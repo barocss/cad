@@ -340,7 +340,7 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
     case 'face-fillet': return { ...at, kind: 'face-fillet', target: ref(node.parent), faces: [node.faces[0], node.faces[1]], radius: node.radius, ...expectOf(node, node.faces) };
     case 'full-round': return { ...at, kind: 'full-round', target: ref(node.parent), faces: node.faces, ...(node.along ? { along: node.along } : {}), ...expectOf(node, node.faces) };
     case 'split-face': return { ...at, kind: 'split-face', target: ref(node.parent), face: node.face, pull: node.pull, ...(node.names ? { names: node.names } : {}) } as CadPartFeature;
-    case 'fillet': return { ...at, kind: 'fillet', target: ref(node.parent), edges: node.edges, ...(node.radii ? { radii: node.radii.map(p => ({ at: p.at, radius: p.radius, ...(p.atEnd ? { atEnd: true as const } : {}) })) } : { radius: node.radius }), ...(node.section ? { section: node.section } : {}), ...expectOf(node, node.edges) };
+    case 'fillet': return { ...at, kind: 'fillet', target: ref(node.parent), edges: node.edges, ...(node.radii ? { radii: node.radii.map(p => ({ at: p.at, radius: p.radius, ...(p.atEnd ? { atEnd: true as const } : {}), ...(p.fraction !== undefined ? { fraction: p.fraction } : {}) })) } : { radius: node.radius }), ...(node.section ? { section: node.section } : {}), ...expectOf(node, node.edges) };
   }
 }
 

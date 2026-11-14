@@ -7,7 +7,7 @@ import { brepFromPrismatic, type PrismaticSolid } from '../features/prismatic-so
 import { booleanCurveRegions, curveTolerance, segEnd, type CurveSegment2, type XY } from '../brep/curved-arrangement.js';
 import { booleanAnalytic } from '../brep/analytic-boolean.js';
 import { faceReach, finishBrepEdges } from '../blend/edge-finish.js';
-import { add, cross, dot, len, scale, sub, unit } from '../core/vec3.js';
+import { add, cross, dot, len, lerp, scale, sub, unit } from '../core/vec3.js';
 import { brepOf, profiling, planarBoolean, planarBrep } from './part-model.js';
 import type { CadPartDim, CadPartPoint3, CadPartFeature, Result, Tools, PartHelpers, Part, Solid, CadPartErrorCode } from './part-model.js';
 
@@ -20,9 +20,12 @@ export function finishOperation(f: CadPartFeature & Record<string, unknown>, t: 
       const target = solids(f.target, 'target'), varying = f.kind === 'fillet' && f.radii !== undefined;
       if (varying && f.radius !== undefined) fail('INPUT', 'give radius or radii, not both');
       if (varying && (!Array.isArray(f.radii) || f.radii.length < 2 || f.radii.length > 16)) fail('INPUT', 'radii must list 2 to 16 points, each { at: [x, y, z], radius }');
-      const authored = varying ? (f.radii as { at: CadPartPoint3; radius: CadPartDim; atEnd?: unknown }[]).map((p, k) => {
+      const authored = varying ? (f.radii as { at: CadPartPoint3; radius: CadPartDim; atEnd?: unknown; fraction?: unknown }[]).map((p, k) => {
         if (p?.atEnd !== undefined && p.atEnd !== true) fail('INPUT', `radii[${k}].atEnd is true or left out`);
-        return { at: xyz(p?.at, `radii[${k}].at`), radius: dim(p?.radius as CadPartDim, `radii[${k}].radius`, true), atEnd: p?.atEnd === true };
+        const fraction = p?.fraction;
+        if (fraction !== undefined && (p.atEnd || typeof fraction !== 'number' || !Number.isFinite(fraction) || fraction <= 1e-9 || fraction >= 1 - 1e-9))
+          return fail('INPUT', 'an interior fillet station must be strictly between the edge ends.');
+        return { at: xyz(p?.at, `radii[${k}].at`), radius: dim(p?.radius as CadPartDim, `radii[${k}].radius`, true), atEnd: p?.atEnd === true, fraction };
       }) : undefined;
       if (authored && authored.filter(p => p.atEnd).length > 2) fail('INPUT', 'at most two radii are at the chain\'s ends');
       const sec = f.kind === 'fillet' ? f.section : undefined;
@@ -58,9 +61,10 @@ type Point = [number, number, number];
  * The radii with the points `atEnd` ones stand for on this body: the two ends of the open chain the edges make, each
  * radius at the end nearest its authored point (a pair: the pairing nearer in all). Other points are kept as given.
  */
-function atChainEnds(radii: readonly { at: Point; radius: number; atEnd: boolean }[], brep: ReturnType<PartHelpers['brepOf']>,
+function atChainEnds(radii: readonly { at: Point; radius: number; atEnd: boolean; fraction?: number }[], brep: ReturnType<PartHelpers['brepOf']>,
   names: readonly string[], fail: Tools['fail']): { at: Point; radius: number }[] {
   const plain = radii.map(p => ({ at: p.at, radius: p.radius })), ending = radii.flatMap((p, i) => p.atEnd ? [i] : []);
+  if (radii.some(point => point.fraction !== undefined)) return atStraightEdgeStation(radii, brep, names, fail);
   if (!ending.length) return plain;
   const uses = new Map<string, number>();
   for (const name of names) {
@@ -75,6 +79,36 @@ function atChainEnds(radii: readonly { at: Point; radius: number; atEnd: boolean
   const [i, j] = ending, keep = d(radii[i].at, ends[0]) + d(radii[j].at, ends[1]) <= d(radii[i].at, ends[1]) + d(radii[j].at, ends[0]);
   plain[i].at = [...ends[keep ? 0 : 1]]; plain[j].at = [...ends[keep ? 1 : 0]];
   return plain;
+}
+function atStraightEdgeStation(
+  radii: readonly { at: Point; radius: number; atEnd: boolean; fraction?: number }[],
+  brep: Brep,
+  names: readonly string[],
+  fail: Tools['fail'],
+): { at: Point; radius: number }[] {
+  const [start, station, end] = radii;
+  const fraction = station?.fraction;
+  if (names.length !== 1 || radii.length !== 3 || !start.atEnd || !end.atEnd ||
+      start.fraction !== undefined || end.fraction !== undefined || fraction === undefined)
+    return fail('SELECTION', 'an interior fillet station needs one straight edge and two end radii.');
+  const edges = brep.edges.filter(edge => edge.name === names[0]);
+  if (edges.length !== 1) return fail('SELECTION', 'the interior fillet station needs one unique native edge.');
+  const edge = edges[0], { curve } = edge;
+  const [a, b] = edge.vertices.map(id => brep.vertices.find(vertex => vertex.id === id)?.point);
+  if (!a || !b || curve.degree !== 1 || curve.controlPoints.length !== 2 || curve.weights.length !== 2 ||
+      !(curve.weights[0] > 0) || curve.weights[0] !== curve.weights[1] ||
+      !a.every((value, axis) => value === curve.controlPoints[0][axis]) ||
+      !b.every((value, axis) => value === curve.controlPoints[1][axis]))
+    return fail('SELECTION', 'the interior fillet station needs a native straight edge.');
+  const original = sub(end.at, start.at), live = sub(b, a);
+  if (!(len(original) > 0 && len(live) > 0) || len(cross(unit(original), unit(live))) > 1e-9)
+    return fail('SELECTION', 'the original fillet edge direction changed. Select the edge again.');
+  const [first, last] = dot(original, live) > 0 ? [a, b] : [b, a];
+  return [
+    { at: [...first], radius: start.radius },
+    { at: lerp(first, last, fraction), radius: station.radius },
+    { at: [...last], radius: end.radius },
+  ];
 }
 // Edge-finishing helpers moved from part-model.ts (3b, D361).
 // ---- chamfers and fillets ------------------------------------------------------------------------------

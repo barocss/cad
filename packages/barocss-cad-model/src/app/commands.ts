@@ -687,18 +687,48 @@ const allCommands: Command[] = [
       if (!sel) return no('Select edges of one body to round (Shift-click for more), or a face for all its edges.');
       const why = ellipseSideRefusal(ctx, sel.edges); return why ? no(why) : ok;
     },
-    fields: () => [{ key: 'radius', label: 'Radius', kind: 'mm', min: 0.1 }, { key: 'endRadius', label: 'End radius (0: same)', kind: 'mm', min: 0 },
-      // (The section between the contacts, R10.5b, D103: a circle, a conic of rho, or G2 — curving as the faces do there.)
-      { key: 'shape', label: 'Section', kind: 'choice', options: [{ value: 'circular', label: 'Circular' }, { value: 'conic', label: 'Conic' }, { value: 'g2', label: 'Curvature (G2)' }] },
-      { key: 'rho', label: 'Rho', kind: 'ratio', min: 0.01, max: 0.99, step: 0.05, when: v => v.shape === 'conic' },
-      { key: 'tension', label: 'Tension', kind: 'ratio', min: 0.01, max: 0.99, step: 0.05, when: v => v.shape === 'g2' }],
-    defaults: () => ({ radius: 3, endRadius: 0, shape: 'circular', rho: 0.5, tension: 0.5 }),
+    fields: (ctx, values) => {
+      const picked = ctx.selection.edges[0];
+      const edge = picked && ctx.bodies[picked.body]?.mesh.edges[picked.edge];
+      const supportsStation = ctx.selection.edges.length === 1 && edge?.nativeLine;
+      return [
+        { key: 'radius', label: 'Radius', kind: 'mm', min: 0.1 },
+        { key: 'endRadius', label: 'End radius (0: same)', kind: 'mm', min: 0 },
+        ...(supportsStation || values?.stationMode === 'interior' ? [
+          { key: 'stationMode', label: 'Radius controls', kind: 'choice' as const,
+            options: [{ value: 'ends', label: 'Ends' }, { value: 'interior', label: 'Ends and interior' }],
+            when: (v: Values) => Number(v.endRadius) > 0 || v.stationMode === 'interior' },
+          { key: 'stationAt', label: 'Interior position (%)', kind: 'number' as const, min: 0, max: 100,
+            when: (v: Values) => v.stationMode === 'interior' },
+          { key: 'stationRadius', label: 'Interior radius', kind: 'mm' as const, min: 0.1,
+            when: (v: Values) => v.stationMode === 'interior' },
+        ] : []),
+        { key: 'shape', label: 'Section', kind: 'choice', options: [{ value: 'circular', label: 'Circular' }, { value: 'conic', label: 'Conic' }, { value: 'g2', label: 'Curvature (G2)' }] },
+        { key: 'rho', label: 'Rho', kind: 'ratio', min: 0.01, max: 0.99, step: 0.05, when: v => v.shape === 'conic' },
+        { key: 'tension', label: 'Tension', kind: 'ratio', min: 0.01, max: 0.99, step: 0.05, when: v => v.shape === 'g2' },
+      ];
+    },
+    defaults: () => ({ radius: 3, endRadius: 0, stationMode: 'ends', stationAt: 50, stationRadius: 3, shape: 'circular', rho: 0.5, tension: 0.5 }),
     steps: edgeSteps,
     handles: (ctx, v) => edgeHandle(ctx, 'radius', Number(v.radius), 'fillet'),
     build: (ctx, v) => {
       const { body, edges } = edgesOfOneBody(ctx)!, why = ellipseSideRefusal(ctx, edges); if (why) throw refusal('VALUE', why);
-      const r = Number(v.radius), r1 = Number(v.endRadius) || 0, names = edges.flatMap(e => e.names);
+      const r = Number(v.radius), endRadius = Number(v.endRadius ?? 0), r1 = endRadius || 0, names = edges.flatMap(e => e.names);
       const section = sectionOf(v), shaped = section ? { section } : {};
+      if (v.stationMode === 'interior') {
+        const [edge] = edges, fraction = Number(v.stationAt) / 100, radius = Number(v.stationRadius);
+        if (ctx.selection.edges.length !== 1 || edges.length !== 1 || names.length !== 1 || !edge.nativeLine)
+          throw refusal('FILLET_CHAIN', 'An interior radius needs one original straight edge.');
+        if (!Number.isFinite(fraction) || fraction <= 1e-9 || fraction >= 1 - 1e-9)
+          throw refusal('VALUE', 'Set the interior position above 0% and below 100%.');
+        if (!(Number.isFinite(radius) && radius > 0) || !Number.isFinite(endRadius) || endRadius < 0)
+          throw refusal('VALUE', 'Set a positive interior radius and a nonnegative end radius.');
+        const a: V3 = [...edge.a], b: V3 = [...edge.b];
+        const at = a.map((x, i) => x + (b[i] - x) * fraction) as V3;
+        return withNode(ctx.doc, { kind: 'fillet', parent: refOf(body), edges: names, radius: r, radii: [
+          { at: a, radius: r, atEnd: true }, { at, radius, fraction }, { at: b, radius: r1 || r, atEnd: true },
+        ], ...shaped });
+      }
       // (An end radius: the radius varies along the picked chain from its start to its end, R10.5, D100.)
       if (r1 > 0 && Math.abs(r1 - r) > 1e-9) {
         const ends = chainEnds(edges);

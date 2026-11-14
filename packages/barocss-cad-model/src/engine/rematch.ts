@@ -169,6 +169,8 @@ export async function rematchNames(prev: StudioDoc, next: StudioDoc, evaluate: (
       if (!sig) { out.push(name); continue; }
       const m = matchSignature(sig, now, what.edge);
       if (node.kind === 'cylindrical-wrap' && m !== name) return { error: `[BAD_REFERENCE] Cylindrical wrap: the original selected wall ${name} is no longer available. Select it again.` };
+      if (node.kind === 'fillet' && node.radii?.some(point => point.fraction !== undefined) && m !== name)
+        return { error: `[BAD_REFERENCE] Fillet: the original straight edge ${name} is no longer available. Select it again.` };
       if (typeof m !== 'string') return { error: m.length ? `Feature ${k}: the ${what.edge ? 'edge' : 'face'} "${name}" is now one of ${m.join(', ')}; name the one you mean.` : `Feature ${k}: the ${what.edge ? 'edge' : 'face'} "${name}" is gone after this edit (nothing like it is left on its body).` };
       out.push(m);
       if (m !== name) { changes.push({ node: k, from: name, to: m }); rematched[m] = rematched[name] ?? name; delete rematched[name]; }

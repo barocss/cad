@@ -319,6 +319,8 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
         if (typeof m === 'string') m = [m];
       }
     }
+    // A fractional station stays on its authored edge.
+    if (finish?.kind === 'fillet' && finish.radii?.some(point => point.fraction !== undefined) && m !== ref.name) m = [];
     // These edges keep their authored name until the user chooses a different live edge.
     if (typeof m === 'string' && m !== ref.name && (node?.kind === 'band-surface' || splitFinish || needsChoice)) {
       const live = cands.get(ref.name);

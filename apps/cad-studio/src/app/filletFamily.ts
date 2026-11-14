@@ -35,7 +35,7 @@ export function filletSelection(type: FilletType, ctx: Ctx): Selection {
 }
 export function newFilletActive(type: FilletType, context: Ctx, initial?: Values): Active {
   const ctx = { ...context, selection: filletSelection(type, context) }, cmd = MEMBERS[type], values = { ...cmd.defaults?.(ctx), ...initial };
-  return { cmd, ctx, values, preview: 'busy', fillet: { type, radiusMode: type === 'edge' && Number(values.endRadius) > 0 ? 'varying' : 'constant' } };
+  return { cmd, ctx, values, preview: 'busy', fillet: { type, radiusMode: type === 'edge' && (Number(values.endRadius) > 0 || values.stationMode === 'interior') ? 'varying' : 'constant' } };
 }
 export function nodeFilletType(node?: ModelNode): FilletType | null { return node ? filletType(node.kind) : null; }
 /** Keep only one presentation row; the original best-ranked member remains the action for a nonempty query. */
@@ -55,7 +55,7 @@ interface Transition { current(): Active | null; context(): Ctx; retire(): void;
 export function replaceFillet(options: Transition, type: FilletType, mode?: RadiusMode): void {
   const old = options.current(); if (!old?.fillet) return;
   const next = newFilletActive(type, { ...options.context(), selection: old.ctx.selection }, mode ? old.values : undefined);
-  if (mode && type === 'edge') { next.fillet!.radiusMode = mode; next.values = { ...next.values, endRadius: mode === 'constant' ? 0 : Number(old.values.endRadius) > 0 ? old.values.endRadius : old.values.radius }; }
+  if (mode && type === 'edge') { next.fillet!.radiusMode = mode; next.values = { ...next.values, endRadius: mode === 'constant' ? 0 : Number(old.values.endRadius) > 0 ? old.values.endRadius : old.values.radius, ...(mode === 'constant' ? { stationMode: 'ends' } : {}) }; }
   options.retire(); options.clearApply(); options.select(next.ctx.selection); options.set(next);
 }
 

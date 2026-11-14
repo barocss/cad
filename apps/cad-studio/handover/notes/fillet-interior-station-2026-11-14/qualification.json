@@ -1,0 +1,145 @@
+{
+  "decision": "D1266",
+  "priority": "P5",
+  "row": 7,
+  "tier": "FULL",
+  "parent": "2542680b924562def48abd5ce3f05683b57d94f1",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1266-<run>",
+    "cd packages/barocss-cad && node scripts/tool.mjs type-check && node scripts/tool.mjs build:fast",
+    "cd packages/barocss-cad && node --test --test-concurrency=1 test/r10-5.test.mjs test/r10-5b.test.mjs test/r11-1c.test.mjs test/api-variable-fillet.test.mjs",
+    "node packages/barocss-cad/scripts/code-shape.mjs --check",
+    "pnpm --filter @barocss/cad-model test fillet-interior-station api-variable-fillet filletNames finish-limits",
+    "pnpm --filter @barocss/cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app test fillet-family",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint <changed Kernel, Model, Studio TypeScript files and Model test>",
+    "node --check apps/cad-studio/test/fillet-interior-station-browser.mjs",
+    "node <external-evidence>/mutation.mjs <external-evidence>",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/build",
+    "D1266_SOURCE_FROZEN=1 node apps/cad-studio/test/fillet-interior-station-browser.mjs <external-evidence>/studio-delivery",
+    "git diff --check"
+  ],
+  "checks": {
+    "actualDesktopStudio": "PASS",
+    "visualReview": "PASS",
+    "independentGeometry": "PASS",
+    "independentReviews": {
+      "status": "PASS",
+      "reviews": 2
+    },
+    "kernelFocused": {
+      "status": "PASS",
+      "passed": 17,
+      "failed": 0
+    },
+    "modelFocused": {
+      "status": "PASS",
+      "passed": 12,
+      "failed": 0
+    },
+    "studioFocused": {
+      "status": "PASS",
+      "passed": 15,
+      "failed": 0
+    },
+    "kernelTypes": "PASS",
+    "kernelBuild": "PASS",
+    "kernelCodeShape": "PASS",
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "lint": "PASS",
+    "driverSyntax": "PASS",
+    "studioProductionBuild": "PASS",
+    "mutation": {
+      "status": "PASS",
+      "unmodifiedExit": 0,
+      "frozenPositionExit": 1,
+      "reversedPositionExit": 1
+    },
+    "unexpectedProductOrCheckFailures": 0,
+    "fullSuites": "NOT_RUN",
+    "ci": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "paidLive": "NOT_RUN",
+    "olderStudioRoundTrip": "NOT_RUN",
+    "tangentExpandedChains": "NOT_RUN"
+  },
+  "observations": [
+    {
+      "label": "first",
+      "sha": "dac7e0b53a0255e04c249fa85abc417b5211d0c2873d2490ebc182fb9cbdeede"
+    },
+    {
+      "label": "edited",
+      "sha": "43b73a04a77629a4ba0b72a0c2335a884357dcc896b11b1c92e6e0f9a7b78cfb"
+    },
+    {
+      "label": "moved",
+      "sha": "75d87ecbee9f61dfcc6377b6af956b3fc0ce2b7f3e19df05d816ede4ccdebd14"
+    },
+    {
+      "label": "reopened",
+      "sha": "75d87ecbee9f61dfcc6377b6af956b3fc0ce2b7f3e19df05d816ede4ccdebd14"
+    }
+  ],
+  "geometry": {
+    "first": {
+      "status": "PASS",
+      "volumeMM3": 11933.290621681288,
+      "removedMM3": 66.70937831871173,
+      "workerVolumeMM3": 11933.290621681279,
+      "nativeVolumeMM3": 11933.29062168128,
+      "maximumSectionResidualMM": 9.392342956916083e-13,
+      "axialSamples": 7,
+      "oracleSHA256": "2417731efa5a3c47775a68940879a16359ee69a0b672d1ed07843a3c116af62d"
+    },
+    "edited": {
+      "status": "PASS",
+      "volumeMM3": 11918.344001172729,
+      "removedMM3": 81.65599882727093,
+      "workerVolumeMM3": 11918.344001172776,
+      "nativeVolumeMM3": 11918.344001172776,
+      "maximumSectionResidualMM": 1.089386224355022e-12,
+      "axialSamples": 7,
+      "oracleSHA256": "3e6ec0ccb514227a01c29a5aab9365d874dee33c403475870828c1bf377bf03f"
+    },
+    "moved": {
+      "status": "PASS",
+      "volumeMM3": 21477.516001759093,
+      "removedMM3": 122.4839982409064,
+      "workerVolumeMM3": 21477.51600175875,
+      "nativeVolumeMM3": 21477.516001758748,
+      "maximumSectionResidualMM": 1.2189277275966553e-12,
+      "axialSamples": 7,
+      "oracleSHA256": "0d8a0cf4f9506b90b499451ec9fe2c5dd29873c25d31c30c213cd1c9b45d2abb"
+    },
+    "reopened": {
+      "status": "PASS",
+      "volumeMM3": 21477.516001759093,
+      "removedMM3": 122.4839982409064,
+      "workerVolumeMM3": 21477.51600175875,
+      "nativeVolumeMM3": 21477.516001758748,
+      "maximumSectionResidualMM": 1.2189277275966553e-12,
+      "axialSamples": 7,
+      "oracleSHA256": "0d8a0cf4f9506b90b499451ec9fe2c5dd29873c25d31c30c213cd1c9b45d2abb"
+    }
+  },
+  "receipts": {
+    "firstStudioSHA256": "9b17c0b56002fba3b518ddd60f95cecfd52e7c14eb0a16cc01330942e580da31",
+    "finalStudioSHA256": "f14d03d0aed8fa0950a266a0c75e5961dba1142ab6b2a50b58345b2b33f94af0",
+    "nativeSaveSHA256": "471c6979c8af4422aa6edb61ff32c7cbb6697956cc1f4f5762078c12488b43b9",
+    "unchangedPinnedFiles": 895,
+    "screenshotsSHA256": {
+      "endpoint-refused": "decec0add77b1e981f0e52b9264e8c20a8f31d73524898fec2bfc1b5c635fec1",
+      "interior-applied": "be6a2bd39d0fc17b81f30bc119c80a472fd15c9e4ef234dcc31e51980b0e93c3",
+      "radius-edited": "3f101dba96f413a558a7b19dcb17135325d3d8a0294b5670ac3c2fd29aaac5dc",
+      "edge-height-12": "c8619fb3cfdea47d6e42e67cf4074e901cd4823258e5a032eb33f060785f52c3",
+      "fresh-open": "4ba341e4d0fa2883077ffc645edab082666e1e05653b05eeb67efbcf4dca79da"
+    }
+  },
+  "issues": {
+    "2259": "OPEN"
+  }
+}
