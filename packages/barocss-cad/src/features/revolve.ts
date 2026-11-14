@@ -116,6 +116,20 @@ function unitArc(sweep: number): { pts: XY[]; w: number[]; knots: number[] } {
 
 export function revolveProfile(input: RevolveInput): Brep {
   if (input.holes?.length) return revolveHollow(input);
+  return revolveOuterProfile(input);
+}
+
+interface SweepClearance {
+  readonly minimum: number;
+  readonly refuse: () => never;
+}
+
+/** Revolve a Sweep section while keeping every point strictly on the outward side of the axis. */
+export function revolveSweepProfile(input: RevolveInput, clearance: SweepClearance): Brep {
+  return revolveOuterProfile(input, clearance);
+}
+
+function revolveOuterProfile(input: RevolveInput, clearance?: SweepClearance): Brep {
   const id = input.id ?? 'revolve', deg = input.angle;
   if (!(typeof deg === 'number' && deg > 0 && deg <= 360)) throw new BrepError('INPUT', 'revolve: the angle must be in (0, 360] degrees');
   const alpha = deg * Math.PI / 180, full = deg === 360;
@@ -137,10 +151,14 @@ export function revolveProfile(input: RevolveInput): Brep {
   // The profile lies on one side, ρ > 0, except at vertices on the axis (poles) and along whole lines
   // on it (the axis segments, which bound no wall).
   let side = 0;
-  const onAxisAt = (p: readonly number[]) => Math.abs(hr(p)[1]) <= 1e-9 * Math.max(1, Math.abs(p[0]), Math.abs(p[1]));
+  const axisToleranceAt = (p: readonly number[]) => 1e-9 * Math.max(1, Math.abs(p[0]), Math.abs(p[1]));
+  const onAxisAt = (p: readonly number[]) => Math.abs(hr(p)[1]) <= axisToleranceAt(p);
   const axial = loop.map(seg => seg.kind === 'line' && onAxisAt(seg.start) && onAxisAt(seg.end));
   loop.forEach((seg, i) => {
-    if (axial[i]) return;
+    if (axial[i]) {
+      if (clearance) clearance.refuse();
+      return;
+    }
     // A line's signed radius is affine. A circular arc's extrema are its carrier points along ±s.
     const candidates: { p: XY; interior: boolean }[] = [{ p: seg.start, interior: false }, { p: seg.end, interior: false }];
     if (seg.kind === 'arc') {
@@ -177,6 +195,7 @@ export function revolveProfile(input: RevolveInput): Brep {
     }
     for (const { p, interior } of candidates) {
       const rho = hr(p)[1];
+      if (clearance && rho <= Math.max(clearance.minimum, axisToleranceAt(p))) clearance.refuse();
       if (onAxisAt(p)) { if (!interior) continue; throw new BrepError('GEOMETRY', 'revolve: the profile touches the axis between its vertices'); }
       if (side && Math.sign(rho) !== side) throw new BrepError('GEOMETRY', 'revolve: the profile crosses the axis');
       side = Math.sign(rho);

@@ -1,13 +1,13 @@
 import { add, cross, dot, len, scale, sub, unit } from '../core/vec3.js';
 import type { SideTags } from '../document/side-names.js';
-import { buildProfileLoop, ExtrudedProfileLimits, type ProfileSegmentInput, type XY } from '../features/extruded-profile-solid.js';
+import { buildProfileLoop, ExtrudedProfileLimits, type ProfileSegment, type ProfileSegmentInput, type XY } from '../features/extruded-profile-solid.js';
 import { brepFromPrismatic, prismaticFromProfile } from '../features/prismatic-solid.js';
-import { revolveMassProperties, revolveProfile, type RevolveInput } from '../features/revolve.js';
+import { revolveMassProperties, revolveProfile, revolveSweepProfile, type RevolveInput } from '../features/revolve.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Curve, Point } from '../types.js';
 import type { Brep } from './brep-core.js';
 import { transformBrep } from './brep-transform.js';
-import { curveTolerance, locateInRegion, segDistance, type CurveSegment2 } from './curved-arrangement.js';
+import { curveTolerance, intersectSegments, locateInRegion, segDistance, type CurveSegment2 } from './curved-arrangement.js';
 import { combineMassProperties, prismaticMassProperties, type MassProperties } from './solid-mass.js';
 
 interface ExactSweepInput {
@@ -29,6 +29,9 @@ const circleOf = (loop: readonly ProfileSegmentInput[]): Circle | undefined =>
   loop.length === 1 && loop[0].kind === 'arc' ? loop[0] : undefined;
 const circleRadius = ({ start, center }: Circle) => Math.hypot(start[0] - center[0], start[1] - center[1]);
 const originDisk = (radius: number): Circle => ({ kind: 'arc', start: [radius, 0], center: [0, 0], direction: 'ccw' });
+const sectionRing = (segments: readonly ProfileSegment[]): CurveSegment2[] => segments.map(s => s.kind === 'line'
+  ? { kind: 'line', a: s.start, b: s.end }
+  : { kind: 'arc', c: s.center, r: s.radius, t0: s.startAngle, sweep: s.sweep });
 
 function straightSection(outer: ExactSweepInput['outer'], holes: NonNullable<ExactSweepInput['holes']>,
   disk: Circle | undefined, refuse: Refuse): { outer: ExactSweepInput['outer']; holes: NonNullable<ExactSweepInput['holes']>; anchor: XY } {
@@ -50,14 +53,27 @@ function straightSection(outer: ExactSweepInput['outer'], holes: NonNullable<Exa
 
   const { centroid, segments } = buildProfileLoop(outer, { maximumSegments: 1024 });
   if (hole) {
-    const ring = segments.map((s): CurveSegment2 => s.kind === 'line' ? { kind: 'line', a: s.start, b: s.end }
-      : { kind: 'arc', c: s.center, r: s.radius, t0: s.startAngle, sweep: s.sweep });
+    const ring = sectionRing(segments);
     const tolerance = curveTolerance([ring]);
     // An inside centre with clearance greater than the radius keeps the whole disk inside.
     if (locateInRegion(hole.center, { outer: ring, holes: [] }, tolerance) !== 'in'
       || ring.some(s => segDistance(s, hole.center) <= r + tolerance)) return noClearance();
   }
   return { outer, holes, anchor: centroid };
+}
+
+function arcSectionAnchor(outer: ExactSweepInput['outer'], refuse: Refuse): XY {
+  const { centroid, segments } = buildProfileLoop(outer, { maximumSegments: 1024 });
+  const ring = sectionRing(segments), tolerance = curveTolerance([ring]);
+  // Only the authored join of adjacent segments may meet. The native intersection also checks arcs between chord samples.
+  for (let i = 0; i < ring.length; i++) for (let j = i + 1; j < ring.length; j++) {
+    const atJoin = (p: XY, q: XY) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= tolerance;
+    const meets = intersectSegments(ring[i], ring[j], tolerance);
+    if (meets.some(p => !(j === i + 1 && atJoin(p, segments[j].start))
+      && !(i === 0 && j === ring.length - 1 && atJoin(p, segments[0].start))))
+      return refuse('GEOMETRY', 'The exact circular-arc sweep needs a simple outer profile.');
+  }
+  return centroid;
 }
 
 function pathTolerance(path: Curve, refuse: Refuse): number {
@@ -122,7 +138,7 @@ function straightSpan(path: Curve, refuse: Refuse) {
 export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
   const { id, mode, outer, holes = [], path, xAxis, yAxis, sideTags } = input;
   const disk = circleOf(outer), profileRadius = disk && circleRadius(disk);
-  if (mode === 'exact' && (!disk || holes.length)) return refuse('CAPABILITY', 'Exact sweep needs one circular profile without holes.');
+  if (mode === 'exact' && holes.length) return refuse('CAPABILITY', 'Exact circular-arc sweep needs one outer profile without holes or separate regions.');
   if (profileRadius !== undefined && profileRadius < ExtrudedProfileLimits.minimumRadiusMM)
     return refuse('PARAMETER', `Exact sweep needs a profile radius of at least ${ExtrudedProfileLimits.minimumRadiusMM} mm.`);
   // The sketch axes set the profile's roll, independent of its location in the sketch plane.
@@ -159,19 +175,25 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     return place({ brep: brepFromPrismatic(prism, { id }), mass: density => prismaticMassProperties(prism, density) }, axes, offset);
   }
 
-  if (profileRadius === undefined) return refuse('CAPABILITY', 'Exact sweep needs one circular profile without holes.');
   const { start, toCentre, tangent, radius, angle, tolerance } = circularSpan(path, refuse);
   if (radius > CadNumericPolicy.coordinateAbs) return refuse('PARAMETER', 'Exact sweep path radius must be at most 10000 mm.');
-  if (radius - profileRadius <= tolerance) return refuse('PARAMETER', 'Exact sweep needs a path radius larger than the profile radius.');
+  if (profileRadius !== undefined && radius - profileRadius <= tolerance)
+    return refuse('PARAMETER', 'Exact sweep needs a path radius larger than the profile radius.');
   const axes = frame(tangent), [x, y] = axes;
-  const origin: XY = [dot(toCentre, x), dot(toCentre, y)];
+  const [dx, dy] = [dot(toCentre, x), dot(toCentre, y)];
+  const [cx, cy] = profileRadius === undefined ? arcSectionAnchor(outer, refuse) : [0, 0];
   const revolve: RevolveInput = {
     id,
-    profile: [originDisk(profileRadius)],
-    axis: { origin, direction: [-origin[1], origin[0]] },
+    profile: profileRadius === undefined ? outer : [originDisk(profileRadius)],
+    axis: { origin: profileRadius === undefined ? [cx + dx, cy + dy] : [dx, dy], direction: [-dy, dx] },
     angle: angle * 180 / Math.PI,
     ...(sideTags ? { sideTags: sideTags.outer } : {}),
   };
   // Revolve departs towards local +Z. The directed tangent maps it into the selected arc's direction.
-  return place({ brep: revolveProfile(revolve), mass: density => revolveMassProperties(revolve, density) }, axes, start);
+  const brep = profileRadius === undefined ? revolveSweepProfile(revolve, {
+    minimum: tolerance,
+    refuse: () => refuse('PARAMETER', 'The exact circular-arc sweep profile must stay clear of the bend axis.'),
+  }) : revolveProfile(revolve);
+  const offset = profileRadius === undefined ? sub(start, add(scale(x, cx), scale(y, cy))) : start;
+  return place({ brep, mass: density => revolveMassProperties(revolve, density) }, axes, offset);
 }

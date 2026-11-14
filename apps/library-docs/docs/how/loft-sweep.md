@@ -24,7 +24,7 @@ those of the [NURBS page](/how/nurbs).
 | `revolve` | A profile turned about an axis in its plane, by 0 &lt; α ≤ 360° | Exact: planes, cylinders, cones, spheres, tori, as rational patches | `features/revolve.ts` (`revolveProfile`) |
 | `extrude` with `draft` | A profile pushed up, every wall leaning by the draft angle | Exact: sloping planes, cone patches | `features/drafted-extrusion.ts` (`draftedExtrusion`) |
 | `sweep` | A profile along straight runs and circular bends | Exact: prisms and revolves, glued at their shared sections | `part/part-model.ts` (`sweepBrep`) |
-| `sweep-curve` | A profile along a NURBS rail | Exact planes and cylinders on a straight rail, or toroidal walls on a circular arc. Other supported rails use the faceted mode. | `brep/exact-sweep.ts` and `brep/sweep-solid.ts` |
+| `sweep-curve` | A profile along a NURBS rail | Exact planes and cylinders on a straight rail. On a circular rail, the outline gives planes, cylinders, cones, or toroidal walls. Other supported rails use the faceted mode. | `brep/exact-sweep.ts` and `brep/sweep-solid.ts` |
 | `loft` | Profiles at heights, or on frames, joined | Exact: ruled patches, or C1 cubic patches through every section | `features/loft.ts` (`loftSolid`) and the files it calls |
 
 The kernel also builds lofted *surfaces* from NURBS section curves, with no solid around them. They are in the last
@@ -104,7 +104,7 @@ not clear the profile is refused: the profile reaches the bend's axis.
 In Studio, select a finished sketch and a Direct curve. Open **Sweep** and choose a representation.
 
 - **Exact straight path** carries one closed outline of lines and circular arcs along a single straight segment. The outer outline's area centroid starts at the first path point. One strictly interior circular hole can run through the entire part. A hole edit retains the outer wall positions.
-- **Exact circular arc** carries a disk along one circular arc from 30° to 90°. The path radius must exceed the disk radius.
+- **Exact circular arc** carries a single closed outline of lines and circular arcs along one circular arc from 30° to 90°. The outer outline's area centroid starts at the first path point. Use an outline without holes and leave clearance between the entire outline and the bend axis.
 
 Both exact modes create a new body with planar end caps. In a kernel feature document, set `mode` to `exact-straight` or `exact` on `sweep-curve`.
 

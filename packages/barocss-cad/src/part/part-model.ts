@@ -742,7 +742,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       if (mode === 'exact' || mode === 'exact-straight') {
         if (sk.regions?.length) fail('CAPABILITY', mode === 'exact-straight'
           ? 'Exact straight sweep needs one outer profile without separate regions.'
-          : 'Exact sweep needs one circular profile without holes.');
+          : 'Exact circular-arc sweep needs one outer profile without holes or separate regions.');
         return () => {
           if (profiling) profiling.sweeps++;
           const { brep, mass } = exactSweep({ id: at, mode, outer: sk.outer, holes: sk.holes, path: curve, xAxis, yAxis, sideTags: sk.tags }, fail);
