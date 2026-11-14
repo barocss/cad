@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1304 — Refine the outside of a circular Sweep after a bore fillet](notes/arc-bore-fillet-display-2026-11-15/README.md).
 - [D1303 — Refine the displayed contours of a circular Sweep with a bore](notes/arc-bore-display-2026-11-15/README.md).
 - [D1302 — Fillet the start rim of a circular Sweep bore](notes/arc-bore-rim-fillet-2026-11-15/README.md).
 - [D1301 — Intersect a circular Sweep with a bore at a radial plane](notes/arc-bore-radial-intersection-2026-11-15/README.md).

@@ -5,10 +5,10 @@ import { fitNotes } from './fits';
 import { boughtOf, elementOf, type BodyElement } from './elements';
 import type { FaceTable } from '../assembly/mates';
 import { BarocssError, massPropertiesOf, reevaluate, exportStl, type CadPartOutput, brepSurfaceArea, cutPiece, evaluateCadPart, transformBrep, FACET_PREVIEW_TRIANGLES, type Brep, type CadPartFeatureProfile, type CadPartSnapshot, type FlatPattern, type GearPlacement, type RackPlacement, type SubdSummary, type CutPiece, exportStep } from '@barocss/cad';
-import { bodyMesh, withoutNativeFaces, type DisplayEdge, type DisplayMesh } from './mesh';
+import { bodyMesh, canonicalSweepCapSamples, withoutNativeFaces, type DisplayEdge, type DisplayMesh } from './mesh';
 import { cylinderDisplayMesh } from './cylinderDisplay';
 import { arcSweepDisplayMesh } from './arcSweepDisplay';
-import { arcSweepMixedDisplayMesh } from './arcSweepMixedDisplay';
+import { arcSweepMixedDisplayMesh, mixedSweepFilletExterior } from './arcSweepMixedDisplay';
 import { bandRailDisplayMesh } from './bandRailDisplay';
 import { loftDisplayMesh } from './loftDisplay';
 import { lumpTouches } from './lumps';
@@ -282,6 +282,24 @@ function refineLoftBody(bodies: BodyResult[], snapshot: CadPartSnapshot, doc: St
   const mesh = loftDisplayMesh(body.mesh, snapshot.outputs[0].brep);
   if (mesh !== body.mesh) bodies[0] = { ...body, mesh };
 }
+const filletExteriorMeshes = new WeakMap<DisplayMesh, DisplayMesh>();
+function refineSweepFillet(base: DisplayMesh, output: CadPartOutput, doc: StudioDoc, node: Extract<ModelNode, { kind: 'fillet' }>): DisplayMesh {
+  const parent = doc.nodes[node.parent.node], reports = output.fillet;
+  if (parent?.kind !== 'sweep-curve' || parent.mode !== 'exact' || node.radii || node.section
+    || reports?.length !== 1) return base;
+  const report = reports[0], sweepId = featureId(doc.nodes, node.parent.node);
+  if (report.edges.length !== 2 || !report.edges.every(edge => edge.split('|').includes(`${sweepId}.start`))) return base;
+  // Only the qualified circular start-rim blend, with a bounded number of native fitted patches.
+  if (report.patches < 2 || report.patches > 16) return base;
+  const capSamples = canonicalSweepCapSamples(output.brep);
+  if (!capSamples) return base;
+  const cached = filletExteriorMeshes.get(base);
+  if (cached) return cached;
+  const detail = mixedSweepFilletExterior(base, output.brep, { sweepId, capSamples, patchCount: report.patches });
+  const mesh = detail ? { ...base, arcSweepExteriorDetail: detail } : base;
+  filletExteriorMeshes.set(base, mesh);
+  return mesh;
+}
 /** The document with its parameter-bound skeletons solved for its parameters now (O140; the same document when none moved); their refusal thrown. */
 function skeletonsNow(doc: StudioDoc): StudioDoc { return resolveSkeletons(doc).doc; }
 export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refineDisplay = false): EvalResult {
@@ -301,6 +319,9 @@ export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refin
       } else if (node?.kind === 'sweep-curve' && node.mode === 'exact') {
         const { brep } = snapshot.outputs[0];
         const mesh = arcSweepMixedDisplayMesh(arcSweepDisplayMesh(body.mesh, brep), brep);
+        if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
+      } else if (node?.kind === 'fillet') {
+        const mesh = refineSweepFillet(body.mesh, snapshot.outputs[0], doc, node);
         if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
       }
     }
@@ -548,6 +569,7 @@ export function placeBody(b: BodyResult, m: readonly number[], t: readonly numbe
   // The optional packets are in the accepted part's frame.
   delete mesh.loftDetail;
   delete mesh.arcSweepDetail;
+  delete mesh.arcSweepExteriorDetail;
   const element = b.element?.kind === 'weld-bead' ? { ...b.element, report: { ...b.element.report,
     sharedSeams: b.element.report.sharedSeams.map(s => ({ ...s, path: [move(m, t, s.path[0]), move(m, t, s.path[1])] as const })) } } : b.element;
   return { ...b, mesh, ...placedMass(b, m, t), ...(b.massRef !== undefined ? { massPlace: [...(b.massPlace ?? []), { m: [...m], t: [...t] }] } : {}), ...(element ? { element } : {}) };

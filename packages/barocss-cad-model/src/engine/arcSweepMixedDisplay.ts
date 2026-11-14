@@ -7,14 +7,20 @@ import { add, cross, dot, len, scale, sub, unit, type Vec3 } from './vec3';
 const packetBudget = 192 * 1024;
 const byMesh = new WeakMap<DisplayMesh, DisplayMesh>();
 
-function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefined {
-  const { id, family } = brep.source;
-  const hollow = brep.faces.length === 8;
-  if (family !== 'sweep-curve' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
-    || brep.shells.length !== 1 || !brep.shells[0].closed || brep.faces.length !== (hollow ? 8 : 6)
+type FilletExterior = { readonly sweepId: string; readonly capSamples: ReadonlyMap<string, Float64Array>; readonly patchCount: number };
+
+function buildDetail(base: DisplayMesh, brep: Brep, exterior?: FilletExterior): BoundedDisplayMesh | undefined {
+  const id = exterior?.sweepId ?? brep.source.id;
+  const hollow = !exterior && brep.faces.length === 8, trimmedCaps = hollow || !!exterior;
+  if (brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid' || brep.shells.length !== 1 || !brep.shells[0].closed) return;
+  if (exterior) {
+    const patches = exterior.patchCount;
+    if (brep.source.family !== 'analytic-boolean' || brep.faces.length !== 8 + patches || brep.edges.length !== 16 + 3 * patches
+      || base.faces.length !== 8 || base.edges.length !== 11) return;
+  } else if (brep.source.family !== 'sweep-curve' || brep.faces.length !== (hollow ? 8 : 6)
     || brep.edges.length !== (hollow ? 18 : 12)
     || base.faces.length !== (hollow ? 7 : 6) || base.edges.length !== (hollow ? 12 : 10)) return;
-  const railDivisions = hollow ? 52 : 56, roundDivisions = hollow ? 24 : 42;
+  const railDivisions = trimmedCaps ? 52 : 56, roundDivisions = trimmedCaps ? 24 : 42;
   const nativeFace = new Map(brep.faces.map(face => [face.id, face]));
   const faceOf = new Map(base.faces.map(face => [face.id, face]));
   const start = base.faces.find(face => face.name === `${id}.start`);
@@ -50,7 +56,7 @@ function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefi
     return matching.length === 1 ? matching[0]!.coedges.map(id => useOf.get(id)!) : [];
   };
   const startFace = nativeFace.get(start.id)!, endFace = nativeFace.get(end.id)!;
-  if ([startFace, endFace].some(face => face.loops.length !== (hollow ? 2 : 1))) return;
+  if ([startFace, endFace].some(face => face.loops.length !== (trimmedCaps ? 2 : 1))) return;
   const startUses = reads(startFace, 'outer'), endUses = reads(endFace, 'outer');
   if (startUses.length !== 4 || endUses.length !== 4) return;
   const capEdges = (uses: typeof startUses) => uses.map(use => nativeEdge.get(use.edge)!);
@@ -71,6 +77,26 @@ function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefi
   const startInner = reads(startFace, 'inner'), endInner = reads(endFace, 'inner');
   const bore = hollow ? readMixedSweepBore(brep, base, [start, end], { centre, first, last, axis, tangent, sweep, tolerance }, startInner, endInner) : undefined;
   if (hollow && (!bore || bore.wall === round.index)) return;
+  if (exterior) {
+    const blend = base.faces.find(face => face.name === `${brep.source.id}.face`);
+    const retained = new Set([round.id, back.id, start.id, end.id, ...annuli.map(face => face.id)]);
+    const otherFace = (use: (typeof startInner)[number]) => {
+      const twin = use.twin === null ? undefined : useOf.get(use.twin);
+      return twin && nativeFace.get(loopOf.get(twin.loop)!.face);
+    };
+    const facesOf = (uses: typeof startInner) => uses.map(otherFace);
+    if (startInner.length !== exterior.patchCount || endInner.length !== 2 || blend?.freeform?.length !== exterior.patchCount
+      || !facesOf(startInner).every(face => face && blend.freeform!.includes(face.id))
+      || !facesOf(endInner).every(face => face && !retained.has(face.id) && !blend.freeform!.includes(face.id)
+        && face.surface.kind === 'surface' && face.surface.degreeU === 2 && face.surface.degreeV === 2)
+      || startInner.some(use => nativeEdge.get(use.edge)?.curve.degree !== 3)
+      || endInner.some(use => nativeEdge.get(use.edge)?.curve.degree !== 2)) return;
+    const rimNames = endInner.map(use => nativeEdge.get(use.edge)?.name);
+    if (!base.edges.some(edge => edge.faces.includes(end.index) && edge.nativeCircle && edge.names.length === 2
+      && rimNames.every(name => name && edge.names.includes(name)))) return;
+    const hidden = new Set(startInner.map(use => nativeEdge.get(use.edge)?.name));
+    if (base.edges.some(edge => edge.names.some(name => hidden.has(name)))) return;
+  }
 
   const startIds = new Set(startEdges.flatMap(edge => [...edge.vertices]));
   const endIds = new Set(endEdges.flatMap(edge => [...edge.vertices]));
@@ -213,19 +239,44 @@ function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefi
       line(edgeOf.get(capEdge.id)?.index, points);
     }
     const boundary = readRing(uses, rows);
-    if (bore) {
-      for (const { edge, points, owner } of bore.capRows(isStart)) {
-        rows.set(edge, points);
-        line(owner, points);
+    if (trimmedCaps) {
+      const innerUses = isStart ? startInner : endInner;
+      if (bore) {
+        for (const { edge, points, owner } of bore.capRows(isStart)) {
+          rows.set(edge, points);
+          line(owner, points);
+        }
+      } else if (exterior) {
+        for (const use of innerUses) {
+          const data = exterior.capSamples.get(use.edge);
+          if (!data || data.length < 6 || data.length % 3 !== 0) return;
+          const points: Vec3[] = [];
+          for (let i = 0; i < data.length; i += 3) points.push([data[i], data[i + 1], data[i + 2]]);
+          const [a, b] = nativeEdge.get(use.edge)!.vertices.map(id => vertex.get(id)!);
+          if (a.some((value, i) => value !== points[0][i]) || b.some((value, i) => value !== points.at(-1)![i])) return;
+          rows.set(use.edge, points);
+        }
       }
-      const inner = readRing(isStart ? startInner : endInner, rows), idx = faceOfVertex.length;
+      const inner = readRing(innerUses, rows), idx = faceOfVertex.length;
       const x = radial[j], y = cross(cap.normal, x);
       const project = (points: Vec3[]): [number, number][] => points.map(p => {
         const q = sub(p, centre);
         return [dot(q, x), dot(q, y)];
       });
       for (const point of [...boundary, ...inner]) emit(point, cap.normal, cap.index);
-      for (const [a, b, c] of triangulatePolygonWithHoles(project(boundary), [project(inner)])) triangle(idx + a, idx + b, idx + c);
+      const triangles = triangulatePolygonWithHoles(project(boundary), [project(inner)]);
+      if (exterior) {
+        const counts = new Map<number, number>(), size = boundary.length + inner.length;
+        const key = (a: number, b: number) => Math.min(a, b) * size + Math.max(a, b);
+        for (const [a, b, c] of triangles) for (const [p, q] of [[a, b], [b, c], [c, a]]) {
+          const id = key(p, q);
+          counts.set(id, (counts.get(id) ?? 0) + 1);
+        }
+        for (const [first, length] of [[0, boundary.length], [boundary.length, inner.length]]) {
+          for (let i = 0; i < length; i++) if (counts.get(key(first + i, first + (i + 1) % length)) !== 1) return;
+        }
+      }
+      for (const [a, b, c] of triangles) triangle(idx + a, idx + b, idx + c);
       continue;
     }
     const backEdge = (isStart ? startEdges : endEdges).find(edge => sideFor(edge, cap) === back)!;
@@ -265,4 +316,9 @@ export function arcSweepMixedDisplayMesh(base: DisplayMesh, brep: Brep): Display
   const result = detail ? { ...base, arcSweepDetail: detail } : base;
   byMesh.set(base, result);
   return result;
+}
+
+/** Generate only new exterior vertices, triangles and edge segments for the original start-rim fillet. */
+export function mixedSweepFilletExterior(base: DisplayMesh, brep: Brep, exterior: FilletExterior): BoundedDisplayMesh | undefined {
+  try { return buildDetail(base, brep, exterior); } catch { return; }
 }

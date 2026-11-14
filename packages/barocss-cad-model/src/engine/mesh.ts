@@ -3,7 +3,7 @@
 // `x#2`: a cylinder wall in halves) shown as one face; display edges are the real B-rep edges minus
 // seams and smooth (tangent) joints, with connected pieces between the same two faces joined. Faces and
 // edges carry their persistent B-rep names, which features use to refer to them.
-import { closestPointOnSurface, createCylindricalBoreCheck, faceGeometry, pointTriangleDistance2, revolutionOf, surfaceDomain, surfaceEvaluator, surfaceSeedGrid, tessellateBrep, type Brep, type BrepFace, type BrepMesh, type SurfaceSeedGrid } from '@barocss/cad';
+import { closestPointOnSurface, createCylindricalBoreCheck, faceGeometry, pointTriangleDistance2, revolutionOf, surfaceDomain, surfaceEvaluator, surfaceSeedGrid, tessellateBrep, type Brep, type BrepFace, type BrepMesh, type BrepMeshEdge, type SurfaceSeedGrid } from '@barocss/cad';
 export { sub, cross, dot, len, unit as norm } from './vec3';
 import { sub, cross, dot, len, unit as norm } from './vec3';
 import { nativeStraightEdgeMatches } from './nativeStraightEdge';
@@ -74,11 +74,17 @@ export interface DisplayMesh {
   loftDetail?: LoftDisplayMesh;
   /** A refined native circular Sweep's viewport geometry in the accepted part frame. */
   arcSweepDetail?: BoundedDisplayMesh;
+  /** Replacement exterior of the supported fillet on an exact arc Sweep bore. Owners index this mesh's tables. */
+  arcSweepExteriorDetail?: BoundedDisplayMesh;
 }
 type DisplayBuffers = Pick<DisplayMesh, 'positions' | 'normals' | 'faceOfVertex' | 'indices' | 'edgeLines' | 'edgeOfSegment'>;
 export type CylinderDisplayTier = DisplayBuffers & { chordErrorMM: number };
 export type BoundedDisplayMesh = DisplayBuffers & { error: number; bounds: DisplayMesh['bounds'] };
 export type LoftDisplayMesh = BoundedDisplayMesh;
+
+const sweepCapSamples = new WeakMap<Brep, ReadonlyMap<string, BrepMeshEdge['points']>>();
+/** Exact XYZ edge samples from the same full quality-8 tessellation used by bodyMesh. */
+export const canonicalSweepCapSamples = (brep: Brep) => sweepCapSamples.get(brep);
 
 interface Builder { p: number[]; n: number[]; f: number[]; i: number[]; faces: DisplayFace[] }
 
@@ -133,6 +139,14 @@ function nativeFaceMetrics(brep: Brep, mesh: BrepMesh): Map<string, NativeDispla
 
 export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundary?: (edge: string, face: number, points: readonly Vec3[]) => void): DisplayMesh {
   const mesh = tessellateBrep(brep, { segmentsPerQuarter: quality });
+  if (quality === 8 && brep.source.family === 'analytic-boolean' && brep.bodies.length === 1) {
+    const caps = new Set(brep.faces.filter(face => face.loops.length === 2 && /\.(start|end)$/.test(face.name ?? '')).map(face => face.id));
+    const inner = new Set(brep.loops.filter(loop => loop.kind === 'inner' && caps.has(loop.face)).map(loop => loop.id));
+    if (inner.size === 2) {
+      const edges = new Set(brep.coedges.filter(use => inner.has(use.loop)).map(use => use.edge));
+      sweepCapSamples.set(brep, new Map(mesh.edges.filter(edge => edges.has(edge.edgeId)).map(edge => [edge.edgeId, edge.points])));
+    }
+  }
   // Native member signatures must not depend on viewport quality.
   let native: Map<string, NativeDisplayFace> | undefined;
   let checkBore: ReturnType<typeof createCylindricalBoreCheck> | undefined;

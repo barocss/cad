@@ -12,6 +12,7 @@ import type { ModelAnnotation } from '@barocss/cad-model/drawing/annotations3d';
 import { pmiDrawings, pmiFacingKey, pmiLabels } from './pmiGeometry';
 import { printPointToModel, printSceneBounds, projectPrintBodies } from './printProjection';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
+import { composeArcSweepExterior } from '@barocss/cad-model/engine/arcSweepExteriorDetail';
 import type { BoundedDisplayMesh, CylinderDisplayTier, Vec3 } from '@barocss/cad-model/engine/mesh';
 import { OrbitCamera } from './camera';
 import { orthographicSketchScale } from './sketchOutlinePick';
@@ -453,8 +454,9 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     const source = p.bodies, view = canvas.current, cam = camera.current;
     let tier = -1, index = -1, packet: CylinderDisplayTier | BoundedDisplayMesh | undefined;
     const refined = source.length === 1 ? source[0].mesh.loftDetail ?? source[0].mesh.arcSweepDetail : undefined;
+    const exterior = source.length === 1 && !refined && !!source[0].mesh.arcSweepExteriorDetail;
     const cylinder = source.length === 1 ? source[0].mesh.cylinderDetail : undefined;
-    if (refined && !p.render && !p.analysis && !p.scalarMaps?.length && !p.mould && !p.proposal && !p.sketch && !p.cage && !p.tool
+    if ((refined || exterior) && !p.render && !p.analysis && !p.scalarMaps?.length && !p.mould && !p.proposal && !p.sketch && !p.cage && !p.tool
       && !p.clip && !p.ghost.size && !p.instances?.length && !p.offsets?.size && !p.transforms?.size && !p.printActive && !p.camActive) {
       index = 0;
       tier = 0;
@@ -482,7 +484,11 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       if (selectedBandRail.current && !readSelectedBandRail()) selectedBandRail.current = null;
       return;
     }
-    const bodies = packet ? source.map((body, i) => i === index ? { ...body, mesh: { ...body.mesh, ...packet } } : body) : source;
+    const bodies = index < 0 ? source : source.map((body, i) => {
+      if (i !== index) return body;
+      const mesh = packet ? { ...body.mesh, ...packet } : composeArcSweepExterior(body.mesh);
+      return mesh === body.mesh ? body : { ...body, mesh };
+    });
     const previousEdge = hover.current.edge;
     const priorRail = previousEdge && current?.index === previousEdge.body && current.bodies !== current.source
       && current.source[previousEdge.body]?.mesh.bandDetail?.rails[previousEdge.edge];
@@ -541,7 +547,8 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       bodiesForMeshPicking: () => {
         const uploaded = uploadedBodies.current, source = propsRef.current.bodies;
         // The surface packets retain canonical selection indices. The sheet-band packet has its own rails.
-        if ((source[0]?.mesh.loftDetail || source[0]?.mesh.arcSweepDetail) && uploaded?.source === source) return uploaded.bodies;
+        const mesh = source[0]?.mesh;
+        if ((mesh?.loftDetail || mesh?.arcSweepDetail || mesh?.arcSweepExteriorDetail) && uploaded?.source === source) return uploaded.bodies;
         return source;
       },
     },
