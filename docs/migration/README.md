@@ -34,7 +34,8 @@ merge status. The [commit map](commit-map.tsv) locates corresponding CAD source 
 The [CAD wiki](https://github.com/barocss/cad/wiki) holds the selected CAD, GPU, Viewer, Loader, Motion, Physics and
 shared 3D material. The first import retained 578 wiki pages, 1,323 linked files and 3,174 filtered wiki commits.
 The link update added three existing B-rep attachments and fixed references within the new wiki and back to
-source pages. The [original wiki](https://github.com/barocss/barocss/wiki) retains the full history and scope.
+source pages. A later import added three CAD language and standard-part pages.
+The original wiki removed the migrated pages from its current tree and points readers to this wiki.
 
 The [open issue map](open-issue-transfers.tsv) records 374 native GitHub transfers. Titles, state and labels
 were checked against the inventory, and an original URL redirect was verified. The [source-open index](source-open-issues.tsv)
@@ -42,3 +43,19 @@ records the other 40 issues from that checkpoint, including cross-project and or
 The [closed issue index](closed-issues.tsv) records 1,046 closed issues with explicit CAD or related 3D module titles. It links
 to their original closed state and timeline. Titles outside that filter can be reviewed in the
 [original issues](https://github.com/barocss/barocss/issues?q=is%3Aissue+is%3Aclosed).
+
+
+## Source repository cleanup
+
+[PR #2635](https://github.com/barocss/barocss/pull/2635) removed the migrated CAD files from the active source
+workspace on `develop`. The original `local/cad-dev` remote branch was deleted after its last commit was matched
+against the filtered history. Historical source commits remain available by their original IDs.
+
+The [closed issue transfer map](closed-issue-transfers.tsv) records each completed transfer and its redirect.
+The first source cleanup moved 122 closed issues with their closed state, resolution reason, comments, and assignees.
+GitHub temporarily refused later transfer requests. The [closed issue index](closed-issues.tsv) includes the remaining
+candidates and provides the source URL for each.
+
+[Archived CAD pull requests](archived-pull-requests.tsv) lists 31 closed, unmerged PRs limited to the CAD paths.
+Their records remain accessible to users with source repository triage access. GitHub refused archival of merged PRs.
+Mixed PRs retain their source history and remain in the pull request index.
