@@ -41,7 +41,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   extrude: { selection: 'none: the newest finished sketch no feature uses yet', values: { h: 'distance along the sketch normal', draft: 'wall draft degrees (0: straight)', op: 'join | new | cut (only for a sketch drawn on a body face)', depth: 'distance | through (a cut only)' } },
   revolve: { selection: 'none: the newest finished sketch no feature uses yet', values: { axis: 'y | x: the sketch axis to turn about', deg: 'angle, up to 360', op: 'join | new | cut (sketch on a body face)' } },
   pipe: { selection: 'none: the newest finished sketch no feature uses yet', values: { h: 'straight run before and after the bend', bend: 'bend radius', bendAngle: 'bend angle', toward: 'x | -x | y | -y', op: 'join | new | cut (sketch on a body face)' } },
-  'offset-face': { selection: 'faces: [one flat face of a body]', values: { d: 'distance along the face normal: + out (material added), − in (taken off)' } },
+  'offset-face': { selection: 'Distance: faces [source]. To plane: faces [source, reference] in that order, on distinct current solids.', values: { offsetMode: 'distance (default) | to-plane (direct native source face and a parallel reference face)', d: 'distance along the face normal: + out (material added), − in (taken off)' } },
   box: { selection: 'none (or a top face to stack on)', values: { w: 'width along X', d: 'depth along Y', h: 'height along Z', x: 'min corner X', y: 'min corner Y', z: 'base Z' } },
   cylinder: { selection: 'none', values: { r: 'radius', h: 'height', x: 'centre X', y: 'centre Y', z: 'base Z' } },
   sphere: { selection: 'none', values: { r: 'radius', x: 'centre X', y: 'centre Y', z: 'Z it stands on (its bottom)' } },
@@ -151,16 +151,26 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   const { selection, unknown } = resolveNames(state.bodies, sel.names);
   if (unknown.length) return fail(state, `No face, edge or body named ${unknown.map(n => `"${n}"`).join(', ')} on the current part. Use the names from the last result or get_part_summary.`);
   const point = Array.isArray(args.point) && args.point.length === 3 ? args.point.map(Number) as [number, number, number] : undefined;
-  const ctx: Ctx = { doc: state.doc, bodies: state.bodies, selection, pick: point };
+  const given = isObj(args.values) ? args.values : {};
+  const toPlane = cmd.id === 'offset-face' && given.offsetMode === 'to-plane';
+  const [sourceFace, referenceFace] = selection.faces;
+  if (toPlane && (sel.names.faces.length !== 2 || selection.faces.length !== 2 ||
+      sel.names.faces.some(name => state.bodies.flatMap(body => body.mesh.faces.filter(face => face.name === name && face.nativePlaneName === name)).length !== 1)))
+    return fail(state, 'Offset face to plane needs two unique native face names in source, reference order.');
+  const ctx: Ctx = { doc: state.doc, bodies: state.bodies, selection: toPlane ? { ...selection, faces: [sourceFace] } : selection, pick: point };
   const avail = cmd.available(ctx);
   if (!avail.ok) return fail(state, `${cmd.label} can’t run: ${avail.reason}`);
   const fields = cmd.fields?.(ctx) ?? [];
-  const given = isObj(args.values) ? args.values : {};
   const bad = Object.keys(given).filter(k => !fields.some(f => f.key === k));
   if (bad.length) return fail(state, `${cmd.label} has no value ${bad.map(k => `"${k}"`).join(', ')}; its values are ${fields.map(f => `${f.key} (${f.label})`).join(', ') || 'none'}.`);
-  const values: Values = givenValues(cmd, ctx, cmd.defaults?.(ctx) ?? {}, Object.fromEntries(Object.entries(given).map(([k, v]) => [k, typeof v === 'number' ? v : String(v)])));
+  let values: Values = givenValues(cmd, ctx, cmd.defaults?.(ctx) ?? {}, Object.fromEntries(Object.entries(given).map(([k, v]) => [k, typeof v === 'number' ? v : String(v)])));
   const why = checkValues(fields, values);
   if (why) return fail(state, `${cmd.label}: ${why}`);
+  if (toPlane) {
+    const picked = cmd.onPick?.(ctx, values, { face: referenceFace, edge: null });
+    if (!picked || typeof picked.error === 'string') return fail(state, typeof picked?.error === 'string' ? picked.error : 'The reference plane is unavailable.');
+    values = picked;
+  }
   // (A command's own refusal — its build throws it — comes back as the tool's, the part unchanged; O14's typed ones among them.)
   let next: StudioDoc;
   try { next = cmd.build(ctx, values); } catch (e) { return fail(state, `${cmd.label}: ${e instanceof Error ? e.message : String(e)}`); }

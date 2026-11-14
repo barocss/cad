@@ -46,7 +46,7 @@ const SPECS: Record<string, Spec> = {
   difference: { parent: 'ref', tool: 'ref' },
   rib: { parent: 'ref', min: 'dim3', max: 'dim3' },
   'rectangular-relief': { parent: 'ref', min: 'dim2', max: 'dim2', depth: 'dim', mode: 'enum:emboss|engrave' },
-  'offset-face': { parent: 'ref', faces: 'names1', distance: 'num' },
+  'offset-face': { parent: 'ref', faces: 'names1', 'distance?': 'num', 'target?': 'any' },
   'cylindrical-wrap': { parent: 'ref', faces: 'names1', rectangle: 'any', height: 'dim' },
   // (B2: thickness and side are listed only so their refusal names exact thicken, #2258.)
   'band-surface': { 'version?': 'any', a: 'any', b: 'any', 'flip?': 'bool', 'thickness?': 'any', 'side?': 'any' },
@@ -448,7 +448,7 @@ export function renumber(node: ModelNode, map: (i: number) => number): ModelNode
   if ((n.kind === 'sketch' || n.kind === 'driven-sketch') && n.on) (n as { on: BodyRef }).on = ref(n.on);
   if (n.kind === 'sketch' && n.association !== undefined) { parentsOf(n); n.association = { ...n.association, source: ref(n.association.source) }; }
   if (n.kind === 'align') n.target = { ...n.target, body: ref(n.target.body) };
-  if (n.kind === 'face-end-extrude') n.target = { ...n.target, body: ref(n.target.body) };
+  if (n.kind === 'face-end-extrude' || (n.kind === 'offset-face' && n.target)) n.target = { ...n.target, body: ref(n.target.body) };
   if ((n.kind === 'gear' || n.kind === 'rack' || n.kind === 'bevel-gear' || n.kind === 'worm') && n.mesh) (n as { mesh: GearMesh }).mesh = { ...n.mesh, gear: map(n.mesh.gear) };
   // (R12c.3b, D157: the shaft a key, ring or pin goes on, and a key's hub keyway.)
   if (n.kind === 'oring') (n as { gland: number }).gland = map(n.gland);
@@ -484,10 +484,14 @@ function renameNode(node: ModelNode, rename: (id: string) => string): ModelNode 
   if (node.kind === 'fillet' || node.kind === 'chamfer') return { ...node, edges: node.edges.map(r) };
   if (node.kind === 'sheet-flange' || node.kind === 'sheet-corner-relief') return { ...node, edges: [r(node.edges[0])] };
   if (node.kind === 'shell') return { ...node, open: node.open.map(r) };
-  if (node.kind === 'offset-face') return {
-    ...node, faces: [r(node.faces[0])],
-    ...(node.sigs && { sigs: Object.fromEntries(Object.entries(node.sigs).map(([name, sig]) => [r(name), sig])) }),
-  };
+  if (node.kind === 'offset-face') {
+    const { target, distance, ...rest } = node;
+    const recipe = { ...rest, faces: [r(node.faces[0])] as [string],
+      ...(node.sigs && { sigs: Object.fromEntries(Object.entries(node.sigs).map(([name, sig]) => [r(name), sig])) }) };
+    return target
+      ? { ...recipe, target: { ...target, feature: rename(target.feature), face: r(target.face) } }
+      : { ...recipe, distance };
+  }
   if (node.kind === 'draft' || node.kind === 'full-round') return { ...node, faces: node.faces.map(r) };
   if (node.kind === 'face-fillet') return { ...node, faces: [r(node.faces[0]), r(node.faces[1])] };
   if (node.kind === 'band-surface') return { ...node, a: { ...node.a, edges: node.a.edges.map(r) }, b: { ...node.b, edges: node.b.edges.map(r) } };
@@ -682,6 +686,7 @@ export function duplicateBody(doc: StudioDoc, body: BodyRef, offset: [number, nu
     stack.push(...(node.kind === 'extrude' && node.cutDepth === 'through' ? usesOf(node, nodes) : parentsOf(node)));
   }
   if ([...chain].some(i => nodes[i].kind === 'align')) throw refusal('BAD_REFERENCE', 'Align: duplicating a body with a bound target face is not supported.');
+  if ([...chain].some(i => { const node = nodes[i]; return node.kind === 'offset-face' && node.target; })) throw refusal('BAD_REFERENCE', 'Offset face: duplicating a body with a reference plane is not supported.');
   if ([...chain].some(i => nodes[i].kind === 'face-end-extrude')) throw refusal('BAD_REFERENCE', 'Extrude to face: duplicating a body with a bound end face is not supported.');
   const order = [...chain].sort((a, b) => a - b), at = new Map(order.map((old, k) => [old, nodes.length + k]));
   const map = (i: number) => at.get(i) ?? i;

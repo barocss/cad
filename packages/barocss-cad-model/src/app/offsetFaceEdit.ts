@@ -4,6 +4,7 @@ import { bodyKeyFor, featureId } from '../engine/ids';
 import { refusal } from '../engine/refusal';
 import { canonical } from '../util/revision';
 import type { Command, Ctx } from './commands';
+import { captureOffsetPlane, offsetFields, offsetPlaneStep, pickOffsetPlane, resetOffsetPlane } from './offsetPlanePick';
 import { buildNativeOffsetFace, checkDirectOffsetDistance, offsetFaceCommand } from './profileCommands';
 
 export const OFFSET_FACE_EDIT = 'offset-face-edit';
@@ -50,16 +51,26 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
   if (direct) return {
     id: OFFSET_FACE_EDIT, label: 'Edit Offset face', icon: 'cad-extrude', group: 'modify',
     available: ctx => ctx.doc === doc ? { ok: true } : { ok: false, reason: 'Open the current Offset face in History again.' },
-    fields: offsetFaceCommand.fields,
-    defaults: () => ({ d: direct.distance }),
-    steps: (ctx, values) => [{ label: 'Face', text: direct.faces[0], done: true }, ...(offsetFaceCommand.steps?.(ctx, values) ?? [])],
+    fields: () => offsetFields(true),
+    defaults: () => ({ d: direct.distance ?? 2, offsetMode: direct.target ? 'to-plane' : 'distance', ...(direct.target ? { keepPlane: 1 } : {}) }),
+    derive: resetOffsetPlane,
+    steps: (ctx, values) => [{ label: 'Face', text: direct.faces[0], done: true },
+      ...(values.offsetMode === 'to-plane' ? [offsetPlaneStep(values, direct.target)] : offsetFaceCommand.steps?.(ctx, values) ?? [])],
+    onPick: (ctx, values, hit) => pickOffsetPlane(ctx, values, hit.face, direct.parent, index),
     build: (ctx, values) => {
       if (ctx.doc !== doc || ctx.doc.nodes[index] !== direct) return rejected('open the current Offset face in History again.');
-      const distance = Number(values.d);
-      checkDirectOffsetDistance(distance);
-      if (distance === direct.distance) return doc;
+      const { target: priorTarget, distance: priorDistance, ...recipe } = direct;
       const nodes = [...doc.nodes];
-      nodes[index] = { ...direct, distance };
+      if (values.offsetMode === 'to-plane') {
+        if (priorTarget && values.keepPlane === 1) return doc;
+        const target = captureOffsetPlane(ctx, values, direct.parent, index);
+        nodes[index] = { ...recipe, target };
+      } else {
+        const distance = Number(values.d);
+        checkDirectOffsetDistance(distance);
+        if (distance === priorDistance) return doc;
+        nodes[index] = { ...recipe, distance };
+      }
       return { ...doc, nodes };
     },
   };
@@ -81,7 +92,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
   return {
     id: OFFSET_FACE_EDIT, label: 'Edit Offset face', icon: 'cad-extrude', group: 'modify',
     available: ctx => ctx.doc === doc ? { ok: true } : { ok: false, reason: 'Open the current Offset face in History again.' },
-    fields: offsetFaceCommand.fields,
+    fields: () => offsetFields(false),
     defaults: () => ({ d: saved.d }),
     steps: (ctx, values) => [{ label: 'Face', text: saved.face, done: true }, ...(offsetFaceCommand.steps?.(ctx, values) ?? [])],
     build: (ctx, values) => {

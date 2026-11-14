@@ -5,6 +5,7 @@ import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { patchValues, shownFields, type Values } from '@barocss/cad-model/app/commands';
 import { bodyName } from '@barocss/cad-model/app/bodies';
 import { refOf } from '@barocss/cad-model/app/bodyRef';
+import { awaitingOffsetPlane } from '@barocss/cad-model/app/offsetPlanePick';
 import { awaitingExtrudeEndFace } from '@barocss/cad-model/app/extrudeEndFacePick';
 import { awaitingRevolveAxis } from '@barocss/cad-model/app/revolveAxisEdit';
 import { awaitingAlignTarget } from '@barocss/cad-model/app/alignCommand';
@@ -70,7 +71,7 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
         setActive(a => a && { ...a, preview: 'error', error: { title: 'Assembly changed', hint: 'Start Bearing again to use the current housing geometry.', detail: '' } });
         return;
       }
-      if (awaitingExtrudeEndFace(active.cmd.id, active.values) || awaitingRevolveAxis(active.cmd.id, active.values)
+      if (awaitingExtrudeEndFace(active.cmd.id, active.values) || awaitingOffsetPlane(active.cmd.id, active.values) || awaitingRevolveAxis(active.cmd.id, active.values)
         || awaitingMirrorPlane(active.cmd.id, active.values) || (active.cmd.id === 'align' && awaitingAlignTarget(active.values))) {
         previewFor.current = null;
         setPreviewBodies(null);

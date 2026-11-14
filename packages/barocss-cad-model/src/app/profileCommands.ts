@@ -6,7 +6,7 @@ import { captureSignatures } from '../engine/references';
 // (a picked profile pulled along its normal), Revolve (turned about a sketch axis), Pipe (carried along
 // runs and bends) and Loft (through two or more picked sections). A profile drawn on a body's face joins
 // that body by default; Operation can make a new body or cut it instead.
-import { prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
+import { isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
 import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle } from './profiles';
@@ -25,6 +25,7 @@ import { isFaceEndExtrudeSketch } from '../engine/faceEndExtrude';
 import { currentPocketSketch } from '../engine/part';
 import { throughCutPlane, throughCutSide } from '../engine/throughCut';
 import { extrudeEndFaceTarget, extrudeEndFaceValues } from './extrudeEndFacePick';
+import { captureOffsetPlane, offsetFields, offsetPlaneStep, pickOffsetPlane, resetOffsetPlane } from './offsetPlanePick';
 
 const ok = { ok: true as const }, no = (reason: string) => ({ ok: false as const, reason });
 /** The sketch a single-profile command works on, or why there is none. */
@@ -236,6 +237,14 @@ export function checkDirectOffsetDistance(distance: number): void {
     throw refusal('VALUE', 'Offset face needs a nonzero signed distance within ±10000 mm.');
 }
 
+function offsetPlaneAvailable(ctx: Ctx): boolean {
+  const pick = ctx.selection.faces[0], body = pick && ctx.bodies[pick.body], ref = body?.ref;
+  const node = ref && ctx.doc.nodes[ref.node];
+  if (!node || !body.mesh.faces[pick.face]?.exact || ref.side !== 'solid') return false;
+  return node.kind === 'draft' || node.kind === 'offset-face' || (node.kind === 'extrude' &&
+    (!!node.draft || (!body.mesh.faces[pick.face].nativeAxisPlane && isStraightHexagonalExtrusion(ctx.doc.nodes, node))));
+}
+
 /** Move an admitted native face along its signed normal. */
 export const offsetFaceCommand: Command = {
   id: 'offset-face', label: 'Offset face', icon: 'cad-extrude', group: 'modify', keywords: 'move face push pull offset direct edit press',
@@ -249,11 +258,21 @@ export const offsetFaceCommand: Command = {
     for (const candidate of ctx.bodies) if (candidate.key === body.key) matches++;
     return matches === 1 ? ok : no('Pick a supported planar face.');
   },
-  fields: () => [{ key: 'd', label: 'Offset', kind: 'mm' }],
-  defaults: () => ({ d: 2 }),
-  steps: (_ctx, v) => [{ label: 'Move', text: Number(v.d) > 0 ? `${v.d} mm out (material added)` : Number(v.d) < 0 ? `${-Number(v.d)} mm in (material taken off)` : 'give it a distance (out +, in −)', done: Number(v.d) !== 0 }],
+  fields: ctx => offsetFields(offsetPlaneAvailable(ctx)),
+  defaults: ctx => ({ d: 2, ...(offsetPlaneAvailable(ctx) ? { offsetMode: 'distance' } : {}) }),
+  derive: resetOffsetPlane,
+  steps: (_ctx, v) => v.offsetMode === 'to-plane' ? [offsetPlaneStep(v)] : [{ label: 'Move', text: Number(v.d) > 0 ? `${v.d} mm out (material added)` : Number(v.d) < 0 ? `${-Number(v.d)} mm in (material taken off)` : 'give it a distance (out +, in −)', done: Number(v.d) !== 0 }],
+  onPick: (ctx, values, hit) => {
+    const pick = ctx.selection.faces[0];
+    return pickOffsetPlane(ctx, values, hit.face, pick && ctx.bodies[pick.body]?.ref, ctx.doc.nodes.length);
+  },
   build: (ctx, v) => {
     const d = Number(v.d), direct = resolveDirectOffsetFace(ctx);
+    if (v.offsetMode === 'to-plane') {
+      if (!direct) throw refusal('VALUE', 'Offset face: the selected face does not support moving to a reference plane.');
+      const target = captureOffsetPlane(ctx, v, direct.parent, ctx.doc.nodes.length);
+      return captureSignatures(withNode(ctx.doc, { kind: 'offset-face', parent: direct.parent, faces: [direct.face], target }), ctx.bodies);
+    }
     if (direct) {
       checkDirectOffsetDistance(d);
       const candidate = withNode(ctx.doc, { kind: 'offset-face', parent: direct.parent, faces: [direct.face], distance: d });
@@ -266,7 +285,8 @@ export const offsetFaceCommand: Command = {
     return { ...candidate, nodes: [...candidate.nodes.slice(0, -1),
       { ...terminal, made: { command: 'offset-face', nodes: 3, values: { d, face } } }] };
   },
-  handles: ctx => {
+  handles: (ctx, values) => {
+    if (values.offsetMode === 'to-plane') return [];
     try {
       const direct = resolveDirectOffsetFace(ctx);
       if (direct) return [{ key: 'd', at: direct.anchor, dir: direct.normal, step: 0.5 }];

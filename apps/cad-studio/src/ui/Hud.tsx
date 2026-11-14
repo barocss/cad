@@ -4,6 +4,7 @@ import type { FilletType, RadiusMode } from '../app/filletFamily';
 import { commandIconName } from './commandIcons';
 import { shownFields } from '@barocss/cad-model/app/commands';
 import { bodyName } from '@barocss/cad-model/app/bodies';
+import { isOffsetToPlane } from '@barocss/cad-model/app/offsetPlanePick';
 import { isExtrudeToFace } from '@barocss/cad-model/app/extrudeEndFacePick';
 import { REVOLVE_AXIS_EDIT } from '@barocss/cad-model/app/revolveAxisEdit';
 import { useEffect, useRef, type ChangeEvent, type ReactNode } from 'react';
@@ -97,7 +98,8 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
         {active.cmd.steps(active.ctx, active.values).filter(step =>
           !(edgeScope && step.label === 'Edges')).map(step => {
           const endFace = step.label === 'End face' && isExtrudeToFace(active.cmd.id, active.values);
-          const requiresPreview = endFace || (step.label === 'Axis' && replacingAxis);
+          const requiresPreview = endFace || (step.label === 'Reference plane' && isOffsetToPlane(active.cmd.id, active.values))
+            || (step.label === 'Axis' && replacingAxis);
           const done = step.done && (!requiresPreview || active.preview === 'ok');
           return <div key={step.label} className={'hud-step' + (done ? ' done' : '')}>
             <Icon name={done ? 'check_circle' : 'radio_button_unchecked'} small /><b>{step.label}</b><span>{step.text}</span>

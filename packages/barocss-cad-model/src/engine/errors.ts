@@ -25,6 +25,8 @@ const rules: { code?: string | readonly string[]; text?: RegExp; title: string; 
     hint: 'Keep the link by canceling this operation. To use the inset as a regular sketch, open Extrude in History and choose Detach inset. This removes the link to the source sketch.' },
   { text: /Extrude to face: the target must be ahead of the source in the positive extrusion direction/i,
     title: 'End face is behind the sketch', hint: 'Pick a parallel face ahead of the sketch along its extrusion direction.' },
+  { text: /Offset face: the reference plane must be parallel to the selected face/i,
+    title: 'Reference plane is not parallel', hint: 'Pick a parallel face on another solid.' },
   { text: /cylindrical wrap.*(?:height|radius)|height.*source radius/i,
     title: 'Wrap height must equal the cylinder radius',
     hint: 'Use the cylinder radius as the outward height.' },

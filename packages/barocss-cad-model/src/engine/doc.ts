@@ -254,12 +254,21 @@ export function cylindricalWrapNodeProblem(input: unknown, parameters: Readonly<
   return null;
 }
 /** Signed offset of one exact face on an existing solid. */
-export interface OffsetFaceNode { kind: 'offset-face'; parent: BodyRef; faces: [string]; distance: number }
+export interface OffsetPlaneRef {
+  body: BodyRef;
+  feature: string;
+  face: string;
+  normal: [number, number, number];
+  localAnchor: [number, number, number];
+  localSupport: number;
+}
+export type OffsetFaceNode = { kind: 'offset-face'; parent: BodyRef; faces: [string] } &
+  ({ distance: number; target?: never } | { target: OffsetPlaneRef; distance?: never });
 
 /** Check the authored recipe before capture or geometry evaluation. */
 export function offsetFaceNodeProblem(input: unknown, index: number): string | null {
   if (!textRecord(input) || input.kind !== 'offset-face') return 'Offset face: an offset recipe is required.';
-  const allowed = new Set(['kind', 'parent', 'faces', 'distance', ...NODE_EXTRA_FIELDS]);
+  const allowed = new Set(['kind', 'parent', 'faces', 'distance', 'target', ...NODE_EXTRA_FIELDS]);
   for (const key of Object.keys(input)) if (!allowed.has(key)) return `Offset face: unknown field ${key}.`;
   const parent = input.parent;
   if (!textRecord(parent) || Object.keys(parent).sort().join(',') !== 'node,side' || parent.side !== 'solid' ||
@@ -268,7 +277,22 @@ export function offsetFaceNodeProblem(input: unknown, index: number): string | n
   }
   const face = Array.isArray(input.faces) && input.faces.length === 1 ? input.faces[0] : undefined;
   if (typeof face !== 'string' || !face.trim() || face.includes('+') || face.includes('\0')) return 'Offset face: one exact individual face name is required.';
-  if (typeof input.distance !== 'number' || !Number.isFinite(input.distance) || input.distance === 0 || Math.abs(input.distance) > CadPartLimits.length) {
+  if (Object.hasOwn(input, 'target')) {
+    const target = input.target;
+    if (Object.hasOwn(input, 'distance') || !textRecord(target) ||
+        Object.keys(target).sort().join(',') !== 'body,face,feature,localAnchor,localSupport,normal') {
+      return 'Offset face: give one reference plane or one signed distance.';
+    }
+    const body = target.body;
+    if (!textRecord(body) || Object.keys(body).sort().join(',') !== 'node,side' || body.side !== 'solid' ||
+        typeof body.node !== 'number' || !Number.isSafeInteger(body.node) || body.node < 0 || body.node >= index || body.node === parent.node ||
+        typeof target.feature !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(target.feature) ||
+        typeof target.face !== 'string' || !target.face.trim() || /[+\0]|#\d+$/.test(target.face) ||
+        !textVector(target.normal, false) || Math.abs(Math.hypot(...target.normal) - 1) > 1e-8 ||
+        !textVector(target.localAnchor, false) || typeof target.localSupport !== 'number' || !Number.isFinite(target.localSupport)) {
+      return 'Offset face: pick one persistent planar face of a different preceding solid.';
+    }
+  } else if (typeof input.distance !== 'number' || !Number.isFinite(input.distance) || input.distance === 0 || Math.abs(input.distance) > CadPartLimits.length) {
     return 'Offset face: distance must be a finite nonzero native length.';
   }
   if (input.id !== undefined && (typeof input.id !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(input.id))) return 'Offset face: the authored feature id is invalid.';
@@ -311,6 +335,14 @@ export function offsetFaceDocumentProblem(input: unknown): string | null {
       const problem = offsetFaceNodeProblem(node, index);
       if (problem) return problem;
       if (node.sigs === undefined) return 'Offset face: the selected face needs its stored individual signature.';
+      if (node.target !== undefined) {
+        const target = node.target as OffsetPlaneRef;
+        const source = value.nodes[target.body.node];
+        if (!textRecord(source) || source.id !== target.feature ||
+            value.nodes.filter(candidate => textRecord(candidate) && candidate.id === target.feature).length !== 1) {
+          return 'Offset face: the reference feature identity is missing, changed or ambiguous.';
+        }
+      }
       const parent = value.nodes[(node.parent as BodyRef).node];
       if (!textRecord(parent)) return 'Offset face: a supported solid parent is required.';
       if (parent.kind === 'draft' || parent.kind === 'offset-face') continue;
@@ -1135,6 +1167,7 @@ export const usesOf = (node: ModelNode, nodes?: readonly ModelNode[]): number[] 
     ? [node.sketch, ...(nodes ? nodes.flatMap((_, i) => featureId(nodes, i) === node.axisRef!.sourceFeature ? [i] : []) : [])]
   : node.kind === 'align' ? [node.parent.node, node.target.body.node]
   : node.kind === 'face-end-extrude' ? [node.sketch, node.target.body.node]
+  : node.kind === 'offset-face' && node.target ? [node.parent.node, node.target.body.node]
   : node.kind === 'extrude' && node.cutDepth === 'through' ? throughCutSources(node, nodes) : parentsOf(node);
 
 function throughCutSources(node: Extract<ModelNode, { kind: 'extrude' }>, nodes?: readonly ModelNode[]): number[] {
@@ -1319,7 +1352,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
   switch (node.kind) {
     case 'text': return `Text · ${node.text}`;
     case 'cylindrical-wrap': return 'Cylindrical wrap';
-    case 'offset-face': return `Offset face ${node.distance > 0 ? '+' : ''}${fmt(node.distance)} mm`;
+    case 'offset-face': return node.target ? 'Offset face to plane' : `Offset face ${node.distance > 0 ? '+' : ''}${fmt(node.distance)} mm`;
     case 'band-surface': return 'Band surface';
     case 'text-relief': return `${node.mode === 'emboss' ? 'Text emboss' : 'Text engrave'} · ${node.text}`;
     case 'driven-sketch': return 'Sketch · driven outline';

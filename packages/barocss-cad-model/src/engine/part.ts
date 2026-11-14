@@ -1,3 +1,4 @@
+import { resolveOffsetPlaneDistance } from './offsetPlane';
 import { assertRevolveAxisBindings, linkedRevolveSource, resolveRevolveAxis } from './revolveAxis';
 import { assertPocketFloorBindings, pocketFloorSource, resolvePocketFloor } from './pocketFloor';
 import { resolveDrivenSketch } from '../sketch/driven';
@@ -152,6 +153,7 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
       return { ...at, kind: 'cylindrical-wrap', target: ref(node.parent), faces: [name], rectangle: structuredClone(node.rectangle), height: structuredClone(node.height), ...expectOf(node, node.faces) };
     }
     case 'offset-face': {
+      if (node.target) throw refusal('BAD_REFERENCE', 'Offset face to plane requires the current native document prefix.');
       const face = node.faces[0];
       if (!Object.hasOwn(node.sigs ?? {}, face)) throw refusal('BAD_REFERENCE', 'Offset face: the selected face needs its stored individual signature.');
       return { ...at, kind: 'offset-face', target: ref(node.parent), face, distance: node.distance, ...expectOf(node, node.faces) };
@@ -734,6 +736,13 @@ function buildPartDocument(doc: StudioDoc, before?: number): CadPartDocument {
     // Suppressing the pattern itself keeps the ordinary parent pass-through below.
     if ((node.kind === 'fill-feature-pattern' || node.kind === 'curve-feature-pattern' || node.kind === 'linear-feature-pattern' || node.kind === 'rectangular-feature-pattern' || node.kind === 'rib' || node.kind === 'rectangular-relief' || node.kind === 'text-relief') && !node.suppressed) { features.push(...featuresOf(node, i, CadPartLimits.features - features.length)); return; }
     const parent = (node as { parent: BodyRef }).parent;
+    if (node.kind === 'offset-face' && node.target && !node.suppressed) {
+      if (hasText) checkTextExpansion(features);
+      const { target, ...recipe } = node;
+      const distance = resolveOffsetPlaneDistance(doc, target, recipe, features);
+      features.push(featureOf({ ...recipe, distance }, i));
+      return;
+    }
     if (gone.has(parent.node)) { gone.add(i); return; }
     if (node.suppressed) { pass(i, parent); return; }
     features.push(...featuresOf(node, i, CadPartLimits.features - features.length));

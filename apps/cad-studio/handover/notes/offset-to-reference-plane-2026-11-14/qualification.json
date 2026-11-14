@@ -1,0 +1,151 @@
+{
+  "decision": "D1265",
+  "priority": "P5",
+  "row": 31,
+  "tier": "FULL",
+  "parent": "0091257b5",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1265-<run>",
+    "D1265_SOURCE_FROZEN=1 node apps/cad-studio/test/offset-to-plane-browser.mjs <external-evidence>/studio-delivery",
+    "pnpm --filter @barocss/cad-model test offset-to-plane offset-hexagonal-wall offset-drafted-wall offset-face-native native-offset-face face-end-extrude",
+    "pnpm --filter @barocss-cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app test document-file extrude-end-face-pick fillet-family",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint <changed Model, HUD, Worker preview, viewport picking and affected test paths>",
+    "node --check apps/cad-studio/test/offset-to-plane-browser.mjs",
+    "node <external-evidence>/mutation.mjs <external-evidence>",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/delivery-build",
+    "git diff --check"
+  ],
+  "checks": {
+    "initialModelTypes": "FAIL",
+    "initialFixtureFaceNames": "FAIL",
+    "initialStudioRefusalMessage": "FAIL",
+    "initialStudioTypes": "FAIL",
+    "initialChangedPathLint": "FAIL",
+    "existingAppLint": {
+      "status": "FAIL",
+      "symbol": "_k",
+      "presentAtParent": true
+    },
+    "focusedLint": "PASS",
+    "desktopStudio": "PASS",
+    "independentGeometry": "PASS",
+    "independentReviews": {
+      "status": "PASS",
+      "reviews": 2
+    },
+    "modelFocused": {
+      "status": "PASS",
+      "passed": 66,
+      "failed": 0
+    },
+    "studioFocused": {
+      "status": "PASS",
+      "passed": 32,
+      "failed": 0
+    },
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "mutation": {
+      "status": "PASS",
+      "originalExit": 0,
+      "reversedDistanceExit": 1,
+      "skippedParallelGuardExit": 1
+    },
+    "driverSyntax": "PASS",
+    "studioProductionBuild": "PASS",
+    "fullSuites": "NOT_RUN",
+    "ci": "NOT_RUN",
+    "paidLive": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "arbitraryFaceReplacement": "NOT_RUN",
+    "curvedNeighbors": "NOT_RUN"
+  },
+  "measurements": {
+    "outward": {
+      "status": "PASS",
+      "support": 77,
+      "distanceMM": 1,
+      "exactVolumeMM3": 3934.7916666666665,
+      "nativeVolumeMM3": 3934.791666666667,
+      "studioVolumeMM3": 3934.791666666667,
+      "maximumPlaneResidualMM": 0,
+      "oracleSHA256": "e5eb47659d3121bb3fb66bbacb4c8f6123ed8349b194c5896963e73d0cfd0ded"
+    },
+    "inward": {
+      "status": "PASS",
+      "support": 62,
+      "distanceMM": -2,
+      "exactVolumeMM3": 3619.1666666666665,
+      "nativeVolumeMM3": 3619.1666666666665,
+      "studioVolumeMM3": 3619.1666666666665,
+      "maximumPlaneResidualMM": 0,
+      "oracleSHA256": "121359da29b8fc2aaa5796cf96a4c617ab566ee5d9a4144c6144529326a43c79"
+    },
+    "retargeted": {
+      "status": "PASS",
+      "support": 87,
+      "distanceMM": 3,
+      "exactVolumeMM3": 4093.125,
+      "nativeVolumeMM3": 4093.125,
+      "studioVolumeMM3": 4093.125,
+      "maximumPlaneResidualMM": 0,
+      "oracleSHA256": "c4bce879072e015d368e484d977e2639da552b8b678fbdfc8f8080474c03d0db"
+    },
+    "reopen": {
+      "status": "PASS",
+      "support": 87,
+      "distanceMM": 3,
+      "exactVolumeMM3": 4093.125,
+      "nativeVolumeMM3": 4093.125,
+      "studioVolumeMM3": 4093.125,
+      "maximumPlaneResidualMM": 0,
+      "oracleSHA256": "c4bce879072e015d368e484d977e2639da552b8b678fbdfc8f8080474c03d0db"
+    }
+  },
+  "observations": [
+    {
+      "label": "outward",
+      "bodyHash": "b112c97e908873a88d5141e9539c2a22c7c62ade6d56845118821f68ac11e94c",
+      "referenceHash": "b55ddd5249ccc8061523d9898d04f7925a5239345053824eecaf375ca70b48a4",
+      "incidenceHash": "f0fe878d56cde40cecb372c5448c8e54adcb29550532acfb44d638c5a1c51bf5"
+    },
+    {
+      "label": "inward",
+      "bodyHash": "998c0162090fad938469da95786eed3fa8ca528b6958945d5286a6a9c695f95c",
+      "referenceHash": "93f914c0456b7e398a09486c0e9f0423ae4e6769fccfb84ff1874c05045f8437",
+      "incidenceHash": "f0fe878d56cde40cecb372c5448c8e54adcb29550532acfb44d638c5a1c51bf5"
+    },
+    {
+      "label": "retargeted",
+      "bodyHash": "adb390db2f26f95575f78e14600e63d93a4f7db100613e173231cee78ed8dd27",
+      "referenceHash": "93f914c0456b7e398a09486c0e9f0423ae4e6769fccfb84ff1874c05045f8437",
+      "incidenceHash": "f0fe878d56cde40cecb372c5448c8e54adcb29550532acfb44d638c5a1c51bf5"
+    },
+    {
+      "label": "reopen",
+      "bodyHash": "adb390db2f26f95575f78e14600e63d93a4f7db100613e173231cee78ed8dd27",
+      "referenceHash": "93f914c0456b7e398a09486c0e9f0423ae4e6769fccfb84ff1874c05045f8437",
+      "incidenceHash": "f0fe878d56cde40cecb372c5448c8e54adcb29550532acfb44d638c5a1c51bf5"
+    }
+  ],
+  "receipts": {
+    "initialStudioSHA256": "65b2d3cb8bdc2d64cfe2970065d8c2a603e3a2b0131d2044830b772f4067a935",
+    "finalStudioSHA256": "d11e88cdd3e9936ef129ab351961700e281e8040e25fe41d4bedcd56b4eeabaa",
+    "nativeSaveSHA256": "c98c3955497aa6aa3a8531ccb9ba2295be1f890f9920a7ce798e7766ad721298",
+    "unchangedPinnedFiles": 896,
+    "screenshotsSHA256": {
+      "nonparallel-refused": "6b4b3c725d25e90ccd5ba3345ea88361a5010ad3137c88993a754ab27daf79d7",
+      "reference-applied": "a1f5e2fdb8d4a6b572991aa5aa9a7bfd2799dc44fa144fe97084b34168a3fe69",
+      "reference-moved": "c6d4e7483833fac8512f901759eed83a35950fbcae8009afb6868bf538f028e4",
+      "native-reopen": "ccb4e5ded159712c794772535b110cc8da66a2b4d882afeabb79d32e361f663d",
+      "collapse-file-refused": "fe2f3f403d273c675044aeb7c36a94c894a025b7b055940c0c93627615f463e2"
+    }
+  },
+  "issues": {
+    "2264": "OPEN",
+    "536": "OPEN"
+  }
+}

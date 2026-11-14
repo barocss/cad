@@ -64,6 +64,7 @@ import { useRobotExports } from './robot/useRobotExports';
 import { RobotInspector } from './robot/RobotInspector';
 import { sourceRevolveAxis, type RevolveAxisHit } from './app/revolveAxisPick';
 import { shownExtrudeEndFace, sourceExtrudeEndFace, type ExtrudeEndHit } from './app/extrudeEndFace';
+import { awaitingOffsetPlane, isOffsetToPlane } from '@barocss/cad-model/app/offsetPlanePick';
 import { awaitingExtrudeEndFace, EXTRUDE_END_FACE_EDIT, isExtrudeToFace } from '@barocss/cad-model/app/extrudeEndFacePick';
 import { editSavedExtrudeEndFaceCommand, canEditSavedExtrudeEndFace } from '@barocss/cad-model/app/extrudeEndFaceEdit';
 import { canEditSavedOffsetFace, editSavedOffsetFaceCommand, OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
@@ -1504,7 +1505,7 @@ export function App() {
     // (R1d: the command as it is now, its values and preview state — the App may not have rendered since they changed.)
     const active = activeStore.get();
     if (!active?.cmd.build || !canChangeDocument()) return;
-    const toFace = isExtrudeToFace(active.cmd.id, active.values);
+    const toFace = isExtrudeToFace(active.cmd.id, active.values) || isOffsetToPlane(active.cmd.id, active.values);
     const region = active.cmd.id === 'extrude' && active.values.region !== undefined && active.values.region !== 'all';
     const replaceAxis = active.cmd.id === REVOLVE_AXIS_EDIT;
     const sweep = active.cmd.id === SWEEP_CURVE;
@@ -1516,7 +1517,7 @@ export function App() {
     }
     if (active.upload) { applyWhenReady.current = null; return; }
     if (!bearingRootCurrent) { applyWhenReady.current = null; return; }
-    if (awaitingExtrudeEndFace(active.cmd.id, active.values) || awaitingRevolveAxis(active.cmd.id, active.values) || awaitingMirrorPlane(active.cmd.id, active.values)) {
+    if (awaitingExtrudeEndFace(active.cmd.id, active.values) || awaitingOffsetPlane(active.cmd.id, active.values) || awaitingRevolveAxis(active.cmd.id, active.values) || awaitingMirrorPlane(active.cmd.id, active.values)) {
       applyWhenReady.current = null; again.current = null; return;
     }
     if (active.preview === 'busy') { applyWhenReady.current = active.cmd; return; }
@@ -1875,9 +1876,11 @@ export function App() {
   const viewBodiesRef = useRef<BodyResult[]>(null!);
   const sectionPickRef = useRef<SectionPick>(() => ({ face: null, edge: null, cap: false }));
   const commandPickScope = useRef<{ bodies: readonly BodyResult[]; hidden: ReadonlySet<number>; preview: boolean } | null>(null);
-  const pickExtrudeEndFace = (hit: ExtrudeEndHit, blocked: boolean): boolean => {
+  const pickCommandReferenceFace = (hit: ExtrudeEndHit, blocked: boolean): boolean => {
     const current = activeStore.get();
-    if (!current || !isExtrudeToFace(current.cmd.id, current.values)) return false;
+    if (!current) return false;
+    const offset = isOffsetToPlane(current.cmd.id, current.values);
+    if (!offset && !isExtrudeToFace(current.cmd.id, current.values)) return false;
     applyWhenReady.current = null;
     again.current = null;
     if (docNow.current !== doc || evaluatedRef.current !== evaluated || current.ctx.doc !== commandDoc) {
@@ -1891,7 +1894,7 @@ export function App() {
     const picked = face && current.cmd.onPick?.(current.ctx, current.values, { face, edge: null });
     if (!picked || typeof picked.error === 'string') {
       const hint = typeof picked?.error === 'string' ? picked.error : 'Pick one original planar face of a current solid.';
-      setToast({ title: 'End face not selected', hint, detail: '' });
+      setToast({ title: offset ? 'Reference plane not selected' : 'End face not selected', hint, detail: '' });
       return true;
     }
     commandPreview.retire();
@@ -2069,7 +2072,7 @@ export function App() {
   const placedMeasureContextReady = () => placedMeasureContext && docNow.current === doc
     && workerSessionNow.current === workerSession && explodeStore.get() === 0 && !sectionRef.current
     && !activeStore.get() && !halvesShownRef.current;
-  const { onPick, picking } = useViewportPicking({ doc, modelUnavailable, nativeVertexReady, nativePlanePickState: footprintState, sectionPickRef, activeStore, setActive, onFilletPick: pickFillet, onExtrudeTargetPick: pickExtrudeEndFace, onRevolveAxisPick: pickRevolveAxis, onTransformFacePick: pickTransformFace, retargetSweep: retargetActiveSweep, measure, assembly, sectionRef, sectionFacePickRef, viewBodiesRef,
+  const { onPick, picking } = useViewportPicking({ doc, modelUnavailable, nativeVertexReady, nativePlanePickState: footprintState, sectionPickRef, activeStore, setActive, onFilletPick: pickFillet, onReferenceFacePick: pickCommandReferenceFace, onRevolveAxisPick: pickRevolveAxis, onTransformFacePick: pickTransformFace, retargetSweep: retargetActiveSweep, measure, assembly, sectionRef, sectionFacePickRef, viewBodiesRef,
     sectionBoxRef, setSection, setSectionFacePick, setToast, activeRef, halvesShownRef, setPick, setInstanceSel, setSelection, directSel, setDirectSel, setMeasure, measureNativeReady, measureInstances, placedMeasureContextReady, pickFilterRef,
     scene: { active, section, sketch: !!sketch, bodies, selection, setMenu } });
   pickRef.current = onPick;
@@ -2769,7 +2772,8 @@ export function App() {
   commandPickScope.current = fresh && !busy && !section && !sketch && !inPlace && !cageEd.session && !routePreviewBodies
     && !ghost && !rendering && !drawing && !bodyDrag && previewMode === 'none' && (shownBodies === drawnBodies || shownBodies === previewBodies)
     ? { bodies: shownBodies, hidden: hiddenBodies, preview: shownBodies === previewBodies } : null;
-  const shownEndFace = active && commandPickScope.current && isExtrudeToFace(active.cmd.id, active.values) && active.preview === 'ok'
+  const shownEndFace = active && commandPickScope.current && active.preview === 'ok' &&
+    (isExtrudeToFace(active.cmd.id, active.values) || isOffsetToPlane(active.cmd.id, active.values))
     ? shownExtrudeEndFace(active, shownBodies) : null;
   const sectionEdgeSources = useMemo(() => {
     if (!sectionExactShown || shownBodies !== sectionBodies || section?.mode !== 'plane' || section.planes.length !== 1) return [];
@@ -3491,7 +3495,7 @@ export function App() {
   const changeHudValue = (key: string, value: number | string) => {
     const current = activeStore.get();
     if (!current) return;
-    if (current.cmd.id === 'split' || (current.cmd.id === 'mirror' && key === 'pickPlane')
+    if (key === 'offsetMode' || current.cmd.id === 'split' || (current.cmd.id === 'mirror' && key === 'pickPlane')
       || (current.cmd.id === 'extrude' && (key === 'region'
       || (key === 'depth' && (isExtrudeToFace(current.cmd.id, current.values) || value === 'to-face'))))) {
       applyWhenReady.current = null;
@@ -3512,6 +3516,7 @@ export function App() {
       || owner.cmd.id === OFFSET_FACE_EDIT || current.cmd.id === OFFSET_FACE_EDIT
       || owner.cmd.id === DRAFT_EDIT || current.cmd.id === DRAFT_EDIT
       || isExtrudeToFace(owner.cmd.id, owner.values) || isExtrudeToFace(current.cmd.id, current.values)
+      || isOffsetToPlane(owner.cmd.id, owner.values) || isOffsetToPlane(current.cmd.id, current.values)
       || (current.cmd.id === 'extrude' && owner.values.region !== current.values.region))) return;
     apply();
   };
