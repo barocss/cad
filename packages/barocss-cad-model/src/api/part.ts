@@ -29,7 +29,7 @@ export type StudioLoftSection = { readonly sketch: Sketch } & (
   | { readonly z: number; readonly frame?: never }
   | { readonly frame: LoftSectionFrame; readonly z?: never }
 );
-/** The Kernel's bounded quadratic/cubic guide: copied world-mm values, not a live curve reference. */
+/** Loft guides use copied world-mm values. */
 export interface StudioLoftOptions { readonly guide?: LoftInput['guide']; readonly guides?: LoftInput['guides']; readonly smooth?: boolean }
 
 /** set_drawing's settings (its schema's names): the sheet, scale, projection, front, views, tolerancing, title, scope, sections, details, tables, balloons, weld symbols. */
@@ -339,7 +339,7 @@ export class StudioPart extends Part<StudioDoc> {
    * A loft through closed sketches, choosing its new body. Section frames and guide controls are copied snapshots
    * in world mm; later edits to the source curve or caller's arrays do not drive this feature. A Bézier guide requires
    * explicit frames; a `nurbs` guide (any polynomial B-spline through a vertex of each section) takes sections by z.
-   * A pair of quadratic Bézier `guides` takes two congruent XY rectangles at distinct z heights. The Kernel checks the exact guide contacts and supported section geometry.
+   * A pair of quadratic Bézier `guides` takes two axis-aligned XY rectangles at distinct z heights. The Kernel checks the exact guide contacts and supported section geometry.
    * Only a successfully evaluated document is returned; a refusal leaves this part and the inputs unchanged.
    */
   loft(sections: readonly StudioLoftSection[], options: StudioLoftOptions = {}): this {

@@ -102,7 +102,7 @@ await f.run(async () => {
   const incompatible = (await f.applyEditor(pending, 'width-edited')).doc;
   assert.equal(incompatible.nodes[1].id, 'n1');
   assert.deepEqual(incompatible.nodes[1].max, [11, 6]);
-  await refuseRebase(incompatible, /could not be rebased.*the Loft sections have different sizes.*same width and depth/is, 'incompatible-section-refused');
+  await refuseRebase(incompatible, /could not be rebased.*a guide misses a section corner.*maximum X corner/is, 'incompatible-section-refused');
 
   f.phase = 'Move the unrelated sketch into the upper section’s old index and rebase';
   await open(file, pending);

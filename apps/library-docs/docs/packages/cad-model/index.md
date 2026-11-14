@@ -300,7 +300,7 @@ recipe and edit the source profile through existing Width/Depth fields. The sour
 
 ### Two guides between rectangular sections
 
-Pass `guides` with two quadratic Bézier curves and two congruent, axis-aligned rectangular sections on a common XY sketch plane. Use `z` for the section heights. Express the guide controls in world mm. Use the minimum-Y corners from minimum X to maximum X. Both guides go from the lower section to the upper section. Put both middle controls at the halfway height. Keep the second middle control to the right of the first.
+Pass `guides` with two quadratic Bézier curves and two axis-aligned rectangular sections on a common XY sketch plane. Use `z` for the section heights. The sections can have different sizes. Their depth-to-width ratio changes linearly with height. Express the guide controls in world mm. Use the minimum-Y corners from minimum X to maximum X. Both guides go from the lower section to the upper section. Put both middle controls at the halfway height. Keep the second middle control to the right of the first.
 
 ```ts
 import { part, sketch } from '@barocss/cad-model/api';

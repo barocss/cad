@@ -53,7 +53,7 @@ export interface LoftInput {
     readonly kind: 'cubic-bezier';
     readonly controlPoints: readonly [readonly [number, number, number], readonly [number, number, number], readonly [number, number, number], readonly [number, number, number]];
   } | LoftNurbsGuideInput;
-  /** Two quadratic guides for two congruent rectangular height sections, ordered min X to max X along min Y. */
+  /** Two quadratic guides for two axis-aligned rectangular height sections, ordered min X to max X along min Y. */
   readonly guides?: readonly [LoftQuadraticGuide, LoftQuadraticGuide];
   /**
    * The first section's segment tags (R10a, D86): each side named `side[t]` by the segment of the first section it

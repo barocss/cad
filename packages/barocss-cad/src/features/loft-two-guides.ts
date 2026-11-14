@@ -6,8 +6,8 @@ import type { Curve, Point } from '../types.js';
 import { buildProfileLoop, capSurface, ExtrudedProfileLimits, type XY } from './extruded-profile-solid.js';
 import type { LoftInput, LoftSectionInput } from './loft.js';
 
-const linearKnots = [0, 0, 1, 1], quadraticKnots = [0, 0, 0, 1, 1, 1];
-const corners = [0, 1, 2, 3], G5 = gauss(5);
+const linearKnots = [0, 0, 1, 1], quadraticKnots = [0, 0, 0, 1, 1, 1], cubicKnots = [0, 0, 0, 0, 1, 1, 1, 1];
+const corners = [0, 1, 2, 3], G5 = gauss(5), G7 = gauss(7);
 const limit = ExtrudedProfileLimits.coordinateMM;
 const fail = (reason: string): never => { throw new BrepError('INPUT', `loft: two guides ${reason}`); };
 const pointInRange = (value: unknown): value is Point => Array.isArray(value) && value.length === 3
@@ -41,7 +41,7 @@ function middleControl(value: unknown, index: number, start: Point, end: Point):
   return [...points[1]] as Point;
 }
 
-/** The four upright curves share the same affine height. Each slice is a similarity of the cap rectangle. */
+/** The four upright curves share the same affine height. Each slice is a rectangle with a linearly varying aspect ratio. */
 export function twoGuideLoftSolid(input: LoftInput) {
   if (!Array.isArray(input.guides) || input.guides.length !== 2) return fail('require exactly two quadratic Béziers');
   if (Object.hasOwn(input, 'guide')) return fail('cannot be combined with the single guide');
@@ -49,22 +49,36 @@ export function twoGuideLoftSolid(input: LoftInput) {
   if (!Array.isArray(input.sections) || input.sections.length !== 2) return fail('require exactly two sections');
   const [lo, hi] = input.sections.map(rectangle);
   if (!(hi.z - lo.z >= ExtrudedProfileLimits.minimumLengthMM)) return fail('require two separated heights in increasing order');
-  if (lo.width !== hi.width || lo.depth !== hi.depth) return fail('require congruent rectangular sections');
   const sideTags = input.sideTags;
   if (sideTags && (sideTags.length !== 4 || !Array.from(sideTags).every(tag => typeof tag === 'string' && tag.length > 0) || new Set(sideTags).size !== 4))
     return fail('require a unique side tag for each rectangle edge');
 
   const a = middleControl(input.guides[0], 1, lo.points[0], hi.points[0]);
   const b = middleControl(input.guides[1], 2, lo.points[1], hi.points[1]);
-  const dx = b[0] - a[0], dy = b[1] - a[1], aspect = lo.depth / lo.width;
-  // The X differences of the three guide poles are the Bernstein coefficients of the span's X gap.
-  // Their positive lower bound keeps the similarity regular and all four section edges separated.
-  if (!(dx > 0 && Math.min(dx, dx * aspect) >= ExtrudedProfileLimits.minimumLengthMM))
+  const dx = b[0] - a[0], dy = b[1] - a[1], aspectLo = lo.depth / lo.width, aspectHi = hi.depth / hi.width;
+  const cubic = aspectLo !== aspectHi;
+  // Multiply the guide span by the linear aspect in the Bernstein basis, then rotate it 90°.
+  // The end span has zero Y component at each cap. Only the inner offset coefficients are needed.
+  const offsets: XY[] = cubic ? [
+    [(-2 * aspectLo * dy) / 3, (2 * aspectLo * dx + aspectHi * lo.width) / 3],
+    [(-2 * aspectHi * dy) / 3, (2 * aspectHi * dx + aspectLo * hi.width) / 3],
+  ] : [[-dy * aspectLo, dx * aspectLo]];
+  // The projected width and depth are bounded below by their Bernstein coefficients.
+  const minimum = ExtrudedProfileLimits.minimumLengthMM;
+  if (!(dx >= minimum && offsets.every(([, depth]) => depth >= minimum)))
     return fail('require guide 2 to stay to the right of guide 1 by a positive control gap');
-  const offset = (p: Point): Point => [p[0] - dy * aspect, p[1] + dx * aspect, p[2]];
-  const middle = [a, b, offset(b), offset(a)];
-  if (!middle.every(pointInRange)) return fail('would move the section outside the modeling coordinate range');
-  const rows = corners.map(i => [lo.points[i], middle[i], hi.points[i]]);
+  const guideRows = [[lo.points[0], a, hi.points[0]], [lo.points[1], b, hi.points[1]]];
+  const frontRows = cubic ? guideRows.map(elevateQuadratic) : guideRows;
+  const backRows = [2, 3].map(i => {
+    const front = frontRows[3 - i];
+    const inner = offsets.map(([ox, oy], j): Point => {
+      const [x, y, z] = front[j + 1];
+      return [x + ox, y + oy, z];
+    });
+    return [lo.points[i], ...inner, hi.points[i]];
+  });
+  if (!backRows.every(row => row.every(pointInRange))) return fail('would move the section outside the modeling coordinate range');
+  const rows = [...frontRows, ...backRows], railRows = [...guideRows, ...backRows];
 
   const { id, name } = input;
   const vertex = (k: number, i: number) => `v${k}_${i % 4}`, ring = (k: number, i: number) => `r${k}_${i % 4}`, rail = (i: number) => `l0_${i % 4}`;
@@ -72,13 +86,17 @@ export function twoGuideLoftSolid(input: LoftInput) {
   const vertices = [lo, hi].flatMap(({ points }, k) => points.map((point, i) => ({ id: vertex(k, i), point })));
   const edges = [lo, hi].flatMap(({ points }, k) => points.map((p, i) => edge(ring(k, i), lineCurve(ring(k, i), p, points[(i + 1) % 4]),
     vertex(k, i), vertex(k, i + 1), side(i), `${name}.${k ? 'top' : 'bottom'}`)));
-  for (const i of corners) edges.push(edge(rail(i), { kind: 'curve', id: rail(i), degree: 2, knots: [...quadraticKnots], controlPoints: rows[i], weights: [1, 1, 1] },
-    vertex(0, i), vertex(1, i), side(i + 3), side(i)));
+  for (const i of corners) {
+    const controlPoints = railRows[i], degree = controlPoints.length - 1;
+    edges.push(edge(rail(i), { kind: 'curve', id: rail(i), degree, knots: [...(degree === 2 ? quadraticKnots : cubicKnots)],
+      controlPoints, weights: controlPoints.map(() => 1) }, vertex(0, i), vertex(1, i), side(i + 3), side(i)));
+  }
 
   const faces = corners.map((i): BrepFaceInput => {
-    const face = `f0_${i}`;
-    return { id: face, name: side(i), sense: 'forward', surface: { kind: 'surface', id: face, degreeU: 1, degreeV: 2, knotsU: [...linearKnots], knotsV: [...quadraticKnots],
-      controlPoints: [rows[i], rows[(i + 1) % 4]], weights: [[1, 1, 1], [1, 1, 1]] }, loops: [{ kind: 'outer', uses: [
+    const face = `f0_${i}`, weights = rows[i].map(() => 1);
+    return { id: face, name: side(i), sense: 'forward', surface: { kind: 'surface', id: face, degreeU: 1, degreeV: cubic ? 3 : 2,
+      knotsU: [...linearKnots], knotsV: [...(cubic ? cubicKnots : quadraticKnots)],
+      controlPoints: [rows[i], rows[(i + 1) % 4]], weights: [weights, [...weights]] }, loops: [{ kind: 'outer', uses: [
         use(face, ring(0, i), 'forward', [0, 0], [1, 0]), use(face, rail(i + 1), 'forward', [1, 0], [1, 1]),
         use(face, ring(1, i), 'reversed', [0, 1], [1, 1]), use(face, rail(i), 'reversed', [0, 0], [0, 1]),
       ] }] };
@@ -98,6 +116,12 @@ export function twoGuideLoftSolid(input: LoftInput) {
   } };
 }
 
+/** Degree elevation preserves the guide, including its height parameter, on the cubic side patch. */
+function elevateQuadratic([start, middle, end]: Point[]): Point[] {
+  const inner = (p: Point): Point => p.map((x, i) => x + (middle[i] - x) * (2 / 3)) as Point;
+  return [start, inner(start), inner(end), end];
+}
+
 function edge(id: string, curve: Curve, a: string, b: string, left: string, right: string) {
   return { id, curve, vertices: [a, b] as [string, string], name: [left, right].sort().join('|') };
 }
@@ -107,11 +131,11 @@ function use(face: string, edge: string, sense: 'forward' | 'reversed', start: X
   return { edge, sense, pcurve: lineCurve(`uv_${face}_${edge}`, [...start, 0], [...end, 0]) };
 }
 
-/** Polygon moments of the actual native slice. Degree at most eight in height; five Gauss nodes suffice. */
+/** Polygon moments of the native slice have degree at most four times the rail degree. */
 function sliceIntegrals(rows: Point[][], origin: Point, height: number): number[] {
-  const integrals = Array<number>(10).fill(0);
-  G5.x.forEach((t, i) => {
-    const v = 1 - t, weights = [v * v, 2 * t * v, t * t], z = t * height;
+  const integrals = Array<number>(10).fill(0), cubic = rows[0].length === 4, rule = cubic ? G7 : G5;
+  rule.x.forEach((t, i) => {
+    const v = 1 - t, weights = cubic ? [v ** 3, 3 * t * v * v, 3 * t * t * v, t ** 3] : [v * v, 2 * t * v, t * t], z = t * height;
     const slice = rows.map(row => [0, 1].map(axis => row.reduce((sum, p, j) => sum + weights[j] * (p[axis] - origin[axis]), 0)));
     let area = 0, x = 0, y = 0, xx = 0, yy = 0, xy = 0;
     for (const j of corners) {
@@ -121,7 +145,7 @@ function sliceIntegrals(rows: Point[][], origin: Point, height: number): number[
       xx += cross * (a * a + a * c + c * c) / 12; yy += cross * (b * b + b * d + d * d) / 12;
       xy += cross * (2 * a * b + a * d + b * c + 2 * c * d) / 24;
     }
-    const w = height * G5.w[i];
+    const w = height * rule.w[i];
     [area, x, y, z * area, xx, yy, z * z * area, xy, z * x, z * y].forEach((moment, j) => { integrals[j] += w * moment; });
   });
   return integrals;
