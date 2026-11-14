@@ -1,0 +1,15 @@
+# D1261 — Offset an inclined wall of a rectangular taper
+
+2026-11-14 · FULL · P5, row 31 · [#2264](https://github.com/barocss/barocss/issues/2264) · [#536](https://github.com/barocss/barocss/issues/536)
+
+Select an inclined wall of an authored rectangular taper. In **Offset face**, drag the handle or enter a signed distance. The selected support plane moves along its outward unit normal. The other five support planes and their names stay in place. The neighboring trims extend or contract on those planes. Both cap elevations stay fixed. The edit stores one native feature. Its original face name and signature remain available in History and in the native file.
+
+- **PASS, actual desktop Studio.** A 40 × 30 × 10 mm stock with 10° inward draft used the right wall `n1.side1`. The original drag handle moved from its default +2 mm to +3 mm. The History editor accepted −2 mm. Entering −37 mm refused a section collapse and kept the accepted part. Undo and Redo restored the corresponding exact documents. Native Save and fresh Open restored the same B-rep. Opening an invalid −37 mm file kept the current part and displayed the reason.
+- **PASS, independent geometry.** The Python oracle intersects six analytic planes, checks all eight vertices and six trims against their finite chart polygons, and integrates the section area. Expected and measured volume was 11,667.335891990815 mm³ at +3 mm and 10,233.719528464619 mm³ at −2 mm. The largest plane residual was 3.553e−15 mm. Strict checks found one closed solid with 6 faces, 12 edges and 8 vertices. IDs, names and the source tolerances remained in place.
+- **PASS, focused checks.** Kernel tests cover both signs on all-wall and adjacent-wall tapers, another axis, repeated offsets, original retention and dimensional refusals. The Model test runs the existing agent command against the same face as Studio, checks the native recipe and verifies unchanged state on refusal. The first independent source audit also ran 96 combinations of wall axis, draft sign, offset sign, translation and section height. The source reviews cover finite charts, binding invalidation and integration. Mutation checks cover normal distance and the pre-build collapse guard.
+- **FAIL, intermediate.** The first Model run could not select the wall because its trapezoidal planar chart took the curved tessellation path. The second run found a matching signature mismatch in the Part evaluator. The final code recognizes the native support for Offset face without changing the tessellation. The first Model type check also found two test assertion typing errors. The final checks pass.
+- **NOT_RUN.** Full suites, live AI, mobile, general face move or replace, and the wider planar/cylindrical-neighbor acceptance. The Studio fixture does not exercise stored parameter curves. The linked issues remain open.
+
+D1262 returns to P5 row 24. Measure the cross-edge normal-curvature difference at the two tangent R2 box-filleted interfaces. Qualify the observed plane–cylinder difference of 0.5 mm⁻¹ independently of the face-normal angle. State the limits of the sampled read.
+
+[Commands and receipt hashes](qualification.json).

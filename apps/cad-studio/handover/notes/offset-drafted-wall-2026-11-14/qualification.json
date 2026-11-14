@@ -1,0 +1,154 @@
+{
+  "decision": "D1261",
+  "tier": "FULL",
+  "priority": "P5",
+  "row": 31,
+  "parent": "3ea3d7c3ed50977a079dc62ce952618b60e80444",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1261-<run>",
+    "cd packages/barocss-cad && node scripts/tool.mjs type-check",
+    "cd packages/barocss-cad && node scripts/tool.mjs build:fast",
+    "cd packages/barocss-cad && node --test --test-concurrency=1 test/drafted-cap-offset.test.mjs test/draft.test.mjs",
+    "node packages/barocss-cad/scripts/code-shape.mjs --check",
+    "pnpm --filter @barocss/cad-model test offset-drafted-wall offset-face-native native-offset-face mould-draft",
+    "pnpm --filter @barocss/cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint packages/barocss-cad/src/{features/drafted-cap-offset,part/part-model,part/part-expect}.ts packages/barocss-cad-model/src/{app/nativeOffsetFace,app/profileCommands,engine/doc,engine/mesh,engine/part,engine/rematch}.ts packages/barocss-cad-model/test/offset-drafted-wall.test.ts",
+    "node <external-evidence>/mutation.mjs <external-evidence>",
+    "node --check apps/cad-studio/test/offset-drafted-wall-browser.mjs",
+    "D1261_SOURCE_FROZEN=1 node apps/cad-studio/test/offset-drafted-wall-browser.mjs <external-evidence>/studio-final",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/build",
+    "git diff --check"
+  ],
+  "checks": {
+    "initialWallSelection": "FAIL",
+    "initialPartSignature": "FAIL",
+    "initialTestTypeCheck": "FAIL",
+    "actualStudio": "PASS",
+    "independentOracles": "PASS",
+    "independentReviews": {
+      "status": "PASS",
+      "reviews": 2,
+      "additionalNativeCases": 96
+    },
+    "kernel": {
+      "status": "PASS",
+      "passed": 14,
+      "failed": 0
+    },
+    "model": {
+      "status": "PASS",
+      "passed": 51,
+      "failed": 0
+    },
+    "kernelTypes": "PASS",
+    "kernelBuild": "PASS",
+    "kernelCodeShape": "PASS",
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "lint": "PASS",
+    "mutation": {
+      "status": "PASS",
+      "expectedExitCodesObserved": {
+        "current": 0,
+        "axis-distance": 1,
+        "no-collapse-guard": 1
+      }
+    },
+    "driverSyntax": "PASS",
+    "studioBuild": "PASS",
+    "fullSuites": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "liveModel": "NOT_RUN",
+    "generalFaceMove": "NOT_RUN"
+  },
+  "geometry": {
+    "fixtureMM": [
+      40,
+      30,
+      10
+    ],
+    "draftDegrees": 10,
+    "counts": {
+      "bodies": 1,
+      "shells": 1,
+      "faces": 6,
+      "edges": 12,
+      "vertices": 8
+    },
+    "maximumVolumeErrorMM3": 1.8189894035458565e-12,
+    "oracles": {
+      "original-oracle": {
+        "status": "PASS",
+        "distanceMM": 0,
+        "expectedVolumeMM3": 10807.166073875096,
+        "nativeVolumeMM3": 10807.166073875094,
+        "studioVolumeMM3": 10807.166073875094,
+        "maximumPlaneResidualMM": 3.552713678800501e-15,
+        "crossPlaneShiftMM": 0,
+        "sha256": "b961159b096529a5ce80d7932ddb2f5df7b25e084b56ea036b6d3320ec1dda76"
+      },
+      "outward-oracle": {
+        "status": "PASS",
+        "distanceMM": 3,
+        "expectedVolumeMM3": 11667.335891990815,
+        "nativeVolumeMM3": 11667.335891990815,
+        "studioVolumeMM3": 11667.335891990815,
+        "maximumPlaneResidualMM": 3.552713678800501e-15,
+        "crossPlaneShiftMM": 3.0462798356572347,
+        "sha256": "a3448a78361ea6164013526a487f4d8a4254abaad243495dd73b823ac21ee990"
+      },
+      "inward-oracle": {
+        "status": "PASS",
+        "distanceMM": -2,
+        "expectedVolumeMM3": 10233.719528464619,
+        "nativeVolumeMM3": 10233.719528464619,
+        "studioVolumeMM3": 10233.719528464619,
+        "maximumPlaneResidualMM": 3.552713678800501e-15,
+        "crossPlaneShiftMM": -2.03085322377149,
+        "sha256": "7fbf72a18545f5109348963397dcff916cac2bcbddbc3e1b6619ab39c23bea77"
+      },
+      "reopened-oracle": {
+        "status": "PASS",
+        "distanceMM": -2,
+        "expectedVolumeMM3": 10233.719528464619,
+        "nativeVolumeMM3": 10233.719528464619,
+        "studioVolumeMM3": 10233.719528464619,
+        "maximumPlaneResidualMM": 3.552713678800501e-15,
+        "crossPlaneShiftMM": -2.03085322377149,
+        "sha256": "7fbf72a18545f5109348963397dcff916cac2bcbddbc3e1b6619ab39c23bea77"
+      }
+    },
+    "nativeEdit": {
+      "label": "wall-offset",
+      "face": "n1.side1",
+      "handleDistance": 3,
+      "inwardDistance": -2,
+      "dragCssPixels": [
+        13.630749224731858,
+        2.7815876575940592
+      ],
+      "signedRefusal": -37,
+      "exactReopen": true,
+      "identityRetained": true,
+      "shapeSHA256": "a61807b96b4381c7bf4cd67466d1304fd2adc46219abb5a5130a2ee93c6735b6"
+    }
+  },
+  "frozenFiles": 894,
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "retainedNativeFileSHA256": "9d54bca64f5d77341f742555766f39df0ce18cf98b14f5ed937818d2e75ff1b0",
+  "receiptSHA256": {
+    "initialModelFailure": "895f13b96ae3dc3389f747cf35eb305ac00a5177ae089b40baaa2bdfd9c756ba",
+    "initialPartReferenceFailure": "dc49ca3944a628327a6f73bfaa1cdf8c864580a5c43b09ef9d7f4e36f66fa953",
+    "initialTypeFailure": "b31107bda590a34bbdca8222d16cf01a45fb4cf702a3452f69d4aac6e054207c",
+    "finalDesktop": "ce643a48ff536748ad2f04e36990fe07a938a123b319506c1194a32d19e2df44",
+    "outwardVisualReview": "9918de5f604b05fcfeec176099e9034c13b1145b57f932043f8a6e4b8b4037f8",
+    "finalInvalidFileVisualReview": "b6090359d882e24e96f5fa6a632df2de267f9ad1f8ab7ad7248989e4441b90b6"
+  }
+}

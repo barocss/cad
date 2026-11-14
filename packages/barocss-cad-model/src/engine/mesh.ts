@@ -168,7 +168,13 @@ export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundar
     }
     const names = [...new Set(members.map(m => baseName(nameOf.get(m))))];
     // (A mesh region that is flat shows as a plane: sketches and mates take it; a curved one as curved, no radius.)
-    const rootKind = meshFace.get(root)!.kind, flatRegion = rootKind === 'facet' && faceGeometry(faceById.get(root)!).kind === 'plane';
+    const rootKind = meshFace.get(root)!.kind, nativeFace = faceById.get(root)!;
+    const flatRegion = rootKind === 'facet' && faceGeometry(nativeFace).kind === 'plane';
+    // Drafted extrusion walls may have a trapezoidal planar chart. The planar tessellator
+    // accepts parallelograms only, so classify these unmerged faces from the native support.
+    const drafted = rootKind !== 'planar' && rootKind !== 'facet' && members.length === 1 && brep.source.family === 'drafted-extrusion'
+      ? faceGeometry(nativeFace) : undefined;
+    const draftedPlane = drafted?.kind === 'plane' ? drafted : undefined;
     addFace(b, root, names.length === 1 ? names[0] : members.map(m => nameOf.get(m)!).join('+'), rootKind === 'planar' || flatRegion ? 'plane' : 'curved', pos, nor, idx);
     if (brep.source.family === 'prismatic-solid' && members.length > 1 && rootKind !== 'planar' && rootKind !== 'facet') {
       native ??= nativeFaceMetrics(brep, quality === 8 ? mesh : tessellateBrep(brep, { segmentsPerQuarter: 8 }));
@@ -178,15 +184,15 @@ export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundar
     }
     if (lumps) b.faces[b.faces.length - 1].lump = lumpOf.get(shellBody.get(faceById.get(root)!.shell)!)!;
     if (rootKind === 'facet') b.faces[b.faces.length - 1].facet = true;
-    else if (rootKind === 'planar') {
+    else if (rootKind === 'planar' || draftedPlane) {
       // (The exact plane, A6.3, from the face's own control points — cheap, no surface recognition: a point, and the
       // normal of the widest triangle of them, turned out of the face as the display normal is.)
-      const nativeFace = faceById.get(root)!, sf = nativeFace.surface, df = b.faces[b.faces.length - 1];
+      const sf = nativeFace.surface, df = b.faces[b.faces.length - 1];
       if (members.length === 1 && nativeFace.name && !nativeFace.name.includes('+')) df.nativePlaneName = nativeFace.name;
       if (df.nativePlaneName && brep.bodies.length === 1 && brep.bodies[0].kind === 'solid'
         && !insetOutlineProblem(nativeFace, loopsById, coedgesById, edgesById)) df.nativeInsetOutline = true;
       if (sf.kind === 'surface') {
-        const pl = planeOfPoints(sf.controlPoints);
+        const pl = draftedPlane ?? planeOfPoints(sf.controlPoints);
         if (pl) {
           const sign = dot(pl.n, df.normal) < 0 ? -1 : 1;
           df.exact = { kind: 'plane', o: pl.o, n: [pl.n[0] * sign, pl.n[1] * sign, pl.n[2] * sign] };

@@ -12,12 +12,15 @@ type Section = { readonly z: number; readonly ranges: Rectangle };
 type FaceRole = { readonly axis: Axis | 2; readonly end: End };
 type Plane = Extract<ReturnType<typeof faceGeometry>, { kind: 'plane' }>;
 type Wall = { readonly axis: Axis; readonly end: End; readonly plane: Plane; readonly slope: number };
-type DraftedCap = {
+type Taper = {
   readonly sections: readonly [Section, Section];
+  readonly caps: readonly [BrepFace, BrepFace];
+  readonly walls: ReadonlyMap<string, Wall>;
+};
+type DraftedCap = Taper & {
   readonly end: End;
   readonly named: BrepFace;
   readonly opposite: BrepFace;
-  readonly walls: ReadonlyMap<string, Wall>;
 };
 
 const XY_AXES = [0, 1] as const;
@@ -71,7 +74,7 @@ function roundoffAt(points: readonly Point[]): number {
 }
 
 /** One solid, two four-edge sections, four matching straight connectors and one support per side. */
-function admittedCap(brep: Brep, named: BrepFace): DraftedCap | undefined {
+function admittedTaper(brep: Brep): Taper | undefined {
   const { bodies, shells, faces, loops, coedges, edges, vertices } = brep;
   if (bodies.length !== 1 || bodies[0].kind !== 'solid' || bodies[0].shells.length !== 1 || shells.length !== 1
     || !shells[0].closed || faces.length !== 6 || loops.length !== 6 || coedges.length !== 24 || edges.length !== 12 || vertices.length !== 8) return undefined;
@@ -131,25 +134,62 @@ function admittedCap(brep: Brep, named: BrepFace): DraftedCap | undefined {
     if (![...poles, ...corners].every(p => Math.abs(p[axis] - wallAt(wall, p[2])) <= roundoff)) return undefined;
     walls.set(face.id, wall);
   }
-  const end = caps[0] === named ? 0 : caps[1] === named ? 1 : undefined;
-  if (end === undefined || !caps[0] || !caps[1] || !checkBrep(brep, { strict: true }).valid) return undefined;
-  return { sections: [base, top], end, named, opposite: caps[1 - end]!, walls };
+  if (!caps[0] || !caps[1] || !checkBrep(brep, { strict: true }).valid) return undefined;
+  return { sections: [base, top], caps: [caps[0], caps[1]], walls };
 }
 
-function namedCap(brep: Brep, faceName: string): BrepFace | undefined {
+function admittedCap(taper: Taper, named: BrepFace): DraftedCap | undefined {
+  const end = taper.caps[0] === named ? 0 : taper.caps[1] === named ? 1 : undefined;
+  if (end === undefined) return undefined;
+  return { ...taper, end, named, opposite: taper.caps[1 - end] };
+}
+
+function namedFace(brep: Brep, faceName: string): BrepFace | undefined {
   const faces = brep.faces.filter(face => face.name === faceName);
   return faces.length === 1 ? faces[0] : undefined;
 }
 
+function capFrame(cap: DraftedCap): { anchor: Point; normal: Point } {
+  const { z, ranges: [[x0, x1], [y0, y1]] } = cap.sections[cap.end];
+  return { anchor: [(x0 + x1) / 2, (y0 + y1) / 2, z], normal: [0, 0, cap.end === 0 ? -1 : 1] };
+}
+
 /** Locate the exact named end and its signed outward normal. */
 export function draftedCapOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
-  const face = namedCap(brep, faceName);
+  const face = namedFace(brep, faceName);
   if (!face) return undefined;
   try {
-    const cap = admittedCap(brep, face);
-    if (!cap) return undefined;
-    const { z, ranges: [[x0, x1], [y0, y1]] } = cap.sections[cap.end];
-    return { anchor: [(x0 + x1) / 2, (y0 + y1) / 2, z], normal: [0, 0, cap.end === 0 ? -1 : 1] };
+    const taper = admittedTaper(brep);
+    const cap = taper && admittedCap(taper, face);
+    return cap && capFrame(cap);
+  } catch { return undefined; }
+}
+
+function inclinedWall(taper: Taper, face: BrepFace): Wall | undefined {
+  const wall = taper.walls.get(face.id);
+  if (!wall || face.surface.kind !== 'surface') return undefined;
+  const poles = face.surface.controlPoints.flat();
+  const coordinates = poles.map(p => p[wall.axis]);
+  if (wall.plane.n[2] === 0 || Math.max(...coordinates) - Math.min(...coordinates) <= roundoffAt(poles)) return undefined;
+  return wall;
+}
+
+/** Locate the native planar face under the direct Offset face command. */
+export function draftedFaceOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
+  const face = namedFace(brep, faceName);
+  if (!face) return undefined;
+  try {
+    const taper = admittedTaper(brep);
+    if (!taper) return undefined;
+    const cap = admittedCap(taper, face);
+    if (cap) return capFrame(cap);
+    const wall = inclinedWall(taper, face);
+    if (!wall) return undefined;
+    const [base, top] = taper.sections, across: Axis = wall.axis === 0 ? 1 : 0;
+    const anchor: Point = [0, 0, (base.z + top.z) / 2];
+    anchor[wall.axis] = (base.ranges[wall.axis][wall.end] + top.ranges[wall.axis][wall.end]) / 2;
+    anchor[across] = (base.ranges[across][0] + base.ranges[across][1] + top.ranges[across][0] + top.ranges[across][1]) / 4;
+    return { anchor, normal: wall.plane.n };
   } catch { return undefined; }
 }
 
@@ -173,6 +213,12 @@ function chartCovers(surface: Surface, wall: Wall, base: Section, top: Section):
   const poles = surface.controlPoints.flat(), across: Axis = wall.axis === 0 ? 1 : 0;
   const lo = Math.min(...poles.map(p => p[2])), hi = Math.max(...poles.map(p => p[2]));
   if (!(hi > lo) || base.z < lo || top.z > hi) return false;
+  const [[p00, p01], [p10, p11]] = surface.controlPoints;
+  // Two chart edges must follow the section levels without crossing between them.
+  const uHorizontal = p00[2] === p10[2] && p01[2] === p11[2] && p00[2] !== p01[2];
+  const vHorizontal = p00[2] === p01[2] && p10[2] === p11[2] && p00[2] !== p10[2];
+  if ((!uHorizontal || Math.sign(p10[across] - p00[across]) !== Math.sign(p11[across] - p01[across]))
+    && (!vHorizontal || Math.sign(p01[across] - p00[across]) !== Math.sign(p11[across] - p10[across]))) return false;
   const atLo = poles.filter(p => p[2] === lo).map(p => p[across]).sort((a, b) => a - b);
   const atHi = poles.filter(p => p[2] === hi).map(p => p[across]).sort((a, b) => a - b);
   if (atLo.length !== 2 || atHi.length !== 2 || !(atLo[0] < atLo[1] && atHi[0] < atHi[1])) return false;
@@ -189,10 +235,15 @@ function fail(code: BrepError['code'], detail: string): never {
 /** Move the named Z-facing cap outwards by a signed distance along its existing planar supports. */
 export function offsetDraftedCap(brep: Brep, faceName: string, distance: number): Brep {
   if (typeof distance !== 'number' || !Number.isFinite(distance)) fail('INPUT', 'distance must be finite');
-  const face = namedCap(brep, faceName);
+  const face = namedFace(brep, faceName);
   if (!face) fail('INPUT', 'the selected face name is missing or ambiguous');
-  const cap = admittedCap(brep, face);
+  const taper = admittedTaper(brep);
+  const cap = taper && admittedCap(taper, face);
   if (!cap) fail('GEOMETRY', 'pick a Z-facing cap of one solid with tapered planar walls and rectangular sections');
+  return offsetCap(brep, cap, distance);
+}
+
+function offsetCap(brep: Brep, cap: DraftedCap, distance: number): Brep {
   if (distance === 0) return brep;
   const { sections, end, named, opposite, walls } = cap, outward = end === 0 ? -1 : 1;
   const selected = sections[end], fixed = sections[1 - end], z = selected.z + outward * distance;
@@ -230,7 +281,7 @@ export function offsetDraftedCap(brep: Brep, faceName: string, distance: number)
     if (!wall) return face; // The opposite cap and its own trim are unchanged.
     if (face.surface.kind === 'surface' && polesFit(face.surface) && chartCovers(face.surface, wall, base, top)) return face;
     const { axis, end: wallEnd } = wall;
-    const sense = (axis === 1 ? wallEnd === 0 : wallEnd === 1) ? 'forward' as const : 'reversed' as const;
+    const sense = wallChartSense(wall);
     const adjusted = { ...face, sense, surface: sideSurface(face.surface.id, axis, wallEnd, base, top) };
     const plane = planeOf(adjusted), normalError = plane ? Math.hypot(...plane.n.map((n, i) => n - wall.plane.n[i])) : Infinity;
     const span = Math.max(1, ...base.ranges.map(([lo, hi]) => hi - lo), ...top.ranges.map(([lo, hi]) => hi - lo), top.z - base.z);
@@ -243,4 +294,131 @@ export function offsetDraftedCap(brep: Brep, faceName: string, distance: number)
   const report = checkBrep(result, { strict: true });
   if (!report.valid) fail('GEOMETRY', `the offset solid is invalid: ${report.issues[0]}`);
   return result;
+}
+
+
+/** Expand a transverse wall chart across the retouched trim, keeping its original pull interval if possible. */
+function extendWallChart(surface: Surface, wall: Wall, base: Section, top: Section): Surface {
+  const poles = surface.controlPoints.flat();
+  const lo = Math.min(...poles.map(p => p[2])), hi = Math.max(...poles.map(p => p[2]));
+  const extend = (section: Section, z: number): Section => {
+    const ranges: Rectangle = [[...section.ranges[0]], [...section.ranges[1]]];
+    ranges[wall.axis][wall.end] = wallAt(wall, z);
+    return { z, ranges };
+  };
+  if (lo <= base.z && hi >= top.z) {
+    const extended = sideSurface(surface.id, wall.axis, wall.end, extend(base, lo), extend(top, hi));
+    if (polesFit(extended)) return extended;
+  }
+  return sideSurface(surface.id, wall.axis, wall.end, base, top);
+}
+
+function wallChartSense(wall: Wall): BrepFace['sense'] {
+  return (wall.axis === 1 ? wall.end === 0 : wall.end === 1) ? 'forward' : 'reversed';
+}
+
+function offsetWall(brep: Brep, taper: Taper, face: BrepFace, wall: Wall, distance: number): Brep {
+  if (distance === 0) return brep;
+  const { axis, end } = wall;
+  // The new wall obeys n · (p − o) = distance. Its four corners keep their Z and transverse coordinates.
+  const shift = distance / wall.plane.n[axis];
+  const sections = taper.sections.map((section): Section => {
+    const ranges: Rectangle = [[...section.ranges[0]], [...section.ranges[1]]];
+    ranges[axis][end] += shift;
+    if (ranges[axis][end] === section.ranges[axis][end]) fail('GEOMETRY', 'distance is too small to move the inclined wall');
+    return { ...section, ranges };
+  });
+  const [base, top] = sections;
+  const extent = Math.max(...sections.flatMap(section => [Math.abs(section.z), ...section.ranges.flat().map(Math.abs)]));
+  if (!Number.isFinite(extent) || extent > CadNumericPolicy.coordinateAbs)
+    fail('GEOMETRY', 'the offset exceeds the modeling coordinate range');
+  const linear = linearToleranceMM(extent);
+  if (sections.some(section => section.ranges.some(([lo, hi]) => hi - lo <= linear)))
+    fail('GEOMETRY', 'the offset would close a section or cross the opposite wall');
+
+  const moved = new Map<string, Point>();
+  const vertices = brep.vertices.map(vertex => {
+    const original = vertex.point, level = original[2] === base.z ? 0 : 1;
+    if (original[axis] !== taper.sections[level].ranges[axis][end]) return vertex;
+    const point: Point = [...original];
+    point[axis] = sections[level].ranges[axis][end];
+    moved.set(vertex.id, point);
+    return { ...vertex, point };
+  });
+  const changedEdges = new Set<string>();
+  const edges = brep.edges.map(edge => {
+    const a = moved.get(edge.vertices[0]), b = moved.get(edge.vertices[1]);
+    if (!a && !b) return edge;
+    changedEdges.add(edge.id);
+    return { ...edge, curve: { ...edge.curve, controlPoints: [a ?? edge.curve.controlPoints[0], b ?? edge.curve.controlPoints[1]] } };
+  });
+  const changedCharts = new Set<string>();
+  const faces = brep.faces.map(current => {
+    const support = taper.walls.get(current.id);
+    let surface: Surface, sense: BrepFace['sense'];
+    if (!support) {
+      const section = current === taper.caps[0] ? base : top;
+      const [[x0, x1], [y0, y1]] = section.ranges;
+      surface = capSurface({ min: [x0, y0], max: [x1, y1] }, section.z, current.surface.id, section === top);
+      sense = 'forward';
+    } else if (current === face) {
+      const original = current.surface as Surface;
+      const controlPoints = original.controlPoints.map(row => row.map((p): Point => {
+        const translated: Point = [...p];
+        translated[axis] += shift;
+        return translated;
+      }));
+      surface = { ...original, controlPoints };
+      sense = current.sense;
+      if (!polesFit(surface) || !chartCovers(surface, wall, base, top)) {
+        surface = sideSurface(surface.id, axis, end, base, top);
+        sense = wallChartSense(wall);
+      }
+    } else {
+      const original = current.surface as Surface;
+      if (polesFit(original) && chartCovers(original, support, base, top)) return current;
+      surface = extendWallChart(original, support, base, top);
+      sense = wallChartSense(support);
+    }
+    const adjusted = { ...current, sense, surface };
+    if (support) {
+      const plane = planeOf(adjusted);
+      const normalError = plane ? Math.hypot(...plane.n.map((n, i) => n - support.plane.n[i])) : Infinity;
+      const poles = surface.controlPoints.flat(), expectedDistance = current === face ? distance : 0;
+      const allowance = roundoffAt([...poles, support.plane.o]);
+      const across: Axis = support.axis === 0 ? 1 : 0;
+      const corners = sections.flatMap(({ z, ranges }) => ranges[across].map((u): Point => {
+        const v = ranges[support.axis][support.end];
+        return support.axis === 0 ? [v, u, z] : [u, v, z];
+      }));
+      const span = Math.max(1, top.z - base.z, ...sections.flatMap(section => section.ranges.map(([lo, hi]) => hi - lo)));
+      if (normalError * span > linear || [...poles, ...corners].some(point => {
+        const signed = point.reduce((sum, x, i) => sum + (x - support.plane.o[i]) * support.plane.n[i], 0);
+        return Math.abs(signed - expectedDistance) > allowance;
+      }))
+        fail('GEOMETRY', 'the offset cannot preserve the wall supports at this distance');
+    }
+    for (const loop of current.loops) changedCharts.add(loop);
+    return adjusted;
+  });
+  const coedges = brep.coedges.map(coedge => coedge.pcurve && (changedEdges.has(coedge.edge) || changedCharts.has(coedge.loop))
+    ? { ...coedge, pcurve: null } : coedge);
+  const result: Brep = { ...brep, vertices, edges, faces, coedges };
+  const report = checkBrep(result, { strict: true });
+  if (!report.valid) fail('GEOMETRY', `the offset solid is invalid: ${report.issues[0]}`);
+  return result;
+}
+
+/** Move one cap or inclined wall of an admitted rectangular taper along its outward unit normal. */
+export function offsetDraftedFace(brep: Brep, faceName: string, distance: number): Brep {
+  if (typeof distance !== 'number' || !Number.isFinite(distance)) fail('INPUT', 'distance must be finite');
+  const face = namedFace(brep, faceName);
+  if (!face) fail('INPUT', 'the selected face name is missing or ambiguous');
+  const taper = admittedTaper(brep);
+  if (!taper) fail('GEOMETRY', 'pick one planar face of a solid with tapered walls and rectangular sections');
+  const cap = admittedCap(taper, face);
+  if (cap) return offsetCap(brep, cap, distance);
+  const wall = inclinedWall(taper, face);
+  if (!wall) fail('GEOMETRY', 'pick a Z-facing cap or one inclined wall of the rectangular taper');
+  return offsetWall(brep, taper, face, wall, distance);
 }

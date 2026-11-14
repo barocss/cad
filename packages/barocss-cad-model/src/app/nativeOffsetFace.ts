@@ -1,6 +1,6 @@
 // Offset face owns a native cap snapshot. Display data identifies the pick only; it never authors a profile.
 import { CadNumericPolicy, CadPartLimits, brepFromPrismatic, checkBrep, prismaticFromProfile, prismaticMassProperties, transformBrep, type Brep, type BrepFace, type Curve, type Surface } from '@barocss/cad';
-import { draftedCapOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
+import { draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
 import { leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
@@ -308,11 +308,11 @@ const cache = new WeakMap<StudioDoc, Cached>();
 /** Require one exact display pick bound to the current body reference. */
 function offsetPick(ctx: Ctx) {
   const selection = ctx.selection;
-  if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length || selection.vertices?.length || ctx.direct?.length) return missing('pick exactly one current cap face.');
+  if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length || selection.vertices?.length || ctx.direct?.length) return missing('pick exactly one current face.');
   const picked = selection.faces[0];
   if (!Number.isSafeInteger(picked.body) || !Number.isSafeInteger(picked.face) || picked.body < 0 || picked.face < 0) return missing('the picked face index is invalid.');
   const body = ctx.bodies[picked.body], display = body?.mesh.faces[picked.face];
-  if (!body || !display || display.kind !== 'plane' || display.facet || !display.name || display.name.includes('+')) return missing('pick one unambiguous native planar cap.');
+  if (!body || !display || (display.kind !== 'plane' && display.exact?.kind !== 'plane') || display.facet || !display.name || display.name.includes('+')) return missing('pick one unambiguous native planar face.');
   let sameKeys = 0; for (const candidate of ctx.bodies) if (candidate.key === body.key) sameKeys++;
   if (sameKeys !== 1) return missing('the selected body identity is ambiguous.');
   const ref = refOf(body);
@@ -340,12 +340,12 @@ function nativeOffsetBody(ctx: Ctx, body: BodyResult, display: ReturnType<typeof
 /** Check the same native profile the direct offset evaluates. The old snapshot recipe remains separate. */
 export function resolveDraftedOffsetFace(ctx: Ctx): { parent: ReturnType<typeof refOf>; face: string; anchor: XYZ; normal: XYZ } | undefined {
   const { body, display, ref } = offsetPick(ctx);
-  if (display.nativeAxisPlane?.axis !== 'z' || display.exact?.kind !== 'plane' || Math.abs(display.exact.n[2]) !== 1) return undefined;
+  if (display.exact?.kind !== 'plane') return undefined;
   const node = ctx.doc.nodes[ref.node];
   if (ref.side !== 'solid' || (node.kind !== 'draft' && node.kind !== 'offset-face' && (node.kind !== 'extrude' || !node.draft))) return undefined;
   currentOffsetBody(ctx, body);
   const { brep } = nativeOffsetBody(ctx, body, display);
-  const frame = draftedCapOffsetFrame(brep, display.name);
+  const frame = draftedFaceOffsetFrame(brep, display.name);
   return frame ? { parent: ref, face: display.name, ...frame } : undefined;
 }
 

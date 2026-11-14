@@ -153,7 +153,7 @@ export async function rematchNames(prev: StudioDoc, next: StudioDoc, evaluate: (
       if (node.kind === 'offset-face') {
         const sig = old.get(name);
         if (!sig || matchSignature(sig, now, false) !== name) {
-          return { error: `[BAD_REFERENCE] Offset face: the original selected cap ${name} is no longer available. Select it again.` };
+          return { error: `[BAD_REFERENCE] Offset face: the original selected face ${name} is no longer available. Select it again.` };
         }
         out.push(name);
         continue;

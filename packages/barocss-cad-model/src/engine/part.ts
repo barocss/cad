@@ -153,7 +153,7 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
     }
     case 'offset-face': {
       const face = node.faces[0];
-      if (!Object.hasOwn(node.sigs ?? {}, face)) throw refusal('BAD_REFERENCE', 'Offset face: the selected cap needs its stored individual signature.');
+      if (!Object.hasOwn(node.sigs ?? {}, face)) throw refusal('BAD_REFERENCE', 'Offset face: the selected face needs its stored individual signature.');
       return { ...at, kind: 'offset-face', target: ref(node.parent), face, distance: node.distance, ...expectOf(node, node.faces) };
     }
     // (B2: both sides' targets are read, not consumed; the stored signatures of both sides' names go as the kernel's `expect`.)

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { draftedExtrusion, evaluateCadPart, checkBrep, faceGeometry } from '../dist/index.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
 import { transformBrep } from '../dist/brep/brep-transform.js';
-import { draftedCapOffsetFrame, offsetDraftedCap } from '../dist/features/drafted-cap-offset.js';
+import { draftedCapOffsetFrame, draftedFaceOffsetFrame, offsetDraftedCap, offsetDraftedFace } from '../dist/features/drafted-cap-offset.js';
 
 const rect = (width, depth) => [[0, 0], [width, 0], [width, depth], [0, depth]].map(start => ({ kind: 'line', start }));
 const slope = Math.tan(Math.PI / 18);
@@ -194,4 +194,102 @@ test('drafted cap offset refuses a nearby side surface that no longer supports i
   assert.equal(checkBrep(source, { strict: true }).valid, true, 'general B-rep tolerance admits the mismatch');
   assert.equal(draftedCapOffsetFrame(source, 'box.top'), undefined);
   assert.throws(() => offsetDraftedCap(source, 'box.top', 3), /tapered planar walls/);
+});
+
+
+for (const [kind, draftedSides] of [['all walls', 2], ['adjacent walls', 1]]) {
+  test(`offset of an inclined wall with ${kind} changes one support and keeps both cap levels`, () => {
+    const source = stock(kind), before = structuredClone(source), name = 'box.side1';
+    const q = Math.hypot(1, slope), h = 10, t = draftedSides * slope;
+    const frame = draftedFaceOffsetFrame(source, name);
+    assert.ok(frame);
+    close(frame.anchor[0], 40 - h * slope / 2);
+    close(frame.anchor[1], draftedSides === 2 ? 15 : 15 - h * slope / 4);
+    close(frame.anchor[2], 5);
+    [1 / q, 0, slope / q].forEach((x, i) => close(frame.normal[i], x));
+    assert.deepEqual(draftedFaceOffsetFrame(source, 'box.top'), draftedCapOffsetFrame(source, 'box.top'));
+    assert.equal(offsetDraftedFace(source, name, 0), source);
+    const sourceVolume = 40 * 30 * h - 35 * t * h ** 2 + t ** 2 * h ** 3 / 3;
+    const wallArea = q * (30 * h - t * h ** 2 / 2);
+    for (const d of [3, -2]) {
+      const out = offsetDraftedFace(source, name, d), check = checkBrep(out, { strict: true });
+      assert.equal(check.valid, true, check.issues.join('\n'));
+      assert.deepEqual(check.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+      assert.equal(check.topology[0].genus, 0);
+      for (const key of ['bodies', 'shells', 'loops']) assert.equal(out[key], source[key]);
+      for (const key of ['faces', 'edges', 'vertices', 'coedges']) {
+        assert.deepEqual(out[key].map(({ id, name, tolerance }) => [id, name, tolerance]),
+          source[key].map(({ id, name, tolerance }) => [id, name, tolerance]));
+      }
+      assert.equal(faceOf(out, 'box.side3'), faceOf(source, 'box.side3'));
+      assert.equal(out.vertices.filter((vertex, i) => vertex !== source.vertices[i]).length, 4);
+      assert.equal(out.edges.filter((edge, i) => edge !== source.edges[i]).length, 8);
+      for (const [i, vertex] of out.vertices.entries()) {
+        const [x, y, z] = source.vertices[i].point;
+        const expected = 40 - slope * z;
+        close(vertex.point[0], Math.abs(x - expected) < 1e-9 ? expected + d * q : x);
+        assert.deepEqual(vertex.point.slice(1), [y, z]);
+      }
+      const mass = brepMassProperties(out, 1);
+      assert.equal(mass.method, 'planar-exact');
+      close(mass.volume, sourceVolume + d * wallArea, 1e-7);
+      for (const current of out.faces) {
+        const prior = faceGeometry(faceOf(source, current.name)), next = faceGeometry(current);
+        assert.equal(next.kind, 'plane');
+        close(Math.hypot(...next.n.map((x, i) => x - prior.n[i])), 0);
+        for (const p of current.surface.controlPoints.flat()) {
+          const signed = p.reduce((sum, x, i) => sum + (x - prior.o[i]) * prior.n[i], 0);
+          close(signed, current.name === name ? d : 0);
+        }
+      }
+    }
+    assert.deepEqual(source, before);
+  });
+}
+
+test('inclined wall offsets compose across axes and refuse collapse and unsupported supports', () => {
+  const source = stock('all walls'), name = 'box.side1';
+  const q = Math.hypot(1, slope), collapse = -(40 - 20 * slope) / q;
+  const once = offsetDraftedFace(source, name, 3);
+  const twice = offsetDraftedFace(once, name, -1), direct = offsetDraftedFace(source, name, 2);
+  for (const [i, vertex] of twice.vertices.entries()) {
+    close(Math.hypot(...vertex.point.map((x, k) => x - direct.vertices[i].point[k])), 0);
+  }
+  const other = offsetDraftedFace(once, 'box.side0', 1);
+  for (const [i, vertex] of other.vertices.entries()) {
+    const old = once.vertices[i], [, y, z] = old.point;
+    close(vertex.point[1], Math.abs(y - slope * z) < 1e-9 ? y - q : y);
+    assert.equal(vertex.point[0], old.point[0]);
+  }
+  for (const distance of [collapse, collapse - 1]) {
+    assert.throws(() => offsetDraftedFace(source, name, distance), /close a section or cross the opposite wall/);
+  }
+  assert.throws(() => offsetDraftedFace(source, name, 10000), /modeling coordinate range/);
+  assert.throws(() => offsetDraftedFace(source, name, Number.EPSILON), /too small/);
+  assert.throws(() => offsetDraftedFace(source, name, NaN), /distance must be finite/);
+  assert.throws(() => offsetDraftedFace(source, 'missing', 1), /missing or ambiguous/);
+  const duplicate = { ...source, faces: source.faces.map(face => face.name === 'box.side2' ? { ...face, name } : face) };
+  assert.throws(() => offsetDraftedFace(duplicate, name, 1), /missing or ambiguous/);
+  const adjacent = stock('adjacent walls');
+  assert.equal(draftedFaceOffsetFrame(adjacent, 'box.side0'), undefined);
+  assert.throws(() => offsetDraftedFace(adjacent, 'box.side0', 1), /inclined wall/);
+  const triangle = draftedExtrusion({ profile: [[0, 0], [40, 0], [0, 30]].map(start => ({ kind: 'line', start })), z0: 0, z1: 10, draft: 10, tag: 'triangle' });
+  assert.throws(() => offsetDraftedFace(triangle, 'triangle.side1', 1), /rectangular sections/);
+  const disconnected = structuredClone(source);
+  faceOf(disconnected, name).surface.controlPoints.forEach(row => row.forEach(point => { point[0] += 5e-8; }));
+  assert.equal(checkBrep(disconnected, { strict: true }).valid, true);
+  assert.throws(() => offsetDraftedFace(disconnected, name, 1), /rectangular sections/);
+});
+
+test('the native offset-face Part route applies the inclined wall recipe under its feature id', () => {
+  const features = [
+    { id: 's', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 30] },
+    { id: 'box', kind: 'extrude', sketch: 's', height: 10, draft: 10 },
+  ];
+  const doc = { format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features };
+  const [parent] = evaluateCadPart(doc).outputs;
+  const next = { ...doc, features: [...features, { id: 'change', kind: 'offset-face', target: 'box', face: 'box.side1', distance: 3 }] };
+  const snapshot = evaluateCadPart(next);
+  assert.deepEqual(snapshot.outputs.map(({ id, feature }) => [id, feature]), [['change', 'change']]);
+  assert.deepEqual(snapshot.outputs[0].brep, offsetDraftedFace(parent.brep, 'box.side1', 3));
 });

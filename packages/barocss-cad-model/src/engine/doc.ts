@@ -253,7 +253,7 @@ export function cylindricalWrapNodeProblem(input: unknown, parameters: Readonly<
   }
   return null;
 }
-/** Signed offset of one exact cap on an existing solid. */
+/** Signed offset of one exact face on an existing solid. */
 export interface OffsetFaceNode { kind: 'offset-face'; parent: BodyRef; faces: [string]; distance: number }
 
 /** Check the authored recipe before capture or geometry evaluation. */
@@ -301,11 +301,11 @@ export function offsetFaceDocumentProblem(input: unknown): string | null {
       if (!textRecord(node) || node.kind !== 'offset-face') continue;
       const problem = offsetFaceNodeProblem(node, index);
       if (problem) return problem;
-      if (node.sigs === undefined) return 'Offset face: the selected cap needs its stored individual signature.';
+      if (node.sigs === undefined) return 'Offset face: the selected face needs its stored individual signature.';
       const parent = value.nodes[(node.parent as BodyRef).node];
       if (!textRecord(parent) || parent.kind !== 'draft' && parent.kind !== 'offset-face' &&
           (parent.kind !== 'extrude' || typeof parent.draft !== 'number' || !Number.isFinite(parent.draft) || parent.draft === 0)) {
-        return 'Offset face: the parent must be Draft, a drafted extrusion, or an offset of a drafted cap.';
+        return 'Offset face: the parent must be Draft, a drafted extrusion, or an offset of a drafted face.';
       }
     }
     if (Array.isArray(value.instances)) for (const instance of value.instances) if (textRecord(instance)) stack.push(instance.doc);

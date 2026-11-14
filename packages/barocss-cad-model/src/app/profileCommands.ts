@@ -236,18 +236,18 @@ export function checkDraftedOffsetDistance(distance: number): void {
     throw refusal('VALUE', 'Offset face needs a nonzero signed distance within ±10000 mm.');
 }
 
-/** Move an admitted native cap along its signed normal. */
+/** Move an admitted native face along its signed normal. */
 export const offsetFaceCommand: Command = {
   id: 'offset-face', label: 'Offset face', icon: 'cad-extrude', group: 'modify', keywords: 'move face push pull offset direct edit press',
-  hint: 'Move a prism or cylinder cap, or an end cap of a rectangular taper. Drag the arrow or enter a signed distance.',
+  hint: 'Move a prism or cylinder cap, or a cap or inclined wall of a rectangular taper. Drag the arrow or enter a signed distance.',
   available: ctx => {
     const selection = ctx.selection;
-    if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length || selection.vertices?.length || ctx.direct?.length) return no('Pick one flat cap of a prism, cylinder or rectangular taper.');
+    if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length || selection.vertices?.length || ctx.direct?.length) return no('Pick a flat prism or cylinder cap, or a cap or inclined wall of a rectangular taper.');
     const picked = selection.faces[0], body = ctx.bodies[picked.body], face = body?.mesh.faces[picked.face];
-    if (!Number.isInteger(picked.body) || !Number.isInteger(picked.face) || !body || !face || face.kind !== 'plane' || face.facet || !face.name) return no('Pick one flat cap of a prism, cylinder or rectangular taper.');
+    if (!Number.isInteger(picked.body) || !Number.isInteger(picked.face) || !body || !face || (face.kind !== 'plane' && face.exact?.kind !== 'plane') || face.facet || !face.name) return no('Pick a flat prism or cylinder cap, or a cap or inclined wall of a rectangular taper.');
     let matches = 0;
     for (const candidate of ctx.bodies) if (candidate.key === body.key) matches++;
-    return matches === 1 ? ok : no('Pick one flat cap of a prism, cylinder or rectangular taper.');
+    return matches === 1 ? ok : no('Pick a flat prism or cylinder cap, or a cap or inclined wall of a rectangular taper.');
   },
   fields: () => [{ key: 'd', label: 'Offset', kind: 'mm' }],
   defaults: () => ({ d: 2 }),
