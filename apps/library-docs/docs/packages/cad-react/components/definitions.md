@@ -2,7 +2,7 @@
 
 Declares reusable profiles and solids without adding independent Part outputs. It is a logical registry group, not a native modeling operation.
 
-Import `Definitions` from `@barocss/cad-react`. This private experimental workspace API is not a published installable package.
+Import `Definitions` from `@barocss/cad-react`. This private workspace API is not a published installable package.
 
 ## Props and output
 

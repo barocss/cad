@@ -1,6 +1,6 @@
 {
   "name": "@barocss/viewer",
-  "version": "0.0.0-experimental",
+  "version": "0.0.0",
   "private": false,
   "publishConfig": {
     "access": "public",
@@ -14,7 +14,10 @@
     }
   },
   "type": "module",
-  "description": "Bounded native CAD Surface and Curve viewer using the BaroCSS GPU backend",
+  "description": "Embeddable WebGPU CAD viewer with native geometry inspection and review tools",
+  "repository": {"type": "git", "url": "git+https://github.com/barocss/cad.git", "directory": "packages/barocss-viewer"},
+  "homepage": "https://github.com/barocss/cad/tree/main/packages/barocss-viewer#readme",
+  "bugs": {"url": "https://github.com/barocss/cad/issues"},
   "license": "MIT",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

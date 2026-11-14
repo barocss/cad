@@ -1,9 +1,13 @@
 {
   "name": "@barocss/cad-react",
-  "version": "0.0.0-experimental",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Experimental compositional CAD React host using the existing CAD model and Viewer",
+  "description": "Declarative CAD modeling with React, a host-supplied engine, and the BaroCSS Viewer",
+  "license": "MIT",
+  "repository": {"type": "git", "url": "git+https://github.com/barocss/cad.git", "directory": "packages/barocss-cad-react"},
+  "homepage": "https://github.com/barocss/cad/tree/main/packages/barocss-cad-react#readme",
+  "bugs": {"url": "https://github.com/barocss/cad/issues"},
   "exports": {
     ".": {
       "types": "./src/index.ts",

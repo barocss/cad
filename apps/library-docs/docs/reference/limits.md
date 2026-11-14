@@ -153,4 +153,4 @@ It tightens input validation; it adds no supported geometry operations.
 
 - **Frame costs.** The viewer counts each body's draw work, but the studio doesn't show it.
   ([Display, sections and analysis](/studio/display))
-- **GPU compute** (`computeExperimental`) is experimental, and may change without a version bump.
+- **GPU compute** (`computeExperimental`) may change before its API is stabilized.

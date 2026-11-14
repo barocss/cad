@@ -2,7 +2,7 @@
 
 Groups the ordered solid cutters for Difference. Tools is a logical slot, not a native feature or a union of its children.
 
-Import `Tools` from `@barocss/cad-react`. This private experimental workspace API is not a published installable package.
+Import `Tools` from `@barocss/cad-react`. This private workspace API is not a published installable package.
 
 ## Props and output
 

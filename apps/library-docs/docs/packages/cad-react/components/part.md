@@ -2,7 +2,7 @@
 
 The model root and declaration lifecycle. Part is a logical React element, not a native feature node or a visible canvas.
 
-Import `Part` from `@barocss/cad-react`. This private experimental workspace API is not a published installable package.
+Import `Part` from `@barocss/cad-react`. This private workspace API is not a published installable package.
 
 ## Props and output
 

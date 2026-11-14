@@ -273,4 +273,4 @@ Also in that folder, outside the two scripts' lists: `viewer-shadow-spot-browser
 - **Progressive stills.** Section clips and caps, shader materials, scalar colour maps and contours are refused
   (`PATH_TRACE_UNSUPPORTED`); lines, labels, overlays and the raster effects (bloom, depth of field, ambient occlusion,
   contact shadows, outlines) are not in them.
-- **Compute.** Experimental, and display-only; it may change without a version bump.
+- **Compute.** Display-only. This API may change.

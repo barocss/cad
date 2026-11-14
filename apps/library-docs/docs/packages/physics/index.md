@@ -9,8 +9,7 @@ within its input and numerical limits. Dynamic noncubic boxes use their COM
 inertia, not constant world angular velocity. Contact, CCD and joint limits
 remain separate. A CAD proxy conversion does not certify its physical accuracy.
 
-This guide describes the current documentation branch. The package version is `0.0.0-experimental`
-and unreleased. Local implementation and numerical evidence do not establish active CAD adoption,
+This guide describes the workspace package. Local implementation and numerical evidence do not establish active CAD adoption,
 publication, hardware validation or manufacturing acceptance. Existing HOLD and historical NO_GO
 decisions remain in force. See [Physics verification](/reference/physics-verification).
 
@@ -49,7 +48,7 @@ package only; it does not install dependencies or build Physics automatically.
 Open the loopback address printed by the server. Numerical qualification uses
 a separate authenticated verification entry, not saved answers as animation.
 
-This is a local experimental library and Viewer host. The three-cube long
+This is a local library and Viewer host. The three-cube long
 horizon remains NO_GO. It does not qualify arbitrary CAD contact, mechanisms,
 physical fluid/cloth coupling, Studio or real equipment. Existing HOLDs remain.
 

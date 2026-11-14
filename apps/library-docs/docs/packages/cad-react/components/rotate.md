@@ -2,7 +2,7 @@
 
 Rotates one solid with the existing Model body-rotation node. The component declares parameters; native backend code performs the transformation.
 
-Import `Rotate` from `@barocss/cad-react`. This private experimental workspace API is not a published installable package.
+Import `Rotate` from `@barocss/cad-react`. This private workspace API is not a published installable package.
 
 ## Props and output
 

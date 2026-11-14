@@ -3,7 +3,10 @@
   "version": "0.0.0",
   "private": false,
   "type": "module",
-  "description": "Experimental bounded CSS scene compiler and WebGPU viewer",
+  "description": "WebGPU rendering, mesh and scene APIs, and a scene language for CAD applications",
+  "repository": {"type": "git", "url": "git+https://github.com/barocss/cad.git", "directory": "packages/barocss-gpu"},
+  "homepage": "https://github.com/barocss/cad/tree/main/packages/barocss-gpu#readme",
+  "bugs": {"url": "https://github.com/barocss/cad/issues"},
   "license": "MIT",
   "dependencies": {"@barocss/cad": "workspace:*"},
   "exports": {

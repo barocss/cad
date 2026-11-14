@@ -2,7 +2,7 @@
 
 Turns one supported closed profile into a solid using the existing Model extrusion. Sketch lowering is internal storage; there is no public sketch prop.
 
-Import `Extrude` from `@barocss/cad-react`. This private experimental workspace API is not a published installable package.
+Import `Extrude` from `@barocss/cad-react`. This private workspace API is not a published installable package.
 
 ## Props and output
 

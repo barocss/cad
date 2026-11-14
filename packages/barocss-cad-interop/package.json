@@ -1,6 +1,6 @@
 {
   "name": "@barocss/cad-interop",
-  "version": "0.0.0-experimental",
+  "version": "0.0.0",
   "private": false,
   "publishConfig": {
     "access": "public",
@@ -238,7 +238,10 @@
     }
   },
   "type": "module",
-  "description": "BaroCSS CAD preview export and native source loaders",
+  "description": "Native CAD loaders, renderer adapters, and glTF preview export",
+  "repository": {"type": "git", "url": "git+https://github.com/barocss/cad.git", "directory": "packages/barocss-cad-interop"},
+  "homepage": "https://github.com/barocss/cad/tree/main/packages/barocss-cad-interop#readme",
+  "bugs": {"url": "https://github.com/barocss/cad/issues"},
   "license": "MIT",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

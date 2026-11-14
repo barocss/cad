@@ -1,9 +1,9 @@
 {
   "name": "@barocss/cad-model",
-  "version": "0.0.0-experimental",
+  "version": "0.0.0",
   "private": false,
   "type": "module",
-  "description": "The CAD document model and engineering domain logic on top of @barocss/cad: documents, evaluation, analyses, manufacturability and the agent tools — no UI",
+  "description": "Editable CAD documents, assemblies, drawings, engineering checks, and agent tools",
   "license": "MIT",
   "repository": {
     "type": "git",

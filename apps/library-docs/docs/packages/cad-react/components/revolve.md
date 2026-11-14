@@ -2,7 +2,7 @@
 
 Revolve turns one closed profile into a solid through the existing CAD Model revolve node. Provide a profile, a sketch axis and an angle. The result is a solid that other operations can use. The selected rectangle example below has current browser, native geometry and Studio Open evidence.
 
-Import `Revolve` from `@barocss/cad-react`. The package is private, version `0.0.0-experimental`; it is not a published portable install.
+Import `Revolve` from `@barocss/cad-react`. The package is private, version `0.0.0`; it is not a published portable install.
 
 ## Props and output
 

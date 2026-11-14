@@ -18,7 +18,7 @@ The package is public module by module. Import each module by its path; the pack
 
 <<< @/../samples/cad-model.test.mjs#import
 
-- **Version.** It is `0.0.0-experimental` and unreleased. Its API can change between versions: there is no
+- **Version.** It is `0.0.0` and unreleased. Its API can change between versions: there is no
   compatibility promise yet.
 - **TypeScript sources.** Its modules are the TypeScript sources themselves, as with the kernel.
 - **Data files.** JSON data is imported by path too, such as `@barocss/cad-model/library/builtin/materials.json`, and

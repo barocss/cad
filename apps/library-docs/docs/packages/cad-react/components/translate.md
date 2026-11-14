@@ -2,7 +2,7 @@
 
 Places one solid with the existing Model body-translation node. It adds the authored XYZ offset to the parent solid in model coordinates; no frontend transform math is introduced.
 
-Import `Translate` from `@barocss/cad-react`. This private experimental workspace API is not a published installable package.
+Import `Translate` from `@barocss/cad-react`. This private workspace API is not a published installable package.
 
 ## Props and output
 

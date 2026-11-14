@@ -2,7 +2,7 @@
 
 Selects the single solid operand for its parent Difference. Target is a logical slot and creates no native feature node of its own.
 
-Import `Target` from `@barocss/cad-react`. This private experimental workspace API is not a published installable package.
+Import `Target` from `@barocss/cad-react`. This private workspace API is not a published installable package.
 
 ## Props and output
 

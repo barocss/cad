@@ -2,7 +2,7 @@
 
 Subtracts an ordered list of solid tools from one solid target. Difference is logical composition and can lower to multiple existing native difference nodes.
 
-Import `Difference` from `@barocss/cad-react`. This private experimental workspace API is not a published installable package.
+Import `Difference` from `@barocss/cad-react`. This private workspace API is not a published installable package.
 
 ## Props and output
 

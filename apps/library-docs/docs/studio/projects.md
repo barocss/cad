@@ -84,7 +84,7 @@ The folder can be copied or synced: a version's files never change once they're 
   project files", each linked file is read. If one was saved with changes since, a toast says **Newer files for** *N*
   placed parts, and the part's panel shows **Revision waiting**: accept the new revision, which every copy of the part
   takes where it stands, or keep the one it has. Nothing changes until you accept.
-- **A missing file** the project no longer has is named: "Not in the project any more: …".
+- For a missing file, Studio shows "Not in the project any more: …".
 - **It still opens anywhere.** The assembly keeps its own copy of each placed part, so its `.bcad` opens on its own.
 
 ## The agent's versions

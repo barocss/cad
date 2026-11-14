@@ -5,7 +5,7 @@ The studio's WebGPU viewer, and a small CSS-shaped scene and material language. 
 This package supplies the low-level canvas renderer. For the `Viewer` SDK class and its review-state API, see
 [`@barocss/viewer`](/packages/viewer/).
 
-- **Version.** The package is `0.0.0`, experimental and unreleased.
+- **Workspace use.** Source imports use TypeScript. The library build emits JavaScript and declarations.
 - **How the studio uses it.** The studio draws with this viewer when the browser has WebGPU. Its WebGL2 fallback is
   the studio's own renderer, not part of this package (see [WebGPU and WebGL2](#webgpu-and-webgl2)).
 - **In code.** `@barocss/gpu/api` describes a scene as an immutable object: a part's meshes, their materials, lights
@@ -386,7 +386,7 @@ draw only with WebGPU; on WebGL2 their buttons are disabled and say why. `?rende
 - **3-axis access:** from each sample, a ray along each of ±X, ±Y and ±Z, and whether it leaves the part.
 
 Both trace the kernel's triangle hierarchy, packed for WGSL, and each has a CPU mirror. They are for display only: the
-exact values a report uses stay the CPU's. The namespace is experimental and may change without a version bump.
+exact values a report uses stay the CPU's. The namespace may change before its API is stabilized.
 
 ## Frame costs
 

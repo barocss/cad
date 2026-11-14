@@ -127,7 +127,7 @@ export interface CadLibraryInstance {
 }
 
 /** This kernel's version, recorded with a library's sharing check (kept equal to package.json's by a test). */
-export const CAD_KERNEL_VERSION = '0.0.0-experimental';
+export const CAD_KERNEL_VERSION = '0.0.0';
 /**
  * Recipe kinds that carry another model's geometry (a STEP file, a mesh, sewn surfaces): never part of a library — a
  * model downloaded from elsewhere stays an import in the user's own document, not a shared catalogue part (peer, LIB4).

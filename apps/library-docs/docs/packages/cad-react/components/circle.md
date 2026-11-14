@@ -2,7 +2,7 @@
 
 A closed circular profile in local XY. It lowers to existing sketch storage for extrusion, not to a solid hole feature by itself.
 
-Import `Circle` from `@barocss/cad-react`. This private experimental workspace API is not a published installable package.
+Import `Circle` from `@barocss/cad-react`. This private workspace API is not a published installable package.
 
 ## Props and output
 

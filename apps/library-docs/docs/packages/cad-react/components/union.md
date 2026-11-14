@@ -2,7 +2,7 @@
 
 Joins realized solid operands in declared order through existing Model union nodes. The React group may lower to more than one native node.
 
-Import `Union` from `@barocss/cad-react`. This private experimental workspace API is not a published installable package.
+Import `Union` from `@barocss/cad-react`. This private workspace API is not a published installable package.
 
 ## Props and output
 

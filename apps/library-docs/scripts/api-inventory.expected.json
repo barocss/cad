@@ -12331,7 +12331,7 @@
             "kind": "const"
           },
           "shape": {
-            "type": "\"0.0.0-experimental\"",
+            "type": "\"0.0.0\"",
             "declarationSignatures": [
               {
                 "kind": "VariableDeclaration"

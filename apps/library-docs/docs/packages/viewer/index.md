@@ -1,6 +1,6 @@
 # Viewer review files
 
-`@barocss/viewer` is experimental and unreleased.
+`@barocss/viewer` is currently used from source.
 
 `@barocss/viewer` can capture and restore a review of a loaded CAD scene: its camera, visible geometry and selected
 geometry. The host app supplies file Save/Open. Opening a review does not load CAD geometry or modify the CAD model.

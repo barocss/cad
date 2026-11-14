@@ -1,9 +1,12 @@
 {
   "name": "@barocss/physics",
-  "version": "0.0.0-experimental",
+  "version": "0.0.0",
   "private": false,
   "type": "module",
-  "description": "Bounded renderer-neutral fixed-step 3D rigid, visual-water and cloth simulation",
+  "description": "Renderer-independent fixed-step simulation for rigid bodies, visual cloth, and visual water",
+  "repository": {"type": "git", "url": "git+https://github.com/barocss/cad.git", "directory": "packages/barocss-physics"},
+  "homepage": "https://github.com/barocss/cad/tree/main/packages/barocss-physics#readme",
+  "bugs": {"url": "https://github.com/barocss/cad/issues"},
   "license": "MIT",
   "exports": {
     ".": {

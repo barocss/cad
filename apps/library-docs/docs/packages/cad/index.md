@@ -19,7 +19,7 @@ it.
 
 ## Status and install
 
-The package is `@barocss/cad`, version `0.0.0-experimental`. It is unreleased and not on npm.
+Use `@barocss/cad` from the repository workspace.
 
 - **From the repository.** Use it from a checkout, as a workspace package.
 - **TypeScript sources.** Its entry point is the TypeScript source itself (`./src/index.ts`). Use it with a bundler or

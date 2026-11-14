@@ -1,6 +1,6 @@
 # Support and validation boundaries
 
-The package is private experimental workspace source, version `0.0.0-experimental`. Current code accepts more parameter combinations than have independent actual geometry evidence. Keep declaration support, controlled tests, real Worker/Viewer behavior and native physical accuracy separate.
+The package is private workspace source, version `0.0.0`. Current code accepts more parameter combinations than have independent actual geometry evidence. Keep declaration support, controlled tests, real Worker/Viewer behavior and native physical accuracy separate.
 
 ## React admission
 

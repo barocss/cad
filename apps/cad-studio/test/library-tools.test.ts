@@ -106,7 +106,7 @@ test('an agent writes a library as data: checked at once (builds in each variant
     assert.equal(p.status, 200, JSON.stringify(p.json)); assert.equal(p.json.check.ok, true);
     assert.deepEqual(readdirSync(team).sort(), ['agent-spacers.check.json', 'agent-spacers.json']);
     const kept = JSON.parse(readFileSync(join(team, 'agent-spacers.check.json'), 'utf8'));
-    assert.deepEqual([kept.ok, kept.kernel, kept.library, kept.version, kept.built], [true, '0.0.0-experimental', 'agent-spacers', '0.1.0', 3]); assert.ok(!Number.isNaN(Date.parse(kept.at)));
+    assert.deepEqual([kept.ok, kept.kernel, kept.library, kept.version, kept.built], [true, '0.0.0', 'agent-spacers', '0.1.0', 3]); assert.ok(!Number.isNaN(Date.parse(kept.at)));
     const before = Object.fromEntries(readdirSync(team).map(name => [name, readFileSync(join(team, name), 'utf8')]));
     const badDefault = { ...SPACER, parts: [{ ...SPACER.parts[0], parameters: { ...SPACER.parts[0].parameters, h: { ...SPACER.parts[0].parameters.h, value: 0 } } }] };
     for (const candidate of [badDefault, { ...badDefault, id: 'new-bad-default' }]) {

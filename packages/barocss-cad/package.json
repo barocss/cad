@@ -1,6 +1,9 @@
 {
-  "name": "@barocss/cad", "version": "0.0.0-experimental", "private": false,
-  "type": "module", "description": "Original bounded CSS model NURBS and IGES experiment",
+  "name": "@barocss/cad", "version": "0.0.0", "private": false,
+  "type": "module", "description": "TypeScript CAD kernel for B-rep and NURBS modeling, geometry analysis, and file exchange",
+  "repository": {"type": "git", "url": "git+https://github.com/barocss/cad.git", "directory": "packages/barocss-cad"},
+  "homepage": "https://github.com/barocss/cad/tree/main/packages/barocss-cad#readme",
+  "bugs": {"url": "https://github.com/barocss/cad/issues"},
   "license": "MIT", "main": "./src/index.ts", "types": "./src/index.ts",
   "exports": {".":{"types":"./src/index.ts","import":"./src/index.ts"},"./api":{"types":"./src/api/index.ts","import":"./src/api/index.ts"},"./internal/native-si-mass":{"types":"./src/internal/native-si-mass.ts","import":"./src/internal/native-si-mass.ts"},"./internal/drafted-cap-offset":{"types":"./src/features/drafted-cap-offset.ts","import":"./src/features/drafted-cap-offset.ts"},"./internal/prism-wall-offset":{"types":"./src/features/prism-wall-offset.ts","import":"./src/features/prism-wall-offset.ts"}},
   "publishConfig": {"access":"public","main":"./dist/index.js","types":"./dist/index.d.ts","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js"},"./api":{"types":"./dist/api/index.d.ts","import":"./dist/api/index.js"},"./internal/native-si-mass":{"types":"./dist/internal/native-si-mass.d.ts","import":"./dist/internal/native-si-mass.js"},"./internal/drafted-cap-offset":{"types":"./dist/features/drafted-cap-offset.d.ts","import":"./dist/features/drafted-cap-offset.js"},"./internal/prism-wall-offset":{"types":"./dist/features/prism-wall-offset.d.ts","import":"./dist/features/prism-wall-offset.js"}}},

@@ -1,8 +1,8 @@
 # CAD React
 
-`@barocss/cad-react` is a private experimental workspace package, version `0.0.0-experimental`. It describes CAD geometry with ordinary React components, lowers the committed geometry to the existing [CAD Model](/packages/cad-model/) document, and can connect an injected engine to the existing [Viewer](/packages/viewer/).
+`@barocss/cad-react` is a private workspace package. It describes CAD geometry with ordinary React components, lowers the committed geometry to the existing [CAD Model](/packages/cad-model/) document, and can connect an injected engine to the existing [Viewer](/packages/viewer/).
 
-The current package is TypeScript source in this repository. It is not a published npm package, a portable engine client, a distribution build or a standalone Worker. The host application supplies the engine, Worker setup and mass integration. There is no `npm install` quick start for this private checkpoint.
+The current package is TypeScript source in this repository. It is not a published npm package, a portable engine client, a distribution build or a standalone Worker. The host application supplies the engine, Worker setup and mass integration. Add it to a workspace consumer with `workspace:*`.
 
 ## What you can compose
 

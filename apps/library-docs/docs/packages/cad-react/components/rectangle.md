@@ -2,7 +2,7 @@
 
 A closed axis-aligned profile in the local XY plane. The compiler lowers it to a native sketch-storage record when a consumer needs it; the logical component is a profile producer, not a solid.
 
-Import `Rectangle` from `@barocss/cad-react`. This private experimental workspace API is not a published installable package.
+Import `Rectangle` from `@barocss/cad-react`. This private workspace API is not a published installable package.
 
 ## Props and output
 
