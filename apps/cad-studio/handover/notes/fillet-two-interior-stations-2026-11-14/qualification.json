@@ -1,0 +1,196 @@
+{
+  "decision": "D1269",
+  "priority": "P5",
+  "row": 7,
+  "tier": "FULL",
+  "parent": "8b8c9e0b15250c1cfd0e3fbc256dbb3e029f5c36",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1269-<run>",
+    "cd packages/barocss-cad && node scripts/tool.mjs type-check && node scripts/tool.mjs build:fast",
+    "cd packages/barocss-cad && node --test --test-concurrency=1 test/r10-5.test.mjs test/r10-5b.test.mjs test/r11-1c.test.mjs test/api-variable-fillet.test.mjs",
+    "node packages/barocss-cad/scripts/code-shape.mjs --check",
+    "pnpm --filter @barocss/cad-model test fillet-interior-station api-variable-fillet filletNames finish-limits",
+    "pnpm --filter @barocss/cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app test fillet-family",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint packages/barocss-cad/src/{blend/edge-finish,part/part-finish,part/part-types}.ts packages/barocss-cad-model/src/{app/commands,app/editFields,chat/part/features}.ts packages/barocss-cad-model/test/fillet-interior-station.test.ts apps/cad-studio/src/{app/filletFamily.ts,ui/Hud.tsx}",
+    "node --check apps/cad-studio/test/fillet-two-interior-stations-browser.mjs",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/build",
+    "D1269_SOURCE_FROZEN=1 node apps/cad-studio/test/fillet-two-interior-stations-browser.mjs <external-evidence>/studio-first",
+    "D1266_SOURCE_FROZEN=1 node apps/cad-studio/test/fillet-interior-station-browser.mjs <external-evidence>/one-station-regression",
+    "python3 -I <external-evidence>/studio-first/fillet-two-interior-stations-oracle.py < <variant-input.json>",
+    "git diff --check"
+  ],
+  "checks": {
+    "desktopStudio": "PASS",
+    "visualReview": "PASS",
+    "nativeSaveOpen": "PASS",
+    "historyUndoRedo": "PASS",
+    "strictBrep": "PASS",
+    "independentGeometry": "PASS",
+    "existingOneInteriorStudio": "PASS",
+    "localMcpDiscoveryDryRun": "PASS",
+    "kernelTypes": "PASS",
+    "kernelFastBuild": "PASS",
+    "kernelCodeShape": "PASS",
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "changedSourceLint": "PASS",
+    "driverSyntax": "PASS",
+    "studioProductionBuild": "PASS",
+    "kernelFocused": {
+      "status": "PASS",
+      "passed": 20,
+      "failed": 0
+    },
+    "modelFocused": {
+      "status": "PASS",
+      "passed": 13,
+      "failed": 0
+    },
+    "studioFocused": {
+      "status": "PASS",
+      "passed": 15,
+      "failed": 0
+    },
+    "oracleSensitivity": {
+      "status": "PASS",
+      "exitCodes": {
+        "current": 0,
+        "stale-edit": 1,
+        "reversed-stations": 1,
+        "frozen-upstream": 1
+      }
+    },
+    "kernelTangentDiagnostic": {
+      "status": "PASS",
+      "evidence": "Read-only Node stdin probe using the four-edge native slot from edge-finish.test.mjs; seeded stock.side0|stock.top with fractions 0.25 and 0.625, received typed SELECTION for a tangent continuation."
+    },
+    "unexpectedFailures": 0,
+    "fullSuites": "NOT_RUN",
+    "ci": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "paidLiveAI": "NOT_RUN",
+    "agentCommitOrApproval": "NOT_RUN",
+    "conicAndG2FourControls": "NOT_RUN",
+    "shellAfterFourControls": "NOT_RUN",
+    "olderStudioOpen": "NOT_RUN",
+    "broadFilletIssue": "NOT_RUN"
+  },
+  "geometry": {
+    "first": {
+      "status": "PASS",
+      "volumeMM3": 11964.57664564985,
+      "removedMM3": 35.423354350150966,
+      "workerVolumeMM3": 11964.576645649728,
+      "nativeVolumeMM3": 11964.576645649728,
+      "maximumSectionResidualMM": 1.0505465057961044e-12,
+      "axialSamples": 7,
+      "radiusSquaredIntegralAt40MM3": "27731/168",
+      "controlXMM": [
+        0,
+        10,
+        25,
+        40
+      ],
+      "oracleSHA256": "c3f1866fc4315dff9cc7e230b63045eb86b05b91f6cea03d6b3aead39c7ebcca"
+    },
+    "edited": {
+      "status": "PASS",
+      "volumeMM3": 11957.92398871517,
+      "removedMM3": 42.07601128483007,
+      "workerVolumeMM3": 11957.923988715233,
+      "nativeVolumeMM3": 11957.923988715233,
+      "maximumSectionResidualMM": 1.023257093549734e-12,
+      "axialSamples": 7,
+      "radiusSquaredIntegralAt40MM3": "32939/168",
+      "controlXMM": [
+        0,
+        10,
+        28,
+        40
+      ],
+      "oracleSHA256": "29ddd64da1e2dbe18032a3e91e0c6f7098b9ba5d9e6a7bd884cdd4da586565e7"
+    },
+    "moved": {
+      "status": "PASS",
+      "volumeMM3": 21536.885983072756,
+      "removedMM3": 63.114016927245096,
+      "workerVolumeMM3": 21536.885983073054,
+      "nativeVolumeMM3": 21536.885983073054,
+      "maximumSectionResidualMM": 1.0839678178900658e-12,
+      "axialSamples": 7,
+      "radiusSquaredIntegralAt40MM3": "32939/168",
+      "controlXMM": [
+        0,
+        15,
+        42,
+        60
+      ],
+      "oracleSHA256": "569d0b6468cc04743dd6ee27bc9a96cc3aeb872a08a1e52a6cbd96b4bd4fe924"
+    },
+    "reopened": {
+      "status": "PASS",
+      "volumeMM3": 21536.885983072756,
+      "removedMM3": 63.114016927245096,
+      "workerVolumeMM3": 21536.885983073054,
+      "nativeVolumeMM3": 21536.885983073054,
+      "maximumSectionResidualMM": 1.0839678178900658e-12,
+      "axialSamples": 7,
+      "radiusSquaredIntegralAt40MM3": "32939/168",
+      "controlXMM": [
+        0,
+        15,
+        42,
+        60
+      ],
+      "oracleSHA256": "569d0b6468cc04743dd6ee27bc9a96cc3aeb872a08a1e52a6cbd96b4bd4fe924"
+    }
+  },
+  "observations": [
+    {
+      "label": "first",
+      "sha": "704b3ac7e20d05f8f1a276b6aab7e79592904b2d1a2eaa5ecfd5f4d8f646f4e1"
+    },
+    {
+      "label": "edited",
+      "sha": "bdb4efbc9822d9dd40b29fa9e215cceff1702298e9d00ea1fd71cf38807f3333"
+    },
+    {
+      "label": "moved",
+      "sha": "23c9cc01462a2485715072eb73cbf6350fc81fed72cb2a9df8cf5ba6a6e2a6dc"
+    },
+    {
+      "label": "reopened",
+      "sha": "23c9cc01462a2485715072eb73cbf6350fc81fed72cb2a9df8cf5ba6a6e2a6dc"
+    },
+    {
+      "label": "agent-dry-run",
+      "changeVolumeMM3": -35.423,
+      "refusedDuplicate": true
+    },
+    {
+      "label": "agent-unchanged",
+      "mcpExited": true,
+      "fileSHA256": "cd5532b3e1f1719df84d9cb3c17a379b6db166238d87e70f74a32380f8e98756",
+      "fileUnchanged": true
+    }
+  ],
+  "receipts": {
+    "studioSHA256": "5aabbaf9420fb4a23624ff7920351e069a3c4a3b4576815102b8c055df1edfa5",
+    "oneInteriorRegressionSHA256": "a3d8e74e56acef1a063ce1c383cd685a7a105b65841517707a9da3a02ed780c6",
+    "nativeSaveSHA256": "e497544243ad7f6e5d8737383e11b953cddff83046ec927178decd5e01fa269d",
+    "unchangedPinnedFiles": 905,
+    "screenshotsSHA256": {
+      "four-radii-preview": "336cf75df18efe7620c78b669fd3ba5b6ece334d48d13f406aba5568be6f62ef",
+      "endpoint-refused": "f7bce8ca990952def4702f520e7d96a494e99d768b0eaa6d4633a436e2d0f53c",
+      "interior-applied": "f7d6f6c7f968b533a2f7f45f3d1eafd037f49bb1fc816c497ff3174cb2df8b0d",
+      "radius-edited": "9155ea5c0a978b1052df698ddd4102d567d05c4c6fd85c1467a1b1cf08666e86",
+      "fresh-open": "da2f4d34b6dcfd7ee6cae5135daef36badd2374b6ddb32b981e45e960ec5779b"
+    }
+  },
+  "issues": {
+    "2259": "OPEN"
+  }
+}

@@ -35,7 +35,8 @@ export function filletSelection(type: FilletType, ctx: Ctx): Selection {
 }
 export function newFilletActive(type: FilletType, context: Ctx, initial?: Values): Active {
   const ctx = { ...context, selection: filletSelection(type, context) }, cmd = MEMBERS[type], values = { ...cmd.defaults?.(ctx), ...initial };
-  return { cmd, ctx, values, preview: 'busy', fillet: { type, radiusMode: type === 'edge' && (Number(values.endRadius) > 0 || values.stationMode === 'interior') ? 'varying' : 'constant' } };
+  const hasInterior = values.stationMode === 'interior' || values.stationMode === 'two-interior';
+  return { cmd, ctx, values, preview: 'busy', fillet: { type, radiusMode: type === 'edge' && (Number(values.endRadius) > 0 || hasInterior) ? 'varying' : 'constant' } };
 }
 export function nodeFilletType(node?: ModelNode): FilletType | null { return node ? filletType(node.kind) : null; }
 /** Keep only one presentation row; the original best-ranked member remains the action for a nonempty query. */

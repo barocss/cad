@@ -53,7 +53,8 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     ? alignTargetBody ? `${bodyName(active.ctx.doc, alignTargetBody)} · ${alignTargetFace}` : alignTargetFace
     : null;
   const cutSource = isCutPattern(active.cmd.id) ? cutPatternSourceLabel(active.ctx.doc.nodes, selectedCutPatternSource(active.ctx)) : null;
-  const fields = shownFields(active.cmd.fields?.(active.ctx, active.values) ?? [], active.values).filter(f => !(active.fillet?.type === 'edge' && active.fillet.radiusMode === 'constant' && ['endRadius', 'stationMode', 'stationAt', 'stationRadius'].includes(f.key)));
+  const fields = shownFields(active.cmd.fields?.(active.ctx, active.values) ?? [], active.values).filter(f =>
+    !(active.fillet?.type === 'edge' && active.fillet.radiusMode === 'constant' && (f.key === 'endRadius' || f.key.startsWith('station'))));
   const captureFirst = (element: HTMLInputElement | HTMLSelectElement | null) => { first.current = element; };
   const changeValue = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const input = event.currentTarget, key = input.dataset.key;

@@ -331,13 +331,18 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
         const k = (n: ModelNode) => n as typeof node, last = node.radii.length - 1;
         number('r', 'Start radius', 'mm', n => num(k(n).radii![0].radius), (n, v) => ({ ...k(n), radius: v, radii: k(n).radii!.map((p, i) => i === 0 ? { ...p, radius: v } : p) }));
         number('r1', 'End radius', 'mm', n => num(k(n).radii![last].radius), (n, v) => ({ ...k(n), radii: k(n).radii!.map((p, i) => i === last ? { ...p, radius: v } : p) }));
-        if (last === 2 && node.radii[1].fraction !== undefined) {
-          number('stationAt', 'Interior position (%)', undefined, n => k(n).radii![1].fraction! * 100, (n, v) => ({
-            ...k(n), radii: k(n).radii!.map((p, i) => i === 1 ? { ...p, fraction: v / 100 } : p),
-          }));
-          number('stationRadius', 'Interior radius', 'mm', n => num(k(n).radii![1].radius), (n, v) => ({
-            ...k(n), radii: k(n).radii!.map((p, i) => i === 1 ? { ...p, radius: v } : p),
-          }));
+        const interior = node.radii.slice(1, last);
+        if ((interior.length === 1 || interior.length === 2) && interior.every(point => point.fraction !== undefined)) {
+          interior.forEach((_, index) => {
+            const station = index + 1, key = index === 0 ? 'station' : 'station2';
+            const label = interior.length === 1 ? 'Interior' : `Interior ${station}`;
+            number(key + 'At', label + ' position (%)', undefined, n => k(n).radii![station].fraction! * 100, (n, v) => ({
+              ...k(n), radii: k(n).radii!.map((p, i) => i === station ? { ...p, fraction: v / 100 } : p),
+            }));
+            number(key + 'Radius', label + ' radius', 'mm', n => num(k(n).radii![station].radius), (n, v) => ({
+              ...k(n), radii: k(n).radii!.map((p, i) => i === station ? { ...p, radius: v } : p),
+            }));
+          });
         }
       } else number('r', 'Radius', 'mm', n => num((n as typeof node).radius), (n, v) => ({ ...(n as typeof node), radius: v }));
       // (A conic's rho, a G2 section's tension, R10.5b, D103.)

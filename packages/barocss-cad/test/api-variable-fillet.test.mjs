@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { part, param, BarocssError } from '../dist/api/index.js';
-import { evaluateCadPart, outputOf, checkBrep, saveCadPart, loadCadPart } from '../dist/index.js';
+import { CadPartError, checkBrep, evaluateCadPart, evaluateSurface, loadCadPart, massPropertiesOf, outputOf, saveCadPart } from '../dist/index.js';
 
 // Fixed before candidate source: work/k04-variable-fillet-51a59/oracle.json.
 // MMGS; the removed-volume relative comparison is the existing R10.5 1e-9 contract.
@@ -89,4 +89,138 @@ test('public variable fillet: equal numeric radii retain constant behavior and i
   assert.equal(focused.doc.features.at(-1).target, 'extrude1');
   assert.deepEqual(focused.body('extrude2').mass({ density: 1 }), pair.body('extrude2').mass({ density: 1 }));
   assert.deepEqual(pair.doc, pairBefore); assert.deepEqual(source.doc, before);
+});
+
+function fractionalFillet() {
+  const source = plate(), doc = source.doc;
+  const [{ names }] = picked(source.select()).list();
+  return { doc, feature: { id: 'f', kind: 'fillet', target: 'extrude1', edges: names, radii: [
+    { at: [0, 0, 10], radius: 1.25, atEnd: true },
+    { at: [10, 0, 10], radius: 3, fraction: 0.25 },
+    { at: [25, 0, 10], radius: 1, fraction: 0.625 },
+    { at: [40, 0, 10], radius: 2.5, atEnd: true },
+  ] } };
+}
+
+function assertFractionalVolume(output, base, removedVolume) {
+  const check = checkBrep(output.brep, { strict: true });
+  assert.equal(check.valid, true, JSON.stringify(check.issues));
+  assert.equal(check.counts.bodies, 1);
+  assert.equal(check.counts.shells, 1);
+  const removed = base - massPropertiesOf(output).volume;
+  assert.ok(Math.abs(removed / removedVolume - 1) < 1e-9, `${removed} vs ${removedVolume}`);
+}
+
+function assertNativeSections(output, samples, height) {
+  const surfaces = output.brep.faces.filter(face => face.name?.startsWith('f.face')).map(face => face.surface);
+  for (const [x, radius] of samples) {
+    let seen = 0;
+    for (const surface of surfaces) {
+      assert.equal(surface.kind, 'surface');
+      const u0 = surface.knotsU[surface.degreeU], u1 = surface.knotsU[surface.controlPoints.length], um = (u0 + u1) / 2;
+      const v0 = surface.knotsV[surface.degreeV], v1 = surface.knotsV[surface.controlPoints[0].length];
+      const x0 = evaluateSurface(surface, um, v0)[0], x1 = evaluateSurface(surface, um, v1)[0];
+      if (x < Math.min(x0, x1) - 1e-9 || x > Math.max(x0, x1) + 1e-9) continue;
+      seen++;
+      let lo = v0, hi = v1;
+      for (let i = 0; i < 60; i++) {
+        const mid = (lo + hi) / 2;
+        if ((evaluateSurface(surface, um, mid)[0] < x) === (x0 < x1)) lo = mid;
+        else hi = mid;
+      }
+      const points = [u0, um, u1].map(u => evaluateSurface(surface, u, (lo + hi) / 2)).sort((a, b) => a[1] - b[1]);
+      const diag = radius * (1 - 1 / Math.sqrt(2));
+      const expected = [[x, 0, height - radius], [x, diag, height - diag], [x, radius, height]];
+      for (const [i, point] of points.entries()) {
+        const residual = Math.hypot(...point.map((value, axis) => value - expected[i][axis]));
+        assert.ok(residual <= 1e-6, `X=${x} radius=${radius}: ${JSON.stringify(point)} vs ${expected[i]}`);
+      }
+    }
+    assert.ok(seen > 0, `No native fillet section at X=${x}`);
+  }
+}
+
+test('fractional kernel fillet: two stations give the native peak and trough while retaining the authored direction', () => {
+  const { doc, feature } = fractionalFillet();
+  const circularArea = 1 - Math.PI / 4;
+  const removal = circularArea * 27731 / 168;
+  // Independently expanded Hermite cubics have local midspan values 75/32, 2 and 25/16.
+  const samples = [[0, 1.25], [5, 75 / 32], [10, 3], [17.5, 2], [25, 1], [32.5, 25 / 16], [40, 2.5]];
+  const snapshot = evaluateCadPart({ ...doc, features: [...doc.features, feature] });
+  const output = outputOf(snapshot, feature.id);
+  assert.deepEqual(output.filletTargets, feature.edges);
+  assertFractionalVolume(output, 12000, removal);
+  assertNativeSections(output, samples, 10);
+
+  const opposite = structuredClone(feature);
+  for (const station of opposite.radii) station.at[0] = 40 - station.at[0];
+  const reversed = outputOf(evaluateCadPart({ ...doc, features: [...doc.features, opposite] }), feature.id);
+  assertFractionalVolume(reversed, 12000, removal);
+  assertNativeSections(reversed, samples.map(([x, radius]) => [40 - x, radius]), 10);
+
+  const loaded = loadCadPart(saveCadPart(snapshot));
+  assert.deepEqual(loaded.document, snapshot.document);
+  assert.deepEqual(outputOf(loaded, feature.id).brep, output.brep);
+});
+
+test('fractional kernel fillet: station edits follow a resized edge and the three-record mode remains valid', () => {
+  const { doc, feature } = fractionalFillet();
+  const updated = structuredClone(feature);
+  updated.radii[2].fraction = 0.7;
+  updated.radii[2].radius = 1.5;
+  const circularArea = 1 - Math.PI / 4;
+  const editedRemoval = circularArea * 32939 / 168;
+  const edited = outputOf(evaluateCadPart({ ...doc, features: [...doc.features, updated] }), feature.id);
+  assertFractionalVolume(edited, 12000, editedRemoval);
+  assertNativeSections(edited, [[10, 3], [28, 1.5]], 10);
+
+  const resized = structuredClone(doc);
+  const [sketch, extrusion] = resized.features;
+  sketch.max[0] = 60;
+  extrusion.height = 12;
+  resized.features.push(updated);
+  const output = outputOf(evaluateCadPart(resized), feature.id);
+  assertFractionalVolume(output, 21600, 1.5 * editedRemoval);
+  assertNativeSections(output, [[15, 3], [42, 1.5]], 12);
+
+  const previous = { ...feature, radii: [
+    { ...feature.radii[0], radius: 1 },
+    { ...feature.radii[1], radius: 2 },
+    { ...feature.radii[3], radius: 4 },
+  ] };
+  const legacy = outputOf(evaluateCadPart({ ...doc, features: [...doc.features, previous] }), feature.id);
+  assertFractionalVolume(legacy, 12000, circularArea * 8393 / 27);
+  assertNativeSections(legacy, [[0, 1], [10, 2], [40, 4]], 10);
+});
+
+test('fractional kernel fillet: malformed records and changed edge direction fail without modifying the source', () => {
+  const { doc, feature } = fractionalFillet();
+  for (const [mutate, code, message] of [
+    [f => { f.radii[1].fraction = 0; }, 'INPUT', /strictly between/],
+    [f => { f.radii[2].fraction = 1; }, 'INPUT', /strictly between/],
+    [f => { f.radii[1].fraction = Infinity; }, 'INPUT', /strictly between/],
+    [f => { f.radii[2].fraction = 0.25; }, 'INPUT', /increase/],
+    [f => { f.radii[2].fraction = 0.25 + 5e-10; }, 'INPUT', /increase/],
+    [f => { [f.radii[1], f.radii[2]] = [f.radii[2], f.radii[1]]; }, 'INPUT', /increase/],
+    [f => { delete f.radii[2].fraction; }, 'SELECTION', /each interior/],
+    [f => { f.radii.splice(3, 0, { at: [30, 0, 10], radius: 1.75, fraction: 0.75 }); }, 'SELECTION', /one straight edge/],
+    [f => { f.radii[3].at = [0, 30, 10]; }, 'SELECTION', /direction changed/],
+  ]) {
+    const candidate = structuredClone(feature);
+    mutate(candidate);
+    const input = { ...doc, features: [...doc.features, candidate] }, before = structuredClone(input);
+    assert.throws(() => evaluateCadPart(input), error => error instanceof CadPartError && error.code === code && message.test(error.message));
+    assert.deepEqual(input, before);
+  }
+
+  const step = [...doc.features,
+    { id: 'step', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 15] },
+    { id: 'upper', kind: 'extrude', sketch: 'step', height: 10, from: 10 },
+    { id: 'union', kind: 'union', target: 'extrude1', tool: 'upper' },
+  ];
+  const body = outputOf(evaluateCadPart({ ...doc, features: step }), 'union').brep;
+  const concave = body.edges.find(edge => edge.curve.degree === 1 && edge.curve.controlPoints.every(point => point[1] === 15 && point[2] === 10));
+  assert.ok(concave);
+  const cutter = { ...feature, target: 'union', edges: [concave.name] };
+  assert.throws(() => evaluateCadPart({ ...doc, features: [...step, cutter] }), error => error instanceof CadPartError && error.code === 'SELECTION' && /need a convex edge/.test(error.message));
 });

@@ -691,42 +691,53 @@ const allCommands: Command[] = [
       const picked = ctx.selection.edges[0];
       const edge = picked && ctx.bodies[picked.body]?.mesh.edges[picked.edge];
       const supportsStation = ctx.selection.edges.length === 1 && edge?.nativeLine;
+      const hasInterior = (v: Values) => v.stationMode === 'interior' || v.stationMode === 'two-interior';
+      const two = values?.stationMode === 'two-interior';
       return [
         { key: 'radius', label: 'Radius', kind: 'mm', min: 0.1 },
         { key: 'endRadius', label: 'End radius (0: same)', kind: 'mm', min: 0 },
-        ...(supportsStation || values?.stationMode === 'interior' ? [
+        ...(supportsStation || values && hasInterior(values) ? [
           { key: 'stationMode', label: 'Radius controls', kind: 'choice' as const,
-            options: [{ value: 'ends', label: 'Ends' }, { value: 'interior', label: 'Ends and interior' }],
-            when: (v: Values) => Number(v.endRadius) > 0 || v.stationMode === 'interior' },
-          { key: 'stationAt', label: 'Interior position (%)', kind: 'number' as const, min: 0, max: 100,
-            when: (v: Values) => v.stationMode === 'interior' },
-          { key: 'stationRadius', label: 'Interior radius', kind: 'mm' as const, min: 0.1,
-            when: (v: Values) => v.stationMode === 'interior' },
+            options: [{ value: 'ends', label: 'Ends' }, { value: 'interior', label: 'Ends and interior' }, { value: 'two-interior', label: 'Ends and two interior points' }],
+            when: (v: Values) => Number(v.endRadius) > 0 || hasInterior(v) },
+          { key: 'stationAt', label: two ? 'Interior 1 position (%)' : 'Interior position (%)', kind: 'number' as const, min: 0, max: 100,
+            when: hasInterior },
+          { key: 'stationRadius', label: two ? 'Interior 1 radius' : 'Interior radius', kind: 'mm' as const, min: 0.1,
+            when: hasInterior },
+          { key: 'station2At', label: 'Interior 2 position (%)', kind: 'number' as const, min: 0, max: 100,
+            when: (v: Values) => v.stationMode === 'two-interior' },
+          { key: 'station2Radius', label: 'Interior 2 radius', kind: 'mm' as const, min: 0.1,
+            when: (v: Values) => v.stationMode === 'two-interior' },
         ] : []),
         { key: 'shape', label: 'Section', kind: 'choice', options: [{ value: 'circular', label: 'Circular' }, { value: 'conic', label: 'Conic' }, { value: 'g2', label: 'Curvature (G2)' }] },
         { key: 'rho', label: 'Rho', kind: 'ratio', min: 0.01, max: 0.99, step: 0.05, when: v => v.shape === 'conic' },
         { key: 'tension', label: 'Tension', kind: 'ratio', min: 0.01, max: 0.99, step: 0.05, when: v => v.shape === 'g2' },
       ];
     },
-    defaults: () => ({ radius: 3, endRadius: 0, stationMode: 'ends', stationAt: 50, stationRadius: 3, shape: 'circular', rho: 0.5, tension: 0.5 }),
+    defaults: () => ({ radius: 3, endRadius: 0, stationMode: 'ends', stationAt: 50, stationRadius: 3, station2At: 75, station2Radius: 3, shape: 'circular', rho: 0.5, tension: 0.5 }),
     steps: edgeSteps,
     handles: (ctx, v) => edgeHandle(ctx, 'radius', Number(v.radius), 'fillet'),
     build: (ctx, v) => {
       const { body, edges } = edgesOfOneBody(ctx)!, why = ellipseSideRefusal(ctx, edges); if (why) throw refusal('VALUE', why);
       const r = Number(v.radius), endRadius = Number(v.endRadius ?? 0), r1 = endRadius || 0, names = edges.flatMap(e => e.names);
       const section = sectionOf(v), shaped = section ? { section } : {};
-      if (v.stationMode === 'interior') {
-        const [edge] = edges, fraction = Number(v.stationAt) / 100, radius = Number(v.stationRadius);
+      if (v.stationMode === 'interior' || v.stationMode === 'two-interior') {
+        const [edge] = edges;
         if (ctx.selection.edges.length !== 1 || edges.length !== 1 || names.length !== 1 || !edge.nativeLine)
           throw refusal('FILLET_CHAIN', 'An interior radius needs one original straight edge.');
-        if (!Number.isFinite(fraction) || fraction <= 1e-9 || fraction >= 1 - 1e-9)
-          throw refusal('VALUE', 'Set the interior position above 0% and below 100%.');
-        if (!(Number.isFinite(radius) && radius > 0) || !Number.isFinite(endRadius) || endRadius < 0)
-          throw refusal('VALUE', 'Set a positive interior radius and a nonnegative end radius.');
+        const controls = [{ fraction: Number(v.stationAt) / 100, radius: Number(v.stationRadius) }];
+        if (v.stationMode === 'two-interior')
+          controls.push({ fraction: Number(v.station2At) / 100, radius: Number(v.station2Radius) });
+        if (controls.some(({ fraction }) => !(fraction > 1e-9 && fraction < 1 - 1e-9)))
+          throw refusal('VALUE', 'Set each interior position above 0% and below 100%.');
+        if (controls.length === 2 && controls[1].fraction - controls[0].fraction <= 1e-9)
+          throw refusal('VALUE', 'Set interior position 2 after interior position 1.');
+        if (controls.some(({ radius }) => !(Number.isFinite(radius) && radius > 0)) || !Number.isFinite(endRadius) || endRadius < 0)
+          throw refusal('VALUE', 'Set positive interior radii and a nonnegative end radius.');
         const a: V3 = [...edge.a], b: V3 = [...edge.b];
-        const at = a.map((x, i) => x + (b[i] - x) * fraction) as V3;
+        const stations = controls.map(control => ({ ...control, at: a.map((x, i) => x + (b[i] - x) * control.fraction) as V3 }));
         return withNode(ctx.doc, { kind: 'fillet', parent: refOf(body), edges: names, radius: r, radii: [
-          { at: a, radius: r, atEnd: true }, { at, radius, fraction }, { at: b, radius: r1 || r, atEnd: true },
+          { at: a, radius: r, atEnd: true }, ...stations, { at: b, radius: r1 || r, atEnd: true },
         ], ...shaped });
       }
       // (An end radius: the radius varies along the picked chain from its start to its end, R10.5, D100.)

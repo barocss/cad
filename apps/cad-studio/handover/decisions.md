@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1269 — Set two interior radii on a fillet](notes/fillet-two-interior-stations-2026-11-14/README.md).
 - [D1268 — Show curvature combs on authored NURBS curves](notes/direct-curve-curvature-comb-2026-11-14/README.md).
 - [D1267 — Display a native edge curvature comb](notes/native-edge-curvature-comb-2026-11-14/README.md).
 - [D1266 — Control a variable fillet radius inside a straight edge](notes/fillet-interior-station-2026-11-14/README.md).

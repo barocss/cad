@@ -11,6 +11,8 @@ import { add, cross, dot, len, lerp, scale, sub, unit } from '../core/vec3.js';
 import { brepOf, profiling, planarBoolean, planarBrep } from './part-model.js';
 import type { CadPartDim, CadPartPoint3, CadPartFeature, Result, Tools, PartHelpers, Part, Solid, CadPartErrorCode } from './part-model.js';
 
+const stationFractionTolerance = 1e-9;
+
 /** A fillet or chamfer feature's evaluation (part-model.ts's operation() for these kinds). */
 export function finishOperation(f: CadPartFeature & Record<string, unknown>, t: Tools, k: PartHelpers): () => Result {
   const { dim, xyz, solids, fail, at } = t;
@@ -23,7 +25,8 @@ export function finishOperation(f: CadPartFeature & Record<string, unknown>, t: 
       const authored = varying ? (f.radii as { at: CadPartPoint3; radius: CadPartDim; atEnd?: unknown; fraction?: unknown }[]).map((p, k) => {
         if (p?.atEnd !== undefined && p.atEnd !== true) fail('INPUT', `radii[${k}].atEnd is true or left out`);
         const fraction = p?.fraction;
-        if (fraction !== undefined && (p.atEnd || typeof fraction !== 'number' || !Number.isFinite(fraction) || fraction <= 1e-9 || fraction >= 1 - 1e-9))
+        if (fraction !== undefined && (p.atEnd || typeof fraction !== 'number' || !Number.isFinite(fraction) ||
+            fraction <= stationFractionTolerance || fraction >= 1 - stationFractionTolerance))
           return fail('INPUT', 'an interior fillet station must be strictly between the edge ends.');
         return { at: xyz(p?.at, `radii[${k}].at`), radius: dim(p?.radius as CadPartDim, `radii[${k}].radius`, true), atEnd: p?.atEnd === true, fraction };
       }) : undefined;
@@ -41,7 +44,8 @@ export function finishOperation(f: CadPartFeature & Record<string, unknown>, t: 
         const t = target[0], kind = f.kind as 'chamfer' | 'fillet', reports: FilletReport[] = [];
         const radii = authored && atChainEnds(authored, k.brepOf(t, 'target'), f.edges as string[], fail);
         const targets = !shape ? new Set<string>() : undefined;
-        const solid = finishEdges(t, f.edges as string[], size, kind, at, fail, reports, radii, shape, targets);
+        const singleConvexEdge = authored?.length === 4 && authored.some(point => point.fraction !== undefined);
+        const solid = finishEdges(t, f.edges as string[], size, kind, at, fail, reports, radii, shape, targets, singleConvexEdge);
         // A body that left the upright family keeps how it was made, so that it can still be shelled — past a
         // variable-radius fillet too (its hollow's radius is the outer one less the wall, D108), not past a conic or G2 one.
         const base = t.solid.kind === 'upright' ? t.solid.solid : t.history?.base, before = t.solid.kind === 'upright' ? [] : t.history?.finishes ?? [];
@@ -64,7 +68,7 @@ type Point = [number, number, number];
 function atChainEnds(radii: readonly { at: Point; radius: number; atEnd: boolean; fraction?: number }[], brep: ReturnType<PartHelpers['brepOf']>,
   names: readonly string[], fail: Tools['fail']): { at: Point; radius: number }[] {
   const plain = radii.map(p => ({ at: p.at, radius: p.radius })), ending = radii.flatMap((p, i) => p.atEnd ? [i] : []);
-  if (radii.some(point => point.fraction !== undefined)) return atStraightEdgeStation(radii, brep, names, fail);
+  if (radii.some(point => point.fraction !== undefined)) return atStraightEdgeStations(radii, brep, names, fail);
   if (!ending.length) return plain;
   const uses = new Map<string, number>();
   for (const name of names) {
@@ -80,17 +84,21 @@ function atChainEnds(radii: readonly { at: Point; radius: number; atEnd: boolean
   plain[i].at = [...ends[keep ? 0 : 1]]; plain[j].at = [...ends[keep ? 1 : 0]];
   return plain;
 }
-function atStraightEdgeStation(
+function atStraightEdgeStations(
   radii: readonly { at: Point; radius: number; atEnd: boolean; fraction?: number }[],
   brep: Brep,
   names: readonly string[],
   fail: Tools['fail'],
 ): { at: Point; radius: number }[] {
-  const [start, station, end] = radii;
-  const fraction = station?.fraction;
-  if (names.length !== 1 || radii.length !== 3 || !start.atEnd || !end.atEnd ||
-      start.fraction !== undefined || end.fraction !== undefined || fraction === undefined)
-    return fail('SELECTION', 'an interior fillet station needs one straight edge and two end radii.');
+  const start = radii[0], end = radii[radii.length - 1], stations = radii.slice(1, -1);
+  if (names.length !== 1 || stations.length < 1 || stations.length > 2 || !start.atEnd || !end.atEnd)
+    return fail('SELECTION', 'interior fillet stations need one straight edge and two end radii.');
+  const resolved = stations.map(({ fraction, radius }) => {
+    if (fraction === undefined) return fail('SELECTION', 'each interior fillet station needs an edge fraction.');
+    return { fraction, radius };
+  });
+  if (resolved.length === 2 && resolved[1].fraction - resolved[0].fraction <= stationFractionTolerance)
+    return fail('INPUT', 'interior fillet station fractions must increase from the original start and be distinct.');
   const edges = brep.edges.filter(edge => edge.name === names[0]);
   if (edges.length !== 1) return fail('SELECTION', 'the interior fillet station needs one unique native edge.');
   const edge = edges[0], { curve } = edge;
@@ -106,13 +114,13 @@ function atStraightEdgeStation(
   const [first, last] = dot(original, live) > 0 ? [a, b] : [b, a];
   return [
     { at: [...first], radius: start.radius },
-    { at: lerp(first, last, fraction), radius: station.radius },
+    ...resolved.map(({ fraction, radius }) => ({ at: lerp(first, last, fraction), radius })),
     { at: [...last], radius: end.radius },
   ];
 }
 // Edge-finishing helpers moved from part-model.ts (3b, D361).
 // ---- chamfers and fillets ------------------------------------------------------------------------------
-export function finishEdges(part: Part, names: string[], size: number, kind: 'chamfer' | 'fillet', at: string, fail: Tools['fail'], reports?: FilletReport[], radii?: readonly { at: Point; radius: number }[], shape?: { kind: 'conic'; rho: number } | { kind: 'g2'; tension: number }, targets?: Set<string>): Solid {
+export function finishEdges(part: Part, names: string[], size: number, kind: 'chamfer' | 'fillet', at: string, fail: Tools['fail'], reports?: FilletReport[], radii?: readonly { at: Point; radius: number }[], shape?: { kind: 'conic'; rho: number } | { kind: 'g2'; tension: number }, targets?: Set<string>, singleConvexEdge = false): Solid {
   if (profiling) profiling.finishes++;
   // Vertical corners of an upright body keep it upright (its section is finished exactly); straight
   // chamfers elsewhere cut a wedge; every other edge (sloping or curved, on any body) gets a rolling-ball
@@ -151,7 +159,7 @@ export function finishEdges(part: Part, names: string[], size: number, kind: 'ch
       const missing = general.find(name => !remaining.has(name));
       if (missing !== undefined) fail('SELECTION', `Chamfer intermediate edge ${missing} is unavailable at this distance.`);
     }
-    try { solid = { kind: 'brep', brep: finishBrepEdges(body, general, size, kind, at, { reports, tangentTargets, ...(radii ? { radii } : {}), ...(shape ? { shape } : {}) }) }; }
+    try { solid = { kind: 'brep', brep: finishBrepEdges(body, general, size, kind, at, { reports, tangentTargets, singleConvexEdge, ...(radii ? { radii } : {}), ...(shape ? { shape } : {}) }) }; }
     catch (cause) {
       const m = cause instanceof BrepError ? /^B-rep: (SELECTION|CAPABILITY|PARAMETER): (.*)$/s.exec(cause.message) : null;
       if (m) fail(m[1] as CadPartErrorCode, m[2]);

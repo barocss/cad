@@ -99,7 +99,7 @@ function finishGuarded(body: Brep, names: readonly string[], size: number, kind:
     return finishEdges(body, names, size, kind, id, { ...options, squareAtCylinders: true });
   }
 }
-interface FinishOptions { readonly reports?: FilletReport[]; readonly tangentTargets?: Set<string>; readonly general?: boolean; readonly phased?: boolean; readonly squareAtCylinders?: boolean; readonly generalEdges?: readonly string[]; /** A variable radius (R10.5, D100): the radius at points of the edges, `size` their largest; the rolling ball's. */ readonly radii?: readonly RadiusAt[]; /** The section's shape (R10.5b, D103); not circular: the rolling ball's. */ readonly shape?: SectionShape }
+interface FinishOptions { readonly reports?: FilletReport[]; readonly tangentTargets?: Set<string>; readonly general?: boolean; readonly phased?: boolean; readonly squareAtCylinders?: boolean; readonly generalEdges?: readonly string[]; readonly singleConvexEdge?: boolean; /** A variable radius (R10.5, D100): the radius at points of the edges, `size` their largest; the rolling ball's. */ readonly radii?: readonly RadiusAt[]; /** The section's shape (R10.5b, D103); not circular: the rolling ball's. */ readonly shape?: SectionShape }
 function finishEdges(body: Brep, names: readonly string[], size: number, kind: EdgeFinishKind, id: string, options: FinishOptions, used: { cylinder: boolean } = { cylinder: false }): Brep {
   let usedCylinder = false;
   try {
@@ -161,6 +161,8 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
     const e = queue.pop()!;
     for (const end of ends(e)) for (const o of continues(e, end)) if (!chain.has(o.id)) { chain.set(o.id, o); queue.push(o); }
   }
+  if (options.singleConvexEdge && chain.size !== 1)
+    refuse('SELECTION', 'two interior fillet stations need one edge without tangent continuations.');
   // Capture the original body's scope. Phased passes can use newly generated names.
   if (options.tangentTargets) {
     options.tangentTargets.clear();
@@ -306,7 +308,9 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
     const clips: EndClip[] = [], clipped: [boolean, boolean] = [false, false];
     let squareEnd: string | null = null;
     if (open) {
-      const sideFaces = new Set(comp.flatMap(facesOf)), convex0 = convexAt(generalInto(open[0], usesOf, ends));
+      const sideFaces = new Set(comp.flatMap(facesOf)), sides = generalInto(open[0], usesOf, ends), convex0 = convexAt(sides);
+      if (options.singleConvexEdge && (!convex0 || len(sub(sides[0].n, sides[1].n)) < 1e-9))
+        refuse('SELECTION', 'two interior fillet stations need a convex edge.');
       past = [0, 1].map(i => {
         const o = open[i === 0 ? 0 : open.length - 1], E = ends(o.e), end = i === 0 ? (o.reversed ? E[1] : E[0]) : (o.reversed ? E[0] : E[1]);
         // Another finished edge at the end: where it shares a face with this one at a convex corner of that face, the

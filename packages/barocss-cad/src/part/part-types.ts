@@ -522,8 +522,9 @@ export type CadPartFeature = Base & (
    * two points: linear), carried on at its end slopes past the outer points of an open chain (it must stay positive
    * to the chain's ends), periodic round a closed one. Give one of them. A point with `atEnd: true` is the radius at an end
    * of the open chain the edges make: evaluated, it is the chain end nearest its `at` (the two of a pair at the two ends), so
-   * it follows the ends when an earlier feature moves them. `fraction` binds one interior point to a single
-   * native straight edge oriented by the two authored end points. It is strictly inside (0, 1).
+   * it follows the ends when an earlier feature moves them. `fraction` binds one or two interior points to a single
+   * native straight edge oriented by the two authored end points. Give the start, increasing fractions strictly
+   * inside (0, 1), then the end. Two fractional points require one convex edge without tangent continuations.
    */
   /**
    * `section` (R10.5b, D103): the fillet's shape across — `circular` (the default, the rolling ball's arc); `conic` with
