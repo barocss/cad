@@ -8,6 +8,7 @@ import { BarocssError, massPropertiesOf, reevaluate, exportStl, type CadPartOutp
 import { bodyMesh, withoutNativeFaces, type DisplayEdge, type DisplayMesh } from './mesh';
 import { cylinderDisplayMesh } from './cylinderDisplay';
 import { arcSweepDisplayMesh } from './arcSweepDisplay';
+import { arcSweepMixedDisplayMesh } from './arcSweepMixedDisplay';
 import { bandRailDisplayMesh } from './bandRailDisplay';
 import { loftDisplayMesh } from './loftDisplay';
 import { lumpTouches } from './lumps';
@@ -298,7 +299,8 @@ export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refin
         const mesh = cylinderDisplayMesh(body.mesh, snapshot.outputs[0].brep, revision);
         if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
       } else if (node?.kind === 'sweep-curve' && node.mode === 'exact') {
-        const mesh = arcSweepDisplayMesh(body.mesh, snapshot.outputs[0].brep);
+        const { brep } = snapshot.outputs[0];
+        const mesh = arcSweepMixedDisplayMesh(arcSweepDisplayMesh(body.mesh, brep), brep);
         if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
       }
     }

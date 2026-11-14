@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1299 — Refine the inner and outer contours of a mixed circular Sweep](notes/mixed-arc-sweep-display-2026-11-15/README.md).
 - [D1298 — Sweep a line-and-arc profile along a circular arc](notes/exact-arc-profile-sweep-2026-11-15/README.md).
 - [D1297 — Sweep a line-and-arc profile with one through-hole](notes/exact-straight-profile-sweep-2026-11-15/README.md).
 - [D1296 — Refine Studio’s native circular Sweep silhouette](notes/arc-sweep-display-2026-11-15/README.md).
