@@ -74,7 +74,8 @@ export interface ExtrudeOptions { h: Dim; draft?: Dim }
 export interface RevolveOptions { axis?: 'x' | 'y'; deg?: Dim }
 /** `hole`: into the face a selector picks; `x`, `y` on that face's plane (a Z face: X and Y), as the command takes them. */
 export interface HoleOptions { d: Dim; x: Dim; y: Dim; type?: 'through' | 'blind'; depth?: Dim }
-/** `fillet`: on the selected edges; endRadius explicitly selects one straight open edge, from a to b.
+/** `fillet`: on the selected edges; endRadius assigns radii from a to b on one straight open edge or a supported convex 90° circular rim.
+ * The rim must join a planar cap to a coaxial cylindrical wall and stop at outward radial planes.
  * Both explicit endpoint radii are at least 0.1 mm. Near-equal distinct radii are refused at the existing
  * Studio 1e-9 boundary. Equal numeric radii use the constant path; only a varying endRadius can bind.
  */
@@ -163,16 +164,18 @@ export function holeSpec(face: string, o: Resolved<HoleOptions>): FeatureSpec {
   return { command: 'hole', face, values: { type, d: positive('d', o.d), x: finite('x', o.x), y: finite('y', o.y), ...(type === 'blind' ? { depth: positive('depth', o.depth!) } : {}) } };
 }
 
-export function filletSpec(edges: readonly string[], o: Resolved<FilletOptions>, picked?: readonly EdgeInfo[]): FeatureSpec {
+export function filletSpec(edges: readonly string[], o: Resolved<FilletOptions>, picked?: readonly EdgeInfo[], supportsCircular?: (edge: EdgeInfo) => boolean): FeatureSpec {
   const names = edgesOf(edges, 'fillet'), radius = positive('radius', o.radius);
   if (o.endRadius === undefined) return { command: 'fillet', edges: names, values: { radius } };
   const endRadius = finite('endRadius', o.endRadius);
   if (radius < 0.1 || endRadius < 0.1) throw refuse('VALUE', 'explicit fillet endpoint radii must be at least 0.1 mm');
-  if (picked?.length !== 1) throw refuse('SELECTION_ONE', 'an endRadius takes exactly one straight open edge with one name');
+  if (picked?.length !== 1) throw refuse('SELECTION_ONE', 'an endRadius takes exactly one open edge with one name');
   const edge = picked[0];
-  if (!edge.straight || edge.a.length !== 3 || edge.b.length !== 3 || ![...edge.a, ...edge.b].every(Number.isFinite)
-    || edge.a.map(x => Math.round(x * 1e4)).join(',') === edge.b.map(x => Math.round(x * 1e4)).join(',')) throw refuse('VALUE', 'an endRadius takes one straight open edge with distinct endpoints');
-  if (names.length !== 1) throw refuse('SELECTION_ONE', 'an endRadius takes exactly one straight open edge with one name');
+  if (edge.a.length !== 3 || edge.b.length !== 3 || ![...edge.a, ...edge.b].every(Number.isFinite)
+    || edge.a.map(x => Math.round(x * 1e4)).join(',') === edge.b.map(x => Math.round(x * 1e4)).join(',')) throw refuse('VALUE', 'an endRadius takes one open edge with distinct endpoints');
+  if (!edge.straight && (names.length !== 1 || !supportsCircular?.(edge)))
+    throw refuse('VALUE', 'an endRadius needs a straight open edge or a convex 90° circular rim between radial ends');
+  if (names.length !== 1) throw refuse('SELECTION_ONE', 'an endRadius takes exactly one open edge with one name');
   // Preserve the existing Studio command threshold without silently dropping a distinct end radius.
   if (endRadius !== radius && Math.abs(endRadius - radius) <= 1e-9) throw refuse('VALUE', 'distinct fillet endpoint radii must differ by more than 1e-9 mm');
   return { command: 'fillet', edges: names, values: { radius, ...(endRadius !== radius ? { endRadius } : {}) } };

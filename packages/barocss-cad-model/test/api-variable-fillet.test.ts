@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { part, param, BarocssError, type BodyQuery, type StudioPart } from '../src/api';
+import { part, param, sketch, BarocssError, type BodyQuery, type StudioPart } from '../src/api';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 
 // Fixed K04 oracle: 40x30x10 mm; the selected edge runs [0,0,10] to [40,0,10].
@@ -106,4 +106,35 @@ test('the Studio Fillet command writes a varying radius at the chain ends and it
   assert.deepEqual(node.radii.map(p => p.atEnd), [true, true]);
   const taller = part('taller', made).withParameters({ H: 12 });
   close(40 * 30 * 12 - taller.mass({ density: 1 }).volume, removedVolume(1, 3));
+});
+
+
+test('public Model fillet: a quarter rim on the focused body binds and saves its ordered radius', async () => {
+  const profile = sketch().moveTo([0, 0]).lineTo([8, 0]).arcTo([0, 8], { center: [0, 0] }).close();
+  const rim = (body: BodyQuery) => body.edges().curved().where(e => e.a[2] === 10 && e.b[2] === 10);
+  const source = part('two bodies').box({ w: 4, d: 3, h: 2, x: 20 }).extrude(profile, { h: 10 }).parameter('End', 1.2);
+  const [box, sector] = source.bodies();
+  const before = source.doc;
+  assert.throws(() => source.fillet(rim, { radius: 0.6, endRadius: 1.2 }), error => error instanceof BarocssError && error.code === 'BODY_AMBIGUOUS');
+  const made = source.body(sector).fillet(rim, { radius: 0.6, endRadius: param('End') });
+  const node = made.doc.nodes.at(-1);
+  assert.ok(node?.kind === 'fillet' && node.radii);
+  const [selected] = rim(source.body(sector).select()).list();
+  assert.deepEqual(node.edges, selected.names);
+  assert.deepEqual(node.radii, [
+    { at: selected.a, radius: 0.6, atEnd: true }, { at: selected.b, radius: { parameter: 'End' }, atEnd: true },
+  ]);
+  assert.deepEqual(made.body(box).mass({ density: 1 }), source.body(box).mass({ density: 1 }));
+  const [finishedSector] = made.bodies().filter(key => key !== box);
+  assert.ok(finishedSector);
+  const reopened = await readStudioFile(encodeStudioFile(made.doc));
+  assert.ok('doc' in reopened, JSON.stringify(reopened));
+  assert.deepEqual(reopened.doc, made.doc);
+  const accepted = part('reopened sector', reopened.doc).body(finishedSector);
+  assert.ok(Math.abs(accepted.mass({ density: 1 }).volume - 500.4505310301965) < 2e-6);
+  assert.ok(Math.abs(accepted.withParameters({ End: 1.5 }).mass({ density: 1 }).volume - 499.60278298167606) < 2e-6);
+  const cylinder = part('closed circle').cylinder({ r: 8, h: 10 });
+  assert.throws(() => cylinder.fillet(b => rim(b).first(), { radius: 0.6, endRadius: 1.2 }),
+    error => error instanceof BarocssError && error.code === 'VALUE' && error.where === 'facade');
+  assert.deepEqual(source.doc, before);
 });

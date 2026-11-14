@@ -160,7 +160,7 @@ Each verb makes a body of its own, or acts on the part's body.
 | `extrude(sketch, { h, draft? })` | `extrude` | A finished sketch pulled along its plane's normal |
 | `revolve(sketch, { axis?, deg? })` | `revolve` | A finished sketch turned about its plane's Y axis (or X), a full turn by default |
 | `hole(face, { d, x, y, type?, depth? })` | `hole` | A hole into the one flat face the selector picks, at (x, y) on that face's plane; through unless `'blind'` with a `depth` |
-| `fillet(edges, { radius })` | `fillet` | Rounds the edges the selector picks |
+| `fillet(edges, { radius, endRadius? })` | `fillet` | Rounds the selected edges with a constant radius or assigns two endpoint radii to one supported edge |
 | `chamfer(edges, { distance })` | `chamfer` | Cuts them back at 45° |
 | `shell(open?, { t })` | `shell` | Hollows the body to walls t thick, leaving the faces the selector picks open; with no selector, a closed hollow |
 | `union(tool)`, `subtract(tool)`, `intersect(tool)` | `union`, `difference`, `intersect` | Combines the body with a tool body |
@@ -180,6 +180,22 @@ Each verb makes a body of its own, or acts on the part's body.
   the studio writes it: a move, the mirror, and a move back.
 
 <<< @/../samples/cad-api.test.mjs#transforms
+
+### Fillet with two endpoint radii
+
+Both TypeScript backends accept `endRadius` on one named straight open edge or a supported convex 90° circular rim. The circular rim joins a planar cap to a coaxial cylinder and ends at two outward radial planes. The radius starts at the selected edge's `a` endpoint and ends at `b`. Use at least 0.1 mm at each end. An equal numeric pair uses the constant-radius operation.
+
+```ts
+import { part, sketch } from '@barocss/cad/api';
+
+const sector = sketch().moveTo([0, 0]).lineTo([8, 0]).arcTo([0, 8], { center: [0, 0] }).close();
+const rounded = part('Quarter rim').extrude(sector, { h: 10 }).fillet(
+  body => body.edges().curved().where(edge => edge.a[2] === 10 && edge.b[2] === 10),
+  { radius: 0.6, endRadius: 1.2 },
+);
+```
+
+Import `part` from `@barocss/cad-model/api` to make a Studio document. Encode it with `encodeStudioFile(rounded.doc)` from `@barocss/cad-model/engine/container` to open it as a `.bcad` file. Use Studio History to edit the end radius.
 
 ### Sketches, planes and locations
 

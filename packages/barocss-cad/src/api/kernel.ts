@@ -2,6 +2,7 @@
 // and the kernel's results through ./core. Feature ids go by kind and number (sketch1, extrude1, hole1 …). A body is an
 // output, by its id.
 import type { CadPartDocument, CadPartFeature, CadPartOutput } from '../part/part-model.js';
+import { supportsQuarterRimFillet } from '../blend/edge-finish.js';
 import { massOf, meshOf, outputsOf, selectionOf, stepOf, stlOf } from './core.js';
 import { Part, type PartBackend } from './part.js';
 import type { FeatureSpec } from './spec.js';
@@ -196,6 +197,7 @@ export const kernelBackend: PartBackend<CadPartDocument> = {
     return next;
   },
   select: (doc, body) => selectionOf(output(doc, body)),
+  supportsCircularFillet: (doc, body, edge) => supportsQuarterRimFillet(output(doc, body).brep, edge.names[0], [...edge.a], [...edge.b]),
   mass: (doc, body, density) => massOf(output(doc, body), density),
   step: (doc, name) => stepOf(outputs(doc), name),
   meshes: doc => outputs(doc).map(meshOf),

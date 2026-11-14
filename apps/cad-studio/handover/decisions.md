@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1274 — Author a quarter-rim fillet from TypeScript](notes/quarter-rim-fillet-api-2026-11-15/README.md).
 - [D1273 — Vary the radius on one open circular rim](notes/open-circular-variable-fillet-2026-11-14/README.md).
 - [D1272 — Propose and approve a tapered variable fillet](notes/drafted-fillet-agent-proposal-2026-11-14/README.md).
 - [D1271 — Preserve short fillet contacts on tapered extrusions](notes/drafted-extrude-variable-fillet-2026-11-14/README.md).

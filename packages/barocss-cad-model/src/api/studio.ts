@@ -5,6 +5,7 @@
 // add_features writes one (checked, the next id), and the command takes it as the newest sketch no feature uses yet. So
 // a facade-built StudioDoc is the one the agent's tools would write, `made` and signatures and all.
 import { BarocssError, bracketedCode, refuse, type Bound, type FeatureSpec, type PartBackend } from '@barocss/cad/api';
+import { supportsQuarterRimFillet } from '@barocss/cad/internal/quarter-rim-fillet';
 import { emptyDoc, featureLabel, withNode, type ModelNode, type StudioDoc } from '../engine/doc';
 import { withIds } from '../engine/ids';
 import { addParameters, bindParameter, withParameters as coreWithParameters } from '../engine/parameters';
@@ -13,7 +14,7 @@ import { resolveNames } from '../chat/names';
 import { checkNode } from '../chat/features';
 import { captureSignatures } from '../engine/references';
 import { checkValues } from '../chat/toolKit';
-import type { BodyResult } from '../engine/evaluate';
+import { partBreps, type BodyResult } from '../engine/evaluate';
 import { bodiesOf, massOf, meshesOf, stepOf, stepReportOf } from './core';
 import { meshSelection } from './select';
 
@@ -39,7 +40,9 @@ function withSketch(doc: StudioDoc, spec: FeatureSpec): StudioDoc {
 
 function apply(doc: StudioDoc, spec: FeatureSpec, body: string | null): StudioDoc {
   const bodies = doc.nodes.length ? bodiesOf(doc) : [];
-  const { selection, unknown } = resolveNames(bodies, namesOf(spec, body));
+  const target = spec.command === 'fillet' ? bodies.findIndex(b => b.key === body) : -1;
+  const { selection, unknown } = resolveNames(target < 0 ? bodies : [bodies[target]], namesOf(spec, body));
+  if (target >= 0) for (const edge of selection.edges) edge.body = target;
   if (unknown.length) throw refuse('SELECTION_UNKNOWN', `no face, edge or body named ${unknown.join(', ')} on the part`);
   const cmd = commandById(spec.command)!, ctx: Ctx = { doc: withSketch(doc, spec), bodies, selection };
   if (spec.command === 'fill-feature-pattern') { ctx.fillPatternRegion = spec.region; ctx.fillPatternAnchor = spec.anchor; }
@@ -115,6 +118,10 @@ export const studioBackend: PartBackend<StudioDoc> = {
   bodies: doc => doc.nodes.length ? bodiesOf(doc).map(b => b.key) : [],
   apply,
   select: (doc, body) => meshSelection(bodyOf(doc, body).mesh),
+  supportsCircularFillet(doc, body, edge) {
+    const native = partBreps(doc).find(candidate => candidate.key === body);
+    return !!native && supportsQuarterRimFillet(native.brep, edge.names[0], [...edge.a], [...edge.b]);
+  },
   mass: (doc, body, density) => massOf(bodyOf(doc, body), density),
   step: stepOf,
   stepReport: stepReportOf,

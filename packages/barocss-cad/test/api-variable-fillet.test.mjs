@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { part, param, BarocssError } from '../dist/api/index.js';
+import { part, param, sketch, EdgeQuery, BarocssError } from '../dist/api/index.js';
 import { CadPartError, checkBrep, evaluateCadPart, evaluateCurve, evaluateSurface, loadCadPart, massPropertiesOf, outputOf, saveCadPart } from '../dist/index.js';
 
 // Fixed before candidate source: work/k04-variable-fillet-51a59/oracle.json.
@@ -89,6 +89,29 @@ test('public variable fillet: equal numeric radii retain constant behavior and i
   assert.equal(focused.doc.features.at(-1).target, 'extrude1');
   assert.deepEqual(focused.body('extrude2').mass({ density: 1 }), pair.body('extrude2').mass({ density: 1 }));
   assert.deepEqual(pair.doc, pairBefore); assert.deepEqual(source.doc, before);
+});
+
+test('public variable fillet: one native quarter rim preserves endpoint order and the end binding', () => {
+  const sector = (tip = [0, 8]) => sketch().moveTo([0, 0]).lineTo([8, 0]).arcTo(tip, { center: [0, 0] }).close();
+  const rim = b => b.edges().curved().where(e => e.a[2] === 10 && e.b[2] === 10);
+  const source = part('sector').extrude(sector(), { h: 10 }).parameter('End', 1.2), before = source.doc;
+  const [edge] = rim(source.select()).list();
+  const made = source.fillet(rim, { radius: 0.6, endRadius: param('End') });
+  const feature = made.doc.features.at(-1);
+  assert.deepEqual(feature.edges, edge.names);
+  assert.deepEqual(feature.radii, [
+    { at: edge.a, radius: 0.6, atEnd: true }, { at: edge.b, radius: { parameter: 'End' }, atEnd: true },
+  ]);
+  for (const [radius, expected] of [[1.2, 500.4505310301965], [1.5, 499.60278298167606]]) {
+    const edited = made.withParameters({ End: radius });
+    assert.ok(Math.abs(edited.mass({ density: 1 }).volume - expected) < 2e-6);
+    assert.deepEqual(edited.doc.features.at(-1), feature);
+  }
+  assert.deepEqual(source.fillet(rim, { radius: 0.6, endRadius: 0.6 }).doc, source.fillet(rim, { radius: 0.6 }).doc);
+  const nonQuarter = part('60 degree sector').extrude(sector([4, 4 * Math.sqrt(3)]), { h: 10 });
+  refused(() => nonQuarter.fillet(rim, { radius: 0.6, endRadius: 1.2 }), 'VALUE');
+  refused(() => source.fillet(() => new EdgeQuery([{ ...edge, a: edge.b, b: edge.a }]), { radius: 0.6, endRadius: 1.2 }), 'VALUE');
+  assert.deepEqual(source.doc, before);
 });
 
 function fractionalFillet() {

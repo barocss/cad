@@ -100,19 +100,67 @@ function finishGuarded(body: Brep, names: readonly string[], size: number, kind:
   }
 }
 interface FinishOptions { readonly reports?: FilletReport[]; readonly tangentTargets?: Set<string>; readonly general?: boolean; readonly phased?: boolean; readonly squareAtCylinders?: boolean; readonly generalEdges?: readonly string[]; readonly singleConvexEdge?: boolean; /** A variable radius (R10.5, D100): the radius at points of the edges, `size` their largest; the rolling ball's. */ readonly radii?: readonly RadiusAt[]; /** The section's shape (R10.5b, D103); not circular: the rolling ball's. */ readonly shape?: SectionShape }
-function finishEdges(body: Brep, names: readonly string[], size: number, kind: EdgeFinishKind, id: string, options: FinishOptions, used: { cylinder: boolean } = { cylinder: false }): Brep {
-  let usedCylinder = false;
-  try {
-  // (`general`: every closed loop by the rolling ball, even where a closed form exists — to check one against the other.)
-  const reports = options.reports;
+/** Read the native topology used to expand and classify a finish chain. */
+function finishTopology(body: Brep) {
   let scaleMM = 1; for (const v of body.vertices) for (const x of v.point) scaleMM = Math.max(scaleMM, Math.abs(x));
-  const tol = 1e-9 * scaleMM;
   const faces = new Map(body.faces.map(f => [f.id, f])), loopFace = new Map(body.loops.map(l => [l.id, l.face]));
   const usesOf = new Map<string, Use[]>(), geometry = new Map<string, Geo>();
   const geom = (fid: string) => { let g = geometry.get(fid); if (!g) { g = geoOf(faces.get(fid)!, scaleMM); geometry.set(fid, g); } return g; };
   for (const c of body.coedges) { const f = faces.get(loopFace.get(c.loop)!)!; usesOf.set(c.edge, [...(usesOf.get(c.edge) ?? []), { face: f, geometry: geom(f.id), sense: c.sense }]); }
   const atVertex = new Map<string, Brep['edges'][number][]>();
   for (const e of body.edges) for (const v of new Set(e.vertices)) atVertex.set(v, [...(atVertex.get(v) ?? []), e]);
+  // Ends and end tangents (pointing away from the vertex, along the edge).
+  const ends = (e: Brep['edges'][number]) => {
+    const [t0, t1] = curveDomain(e.curve), h = 1e-6 * (t1 - t0);
+    const p = evaluateCurve(e.curve, t0), q = evaluateCurve(e.curve, t1);
+    return [{ v: e.vertices[0], x: p, out: unit(sub(evaluateCurve(e.curve, t0 + h), p)) }, { v: e.vertices[1], x: q, out: unit(sub(evaluateCurve(e.curve, t1 - h), q)) }];
+  };
+  const facesOf = (e: Brep['edges'][number]) => (usesOf.get(e.id) ?? []).map(u => u.face.id);
+
+  // Tangent chains: at a vertex, an edge sharing a face and leaving in the opposite direction continues it; a
+  // curved edge also continues across a seam between halves of its faces (R10.1: a revolve's rim, whose halves
+  // share no face) when the faces there have the same normals.
+  const normalsAt = (e: Brep['edges'][number], x: Point) => (usesOf.get(e.id) ?? []).map(u => normalOf(u.geometry, x));
+  const sameSection = (e: Brep['edges'][number], o: Brep['edges'][number], x: Point) => {
+    if (e.curve.degree === 1 || o.curve.degree === 1) return false;
+    const a = normalsAt(e, x), b = normalsAt(o, x);
+    return a.length === 2 && b.length === 2 && [...a, ...b].every(n => n) && b.every(n => a.some(m => len(sub(m!, n!)) < 1e-9));
+  };
+  // (Not onto a smooth edge — its faces tangent there, a seam or a split of one surface: there is no corner to go on.)
+  const smoothAt = (o: Brep['edges'][number], x: Point) => { const ns = (usesOf.get(o.id) ?? []).map(u => normalOf(u.geometry, x) ?? sheetNormal(u.face, x)); return ns.length === 2 && len(sub(ns[0], ns[1])) < 1e-9; };
+  const continues = (e: Brep['edges'][number], end: { v: string; x: Point; out: Point }) => (atVertex.get(end.v) ?? []).filter(o => {
+    if (o.id === e.id || !(facesOf(o).some(f => facesOf(e).includes(f)) || sameSection(e, o, end.x)) || smoothAt(o, end.x)) return false;
+    return ends(o).some(oe => oe.v === end.v && dot(oe.out, end.out) <= -1 + 1e-9);
+  });
+  return { scaleMM, geom, usesOf, atVertex, ends, faces, facesOf, continues };
+}
+
+/** Recognize the native quarter rim qualified for two endpoint radii in the part facade. */
+export function supportsQuarterRimFillet(body: Brep, name: string, a: Point, b: Point): boolean {
+  if (body.bodies.length !== 1 || body.bodies[0].kind !== 'solid' || body.shells.length !== 1 || !body.shells[0].closed) return false;
+  const found = body.edges.filter(edge => edge.name === name);
+  if (found.length !== 1) return false;
+  const [edge] = found;
+  const circle = circleOf(edge.curve);
+  if (edge.vertices[0] === edge.vertices[1] || circle?.spans.length !== 1 || Math.abs(circle.spans[0].phi - Math.PI / 2) > 1e-12) return false;
+  const { scaleMM, geom, usesOf, atVertex, ends, facesOf, continues } = finishTopology(body);
+  const supports = usesOf.get(edge.id);
+  if (supports?.length !== 2 || supports[0].face.id === supports[1].face.id) return false;
+  const [start, end] = ends(edge);
+  const tol = 1e-12 * scaleMM;
+  if (len(sub(start.x, a)) > tol || len(sub(end.x, b)) > tol ||
+      continues(edge, start).length || continues(edge, end).length) return false;
+  const tangents = radialRimTangents(edge, supports, atVertex, facesOf, geom, [a, b], scaleMM);
+  return !!tangents && convexAt(generalInto({ e: edge, reversed: false }, usesOf, ends));
+}
+
+function finishEdges(body: Brep, names: readonly string[], size: number, kind: EdgeFinishKind, id: string, options: FinishOptions, used: { cylinder: boolean } = { cylinder: false }): Brep {
+  let usedCylinder = false;
+  try {
+  // (`general`: every closed loop by the rolling ball, even where a closed form exists — to check one against the other.)
+  const reports = options.reports;
+  const { scaleMM, geom, usesOf, atVertex, ends, faces, facesOf, continues } = finishTopology(body);
+  const tol = 1e-9 * scaleMM;
   const byName = new Map(body.edges.map(e => [e.name, e]));
   // (Where the body's faces on a cylinder meet each other: the straight edges along its axis between two of them, as
   // vectors from its axis, D94.)
@@ -128,35 +176,12 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
     return out;
   };
 
-  // Ends and end tangents (pointing away from the vertex, along the edge).
-  const ends = (e: Brep['edges'][number]) => {
-    const [t0, t1] = curveDomain(e.curve), h = 1e-6 * (t1 - t0);
-    const p = evaluateCurve(e.curve, t0), q = evaluateCurve(e.curve, t1);
-    return [{ v: e.vertices[0], x: p, out: unit(sub(evaluateCurve(e.curve, t0 + h), p)) }, { v: e.vertices[1], x: q, out: unit(sub(evaluateCurve(e.curve, t1 - h), q)) }];
-  };
-  const facesOf = (e: Brep['edges'][number]) => (usesOf.get(e.id) ?? []).map(u => u.face.id);
-
-  // Tangent chains: at a vertex, an edge sharing a face and leaving in the opposite direction continues it; a
-  // curved edge also continues across a seam between halves of its faces (R10.1: a revolve's rim, whose halves
-  // share no face) when the faces there have the same normals.
   const chain = new Map<string, Brep['edges'][number]>();
-  const normalsAt = (e: Brep['edges'][number], x: Point) => (usesOf.get(e.id) ?? []).map(u => normalOf(u.geometry, x));
-  const sameSection = (e: Brep['edges'][number], o: Brep['edges'][number], x: Point) => {
-    if (e.curve.degree === 1 || o.curve.degree === 1) return false;
-    const a = normalsAt(e, x), b = normalsAt(o, x);
-    return a.length === 2 && b.length === 2 && [...a, ...b].every(n => n) && b.every(n => a.some(m => len(sub(m!, n!)) < 1e-9));
-  };
   for (const name of names) {
     const e = byName.get(name);
     if (!e) refuse('SELECTION', `no edge named ${name}; edges: ${body.edges.slice(0, 12).map(x => x.name).join(', ')}${body.edges.length > 12 ? ', …' : ''}`);
     chain.set(e!.id, e!);
   }
-  // (Not onto a smooth edge — its faces tangent there, a seam or a split of one surface: there is no corner to go on.)
-  const smoothAt = (o: Brep['edges'][number], x: Point) => { const ns = (usesOf.get(o.id) ?? []).map(u => normalOf(u.geometry, x) ?? sheetNormal(u.face, x)); return ns.length === 2 && len(sub(ns[0], ns[1])) < 1e-9; };
-  const continues = (e: Brep['edges'][number], end: { v: string; x: Point; out: Point }) => (atVertex.get(end.v) ?? []).filter(o => {
-    if (o.id === e.id || !(facesOf(o).some(f => facesOf(e).includes(f)) || sameSection(e, o, end.x)) || smoothAt(o, end.x)) return false;
-    return ends(o).some(oe => oe.v === end.v && dot(oe.out, end.out) <= -1 + 1e-9);
-  });
   for (const queue = [...chain.values()]; queue.length;) {
     const e = queue.pop()!;
     for (const end of ends(e)) for (const o of continues(e, end)) if (!chain.has(o.id)) { chain.set(o.id, o); queue.push(o); }
@@ -317,11 +342,8 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
       if (convex0 && open.length === 1 && chain.size === 1 && options.radii?.length === 2 &&
           (!options.shape || options.shape.kind === 'circular')) {
         const { e, reversed } = open[0];
-        const owners = e.vertices.map(v => Array.from(new Set((atVertex.get(v) ?? []).flatMap(facesOf))).filter(f => !sideFaces.has(f)));
-        if (owners.every(fs => fs.length === 1)) {
-          const radial = radialEndTangents(e, usesOf.get(e.id)!, owners.map(fs => geom(fs[0])), options.radii, scaleMM);
-          if (radial) endTangents = reversed ? [scale(radial[1], -1), scale(radial[0], -1)] : radial;
-        }
+        const radial = radialRimTangents(e, usesOf.get(e.id)!, atVertex, facesOf, geom, options.radii.map(station => station.at), scaleMM);
+        if (radial) endTangents = reversed ? [scale(radial[1], -1), scale(radial[0], -1)] : radial;
       }
       if (!endTangents) past = [0, 1].map(i => {
         const o = open[i === 0 ? 0 : open.length - 1], E = ends(o.e), end = i === 0 ? (o.reversed ? E[1] : E[0]) : (o.reversed ? E[0] : E[1]);
@@ -520,8 +542,17 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
 }
 
 type Edge = Brep['edges'][number];
+function radialRimTangents(edge: Edge, uses: readonly Use[], atVertex: Map<string, Edge[]>,
+  facesOf: (edge: Edge) => string[], geometry: (face: string) => Geo, stations: readonly Point[], scaleMM: number,
+): [Point, Point] | undefined {
+  const supportFaces = facesOf(edge);
+  const owners = edge.vertices.map(v => Array.from(new Set((atVertex.get(v) ?? []).flatMap(facesOf))).filter(f => !supportFaces.includes(f)));
+  if (owners.some(faces => faces.length !== 1)) return;
+  return radialEndTangents(edge, uses, owners.map(faces => geometry(faces[0])), stations, scaleMM);
+}
+
 /** Tangents of a convex, single-span cylinder rim ending on two outward-facing radial planes. */
-function radialEndTangents(edge: Edge, uses: readonly Use[], ends: readonly Geo[], stations: readonly RadiusAt[], scaleMM: number): [Point, Point] | undefined {
+function radialEndTangents(edge: Edge, uses: readonly Use[], ends: readonly Geo[], stations: readonly Point[], scaleMM: number): [Point, Point] | undefined {
   const c = circleOf(edge.curve);
   const cap = uses.map(u => u.geometry).find(g => g.kind === 'plane');
   const wall = uses.map(u => u.geometry).find(g => g.kind === 'cylinder');
@@ -532,7 +563,7 @@ function radialEndTangents(edge: Edge, uses: readonly Use[], ends: readonly Geo[
       len(cross(sub(c.c, wall.c), axis)) > tol || Math.abs(c.r - wall.r) > tol) return;
 
   const [p0, middle, p1] = edge.curve.controlPoints;
-  const covers = (p: Point) => stations.filter(s => len(sub(p, s.at)) <= tol).length === 1;
+  const covers = (p: Point) => stations.filter(s => len(sub(p, s)) <= tol).length === 1;
   if (!covers(p0) || !covers(p1)) return;
   const [first, last] = ends;
   const isRadial = (end: Geo, point: Point, outward: Point): end is Extract<Geo, { kind: 'plane' }> =>

@@ -13,7 +13,7 @@ import {
   type HoleOptions, type RectangularFeaturePatternOptions, type FillFeaturePatternOptions, type CurveFeaturePatternOptions, type LinearPatternOptions, type MirrorOptions, type RevolveOptions, type ScaleOptions, type ShellOptions, type SplitOptions,
   type RawNurbsSurface, type SewOptions, type ThickenOptions, type Bound, type Resolved, isParam,
 } from './spec.js';
-import type { BodyQuery, EdgeQuery, FaceQuery } from './select.js';
+import type { BodyQuery, EdgeInfo, EdgeQuery, FaceQuery } from './select.js';
 import { Location, type Sketch } from './sketch.js';
 import type { MassResult, MeshData } from './core.js';
 import { refuse } from './refusal.js';
@@ -28,6 +28,8 @@ export interface PartBackend<D> {
   apply(doc: D, spec: FeatureSpec, body: string | null): D;
   /** A body's edges and faces. */
   select(doc: D, body: string): BodyQuery;
+  /** Whether this body supports endpoint radii on the selected circular rim. */
+  supportsCircularFillet?(doc: D, body: string, edge: EdgeInfo): boolean;
   /** A body's mass properties at a density (g/cm³), in MMGS. */
   mass(doc: D, body: string, density: number): MassResult;
   /** Every body of the part as one STEP AP214 file. */
@@ -171,7 +173,8 @@ export class Part<D> {
   /** `fillet`: rounds the edges a selector picks. */
   fillet(edges: (body: BodyQuery) => EdgeQuery, options: FilletOptions): this {
     return this.#act(this.#spec(options, o => {
-      const picked = edges(this.select()), spec = filletSpec(picked.names(), o, picked.list());
+      const picked = edges(this.select());
+      const spec = filletSpec(picked.names(), o, picked.list(), edge => this.backend.supportsCircularFillet?.(this.#doc, this.target(), edge) ?? false);
       if (o.endRadius !== undefined && (isParam(options.radius) || (o.endRadius === o.radius && isParam(options.endRadius)))) throw refuse('PARAMETER_UNBINDABLE', 'an explicit fillet endRadius can bind only while varying; its start radius must be numeric');
       return spec;
     }));
