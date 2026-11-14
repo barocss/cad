@@ -41,7 +41,7 @@ Reads the part without changing it.
 | `query.interference` | `interference` | bodies? — overlap and clearance |
 | `query.section` | `section` | axis, at |
 | `query.native_joints` | `list_native_joints` | body |
-| `query.edge_continuity` | `measure_edge_continuity` | body, edgeId, expectedRevision |
+| `query.edge_continuity` | `measure_edge_continuity` | body, edgeId, expectedRevision, curvature? |
 | `query.wall` | `wall_thickness` | body?, below? |
 | `query.draft` | `draft` | body?, pull?, draftMin? |
 | `query.fit_clearance` | `fit_clearance` | hole?, shaft?, hole_class?, shaft_class?, size? — a hole–shaft fit’s limits and clearance from your fit tables |

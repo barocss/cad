@@ -32,7 +32,7 @@ async function withMcp(flow, doc, label, run) {
     } finally { clearTimeout(timer); }
   }
   try {
-    const hello = await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'D1260', version: '1' } });
+    const hello = await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'barocss-fillet-continuity-check', version: '1' } });
     assert.equal(hello.serverInfo.version, 'barocss-cad-tools-v2');
     return await run(request, args => request('tools/call', { name: 'query', arguments: args }));
   } finally {
@@ -66,15 +66,23 @@ function refusal(answer, why) {
   return data;
 }
 
-export async function compareMcp(flow, doc, native, studio) {
+export async function compareMcp(flow, doc, native, studio, curvatureCheck) {
   const { key: body, records, edges } = native;
-  const calls = [], agreement = [], refusals = [];
+  const studioCurvature = curvatureCheck?.studio;
+  const calls = [], agreement = [], refusals = [], compatibility = [];
   const toleranceDegrees = 1e-10;
   const accepted = await withMcp(flow, doc, 'accepted-mcp', async (request, call) => {
     const { tools } = await request('tools/list');
     assert.equal(tools.length, 13);
     const actions = tools.find(tool => tool.name === 'query').inputSchema.properties.action.enum;
     assert.ok(actions.includes('native_joints') && actions.includes('edge_continuity'));
+    if (curvatureCheck) {
+      const answer = await request('tools/call', { name: 'describe', arguments: { tool: 'query', action: 'edge_continuity' } });
+      assert.equal(answer.isError, false);
+      const action = JSON.parse(answer.content[0].text);
+      assert.equal(action.input.properties.curvature.type, 'boolean');
+      assert.ok(!action.input.required.includes('curvature'));
+    }
     const discovery = { action: 'native_joints', body };
     const listed = await call(discovery);
     const { revision, ...result } = success(listed);
@@ -82,7 +90,7 @@ export async function compareMcp(flow, doc, native, studio) {
     assert.deepEqual(result, { body, edges });
     calls.push({ input: discovery, handler: 'list_native_joints', response: listed });
     for (const { id, faces, read: { measurement } } of records) {
-      const input = { action: 'edge_continuity', body, edgeId: id, expectedRevision: revision };
+      const input = { action: 'edge_continuity', body, edgeId: id, expectedRevision: revision, ...(studioCurvature ? { curvature: true } : {}) };
       const response = await call(input);
       const handler = 'measure_edge_continuity';
       if (measurement.status === 'unsupported') {
@@ -96,7 +104,22 @@ export async function compareMcp(flow, doc, native, studio) {
         const extrema = [data.minimumAngleDegrees, data.maximumAngleDegrees];
         const difference = Math.max(...extrema.map((angle, index) => Math.abs(angle - studio[other][index])));
         assert.ok(difference <= toleranceDegrees, `${id}: Studio differs by ${difference}°`);
-        agreement.push({ edgeId: id, studio: studio[other], mcp: extrema, maximumDifferenceDegrees: difference });
+        const joint = { edgeId: id, studio: studio[other], mcp: extrema, maximumDifferenceDegrees: difference };
+        if (studioCurvature) {
+          assert.equal(data.curvature.status, 'measured');
+          assert.equal(data.curvature.unit, '1/mm');
+          const gap = Math.abs(studioCurvature[other] - data.curvature.maximumDifference);
+          assert.ok(gap <= 1e-10, `${id}: Studio curvature differs by ${gap} mm⁻¹`);
+          joint.curvature = { studio: studioCurvature[other], mcp: data.curvature.maximumDifference, maximumDifference: gap };
+          const { curvature: _optIn, ...legacyInput } = input;
+          const { curvature: _curvature, ...anglesOnly } = data;
+          for (const args of [legacyInput, { ...legacyInput, curvature: false }]) {
+            const legacy = await call(args);
+            assert.deepEqual(success(legacy), anglesOnly);
+            compatibility.push({ input: args, response: legacy });
+          }
+        }
+        agreement.push(joint);
         assert.equal(data.sampleCount, 8);
       }
       calls.push({ input, handler, response });
@@ -130,7 +153,21 @@ export async function compareMcp(flow, doc, native, studio) {
     refusal(response, /missing_joint_height/);
     refusals.push({ label: 'evaluation-refusal', response });
   });
-  await writeFile(join(flow.output, 'mcp-replies.json'), JSON.stringify({ calls, refusals }, null, 2), { flag: 'wx' });
+  if (curvatureCheck) {
+    await withMcp(flow, curvatureCheck.sharpDoc, 'sharp-mcp', async (_, call) => {
+      const body = 'b1';
+      const current = success(await call({ action: 'native_joints', body }));
+      const rim = current.edges.find(edge => edge.name === 'n1.side0|n1.top');
+      assert.ok(rim);
+      const input = { action: 'edge_continuity', body, edgeId: rim.id, expectedRevision: current.revision, curvature: true };
+      const response = await call(input);
+      const sharp = success(response);
+      assert.deepEqual([sharp.minimumAngleDegrees, sharp.maximumAngleDegrees], [90, 90]);
+      assert.deepEqual(sharp.curvature, { status: 'unavailable', reason: 'non-tangent' });
+      compatibility.push({ label: 'sharp-rim', input, response });
+    });
+  }
+  await writeFile(join(flow.output, 'mcp-replies.json'), JSON.stringify({ calls, refusals, compatibility }, null, 2), { flag: 'wx' });
   flow.report.observations.push({ label: 'studio-mcp-angles', toleranceDegrees, joints: agreement });
   return calls;
 }

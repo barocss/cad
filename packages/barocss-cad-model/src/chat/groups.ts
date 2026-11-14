@@ -47,7 +47,7 @@ export const GROUPS: Record<string, Group> = {
       interference: ['interference', 'bodies? — overlap and clearance'],
       section: ['section', 'axis, at'],
       native_joints: ['list_native_joints', 'body'],
-      edge_continuity: ['measure_edge_continuity', 'body, edgeId, expectedRevision'],
+      edge_continuity: ['measure_edge_continuity', 'body, edgeId, expectedRevision, curvature?'],
       wall: ['wall_thickness', 'body?, below?'],
       draft: ['draft', 'body?, pull?, draftMin?'],
       fit_clearance: ['fit_clearance', 'hole?, shaft?, hole_class?, shaft_class?, size? — a hole–shaft fit\u2019s limits and clearance from your fit tables (D155)'],

@@ -7,7 +7,8 @@ const output = process.argv[2];
 assert.ok(output && relative(resolve(import.meta.dirname, '../../..'), resolve(output)).startsWith('../'));
 const driver = 'apps/cad-studio/test/fillet-continuity-browser.mjs';
 const baseline = process.argv.includes('--baseline');
-const agent = process.argv.includes('--agent');
+const curvature = process.argv.includes('--curvature');
+const agent = curvature || process.argv.includes('--agent');
 assert.ok(!agent || !baseline);
 const agentPins = agent ? [
   'apps/cad-studio/test/fillet-continuity-mcp.mjs',
@@ -23,9 +24,11 @@ const agentPins = agent ? [
 ] : [];
 const baselineNativeSHA256 = '12ff52104e6d5ff5b4235b3e5a267aaf168a563285aed2b132137e9d9030fc2f';
 const f = await createFlow({
-  name: 'fillet-continuity', output, envFrozen: agent ? 'D1260_SOURCE_FROZEN' : 'D1259_SOURCE_FROZEN',
-  initialFiles: [driver, ...agentPins], requiredFrozen: [driver, 'packages/barocss-cad/src/brep/edge-continuity.ts', ...agentPins],
-  qualification: agent ? 'Compare actual Studio fillet measurements with the native edge query over local stdio MCP.'
+  name: 'fillet-continuity', output, envFrozen: curvature ? 'D1262_SOURCE_FROZEN' : agent ? 'D1260_SOURCE_FROZEN' : 'D1259_SOURCE_FROZEN',
+  initialFiles: [driver, ...agentPins, 'apps/cad-studio/test/flow-helper.mjs'],
+  requiredFrozen: [driver, 'packages/barocss-cad/src/brep/edge-continuity.ts', ...agentPins, 'apps/cad-studio/test/flow-helper.mjs'],
+  qualification: curvature ? 'Compare sampled cross-edge curvature in Studio and local MCP against the analytic R2 fillet.'
+    : agent ? 'Compare actual Studio fillet measurements with the native edge query over local stdio MCP.'
     : 'Inspect both tangent interfaces of an authored constant-radius box fillet in Studio.',
   limits: ['One 30 × 12 × 20 mm native box, one straight Fillet R2, two straight plane–cylinder interfaces.',
     ...(agent ? ['Real local MCP; desktop Chat displays a deterministic replay of its responses.'] : [])],
@@ -54,7 +57,9 @@ const records = list.edges.filter(row => row.faces.includes('n2.face')).map(row 
   const uses = brep.coedges.filter(use => use.edge === row.id);
   return { ...row, vertices: edge.vertices.map(id => brep.vertices.find(vertex => vertex.id === id)!.point),
     storedBindings: uses.filter(use => use.pcurve).length,
-    read: readEdgeContinuity(doc, key, {kind:'measure', edgeId:row.id}) };
+    read: readEdgeContinuity(doc, key, {kind:'measure', edgeId:row.id${curvature ? ', curvature:true' : ''}}),
+    ${curvature ? "angleOnly: readEdgeContinuity(doc, key, {kind:'measure', edgeId:row.id})" : ''}
+  };
 });
 assert.equal(digestOf(brep), sourceBefore);
 console.log(JSON.stringify({ sourceSHA256: sourceBefore, check: checkBrep(brep, {strict:true}),
@@ -75,7 +80,7 @@ assert abs(abs(geom['a'][0]) - 1) <= 1e-8 and all(abs(geom['a'][i]) <= 1e-8 for 
 assert abs(geom['c'][1] - 2) <= 1e-8 and abs(geom['c'][2] - 18) <= 1e-8
 positions = {'n1.side0': (0,18), 'n1.top': (2,20)}
 normals = {'n1.side0': (0,-1,0), 'n1.top': (0,0,1)}
-angles = {}
+angles, curvature = {}, {}
 for row in native['records']:
     name = next(f for f in row['faces'] if f != 'n2.face')
     if name not in positions: continue
@@ -91,8 +96,28 @@ for row in native['records']:
     assert read['sampleCount'] == len(read['samples']) == 8
     assert all(abs(s['angleDegrees'] - expect) <= absolute_angle_tolerance for s in read['samples'])
     assert all(abs(a - expect) <= absolute_angle_tolerance for a in d['studio'][name])
+    if name in d.get('studioCurvature', {}):
+        k = read['curvature']
+        assert k['status'] == 'measured' and k['unit'] == '1/mm'
+        limit = 1e-10
+        expected_gap = 1 / 2  # Outward cylinder normal: its arc-length acceleration is -n/R.
+        signed = [-expected_gap if f.get('name') == 'n2.face' else 0 for f in read['faces']]
+        assert len(k['samples']) == 8
+        for a, sample in zip(read['samples'], k['samples']):
+            assert sample['parameter'] == a['parameter']
+            assert abs(sample['first'] - signed[0]) <= limit
+            assert abs(sample['second'] - signed[1]) <= limit
+            assert abs(sample['difference'] - expected_gap) <= limit
+        assert abs(k['maximumDifference'] - expected_gap) <= limit
+        assert abs(d['studioCurvature'][name] - expected_gap) <= limit
+        curvature[name] = expected_gap
 assert angles == {'n1.side0':0,'n1.top':0}, angles
-print(json.dumps({'status':'PASS','radiusMM':2,'axis':[1,0,0], 'expectedVolumeMM3':expected_volume,'anglesDegrees':angles}))
+if d.get('studioCurvature', {}):
+    assert curvature == {'n1.side0':0.5,'n1.top':0.5}
+out = {'status':'PASS','radiusMM':2,'axis':[1,0,0], 'expectedVolumeMM3':expected_volume,'anglesDegrees':angles}
+if curvature:
+    out['curvatureDifferencePerMM'] = curvature
+print(json.dumps(out))
 `,
 });
 const source = {
@@ -108,6 +133,7 @@ const panel = () => f.page.getByRole('region', { name: 'Edge continuity', exact:
 const edges = () => panel().getByRole('combobox', { name: 'Native shared edge', exact: true });
 const result = () => panel().getByRole('status', { name: 'Edge continuity result', exact: true });
 const value = () => result().locator('[data-continuity-angle]');
+const crossEdge = () => result().locator('[data-continuity-curvature]');
 
 async function camera(view) {
   await button(view, f.page.locator('.views')).click();
@@ -128,6 +154,7 @@ async function pick(point) {
 async function measure(row) {
   await edges().selectOption(row.id);
   assert.equal(await value().count(), 0);
+  assert.equal(await crossEdge().count(), 0);
   await button('Measure continuity', panel()).click();
 }
 
@@ -142,7 +169,7 @@ await f.run(async () => {
       if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
       if (['http:', 'https:'].includes(url.protocol) && url.origin !== origin) return route.abort();
       if (!agent) return route.continue();
-      if (url.pathname === '/api/chat/status') return route.fulfill({ json: { enabled: true, model: 'D1260 offline tool replay' } });
+      if (url.pathname === '/api/chat/status') return route.fulfill({ json: { enabled: true, model: `${curvature ? 'D1262' : 'D1260'} offline tool replay` } });
       if (url.pathname !== '/api/chat/turn') return route.continue();
       let events;
       try {
@@ -193,7 +220,7 @@ await f.run(async () => {
   await filter('Bodies');
   await pick([15, 6, 20]);
   await button('Inspect native joints', panel()).click();
-  const studio = {};
+  const studio = {}, studioCurvature = {};
   for (const row of interfaces) {
     const other = row.faces.find(name => name !== 'n2.face');
     await measure(row);
@@ -205,17 +232,24 @@ await f.run(async () => {
       await value().waitFor();
       assert.match(await result().innerText(), /Native samples\s+8/);
       studio[other] = (await value().textContent()).replace('°', '').split('–').map(Number);
+      if (curvature) {
+        await crossEdge().waitFor();
+        studioCurvature[other] = Number((await crossEdge().textContent()).replace(' mm⁻¹', ''));
+        const { curvature: _curvature, ...angleOnly } = row.read.measurement;
+        assert.deepEqual(angleOnly, row.angleOnly.measurement);
+      }
     }
     await f.snapshot('joint-' + other);
   }
   if (!baseline) {
-    await f.runOracle({ native, studio, studioVolume: (await f.bodies()).bodies[0].volume }, 'actual-fillet');
+    await f.runOracle({ native, studio, studioCurvature, studioVolume: (await f.bodies()).bodies[0].volume }, 'actual-fillet');
     f.phase = 'Refuse the curved fillet end without a native parameter curve';
     for (const row of ends) {
       assert.equal(row.read.measurement.reason, 'missing-pcurve');
       await measure(row);
       await result().getByText(/no native parameter curve/i).waitFor();
       assert.equal(await value().count(), 0);
+      assert.equal(await crossEdge().count(), 0);
     }
     await f.snapshot('unsupported-end');
 
@@ -223,14 +257,32 @@ await f.run(async () => {
     await f.undo();
     await f.same(source);
     assert.equal(await value().count(), 0);
+    assert.equal(await crossEdge().count(), 0);
+    if (curvature) {
+      f.phase = 'Retain the 90-degree angle and refuse curvature at the original sharp box rim';
+      await filter('Bodies');
+      await pick([15, 6, 20]);
+      await button('Inspect native joints', panel()).click();
+      await edges().waitFor();
+      const options = await edges().getByRole('option').allTextContents();
+      const rim = options.find(label => label.includes('n1.side0|n1.top'));
+      assert.ok(rim);
+      await edges().selectOption({ label: rim });
+      await button('Measure continuity', panel()).click();
+      await result().getByText('Cross-edge curvature comparison needs a tangent joint.', { exact: true }).waitFor();
+      assert.deepEqual((await value().textContent()).replace('°', '').split('–').map(Number), [90, 90]);
+      assert.equal(await crossEdge().count(), 0);
+      await f.snapshot('sharp-rim');
+    }
     await f.redo();
     await f.same(accepted);
     assert.equal(await value().count(), 0);
+    assert.equal(await crossEdge().count(), 0);
   }
   await f.same(accepted);
   if (agent) {
     f.phase = 'Compare the exact accepted fillet across Studio and local MCP';
-    const calls = await compareMcp(f, accepted, native, studio);
+    const calls = await compareMcp(f, accepted, native, studio, curvature ? { studio: studioCurvature, sharpDoc: source } : undefined);
     const events = [];
     for (const { input, handler, response } of calls) {
       const { summary } = await f.inspect('chat-' + (input.edgeId ?? 'list'), accepted, handler, response.content[0].text, response.isError);
@@ -251,12 +303,18 @@ await f.run(async () => {
     assert.deepEqual(await chat.locator('[data-slot="tool"] .mono').allInnerTexts(),
       ['query.native_joints', ...Array(4).fill('query.edge_continuity')]);
     assert.equal(await chat.getByText(/missing-pcurve/).count(), 2);
+    if (curvature) {
+      for (const row of interfaces) {
+        const summary = `0.5 mm⁻¹ curvature difference · 8 samples · ${row.name}`;
+        assert.equal(await chat.getByText(summary, { exact: true }).count(), 1);
+      }
+    }
     await f.same(accepted);
     await f.snapshot('agent-native-joints');
     f.report.observations.push({ label: 'agent', actions: calls.length, measuredEdges: interfaces.map(row => row.id),
       refusedEdges: ends.map(row => row.id), samples: 8, studioExtremaAgree: true, chatDocumentRetained: true });
   }
   f.report.observations.push({ label: 'fillet', sourceSHA256: native.sourceSHA256, recordCount: native.records.length, volume: native.volume,
-    topology: native.check.counts, originalDocumentRetained: true, baselineRefusals: baseline ? interfaces.length : 0, studio });
+    topology: native.check.counts, originalDocumentRetained: true, baselineRefusals: baseline ? interfaces.length : 0, studio, ...(curvature ? { studioCurvature } : {}) });
   assert.deepEqual(f.report.downloads, []);
 });

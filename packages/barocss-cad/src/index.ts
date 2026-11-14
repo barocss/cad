@@ -420,7 +420,7 @@ export { checkBrep, assertValidBrep, buildBrep, coedgeVertices, isFacetFace, lin
 export type { BrepErrorReason } from './brep/brep-core.js';
 export type { Brep, BrepBody, BrepShell, BrepFace, BrepLoop, BrepCoedge, BrepEdge, BrepVertex, BrepCheckReport, BrepBodyTopology, BrepBuildInput, BrepFaceInput, BrepLoopInput, BrepShellInput } from './brep/brep-core.js';
 export { measureBrepEdgeContinuity } from './brep/edge-continuity.js';
-export type { BrepEdgeContinuityRefusal, BrepEdgeContinuityResult } from './brep/edge-continuity.js';
+export type { BrepEdgeContinuityRefusal, BrepEdgeContinuityResult, BrepEdgeCurvatureResult, BrepEdgeContinuityOptions } from './brep/edge-continuity.js';
 export { BrepEditor, BrepEulerError } from './brep/brep-euler.js';
 export { extrudeProfileWithHoles, extrudePolygonBoolean } from './brep/brep-sweep.js';
 export type { ProfileWithHolesInput } from './brep/brep-sweep.js';

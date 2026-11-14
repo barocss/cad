@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { annotationsOf } from '../src/chat/contract';
+import { annotationsOf, outputSchemaOf, validate } from '../src/chat/contract';
 import { v2Result } from '../src/chat/groups';
 import { BATCHABLE_TOOLS, runTool } from '../src/chat/tools';
 import { rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
@@ -42,6 +42,19 @@ test('discovery and measurement retain the native fillet edge and full eight-sam
     assert.deepEqual(measured.content, { body, revision, unit: 'degrees', ...direct.measurement });
     assert.equal(measured.content.sampleCount, 8);
     assert.ok(measured.content.maximumAngleDegrees < 1e-7);
+    assert.equal(measured.content.curvature, undefined);
+    const request = { body, expectedRevision: revision, edgeId: edge.id, curvature: true };
+    const curved = await query(doc, 'edge_continuity', request);
+    assert.equal(curved.isError, false);
+    assert.deepEqual(validate(outputSchemaOf('measure_edge_continuity')!, curved.content), []);
+    const { curvature, ...baseline } = curved.content;
+    assert.deepEqual(baseline, measured.content);
+    assert.equal(curvature.status, 'measured');
+    assert.equal(curvature.unit, '1/mm');
+    assert.ok(Math.abs(curvature.maximumDifference - 0.5) < 1e-10);
+    assert.equal(curvature.samples.length, 8);
+    assert.deepEqual(curvature.samples.map((s: { parameter: number }) => s.parameter),
+      measured.content.samples.map((s: { parameter: number }) => s.parameter));
   }
   for (const edge of blend.filter(edge => !tangent.includes(edge))) {
     const refused = await query(doc, 'edge_continuity', { body, expectedRevision: revision, edgeId: edge.id });
@@ -63,7 +76,14 @@ test('a revision binds the exact session document and base body', async () => {
   assert.equal(right.isError, false);
   assert.notEqual(left.content.revision, right.content.revision);
   const args = { body: b.key, edgeId: right.content.edges[0].id, expectedRevision: right.content.revision };
-  assert.equal((await query(doc, 'edge_continuity', args)).isError, false);
+  const sharp = await query(doc, 'edge_continuity', { ...args, curvature: true });
+  assert.equal(sharp.isError, false);
+  assert.equal(sharp.content.maximumAngleDegrees, 90);
+  assert.deepEqual(sharp.content.curvature, { status: 'unavailable', reason: 'non-tangent' });
+  assert.deepEqual(validate(outputSchemaOf('measure_edge_continuity')!, sharp.content), []);
+  const invalid = await query(doc, 'edge_continuity', { ...args, curvature: 'true' });
+  assert.equal(invalid.isError, true);
+  assert.match(invalid.content.error, /boolean/);
   for (const [changed, expectedRevision] of [[doc, left.content.revision], [{ ...doc, parameters: { changed: 1 } }, right.content.revision]] as const) {
     const refused = await query(changed, 'edge_continuity', { ...args, expectedRevision });
     assert.equal(refused.isError, true);

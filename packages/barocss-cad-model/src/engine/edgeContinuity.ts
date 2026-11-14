@@ -11,7 +11,7 @@ export interface ContinuityEdge {
 
 export type ContinuityRequest =
   | { kind: 'list'; picked?: DisplayEdge['nativeJoint'] }
-  | { kind: 'measure'; edgeId: string };
+  | { kind: 'measure'; edgeId: string; curvature?: boolean };
 type ListReply = { edges: ContinuityEdge[]; selected: string | null } | { error: string };
 type MeasureReply = { measurement: BrepEdgeContinuityResult } | { error: string };
 export type ContinuityReply = ListReply | MeasureReply;
@@ -28,7 +28,7 @@ export function readEdgeContinuity(doc: StudioDoc, bodyKey: string, request: Con
   }
   if (bodies.length !== 1) return { error: 'The selected body has no unique native geometry.' };
   const { brep } = bodies[0];
-  if (request.kind === 'measure') return { measurement: measureBrepEdgeContinuity(brep, request.edgeId) };
+  if (request.kind === 'measure') return { measurement: measureBrepEdgeContinuity(brep, request.edgeId, { curvature: request.curvature }) };
 
   const faces = new Map(brep.faces.map(face => [face.id, face]));
   const loops = new Map(brep.loops.map(loop => [loop.id, loop.face]));

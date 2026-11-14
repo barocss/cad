@@ -45,6 +45,30 @@ function assertMeasured(brep, edgeName, expectedDegrees) {
   assert.equal(result.maximumAngleDegrees, Math.max(...angles));
 }
 
+function curvatureAt(brep, edgeName) {
+  const edge = edgeNamed(brep, edgeName);
+  const { curvature, ...angle } = measureBrepEdgeContinuity(brep, edge.id, { curvature: true });
+  assert.equal(angle.status, 'measured', JSON.stringify(angle));
+  assert.deepEqual(angle, measureBrepEdgeContinuity(brep, edge.id));
+  assert.deepEqual(angle, measureBrepEdgeContinuity(brep, edge.id, { curvature: false }));
+  assert.ok(curvature);
+  return { angle, curvature };
+}
+
+function assertCurvature(brep, edgeName, expectedByFace) {
+  const { angle, curvature } = curvatureAt(brep, edgeName);
+  assert.equal(curvature.status, 'measured', JSON.stringify(curvature));
+  assert.equal(curvature.unit, '1/mm');
+  assert.deepEqual(curvature.samples.map(sample => sample.parameter), angle.samples.map(sample => sample.parameter));
+  const [first, second] = angle.faces.map(face => expectedByFace[face.name]);
+  for (const sample of curvature.samples) {
+    assert.ok(Math.abs(sample.first - first) <= 1e-10, JSON.stringify(sample));
+    assert.ok(Math.abs(sample.second - second) <= 1e-10, JSON.stringify(sample));
+    assert.ok(Math.abs(sample.difference - Math.abs(first - second)) <= 1e-10, JSON.stringify(sample));
+  }
+  assert.equal(curvature.maximumDifference, Math.max(...curvature.samples.map(sample => sample.difference)));
+}
+
 test('samples a sharp planar joint using oriented normals, including an obtuse angle', () => {
   const brep = prism(skewBox);
   // The profile goes east at one wall and follows the 3–4–5 slope at the next.
@@ -59,6 +83,65 @@ test('samples a tangent plane–cylinder joint and a perpendicular cylinder rim'
   assertMeasured(brep, 'stock.side0|stock.side1', 0);
   // At the cylinder rim its radial normals are horizontal and the top cap normal points along +Z.
   assertMeasured(brep, 'stock.side1|stock.top', 90);
+});
+
+test('reports curvature unavailable on sharp planar and cylindrical joins while preserving the angle report', () => {
+  for (const [brep, name] of [
+    [prism(skewBox), 'stock.side0|stock.side1'],
+    [prism(capsule), 'stock.side1|stock.top'],
+  ]) {
+    assert.deepEqual(curvatureAt(brep, name).curvature, { status: 'unavailable', reason: 'non-tangent' });
+  }
+});
+
+test('measures signed transverse curvature in oblique charts and follows face order and sense', () => {
+  const brep = prism(capsule);
+  const name = 'stock.side0|stock.side1';
+  const edge = edgeNamed(brep, name);
+  const firstFace = brep.faces.find(face => face.name === 'stock.side0');
+  const secondFace = brep.faces.find(face => face.name === 'stock.side1');
+  const uses = brep.coedges.filter(use => use.edge === edge.id);
+  // Replace the two local supports with Y = -4 + c(X - 20)², keeping the selected edge and its native tangent.
+  // S(u,v) = (20 + u - v, -4 + c(u - v)², 6(u + v)). On u=v, the normal points along -Y.
+  // The physical transverse curvature is -2c. Both chart derivatives contribute along X.
+  for (const [face, c] of [[firstFace, 2], [secondFace, -3]]) {
+    const indices = [0, 1, 2];
+    Object.assign(face.surface, {
+      degreeU: 2, degreeV: 2, knotsU: [0, 0, 0, 1, 1, 1], knotsV: [0, 0, 0, 1, 1, 1],
+      weights: indices.map(() => [1, 1, 1]),
+      controlPoints: indices.map(i => indices.map(j => [
+        20 + (i - j) / 2,
+        -4 + c * (Number(i === 2) - i * j / 2 + Number(j === 2)),
+        3 * (i + j),
+      ])),
+    });
+  }
+  for (const use of uses) use.pcurve = lineCurve(use.pcurve.id, [0, 0, 0], [0.5, 0.5, 0]);
+  assertCurvature(brep, name, { 'stock.side0': -4, 'stock.side1': 6 });
+
+  brep.coedges.reverse();
+  const { angle } = curvatureAt(brep, name);
+  assert.deepEqual(angle.faces.map(face => face.name), ['stock.side1', 'stock.side0']);
+  assertCurvature(brep, name, { 'stock.side0': -4, 'stock.side1': 6 });
+
+  firstFace.sense = secondFace.sense = 'reversed';
+  assertCurvature(brep, name, { 'stock.side0': 4, 'stock.side1': -6 });
+});
+
+test('keeps the tangent angle samples when a C1 interior knot prevents native D2 evaluation', () => {
+  const brep = prism(capsule);
+  const name = 'stock.side0|stock.side1';
+  const face = brep.faces.find(face => face.name === 'stock.side0');
+  const firstSample = 1 / 16;
+  // Degree two with a simple knot gives C1 admission. The Greville poles preserve the original planar chart.
+  const { surface } = face;
+  surface.degreeV = 2;
+  surface.knotsV = [0, 0, 0, firstSample, 1, 1, 1];
+  surface.controlPoints = surface.controlPoints.map(([start, end]) => [0, firstSample / 2, (1 + firstSample) / 2, 1]
+    .map(t => start.map((coordinate, axis) => coordinate + t * (end[axis] - coordinate))));
+  surface.weights = surface.controlPoints.map(() => [1, 1, 1, 1]);
+  assertMeasured(brep, name, 0);
+  assert.deepEqual(curvatureAt(brep, name).curvature, { status: 'unavailable', reason: 'derivative-unavailable' });
 });
 
 test('declines mesh-derived planar faces and a same-face seam from a valid cylinder', () => {
@@ -136,6 +219,8 @@ test('recovers both straight tangent bindings of a constant-radius box edge fill
     const uses = brep.coedges.filter(use => use.edge === edge.id);
     assert.deepEqual(uses.map(use => use.pcurve), [null, null]);
     assertMeasured(brep, name, 0);
+    // The plane has zero curvature. The outward-oriented, 2 mm cylinder has normal curvature -1/R.
+    assertCurvature(brep, name, { 'round.face': -0.5, [adjacent]: 0 });
     for (let i = 0; i < 8; i++) {
       const t = (i + 0.5) / 8;
       const x = startX + (endX - startX) * t;

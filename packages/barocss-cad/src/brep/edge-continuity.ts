@@ -1,6 +1,7 @@
 import { curveD1Evaluator, surfaceD1Evaluator } from '../core/derivatives.js';
 import { curveDomain, surfaceDomain } from '../core/math.js';
-import { add, cross, dist, dot, len, scale, unit } from '../core/vec3.js';
+import { surfaceD2Evaluator, type SurfaceD2Result } from '../core/second-derivatives.js';
+import { add, cross, dist, dot, len, scale, sub, unit } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Curve, Point, Surface } from '../types.js';
 import type { Brep, BrepCoedge, BrepFace } from './brep-core.js';
@@ -20,6 +21,28 @@ interface FaceIdentity {
   readonly name?: string;
 }
 
+export interface BrepEdgeContinuityOptions {
+  readonly curvature?: boolean;
+}
+
+interface BrepEdgeCurvatureSample {
+  readonly parameter: number;
+  /** Signed normal curvature along the transverse direction, in the order of `faces`. */
+  readonly first: number;
+  readonly second: number;
+  /** Absolute difference between the two signed values. */
+  readonly difference: number;
+}
+
+export type BrepEdgeCurvatureResult =
+  | {
+    readonly status: 'measured';
+    readonly unit: '1/mm';
+    readonly maximumDifference: number;
+    readonly samples: readonly BrepEdgeCurvatureSample[];
+  }
+  | { readonly status: 'unavailable'; readonly reason: 'non-tangent' | 'derivative-unavailable' };
+
 export type BrepEdgeContinuityResult =
   | {
     readonly status: 'measured';
@@ -30,10 +53,22 @@ export type BrepEdgeContinuityResult =
     readonly minimumAngleDegrees: number;
     readonly maximumAngleDegrees: number;
     readonly samples: readonly { readonly parameter: number; readonly angleDegrees: number }[];
+    readonly curvature?: BrepEdgeCurvatureResult;
   }
   | { readonly status: 'unsupported'; readonly edgeId: string; readonly reason: BrepEdgeContinuityRefusal };
 
 const SAMPLE_COUNT = 8;
+const TANGENCY_THRESHOLD_DEGREES = CadNumericPolicy.relativeComparison * (180 / Math.PI);
+// Apply the same conservative metric bound as local surface curvature, using sin² directly.
+const CURVATURE_METRIC_FLOOR = 1024 * Number.EPSILON;
+
+type UV = readonly [u: number, v: number];
+interface CurvatureFrame {
+  parameter: number;
+  tangent: Point;
+  normals: readonly [Point, Point];
+  chart: readonly [UV, UV];
+}
 
 function findUnique<T extends { readonly id: string }>(items: readonly T[], id: string): T | undefined {
   let found: T | undefined;
@@ -82,12 +117,78 @@ function orientedNormal(du: Point, dv: Point, orientation: number): Point | unde
   return scale(unit(normal), orientation);
 }
 
+function normalSecondPartial(partial: Point, normal: Point, firstLength: number, secondLength: number): number {
+  const component = dot(normal, partial);
+  const scaled = component / Math.max(firstLength, secondLength);
+  const result = scaled / Math.min(firstLength, secondLength);
+  if (!Number.isFinite(result) || (component !== 0 && result === 0)) {
+    throw new RangeError('Normal curvature is outside the finite arithmetic range');
+  }
+  return result;
+}
+
+function normalCurvature(surface: SurfaceD2Result, normal: Point, commonDirection: Point): number {
+  const uLength = len(surface.du), vLength = len(surface.dv);
+  const u = unit(surface.du), v = unit(surface.dv);
+  const chartCross = cross(u, v);
+  const sine = len(chartCross);
+  if (!(sine * sine > CURVATURE_METRIC_FLOOR)) throw new RangeError('Ill-conditioned surface chart');
+
+  // Project the common world direction onto this support, then express it in the normalized UV basis.
+  const projected = sub(commonDirection, scale(normal, dot(commonDirection, normal)));
+  if (!(len(projected) > CadNumericPolicy.relativeComparison)) throw new RangeError('Degenerate transverse direction');
+  const direction = unit(projected);
+  const chartNormal = unit(chartCross);
+  const a = dot(cross(direction, v), chartNormal) / sine;
+  const b = dot(cross(u, direction), chartNormal) / sine;
+  if (!(dist(add(scale(u, a), scale(v, b)), direction) <= CadNumericPolicy.relativeComparison)) {
+    throw new RangeError('Could not resolve the transverse direction in the surface chart');
+  }
+
+  const uu = normalSecondPartial(surface.duu, normal, uLength, uLength);
+  const uv = normalSecondPartial(surface.duv, normal, uLength, vLength);
+  const vv = normalSecondPartial(surface.dvv, normal, vLength, vLength);
+  const curvature = a * (uu * a + uv * b) + b * (uv * a + vv * b);
+  if (!Number.isFinite(curvature)) throw new RangeError('Non-finite normal curvature');
+  return curvature === 0 ? 0 : curvature;
+}
+
+function measureCurvature(
+  surfaces: readonly [Surface, Surface], frames: readonly CurvatureFrame[], maximumAngleDegrees: number,
+): BrepEdgeCurvatureResult {
+  if (maximumAngleDegrees > TANGENCY_THRESHOLD_DEGREES) return { status: 'unavailable', reason: 'non-tangent' };
+  try {
+    const firstAt = surfaceD2Evaluator(surfaces[0]), secondAt = surfaceD2Evaluator(surfaces[1]);
+    const samples: BrepEdgeCurvatureSample[] = [];
+    let maximumDifference = 0;
+    for (const { parameter, tangent, normals, chart } of frames) {
+      const seamNormal = unit(add(normals[0], normals[1]));
+      const transverse = cross(seamNormal, tangent);
+      if (!(len(transverse) > CadNumericPolicy.relativeComparison)) throw new RangeError('Degenerate seam direction');
+      const commonDirection = unit(transverse);
+      const first = normalCurvature(firstAt(...chart[0]), normals[0], commonDirection);
+      const second = normalCurvature(secondAt(...chart[1]), normals[1], commonDirection);
+      const difference = Math.abs(first - second);
+      if (!Number.isFinite(difference)) throw new RangeError('Non-finite curvature difference');
+      samples.push({ parameter, first, second, difference });
+      maximumDifference = Math.max(maximumDifference, difference);
+    }
+    return { status: 'measured', unit: '1/mm', maximumDifference, samples };
+  } catch {
+    return { status: 'unavailable', reason: 'derivative-unavailable' };
+  }
+}
+
 /**
  * Sample the angle between the two oriented native face normals, in degrees.
  * Each sample checks both parameter bindings against the native edge.
- * Extrema describe the samples only. This is a local inspection of the selected edge.
+ * Optional curvature compares signed normal curvature across the edge, in inverse mm,
+ * when all sampled normal angles are at most 1e-7 radians.
+ * The values are numerical observations at the sample points.
  */
-export function measureBrepEdgeContinuity(brep: Brep, edgeId: string): BrepEdgeContinuityResult {
+export function measureBrepEdgeContinuity(
+  brep: Brep, edgeId: string, options?: BrepEdgeContinuityOptions,
+): BrepEdgeContinuityResult {
   const refuse = (reason: BrepEdgeContinuityRefusal): BrepEdgeContinuityResult => ({ status: 'unsupported', edgeId, reason });
   const edge = findUnique(brep.edges, edgeId);
   if (!edge) return refuse('edge-not-found');
@@ -131,6 +232,7 @@ export function measureBrepEdgeContinuity(brep: Brep, edgeId: string): BrepEdgeC
     ];
     const tolerance = Math.min(edge.tolerance, linearToleranceMM(geometryScaleMM(edge.curve.controlPoints)));
     const samples: { parameter: number; angleDegrees: number }[] = [];
+    const curvatureFrames: CurvatureFrame[] | undefined = options?.curvature ? [] : undefined;
     let previous = start, minimumAngleDegrees = Infinity, maximumAngleDegrees = 0;
 
     for (let i = 0; i < SAMPLE_COUNT; i++) {
@@ -142,6 +244,7 @@ export function measureBrepEdgeContinuity(brep: Brep, edgeId: string): BrepEdgeC
       if (!(speed > 0 && Number.isFinite(speed))) return refuse('derivative-unavailable');
 
       const normals: Point[] = [], supportPoints: Point[] = [];
+      const chart: UV[] | undefined = curvatureFrames && [];
       for (const side of sides) {
         // Both pcurves use the edge's canonical parameter, even for a reversed coedge.
         const uv = side.uvAt(parameter);
@@ -157,14 +260,19 @@ export function measureBrepEdgeContinuity(brep: Brep, edgeId: string): BrepEdgeC
         if (!normal) return refuse('derivative-unavailable');
         normals.push(normal);
         supportPoints.push(support.point);
+        chart?.push([u, v]);
       }
       if (dist(supportPoints[0], supportPoints[1]) > tolerance) return refuse('binding-mismatch');
       const angleDegrees = Math.atan2(len(cross(normals[0], normals[1])), dot(normals[0], normals[1])) * (180 / Math.PI);
       samples.push({ parameter, angleDegrees });
       minimumAngleDegrees = Math.min(minimumAngleDegrees, angleDegrees);
       maximumAngleDegrees = Math.max(maximumAngleDegrees, angleDegrees);
+      if (chart && curvatureFrames) {
+        curvatureFrames.push({ parameter, tangent: unit(world.derivative), normals: [normals[0], normals[1]], chart: [chart[0], chart[1]] });
+      }
     }
 
+    const curvature = curvatureFrames && measureCurvature([firstFace.surface, secondFace.surface], curvatureFrames, maximumAngleDegrees);
     return {
       status: 'measured',
       edgeId,
@@ -174,6 +282,7 @@ export function measureBrepEdgeContinuity(brep: Brep, edgeId: string): BrepEdgeC
       minimumAngleDegrees,
       maximumAngleDegrees,
       samples,
+      ...(curvature === undefined ? {} : { curvature }),
     };
   } catch {
     return refuse('derivative-unavailable');

@@ -17,7 +17,7 @@ function EdgeContinuityRead({ picked, read }: {
   const live = useRef(false);
   useLayoutEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   async function measure(edgeId: string) {
-    const reply = await read({ kind: 'measure', edgeId });
+    const reply = await read({ kind: 'measure', edgeId, curvature: true });
     if (!live.current) return;
     if ('measurement' in reply) setResult(reply.measurement);
     else setError('error' in reply ? reply.error : 'The edge could not be measured.');
@@ -65,14 +65,19 @@ function EdgeContinuityRead({ picked, read }: {
       {error && <div className="empty">{error}</div>}
       {result?.status === 'unsupported' && <div className="empty">Cannot measure this joint. {refusalLabel[result.reason]}</div>}
       {result?.status === 'measured' && <>
-        <div className="kv"><span>Sampled face-normal angle</span><b data-continuity-angle>{angle(result.minimumAngleDegrees)} – {angle(result.maximumAngleDegrees)}°</b></div>
+        <div className="kv"><span>Sampled face-normal angle</span><b data-continuity-angle>{formatValue(result.minimumAngleDegrees)} – {formatValue(result.maximumAngleDegrees)}°</b></div>
+        {result.curvature?.status === 'measured' && <div className="kv"><span>Max sampled cross-edge curvature difference</span>
+          <b data-continuity-curvature>{formatValue(result.curvature.maximumDifference)} mm⁻¹</b></div>}
+        {result.curvature?.status === 'unavailable' && <div className="empty" data-continuity-curvature-unavailable>
+          {result.curvature.reason === 'non-tangent' ? 'Cross-edge curvature comparison needs a tangent joint.' : 'Cross-edge curvature is unavailable at a sample.'}
+        </div>}
         <div className="kv"><span>Native samples</span><b>{result.sampleCount}</b></div>
       </>}
     </div>
   </section>;
 }
 
-const angle = (value: number): string => String(Number(value.toPrecision(7)));
+const formatValue = (value: number): string => String(Number(value.toPrecision(7)));
 
 const refusalLabel: Record<Extract<Result, { status: 'unsupported' }>['reason'], string> = {
   'edge-not-found': 'The native edge is unavailable.',

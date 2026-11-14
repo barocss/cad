@@ -1,0 +1,147 @@
+{
+  "decision": "D1262",
+  "tier": "FULL",
+  "priority": "P5",
+  "row": 24,
+  "parent": "62234108fc9788a50543ad2e4727d7671a9b42d1",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1262-<run>",
+    "UPDATE_TOOL_CONTRACT=1 pnpm --filter @barocss/cad-model test toolset.test",
+    "node apps/library-docs/scripts/agent-tools.mjs",
+    "D1262_SOURCE_FROZEN=1 node apps/cad-studio/test/fillet-continuity-browser.mjs <external-evidence>/studio-final --curvature",
+    "cd packages/barocss-cad && node scripts/tool.mjs type-check",
+    "cd packages/barocss-cad && node scripts/tool.mjs build:fast",
+    "cd packages/barocss-cad && node --test --test-concurrency=1 test/edge-continuity.test.mjs test/derivatives.test.mjs test/edge-finish.test.mjs",
+    "node packages/barocss-cad/scripts/code-shape.mjs --check",
+    "pnpm --filter @barocss/cad-model test native-continuity-tool edge-continuity toolset.test tool-contract.test",
+    "pnpm --filter @barocss/cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint packages/barocss-cad/src/{brep/edge-continuity,index}.ts packages/barocss-cad-model/src/{chat/contract,chat/groups,chat/part/nativeContinuity,chat/toolDefinitions,engine/edgeContinuity}.ts packages/barocss-cad-model/test/native-continuity-tool.test.ts",
+    "node apps/library-docs/scripts/agent-tools.mjs --check",
+    "node <external-evidence>/mutation.mjs <external-evidence>",
+    "node --check apps/cad-studio/test/fillet-continuity-browser.mjs",
+    "node --check apps/cad-studio/test/fillet-continuity-mcp.mjs",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/build",
+    "git diff --check"
+  ],
+  "checks": {
+    "actualStudio": "PASS",
+    "localStdioMcp": "PASS",
+    "chatLocalReplay": "PASS",
+    "independentOracle": "PASS",
+    "kernel": {
+      "status": "PASS",
+      "passed": 31,
+      "failed": 0
+    },
+    "model": {
+      "status": "PASS",
+      "passed": 20,
+      "failed": 0
+    },
+    "kernelTypes": "PASS",
+    "kernelBuild": "PASS",
+    "kernelCodeShape": "PASS",
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "lint": "PASS",
+    "generatedAgentTools": "PASS",
+    "driverSyntax": "PASS",
+    "studioBuild": "PASS",
+    "independentReviews": 2,
+    "toolList": {
+      "tools": 13,
+      "characters": 24615,
+      "limit": 25000
+    },
+    "mutationExitCodes": {
+      "current": 0,
+      "ignore-tangency": 1,
+      "ignore-mixed": 1
+    },
+    "fullSuites": "NOT_RUN",
+    "liveModel": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "studioSaveReopen": "NOT_RUN",
+    "generalG2G3": "NOT_RUN"
+  },
+  "geometry": {
+    "nativeShapeSHA256": "12ff52104e6d5ff5b4235b3e5a267aaf168a563285aed2b132137e9d9030fc2f",
+    "fixtureMM": [
+      30,
+      12,
+      20
+    ],
+    "radiusMM": 2,
+    "tangencyThresholdRadians": 1e-07,
+    "samplesPerJoint": 8,
+    "tolerancePerMM": 1e-10,
+    "sharpDegrees": 90,
+    "signedCurvaturePerMM": {
+      "plane": 0,
+      "convexCylinder": -0.5
+    },
+    "joins": [
+      {
+        "edgeId": "n2_e8",
+        "studio": [
+          5.088887e-14,
+          5.088887e-14
+        ],
+        "mcp": [
+          1.272221872585407e-14,
+          1.2722218725854078e-14
+        ],
+        "maximumDifferenceDegrees": 3.816665127414593e-14,
+        "curvature": {
+          "studio": 0.5,
+          "mcp": 0.5000000000000006,
+          "maximumDifference": 5.551115123125783e-16
+        }
+      },
+      {
+        "edgeId": "n2_e14",
+        "studio": [
+          7.196774e-14,
+          1.439355e-13
+        ],
+        "mcp": [
+          0,
+          7.196773706231915e-14
+        ],
+        "maximumDifferenceDegrees": 7.196776293768085e-14,
+        "curvature": {
+          "studio": 0.5,
+          "mcp": 0.5000000000000011,
+          "maximumDifference": 1.1102230246251565e-15
+        }
+      }
+    ],
+    "curvedEndRefusals": [
+      "n2_e11",
+      "n2_e12"
+    ],
+    "largestAbsoluteDifferencePerMM": 1.1102230246251565e-15
+  },
+  "frozenFiles": 1124,
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "retainedMcpInputs": {
+    "accepted-mcp": "16595d18676b77613b85d533cbe594e8e451942471842fc1664696ac4b286c5a",
+    "revised-mcp": "9301f6e6c8f9c615c06c549ea5b6808eee042f410a174066846d03975d1c1d7f",
+    "unresolved-mcp": "ebcf281dd1afe5e090e05f8bf48a5704859f603a0b8bb932f6d49ea04a01a48e",
+    "sharp-mcp": "ce1c29219394f8f2f766a16fa859d48320ded6759af0d13a5e43554e9b9f8b9c"
+  },
+  "receiptSHA256": {
+    "desktop": "4cbd8e0974e2561fe26cf1ce8ae00aa1286c891df99dd4642bb17be8d1e344b2",
+    "actualMcpResponses": "6e7d7416b219ede01a0aa4d61dd90555d7d812768d483eea3e767c69dcaef98c",
+    "independentOracle": "9547a7986d6214f850ac3be9b3c8a2f625e1f76569948032f6522d32cca8f827",
+    "studioVisual": "f0b81f3a47f3e844b649e2398d6375f018a6ccb3714a89bbd0c2bca812bdefb2",
+    "sharpVisual": "a2fee5cce02b21e2f3b77cfefc38eb3efba5dc1d20c7e52e720a983f7c8dcd7a",
+    "chatVisual": "3d73fea8188f930d36a576e046e29eed547e1682c95654d88c567977c00d06e9"
+  }
+}

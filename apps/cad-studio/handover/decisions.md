@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1262 — Measure sampled cross-edge curvature](notes/native-cross-edge-curvature-2026-11-14/README.md).
 - [D1261 — Offset an inclined wall of a rectangular taper](notes/offset-drafted-wall-2026-11-14/README.md).
 - [D1260 — Inspect native edge continuity from the CAD agent](notes/agent-native-edge-continuity-2026-11-14/README.md).
 - [D1259 — Inspect straight box fillet interfaces](notes/box-fillet-continuity-2026-11-14/README.md).

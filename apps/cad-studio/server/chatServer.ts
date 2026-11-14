@@ -151,7 +151,10 @@ export function summarize(name: string, text: string, isError: boolean): string 
   if (name === 'calculate_drawing_tolerance_stack' && j.unit === 'mm') return `Nominal ${j.nominal} mm · worst case ${j.minimum} to ${j.maximum} mm`;
   if (name === 'list_native_joints' && Array.isArray(j.edges)) return `${j.edges.length} native joints · ${j.body}`;
   if (name === 'measure_edge_continuity' && j.status === 'measured') {
-    return `${Number(j.minimumAngleDegrees.toPrecision(7))}–${Number(j.maximumAngleDegrees.toPrecision(7))}° · ${j.sampleCount} samples · ${j.edgeName ?? j.edgeId}`;
+    if (j.curvature?.status === 'measured') return `${Number(j.curvature.maximumDifference.toPrecision(7))} mm⁻¹ curvature difference · ${j.sampleCount} samples · ${j.edgeName ?? j.edgeId}`;
+    const angles = `${Number(j.minimumAngleDegrees.toPrecision(7))}–${Number(j.maximumAngleDegrees.toPrecision(7))}°`;
+    if (j.curvature?.status === 'unavailable') return `${angles} · curvature unavailable · ${j.edgeName ?? j.edgeId}`;
+    return `${angles} · ${j.sampleCount} samples · ${j.edgeName ?? j.edgeId}`;
   }
   if (name === 'get_part_summary') return `${j.feature_count} features, ${j.bodies?.length ?? 0} bodies`;
   // (O79: the manufacturability report as its process and each rule's status — the whole JSON is past 160 characters.)

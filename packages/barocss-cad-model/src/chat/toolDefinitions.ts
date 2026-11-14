@@ -363,9 +363,10 @@ export const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'measure_edge_continuity',
-    description: 'Measures sampled face-normal angles in degrees on one native joint. Use the body, edge ID and revision from query.native_joints. Unsupported joints refuse. No curvature or full-edge certification.',
+    description: 'Measures sampled face-normal angles in degrees on one native joint. Use the body, edge ID and revision from query.native_joints. Optional curvature reports sampled transverse normal curvature in inverse mm on tangent joins. Unsupported joints refuse. No full-edge certification.',
     input_schema: { type: 'object', properties: {
       body: { type: 'string', minLength: 1 }, edgeId: { type: 'string', minLength: 1 }, expectedRevision: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+      curvature: { type: 'boolean', description: 'Include cross-edge curvature at the same native samples.' },
     }, required: ['body', 'edgeId', 'expectedRevision'], additionalProperties: false },
   },
   ...ASSEMBLY_TOOLS.map(withPartArgument),
