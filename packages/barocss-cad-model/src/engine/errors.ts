@@ -17,6 +17,9 @@ export interface FriendlyError {
 // messages without a code, and rows naming a code unbracketed (messages carry it bare), so they stay regexes. Order
 // matters: the first row that matches wins.
 const rules: { code?: string | readonly string[]; text?: RegExp; title: string; hint: string }[] = [
+  { text: /loft: two guides require congruent rectangular sections/,
+    title: 'The Loft sections have different sizes',
+    hint: 'Make the two rectangles the same width and depth, or propose a new Loft for the changed sections.' },
   { text: /loft: two guides require guide [12] endpoints to exactly match/,
     title: 'A guide misses a section corner',
     hint: 'Use the minimum X corner for the first guide and the maximum X corner for the second guide, both at minimum Y. Each guide must start on the lower section and end on the upper section.' },
