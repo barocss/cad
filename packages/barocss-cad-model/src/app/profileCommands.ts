@@ -9,7 +9,7 @@ import { captureSignatures } from '../engine/references';
 import { isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
-import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle } from './profiles';
+import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle, twoGuideLoftSections } from './profiles';
 import { copyLoftGuide } from './loftGuides';
 import { faceProfile } from './faceProfile';
 import { nativeExtrudeFace } from './nativeExtrudeFace';
@@ -395,17 +395,45 @@ function loftSourceNodes(ctx: Ctx): readonly ModelNode[] {
   });
 }
 
+function loftGuideField(ctx: Ctx, second = false): Field {
+  const eligible = (id: string) => {
+    const copy = copyLoftGuide(ctx.doc, id);
+    if (!copy.ok) return copy;
+    return second && copy.guide.kind !== 'quadratic-bezier'
+      ? { ok: false as const, reason: 'Choose a quadratic Bézier curve for the second guide.' }
+      : copy;
+  };
+  return {
+    key: second ? 'guideB' : 'guide', label: second ? 'Second guide (copied)' : 'Guide (copied)', kind: 'choice',
+    options: [{ value: '', label: 'None' }, ...(ctx.doc.direct?.objects ?? []).flatMap(object => {
+      const copy = eligible(object.id);
+      return copy.ok ? [{ value: object.id, label: copy.name }] : [];
+    })],
+    unknown: value => { const copy = eligible(value); return copy.ok ? 'Choose an available guide or None.' : copy.reason; },
+  };
+}
+
 export const loftCommand: Command = {
   id: 'loft', label: 'Loft', icon: 'cad-loft', group: 'create', keywords: 'taper transition blend sections ruled',
   hint: 'A solid through two or more sketches on parallel planes (Shift-click to pick them)',
   available: ctx => { const picked = ctx.selection.sketches ?? []; if (picked.length < 2) return no('Pick two or more finished sketches on parallel planes (Shift-click).'); const s = attempt(() => loftSections(loftSourceNodes(ctx), picked, ctx.doc.parameters)); return 'error' in s ? no(s.error) : ok; },
-  fields: (ctx, values) => [{ key: 'guide', label: 'Guide (copied)', kind: 'choice', options: [
-    { value: '', label: 'None' },
-    ...(ctx.doc.direct?.objects ?? []).flatMap(object => { const guide = copyLoftGuide(ctx.doc, object.id); return guide.ok ? [{ value: object.id, label: guide.name }] : []; }),
-  ], unknown: value => { const guide = copyLoftGuide(ctx.doc, value); return guide.ok ? 'Choose an available guide or None.' : guide.reason; } },
-  ...(!values?.guide && (ctx.selection.sketches?.length ?? 0) >= 3 ? [{ key: 'smooth', label: 'Smooth (through the middle sections)', kind: 'choice' as const, options: [{ value: 'no', label: 'Ruled' }, { value: 'yes', label: 'Smooth' }] }] : [])],
-  defaults: () => ({ smooth: 'no', guide: '' }),
+  fields: (ctx, values) => [loftGuideField(ctx),
+    ...((ctx.selection.sketches?.length ?? 0) === 2 ? [loftGuideField(ctx, true)] : []),
+    ...(!values?.guide && !values?.guideB && (ctx.selection.sketches?.length ?? 0) >= 3
+      ? [{ key: 'smooth', label: 'Smooth (through the middle sections)', kind: 'choice' as const, options: [{ value: 'no', label: 'Ruled' }, { value: 'yes', label: 'Smooth' }] }] : [])],
+  defaults: () => ({ smooth: 'no', guide: '', guideB: '' }),
   steps: (ctx, values) => {
+    if (values.guideB) {
+      const picked = ctx.selection.sketches ?? [];
+      const sections = attempt(() => twoGuideLoftSections(loftSourceNodes(ctx), picked, ctx.doc.parameters));
+      const first = typeof values.guide === 'string' && values.guide ? copyLoftGuide(ctx.doc, values.guide) : null;
+      const second = typeof values.guideB === 'string' ? copyLoftGuide(ctx.doc, values.guideB) : null;
+      const pair = first?.ok && second?.ok && first.guide.kind === 'quadratic-bezier' && second.guide.kind === 'quadratic-bezier' && values.guide !== values.guideB;
+      return [...boundStep(ctx),
+        { label: 'Sections', text: 'error' in sections ? sections.error : sections.sections.map(section => `Sketch ${section.source + 1}`).join(' → ') + ' (height order)', done: !('error' in sections) },
+        { label: 'Guides', text: pair ? `${first.name} → ${second.name} (copied)` : 'Choose two different quadratic Bézier curves in section corner order.', done: !!pair },
+      ];
+    }
     if (values.guide !== undefined && values.guide !== '') {
       const guide = typeof values.guide === 'string' ? copyLoftGuide(ctx.doc, values.guide) : { ok: false as const, reason: 'Choose an available guide or None.' };
       const general = guide.ok && guide.guide.kind === 'nurbs';
@@ -427,6 +455,26 @@ export const loftCommand: Command = {
     ];
   },
   build: (ctx, v) => {
+    if (v.guideB !== undefined && v.guideB !== '') {
+      const picked = ctx.selection.sketches ?? [];
+      if (picked.length !== 2 || v.smooth === 'yes') throw refusal('LOFT_SECTIONS', 'A two-guide loft needs exactly two ruled sections.');
+      if (typeof v.guide !== 'string' || !v.guide || typeof v.guideB !== 'string' || v.guide === v.guideB)
+        throw refusal('DIRECT_PICK', 'Choose two different quadratic Bézier guides.');
+      const first = copyLoftGuide(ctx.doc, v.guide), second = copyLoftGuide(ctx.doc, v.guideB);
+      if (!first.ok) throw refusal('DIRECT_PICK', first.reason);
+      if (!second.ok) throw refusal('DIRECT_PICK', second.reason);
+      if (first.guide.kind !== 'quadratic-bezier' || second.guide.kind !== 'quadratic-bezier')
+        throw refusal('DIRECT_PICK', 'Both guides must be quadratic Bézier curves.');
+      const sections = twoGuideLoftSections(loftSourceNodes(ctx), picked, ctx.doc.parameters);
+      if ('error' in sections) throw refusal('LOFT_SECTIONS', sections.error);
+      let doc = ctx.doc;
+      const at: number[] = [];
+      for (const section of sections.sections) { doc = withNode(doc, section.node); at.push(doc.nodes.length - 1); }
+      return withNode(doc, {
+        kind: 'loft', sections: sections.sections.map((section, index) => ({ sketch: at[index], z: section.z })),
+        from: sections.sections.map(section => section.source), guides: [first.guide, second.guide],
+      });
+    }
     if (v.guide !== undefined && v.guide !== '') {
       if (typeof v.guide !== 'string') throw refusal('DIRECT_PICK', 'Choose an available guide or None.');
       const guide = copyLoftGuide(ctx.doc, v.guide);

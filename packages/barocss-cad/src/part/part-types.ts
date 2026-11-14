@@ -156,7 +156,7 @@ export type CadPartFeature = Base & (
    * sections): one smooth side per edge through them all (C1), named `.side${i}`.
    */
   /** Two world frames: admitted convex polygon or circle/ellipse conic correspondence. */
-  | { readonly kind: 'loft'; readonly sections: readonly CadPartLoftSection[]; readonly smooth?: boolean; readonly guide?: LoftInput['guide'] }
+  | { readonly kind: 'loft'; readonly sections: readonly CadPartLoftSection[]; readonly smooth?: boolean; readonly guide?: LoftInput['guide']; readonly guides?: LoftInput['guides'] }
   /**
    * A body read from a STEP file (its text); its faces keep their names, prefixed `${id}.`. `each`: every
    * solid of the file is its own part (`id/k`, in file order) instead of one body holding them all.

@@ -146,7 +146,7 @@ export function editFields(nodes: Nodes, i: number, params?: Record<string, numb
   const raw = editFieldsRaw(nodes, i, bearingAssembly, scope, params ?? scope?.doc?.parameters ?? {});
   if (!params || nodes[i]?.kind === 'linear-span-pattern' || nodes[i]?.kind === 'align') return raw;
   return raw.map(f => f.kind !== 'number' || 'bind' in f || (nodes[i]?.kind === 'sew' && f.key === 'tol')
-    || f.key.endsWith('linkedInsetMM') || (nodes[i]?.kind === 'hole' && /^(step|about)[01]$/.test(f.key)) ? f : {
+    || f.key.startsWith('loftGuideControl') || f.key.endsWith('linkedInsetMM') || (nodes[i]?.kind === 'hole' && /^(step|about)[01]$/.test(f.key)) ? f : {
     ...f,
     get: n => within(params, () => f.get(n)).value,
     set: (n, v) => within(params, () => f.set(n, v)).value,
@@ -264,11 +264,24 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       break;
     case 'loft': {
       out.push(...loftSectionSourceFields(nodes, i, node, parameters));
-      node.sections.forEach((sec, k) => {
+      if (!node.guides) node.sections.forEach((sec, k) => {
         out.push(...sketchFields(nodes, sec.sketch, `Section ${k + 1} · `, parameters));
         if (!Object.hasOwn(sec, 'frame')) number('z' + k, `Section ${k + 1} · height`, 'mm', n => num((n as typeof node).sections[k].z), (n, v) => ({ ...(n as typeof node), sections: (n as typeof node).sections.map((x, j) => j === k && !Object.hasOwn(x, 'frame') && x.frame === undefined ? { ...x, z: v } : x) }));
       });
-      if (node.sections.length >= 3 && !node.guide && node.sections.every(section => section.frame === undefined))
+      if (node.guides) {
+        for (const slot of [0, 1] as const) for (const axis of [0, 1] as const) {
+          number(`loftGuideControl${slot}${axis}`, `Guide ${slot + 1} middle ${axis === 0 ? 'X' : 'Y'}`, 'mm',
+            n => (n as typeof node).guides![slot].controlPoints[1][axis],
+            (n, value) => {
+              const current = n as typeof node, guides = structuredClone(current.guides!);
+              const guide = guides[slot], [start, middle, end] = guide.controlPoints;
+              const moved = axis === 0 ? [value, middle[1], middle[2]] as const : [middle[0], value, middle[2]] as const;
+              const next = { ...guide, controlPoints: [start, moved, end] as const };
+              return { ...current, guides: slot === 0 ? [next, guides[1]] : [guides[0], next] };
+            });
+        }
+      }
+      if (node.sections.length >= 3 && !node.guide && !node.guides && node.sections.every(section => section.frame === undefined))
         out.push({ kind: 'toggle', key: 'smooth', label: 'Smooth', get: n => !!self<typeof node>(n).smooth, set: (n, v) => replace(n, i, { ...self<typeof node>(n), smooth: v }) });
       if (node.guide?.kind === 'nurbs' && node.sections.every(section => section.frame === undefined) && scope?.doc?.direct) {
         const source = scope.doc;

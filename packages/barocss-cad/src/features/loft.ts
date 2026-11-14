@@ -15,6 +15,7 @@ import type { LoftGuideFactory } from './loft-guide.js';
 import { admitNurbsGuide, type LoftNurbsGuideInput, type LoftNurbsGuideSpan } from './loft-nurbs-guide.js';
 import { orientedLoftSolid } from './oriented-loft.js';
 import { patchLoftGuideSides } from './loft-guide-patches.js';
+import { twoGuideLoftSolid } from './loft-two-guides.js';
 
 type XY = [number, number];
 type Piece = { readonly kind: 'line'; readonly a: XY; readonly b: XY } | { readonly kind: 'arc'; readonly c: XY; readonly r: number; readonly t0: number; readonly dt: number };
@@ -36,6 +37,11 @@ export type LoftSectionInput = ({ readonly profile: readonly ProfileSegmentInput
   readonly profile: { readonly kind: 'ellipse'; readonly center: readonly [number, number]; readonly radii: readonly [number, number]; readonly direction?: 'ccw' | 'cw' };
   readonly frame: LoftSectionFrame; readonly z?: never;
 };
+export interface LoftQuadraticGuide {
+  readonly kind: 'quadratic-bezier';
+  readonly controlPoints: readonly [readonly [number, number, number], readonly [number, number, number], readonly [number, number, number]];
+}
+
 export interface LoftInput {
   readonly id: string; readonly sections: readonly LoftSectionInput[];
   /** Names faces `${name}.bottom`, `.top` and `.side${i}` (two sections, or smooth) or `.s${k}.side${i}`. */
@@ -43,13 +49,12 @@ export interface LoftInput {
   /** Through three or more sections: one smooth (C1) side per edge instead of a ruled side per span. */
   readonly smooth?: boolean;
   /** One seam guide: polynomial NURBS on 2–8 height or identical-axis rigid frames; Bezier on its existing two-frame path. */
-  readonly guide?: {
-    readonly kind: 'quadratic-bezier';
-    readonly controlPoints: readonly [readonly [number, number, number], readonly [number, number, number], readonly [number, number, number]];
-  } | {
+  readonly guide?: LoftQuadraticGuide | {
     readonly kind: 'cubic-bezier';
     readonly controlPoints: readonly [readonly [number, number, number], readonly [number, number, number], readonly [number, number, number], readonly [number, number, number]];
   } | LoftNurbsGuideInput;
+  /** Two quadratic guides for two congruent rectangular height sections, ordered min X to max X along min Y. */
+  readonly guides?: readonly [LoftQuadraticGuide, LoftQuadraticGuide];
   /**
    * The first section's segment tags (R10a, D86): each side named `side[t]` by the segment of the first section it
    * runs from (several from one segment numbered `#k`), instead of by position.
@@ -83,6 +88,7 @@ function at(b: Bezier, s: number): [XY, XY] {
 }
 
 export function loftSolid(input: LoftInput): { brep: Brep; mass: (density: number) => MassProperties } {
+  if (Object.hasOwn(input, 'guides')) return twoGuideLoftSolid(input);
   const zPath = !input.sections.some(s => s.frame !== undefined || !Array.isArray(s.profile));
   // (CG1.3: a general guide on sections stacked along z, ruled; the Bézier guides keep their framed paths.)
   if (input.guide?.kind === 'nurbs' && zPath) return legacyLoft({ ...input, guide: undefined }, undefined, input.guide);

@@ -190,7 +190,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
       <div className="card-title" style={{ marginTop: 10 }}>EDIT FEATURE <ToolIconButton size="tiny" aria-label="Close editor" onClick={close}><Icon name="close" small /></ToolIconButton></div>
       {node?.kind === 'revolve' && <div className="field"><span>Axis</span><span>{node.axisRef
         ? `Linked edge ${node.axisRef.edge}` : node.dir ? 'Fixed edge' : `Sketch ${node.axis.toUpperCase()}`}</span></div>}
-      {node?.kind === 'loft' && node.sections.length === 2 && !node.guide && <div className="field"><span>Mode</span><span>Ruled · 2 sections</span></div>}
+      {node?.kind === 'loft' && node.sections.length === 2 && !node.guide && <div className="field"><span>Mode</span><span>{node.guides ? 'Two guides' : 'Ruled · 2 sections'}</span></div>}
       {node?.kind === 'sweep-curve' && <SweepHistoryInputs sweep={node} profile={draft[node.sketch]} parameters={parameters} />}
       {node?.kind === 'hole' && <HoleHistoryInputs hole={original?.kind === 'hole' ? original : node} doc={doc} index={index} />}
       {node?.kind === 'extrude' && node.cutDepth === 'through' && <div className="field"><span>Depth</span><span>Through all</span></div>}

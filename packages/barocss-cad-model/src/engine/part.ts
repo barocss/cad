@@ -188,12 +188,13 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
     case 'sweep': return { ...at, kind: 'sweep', sketch: id(node.sketch), path: node.path };
     case 'sweep-curve': return { ...at, kind: 'sweep-curve', sketch: id(node.sketch), path: node.path };
     case 'loft': {
-      const framed = Object.hasOwn(node, 'guide') || node.sections.some(s => Object.hasOwn(s, 'frame'));
+      const guidedOrFramed = Object.hasOwn(node, 'guide') || Object.hasOwn(node, 'guides') || node.sections.some(s => Object.hasOwn(s, 'frame'));
       return { ...at, kind: 'loft',
-        // Keep own presence and malformed values for kernel admission on the framed path.
+        // Preserve authored values for guided and framed kernel admission.
         sections: node.sections.map(s => ({ ...structuredClone(s), sketch: id(s.sketch) })),
-        ...(framed ? (Object.hasOwn(node, 'smooth') ? { smooth: structuredClone(node.smooth) } : {}) : (node.smooth ? { smooth: true } : {})),
+        ...(guidedOrFramed ? (Object.hasOwn(node, 'smooth') ? { smooth: structuredClone(node.smooth) } : {}) : (node.smooth ? { smooth: true } : {})),
         ...(Object.hasOwn(node, 'guide') ? { guide: structuredClone(node.guide) } : {}),
+        ...(Object.hasOwn(node, 'guides') ? { guides: structuredClone(node.guides) } : {}),
       };
     }
     case 'import': return { ...at, kind: 'import', step: node.step, ...((node.solids ?? 1) > 1 ? { each: true } : {}) };

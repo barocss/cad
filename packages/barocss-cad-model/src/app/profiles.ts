@@ -86,13 +86,13 @@ export function copyLoftSection(node: SketchNode | DrivenSketchNode, source: num
   return projectLoftSection(valued(node, params, source), source, base);
 }
 
-function projectLoftSection(sketch: SketchNode, source: number, base: SketchPlane): ReturnType<typeof copyLoftSection> {
+function projectLoftSection(sketch: SketchNode, source: number, base: SketchPlane, exact = false): ReturnType<typeof copyLoftSection> {
   const p = planeOf(sketch);
   if (sketch.regions?.length || sketch.holes?.length) return { error: `Sketch ${source + 1} has holes or several shapes: a loft section is one closed shape.` };
   const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   if (dot(p.normal, base.normal) < 1 - 1e-9) return { error: `Sketch ${source + 1} is not on a plane parallel to the first section's (facing the same way).` };
   const z = dot([p.origin[0] - base.origin[0], p.origin[1] - base.origin[1], p.origin[2] - base.origin[2]], base.normal);
-  const snap = (value: number) => Math.round(value * 1e9) / 1e9;
+  const snap = (value: number) => exact ? value : Math.round(value * 1e9) / 1e9;
   const carry = (q: readonly unknown[]): [number, number] => {
     const l = toLocal(base, toWorld(p, [num(q[0]), num(q[1])]));
     return [snap(l[0]), snap(l[1])];
@@ -101,6 +101,24 @@ function projectLoftSection(sketch: SketchNode, source: number, base: SketchPlan
     ? { kind: 'arc', start: carry(s.start), center: carry(s.center), direction: s.direction }
     : { kind: 'line', start: carry(s.start) });
   return { segments, z: snap(z) };
+}
+
+/** Two-guide seams share the actual sketch vertices in world mm. Keep their exact coordinates. */
+export function twoGuideLoftSections(nodes: readonly ModelNode[], picked: readonly number[], params: Params): ReturnType<typeof loftSections> {
+  if (picked.length !== 2 || picked[0] === picked[1]) return { error: 'Pick two different rectangular sketches for a two-guide loft.' };
+  const plane = xyPlane(), sections: { node: SketchNode; z: number; source: number }[] = [];
+  for (const source of picked) {
+    const sketch = nodes[source];
+    if (sketch?.kind !== 'sketch' && sketch?.kind !== 'driven-sketch') return { error: 'Pick two finished sketches.' };
+    if (!planeOf(sketch).normal.every((normal, axis) => normal === plane.normal[axis]))
+      return { error: `Sketch ${source + 1} must face +Z for a two-guide loft.` };
+    const section = projectLoftSection(valued(sketch, params, source), source, plane, true);
+    if ('error' in section) return section;
+    const { segments, z } = section;
+    sections.push({ node: { kind: 'sketch', profile: 'loop', segments }, z, source });
+  }
+  sections.sort((a, b) => a.z - b.z);
+  return { plane, sections };
 }
 
 /**

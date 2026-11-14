@@ -17,6 +17,12 @@ export interface FriendlyError {
 // messages without a code, and rows naming a code unbracketed (messages carry it bare), so they stay regexes. Order
 // matters: the first row that matches wins.
 const rules: { code?: string | readonly string[]; text?: RegExp; title: string; hint: string }[] = [
+  { text: /loft: two guides require guide [12] endpoints to exactly match/,
+    title: 'A guide misses a section corner',
+    hint: 'Use the minimum X corner for the first guide and the maximum X corner for the second guide, both at minimum Y. Each guide must start on the lower section and end on the upper section.' },
+  { text: /loft: two guides require guide 2 to stay to the right/,
+    title: 'The Loft guides are too close',
+    hint: 'Keep the second guide’s middle X greater than the first guide’s middle X. Increase the gap between them.' },
   { text: /^\[VALUE\] Align: the resulting placement is outside the native coordinate range or cannot preserve the gap\.$/,
     title: 'Align exceeds the placement limit',
     hint: 'This placement exceeds the coordinate range or cannot keep the requested gap. Reduce Gap or reset this edit.' },

@@ -581,7 +581,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   | { kind: 'sweep-curve'; sketch: number; name: string; path: { degree: number; knots: number[]; controlPoints: [number, number, number][]; weights: number[] }; routeBundleMember?: { bundleId: string; memberId: string } }
   /** A ruled loft through sketches at increasing heights (each section's edges to the next one's). */
   /** `from`: the sketches the sections were carried over from, when they lay on offset planes (used by the loft). */
-  | { kind: 'loft'; sections: LoftSection[]; smooth?: boolean; from?: number[]; /** World-mm seam controls, copied on authoring and passed to the kernel unchanged. */ guide?: LoftInput['guide'] }
+  | { kind: 'loft'; sections: LoftSection[]; smooth?: boolean; from?: number[]; /** World-mm seam controls, copied on authoring and passed to the kernel unchanged. */ guide?: LoftInput['guide']; /** Ordered pair of world-mm guide snapshots. */ guides?: LoftInput['guides'] }
   /** A body read from a STEP file (the file's text is kept in the document). */
   /** `solids`: how many solids the file holds when more than one; each is then its own body (side `part<k>`). */
   | { kind: 'import'; name: string; step: string; solids?: number }

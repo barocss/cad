@@ -20,7 +20,7 @@ function sectionOption(nodes: Nodes, loft: Loft, slot: number, source: number, p
 /** Change only a uniquely owned plain section copy at its existing plane and History station. */
 export function loftSectionSourceFields(nodes: Nodes, index: number, loft: Loft, parameters: Record<string, number>): EditField[] {
   const sources = loft.from;
-  if (!sources || sources.length !== loft.sections.length || loft.suppressed
+  if (!sources || sources.length !== loft.sections.length || loft.suppressed || loft.guides
     || loft.sections.some(section => section.frame !== undefined)) return [];
   const copies = new Set(loft.sections.map(section => section.sketch));
   if (copies.size !== sources.length || sources.some(source => copies.has(source))) return [];

@@ -110,7 +110,7 @@ export function confirmDimension(doc: StudioDoc, key: string, value: number | un
     else if (d.kind === 'height') for (const id of d.nodes) { const n = nodes[idx(id)] as ModelNode & { height: Dim }; if (!isNum(n.height)) throw refusal('BOUND', 'the height is bound to a parameter'); nodes[idx(id)] = { ...n, height: r6(v) } as ModelNode; }
     else if (d.kind === 'depth') for (const id of d.nodes) {
       const n = nodes[idx(id)] as ModelNode & { sections: { sketch: number; z: number }[] };
-      if (Object.hasOwn(n, 'guide') || n.sections.some(sc => Object.hasOwn(sc, 'frame'))) throw refusal('BOUND', 'a guided or framed loft depth cannot be scaled: edit its explicit frames and guide instead');
+      if (Object.hasOwn(n, 'guide') || Object.hasOwn(n, 'guides') || n.sections.some(sc => Object.hasOwn(sc, 'frame'))) throw refusal('BOUND', 'a guided or framed loft depth cannot be scaled: edit its explicit frames and guide instead');
       nodes[idx(id)] = { ...n, sections: n.sections.map(sc => ({ ...sc, z: r6(sc.z * k) })) } as ModelNode;
     }
     else { const n = nodes[idx(d.node)] as ModelNode & { holes?: LoopSegment[][] }; if (!n.holes?.[d.hole]) throw refusal('GONE', `${key}'s hole is gone`); nodes[idx(d.node)] = { ...n, holes: n.holes.map((h, i) => (i === d.hole ? scaleLoop(h, k, d.center) : h)) } as ModelNode; }

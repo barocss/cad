@@ -82,6 +82,34 @@ export function profileSolidOperation(f: CadPartFeature & Record<string, unknown
     case 'loft': {
       const list = f.sections as unknown;
       if (!Array.isArray(list) || list.length < 2 || list.length > CadPartLimits.copies) fail('INPUT', 'sections must list 2 to 64 sections');
+      if (Object.hasOwn(f, 'guides')) {
+        if (Object.hasOwn(f, 'guide')) fail('INPUT', 'loft: two guides cannot be combined with the single guide');
+        if (f.smooth !== undefined && f.smooth !== false) fail('INPUT', 'loft: two guides require ruled sections');
+        if ((list as unknown[]).length !== 2) fail('INPUT', 'loft: two guides require exactly two sections');
+        const sections = (list as unknown[]).map((sec, i) => {
+          if (!isRecord(sec) || typeof sec.sketch !== 'string' || Object.hasOwn(sec, 'frame') || Object.hasOwn(sec, 'profile'))
+            return fail('INPUT', `loft: sections[${i}] needs a sketch and z height for two guides`);
+          const sketch = ref(sec.sketch, 'sketch').result;
+          if (sketch.kind !== 'sketch') return fail('REFERENCE', `${sec.sketch} is not a sketch`);
+          if (sketch.regions?.length || sketch.holes?.length) return fail('CAPABILITY', 'loft: two-guide sections need one rectangle without holes');
+          return { z: dim(sec.z as CadPartDim, `sections[${i}].z`), sketch };
+        });
+        const frame = sections[0].sketch.frame;
+        if (sections.some(s => JSON.stringify(s.sketch.frame) !== JSON.stringify(frame)) ||
+          (frame && !frame.m.every((x, i) => x === (i % 4 === 0 ? 1 : 0))))
+          fail('INPUT', 'loft: two guides need a common world XY sketch frame');
+        const [x, y, z] = frame?.o ?? [0, 0, 0];
+        const placedSections = sections.map(s => ({ z: s.z + z, profile: s.sketch.outer.map((seg): ProfileSegmentInput => {
+          if (seg.kind !== 'line') return fail('CAPABILITY', 'loft: two-guide sections need four-line rectangles');
+          // Place sections in world coordinates once. The two guides keep their authored world-mm controls.
+          return { kind: 'line', start: [seg.start[0] + x, seg.start[1] + y] };
+        }) }));
+        const tags = sections[0].sketch.tags?.outer;
+        return () => {
+          const { brep, mass } = loftSolid({ id: at, name: at, sections: placedSections, guides: f.guides, ...(tags ? { sideTags: tags } : {}) });
+          return { kind: 'solid', parts: [{ solid: { kind: 'brep', brep }, mass }] };
+        };
+      }
       const framedSections = (list as unknown[]).some(sec => isRecord(sec) && (sec.frame !== undefined || Object.hasOwn(sec, 'profile')));
       // (CG1.3: a general guide — kind nurbs — on sketches stacked along their plane's normal takes the z path.)
       const nurbsGuide = isRecord(f.guide) && (f.guide as { kind?: unknown }).kind === 'nurbs' && !framedSections;

@@ -440,7 +440,7 @@
 | `[LIMIT]` | `engine` | Text solid: a component boundary exceeds the native loop budget. |
 | `[LIMITS_BAD]` | `api`, `robot` | motion limits are a record of joint rate settings |
 | `[LIMITS_MISSING]` | `robot` | joint … has no … limits above 0 |
-| `[LOFT_SECTIONS]` | `app` | … |
+| `[LOFT_SECTIONS]` | `app` | A two-guide loft needs exactly two ruled sections. |
 | `[LOOP_MATE_UNSUPPORTED]` | `robot` | … (… between ….… and ….…) closes a loop, and no loop closure holds that mate yet: concentric round faces, edges, cones or spheres, coincident, distance or … |
 | `[LOOP_OPEN]` | `api`, `robot` | the robot has a closed loop (…); facade sweep/CCD does not yet check its closed motion |
 | `[LOOP_PASSIVE]` | `robot` | the loop… … degree… of freedom: give … of …, and the rest are solved (… given) |

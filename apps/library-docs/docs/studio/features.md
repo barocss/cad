@@ -62,6 +62,12 @@ curve edits do not update the loft. A single quadratic or cubic Bézier span kee
 A section sketch with parameter-bound sizes is copied at the parameters' values then (the Sizes step lists them, as "Copied at W = 40"): later parameter changes do not update the loft.
 See [Lofts and guides](/how/loft-sweep#one-polynomial-guide-on-height-sections) for the input rules and limits.
 
+For two congruent, axis-aligned rectangular sections facing +Z, select **Guide (copied)** and **Second guide (copied)**.
+Choose two quadratic Bézier curves that go from the lower section to the upper section. For the first guide, use the
+minimum X corner of each section. For the second guide, use the maximum X corner. All four corners must be at minimum Y.
+Put both middle controls halfway between the sections in Z. Put the second guide's middle control to the right of the first.
+Edit the middle X and Y in Loft History to change the shape between the sections.
+
 ## Route bundles
 
 **Route bundle** ties one interior control point on each of two direct curves. Both selected points move by the
