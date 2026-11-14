@@ -104,7 +104,7 @@ not clear the profile is refused: the profile reaches the bend's axis.
 In Studio, select a finished sketch and a Direct curve. Open **Sweep** and choose a representation.
 
 - **Exact straight path** carries one closed outline of lines and circular arcs along a single straight segment. The outer outline's area centroid starts at the first path point. One strictly interior circular hole can run through the entire part. A hole edit retains the outer wall positions.
-- **Exact circular arc** carries a closed outline of lines and circular arcs along one circular arc from 30° to 90°. The outer outline's area centroid starts at the first path point. One strictly interior circular hole can run from one end cap to the other as a curved bore. Leave clearance from the bend axis.
+- **Exact circular arc** carries a closed outline of lines and circular arcs along one 30°–120° circular arc in a single rational quadratic span. The outer outline's area centroid starts at the first path point. One strictly interior circular hole can run from one end cap to the other as a curved bore. Leave clearance from the bend axis.
 
 Both exact modes create a new body with planar end caps. In a kernel feature document, set `mode` to `exact-straight` or `exact` on `sweep-curve`.
 

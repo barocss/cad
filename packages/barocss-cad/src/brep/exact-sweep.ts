@@ -99,7 +99,7 @@ function pathTolerance(path: Curve, refuse: Refuse): number {
 
 /** Recover the circular carrier of a validated single span within the native linear tolerance. */
 function circularSpan(path: Curve, refuse: Refuse) {
-  const unsupported = () => refuse('CAPABILITY', 'Exact sweep needs one open circular arc from 30° to 90°.');
+  const unsupported = () => refuse('CAPABILITY', 'Exact sweep needs one open circular arc from 30° to 120°.');
   const [w0, w1, w2] = path.weights;
   if (path.degree !== 2 || path.controlPoints.length !== 3 || w0 !== w2) return unsupported();
   const tolerance = pathTolerance(path, refuse);
@@ -112,21 +112,24 @@ function circularSpan(path: Curve, refuse: Refuse) {
   const perpendicular = sub(fromMidpoint, scale(chordDirection, alongChord)), h = len(perpendicular);
   if (h <= tolerance) return unsupported();
   const minHeight = a * Math.tan(Math.PI / 12);
-  const circularHeight = Math.max(minHeight, Math.min(a, h));
-
-  const weight = w1 / w0, canonicalWeight = a / Math.hypot(a, circularHeight);
-  const diameter = Math.max(2 * a, Math.hypot(a, circularHeight));
-  // Project the middle pole onto the chord bisector. Correct height and weight within tolerance so
-  // rounding at an angle limit cannot change the number of spans. The middle Bernstein coefficient
-  // is at most 1/2 and the positive denominator is at least the minimum weight.
-  const poleCorrection = Math.hypot(alongChord, h - circularHeight);
-  const deviation = poleCorrection + 0.5 * Math.abs(weight - canonicalWeight) * diameter / Math.min(1, weight, canonicalWeight);
-  if (deviation > tolerance) return unsupported();
+  const maxHeight = a * Math.sqrt(3);
+  const weight = w1 / w0;
+  // Bound the displacement over the whole span when projecting the pole and correcting the weight.
+  // The middle Bernstein coefficient is at most 1/2 and the denominator is at least the minimum weight.
+  const deviation = (height: number) => {
+    const poleDistance = Math.hypot(a, height), canonicalWeight = a / poleDistance;
+    const diameter = Math.max(2 * a, poleDistance);
+    const poleCorrection = Math.hypot(alongChord, h - height);
+    return poleCorrection + 0.5 * Math.abs(weight - canonicalWeight) * diameter / Math.min(1, weight, canonicalWeight);
+  };
+  // Keep a rounded quarter arc that previously fitted 90° in one output span.
+  const circularHeight = h > a && deviation(a) <= tolerance ? a : Math.max(minHeight, Math.min(maxHeight, h));
+  if (deviation(circularHeight) > tolerance) return unsupported();
 
   const heightDirection = scale(perpendicular, 1 / h);
   const toCentre = sub(halfChord, scale(heightDirection, a * (a / circularHeight)));
   const tangent = unit(add(halfChord, scale(heightDirection, circularHeight)));
-  const angle = 2 * Math.atan2(circularHeight, a);
+  const angle = circularHeight === maxHeight ? 2 * Math.PI / 3 : 2 * Math.atan2(circularHeight, a);
   return { start, toCentre, tangent, radius: len(toCentre), angle, tolerance };
 }
 

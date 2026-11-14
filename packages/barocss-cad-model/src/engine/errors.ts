@@ -161,7 +161,7 @@ const rules: { code?: string | readonly string[]; text?: RegExp; title: string; 
     hint: 'Place each section higher than the one before it.' },
   { text: /Exact sweep needs one open circular arc/,
     title: 'Path is outside the exact Sweep range',
-    hint: 'Choose one circular arc from 30° to 90°.' },
+    hint: 'Choose one circular arc from 30° to 120°.' },
   { text: /Exact straight sweep needs one open straight segment/,
     title: 'Path is outside the straight Sweep range',
     hint: 'Choose one straight line.' },

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  brepMassProperties, CadPartError, checkOutput, coedgeVertices, curveDomain, evaluateCadPart, evaluateCurve,
+  brepMassProperties, CadPartError, checkOutput, coedgeVertices, curveDomain, evaluateCadPart, evaluateCurve, evaluateSurface,
   loadCadPart, massPropertiesOf, reevaluate, saveCadPart, surfaceDomain,
 } from '../dist/index.js';
 import { evaluateSurfaceD1 } from '../dist/core/derivatives.js';
@@ -343,7 +343,7 @@ const holedSection = (radius, dir = 'cw') => {
     sideTags: { ...profile.sideTags, holes: [['bore']] } };
 };
 
-function checkBore(output, holeRadius, reversed) {
+function checkBore(output, holeRadius, reversed, turn = Math.PI / 2) {
   const { brep } = output, check = checkOutput(output);
   assert.equal(check.valid, true, check.issues.join('\n'));
   assert.deepEqual(check.counts, { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 });
@@ -353,11 +353,11 @@ function checkBore(output, holeRadius, reversed) {
   assert.deepEqual(brep.source, { family: 'sweep-curve', id: 'w' });
 
   const { area, x, variance } = dMoments(2), cutArea = Math.PI * holeRadius ** 2, boreMajor = R + 8 - x;
-  const weightedArea = R * area - boreMajor * cutArea, expected = Math.PI / 2 * weightedArea;
+  const weightedArea = R * area - boreMajor * cutArea, expected = turn * weightedArea;
   // Integrate the second radial moment and the first axial moment of the rectangle, semicircle and removed disk.
-  const radial = (area * (R * R + variance) - cutArea * (boreMajor ** 2 + holeRadius ** 2 / 4)) * 2 / (Math.PI * weightedArea);
+  const radial = (area * (R * R + variance) - cutArea * (boreMajor ** 2 + holeRadius ** 2 / 4)) / (turn * weightedArea);
   const boreAxial = reversed ? -1 : 1;
-  const centroid = add(bendCentre, [radial, radial, -boreAxial * cutArea * boreMajor / weightedArea]);
+  const centroid = add(bendCentre, [radial * Math.sin(turn), radial * (1 - Math.cos(turn)), -boreAxial * cutArea * boreMajor / weightedArea]);
   for (const [mass, method] of [[massPropertiesOf(output), 'closed-form'], [brepMassProperties(brep, 1), 'quadrature']]) {
     assert.equal(mass.method, method);
     near(mass.volume, expected);
@@ -373,13 +373,13 @@ function checkBore(output, holeRadius, reversed) {
   const boreOffset = [13, -7, 4 + boreAxial];
   const outerRings = new Set();
   const loopOwners = [[reversed ? 'w.end' : 'w.start', [1, 0, 0], [0, -1, 0]],
-    [reversed ? 'w.start' : 'w.end', [0, 1, 0], [-1, 0, 0]]];
-  for (const [capName, radial, normal] of loopOwners) {
+    [reversed ? 'w.start' : 'w.end', [Math.cos(turn), Math.sin(turn), 0], [-Math.sin(turn), Math.cos(turn), 0]]];
+  for (const [capName, capRadial, normal] of loopOwners) {
     const cap = brep.faces.find(face => face.name === capName);
     assert.deepEqual([cap.surface.degreeU, cap.surface.degreeV], [1, 1]);
     pointNear(surfacePoint(cap, 0.5, 0.5).normal, normal);
     assert.deepEqual(cap.loops.map(id => loopById.get(id).kind), ['outer', 'inner']);
-    const inner = loopById.get(cap.loops[1]), boreCentre = add(boreOffset, scale(radial, boreMajor));
+    const inner = loopById.get(cap.loops[1]), boreCentre = add(boreOffset, scale(capRadial, boreMajor));
     assert.equal(inner.coedges.length, 2);
     for (const id of inner.coedges) {
       const use = useById.get(id), twin = useById.get(use.twin), edge = edgeById.get(use.edge);
@@ -395,9 +395,10 @@ function checkBore(output, holeRadius, reversed) {
       }
     }
   }
+  const twoSpans = turn > Math.PI / 2;
   for (const face of boreFaces) {
     assert.deepEqual([face.surface.degreeU, face.surface.degreeV], [2, 2]);
-    for (const u of [0.125, 0.5, 0.875]) for (const v of [0.125, 0.375, 0.625, 0.875]) {
+    for (const u of [0.125, 0.4999, 0.5001, 0.875]) for (const v of [0.125, 0.375, 0.625, 0.875]) {
       const { point, normal } = surfacePoint(face, u, v), delta = sub(point, boreOffset);
       const planar = [delta[0], delta[1], 0], q = sub(delta, scale(unit(planar), boreMajor));
       near(Math.hypot(...q), holeRadius);
@@ -413,7 +414,33 @@ function checkBore(output, holeRadius, reversed) {
       for (const t of parameters) {
         const p = evaluateCurve(edge.curve, t);
         for (const neighbor of [face, faceById.get(loopById.get(attached.loop).face)])
-          assert.ok([0, 1].some(v => distance(surfacePoint(neighbor, t, v).point, p) <= tolerance));
+          assert.ok([0, 1].some(v => distance(evaluateSurface(neighbor.surface, t, v), p) <= tolerance));
+      }
+    }
+  }
+  if (twoSpans) {
+    const knots = [0, 0, 0, 0.5, 0.5, 1, 1, 1], w = Math.cos(turn / 4);
+    const curvedFaces = [...boreFaces, ...brep.faces.filter(face => ['w.side[back]', 'w.side[round]'].includes(face.name))];
+    assert.equal(curvedFaces.length, 4);
+    for (const face of brep.faces) {
+      assert.deepEqual(face.surface.knotsU, curvedFaces.includes(face) ? knots : [0, 0, 1, 1]);
+      if (!curvedFaces.includes(face)) assert.deepEqual([face.surface.degreeU, face.surface.degreeV], [1, 1]);
+    }
+
+    const capFaces = new Set(loopOwners.map(([name]) => name));
+    const capEdges = new Set(brep.coedges.filter(use => capFaces.has(faceById.get(loopById.get(use.loop).face).name)).map(use => use.edge));
+    assert.equal(capEdges.size, 12);
+    for (const { curve } of brep.edges.filter(edge => !capEdges.has(edge.id))) {
+      assert.equal(curve.degree, 2);
+      assert.deepEqual(curve.knots, knots);
+      curve.weights.forEach((weight, i) => near(weight, i % 2 === 0 ? 1 : w));
+      const [x, y, z] = sub(evaluateCurve(curve, 0), bendCentre), radius = Math.hypot(x, y);
+      const [mx, my, mz] = sub(evaluateCurve(curve, 0.5), bendCentre);
+      pointNear([mx, my, mz], [radius * Math.cos(turn / 2), radius * Math.sin(turn / 2), z]);
+      for (const t of [0.2, 0.4, 0.6, 0.8]) {
+        const [px, py, pz] = sub(evaluateCurve(curve, t), bendCentre);
+        near(Math.hypot(px, py), radius);
+        near(pz, z);
       }
     }
   }
@@ -432,6 +459,59 @@ test('one offset circular bore travels with the outer area centroid and keeps bo
   assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
   const reverse = { ...rail, controlPoints: rail.controlPoints.toReversed() };
   checkBore(evaluateCadPart(document(reverse, holedSection(1, 'ccw'))).outputs[0], 1, true);
+});
+
+function planarRail(turn) {
+  return { ...path,
+    controlPoints: [[13 + R, -7, 4], [13 + R, -7 + R * Math.tan(turn / 2), 4],
+      [13 + R * Math.cos(turn), -7 + R * Math.sin(turn), 4]],
+    weights: [1, Math.cos(turn / 2), 1],
+  };
+}
+
+test('120-degree Sweep carries the D-profile and offset bore in two native spans without adding a seam', () => {
+  const turn = 2 * Math.PI / 3, rail = planarRail(turn);
+  const first = evaluateCadPart(document(rail, holedSection(1)));
+  checkBore(first.outputs[0], 1, false, turn);
+  // Nine-place poles give a raw angle just above 120 degrees. The authored trim endpoints still bind.
+  const rounded = { ...rail, controlPoints: [[33, -7, 4], [33, 27.641016152, 4], [3, 10.320508076, 4]], weights: [1, 0.5, 1] };
+  checkBore(evaluateCadPart(document(rounded, holedSection(1))).outputs[0], 1, false, turn);
+
+  const edited = reevaluate(first, { document: document(rail, holedSection(1.5)) });
+  checkBore(edited.outputs[0], 1.5, false, turn);
+  const reopened = loadCadPart(saveCadPart(edited));
+  assert.deepEqual(reopened.document, edited.document);
+  assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
+
+  // Set the reverse start roll to the terminal outward radial. Reversal exchanges the caps and mirrors the bore axially.
+  const reverse = { ...rail, controlPoints: rail.controlPoints.toReversed(), weights: scale(rail.weights, 4) };
+  const section = { ...holedSection(1, 'ccw'), plane: {
+    origin: [0, 0, 0], normal: [0, 0, 1], xAxis: [Math.cos(turn), Math.sin(turn), 0],
+  } };
+  checkBore(evaluateCadPart(document(reverse, section)).outputs[0], 1, true, turn);
+});
+
+test('exact circular Sweep admits the boundary and interior turns and refuses unsupported rail spans', () => {
+  for (const degrees of [30, 90.001, 105]) {
+    const turn = degrees * Math.PI / 180;
+    checkBore(evaluateCadPart(document(planarRail(turn), holedSection(1))).outputs[0], 1, false, turn);
+  }
+  for (const degrees of [29.999, 120.001, 179]) {
+    const rail = planarRail(degrees * Math.PI / 180);
+    assert.throws(() => evaluateCadPart(document(rail)), error => error instanceof CadPartError
+      && error.feature === 'w' && error.code === 'CAPABILITY' && /from 30° to 120°/.test(error.message));
+  }
+  const half = planarRail(Math.PI / 3), end = half.controlPoints[2];
+  const secondMiddle = add(end, scale([-Math.sqrt(3) / 2, 0.5, 0], R / Math.sqrt(3)));
+  const multiSpan = { ...half, knots: [0, 0, 0, 0.5, 0.5, 1, 1, 1],
+    controlPoints: [...half.controlPoints, secondMiddle, planarRail(2 * Math.PI / 3).controlPoints[2]],
+    weights: [1, Math.sqrt(3) / 2, 1, Math.sqrt(3) / 2, 1],
+  };
+  assert.throws(() => evaluateCadPart(document(multiSpan)), error => error instanceof CadPartError
+    && error.feature === 'w' && error.code === 'CAPABILITY' && /needs one open circular arc/.test(error.message));
+  const zeroWeight = { ...planarRail(2 * Math.PI / 3), weights: [1, 0, 1] };
+  assert.throws(() => evaluateCadPart(document(zeroWeight)), error => error instanceof CadPartError
+    && error.feature === 'w' && error.code === 'INPUT' && /Weights must be in/.test(error.message));
 });
 
 test('a circular-arc Sweep refuses tangent bores, additional loops and insufficient bend-axis clearance', () => {
