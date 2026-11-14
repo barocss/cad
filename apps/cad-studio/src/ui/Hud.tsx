@@ -22,6 +22,7 @@ import { HolePresets } from './HolePresets';
 import { stepNativeSelect } from './stepNativeSelect';
 import { cutPatternSourceLabel, isCutPattern, selectedCutPatternSource } from '../app/cutPatternSource';
 import { LinearSpanSpacing } from './LinearSpanSpacing';
+import { loftGuideFeedback } from '../app/loftGuideFeedback';
 
 /** The HUD's field box: 26 px, the studio's mono type, the accent ring when focused. */
 const FIELD = 'h-[26px]! w-full px-1.5! text-xs! font-medium [font-family:var(--mono)] bg-[var(--bg)] focus-visible:ring-1 focus-visible:ring-primary';
@@ -44,6 +45,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
   useEffect(() => { first.current?.focus(); if (first.current instanceof HTMLInputElement && first.current.type !== 'file') first.current.select(); }, [active?.cmd.id]);
   // (Ended before the App unmounts it.)
   if (!active) return null;
+  const guideFeedback = loftGuideFeedback(active);
   const edgeScope = active.preview === 'ok' ? active.filletScope ?? active.chamferScope : undefined;
   const replacingAxis = active.cmd.id === REVOLVE_AXIS_EDIT;
   const pickingMirrorPlane = awaitingMirrorPlane(active.cmd.id, active.values);
@@ -75,8 +77,12 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     const range = showCircularCount ? `Whole number from ${field.min} to ${field.max}` : numberRule ? featureNumberRange(numberRule) : null;
     const rangeId = range ? `hud-number-range-${field.key}` : undefined;
     const invalidNumber = numberRule && featureNumberInvalid(value, numberRule);
+    const loftGuide = active.cmd.id === 'loft' && (field.key === 'guide' || field.key === 'guideB');
+    const guideError = field.key === 'guide' ? guideFeedback : undefined;
     let control: ReactNode;
     if (field.kind === 'choice') control = <NativeSelect className={FIELD} ref={ref} aria-label={field.label} data-key={field.key} data-kind="choice" value={String(value)} onChange={changeValue}
+      title={loftGuide ? 'Loft copies the curve. Later edits to the source curve do not update the Loft.' : undefined}
+      aria-invalid={guideError ? true : undefined} aria-describedby={guideError ? 'hud-loft-guide-error' : undefined}
       onKeyDown={active.cmd.id === 'hole' && field.key === 'type' ? event => stepNativeSelect(event, next => onChange(field.key, next)) : undefined}>
       {field.options.map(option => <option key={option.value} value={option.value}>
         {alignTargetName && field.key === 'target' && option.value === 'face' ? alignTargetName : option.label}
@@ -87,7 +93,8 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     else control = <span className="num"><Input className={FIELD + ' pr-7!'} ref={ref} type="number" aria-label={field.label} aria-invalid={invalidCount || invalidNumber || undefined} aria-describedby={rangeId} data-key={field.key} data-kind={field.kind} step={field.kind === 'count' ? 1 : 'any'} min={numberRule === 'nonzero' ? undefined : bounds.min ?? field.min} max={bounds.max ?? field.max} value={String(value ?? '')} onChange={changeValue} />
       {field.kind === 'mm' && <em>mm</em>}{field.kind === 'deg' && <em>°</em>}{field.kind === 'ratio' && <em>×</em>}</span>;
     return <label key={field.key} className="field"><span>{field.label}</span>
-      {range ? <span className="min-w-0">{control}<span id={rangeId} className="muted small block">{range}</span></span> : control}</label>;
+      {range ? <span className="min-w-0">{control}<span id={rangeId} className="muted small block">{range}</span></span> : control}
+      {guideError && <span className="hud-error col-span-2" id="hud-loft-guide-error" role="status">{guideError}</span>}</label>;
   };
   return (
     <div className="card hud" role="dialog" aria-label={active.fillet ? 'Fillet' : active.cmd.label}>
@@ -97,7 +104,9 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
         <Icon name={active.placing ? 'radio_button_unchecked' : 'check_circle'} small /><b>Place</b><span>{active.placing ? 'click where it goes (on the ground or a top face)' : 'placed — drag its arrows to size it'}</span></div></div>}
       {active.cmd.steps && <div className="hud-steps">
         {active.cmd.steps(active.ctx, active.values).filter(step =>
-          !(edgeScope && step.label === 'Edges')).map(step => {
+          !(edgeScope && step.label === 'Edges')
+          && !(active.cmd.id === 'loft' && step.done
+            && ((step.label === 'Guide' && active.values.guide) || step.label === 'Guides'))).map(step => {
           const endFace = step.label === 'End face' && isExtrudeToFace(active.cmd.id, active.values);
           const requiresPreview = endFace || (step.label === 'Reference plane' && isOffsetToPlane(active.cmd.id, active.values))
             || (step.label === 'Axis' && replacingAxis);
@@ -139,7 +148,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           return onHoleOptions(active, { type, d, depth, cd, ch, csd });
         }} /> : null}
       {active.cmd.id === 'fill-feature-pattern' && <FillPatternHints />}
-      {active.preview === 'error' && active.error && <FeatureFailureNotice error={active.error} />}
+      {active.preview === 'error' && active.error && !guideFeedback && <FeatureFailureNotice error={active.error} />}
       <div className="hud-actions">
         {active.cmd.id === 'mirror' && <Button variant="ghost" aria-pressed={pickingMirrorPlane}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
