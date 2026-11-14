@@ -34,6 +34,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
   const recoveredLengths = useRef(new WeakSet<Extract<ModelNode, { kind: 'sketch' }>>());
   const [modeProblem, setModeProblem] = useState<string | null>(null);
   const [loftGuideChoice, setLoftGuideChoice] = useState<string | null>(null);
+  const historyErrorId = useId();
   const guideDescriptionId = useId();
   const [readingEnd, setReadingEnd] = useState(false);
   const ordinaryLocked = pending || !!edgeReplacement?.draft;
@@ -274,6 +275,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
         const description = [rangeId, guideId, failedGuideX && `${guideDescriptionId}-gap`].filter(Boolean).join(' ') || undefined;
         const selectedGuide = f.kind === 'choice' && f.key === 'loftGuide' && sameDraftScope
           ? f.options.find(option => option.value === loftGuideChoice)?.value : undefined;
+        const refusedHistoryField = current?.error?.historyField === f.key;
         return (
         <div key={f.key} className="field">
           {guideX && guide && <div id={guideId} className="col-span-2 small mono break-words">
@@ -297,6 +299,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
               }}>
               <option value="">ƒ</option>{names.map(n => <option key={n} value={n}>{n}</option>)}</select>}</span>
             : f.kind === 'choice' ? <select disabled={ordinaryLocked} aria-label={f.label}
+                aria-invalid={refusedHistoryField || undefined} aria-describedby={refusedHistoryField ? historyErrorId : undefined}
                 value={selectedGuide ?? f.get(draft)} onChange={e => {
                 retireEvaluation();
                 try {
@@ -327,7 +330,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
       {!current && alignResult?.kind === 'ready' && <div className="small" role="status">Align preview</div>}
       {!current && alignResult?.kind === 'error' && <FeatureFailureNotice error={alignResult.error} />}
       <div ref={failureArea} className={current?.error?.linkedInsetFeature ? 'scroll-mb-2' : undefined}>
-        {current?.error && <FeatureFailureNotice id={guideGapError ? `${guideDescriptionId}-gap` : undefined} error={current.error} />}
+        {current?.error && <FeatureFailureNotice id={guideGapError ? `${guideDescriptionId}-gap` : current.error.historyField ? historyErrorId : undefined} error={current.error} />}
         {fields.length > 0 && <div className="row-actions"><button ref={applyButton} className="primary" disabled={!changed || pending || !!edgeReplacement?.draft || incompleteInset || hasInvalidNumber || !!lengthProblem || (current !== null && !current.error)} onClick={event => apply(event.currentTarget)}>Apply</button><button ref={resetButton} className="ghost" disabled={(!changed && !hasInsetDraft && !incompleteInset && !hasInvalidNumber && !lengthProblem && !loftGuideChoice) || pending} onClick={() => { retireEvaluation(); setDraft(nodes); setTyped({}); setLengthProblem(null); setLoftGuideChoice(null); }}>Reset</button></div>}
       </div>
     </div>

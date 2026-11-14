@@ -247,7 +247,7 @@ import { confirmDimension, liveDrafts } from '@barocss/cad-model/chat/drafts';
 import { DraftsPanel } from './ui/DraftsPanel';
 import { retargetSweep, sweepPath, SWEEP_CURVE, extrudeProfile } from '@barocss/cad-model/app/profileCommands';
 import { editCommand } from '@barocss/cad-model/app/editCommand';
-import { failedFeatureText, linkedInsetHistoryFailure } from './app/failedFeature';
+import { failedFeatureText, linkedInsetHistoryFailure, loftHistoryFailure } from './app/failedFeature';
 import { useHeldFinishEdge } from './state/useHeldFinishEdge';
 import { flattenAssembly } from '@barocss/cad-model/engine/flatten';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
@@ -3483,18 +3483,8 @@ export function App() {
             const insetFailure = reply.revision === request ? linkedInsetHistoryFailure(reply.error, doc.nodes, next.nodes, editNode) : undefined;
             if (insetFailure) return insetFailure;
             const failedFeature = reply.revision === request ? failedFeatureText(reply.error.feature, next.nodes, doc.nodes) : undefined;
-            if (doc.nodes[editNode]?.kind === 'loft' && reply.error.feature === featureId(next.nodes, editNode)) {
-              const reason = reply.error.detail.match(/guide (?:must (?:start on the bottom section|end on the top section|pass through a vertex of section)[^\n]*|(?:endpoints must exactly match)[^\n]*)/i)?.[0];
-              if (reason) {
-                const before = doc.nodes[editNode], after = next.nodes[editNode];
-                const changedSection = before.kind === 'loft' && after.kind === 'loft'
-                  && JSON.stringify(before.from) !== JSON.stringify(after.from);
-                return { ...reply.error, title: 'Loft guide does not meet the sections',
-                  hint: `${reason[0].toUpperCase()}${reason.slice(1)}. Choose another ${changedSection ? 'section' : 'guide'} or reset the edit.`,
-                  detail: '', failedFeature };
-              }
-            }
-            return { ...reply.error, failedFeature };
+            const failure = { ...reply.error, failedFeature };
+            return loftHistoryFailure(failure, doc.nodes, next.nodes, editNode) ?? failure;
           });
         }} onDelete={doc.nodes[1]?.kind === 'rounded-rectangle-inset' ? undefined : opener => deleteNode(editNode, opener)} onClose={() => { finishEdgeEditor.cancel(); discardDirectCandidateRef.current(); setEditNode(null); }} />}
       </SelectionInspector>}

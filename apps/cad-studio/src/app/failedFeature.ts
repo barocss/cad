@@ -2,7 +2,7 @@ import { featureLabel, usesOf, type ModelNode } from '@barocss/cad-model/engine/
 import { featureId, nodeIndexOf } from '@barocss/cad-model/engine/ids';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 
-export type FeatureFailure = FriendlyError & { failedFeature?: string };
+export type FeatureFailure = FriendlyError & { failedFeature?: string; historyField?: string };
 
 export function linkedInsetHistoryFailure(error: FriendlyError, accepted: readonly ModelNode[], candidate: readonly ModelNode[], editIndex: number): FeatureFailure | undefined {
   const id = error.linkedInsetFeature;
@@ -42,6 +42,29 @@ export function failedFeatureText(id: string | undefined, evaluated: readonly Mo
     return `${featureLabel(node, historyIndex, history)} (${id})`;
   }
   return `${id} · no matching history step`;
+}
+
+export function loftHistoryFailure(error: FeatureFailure, accepted: readonly ModelNode[], candidate: readonly ModelNode[], index: number): FeatureFailure | undefined {
+  const before = accepted[index], after = candidate[index];
+  if (before?.kind !== 'loft' || after?.kind !== 'loft' || error.feature !== featureId(candidate, index)) return;
+  const vertex = /\bloft: guide must pass through a vertex of section (\d+)\b/.exec(error.detail);
+  if (vertex) {
+    const section = Number(vertex[1]);
+    if (section >= after.sections.length) return;
+    const label = `Section ${section + 1}`;
+    const changedSource = before.from?.[section] !== after.from?.[section];
+    const changedProfile = accepted[before.sections[section]?.sketch] !== candidate[after.sections[section].sketch];
+    const action = changedSource ? `In ${label} source, choose another sketch or select Reset.`
+      : changedProfile ? `Check the dimensions of ${label} or select Reset.`
+      : 'In Guide (copied), choose another guide or select Reset.';
+    return { ...error, title: `The Loft guide misses ${label}`, hint: `The guide must pass through a vertex of ${label}. ${action}`, detail: '',
+      historyField: changedSource ? `loftSource${section}` : changedProfile ? undefined : 'loftGuide' };
+  }
+  const reason = error.detail.match(/guide (?:must (?:start on the bottom section|end on the top section)[^\n]*|endpoints must exactly match[^\n]*)/i)?.[0];
+  if (!reason) return;
+  const changedSection = JSON.stringify(before.from) !== JSON.stringify(after.from);
+  return { ...error, title: 'Loft guide does not meet the sections',
+    hint: `${reason[0].toUpperCase()}${reason.slice(1)}. Choose another ${changedSection ? 'section' : 'guide'} or reset the edit.`, detail: '' };
 }
 
 /** Explain failures of this edge finish without applying its advice to an upstream feature. */
