@@ -15,6 +15,7 @@ import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { CylinderDisplayTier, LoftDisplayMesh, Vec3 } from '@barocss/cad-model/engine/mesh';
 import { OrbitCamera } from './camera';
 import { orthographicSketchScale } from './sketchOutlinePick';
+import { sweepCylinderScale } from './cylinderProjection';
 import { modelFitArea } from './modelFitArea';
 import type { FrameCost } from './frameCost';
 import { PROPOSAL_ADDED, PROPOSAL_CHIP_STEP, PROPOSAL_REMOVED, Renderer, proposalChips, type DisplayMode, type DisplayModeStatus, type EdgeRef, type FaceRef, type InstanceItem, type MouldShown, type OverlayLabels, type OverlayLines, type OverlayPoints, type SectionHatch, type ThemeName, type ViewRenderer, type ViewState, type RenderPathTraceSession } from './renderer';
@@ -452,18 +453,22 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     const source = p.bodies, view = canvas.current, cam = camera.current;
     let tier = -1, index = -1, packet: CylinderDisplayTier | LoftDisplayMesh | undefined;
     const loft = source.length === 1 ? source[0].mesh.loftDetail : undefined;
+    const cylinder = source.length === 1 ? source[0].mesh.cylinderDetail : undefined;
     if (loft && !p.render && !p.analysis && !p.scalarMaps?.length && !p.mould && !p.proposal && !p.sketch && !p.cage && !p.tool
       && !p.clip && !p.ghost.size && !p.instances?.length && !p.offsets?.size && !p.transforms?.size && !p.printActive && !p.camActive) {
       index = 0;
       tier = 0;
       packet = loft;
-    } else if (view && cam.ortho && Math.PI / 2 - cam.pitch < 0.001
+    } else if (view && (cylinder?.sweep
+      ? !p.render && !p.analysis && !p.scalarMaps?.length && !p.mould && !p.proposal && !p.sketch && !p.cage && !p.tool
+      : cam.ortho && Math.PI / 2 - cam.pitch < 0.001)
       && (p.displayMode ?? 'shaded-with-edges') === 'shaded-with-edges'
       && !displayModeScope(p) && !p.clip && !p.offsets?.size && !p.transforms?.size
       && !p.instances?.length && !p.ghost.size && !p.printActive && !p.camActive) {
-      const scale = orthographicSketchScale(cam, view.clientWidth, view.clientHeight);
-      const cylinder = source.length === 1 ? source[0].mesh.cylinderDetail : undefined;
-      const bandIndex = p.bandRailPicking && !p.modelUnavailable ? source.findIndex((body, i) => body.mesh.bandDetail && !p.hiddenBodies?.has(i)) : -1;
+      const scale = cylinder?.sweep ? sweepCylinderScale(cam, view.clientWidth, view.clientHeight, cylinder.sweep)
+        : orthographicSketchScale(cam, view.clientWidth, view.clientHeight);
+      const bandIndex = !cylinder?.sweep && p.bandRailPicking && !p.modelUnavailable
+        ? source.findIndex((body, i) => body.mesh.bandDetail && !p.hiddenBodies?.has(i)) : -1;
       const detail = bandIndex >= 0 ? source[bandIndex].mesh.bandDetail : cylinder;
       if (scale !== undefined && detail && (!cylinder || cylinder.baseChordErrorMM * scale > 0.25)) {
         index = bandIndex >= 0 ? bandIndex : 0;
@@ -739,6 +744,10 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     w.__studioSelectedBandRail = () => bandRail(readSelectedBandRail())?.name ?? null;
     w.__studioCylinderDisplayBytes = () => propsRef.current.bodies[0]?.mesh.cylinderDetail?.tiers.map(packet =>
       packet.positions.byteLength + packet.normals.byteLength + packet.faceOfVertex.byteLength + packet.indices.byteLength + packet.edgeLines.byteLength + packet.edgeOfSegment.byteLength);
+    w.__studioSweepCylinderMesh = () => {
+      const mesh = uploadedBodies.current?.bodies[0]?.mesh;
+      return mesh ? Array.from(mesh.positions) : null;
+    };
     w.__studioLoftDisplay = () => {
       const upload = uploadedBodies.current, original = upload?.source[0]?.mesh, current = upload?.bodies[0]?.mesh;
       if (!original?.loftDetail || current?.positions !== original.loftDetail.positions) return null;

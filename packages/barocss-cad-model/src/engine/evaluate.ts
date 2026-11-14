@@ -292,7 +292,8 @@ export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refin
     if (refineDisplay && quality === 8 && result.bodies.length === 1 && snapshot.outputs.length === 1) {
       const body = result.bodies[0], node = body.ref && doc.nodes[body.ref.node];
       const source = node && node.kind === 'extrude' ? doc.nodes[node.sketch] : undefined;
-      if (source?.kind === 'sketch' && source.profile === 'circle' && !source.plane) {
+      if ((source?.kind === 'sketch' && source.profile === 'circle' && !source.plane)
+        || (node?.kind === 'sweep-curve' && node.mode === 'exact-straight')) {
         const mesh = cylinderDisplayMesh(body.mesh, snapshot.outputs[0].brep, revision);
         if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
       }

@@ -1,5 +1,6 @@
 import type { Brep } from '@barocss/cad';
 import { bodyMesh, type CylinderDisplayTier, type DisplayMesh } from './mesh';
+import { cross, len, sub, unit } from './vec3';
 
 const byMesh = new WeakMap<DisplayMesh, DisplayMesh>();
 const MAX_PACKET_BYTES = 192 * 1024;
@@ -30,15 +31,25 @@ function sameOwners(base: DisplayMesh, next: DisplayMesh): boolean {
     });
 }
 
-/** Exact-source display refinement for a single upright, uncut cylinder. */
+/** Display refinement for a single uncut circular extrusion or exact straight Sweep. */
 export function cylinderDisplayMesh(base: DisplayMesh, brep: Brep, revision: number): DisplayMesh {
   const cached = byMesh.get(base);
   if (cached) return cached;
   byMesh.set(base, base);
-  if (brep.source.family !== 'prismatic-solid' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
+  const straightSweep = brep.source.family === 'sweep-curve';
+  if ((!straightSweep && brep.source.family !== 'prismatic-solid') || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
     || brep.shells.length !== 1 || !brep.shells[0].closed || brep.faces.length !== 4 || brep.edges.length !== 6
     || base.faces.length !== 3 || base.faces.filter(face => face.kind === 'plane').length !== 2
-    || base.edges.length !== 2 || base.edges.some(edge => !edge.nativeCircle || Math.abs(edge.nativeCircle.normal[2]) < 1 - 1e-10)) return base;
+    || base.edges.length !== 2) return base;
+  const a = base.edges[0].nativeCircle, b = base.edges[1].nativeCircle;
+  if (!a || !b) return base;
+  let sweep: NonNullable<DisplayMesh['cylinderDetail']>['sweep'];
+  if (straightSweep) {
+    const axis = sub(b.centre, a.centre);
+    if (len(axis) <= 1e-7 || Math.abs(a.radius - b.radius) > 1e-7
+      || len(cross(unit(axis), a.normal)) > 1e-9 || len(cross(unit(axis), b.normal)) > 1e-9) return base;
+    sweep = { centres: [a.centre, b.centre], radius: Math.max(a.radius, b.radius) + 1e-7 };
+  } else if ([a, b].some(circle => Math.abs(circle.normal[2]) < 1 - 1e-10)) return base;
   const firstError = chordError(base);
   if (!Number.isFinite(firstError) || !(firstError > 0)) return base;
   const cylinderDetail: CylinderDisplayTier[] = [];
@@ -55,7 +66,7 @@ export function cylinderDisplayMesh(base: DisplayMesh, brep: Brep, revision: num
     lastError = chordErrorMM;
   }
   if (!cylinderDetail.length) return base;
-  const detailed = { ...base, cylinderDetail: { baseChordErrorMM: firstError, tiers: cylinderDetail } };
+  const detailed = { ...base, cylinderDetail: { baseChordErrorMM: firstError, tiers: cylinderDetail, ...(sweep ? { sweep } : {}) } };
   byMesh.set(base, detailed);
   return detailed;
 }

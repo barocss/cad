@@ -67,7 +67,7 @@ export interface DisplayMesh {
   /** The tessellation's segments per quarter turn (bodyMesh's quality): measureChords re-tessellates at it. */
   quality?: number;
   /** Optional display-only packets with the same face and edge owners as this mesh. */
-  cylinderDetail?: { baseChordErrorMM: number; tiers: readonly CylinderDisplayTier[] };
+  cylinderDetail?: { baseChordErrorMM: number; tiers: readonly CylinderDisplayTier[]; sweep?: { centres: readonly [Vec3, Vec3]; radius: number } };
   /** Viewport rails belong to one native face and stay outside the canonical two-face edge table. */
   bandDetail?: { rails: readonly { name: string; face: number }[]; tiers: readonly CylinderDisplayTier[] };
   /** A refined native Loft's viewport geometry with the canonical face and edge indices. */

@@ -46,3 +46,38 @@ test('cylinder refinements preserve canonical owners and transfer once per retai
     shareMeshes(false);
   }
 });
+
+test('straight Sweep refinement keeps one tilted cylinder, its native references and packet budget', () => {
+  const sweep: StudioDoc = { ...doc, nodes: [
+    { id: 'n0', kind: 'sketch', profile: 'circle', center: [7, 8], radius: 3 },
+    { id: 'n1', kind: 'sweep-curve', sketch: 0, name: 'Straight line', mode: 'exact-straight',
+      path: { degree: 1, knots: [0,0,1,1], controlPoints: [[20,20,0], [44,38,0]], weights: [1,1] } },
+  ] };
+  const canonical = evaluateDoc(sweep, 1), refined = evaluateDoc(sweep, 2, 8, true);
+  assert.ok(canonical.ok && refined.ok);
+  const [base] = canonical.bodies, [body] = refined.bodies;
+  const detail = body.mesh.cylinderDetail;
+  assert.ok(detail?.sweep);
+  const centres = [...detail.sweep.centres].sort((a, b) => a[0] - b[0]);
+  assert.ok(centres.every((point, index) => point.every((value, axis) => Math.abs(value - [[20,20,0], [44,38,0]][index][axis]) < 1e-7)));
+  assert.deepEqual(body.mesh.faces, base.mesh.faces);
+  assert.deepEqual(body.mesh.edges, base.mesh.edges);
+  assert.deepEqual(body.mesh.positions, base.mesh.positions);
+  assert.equal(body.volume, base.volume);
+  const bytes = detail.tiers.reduce((total, tier) => total + tier.positions.byteLength + tier.normals.byteLength + tier.faceOfVertex.byteLength
+    + tier.indices.byteLength + tier.edgeLines.byteLength + tier.edgeOfSegment.byteLength, 0);
+  assert.ok(bytes <= 192 * 1024);
+  assert.equal(detail.tiers.length, 2);
+  for (const [index, packet] of detail.tiers.entries()) {
+    const angle = Math.PI / (4 * (16 << index));
+    assert.ok(Math.abs(packet.chordErrorMM - 6 * Math.sin(angle / 2) ** 2) < 1e-10);
+    for (let j = 0; j < packet.edgeLines.length; j += 3) {
+      const edge = body.mesh.edges[packet.edgeOfSegment[j / 3]];
+      const xyz = [...packet.edgeLines.subarray(j, j + 3)];
+      for (const face of edge.faces) {
+        assert.ok(packet.faceOfVertex.some((owner, vertex) => owner === face
+          && xyz.every((value, axis) => value === packet.positions[3 * vertex + axis])));
+      }
+    }
+  }
+});
