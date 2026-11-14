@@ -37,7 +37,7 @@ The link update added three existing B-rep attachments and fixed references with
 source pages. A later import added three CAD language and standard-part pages.
 The original wiki removed the migrated pages from its current tree and points readers to this wiki.
 
-The [open issue map](open-issue-transfers.tsv) records 374 native GitHub transfers. Titles, state and labels
+The [open issue map](open-issue-transfers.tsv) records 376 native GitHub transfers. Titles, state and labels
 were checked against the inventory, and an original URL redirect was verified. The [source-open index](source-open-issues.tsv)
 records the other 40 issues from that checkpoint, including cross-project and original-project work.
 The [closed issue index](closed-issues.tsv) records 1,046 closed issues with explicit CAD or related 3D module titles. It links
@@ -52,9 +52,15 @@ workspace on `develop`. The original `local/cad-dev` remote branch was deleted a
 against the filtered history. Historical source commits remain available by their original IDs.
 
 The [closed issue transfer map](closed-issue-transfers.tsv) records each completed transfer and its redirect.
-The first source cleanup moved 122 closed issues with their closed state, resolution reason, comments, and assignees.
-GitHub temporarily refused later transfer requests. The [closed issue index](closed-issues.tsv) includes the remaining
-candidates and provides the source URL for each.
+The first source cleanup verified 122 closed issue transfers. On 2026-11-15, 21 additional closed issue transfers
+passed checks for the redirect, title, closed state, resolution reason, comment count, labels, and assignees.
+The closed issue index has 903 entries without a verified redirect in the map.
+
+The [pending transfer map](pending-closed-issue-transfers.tsv) records destination numbers returned by GitHub
+where the source redirect or metadata has not been verified. Check the original URLs before continuing or
+retrying a transfer. Source [#731](https://github.com/barocss/barocss/issues/731) returned two destination
+numbers, [#542](https://github.com/barocss/cad/issues/542) and [#543](https://github.com/barocss/cad/issues/543).
+Verify the final redirect and comments before choosing which destination to retain.
 
 [Archived CAD pull requests](archived-pull-requests.tsv) lists 31 closed, unmerged PRs limited to the CAD paths.
 Their records remain accessible to users with source repository triage access. GitHub refused archival of merged PRs.
