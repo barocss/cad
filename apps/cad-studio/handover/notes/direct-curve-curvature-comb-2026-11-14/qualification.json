@@ -1,0 +1,135 @@
+{
+  "decision": "D1268",
+  "priority": "P5",
+  "row": 24,
+  "tier": "FEATURE",
+  "parent": "181d21d115b73d6903caf417189fbcc2feea09d0",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1268-<run>",
+    "pnpm --filter @barocss/cad-model test native-edge-curvature native-continuity-tool tool-contract",
+    "pnpm --filter @barocss/cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint packages/barocss-cad-model/src/engine/{edgeCurvature,edgeContinuity,direct}.ts apps/cad-studio/src/{app/useDirectCurveCurvature.ts,app/useEdgeCurvature.ts,ui/DirectInspector.tsx,ui/DirectPanel.tsx,ui/EdgeCurvature.tsx,viewport/CurvatureComb.tsx}",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/build",
+    "node --check apps/cad-studio/test/direct-curve-curvature-browser.mjs",
+    "D1268_SOURCE_FROZEN=1 node apps/cad-studio/test/direct-curve-curvature-browser.mjs <external-evidence>/studio-second",
+    "D1267_SOURCE_FROZEN=1 node apps/cad-studio/test/edge-curvature-comb-browser.mjs <external-evidence>/studio-edge-regression",
+    "python3 -I <external-evidence>/studio-second/direct-curve-curvature-oracle.py < <variant-input.json>",
+    "git diff --check"
+  ],
+  "checks": {
+    "actualDesktopStudio": "PASS",
+    "visualReview": "PASS",
+    "independentBernsteinOracle": "PASS",
+    "existingNativeEdgeStudio": "PASS",
+    "existingLocalEdgeMcp": "PASS",
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "focusedLint": "PASS",
+    "driverSyntax": "PASS",
+    "studioProductionBuild": "PASS",
+    "geometryReview": "PASS",
+    "focusedModel": {
+      "status": "PASS",
+      "passed": 13,
+      "failed": 0
+    },
+    "oracleSensitivity": {
+      "status": "PASS",
+      "exitCodes": {
+        "current": 0,
+        "stale-source": 1,
+        "discard-z-projection": 1,
+        "join-across-knot": 1
+      }
+    },
+    "firstStudio": {
+      "status": "FAIL",
+      "resolved": true,
+      "reason": "UI value check expected tighter precision than the seven significant digits that Studio prints."
+    },
+    "fullSuites": "NOT_RUN",
+    "ci": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "paidLive": "NOT_RUN",
+    "separateWebGL2": "NOT_RUN",
+    "poleDrag": "NOT_RUN",
+    "undoRedo": "NOT_RUN",
+    "surfaceCurvature": "NOT_RUN",
+    "directCurveAgentQuery": "NOT_RUN"
+  },
+  "geometry": {
+    "initial": {
+      "status": "PASS",
+      "minimum": 0.022423095584810534,
+      "maximum": 0.8964867442208808,
+      "maximumPointErrorMM": 1.2573000033218179e-15,
+      "maximumCurvatureErrorPerMM": 3.3306690738754696e-16,
+      "maximumRenderResidualPx": 8.526512829121202e-13,
+      "samples": 16,
+      "scaleMM2": 4,
+      "oracleSHA256": "404241390ba61bababf78a6e954830e7a7a9832e972e32c9c64a7350fbc106b5"
+    },
+    "larger-scale": {
+      "status": "PASS",
+      "minimum": 0.022423095584810534,
+      "maximum": 0.8964867442208808,
+      "maximumPointErrorMM": 1.2573000033218179e-15,
+      "maximumCurvatureErrorPerMM": 3.3306690738754696e-16,
+      "maximumRenderResidualPx": 8.526512829121202e-13,
+      "samples": 16,
+      "scaleMM2": 8,
+      "oracleSHA256": "7c14c4cef1ad9327b5b9679e0540aabdbefc80a29021c6d414b3143d9dd5ac1d"
+    },
+    "reversed": {
+      "status": "PASS",
+      "minimum": 0.022423095584810534,
+      "maximum": 0.8964867442208808,
+      "maximumPointErrorMM": 1.2573000033218179e-15,
+      "maximumCurvatureErrorPerMM": 5.551115123125783e-16,
+      "maximumRenderResidualPx": 8.676771314227237e-13,
+      "samples": 16,
+      "scaleMM2": 4,
+      "oracleSHA256": "b12a60401b361aff81ec44261b0c92d66199dea4ba8cd51e55b06f8e71042ed8"
+    },
+    "edited": {
+      "status": "PASS",
+      "minimum": 0.018162511794330528,
+      "maximum": 0.8964867442208808,
+      "maximumPointErrorMM": 1.2573000033218179e-15,
+      "maximumCurvatureErrorPerMM": 7.043575467574348e-16,
+      "maximumRenderResidualPx": 8.676771314227237e-13,
+      "samples": 16,
+      "scaleMM2": 8,
+      "oracleSHA256": "c18b10567b303e6832d256c85815d6019a48b7f547ca0dc5d816e72c6d6687c5"
+    },
+    "replacement": {
+      "status": "PASS",
+      "minimum": 0.022423095584810534,
+      "maximum": 0.8964867442208808,
+      "maximumPointErrorMM": 1.831026719408895e-15,
+      "maximumCurvatureErrorPerMM": 4.08865160135725e-16,
+      "maximumRenderResidualPx": 2.6716406864579767e-12,
+      "samples": 16,
+      "scaleMM2": 4,
+      "oracleSHA256": "e0e1d18b41382d8cb6c448f3135844ba9df6eddb72f8a4e87f85c1027f35ca23"
+    }
+  },
+  "receipts": {
+    "firstStudioSHA256": "7e158a6430cb26a14fbd1c1a39f16a74e911545bbc8357f9a454f95ca18b8e8c",
+    "finalStudioSHA256": "5b15df517768efff23ecf9711622156aadb24920d3840d284dc8d3e9a6cba5bf",
+    "edgeRegressionSHA256": "935f05c504b5bd02a60cbf9d5bdcc9d1a7cfbf36a48928ba3892c7ea7ecc7f19",
+    "unchangedPinnedFiles": 776,
+    "screenshotsSHA256": {
+      "initial-comb": "802c0f7e1f466cc635ce61e16c537d8149d60c1e2ba792d1e7ece07aea65e2e2",
+      "reversed-comb": "95b5ac210d02757f95deefd5971e77767d19eedcc2efa0d6ef38be9e84a9db64",
+      "edited-comb": "2594edacf9cec76bc033ceddffaa491c559a7a18935915b3e3dc70a0c5fa1275",
+      "replacement-comb": "66546108f2b4bc9d4210db57325e707ed5fa68d0022ed5a20e02b75d877f613c"
+    }
+  },
+  "issues": {
+    "537": "OPEN",
+    "2043": "OPEN"
+  }
+}

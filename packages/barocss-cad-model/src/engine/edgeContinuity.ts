@@ -1,4 +1,4 @@
-import { sampleEdgeCurvature, type EdgeCurvatureMeasurement } from './edgeCurvature';
+import { measureCurveCurvature, type EdgeCurvatureMeasurement } from './edgeCurvature';
 import { measureBrepEdgeContinuity, type BrepEdgeContinuityResult } from '@barocss/cad';
 import { partBreps } from './evaluate';
 import type { StudioDoc } from './doc';
@@ -58,10 +58,7 @@ export function readEdgeContinuity(doc: StudioDoc, bodyKey: string, request: Con
       if (request.edgeId !== edge.id || (picked && !matchesPick)) continue;
       if (brep.edges.filter(candidate => candidate.id === edge.id).length !== 1) break;
       try {
-        const spans = sampleEdgeCurvature(edge.curve);
-        const magnitudes = spans.flatMap(span => span.map(sample => sample.magnitude));
-        return { curve: { edgeId: edge.id, edgeName: edge.name ?? edge.id, unit: '1/mm',
-          minimum: Math.min(...magnitudes), maximum: Math.max(...magnitudes), spans } };
+        return { curve: { edgeId: edge.id, edgeName: edge.name ?? edge.id, ...measureCurveCurvature(edge.curve) } };
       } catch (error) {
         return { error: error instanceof Error ? error.message : 'The native edge curvature is unavailable.' };
       }

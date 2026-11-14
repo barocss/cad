@@ -1,10 +1,20 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { ContinuityReply, ContinuityRequest } from '@barocss/cad-model/engine/edgeContinuity';
-import type { EdgeCurvatureMeasurement } from '@barocss/cad-model/engine/edgeCurvature';
+import type { CurveCurvatureMeasurement, EdgeCurvatureMeasurement } from '@barocss/cad-model/engine/edgeCurvature';
 
 export interface CurvatureOverlay {
-  measurement: EdgeCurvatureMeasurement;
+  target: { kind: 'edge' | 'direct'; id: string };
+  measurement: CurveCurvatureMeasurement;
   scale: number;
+}
+
+export interface CurvatureCombControls {
+  overlay: CurvatureOverlay | null;
+  error?: string;
+  pending?: boolean;
+  show(): void;
+  clear(): void;
+  setScale(scale: number): void;
 }
 
 type Read = (request: ContinuityRequest) => Promise<ContinuityReply>;
@@ -18,7 +28,8 @@ export function useEdgeCurvature(owner: object | null, picked: Extract<Continuit
     return () => { scope.current.owner = null; scope.current.ticket++; };
   }, [owner]);
   const current = state?.owner === owner ? state : null;
-  const overlay: CurvatureOverlay | null = current?.result ? { measurement: current.result, scale: current.scale } : null;
+  const overlay: CurvatureOverlay | null = current?.result
+    ? { target: { kind: 'edge', id: current.result.edgeId }, measurement: current.result, scale: current.scale } : null;
   return {
     overlay,
     error: current?.error,

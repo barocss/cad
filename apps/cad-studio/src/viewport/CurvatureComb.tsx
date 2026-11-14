@@ -3,7 +3,9 @@ import type { CurvatureOverlay } from '../app/useEdgeCurvature';
 
 export function CurvatureComb({ overlay, project }: { overlay: CurvatureOverlay; project(point: Vec3): Vec3 }) {
   if (overlay.measurement.maximum === 0) return null;
-  return <g className="curvature-comb" data-edge={overlay.measurement.edgeId}>
+  return <g className="curvature-comb"
+    data-edge={overlay.target.kind === 'edge' ? overlay.target.id : undefined}
+    data-curve={overlay.target.kind === 'direct' ? overlay.target.id : undefined}>
     {overlay.measurement.spans.map((span, index) => {
       const points = span.map(sample => {
         const tip = sample.point.map((value, axis) => value + overlay.scale * sample.vector[axis]) as Vec3;

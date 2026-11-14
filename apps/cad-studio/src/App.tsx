@@ -52,6 +52,7 @@ import { SelectionInspector } from './ui/SelectionInspector';
 import { EdgeContinuity } from './ui/EdgeContinuity';
 import { EdgeCurvature } from './ui/EdgeCurvature';
 import { useEdgeCurvature } from './app/useEdgeCurvature';
+import { useDirectCurveCurvature } from './app/useDirectCurveCurvature';
 import type { ContinuityRequest } from '@barocss/cad-model/engine/edgeContinuity';
 import { continuitySelection } from './app/edgeContinuitySelection';
 import { MeshFileDialogs } from './files/MeshFileDialogs';
@@ -3059,6 +3060,13 @@ export function App() {
   const curvatureOwner = useMemo(() => curvaturePick ? {} : null,
     [evaluated, docGeneration, workerSession, curvaturePick, continuityKey, continuityOpen]);
   const curvature = useEdgeCurvature(curvatureOwner, curvaturePick, readContinuity);
+  const directCurveId = poleObj;
+  const directCurveVisible = !!directCurveId && !workerFailure && !printEnabled && !camEnabled &&
+    !drawing && !rendering && !section && !inPlace && !active && !ghost && !workingComparison &&
+    !routePanelOpen && !routeVisualDoc && !measure && !instanceSel.length && !isolatedInstances && !stepsDisp?.opaque &&
+    !assembly.draft && !sketch && !cageEd.session && !skel.session && marker === null && shownDoc === doc && !poleDrag &&
+    viewportDirect.some(item => item.id === directCurveId && item.kind === 'curve');
+  const directCurvature = useDirectCurveCurvature(docGeneration, directCurveId, directCurveVisible, doc.direct, D?.measureDirectCurveCurvature);
   const { clearanceReason, clearanceDisplay, clearanceLabels } = useClearancePreview({
     model: { doc, bodies, marker, fresh, instanceBodies, instanceSources }, editing: { rendering, drawing, sketch, active, previewBodies, ghost, assembly, cageEd, skel },
     display: { viewAnalysis, scalarMaps, mouldShown, directShown, section, instancePreview },
@@ -3384,6 +3392,7 @@ export function App() {
       {!rendering && !sketch && !measure && !!doc.instances?.length && (assembly.draft || !!singleTop(instanceSel)) && <MatePanel assembly={assembly} instances={doc.instances} instance={singleTop(instanceSel)}
         onRefused={why => setToast({ title: 'The mate was refused', hint: why, detail: '' })} />}
       {!rendering && !active && !sketch && !measure && !instanceSel.length && directSel.length > 0 && doc.direct && <DirectInspector doc={doc} directSel={directSel}
+        curveCurvature={directCurveVisible ? directCurvature : undefined}
         changes={{ commitDirect }} onThicken={(id, t, side) => {
           if (directSel.length === 1 && directSel[0] === id) start(commands.find(c => c.id === 'thicken')!, { t, side });
         }} onSew={(ids, tol) => {
@@ -3610,7 +3619,7 @@ export function App() {
         bandRailPicking={!active && !finishEdgePicking && !section && !measure && !assembly.draft}
         onDisplayModeStatus={onDisplayModeStatus} onBackend={setViewBackend}
         modelUnavailable={modelUnavailable} bodies={cageInputActive ? cageEd.shown(shownBodies) : viewBodies} selection={cageInputActive ? emptySel : shownSelection}
-        ghost={sketchGhost} sketch={sketch} curvatureComb={curvature.overlay} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
+        ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? curvature.overlay} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
         gizmo={cageInputActive ? cageEd.gizmo : routeGizmo ?? gizmo ?? instGizmo ?? poleGizmo} cage={cageInputActive ? cageEd.overlay : null} onPickCage={cageInputActive ? cageEd.onPick : undefined} tool={skel.tool}
         handles={sectionDrag.length ? sectionDrag : handles} instancePreview={instancePreview} contactLinks={contactShown && motionContact ? motionContact.links : undefined}
         render={rendering ? render : null} analysis={rendering ? null : viewAnalysis}

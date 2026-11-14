@@ -8,13 +8,16 @@ export interface EdgeCurvatureSample {
   vector: Vec3;
 }
 
-export interface EdgeCurvatureMeasurement {
-  edgeId: string;
-  edgeName: string;
+export interface CurveCurvatureMeasurement {
   unit: '1/mm';
   minimum: number;
   maximum: number;
   spans: EdgeCurvatureSample[][];
+}
+
+export interface EdgeCurvatureMeasurement extends CurveCurvatureMeasurement {
+  edgeId: string;
+  edgeName: string;
 }
 
 const MAX_SPANS = 64;
@@ -27,7 +30,7 @@ export function sampleEdgeCurvature(curve: Curve): EdgeCurvatureSample[][] {
   let left = start;
   for (const right of curve.knots) {
     if (right <= left || right > end) continue;
-    if (spans.length === MAX_SPANS) throw new Error('This edge exceeds the curvature sampling limit.');
+    if (spans.length === MAX_SPANS) throw new Error('This curve exceeds the curvature sampling limit.');
     const samples: EdgeCurvatureSample[] = [];
     for (let i = 0; i < SAMPLES_PER_SPAN; i++) {
       const parameter = left + (right - left) * (i + 0.5) / SAMPLES_PER_SPAN;
@@ -38,6 +41,12 @@ export function sampleEdgeCurvature(curve: Curve): EdgeCurvatureSample[][] {
     spans.push(samples);
     left = right;
   }
-  if (!spans.length || left !== end) throw new Error('The native edge has no sampleable knot domain.');
+  if (!spans.length || left !== end) throw new Error('This curve has no sampleable knot domain.');
   return spans;
+}
+
+export function measureCurveCurvature(curve: Curve): CurveCurvatureMeasurement {
+  const spans = sampleEdgeCurvature(curve);
+  const magnitudes = spans.flatMap(span => span.map(sample => sample.magnitude));
+  return { unit: '1/mm', minimum: Math.min(...magnitudes), maximum: Math.max(...magnitudes), spans };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { analyzeCurve, analyzeSurface, curveLength, curvePlaneCrossings, directOps, domainsOf, geometryOf, surfaceIntersection, type DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { SEW_TOLERANCE_LABEL } from '@barocss/cad-model/engine/sew';
 import { CONTROL, FIELD } from './panelStyles';
@@ -12,8 +12,9 @@ import { NativeSelect } from '@/components/ui/native-select';
  * poles). Each tool is one undoable edit; a refusal comes back as a message. O16: the contents on shadcn (Button,
  * Input, NativeSelect, FIELD); the shell (its title and Hide) is the studio's.
  */
-export function DirectPanel({ direct, selected, onChange, onError, onHide, onThicken, onSew }: {
+export function DirectPanel({ direct, selected, onChange, onError, onHide, onThicken, onSew, children }: {
   direct: DirectGeometry; selected: string[];
+  children?: ReactNode;
   onChange(next: DirectGeometry, select?: string[]): void;
   onError(message: string): void;
   onHide(ids: string[]): void;
@@ -40,6 +41,7 @@ export function DirectPanel({ direct, selected, onChange, onError, onHide, onThi
         <button className="ghost tiny" onClick={() => onHide(selected)}>Hide</button></div>
       {one ? <Rename key={one.id} name={one.name} onRename={n => run(() => directOps.rename(direct, one.id, n))} />
         : objs.map(o => <div key={o.id} className="kv">Name <b>{o.name}</b></div>)}
+      {one && g?.kind === 'curve' && children}
       <Transform onMove={by => run(() => directOps.move(direct, selected, by))} onRotate={(axis, deg) => run(() => directOps.rotate(direct, selected, axis, deg))}
         onScale={k => run(() => directOps.scale(direct, selected, k))} onDuplicate={() => run(() => directOps.duplicate(direct, selected), added)}
         onStretch={k => run(() => directOps.stretch(direct, selected, k))} onShear={(a, b, k) => run(() => directOps.shear(direct, selected, a, b, k))} />

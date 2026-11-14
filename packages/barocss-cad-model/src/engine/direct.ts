@@ -8,6 +8,7 @@ import { curvesSource, surfacesSource } from './curveSource';
 import { keptAt, projectLoop, trimmedMesh, type TrimLoop } from './trim';
 import { nextFreeId } from '../util/ids';
 import { refusal } from './refusal';
+import { measureCurveCurvature } from './edgeCurvature';
 
 export interface DirectObject {
   id: string; name: string; source: string; geometry: string; hidden?: boolean;
@@ -82,6 +83,15 @@ const selectedSurface = (d: DirectGeometry, id: string) => {
   return { object: o, surface };
 };
 const surfaceOf = (d: DirectGeometry, id: string) => { const g = geometryOf(d, object(d, id)); if (g.kind !== 'surface') throw refusal('DIRECT_PICK', 'Pick a surface.'); return g; };
+
+/** Read a visible direct curve from its current authored source. */
+export function measureDirectCurveCurvature(direct: DirectGeometry, id: string) {
+  const matches = direct.objects.filter(candidate => candidate.id === id);
+  if (matches.length !== 1 || matches[0].hidden) throw refusal('DIRECT_PICK', 'Select one visible curve.');
+  const curve = geometryOf(direct, matches[0]);
+  if (curve.kind !== 'curve') throw refusal('DIRECT_PICK', 'Select one visible curve.');
+  return measureCurveCurvature(curve);
+}
 
 /** Refuse consumers that use only the support surface and cannot carry its trims. */
 function requireWholeSurface(o: DirectObject, operation: string, code: 'DIRECT_VALUE' | 'DIRECT_INTERSECT' | 'IGES_EXPORT'): void {
