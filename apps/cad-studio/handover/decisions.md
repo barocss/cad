@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1307 — Fillet the new bore mouth on the radial cut cap](notes/radial-bore-cut-mouth-fillet-2026-11-15/README.md).
 - [D1306 — Propose and approve the clipped Sweep bore fillet](notes/radial-bore-fillet-agent-proposal-2026-11-15/README.md).
 - [D1305 — Fillet the original bore mouth after radial Intersect](notes/radial-bore-start-fillet-2026-11-15/README.md).
 - [D1304 — Refine the outside of a circular Sweep after a bore fillet](notes/arc-bore-fillet-display-2026-11-15/README.md).
