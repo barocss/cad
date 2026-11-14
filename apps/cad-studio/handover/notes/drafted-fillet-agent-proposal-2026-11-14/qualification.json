@@ -1,0 +1,140 @@
+{
+  "decision": "D1272",
+  "priority": "P5",
+  "row": 7,
+  "tier": "FEATURE",
+  "parent": "ad09f9614c8b44b4ed324062099e38bbae340861",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1272-<run>",
+    "node --check apps/cad-studio/test/drafted-fillet-agent-proposal-browser.mjs",
+    "node --check apps/cad-studio/test/drafted-extrude-variable-fillet-browser.mjs",
+    "node --check apps/cad-studio/test/drafted-extrude-variable-fillet-oracle.mjs",
+    "D1272_SOURCE_FROZEN=1 node apps/cad-studio/test/drafted-fillet-agent-proposal-browser.mjs <external-evidence>/studio-final",
+    "D1271_SOURCE_FROZEN=1 node apps/cad-studio/test/drafted-extrude-variable-fillet-browser.mjs <external-evidence>/d1271-browser-regression",
+    "git diff --check"
+  ],
+  "checks": {
+    "localMcpDiscovery": "PASS",
+    "localMcpL1DirectRefusal": "PASS",
+    "localMcpInvalidStationRefusal": "PASS",
+    "localMcpL1AcceptRefusal": "PASS",
+    "studioPreviewBeforeAfter": "PASS",
+    "studioUserApproval": "PASS",
+    "studioUndoRedo": "PASS",
+    "nativeSaveOpen": "PASS",
+    "localMcpReadAcceptedFile": "PASS",
+    "independentNativeGeometry": "PASS",
+    "d1271DesktopRegression": "PASS",
+    "visualReview": "PASS",
+    "sourceFreeze": "PASS",
+    "driverSyntax": "PASS",
+    "unexpectedFailures": 0,
+    "fullSuites": "NOT_RUN",
+    "ci": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "productionBuild": "NOT_RUN",
+    "paidAI": "NOT_RUN",
+    "naturalLanguageModelExecution": "NOT_RUN",
+    "otherAutonomyLevels": "NOT_RUN",
+    "generalFilletAcceptance": "NOT_RUN"
+  },
+  "geometry": {
+    "approved": {
+      "status": "PASS",
+      "angleDegrees": 12,
+      "interiorAngleDegrees": 102,
+      "volumeMM3": 10553.214670395955,
+      "removedMM3": 19.12978712586659,
+      "nativeVolumeMM3": 10553.214670399802,
+      "studioVolumeMM3": 10553.21467040015,
+      "maximumContactResidualMM": 4.650898577817189e-07,
+      "maximumArcResidualMM": 1.64696122739727e-07,
+      "maximumNormalDotError": 0,
+      "samples": 7,
+      "radiusSquaredIntegralAt40MM3": "27731/168",
+      "endRemovedMM3": [
+        0.008995582230732446,
+        0.07479393201046432
+      ],
+      "maximumTrimResidualMM": 4.6849133905624285e-08,
+      "oracleSHA256": "95d88d3e66d7f8cefbbdbf4c2952dacd937522d0cb71270b4227a75868270ba3"
+    },
+    "reopened": {
+      "status": "PASS",
+      "angleDegrees": 12,
+      "interiorAngleDegrees": 102,
+      "volumeMM3": 10553.214670395955,
+      "removedMM3": 19.12978712586659,
+      "nativeVolumeMM3": 10553.214670399802,
+      "studioVolumeMM3": 10553.21467040015,
+      "maximumContactResidualMM": 4.650898577817189e-07,
+      "maximumArcResidualMM": 1.64696122739727e-07,
+      "maximumNormalDotError": 0,
+      "samples": 7,
+      "radiusSquaredIntegralAt40MM3": "27731/168",
+      "endRemovedMM3": [
+        0.008995582230732446,
+        0.07479393201046432
+      ],
+      "maximumTrimResidualMM": 4.6849133905624285e-08,
+      "oracleSHA256": "95d88d3e66d7f8cefbbdbf4c2952dacd937522d0cb71270b4227a75868270ba3"
+    }
+  },
+  "observations": [
+    {
+      "label": "local-agent",
+      "body": "b1",
+      "edge": {
+        "id": "n1_te0",
+        "name": "n1.side0|n1.top",
+        "faces": [
+          "n1.side0",
+          "n1.top"
+        ]
+      },
+      "revision": "bc95d1e710314a9cd2bdb269f35bc6f17dad72b13d5283c955c5a3636249658e",
+      "changeVolumeMM3": -19.129,
+      "pendingHash": "2d8ffad5ffe45fcfeb76f87d02e9e60fa7593e2a49e86abb604dacc2d457366a"
+    },
+    {
+      "label": "approved",
+      "nativeHash": "dd52c1d189936c62e5d19bf23b7ba65fa17269887d6cb19a5aebd4bd9853af27",
+      "workerVolume": 10553.21467040015
+    },
+    {
+      "label": "reopened",
+      "nativeHash": "dd52c1d189936c62e5d19bf23b7ba65fa17269887d6cb19a5aebd4bd9853af27",
+      "workerVolume": 10553.21467040015
+    },
+    {
+      "label": "mcp-reopened",
+      "volumeMM3": 10553.215,
+      "proposalStatus": "accepted",
+      "savedHash": "c98c2fd96d1f7fb04af18a6f7b81d7c81b5d6cb02e928a89688c75dd07ce90ff"
+    },
+    {
+      "label": "studio-preview",
+      "baseMeshVolume": 10572.34445752182,
+      "candidateMeshVolume": 10552.58953705447,
+      "displayDelta": "\u221219.13 mm\u00b3 (\u22120.18%)"
+    }
+  ],
+  "receipts": {
+    "studioSHA256": "f25db03b00fb027cf6b295c8abbdc4b3d965f63ac4cc684cd227fd318a0a3512",
+    "d1271DesktopRegressionSHA256": "0246208c6202995800cb51296519e88c47eb2ce47d2c16c06f54c3d137d3a43f",
+    "pendingMcpSHA256": "244560b3eacbb1f9a562eb4a12203d7f1079c0ede64a7c9f90931d183e7d2497",
+    "acceptedMcpSHA256": "46f194a65e662cf4209366728a70d7897e37fb779ab98c069acdffc360bef5f7",
+    "nativeSaveSHA256": "c98c2fd96d1f7fb04af18a6f7b81d7c81b5d6cb02e928a89688c75dd07ce90ff",
+    "unchangedPinnedFiles": 905,
+    "screenshotsSHA256": {
+      "pending-after-preview": "3cb2d653a58e23077ed541f30ceaf20cf2b4a17851400eabe4045f002f90d554",
+      "pending-before-preview": "7b8dcaad84366e5167b11c9750af847189ac1ea19a140ca89cddd1edde6fde3f",
+      "studio-approved": "00cfd3f17c55fa05dc6c8a042b7d90cc90393f12e44a93e836ebc74b988d7bfa",
+      "fresh-open": "aa045943f14ceabd2b0be2a8a8114168d3f25dff55f7bf78bec745a23b29c3ef"
+    }
+  },
+  "issues": {
+    "2259": "OPEN"
+  }
+}
