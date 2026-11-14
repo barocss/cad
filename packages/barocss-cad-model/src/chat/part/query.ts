@@ -17,6 +17,8 @@ import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, type
 import { r3Signed as r3 } from '../../util/round';
 import { isObj } from '../../util/guards';
 import { variabilityView } from '../variability';
+import { featureId } from '../../engine/ids';
+import { visibleSweepCurves } from '../sweepSource';
 
 /** D155: a fit's limits as a result shows them (each row's deviations, sizes, table and row, estimate and source). */
 export const fitView = (l: FitLimits) => ({ kind: l.kind, clearanceMin: l.clearanceMin, clearanceMax: l.clearanceMax, estimate: l.estimate,
@@ -30,8 +32,14 @@ async function getPartSummaryTool(state: ChatState, args: Record<string, unknown
   const many = state.bodies.reduce((n, b) => n + b.mesh.faces.length + b.mesh.edges.length, 0) > 160, page = Math.max(1, Math.floor(Number(args.page) || 1));
   const list = describeBodies(state.doc, state.bodies, false).map((b, i) => responseFormat !== 'concise' && (only === b.key || (!only && (!many || responseFormat === 'detailed'))) ? describeBodies(state.doc, [state.bodies[i]], true, 60, page)[0] : b);
   const stale = followedStale(state.doc);
+  const directCurves = await visibleSweepCurves(state.doc.direct);
   const body = { feature_count: state.doc.nodes.length, facts: factsOf(state.doc, state.bodies), parameters: state.doc.parameters,
-    features: features(state.doc).map(f => responseFormat === 'concise' ? { index: f.index, label: f.label } : { ...f, node: f.node.kind === 'sketch' ? { kind: 'sketch', profile: f.node.profile } : f.node }),
+    features: features(state.doc).map(f => ({
+      index: f.index, label: f.label,
+      ...(f.node.kind === 'sketch' ? { id: featureId(state.doc.nodes, f.index) } : {}),
+      ...(responseFormat === 'concise' ? {} : { node: f.node.kind === 'sketch' ? { kind: 'sketch', profile: f.node.profile } : f.node }),
+    })),
+    ...(directCurves.length ? { direct_curves: directCurves } : {}),
     bodies: list, ...(many && !only ? { note: 'Faces and edges are listed per body: call again with {"body": key}.' } : {}),
     // (FRf2, O125: frames following a placed part's sketch that changed since linked — current geometry, to relink.)
     ...(stale.length ? { followed_changed: stale.map(x => ({ frame: x.frame, part: x.part, sketch: x.sketch, was: x.was, now: x.now, message: staleText(x) })) } : {}),

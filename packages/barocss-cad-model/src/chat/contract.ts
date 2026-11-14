@@ -80,7 +80,7 @@ const READ: Record<string, JsonSchema | null> = {
   output_cam_package: o({ revision: str, files: arr }, ['revision', 'files']),
   output_print_layers: o({ revision: str, files: arr }, ['revision', 'files']),
   output_bundle: o({ revision: str, files: arr }, ['revision', 'files']),
-  get_part_summary: o({ feature_count: num, facts: obj, parameters: obj, features: arr, bodies: arr, note: str, followed_changed: arr, variability: obj }, ['feature_count', 'facts', 'parameters', 'features', 'bodies']),
+  get_part_summary: o({ feature_count: num, facts: obj, parameters: obj, features: arr, bodies: arr, direct_curves: arr, note: str, followed_changed: arr, variability: obj }, ['feature_count', 'facts', 'parameters', 'features', 'bodies']),
   get_image_layers: null,
   measure: o({ label: str, area: num, length: num, radius: num, distance: num, from: arr, to: arr, angle: num, normalDistance: num, resolved: arr }),
   mass_properties: o({ bodies: arr, note: str }, ['bodies']),

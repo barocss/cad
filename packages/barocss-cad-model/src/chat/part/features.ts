@@ -25,13 +25,15 @@ import { mountAxis } from '../../app/mounts';
 import { firstProblem, isRefusal } from '../../engine/refusal';
 import { REFERENCE_CODES } from '../../engine/schema/references';
 import { addParameters, bindParameter, parameterUses, PARAMETER_CODES, removeParameter, renameParameter, withParameters, type Binding } from '../../engine/parameters';
+import { featureId } from '../../engine/ids';
+import { sweepSourceRevision } from '../sweepSource';
 
 /** Commands the chat can run (the ones that build; sketch-mode and measure UI actions are tools of their own). */
 // (Loft takes sketches picked in the studio, Align a face clicked there; chat writes a loft node with
 // add_features, and moves with move or rotate, instead.)
-// (Not loft, align, a sweep along a curve, thicken, sew or band surface: their picked-source contexts are not tool arguments.
+// (Not loft, align, thicken, sew or band surface: their picked-source contexts are not tool arguments.
 // Surface snapshots can be supplied as checked nodes through features.add or through the public Part API.)
-export const CHAT_COMMANDS = commands.filter(c => c.build && c.id !== 'loft' && c.id !== 'align' && c.id !== 'sweep-curve' && c.id !== 'thicken' && c.id !== 'sew' && c.id !== 'band-surface').map(c => c.id);
+export const CHAT_COMMANDS = commands.filter(c => c.build && c.id !== 'loft' && c.id !== 'align' && c.id !== 'thicken' && c.id !== 'sew' && c.id !== 'band-surface').map(c => c.id);
 
 /** What each command needs selected and what its values mean. */
 export const COMMAND_DOCS: Record<string, { selection: string; values: Record<string, string> }> = {
@@ -41,6 +43,12 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   extrude: { selection: 'none: the newest finished sketch no feature uses yet', values: { h: 'distance along the sketch normal', draft: 'wall draft degrees (0: straight)', op: 'join | new | cut (only for a sketch drawn on a body face)', depth: 'distance | through (a cut only)' } },
   revolve: { selection: 'none: the newest finished sketch no feature uses yet', values: { axis: 'y | x: the sketch axis to turn about', deg: 'angle, up to 360', op: 'join | new | cut (sketch on a body face)' } },
   pipe: { selection: 'none: the newest finished sketch no feature uses yet', values: { h: 'straight run before and after the bend', bend: 'bend radius', bendAngle: 'bend angle', toward: 'x | -x | y | -y', op: 'join | new | cut (sketch on a body face)' } },
+  'sweep-curve': { selection: 'none: provide the sketch and Direct curve IDs from query.summary', values: {
+    sketch: 'stable ID of one active finished circular sketch without holes',
+    path: 'stable ID of one visible Direct curve; its current path is copied',
+    pathRevision: 'revision of that curve from query.summary; changed geometry requires a new proposal',
+    representation: 'required: exact-straight for one straight segment, or exact for one 30°–90° circular arc; creates a new body',
+  } },
   'offset-face': { selection: 'Distance: faces [source]. To plane: faces [source, reference] in that order, on distinct current solids.', values: { offsetMode: 'distance (default) | to-plane (direct native source face and a parallel reference face)', d: 'distance along the face normal: + out (material added), − in (taken off)' } },
   box: { selection: 'none (or a top face to stack on)', values: { w: 'width along X', d: 'depth along Y', h: 'height along Z', x: 'min corner X', y: 'min corner Y', z: 'base Z' } },
   cylinder: { selection: 'none', values: { r: 'radius', h: 'height', x: 'centre X', y: 'centre Y', z: 'base Z' } },
@@ -151,16 +159,35 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   const { selection, unknown } = resolveNames(state.bodies, sel.names);
   if (unknown.length) return fail(state, `No face, edge or body named ${unknown.map(n => `"${n}"`).join(', ')} on the current part. Use the names from the last result or get_part_summary.`);
   const point = Array.isArray(args.point) && args.point.length === 3 ? args.point.map(Number) as [number, number, number] : undefined;
-  const given = isObj(args.values) ? args.values : {};
+  let given = isObj(args.values) ? args.values : {};
   const toPlane = cmd.id === 'offset-face' && given.offsetMode === 'to-plane';
   const [sourceFace, referenceFace] = selection.faces;
   if (toPlane && (sel.names.faces.length !== 2 || selection.faces.length !== 2 ||
       sel.names.faces.some(name => state.bodies.flatMap(body => body.mesh.faces.filter(face => face.name === name && face.nativePlaneName === name)).length !== 1)))
     return fail(state, 'Offset face to plane needs two unique native face names in source, reference order.');
-  const ctx: Ctx = { doc: state.doc, bodies: state.bodies, selection: toPlane ? { ...selection, faces: [sourceFace] } : selection, pick: point };
+  let ctx: Ctx = { doc: state.doc, bodies: state.bodies, selection: toPlane ? { ...selection, faces: [sourceFace] } : selection, pick: point };
+  if (cmd.id === 'sweep-curve') {
+    const { sketch, path, pathRevision, representation, ...other } = given;
+    if (typeof sketch !== 'string' || typeof path !== 'string' || !sketch.trim() || !path.trim()
+      || typeof pathRevision !== 'string' || !/^[0-9a-f]{64}$/.test(pathRevision))
+      return fail(state, 'Sweep needs a stable sketch ID, a visible Direct curve ID and its revision from query.summary.');
+    if (args.faces !== undefined || args.edges !== undefined || args.bodies !== undefined || args.point !== undefined)
+      return fail(state, 'Sweep takes its profile and path from values.sketch and values.path.');
+    if (representation !== 'exact' && representation !== 'exact-straight')
+      return fail(state, 'Sweep representation must be exact or exact-straight.');
+    const matches = state.doc.nodes.flatMap((_, index) => featureId(state.doc.nodes, index) === sketch ? [index] : []);
+    const index = matches[0], node = state.doc.nodes[index];
+    if (matches.length !== 1 || node?.kind !== 'sketch' || node.suppressed)
+      return fail(state, 'Sweep needs one active finished sketch with the given ID.');
+    const source = await sweepSourceRevision(state.doc, path);
+    if ('error' in source) return fail(state, source.error);
+    if (source.revision !== pathRevision) return fail(state, 'The Sweep path geometry changed. Read the current curve and make a new proposal.');
+    ctx = { ...ctx, selection: { ...selection, sketches: [index] }, direct: [path] };
+    given = { ...other, representation };
+  }
   const avail = cmd.available(ctx);
   if (!avail.ok) return fail(state, `${cmd.label} can’t run: ${avail.reason}`);
-  const fields = cmd.fields?.(ctx) ?? [];
+  const fields = cmd.fields?.(ctx, cmd.id === 'sweep-curve' ? { representation: String(given.representation) } : undefined) ?? [];
   const bad = Object.keys(given).filter(k => !fields.some(f => f.key === k));
   if (bad.length) return fail(state, `${cmd.label} has no value ${bad.map(k => `"${k}"`).join(', ')}; its values are ${fields.map(f => `${f.key} (${f.label})`).join(', ') || 'none'}.`);
   let values: Values = givenValues(cmd, ctx, cmd.defaults?.(ctx) ?? {}, Object.fromEntries(Object.entries(given).map(([k, v]) => [k, typeof v === 'number' ? v : String(v)])));

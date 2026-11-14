@@ -71,7 +71,7 @@ export { featureKinds };
 const PART_TOOLS: ToolDefinition[] = [
   {
     name: 'get_part_summary',
-    description: 'The current part: every feature node by index (sketch outlines abbreviated), parameters, and each visible body with volume and bounds, and its faces and edges by persistent name (e.g. face "n1.top", edge "n1.side0|n1.side1"; a sketch drawn in the sketcher names its walls by its edges\' ids, "n2.side[e3]", which stay as the sketch is edited). On a big part, faces and edges are listed for the one body named in "body". Call it before referring to faces or edges you have not seen in a result.',
+    description: 'The current part: every feature node by index, stable sketch IDs, visible Direct curve IDs, parameters, and each visible body with volume, bounds and persistent face and edge names (e.g. face "n1.top", edge "n1.side0|n1.side1"). On a big part, faces and edges are listed for the body named in "body". Call it before referring to geometry you have not seen in a result.',
     input_schema: { type: 'object', properties: { body: { type: 'string', description: 'A body key (e.g. "b27") to list the faces and edges of.' }, page: { type: 'integer', description: 'The page of that body\'s faces and edges (60 a page, from 1).' } }, additionalProperties: false },
   },
   {
