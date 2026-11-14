@@ -52,9 +52,9 @@ workspace on `develop`. The original `local/cad-dev` remote branch was deleted a
 against the filtered history. Historical source commits remain available by their original IDs.
 
 The [closed issue transfer map](closed-issue-transfers.tsv) records each completed transfer and its redirect.
-The first source cleanup verified 122 closed issue transfers. On 2026-11-15, 21 additional closed issue transfers
+The first source cleanup verified 122 closed issue transfers. On 2026-11-15, 23 additional closed issue transfers
 passed checks for the redirect, title, closed state, resolution reason, comment count, labels, and assignees.
-The closed issue index has 903 entries without a verified redirect in the map.
+The closed issue index has 901 entries without a verified redirect in the map.
 
 The [pending transfer map](pending-closed-issue-transfers.tsv) records destination numbers returned by GitHub
 where the source redirect or metadata has not been verified. Check the original URLs before continuing or
