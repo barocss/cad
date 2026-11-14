@@ -30,7 +30,7 @@ export type StudioLoftSection = { readonly sketch: Sketch } & (
   | { readonly frame: LoftSectionFrame; readonly z?: never }
 );
 /** The Kernel's bounded quadratic/cubic guide: copied world-mm values, not a live curve reference. */
-export interface StudioLoftOptions { readonly guide?: LoftInput['guide']; readonly smooth?: boolean }
+export interface StudioLoftOptions { readonly guide?: LoftInput['guide']; readonly guides?: LoftInput['guides']; readonly smooth?: boolean }
 
 /** set_drawing's settings (its schema's names): the sheet, scale, projection, front, views, tolerancing, title, scope, sections, details, tables, balloons, weld symbols. */
 export interface DrawingSettingsInput {
@@ -338,13 +338,14 @@ export class StudioPart extends Part<StudioDoc> {
   /**
    * A loft through closed sketches, choosing its new body. Section frames and guide controls are copied snapshots
    * in world mm; later edits to the source curve or caller's arrays do not drive this feature. A Bézier guide requires
-   * explicit frames; a `nurbs` guide (any polynomial B-spline through a vertex of each section) takes sections by z. The Kernel evaluates its exact endpoints, cap fractions and supported shape combinations.
+   * explicit frames; a `nurbs` guide (any polynomial B-spline through a vertex of each section) takes sections by z.
+   * A pair of quadratic Bézier `guides` takes two congruent XY rectangles at distinct z heights. The Kernel checks the exact guide contacts and supported section geometry.
    * Only a successfully evaluated document is returned; a refusal leaves this part and the inputs unchanged.
    */
   loft(sections: readonly StudioLoftSection[], options: StudioLoftOptions = {}): this {
     if (!Array.isArray(sections) || sections.length < 2) throw refuse('VALUE', 'a loft needs at least two sketch sections');
     if (options === null || typeof options !== 'object' || Array.isArray(options)
-      || Object.keys(options).some(k => k !== 'guide' && k !== 'smooth')) throw refuse('VALUE', 'loft options are guide and smooth');
+      || Object.keys(options).some(k => k !== 'guide' && k !== 'guides' && k !== 'smooth')) throw refuse('VALUE', 'loft options are guide, guides and smooth');
     if (options.smooth !== undefined && typeof options.smooth !== 'boolean') throw refuse('VALUE', 'loft smooth must be true or false');
     let copied: StudioLoftOptions;
     try { copied = structuredClone(options); } catch { throw refuse('VALUE', 'loft options must be plain copied values'); }
@@ -367,6 +368,7 @@ export class StudioPart extends Part<StudioDoc> {
     const index = doc.nodes.length;
     const loft: ModelNode = { kind: 'loft', sections: stored,
       ...(Object.prototype.hasOwnProperty.call(copied, 'guide') ? { guide: copied.guide } : {}),
+      ...(Object.hasOwn(copied, 'guides') ? { guides: copied.guides } : {}),
       ...(Object.prototype.hasOwnProperty.call(copied, 'smooth') ? { smooth: copied.smooth } : {}) };
     const why = checkNode(loft, doc.nodes, doc.parameters, doc.frames?.sections, doc.instances ?? []);
     if (why) throw refuse('VALUE', `the loft: ${why}`);

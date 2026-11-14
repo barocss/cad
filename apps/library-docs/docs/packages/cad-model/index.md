@@ -243,8 +243,7 @@ to direct geometry.
 
 Supply sections in the intended order. Each section takes a `sketch` and exactly one of `z` or `frame`.
 A legacy `z` is a finite height in mm. Use one sketch plane and strictly increasing `z` values for that form.
-An explicit frame gives a world-mm `origin` and perpendicular unit `xAxis` and `yAxis` vectors. A guide requires explicit frames on both sections; its control points are already
-in world mm.
+An explicit frame gives a world-mm `origin` and perpendicular unit `xAxis` and `yAxis` vectors. The single quadratic or cubic Bézier guide uses explicit frames. Its control points are in world mm.
 
 ```ts
 import { part, sketch, Plane } from '@barocss/cad-model/api';
@@ -274,8 +273,7 @@ A `quadratic-bezier` guide takes exactly three finite control points, with its m
 midplane. A `cubic-bezier` guide takes exactly four, with its inner controls on the exact one-third and two-thirds
 planes. Both require exact seam endpoints. This is one bounded seam guide for two sections on parallel frames
 with identical axes. The Kernel checks the supported conic or homothetic mixed line/arc profiles and the existing
-coordinate limits. Arbitrary rails, multiple guides, surfaces as sections, and smooth interpolation with a guide
-are outside this contract. A refused loft leaves the previous part and inputs unchanged.
+coordinate limits. A refused loft leaves the previous part and inputs unchanged.
 
 To use the existing height-based path without a guide, omit the API `guide` option and supply `z` sections.
 Do not pass `null` or the string `'None'` as an API guide.
@@ -299,6 +297,28 @@ origins and guide controls. Circle and mixed arc profiles retain their original 
 ellipse objects, different axes and failed reconstruction witnesses are refused. The adapter builds and places
 the loft once, preserving the mass method and existing native SI `transformed` refusal. Studio can reopen the
 recipe and edit the source profile through existing Width/Depth fields. The source is copied without a new schema. See the [tested polynomial example and actual Studio preview](/how/loft-sweep#one-polynomial-guide-on-height-sections).
+
+### Two guides between rectangular sections
+
+Pass `guides` with two quadratic Bézier curves and two congruent, axis-aligned rectangular sections on a common XY sketch plane. Use `z` for the section heights. Express the guide controls in world mm. Use the minimum-Y corners from minimum X to maximum X. Both guides go from the lower section to the upper section. Put both middle controls at the halfway height. Keep the second middle control to the right of the first.
+
+```ts
+import { part, sketch } from '@barocss/cad-model/api';
+
+const rectangle = sketch().rectangle({ w: 10, d: 6, x: 0, y: 0 });
+const model = part('Two-guide loft').loft([
+  { sketch: rectangle, z: 0 },
+  { sketch: rectangle, z: 12 },
+], {
+  guides: [
+    { kind: 'quadratic-bezier', controlPoints: [[0, 0, 0], [2, 0, 6], [0, 0, 12]] },
+    { kind: 'quadratic-bezier', controlPoints: [[10, 0, 0], [14, 0, 6], [10, 0, 12]] },
+  ],
+});
+const doc = model.doc;
+```
+
+Studio History can edit the middle X and Y of each copied guide. Use either `guide` or `guides` in one Loft. Use ruled sections with `guides`.
 
 ## Direct sweep and loft surfaces
 

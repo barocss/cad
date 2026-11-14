@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { part, sketch, BarocssError, type StudioPart } from '../src/api';
+import { part, sketch, BarocssError, type StudioLoftOptions, type StudioPart } from '../src/api';
 import { evaluateDoc } from '../src/engine/evaluate';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { editFields } from '../src/app/editFields';
@@ -23,6 +23,29 @@ const sections = (upperRadius = 4) => [
   { sketch: sketch().circle({ r: 1 }), frame: flat(0) },
   { sketch: sketch().circle({ r: upperRadius }), frame: flat(3) },
 ];
+
+test('public loft: two guide snapshots are independently owned and survive native reopen', async () => {
+  const base = part('rectangular loft'), original = base.doc;
+  const rectangle = sketch().rectangle({ w: 10, d: 6, x: 0, y: 0 });
+  const input = [{ sketch: rectangle, z: 0 }, { sketch: rectangle, z: 12 }];
+  const rail = (x: number, middle: number) => ({ kind: 'quadratic-bezier' as const, controlPoints: [[x, 0, 0], [middle, 0, 6], [x, 0, 12]] as QuadraticControls });
+  const guides = [rail(0, 2), rail(10, 14)] as const;
+  const options: StudioLoftOptions = { guides };
+  const made = base.loft(input, options), accepted = made.doc, before = structuredClone(guides);
+  const feature = accepted.nodes.at(-1);
+  assert.ok(feature?.kind === 'loft');
+  assert.deepEqual(feature.guides, before);
+  guides[1].controlPoints[1][0] = 16;
+  assert.deepEqual(made.doc, accepted);
+  // For q = 2t(1-t), the slice area is 60(1 + 0.2q)^2 and its centroid is (5 + 3q, 3 + 0.6q).
+  const weightedQ = (1 / 3 + 0.4 * (2 / 15) + 0.04 * (2 / 35)) / (1 + 0.4 / 3 + 0.04 * (2 / 15));
+  await reopened(made, 819.84, [5 + 3 * weightedQ, 3 + 0.6 * weightedQ, 6]);
+  close(base.loft(input, options).mass({ density: 1 }).volume, 927.36);
+  assert.throws(() => made.loft(input, { guide: guides[0], guides }), /use either guide or guides/);
+  assert.throws(() => made.loft(input, { guides: [guides[1], guides[0]] }), /endpoints to exactly match/);
+  assert.deepEqual(made.doc, accepted);
+  assert.deepEqual(base.doc, original);
+});
 function massOracle(p: StudioPart, volume: number, centroid: readonly number[]): void {
   const m = p.mass({ density: 1 }); close(m.volume, volume); vector(m.centroid, centroid);
 }

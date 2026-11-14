@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
 
-export const twoGuideInspector = `
+export const twoGuideInspector = twoGuideInspectorWith('');
+
+export function twoGuideInspectorWith(setup) {
+  return `
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 import { toPartDocument } from '@barocss/cad-model/engine/part';
 import { checkBrep, curveDomain, evaluateCadPart, evaluateCurve, evaluateSurface, massPropertiesOf, surfaceDomain } from '@barocss/cad';
-const doc=JSON.parse(readFileSync(process.argv[2],'utf8'));
+let doc=JSON.parse(readFileSync(process.argv[2],'utf8'));
+let extra={};
+${setup}
 const [{key,brep}]=partBreps(doc);
 const output=evaluateCadPart(toPartDocument(doc)).outputs.find(body=>body.id===doc.nodes.at(-1).id);
 assert.ok(output);
@@ -25,8 +30,9 @@ const sides=faces.map(({name,surface})=>{
   const {u,v}=surfaceDomain(surface);
   return {name,samples:ts.map(t=>[0,.5,1].map(s=>evaluateSurface(surface,sample(u,s),sample(v,t))))};
 });
-console.log(JSON.stringify({key,report:checkBrep(brep,{strict:true}),mass:massPropertiesOf(output),edges,sides}));
+console.log(JSON.stringify({key,report:checkBrep(brep,{strict:true}),mass:massPropertiesOf(output),edges,sides,...extra}));
 `;
+}
 
 const near = (actual, expected, tol = 1e-8) => assert.ok(Math.abs(actual - expected) < tol, `${actual} vs ${expected}`);
 const samePoint = (actual, expected) => actual.every((value, i) => Math.abs(value - expected[i]) < 1e-8);
