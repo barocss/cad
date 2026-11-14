@@ -4,7 +4,7 @@ import { bodyKeyFor, featureId } from '../engine/ids';
 import { refusal } from '../engine/refusal';
 import { canonical } from '../util/revision';
 import type { Command, Ctx } from './commands';
-import { buildNativeOffsetFace, checkDraftedOffsetDistance, offsetFaceCommand } from './profileCommands';
+import { buildNativeOffsetFace, checkDirectOffsetDistance, offsetFaceCommand } from './profileCommands';
 
 export const OFFSET_FACE_EDIT = 'offset-face-edit';
 
@@ -56,7 +56,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
     build: (ctx, values) => {
       if (ctx.doc !== doc || ctx.doc.nodes[index] !== direct) return rejected('open the current Offset face in History again.');
       const distance = Number(values.d);
-      checkDraftedOffsetDistance(distance);
+      checkDirectOffsetDistance(distance);
       if (distance === direct.distance) return doc;
       const nodes = [...doc.nodes];
       nodes[index] = { ...direct, distance };

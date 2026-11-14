@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1264 — Offset an oblique wall of a convex hexagonal prism](notes/offset-hexagonal-wall-2026-11-14/README.md).
 - [D1263 — Compare editable G2 and circular box fillets](notes/g2-box-fillet-continuity-2026-11-14/README.md).
 - [D1262 — Measure sampled cross-edge curvature](notes/native-cross-edge-curvature-2026-11-14/README.md).
 - [D1261 — Offset an inclined wall of a rectangular taper](notes/offset-drafted-wall-2026-11-14/README.md).

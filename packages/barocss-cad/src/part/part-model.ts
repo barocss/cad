@@ -65,6 +65,7 @@ import type { EndpointBead } from './part-frame.js';
 import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
 import { offsetDraftedFace } from '../features/drafted-cap-offset.js';
+import { offsetPrismWallIfAdmitted } from '../features/prism-wall-offset.js';
 import { boundaryBindingRefusal } from './part-boundary-refusal-internal.js';
 import { refusalCodeOf, type CadRefusalCode } from '../core/error-codes.js';
 
@@ -159,10 +160,30 @@ function explodeFacets(b: Brep, at: string, what: string): Brep {
   catch (cause) { if (isMeshBrepError(cause)) throw new CadPartError('GEOMETRY', at, cause.message); throw cause; }
 }
 export const brepOf = (part: Part, id: string): Brep => part.brep ??= part.solid.kind === 'upright' ? brepFromPrismatic(part.solid.solid, { id }) : part.solid.brep;
+function partOutputId(feature: CadPartFeature, count: number, part: Part, index: number): string {
+  if (feature.kind === 'frame' && feature.bends !== undefined) return `${feature.id}/${part.member?.frame?.member ?? index}`;
+  return count === 1 ? feature.id : `${feature.id}/${index}`;
+}
+
+function offsetFaceTargetBrep(t: Tools, target: unknown, part: Part): Brep {
+  if (part.solid.kind !== 'upright') return part.solid.brep;
+  const { result, author } = t.ref(target, 'target');
+  if (result.kind !== 'solid' || !author) return t.fail('REFERENCE', 'Offset face needs a solid target.');
+  const id = partOutputId(author, result.parts.length, part, result.parts.indexOf(part)).replace('/', '_');
+  // Another consumer may already have converted this upright part under its own id.
+  return part.brep?.source.id === id ? part.brep : brepOf({ solid: part.solid }, id);
+}
+
 /** A feature run after its stored names are checked on each target part (O19, D277). */
 function expectedThen(f: CadPartFeature & Record<string, unknown>, t: Tools, expect: ReturnType<typeof expectOf> & object, run: () => Result): () => Result {
   const parts = t.solids(f.target, 'target'), edges = f.kind === 'fillet' || f.kind === 'chamfer';
-  return () => { for (const p of parts) checkExpected(brepOf(p, t.at), expect, edges, f.kind, t.fail); return run(); };
+  return () => {
+    for (const p of parts) {
+      const brep = f.kind === 'offset-face' ? offsetFaceTargetBrep(t, f.target, p) : brepOf(p, t.at);
+      checkExpected(brep, expect, edges, f.kind, t.fail);
+    }
+    return run();
+  };
 }
 
 /** Free space closer than this above a hole's face (mm) refuses it (D148b): the cutter has no room to stop short of it. */
@@ -307,7 +328,7 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
     const xyz = (p: CadPartPoint3 | undefined, what: string): Point => { if (!Array.isArray(p) || p.length !== 3) fail('INPUT', `${what} must be [x, y, z]`); return [dim(p![0], what), dim(p![1], what), dim(p![2], what)]; };
     const integer = (v: unknown, what: string, lo: number, hi: number): number => { if (!Number.isInteger(v) || (v as number) < lo || (v as number) > hi) fail('INPUT', `${what} must be an integer from ${lo} to ${hi}`); return v as number; };
     const axisOf = (v: unknown): CadPartAxis => { if (v !== 'x' && v !== 'y' && v !== 'z') fail('INPUT', 'axis must be x, y or z'); return v as CadPartAxis; };
-    const ref = (r: unknown, what: string): { id: string; part: number | null; result: Result } => {
+    const ref: Tools['ref'] = (r, what) => {
       if (typeof r !== 'string') fail('REFERENCE', `${what} must name an earlier feature`);
       const [id, k, extra] = (r as string).split('/');
       const result = results.get(id); if (!result || extra !== undefined) fail('REFERENCE', `${what}: no earlier feature ${r}`);
@@ -317,7 +338,7 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
       if (part !== null && author?.kind === 'frame' && author.bends !== undefined && result!.kind === 'solid') part = result!.parts.findIndex(p => p.member?.frame?.member === part);
 
       if (part !== null && !(Number.isInteger(part) && part >= 0 && result!.kind === 'solid' && part < result!.parts.length)) fail('REFERENCE', `${what}: ${r} is not a part`);
-      return { id, part, result: result! };
+      return { id, part, result: result!, author };
     };
     const solids = (r: unknown, what: string, allowEmpty = false): Part[] => {
       const { id, part, result } = ref(r, what);
@@ -391,7 +412,7 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
     if (result.kind !== 'solid' || used === 'all') continue;
     result.parts.forEach((part, k) => {
       if (used?.has(k) || empty(part.solid)) return;
-      outputs.push(makeOutput(feature.kind === 'frame' && feature.bends !== undefined ? `${feature.id}/${part.member?.frame?.member ?? k}` : result.parts.length === 1 ? feature.id : `${feature.id}/${k}`, feature, part));
+      outputs.push(makeOutput(partOutputId(feature, result.parts.length, part, k), feature, part));
     });
   }
   const snapshot: CadPartSnapshot = {
@@ -458,7 +479,7 @@ export function resolvedDefinition(f: unknown, parameters: Readonly<Record<strin
 export type Tools = {
   dim: (v: CadPartDim | undefined, what: string, positive?: boolean) => number; xy: (p: CadPartPoint2 | undefined, what: string) => XY; xyz: (p: CadPartPoint3 | undefined, what: string) => Point;
   integer: (v: unknown, what: string, lo: number, hi: number) => number; axisOf: (v: unknown) => CadPartAxis; solids: (r: unknown, what: string, allowEmpty?: boolean) => Part[];
-  ref: (r: unknown, what: string) => { id: string; part: number | null; result: Result };
+  ref: (r: unknown, what: string) => { id: string; part: number | null; result: Result; author?: CadPartFeature };
   featureKind: (id: string) => CadPartFeature['kind'] | undefined;
   cutSource: (r: unknown) => { seed: Part; tool: Part[] };
   fail: (code: CadPartErrorCode, detail: string) => never; at: string;
@@ -614,7 +635,10 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         return fail('INPUT', 'Offset face needs one exact native face name.');
       if (typeof distance !== 'number' || !Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadPartLimits.length)
         return fail('PARAMETER', 'Offset face needs a nonzero signed distance within the modeling range.');
-      return () => one({ kind: 'brep', brep: offsetDraftedFace(brepOf(target[0], at), face, distance) });
+      return () => {
+        const brep = offsetFaceTargetBrep(t, f.target, target[0]);
+        return one({ kind: 'brep', brep: offsetPrismWallIfAdmitted(brep, face, distance) ?? offsetDraftedFace(brep, face, distance) });
+      };
     }
 
     case 'face-fillet': return faceFilletOperation(f, t);

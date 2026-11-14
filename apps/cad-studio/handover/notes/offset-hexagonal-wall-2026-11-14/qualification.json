@@ -1,0 +1,189 @@
+{
+  "decision": "D1264",
+  "tier": "FULL",
+  "priority": "P5",
+  "row": 31,
+  "parent": "08aa6c7855a5388b08fab62f2870b0d5aec0406d",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1264-<run>",
+    "D1264_SOURCE_FROZEN=1 node apps/cad-studio/test/offset-hexagonal-wall-browser.mjs <external-evidence>/baseline --baseline",
+    "D1264_SOURCE_FROZEN=1 node apps/cad-studio/test/offset-hexagonal-wall-browser.mjs <external-evidence>/studio-first",
+    "cd packages/barocss-cad && node scripts/tool.mjs type-check && node scripts/tool.mjs build:fast",
+    "cd packages/barocss-cad && node --test --test-concurrency=1 test/prism-wall-offset.test.mjs test/drafted-cap-offset.test.mjs test/prismatic-solid.test.mjs",
+    "node packages/barocss-cad/scripts/code-shape.mjs --check",
+    "pnpm --filter @barocss/cad-model test offset-hexagonal-wall offset-drafted-wall offset-face-native native-offset-face",
+    "pnpm --filter @barocss/cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint packages/barocss-cad-model/src/{app/nativeOffsetFace,app/profileCommands,app/offsetFaceEdit,engine/doc}.ts packages/barocss-cad-model/test/offset-hexagonal-wall.test.ts packages/barocss-cad/src/{features/prism-wall-offset,part/part-model}.ts",
+    "node --check apps/cad-studio/test/offset-hexagonal-wall-browser.mjs",
+    "node <external-evidence>/mutation.mjs <external-evidence> <original-expression> <mutated-expression>",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/build",
+    "git diff --check"
+  ],
+  "checks": {
+    "baselineFeature": "FAIL",
+    "intermediateColdPartIdentity": "FAIL",
+    "actualDesktopStudio": "PASS",
+    "visualReview": "PASS",
+    "independentGeometry": "PASS",
+    "independentReviews": {
+      "status": "PASS",
+      "reviews": 2,
+      "additionalNativeCases": 20
+    },
+    "kernelFocused": {
+      "status": "PASS",
+      "passed": 29,
+      "failed": 0
+    },
+    "modelFocused": {
+      "status": "PASS",
+      "passed": 46,
+      "failed": 0
+    },
+    "kernelTypes": "PASS",
+    "kernelBuild": "PASS",
+    "kernelCodeShape": "PASS",
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "lint": "PASS",
+    "mutation": {
+      "status": "PASS",
+      "exitCodes": {
+        "original": 0,
+        "zero-distance-at-first-intersection": 1,
+        "bypass-collapse-guard": 1
+      }
+    },
+    "studioDriverSyntax": "PASS",
+    "studioProductionBuild": "PASS",
+    "fullSuites": "NOT_RUN",
+    "ci": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "paidLive": "NOT_RUN",
+    "widerDirectEdit": "NOT_RUN"
+  },
+  "geometry": {
+    "sectionPointsMM": [
+      [
+        0,
+        0
+      ],
+      [
+        18,
+        0
+      ],
+      [
+        24,
+        8
+      ],
+      [
+        18,
+        16
+      ],
+      [
+        0,
+        16
+      ],
+      [
+        -6,
+        8
+      ]
+    ],
+    "heightMM": 10,
+    "collapseMM": [
+      -9.6,
+      9.6
+    ],
+    "counts": {
+      "bodies": 1,
+      "shells": 1,
+      "faces": 8,
+      "edges": 18,
+      "vertices": 12,
+      "pcurves": 36
+    },
+    "incidenceSHA256": "6e1fde86743bb66ee695d7fd0addb9674c78fed11e4ec082373121718a50a197",
+    "maximumPcurveGapMM": 4.351167857633658e-15,
+    "oracles": {
+      "source": {
+        "status": "PASS",
+        "distanceMM": 0,
+        "footprintAreaMM2": 384,
+        "exactVolumeMM3": 3840,
+        "nativeVolumeMM3": 3840,
+        "studioVolumeMM3": 3840.0000000000023,
+        "planeResidualMM": 3.552713678800501e-15,
+        "sha256": "0bb66793309fd2ed463c25a5bb9fc55e21fe6c8a52b87e072ae143c9bccb5638"
+      },
+      "outward": {
+        "status": "PASS",
+        "distanceMM": 1,
+        "footprintAreaMM2": 393.4791666666667,
+        "exactVolumeMM3": 3934.7916666666665,
+        "nativeVolumeMM3": 3934.791666666667,
+        "studioVolumeMM3": 3934.791666666667,
+        "planeResidualMM": 3.552713678800501e-15,
+        "sha256": "47691f2f6ab3dc34b95796ca7d935c4a251f7e39f7fce6cc5768be1b1d9300a7"
+      },
+      "inward": {
+        "status": "PASS",
+        "distanceMM": -2,
+        "footprintAreaMM2": 361.9166666666667,
+        "exactVolumeMM3": 3619.1666666666665,
+        "nativeVolumeMM3": 3619.1666666666665,
+        "studioVolumeMM3": 3619.1666666666665,
+        "planeResidualMM": 3.552713678800501e-15,
+        "sha256": "5100665f9d027b878bc12eeeecc342d69ba69f611f8f1a3f303e51d3e149bd14"
+      },
+      "reopened": {
+        "status": "PASS",
+        "distanceMM": -2,
+        "footprintAreaMM2": 361.9166666666667,
+        "exactVolumeMM3": 3619.1666666666665,
+        "nativeVolumeMM3": 3619.1666666666665,
+        "studioVolumeMM3": 3619.1666666666665,
+        "planeResidualMM": 3.552713678800501e-15,
+        "sha256": "5100665f9d027b878bc12eeeecc342d69ba69f611f8f1a3f303e51d3e149bd14"
+      }
+    },
+    "observations": [
+      {
+        "label": "source",
+        "shapeSHA256": "d9da8d76ad70cce73d9061bb6d1ac6632e1a9124562aabd239697d79e11b94b8",
+        "identityRetained": false
+      },
+      {
+        "label": "outward",
+        "shapeSHA256": "c230b03b21fad29155873d0a7bc66e2c37ca1117ced6d50b7591c0456b15aaa4",
+        "identityRetained": true
+      },
+      {
+        "label": "inward",
+        "shapeSHA256": "998c0162090fad938469da95786eed3fa8ca528b6958945d5286a6a9c695f95c",
+        "identityRetained": true
+      },
+      {
+        "label": "reopened",
+        "shapeSHA256": "998c0162090fad938469da95786eed3fa8ca528b6958945d5286a6a9c695f95c",
+        "identityRetained": true
+      }
+    ]
+  },
+  "receipts": {
+    "baselineSHA256": "49c397702212eb77044d5a57a1534c0715705a514f61248611a0b580b33342b1",
+    "studioSHA256": "8a360c3c2c34f25cf774b346df23196422d6011f308725841f4e01b683eb5b05",
+    "nativeSaveSHA256": "01cb9acdfc200858cb747136043c8634ed61723c75f827be07fd1cbe49bddd9d",
+    "unchangedPinnedFiles": 894,
+    "screenshotsSHA256": {
+      "outward-applied": "4a46fcb3836a2df07db8ee24d5818f4f9b152a52802b73defd68ff7687a66a29",
+      "collapse-refused": "3164fe0f31421063ad821363072f9948354264d5b9fbf279735ade255946b3bb",
+      "native-reopen": "9015b5d46b675c9da40640c2296054f6143ed16203ded179b4b734d1cf52f181"
+    }
+  },
+  "issueState": {
+    "2264": "OPEN",
+    "536": "OPEN"
+  }
+}

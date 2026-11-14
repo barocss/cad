@@ -290,6 +290,15 @@ export function offsetFaceNodeProblem(input: unknown, index: number): string | n
   return null;
 }
 
+/** Straight polygon extrusion source for the direct wall offset. Native admission checks the evaluated solid. */
+export function isStraightHexagonalExtrusion(nodes: readonly unknown[], parent: unknown): boolean {
+  if (!textRecord(parent) || parent.kind !== 'extrude' || (parent.draft !== undefined && parent.draft !== 0) ||
+      !Number.isSafeInteger(parent.sketch) || typeof parent.sketch !== 'number' || parent.sketch < 0) return false;
+  const sketch = nodes[parent.sketch];
+  return textRecord(sketch) && sketch.kind === 'sketch' && sketch.profile === 'polygon' &&
+    Array.isArray(sketch.points) && sketch.points.length === 6;
+}
+
 /** Check raw recipes in the root model and its placed or pending part definitions. */
 export function offsetFaceDocumentProblem(input: unknown): string | null {
   const stack: unknown[] = [input], seen = new Set<object>();
@@ -303,10 +312,13 @@ export function offsetFaceDocumentProblem(input: unknown): string | null {
       if (problem) return problem;
       if (node.sigs === undefined) return 'Offset face: the selected face needs its stored individual signature.';
       const parent = value.nodes[(node.parent as BodyRef).node];
-      if (!textRecord(parent) || parent.kind !== 'draft' && parent.kind !== 'offset-face' &&
-          (parent.kind !== 'extrude' || typeof parent.draft !== 'number' || !Number.isFinite(parent.draft) || parent.draft === 0)) {
-        return 'Offset face: the parent must be Draft, a drafted extrusion, or an offset of a drafted face.';
+      if (!textRecord(parent)) return 'Offset face: a supported solid parent is required.';
+      if (parent.kind === 'draft' || parent.kind === 'offset-face') continue;
+      if (parent.kind === 'extrude') {
+        if (typeof parent.draft === 'number' && Number.isFinite(parent.draft) && parent.draft !== 0) continue;
+        if (isStraightHexagonalExtrusion(value.nodes, parent)) continue;
       }
+      return 'Offset face: the parent must be Draft, a drafted extrusion, a straight hexagonal extrusion, or a previous face offset.';
     }
     if (Array.isArray(value.instances)) for (const instance of value.instances) if (textRecord(instance)) stack.push(instance.doc);
     if (textRecord(value.pendingParts)) for (const pending of Object.values(value.pendingParts)) if (textRecord(pending)) stack.push(pending.doc);
