@@ -350,6 +350,7 @@
        "section",
        "native_joints",
        "edge_continuity",
+       "edge_curvature",
        "wall",
        "draft",
        "fit_clearance",
