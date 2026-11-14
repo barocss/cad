@@ -1,0 +1,41 @@
+number	url	title
+301	https://github.com/barocss/barocss/issues/301	streamed SSR: trusted channel for per-chunk server sheets (low priority)
+434	https://github.com/barocss/barocss/issues/434	example: AI-generated coffee kiosk: per-persona screens via local claude -p server + BaroCSS
+444	https://github.com/barocss/barocss/issues/444	example(kiosk): full flow part 2 — review, payment methods, point/cash modals, e-receipt (mock)
+660	https://github.com/barocss/barocss/issues/660	goal(3d): own public 3D library family and verified consumer contracts
+674	https://github.com/barocss/barocss/issues/674	ops: active dedicated serial Integration role and handoff wait records
+1029	https://github.com/barocss/barocss/issues/1029	plan(editors): separate CAD authoring and render-scene authoring over own libraries
+1032	https://github.com/barocss/barocss/issues/1032	test(canvas2d): add repeatable installed tarball consumer acceptance
+1048	https://github.com/barocss/barocss/issues/1048	feat(render-editor): retain native CAD assets in qualified Viewer scenes
+1049	https://github.com/barocss/barocss/issues/1049	feat(render-editor): edit qualified opaque materials uniforms light and camera
+1050	https://github.com/barocss/barocss/issues/1050	feat(render-editor): preview authored rigid Physics with truthful edit play reset state
+1206	https://github.com/barocss/barocss/issues/1206	research(render): observe five Codex UI displays with a pinned model catalog
+1236	https://github.com/barocss/barocss/issues/1236	spec(render-editor): prepare authored-mesh EngineScene viewport adoption
+1247	https://github.com/barocss/barocss/issues/1247	docs(manual): build a multi-package library documentation portal
+1254	https://github.com/barocss/barocss/issues/1254	ops(validation): track deferred integrated acceptance after completed prototype deliveries
+1332	https://github.com/barocss/barocss/issues/1332	fix(render-editor): select applied Source1 objects with a Canvas click
+1445	https://github.com/barocss/barocss/issues/1445	feat(render-editor): add editable authored scene light objects
+1460	https://github.com/barocss/barocss/issues/1460	spec(ui-compiler,ui-runtime): bind CSS identity before frame reuse
+1560	https://github.com/barocss/barocss/issues/1560	research(manual): compare keyword retrieval with a bounded EmbeddingGemma2 pilot
+1565	https://github.com/barocss/barocss/issues/1565	feat(render-editor): preview and cancel qualified Native material drafts
+1872	https://github.com/barocss/barocss/issues/1872	ci: render-editor test run repeatedly terminated by GitHub runner
+2096	https://github.com/barocss/barocss/issues/2096	plan(studios): roadmap for Rendering, Game, World and Virtual products
+2097	https://github.com/barocss/barocss/issues/2097	plan(rendering): define the CAD model connection before a new Editor
+2098	https://github.com/barocss/barocss/issues/2098	plan(rendering): build a new Rendering Editor and retire the legacy direction
+2099	https://github.com/barocss/barocss/issues/2099	plan(world): define source-linked spatial authoring milestones
+2100	https://github.com/barocss/barocss/issues/2100	plan(game): define bounded interactive authoring and play milestones
+2101	https://github.com/barocss/barocss/issues/2101	plan(virtual): define desktop experience and directed-view milestones
+2102	https://github.com/barocss/barocss/issues/2102	feat(world): save and verify pinned World metadata artifacts
+2103	https://github.com/barocss/barocss/issues/2103	feat(game): connect a Rendering scene and success HUD
+2105	https://github.com/barocss/barocss/issues/2105	feat(virtual): stage pinned World metadata in a saved experience
+2108	https://github.com/barocss/barocss/issues/2108	feat(world): resolve a pinned Rendering scene and actual bookmark
+2111	https://github.com/barocss/barocss/issues/2111	feat(world): map two bookmarks to pinned Rendering camera views
+2112	https://github.com/barocss/barocss/issues/2112	feat(virtual): display and play a pinned two-view World experience
+2137	https://github.com/barocss/barocss/issues/2137	plan(rendering): add shared mesh modeling and sculpting toward a character-head workflow
+2169	https://github.com/barocss/barocss/issues/2169	feat(rendering): remove selected placements in one confirmed command
+2174	https://github.com/barocss/barocss/issues/2174	research(rendering): normalMagic의 corner normals·sharp 경계·표면 삽입 적용 검토
+2252	https://github.com/barocss/barocss/issues/2252	research(world): Metropolix 참고 — 공간 오브젝트와 정보 페이지 연결·복귀 상태 계약
+2271	https://github.com/barocss/barocss/issues/2271	research(experiments): PlantCraft 참고 — 관측 시계열·공정 모델 비교와 CAD 권위 분리
+2280	https://github.com/barocss/barocss/issues/2280	research(rendering): evaluate SUPRA-Tex for photo-aligned PBR on derived assets
+2283	https://github.com/barocss/barocss/issues/2283	research(sculpt): SculptForge의 데이터형 브러시·레이어·명령 계약과 토폴로지 확장 검토
+2415	https://github.com/barocss/barocss/issues/2415	Tailwind 4.x drift: parity corpora or preflight changed

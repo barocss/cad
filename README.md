@@ -19,6 +19,7 @@ Run `pnpm type-check`, `pnpm lint` and `pnpm test` for the workspace.
 
 ## Project
 
+- [First feature milestones in the standalone repository](docs/migration/engineering-start.md)
 - [CAD roadmap](apps/cad-studio/handover/roadmap.md)
 - [Decision log](apps/cad-studio/handover/decisions.md)
 - [CAD kernel](packages/barocss-cad/README.md)

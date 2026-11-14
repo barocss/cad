@@ -36,7 +36,9 @@ shared 3D material. The first import retained 578 wiki pages, 1,323 linked files
 The link update added three existing B-rep attachments and fixed references within the new wiki and back to
 source pages. The [original wiki](https://github.com/barocss/barocss/wiki) retains the full history and scope.
 
-Open CAD issue transfers use GitHub's native operation and preserve the old URLs as redirects. The
-[closed issue index](closed-issues.tsv) records 571 closed issues with explicit CAD module titles. It links
+The [open issue map](open-issue-transfers.tsv) records 374 native GitHub transfers. Titles, state and labels
+were checked against the inventory, and an original URL redirect was verified. The [source-open index](source-open-issues.tsv)
+records the other 40 issues from that checkpoint, including cross-project and original-project work.
+The [closed issue index](closed-issues.tsv) records 1,046 closed issues with explicit CAD or related 3D module titles. It links
 to their original closed state and timeline. Titles outside that filter can be reviewed in the
 [original issues](https://github.com/barocss/barocss/issues?q=is%3Aissue+is%3Aclosed).
