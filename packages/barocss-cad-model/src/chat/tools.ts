@@ -29,6 +29,7 @@ import { newPolicy } from './spec';
 import { checkPartEdit, refreshFollowed } from '../frames/skeleton';
 import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, type CallOptions, json, accept, fail, subToolResult } from './toolKit';
 import { QUERY_HANDLERS } from './part/query';
+import { NATIVE_CONTINUITY_HANDLERS } from './part/nativeContinuity';
 import { IMAGE_HANDLERS } from './part/image';
 import { FEATURE_HANDLERS } from './part/features';
 import { REQUIREMENT_HANDLERS } from './part/requirements';
@@ -51,7 +52,7 @@ export { CHAT_COMMANDS, COMMAND_DOCS } from './part/features';
 export { BATCHABLE_TOOLS, isMutator, featureKinds, takesArgument, unknownArguments, TOOLS, SYSTEM_PROMPT } from './toolDefinitions';
 export { agentMayNotAccept, autonomy, leaveOutClosure, partialDoc, proposalParts, toggledLeaveOut, type Decider, type ProposalPart } from './part/proposals';
 /** Every moved handler, by v1 tool name (R3): built once, at load. */
-const PART_HANDLERS: Readonly<Record<string, PartHandler>> = { ...QUERY_HANDLERS, ...IMAGE_HANDLERS, ...FEATURE_HANDLERS, ...REQUIREMENT_HANDLERS, ...VIEW_HANDLERS, ...HISTORY_HANDLERS, ...VERSION_HANDLERS, ...PROPOSAL_HANDLERS };
+const PART_HANDLERS: Readonly<Record<string, PartHandler>> = { ...QUERY_HANDLERS, ...NATIVE_CONTINUITY_HANDLERS, ...IMAGE_HANDLERS, ...FEATURE_HANDLERS, ...REQUIREMENT_HANDLERS, ...VIEW_HANDLERS, ...HISTORY_HANDLERS, ...VERSION_HANDLERS, ...PROPOSAL_HANDLERS };
 const runProposalTool = (state: ChatState, name: string, input: unknown, evaluate: Evaluate) => runToolCounted(state, name, input, evaluate, false, true);
 
 // (R3e: the proposal functions the studio and the team code call, with their signatures as they were; the work is in

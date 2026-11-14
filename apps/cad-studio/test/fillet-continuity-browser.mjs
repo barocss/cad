@@ -1,17 +1,34 @@
 import assert from 'node:assert/strict';
 import { relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { compareMcp } from './fillet-continuity-mcp.mjs';
 
 const output = process.argv[2];
 assert.ok(output && relative(resolve(import.meta.dirname, '../../..'), resolve(output)).startsWith('../'));
 const driver = 'apps/cad-studio/test/fillet-continuity-browser.mjs';
 const baseline = process.argv.includes('--baseline');
+const agent = process.argv.includes('--agent');
+assert.ok(!agent || !baseline);
+const agentPins = agent ? [
+  'apps/cad-studio/test/fillet-continuity-mcp.mjs',
+  'apps/cad-studio/scripts/cad-mcp.mjs',
+  'apps/cad-studio/server/cadMcp.ts',
+  'apps/cad-studio/server/cadDoc.ts',
+  'apps/cad-studio/server/chatServer.ts',
+  'packages/barocss-cad-model/src/chat/part/nativeContinuity.ts',
+  'packages/barocss-cad-model/src/chat/toolDefinitions.ts',
+  'packages/barocss-cad-model/src/chat/groups.ts',
+  'packages/barocss-cad-model/src/chat/contract.ts',
+  'packages/barocss-cad-model/src/chat/tools-v2.json',
+] : [];
 const baselineNativeSHA256 = '12ff52104e6d5ff5b4235b3e5a267aaf168a563285aed2b132137e9d9030fc2f';
 const f = await createFlow({
-  name: 'fillet-continuity', output, envFrozen: 'D1259_SOURCE_FROZEN',
-  initialFiles: [driver], requiredFrozen: [driver, 'packages/barocss-cad/src/brep/edge-continuity.ts'],
-  qualification: 'Inspect both tangent interfaces of an authored constant-radius box fillet in Studio.',
-  limits: ['One 30 × 12 × 20 mm native box, one straight Fillet R2, two straight plane–cylinder interfaces.'],
+  name: 'fillet-continuity', output, envFrozen: agent ? 'D1260_SOURCE_FROZEN' : 'D1259_SOURCE_FROZEN',
+  initialFiles: [driver, ...agentPins], requiredFrozen: [driver, 'packages/barocss-cad/src/brep/edge-continuity.ts', ...agentPins],
+  qualification: agent ? 'Compare actual Studio fillet measurements with the native edge query over local stdio MCP.'
+    : 'Inspect both tangent interfaces of an authored constant-radius box fillet in Studio.',
+  limits: ['One 30 × 12 × 20 mm native box, one straight Fillet R2, two straight plane–cylinder interfaces.',
+    ...(agent ? ['Real local MCP; desktop Chat displays a deterministic replay of its responses.'] : [])],
   inspectorSource: `
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -19,6 +36,12 @@ import { partBreps } from '@barocss/cad-model/engine/evaluate';
 import { readEdgeContinuity } from '@barocss/cad-model/engine/edgeContinuity';
 import { digestOf } from '@barocss/cad-model/util/digest';
 import { brepMassProperties, faceGeometry, checkBrep } from '@barocss/cad';
+${agent ? "import { summarize } from './server/chatServer';" : ""}
+${agent ? `if (process.argv.length > 3) {
+  const [name, text, isError] = process.argv.slice(3).map(s => JSON.parse(s));
+  console.log(JSON.stringify({ summary: summarize(name, text, isError) }));
+  process.exit(0);
+}` : ''}
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const [{ key, brep }] = partBreps(doc);
 const sourceBefore = digestOf(brep);
@@ -35,7 +58,7 @@ const records = list.edges.filter(row => row.faces.includes('n2.face')).map(row 
 });
 assert.equal(digestOf(brep), sourceBefore);
 console.log(JSON.stringify({ sourceSHA256: sourceBefore, check: checkBrep(brep, {strict:true}),
-  volume: brepMassProperties(brep, 1).volume, geometry: faceGeometry(blend), records }));
+  volume: brepMassProperties(brep, 1).volume, geometry: faceGeometry(blend), key, edges: list.edges, records }));
 `,
   oracleSource: `
 import json, math, sys
@@ -111,12 +134,27 @@ async function measure(row) {
 await f.run(async () => {
   const origin = new URL(f.server.resolvedUrls.local[0]).origin;
   const newContext = f.browser.newContext.bind(f.browser);
+  let controlled, turnError;
   f.browser.newContext = async options => {
     const context = await newContext({ ...options, serviceWorkers: 'block' });
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
       if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
-      return ['http:', 'https:'].includes(url.protocol) && url.origin !== origin ? route.abort() : route.continue();
+      if (['http:', 'https:'].includes(url.protocol) && url.origin !== origin) return route.abort();
+      if (!agent) return route.continue();
+      if (url.pathname === '/api/chat/status') return route.fulfill({ json: { enabled: true, model: 'D1260 offline tool replay' } });
+      if (url.pathname !== '/api/chat/turn') return route.continue();
+      let events;
+      try {
+        const input = route.request().postDataJSON();
+        assert.deepEqual(input.doc, controlled.doc);
+        assert.equal(Number(input.autonomy), 1);
+        events = controlled.events;
+      } catch (error) {
+        turnError = error;
+        events = [{ type: 'done', end: 'error', error: 'Offline tool replay failed' }];
+      }
+      return route.fulfill({ contentType: 'text/event-stream', body: events.map(e => 'data: ' + JSON.stringify(e) + '\n\n').join('') });
     });
     return context;
   };
@@ -190,6 +228,34 @@ await f.run(async () => {
     assert.equal(await value().count(), 0);
   }
   await f.same(accepted);
+  if (agent) {
+    f.phase = 'Compare the exact accepted fillet across Studio and local MCP';
+    const calls = await compareMcp(f, accepted, native, studio);
+    const events = [];
+    for (const { input, handler, response } of calls) {
+      const { summary } = await f.inspect('chat-' + (input.edgeId ?? 'list'), accepted, handler, response.content[0].text, response.isError);
+      events.push({ type: 'tool', name: 'query', input, summary, isError: response.isError });
+    }
+
+    f.phase = 'Display the real MCP responses in desktop Chat';
+    controlled = { doc: accepted, events: [...events, { type: 'done', end: 'done' }] };
+    await button('Open chat').click();
+    const chat = f.page.getByRole('complementary', { name: 'Chat', exact: true });
+    await chat.getByLabel('Autonomy', { exact: true }).selectOption('1');
+    await chat.getByLabel('Chat message', { exact: true }).fill('Inspect the joints of this constant-radius fillet.');
+    await button('Send', chat).click();
+    assert.equal(events.length, 5);
+    for (const event of events.filter(event => !event.isError)) await chat.getByText(event.summary, { exact: true }).waitFor();
+    await chat.getByText(/missing-pcurve/).first().or(chat.getByText('Offline tool replay failed', { exact: true })).waitFor();
+    assert.ifError(turnError);
+    assert.deepEqual(await chat.locator('[data-slot="tool"] .mono').allInnerTexts(),
+      ['query.native_joints', ...Array(4).fill('query.edge_continuity')]);
+    assert.equal(await chat.getByText(/missing-pcurve/).count(), 2);
+    await f.same(accepted);
+    await f.snapshot('agent-native-joints');
+    f.report.observations.push({ label: 'agent', actions: calls.length, measuredEdges: interfaces.map(row => row.id),
+      refusedEdges: ends.map(row => row.id), samples: 8, studioExtremaAgree: true, chatDocumentRetained: true });
+  }
   f.report.observations.push({ label: 'fillet', sourceSHA256: native.sourceSHA256, recordCount: native.records.length, volume: native.volume,
     topology: native.check.counts, originalDocumentRetained: true, baselineRefusals: baseline ? interfaces.length : 0, studio });
   assert.deepEqual(f.report.downloads, []);

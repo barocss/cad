@@ -348,6 +348,8 @@
        "mass",
        "interference",
        "section",
+       "native_joints",
+       "edge_continuity",
        "wall",
        "draft",
        "fit_clearance",

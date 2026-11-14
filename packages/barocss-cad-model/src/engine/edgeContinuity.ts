@@ -12,13 +12,20 @@ export interface ContinuityEdge {
 export type ContinuityRequest =
   | { kind: 'list'; picked?: DisplayEdge['nativeJoint'] }
   | { kind: 'measure'; edgeId: string };
-export type ContinuityReply =
-  | { edges: ContinuityEdge[]; selected: string | null }
-  | { measurement: BrepEdgeContinuityResult }
-  | { error: string };
+type ListReply = { edges: ContinuityEdge[]; selected: string | null } | { error: string };
+type MeasureReply = { measurement: BrepEdgeContinuityResult } | { error: string };
+export type ContinuityReply = ListReply | MeasureReply;
 
+export function readEdgeContinuity(doc: StudioDoc, bodyKey: string, request: Extract<ContinuityRequest, { kind: 'list' }>): ListReply;
+export function readEdgeContinuity(doc: StudioDoc, bodyKey: string, request: Extract<ContinuityRequest, { kind: 'measure' }>): MeasureReply;
+export function readEdgeContinuity(doc: StudioDoc, bodyKey: string, request: ContinuityRequest): ContinuityReply;
 export function readEdgeContinuity(doc: StudioDoc, bodyKey: string, request: ContinuityRequest): ContinuityReply {
-  const bodies = partBreps(doc).filter(body => body.key === bodyKey);
+  let bodies: ReturnType<typeof partBreps>;
+  try {
+    bodies = partBreps(doc).filter(body => body.key === bodyKey);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
   if (bodies.length !== 1) return { error: 'The selected body has no unique native geometry.' };
   const { brep } = bodies[0];
   if (request.kind === 'measure') return { measurement: measureBrepEdgeContinuity(brep, request.edgeId) };

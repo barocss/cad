@@ -149,6 +149,10 @@ export function summarize(name: string, text: string, isError: boolean): string 
   }
   if (name === 'get_drawing_dimensions' && Array.isArray(j.dimensions)) return `${j.dimensions.length} linear dimensions · sheet ${j.sheet}`;
   if (name === 'calculate_drawing_tolerance_stack' && j.unit === 'mm') return `Nominal ${j.nominal} mm · worst case ${j.minimum} to ${j.maximum} mm`;
+  if (name === 'list_native_joints' && Array.isArray(j.edges)) return `${j.edges.length} native joints · ${j.body}`;
+  if (name === 'measure_edge_continuity' && j.status === 'measured') {
+    return `${Number(j.minimumAngleDegrees.toPrecision(7))}–${Number(j.maximumAngleDegrees.toPrecision(7))}° · ${j.sampleCount} samples · ${j.edgeName ?? j.edgeId}`;
+  }
   if (name === 'get_part_summary') return `${j.feature_count} features, ${j.bodies?.length ?? 0} bodies`;
   // (O79: the manufacturability report as its process and each rule's status — the whole JSON is past 160 characters.)
   if (name === 'check_printability' && Array.isArray(j.rules)) return `${j.process ?? 'no process'}: ${j.rules.map((r: { id: string; status: string }) => `${r.id} ${r.status}`).join(', ')}`;

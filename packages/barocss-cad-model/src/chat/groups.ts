@@ -46,6 +46,8 @@ export const GROUPS: Record<string, Group> = {
       mass: ['mass_properties', 'bodies?'],
       interference: ['interference', 'bodies? — overlap and clearance'],
       section: ['section', 'axis, at'],
+      native_joints: ['list_native_joints', 'body'],
+      edge_continuity: ['measure_edge_continuity', 'body, edgeId, expectedRevision'],
       wall: ['wall_thickness', 'body?, below?'],
       draft: ['draft', 'body?, pull?, draftMin?'],
       fit_clearance: ['fit_clearance', 'hole?, shaft?, hole_class?, shaft_class?, size? — a hole–shaft fit\u2019s limits and clearance from your fit tables (D155)'],
@@ -200,7 +202,9 @@ function translateNotes(record: unknown, fields: readonly string[]): void {
 export function v2Result(text: string, handler?: string): string {
   let parsed: unknown;
   try { parsed = JSON.parse(text); } catch { return v2Text(text); }
-  if (handler === 'get_drawing_dimensions' || handler === 'calculate_drawing_tolerance_stack') return text;
+  // These records carry literal IDs, names and refusal codes.
+  if (handler === 'get_drawing_dimensions' || handler === 'calculate_drawing_tolerance_stack'
+    || handler === 'list_native_joints' || handler === 'measure_edge_continuity') return text;
   if (handler === 'get_assembly') {
     // A refusal names literal occurrences too. Argument diagnostics already name the public action.
     if (!isRecord(parsed) || !Array.isArray(parsed.instances)) return text;

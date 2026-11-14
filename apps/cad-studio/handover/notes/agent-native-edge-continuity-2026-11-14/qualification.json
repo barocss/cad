@@ -1,0 +1,117 @@
+{
+  "decision": "D1260",
+  "tier": "FULL",
+  "priority": "P5",
+  "row": 24,
+  "parent": "3266563984fcc1b73505d2fdfd74486ed7a38804",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1260-<run>",
+    "UPDATE_TOOL_CONTRACT=1 pnpm --filter @barocss/cad-model test toolset.test",
+    "node apps/library-docs/scripts/agent-tools.mjs",
+    "D1260_SOURCE_FROZEN=1 node apps/cad-studio/test/fillet-continuity-browser.mjs <external-evidence>/studio-qualified --agent",
+    "pnpm --filter @barocss/cad-model test native-continuity-tool edge-continuity toolset.test tool-contract.test drawing-stack-tool",
+    "pnpm --filter @barocss/cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint packages/barocss-cad-model/src/chat/{contract,groups,toolDefinitions,tools}.ts packages/barocss-cad-model/src/chat/part/nativeContinuity.ts packages/barocss-cad-model/src/engine/edgeContinuity.ts packages/barocss-cad-model/test/{native-continuity-tool,tool-contract}.test.ts",
+    "node apps/library-docs/scripts/agent-tools.mjs --check",
+    "node <external-evidence>/mutation.mjs <external-evidence>",
+    "node --check apps/cad-studio/test/fillet-continuity-browser.mjs",
+    "node --check apps/cad-studio/test/fillet-continuity-mcp.mjs",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/build-qualified",
+    "git diff --check"
+  ],
+  "checks": {
+    "initialExactRuntimeComparison": "FAIL",
+    "actualStudio": "PASS",
+    "localStdioMcp": "PASS",
+    "chatLocalReplay": "PASS",
+    "model": {
+      "status": "PASS",
+      "passed": 23,
+      "failed": 0
+    },
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "scopedLint": "PASS",
+    "documentation": "PASS",
+    "driverSyntax": "PASS",
+    "viteBuild": "PASS",
+    "independentSourceReviews": "PASS",
+    "toolList": {
+      "tools": 13,
+      "promptAndListCharacters": 24603,
+      "limit": 25000
+    },
+    "revisionMutations": {
+      "currentExit": 0,
+      "ignoresRevisionExit": 1,
+      "ignoresBodyExit": 1
+    },
+    "fullSuites": "NOT_RUN",
+    "liveModel": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "generalG2G3": "NOT_RUN"
+  },
+  "geometry": {
+    "sourceSHA256": "12ff52104e6d5ff5b4235b3e5a267aaf168a563285aed2b132137e9d9030fc2f",
+    "volumeMM3": 7174.247779607695,
+    "analyticVolumeMM3": 7174.247779607694,
+    "analyticAnglesDegrees": {
+      "n1.side0": 0,
+      "n1.top": 0
+    },
+    "comparison": {
+      "toleranceDegrees": 1e-10,
+      "joints": [
+        {
+          "edgeId": "n2_e8",
+          "studio": [
+            5.088887e-14,
+            5.088887e-14
+          ],
+          "mcp": [
+            1.272221872585407e-14,
+            1.2722218725854078e-14
+          ],
+          "maximumDifferenceDegrees": 3.816665127414593e-14
+        },
+        {
+          "edgeId": "n2_e14",
+          "studio": [
+            7.196774e-14,
+            1.439355e-13
+          ],
+          "mcp": [
+            0,
+            7.196773706231915e-14
+          ],
+          "maximumDifferenceDegrees": 7.196776293768085e-14
+        }
+      ]
+    },
+    "samplesPerJoint": 8,
+    "refusedEdges": [
+      "n2_e11",
+      "n2_e12"
+    ]
+  },
+  "frozenFiles": 1124,
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "inputFileSHA256": {
+    "accepted-mcp": "16595d18676b77613b85d533cbe594e8e451942471842fc1664696ac4b286c5a",
+    "revised-mcp": "9301f6e6c8f9c615c06c549ea5b6808eee042f410a174066846d03975d1c1d7f",
+    "unresolved-mcp": "ebcf281dd1afe5e090e05f8bf48a5704859f603a0b8bb932f6d49ea04a01a48e"
+  },
+  "receiptSHA256": {
+    "initialFailure": "ee7592221423dd9240cf709d8dd99bc1f25864701a939d4fa6cb58a0b30f6dc9",
+    "finalStudio": "2a83b6619d724e1c757c791dab694040ed91dc0c8193c2a4003e62b31ccfc1fe",
+    "actualMcpResponses": "afe477ea921dfde046a2d74232bd3a9d1ef6fb9097690a7bd3bab7090fae0615",
+    "reviewedChatScreenshot": "d7cdc931da1bb36b6f5f1eb3469a630ce85e63929765ddfa15650a619430542a",
+    "independentOracle": "14730466545cf6ee4847a9fadf6e8559a626debbf8eaa5e2cb140b048da0ca21"
+  }
+}

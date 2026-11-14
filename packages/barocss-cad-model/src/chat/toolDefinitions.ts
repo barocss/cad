@@ -356,6 +356,18 @@ export function unknownArguments(name: string, args: Record<string, unknown>): s
 export const TOOLS: ToolDefinition[] = [
   { name: 'load_rows', description: 'Loads strict shop rows only from a JSON file supplied by the person in this conversation. file is an opaque reference listed with the user attachments, never a path, URL, inline rows or suppliedBy claim. Keeps the original source/estimate and adds a file/turn/hash receipt per row. Kinds use the existing domain validators. fits accepts tables, sections accepts section rows or a section table, stock is machining stock, frame-stock is bar lengths, fasteners are bought screws, bolts, nuts and washers (kind, size as M6, lengthMM, designation; a fastener placed as its own part is the BOM line of the row of its kind, size and length). bend requires feature: the index of an existing sheet-base or sheet-contour, whose bend table is replaced. All edits keep the current proposal and approval gates.', input_schema: { type: 'object', properties: { kind: { type: 'string', enum: [...ROW_KINDS] }, file: { type: 'string' }, feature: { type: 'integer', minimum: 0 }, part: PART_ARGUMENT }, required: ['kind', 'file'], additionalProperties: false } },
   ...PART_TOOLS.map(t => t.name === 'select' ? t : { ...t, input_schema: { ...t.input_schema, properties: { ...(t.input_schema.properties as object), part: PART_ARGUMENT } } }),
+  {
+    name: 'list_native_joints',
+    description: 'Lists shared native edges on one base body in the session snapshot. Use a body key from query.summary. Returns IDs and a revision for query.edge_continuity.',
+    input_schema: { type: 'object', properties: { body: { type: 'string', minLength: 1 } }, required: ['body'], additionalProperties: false },
+  },
+  {
+    name: 'measure_edge_continuity',
+    description: 'Measures sampled face-normal angles in degrees on one native joint. Use the body, edge ID and revision from query.native_joints. Unsupported joints refuse. No curvature or full-edge certification.',
+    input_schema: { type: 'object', properties: {
+      body: { type: 'string', minLength: 1 }, edgeId: { type: 'string', minLength: 1 }, expectedRevision: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+    }, required: ['body', 'edgeId', 'expectedRevision'], additionalProperties: false },
+  },
   ...ASSEMBLY_TOOLS.map(withPartArgument),
   ...VERSION_TOOLS,
   ...ROBOT_TOOLS,

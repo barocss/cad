@@ -91,6 +91,18 @@ test('every read tool’s result matches its output schema and changes nothing',
     assert.deepEqual(validate(outputSchemaOf(name)!, result), [], name);
     seen.add(name);
   }
+  const jointState: ChatState = { doc: rectanglePart(30, 12, 20), bodies: [] };
+  const joints = await dispatchTool(jointState, 'query', { action: 'native_joints', body: 'b1' }, evaluate);
+  assert.ok(!joints.isError && !joints.changed, joints.content);
+  const listed = JSON.parse(joints.content);
+  const angles = await dispatchTool(jointState, 'query', {
+    action: 'edge_continuity', body: 'b1', expectedRevision: listed.revision, edgeId: listed.edges[0].id,
+  }, evaluate);
+  assert.ok(!angles.isError && !angles.changed, angles.content);
+  for (const [name, result] of [['list_native_joints', listed], ['measure_edge_continuity', JSON.parse(angles.content)]]) {
+    assert.deepEqual(validate(outputSchemaOf(name)!, result), [], name);
+    seen.add(name);
+  }
   // Every read tool with an output schema was run here.
   // (A keep-out to check, A6.3.)
   const withK = await dispatchTool(s, 'add_keepout', { box: { frame: { origin: [100, 0, 0], normal: [0, 0, 1], xAxis: [1, 0, 0] }, size: [5, 5, 5] } }, evaluate);

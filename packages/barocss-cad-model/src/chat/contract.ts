@@ -26,7 +26,17 @@ const versionPin = o({ id: str, snapshot: str, revision: str, evidenceRevision: 
 const footprint = o({ widthMm: num, depthMm: num }, ['widthMm', 'depthMm']);
 const drawingRead = { revision: str, sheet: num, sheetName: str, scope: obj, unit: { type: 'string', const: 'mm' }, printUnit: { type: 'string', enum: ['mm', 'inch'] } };
 const drawingReadRequired = Object.keys(drawingRead);
+const nativeJointRead = { body: str, revision: str };
 const READ: Record<string, JsonSchema | null> = {
+  list_native_joints: o({ ...nativeJointRead,
+    edges: { type: 'array', items: o({ id: str, name: str, faces: { type: 'array', items: str, minItems: 2, maxItems: 2 } }, ['id', 'name', 'faces']) },
+  }, ['body', 'revision', 'edges']),
+  measure_edge_continuity: o({ ...nativeJointRead, unit: { type: 'string', const: 'degrees' },
+    status: { type: 'string', const: 'measured' }, edgeId: str, edgeName: str,
+    faces: { type: 'array', items: o({ id: str, name: str }, ['id']), minItems: 2, maxItems: 2 },
+    sampleCount: { type: 'integer', minimum: 1 }, minimumAngleDegrees: num, maximumAngleDegrees: num,
+    samples: { type: 'array', items: o({ parameter: num, angleDegrees: num }, ['parameter', 'angleDegrees']) },
+  }, ['body', 'revision', 'unit', 'status', 'edgeId', 'faces', 'sampleCount', 'minimumAngleDegrees', 'maximumAngleDegrees', 'samples']),
   get_drawing_dimensions: o({ ...drawingRead, dimensions: arr }, [...drawingReadRequired, 'dimensions']),
   calculate_drawing_tolerance_stack: o({ ...drawingRead, method: { type: 'string', const: 'worst-case' }, nominal: str, minimum: str, maximum: str, terms: arr },
     [...drawingReadRequired, 'method', 'nominal', 'minimum', 'maximum', 'terms']),
