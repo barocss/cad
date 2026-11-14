@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { twoGuideInspector } from './loft-two-guides-oracle.mjs';
 
 const backend = process.argv.includes('--webgl2') ? 'webgl2' : 'webgpu';
+const checkAo = process.argv.includes('--check-ao');
+const { PNG } = createRequire(join(process.env.PW_DIR, 'package.json'))('playwright-core/lib/utilsBundle');
 const pins = [
   'apps/cad-studio/test/two-guide-loft-display-browser.mjs', 'apps/cad-studio/src/viewport/Viewport.tsx',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts', 'apps/cad-studio/src/engine/engine.worker.ts',
@@ -40,6 +44,68 @@ const source = {
 const button = name => f.page.getByRole('button', { name, exact: true });
 const world = point => f.page.evaluate(p => window.__studioScreenOf(p), point);
 const frame = () => f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+const aoButton = () => f.page.getByTitle('Ambient occlusion', { exact: true });
+async function setAo(on) {
+  const ao = aoButton();
+  if ((await ao.getAttribute('aria-pressed') === 'true') !== on) await ao.click();
+  await ao.getAttribute('aria-pressed').then(pressed => assert.equal(pressed, String(on)));
+  await frame();
+}
+
+function bandMetric({ width, data }) {
+  let total = 0, high = 0, count = 0;
+  for (let y = 465; y < 600; y++) for (let x = 510; x < 538; x++) {
+    const p = 4 * (y * width + x), delta = Math.abs(data[p - 4] - 2 * data[p] + data[p + 4]);
+    total += delta;
+    high += Number(delta >= 4);
+    count++;
+  }
+  return { mean: total / count, fractionAtLeastFour: high / count, count };
+}
+async function checkGrazingAo() {
+  await fit();
+  await f.page.mouse.move(300, 90);
+  const images = [];
+  for (const [label, enabled] of [['grazing-ao-on', true], ['grazing-ao-off', false], ['grazing-ao-restored', true]]) {
+    await setAo(enabled);
+    images.push(PNG.sync.read(await f.page.screenshot()));
+    await f.snapshot(label);
+  }
+  const metrics = images.map(bandMetric);
+  assert.deepEqual(metrics[0], metrics[2]);
+  assert.ok(metrics[0].mean < 0.5 && metrics[0].fractionAtLeastFour < 0.02, JSON.stringify(metrics));
+  f.report.observations.push({ label: 'grazing-ao', metrics });
+}
+
+async function checkContactAo() {
+  const rectangles = [
+    { min: [0, 0], max: [22, 18], height: 2 },
+    { min: [0, 0], max: [6, 18], height: 15 },
+  ];
+  const nodes = rectangles.flatMap(({ min, max, height }, i) => [
+    { id: `n${i * 2}`, kind: 'sketch', profile: 'rectangle', min, max },
+    { id: `n${i * 2 + 1}`, kind: 'extrude', sketch: i * 2, height },
+  ]);
+  const fixture = { ...source, direct: undefined, nodes, nextId: 4, outputs: { b1: { node: 1, side: 'solid' }, b3: { node: 3, side: 'solid' } } };
+  await f.newPage();
+  const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
+  await chooser.setFiles({ name: 'AO-contact.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(fixture)) });
+  await f.same(fixture);
+  await button('Iso').click();
+  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  const landmarks = await Promise.all([[6.2, 7, 2], [6.2, 9, 2], [6.2, 11, 2], [7, 9, 2], [9, 9, 2]].map(world));
+  const captures = [];
+  for (const [label, enabled] of [['contact-ao-on', true], ['contact-ao-off', false]]) {
+    await setAo(enabled);
+    const { width, data } = PNG.sync.read(await f.page.screenshot());
+    captures.push(landmarks.map(([x, y]) => data[4 * (Math.round(y) * width + Math.round(x))]));
+    await f.snapshot(label);
+  }
+  const deltas = captures[1].map((value, i) => value - captures[0][i]);
+  assert.ok(deltas.slice(0, 3).every(diff => diff >= 8) && Math.abs(deltas[4]) <= 3, JSON.stringify({ captures, deltas, landmarks }));
+  f.report.observations.push({ label: 'contact-ao', captures, deltas });
+}
 function ring(t, middle) {
   const q = 2 * t * (1 - t), x = 2 * q, y = -q, z = 12 * t;
   const dx = 10 + 4 * t + (middle - 14) * q, dy = 4 * q, aspect = 3 / 5 - 11 / 35 * t;
@@ -126,6 +192,10 @@ await f.run(async () => {
   assert.equal(canonical.report.valid, true);
   assert.equal(canonical.report.counts.faces, 6);
   assert.ok(Math.abs(canonical.mass.volume - 163256 / 175) < 1e-8);
+  if (checkAo) {
+    f.phase = 'Verify grazing-angle WebGL2 shading with AO on, off and restored';
+    await checkGrazingAo();
+  }
   const pickEdges = async () => {
     const filter = button('Selection filter');
     for (let i = 0; i < 4 && !(await filter.innerText()).includes('Edges'); i++) await filter.click();
@@ -180,4 +250,8 @@ await f.run(async () => {
   const checked = await f.inspect('reopened', edited);
   assert.equal(checked.report.valid, true);
   assert.ok(Math.abs(checked.mass.volume - 147064 / 175) < 1e-8);
+  if (checkAo) {
+    f.phase = 'Verify contact AO still darkens the horizontal ledge';
+    await checkContactAo();
+  }
 });

@@ -350,7 +350,7 @@ void main(){ vec3 c=mix(uBottom,uTop,vUV.y); float v=length(vUV-vec2(0.5,0.6)); 
 const AO_FS = `#version 300 es
 precision highp float; in vec2 vUV;
 uniform sampler2D uColor; uniform sampler2D uDepth; uniform vec2 uTexel; uniform float uNear; uniform float uFar; uniform float uOrtho;
-uniform float uRadius; uniform float uFocal; uniform float uStrength; out vec4 o;
+uniform float uRadius; uniform float uFocal; uniform float uStrength; uniform float uOrthoPixel; out vec4 o;
 float lin(float d){ if(uOrtho>0.5) return uNear+d*(uFar-uNear); float z=d*2.0-1.0; return 2.0*uNear*uFar/(uFar+uNear-z*(uFar-uNear)); }
 void main(){
   vec4 c=texture(uColor,vUV); float d0=texture(uDepth,vUV).r;
@@ -368,7 +368,11 @@ void main(){
     float zs=lin(ds); float expected=z0+gx*off.x+gy*off.y; float diff=expected-zs;
     occ+=smoothstep(0.10*uRadius,0.55*uRadius,diff)*(1.0-smoothstep(1.5*uRadius,3.0*uRadius,diff));
   }
-  float ao=1.0-uStrength*occ/float(N);
+  // At grazing angles a one-pixel depth change can exceed the world pixel width.
+  // Fade the screen-space estimate where a local plane cannot predict neighbouring depth reliably.
+  float confidence=1.0;
+  if(uOrtho>0.5) confidence=1.0-smoothstep(1.5,4.0,length(vec2(gx,gy))/uOrthoPixel);
+  float ao=1.0-uStrength*confidence*occ/float(N);
   o=vec4(c.rgb*ao,1.0);
 }`;
 
@@ -1065,7 +1069,9 @@ export class Renderer implements ViewRenderer {
     gl.uniform1f(this.u(this.ao, 'uNear'), camera.near()); gl.uniform1f(this.u(this.ao, 'uFar'), camera.far()); gl.uniform1f(this.u(this.ao, 'uOrtho'), camera.ortho ? 1 : 0);
     const size = bounds ? Math.hypot(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2]) : 50;
     gl.uniform1f(this.u(this.ao, 'uRadius'), Math.max(1, size * 0.045));
-    gl.uniform1f(this.u(this.ao, 'uFocal'), camera.ortho ? h / (2 * camera.distance * Math.tan(camera.fovY / 2)) * camera.distance : h / (2 * Math.tan(camera.fovY / 2)));
+    const focal = h / (2 * Math.tan(camera.fovY / 2));
+    gl.uniform1f(this.u(this.ao, 'uFocal'), focal);
+    gl.uniform1f(this.u(this.ao, 'uOrthoPixel'), camera.ortho ? camera.distance / focal : 1);
     gl.uniform1f(this.u(this.ao, 'uStrength'), this.aoEnabled && !this.interacting && !lineOnly ? t.ao : 0);
     gl.bindVertexArray(this.emptyVao); gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null); gl.activeTexture(gl.TEXTURE0);
