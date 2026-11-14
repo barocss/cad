@@ -44,10 +44,10 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   revolve: { selection: 'none: the newest finished sketch no feature uses yet', values: { axis: 'y | x: the sketch axis to turn about', deg: 'angle, up to 360', op: 'join | new | cut (sketch on a body face)' } },
   pipe: { selection: 'none: the newest finished sketch no feature uses yet', values: { h: 'straight run before and after the bend', bend: 'bend radius', bendAngle: 'bend angle', toward: 'x | -x | y | -y', op: 'join | new | cut (sketch on a body face)' } },
   'sweep-curve': { selection: 'none: provide the sketch and Direct curve IDs from query.summary', values: {
-    sketch: 'stable ID of one active finished circular sketch without holes',
+    sketch: 'stable ID of an active finished sketch. For exact-straight, use one closed line-and-arc outline with up to one strictly interior circular hole. For exact, use one disk.',
     path: 'stable ID of one visible Direct curve; its current path is copied',
     pathRevision: 'revision of that curve from query.summary; changed geometry requires a new proposal',
-    representation: 'required: exact-straight for one straight segment, or exact for one 30°–90° circular arc; creates a new body',
+    representation: 'required: exact-straight for one straight segment, or exact for one 30°–90° circular arc. The path starts at the outer profile’s area centroid. Creates a new body.',
   } },
   'offset-face': { selection: 'Distance: faces [source]. To plane: faces [source, reference] in that order, on distinct current solids.', values: { offsetMode: 'distance (default) | to-plane (direct native source face and a parallel reference face)', d: 'distance along the face normal: + out (material added), − in (taken off)' } },
   box: { selection: 'none (or a top face to stack on)', values: { w: 'width along X', d: 'depth along Y', h: 'height along Z', x: 'min corner X', y: 'min corner Y', z: 'base Z' } },

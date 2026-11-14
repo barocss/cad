@@ -24,7 +24,7 @@ those of the [NURBS page](/how/nurbs).
 | `revolve` | A profile turned about an axis in its plane, by 0 &lt; α ≤ 360° | Exact: planes, cylinders, cones, spheres, tori, as rational patches | `features/revolve.ts` (`revolveProfile`) |
 | `extrude` with `draft` | A profile pushed up, every wall leaning by the draft angle | Exact: sloping planes, cone patches | `features/drafted-extrusion.ts` (`draftedExtrusion`) |
 | `sweep` | A profile along straight runs and circular bends | Exact: prisms and revolves, glued at their shared sections | `part/part-model.ts` (`sweepBrep`) |
-| `sweep-curve` | A profile along any NURBS curve | Faceted: flat triangles between rings of exact points | `brep/sweep-solid.ts` (`sweepSolid`) |
+| `sweep-curve` | A profile along a NURBS rail | Exact planes and cylinders on a straight rail, or toroidal walls on a circular arc. Other supported rails use the faceted mode. | `brep/exact-sweep.ts` and `brep/sweep-solid.ts` |
 | `loft` | Profiles at heights, or on frames, joined | Exact: ruled patches, or C1 cubic patches through every section | `features/loft.ts` (`loftSolid`) and the files it calls |
 
 The kernel also builds lofted *surfaces* from NURBS section curves, with no solid around them. They are in the last
@@ -99,11 +99,18 @@ are united by a [Boolean](/how/boolean). The mass is the sum of the pieces' clos
 after a Boolean it is computed from the final body, so an overlap is not counted twice (D168). A bend whose radius does
 not clear the profile is refused: the profile reaches the bend's axis.
 
-### Along any curve
+### Along a straight line or circular arc
 
-`sweep-curve` takes a NURBS path. The profile cannot be carried exactly along a general curve, so the result is a
-faceted solid: exact points on rings, flat triangles between them. The question is how to orient the profile at each
-ring.
+In Studio, select a finished sketch and a Direct curve. Open **Sweep** and choose a representation.
+
+- **Exact straight path** carries one closed outline of lines and circular arcs along a single straight segment. The outer outline's area centroid starts at the first path point. One strictly interior circular hole can run through the entire part. A hole edit retains the outer wall positions.
+- **Exact circular arc** carries a disk along one circular arc from 30° to 90°. The path radius must exceed the disk radius.
+
+Both exact modes create a new body with planar end caps. In a kernel feature document, set `mode` to `exact-straight` or `exact` on `sweep-curve`.
+
+### Along a general curve
+
+The default `sweep-curve` mode carries the profile along a NURBS path as a faceted solid. It places exact points on rings and connects them with flat triangles.
 
 <LoftSweep />
 
@@ -289,8 +296,7 @@ three-section loft demos import the TypeScript sources directly and do not run t
 
 ## Limits
 
-- `sweep-curve` is faceted, not exact. Nothing checks that its walls do not cross each other, as they would where the
-  path bends tighter than the profile is wide. Closed paths are refused.
+- The faceted `sweep-curve` permits open paths. Its wall mesh can self-intersect where the path bends tighter than the profile can follow.
 - `sweep` takes one loop with no holes; its path has 1 … 64 steps, bends of at most 180° to one of four sides.
 - `loft` at heights: 2 … 64 sections, each above the one before. Smooth sides need three or more sections. On frames:
   the families in the table above and the certified common-frame polynomial path only; no smooth sides.

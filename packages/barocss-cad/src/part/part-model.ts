@@ -740,10 +740,12 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       const m = sk.frame?.m ?? [1, 0, 0, 0, 1, 0, 0, 0, 1];
       const xAxis: Point = [m[0], m[3], m[6]], yAxis: Point = [m[1], m[4], m[7]];
       if (mode === 'exact' || mode === 'exact-straight') {
-        if (sk.holes?.length || sk.regions?.length) fail('CAPABILITY', 'Exact sweep needs one circular profile without holes.');
+        if (sk.regions?.length) fail('CAPABILITY', mode === 'exact-straight'
+          ? 'Exact straight sweep needs one outer profile without separate regions.'
+          : 'Exact sweep needs one circular profile without holes.');
         return () => {
           if (profiling) profiling.sweeps++;
-          const { brep, mass } = exactSweep({ id: at, mode, outer: sk.outer, path: curve, xAxis, yAxis, sideTags: sk.tags?.outer }, fail);
+          const { brep, mass } = exactSweep({ id: at, mode, outer: sk.outer, holes: sk.holes, path: curve, xAxis, yAxis, sideTags: sk.tags }, fail);
           return { kind: 'solid', parts: [{ solid: { kind: 'brep', brep }, mass }] };
         };
       }

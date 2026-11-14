@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  brepMassProperties, brepSurfaceArea, CadPartError, checkOutput, coedgeVertices, evaluateCadPart, evaluateCurve,
+  brepMassProperties, brepSurfaceArea, CadPartError, checkOutput, coedgeVertices, curveDomain, evaluateCadPart, evaluateCurve,
   evaluateSurface, loadCadPart, massPropertiesOf, measureBrepEdgeContinuity, saveCadPart, surfaceDomain,
 } from '../dist/index.js';
 import { brepBounds } from '../dist/brep/brep-bounds.js';
@@ -171,9 +171,144 @@ test('exact straight sweep bounds the full span and refuses paths or sections ou
   refuse(document(linear(x, [0, 10001, 0])), 'PARAMETER', /path coordinates/);
   refuse(document(linear(), { ...sketch, radius: 0.009 }), 'PARAMETER', /profile radius of at least 0\.01 mm/);
   refuse(document(linear(), { ...sketch, sideTags: { ...sketch.sideTags, holes: [['bore']] },
-    holes: [[{ kind: 'arc', start: [19, 21], center: [18, 21], direction: 'ccw' }]] }),
-    'CAPABILITY', /one circular profile without holes/);
+    holes: [[{ kind: 'arc', start: [21, 21], center: [20, 21], direction: 'ccw' }]] }),
+    'GEOMETRY', /hole must lie strictly inside/);
   const legacy = evaluateCadPart(document(linear(), sketch, null)).outputs[0];
   assert.equal(legacy.brep.source.family, 'mesh');
   refuse(document(linear(), sketch, 'exact'), 'CAPABILITY', /one open circular arc/);
+});
+
+const mixedStart = [13, -7, 4], mixedEnd = [13, 5, 20];
+const xAxis = [1, 0, 0], yAxis = [0, 0.8, -0.6], tangent = [0, 0.6, 0.8];
+const outerArea = 100 + 12.5 * Math.PI;
+const outerCentre = [(700 + 12.5 * Math.PI * (12 + 20 / (3 * Math.PI))) / outerArea, 8];
+const holeCentre = [8, 7];
+const circularHole = (r, [x, y] = holeCentre) => [{ kind: 'arc', start: [x + r, y], center: [x, y], direction: 'cw' }];
+const outer = [
+  { kind: 'line', start: [2, 3] },
+  { kind: 'arc', start: [12, 3], center: [12, 8], direction: 'ccw' },
+  { kind: 'line', start: [12, 13] },
+  { kind: 'line', start: [2, 13] },
+];
+const section = (r = 1) => ({ id: 's', kind: 'sketch', profile: 'loop', segments: outer, holes: [circularHole(r)],
+  sideTags: { outer: ['base', 'round', 'roof', 'back'], holes: [['bore']] } });
+const mixedDocument = (profile = section(), path = linear(mixedStart, mixedEnd), mode = 'exact-straight') => document(path, profile, mode);
+const local = point => {
+  const q = sub(point, mixedStart);
+  return [outerCentre[0] + dot(q, xAxis), outerCentre[1] + dot(q, yAxis), dot(q, tangent)];
+};
+
+function checkMixedSection(output, radius) {
+  const { brep } = output, checked = checkOutput(output);
+  assert.equal(checked.valid, true, checked.issues.join('\n'));
+  assert.deepEqual(brep.source, { family: 'sweep-curve', id: 'w' });
+  assert.deepEqual(checked.counts, { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 });
+  assert.equal(checked.topology[0].genus, 1);
+  near(checked.maximumEdgeSurfaceGap, 0);
+
+  const holeArea = Math.PI * radius ** 2, area = outerArea - holeArea;
+  const centre = add(add(mixedStart, scale(tangent, 10)),
+    add(scale(xAxis, holeArea * (outerCentre[0] - holeCentre[0]) / area),
+      scale(yAxis, holeArea * (outerCentre[1] - holeCentre[1]) / area)));
+  const analytic = massPropertiesOf(output), native = brepMassProperties(brep, 1);
+  assert.equal(analytic.method, 'closed-form');
+  assert.equal(native.method, 'quadrature');
+  for (const mass of [analytic, native]) {
+    near(mass.volume, 20 * area);
+    pointNear(mass.centroid, centre);
+  }
+  near(brepSurfaceArea(brep), 2 * area + 20 * (30 + 5 * Math.PI + 2 * Math.PI * radius));
+  const bounds = brepBounds(brep);
+  pointNear(bounds.min, add(mixedStart, [2 - outerCentre[0], -4, -3]));
+  pointNear(bounds.max, add(mixedEnd, [17 - outerCentre[0], 4, 3]));
+
+  const sides = new Map([
+    ['w.side[base]', [1, [0, -1, 0]]],
+    ['w.side[roof]', [1, [0, 1, 0]]],
+    ['w.side[back]', [1, [-1, 0, 0]]],
+    ['w.side[round]', [2, [12, 8, 5]]],
+    ['w.side[bore]#1', [2, [...holeCentre, radius]]],
+    ['w.side[bore]#2', [2, [...holeCentre, radius]]],
+  ]);
+  assert.deepEqual(new Set(brep.faces.map(face => face.name)), new Set(['w.start', 'w.end', ...sides.keys()]));
+  const loops = new Map(brep.loops.map(loop => [loop.id, loop]));
+  const edges = new Map(brep.edges.map(edge => [edge.id, edge]));
+  const uses = new Map(brep.coedges.map(use => [use.id, use]));
+  for (const face of brep.faces) {
+    const side = sides.get(face.name), bore = face.name.includes('[bore]'), end = face.name === 'w.end';
+    assert.equal(face.surface.kind, 'surface');
+    assert.deepEqual([face.surface.degreeU, face.surface.degreeV], [side?.[0] ?? 1, 1]);
+    const faceLoops = face.loops.map(id => loops.get(id));
+    assert.deepEqual(faceLoops.map(loop => loop.kind), side ? ['outer'] : ['outer', 'inner']);
+    const { u, v } = surfaceDomain(face.surface);
+    // The two rational spans meet at u=0.5. Check derivatives on both sides of that knot.
+    for (const a of [0.125, 0.375, 0.625, 0.875]) for (const b of [0.125, 0.5, 0.875]) {
+      const { point, du, dv } = evaluateSurfaceD1(face.surface, u[0] + a * (u[1] - u[0]), v[0] + b * (v[1] - v[0]));
+      const n = scale(unit(cross(du, dv)), face.sense === 'forward' ? 1 : -1);
+      const [x, y, z] = local(point);
+      if (!side) {
+        near(z, end ? 20 : 0);
+        pointNear(n, scale(tangent, end ? 1 : -1));
+      } else if (side[0] === 2) {
+        const [cx, cy, r] = side[1];
+        near(Math.hypot(x - cx, y - cy), r);
+        if (!bore) assert.ok(x >= 12 - tolerance);
+        pointNear(n, scale(add(scale(xAxis, x - cx), scale(yAxis, y - cy)), (bore ? -1 : 1) / r));
+      } else {
+        const [nx, ny] = side[1];
+        pointNear(n, add(scale(xAxis, nx), scale(yAxis, ny)));
+        if (nx) near(x, 2);
+        else near(y, ny > 0 ? 13 : 3);
+      }
+    }
+    if (!side) assert.deepEqual(faceLoops.map(loop => loop.coedges.length), [4, 2]);
+    for (const loop of faceLoops) for (const id of loop.coedges) {
+      const use = uses.get(id), twin = uses.get(use.twin), edge = edges.get(use.edge);
+      assert.equal(twin.twin, id);
+      assert.equal(twin.edge, use.edge);
+      assert.notEqual(twin.sense, use.sense);
+      assert.ok(use.pcurve);
+      const [lo, hi] = curveDomain(edge.curve);
+      for (const fraction of [0, 0.25, 0.5, 0.75, 1]) {
+        const t = lo + (hi - lo) * fraction, point = evaluateCurve(edge.curve, t);
+        const [s, v] = evaluateCurve(use.pcurve, t);
+        pointNear(evaluateSurface(face.surface, s, v), point);
+        if (loop.kind === 'inner') {
+          const [x, y] = local(point);
+          near(Math.hypot(x - holeCentre[0], y - holeCentre[1]), radius);
+        }
+      }
+    }
+  }
+}
+
+test('exact straight Sweep carries mixed outer walls and an offset circular through-hole', () => {
+  const first = evaluateCadPart(mixedDocument());
+  checkMixedSection(first.outputs[0], 1);
+  const edited = evaluateCadPart(mixedDocument(section(1.5), quadratic(mixedStart, mixedEnd)));
+  checkMixedSection(edited.outputs[0], 1.5);
+  const saved = loadCadPart(saveCadPart(edited));
+  assert.deepEqual(saved.document, edited.document);
+  assert.deepEqual(saved.outputs[0].brep, edited.outputs[0].brep);
+  const annulus = evaluateCadPart(document(linear(), { ...sketch, sideTags: { outer: ['disk'], holes: [['bore']] },
+    holes: [circularHole(1, [18, 21])] })).outputs[0];
+  assert.equal(checkOutput(annulus).topology[0].genus, 1);
+  near(massPropertiesOf(annulus).volume, 3 * Math.PI * distance(a, b));
+});
+
+test('exact straight Sweep refuses inexact or unsupported hole topology', () => {
+  const base = section(), refuse = (profile, code, message, mode = 'exact-straight') =>
+    assert.throws(() => evaluateCadPart(mixedDocument(profile, undefined, mode)), err =>
+      err instanceof CadPartError && err.code === code && err.feature === 'w' && message.test(err.message));
+  for (const hole of [circularHole(1, [8, 4]), circularHole(1, [8, 3.5]), circularHole(1, [-1, 7]),
+    circularHole(1, [16, 8]), circularHole(1, [16 + 1e-8, 8])])
+    refuse({ ...base, holes: [hole] }, 'GEOMETRY', /hole must lie strictly inside/);
+  refuse({ ...base, holes: [circularHole(0.009)] }, 'PARAMETER', /hole radius of at least 0.01/);
+  refuse({ ...base, sideTags: undefined, holes: [circularHole(1), circularHole(1, [6, 9])] },
+    'CAPABILITY', /at most one circular hole/);
+  refuse({ ...base, sideTags: undefined, holes: [[[6, 6], [7, 6], [7, 7], [6, 7]].map(start => ({ kind: 'line', start }))] },
+    'CAPABILITY', /at most one circular hole/);
+  refuse({ ...base, sideTags: undefined, regions: [circularHole(1, [30, 30])] },
+    'CAPABILITY', /without separate regions/);
+  refuse(base, 'CAPABILITY', /one circular profile without holes/, 'exact');
 });

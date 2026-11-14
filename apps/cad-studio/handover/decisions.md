@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1297 — Sweep a line-and-arc profile with one through-hole](notes/exact-straight-profile-sweep-2026-11-15/README.md).
 - [D1296 — Refine Studio’s native circular Sweep silhouette](notes/arc-sweep-display-2026-11-15/README.md).
 - [D1295 — Propose an exact Sweep from a saved Direct curve](notes/exact-sweep-agent-proposal-2026-11-15/README.md).
 - [D1294 — Fillet the mouth of an exact straight Sweep bore](notes/sweep-bore-mouth-fillet-2026-11-15/README.md).

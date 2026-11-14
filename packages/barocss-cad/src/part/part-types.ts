@@ -54,7 +54,7 @@ type Base = { readonly id: string };
 export interface CadPartSketchPlane { readonly origin: CadPartPoint3; readonly normal: readonly [number, number, number]; readonly xAxis: readonly [number, number, number] }
 /**
  * `regions`: more closed loops of material beside the profile; `holes`: closed loops cut from them (a
- * plate with windows, two bosses at once). Only straight extrudes take them.
+ * plate with windows, two bosses at once). Features define the combinations they support.
  */
 /**
  * `sideTags` (R10a, D86): a stable id for each side of the outer loop (a rectangle's 4, a circle's 1, a polygon's points,
@@ -187,7 +187,8 @@ export type CadPartFeature = Base & (
    * The sketch's profile swept along a curve (any NURBS path in mm): its middle starts on the path's
    * start, square to it, carried along without twisting; the ends capped; holes run through. Faceted by
    * default. The `exact` mode sweeps one circular disk along one circular arc from 30° to 90°.
-   * The `exact-straight` mode sweeps one circular disk along a single straight segment.
+   * The `exact-straight` mode sweeps one closed line-and-arc profile along a single straight segment.
+   * The outer profile's area centroid starts at the first path point. One interior circular hole is allowed.
    */
   | { readonly kind: 'sweep-curve'; readonly sketch: string; readonly path: RawNurbsPath; readonly mode?: 'exact' | 'exact-straight' }
   /**
