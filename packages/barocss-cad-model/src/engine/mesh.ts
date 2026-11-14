@@ -72,10 +72,13 @@ export interface DisplayMesh {
   bandDetail?: { rails: readonly { name: string; face: number }[]; tiers: readonly CylinderDisplayTier[] };
   /** A refined native Loft's viewport geometry with the canonical face and edge indices. */
   loftDetail?: LoftDisplayMesh;
+  /** A refined native circular Sweep's viewport geometry in the accepted part frame. */
+  arcSweepDetail?: BoundedDisplayMesh;
 }
 type DisplayBuffers = Pick<DisplayMesh, 'positions' | 'normals' | 'faceOfVertex' | 'indices' | 'edgeLines' | 'edgeOfSegment'>;
 export type CylinderDisplayTier = DisplayBuffers & { chordErrorMM: number };
-export type LoftDisplayMesh = DisplayBuffers & { error: number; bounds: DisplayMesh['bounds'] };
+export type BoundedDisplayMesh = DisplayBuffers & { error: number; bounds: DisplayMesh['bounds'] };
+export type LoftDisplayMesh = BoundedDisplayMesh;
 
 interface Builder { p: number[]; n: number[]; f: number[]; i: number[]; faces: DisplayFace[] }
 

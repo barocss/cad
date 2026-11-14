@@ -7,6 +7,7 @@ import type { FaceTable } from '../assembly/mates';
 import { BarocssError, massPropertiesOf, reevaluate, exportStl, type CadPartOutput, brepSurfaceArea, cutPiece, evaluateCadPart, transformBrep, FACET_PREVIEW_TRIANGLES, type Brep, type CadPartFeatureProfile, type CadPartSnapshot, type FlatPattern, type GearPlacement, type RackPlacement, type SubdSummary, type CutPiece, exportStep } from '@barocss/cad';
 import { bodyMesh, withoutNativeFaces, type DisplayEdge, type DisplayMesh } from './mesh';
 import { cylinderDisplayMesh } from './cylinderDisplay';
+import { arcSweepDisplayMesh } from './arcSweepDisplay';
 import { bandRailDisplayMesh } from './bandRailDisplay';
 import { loftDisplayMesh } from './loftDisplay';
 import { lumpTouches } from './lumps';
@@ -296,6 +297,9 @@ export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refin
         || (node?.kind === 'sweep-curve' && node.mode === 'exact-straight')) {
         const mesh = cylinderDisplayMesh(body.mesh, snapshot.outputs[0].brep, revision);
         if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
+      } else if (node?.kind === 'sweep-curve' && node.mode === 'exact') {
+        const mesh = arcSweepDisplayMesh(body.mesh, snapshot.outputs[0].brep);
+        if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
       }
     }
     if (refineDisplay && quality === 8) {
@@ -539,7 +543,9 @@ export function placeBody(b: BodyResult, m: readonly number[], t: readonly numbe
     return placed;
   });
   const mesh = { ...src, positions, normals, edgeLines, faces, edges, bounds: { min, max } };
-  delete mesh.loftDetail; // The optional packet is in the accepted part's frame.
+  // The optional packets are in the accepted part's frame.
+  delete mesh.loftDetail;
+  delete mesh.arcSweepDetail;
   const element = b.element?.kind === 'weld-bead' ? { ...b.element, report: { ...b.element.report,
     sharedSeams: b.element.report.sharedSeams.map(s => ({ ...s, path: [move(m, t, s.path[0]), move(m, t, s.path[1])] as const })) } } : b.element;
   return { ...b, mesh, ...placedMass(b, m, t), ...(b.massRef !== undefined ? { massPlace: [...(b.massPlace ?? []), { m: [...m], t: [...t] }] } : {}), ...(element ? { element } : {}) };
