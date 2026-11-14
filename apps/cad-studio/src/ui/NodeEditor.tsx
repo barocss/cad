@@ -33,6 +33,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
   const [lengthProblem, setLengthProblem] = useState<string | null>(null);
   const recoveredLengths = useRef(new WeakSet<Extract<ModelNode, { kind: 'sketch' }>>());
   const [modeProblem, setModeProblem] = useState<string | null>(null);
+  const [loftGuideChoice, setLoftGuideChoice] = useState<string | null>(null);
   const guideDescriptionId = useId();
   const [readingEnd, setReadingEnd] = useState(false);
   const ordinaryLocked = pending || !!edgeReplacement?.draft;
@@ -47,7 +48,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
     recoveredLengths.current = new WeakSet();
     return () => { request.current = null; };
   }, [nodes, index]);
-  useEffect(() => { setDraft(nodes); setTyped({}); setEvaluation(null); setModeProblem(null); setLengthProblem(null); setReadingEnd(false); }, [nodes, index]);
+  useEffect(() => { setDraft(nodes); setTyped({}); setEvaluation(null); setModeProblem(null); setLengthProblem(null); setReadingEnd(false); setLoftGuideChoice(null); }, [nodes, index]);
   const current = evaluation?.nodes === nodes && evaluation.index === index ? evaluation : null;
   useLayoutEffect(() => {
     const opener = current?.opener, error = current?.error;
@@ -271,6 +272,8 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
         const guideX = guideField?.[2] === '0';
         const failedGuideX = !!guideGapError && guideX;
         const description = [rangeId, guideId, failedGuideX && `${guideDescriptionId}-gap`].filter(Boolean).join(' ') || undefined;
+        const selectedGuide = f.kind === 'choice' && f.key === 'loftGuide' && sameDraftScope
+          ? f.options.find(option => option.value === loftGuideChoice)?.value : undefined;
         return (
         <div key={f.key} className="field">
           {guideX && guide && <div id={guideId} className="col-span-2 small mono break-words">
@@ -293,10 +296,15 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
                 } catch (error) { onRefuse(error instanceof Error ? error.message.replace(/^\[\w+\] /, '') : String(error)); }
               }}>
               <option value="">ƒ</option>{names.map(n => <option key={n} value={n}>{n}</option>)}</select>}</span>
-            : f.kind === 'choice' ? <select disabled={ordinaryLocked} aria-label={f.label} value={f.get(draft)} onChange={e => {
+            : f.kind === 'choice' ? <select disabled={ordinaryLocked} aria-label={f.label}
+                value={selectedGuide ?? f.get(draft)} onChange={e => {
                 retireEvaluation();
                 try {
                   const next = f.set(draft, e.target.value);
+                  if (f.key === 'loftGuide') {
+                    setLoftGuideChoice(e.target.value);
+                    if (next[index] === draft[index]) return;
+                  }
                   if (f.key.startsWith('loftSource')) {
                     const section = 'Section ' + (Number(f.key.slice('loftSource'.length)) + 1) + ' · ';
                     const keys = new Set(fields.filter(field => field.label.startsWith(section)).map(field => field.key));
@@ -320,7 +328,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
       {!current && alignResult?.kind === 'error' && <FeatureFailureNotice error={alignResult.error} />}
       <div ref={failureArea} className={current?.error?.linkedInsetFeature ? 'scroll-mb-2' : undefined}>
         {current?.error && <FeatureFailureNotice id={guideGapError ? `${guideDescriptionId}-gap` : undefined} error={current.error} />}
-        {fields.length > 0 && <div className="row-actions"><button ref={applyButton} className="primary" disabled={!changed || pending || !!edgeReplacement?.draft || incompleteInset || hasInvalidNumber || !!lengthProblem || (current !== null && !current.error)} onClick={event => apply(event.currentTarget)}>Apply</button><button ref={resetButton} className="ghost" disabled={(!changed && !hasInsetDraft && !incompleteInset && !hasInvalidNumber && !lengthProblem) || pending} onClick={() => { retireEvaluation(); setDraft(nodes); setTyped({}); setLengthProblem(null); }}>Reset</button></div>}
+        {fields.length > 0 && <div className="row-actions"><button ref={applyButton} className="primary" disabled={!changed || pending || !!edgeReplacement?.draft || incompleteInset || hasInvalidNumber || !!lengthProblem || (current !== null && !current.error)} onClick={event => apply(event.currentTarget)}>Apply</button><button ref={resetButton} className="ghost" disabled={(!changed && !hasInsetDraft && !incompleteInset && !hasInvalidNumber && !lengthProblem && !loftGuideChoice) || pending} onClick={() => { retireEvaluation(); setDraft(nodes); setTyped({}); setLengthProblem(null); setLoftGuideChoice(null); }}>Reset</button></div>}
       </div>
     </div>
   );
