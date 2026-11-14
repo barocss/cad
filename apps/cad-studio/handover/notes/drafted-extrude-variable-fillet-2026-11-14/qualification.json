@@ -1,0 +1,167 @@
+{
+  "decision": "D1271",
+  "tier": "FULL",
+  "priority": "P5",
+  "row": 7,
+  "parent": "1917f4a1cec40f40188e4c61a477874121edcca9",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1271-<run>",
+    "cd packages/barocss-cad && node scripts/tool.mjs type-check && node scripts/tool.mjs build:fast",
+    "cd packages/barocss-cad && node --test --test-concurrency=1 test/r10-5.test.mjs test/r10-5b.test.mjs test/r11-1c.test.mjs test/api-variable-fillet.test.mjs test/edge-finish.test.mjs",
+    "node --test --test-concurrency=1 --test-name-pattern 'both inclined ends' packages/barocss-cad/test/api-variable-fillet.test.mjs",
+    "node packages/barocss-cad/scripts/code-shape.mjs --check",
+    "pnpm --filter @barocss/cad-model test fillet-interior-station edge-plane-crossing filletNames native-edge-curvature",
+    "pnpm --filter @barocss/cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint packages/barocss-cad/src/brep/analytic-boolean.ts packages/barocss-cad-model/src/engine/mesh.ts packages/barocss-cad-model/test/fillet-interior-station.test.ts",
+    "node --check apps/cad-studio/test/drafted-extrude-variable-fillet-browser.mjs",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/build",
+    "D1271_SOURCE_FROZEN=1 node apps/cad-studio/test/drafted-extrude-variable-fillet-browser.mjs <external-evidence>/studio-final",
+    "python3 -I <external-evidence>/studio-final/drafted-extrude-variable-fillet-oracle.py < <variant-input.json>",
+    "git diff --check"
+  ],
+  "checks": {
+    "desktopStudio": "PASS",
+    "visualReview": "PASS",
+    "sourceFreeze": "PASS",
+    "independentGeometry": "PASS",
+    "focusedKernel": {
+      "status": "PASS",
+      "passed": 30,
+      "failed": 0
+    },
+    "focusedModel": {
+      "status": "PASS",
+      "passed": 16,
+      "failed": 0
+    },
+    "kernelTypes": "PASS",
+    "kernelBuild": "PASS",
+    "kernelCodeShape": "PASS",
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "focusedLint": "PASS",
+    "driverSyntax": "PASS",
+    "studioProductionBuild": "PASS",
+    "geometryReviews": {
+      "status": "PASS",
+      "count": 2
+    },
+    "baseline12": {
+      "status": "FAIL",
+      "resolved": true,
+      "reason": "The last cap contact cut skipped a short planar overlap. Studio retained the original 8-degree part and reported a one-use rim in History."
+    },
+    "intermediateChecks": {
+      "status": "FAIL",
+      "resolved": true,
+      "reason": "Baseline driver expected a toast instead of History feedback; the first focused Model type check inferred the single-station fixture values too narrowly."
+    },
+    "fullSuites": "NOT_RUN",
+    "ci": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "paidAI": "NOT_RUN",
+    "localMcpReplay": "NOT_RUN",
+    "broadFilletAcceptance": "NOT_RUN",
+    "placedOrNonRectangularDraft": "NOT_RUN",
+    "noncircularSection": "NOT_RUN"
+  },
+  "geometry": {
+    "angle-8": {
+      "status": "PASS",
+      "angleDegrees": 8,
+      "interiorAngleDegrees": 98,
+      "volumeMM3": 11018.889660840567,
+      "removedMM3": 23.660131201154137,
+      "nativeVolumeMM3": 11018.889660843859,
+      "studioVolumeMM3": 11018.889660844428,
+      "maximumContactResidualMM": 9.300007969530365e-07,
+      "maximumArcResidualMM": 3.4771245682740926e-07,
+      "maximumNormalDotError": 0,
+      "samples": 7,
+      "radiusSquaredIntegralAt40MM3": "27731/168",
+      "endRemovedMM3": [
+        0.00782206021586716,
+        0.06427782776512496
+      ],
+      "maximumTrimResidualMM": 9.342471352091763e-08,
+      "oracleSHA256": "885b4a749f69806b5587a66db6f42b2e18ae5780a4023e4a8470b60141dc96c1"
+    },
+    "angle-12": {
+      "status": "PASS",
+      "angleDegrees": 12,
+      "interiorAngleDegrees": 102,
+      "volumeMM3": 10553.214670395955,
+      "removedMM3": 19.12978712586659,
+      "nativeVolumeMM3": 10553.214670399802,
+      "studioVolumeMM3": 10553.21467040015,
+      "maximumContactResidualMM": 4.650898577817189e-07,
+      "maximumArcResidualMM": 1.64696122739727e-07,
+      "maximumNormalDotError": 0,
+      "samples": 7,
+      "radiusSquaredIntegralAt40MM3": "27731/168",
+      "endRemovedMM3": [
+        0.008995582230732446,
+        0.07479393201046432
+      ],
+      "maximumTrimResidualMM": 4.6849133905624285e-08,
+      "oracleSHA256": "95d88d3e66d7f8cefbbdbf4c2952dacd937522d0cb71270b4227a75868270ba3"
+    },
+    "reopened": {
+      "status": "PASS",
+      "angleDegrees": 12,
+      "interiorAngleDegrees": 102,
+      "volumeMM3": 10553.214670395955,
+      "removedMM3": 19.12978712586659,
+      "nativeVolumeMM3": 10553.214670399802,
+      "studioVolumeMM3": 10553.21467040015,
+      "maximumContactResidualMM": 4.650898577817189e-07,
+      "maximumArcResidualMM": 1.64696122739727e-07,
+      "maximumNormalDotError": 0,
+      "samples": 7,
+      "radiusSquaredIntegralAt40MM3": "27731/168",
+      "endRemovedMM3": [
+        0.008995582230732446,
+        0.07479393201046432
+      ],
+      "maximumTrimResidualMM": 4.6849133905624285e-08,
+      "oracleSHA256": "95d88d3e66d7f8cefbbdbf4c2952dacd937522d0cb71270b4227a75868270ba3"
+    }
+  },
+  "mutations": {
+    "current": 0,
+    "omit-end-removal": 1,
+    "swap-trims": 1,
+    "drop-right-trim": 1
+  },
+  "nativeHashes": [
+    {
+      "label": "angle-8",
+      "sha": "58d63b575fcc4e51a702880b2354aa19240eaba17850638bd0d49427eeeeef7c"
+    },
+    {
+      "label": "angle-12",
+      "sha": "dd52c1d189936c62e5d19bf23b7ba65fa17269887d6cb19a5aebd4bd9853af27"
+    },
+    {
+      "label": "reopened",
+      "sha": "dd52c1d189936c62e5d19bf23b7ba65fa17269887d6cb19a5aebd4bd9853af27"
+    }
+  ],
+  "receipts": {
+    "baselineStudioSHA256": "65de521997cc8d6da7723ecb957c44623a12048d0a4b62926fa73932dc82a249",
+    "baselineInlineRefusalSHA256": "6d92f2165af11ff8fa18b350de56edf3f0372a31ececd64f80b096d7cbdb6232",
+    "finalStudioSHA256": "75ec9bdad51c44d3a369aaf44026fcee5265756baaaf4faa07aabb7f07c88604",
+    "nativeSaveSHA256": "646622f1670b020958d8d731e6b1cdf6d9a54b01edb33b5fe0c2f10ea6eb3768",
+    "unchangedPinnedFiles": 902,
+    "screenshotsSHA256": {
+      "fillet-angle-8": "c9238291848c882514d032e3747956d461412c2aceb0f7e6c2c5e8b63baad6e7",
+      "fillet-angle-12": "419c77a3a248acb5b6a4705e4e4b45a65a2be40efe10a06e64819d4cf4e2f6d3",
+      "fresh-open": "37440c6c37a0abbef6f6a7cf1fcdc04cc4a97ed496b0b46d738345461de0b8d7"
+    }
+  },
+  "issues": {
+    "2259": "OPEN"
+  }
+}

@@ -20,7 +20,7 @@ const volume = (doc: StudioDoc, expected: number) => {
   const actual = bodies(doc)[0].volume;
   assert.ok(actual !== null && Math.abs(actual - expected) < 1e-7, `${actual} vs ${expected}`);
 };
-const execute = (doc: StudioDoc, given = values) => dispatchTool({ doc, bodies: bodies(doc) },
+const execute = (doc: StudioDoc, given: Record<string, number | string> = values) => dispatchTool({ doc, bodies: bodies(doc) },
   'run_command', { command: 'fillet', edges: [edge], values: given }, async doc => evaluateDoc(doc, 0));
 
 test('a fillet with one interior station survives History, native Save/Open and changing edge length', async () => {
@@ -104,6 +104,24 @@ test('a selected polyhedral Draft rim accepts fractional radii as an exact local
   assert.ok(node.kind === 'fillet');
   assert.deepEqual(node.radii?.map(({ at }) => at[0]), [40, 30, 15, 0]);
   volume(result.state.doc, 11693.5474789483);
+});
+
+test('four-wall Draft Extrude preserves the exact unplaced fillet rim through an angle edit', async () => {
+  const initial = seed(), [profile, extrude] = initial.nodes;
+  assert.equal(extrude.kind, 'extrude');
+  const draft = { ...initial, nodes: [profile, { ...extrude, draft: 8 }] };
+  const [body] = bodies(draft), rim = body.mesh.edges.find(e => e.names.includes(edge));
+  assert.ok(rim?.nativeFinishLine && !rim.nativeLine && !rim.nativeVertices);
+  const result = await execute(draft, { radius: 1.25, endRadius: 2.5, stationMode: 'two-interior',
+    stationAt: 25, stationRadius: 3, station2At: 62.5, station2Radius: 1 });
+  assert.ok(result.changed && !result.isError, result.content);
+  volume(result.state.doc, 11018.889660840567);
+  const authored = result.state.doc, candidate = {
+    ...authored, nodes: [profile, { ...extrude, draft: 12 }, authored.nodes[2]],
+  };
+  const rematched = await rematchNames(authored, candidate, async doc => evaluateDoc(doc, 0));
+  assert.ok(!('error' in rematched), 'error' in rematched ? rematched.error : '');
+  volume(rematched.doc, 10553.214670395955);
 });
 
 

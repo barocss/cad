@@ -731,11 +731,13 @@ function cutPair(fa: GFace, fb: GFace, tol: number, span: number, touching = fal
       const k = curve3Of(f, seg), key = (k.kind === 'param' && k.src) || null, seen = contactCuts.get(g) ?? new Set<unknown>();
       if (key && seen.has(key)) continue;
       if (!AT_FIFTHS.every(u => offSurface(g, pointOf(k, u), tol) <= tol)) continue;
-      // (Not where it lies wholly off a planar face: a tool's section edge in the plane of a face it ends beside — a lug's
-      // end face, where the ball turns its corner, R10.3a — lies on that face's surface but off the face. Planes only:
-      // on a curved face a contact's (u, v) can fall a period over, off the region as drawn.)
       const c2 = curve2(g, k, tol);
-      if (g.surf.kind === 'plane' && INNER_3.every(u => locateInRegion(segAtAny(c2, u), g.region, 10 * tol) === 'out')) continue;
+      if (g.surf.kind === 'plane' && INNER_3.every(u => locateInRegion(segAtAny(c2, u), g.region, 10 * tol) === 'out')) {
+        // A contact can cross a planar trim near the end of a loft patch, beyond all the interior samples.
+        // Check its intervals before dropping it. The arrangement takes the whole cut and clips it to the face.
+        const overlapsFace = intervals(g, { kind: 'param', at: u => pointOf(k, u), lo: 0, hi: 1 }, tol);
+        if (!overlapsFace.length) continue;
+      }
       g.cuts.push(c2); if (key) { seen.add(key); contactCuts.set(g, seen); }
     }
     return;

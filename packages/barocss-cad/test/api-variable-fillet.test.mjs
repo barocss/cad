@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { part, param, BarocssError } from '../dist/api/index.js';
-import { CadPartError, checkBrep, evaluateCadPart, evaluateSurface, loadCadPart, massPropertiesOf, outputOf, saveCadPart } from '../dist/index.js';
+import { CadPartError, checkBrep, evaluateCadPart, evaluateCurve, evaluateSurface, loadCadPart, massPropertiesOf, outputOf, saveCadPart } from '../dist/index.js';
 
 // Fixed before candidate source: work/k04-variable-fillet-51a59/oracle.json.
 // MMGS; the removed-volume relative comparison is the existing R10.5 1e-9 contract.
@@ -223,4 +223,45 @@ test('fractional kernel fillet: malformed records and changed edge direction fai
   assert.ok(concave);
   const cutter = { ...feature, target: 'union', edges: [concave.name] };
   assert.throws(() => evaluateCadPart({ ...doc, features: [...step, cutter] }), error => error instanceof CadPartError && error.code === 'SELECTION' && /need a convex edge/.test(error.message));
+});
+
+test('fractional kernel fillet: both inclined ends trim the drafted top rim at 8 and 12 degrees', () => {
+  const { doc, feature } = fractionalFillet();
+  for (const [draft, expectedVolume] of [[8, 11018.889660840565], [12, 10553.214670395955]]) {
+    const theta = draft * Math.PI / 180, slope = Math.tan(theta), inset = 10 * slope, span = 40 - 2 * inset;
+    const setback = Math.tan((Math.PI / 2 - theta) / 2);
+    const [sketch, extrusion] = doc.features;
+    const rim = { ...feature, radii: feature.radii.map(({ at, ...control }) => ({ ...control, at: [inset + at[0] / 40 * span, inset, 10] })) };
+    const output = outputOf(evaluateCadPart({ ...doc, features: [sketch, { ...extrusion, draft }, rim] }), rim.id);
+    const { brep } = output;
+    const check = checkBrep(brep, { strict: true });
+    assert.equal(check.valid, true, check.issues.join('\n'));
+    assert.equal(check.counts.bodies, 1);
+    assert.equal(check.counts.shells, 1);
+    // The volume reference integrates the circular corner along X and includes the wedges beyond the cap endpoints.
+    const volume = massPropertiesOf(output).volume;
+    assert.ok(Math.abs(volume - expectedVolume) < 1e-6, `${draft}°: ${volume} vs ${expectedVolume} mm³`);
+
+    for (const [side, planeX, endpoint, endRadius, endRate] of [
+      ['side1', z => 40 - slope * z, 40 - inset, 2.5, 1.5 / (0.375 * span)],
+      ['side3', z => slope * z, inset, 1.25, 1.75 / (0.25 * span)],
+    ]) {
+      const trims = brep.edges.filter(edge => edge.name?.startsWith(`${extrusion.id}.${side}|f.face`));
+      assert.ok(trims.length > 0, `${draft}° ${side}: missing native end trim`);
+      let cap = false, wall = false;
+      for (const { curve } of trims) {
+        const start = curve.knots[curve.degree], end = curve.knots[curve.controlPoints.length];
+        for (const fraction of [0, 0.2, 0.5, 0.8, 1]) {
+          const [x, y, z] = evaluateCurve(curve, start + (end - start) * fraction);
+          const radius = endRadius + endRate * (x - endpoint);
+          const radial = Math.hypot(y - inset - radius * setback, z - 10 + radius);
+          assert.ok(Math.abs(x - planeX(z)) < 1e-5, `${draft}° ${side}: trim leaves its plane`);
+          assert.ok(Math.abs(radial - radius) < 1e-5, `${draft}° ${side}: trim leaves its rolling circle`);
+          cap ||= Math.abs(z - 10) < 1e-6 && Math.abs(y - inset - endRadius * setback) < 1e-6;
+          wall ||= Math.abs(y - slope * z) < 1e-6 && Math.abs(z - 10 + radius * (1 - Math.sin(theta))) < 1e-6;
+        }
+      }
+      assert.ok(cap && wall, `${draft}° ${side}: trim must meet both support contacts`);
+    }
+  }
 });

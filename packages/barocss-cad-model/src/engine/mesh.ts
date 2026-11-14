@@ -54,7 +54,7 @@ export interface DisplayEdge { index: number; faces: [number, number]; a: Vec3; 
   nativeVertices?: readonly [string, string];
   /** Both display endpoints are exact native line poles and vertices on one unmerged prism edge. */
   nativeLine?: true;
-  /** Exact native line between two unmerged planes of a single polyhedral Boolean solid. */
+  /** Exact native line between two unmerged planes of a single non-prismatic solid supported by Fillet. */
   nativeFinishLine?: true;
   /** Circular support shared by every native curve in this display edge. */
   nativeCircle?: NativeCircle;
@@ -271,13 +271,13 @@ export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundar
   // pair's alone — the first that fits, as a walk over all of them finds it; PERF3 C17.)
   const edges: DisplayEdge[] = [], lines: number[] = [], segmentEdge: number[] = [], byPair = new Map<number, DisplayEdge[]>(), F = brep.faces.length + 1;
   const nativeEdges = new Map(brep.edges.map(e => [e.id, e]));
-  const nativeSolid = (brep.source.family === 'prismatic-solid' || brep.source.family === 'polyhedral-boolean') &&
+  const nativeFinishFamily = brep.source.family === 'polyhedral-boolean' || brep.source.family === 'drafted-extrusion';
+  const nativeSolid = (brep.source.family === 'prismatic-solid' || nativeFinishFamily) &&
     brep.bodies.length === 1 && brep.bodies[0].kind === 'solid'
     && brep.shells.length === 1 && brep.shells[0].closed && brep.bodies[0].shells.length === 1
     && brep.bodies[0].shells[0] === brep.shells[0].id && brep.faces.every(face => face.surface.kind === 'surface');
   const nativePrism = nativeSolid && brep.source.family === 'prismatic-solid';
-  const nativeBoolean = nativeSolid && brep.source.family === 'polyhedral-boolean';
-  const nativePoints = nativePrism || nativeBoolean ? new Map(brep.vertices.map(vertex => [vertex.id, vertex.point])) : null;
+  const nativePoints = nativeSolid ? new Map(brep.vertices.map(vertex => [vertex.id, vertex.point])) : null;
   for (const e of mesh.edges) {
     const fs = facesOfEdge.get(e.edgeId) ?? [], pts: Vec3[] = [];
     for (let k = 0; k < e.points.length; k += 3) pts.push([e.points[k], e.points[k + 1], e.points[k + 2]]);
