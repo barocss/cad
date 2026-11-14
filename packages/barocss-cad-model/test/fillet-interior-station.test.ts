@@ -3,8 +3,8 @@ import test from 'node:test';
 import { editFields } from '../src/app/editFields';
 import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
-import { rectanglePart, type StudioDoc } from '../src/engine/doc';
-import { evaluateDoc } from '../src/engine/evaluate';
+import { rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
+import { evaluateDoc, placeBody } from '../src/engine/evaluate';
 import { verifyReferences } from '../src/engine/references';
 import { rematchNames } from '../src/engine/rematch';
 
@@ -85,6 +85,25 @@ test('the agent creates a peak and a trough and History can edit the second inte
     assert.match(refused.content, message);
     assert.equal(refused.state.doc, doc);
   }
+});
+
+test('a selected polyhedral Draft rim accepts fractional radii as an exact local edge', async () => {
+  const doc = withNode(seed(), { kind: 'draft', parent: { node: 1, side: 'solid' }, faces: ['n1.side0'], angle: 8 });
+  const [body] = bodies(doc), name = 'n1.top|n2.draft.bottom';
+  const rim = body.mesh.edges.find(item => item.names.includes(name));
+  assert.ok(rim?.nativeFinishLine && !rim.nativeLine && !rim.nativeVertices);
+  const placed = placeBody(body, [1, 0, 0, 0, 1, 0, 0, 0, 1], [3, 4, 5]);
+  assert.equal(placed.mesh.edges[rim.index].nativeFinishLine, undefined);
+  const result = await dispatchTool({ doc, bodies: [body] }, 'run_command', {
+    command: 'fillet', edges: [name], values: {
+      radius: 1.25, endRadius: 2.5, stationMode: 'two-interior', stationAt: 25, stationRadius: 3, station2At: 62.5, station2Radius: 1,
+    },
+  }, async input => evaluateDoc(input, 0));
+  assert.ok(result.changed && !result.isError, result.content);
+  const node = result.state.doc.nodes[3];
+  assert.ok(node.kind === 'fillet');
+  assert.deepEqual(node.radii?.map(({ at }) => at[0]), [40, 30, 15, 0]);
+  volume(result.state.doc, 11693.5474789483);
 });
 
 

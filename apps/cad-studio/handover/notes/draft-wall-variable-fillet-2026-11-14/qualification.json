@@ -1,0 +1,136 @@
+{
+  "decision": "D1270",
+  "tier": "FEATURE",
+  "priority": "P5",
+  "row": 7,
+  "parent": "242b8fc9301bec6e8978c1cbffa1018ad55bd7f5",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1270-<run>",
+    "pnpm --filter @barocss/cad-model test fillet-interior-station edge-plane-crossing filletNames native-edge-curvature",
+    "pnpm --filter @barocss/cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint packages/barocss-cad-model/src/{engine/mesh,engine/evaluate,app/commands}.ts packages/barocss-cad-model/test/fillet-interior-station.test.ts",
+    "node --check apps/cad-studio/test/draft-wall-variable-fillet-browser.mjs",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/build",
+    "D1270_SOURCE_FROZEN=1 node apps/cad-studio/test/draft-wall-variable-fillet-browser.mjs <external-evidence>/studio-third",
+    "python3 -I <external-evidence>/studio-third/draft-wall-variable-fillet-oracle.py < <variant-input.json>",
+    "git diff --check"
+  ],
+  "checks": {
+    "studio": "PASS",
+    "visualReview": "PASS",
+    "sourceFreeze": "PASS",
+    "independentGeometry": "PASS",
+    "focusedModel": {
+      "status": "PASS",
+      "passed": 15,
+      "failed": 0
+    },
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "focusedLint": "PASS",
+    "driverSyntax": "PASS",
+    "studioProductionBuild": "PASS",
+    "geometryReview": "PASS",
+    "firstTwoStudioRuns": {
+      "status": "FAIL",
+      "resolved": true,
+      "reason": "Selected Draft rim offered no fractional radius controls. Source inspection identified the polyhedral Boolean family."
+    },
+    "allWallDraft12": {
+      "status": "FAIL",
+      "reason": "Direct kernel probe of 40 \u00d7 30 \u00d7 10 mm four-wall Draft Extrude, R1.25/3/1/2.5, fails final analytic Boolean stitch with a one-use top-rim edge."
+    },
+    "fullSuites": "NOT_RUN",
+    "ci": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "paidAI": "NOT_RUN",
+    "localMcpReplay": "NOT_RUN",
+    "broadFilletAcceptance": "NOT_RUN",
+    "noncircularSection": "NOT_RUN",
+    "allWallDraftStudio": "NOT_RUN"
+  },
+  "geometry": {
+    "angle-8": {
+      "status": "PASS",
+      "angleDegrees": 8,
+      "interiorAngleDegrees": 98,
+      "volumeMM3": 11693.547478948258,
+      "removedMM3": 25.37085164696032,
+      "nativeVolumeMM3": 11693.547478948354,
+      "studioVolumeMM3": 11693.547478948356,
+      "maximumContactResidualMM": 3.6618592543628475e-11,
+      "maximumArcResidualMM": 3.5996094993606675e-11,
+      "maximumNormalDotError": 0,
+      "samples": 7,
+      "radiusSquaredIntegralMM3": "27731/168",
+      "oracleSHA256": "4df6c8305d7cc870dce82bfc3eff3cc2a514dcd4afdee5080aea1d594626a773"
+    },
+    "angle-12": {
+      "status": "PASS",
+      "angleDegrees": 12,
+      "interiorAngleDegrees": 102,
+      "volumeMM3": 11553.575995204126,
+      "removedMM3": 21.31088145582969,
+      "nativeVolumeMM3": 11553.575995204046,
+      "studioVolumeMM3": 11553.575995204046,
+      "maximumContactResidualMM": 1.3197027920784227e-11,
+      "maximumArcResidualMM": 7.275957614183426e-12,
+      "maximumNormalDotError": 1.1102230246251565e-16,
+      "samples": 7,
+      "radiusSquaredIntegralMM3": "27731/168",
+      "oracleSHA256": "6bf27745866a7c2159c5cfb48f3c1af7ce2406998246fe4b10c9467fd7a6ec5d"
+    },
+    "reopened": {
+      "status": "PASS",
+      "angleDegrees": 12,
+      "interiorAngleDegrees": 102,
+      "volumeMM3": 11553.575995204126,
+      "removedMM3": 21.31088145582969,
+      "nativeVolumeMM3": 11553.575995204046,
+      "studioVolumeMM3": 11553.575995204046,
+      "maximumContactResidualMM": 1.3197027920784227e-11,
+      "maximumArcResidualMM": 7.275957614183426e-12,
+      "maximumNormalDotError": 1.1102230246251565e-16,
+      "samples": 7,
+      "radiusSquaredIntegralMM3": "27731/168",
+      "oracleSHA256": "6bf27745866a7c2159c5cfb48f3c1af7ce2406998246fe4b10c9467fd7a6ec5d"
+    }
+  },
+  "mutations": {
+    "current": 0,
+    "stale-angle": 1,
+    "wrong-contact-normal": 1,
+    "wrong-arc": 1
+  },
+  "nativeHashes": [
+    {
+      "label": "angle-8",
+      "sha": "d7b2f9a425be46c6c7e3aa046f3bb2f58f7f6243eb0379d5e1f5aa40c35ff554"
+    },
+    {
+      "label": "angle-12",
+      "sha": "da7c29d254f5d7c28080c14085b0801271b8e5904ccb6e71a00e6260a00663b1"
+    },
+    {
+      "label": "reopened",
+      "sha": "da7c29d254f5d7c28080c14085b0801271b8e5904ccb6e71a00e6260a00663b1"
+    }
+  ],
+  "receipts": {
+    "firstStudioSHA256": "2968546b813344535455269d0ef23c553b4f1a888cbbbac72b5969f9ed30459d",
+    "secondStudioSHA256": "28d05218760b0f7da97357ac92d64816867333263c69dba107dcf9d7fe5f046f",
+    "finalStudioSHA256": "841ee9fc784e86696b50c0bfb87f6da20b0e1c091def490277faf165554c7187",
+    "nativeSaveSHA256": "f575cdc882e84af33c725ebc80c2a6e4c524ca0e31a61b0059c5d040f0719208",
+    "unchangedPinnedFiles": 901,
+    "screenshotsSHA256": {
+      "fillet-angle-8": "5a5b69b2a63701c3305b8a814f530d9e7823e85d6df3bc8d20bb1cb068088757",
+      "fillet-angle-12": "fe963e518e6a342b5575a3d871204e739e7d6b35b57c1fe2fd1d536959eca9c0",
+      "fresh-open": "a496e5c0b85d23e30fe93cca44b9cf4d05817922f664ae6e04775691a9e9c263"
+    }
+  },
+  "issues": {
+    "2259": "OPEN"
+  }
+}

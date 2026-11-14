@@ -690,7 +690,7 @@ const allCommands: Command[] = [
     fields: (ctx, values) => {
       const picked = ctx.selection.edges[0];
       const edge = picked && ctx.bodies[picked.body]?.mesh.edges[picked.edge];
-      const supportsStation = ctx.selection.edges.length === 1 && edge?.nativeLine;
+      const supportsStation = ctx.selection.edges.length === 1 && (edge?.nativeLine || edge?.nativeFinishLine);
       const hasInterior = (v: Values) => v.stationMode === 'interior' || v.stationMode === 'two-interior';
       const two = values?.stationMode === 'two-interior';
       return [
@@ -723,7 +723,7 @@ const allCommands: Command[] = [
       const section = sectionOf(v), shaped = section ? { section } : {};
       if (v.stationMode === 'interior' || v.stationMode === 'two-interior') {
         const [edge] = edges;
-        if (ctx.selection.edges.length !== 1 || edges.length !== 1 || names.length !== 1 || !edge.nativeLine)
+        if (ctx.selection.edges.length !== 1 || edges.length !== 1 || names.length !== 1 || !(edge.nativeLine || edge.nativeFinishLine))
           throw refusal('FILLET_CHAIN', 'An interior radius needs one original straight edge.');
         const controls = [{ fraction: Number(v.stationAt) / 100, radius: Number(v.stationRadius) }];
         if (v.stationMode === 'two-interior')
