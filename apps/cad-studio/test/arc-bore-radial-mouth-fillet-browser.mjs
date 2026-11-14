@@ -5,11 +5,12 @@ import { withMcpSession } from './mcp-browser-session.mjs';
 const pins = ['apps/cad-studio/src/state/useCommandPreview.ts', 'packages/barocss-cad-model/src/app/commands.ts',
   'packages/barocss-cad/src/blend/edge-finish.ts', 'packages/barocss-cad/src/brep/exact-sweep.ts',
   'packages/barocss-cad/src/brep/analytic-boolean.ts'];
+const both = process.argv.includes('--both');
 const f = await createFlow({
-  name: 'arc-bore-radial-mouth-fillet', output: process.argv[2], envFrozen: 'D1307_SOURCE_FROZEN',
+  name: 'arc-bore-radial-mouth-fillet', output: process.argv[2], envFrozen: both ? 'D1308_SOURCE_FROZEN' : 'D1307_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Round the new cut rim of a radially clipped circular Sweep and preserve the original cap.',
-  limits: ['Desktop WebGPU. One 45-degree radial cut, new cut rim and constant fillet radii 0.2 and 0.25 mm.'],
+  qualification: both ? 'Round both bore mouths in separate editable features.' : 'Round the new cut rim and preserve the original cap.',
+  limits: ['Desktop WebGPU. One radially clipped circular Sweep with a 2 mm bore and constant fillet radii 0.20 and 0.25 mm.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkOutput, curveDomain, evaluateCadPart, evaluateCurve, massPropertiesOf } from '@barocss/cad';
@@ -63,6 +64,7 @@ const seed = {
   outputs: { b4: { node: 4, side: 'solid' } },
 };
 const names = ['n1.side[bore]#1|n3.bottom', 'n1.side[bore]#2|n3.bottom'];
+const startNames = names.map(name => name.replace('n3.bottom', 'n1.start'));
 const halfDisk = 12.5 * Math.PI;
 const cx = (700 + 12 * halfDisk + 250 / 3) / (100 + halfDisk);
 const boreMajor = 28 - cx;
@@ -79,26 +81,29 @@ async function open(file) {
   await chooser.setFiles(file);
 }
 
-function checkCap(cap, radius) {
+function checkCap(cap, radius, blend) {
   const cut = cap.name === 'n3.bottom', angle = cut ? Math.PI / 4 : 0;
   const cos = Math.cos(angle), sin = Math.sin(angle);
   assert.deepEqual(cap.loops.map(loop => loop.kind), ['outer', 'inner']);
   const [outer, inner] = cap.loops;
   assert.deepEqual(outer.edges.map(edge => edge.degree).sort(), cut ? [1,1,1,2,2] : [1,1,1,2]);
-  if (cut) assert.ok(inner.edges.length > 2 && inner.edges.every(edge => edge.degree === 3));
+  if (radius) assert.ok(inner.edges.length > 2 && inner.edges.every(edge => edge.degree === 3));
   else assert.deepEqual(inner.edges.map(edge => edge.degree), [2,2]);
   let residual = 0;
   for (const loop of cap.loops) for (const edge of loop.edges) {
     assert.ok(edge.paired);
-    if (loop.kind === 'inner') assert.match(edge.adjacent, cut ? /^n5\.face/ : /^n1\.side\[bore\]/);
+    if (loop.kind === 'inner') {
+      if (blend) assert.ok(edge.adjacent.startsWith(`${blend}.face`), edge.adjacent);
+      else assert.match(edge.adjacent, /^n1\.side\[bore\]/);
+    }
     else assert.match(edge.adjacent, /^n1\.side\[(base|round|roof|back)\]/);
     for (const [x,y,z] of edge.samples) {
       const radial = cos * (x - 13) + sin * (y + 7), plane = -sin * (x - 13) + cos * (y + 7);
       near(plane, 0);
       let error;
       if (loop.kind === 'inner') {
-        const carrier = cut ? Math.hypot(radial, radius) : radial;
-        error = Math.hypot(carrier - boreMajor, z - 5) - (cut ? 1 + radius : 1);
+        const carrier = Math.hypot(radial, radius);
+        error = Math.hypot(carrier - boreMajor, z - 5) - (1 + radius);
       } else {
         const s = radial - 20 + cx, t = 12 - z;
         if (edge.adjacent.includes('[round]')) error = Math.hypot(s - 12, t - 8) - 5;
@@ -112,6 +117,18 @@ function checkCap(cap, radius) {
   return { name: cap.name, outer: outer.edges.length, inner: inner.edges.length, residual };
 }
 
+const capByName = (read, name) => read.caps.find(cap => cap.name === name);
+const edgeData = cap => cap.loops.flatMap(loop => loop.edges).map(({ name, degree, samples }) => ({ name, degree, samples })).sort((a,b) => a.name.localeCompare(b.name));
+
+function checkRetainedTrim(before, after) {
+  const [oldOuter, oldInner] = capByName(before, 'n1.start').loops;
+  const [newOuter, newInner] = capByName(after, 'n1.start').loops;
+  assert.deepEqual(edgeData({ loops: [newOuter] }), edgeData({ loops: [oldOuter] }));
+  // A second Boolean can reorder fitted patch suffixes. Match each trim by its sampled curve.
+  const curves = loop => loop.edges.map(({ degree, samples }) => JSON.stringify([degree, samples])).sort();
+  assert.deepEqual(curves(newInner), curves(oldInner));
+}
+
 async function verify(doc, radius, label, originalStart) {
   assert.deepEqual(doc.nodes.slice(0, 5), seed.nodes);
   const feature = doc.nodes[5];
@@ -123,8 +140,7 @@ async function verify(doc, radius, label, originalStart) {
   assert.ok(read.valid && read.genus === 1 && read.counts.bodies === 1 && read.counts.shells === 1);
   assert.ok(read.gap <= 1e-7);
   assert.deepEqual(read.caps.map(cap => cap.name).sort(), ['n1.start', 'n3.bottom']);
-  const caps = read.caps.map(cap => checkCap(cap, radius));
-  const edgeData = cap => cap.loops.flatMap(loop => loop.edges).map(({ name, degree, samples }) => ({ name, degree, samples })).sort((a,b) => a.name.localeCompare(b.name));
+  const caps = read.caps.map(cap => cap.name === 'n3.bottom' ? checkCap(cap, radius, feature.id) : checkCap(cap, 0));
   assert.deepEqual(edgeData(read.caps.find(cap => cap.name === 'n1.start')), edgeData(originalStart));
   assert.equal(read.fillet.length, 1);
   const [fit] = read.fillet;
@@ -137,6 +153,107 @@ async function verify(doc, radius, label, originalStart) {
   assert.equal(bodies.length, 1);
   near(bodies[0].volume, volume);
   f.report.observations.push({ label, radius, expectedVolume: volume, volume: read.volume, counts: read.counts, gap: read.gap, fit, caps });
+}
+
+async function applyRim(previous, atCut, amount, refuseOversize = false) {
+  f.phase = atCut ? 'pick the 45-degree cut rim' : 'pick the original start rim';
+  if (atCut) {
+    await button('View cube directions').click();
+    await f.page.getByRole('menuitem', { name: 'Back left', exact: true }).click();
+  } else await button('Front', f.page.locator('.views')).click();
+  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  const filter = button('Selection filter');
+  for (let i = 0; i < 6 && !(await filter.innerText()).includes('Edges'); i++) await filter.click();
+  assert.match(await filter.innerText(), /Edges/);
+  const alongView = atCut ? [12,-6,4] : [13,-6,4];
+  await f.page.waitForFunction(p => {
+    const a = window.__studioScreenOf([13,-7,4]), b = window.__studioScreenOf(p);
+    return Math.hypot(a[0] - b[0], a[1] - b[1]) < .01;
+  }, alongView);
+  const radial = boreMajor + Math.SQRT1_2, along = radial * Math.SQRT1_2;
+  const point = await f.screenOf(atCut ? [13 + along, -7 + along, 5 + Math.SQRT1_2] : [13 + radial, -7, 5 + Math.SQRT1_2]);
+  assert.ok(point && await f.page.evaluate(point => document.elementFromPoint(...point)?.matches('canvas.vp-canvas'), point));
+  await f.page.mouse.click(...point);
+  await f.page.waitForFunction(() => window.__studioSelection?.selection.edges.length === 1);
+
+  f.phase = atCut ? 'preview the cut-rim fillet' : 'preview the original-rim fillet';
+  await f.command('Fillet');
+  const hud = f.page.getByRole('dialog', { name: 'Fillet', exact: true });
+  const radius = hud.getByLabel('Radius', { exact: true });
+  if (refuseOversize) {
+    await radius.fill('10');
+    await hud.locator('.status').filter({ hasText: /^refused$/ }).waitFor({ timeout: 60000 });
+    assert.equal(await button('Apply', hud).isDisabled(), true);
+    await f.same(previous);
+    await f.snapshot('oversize-refused');
+  }
+  await radius.fill(String(amount));
+  await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor({ timeout: 60000 });
+  const picked = hud.getByRole('group', { name: 'Fillet scope' }).locator('.field').filter({ hasText: 'Picked native edges' }).locator('span[title]');
+  assert.deepEqual((await picked.getAttribute('title')).split('\n').sort(), atCut ? names : startNames);
+  await f.same(previous);
+  await f.snapshot(atCut ? 'curved-mouth-preview' : 'original-mouth-preview');
+  await button('Apply', hud).click();
+  await f.changed(previous);
+  return (await f.snapshot(atCut ? 'curved-mouth-applied' : 'original-mouth-applied')).doc;
+}
+
+async function verifyPair(doc, startRadius, cutRadius, label) {
+  assert.deepEqual(doc.nodes.slice(0, 5), seed.nodes);
+  const [start, cut] = doc.nodes.slice(5);
+  assert.equal(doc.nodes.length, 7);
+  for (const [node, parent, radius, rim] of [[start, 4, startRadius, startNames], [cut, 5, cutRadius, names]]) {
+    assert.equal(node.kind, 'fillet');
+    assert.equal(node.radius, radius);
+    assert.deepEqual(node.parent, { node: parent, side: 'solid' });
+    assert.deepEqual([...node.edges].sort(), rim);
+  }
+  const read = await f.inspect(label, doc);
+  assert.ok(read.valid && read.genus === 1 && read.counts.bodies === 1 && read.counts.shells === 1);
+  assert.ok(read.gap <= 1e-7);
+  const capInfo = [checkCap(capByName(read, 'n1.start'), startRadius, start.id), checkCap(capByName(read, 'n3.bottom'), cutRadius, cut.id)];
+  const volume = slicedVolume - removedByRadius.get(startRadius) - removedByRadius.get(cutRadius);
+  near(read.volume, volume);
+  const { bodies } = await f.bodies();
+  assert.equal(bodies.length, 1);
+  near(bodies[0].volume, volume);
+  f.report.observations.push({ label, startRadius, cutRadius, expectedVolume: volume, volume: read.volume, counts: read.counts, gap: read.gap, caps: capInfo });
+  return read;
+}
+
+async function verifyBoth(cut) {
+  const first = await applyRim(seed, false, .2);
+  const nativeFirst = await f.inspect('first-native-fillet', first);
+  assert.ok(nativeFirst.valid && nativeFirst.genus === 1);
+  near(nativeFirst.volume, volumeAt(.2));
+  assert.deepEqual(edgeData(capByName(nativeFirst, 'n3.bottom')), edgeData(capByName(cut, 'n3.bottom')));
+  const pair = await applyRim(first, true, .25, true);
+  const nativePair = await verifyPair(pair, .2, .25, 'sequential');
+  checkRetainedTrim(nativeFirst, nativePair);
+  await f.openFeatureEditor(5, 'edit the first fillet with the second downstream');
+  await f.editor().getByLabel('Radius', { exact: true }).fill('0.25');
+  const edited = (await f.applyEditor(pair, 'edited-first')).doc;
+  assert.deepEqual(edited.nodes[6], pair.nodes[6]);
+  const native = await verifyPair(edited, .25, .25, 'edited');
+  const firstAlone = await f.inspect('edited-first-without-second', { ...first, nodes: edited.nodes.slice(0, 6) });
+  checkRetainedTrim(firstAlone, native);
+  await f.undo();
+  await f.same(pair);
+  await f.redo();
+  await f.same(edited);
+  const saved = await f.save('two-bore-mouth-fillets');
+  await f.newPage();
+  await open(saved.file);
+  await f.same(edited);
+  assert.deepEqual(await verifyPair(await f.doc(), .25, .25, 'reopened'), native);
+  await f.snapshot('both-mouths-reopened');
+  await withMcpSession({ app: f.app, output: f.output, clientName: 'barocss-sweep-two-fillets-test' }, saved.file, 'reopened-fillets', async call => {
+    const result = await call('query', { action: 'summary' });
+    near(result.facts.volume, native.volume, .001);
+    assert.deepEqual(result.features.slice(-2).map(row => row.node), edited.nodes.slice(-2));
+    f.report.observations.push({ label: 'reopened-agent-readback', volume: result.facts.volume });
+  });
 }
 
 await f.run(async () => {
@@ -157,44 +274,10 @@ await f.run(async () => {
   const cut = await f.inspect('unfilleted-cut', seed);
   assert.ok(cut.valid && cut.genus === 1);
   near(cut.volume, slicedVolume);
-  const originalStart = cut.caps.find(cap => cap.name === 'n1.start');
+  if (both) return verifyBoth(cut);
+  const originalStart = capByName(cut, 'n1.start');
   assert.ok(originalStart);
-  f.phase = 'pick the new 45-degree cut rim on the Studio canvas';
-  await button('View cube directions').click();
-  await f.page.getByRole('menuitem', { name: 'Back left', exact: true }).click();
-  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
-  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  const filter = button('Selection filter');
-  for (let i = 0; i < 6 && !(await filter.innerText()).includes('Edges'); i++) await filter.click();
-  assert.match(await filter.innerText(), /Edges/);
-  await f.page.waitForFunction(() => {
-    const a = window.__studioScreenOf([13,-7,4]), b = window.__studioScreenOf([12,-6,4]);
-    return Math.hypot(a[0] - b[0], a[1] - b[1]) < .01;
-  });
-  const along = Math.SQRT1_2 * (boreMajor + Math.SQRT1_2);
-  const point = await f.screenOf([13 + along, -7 + along, 5 + Math.SQRT1_2]);
-  assert.ok(point && await f.page.evaluate(point => document.elementFromPoint(...point)?.matches('canvas.vp-canvas'), point));
-  await f.page.mouse.click(...point);
-  await f.page.waitForFunction(() => window.__studioSelection?.selection.edges.length === 1);
-
-  f.phase = 'preview and apply the rolling-ball fillet';
-  await f.command('Fillet');
-  const hud = f.page.getByRole('dialog', { name: 'Fillet', exact: true });
-  const radius = hud.getByLabel('Radius', { exact: true });
-  await radius.fill('10');
-  await hud.locator('.status').filter({ hasText: /^refused$/ }).waitFor({ timeout: 60000 });
-  assert.equal(await button('Apply', hud).isDisabled(), true);
-  await f.same(seed);
-  await f.snapshot('oversize-refused');
-  await radius.fill('0.2');
-  await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor({ timeout: 60000 });
-  const picked = hud.getByRole('group', { name: 'Fillet scope' }).locator('.field').filter({ hasText: 'Picked native edges' }).locator('span[title]');
-  assert.deepEqual((await picked.getAttribute('title')).split('\n').sort(), names);
-  await f.same(seed);
-  await f.snapshot('curved-mouth-preview');
-  await button('Apply', hud).click();
-  await f.changed(seed);
-  const applied = (await f.snapshot('curved-mouth-applied')).doc;
+  const applied = await applyRim(seed, true, .2, true);
   await verify(applied, .2, 'fillet-0.2', originalStart);
   await f.openFeatureEditor(5, 'edit the curved bore fillet');
   await f.editor().getByLabel('Radius', { exact: true }).fill('0.25');
