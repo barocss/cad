@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1290 — Match display normals across ruled cylinder seams](notes/ruled-cylinder-display-normals-2026-11-15/README.md).
 - [D1289 — Sweep a circular disk along a straight path](notes/exact-straight-disk-sweep-2026-11-15/README.md).
 - [D1288 — Sweep a circular disk along an exact circular arc](notes/exact-circular-arc-sweep-2026-11-15/README.md).
 - [D1287 — Match Loft refusals to History section numbers](notes/loft-history-section-refusal-number-2026-11-15/README.md).

@@ -310,11 +310,13 @@ function tessellate(brep: Brep, options: BrepTessellationOptions, parameters: Ma
   const perQuarter = Math.max(1, Math.min(64, Math.floor(options.segmentsPerQuarter ?? 8)));
   const edges = new Map(brep.edges.map(e => [e.id, e])), loops = new Map(brep.loops.map(l => [l.id, l])), coedges = new Map(brep.coedges.map(c => [c.id, c]));
   // Faces on a cylinder that are not two rails with straight sides: triangulated in their (r·θ, height) domain.
-  const trimmed = new Map<string, CylinderFrame>(), params = new Map(brep.edges.map(e => [e.id, edgeParameters(e.curve, perQuarter)]));
+  const trimmed = new Map<string, CylinderFrame>(), ruledCylinders = new Map<string, CylinderFrame>();
+  const params = new Map(brep.edges.map(e => [e.id, edgeParameters(e.curve, perQuarter)]));
   for (const face of brep.faces) {
     if (face.surface.kind === 'facets' || planar(face.surface)) continue;
-    const frame = cylinderFrame(face.surface); if (!frame || railsOf(face, loops, coedges, edges) !== undefined) continue;
-    trimmed.set(face.id, frame);
+    const frame = cylinderFrame(face.surface); if (!frame) continue;
+    if (railsOf(face, loops, coedges, edges) === undefined) trimmed.set(face.id, frame);
+    else if (hasCircularBase(face.surface, frame)) ruledCylinders.set(face.id, frame);
   }
   const refined = new Set<string>(), gridded = new Map<string, number>(), rows = 2 * perQuarter;
   // Straight rails of a curved ruled face (a loft's side): sampled as finely as its other rail, or a
@@ -466,6 +468,14 @@ function tessellate(brep: Brep, options: BrepTessellationOptions, parameters: Ma
       const chain = (from: number, to: number) => { const out: Point[] = []; for (let i = (from + 1) % count; i !== to; i = (i + 1) % count) out.push(...along(sides[i]).slice(0, -1)); return out.slice(1); };
       const right = chain(r1, r2), left = chain(r2, r1);
       const pts = [...A, ...B, ...right, ...left], tris: [number, number, number][] = [];
+      const cylinder = ruledCylinders.get(face.id);
+      // Adjacent cylinder halves use the same radial normal at their shared seam. Their triangle
+      // normals follow different endpoint chords, so averaging triangles per face breaks the shading there.
+      const ruledNormals = (points: readonly Point[]) => cylinder ? points.map(p => {
+        const offset = sub(p, cylinder.c);
+        const radial = sub(offset, scale3(cylinder.a, dot(offset, cylinder.a)));
+        return scale3(unit(radial), cylinder.outwardRadial ? 1 : -1);
+      }) : null;
       // Zipper the two sides (A runs with the loop; B was reversed to run the same way), pairing the
       // points by their parameter across the rails when the face is a ruled patch between two of its
       // iso-lines (so the strip follows its rulings), else by their share of each side.
@@ -481,7 +491,7 @@ function tessellate(brep: Brep, options: BrepTessellationOptions, parameters: Ma
         for (let r = 1; r < gridRows; r++) for (let k = 1; k < n; k++) inner.push(ruled.between(across, k, r / gridRows));
         const all = [...A, ...B, ...right, ...left, ...inner], cells: [number, number, number][] = [];
         for (let r = 0; r < gridRows; r++) for (let k = 0; k < n; k++) cells.push([index(k, r), index(k + 1, r), index(k, r + 1)], [index(k + 1, r), index(k + 1, r + 1), index(k, r + 1)]);
-        emit(face.id, 'ruled', all, cells, null); continue;
+        emit(face.id, 'ruled', all, cells, null, ruledNormals(all), sign); continue;
       }
       while (i < n || j < m) {
         const advanceA = j >= m || (i < n && fa(i + 1) <= fb(j + 1));
@@ -495,7 +505,7 @@ function tessellate(brep: Brep, options: BrepTessellationOptions, parameters: Ma
       const r0 = b0 + B.length, l0 = r0 + right.length;
       if (right.length) fan(tris.length - 1, n, b0 + m, right.map((_, k) => r0 + k));
       if (left.length) fan(0, b0, 0, left.map((_, k) => l0 + k));
-      emit(face.id, 'ruled', pts, tris, null);
+      emit(face.id, 'ruled', pts, tris, null, ruledNormals(pts), sign);
     }
     if (!splits.size || round === 2) {
       // (For mass quadrature: each segment between an edge's samples with its curve and parameters, so the curved
@@ -603,6 +613,24 @@ function railsOf(face: Brep['faces'][number], loops: Map<string, Brep['loops'][n
 
 /** sameU: one tolerance for "the same θ column" in the sample pre-pass and in the cells. */
 interface CylinderFrame { c: Point; a: Point; e1: Point; e2: Point; r: number; ref: number; outwardRadial: boolean; sameU: number; uv(p: Point): XY; at(u: number, v: number): Point }
+
+/** Check all base span coefficients before using radial normals on a ruled face. */
+function hasCircularBase(surface: Surface, { c, a, r }: CylinderFrame): boolean {
+  const points = surface.controlPoints.map(row => sub(row[0], c)), knots = surface.knotsU;
+  const tolerance = 1e-9 * Math.max(1, r);
+  for (let i = 0; i + 2 < points.length; i += 2) {
+    // Consecutive clamped quadratic spans meet at a doubled knot. Their end poles are on the
+    // circle; each middle pole is the intersection of the tangents with weight cos(half angle).
+    if (i > 0 && knots[i + 1] !== knots[i + 2]) return false;
+    const [start, middle, end] = [points[i], points[i + 1], points[i + 2]];
+    if (![start, end].every(p => Math.abs(dot(p, a)) <= tolerance && Math.abs(Math.hypot(...p) - r) <= tolerance)) return false;
+    const sum = add3(start, end), weight = surface.weights[i + 1][0];
+    if (Math.abs(Math.hypot(...sum) - 2 * r * weight) > tolerance) return false;
+    if (Math.hypot(...sub(middle, scale3(sum, 0.5 / (weight * weight)))) > tolerance) return false;
+  }
+  return true;
+}
+
 function cylinderDifferential(frame: CylinderFrame): NonNullable<FaceParameters['analytic']> {
   const radial = (p: Point) => { const q = sub(p, frame.c), x = dot(q, frame.e1), y = dot(q, frame.e2), r2 = x * x + y * y; if (!(r2 > 0 && Number.isFinite(r2))) throw new RangeError('Cylinder projection is singular'); return { x, y, r2 }; };
   const finite = (q: XY): XY => { if (!q.every(Number.isFinite)) throw new RangeError('Cylinder projection is not finite'); return q; };
