@@ -119,3 +119,101 @@ test('the mixed angular packet keeps the canonical mesh for a different native s
   assert.equal(base.faces.length, 6);
   assert.equal(arcSweepMixedDisplayMesh(base, output.brep), base);
 });
+
+test('an offset bore shares its two half-rims with both trimmed caps and one pick owner per mouth', () => {
+  for (const [r, reverse] of [[1, false], [1.5, false], [1, true]] as const) {
+    const source = profileSweep(2, reverse), [profile, path] = source.features;
+    assert.ok(profile.kind === 'sketch' && profile.profile === 'loop');
+    const [output] = evaluateCadPart({ ...source, features: [{
+      ...profile,
+      holes: [[{ kind: 'arc', start: [8 + r, 7], center: [8, 7], direction: 'cw' }]],
+      sideTags: { ...profile.sideTags!, holes: [['eccentric']] },
+    }, path] }).outputs;
+    const base = bodyMesh(output.brep, 1), mesh = arcSweepMixedDisplayMesh(base, output.brep), detail = mesh.arcSweepDetail;
+    assert.ok(detail);
+    assert.equal(mesh.faces, base.faces);
+    assert.equal(mesh.edges, base.edges);
+    assert.equal(mesh.positions, base.positions);
+    assert.equal(mesh.faces.length, 7);
+    assert.equal(mesh.edges.length, 12);
+    const { positions, indices, normals, faceOfVertex, edgeOfSegment, edgeLines } = detail;
+    const bytes = [positions, normals, indices, faceOfVertex, edgeOfSegment, edgeLines].reduce((n, buffer) => n + buffer.byteLength, 0);
+    assert.equal(bytes, 186_480);
+    assert.ok(detail.error < 0.024);
+
+    const area = 100 + 12.5 * Math.PI, anchor = (700 + 12.5 * Math.PI * (12 + 20 / (3 * Math.PI))) / area;
+    const boreMajor = 28 - anchor, boreZ = 4 + (reverse ? -1 : 1), bore = mesh.faces.find(face => face.name.endsWith('[eccentric]'))!;
+    const mouths = mesh.edges.filter(edge => edge.names.every(name => name.includes('[eccentric]')));
+    const caps = mouths.map(edge => mesh.faces[edge.faces.find(index => index !== bore.index)!]);
+    assert.equal(mouths.length, 2);
+    for (const edge of mouths) {
+      assert.equal(edge.names.length, 2);
+      assert.equal(edge.nativeJoint, undefined);
+      assert.ok(edge.nativeCircle && edge.faces.includes(bore.index));
+    }
+    const boundaries = mesh.faces.map(() => new Map<string, number>());
+    const capAreas = new Map(caps.map(cap => [cap.index, 0]));
+    const contourArcs = new Map([['[inboard]', 22 - anchor], ['[halfRound]', 37 - anchor]]);
+    const contourStations = new Map([...contourArcs.keys()].map(name => [name, new Set<number>()]));
+    const step = Math.PI / (2 * 52);
+    for (let i = 0; i < faceOfVertex.length; i++) {
+      const face = mesh.faces[faceOfVertex[i]], [x, y, z] = xyz(positions, i), d = [x - 13, y + 7, z - boreZ] as Vec3;
+      const radial = Math.hypot(d[0], d[1]), carrierError = radial - boreMajor;
+      if (face.index === bore.index) {
+        near(Math.hypot(carrierError, d[2]), r);
+        assert.ok(len(sub(xyz(normals, i), [-carrierError * d[0] / radial / r, -carrierError * d[1] / radial / r, -d[2] / r])) < 1e-7);
+      }
+      for (const [name, radius] of contourArcs) if (face.name.endsWith(name) && Math.abs(radial - radius) < 1e-7) {
+        const j = Math.round(Math.atan2(d[1], d[0]) / step);
+        near(radial, radius);
+        near(Math.atan2(d[1], d[0]), j * step);
+        contourStations.get(name)!.add(j);
+      }
+    }
+    for (const [name, radius] of contourArcs) {
+      assert.deepEqual([...contourStations.get(name)!].sort((a, b) => a - b), Array.from({ length: 53 }, (_, j) => j));
+      assert.ok(radius * (1 - Math.cos(step / 2)) * 64.012 < 0.25);
+    }
+    for (let i = 0; i < indices.length; i += 3) {
+      const [i0, i1, i2] = indices.subarray(i, i + 3), owner = faceOfVertex[i0];
+      assert.equal(faceOfVertex[i1], owner);
+      assert.equal(faceOfVertex[i2], owner);
+      const [a, b, c] = [xyz(positions, i0), xyz(positions, i1), xyz(positions, i2)];
+      const n = cross(sub(b, a), sub(c, a));
+      assert.ok(dot(n, xyz(normals, i0)) > 0);
+      for (const [p, q] of [[a, b], [b, c], [c, a]]) {
+        const k = key(p, q), used = boundaries[owner];
+        used.set(k, (used.get(k) ?? 0) + 1);
+      }
+      if (!capAreas.has(owner)) continue;
+      capAreas.set(owner, capAreas.get(owner)! + len(n) / 2);
+    }
+    const polygonArea = 100 + 12 * 25 * Math.sin(Math.PI / 24) - 24 * r ** 2 * Math.sin(Math.PI / 24);
+    for (const area of capAreas.values()) near(area, polygonArea);
+    const visible = new Map<number, number>();
+    for (let i = 0; i < edgeLines.length; i += 6) {
+      const index = edgeOfSegment[i / 3], edge = mesh.edges[index];
+      const p = xyz(edgeLines, i / 3), q = xyz(edgeLines, i / 3 + 1);
+      assert.equal(edgeOfSegment[i / 3 + 1], index);
+      for (const face of edge.faces) assert.equal(boundaries[face].get(key(p, q)), 1);
+      visible.set(index, (visible.get(index) ?? 0) + 1);
+      if (!mouths.includes(edge)) continue;
+      const circle = edge.nativeCircle!;
+      const a = sub(p, circle.centre), b = sub(q, circle.centre);
+      for (const v of [a, b]) {
+        near(len(v), r);
+        near(dot(v, circle.normal), 0);
+      }
+      near(1 - dot(a, b) / (r * r), 1 - Math.cos(Math.PI / 24));
+      assert.ok((r - Math.hypot(...a.map((x, j) => (x + b[j]) / 2))) * 64.012 < 0.25);
+    }
+    assert.equal(visible.size, 12);
+    assert.deepEqual(mouths.map(edge => visible.get(edge.index)), [48, 48]);
+    // Hidden bore rails appear as interior segments of the merged wall, with one triangle per native half.
+    const seamStride = 25, firstBore = faceOfVertex.indexOf(bore.index);
+    for (const seam of [0, seamStride - 1]) for (let row = 0; row < 20; row++) {
+      const i = firstBore + row * seamStride + seam;
+      assert.equal(boundaries[bore.index].get(key(xyz(positions, i), xyz(positions, i + seamStride))), 2);
+    }
+  }
+});

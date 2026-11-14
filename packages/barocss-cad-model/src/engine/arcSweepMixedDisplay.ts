@@ -1,27 +1,32 @@
-import { curveDomain, evaluateCurve, revolutionOf, type Brep, type BrepEdge, type BrepFace } from '@barocss/cad';
+import { curveDomain, evaluateCurve, revolutionOf, triangulatePolygonWithHoles, type Brep, type BrepEdge, type BrepFace } from '@barocss/cad';
+import { readMixedSweepBore } from './arcSweepMixedBore';
 import type { BoundedDisplayMesh, DisplayFace, DisplayMesh } from './mesh';
 import { nativeCircleOf } from './nativeCircle';
 import { add, cross, dot, len, scale, sub, unit, type Vec3 } from './vec3';
 
-const railDivisions = 56, roundDivisions = 42;
 const packetBudget = 192 * 1024;
 const byMesh = new WeakMap<DisplayMesh, DisplayMesh>();
 
 function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefined {
   const { id, family } = brep.source;
+  const hollow = brep.faces.length === 8;
   if (family !== 'sweep-curve' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
-    || brep.shells.length !== 1 || !brep.shells[0].closed || brep.faces.length !== 6 || brep.edges.length !== 12
-    || base.faces.length !== 6 || base.edges.length !== 10) return;
+    || brep.shells.length !== 1 || !brep.shells[0].closed || brep.faces.length !== (hollow ? 8 : 6)
+    || brep.edges.length !== (hollow ? 18 : 12)
+    || base.faces.length !== (hollow ? 7 : 6) || base.edges.length !== (hollow ? 12 : 10)) return;
+  const railDivisions = hollow ? 52 : 56, roundDivisions = hollow ? 24 : 42;
   const nativeFace = new Map(brep.faces.map(face => [face.id, face]));
   const faceOf = new Map(base.faces.map(face => [face.id, face]));
   const start = base.faces.find(face => face.name === `${id}.start`);
   const end = base.faces.find(face => face.name === `${id}.end`);
-  const round = base.faces.find(face => face.kind === 'curved' && !face.exact);
   const back = base.faces.find(face => face.exact?.kind === 'cylinder');
-  if (!start || start.exact?.kind !== 'plane' || !end || end.exact?.kind !== 'plane' || !round || back?.exact?.kind !== 'cylinder'
-    || faceOf.size !== 6 || base.faces.some(face => !nativeFace.has(face.id))) return;
+  if (!start || start.exact?.kind !== 'plane' || !end || end.exact?.kind !== 'plane' || back?.exact?.kind !== 'cylinder'
+    || faceOf.size !== base.faces.length || base.faces.some(face => !nativeFace.has(face.id))) return;
   const annuli = base.faces.filter(face => face !== start && face !== end && face.exact?.kind === 'plane');
   if (annuli.length !== 2) return;
+  const round = base.faces.find(face => face.kind === 'curved' && !face.exact &&
+    base.edges.some(edge => edge.nativeCircle && edge.nativeJoint && edge.faces.includes(start.index) && edge.faces.includes(face.index)));
+  if (!round) return;
   const support = nativeFace.get(round.id)?.surface, backSupport = nativeFace.get(back.id)?.surface;
   if (support?.kind !== 'surface' || support.degreeU !== 2 || support.degreeV !== 2
     || backSupport?.kind !== 'surface' || backSupport.degreeU !== 2 || backSupport.degreeV !== 1) return;
@@ -38,13 +43,15 @@ function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefi
   const loopOf = new Map(brep.loops.map(loop => [loop.id, loop]));
   const useOf = new Map(brep.coedges.map(use => [use.id, use]));
   const vertex = new Map(brep.vertices.map(v => [v.id, v.point]));
-  const edgeOf = new Map(base.edges.map(edge => [edge.nativeJoint?.edgeId, edge]));
-  if (edgeOf.size !== 10 || edgeOf.has(undefined)) return;
-  const reads = (face: BrepFace) => {
-    const loop = face.loops.length === 1 ? loopOf.get(face.loops[0]) : undefined;
-    return loop?.kind === 'outer' && loop.coedges.length === 4 ? loop.coedges.map(id => useOf.get(id)!) : [];
+  const edgeOf = new Map(base.edges.flatMap(edge => edge.nativeJoint ? [[edge.nativeJoint.edgeId, edge] as const] : []));
+  if (edgeOf.size !== 10) return;
+  const reads = (face: BrepFace, kind: 'outer' | 'inner') => {
+    const matching = face.loops.map(id => loopOf.get(id)).filter(loop => loop?.kind === kind);
+    return matching.length === 1 ? matching[0]!.coedges.map(id => useOf.get(id)!) : [];
   };
-  const startUses = reads(nativeFace.get(start.id)!), endUses = reads(nativeFace.get(end.id)!);
+  const startFace = nativeFace.get(start.id)!, endFace = nativeFace.get(end.id)!;
+  if ([startFace, endFace].some(face => face.loops.length !== (hollow ? 2 : 1))) return;
+  const startUses = reads(startFace, 'outer'), endUses = reads(endFace, 'outer');
   if (startUses.length !== 4 || endUses.length !== 4) return;
   const capEdges = (uses: typeof startUses) => uses.map(use => nativeEdge.get(use.edge)!);
   const startEdges = capEdges(startUses), endEdges = capEdges(endUses);
@@ -61,11 +68,14 @@ function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefi
     || !near(start.exact.n, scale(tangent, -1)) || !near(end.exact.n, cross(axis, last))
     || len(cross(circle1.normal, tangent)) > 1e-9 || len(cross(circle2.normal, cross(axis, last))) > 1e-9
     || len(cross(axis, back.exact.a)) > 1e-9 || len(cross(sub(back.exact.c, centre), axis)) > tolerance) return;
+  const startInner = reads(startFace, 'inner'), endInner = reads(endFace, 'inner');
+  const bore = hollow ? readMixedSweepBore(brep, base, [start, end], { centre, first, last, axis, tangent, sweep, tolerance }, startInner, endInner) : undefined;
+  if (hollow && (!bore || bore.wall === round.index)) return;
 
   const startIds = new Set(startEdges.flatMap(edge => [...edge.vertices]));
   const endIds = new Set(endEdges.flatMap(edge => [...edge.vertices]));
   if (startIds.size !== 4 || endIds.size !== 4 || [...startIds].some(id => endIds.has(id))) return;
-  const rails = brep.edges.filter(edge => !startEdges.includes(edge) && !endEdges.includes(edge));
+  const rails = brep.edges.filter(edge => edge.vertices.some(id => startIds.has(id)) && edge.vertices.some(id => endIds.has(id)));
   const connections = new Map<string, { edge: BrepEdge; end: string }>();
   for (const edge of rails) {
     const [a, b] = edge.vertices;
@@ -147,14 +157,24 @@ function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefi
     if (dot(cross(sub(q, p), sub(r, p)), xyz(normals, a)) < 0) indices.push(a, c, b);
     else indices.push(a, b, c);
   };
-  const line = (edge: BrepEdge, points: readonly Vec3[]) => {
-    const owner = edgeOf.get(edge.id);
-    if (!owner) return;
+  const line = (owner: number | undefined, points: readonly Vec3[]) => {
+    if (owner === undefined) return;
     for (let j = 1; j < points.length; j++) {
       edgeLines.push(...points[j - 1], ...points[j]);
-      edgeOfSegment.push(owner.index, owner.index);
+      edgeOfSegment.push(owner, owner);
     }
   };
+  const strip = (left: number, right: number, width: number) => {
+    for (let k = 0; k < width; k++) {
+      const a = left + k, b = right + k;
+      triangle(a, b, a + 1);
+      triangle(a + 1, b, b + 1);
+    }
+  };
+  const readRing = (uses: typeof startUses, rows: Map<string, Vec3[]>) => uses.flatMap(use => {
+    const points = rows.get(use.edge)!;
+    return (use.sense === 'forward' ? points : [...points].reverse()).slice(0, -1);
+  });
 
   const roundRows: Vec3[][] = [];
   for (const edge of startEdges) {
@@ -172,12 +192,14 @@ function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefi
         row.push(p);
       }
       if (rounded) roundRows.push(row);
-      if (!j) continue;
-      for (let k = 0; k < width; k++) {
-        const a = firstIndex + (j - 1) * (width + 1) + k, b = a + width + 1;
-        triangle(a, b, a + 1);
-        triangle(a + 1, b, b + 1);
-      }
+      if (j) strip(firstIndex + (j - 1) * (width + 1), firstIndex + j * (width + 1), width);
+    }
+  }
+  if (bore) for (const { rows } of bore.halves) {
+    const index = faceOfVertex.length, width = rows[0].points.length;
+    for (const [j, row] of rows.entries()) {
+      row.points.forEach((point, k) => emit(point, row.normals[k], bore.wall));
+      if (j) strip(index + (j - 1) * width, index + j * width, width - 1);
     }
   }
 
@@ -188,12 +210,24 @@ function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefi
       const points = edge === startArc ? roundRows[j] : [railPoints.get(a)![j], railPoints.get(b)![j]];
       const capEdge = isStart ? edge : mate;
       rows.set(capEdge.id, isStart || mate.vertices[0] === connections.get(a)!.end ? points : [...points].reverse());
-      line(capEdge, points);
+      line(edgeOf.get(capEdge.id)?.index, points);
     }
-    const boundary = uses.flatMap(use => {
-      const points = rows.get(use.edge)!;
-      return (use.sense === 'forward' ? points : [...points].reverse()).slice(0, -1);
-    });
+    const boundary = readRing(uses, rows);
+    if (bore) {
+      for (const { edge, points, owner } of bore.capRows(isStart)) {
+        rows.set(edge, points);
+        line(owner, points);
+      }
+      const inner = readRing(isStart ? startInner : endInner, rows), idx = faceOfVertex.length;
+      const x = radial[j], y = cross(cap.normal, x);
+      const project = (points: Vec3[]): [number, number][] => points.map(p => {
+        const q = sub(p, centre);
+        return [dot(q, x), dot(q, y)];
+      });
+      for (const point of [...boundary, ...inner]) emit(point, cap.normal, cap.index);
+      for (const [a, b, c] of triangulatePolygonWithHoles(project(boundary), [project(inner)])) triangle(idx + a, idx + b, idx + c);
+      continue;
+    }
     const backEdge = (isStart ? startEdges : endEdges).find(edge => sideFor(edge, cap) === back)!;
     const corner = boundary.indexOf(vertex.get(backEdge.vertices[0])!);
     if (corner < 0) return;
@@ -202,7 +236,7 @@ function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefi
     for (let k = 0; k < boundary.length; k++) emit(boundary[(corner + k) % boundary.length], cap.normal, cap.index);
     for (let k = 1; k + 1 < boundary.length; k++) triangle(index, index + k, index + k + 1);
   }
-  for (const [id, points] of railPoints) line(nativeEdge.get(nativeRailId.get(id)!)!, points);
+  for (const [id, points] of railPoints) line(edgeOf.get(nativeRailId.get(id)!)?.index, points);
 
   const bytes = 8 * (positions.length + edgeLines.length)
     + 4 * (normals.length + faceOfVertex.length + indices.length + edgeOfSegment.length);
@@ -215,7 +249,7 @@ function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefi
   // Tensor interpolation: the angular second derivative bounds are R+r, r and r.
   // The same rail sagitta bounds the cylinder and annuli, and the cap uses the profile sagitta.
   const d = sweep / railDivisions, e = Math.PI / roundDivisions;
-  const error = ((major + minor) * d ** 2 + 2 * minor * d * e + minor * e ** 2) / 8 + tolerance;
+  const error = Math.max(((major + minor) * d ** 2 + 2 * minor * d * e + minor * e ** 2) / 8, bore?.error ?? 0) + tolerance;
   return { positions: new Float64Array(positions), normals: new Float32Array(normals), faceOfVertex: new Float32Array(faceOfVertex),
     indices: new Uint32Array(indices), edgeLines: new Float64Array(edgeLines), edgeOfSegment: new Float32Array(edgeOfSegment),
     bounds: { min, max }, error };
