@@ -1,0 +1,572 @@
+number	url	state	title
+500	https://github.com/barocss/barocss/issues/500	CLOSED	feat(cad): own NURBS engine and IGES export with independent read-back
+502	https://github.com/barocss/barocss/issues/502	CLOSED	feat(cad): deterministic NURBS preview tessellation with measured deviation
+505	https://github.com/barocss/barocss/issues/505	CLOSED	feat(cad): exact open-surface extrusion from bounded CSS construction source
+507	https://github.com/barocss/barocss/issues/507	CLOSED	feat(cad): native rational first derivatives with explicit local continuity limits
+509	https://github.com/barocss/barocss/issues/509	CLOSED	feat(cad): exact oriented parameter-boundary curves from native NURBS surfaces
+511	https://github.com/barocss/barocss/issues/511	CLOSED	feat(cad): bounded parametric face incidence over four native boundaries
+514	https://github.com/barocss/barocss/issues/514	CLOSED	research(cad): executable restricted face validity and shared-edge feasibility
+515	https://github.com/barocss/barocss/issues/515	CLOSED	feat(cad): qualified shared-edge incidence for two exact adjacent rectangles
+518	https://github.com/barocss/barocss/issues/518	CLOSED	research(cad): exact orthogonal rectangle common-edge feasibility
+519	https://github.com/barocss/barocss/issues/519	CLOSED	feat(cad): bounded orthogonal rectangle shared-edge incidence
+520	https://github.com/barocss/barocss/issues/520	CLOSED	research(cad): exact six-face axis-box closure and solid validity
+523	https://github.com/barocss/barocss/issues/523	CLOSED	feat(cad): exact outward six-face axis-box shell incidence
+524	https://github.com/barocss/barocss/issues/524	CLOSED	feat(cad): original restricted axis-box solid validity and volume
+527	https://github.com/barocss/barocss/issues/527	CLOSED	research(cad): original bounded axis-box STEP bytes and shared topology readback
+543	https://github.com/barocss/barocss/issues/543	CLOSED	feat(cad): structured source AST, semantic model IR and compatible lowering
+544	https://github.com/barocss/barocss/issues/544	CLOSED	docs(cad): own native modelling contract and independent format adapters
+545	https://github.com/barocss/barocss/issues/545	CLOSED	feat(cad): typed named parameters and bounded modelling expressions
+548	https://github.com/barocss/barocss/issues/548	CLOSED	feat(cad,example): bounded native circle and arc sketch profiles
+549	https://github.com/barocss/barocss/issues/549	CLOSED	feat(cad,example): driving profile length and radius dimensions
+553	https://github.com/barocss/barocss/issues/553	CLOSED	feat(cad): bounded XY line, polyline and rectangle profile builders
+554	https://github.com/barocss/barocss/issues/554	CLOSED	feat(cad): bounded XY rational quarter-arc and circle builders
+555	https://github.com/barocss/barocss/issues/555	CLOSED	feat(cad): parametric capped extrusion of exact XY rectangles
+557	https://github.com/barocss/barocss/issues/557	CLOSED	feat(cad): native rectangle extrusion feature document and atomic parameter edits
+558	https://github.com/barocss/barocss/issues/558	CLOSED	feat(cad): bounded XY linear sketch constraints and degree-of-freedom diagnostics
+559	https://github.com/barocss/barocss/issues/559	CLOSED	feat(cad): anchored driving XY axis dimensions with exact signed offsets
+561	https://github.com/barocss/barocss/issues/561	CLOSED	feat(cad): exact simple XY polygon regions and intersection validation
+562	https://github.com/barocss/barocss/issues/562	CLOSED	feat(cad): triangulate closed XY regions into filled preview packets
+563	https://github.com/barocss/barocss/issues/563	CLOSED	feat(cad): capped XY polygon prism preview from real region triangulation
+564	https://github.com/barocss/barocss/issues/564	CLOSED	feat(cad): editable own polygon prism feature document and intent Save/Open
+566	https://github.com/barocss/barocss/issues/566	CLOSED	feat(cad): original XY polygon planar face trim topology and point classification
+567	https://github.com/barocss/barocss/issues/567	CLOSED	feat(cad): original capped polygon prism faces and shared shell incidence
+569	https://github.com/barocss/barocss/issues/569	CLOSED	feat(cad): consume actual polygon shell faces and native edge paths for GPU preview
+571	https://github.com/barocss/barocss/issues/571	CLOSED	feat(cad): bounded original polygon shell face ray query with native identities
+572	https://github.com/barocss/barocss/issues/572	CLOSED	feat(cad): original planar polygon face with one interior hole and native trim identities
+575	https://github.com/barocss/barocss/issues/575	CLOSED	feat(cad): tessellate actual one-hole planar face with original boundary paths
+576	https://github.com/barocss/barocss/issues/576	CLOSED	feat(cad): original through-hole polygon prism shell with shared native incidence
+577	https://github.com/barocss/barocss/issues/577	CLOSED	feat(cad): actual through-hole shell Surface mesh and original global edge paths
+579	https://github.com/barocss/barocss/issues/579	CLOSED	feat(cad): editable original cutout extrusion intent and bounded Save Open
+581	https://github.com/barocss/barocss/issues/581	CLOSED	feat(cad): original through-hole shell face ray query with cutout and ambiguity
+583	https://github.com/barocss/barocss/issues/583	CLOSED	feat(cad): native XY sketch intent edits and actual Save Open
+585	https://github.com/barocss/barocss/issues/585	CLOSED	feat(cad): native sketch rectangle feature dependencies and atomic recompute
+586	https://github.com/barocss/barocss/issues/586	CLOSED	feat(cad): atomic rectangle feature creation removal and input rebinding
+587	https://github.com/barocss/barocss/issues/587	CLOSED	feat(cad): native circle and quarter arc sketch intent edits and Save Open
+589	https://github.com/barocss/barocss/issues/589	CLOSED	feat(cad): typed height parameter creation removal and atomic reference repair
+590	https://github.com/barocss/barocss/issues/590	CLOSED	feat(cad): original rational circle planar trim face and native point classification
+592	https://github.com/barocss/barocss/issues/592	CLOSED	feat(cad): original rational circle face display mesh and boundary lineage
+595	https://github.com/barocss/barocss/issues/595	CLOSED	feat(cad): original circle prism candidate shell with cap and seam topology
+596	https://github.com/barocss/barocss/issues/596	CLOSED	feat(cad): original circle prism cap and ruled-wall preview mesh with seam lineage
+599	https://github.com/barocss/barocss/issues/599	CLOSED	feat(cad): original circle extrusion intent with atomic edits and native Save Open
+601	https://github.com/barocss/barocss/issues/601	CLOSED	feat(cad): original circle extrusion graph and shared fractional height dependencies
+603	https://github.com/barocss/barocss/issues/603	CLOSED	feat(cad): original circle feature graph creation removal and reference repair
+604	https://github.com/barocss/barocss/issues/604	CLOSED	feat(cad): original circle height parameter creation removal and atomic reference repair
+606	https://github.com/barocss/barocss/issues/606	CLOSED	feat(cad): original circle radius driven by typed length graph and authored native Save Open
+608	https://github.com/barocss/barocss/issues/608	CLOSED	feat(cad): original driven circle graph parameter and feature lifecycle with atomic repair
+609	https://github.com/barocss/barocss/issues/609	CLOSED	feat(cad): original driven circle and quarter profile lifecycle with atomic native repair
+610	https://github.com/barocss/barocss/issues/610	CLOSED	feat(cad): original full-turn Z-axis NURBS revolve surface from meridian curve
+612	https://github.com/barocss/barocss/issues/612	CLOSED	feat(cad): authored Z-axis revolve feature and atomic meridian pole Save Open
+613	https://github.com/barocss/barocss/issues/613	CLOSED	feat(cad): original revolve Surface preview with knot-span normals and bound parameter boundaries
+616	https://github.com/barocss/barocss/issues/616	CLOSED	feat(cad): original compatible two-curve ruled Surface with source provenance
+617	https://github.com/barocss/barocss/issues/617	CLOSED	feat(cad): original rational Curve knot insertion with source adoption
+619	https://github.com/barocss/barocss/issues/619	CLOSED	feat(cad): atomic original Surface control-net pole and weight edits
+620	https://github.com/barocss/barocss/issues/620	CLOSED	feat(cad): original rational Surface U or V knot insertion with source adoption
+621	https://github.com/barocss/barocss/issues/621	CLOSED	feat(cad): native rational Surface parameter iso-Curve with source adoption
+622	https://github.com/barocss/barocss/issues/622	CLOSED	feat(cad): native rational Surface split at an original U or V parameter
+624	https://github.com/barocss/barocss/issues/624	CLOSED	feat(cad): native rational Curve split at an original parameter
+625	https://github.com/barocss/barocss/issues/625	CLOSED	feat(cad): atomic original3D rational Curve pole and weight edits
+627	https://github.com/barocss/barocss/issues/627	CLOSED	feat(cad): native one-step rational Bezier Curve degree elevation
+628	https://github.com/barocss/barocss/issues/628	CLOSED	feat(cad): native one-step Surface Bezier-axis degree elevation
+630	https://github.com/barocss/barocss/issues/630	CLOSED	feat(cad): rational ruled Surface from independent-weight same-basis Curves
+631	https://github.com/barocss/barocss/issues/631	CLOSED	feat(cad): explicit Bezier degree matching before rational ruled construction
+636	https://github.com/barocss/barocss/issues/636	CLOSED	feat(cad): own native circular through-hole plate shell and trim tessellation
+637	https://github.com/barocss/barocss/issues/637	CLOSED	feat(cad): own transverse plane-cylinder intersection with native dual UV curves
+638	https://github.com/barocss/barocss/issues/638	CLOSED	feat(cad): own finite cylinder-wall section clipping with native root and dual UV bindings
+639	https://github.com/barocss/barocss/issues/639	CLOSED	feat(cad): own rational Bezier curve and affine plane Surface intersections
+640	https://github.com/barocss/barocss/issues/640	CLOSED	feat(cad): own multi-span rational Curve and affine Plane Surface intersections
+641	https://github.com/barocss/barocss/issues/641	CLOSED	feat(cad): own coplanar Curve interval clipping and native Plane UV bindings
+644	https://github.com/barocss/barocss/issues/644	CLOSED	feat(cad): own coplanar rational Curve and finite Line intersections with overlap bindings
+645	https://github.com/barocss/barocss/issues/645	CLOSED	feat(cad): own coplanar Curve clipping by convex native Line trim loops
+648	https://github.com/barocss/barocss/issues/648	CLOSED	feat(cad): own affine Plane face with convex native Line trim ownership and UV classification
+649	https://github.com/barocss/barocss/issues/649	CLOSED	feat(cad): own nonparallel convex Plane face intersection with native dual UV bindings
+650	https://github.com/barocss/barocss/issues/650	CLOSED	feat(cad): own affine convex Plane face with native inner hole loops and UV classification
+651	https://github.com/barocss/barocss/issues/651	CLOSED	feat(cad): own hole-aware Plane face intersection with native material intervals
+653	https://github.com/barocss/barocss/issues/653	CLOSED	feat(cad): own affine hole-face material triangulation and original native boundaries
+655	https://github.com/barocss/barocss/issues/655	CLOSED	feat(cad): own affine hole-face native ray query and qualified material hits
+661	https://github.com/barocss/barocss/issues/661	CLOSED	feat(cad): own adaptive native Curve sampling with bounded chord observations
+667	https://github.com/barocss/barocss/issues/667	CLOSED	feat(cad): own rational Curve join with explicit parameter and weight lineage
+672	https://github.com/barocss/barocss/issues/672	CLOSED	feat(cad): own rational Curve reversal with explicit parameter and coefficient lineage
+676	https://github.com/barocss/barocss/issues/676	CLOSED	feat(cad): own original-parameter rational Curve interval extraction
+680	https://github.com/barocss/barocss/issues/680	CLOSED	feat(cad): native rational Surface rectangular parameter-region extraction
+686	https://github.com/barocss/barocss/issues/686	CLOSED	feat(cad): bounded wide rational Curve refinement with explicit capacity profile
+694	https://github.com/barocss/barocss/issues/694	CLOSED	feat(cad): own Surface parameter-axis reversal and native partial lineage
+696	https://github.com/barocss/barocss/issues/696	CLOSED	feat(cad): own wide rational Curve adaptive sampling with explicit consumer version
+712	https://github.com/barocss/barocss/issues/712	CLOSED	feat(cad): canonical authored document envelope with explicit source and cache roles
+713	https://github.com/barocss/barocss/issues/713	CLOSED	feat(cad): qualified document references and explicit frame conversion records
+714	https://github.com/barocss/barocss/issues/714	CLOSED	feat(cad): explicit native document compatibility and migration reports
+715	https://github.com/barocss/barocss/issues/715	CLOSED	feat(cad): explicit exporter capability loss and source-reference mapping reports
+723	https://github.com/barocss/barocss/issues/723	CLOSED	feat(cad): reusable native Bezier span extraction for wide original Curves
+727	https://github.com/barocss/barocss/issues/727	CLOSED	feat(cad): wide native Curve and affine Plane intersections via Bezier spans
+781	https://github.com/barocss/barocss/issues/781	CLOSED	feat(cad): own cubic Bezier Curve and affine Plane intersections
+793	https://github.com/barocss/barocss/issues/793	CLOSED	feat(cad): wide native cubic Curve and affine Plane intersections
+804	https://github.com/barocss/barocss/issues/804	CLOSED	feat(cad): wide native Curve control-point and weight editing
+839	https://github.com/barocss/barocss/issues/839	CLOSED	feat(cad): wide native Curve reversal with original parameter and coefficient lineage
+845	https://github.com/barocss/barocss/issues/845	CLOSED	docs(cad): reconcile requirement roadmap with actual implementation and consumer Issues
+847	https://github.com/barocss/barocss/issues/847	CLOSED	feat(cad): same-basis three-section homogeneous loft Surface
+852	https://github.com/barocss/barocss/issues/852	CLOSED	feat(cad): document-bound native positive control-hull bounds
+857	https://github.com/barocss/barocss/issues/857	CLOSED	feat(cad): source-qualified native Curve arc-length estimate
+859	https://github.com/barocss/barocss/issues/859	CLOSED	feat(cad): source-qualified native Surface parametric-area estimate
+863	https://github.com/barocss/barocss/issues/863	CLOSED	feat(cad): authored native part instances and rigid frame hierarchy
+876	https://github.com/barocss/barocss/issues/876	CLOSED	feat(cad): revision-checked assembly instance add and remove
+881	https://github.com/barocss/barocss/issues/881	CLOSED	feat(cad): native coplanar linear-face Boolean regions with source lineage
+887	https://github.com/barocss/barocss/issues/887	CLOSED	feat(cad): filled native coplanar Boolean mesh with true boundary provenance
+888	https://github.com/barocss/barocss/issues/888	CLOSED	feat(cad): native capped extrusion shells from coplanar Boolean regions
+896	https://github.com/barocss/barocss/issues/896	CLOSED	feat(cad): filled native Boolean extrusion Shell mesh with face and edge provenance
+903	https://github.com/barocss/barocss/issues/903	CLOSED	feat(cad): native Boolean extrusion intent graph and atomic recomputation
+915	https://github.com/barocss/barocss/issues/915	CLOSED	feat(cad): native Boolean intent parameter lifecycle with atomic reference repair
+922	https://github.com/barocss/barocss/issues/922	CLOSED	feat(cad): native Boolean feature lifecycle with atomic dependency repair
+927	https://github.com/barocss/barocss/issues/927	CLOSED	feat(cad): shared Boolean region with multiple native extrusion outputs
+931	https://github.com/barocss/barocss/issues/931	CLOSED	feat(cad): native extrusion construction volume and geometric centroid
+934	https://github.com/barocss/barocss/issues/934	CLOSED	feat(cad): native fixed-orientation rational Curve path sweep Surface
+943	https://github.com/barocss/barocss/issues/943	CLOSED	feat(cad): native parameterized through-point Curve interpolation
+946	https://github.com/barocss/barocss/issues/946	CLOSED	feat(cad): native point-grid Surface interpolation with original Curve kernel
+947	https://github.com/barocss/barocss/issues/947	CLOSED	feat(cad): uniform chord-length and centripetal Curve parameterization
+949	https://github.com/barocss/barocss/issues/949	CLOSED	feat(cad): fixed positive-weight rational Curve interpolation with shared native solver
+952	https://github.com/barocss/barocss/issues/952	CLOSED	feat(cad): compatible multi-section rational-U native loft Surface
+958	https://github.com/barocss/barocss/issues/958	CLOSED	feat(cad): native affine Curve Surface copies and reflection parity
+964	https://github.com/barocss/barocss/issues/964	CLOSED	feat(cad): atomic seed-based linear native geometry patterns
+967	https://github.com/barocss/barocss/issues/967	CLOSED	feat(cad): atomic native circular geometry patterns about an authored axis
+971	https://github.com/barocss/barocss/issues/971	CLOSED	feat(cad): native analytic rational Curve and Surface second derivatives
+984	https://github.com/barocss/barocss/issues/984	CLOSED	feat(cad): native local Curve and Surface curvature queries
+986	https://github.com/barocss/barocss/issues/986	CLOSED	feat(cad): native transverse Curve crossings against holed planar Face material
+993	https://github.com/barocss/barocss/issues/993	CLOSED	feat(cad): uniform-density extrusion construction mass and inertia
+1012	https://github.com/barocss/barocss/issues/1012	CLOSED	feat(cad): principal inertia and axes of native construction mass
+1013	https://github.com/barocss/barocss/issues/1013	CLOSED	feat(cad): exact common-boundary adjacency for owned NURBS patch Faces
+1014	https://github.com/barocss/barocss/issues/1014	CLOSED	feat(cad): align unlike native section knot bases for rational ruled Surfaces
+1015	https://github.com/barocss/barocss/issues/1015	CLOSED	feat(cad): replace embedded assembly part geometry with explicit revision repairs
+1026	https://github.com/barocss/barocss/issues/1026	CLOSED	feat(cad): native quintic Hermite Curve from original-domain endpoint D2 constraints
+1031	https://github.com/barocss/barocss/issues/1031	CLOSED	feat(cad): source-qualified Curve endpoint C0 C1 C2 and regular G1 G2 inspection
+1043	https://github.com/barocss/barocss/issues/1043	CLOSED	feat(cad-editor): add reusable module and shadcn CAD app with native edit Save Open
+1044	https://github.com/barocss/barocss/issues/1044	CLOSED	feat(cad-editor): preserve native drafts through keyboard and selection transitions
+1045	https://github.com/barocss/barocss/issues/1045	CLOSED	feat(cad-editor): select bounded visible bodies from complete canonical native documents
+1046	https://github.com/barocss/barocss/issues/1046	CLOSED	feat(cad-editor): author a real native Boolean extrusion feature graph
+1057	https://github.com/barocss/barocss/issues/1057	CLOSED	feat(cad): closed source-qualified exact quad-patch Shell incidence
+1069	https://github.com/barocss/barocss/issues/1069	CLOSED	feat(cad): bounded V-linear Surface Plane section with exact model-gap proof
+1071	https://github.com/barocss/barocss/issues/1071	CLOSED	feat(cad): preserve complete Source0 when editing selected Surface poles
+1081	https://github.com/barocss/barocss/issues/1081	CLOSED	feat(cad-editor): inspect qualified shared Boolean extrusion outputs
+1083	https://github.com/barocss/barocss/issues/1083	CLOSED	feat(cad): original V-linear section trim candidates with exact UV and edge-gap proof
+1088	https://github.com/barocss/barocss/issues/1088	CLOSED	feat(cad-editor): author extrusion lifecycle with explicit display repair
+1093	https://github.com/barocss/barocss/issues/1093	CLOSED	feat(cad-editor): edit Surface poles without discarding source siblings
+1097	https://github.com/barocss/barocss/issues/1097	CLOSED	feat(cad-editor): author length parameter lifecycle with explicit repairs
+1098	https://github.com/barocss/barocss/issues/1098	CLOSED	feat(cad): exact stored curved trim UV material classification
+1101	https://github.com/barocss/barocss/issues/1101	CLOSED	feat(cad): regularized integer axis-box 3D Boolean with native manifold boundary
+1104	https://github.com/barocss/barocss/issues/1104	CLOSED	feat(cad-editor): replace referenced Face and Boolean features with explicit repairs
+1105	https://github.com/barocss/barocss/issues/1105	CLOSED	feat(cad): exact World XYZ material queries on axis-box Boolean solids
+1108	https://github.com/barocss/barocss/issues/1108	CLOSED	feat(cad): regularized disjoint and face-contact integer box Boolean support
+1110	https://github.com/barocss/barocss/issues/1110	CLOSED	feat(cad-editor): edit coupled native Face corner poles
+1112	https://github.com/barocss/barocss/issues/1112	CLOSED	feat(cad): exact mass centroid and inertia moments for integer cell solids
+1116	https://github.com/barocss/barocss/issues/1116	CLOSED	feat(cad-editor): inspect qualified native extrusion construction properties
+1118	https://github.com/barocss/barocss/issues/1118	CLOSED	feat(cad): principal inertia and axes for owned integer cell Solid mass
+1121	https://github.com/barocss/barocss/issues/1121	CLOSED	feat(cad-editor): review qualified native IGES exports
+1125	https://github.com/barocss/barocss/issues/1125	CLOSED	feat(cad): explicit rigid-frame centroid and inertia for owned cell Solid mass
+1128	https://github.com/barocss/barocss/issues/1128	CLOSED	feat(cad-editor): inspect original native derivatives and curvature
+1129	https://github.com/barocss/barocss/issues/1129	CLOSED	feat(cad): edit authored integer-box Boolean feature dimensions
+1133	https://github.com/barocss/barocss/issues/1133	CLOSED	feat(cad-editor): rename original native bodies without changing geometry
+1134	https://github.com/barocss/barocss/issues/1134	CLOSED	feat(cad): edit degree 1 to 5 Curves in complete original source files
+1135	https://github.com/barocss/barocss/issues/1135	CLOSED	feat(cad-editor): inspect original Curve length estimates
+1139	https://github.com/barocss/barocss/issues/1139	CLOSED	feat(cad): construct piecewise rational lofts through independently weighted sections
+1140	https://github.com/barocss/barocss/issues/1140	CLOSED	fix(cad-editor): protect accepted unsaved changes before document replacement
+1147	https://github.com/barocss/barocss/issues/1147	CLOSED	feat(cad): edit native degree-five Surface poles in complete original source
+1148	https://github.com/barocss/barocss/issues/1148	CLOSED	feat(cad): author workplane Sketch frames and regenerate world Curves
+1158	https://github.com/barocss/barocss/issues/1158	CLOSED	feat(cad): construct native rational arcs from start angles and signed sweeps
+1161	https://github.com/barocss/barocss/issues/1161	CLOSED	feat(cad): author mixed workplane sketches with directed rational arcs
+1165	https://github.com/barocss/barocss/issues/1165	CLOSED	feat(cad-editor): recover a manual accepted document copy
+1168	https://github.com/barocss/barocss/issues/1168	CLOSED	feat(cad): apply driving linear constraints to authored mixed workplane sketches
+1173	https://github.com/barocss/barocss/issues/1173	CLOSED	feat(cad-editor): edit original Curve pole XYZ and weights
+1176	https://github.com/barocss/barocss/issues/1176	CLOSED	feat(cad): verify original XY angle-arc artifacts across Node and browser runtimes
+1177	https://github.com/barocss/barocss/issues/1177	CLOSED	feat(cad): qualify stored-rational plate-hole boundaries as a restricted Solid
+1190	https://github.com/barocss/barocss/issues/1190	CLOSED	feat(cad): classify XYZ material in qualified stored-rational plate-hole Solids
+1194	https://github.com/barocss/barocss/issues/1194	CLOSED	feat(cad-editor): add Surface canvas handles and professional modeling workspace
+1198	https://github.com/barocss/barocss/issues/1198	CLOSED	feat(cad-editor): add native pole axis Gizmo and movement snap
+1201	https://github.com/barocss/barocss/issues/1201	CLOSED	feat(cad): section original multi-span V-linear Surfaces with dual-UV model-gap proof
+1212	https://github.com/barocss/barocss/issues/1212	CLOSED	feat(cad): split original multispan V-linear UV graphs into trim Face candidates
+1214	https://github.com/barocss/barocss/issues/1214	CLOSED	feat(cad-editor): translate whole native objects with canvas Gizmo
+1215	https://github.com/barocss/barocss/issues/1215	CLOSED	feat(cad): classify material on original multispan stored UV trim graphs
+1217	https://github.com/barocss/barocss/issues/1217	CLOSED	fix(cad): preserve exact constant coordinates in native rational evaluation
+1224	https://github.com/barocss/barocss/issues/1224	CLOSED	feat(cad-editor): rotate native objects with a canvas ring
+1232	https://github.com/barocss/barocss/issues/1232	CLOSED	feat(cad-editor): scale native objects with canvas handles
+1235	https://github.com/barocss/barocss/issues/1235	CLOSED	feat(cad): construct an exact original Plane cap from paired curved sections
+1241	https://github.com/barocss/barocss/issues/1241	CLOSED	feat(cad-editor): add native modeling tool buttons and shortcuts
+1250	https://github.com/barocss/barocss/issues/1250	CLOSED	feat(cad-editor): toggle workspace panels and focus the canvas
+1253	https://github.com/barocss/barocss/issues/1253	CLOSED	feat(cad): bind stored multi-span section Curves exactly to original Surfaces
+1261	https://github.com/barocss/barocss/issues/1261	CLOSED	feat(cad): construct an exact original Surface lower-strip Face
+1265	https://github.com/barocss/barocss/issues/1265	CLOSED	feat(cad-editor): resize workspace panels with draggable dividers
+1271	https://github.com/barocss/barocss/issues/1271	CLOSED	feat(cad-editor): add a compact six-side view navigator
+1277	https://github.com/barocss/barocss/issues/1277	CLOSED	feat(cad): construct an exact base Face between translated Surface strips
+1278	https://github.com/barocss/barocss/issues/1278	CLOSED	feat(cad): construct exact U-end Faces between translated Surface strips
+1282	https://github.com/barocss/barocss/issues/1282	CLOSED	feat(cad-editor): collapse secondary geometry analysis in the inspector
+1287	https://github.com/barocss/barocss/issues/1287	CLOSED	feat(cad): measure exact volume of translated Surface strip regions
+1291	https://github.com/barocss/barocss/issues/1291	CLOSED	feat(cad-editor): search and run native editing commands from a compact palette
+1292	https://github.com/barocss/barocss/issues/1292	CLOSED	feat(cad-editor): compact contextual axes and snapping controls on the canvas
+1301	https://github.com/barocss/barocss/issues/1301	CLOSED	feat(cad): assemble qualified translated-strip Body topology and material boundary
+1303	https://github.com/barocss/barocss/issues/1303	CLOSED	feat(cad-editor): drag whole native objects on XY XZ and YZ planes
+1311	https://github.com/barocss/barocss/issues/1311	CLOSED	feat(cad-editor): duplicate original bodies with independent native asset identity
+1316	https://github.com/barocss/barocss/issues/1316	CLOSED	feat(cad): edit complete NURBS section sources and regenerate a dependent loft feature
+1319	https://github.com/barocss/barocss/issues/1319	CLOSED	feat(cad): classify exact World XYZ points in translated Surface strip regions
+1326	https://github.com/barocss/barocss/issues/1326	CLOSED	feat(cad-editor): fit a qualified object with a Canvas double-click
+1327	https://github.com/barocss/barocss/issues/1327	CLOSED	feat(cad): construct an exact original Surface band Face between two plane cuts
+1328	https://github.com/barocss/barocss/issues/1328	CLOSED	feat(cad): build regularized interval Booleans of common-map translated-strip Bodies
+1329	https://github.com/barocss/barocss/issues/1329	CLOSED	feat(cad-editor): drag native shared extrusion height in the Canvas
+1341	https://github.com/barocss/barocss/issues/1341	CLOSED	feat(cad-editor): edit original NURBS sections and regenerate a dependent loft
+1348	https://github.com/barocss/barocss/issues/1348	CLOSED	feat(cad): tessellate actual trimmed six-Face translated-strip Body boundaries
+1353	https://github.com/barocss/barocss/issues/1353	CLOSED	feat(cad): insert original Curve knots in complete degree-one to five Source0 files
+1361	https://github.com/barocss/barocss/issues/1361	CLOSED	feat(cad-editor): navigate Loft and original section standard views
+1363	https://github.com/barocss/barocss/issues/1363	CLOSED	feat(cad): insert original Surface U or V knots in complete degree-one to five Source0 files
+1364	https://github.com/barocss/barocss/issues/1364	CLOSED	feat(cad-editor): edit native assembly instance poses and hierarchy
+1373	https://github.com/barocss/barocss/issues/1373	CLOSED	feat(cad): align complete source section knots for a three-section rational Loft
+1377	https://github.com/barocss/barocss/issues/1377	CLOSED	feat(cad-editor): author driving dimensions and selected linear constraints
+1378	https://github.com/barocss/barocss/issues/1378	CLOSED	feat(cad): restrict original degree-one to five Curves to proper intervals in complete Source0
+1385	https://github.com/barocss/barocss/issues/1385	CLOSED	feat(cad): elevate complete-source rational Curve degree through quintic
+1388	https://github.com/barocss/barocss/issues/1388	CLOSED	feat(cad-editor): restrict a selected original Curve interval
+1395	https://github.com/barocss/barocss/issues/1395	CLOSED	feat(cad): persist shared Curve refinement and dependent Loft recipes
+1401	https://github.com/barocss/barocss/issues/1401	CLOSED	feat(cad): elevate a Surface axis within complete original source
+1403	https://github.com/barocss/barocss/issues/1403	CLOSED	feat(cad): import bounded IGES Curve and Surface geometry into native source
+1412	https://github.com/barocss/barocss/issues/1412	CLOSED	feat(cad-editor): isolate a selected document body in the Canvas
+1417	https://github.com/barocss/barocss/issues/1417	CLOSED	feat(cad): retain complete-source Line width as an owned Face intent
+1423	https://github.com/barocss/barocss/issues/1423	CLOSED	feat(cad-editor): unlock native degree-five Surface editing and transforms
+1426	https://github.com/barocss/barocss/issues/1426	CLOSED	feat(cad): trace seeded transverse Surface intersections with both original UVs
+1431	https://github.com/barocss/barocss/issues/1431	CLOSED	feat(cad-editor): refine an original Surface with Canvas U/V knot placement
+1433	https://github.com/barocss/barocss/issues/1433	CLOSED	feat(cad): extrude an owned rectangle Face into a closed patch Shell
+1438	https://github.com/barocss/barocss/issues/1438	CLOSED	feat(cad-editor): edit original Curves directly in document view
+1442	https://github.com/barocss/barocss/issues/1442	CLOSED	feat(cad): persist Line width and extrusion dependency recipes
+1448	https://github.com/barocss/barocss/issues/1448	CLOSED	feat(cad-editor): insert original Curve knots with a Canvas parameter handle
+1453	https://github.com/barocss/barocss/issues/1453	CLOSED	feat(cad): compile bounded pure quantity functions with source mappings
+1464	https://github.com/barocss/barocss/issues/1464	CLOSED	feat(cad-editor): restrict original Curve intervals directly in document view
+1468	https://github.com/barocss/barocss/issues/1468	CLOSED	feat(cad-editor): drag fixed Sketch anchors on their original workplane
+1474	https://github.com/barocss/barocss/issues/1474	CLOSED	feat(cad): qualify rectangular Face extrusion as a source-backed material Body
+1475	https://github.com/barocss/barocss/issues/1475	CLOSED	feat(cad-editor): create persistent iso-Curves from original Surfaces
+1483	https://github.com/barocss/barocss/issues/1483	CLOSED	feat(cad-editor): move original bodies without selecting a control point
+1485	https://github.com/barocss/barocss/issues/1485	CLOSED	feat(cad): persist source Line width and extrusion material Body dependencies
+1491	https://github.com/barocss/barocss/issues/1491	CLOSED	feat(cad-editor): join original Curves into a persistent Curve body
+1497	https://github.com/barocss/barocss/issues/1497	CLOSED	feat(cad-editor): raise original Surface U or V degree from Canvas
+1499	https://github.com/barocss/barocss/issues/1499	CLOSED	feat(cad): construct exact paired curved Surface intersection curves in original UVs
+1504	https://github.com/barocss/barocss/issues/1504	CLOSED	feat(cad-editor): extract an original Surface region with Canvas boundary drags
+1510	https://github.com/barocss/barocss/issues/1510	CLOSED	feat(cad-editor): split an original Curve with a Canvas parameter grip
+1511	https://github.com/barocss/barocss/issues/1511	CLOSED	feat(cad): construct complementary embedded Faces from original paired UV curves
+1513	https://github.com/barocss/barocss/issues/1513	CLOSED	feat(cad-editor): split an original Surface with Canvas U or V parameter drags
+1515	https://github.com/barocss/barocss/issues/1515	CLOSED	feat(cad-editor): distinguish repeated Objects with stable compact labels
+1519	https://github.com/barocss/barocss/issues/1519	CLOSED	feat(cad): construct original B XZ Faces from paired UV intersections
+1520	https://github.com/barocss/barocss/issues/1520	CLOSED	feat(cad-editor): make an independent reversed Curve copy from the Canvas
+1522	https://github.com/barocss/barocss/issues/1522	CLOSED	feat(cad): classify exact original UV membership on paired Faces
+1523	https://github.com/barocss/barocss/issues/1523	CLOSED	feat(cad-editor): compact contextual Inspector commands
+1528	https://github.com/barocss/barocss/issues/1528	CLOSED	feat(cad): construct occupied material Body from paired curved Faces
+1529	https://github.com/barocss/barocss/issues/1529	CLOSED	feat(cad-editor): make independent Surface axis-reversed copies from Canvas
+1532	https://github.com/barocss/barocss/issues/1532	CLOSED	feat(cad-editor): unify Canvas tools in a contextual command rail
+1537	https://github.com/barocss/barocss/issues/1537	CLOSED	feat(cad): classify exact World points in paired material Bodies
+1538	https://github.com/barocss/barocss/issues/1538	CLOSED	feat(cad-editor): create rational Surface between original Curves
+1542	https://github.com/barocss/barocss/issues/1542	CLOSED	feat(cad-editor): show Canvas settings on demand with concise gesture feedback
+1544	https://github.com/barocss/barocss/issues/1544	CLOSED	feat(cad): construct strictly positive paired roof difference Bodies
+1545	https://github.com/barocss/barocss/issues/1545	CLOSED	feat(cad-editor): use compact icons for Inspector object operations
+1550	https://github.com/barocss/barocss/issues/1550	CLOSED	feat(cad-editor): create fixed-orientation Surface along Curve path
+1554	https://github.com/barocss/barocss/issues/1554	CLOSED	feat(cad-editor): use icons for Driving Sketch constraint commands
+1559	https://github.com/barocss/barocss/issues/1559	CLOSED	feat(cad): export qualified Body mesh as binary STL with measured loss
+1562	https://github.com/barocss/barocss/issues/1562	CLOSED	feat(cad-editor): show Driving Canvas status only during gestures
+1564	https://github.com/barocss/barocss/issues/1564	CLOSED	feat(cad-editor): use compact icons for document and fit commands
+1575	https://github.com/barocss/barocss/issues/1575	CLOSED	feat(cad): split a paired-roof difference Body at a conserved native roof
+1576	https://github.com/barocss/barocss/issues/1576	CLOSED	feat(cad): classify exact World points in paired-roof difference Bodies
+1586	https://github.com/barocss/barocss/issues/1586	CLOSED	feat(cad): compose bounded orthogonal solid Boolean results
+1587	https://github.com/barocss/barocss/issues/1587	CLOSED	feat(cad): exact affine XY sketch constraints with midpoint and fixed directions
+1588	https://github.com/barocss/barocss/issues/1588	CLOSED	feat(cad): bounded numerical XY length and signed-angle sketches
+1589	https://github.com/barocss/barocss/issues/1589	CLOSED	feat(cad): qualify bounded convex planar BRep solids
+1590	https://github.com/barocss/barocss/issues/1590	CLOSED	feat(cad): bounded radius and interior segment-circle tangency constraints
+1591	https://github.com/barocss/barocss/issues/1591	CLOSED	feat(cad): split qualified convex planar solids by an authored plane
+1592	https://github.com/barocss/barocss/issues/1592	CLOSED	feat(cad): bridge authored convex line sketch to qualified prism with lineage
+1593	https://github.com/barocss/barocss/issues/1593	CLOSED	test(cad): integrate authored sketch prism and qualified plane split
+1594	https://github.com/barocss/barocss/issues/1594	CLOSED	feat(cad): intersect qualified convex planar solids with exact final-facet clipping
+1595	https://github.com/barocss/barocss/issues/1595	CLOSED	feat(cad): subtract authored through slabs from qualified convex planar solids
+1596	https://github.com/barocss/barocss/issues/1596	CLOSED	feat(cad): persist and selectively rebuild authored prism subtraction features
+1597	https://github.com/barocss/barocss/issues/1597	CLOSED	feat(cad): chamfer one source-qualified cardinal convex edge
+1598	https://github.com/barocss/barocss/issues/1598	CLOSED	feat(cad): retain editable source-qualified prism chamfer in versioned model document
+1599	https://github.com/barocss/barocss/issues/1599	CLOSED	feat(cad): exact mass properties for qualified convex planar Solids
+1600	https://github.com/barocss/barocss/issues/1600	CLOSED	docs(cad): adopt exact sketch prism, slab and source-edge chamfer guides
+1601	https://github.com/barocss/barocss/issues/1601	CLOSED	feat(cad-editor): edit authored affine prism dimensions in a worker inspector
+1602	https://github.com/barocss/barocss/issues/1602	CLOSED	feat(cad): tessellate qualified convex solid trimmed boundaries
+1603	https://github.com/barocss/barocss/issues/1603	CLOSED	feat(cad): author exact coordinate-span charts for affine prism edits
+1604	https://github.com/barocss/barocss/issues/1604	CLOSED	feat(cad-editor): display trimmed affine prism results atomically
+1606	https://github.com/barocss/barocss/issues/1606	CLOSED	docs(cad): clarify source dialect coverage and executable authoring workflows
+1607	https://github.com/barocss/barocss/issues/1607	CLOSED	feat(cad): persist chart-aware serial slab-component chamfer part v2
+1608	https://github.com/barocss/barocss/issues/1608	CLOSED	feat(cad-editor): explicitly edit and preview serial prism part v2
+1609	https://github.com/barocss/barocss/issues/1609	CLOSED	cad: expose explicit serial-part v2 concise document aliases
+1610	https://github.com/barocss/barocss/issues/1610	CLOSED	docs(cad): explain serial-part v2 cut chamfer and editable authored files
+1611	https://github.com/barocss/barocss/issues/1611	CLOSED	feat(cad): design and implement one ergonomic modeling API
+1612	https://github.com/barocss/barocss/issues/1612	CLOSED	feat(cad-editor): make the single modeling API the primary authoring workflow
+1613	https://github.com/barocss/barocss/issues/1613	CLOSED	docs(cad): lead with the single modeling API and editable part workflow
+1614	https://github.com/barocss/barocss/issues/1614	CLOSED	feat(cad): intersect owned modeling shapes into an editable overlap part
+1615	https://github.com/barocss/barocss/issues/1615	CLOSED	fix(cad-editor): bound compiler and worker bundle memory lifetimes
+1617	https://github.com/barocss/barocss/issues/1617	CLOSED	feat(cad-editor): expose editable intersection sample and modeling guide
+1619	https://github.com/barocss/barocss/issues/1619	CLOSED	feat(cad): split an owned extruded part at an editable height
+1620	https://github.com/barocss/barocss/issues/1620	CLOSED	feat(cad-editor): expose editable split-body sample and guide
+1622	https://github.com/barocss/barocss/issues/1622	CLOSED	feat(cad): split owned extruded parts along X and Y
+1623	https://github.com/barocss/barocss/issues/1623	CLOSED	feat(cad-editor): choose X/Y/Z axes in the split-body sample
+1625	https://github.com/barocss/barocss/issues/1625	CLOSED	feat(cad): author two sequential owned cardinal chamfers
+1626	https://github.com/barocss/barocss/issues/1626	CLOSED	feat(cad-editor): add an owned two-chamfer part preset
+1627	https://github.com/barocss/barocss/issues/1627	CLOSED	feat(cad): reuse unchanged owned features during parameter edits
+1629	https://github.com/barocss/barocss/issues/1629	CLOSED	test(cad-editor): verify snapshot reuse and cold recovery
+1631	https://github.com/barocss/barocss/issues/1631	CLOSED	feat(cad): split an owned chamfered rail into editable bodies
+1632	https://github.com/barocss/barocss/issues/1632	CLOSED	feat(cad-editor): split a finished beveled part from the modeling picker
+1634	https://github.com/barocss/barocss/issues/1634	CLOSED	feat(cad): compose owned derived dimensions with add and scale
+1635	https://github.com/barocss/barocss/issues/1635	CLOSED	feat(cad-editor): keep a beveled split centered with numeric drivers
+1637	https://github.com/barocss/barocss/issues/1637	CLOSED	feat(cad): author an owned 45-degree XY miter split
+1639	https://github.com/barocss/barocss/issues/1639	CLOSED	feat(cad-editor): expose the fixed 45-degree XY miter preset
+1640	https://github.com/barocss/barocss/issues/1640	CLOSED	feat(cad): configure named validated chamfer finishes
+1642	https://github.com/barocss/barocss/issues/1642	CLOSED	feat(cad-editor): configure named rail finishes with shared history
+1643	https://github.com/barocss/barocss/issues/1643	CLOSED	feat(cad): author a qualified mounting-plate through-hole with one tagged body contract
+1644	https://github.com/barocss/barocss/issues/1644	CLOSED	feat(cad-editor): preview and edit a qualified mounting plate
+1645	https://github.com/barocss/barocss/issues/1645	CLOSED	feat(cad): author connected integer-box union through the primary owned API
+1647	https://github.com/barocss/barocss/issues/1647	CLOSED	feat(cad-editor): preview and edit a connected union bracket
+1649	https://github.com/barocss/barocss/issues/1649	CLOSED	feat(cad): cut an owned rectangular recess or through-window
+1652	https://github.com/barocss/barocss/issues/1652	CLOSED	research(cad): qualify usd-brep lessons with a bounded native-fixture comparison
+1655	https://github.com/barocss/barocss/issues/1655	CLOSED	feat(cad): qualify an exact stored-rational capped circle prism
+1656	https://github.com/barocss/barocss/issues/1656	CLOSED	cad(contract): qualified B-Rep integrity v1
+1661	https://github.com/barocss/barocss/issues/1661	CLOSED	test(cad): regression corpus evidence tiers v1
+1668	https://github.com/barocss/barocss/issues/1668	CLOSED	fix(cad,ci): resolve 27 ESLint errors blocking native foundation PRs
+1677	https://github.com/barocss/barocss/issues/1677	CLOSED	feat(cad): author round posts through owned circle sketches and extrusion
+1683	https://github.com/barocss/barocss/issues/1683	CLOSED	feat(cad-editor): edit a qualified round post with native face preview
+1695	https://github.com/barocss/barocss/issues/1695	CLOSED	feat(cad): cut a through-slot in an owned union bracket
+1696	https://github.com/barocss/barocss/issues/1696	CLOSED	feat(cad): qualified transactional rebuild candidate before selective execution
+1701	https://github.com/barocss/barocss/issues/1701	CLOSED	fix(cad): include native extrusion distance dependencies in impact planning
+1709	https://github.com/barocss/barocss/issues/1709	CLOSED	feat(cad): one-leaf native selective extrusion parity probe
+1710	https://github.com/barocss/barocss/issues/1710	CLOSED	docs(cad): bound private Boolean extrusion feature cache contract
+1717	https://github.com/barocss/barocss/issues/1717	CLOSED	feat(cad): scoped native extrusion-only preview session
+1721	https://github.com/barocss/barocss/issues/1721	CLOSED	feat(cad): revision-guarded native extrusion preview acceptance
+1724	https://github.com/barocss/barocss/issues/1724	CLOSED	feat(cad): author exact offset extrusions and top-entry pockets
+1725	https://github.com/barocss/barocss/issues/1725	CLOSED	feat(cad-editor): stage a saved modeling file from a native picker
+1728	https://github.com/barocss/barocss/issues/1728	CLOSED	docs(cad-editor): teach a first model through the actual UI
+1732	https://github.com/barocss/barocss/issues/1732	CLOSED	perf(cad): avoid duplicate initial native graph evaluation in preview acceptance
+1740	https://github.com/barocss/barocss/issues/1740	CLOSED	docs(cad-editor): teach and qualify a circular post in the UI
+1743	https://github.com/barocss/barocss/issues/1743	CLOSED	feat(cad): explicit disposal and stale refusal for Native preview sessions
+1751	https://github.com/barocss/barocss/issues/1751	CLOSED	feat(cad-editor): preview and edit a slot in an owned union bracket
+1753	https://github.com/barocss/barocss/issues/1753	CLOSED	docs(cad-editor): first mounting plate and qualified hole tutorial
+1755	https://github.com/barocss/barocss/issues/1755	CLOSED	docs(cad-editor): teach connected L-bracket union in modeling UI
+1758	https://github.com/barocss/barocss/issues/1758	CLOSED	docs(cad-editor): publish status-aware CAD learning pathway
+1763	https://github.com/barocss/barocss/issues/1763	CLOSED	docs(cad-editor): source-backed modeling troubleshooting guide
+1766	https://github.com/barocss/barocss/issues/1766	CLOSED	cad(api): expose a bounded Native extrusion preview bridge to CAD Editor
+1783	https://github.com/barocss/barocss/issues/1783	CLOSED	feat(cad): exact binary64 orient2d sign for bounded planar coordinates
+1790	https://github.com/barocss/barocss/issues/1790	CLOSED	feat(cad): measure named model outputs with exact mass properties
+1791	https://github.com/barocss/barocss/issues/1791	CLOSED	fix(cad-editor): keep imported offset pockets out of underside-only labels
+1793	https://github.com/barocss/barocss/issues/1793	CLOSED	feat(cad): exact binary64 straight-segment crossing classification
+1801	https://github.com/barocss/barocss/issues/1801	CLOSED	feat(cad): exact rational intersection point for proper 2D segment crossings
+1813	https://github.com/barocss/barocss/issues/1813	CLOSED	feat(cad): bounded exact collinear straight-segment overlap classification
+1818	https://github.com/barocss/barocss/issues/1818	CLOSED	feat(cad): deterministic exact straight-edge split plan from rational proper crossing
+1826	https://github.com/barocss/barocss/issues/1826	CLOSED	feat(cad-editor): edit a top-entry pocket from the existing modeling picker
+1835	https://github.com/barocss/barocss/issues/1835	CLOSED	feat(cad): author fully constrained convex profiles with owned sketch points
+1838	https://github.com/barocss/barocss/issues/1838	CLOSED	docs(cad): source-backed engine/editor feature coverage matrix
+1842	https://github.com/barocss/barocss/issues/1842	CLOSED	feat(cad): native vertex-edge incidence graph from exact split plan
+1847	https://github.com/barocss/barocss/issues/1847	CLOSED	feat(cad): validate directed half-edge twins over exact crossing incidence graph
+1858	https://github.com/barocss/barocss/issues/1858	CLOSED	feat(cad): exact planar directed-edge loop closure qualification
+1862	https://github.com/barocss/barocss/issues/1862	CLOSED	feat(cad): drive a tapered gusset from an owned edge direction
+1865	https://github.com/barocss/barocss/issues/1865	CLOSED	feat(cad-editor): resize a constrained plate with existing numeric controls
+1867	https://github.com/barocss/barocss/issues/1867	CLOSED	test(cad-editor): verify top-entry pocket in a real browser and physical file round-trip
+1870	https://github.com/barocss/barocss/issues/1870	CLOSED	feat(cad): immutable native planar face boundary from qualified simple loop
+1880	https://github.com/barocss/barocss/issues/1880	CLOSED	feat(cad): create one exact owned translated gusset copy
+1885	https://github.com/barocss/barocss/issues/1885	CLOSED	docs(cad): open and space two translated gussets
+1888	https://github.com/barocss/barocss/issues/1888	CLOSED	docs(cad-editor): extend UI course with top-entry pocket and constrained plate
+1890	https://github.com/barocss/barocss/issues/1890	CLOSED	feat(cad): export a named convex model output as binary STL
+1891	https://github.com/barocss/barocss/issues/1891	CLOSED	feat(cad-editor): apply staged modeling dimensions with Enter safely
+1895	https://github.com/barocss/barocss/issues/1895	CLOSED	fix(cad): snapshot exact binary64 orientation point descriptors before evaluation
+1900	https://github.com/barocss/barocss/issues/1900	CLOSED	test(cad-editor): register modeling dimension shortcut checks in standard CI
+1903	https://github.com/barocss/barocss/issues/1903	CLOSED	docs(cad-editor): teach the owned union-to-slot bracket workflow
+1906	https://github.com/barocss/barocss/issues/1906	CLOSED	docs(cad-editor): teach serial chamfers and Z split in the modeling UI
+1907	https://github.com/barocss/barocss/issues/1907	CLOSED	fix(cad): snapshot exact segment endpoints once across classification and rational intersection
+1914	https://github.com/barocss/barocss/issues/1914	CLOSED	docs(cad): export a translated gusset with the primary STL API
+1918	https://github.com/barocss/barocss/issues/1918	CLOSED	feat(cad-editor): download a selected accepted convex output as STL
+1919	https://github.com/barocss/barocss/issues/1919	CLOSED	feat(cad): translate an owned finished chamfer rail
+1929	https://github.com/barocss/barocss/issues/1929	CLOSED	docs(cad): make a translated two-chamfer rail pair
+1930	https://github.com/barocss/barocss/issues/1930	CLOSED	docs(cad-editor): choose correct modeling workspace and tool
+1936	https://github.com/barocss/barocss/issues/1936	CLOSED	docs(cad-editor): compare beveled split and derived centered dimensions
+1943	https://github.com/barocss/barocss/issues/1943	CLOSED	feat(cad-editor): adopt command-context workspace for primary modeling
+1945	https://github.com/barocss/barocss/issues/1945	CLOSED	docs(cad-editor): explain the contextual Model a part workspace
+1948	https://github.com/barocss/barocss/issues/1948	CLOSED	feat(cad-editor): edit selected extrusion drivers in the modeling workspace
+1949	https://github.com/barocss/barocss/issues/1949	CLOSED	feat(cad): owned cardinal rotation of a finished convex rail
+1951	https://github.com/barocss/barocss/issues/1951	CLOSED	feat(cad-editor): create an owned rectangular part from workspace dimensions
+1953	https://github.com/barocss/barocss/issues/1953	CLOSED	docs(cad-editor): distinguish editable model Save and convex STL export
+1957	https://github.com/barocss/barocss/issues/1957	CLOSED	feat(cad-editor): edit the selected rectangular sketch's named coordinates
+1958	https://github.com/barocss/barocss/issues/1958	CLOSED	fix(cad-editor): make accepted-only model downloads explicit during drafts
+1959	https://github.com/barocss/barocss/issues/1959	CLOSED	feat(cad-editor): preview pending dimensions before Apply
+1960	https://github.com/barocss/barocss/issues/1960	CLOSED	feat(cad-editor): author an L plate and through-slot with structural Undo
+1962	https://github.com/barocss/barocss/issues/1962	CLOSED	feat(cad): exact cardinal-plane mirror of owned native convex solids
+1965	https://github.com/barocss/barocss/issues/1965	CLOSED	feat(cad-editor): inspect model slots with Top and Isometric views
+1966	https://github.com/barocss/barocss/issues/1966	CLOSED	feat(cad-editor): author one through-hole on a rectangular part
+1967	https://github.com/barocss/barocss/issues/1967	CLOSED	feat(cad): exact owned native Solid uniform scale about the world origin
+1971	https://github.com/barocss/barocss/issues/1971	CLOSED	feat(cad-editor): author an open tray with a rectangular pocket command
+1973	https://github.com/barocss/barocss/issues/1973	CLOSED	feat(cad): add owned Native Solid linear pattern with three instances
+1974	https://github.com/barocss/barocss/issues/1974	CLOSED	feat(cad-editor): distinguish qualified orthogonal faces without changing geometry
+1978	https://github.com/barocss/barocss/issues/1978	CLOSED	fix(cad-editor): clear tracked app lint blockers for required full CI
+1979	https://github.com/barocss/barocss/issues/1979	CLOSED	feat(cad): add owned Native Solid cardinal circular pattern
+1984	https://github.com/barocss/barocss/issues/1984	CLOSED	feat(cad-editor): author one front top chamfer on a rectangular part
+1986	https://github.com/barocss/barocss/issues/1986	CLOSED	feat(cad): support four-instance full cardinal Solid circular pattern
+1989	https://github.com/barocss/barocss/issues/1989	CLOSED	feat(cad-editor): finish a rectangular rail with two independent opposite bevels
+1990	https://github.com/barocss/barocss/issues/1990	CLOSED	fix(cad-editor): make retained convex bevel faces readable and pickable
+1994	https://github.com/barocss/barocss/issues/1994	CLOSED	feat(cad): place one cardinally rotated Native Solid with exact translation
+1995	https://github.com/barocss/barocss/issues/1995	CLOSED	feat(cad-editor,gpu): display real convex boundary edges with shared depth
+1999	https://github.com/barocss/barocss/issues/1999	CLOSED	feat(cad-editor): orient and place an owned two-bevel rail
+2000	https://github.com/barocss/barocss/issues/2000	CLOSED	feat(cad-editor): create three spaced finished rails with a normal linear pattern command
+2002	https://github.com/barocss/barocss/issues/2002	CLOSED	feat(cad): intersect an owned translated extrusion with a direct Solid
+2008	https://github.com/barocss/barocss/issues/2008	CLOSED	feat(cad-editor): mirror a finished rail into an independently selectable handed pair
+2009	https://github.com/barocss/barocss/issues/2009	CLOSED	feat(cad): extend owned Native Solid linear patterns to two and four instances
+2015	https://github.com/barocss/barocss/issues/2015	CLOSED	feat(cad): rotate native solids about an authored cardinal pivot
+2016	https://github.com/barocss/barocss/issues/2016	CLOSED	feat(cad-editor): choose two, three or four linear-pattern bodies
+2018	https://github.com/barocss/barocss/issues/2018	CLOSED	feat(cad-editor): split an authored beveled rail into two bodies
+2022	https://github.com/barocss/barocss/issues/2022	CLOSED	feat(cad-editor): split rectangular parts before or after one chamfer
+2094	https://github.com/barocss/barocss/issues/2094	CLOSED	research(cad): solidcore 표준부품·나사산 기능 조사와 단계별 fastener 제안
+2110	https://github.com/barocss/barocss/issues/2110	CLOSED	research(cad): text-to-cad 기반 AI 편집 문맥·산출물 검증 계약 검토
+2171	https://github.com/barocss/barocss/issues/2171	CLOSED	research(cad): ZW3D WuKong 참고 — 재생성·조립·단면 계측·Rendering identity
+2173	https://github.com/barocss/barocss/issues/2173	CLOSED	research(cad): IntelliCAD·ODA Teigha의 플랫폼·DWG·WASM 적용 경계 조사
+2178	https://github.com/barocss/barocss/issues/2178	CLOSED	research(cad): SKY-001 계층적 생성 연구와 실행 가능한 CAD 계획·검증 계약
+2180	https://github.com/barocss/barocss/issues/2180	CLOSED	research(cad): iCAD SX 참고 — 조립 문맥 편집·BOM/도면 일관성·작업별 성능
+2181	https://github.com/barocss/barocss/issues/2181	CLOSED	research(cad): Quartz 참고 — AI-native CAD 후보 격리·검증·승인 계약
+2182	https://github.com/barocss/barocss/issues/2182	CLOSED	research(cad): Seamless CAD 참고 — 파라메트릭 이력·미리보기 분리·렌더 갱신 계약
+2187	https://github.com/barocss/barocss/issues/2187	CLOSED	plan(cad): CAD 원본 기반 단방향 SVG 벡터 출력 범위와 검증 기준
+2188	https://github.com/barocss/barocss/issues/2188	CLOSED	research(cad): SOLIDWORKS 2027 참고 — 파라미터 변형·비동기 재계산·성능 진단
+2189	https://github.com/barocss/barocss/issues/2189	CLOSED	research(cad): 로봇용 편집 가능한 조립·관절·기구학과 URDF 전달 계획
+2190	https://github.com/barocss/barocss/issues/2190	CLOSED	research(cad): Peopoly Giga 800 참고 — 제조용 3MF/STL 출력·공정 보정·검증 계획
+2192	https://github.com/barocss/barocss/issues/2192	CLOSED	research(cad): 3d-model-anything 참고 — 도면에서 편집 가능한 CAD 연산 생성·검증
+2193	https://github.com/barocss/barocss/issues/2193	CLOSED	plan(cad-ai): 이미지→CAD 공통 artifact·ID·좌표·revision 계약
+2194	https://github.com/barocss/barocss/issues/2194	CLOSED	plan(cad-ai): 실사진 입력·출처·평가 정답 분리와 첫 벤치마크 준비
+2195	https://github.com/barocss/barocss/issues/2195	CLOSED	plan(cad-ai): 사물 탐지·분할과 원본 좌표에 연결된 region 증거
+2196	https://github.com/barocss/barocss/issues/2196	CLOSED	plan(cad-ai): 부품 의미·관계와 도면 치수 OCR의 근거 연결
+2197	https://github.com/barocss/barocss/issues/2197	CLOSED	plan(cad-ai): 선택적 깊이·카메라·다중시점 증거와 metric scale 분리
+2198	https://github.com/barocss/barocss/issues/2198	CLOSED	plan(cad-ai): 선택적 이미지→3D 메시 가설과 CAD 재구성 비교
+2199	https://github.com/barocss/barocss/issues/2199	CLOSED	plan(cad-ai): 실측·설계 의도·미확정 치수와 최소 질문 계약
+2200	https://github.com/barocss/barocss/issues/2200	CLOSED	plan(cad-ai): 증거 기반 CAD 연산 계획과 기존 native 도구 adapter
+2201	https://github.com/barocss/barocss/issues/2201	CLOSED	plan(cad-ai): 후보 실행·독립 형상 검사·예산 제한 AI 수정 루프
+2202	https://github.com/barocss/barocss/issues/2202	CLOSED	plan(cad-ai): AI·직접 편집의 동일 native 원본과 Save/Open·Undo 검증
+2203	https://github.com/barocss/barocss/issues/2203	CLOSED	plan(cad-ai): 동일 CAD revision의 exact STEP·SVG 파생 출력 검증
+2204	https://github.com/barocss/barocss/issues/2204	CLOSED	plan(cad-ai): 실사진→편집 CAD 단계별 평가와 직접·3D 경유 비교
+2205	https://github.com/barocss/barocss/issues/2205	CLOSED	research(cad): 최신 BaroCSS와 SolidCraft v0.21.0 코드 비교·검증 격차 (2026-10-24)
+2206	https://github.com/barocss/barocss/issues/2206	CLOSED	research(cad-ai): print3d 참고 — 사진 근거·검증 피드백·CAD-to-print 통합 설계
+2207	https://github.com/barocss/barocss/issues/2207	CLOSED	research(cad): dimensional-drawing 참고 — CAD 파생 SVG의 치수·상세도 표현
+2208	https://github.com/barocss/barocss/issues/2208	CLOSED	research(cad-ai): SOMA 참고 — 선택·계측·파라미터·revision 기반 에이전트 수정 계약
+2210	https://github.com/barocss/barocss/issues/2210	CLOSED	research(cad): 자체 커널 검증 보강 — 공차·조립 교환·위상 참조·제약 진단 비교
+2216	https://github.com/barocss/barocss/issues/2216	CLOSED	research(cad): LeatherPatternMaker 참고 — 공통 2D 기하와 가죽 패턴 제작 규칙 분리
+2217	https://github.com/barocss/barocss/issues/2217	CLOSED	research(cad): OpenCADStudio 참조 — 포맷·entity 보존 행렬과 verified save 계약
+2219	https://github.com/barocss/barocss/issues/2219	CLOSED	research(cad): HeyPCB materials 참고 — 재료·공정·적층·제조 역량과 검증 근거 분리
+2220	https://github.com/barocss/barocss/issues/2220	CLOSED	research(cad-ai): Atech AI CAD 참조 — 생성·검증 상태 분리와 revision-bound 진단 산출물
+2222	https://github.com/barocss/barocss/issues/2222	CLOSED	research(cad-ai): blender-skills 참고 — 선택적 skill routing과 bounded 단계별 시각 QA
+2224	https://github.com/barocss/barocss/issues/2224	CLOSED	research(cad-ai): BerriaCraft 참고 — 원본 scan 보존·재구성/출력 품질 분리와 mesh 검증 계약
+2227	https://github.com/barocss/barocss/issues/2227	CLOSED	research(cad): NativeCAD v0.26.0 참조 — Boolean 결과·단위·STEP pcurve·loft 회귀 계약
+2228	https://github.com/barocss/barocss/issues/2228	CLOSED	research(cad): smlibpy WASM·Three.js 참고 — 선택 identity·Worker 복구·좌표·수명 계약
+2232	https://github.com/barocss/barocss/issues/2232	CLOSED	research(cad): SolidCraft 스케치 참고 — 연관 offset의 코너 소멸·복원과 profile identity 검증
+2282	https://github.com/barocss/barocss/issues/2282	CLOSED	research(cad): Shapr3D 26.200 참고 — 선–원호 스케치 필렛과 구속·참조 보존
+2285	https://github.com/barocss/barocss/issues/2285	CLOSED	research(cad): Plasticity 참고 — 선택 기반 직접 편집의 치수·이력·참조 보존 계약
+2288	https://github.com/barocss/barocss/issues/2288	CLOSED	fix(cad-studio): 일반 박스 선택에서 숨긴 body가 새로 선택되지 않도록 보강
+2293	https://github.com/barocss/barocss/issues/2293	CLOSED	fix(cad-studio): 스케치 치수 인라인 재확인에서 표시 반올림값이 원본값을 덮어쓰지 않도록 보강
+2295	https://github.com/barocss/barocss/issues/2295	CLOSED	fix(cad-studio): Finish sketch에서 열린 일반 선·원호를 말없이 버리지 않도록 보강
+2296	https://github.com/barocss/barocss/issues/2296	CLOSED	fix(cad-model): Split한 원의 Offset Out/In 방향이 뒤집히지 않도록 보강
+2297	https://github.com/barocss/barocss/issues/2297	CLOSED	fix(cad-model): DXF 끝점 Z·elevation을 무시한 2D profile 수락 방지
+2299	https://github.com/barocss/barocss/issues/2299	CLOSED	fix(cad-model): 비원형 곡선에서 가짜 원 중심 스냅을 만들지 않도록 보강
+2301	https://github.com/barocss/barocss/issues/2301	CLOSED	fix(cad-studio): 명령 검색 입력의 Undo가 모델 문서 이력을 바꾸지 않도록 보강
+2302	https://github.com/barocss/barocss/issues/2302	CLOSED	fix(cad-model): 면 내부를 관통하는 edge의 최단 거리가 양수로 나오지 않도록 보강
+2305	https://github.com/barocss/barocss/issues/2305	CLOSED	fix(cad-studio): 숨긴 body의 스냅 후보가 스케치 입력 좌표에 남지 않도록 보강
+2306	https://github.com/barocss/barocss/issues/2306	CLOSED	research(cad-studio): Dune 3D 참고 — 구속 적용 전 임시 미리보기와 단일 편집 계약
+2307	https://github.com/barocss/barocss/issues/2307	CLOSED	feat(cad-studio): 기존 구속 행에서 관련 형상을 선택 변경 없이 강조
+2310	https://github.com/barocss/barocss/issues/2310	CLOSED	fix(cad-studio): 문서 교체 뒤 body Paste가 동명 key의 다른 원본을 복제하지 않도록 보강
+2311	https://github.com/barocss/barocss/issues/2311	CLOSED	fix(cad-studio): 미해결 도면 치수의 대체 참조 후보 미리보기가 차단되지 않도록 보강
+2312	https://github.com/barocss/barocss/issues/2312	CLOSED	fix(cad-studio): 숨긴 보조 형상이 Trim·Extend·Split의 편집 대상에 남지 않도록 보강
+2317	https://github.com/barocss/barocss/issues/2317	CLOSED	research(cad): nanoCAD 참고: 원호 끝점 기반 임시 연장 스냅
+2318	https://github.com/barocss/barocss/issues/2318	CLOSED	research(cad): LibreCAD 참고: 두 원주점·반지름으로 원의 중심 후보 선택
+2320	https://github.com/barocss/barocss/issues/2320	CLOSED	fix(cad-studio): 마지막 H/V 구속 삭제 상태를 Finish·재열기에서 보존
+2322	https://github.com/barocss/barocss/issues/2322	CLOSED	fix(cad-studio): 상세도 지름 치수의 화살표가 잘린 원호 밖에 붙지 않도록 보강
+2323	https://github.com/barocss/barocss/issues/2323	CLOSED	fix(cad-model): 재생성 거부의 원래 feature ID를 Studio 오류까지 보존
+2324	https://github.com/barocss/barocss/issues/2324	CLOSED	research(cad): Fusion 참고 — 연관 face inset의 명시적 재연결과 원본·대상 분리
+2329	https://github.com/barocss/barocss/issues/2329	CLOSED	research(cad-studio): Onshape 참고 — 현재 스케치 구속 목록의 종류·선택 대상 필터
+2330	https://github.com/barocss/barocss/issues/2330	CLOSED	research(cad): Fusion reference for locating locally under-constrained sketch geometry
+2333	https://github.com/barocss/barocss/issues/2333	CLOSED	research(cad): Plasticity 26.2 참고 — 배치 부품의 현재 위치에서 스케치 스냅
+2348	https://github.com/barocss/barocss/issues/2348	CLOSED	fix(cad-studio): 간섭 계산 실패를 ‘간섭 없음’으로 표시하지 않도록 보강
+2350	https://github.com/barocss/barocss/issues/2350	CLOSED	fix(cad-studio): 닫거나 교체한 간섭 검사의 늦은 결과 수용 차단
+2354	https://github.com/barocss/barocss/issues/2354	CLOSED	fix(cad-studio): X/Y 원형 패턴의 초과 개수를 4개로 조용히 줄이지 않도록 보강
+2355	https://github.com/barocss/barocss/issues/2355	CLOSED	fix(cad-studio): 작은 비영점 Measure 값을 0으로 숨기지 않도록 보강
+2356	https://github.com/barocss/barocss/issues/2356	CLOSED	fix(cad-studio): 재계산 중 이전 BOM의 CSV·구매/제작 변경을 현재 문서에 적용하지 않도록 보강
+2357	https://github.com/barocss/barocss/issues/2357	CLOSED	fix(cad-model): 파라미터 Rename이 구성에 남은 삭제된 이름의 값을 덮지 않도록 보강
+2359	https://github.com/barocss/barocss/issues/2359	CLOSED	fix(cad-studio): 거부된 비동기 도면 변경을 성공 알림으로 보고하지 않도록 보강
+2360	https://github.com/barocss/barocss/issues/2360	CLOSED	fix(cad): STEP 일반 곡선 wrapper의 순환 참조를 명명된 오류로 거부
+2363	https://github.com/barocss/barocss/issues/2363	CLOSED	fix(cad-model): face·Offset 스케치 평면의 표시용 반올림이 저장 위치를 바꾸지 않도록 보강
+2364	https://github.com/barocss/barocss/issues/2364	CLOSED	fix(cad-studio): 취소·수정한 일반 스케치의 늦은 Finish 응답 수용 차단
+2365	https://github.com/barocss/barocss/issues/2365	CLOSED	fix(cad): 자동 치수 재실행에서 사용자가 지정한 공차를 말없이 제거하지 않도록 보강
+2366	https://github.com/barocss/barocss/issues/2366	CLOSED	fix(cad-studio): 상세도 삭제 뒤 남은 치수가 재사용된 문자에 자동 연결되지 않도록 보강
+2367	https://github.com/barocss/barocss/issues/2367	CLOSED	fix(cad-studio): 도면 절단선이 겹친 치수의 선택·드래그를 가로채지 않도록 보강
+2368	https://github.com/barocss/barocss/issues/2368	CLOSED	fix(cad-model): 일반 공차 제안의 mm 단위를 Note에 보존해 inch 도면의 오해 방지
+2371	https://github.com/barocss/barocss/issues/2371	CLOSED	research(cad-studio): Solid Edge 참고 — 두 평행 face 사이의 중앙 평면에서 Sketch 시작
+2379	https://github.com/barocss/barocss/issues/2379	CLOSED	feat(cad-studio): Creo 참고 — 기하 참조를 제외한 Hole 옵션을 이름으로 저장·재사용
+2386	https://github.com/barocss/barocss/issues/2386	CLOSED	research(cad): Hexagon DESIGNER 참고: 개수를 바꿔도 유지되는 선형 body 패턴의 첫–마지막 거리
+2387	https://github.com/barocss/barocss/issues/2387	CLOSED	feat(cad-studio): GstarCAD 참고 — 스케치 원호의 호 길이 중점 스냅
+2388	https://github.com/barocss/barocss/issues/2388	CLOSED	feat(cad-studio): IronCAD 2027 PU1 참고 — 명령을 유지하는 스케치 객체 스냅 종류 선택
+2392	https://github.com/barocss/barocss/issues/2392	CLOSED	feat(cad-studio): Caddie 32 참고 — 완전히 겹친 스케치 직선 구간의 읽기 전용 진단
+2394	https://github.com/barocss/barocss/issues/2394	CLOSED	research(cad): SolidCraft 참고: 큰 스케치 치수 변경의 유한 단계 재시도와 원본 보존
+2397	https://github.com/barocss/barocss/issues/2397	CLOSED	feat(cad-studio): SolveSpace 참고 — 원호 치수의 지름 입력과 기존 반지름 보존
+2398	https://github.com/barocss/barocss/issues/2398	CLOSED	fix(cad-model): AgentCAD 참고 — 비동기 도구 호출의 요구조건 예외 사유·응답 형식 격리
+2399	https://github.com/barocss/barocss/issues/2399	CLOSED	feat(cad-ai): 명세 revision을 작업별 입력·소유 범위·검증 의무에 연결
+2400	https://github.com/barocss/barocss/issues/2400	CLOSED	fix(cad-model): 진행 중 candidate 채택·취소·중복 호출의 원자성 검증
+2401	https://github.com/barocss/barocss/issues/2401	CLOSED	feat(cad-ai): 두 worker의 병렬 작업·중단·재시작 복구를 유한 profile로 검증
+2403	https://github.com/barocss/barocss/issues/2403	CLOSED	fix(cad-model): DXF 연결 허용오차가 원점 거리·무관한 형상에 따라 커지지 않도록 보강
+2404	https://github.com/barocss/barocss/issues/2404	CLOSED	fix(cad-model): LibreCAD 참고 — 숨긴 DXF 형상의 profile 수락 전 진단·거부
+2406	https://github.com/barocss/barocss/issues/2406	CLOSED	fix(cad-model): Draftly 참고: 모든 도면 배치 후보가 실패한 경우의 명시적 거부·원본 보존
+2407	https://github.com/barocss/barocss/issues/2407	CLOSED	fix(cad-studio): 얇은 부품의 단면 평면이 고정 여유·반올림으로 경계 밖으로 벗어나지 않도록 보강
+2408	https://github.com/barocss/barocss/issues/2408	CLOSED	fix(cad-model): 상세도가 부모 도면의 숨은 선 표시 설정을 따르도록 보강
+2411	https://github.com/barocss/barocss/issues/2411	CLOSED	fix(cad-model): 표시용 반올림값이 요구조건의 통과·실패를 바꾸지 않도록 보강
+2412	https://github.com/barocss/barocss/issues/2412	CLOSED	fix(cad-model): 미지원 STEP 변환식 길이 단위를 기준 SI 단위로 오해하지 않도록 거부
+2414	https://github.com/barocss/barocss/issues/2414	CLOSED	feat(cad-model): best snapshot 선택에서 필수 요구 충족을 선호 개수보다 우선
+2416	https://github.com/barocss/barocss/issues/2416	CLOSED	fix(cad-model): 미등록 재료 ID의 aluminium 대체값을 확정 질량으로 판정하지 않도록 보강
+2417	https://github.com/barocss/barocss/issues/2417	CLOSED	fix(cad-model): 라이브러리 공유 검사에서 variant 생략 시 쓰이는 기본 구성도 검증
+2418	https://github.com/barocss/barocss/issues/2418	CLOSED	fix(cad-model): 원점에서 멀어진 도면 단면이 교차 body를 잘못 제외하지 않도록 보강
+2419	https://github.com/barocss/barocss/issues/2419	CLOSED	fix(cad-studio): 교체·종료한 이미지 가져오기의 늦은 적용 차단
+2420	https://github.com/barocss/barocss/issues/2420	CLOSED	fix(cad-model): 일반 부품 평가 실패를 정상 BOM의 0 g·누락 행으로 확정하지 않도록 보강
+2421	https://github.com/barocss/barocss/issues/2421	CLOSED	fix(cad-model): 완전히 가려진 축방향 나사 표시가 Hidden lines를 꺼도 실선으로 남지 않도록 보강
+2422	https://github.com/barocss/barocss/issues/2422	CLOSED	fix(cad-model): keep-out 오차 구간의 등식·범위 요구를 불확실하면 unknown으로 유지
+2423	https://github.com/barocss/barocss/issues/2423	CLOSED	fix(cad): reject unsupported STEP spline knot forms without an unexpected TypeError
+2424	https://github.com/barocss/barocss/issues/2424	CLOSED	fix(cad-model): stop silently losing reflected DXF TEXT underlay orientation
+2426	https://github.com/barocss/barocss/issues/2426	CLOSED	fix(cad-studio): reject stale disk writes from external MCP document sessions
+2427	https://github.com/barocss/barocss/issues/2427	CLOSED	fix(cad-model): preserve occurrence IDs in MCP assembly results
+2428	https://github.com/barocss/barocss/issues/2428	CLOSED	fix(cad-model): 구매목록 CSV의 문자열이 스프레드시트 수식으로 해석되지 않도록 보강
+2429	https://github.com/barocss/barocss/issues/2429	CLOSED	fix(cad-model): hole_diameter가 바깥 원통·구면의 지름을 구멍 요구 충족으로 판정하지 않도록 보강
+2430	https://github.com/barocss/barocss/issues/2430	CLOSED	fix(cad-studio): crossing 박스가 꼭짓점 없이 가로지르는 body를 놓치지 않도록 보강
+2431	https://github.com/barocss/barocss/issues/2431	CLOSED	fix(cad-studio): perspective 박스 선택에서 카메라 뒤 body가 새로 선택되지 않도록 보강
+2432	https://github.com/barocss/barocss/issues/2432	CLOSED	fix(cad-model): Sketch Extend가 원점 거리·먼 형상 때문에 가까운 경계를 건너뛰지 않도록 보강
+2433	https://github.com/barocss/barocss/issues/2433	CLOSED	fix(cad): STEP 공동 shell 방향을 보존하고 자체 round-trip의 상쇄 오류를 분리
+2434	https://github.com/barocss/barocss/issues/2434	CLOSED	fix(cad-model): DXF zero-chord bulge가 NaN profile·underlay로 수락되지 않도록 보강
+2438	https://github.com/barocss/barocss/issues/2438	CLOSED	CAD Studio: Open을 Undo한 뒤 Save가 다른 프로젝트 파일을 덮어씀
+2439	https://github.com/barocss/barocss/issues/2439	CLOSED	CAD Studio: 작업 전환과 정상 Open에서 미적용 초안 유실 방지
+2440	https://github.com/barocss/barocss/issues/2440	CLOSED	CAD Studio: 키보드·포인터 입력을 현재 작업 공간에만 전달
+2441	https://github.com/barocss/barocss/issues/2441	CLOSED	CAD Studio: More tools 재배치 뒤 포커스 유지와 Escape 복구
+2442	https://github.com/barocss/barocss/issues/2442	CLOSED	CAD Studio Drawing: 빈 상세도의 Move와 Fix all이 주석을 삭제함
+2443	https://github.com/barocss/barocss/issues/2443	CLOSED	CAD Studio Drawing: 주석 종류와 시트가 다른 항목의 선택·삭제 방지
+2444	https://github.com/barocss/barocss/issues/2444	CLOSED	CAD Studio: 모델 계산 실패 뒤 이전 형상의 선택·피처·출력 차단
+2446	https://github.com/barocss/barocss/issues/2446	CLOSED	CAD Studio: Section의 Hole·Hide·Mate가 화면과 같은 원본 대상을 사용
+2447	https://github.com/barocss/barocss/issues/2447	CLOSED	CAD Studio: 패턴의 간격·개수 변경에서 후속 Hole 대상 보존
+2448	https://github.com/barocss/barocss/issues/2448	CLOSED	CAD Studio: Assembly Cut의 적용 상태를 Render·STEP·Drawing 출력과 일치
+2449	https://github.com/barocss/barocss/issues/2449	CLOSED	CAD Studio Drawing: 부품 삭제·재삽입 뒤 치수가 다른 인스턴스에 연결됨
+2450	https://github.com/barocss/barocss/issues/2450	CLOSED	CAD Studio: Measure의 대상이 사라지면 다른 바디로 자동 전환됨
+2451	https://github.com/barocss/barocss/issues/2451	CLOSED	CAD Studio: 4 CSS px 간격에서 선택선과 호버가 모서리 사이를 가림
+2452	https://github.com/barocss/barocss/issues/2452	CLOSED	CAD Studio: X-ray·Wireframe에 보이는 뒤쪽 모서리 선택
+2453	https://github.com/barocss/barocss/issues/2453	CLOSED	CAD Studio: 좁은 데스크톱에서 도구 레일이 꼭짓점과 기즈모를 가림
+2454	https://github.com/barocss/barocss/issues/2454	CLOSED	CAD Studio: 혼합 Shift 선택과 교차 창 선택의 대상 범위 일치
+2455	https://github.com/barocss/barocss/issues/2455	CLOSED	CAD Studio Sketch: 도구 간 초안 Undo·Redo와 no-op Finish 복구
+2457	https://github.com/barocss/barocss/issues/2457	CLOSED	CAD Studio Sketch: 기울어진 평면의 스냅 표시·저장 좌표 일치
+2458	https://github.com/barocss/barocss/issues/2458	CLOSED	CAD Studio Sketch: 기울어진 작업면으로 명시적 정면 복귀
+2459	https://github.com/barocss/barocss/issues/2459	CLOSED	CAD Studio Sketch: 독립 윤곽·공유 변 영역을 개별 선택하고 Extrude에 전달
+2460	https://github.com/barocss/barocss/issues/2460	CLOSED	CAD Studio Sketch: 가까운 원주·선·치수의 호버와 선택 대상 일치
+2461	https://github.com/barocss/barocss/issues/2461	CLOSED	CAD Studio: 빈 숫자 입력에서 이전 값 적용 방지
+2462	https://github.com/barocss/barocss/issues/2462	CLOSED	CAD Studio Sweep: 선택한 단면·경로와 미리보기·이력 일치
+2463	https://github.com/barocss/barocss/issues/2463	CLOSED	CAD Studio Loft: 단면 모드와 가이드 교체를 미리보기·이력에 반영
+2464	https://github.com/barocss/barocss/issues/2464	CLOSED	CAD Studio: Extrude Cut·Join의 적용 대상과 깊이·결과 검증
+2473	https://github.com/barocss/barocss/issues/2473	CLOSED	CAD Studio: 확대 배율에 따라 원·원호의 표시 분할 조정
+2480	https://github.com/barocss/barocss/issues/2480	CLOSED	CAD Studio Revolve: 미리보기에서 고른 회전축과 이력 참조 일치
+2487	https://github.com/barocss/barocss/issues/2487	CLOSED	CAD Studio Model: 스케치·돌출과 선택별 도구의 데스크톱 회귀 기준
+2489	https://github.com/barocss/barocss/issues/2489	CLOSED	CAD Studio Sketch: Circle gap을 기존 원의 이력과 초안 Undo에서 사용
+2491	https://github.com/barocss/barocss/issues/2491	CLOSED	CAD Studio: Scale 기준점과 Align 대상·간격을 이력에서 편집
+2494	https://github.com/barocss/barocss/issues/2494	CLOSED	CAD Studio Drawing: 원형 카운터보어의 잘못된 수량이 PDF·SVG에 출력됨
+2495	https://github.com/barocss/barocss/issues/2495	CLOSED	CAD Studio Hole: Escape·Cancel·Apply 뒤 키보드 포커스 복귀
+2497	https://github.com/barocss/barocss/issues/2497	CLOSED	CAD Studio: 치수 핸들과 겹친 면·모서리에서 Shift 선택이 막힘
+2499	https://github.com/barocss/barocss/issues/2499	CLOSED	CAD Studio Sketch·Drawing: 도구 포커스에서 단축키와 용도 확인
+2501	https://github.com/barocss/barocss/issues/2501	CLOSED	CAD Studio 명령 검색: 검색 결과 없음 표시와 실행 불가 시 검색어 유지
+2506	https://github.com/barocss/barocss/issues/2506	CLOSED	CAD Studio Align: 대상 면 선택 대기에서 오류와 중복 안내 제거
+2510	https://github.com/barocss/barocss/issues/2510	CLOSED	CAD Studio Sketch: 일반 Offset 거리에서 Enter가 스케치를 끝냄
+2511	https://github.com/barocss/barocss/issues/2511	CLOSED	CAD Studio Drawing: 원형 탭 배열 변경 뒤 기존 도면 수량 갱신
+2520	https://github.com/barocss/barocss/issues/2520	CLOSED	CAD Studio Chamfer: 선택 모서리와 접선으로 넓어진 적용 범위 표시
+2523	https://github.com/barocss/barocss/issues/2523	CLOSED	CAD Studio Chamfer: 직선과 원호를 함께 선택할 때 적용 범위 표시
+2525	https://github.com/barocss/barocss/issues/2525	CLOSED	CAD Studio Align: 숨겨진 바디와 긴 이름에서 현재 대상 면 식별
+2529	https://github.com/barocss/barocss/issues/2529	CLOSED	CAD Studio Chamfer: 과도한 거리에서 모서리 재선택 대신 거리 복구 안내
+2530	https://github.com/barocss/barocss/issues/2530	CLOSED	CAD Studio Align Floor: 생성 간격의 허용 범위와 실제 적용 일치
+2531	https://github.com/barocss/barocss/issues/2531	CLOSED	CAD Studio Align History: 간격 안내 중복과 배치 범위 오류 정리
+2539	https://github.com/barocss/barocss/issues/2539	CLOSED	CAD Studio References: 보류 피처 이름 표시와 중복 미리보기 정리
+2541	https://github.com/barocss/barocss/issues/2541	CLOSED	CAD Studio Rebuild: 현재 계산 실패와 이전 문서의 보고서를 표시

@@ -17,18 +17,26 @@ The original commit messages and authors are retained. Filtered commit IDs and a
 - **PASS** for Studio's production build, Viewer's bundle, and the documentation site's production build.
 - **PASS** for the actual desktop WebGPU Studio flow. Author the open-rim variable fillet, edit the end radius, undo,
   redo, save, and reopen. Strict native geometry checks and local MCP discovery and dry run also passed.
-- **NOT_RUN** for GitHub checks, wiki migration, individual issue transfer, and historical pull request indexing.
-  D1274 remains an uncommitted change in the original development worktree.
+- **PASS** for the first [CAD CI](https://github.com/barocss/cad/actions/runs/43606656234) run. It installed the workspace, built Studio, Viewer and docs, and ran the focused Kernel and Model facade tests.
+- **NOT_RUN** for broad suites and the unfinished D1274 Studio acceptance.
 
 ## GitHub history
 
 The existing source repository includes 2,164 issues and 455 pull requests. There were zero open PRs at the inventory checkpoint.
-Use the [original issues](https://github.com/barocss/barocss/issues),
-[original pull requests](https://github.com/barocss/barocss/pulls?q=is%3Apr), and
-[original wiki](https://github.com/barocss/barocss/wiki) until the migration index is complete.
+The [pull request index](pull-requests.tsv) identifies 191 PRs that changed exported paths. It records their
+states, source URLs, base and head commits, merge commits, mapped commits where available, and the path counts
+available for classification. For PR #2221, GitHub supplied 3,000 of 3,402 paths, and the surviving local diff
+lists 3,375. The index flags that row as partial.
 
-- Transfer confirmed open CAD issues using GitHub's native transfer. Review labels, milestones and cross-repository links first.
-- Preserve original state, links and timeline for closed issues. GitHub documents native transfer for open issues.
-- Index CAD PRs with their original URL and mapped commits. GitHub cannot retarget a PR to a different base repository.
-  The original PR holds its review, comment and check records.
-- Migrate CAD wiki material with its history and links. Keep mixed pages linked to their source.
+GitHub cannot change a PR's base repository. The links lead to the original reviews, comments, checks and
+merge status. The [commit map](commit-map.tsv) locates corresponding CAD source when the filtered history includes it.
+
+The [CAD wiki](https://github.com/barocss/cad/wiki) holds the selected CAD, GPU, Viewer, Loader, Motion, Physics and
+shared 3D material. The first import retained 578 wiki pages, 1,323 linked files and 3,174 filtered wiki commits.
+The link update added three existing B-rep attachments and fixed references within the new wiki and back to
+source pages. The [original wiki](https://github.com/barocss/barocss/wiki) retains the full history and scope.
+
+Open CAD issue transfers use GitHub's native operation and preserve the old URLs as redirects. The
+[closed issue index](closed-issues.tsv) records 571 closed issues with explicit CAD module titles. It links
+to their original closed state and timeline. Titles outside that filter can be reviewed in the
+[original issues](https://github.com/barocss/barocss/issues?q=is%3Aissue+is%3Aclosed).
