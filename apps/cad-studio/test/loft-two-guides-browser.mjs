@@ -3,6 +3,7 @@ import { createFlow } from './flow-helper.mjs';
 import { twoGuideInspector, verifyTwoGuideLoft } from './loft-two-guides-oracle.mjs';
 
 const pins = ['apps/cad-studio/test/loft-two-guides-browser.mjs', 'apps/cad-studio/test/loft-two-guides-oracle.mjs', 'apps/cad-studio/src/ui/NodeEditor.tsx',
+  'apps/cad-studio/src/ui/FeatureFailureNotice.tsx', 'apps/cad-studio/src/styles.css',
   'packages/barocss-cad-model/src/app/profileCommands.ts', 'packages/barocss-cad-model/src/app/editFields.ts',
   'packages/barocss-cad-model/src/app/profiles.ts',
   'packages/barocss-cad-model/src/engine/errors.ts',
@@ -12,7 +13,7 @@ const pins = ['apps/cad-studio/test/loft-two-guides-browser.mjs', 'apps/cad-stud
 const f = await createFlow({
   name: 'loft-two-guides', envFrozen: 'D1275_SOURCE_FROZEN', output: process.argv[2],
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Create a two-guide Loft, edit each guide independently, and reopen the saved Studio document.',
+  qualification: 'Create a two-guide Loft, identify each guide by its endpoints, refuse touching guides, edit each guide independently, and reopen the saved Studio document.',
   limits: ['Two congruent XY rectangles and two ordered quadratic Bézier rails with affine Z.'],
   inspectorSource: twoGuideInspector,
 });
@@ -38,10 +39,21 @@ const button = (name, scope = f.page) => scope.getByRole('button', { name, exact
 const hud = () => f.page.getByRole('dialog', { name: 'Loft', exact: true });
 const preview = () => hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor();
 const openFeature = () => f.openFeatureEditor(4, 'edit the two-guide Loft');
+const guideField = (slot, axis = 'X') => f.editor().getByLabel(`Guide ${slot} middle ${axis}`, { exact: true });
+async function verifyGuideLabels() {
+  for (const [slot, x] of [[1, 0], [2, 10]]) {
+    const endpoints = `Guide ${slot} · (${x}, 0, 0) → (${x}, 0, 12) mm`;
+    await f.editor().getByText(endpoints, { exact: true }).waitFor();
+    for (const axis of ['X', 'Y']) {
+      const description = await guideField(slot, axis).evaluate(input => input.getAttribute('aria-describedby')?.split(' ').map(id => document.getElementById(id)?.textContent?.trim()).join(' '));
+      assert.ok(description?.includes(endpoints), description);
+    }
+  }
+}
 const change = async (doc, slot, x, label) => {
   await openFeature();
   await f.editor().getByText('Two guides', { exact: true }).waitFor();
-  await f.editor().getByLabel(`Guide ${slot} middle X`, { exact: true }).fill(String(x));
+  await guideField(slot).fill(String(x));
   await f.applyEditor(doc, label);
   return f.doc();
 };
@@ -86,7 +98,29 @@ await f.run(async () => {
   await verifyTwoGuideLoft(f, loft, 2, 4, 'original');
   await f.snapshot('original');
 
-  const aEdited = await change(loft, 1, 3, 'edit-first');
+  f.phase = 'Reject touching guides and associate the error with both X inputs';
+  await openFeature();
+  await verifyGuideLabels();
+  const border = input => input.evaluate(element => getComputedStyle(element).borderTopColor);
+  const originalBorders = await Promise.all([border(guideField(1)), border(guideField(2))]);
+  await guideField(1).fill('14');
+  await button('Apply', f.editor()).click();
+  await f.editor().getByText('The Loft guides are too close', { exact: true }).waitFor();
+  assert.equal(await guideField(2).inputValue(), '14');
+  for (const slot of [1, 2]) {
+    assert.equal(await guideField(slot).getAttribute('aria-invalid'), 'true');
+    assert.equal(await guideField(slot, 'Y').getAttribute('aria-invalid'), null);
+    assert.notEqual(await border(guideField(slot)), originalBorders[slot - 1]);
+    assert.equal(await border(guideField(slot, 'Y')), originalBorders[slot - 1]);
+    const hasError = await guideField(slot).evaluate(input => input.getAttribute('aria-describedby').split(' ').some(id => document.getElementById(id)?.textContent.includes('Guide 2 must stay to the right of Guide 1')));
+    assert.ok(hasError);
+  }
+  await f.same(loft);
+  await f.snapshot('history-guide-gap-refused');
+  await guideField(1).fill('3');
+  assert.equal(await guideField(1).getAttribute('aria-invalid'), null);
+  await f.applyEditor(loft, 'edit-first');
+  const aEdited = await f.doc();
   assert.deepEqual(aEdited.nodes[4].guides[1], loft.nodes[4].guides[1]);
   await verifyTwoGuideLoft(f, aEdited, 3, 4, 'edit-first');
   await f.undo();
@@ -101,4 +135,7 @@ await f.run(async () => {
   const saved = await f.save('two-guide-loft');
   await f.freshOpen(saved.file, bEdited, 'reopened');
   await verifyTwoGuideLoft(f, await f.doc(), 2, 6, 'reopened');
+  await openFeature();
+  await verifyGuideLabels();
+  await f.snapshot('reopened-guide-history');
 });

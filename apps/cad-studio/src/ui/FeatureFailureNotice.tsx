@@ -1,7 +1,7 @@
 import type { FeatureFailure } from '../app/failedFeature';
 
-export function FeatureFailureNotice({ error }: { error: FeatureFailure }) {
-  return <div className="hud-error" role="status">
+export function FeatureFailureNotice({ error, id }: { error: FeatureFailure; id?: string }) {
+  return <div id={id} className="hud-error" role="status">
     <div className="hud-error-title">{error.title}</div>
     <div>{error.hint}</div>
     {error.failedFeature && <div className="hud-error-feature">Failed feature · {error.failedFeature}</div>}

@@ -123,4 +123,8 @@ await f.run(async () => {
   const saved = await f.save('loft-between-unequal-rectangles');
   await f.freshOpen(saved.file, edited, 'reopened');
   assert.deepEqual(await verify(await f.doc(), 18, 'reopened'), actual);
+  await f.openFeatureEditor(4, 'Reopened Loft with unequal sections');
+  await f.editor().getByText('Guide 1 · (0, 0, 0) → (0, 0, 12) mm', { exact: true }).waitFor();
+  await f.editor().getByText('Guide 2 · (10, 0, 0) → (14, 0, 12) mm', { exact: true }).waitFor();
+  await f.snapshot('reopened-guide-history');
 });

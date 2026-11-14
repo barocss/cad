@@ -1,6 +1,6 @@
 import { nodeFilletType } from '../app/filletFamily';
 import { FilletTypeFields } from './FilletTypeFields';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { featureLabel, type ModelNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { featureId } from '@barocss/cad-model/engine/ids';
 import { detachFaceEndExtrude } from '@barocss/cad-model/engine/faceEndExtrude';
@@ -33,6 +33,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
   const [lengthProblem, setLengthProblem] = useState<string | null>(null);
   const recoveredLengths = useRef(new WeakSet<Extract<ModelNode, { kind: 'sketch' }>>());
   const [modeProblem, setModeProblem] = useState<string | null>(null);
+  const guideDescriptionId = useId();
   const [readingEnd, setReadingEnd] = useState(false);
   const ordinaryLocked = pending || !!edgeReplacement?.draft;
   const request = useRef<object | null>(null);
@@ -91,6 +92,9 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
     }
   };
   const node = draft[index];
+  const loftGuides = originalLoft?.guides;
+  const guideGapError = current?.error?.feature === originalLoft?.id
+    && current?.error?.detail.includes('loft: two guides require guide 2 to stay to the right');
   const cutSource = node ? savedCutPatternSource(node, draft) : null;
   const linearPattern = node?.kind === 'linear-pattern' || node?.kind === 'linear-span-pattern' ? node : null;
   const changeDistanceMode = (mode: LinearPatternDistanceMode) => {
@@ -261,9 +265,19 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
         const range = f.kind === 'number' && f.integerRange && !invalidCounts.includes(f)
           ? `Whole number from ${f.integerRange.min} to ${f.integerRange.max}` : rule && !invalidDimension ? featureNumberRange(rule) : null;
         const rangeId = invalidDimension ? `history-invalid-${f.key}` : range ? `history-range-${f.key}` : undefined;
+        const guideField = loftGuides && /^loftGuideControl([01])([01])$/.exec(f.key);
+        const guide = guideField && loftGuides?.[guideField[1] === '0' ? 0 : 1];
+        const guideId = guideField ? `${guideDescriptionId}-${guideField[1]}` : undefined;
+        const guideX = guideField?.[2] === '0';
+        const failedGuideX = !!guideGapError && guideX;
+        const description = [rangeId, guideId, failedGuideX && `${guideDescriptionId}-gap`].filter(Boolean).join(' ') || undefined;
         return (
-        <div key={f.key} className="field"><span>{f.label}</span>
-          {f.kind === 'number' ? <span className="num"><input type="number" step={f.integerRange ? 1 : "any"} min={f.integerRange?.min ?? numberBounds.min} max={f.integerRange?.max ?? numberBounds.max} aria-label={f.label} aria-describedby={rangeId} aria-invalid={typed[f.key]?.trim() === '' || invalidCounts.includes(f) || invalidDimension || (f.key === 'olen2' && !!lengthProblem) || undefined} value={typed[f.key] ?? f.get(draft)} disabled={ordinaryLocked || !!(f as BindableField).param?.(draft)} onChange={e => changeNumber(f, e.target.value)} />{f.unit && <em>{f.unit}</em>}
+        <div key={f.key} className="field">
+          {guideX && guide && <div id={guideId} className="col-span-2 small mono break-words">
+            Guide {Number(guideField[1]) + 1} · ({guide.controlPoints[0].join(', ')}) → ({guide.controlPoints[2].join(', ')}) mm
+          </div>}
+          <span>{f.label}</span>
+          {f.kind === 'number' ? <span className="num"><input type="number" step={f.integerRange ? 1 : "any"} min={f.integerRange?.min ?? numberBounds.min} max={f.integerRange?.max ?? numberBounds.max} aria-label={f.label} aria-describedby={description} aria-invalid={typed[f.key]?.trim() === '' || invalidCounts.includes(f) || invalidDimension || failedGuideX || (f.key === 'olen2' && !!lengthProblem) || undefined} data-loft-guide-gap={failedGuideX || undefined} value={typed[f.key] ?? f.get(draft)} disabled={ordinaryLocked || !!(f as BindableField).param?.(draft)} onChange={e => changeNumber(f, e.target.value)} />{f.unit && <em>{f.unit}</em>}
             {names.length > 0 && 'bind' in f && <select className="param-bind" disabled={ordinaryLocked} aria-label={`${f.label} parameter`} data-tip="Parameter" data-tip-desc="Bind this value to a named parameter (Parameters panel)" value={(f as BindableField).param(draft) ?? ''}
               onChange={e => {
                 retireEvaluation();
@@ -305,7 +319,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
       {!current && alignResult?.kind === 'ready' && <div className="small" role="status">Align preview</div>}
       {!current && alignResult?.kind === 'error' && <FeatureFailureNotice error={alignResult.error} />}
       <div ref={failureArea} className={current?.error?.linkedInsetFeature ? 'scroll-mb-2' : undefined}>
-        {current?.error && <FeatureFailureNotice error={current.error} />}
+        {current?.error && <FeatureFailureNotice id={guideGapError ? `${guideDescriptionId}-gap` : undefined} error={current.error} />}
         {fields.length > 0 && <div className="row-actions"><button ref={applyButton} className="primary" disabled={!changed || pending || !!edgeReplacement?.draft || incompleteInset || hasInvalidNumber || !!lengthProblem || (current !== null && !current.error)} onClick={event => apply(event.currentTarget)}>Apply</button><button ref={resetButton} className="ghost" disabled={(!changed && !hasInsetDraft && !incompleteInset && !hasInvalidNumber && !lengthProblem) || pending} onClick={() => { retireEvaluation(); setDraft(nodes); setTyped({}); setLengthProblem(null); }}>Reset</button></div>}
       </div>
     </div>

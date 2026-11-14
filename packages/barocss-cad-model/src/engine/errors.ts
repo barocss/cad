@@ -22,7 +22,7 @@ const rules: { code?: string | readonly string[]; text?: RegExp; title: string; 
     hint: 'Use the minimum X corner for the first guide and the maximum X corner for the second guide, both at minimum Y. Each guide must start on the lower section and end on the upper section.' },
   { text: /loft: two guides require guide 2 to stay to the right/,
     title: 'The Loft guides are too close',
-    hint: 'Keep the second guide’s middle X greater than the first guide’s middle X. Increase the gap between them.' },
+    hint: 'Increase the gap between Guide 1 middle X and Guide 2 middle X. Guide 2 must stay to the right of Guide 1.' },
   { text: /^\[VALUE\] Align: the resulting placement is outside the native coordinate range or cannot preserve the gap\.$/,
     title: 'Align exceeds the placement limit',
     hint: 'This placement exceeds the coordinate range or cannot keep the requested gap. Reduce Gap or reset this edit.' },
