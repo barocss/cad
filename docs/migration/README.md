@@ -52,15 +52,15 @@ workspace on `develop`. The original `local/cad-dev` remote branch was deleted a
 against the filtered history. Historical source commits remain available by their original IDs.
 
 The [closed issue transfer map](closed-issue-transfers.tsv) records each completed transfer and its redirect.
-The first source cleanup verified 122 closed issue transfers. On 2026-11-15, 23 additional closed issue transfers
+The first source cleanup verified 122 closed issue transfers. On 2026-11-15, 39 additional closed issue transfers
 passed checks for the redirect, title, closed state, resolution reason, comment count, labels, and assignees.
-The closed issue index has 901 entries without a verified redirect in the map.
+The closed issue index has 885 entries without a verified redirect in the map.
 
 The [pending transfer map](pending-closed-issue-transfers.tsv) records destination numbers returned by GitHub
-where the source redirect or metadata has not been verified. Check the original URLs before continuing or
-retrying a transfer. Source [#731](https://github.com/barocss/barocss/issues/731) returned two destination
-numbers, [#542](https://github.com/barocss/cad/issues/542) and [#543](https://github.com/barocss/cad/issues/543).
-Verify the final redirect and comments before choosing which destination to retain.
+while the source redirect or metadata is pending. Confirm both before retrying a transfer. Source
+[#731](https://github.com/barocss/barocss/issues/731) now redirects to [#542](https://github.com/barocss/cad/issues/542),
+which retained all five comments. The second request created #543. It was deleted after confirming that it held
+no comments or timeline entries and that #542 was the canonical destination.
 
 [Archived CAD pull requests](archived-pull-requests.tsv) lists 31 closed, unmerged PRs limited to the CAD paths.
 Their records remain accessible to users with source repository triage access. GitHub refused archival of merged PRs.
