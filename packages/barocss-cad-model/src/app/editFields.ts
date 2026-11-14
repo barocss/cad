@@ -249,6 +249,8 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       out.push(...sketchFields(nodes, node.sketch, '', parameters));
       number('deg', 'Angle', '°', n => (n as typeof node).angle, (n, v) => ({ ...(n as typeof node), angle: v }));
       break;
+    case 'sweep-curve':
+      return node.mode === 'exact' ? sketchFields(nodes, node.sketch, '', parameters).filter(field => field.key === 'dia') : [];
     case 'sweep':
       out.push(...sketchFields(nodes, node.sketch, '', parameters));
       node.path.forEach((st, k) => {

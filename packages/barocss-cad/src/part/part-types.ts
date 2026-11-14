@@ -185,9 +185,10 @@ export type CadPartFeature = Base & (
    */
   /**
    * The sketch's profile swept along a curve (any NURBS path in mm): its middle starts on the path's
-   * start, square to it, carried along without twisting; the ends capped; holes run through. Faceted.
+   * start, square to it, carried along without twisting; the ends capped; holes run through. Faceted by
+   * default. The exact mode sweeps a single disk along a single circular arc from 30° to 90°.
    */
-  | { readonly kind: 'sweep-curve'; readonly sketch: string; readonly path: RawNurbsPath }
+  | { readonly kind: 'sweep-curve'; readonly sketch: string; readonly path: RawNurbsPath; readonly mode?: 'exact' }
   /**
    * Draft (taper) on chosen side faces along the signed `pull` axis (default: positive Z). Each planar side
    * face turns about its line on the neutral plane by `angle` degrees: positive leans into the material,

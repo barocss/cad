@@ -125,6 +125,7 @@ function sweepOf(doc: StudioDoc, member: CreateRouteBundleMemberInput) {
   check(sweeps.length === 1 && profiles.length === 1, 'the sweep or profile stable id is missing or ambiguous.' + RESELECT);
   const index = sweeps[0], profileIndex = profiles[0], node = doc.nodes[index], profile = doc.nodes[profileIndex];
   check(node.kind === 'sweep-curve' && !node.suppressed, 'the member must name an active copied sweep.');
+  check(node.mode === undefined, 'the member must use a faceted sweep.');
   check(profileIndex < index && node.sketch === profileIndex && profile.kind === 'sketch' && !profile.suppressed, 'the profile must be the sweep\'s earlier sketch.' + RESELECT);
   check(profile.profile === 'circle' && typeof profile.radius === 'number' && Number.isFinite(profile.radius) && profile.radius > 0, 'PB0 requires a finite positive circular profile.');
   const center = dense(profile.center, 'profile center'); check(center.length === 2 && center.every(v => typeof v === 'number' && Number.isFinite(v)), 'the profile center must be finite.');

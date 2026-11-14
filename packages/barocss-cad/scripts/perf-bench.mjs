@@ -157,6 +157,13 @@ straightPathCutBrep.prepare = straightPathCutFixture;
 quadraticPathCutBrep.batch = straightPathCutBrep.batch = 1;
 quadraticPathCutBrep.warmup = straightPathCutBrep.warmup = 3;
 const CASES = {
+  'native-quarter-arc-sweep': () => out([
+    { id: 'disk', kind: 'sketch', profile: 'circle', center: [7, 8], radius: 2 },
+    { id: 'sweep', kind: 'sweep-curve', sketch: 'disk', mode: 'exact', path: {
+      degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[25, 9, 4], [25, 9, 24], [13, -7, 24]],
+      weights: [1, 0.707106781, 1],
+    } },
+  ], 'sweep').brep,
   'quadratic-path-cut-3': quadraticPathCutBrep,
   'straight-path-cut-3': straightPathCutBrep,
   'native-cylinder-ordinary-first-mass': nativeCylinderFirstMass(5.00009),

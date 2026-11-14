@@ -1974,8 +1974,9 @@ export function App() {
       return true;
     }
     setToast(notice => notice?.inputPick === current.cmd ? null : notice);
-    const operation = current.cmd.fields?.(next).find(field => field.key === 'op');
-    const values = operation ? { ...current.values, op: current.values.op ?? 'new' } : {};
+    const { op, ...inputs } = current.values;
+    const operation = current.cmd.fields?.(next, current.values).some(field => field.key === 'op');
+    const values = operation ? { ...inputs, op: op ?? 'new' } : inputs;
     commandPreview.retire();
     setSelection(next.selection);
     setDirectSel(next.direct ?? []);

@@ -125,7 +125,7 @@ export function useRouteBundleEditor({ owner, worker, acceptValidated, onNotice:
       const accepted = docNow.current;
       const members = routeCreate.members.map((member, index) => {
         const sweep = accepted.nodes.find(n => n.id === member.sweepFeatureId);
-        if (!sweep || sweep.kind !== 'sweep-curve') throw new Error(`Member ${index + 1}: select a current copied sweep.`);
+        if (!sweep || sweep.kind !== 'sweep-curve' || sweep.mode !== undefined) throw new Error(`Member ${index + 1}: select a current faceted sweep.`);
         const profile = accepted.nodes[sweep.sketch];
         if (!profile?.id) throw new Error(`Member ${index + 1}: the copied sweep needs a current profile. Reselect the curve and copied sweep.`);
         return { ...member, id: `member${index + 1}`, profileFeatureId: profile.id };

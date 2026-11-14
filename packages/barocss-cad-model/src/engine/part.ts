@@ -186,7 +186,8 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
     case 'separate': return { ...at, kind: 'separate', target: ref(node.parent) };
     case 'decimate': return { ...at, kind: 'decimate', target: ref(node.parent), ...(node.ratio !== undefined ? { ratio: node.ratio } : {}), ...(node.triangles !== undefined ? { triangles: node.triangles } : {}), ...(node.maxError !== undefined ? { maxError: node.maxError } : {}), ...(node.featureAngle !== undefined ? { featureAngle: node.featureAngle } : {}) };
     case 'sweep': return { ...at, kind: 'sweep', sketch: id(node.sketch), path: node.path };
-    case 'sweep-curve': return { ...at, kind: 'sweep-curve', sketch: id(node.sketch), path: node.path };
+    case 'sweep-curve': return { ...at, kind: 'sweep-curve', sketch: id(node.sketch), path: node.path,
+      ...(node.mode !== undefined ? { mode: node.mode } : {}) };
     case 'loft': {
       const guidedOrFramed = Object.hasOwn(node, 'guide') || Object.hasOwn(node, 'guides') || node.sections.some(s => Object.hasOwn(s, 'frame'));
       return { ...at, kind: 'loft',

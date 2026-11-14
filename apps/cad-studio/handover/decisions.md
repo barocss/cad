@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1288 — Sweep a circular disk along an exact circular arc](notes/exact-circular-arc-sweep-2026-11-15/README.md).
 - [D1287 — Match Loft refusals to History section numbers](notes/loft-history-section-refusal-number-2026-11-15/README.md).
 - [D1286 — Explain Loft guide direction and height at the picker](notes/loft-guide-direction-and-height-2026-11-15/README.md).
 - [D1285 — Keep the chosen duplicate guide in Loft History](notes/loft-history-duplicate-guide-choice-2026-11-15/README.md).

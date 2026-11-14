@@ -544,19 +544,32 @@ export const sweepCurveCommand: Command = {
     const path = pickedPath(ctx);
     return typeof path === 'string' ? no(path) : ok;
   },
-  fields: ctx => { const p = oneProfile(ctx); return [...opFields(!!(p && baseOf(ctx, p.node)))]; },
-  defaults: (ctx): Values => { const p = oneProfile(ctx); return p && baseOf(ctx, p.node) ? { op: 'new' } : {}; },
-  steps: ctx => {
+  fields: (ctx, values) => {
+    const p = oneProfile(ctx);
+    return [{ key: 'representation', label: 'Representation', kind: 'choice',
+      options: [{ value: 'faceted', label: 'Faceted' }, { value: 'exact', label: 'Exact circular arc' }] },
+      ...opFields(!!(p && baseOf(ctx, p.node) && values?.representation !== 'exact'))];
+  },
+  defaults: (ctx): Values => {
+    const p = oneProfile(ctx);
+    return { representation: 'faceted', ...(p && baseOf(ctx, p.node) ? { op: 'new' } : {}) };
+  },
+  derive: (_ctx, values, changed) => changed.includes('representation') ? { ...values, op: 'new' } : values,
+  steps: (ctx, values) => {
     const profile = oneProfile(ctx), path = pickedPath(ctx);
     return [
       { label: 'Profile', text: profile ? `Sketch ${profile.index + 1}` : 'Pick a finished sketch', done: !!profile },
-      { label: 'Path', text: typeof path === 'string' ? path : `${path.name} · Faceted`, done: typeof path !== 'string' },
+      { label: 'Path', text: typeof path === 'string' ? path : `${path.name} · ${values.representation === 'exact' ? 'Exact circular arc' : 'Faceted'}`, done: typeof path !== 'string' },
     ];
   },
   build: (ctx, v) => {
     const p = oneProfile(ctx), path = pickedPath(ctx);
     if (!p || ctx.doc.nodes[p.index].suppressed) throw refusal('BAD_REFERENCE', 'Choose a current finished sketch as the profile.');
     if (typeof path === 'string') throw refusal('SWEEP_PATH', path);
+    if (v.representation === 'exact') {
+      if (v.op === 'join' || v.op === 'cut') throw refusal('VALUE', 'Exact circular arc Sweep creates a new body.');
+      return withNode(ctx.doc, { kind: 'sweep-curve', sketch: p.index, name: path.name, path: path.path, mode: 'exact' });
+    }
     return combine(withNode(ctx.doc, { kind: 'sweep-curve', sketch: p.index, name: path.name, path: path.path }), baseOf(ctx, p.node)?.ref ?? null, v.op);
   },
 };

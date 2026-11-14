@@ -32,6 +32,7 @@ import { weldVertices } from '../mesh/facet-brep.js';
 import { splitFacetBrep, type FacetSplitResult } from '../mesh/facet-split.js';
 import { facetBoolean, isFacetBooleanError, splitMixedBrep } from '../mesh/facet-boolean.js';
 import { selfIntersections } from '../mesh/mesh-repair.js';
+import { exactArcSweep } from '../brep/exact-arc-sweep.js';
 import { sweepSolid } from '../brep/sweep-solid.js';
 import { validateCurve } from '../core/math.js';
 
@@ -734,12 +735,22 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       if (!isRecord(path)) fail('INPUT', 'path must be a NURBS curve { degree, knots, controlPoints, weights }');
       const curve = { kind: 'curve' as const, id: 'path', degree: path.degree as number, knots: path.knots as number[], controlPoints: path.controlPoints as Point[], weights: path.weights as number[] };
       try { validateCurve(curve); } catch (cause) { fail('INPUT', `path: ${cause instanceof Error ? cause.message : String(cause)}`); }
-      if (sk.regions?.length) fail('CAPABILITY', 'a sweep takes one shape (holes allowed, no separate regions) yet');
+      if (f.mode !== undefined && f.mode !== 'exact') fail('INPUT', 'sweep mode must be "exact" when provided');
       const m = sk.frame?.m ?? [1, 0, 0, 0, 1, 0, 0, 0, 1];
+      const xAxis: Point = [m[0], m[3], m[6]], yAxis: Point = [m[1], m[4], m[7]];
+      if (f.mode === 'exact') {
+        if (sk.holes?.length || sk.regions?.length) fail('CAPABILITY', 'Exact sweep needs one circular profile without holes.');
+        return () => {
+          if (profiling) profiling.sweeps++;
+          const { brep, mass } = exactArcSweep({ id: at, outer: sk.outer, path: curve, xAxis, yAxis, sideTags: sk.tags?.outer }, fail);
+          return { kind: 'solid', parts: [{ solid: { kind: 'brep', brep }, mass }] };
+        };
+      }
+      if (sk.regions?.length) fail('CAPABILITY', 'a sweep takes one shape (holes allowed, no separate regions) yet');
       return () => {
         try {
           if (profiling) profiling.sweeps++;
-          return one({ kind: 'brep', brep: sweepSolid({ id: at, outer: loopPoints(sk.outer), holes: (sk.holes ?? []).map(loopPoints), xAxis: [m[0], m[3], m[6]], yAxis: [m[1], m[4], m[7]], path: curve }) });
+          return one({ kind: 'brep', brep: sweepSolid({ id: at, outer: loopPoints(sk.outer), holes: (sk.holes ?? []).map(loopPoints), xAxis, yAxis, path: curve }) });
         } catch (cause) { if (cause instanceof RangeError || isMeshBrepError(cause)) fail('GEOMETRY', cause.message); throw cause; }
       };
     }

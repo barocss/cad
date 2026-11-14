@@ -75,6 +75,14 @@ test('route bundle admission: legacy export target stays 3 and plain JSON preser
   assert.deepEqual(doc, before);
 });
 
+test('route bundle admission: an exact Sweep cannot become a faceted route member', () => {
+  const doc = copiedDocument();
+  const sweep = doc.nodes[1];
+  assert.equal(sweep.kind, 'sweep-curve');
+  const exact: StudioDoc = { ...doc, nodes: doc.nodes.map((node, index) => index === 1 ? { ...sweep, mode: 'exact' } : node) };
+  assert.throws(() => bundledDocument(exact), /member must use a faceted sweep/);
+});
+
 test('route bundle admission: a missing or older schema is refused, not migrated', () => {
   const old = rectanglePart(10, 10, 5);
   Reflect.deleteProperty(old, 'schema');

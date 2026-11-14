@@ -68,7 +68,7 @@ export function RouteBundlePanel(props: RouteBundlePanelProps) {
     });
   }, [doc.direct]);
   const sweeps = doc.nodes.flatMap(node => {
-    if (node.kind !== 'sweep-curve' || node.suppressed || !node.id) return [];
+    if (node.kind !== 'sweep-curve' || node.mode !== undefined || node.suppressed || !node.id) return [];
     const profile = doc.nodes[node.sketch];
     return [{ id: node.id, name: node.name || node.id, profileId: profile?.id,
       profileName: profile?.id || `Sketch ${node.sketch + 1}` }];
