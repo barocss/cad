@@ -157,6 +157,13 @@ straightPathCutBrep.prepare = straightPathCutFixture;
 quadraticPathCutBrep.batch = straightPathCutBrep.batch = 1;
 quadraticPathCutBrep.warmup = straightPathCutBrep.warmup = 3;
 const CASES = {
+  'native-straight-disk-sweep': () => out([
+    { id: 'disk', kind: 'sketch', profile: 'circle', center: [7, 8], radius: 2 },
+    { id: 'sweep', kind: 'sweep-curve', sketch: 'disk', mode: 'exact-straight', path: {
+      degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[13, -7, 4], [19, 1, 17], [25, 9, 30]],
+      weights: [1, 1, 1],
+    } },
+  ], 'sweep').brep,
   'native-quarter-arc-sweep': () => out([
     { id: 'disk', kind: 'sketch', profile: 'circle', center: [7, 8], radius: 2 },
     { id: 'sweep', kind: 'sweep-curve', sketch: 'disk', mode: 'exact', path: {

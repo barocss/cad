@@ -521,6 +521,20 @@ const pickedPath = (ctx: Ctx) => sweepPath(ctx.doc, ctx.direct ?? []);
 
 export const SWEEP_CURVE = 'sweep-curve';
 
+const sweepRepresentations = [
+  { value: 'faceted', label: 'Faceted' },
+  { value: 'exact', label: 'Exact circular arc' },
+  { value: 'exact-straight', label: 'Exact straight path' },
+];
+
+export function sweepRepresentationLabel(mode: unknown): string {
+  return sweepRepresentations.find(item => item.value === mode)?.label ?? sweepRepresentations[0].label;
+}
+
+function exactSweepMode(value: Values[string] | undefined) {
+  return value === 'exact' || value === 'exact-straight' ? value : undefined;
+}
+
 /** Resolve one replacement without changing the other input in the captured command context. */
 export function retargetSweep(ctx: Ctx, input: { profile: number } | { path: string }): Ctx | { error: string } {
   if ('profile' in input) {
@@ -547,8 +561,8 @@ export const sweepCurveCommand: Command = {
   fields: (ctx, values) => {
     const p = oneProfile(ctx);
     return [{ key: 'representation', label: 'Representation', kind: 'choice',
-      options: [{ value: 'faceted', label: 'Faceted' }, { value: 'exact', label: 'Exact circular arc' }] },
-      ...opFields(!!(p && baseOf(ctx, p.node) && values?.representation !== 'exact'))];
+      options: sweepRepresentations },
+      ...opFields(!!(p && baseOf(ctx, p.node) && !exactSweepMode(values?.representation)))];
   },
   defaults: (ctx): Values => {
     const p = oneProfile(ctx);
@@ -559,16 +573,17 @@ export const sweepCurveCommand: Command = {
     const profile = oneProfile(ctx), path = pickedPath(ctx);
     return [
       { label: 'Profile', text: profile ? `Sketch ${profile.index + 1}` : 'Pick a finished sketch', done: !!profile },
-      { label: 'Path', text: typeof path === 'string' ? path : `${path.name} · ${values.representation === 'exact' ? 'Exact circular arc' : 'Faceted'}`, done: typeof path !== 'string' },
+      { label: 'Path', text: typeof path === 'string' ? path : `${path.name} · ${sweepRepresentationLabel(values.representation)}`, done: typeof path !== 'string' },
     ];
   },
   build: (ctx, v) => {
     const p = oneProfile(ctx), path = pickedPath(ctx);
     if (!p || ctx.doc.nodes[p.index].suppressed) throw refusal('BAD_REFERENCE', 'Choose a current finished sketch as the profile.');
     if (typeof path === 'string') throw refusal('SWEEP_PATH', path);
-    if (v.representation === 'exact') {
-      if (v.op === 'join' || v.op === 'cut') throw refusal('VALUE', 'Exact circular arc Sweep creates a new body.');
-      return withNode(ctx.doc, { kind: 'sweep-curve', sketch: p.index, name: path.name, path: path.path, mode: 'exact' });
+    const mode = exactSweepMode(v.representation);
+    if (mode) {
+      if (v.op === 'join' || v.op === 'cut') throw refusal('VALUE', 'Exact Sweep creates a new body.');
+      return withNode(ctx.doc, { kind: 'sweep-curve', sketch: p.index, name: path.name, path: path.path, mode });
     }
     return combine(withNode(ctx.doc, { kind: 'sweep-curve', sketch: p.index, name: path.name, path: path.path }), baseOf(ctx, p.node)?.ref ?? null, v.op);
   },

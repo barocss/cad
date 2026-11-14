@@ -7,7 +7,7 @@ const pins = [
   'packages/barocss-cad-model/src/app/editFields.ts',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
   'packages/barocss-cad-model/src/engine/part.ts',
-  'packages/barocss-cad/src/brep/exact-arc-sweep.ts',
+  'packages/barocss-cad/src/brep/exact-sweep.ts',
 ];
 const f = await createFlow({
   name: 'exact-arc-sweep', output: process.argv[2], envFrozen: 'D1288_SOURCE_FROZEN',

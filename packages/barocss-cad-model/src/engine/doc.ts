@@ -578,7 +578,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   /** The sketch swept along straight runs and bends (from the sketch plane up +Z). */
   | { kind: 'sweep'; sketch: number; path: ({ kind: 'straight'; length: Dim } | { kind: 'bend'; radius: Dim; angle: number; toward: 'x' | '-x' | 'y' | '-y' })[] }
   /** The sketch's profile swept along a curve (a NURBS path in mm, copied from a direct curve `name`): faceted. */
-  | { kind: 'sweep-curve'; sketch: number; name: string; mode?: 'exact'; path: { degree: number; knots: number[]; controlPoints: [number, number, number][]; weights: number[] }; routeBundleMember?: { bundleId: string; memberId: string } }
+  | { kind: 'sweep-curve'; sketch: number; name: string; mode?: 'exact' | 'exact-straight'; path: { degree: number; knots: number[]; controlPoints: [number, number, number][]; weights: number[] }; routeBundleMember?: { bundleId: string; memberId: string } }
   /** A ruled loft through sketches at increasing heights (each section's edges to the next one's). */
   /** `from`: the sketches the sections were carried over from, when they lay on offset planes (used by the loft). */
   | { kind: 'loft'; sections: LoftSection[]; smooth?: boolean; from?: number[]; /** World-mm seam controls, copied on authoring and passed to the kernel unchanged. */ guide?: LoftInput['guide']; /** Ordered pair of world-mm guide snapshots. */ guides?: LoftInput['guides'] }

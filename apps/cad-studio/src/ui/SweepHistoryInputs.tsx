@@ -1,5 +1,6 @@
 import { curveDomain, evaluateCurve, validateCurve, type Curve } from '@barocss/cad';
 import { fmt, type ModelNode } from '@barocss/cad-model/engine/doc';
+import { sweepRepresentationLabel } from '@barocss/cad-model/app/profileCommands';
 import { resolveSketchDims } from '@barocss/cad-model/sketch/reopen';
 
 interface Props {
@@ -35,7 +36,7 @@ export function SweepHistoryInputs(props: Props) {
   return <div role="group" aria-label="Sweep inputs">
     <div className="field"><span>Profile</span><span>{profileLabel(props)}</span></div>
     <div className="field"><span>Path</span><span>{sweep.name} · {sweep.routeBundleMember ? 'Linked route' : 'Copied'}</span></div>
-    {sweep.mode === 'exact' && <div className="field"><span>Representation</span><span>Exact circular arc</span></div>}
+    {sweep.mode && <div className="field"><span>Representation</span><span>{sweepRepresentationLabel(sweep.mode)}</span></div>}
     {ends && <>
       <div className="field"><span>Start</span><span>{ends[0]}</span></div>
       <div className="field"><span>End</span><span>{ends[1]}</span></div>
