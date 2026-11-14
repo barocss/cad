@@ -10,7 +10,7 @@ remain the technical reference. The former roadmap names refer to the original r
 | --- | --- | --- |
 | 1 | Row 07. [D1274 delivered](../../apps/cad-studio/handover/notes/quarter-rim-fillet-api-2026-11-15/README.md). | Both TypeScript backends, independent geometry, and desktop Studio edit and reopen passed. |
 | 2 | Row 07. [D1275 delivered](../../apps/cad-studio/handover/notes/two-guide-loft-2026-11-15/README.md). | Both native guide contacts, strict solid validity, independent History edits, Undo, Redo, and desktop Save/Open passed. |
-| 3 | AI modeling. Make the qualified two-guide Loft available to the local CAD agent. | Discover the available inputs, preview an editable proposal, and apply it only after approval. Verify that Studio and the agent read the same committed result after reopen. |
+| 3 | AI modeling. [D1276 delivered](../../apps/cad-studio/handover/notes/two-guide-loft-agent-proposal-2026-11-15/README.md). | Local MCP discovery, refusal and proposal; Studio approval, native edit and matching readback after reopen. |
 
 An advanced modeling milestone must state what the user can create or edit and which real Studio workflow verifies it.
 Fixes that directly block that workflow belong to the milestone. Other defects stay in the issue queue.

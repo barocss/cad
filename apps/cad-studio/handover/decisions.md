@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1276 — Propose a two-guide Loft through local MCP](notes/two-guide-loft-agent-proposal-2026-11-15/README.md).
 - [D1275 — Loft between two independently editable guides](notes/two-guide-loft-2026-11-15/README.md).
 - [D1274 — Author a quarter-rim fillet from TypeScript](notes/quarter-rim-fillet-api-2026-11-15/README.md).
 - [D1273 — Vary the radius on one open circular rim](notes/open-circular-variable-fillet-2026-11-14/README.md).

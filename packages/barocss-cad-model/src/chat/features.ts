@@ -29,7 +29,7 @@ const SPECS: Record<string, Spec> = {
   extrude: { sketch: 'sketch', height: 'dim', 'from?': 'dim', 'draft?': 'num' },
   revolve: { sketch: 'sketch', axis: 'enum:x|y', 'origin?': 'dim2', angle: 'num' },
   sweep: { sketch: 'sketch', path: 'path' },
-  loft: { sections: 'sections', 'smooth?': 'bool', 'guide?': 'loft-guide' },
+  loft: { sections: 'sections', 'smooth?': 'bool', 'guide?': 'loft-guide', 'guides?': 'loft-guide-pair' },
   translate: { parent: 'ref', offset: 'dim3' },
   rotate: { parent: 'ref', axis: 'enum:x|y|z', angle: 'num', 'pivot?': 'dim3' },
   mirror: { parent: 'ref', plane: 'enum:xy|xz|yz', 'keep?': 'bool' },
@@ -194,6 +194,13 @@ export function checkNode(node: unknown, nodes: readonly ModelNode[], parameters
     if (v === undefined) { if (optional) continue; return `${kind}: "${key}" is required.`; }
     const why = checkValue(v, type, nodes, parameters, leaves);
     if (why) return `${kind}.${key}: ${why}`;
+  }
+  if (kind === 'loft' && Object.hasOwn(node, 'guides')) {
+    if (node.guides === undefined) return 'loft.guides: give two quadratic Bézier guides or omit the field';
+    if (Object.hasOwn(node, 'guide')) return 'loft.guides: use either guide or guides';
+    if (node.smooth === true) return 'loft.guides: use ruled sections';
+    if (!Array.isArray(node.sections) || node.sections.length !== 2 || node.sections.some(s => Object.keys(s).some(k => k !== 'sketch' && k !== 'z')))
+      return 'loft.sections: two guides need exactly two {sketch, z} sections';
   }
   if ((kind === 'fillet' || kind === 'chamfer') && (node.edges as string[]).some(e => ellipseSideEdge(nodes, e))) return `${kind}.edges: ${ELLIPSE_SIDE_EDGE_REFUSAL}`;
   if (kind === 'align') return alignRecipeProblem(node, nodes.length, nodes);
@@ -385,6 +392,15 @@ function checkValue(v: unknown, type: string, nodes: readonly ModelNode[], param
     case 'sketch': {
       if (!Number.isInteger(v) || (v as number) < 0 || (v as number) >= nodes.length) return `the index of an earlier sketch (0–${nodes.length - 1})`;
       return (nodes[v as number].kind === 'sketch' || nodes[v as number].kind === 'driven-sketch') ? null : `feature ${v} is a ${nodes[v as number].kind}, not a sketch`;
+    }
+    case 'loft-guide-pair': {
+      if (!Array.isArray(v) || v.length !== 2) return 'two ordered quadratic Bézier guides';
+      for (const [i, guide] of v.entries()) {
+        if (!isObj(guide) || guide.kind !== 'quadratic-bezier') return `guide ${i + 1} must be quadratic-bezier`;
+        const why = checkValue(guide, 'loft-guide', nodes, parameters, leaves);
+        if (why) return `guide ${i + 1}: ${why}`;
+      }
+      return null;
     }
     case 'loft-guide': {
       // (CG1.3: a general guide, a polynomial B-spline on sections stacked by z; its knots and shape are the kernel's to admit.)

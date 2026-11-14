@@ -85,6 +85,33 @@ ran. The proposal itself was made by the real tool layer.
 
 ![The proposal card: its risk, summary, the features to keep, Reject and Accept](/shots/agent/proposals/card.png)
 
+### Propose a Loft with two guides
+
+Use `query.summary` to find the two sketch indices. Call `describe` with `{"feature":"loft"}` for the allowed guide geometry.
+For example, two 10 × 6 mm rectangles on the same default XY sketch plane can form the sections at Z 0 and Z 12 below.
+Pass this payload to `proposals`.
+
+```json
+{
+  "action": "propose",
+  "title": "Loft two rectangular sections",
+  "ops": [{
+    "tool": "features",
+    "args": { "action": "add", "features": [{
+      "kind": "loft",
+      "sections": [{ "sketch": 0, "z": 0 }, { "sketch": 1, "z": 12 }],
+      "guides": [
+        { "kind": "quadratic-bezier", "controlPoints": [[0, 0, 0], [2, 0, 6], [0, 0, 12]] },
+        { "kind": "quadratic-bezier", "controlPoints": [[10, 0, 0], [14, 0, 6], [10, 0, 12]] }
+      ]
+    }] }
+  }]
+}
+```
+
+Open the part in Studio. Use **Preview** to inspect the volume change, then **Accept** to apply the Loft.
+Open the Loft in History to change either guide's middle X or Y. Save the part before reading it again with `query.summary`.
+
 ## When the part changed meanwhile
 
 - **Stale proposals.** A proposal is made against the part as it was. If the part has changed since, the card says

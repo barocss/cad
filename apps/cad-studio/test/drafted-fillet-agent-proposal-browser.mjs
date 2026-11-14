@@ -1,16 +1,14 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
-import { createInterface } from 'node:readline';
 import { createFlow, sha256 } from './flow-helper.mjs';
+import { withMcpSession } from './mcp-browser-session.mjs';
 import { box, inspectorSource, oracleSource } from './drafted-extrude-variable-fillet-oracle.mjs';
 
 const output = process.argv[2];
 assert.ok(output && relative(resolve(import.meta.dirname, '../../..'), resolve(output)).startsWith('../'));
 const pins = [
-  'apps/cad-studio/test/drafted-extrude-variable-fillet-oracle.mjs', 'apps/cad-studio/test/flow-helper.mjs',
+  'apps/cad-studio/test/drafted-extrude-variable-fillet-oracle.mjs', 'apps/cad-studio/test/flow-helper.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs',
   'apps/cad-studio/scripts/cad-mcp.mjs', 'apps/cad-studio/server/cadDoc.ts', 'apps/cad-studio/server/cadMcp.ts',
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/state/useProposalPreview.ts', 'apps/cad-studio/src/ui/ProposalBrowser.tsx',
   'packages/barocss-cad-model/src/chat/part/proposals.ts', 'packages/barocss-cad-model/src/chat/part/nativeContinuity.ts',
@@ -23,57 +21,13 @@ const f = await createFlow({
   limits: ['One drafted extrusion at 12 degrees, one native shared edge, one circular four-radius fillet, local autonomy L1.'],
   inspectorSource, oracleSource,
 });
+const mcp = (path, label, run) => withMcpSession({ app: f.app, output, clientName: 'barocss-drafted-fillet-test' }, path, label, run);
 const angle = 12;
 const stock = { ...box, nodes: [box.nodes[0], { ...box.nodes[1], draft: angle }] };
 const title = 'Fillet the front drafted rim';
 const values = { radius: 1.25, endRadius: 2.5, stationMode: 'two-interior', stationAt: 25, stationRadius: 3, station2At: 62.5, station2Radius: 1 };
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const card = () => f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
-
-async function withSession(path, label, run) {
-  const child = spawn(process.execPath, [join(f.app, 'scripts/cad-mcp.mjs'), '--doc', path, '--autonomy', '1'],
-    { stdio: ['pipe', 'pipe', 'inherit'] });
-  const closed = once(child, 'close');
-  const lines = createInterface({ input: child.stdout }), replies = lines[Symbol.asyncIterator]();
-  let id = 0, timer;
-  const events = [];
-  const request = async (method, params) => {
-    const frame = { jsonrpc: '2.0', id: ++id, method, params };
-    child.stdin.write(JSON.stringify(frame) + '\n');
-    try {
-      const next = await Promise.race([replies.next(), new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error('MCP call timed out: '+method)), 20000);
-      })]);
-      assert.equal(next.done, false);
-      const reply = JSON.parse(next.value);
-      events.push({ frame, reply });
-      assert.equal(reply.id, frame.id);
-      assert.equal(reply.error, undefined, JSON.stringify(reply));
-      return reply.result;
-    } finally { clearTimeout(timer); }
-  };
-  try {
-    const hello = await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'barocss-drafted-fillet-test', version: '1' } });
-    assert.equal(hello.serverInfo.version, 'barocss-cad-tools-v2');
-    return await run(async (name, args, error = false) => {
-      const reply = await request('tools/call', { name, arguments: args });
-      assert.equal(reply.isError, error, JSON.stringify(reply));
-      return JSON.parse(reply.content[0].text);
-    });
-  } finally {
-    child.stdin.end();
-    lines.close();
-    try {
-      const [code] = await Promise.race([closed, new Promise((_, reject) => {
-        timer = setTimeout(() => { child.kill('SIGTERM'); reject(new Error('MCP close timed out')); }, 5000);
-      })]);
-      assert.equal(code, 0);
-    } finally {
-      clearTimeout(timer);
-      await writeFile(join(output, label+'-mcp-transcript.json'), JSON.stringify(events, null, 2));
-    }
-  }
-}
 
 async function inspect(doc, label, edge) {
   const [worker] = (await f.bodies()).bodies;
@@ -107,7 +61,7 @@ await f.run(async () => {
   f.phase = 'Discover a unique native edge and propose its four-radius fillet in MCP';
   const file = join(output, 'pending-agent.bcad'), original = Buffer.from(JSON.stringify(stock));
   await writeFile(file, original, { flag: 'wx' });
-  const witness = await withSession(file, 'pending', async call => {
+  const witness = await mcp(file, 'pending', async call => {
     const before = await call('query',{action:'summary'});
     assert.equal(before.feature_count,2);
     assert.equal(before.bodies.length,1);
@@ -200,7 +154,7 @@ await f.run(async () => {
   const reopened=await inspect(await f.doc(),'reopened',witness.edge.name);
   assert.equal(reopened.sha,native.sha);
   const savedBytes=await readFile(saved.file);
-  await withSession(saved.file,'reopened',async call=>{
+  await mcp(saved.file,'reopened',async call=>{
     const summary=await call('query',{action:'summary'});
     const restored=summary.features.find(row=>row.node.kind==='fillet')?.node;
     assert.equal(summary.feature_count,3);
