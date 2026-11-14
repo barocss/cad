@@ -230,8 +230,7 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
     }
   }
 
-  // Arcs covering a whole circle between the same plane and cylinder make one closed tool (the first of
-  // them stands for the rest).
+  // Arcs covering a whole circle make one closed-form tool when its supports admit one.
   const skip = new Set<string>(), closedCircle = new Set<string>();
   const circleKey = (e: Brep['edges'][number]) => {
     const k = circleOf(e.curve), us = usesOf.get(e.id) ?? [];
@@ -256,7 +255,11 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
     // (A circle with an edge the rolling ball takes — its closed form would run over a smooth edge — is the ball's whole.)
     if (list.some(e => options.generalEdges?.includes(e.id))) continue;
     const total = list.reduce((acc, e) => { const k = circleOf(e.curve)!; return acc + k.spans.reduce((a, x) => a + x.phi, 0); }, 0);
-    if (Math.abs(total - 2 * Math.PI) <= 1e-9) { closedCircle.add(list[0].id); for (const e of list.slice(1)) skip.add(e.id); }
+    if (Math.abs(total - 2 * Math.PI) > 1e-9) continue;
+    // A circular rim can lie on a noncoaxial support. The rolling ball needs the entire chain.
+    if (kind === 'fillet' && list.some(e => pairOf(e, usesOf.get(e.id)!, false, kind, tol, true) === 'general')) continue;
+    closedCircle.add(list[0].id);
+    for (const e of list.slice(1)) skip.add(e.id);
   }
 
   const convexTools: Brep[] = [], concaveTools: Brep[] = [], cornerTools: Brep[] = [], concaveCorners: Brep[] = [], handled = new Set<string>(), rings: { brep: Brep; convex: boolean; contactFaces: string[]; sides: string[]; report: FilletReport }[] = [];
