@@ -407,7 +407,7 @@ function loftGuideField(ctx: Ctx, second = false): Field {
     key: second ? 'guideB' : 'guide', label: second ? 'Second guide (copied)' : 'Guide (copied)', kind: 'choice',
     options: [{ value: '', label: 'None' }, ...(ctx.doc.direct?.objects ?? []).flatMap(object => {
       const copy = eligible(object.id);
-      return copy.ok ? [{ value: object.id, label: copy.name }] : [];
+      return copy.ok ? [{ value: object.id, label: object.hidden ? `${copy.name} (hidden)` : copy.name }] : [];
     })],
     unknown: value => { const copy = eligible(value); return copy.ok ? 'Choose an available guide or None.' : copy.reason; },
   };

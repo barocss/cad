@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1284 — Identify hidden sources in the Loft guide picker](notes/loft-hidden-guide-picker-2026-11-15/README.md).
 - [D1283 — Remove WebGL2 grazing-angle AO bands in the Loft test](notes/webgl2-loft-grazing-ao-2026-11-15/README.md).
 - [D1282 — Refine the displayed faces and edges of a two-guide Loft](notes/two-guide-loft-display-2026-11-15/README.md).
 - [D1281 — Identify both Loft guides in History](notes/two-guide-loft-history-endpoints-2026-11-15/README.md).

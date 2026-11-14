@@ -17,6 +17,7 @@ const f = await createFlow({
   limits: ['Two congruent XY rectangles and two ordered quadratic Bézier rails with affine Z.'],
   inspectorSource: twoGuideInspector,
 });
+const checkHidden = process.argv.includes('--check-hidden');
 const bezier = (name, x0, midX, x1, end = 12) => `@model ${name} {
   version: 0; length-unit: mm;
   @curve #curve { type: nurbs; degree: 2; knots: [0,0,0,1,1,1]; control-points:
@@ -76,11 +77,65 @@ await f.run(async () => {
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: 'two-loft-guides.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
-  await button('Sketch 2').click();
-  await button('Sketch 1').click({ modifiers: ['Shift'] });
-  await f.page.evaluate(() => document.activeElement?.blur());
-  await f.command('Loft');
-  await preview();
+  const startLoft = async () => {
+    await button('Sketch 2').click();
+    await button('Sketch 1').click({ modifiers: ['Shift'] });
+    await f.page.evaluate(() => document.activeElement?.blur());
+    await f.command('Loft');
+    await preview();
+  };
+  const hiddenRow = () => f.page.getByTitle('Hidden: click to show').filter({ hasText: /^Rail B$/ });
+  let initial = seed;
+  if (checkHidden) {
+    f.phase = 'Hide the source Rail B through Direct geometry';
+    await button('Rail B').click();
+    await button('Hide', f.page.getByRole('complementary', { name: 'Direct geometry' })).click();
+    await f.changed(seed);
+    initial = { ...seed, direct: { ...seed.direct, objects: seed.direct.objects.map(object => object.id === 'b' ? { ...object, hidden: true } : object) } };
+    await f.same(initial);
+    await hiddenRow().waitFor();
+
+    f.phase = 'Make a single-guide circular Loft from a hidden curve';
+    const singleSource = {
+      ...seed,
+      nodes: seed.nodes.map(({ id, kind, plane }) => ({ id, kind, profile: 'circle', center: [0, 0], radius: 3, ...(plane ? { plane } : {}) })),
+      direct: {
+        sources: { a: bezier('left', 3, 5, 3) },
+        objects: [seed.direct.objects[0]],
+      },
+    };
+    await f.freshOpen({ name: 'single-guide.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(singleSource)) }, singleSource, 'single-source');
+    await button('Rail A').click();
+    await button('Hide', f.page.getByRole('complementary', { name: 'Direct geometry' })).click();
+    await f.changed(singleSource);
+    const hiddenSingle = { ...singleSource, direct: { ...singleSource.direct, objects: [{ ...singleSource.direct.objects[0], hidden: true }] } };
+    await f.same(hiddenSingle);
+    await button('Sketch 1').click();
+    await button('Sketch 2').click({ modifiers: ['Shift'] });
+    await f.page.evaluate(() => document.activeElement?.blur());
+    await f.command('Loft');
+    await preview();
+    const single = hud().getByLabel('Guide (copied)', { exact: true });
+    assert.equal(await single.locator('option[value="a"]').textContent(), 'Rail A (hidden)');
+    await single.selectOption('a');
+    await preview();
+    assert.equal(await single.locator('option:checked').textContent(), 'Rail A (hidden)');
+    await f.same(hiddenSingle);
+    await f.snapshot('single-hidden-guide');
+    await button('Apply', hud()).click();
+    await f.changed(hiddenSingle);
+    const singlyGuided = await f.doc();
+    assert.deepEqual(singlyGuided.nodes.at(-1).guide.controlPoints, [[3, 0, 0], [5, 0, 6], [3, 0, 12]]);
+    assert.deepEqual(singlyGuided.direct, hiddenSingle.direct);
+    assert.ok(Math.abs((await f.bodies()).bodies[0].volume - 108 * Math.PI) < 1e-8);
+    await f.undo();
+    await f.same(hiddenSingle);
+    await f.redo();
+    await f.same(singlyGuided);
+    await f.freshOpen({ name: 'two-hidden-guide.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(initial)) }, initial, 'two-source');
+    await hiddenRow().waitFor();
+  }
+  await startLoft();
   const first = hud().getByLabel('Guide (copied)', { exact: true });
   const second = hud().getByLabel('Second guide (copied)', { exact: true });
   await first.selectOption('a');
@@ -88,13 +143,20 @@ await f.run(async () => {
   await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
   assert.equal(await button('Apply', hud()).isEnabled(), false);
   await hud().getByText('A guide misses a section corner', { exact: true }).waitFor();
-  await f.same(seed);
+  await f.same(initial);
   await f.snapshot('wrong-end-refused');
   await second.selectOption('b');
   await preview();
+  if (checkHidden) {
+    assert.equal(await first.locator('option:checked').textContent(), 'Rail A');
+    assert.equal(await second.locator('option:checked').textContent(), 'Rail B (hidden)');
+    await f.same(initial);
+    await f.snapshot('second-hidden-guide');
+  }
   await button('Apply', hud()).click();
-  await f.changed(seed);
+  await f.changed(initial);
   const loft = await f.doc();
+  assert.deepEqual(loft.direct, initial.direct);
   await verifyTwoGuideLoft(f, loft, 2, 4, 'original');
   await f.snapshot('original');
 
@@ -134,6 +196,7 @@ await f.run(async () => {
   await f.same(bEdited);
   const saved = await f.save('two-guide-loft');
   await f.freshOpen(saved.file, bEdited, 'reopened');
+  if (checkHidden) await hiddenRow().waitFor();
   await verifyTwoGuideLoft(f, await f.doc(), 2, 6, 'reopened');
   await openFeature();
   await verifyGuideLabels();
