@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1301 — Intersect a circular Sweep with a bore at a radial plane](notes/arc-bore-radial-intersection-2026-11-15/README.md).
 - [D1300 — Carry a circular through-hole along an exact circular Sweep](notes/exact-arc-bore-sweep-2026-11-15/README.md).
 - [D1299 — Refine the inner and outer contours of a mixed circular Sweep](notes/mixed-arc-sweep-display-2026-11-15/README.md).
 - [D1298 — Sweep a line-and-arc profile along a circular arc](notes/exact-arc-profile-sweep-2026-11-15/README.md).
