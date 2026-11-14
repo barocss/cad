@@ -1,0 +1,181 @@
+{
+  "decision": "D1273",
+  "priority": "P5",
+  "row": 7,
+  "tier": "FULL",
+  "parent": "e3875657c952d826db914c5f7a7238ee57370746",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1273-<run>",
+    "cd packages/barocss-cad && node scripts/tool.mjs type-check && node scripts/tool.mjs build:fast",
+    "cd packages/barocss-cad && node --test --test-concurrency=1 test/api-variable-fillet.test.mjs test/r10-5.test.mjs test/r10-5b.test.mjs test/r11-1c.test.mjs test/edge-finish.test.mjs",
+    "cd packages/barocss-cad && node --test --test-concurrency=1 test/open-circular-variable-fillet.test.mjs",
+    "node packages/barocss-cad/scripts/code-shape.mjs --check",
+    "pnpm --filter @barocss/cad-model test fillet-interior-station filletNames",
+    "pnpm --filter @barocss/cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint packages/barocss-cad/src/blend/{edge-finish,rolling-ball}.ts packages/barocss-cad-model/test/fillet-interior-station.test.ts",
+    "node --check apps/cad-studio/test/open-circular-variable-fillet-browser.mjs",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/build",
+    "D1273_SOURCE_FROZEN=1 node apps/cad-studio/test/open-circular-variable-fillet-browser.mjs <external-evidence>/studio-baseline --baseline",
+    "D1273_SOURCE_FROZEN=1 node apps/cad-studio/test/open-circular-variable-fillet-browser.mjs <external-evidence>/studio-final",
+    "git diff --check"
+  ],
+  "checks": {
+    "desktopStudio": "PASS",
+    "visualReview": "PASS",
+    "independentGeometry": "PASS",
+    "nativeSaveOpen": "PASS",
+    "historyUndoRedo": "PASS",
+    "strictBrep": "PASS",
+    "localMcpDiscoveryDryRun": "PASS",
+    "kernelTypes": "PASS",
+    "kernelFastBuild": "PASS",
+    "kernelCodeShape": "PASS",
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "focusedLint": "PASS",
+    "driverSyntax": "PASS",
+    "studioProductionBuild": "PASS",
+    "focusedKernel": {
+      "status": "PASS",
+      "passed": 32,
+      "failed": 0
+    },
+    "focusedModel": {
+      "status": "PASS",
+      "passed": 10,
+      "failed": 0
+    },
+    "baseline": {
+      "status": "FAIL",
+      "resolved": true,
+      "reason": "Radius 0.6 to 1.2 mm failed analytic Boolean stitch. Studio retained the original and disabled Apply."
+    },
+    "intermediate": {
+      "status": "FAIL",
+      "resolved": true,
+      "reason": "The first code-shape check rejected a new loop spread. The first new test assumed specific equivalent rational weights and the wrong typed refusal field."
+    },
+    "fullSuites": "NOT_RUN",
+    "ci": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "paidAI": "NOT_RUN",
+    "publicTypeScriptFacade": "NOT_RUN",
+    "semicircularAndClosedRims": "NOT_RUN",
+    "nonRadialEndPlanes": "NOT_RUN",
+    "noncircularSections": "NOT_RUN",
+    "broaderFilletAcceptance": "NOT_RUN"
+  },
+  "geometry": {
+    "original": {
+      "status": "PASS",
+      "expectedVolumeMM3": 500.4505310301965,
+      "removedMM3": 2.2042935441703864,
+      "nativeVolumeMM3": 500.45053080076445,
+      "workerVolumeMM3": 500.45053080076457,
+      "maximumVolumeErrorMM3": 2.2943203248360078e-07,
+      "maximumSectionResidualMM": 4.384591191549312e-08,
+      "maximumEndTrimResidualMM": 1.1832313440605465e-11,
+      "sections": 5,
+      "oracleSHA256": "3c0eea96a3706fe8e8824a03a4aa5d1e9dcb9cf28969c5d44927ed01cd1bfc33"
+    },
+    "edited": {
+      "status": "PASS",
+      "expectedVolumeMM3": 499.60278298167606,
+      "removedMM3": 3.0520415926908466,
+      "nativeVolumeMM3": 499.602782720443,
+      "workerVolumeMM3": 499.602782720443,
+      "maximumVolumeErrorMM3": 2.612330831652798e-07,
+      "maximumSectionResidualMM": 4.685577247729292e-08,
+      "maximumEndTrimResidualMM": 4.800049246966864e-12,
+      "sections": 5,
+      "oracleSHA256": "494f20401a2da2bfca2a62f65ed350b3bdc4ce96ab7de4f40e9b3a8ff3efd411"
+    },
+    "reopened": {
+      "status": "PASS",
+      "expectedVolumeMM3": 499.60278298167606,
+      "removedMM3": 3.0520415926908466,
+      "nativeVolumeMM3": 499.602782720443,
+      "workerVolumeMM3": 499.602782720443,
+      "maximumVolumeErrorMM3": 2.612330831652798e-07,
+      "maximumSectionResidualMM": 4.685577247729292e-08,
+      "maximumEndTrimResidualMM": 4.800049246966864e-12,
+      "sections": 5,
+      "oracleSHA256": "494f20401a2da2bfca2a62f65ed350b3bdc4ce96ab7de4f40e9b3a8ff3efd411"
+    }
+  },
+  "observations": [
+    {
+      "label": "original",
+      "nativeHash": "674df28636a118b4f1f0630801773dbf33d59b8637a35023021ab4bce70f9f71",
+      "status": "PASS",
+      "expectedVolumeMM3": 500.4505310301965,
+      "removedMM3": 2.2042935441703864,
+      "nativeVolumeMM3": 500.45053080076445,
+      "workerVolumeMM3": 500.45053080076457,
+      "maximumVolumeErrorMM3": 2.2943203248360078e-07,
+      "maximumSectionResidualMM": 4.384591191549312e-08,
+      "maximumEndTrimResidualMM": 1.1832313440605465e-11,
+      "sections": 5
+    },
+    {
+      "label": "edited",
+      "nativeHash": "2bf7a19096e4714e9a4164d58fea053bfd70eb27397afe957bdebda72f4dabcc",
+      "status": "PASS",
+      "expectedVolumeMM3": 499.60278298167606,
+      "removedMM3": 3.0520415926908466,
+      "nativeVolumeMM3": 499.602782720443,
+      "workerVolumeMM3": 499.602782720443,
+      "maximumVolumeErrorMM3": 2.612330831652798e-07,
+      "maximumSectionResidualMM": 4.685577247729292e-08,
+      "maximumEndTrimResidualMM": 4.800049246966864e-12,
+      "sections": 5
+    },
+    {
+      "label": "reopened",
+      "nativeHash": "2bf7a19096e4714e9a4164d58fea053bfd70eb27397afe957bdebda72f4dabcc",
+      "status": "PASS",
+      "expectedVolumeMM3": 499.60278298167606,
+      "removedMM3": 3.0520415926908466,
+      "nativeVolumeMM3": 499.602782720443,
+      "workerVolumeMM3": 499.602782720443,
+      "maximumVolumeErrorMM3": 2.612330831652798e-07,
+      "maximumSectionResidualMM": 4.685577247729292e-08,
+      "maximumEndTrimResidualMM": 4.800049246966864e-12,
+      "sections": 5
+    },
+    {
+      "label": "mcp-dry-run",
+      "nativeEdge": {
+        "id": "n1_e6",
+        "name": "n1.side1|n1.top",
+        "faces": [
+          "n1.side1",
+          "n1.top"
+        ]
+      },
+      "volumeDelta": -2.204
+    },
+    {
+      "label": "agent-sector",
+      "mcpExited": true,
+      "fileSHA256": "39fab095d0d053df60ace9d82b6934787200321a964d204b1e6f2f9e0a990766",
+      "fileUnchanged": true
+    }
+  ],
+  "receipts": {
+    "baselineStudioSHA256": "6a05547ffea02c844765e7c13bea18fdf4e657251c123d8101774d19dc9a7f3d",
+    "finalStudioSHA256": "f54da52b6fb7dd2abe5075961e1a2ef5cd0c8dc8f363d3bc89c1b28c29b99ab6",
+    "nativeSaveSHA256": "a4bd66cce5d5706b74453758a50441db2d878651abbc4170552800a633cb39a3",
+    "unchangedPinnedFiles": 902,
+    "screenshotsSHA256": {
+      "applied": "472253fbdfcfbda75f0ed9ec78a0b3bcf973b15a44d8c0b381a2d21b3a593ad6",
+      "end-radius-1.5": "9bfa94dc03cb000faefd1669bc864516a2a2a77e26ed26c1427b71fc7768a834",
+      "fresh-open": "ab07a83d86609512dfa16c0f1fc5fb547640525ebfd6b69fab1763bf1d862e3b"
+    }
+  },
+  "issues": {
+    "2259": "OPEN"
+  }
+}

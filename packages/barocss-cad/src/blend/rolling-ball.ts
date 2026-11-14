@@ -452,7 +452,7 @@ function facesOut(S: Surface, near: Section, fillet = false): boolean {
 /** A closed chain of edge curves by length: its point and unit tangent at s in [0, length). */
 /** `starts`: the length along the chain where each of its curves starts. */
 export interface ChainPath { readonly length: number; readonly starts: readonly number[]; at(s: number): { X: Point; t: Point } }
-export function chainPath(curves: readonly { curve: Curve; reversed: boolean }[], closed = true): ChainPath {
+export function chainPath(curves: readonly { curve: Curve; reversed: boolean }[], closed = true, endTangents?: readonly [Point, Point]): ChainPath {
   // (A table of lengths by parameter, 2000 a curve; a point is the curve's own at the interpolated parameter.)
   const K = 2000, rows: { s: number; k: number; t: number }[] = [], starts: number[] = [], evals = curves.map(c => curveEvaluator(c.curve));
   let s = 0;
@@ -480,7 +480,8 @@ export function chainPath(curves: readonly { curve: Curve; reversed: boolean }[]
   const h = 1e-6 * total;
   if (closed) return { length: total, starts, at: x => ({ X: pointAt(x), t: unit(sub(pointAt(x + h), pointAt(x - h))) }) };
   // Open: one-sided at the ends, and on past them along the end tangents (where a tool runs past the body's end).
-  const t0 = unit(sub(pointAt(h), pointAt(0))), t1 = unit(sub(lastPoint, pointAt(total - h))), P0 = pointAt(0), P1 = lastPoint;
+  const P0 = pointAt(0), P1 = lastPoint;
+  const t0 = endTangents?.[0] ?? unit(sub(pointAt(h), P0)), t1 = endTangents?.[1] ?? unit(sub(P1, pointAt(total - h)));
   return { length: total, starts, at: x => x <= 0 ? { X: x === 0 ? P0 : add(P0, scale(t0, x)), t: t0 } : x >= total ? { X: x === total ? P1 : add(P1, scale(t1, x - total)), t: t1 } : { X: pointAt(x), t: unit(sub(pointAt(Math.min(total, x + h)), pointAt(Math.max(0, x - h)))) } };
 }
 
@@ -706,7 +707,7 @@ function radiusOn(p: RadiusProfile, s: number): number {
  * finished) joins the faces `before` and `next` on side `side`; the ball keeps touching `shared`, on the other side.
  */
 export interface CornerInput { readonly after: number; readonly side: 'A' | 'B'; readonly shared: Face; readonly edge: Curve; readonly before: Face; readonly next: Face }
-export interface RingInput { readonly loop: readonly { curve: Curve; reversed: boolean }[]; readonly facesOf?: readonly (readonly string[])[]; readonly noCliffs?: boolean; readonly names: readonly string[]; readonly sideA: readonly Face[]; readonly sideB: readonly Face[]; readonly start: { wA: Point; wB: Point }; readonly convex: boolean; readonly r: number; readonly id: string; readonly scaleMM: number; readonly tolMM: number; readonly closed?: boolean; readonly past?: readonly (EndPlane | null)[]; readonly corners?: readonly CornerInput[]; /** A variable radius (R10.5, D100): the radius at points of the chain, `r` their largest. */ readonly radii?: readonly RadiusAt[]; /** The section's shape (R10.5b, D103): circular when absent. */ readonly shape?: SectionShape; /** Which ends run past are cut by their plane (a clipped tool), not trimmed by the Boolean. */ readonly clipped?: readonly [boolean, boolean] }
+export interface RingInput { readonly loop: readonly { curve: Curve; reversed: boolean }[]; readonly facesOf?: readonly (readonly string[])[]; readonly noCliffs?: boolean; readonly names: readonly string[]; readonly sideA: readonly Face[]; readonly sideB: readonly Face[]; readonly start: { wA: Point; wB: Point }; readonly convex: boolean; readonly r: number; readonly id: string; readonly scaleMM: number; readonly tolMM: number; readonly closed?: boolean; readonly past?: readonly (EndPlane | null)[]; readonly corners?: readonly CornerInput[]; /** A variable radius (R10.5, D100): the radius at points of the chain, `r` their largest. */ readonly radii?: readonly RadiusAt[]; /** The section's shape (R10.5b, D103): circular when absent. */ readonly shape?: SectionShape; /** Which ends run past are cut by their plane (a clipped tool), not trimmed by the Boolean. */ readonly clipped?: readonly [boolean, boolean]; /** Exact along-chain tangents where the end sections are already in the stock end planes. */ readonly endTangents?: readonly [Point, Point] }
 export function ringFillet(body: Brep, input: RingInput): { brep: Brep; report: FilletReport; contactFaces: string[]; sides: string[] } {
   // (A variable radius — R10.5, D100 — along plain chains for now: not where the ball rolls round an edge or onto one.)
   if (input.corners?.length && input.radii) throw new BrepError('GEOMETRY', `CAPABILITY: edge ${input.names[0]}: a variable-radius fillet where the ball rolls round an edge at a corner is not supported yet`);
@@ -717,7 +718,7 @@ export function ringFillet(body: Brep, input: RingInput): { brep: Brep; report: 
   const As = input.sideA.map(f => sideOf(body, f, !closed, scaleMM)), Bs = input.sideB.map(f => sideOf(body, f, !closed, scaleMM));
   const alpha = Math.acos(Math.max(-1, Math.min(1, dot(input.start.wA, input.start.wB))));
   if (alpha > Math.PI - 1e-6) throw new BrepError('GEOMETRY', `SELECTION: [TANGENT_FACES] edge ${name}: its faces meet tangentially; there is no corner to finish`);
-  const path = chainPath(input.loop, closed), L = path.length, prof = input.radii ? radiusProfile(path, closed, input.radii, scaleMM, name) : null;
+  const path = chainPath(input.loop, closed, input.endTangents), L = path.length, prof = input.radii ? radiusProfile(path, closed, input.radii, scaleMM, name) : null;
   // (The radius at arc length x along the chain: the profile's, or the one radius.)
   const rAt = (x: number) => prof ? radiusOn(prof, x) : r, back = rAt(0) / Math.tan(alpha / 2), rMin = prof ? prof.min : r;
   // Past an end the chain goes on along the faces' own junction (their extended surfaces), marched a step at a time:

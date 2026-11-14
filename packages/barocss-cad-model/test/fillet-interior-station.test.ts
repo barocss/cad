@@ -124,6 +124,41 @@ test('four-wall Draft Extrude preserves the exact unplaced fillet rim through an
   volume(rematched.doc, 10553.214670395955);
 });
 
+test('two end radii stay on the original endpoints of an open native circular rim', async () => {
+  const box = seed();
+  const doc: StudioDoc = { ...box, nodes: [{
+    kind: 'sketch', id: 'n0', profile: 'loop', segments: [
+      { kind: 'line', start: [0, 0] },
+      { kind: 'arc', start: [8, 0], center: [0, 0], direction: 'ccw' },
+      { kind: 'line', start: [0, 8] },
+    ],
+  }, box.nodes[1]] };
+  const [body] = bodies(doc), rim = 'n1.side1|n1.top';
+  const picked = body.mesh.edges.find(e => e.names.includes(rim));
+  assert.ok(picked?.nativeCircle && picked.nativeJoint && !picked.straight);
+  const result = await dispatchTool({ doc, bodies: [body] }, 'run_command', {
+    command: 'fillet', edges: [rim], values: { radius: 0.6, endRadius: 1.2 },
+  }, async input => evaluateDoc(input, 0));
+  assert.ok(result.changed && !result.isError, result.content);
+  const built = result.state.doc, n = built.nodes[2];
+  assert.equal(n.kind, 'fillet');
+  assert.deepEqual(n.edges, [rim]);
+  assert.deepEqual(n.radii?.map(p => [p.atEnd, p.radius]), [[true, 0.6], [true, 1.2]]);
+  assert.ok(n.radii!.every(({ at: [x,y,z] }, i) => Math.hypot(x-(i ? 0 : 8), y-(i ? 8 : 0), z-10) < 1e-12));
+  const edit = editFields(built.nodes, 2).find(f => f.key === 'r1');
+  assert.ok(edit?.kind === 'number');
+  const after = { ...built, nodes: edit.set(built.nodes, 1.5) };
+  const opened = await readStudioFile(encodeStudioFile(after));
+  assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, JSON.parse(JSON.stringify(after)));
+  for (const [input, a, b] of [[built, 0.6, 1.2], [opened.doc, 0.6, 1.5]] as const) {
+    const removed = Math.PI / 2 * ((1 - Math.PI / 4) * 8 * (a*a+a*b+b*b) / 3 -
+      (5/6 - Math.PI/4) * (a**3+a*a*b+a*b*b+b**3) / 4);
+    const actual = bodies(input)[0].volume;
+    assert.ok(actual !== null && Math.abs(actual - (160*Math.PI - removed)) < 2e-6);
+  }
+});
+
 
 test('an ambiguously renamed edge cannot silently take the bound radius station', async () => {
   const draft = seed(), result = await execute(draft);
