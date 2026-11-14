@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1294 — Fillet the mouth of an exact straight Sweep bore](notes/sweep-bore-mouth-fillet-2026-11-15/README.md).
 - [D1293 — Intersect a circular-arc Sweep at a radial plane](notes/arc-sweep-radial-intersection-2026-11-15/README.md).
 - [D1292 — Cut a through bore with an exact straight Sweep](notes/straight-sweep-through-bore-2026-11-15/README.md).
 - [D1291 — Refine straight Sweep cylinders as Studio zooms](notes/straight-sweep-cylinder-zoom-2026-11-15/README.md).
