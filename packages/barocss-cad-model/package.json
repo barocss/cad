@@ -7,12 +7,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/barocss/barocss.git",
+    "url": "git+https://github.com/barocss/cad.git",
     "directory": "packages/barocss-cad-model"
   },
-  "homepage": "https://github.com/barocss/barocss/tree/develop/packages/barocss-cad-model#readme",
+  "homepage": "https://github.com/barocss/cad/tree/main/packages/barocss-cad-model#readme",
   "bugs": {
-    "url": "https://github.com/barocss/barocss/issues"
+    "url": "https://github.com/barocss/cad/issues"
   },
   "exports": {
     "./samples/*": "./samples/*",

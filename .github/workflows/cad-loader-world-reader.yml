@@ -2,7 +2,7 @@ name: CAD Loader World Reader
 
 on:
   pull_request:
-    branches: [develop]
+    branches: [main]
     paths:
       - 'packages/barocss-cad-interop/**'
       - 'packages/barocss-cad/**'
