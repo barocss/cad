@@ -273,3 +273,65 @@ test('refuses other missing bindings and never replaces an invalid stored fillet
     copy.coedges.find(use => use.edge === edge.id).pcurve = lineCurve('invalid', [0, 0, 0], [0, 1, 0]);
   });
 });
+
+function shapedBoxFillet(shape) {
+  const outer = [[0, 0], [30, 0], [30, 12], [0, 12]].map(start => ({ kind: 'line', start }));
+  return finishBrepEdges(prism(outer, 20), ['stock.side0|stock.top'], 2, 'fillet', 'round', { shape });
+}
+
+test('recovers every native span of both straight G2 box fillet joins at two tensions', () => {
+  for (const tension of [0.5, 0.7]) {
+    const brep = shapedBoxFillet({ kind: 'g2', tension });
+    const before = structuredClone(brep);
+    assert.deepEqual(checkBrep(brep, { strict: true }).issues, []);
+    assert.deepEqual([brep.vertices.length, brep.edges.length, brep.faces.length], [14, 21, 9]);
+    const spanEnds = [0, 30 * 10 / 31, 30 * 21 / 31, 30];
+    for (let i = 0; i < 3; i++) {
+      const blend = `round.face#${i + 1}`;
+      for (const [adjacent, y, z] of [['stock.top', 2, 20], ['stock.side0', 0, 18]]) {
+        const name = `${blend}|${adjacent}`;
+        const edge = edgeNamed(brep, name);
+        assert.equal(edge.curve.degree, 3);
+        assert.deepEqual(brep.coedges.filter(use => use.edge === edge.id).map(use => use.pcurve), [null, null]);
+        assertMeasured(brep, name, 0);
+        // Each plane is flat. The first or last three quartic poles lie in that plane,
+        // so the blend's exact transverse second derivative has zero normal component there.
+        assertCurvature(brep, name, { [blend]: 0, [adjacent]: 0 });
+        const [x0, x1] = adjacent === 'stock.top' ? [spanEnds[i], spanEnds[i + 1]] : [spanEnds[i + 1], spanEnds[i]];
+        for (const t of [0, 1 / 16, 0.5, 15 / 16, 1]) {
+          const world = evaluateCurveD1(edge.curve, t);
+          assert.ok(Math.hypot(world.point[0] - (x0 + (x1 - x0) * t), world.point[1] - y, world.point[2] - z) <= 1e-10);
+          assert.ok(Math.hypot(world.derivative[0] - (x1 - x0), world.derivative[1], world.derivative[2]) <= 1e-10);
+        }
+      }
+    }
+    assert.deepEqual(brep, before);
+  }
+});
+
+test('refuses G2 end caps, patch joins, mismatched coefficients, and invalid authored bindings', () => {
+  const original = shapedBoxFillet({ kind: 'g2', tension: 0.7 });
+  const assertRefusal = (brep, name, reason = 'missing-pcurve') => {
+    const { id: edgeId } = edgeNamed(brep, name);
+    assert.deepEqual(measureBrepEdgeContinuity(brep, edgeId, { curvature: true }), { status: 'unsupported', edgeId, reason });
+  };
+  for (const name of ['round.face#1|stock.side3', 'round.face#3|stock.side1', 'round.face#1|round.face#2',
+    'round.face#2|round.face#3', 'stock.bottom|stock.side0']) assertRefusal(original, name);
+
+  const name = 'round.face#2|stock.top';
+  assertRefusal(shapedBoxFillet({ kind: 'conic', rho: 0.5 }), name);
+  const refused = (reason, change) => {
+    const brep = structuredClone(original);
+    const edge = edgeNamed(brep, name);
+    const surface = brep.faces.find(face => face.name === 'round.face#2').surface;
+    change(brep, edge, surface);
+    assertRefusal(brep, name, reason);
+  };
+  refused('missing-pcurve', (_brep, _edge, surface) => { surface.controlPoints[2][3][2] += 1e-8; });
+  refused('missing-pcurve', (_brep, _edge, surface) => { surface.weights[2][3] *= 1.01; });
+  refused('missing-pcurve', (_brep, edge) => { edge.curve.controlPoints[3][0] += 1e-8; });
+  refused('missing-pcurve', (_brep, edge) => { edge.curve.knots[4] += 1e-8; });
+  refused('binding-mismatch', (brep, edge) => {
+    brep.coedges.find(use => use.edge === edge.id).pcurve = lineCurve('invalid', [0, 0, 0], [0, 1, 0]);
+  });
+});

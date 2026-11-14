@@ -1,0 +1,355 @@
+{
+  "decision": "D1263",
+  "tier": "FULL",
+  "priority": "P5",
+  "row": 24,
+  "parent": "7c51a78e631ebf416aabb1361789b83add01c7e0",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1263-<run>",
+    "D1263_SOURCE_FROZEN=1 node apps/cad-studio/test/g2-box-fillet-browser.mjs <external-evidence>/baseline-2 --baseline",
+    "D1263_SOURCE_FROZEN=1 node apps/cad-studio/test/g2-box-fillet-browser.mjs <external-evidence>/studio-final",
+    "cd packages/barocss-cad && node scripts/tool.mjs type-check",
+    "cd packages/barocss-cad && node scripts/tool.mjs build:fast",
+    "cd packages/barocss-cad && node --test --test-concurrency=1 test/edge-continuity.test.mjs test/derivatives.test.mjs test/edge-finish.test.mjs test/r10-5b.test.mjs",
+    "node packages/barocss-cad/scripts/code-shape.mjs --check",
+    "pnpm --filter @barocss/cad-model test native-continuity-tool edge-continuity toolset.test tool-contract.test",
+    "pnpm --filter @barocss/cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint packages/barocss-cad/src/brep/box-fillet-bindings.ts packages/barocss-cad/test/edge-continuity.test.mjs packages/barocss-cad-model/test/native-continuity-tool.test.ts",
+    "node <external-evidence>/mutation.mjs <external-evidence> 'return recoverQuarticBindings(brep, edge, first, second, curveDomain(line));' 'return undefined;'",
+    "node <external-evidence>/mutation.mjs <external-evidence> 'if (!(dist(controls[i][j], add(along, offsets[i])) <= tolerance)) return undefined;' 'if (false) return undefined;'",
+    "node --check apps/cad-studio/test/g2-box-fillet-browser.mjs",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/build",
+    "git diff --check"
+  ],
+  "checks": {
+    "initialInspectorImport": "FAIL",
+    "baselineG2Measurement": "FAIL",
+    "actualStudio": "PASS",
+    "historyUndoRedo": "PASS",
+    "nativeSaveReopenAndRemeasure": "PASS",
+    "independentOracle": "PASS",
+    "modelAgentRevision": "PASS",
+    "kernel": {
+      "status": "PASS",
+      "passed": 38,
+      "failed": 0
+    },
+    "model": {
+      "status": "PASS",
+      "passed": 21,
+      "failed": 0
+    },
+    "kernelTypes": "PASS",
+    "kernelBuild": "PASS",
+    "kernelCodeShape": "PASS",
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "lint": "PASS",
+    "driverSyntax": "PASS",
+    "studioBuild": "PASS",
+    "independentReviews": 2,
+    "mutationExitCodes": {
+      "disableRecovery": {
+        "current": 0,
+        "mutant": 1
+      },
+      "ignoreControlNet": {
+        "current": 0,
+        "mutant": 1
+      }
+    },
+    "fullSuites": "NOT_RUN",
+    "realStdioMcp": "NOT_RUN",
+    "liveModel": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "generalG2G3": "NOT_RUN"
+  },
+  "geometry": {
+    "fixtureMM": [
+      30,
+      12,
+      20
+    ],
+    "radiusMM": 2,
+    "samplesPerSegment": 8,
+    "sectionToleranceMM": 1e-08,
+    "g2VolumeToleranceMM3": 5e-06,
+    "curvatureTolerancePerMM": 1e-09,
+    "baselineRefusedEdges": [
+      "n2_e8",
+      "n2_e9",
+      "n2_e10",
+      "n2_e16",
+      "n2_e17",
+      "n2_e18"
+    ],
+    "afterRefusedG2Edges": [
+      "n2_e13",
+      "n2_e14",
+      "n2_e19",
+      "n2_e20"
+    ],
+    "results": {
+      "circular": {
+        "status": "PASS",
+        "tension": null,
+        "expectedVolumeMM3": 7174.247779607694,
+        "nativeVolumeMM3": 7174.247779607695,
+        "studioVolumeMM3": 7174.247779607695,
+        "expectedDifferencePerMM": 0.5,
+        "joins": {
+          "n1.side0": [
+            [
+              "n2_e8",
+              [
+                0,
+                30
+              ],
+              0.5000000000000006,
+              0
+            ]
+          ],
+          "n1.top": [
+            [
+              "n2_e14",
+              [
+                0,
+                30
+              ],
+              0.5000000000000011,
+              0
+            ]
+          ]
+        },
+        "oracleSHA256": "a1c428c64683d8418e86818489e2c96b836718c2f93768b96d893b6454703800",
+        "nativeShapeSHA256": "12ff52104e6d5ff5b4235b3e5a267aaf168a563285aed2b132137e9d9030fc2f"
+      },
+      "g2-default": {
+        "status": "PASS",
+        "tension": 0.5,
+        "expectedVolumeMM3": 7188,
+        "nativeVolumeMM3": 7187.999998999872,
+        "studioVolumeMM3": 7187.999998999872,
+        "expectedDifferencePerMM": 0,
+        "joins": {
+          "n1.side0": [
+            [
+              "n2_e8",
+              [
+                20.32258064516133,
+                30
+              ],
+              2.6001288852539793e-13,
+              0
+            ],
+            [
+              "n2_e9",
+              [
+                9.677419354837454,
+                20.32258064516133
+              ],
+              2.35282810532735e-13,
+              0
+            ],
+            [
+              "n2_e10",
+              [
+                -4.257999853207073e-13,
+                9.677419354837454
+              ],
+              4.08809842513721e-13,
+              0
+            ]
+          ],
+          "n1.top": [
+            [
+              "n2_e16",
+              [
+                -4.4053649617126206e-13,
+                9.677419354839428
+              ],
+              4.060102948293001e-13,
+              0
+            ],
+            [
+              "n2_e17",
+              [
+                9.677419354839428,
+                20.322580645160137
+              ],
+              2.341042941097547e-13,
+              0
+            ],
+            [
+              "n2_e18",
+              [
+                20.322580645160137,
+                30
+              ],
+              2.5938626246861473e-13,
+              0
+            ]
+          ]
+        },
+        "oracleSHA256": "1480ad1585975c53af7c14638759e1315f44b467570c2615bcdb348961120234",
+        "nativeShapeSHA256": "fe8f2a2e26f6ca19a8b3d069c6a1a6fadd951257fc98b379253857a5954b64d7"
+      },
+      "g2-edited": {
+        "status": "PASS",
+        "tension": 0.7,
+        "expectedVolumeMM3": 7192.937142857143,
+        "nativeVolumeMM3": 7192.937142857137,
+        "studioVolumeMM3": 7192.937142857137,
+        "expectedDifferencePerMM": 0,
+        "joins": {
+          "n1.side0": [
+            [
+              "n2_e8",
+              [
+                20.32258064516133,
+                30
+              ],
+              1.3265963700275848e-13,
+              0
+            ],
+            [
+              "n2_e9",
+              [
+                9.677419354837454,
+                20.32258064516133
+              ],
+              1.2004225027180436e-13,
+              0
+            ],
+            [
+              "n2_e10",
+              [
+                -4.257999853207073e-13,
+                9.677419354837454
+              ],
+              2.0857645026200734e-13,
+              0
+            ]
+          ],
+          "n1.top": [
+            [
+              "n2_e16",
+              [
+                -4.4053649617126206e-13,
+                9.677419354839428
+              ],
+              2.0858165878831264e-13,
+              0
+            ],
+            [
+              "n2_e17",
+              [
+                9.677419354839428,
+                20.322580645160137
+              ],
+              1.2072314608436302e-13,
+              0
+            ],
+            [
+              "n2_e18",
+              [
+                20.322580645160137,
+                30
+              ],
+              1.3153730412929452e-13,
+              0
+            ]
+          ]
+        },
+        "oracleSHA256": "0b1d3607fbcd51f592b9339bac3b254d9e7fd302ae26591f7440aa3a27bb57ca",
+        "nativeShapeSHA256": "3899aea499232e3573dec8737b12bf48e09cb1e50a0f00c172910aea4e53e7b0"
+      },
+      "g2-reopened-measure": {
+        "status": "PASS",
+        "tension": 0.7,
+        "expectedVolumeMM3": 7192.937142857143,
+        "nativeVolumeMM3": 7192.937142857137,
+        "studioVolumeMM3": 7192.937142857137,
+        "expectedDifferencePerMM": 0,
+        "joins": {
+          "n1.side0": [
+            [
+              "n2_e8",
+              [
+                20.32258064516133,
+                30
+              ],
+              1.3265963700275848e-13,
+              0
+            ],
+            [
+              "n2_e9",
+              [
+                9.677419354837454,
+                20.32258064516133
+              ],
+              1.2004225027180436e-13,
+              0
+            ],
+            [
+              "n2_e10",
+              [
+                -4.257999853207073e-13,
+                9.677419354837454
+              ],
+              2.0857645026200734e-13,
+              0
+            ]
+          ],
+          "n1.top": [
+            [
+              "n2_e16",
+              [
+                -4.4053649617126206e-13,
+                9.677419354839428
+              ],
+              2.0858165878831264e-13,
+              0
+            ],
+            [
+              "n2_e17",
+              [
+                9.677419354839428,
+                20.322580645160137
+              ],
+              1.2072314608436302e-13,
+              0
+            ],
+            [
+              "n2_e18",
+              [
+                20.322580645160137,
+                30
+              ],
+              1.3153730412929452e-13,
+              0
+            ]
+          ]
+        },
+        "oracleSHA256": "0b1d3607fbcd51f592b9339bac3b254d9e7fd302ae26591f7440aa3a27bb57ca",
+        "nativeShapeSHA256": "3899aea499232e3573dec8737b12bf48e09cb1e50a0f00c172910aea4e53e7b0"
+      }
+    }
+  },
+  "frozenFiles": 892,
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "savedFileSHA256": "5051000255edf7399e610453e4d6fd436b9170822cc7c1bc1f8b1a3bd6c5ca61",
+  "receiptSHA256": {
+    "initialInspectorFailure": "95ed4e225e87923827fd2c1575e36784d7e9f8ebe952ac4ab56b9e1c59d47812",
+    "baselineStudio": "2d8ab6de4db14a0549a3c40a4e7b7ad9784fa0bc531900e8c92e7ae1acca5d38",
+    "finalStudio": "1a9f36f5f56a21c49fe38e556cd06e15bea5cfd3f43000cf0eee708b75e6658a",
+    "editedVisual": "49f80ce191a8d7767a31926f61333a57e58d385c9fdd7be6ec067e5045a3c3c8"
+  }
+}

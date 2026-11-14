@@ -130,3 +130,39 @@ test('a model evaluation failure is a tool refusal without native measurements',
   assert.match(refused.content.error, /missing_joint_height/);
   assert.equal(refused.content.edges, undefined);
 });
+
+test('a G2 feature tension edit preserves the six measurable joints and invalidates the old agent revision', async () => {
+  const base = rectanglePart(30, 12, 20);
+  const initial = withNode(base, {
+    kind: 'fillet', parent: { node: 1, side: 'solid' }, edges: ['n1.side0|n1.top'], radius: 2,
+    section: { kind: 'g2', tension: 0.5 },
+  });
+  const node = initial.nodes.at(-1);
+  assert.ok(node?.kind === 'fillet');
+  const edited: StudioDoc = { ...initial, nodes: [...initial.nodes.slice(0, -1), { ...node, section: { kind: 'g2', tension: 0.7 } }] };
+  const old = await query(initial, 'native_joints', { body });
+  const fresh = await query(edited, 'native_joints', { body });
+  assert.equal(old.isError, false);
+  assert.equal(fresh.isError, false);
+  assert.notEqual(old.content.revision, fresh.content.revision);
+  const original = readEdgeContinuity(initial, body, { kind: 'list' });
+  assert.ok('edges' in original);
+  const joins = original.edges.filter(edge => edge.faces.some(name => /^n2\.face#\d+$/.test(name)) &&
+    (edge.faces.includes('n1.top') || edge.faces.includes('n1.side0')));
+  assert.equal(joins.length, 6);
+  assert.deepEqual(fresh.content.edges.filter((edge: { faces: string[] }) =>
+    edge.faces.some(name => /^n2\.face#\d+$/.test(name)) &&
+    (edge.faces.includes('n1.top') || edge.faces.includes('n1.side0'))), joins);
+  for (const edge of joins) {
+    const input = { body, edgeId: edge.id, expectedRevision: old.content.revision, curvature: true };
+    const stale = await query(edited, 'edge_continuity', input);
+    assert.equal(stale.isError, true);
+    assert.match(stale.content.error, /changed/);
+    const result = await query(edited, 'edge_continuity', { ...input, expectedRevision: fresh.content.revision });
+    assert.equal(result.isError, false, JSON.stringify(result.content));
+    assert.equal(result.content.sampleCount, 8);
+    assert.ok(result.content.maximumAngleDegrees <= 1e-7);
+    assert.equal(result.content.curvature.status, 'measured');
+    assert.ok(result.content.curvature.maximumDifference <= 1e-9);
+  }
+});

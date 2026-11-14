@@ -1,7 +1,7 @@
 import { curveDomain, surfaceDomain } from '../core/math.js';
 import { add, cross, dist, dot, len, scale, sub, unit } from '../core/vec3.js';
 import { geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
-import type { Curve, Point } from '../types.js';
+import type { Curve, Point, Surface } from '../types.js';
 import type { Brep, BrepEdge, BrepFace } from './brep-core.js';
 
 type Range = readonly [number, number];
@@ -105,27 +105,32 @@ function generatorParameter(origin: Point, span: Point, point: Point, tolerance:
   return dist(add(origin, scale(span, fraction)), point) <= tolerance ? fraction : undefined;
 }
 
-/** Recover local parameter lines for the two straight interfaces of a single round on a box. */
+/** Recover local parameter curves for the straight interfaces of a single fillet on a box. */
 export function recoverBoxFilletBindings(brep: Brep, edge: BrepEdge, first: BrepFace, second: BrepFace): [Curve, Curve] | undefined {
   const { bodies, shells, faces, loops, coedges, edges, vertices } = brep;
   const line = edge.curve;
   if (brep.source.family !== 'analytic-boolean' || bodies.length !== 1 || bodies[0].kind !== 'solid'
     || shells.length !== 1 || !shells[0].closed || shells[0].body !== bodies[0].id
-    || bodies[0].shells.length !== 1 || bodies[0].shells[0] !== shells[0].id || shells[0].faces.length !== 7
-    || faces.length !== 7 || loops.length !== 7
-    || coedges.length !== 30 || edges.length !== 15 || vertices.length !== 10
+    || bodies[0].shells.length !== 1 || bodies[0].shells[0] !== shells[0].id
+    || shells[0].faces.length !== faces.length || loops.length !== faces.length
     || edge.vertices[0] === edge.vertices[1]
-    || line.degree !== 1 || line.controlPoints.length !== 2 || line.weights[0] !== line.weights[1]) return undefined;
+    || !line.weights.every(weight => weight === line.weights[0])) return undefined;
 
   try {
-    const domain = curveDomain(line);
-    return recoverBindings(brep, edge, first, second, domain);
+    if (faces.length === 7 && coedges.length === 30 && edges.length === 15 && vertices.length === 10
+      && line.degree === 1 && line.controlPoints.length === 2) {
+      return recoverCircularBindings(brep, edge, first, second, curveDomain(line));
+    }
+    if (faces.length === 9 && coedges.length === 42 && edges.length === 21 && vertices.length === 14 && line.degree === 3) {
+      return recoverQuarticBindings(brep, edge, first, second, curveDomain(line));
+    }
   } catch {
     return undefined;
   }
+  return undefined;
 }
 
-function recoverBindings(brep: Brep, edge: BrepEdge, first: BrepFace, second: BrepFace, [t0, t1]: Range): [Curve, Curve] | undefined {
+function recoverCircularBindings(brep: Brep, edge: BrepEdge, first: BrepFace, second: BrepFace, [t0, t1]: Range): [Curve, Curve] | undefined {
   const firstPlane = affinePlane(first), secondPlane = affinePlane(second);
   if (!!firstPlane === !!secondPlane) return undefined;
   const plane = firstPlane ?? secondPlane!;
@@ -171,4 +176,155 @@ function recoverBindings(brep: Brep, edge: BrepEdge, first: BrepFace, second: Br
   if (!cylinderBinding) return undefined;
   const planeBinding = pcurve(planeStart, planeEnd);
   return firstPlane ? [planeBinding, cylinderBinding] : [cylinderBinding, planeBinding];
+}
+
+type QuarticPatch = { readonly face: BrepFace; readonly surface: Surface; readonly domain: ChartDomain };
+
+// The rolling-ball solve, cubic collocation and stitch introduce separate rounding errors.
+// Keep their admission bound below the native linear tolerance even for large boxes.
+const LOFT_ROUNDING = 4096 * Number.EPSILON;
+
+function quarticPatch(face: BrepFace): QuarticPatch | undefined {
+  const s = face.surface;
+  if (s.kind !== 'surface' || s.degreeU !== 4 || s.degreeV !== 3 || s.controlPoints.length !== 5) return undefined;
+  const domain = surfaceDomain(s);
+  if (!s.weights.every(row => row.every(weight => weight === s.weights[0][0]))) return undefined;
+  const spans = s.controlPoints[0].length - 3;
+  const [v0, v1] = domain.v;
+  for (let i = 1; i < spans; i++) {
+    if (!(Math.abs((s.knotsV[i + 3] - v0) / (v1 - v0) - i / spans) <= LOFT_ROUNDING)) return undefined;
+  }
+  return { face, surface: s, domain };
+}
+
+function planeDistance(plane: PlaneChart, point: Point): number {
+  return dot(sub(point, plane.origin), plane.normal);
+}
+
+function greville(knots: readonly number[], i: number): number {
+  return (knots[i + 1] + knots[i + 2] + knots[i + 3]) / 3;
+}
+
+function increasesAlong(points: readonly Point[], direction: Point): boolean {
+  return points.every((point, i) => i === 0 || dot(sub(point, points[i - 1]), direction) > 0);
+}
+
+function quarticBoxSection(patches: readonly QuarticPatch[], planes: readonly PlaneChart[], tolerance: number) {
+  const reference = patches[0];
+  const [first, nearFirst, middle, nearLast, last] = reference.surface.controlPoints;
+  const axial = sub(middle[middle.length - 1], middle[0]);
+  const sense = reference.face.sense === 'forward' ? 1 : -1;
+  const normal0 = scale(unit(cross(sub(nearFirst[0], first[0]), axial)), sense);
+  const normal1 = scale(unit(cross(sub(last[0], nearLast[0]), axial)), sense);
+  const plane0 = planes.find(plane => dist(plane.normal, normal0) <= LOFT_ROUNDING * 32);
+  const plane1 = planes.find(plane => dist(plane.normal, normal1) <= LOFT_ROUNDING * 32);
+  if (!plane0 || !plane1 || Math.abs(dot(plane0.normal, plane1.normal)) > ROUNDING) return undefined;
+
+  const radius = -planeDistance(plane1, first[0]);
+  const tangentLength = dot(sub(nearFirst[0], first[0]), plane1.normal);
+  if (!(tangentLength > tolerance && radius - tangentLength > tolerance)) return undefined;
+  const across = radius - tangentLength;
+  const offsets: readonly Point[] = [scale(plane1.normal, -radius), scale(plane1.normal, -across),
+    [0, 0, 0], scale(plane0.normal, -across), scale(plane0.normal, -radius)];
+  const corner = sub(sub(middle[0], scale(plane0.normal, planeDistance(plane0, middle[0]))),
+    scale(plane1.normal, planeDistance(plane1, middle[0])));
+  const direction = scale(unit(cross(plane0.normal, plane1.normal)), sense);
+  const ends: Range[] = [];
+  for (const patch of patches) {
+    const controls = patch.surface.controlPoints;
+    const [v0, v1] = patch.domain.v;
+    const start = dot(sub(controls[2][0], corner), direction);
+    const finish = dot(sub(controls[2][controls[2].length - 1], corner), direction);
+    if (patch.face.sense !== reference.face.sense || !(finish - start > tolerance)
+      || !controls.every(row => increasesAlong(row, direction))) return undefined;
+    ends.push([start, finish]);
+
+    // Greville coefficients reproduce a line in V. In U, the first and last three poles
+    // lie in the respective planes, with the common middle pole on their intersection.
+    for (let j = 0; j < controls[2].length; j++) {
+      const fraction = (greville(patch.surface.knotsV, j) - v0) / (v1 - v0);
+      const along = add(corner, scale(direction, interpolate([start, finish], fraction)));
+      for (let i = 0; i < offsets.length; i++) {
+        if (!(dist(controls[i][j], add(along, offsets[i])) <= tolerance)) return undefined;
+      }
+    }
+  }
+
+  ends.sort(([a], [b]) => a - b);
+  const startCap = planes.find(plane => dist(plane.normal, scale(direction, -1)) <= ROUNDING);
+  const endCap = planes.find(plane => dist(plane.normal, direction) <= ROUNDING);
+  if (!startCap || !endCap
+    || Math.abs(planeDistance(startCap, add(corner, scale(direction, ends[0][0])))) > tolerance
+    || Math.abs(planeDistance(endCap, add(corner, scale(direction, ends[ends.length - 1][1])))) > tolerance) return undefined;
+  for (let i = 1; i < ends.length; i++) {
+    if (Math.abs(ends[i - 1][1] - ends[i][0]) > tolerance) return undefined;
+  }
+  return { plane0, plane1, direction };
+}
+
+function quarticBoundary(edge: BrepEdge, t: Range, patch: QuarticPatch, atStart: boolean, tolerance: number): Curve | undefined {
+  const { surface, domain } = patch;
+  const row = surface.controlPoints[atStart ? 0 : 4];
+  const { controlPoints, knots } = edge.curve;
+  if (controlPoints.length !== row.length) return undefined;
+  const [t0, t1] = t;
+  const [v0, v1] = domain.v;
+  const u = domain.u[atStart ? 0 : 1];
+  // Compare all poles and knots after the affine change of parameter, in both canonical directions.
+  const matches = (reversed: boolean): boolean => controlPoints.every((point, i) =>
+    dist(point, row[reversed ? row.length - 1 - i : i]) <= tolerance) && knots.every((knot, i) => {
+    const other = surface.knotsV[reversed ? knots.length - 1 - i : i];
+    const fraction = reversed ? (v1 - other) / (v1 - v0) : (other - v0) / (v1 - v0);
+    return Math.abs((knot - t0) / (t1 - t0) - fraction) <= LOFT_ROUNDING;
+  });
+  const forward = matches(false), reversed = matches(true);
+  if (forward === reversed) return undefined;
+  return { kind: 'curve', id: edge.curve.id, degree: 1, knots: [t0, t0, t1, t1],
+    controlPoints: [[u, forward ? v0 : v1, 0], [u, forward ? v1 : v0, 0]], weights: [1, 1] };
+}
+
+function recoverQuarticBindings(brep: Brep, edge: BrepEdge, first: BrepFace, second: BrepFace, t: Range): [Curve, Curve] | undefined {
+  const planes = new Map<BrepFace, PlaneChart>();
+  const patches = new Map<BrepFace, QuarticPatch>();
+  let scaleMM = 1;
+  for (const face of brep.faces) {
+    const loop = brep.loops.find(loop => loop.id === face.loops[0]);
+    if (face.shell !== first.shell || !brep.shells[0].faces.includes(face.id)
+      || face.loops.length !== 1 || loop?.kind !== 'outer' || loop.face !== face.id) return undefined;
+    const plane = affinePlane(face);
+    if (plane) {
+      planes.set(face, plane);
+      continue;
+    }
+    const patch = quarticPatch(face);
+    if (!patch || loop.coedges.length !== 4) return undefined;
+    patches.set(face, patch);
+    for (const row of patch.surface.controlPoints) scaleMM = Math.max(scaleMM, geometryScaleMM(row));
+  }
+  if (patches.size !== 3 || !admitsBoxPlanes(Array.from(planes.values()))) return undefined;
+  const firstPlane = planes.get(first), secondPlane = planes.get(second);
+  const plane = firstPlane ?? secondPlane;
+  const patch = patches.get(firstPlane ? second : first);
+  if (!plane || !patch) return undefined;
+  const tolerance = Math.min(edge.tolerance, linearToleranceMM(scaleMM) / 10, LOFT_ROUNDING * scaleMM);
+  const section = quarticBoxSection(Array.from(patches.values()), Array.from(planes.values()), tolerance);
+  if (!section || (plane !== section.plane0 && plane !== section.plane1)) return undefined;
+
+  const points = edge.curve.controlPoints;
+  const along = dot(sub(points[points.length - 1], points[0]), section.direction);
+  if (!(Math.abs(along) > tolerance) || !increasesAlong(points, scale(section.direction, Math.sign(along)))) return undefined;
+  const startVertex = brep.vertices.find(vertex => vertex.id === edge.vertices[0]);
+  const endVertex = brep.vertices.find(vertex => vertex.id === edge.vertices[1]);
+  if (!startVertex || !endVertex || !(dist(points[0], startVertex.point) <= tolerance
+    && dist(points[points.length - 1], endVertex.point) <= tolerance)) return undefined;
+  const patchBinding = quarticBoundary(edge, t, patch, plane === section.plane0, tolerance);
+  if (!patchBinding) return undefined;
+  const controlPoints: Point[] = [];
+  for (const point of points) {
+    const uv = planeParameter(plane, point, tolerance);
+    if (!uv) return undefined;
+    controlPoints.push(uv);
+  }
+  const planeBinding: Curve = { ...edge.curve, controlPoints };
+  return firstPlane ? [planeBinding, patchBinding] : [patchBinding, planeBinding];
 }
