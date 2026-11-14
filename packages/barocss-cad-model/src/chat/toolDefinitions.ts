@@ -358,8 +358,15 @@ export const TOOLS: ToolDefinition[] = [
   ...PART_TOOLS.map(t => t.name === 'select' ? t : { ...t, input_schema: { ...t.input_schema, properties: { ...(t.input_schema.properties as object), part: PART_ARGUMENT } } }),
   {
     name: 'list_native_joints',
-    description: 'Lists shared native edges on one base body in the session snapshot. Use a body key from query.summary. Returns IDs and a revision for query.edge_continuity.',
+    description: 'Lists shared native edges on one base body in the session snapshot. Use a body key from query.summary. Returns IDs and a revision for query.edge_continuity and query.edge_curvature.',
     input_schema: { type: 'object', properties: { body: { type: 'string', minLength: 1 } }, required: ['body'], additionalProperties: false },
+  },
+  {
+    name: 'measure_edge_curvature',
+    description: 'Reads sampled curvature magnitude and world vector in inverse mm along one native curve. Use body, edge ID and revision from query.native_joints. Samples stay within the original knot spans.',
+    input_schema: { type: 'object', properties: {
+      body: { type: 'string', minLength: 1 }, edgeId: { type: 'string', minLength: 1 }, expectedRevision: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+    }, required: ['body', 'edgeId', 'expectedRevision'], additionalProperties: false },
   },
   {
     name: 'measure_edge_continuity',

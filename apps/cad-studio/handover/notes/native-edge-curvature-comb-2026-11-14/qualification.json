@@ -1,0 +1,121 @@
+{
+  "decision": "D1267",
+  "priority": "P5",
+  "row": 24,
+  "tier": "FULL",
+  "parent": "8c1ee9fcd422150d3dc9d80068eee9021e3c1348",
+  "node": "22.19.0",
+  "commands": [
+    "gate.sh acquire heavy 600 D1267-<run>",
+    "pnpm --filter @barocss/cad-model test native-edge-curvature native-continuity-tool tool-contract",
+    "pnpm --filter @barocss/cad-model type-check",
+    "pnpm --filter @barocss/cad-studio-app type-check",
+    "pnpm exec eslint packages/barocss-cad-model/src/{engine/edgeCurvature,engine/edgeContinuity,chat/part/nativeContinuity,chat/groups,chat/contract,chat/toolDefinitions}.ts packages/barocss-cad-model/test/{native-edge-curvature,tool-contract}.test.ts apps/cad-studio/src/{app/useEdgeCurvature.ts,ui/EdgeCurvature.tsx,viewport/CurvatureComb.tsx,viewport/Viewport.tsx}",
+    "node apps/library-docs/scripts/agent-tools.mjs --check",
+    "node --check apps/cad-studio/test/edge-curvature-comb-browser.mjs",
+    "node <external-evidence>/mutation.mjs <external-evidence>",
+    "cd apps/cad-studio && pnpm exec vite build --outDir <external-evidence>/build",
+    "D1267_SOURCE_FROZEN=1 node apps/cad-studio/test/edge-curvature-comb-browser.mjs <external-evidence>/studio-final",
+    "git diff --check"
+  ],
+  "checks": {
+    "actualDesktopStudio": "PASS",
+    "localStdioMcp": "PASS",
+    "visualReview": "PASS",
+    "independentGeometry": "PASS",
+    "modelTypes": "PASS",
+    "studioTypes": "PASS",
+    "focusedLint": "PASS",
+    "toolDocumentation": "PASS",
+    "driverSyntax": "PASS",
+    "studioProductionBuild": "PASS",
+    "independentReviews": {
+      "status": "PASS",
+      "reviews": 2
+    },
+    "modelFocused": {
+      "status": "PASS",
+      "passed": 13,
+      "failed": 0
+    },
+    "mutation": {
+      "status": "PASS",
+      "unmodifiedExit": 0,
+      "reversedVectorExit": 1,
+      "includeKnotExit": 1
+    },
+    "intermediate": {
+      "status": "FAIL",
+      "resolved": true,
+      "checks": [
+        "projection oracle on replacement",
+        "tool inventory coverage",
+        "Model test fixture chat state type"
+      ]
+    },
+    "fullSuites": "NOT_RUN",
+    "ci": "NOT_RUN",
+    "mobile": "NOT_RUN",
+    "paidLive": "NOT_RUN",
+    "separateWebGL2": "NOT_RUN",
+    "zoomOrbit": "NOT_RUN",
+    "injectedLateReplies": "NOT_RUN"
+  },
+  "agentObservations": [
+    {
+      "label": "capsule-agent",
+      "mcpExited": true,
+      "fileSHA256": "0fb55fbae1ca2ce8295f2a655d2ce94f23a832970ecca488081d9e9e16bc08a5",
+      "fileUnchanged": true
+    },
+    {
+      "label": "taller-capsule-agent",
+      "mcpExited": true,
+      "fileSHA256": "285d5587f6eb704177ec7d6ca64b2f0650f4874e9f0bee58e5c547c7671148b9",
+      "fileUnchanged": true
+    }
+  ],
+  "geometry": {
+    "capsule": {
+      "status": "PASS",
+      "radiusMM": 4,
+      "lineCurvature": 0,
+      "arcCurvature": 0.25,
+      "arcSamples": 16,
+      "maximumVectorErrorPerMM": 4.107582639188552e-16,
+      "maximumRenderResidualPx": 4.687428401686771e-13,
+      "displayScalesMM2": [
+        4,
+        8
+      ],
+      "oracleSHA256": "3e243b3618eaea198bb15a57d05d1ff10ef70ac9ac8f80532996f61bb43be323"
+    },
+    "taller-capsule": {
+      "status": "PASS",
+      "radiusMM": 4,
+      "lineCurvature": 0,
+      "arcCurvature": 0.25,
+      "arcSamples": 16,
+      "maximumVectorErrorPerMM": 4.1004107616799284e-16,
+      "maximumRenderResidualPx": 2.5421149729252077e-13,
+      "displayScalesMM2": [
+        4
+      ],
+      "oracleSHA256": "c10cf3385c36669c19cae32782c47794e40ae06ab8d8ee0028c26da90afa358b"
+    }
+  },
+  "receipts": {
+    "firstStudioSHA256": "312cd25fa27a51937907efd44ce77a62ed90cc528e0271b8994246dc13cb0541",
+    "finalStudioSHA256": "7665b9e957267437a5e6dbe39b82f1a05c9bbbff74c88139c1fac53753577df6",
+    "unchangedPinnedFiles": 905,
+    "screenshotsSHA256": {
+      "straight": "3936c5e4463dc9171e9aa00ee42a54158648c9bcb39cd593df521ffc4b1557d4",
+      "arc-comb": "0b4c4df72b89fdcb98c8e5cb3bf3392e6782df3243e7f6cc756597a105c248ac",
+      "replacement-comb": "636cfe427f2f287661196121151a63b9674db243eafb1d1004090596e5c3b767"
+    }
+  },
+  "issues": {
+    "537": "OPEN",
+    "2043": "OPEN"
+  }
+}

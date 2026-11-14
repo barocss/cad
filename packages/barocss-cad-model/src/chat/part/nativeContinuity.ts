@@ -16,6 +16,17 @@ export const NATIVE_CONTINUITY_HANDLERS: Record<string, PartHandler> = {
     return readResult(state, { body, revision: revisionOf(state, body), edges: result.edges }, 'Read native joints');
   },
 
+  measure_edge_curvature: async (state, { body: value, edgeId, expectedRevision }) => {
+    const body = bodyKey(value);
+    if (!body) return fail(state, 'Use a base body key from query.summary.');
+    if (typeof edgeId !== 'string' || !edgeId.trim()) return fail(state, 'Use a native edge ID from query.native_joints.');
+    const revision = revisionOf(state, body);
+    if (expectedRevision !== revision) return fail(state, 'The model or base body changed. Run query.native_joints again.');
+    const result = readEdgeContinuity(state.doc, body, { kind: 'curve', edgeId });
+    if ('error' in result) return fail(state, result.error);
+    return readResult(state, { body, revision, ...result.curve }, 'Measured native curve curvature');
+  },
+
   measure_edge_continuity: async (state, { body: value, edgeId, expectedRevision, curvature }) => {
     const body = bodyKey(value);
     if (!body) return fail(state, 'Use a base body key from query.summary.');

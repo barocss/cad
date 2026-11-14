@@ -50,6 +50,9 @@ import { useInterferenceCheck } from './state/useInterferenceCheck';
 import { measureQuantityText } from './ui/quantityText';
 import { SelectionInspector } from './ui/SelectionInspector';
 import { EdgeContinuity } from './ui/EdgeContinuity';
+import { EdgeCurvature } from './ui/EdgeCurvature';
+import { useEdgeCurvature } from './app/useEdgeCurvature';
+import type { ContinuityRequest } from '@barocss/cad-model/engine/edgeContinuity';
 import { continuitySelection } from './app/edgeContinuitySelection';
 import { MeshFileDialogs } from './files/MeshFileDialogs';
 import { useRouteBundleEditor } from './state/useRouteBundleEditor';
@@ -3042,7 +3045,20 @@ export function App() {
     && !drawing && !rendering && !section && !inPlace && !active && !bodyDrag && !ghost && !workingComparison
     && !routePanelOpen && !halvesShownRef.current && viewBodies === drawnBodies && sameMeshes(drawnBodies, bodies)
     ? continuitySelection(selection, bodies) : null;
-  const continuityOpen = openIntent.current;
+  const continuityOpen = openIntent.current, continuityKey = continuityPick?.body.key;
+  const readContinuity = async (input: ContinuityRequest) => {
+    const current = () => continuityOpen === openIntent.current && ownsEvaluatedSource() && shownDocNow.current === doc;
+    const unavailable = { error: 'The source changed. Select the edge again.' };
+    if (!continuityKey || !current()) return unavailable;
+    const reply = await engine.edgeContinuity(evaluated, continuityKey, input);
+    return current() ? reply : unavailable;
+  };
+  const curvaturePick = continuityPick?.picked && !lookOf(doc, continuityPick.body).hidden &&
+    !printEnabled && !camEnabled && !measure && !directSel.length && !instanceSel.length && !isolatedInstances && !stepsDisp?.opaque &&
+    !assembly.draft && !sketch && !cageEd.session && !skel.session && !inPlace && editNode === null ? continuityPick.picked : undefined;
+  const curvatureOwner = useMemo(() => curvaturePick ? {} : null,
+    [evaluated, docGeneration, workerSession, curvaturePick, continuityKey, continuityOpen]);
+  const curvature = useEdgeCurvature(curvatureOwner, curvaturePick, readContinuity);
   const { clearanceReason, clearanceDisplay, clearanceLabels } = useClearancePreview({
     model: { doc, bodies, marker, fresh, instanceBodies, instanceSources }, editing: { rendering, drawing, sketch, active, previewBodies, ghost, assembly, cageEd, skel },
     display: { viewAnalysis, scalarMaps, mouldShown, directShown, section, instancePreview },
@@ -3383,13 +3399,8 @@ export function App() {
         {continuityPick && !lookOf(doc, continuityPick.body).hidden && <EdgeContinuity
           key={JSON.stringify([docGeneration, workerSession, continuityPick.body.key, continuityPick.edge, continuityPick.picked])}
           picked={continuityPick.picked} source={evaluated}
-          read={async input => {
-            const current = () => continuityOpen === openIntent.current && ownsEvaluatedSource() && shownDocNow.current === doc;
-            const unavailable = { error: 'The source changed. Select the edge again.' };
-            if (!current()) return unavailable;
-            const reply = await engine.edgeContinuity(evaluated, continuityPick.body.key, input);
-            return current() ? reply : unavailable;
-          }} />}
+          read={readContinuity} />}
+        {curvaturePick && <EdgeCurvature {...curvature} />}
         {editNode !== null && <NodeEditor alignPreview={historyAlign} readAlignTargets={doc.nodes[editNode]?.kind === 'align' ? readAlignHistoryTargets : undefined} edgeReplacement={finishEdgeEditor.available ? {
           start: finishEdgeEditor.start, cancel: finishEdgeEditor.cancel, apply: finishEdgeEditor.apply,
           draft: finishEdgeEditor.current,
@@ -3599,7 +3610,7 @@ export function App() {
         bandRailPicking={!active && !finishEdgePicking && !section && !measure && !assembly.draft}
         onDisplayModeStatus={onDisplayModeStatus} onBackend={setViewBackend}
         modelUnavailable={modelUnavailable} bodies={cageInputActive ? cageEd.shown(shownBodies) : viewBodies} selection={cageInputActive ? emptySel : shownSelection}
-        ghost={sketchGhost} sketch={sketch} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
+        ghost={sketchGhost} sketch={sketch} curvatureComb={curvature.overlay} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
         gizmo={cageInputActive ? cageEd.gizmo : routeGizmo ?? gizmo ?? instGizmo ?? poleGizmo} cage={cageInputActive ? cageEd.overlay : null} onPickCage={cageInputActive ? cageEd.onPick : undefined} tool={skel.tool}
         handles={sectionDrag.length ? sectionDrag : handles} instancePreview={instancePreview} contactLinks={contactShown && motionContact ? motionContact.links : undefined}
         render={rendering ? render : null} analysis={rendering ? null : viewAnalysis}

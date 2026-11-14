@@ -1,3 +1,5 @@
+import { CurvatureComb } from './CurvatureComb';
+import type { CurvatureOverlay } from '../app/useEdgeCurvature';
 import type { MarkHandlers } from '../ui/SketchMarks';
 import type { ScreenBox } from '../ui/sketchConstraintMarkLayout';
 import { viewportRecoveryHost, type ViewportRecoveryNotice } from './viewportRecovery';
@@ -91,6 +93,7 @@ const NO_CONSTRAINT_INSPECTION = createConstraintInspection();
 
 interface Props extends ViewportPointerProps, MarkHandlers {
   modelUnavailable?: boolean;
+  curvatureComb?: CurvatureOverlay | null;
   constraintInspection?: ConstraintInspectionStore;
   overlaidLine?: OverlaidLine;
   /** G23 CNC: the preview's stock, paths, remaining stock and tool (world coordinates), beside the native bodies. */
@@ -925,6 +928,8 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     const c = canvas.current; if (!c) return null;
     const w = c.clientWidth, h = c.clientHeight; const cam = camera.current;
     const items: React.ReactNode[] = [];
+    if (props.curvatureComb && !props.modelUnavailable)
+      items.push(<CurvatureComb key="curvature-comb" overlay={props.curvatureComb} project={point => cam.project(point, w, h)} />);
     const sk = props.sketch;
     const workArea = sk?.editDim ? modelFitArea(c) : undefined;
     const dimensionArea = sk?.editDim ? workArea ? {

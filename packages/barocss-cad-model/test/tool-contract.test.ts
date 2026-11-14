@@ -99,7 +99,13 @@ test('every read tool’s result matches its output schema and changes nothing',
     action: 'edge_continuity', body: 'b1', expectedRevision: listed.revision, edgeId: listed.edges[0].id,
   }, evaluate);
   assert.ok(!angles.isError && !angles.changed, angles.content);
-  for (const [name, result] of [['list_native_joints', listed], ['measure_edge_continuity', JSON.parse(angles.content)]]) {
+  const curvature = await dispatchTool(jointState, 'query', {
+    action: 'edge_curvature', body: 'b1', expectedRevision: listed.revision, edgeId: listed.edges[0].id,
+  }, evaluate);
+  assert.ok(!curvature.isError && !curvature.changed, curvature.content);
+  assert.equal(curvature.state.doc, jointState.doc);
+  for (const [name, result] of [['list_native_joints', listed], ['measure_edge_continuity', JSON.parse(angles.content)],
+    ['measure_edge_curvature', JSON.parse(curvature.content)]]) {
     assert.deepEqual(validate(outputSchemaOf(name)!, result), [], name);
     seen.add(name);
   }

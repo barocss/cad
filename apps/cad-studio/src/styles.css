@@ -78,6 +78,7 @@ button { font: inherit; color: inherit; }
 .viewport { position: absolute; inset: 0; }
 .vp-canvas { width: 100%; height: 100%; display: block; cursor: default; touch-action: none; }
 .vp-overlay { position: absolute; inset: 0; pointer-events: none; }
+.curvature-comb { fill: none; stroke: var(--accent); stroke-width: 1.5; }
 .vp-overlay.pmi .pmi-text { fill: #2185db; font: 12px var(--mono, ui-monospace, monospace); paint-order: stroke; stroke: var(--bg, #fff); stroke-width: 3px; }
 .vp-overlay.pmi .pmi-text.sel { fill: #ff941f; }
 /* The view cube: top right of the viewport, left of the properties column. */

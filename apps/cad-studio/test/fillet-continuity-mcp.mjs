@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { sha256 } from './flow-helper.mjs';
 
-async function withMcp(flow, doc, label, run) {
+export async function withMcp(flow, doc, label, run) {
   const path = join(flow.output, label + '.bcad');
   const bytes = JSON.stringify(doc);
   await writeFile(path, bytes, { flag: 'wx' });

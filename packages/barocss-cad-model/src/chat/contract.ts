@@ -27,10 +27,17 @@ const footprint = o({ widthMm: num, depthMm: num }, ['widthMm', 'depthMm']);
 const drawingRead = { revision: str, sheet: num, sheetName: str, scope: obj, unit: { type: 'string', const: 'mm' }, printUnit: { type: 'string', enum: ['mm', 'inch'] } };
 const drawingReadRequired = Object.keys(drawingRead);
 const nativeJointRead = { body: str, revision: str };
+const nativePoint = { type: 'array', items: num, minItems: 3, maxItems: 3 };
+const curveSample = o({ parameter: num, magnitude: num, point: nativePoint, vector: nativePoint },
+  ['parameter', 'magnitude', 'point', 'vector']);
 const READ: Record<string, JsonSchema | null> = {
   list_native_joints: o({ ...nativeJointRead,
     edges: { type: 'array', items: o({ id: str, name: str, faces: { type: 'array', items: str, minItems: 2, maxItems: 2 } }, ['id', 'name', 'faces']) },
   }, ['body', 'revision', 'edges']),
+  measure_edge_curvature: o({
+    ...nativeJointRead, edgeId: str, edgeName: str, unit: { type: 'string', const: '1/mm' }, minimum: num, maximum: num,
+    spans: { type: 'array', items: { type: 'array', items: curveSample } },
+  }, ['body', 'revision', 'edgeId', 'edgeName', 'unit', 'minimum', 'maximum', 'spans']),
   measure_edge_continuity: o({ ...nativeJointRead, unit: { type: 'string', const: 'degrees' },
     status: { type: 'string', const: 'measured' }, edgeId: str, edgeName: str,
     faces: { type: 'array', items: o({ id: str, name: str }, ['id']), minItems: 2, maxItems: 2 },

@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1267 — Display a native edge curvature comb](notes/native-edge-curvature-comb-2026-11-14/README.md).
 - [D1266 — Control a variable fillet radius inside a straight edge](notes/fillet-interior-station-2026-11-14/README.md).
 - [D1265 — Offset a solid face to a reference plane](notes/offset-to-reference-plane-2026-11-14/README.md).
 - [D1264 — Offset an oblique wall of a convex hexagonal prism](notes/offset-hexagonal-wall-2026-11-14/README.md).
