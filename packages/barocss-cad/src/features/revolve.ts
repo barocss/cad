@@ -60,11 +60,13 @@ function profileLoops(input: RevolveInput): readonly (readonly ProfileSegment[])
 }
 
 /** Assemble the outer and bore walls directly. A partial turn shares each bore edge with a cap inner loop. */
-function revolveHollow(input: RevolveInput): Brep {
+function revolveHollow(input: RevolveInput, clearance?: SweepClearance): Brep {
   profileLoops(input);
   const id = input.id ?? 'revolve', full = input.angle === 360;
-  const outer = revolveProfile({ ...input, holes: undefined, holeTags: undefined });
-  const bores = input.holes!.map((profile, i) => revolveProfile({ ...input, id: `${id}_hole${i}`, profile, sideTags: input.holeTags?.[i], holes: undefined, holeTags: undefined }));
+  const outer = revolveOuterProfile({ ...input, holes: undefined, holeTags: undefined }, clearance);
+  const bores = input.holes!.map((profile, i) => revolveOuterProfile({
+    ...input, id: `${id}_hole${i}`, profile, sideTags: input.holeTags?.[i], holes: undefined, holeTags: undefined,
+  }, clearance));
   const reverse = (sense: 'forward' | 'reversed'): 'forward' | 'reversed' => sense === 'forward' ? 'reversed' : 'forward';
   const faceInputs = (b: Brep, inward: boolean): BrepFaceInput[] => {
     const loops = new Map(b.loops.map(l => [l.id, l])), coedges = new Map(b.coedges.map(c => [c.id, c]));
@@ -126,7 +128,7 @@ interface SweepClearance {
 
 /** Revolve a Sweep section while keeping every point strictly on the outward side of the axis. */
 export function revolveSweepProfile(input: RevolveInput, clearance: SweepClearance): Brep {
-  return revolveOuterProfile(input, clearance);
+  return input.holes?.length ? revolveHollow(input, clearance) : revolveOuterProfile(input, clearance);
 }
 
 function revolveOuterProfile(input: RevolveInput, clearance?: SweepClearance): Brep {

@@ -163,6 +163,7 @@ await f.run(async () => {
   const representation = await chooseSweep();
   await representation.selectOption('exact');
   await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
+  await hud().getByText(/outside the exact Sweep range|circular arc from 30° to 90°/i).first().waitFor();
   assert.equal(await button('Apply', hud()).isDisabled(), true);
   assert.deepEqual(await f.doc(), seed);
   await f.snapshot('arc-mode-refused');

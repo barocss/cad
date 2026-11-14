@@ -44,7 +44,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   revolve: { selection: 'none: the newest finished sketch no feature uses yet', values: { axis: 'y | x: the sketch axis to turn about', deg: 'angle, up to 360', op: 'join | new | cut (sketch on a body face)' } },
   pipe: { selection: 'none: the newest finished sketch no feature uses yet', values: { h: 'straight run before and after the bend', bend: 'bend radius', bendAngle: 'bend angle', toward: 'x | -x | y | -y', op: 'join | new | cut (sketch on a body face)' } },
   'sweep-curve': { selection: 'none: provide the sketch and Direct curve IDs from query.summary', values: {
-    sketch: 'stable ID of a finished sketch with one closed outline of lines and circular arcs. Exact-straight permits one strictly interior circular hole. Exact needs an outline without holes that clears the bend axis.',
+    sketch: 'stable ID of a finished sketch with one closed line-and-arc outline and up to one strictly interior circular hole. An arc Sweep also needs clearance from the bend axis.',
     path: 'stable ID of one visible Direct curve; its current path is copied',
     pathRevision: 'revision of that curve from query.summary; changed geometry requires a new proposal',
     representation: 'required: exact-straight for one straight segment, or exact for one 30°–90° circular arc. The path starts at the outer profile’s area centroid. Creates a new body.',

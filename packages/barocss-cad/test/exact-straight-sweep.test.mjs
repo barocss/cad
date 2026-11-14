@@ -310,5 +310,5 @@ test('exact straight Sweep refuses inexact or unsupported hole topology', () => 
     'CAPABILITY', /at most one circular hole/);
   refuse({ ...base, sideTags: undefined, regions: [circularHole(1, [30, 30])] },
     'CAPABILITY', /without separate regions/);
-  refuse(base, 'CAPABILITY', /one outer profile without holes/, 'exact');
+  refuse(base, 'CAPABILITY', /one open circular arc/, 'exact');
 });

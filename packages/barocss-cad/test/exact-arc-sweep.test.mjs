@@ -170,13 +170,19 @@ test('exact sweep refuses unsupported paths and section topology and keeps omitt
   refused(document(path, { ...sketch, radius: R }), 'PARAMETER', /path radius larger/);
   refused(document(path, { ...sketch, radius: R + 1 }), 'PARAMETER', /path radius larger/);
   const holed = { ...sketch, center: [0, 0], holes: [[{ kind: 'arc', start: [1, 0], center: [0, 0], direction: 'ccw' }]] };
-  refused(document(path, holed), 'CAPABILITY', /one outer profile without holes/);
+  const annulus = evaluateCadPart(document(path, holed)).outputs[0];
+  const plain = evaluateCadPart(document(path, { ...holed, holes: [] })).outputs[0];
+  assert.equal(checkOutput(annulus).valid, true);
+  assert.equal(checkOutput(annulus).topology[0].genus, 1);
+  near(massPropertiesOf(annulus).volume, (r * r - 1) * R * Math.PI ** 2 / 2);
+  assert.deepEqual(annulus.brep.faces.filter(face => /^w\.side[01]$/.test(face.name)).map(face => face.surface),
+    plain.brep.faces.filter(face => /^w\.side[01]$/.test(face.name)).map(face => face.surface));
   const rectangle = { id: 's', kind: 'sketch', profile: 'rectangle', min: [-1, -1], max: [1, 1] };
   const result = evaluateCadPart(document(path, rectangle)).outputs[0];
   assert.equal(checkOutput(result).valid, true);
   near(massPropertiesOf(result).volume, 4 * R * Math.PI / 2);
   refused(document(path, { ...rectangle, regions: [[{ kind: 'arc', start: [6, 0], center: [5, 0], direction: 'ccw' }]] }),
-    'CAPABILITY', /without holes or separate regions/);
+    'CAPABILITY', /without separate regions/);
   refused(document(path, sketch, 'other'), 'INPUT', /sweep mode must be/);
   for (const legacy of [document(path, sketch, null), document(line, holed, null)]) {
     const output = evaluateCadPart(legacy).outputs[0];
@@ -327,4 +333,119 @@ test('mixed exact circular-arc Sweep rejects a wall or an interior arc extremum 
     assert.equal(check.valid, true, check.issues.join('\n'));
     assert.equal(check.counts.faces, 6);
   }
+});
+
+const holeLoop = (radius, [x, y] = [8, 7], direction = 'cw') =>
+  [{ kind: 'arc', start: [x + radius, y], center: [x, y], direction }];
+const holedSection = (radius, dir = 'cw') => {
+  const profile = dSection(2);
+  return { ...profile, holes: [holeLoop(radius, [8, 7], dir)],
+    sideTags: { ...profile.sideTags, holes: [['bore']] } };
+};
+
+function checkBore(output, holeRadius, reversed) {
+  const { brep } = output, check = checkOutput(output);
+  assert.equal(check.valid, true, check.issues.join('\n'));
+  assert.deepEqual(check.counts, { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 });
+  assert.equal(check.topology[0].genus, 1);
+  assert.equal(brep.shells[0].closed, true);
+  assert.ok(check.maximumEdgeSurfaceGap <= tolerance);
+  assert.deepEqual(brep.source, { family: 'sweep-curve', id: 'w' });
+
+  const { area, x, variance } = dMoments(2), cutArea = Math.PI * holeRadius ** 2, boreMajor = R + 8 - x;
+  const weightedArea = R * area - boreMajor * cutArea, expected = Math.PI / 2 * weightedArea;
+  // Integrate the second radial moment and the first axial moment of the rectangle, semicircle and removed disk.
+  const radial = (area * (R * R + variance) - cutArea * (boreMajor ** 2 + holeRadius ** 2 / 4)) * 2 / (Math.PI * weightedArea);
+  const boreAxial = reversed ? -1 : 1;
+  const centroid = add(bendCentre, [radial, radial, -boreAxial * cutArea * boreMajor / weightedArea]);
+  for (const [mass, method] of [[massPropertiesOf(output), 'closed-form'], [brepMassProperties(brep, 1), 'quadrature']]) {
+    assert.equal(mass.method, method);
+    near(mass.volume, expected);
+    pointNear(mass.centroid, centroid);
+  }
+
+  const faceById = new Map(brep.faces.map(face => [face.id, face]));
+  const loopById = new Map(brep.loops.map(loop => [loop.id, loop]));
+  const useById = new Map(brep.coedges.map(use => [use.id, use]));
+  const edgeById = new Map(brep.edges.map(edge => [edge.id, edge]));
+  const boreFaces = brep.faces.filter(face => face.name.includes('.side[bore]'));
+  assert.deepEqual(boreFaces.map(face => face.name).sort(), ['w.side[bore]#1', 'w.side[bore]#2']);
+  const boreOffset = [13, -7, 4 + boreAxial];
+  const outerRings = new Set();
+  const loopOwners = [[reversed ? 'w.end' : 'w.start', [1, 0, 0], [0, -1, 0]],
+    [reversed ? 'w.start' : 'w.end', [0, 1, 0], [-1, 0, 0]]];
+  for (const [capName, radial, normal] of loopOwners) {
+    const cap = brep.faces.find(face => face.name === capName);
+    assert.deepEqual([cap.surface.degreeU, cap.surface.degreeV], [1, 1]);
+    pointNear(surfacePoint(cap, 0.5, 0.5).normal, normal);
+    assert.deepEqual(cap.loops.map(id => loopById.get(id).kind), ['outer', 'inner']);
+    const inner = loopById.get(cap.loops[1]), boreCentre = add(boreOffset, scale(radial, boreMajor));
+    assert.equal(inner.coedges.length, 2);
+    for (const id of inner.coedges) {
+      const use = useById.get(id), twin = useById.get(use.twin), edge = edgeById.get(use.edge);
+      assert.ok(boreFaces.includes(faceById.get(loopById.get(twin.loop).face)));
+      assert.equal(twin.twin, id);
+      assert.notEqual(twin.sense, use.sense);
+      assert.equal(edge.curve.degree, 2);
+      outerRings.add(edge.id);
+      for (const t of parameters) {
+        const delta = sub(evaluateCurve(edge.curve, t), boreCentre);
+        near(dot(delta, normal), 0);
+        near(Math.hypot(...delta), holeRadius);
+      }
+    }
+  }
+  for (const face of boreFaces) {
+    assert.deepEqual([face.surface.degreeU, face.surface.degreeV], [2, 2]);
+    for (const u of [0.125, 0.5, 0.875]) for (const v of [0.125, 0.375, 0.625, 0.875]) {
+      const { point, normal } = surfacePoint(face, u, v), delta = sub(point, boreOffset);
+      const planar = [delta[0], delta[1], 0], q = sub(delta, scale(unit(planar), boreMajor));
+      near(Math.hypot(...q), holeRadius);
+      pointNear(normal, scale(q, -1 / holeRadius));
+    }
+    const boundary = loopById.get(face.loops[0]).coedges.map(id => useById.get(id));
+    const seams = boundary.filter(use => !outerRings.has(use.edge));
+    assert.equal(seams.length, 2);
+    for (const seam of seams) {
+      const attached = useById.get(seam.twin);
+      assert.ok(boreFaces.includes(faceById.get(loopById.get(attached.loop).face)));
+      const edge = edgeById.get(seam.edge);
+      for (const t of parameters) {
+        const p = evaluateCurve(edge.curve, t);
+        for (const neighbor of [face, faceById.get(loopById.get(attached.loop).face)])
+          assert.ok([0, 1].some(v => distance(surfacePoint(neighbor, t, v).point, p) <= tolerance));
+      }
+    }
+  }
+}
+
+test('one offset circular bore travels with the outer area centroid and keeps both cap trims', () => {
+  const rail = quarterRail(R);
+  const first = evaluateCadPart(document(rail, holedSection(1)));
+  checkBore(first.outputs[0], 1, false);
+  const edited = reevaluate(first, { document: document(rail, holedSection(1.5)) });
+  checkBore(edited.outputs[0], 1.5, false);
+  const outerFaces = snapshot => snapshot.outputs[0].brep.faces.filter(face => !face.name.includes('.side[bore]')).map(face => [face.name, face.surface]);
+  assert.deepEqual(outerFaces(first), outerFaces(edited));
+  const reopened = loadCadPart(saveCadPart(edited));
+  assert.deepEqual(reopened.document, edited.document);
+  assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
+  const reverse = { ...rail, controlPoints: rail.controlPoints.toReversed() };
+  checkBore(evaluateCadPart(document(reverse, holedSection(1, 'ccw'))).outputs[0], 1, true);
+});
+
+test('a circular-arc Sweep refuses tangent bores, additional loops and insufficient bend-axis clearance', () => {
+  const profile = holedSection(1), rail = quarterRail(R);
+  const refused = (doc, code, match) => assert.throws(() => evaluateCadPart(doc), error =>
+    error instanceof CadPartError && error.feature === 'w' && error.code === code && match.test(error.message));
+  for (const hole of [holeLoop(1, [8, 4]), holeLoop(1, [8, 4 + 1e-8]), holeLoop(1, [8, 3.5]),
+    holeLoop(1, [-1, 8]), holeLoop(1, [16, 8])])
+    refused(document(rail, { ...profile, holes: [hole] }), 'GEOMETRY', /circular-arc sweep hole must lie strictly inside/);
+  refused(document(rail, { ...profile, holes: [holeLoop(0.009)] }), 'PARAMETER', /hole radius of at least 0.01/);
+  const untagged = { ...profile, sideTags: undefined };
+  refused(document(rail, { ...untagged, holes: [holeLoop(1), holeLoop(1, [6, 9])] }), 'CAPABILITY', /at most one circular hole/);
+  const polygon = [[5, 6], [6, 6], [6, 7], [5, 7]].map(start => ({ kind: 'line', start }));
+  refused(document(rail, { ...untagged, holes: [polygon] }), 'CAPABILITY', /at most one circular hole/);
+  const tight = quarterRail(dMoments(2).x - 2);
+  refused(document(tight, profile), 'PARAMETER', /profile must stay clear of the bend axis/);
 });

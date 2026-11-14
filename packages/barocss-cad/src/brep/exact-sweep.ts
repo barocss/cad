@@ -33,36 +33,50 @@ const sectionRing = (segments: readonly ProfileSegment[]): CurveSegment2[] => se
   ? { kind: 'line', a: s.start, b: s.end }
   : { kind: 'arc', c: s.center, r: s.radius, t0: s.startAngle, sweep: s.sweep });
 
+const holeError = (style: string, refuse: Refuse) => () =>
+  refuse('GEOMETRY', `The exact ${style} sweep hole must lie strictly inside the outer profile, with clearance.`);
+
+function circularHole(holes: NonNullable<ExactSweepInput['holes']>, style: string, refuse: Refuse): Circle | undefined {
+  const hole = holes.length === 1 ? circleOf(holes[0]) : undefined;
+  if (holes.length > 1 || (holes.length === 1 && !hole))
+    return refuse('CAPABILITY', `Exact ${style} sweep accepts at most one circular hole.`);
+  if (hole && circleRadius(hole) < ExtrudedProfileLimits.minimumRadiusMM)
+    return refuse('PARAMETER', `Exact ${style} sweep needs a hole radius of at least ${ExtrudedProfileLimits.minimumRadiusMM} mm.`);
+  return hole;
+}
+
+function checkHoleClearance(ring: readonly CurveSegment2[], tolerance: number, hole: Circle, noClearance: () => never): void {
+  const radius = circleRadius(hole);
+  // An inside centre with clearance greater than the radius keeps the whole disk inside.
+  if (locateInRegion(hole.center, { outer: ring, holes: [] }, tolerance) !== 'in'
+    || ring.some(s => segDistance(s, hole.center) <= radius + tolerance)) noClearance();
+}
+
+function centredHole(disk: Circle, hole: Circle, noClearance: () => never): Circle {
+  // Keep the existing disk's seam on local +X. Translate the hole by the same centre.
+  const shift = (p: XY): XY => [p[0] - disk.center[0], p[1] - disk.center[1]];
+  const radius = circleRadius(disk), center = shift(hole.center);
+  if (Math.hypot(...center) + circleRadius(hole) + linearToleranceMM(radius) >= radius) return noClearance();
+  return { ...hole, start: shift(hole.start), center };
+}
+
 function straightSection(outer: ExactSweepInput['outer'], holes: NonNullable<ExactSweepInput['holes']>,
   disk: Circle | undefined, refuse: Refuse): { outer: ExactSweepInput['outer']; holes: NonNullable<ExactSweepInput['holes']>; anchor: XY } {
-  const hole = holes.length === 1 ? circleOf(holes[0]) : undefined;
-  if (holes.length > 1 || (holes.length === 1 && !hole)) return refuse('CAPABILITY', 'Exact straight sweep accepts at most one circular hole.');
-  const r = hole ? circleRadius(hole) : 0;
-  if (hole && r < ExtrudedProfileLimits.minimumRadiusMM)
-    return refuse('PARAMETER', `Exact straight sweep needs a hole radius of at least ${ExtrudedProfileLimits.minimumRadiusMM} mm.`);
-  const noClearance = () => refuse('GEOMETRY', 'The exact straight sweep hole must lie strictly inside the outer profile, with clearance.');
+  const hole = circularHole(holes, 'straight', refuse);
   if (disk) {
-    const radius = circleRadius(disk), profile = [originDisk(radius)];
-    if (!hole) return { outer: profile, holes: [], anchor: [0, 0] };
-    // Keep the existing disk's seam on local +X. Translate the hole by the same centre.
-    const shift = (p: XY): XY => [p[0] - disk.center[0], p[1] - disk.center[1]];
-    const center = shift(hole.center);
-    if (Math.hypot(...center) + r + linearToleranceMM(radius) >= radius) return noClearance();
-    return { outer: profile, holes: [[{ ...hole, start: shift(hole.start), center }]], anchor: [0, 0] };
+    const inner = hole ? [[centredHole(disk, hole, holeError('straight', refuse))]] : [];
+    return { outer: [originDisk(circleRadius(disk))], holes: inner, anchor: [0, 0] };
   }
 
   const { centroid, segments } = buildProfileLoop(outer, { maximumSegments: 1024 });
   if (hole) {
     const ring = sectionRing(segments);
-    const tolerance = curveTolerance([ring]);
-    // An inside centre with clearance greater than the radius keeps the whole disk inside.
-    if (locateInRegion(hole.center, { outer: ring, holes: [] }, tolerance) !== 'in'
-      || ring.some(s => segDistance(s, hole.center) <= r + tolerance)) return noClearance();
+    checkHoleClearance(ring, curveTolerance([ring]), hole, holeError('straight', refuse));
   }
   return { outer, holes, anchor: centroid };
 }
 
-function arcSectionAnchor(outer: ExactSweepInput['outer'], refuse: Refuse): XY {
+function arcSectionAnchor(outer: ExactSweepInput['outer'], hole: Circle | undefined, refuse: Refuse): XY {
   const { centroid, segments } = buildProfileLoop(outer, { maximumSegments: 1024 });
   const ring = sectionRing(segments), tolerance = curveTolerance([ring]);
   // Only the authored join of adjacent segments may meet. The native intersection also checks arcs between chord samples.
@@ -73,6 +87,7 @@ function arcSectionAnchor(outer: ExactSweepInput['outer'], refuse: Refuse): XY {
       && !(i === 0 && j === ring.length - 1 && atJoin(p, segments[0].start))))
       return refuse('GEOMETRY', 'The exact circular-arc sweep needs a simple outer profile.');
   }
+  if (hole) checkHoleClearance(ring, tolerance, hole, holeError('circular-arc', refuse));
   return centroid;
 }
 
@@ -138,7 +153,6 @@ function straightSpan(path: Curve, refuse: Refuse) {
 export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
   const { id, mode, outer, holes = [], path, xAxis, yAxis, sideTags } = input;
   const disk = circleOf(outer), profileRadius = disk && circleRadius(disk);
-  if (mode === 'exact' && holes.length) return refuse('CAPABILITY', 'Exact circular-arc sweep needs one outer profile without holes or separate regions.');
   if (profileRadius !== undefined && profileRadius < ExtrudedProfileLimits.minimumRadiusMM)
     return refuse('PARAMETER', `Exact sweep needs a profile radius of at least ${ExtrudedProfileLimits.minimumRadiusMM} mm.`);
   // The sketch axes set the profile's roll, independent of its location in the sketch plane.
@@ -175,22 +189,25 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     return place({ brep: brepFromPrismatic(prism, { id }), mass: density => prismaticMassProperties(prism, density) }, axes, offset);
   }
 
+  const hole = circularHole(holes, 'circular-arc', refuse);
   const { start, toCentre, tangent, radius, angle, tolerance } = circularSpan(path, refuse);
   if (radius > CadNumericPolicy.coordinateAbs) return refuse('PARAMETER', 'Exact sweep path radius must be at most 10000 mm.');
   if (profileRadius !== undefined && radius - profileRadius <= tolerance)
     return refuse('PARAMETER', 'Exact sweep needs a path radius larger than the profile radius.');
   const axes = frame(tangent), [x, y] = axes;
   const [dx, dy] = [dot(toCentre, x), dot(toCentre, y)];
-  const [cx, cy] = profileRadius === undefined ? arcSectionAnchor(outer, refuse) : [0, 0];
+  const [cx, cy] = profileRadius === undefined ? arcSectionAnchor(outer, hole, refuse) : [0, 0];
+  const inner = hole && disk ? centredHole(disk, hole, holeError('circular-arc', refuse)) : hole;
   const revolve: RevolveInput = {
     id,
     profile: profileRadius === undefined ? outer : [originDisk(profileRadius)],
     axis: { origin: profileRadius === undefined ? [cx + dx, cy + dy] : [dx, dy], direction: [-dy, dx] },
     angle: angle * 180 / Math.PI,
     ...(sideTags ? { sideTags: sideTags.outer } : {}),
+    ...(inner ? { holes: [[inner]], holeTags: sideTags?.holes } : {}),
   };
   // Revolve departs towards local +Z. The directed tangent maps it into the selected arc's direction.
-  const brep = profileRadius === undefined ? revolveSweepProfile(revolve, {
+  const brep = profileRadius === undefined || inner ? revolveSweepProfile(revolve, {
     minimum: tolerance,
     refuse: () => refuse('PARAMETER', 'The exact circular-arc sweep profile must stay clear of the bend axis.'),
   }) : revolveProfile(revolve);

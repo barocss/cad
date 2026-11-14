@@ -187,7 +187,7 @@ export type CadPartFeature = Base & (
    * The sketch's profile swept along a curve (any NURBS path in mm): its middle starts on the path's
    * start, square to it, carried along without twisting; the ends capped; holes run through. Faceted by
    * default. The `exact` mode sweeps one closed line-and-arc outline along one circular arc from 30° to 90°.
-   * The outline must clear the bend axis and have no holes or separate regions.
+   * The outline must clear the bend axis and may contain one strictly interior circular hole.
    * The `exact-straight` mode sweeps one closed line-and-arc profile along a single straight segment.
    * The outer profile's area centroid starts at the first path point. One interior circular hole is allowed.
    */

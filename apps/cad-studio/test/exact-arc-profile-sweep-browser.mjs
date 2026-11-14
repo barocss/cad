@@ -133,7 +133,7 @@ await f.run(async () => {
   await writeFile(file, initial, { flag: 'wx' });
   await withMcpSession({ app: f.app, output: f.output, clientName: 'barocss-arc-profile-test' }, file, 'mixed-arc-propose', async call => {
     const description = await call('describe', { command: 'sweep-curve' });
-    assert.match(description.values.sketch, /outline without holes that clears the bend axis/);
+    assert.match(description.values.sketch, /needs clearance from the bend axis/);
     const summary = await call('query', { action: 'summary' });
     const [path] = summary.direct_curves, [sketch] = summary.features;
     assert.equal(sketch.id, 'n0');

@@ -17,7 +17,7 @@ function profileSweep(back: number, reverse = false): CadPartDocument {
       { kind: 'line', start: [back, 13] },
     ], sideTags: { outer: ['west', 'halfRound', 'east', 'inboard'] } },
     { id: 'branch', kind: 'sweep-curve', sketch: 's', mode: 'exact',
-      path: { degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: reverse ? corners.toReversed() : corners, weights: [1, Math.SQRT1_2, 1] } }],
+      path: { degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: reverse ? [...corners].reverse() : corners, weights: [1, Math.SQRT1_2, 1] } }],
   };
 }
 
