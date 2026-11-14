@@ -70,9 +70,12 @@ export interface DisplayMesh {
   cylinderDetail?: { baseChordErrorMM: number; tiers: readonly CylinderDisplayTier[] };
   /** Viewport rails belong to one native face and stay outside the canonical two-face edge table. */
   bandDetail?: { rails: readonly { name: string; face: number }[]; tiers: readonly CylinderDisplayTier[] };
+  /** A refined native Loft's viewport geometry with the canonical face and edge indices. */
+  loftDetail?: LoftDisplayMesh;
 }
-export type CylinderDisplayTier = Pick<DisplayMesh, 'positions' | 'normals' | 'faceOfVertex' | 'indices' | 'edgeLines' | 'edgeOfSegment'>
-  & { chordErrorMM: number };
+type DisplayBuffers = Pick<DisplayMesh, 'positions' | 'normals' | 'faceOfVertex' | 'indices' | 'edgeLines' | 'edgeOfSegment'>;
+export type CylinderDisplayTier = DisplayBuffers & { chordErrorMM: number };
+export type LoftDisplayMesh = DisplayBuffers & { error: number; bounds: DisplayMesh['bounds'] };
 
 interface Builder { p: number[]; n: number[]; f: number[]; i: number[]; faces: DisplayFace[] }
 

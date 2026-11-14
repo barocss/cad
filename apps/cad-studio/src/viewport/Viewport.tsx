@@ -12,7 +12,7 @@ import type { ModelAnnotation } from '@barocss/cad-model/drawing/annotations3d';
 import { pmiDrawings, pmiFacingKey, pmiLabels } from './pmiGeometry';
 import { printPointToModel, printSceneBounds, projectPrintBodies } from './printProjection';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
-import type { Vec3 } from '@barocss/cad-model/engine/mesh';
+import type { CylinderDisplayTier, LoftDisplayMesh, Vec3 } from '@barocss/cad-model/engine/mesh';
 import { OrbitCamera } from './camera';
 import { orthographicSketchScale } from './sketchOutlinePick';
 import { modelFitArea } from './modelFitArea';
@@ -450,8 +450,14 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
   });
   const syncDisplayedBodies = (r: ViewRenderer, p = propsRef.current) => {
     const source = p.bodies, view = canvas.current, cam = camera.current;
-    let tier = -1, index = -1, packet;
-    if (view && cam.ortho && Math.PI / 2 - cam.pitch < 0.001
+    let tier = -1, index = -1, packet: CylinderDisplayTier | LoftDisplayMesh | undefined;
+    const loft = source.length === 1 ? source[0].mesh.loftDetail : undefined;
+    if (loft && !p.render && !p.analysis && !p.scalarMaps?.length && !p.mould && !p.proposal && !p.sketch && !p.cage && !p.tool
+      && !p.clip && !p.ghost.size && !p.instances?.length && !p.offsets?.size && !p.transforms?.size && !p.printActive && !p.camActive) {
+      index = 0;
+      tier = 0;
+      packet = loft;
+    } else if (view && cam.ortho && Math.PI / 2 - cam.pitch < 0.001
       && (p.displayMode ?? 'shaded-with-edges') === 'shaded-with-edges'
       && !displayModeScope(p) && !p.clip && !p.offsets?.size && !p.transforms?.size
       && !p.instances?.length && !p.ghost.size && !p.printActive && !p.camActive) {
@@ -526,7 +532,14 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
 
   const input = useViewportPointerInput({
     canvas, camera, propsRef,
-    rendering: { renderer, rendererBodies, rendererInstances, syncDisplayedBodies, syncDirect, isBandRail: hit => !!bandRail(hit), selectBandRail, request, requestRef, moving, viewState, hover },
+    rendering: { renderer, rendererBodies, rendererInstances, syncDisplayedBodies, syncDirect, isBandRail: hit => !!bandRail(hit), selectBandRail, request, requestRef, moving, viewState, hover,
+      bodiesForMeshPicking: () => {
+        const uploaded = uploadedBodies.current, source = propsRef.current.bodies;
+        // The Loft packet uses the same index table for selection. The sheet-band packet has its own rails.
+        if (source[0]?.mesh.loftDetail && uploaded?.source === source) return uploaded.bodies;
+        return source;
+      },
+    },
     focus: { focusPick, finishFocusPick },
   });
   const { cancelGizmo } = input;
@@ -726,6 +739,15 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     w.__studioSelectedBandRail = () => bandRail(readSelectedBandRail())?.name ?? null;
     w.__studioCylinderDisplayBytes = () => propsRef.current.bodies[0]?.mesh.cylinderDetail?.tiers.map(packet =>
       packet.positions.byteLength + packet.normals.byteLength + packet.faceOfVertex.byteLength + packet.indices.byteLength + packet.edgeLines.byteLength + packet.edgeOfSegment.byteLength);
+    w.__studioLoftDisplay = () => {
+      const upload = uploadedBodies.current, original = upload?.source[0]?.mesh, current = upload?.bodies[0]?.mesh;
+      if (!original?.loftDetail || current?.positions !== original.loftDetail.positions) return null;
+      return { error: original.loftDetail.error, triangles: current.indices.length / 3, baseTriangles: original.indices.length / 3 };
+    };
+    w.__studioSurfacePoint = (point: Vec3) => {
+      const q = screen(point);
+      return renderer.current?.pickSurfacePoint?.(q[0], q[1], camera.current) ?? null;
+    };
     w.__studioEye = () => camera.current.eye();
     // (O10, for the flow: tracking on or off, and the last frame tracked in each display mode.)
     w.__studioFrameCost = (on?: boolean) => { if (on !== undefined) { frameCostOn.current = on; renderer.current?.trackFrameCost(on); requestRef.current(); } return renderer.current?.frameCosts() ?? {}; };

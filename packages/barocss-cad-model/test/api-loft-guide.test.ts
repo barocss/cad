@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { part, sketch, BarocssError, type StudioLoftOptions, type StudioPart } from '../src/api';
-import { evaluateDoc } from '../src/engine/evaluate';
+import { evaluateDoc, evaluatePreview, placeBody, shareMeshes } from '../src/engine/evaluate';
+import { MeshReceiver, MeshSender } from '../src/engine/meshWire';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { editFields } from '../src/app/editFields';
 import { confirmDimension } from '../src/chat/drafts';
@@ -45,6 +46,46 @@ test('public loft: two guide snapshots are independently owned and survive nativ
   assert.throws(() => made.loft(input, { guides: [guides[1], guides[0]] }), /endpoints to exactly match/);
   assert.deepEqual(made.doc, accepted);
   assert.deepEqual(base.doc, original);
+});
+
+test('two-guide Loft display retains native mass, canonical pick indices and the worker mesh token', () => {
+  const rectangle = (w: number, d: number) => sketch().rectangle({ w, d, x: 0, y: 0 });
+  const doc = part('twisted loft').loft([{ sketch: rectangle(10, 6), z: 0 }, { sketch: rectangle(14, 4), z: 12 }], { guides: [
+    { kind: 'quadratic-bezier', controlPoints: [[0, 0, 0], [2, -1, 6], [0, 0, 12]] },
+    { kind: 'quadratic-bezier', controlPoints: [[10, 0, 0], [18, 3, 6], [14, 0, 12]] },
+  ] }).doc;
+  const channel = new MeshSender(), receiver = new MeshReceiver();
+  shareMeshes(true);
+  try {
+    const original = evaluateDoc(doc, 1), refined = evaluateDoc(doc, 2, 8, true);
+    assert.ok(original.ok && refined.ok);
+    const [canonical] = original.bodies, [body] = refined.bodies, detail = body.mesh.loftDetail;
+    assert.ok(detail);
+    assert.equal(body.mesh.positions, canonical.mesh.positions);
+    assert.equal(body.mesh.faces, canonical.mesh.faces);
+    assert.equal(body.mesh.edges, canonical.mesh.edges);
+    assert.equal(body.volume, canonical.volume);
+    assert.deepEqual(body.inertia, canonical.inertia);
+    assert.ok(detail.indices.length > canonical.mesh.indices.length && detail.error <= 0.01);
+    assert.deepEqual([...new Set(detail.faceOfVertex)].sort(), canonical.mesh.faces.map(face => face.index));
+    assert.deepEqual([...new Set(detail.edgeOfSegment)].sort((a, b) => a - b), canonical.mesh.edges.map(edge => edge.index));
+
+    const posted = channel.pack('evaluate', refined);
+    assert.equal(posted.transfer.length, 12);
+    const received = receiver.unpack('evaluate', structuredClone(posted.result, { transfer: posted.transfer }));
+    assert.ok(received.ok);
+    assert.deepEqual(received.bodies[0].mesh.loftDetail, detail);
+    const reused = channel.pack('evaluate', evaluateDoc(doc, 3, 8, true));
+    assert.equal(reused.transfer.length, 0);
+    assert.deepEqual(receiver.unpack('evaluate', reused.result).ok, true);
+    assert.equal(placeBody(body, [1, 0, 0, 0, 1, 0, 0, 0, 1], [12, 0, 0]).mesh.loftDetail, undefined);
+    const preview = evaluatePreview(doc, 4), section = evaluatePreview(doc, 5, 8, 'section');
+    assert.ok(preview.ok && section.ok);
+    assert.deepEqual(preview.bodies[0].mesh.loftDetail, detail);
+    assert.equal(section.bodies[0].mesh.loftDetail, undefined);
+  } finally {
+    shareMeshes(false);
+  }
 });
 function massOracle(p: StudioPart, volume: number, centroid: readonly number[]): void {
   const m = p.mass({ density: 1 }); close(m.volume, volume); vector(m.centroid, centroid);

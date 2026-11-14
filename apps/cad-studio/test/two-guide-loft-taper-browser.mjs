@@ -109,6 +109,9 @@ await f.run(async () => {
   await f.changed(seed);
   const made = await f.doc();
   await verify(made, 16, 'original');
+  if (process.argv.includes('--check-display')) {
+    await f.page.waitForFunction(() => window.__studioLoftDisplay?.()?.triangles > 0);
+  }
   await f.snapshot('original');
 
   f.phase = 'Edit the second guide and check that both authored sections stay exact';

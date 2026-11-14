@@ -2,6 +2,7 @@ import { BrepError, buildBrep, lineCurve, type BrepFaceInput, type BrepLoopInput
 import { solidMassFromIntegrals } from '../brep/solid-mass.js';
 import { gauss } from '../core/quadrature.js';
 import { transferNativeMassBasis } from '../internal/native-si-mass-state.js';
+import { registerTwoGuideLoftDisplay } from '../internal/two-guide-loft-display.js';
 import type { Curve, Point } from '../types.js';
 import { buildProfileLoop, capSurface, ExtrudedProfileLimits, type XY } from './extruded-profile-solid.js';
 import type { LoftInput, LoftSectionInput } from './loft.js';
@@ -107,6 +108,7 @@ export function twoGuideLoftSolid(input: LoftInput) {
       corners.map(j => k ? j : 3 - j).map(i => use(face, ring(k, i), k ? 'forward' : 'reversed', uv[i], uv[(i + 1) % 4])) }] });
   }
   const brep = buildBrep({ source: { family: 'loft', id }, vertices, edges, bodies: [{ id, kind: 'solid', shells: [{ id: `${id}.shell`, faces, closed: true }] }] });
+  registerTwoGuideLoftDisplay(brep);
   const origin = lo.points[0], integrals = sliceIntegrals(rows, origin, hi.z - lo.z);
   return { brep, mass: (density: number) => {
     const local = solidMassFromIntegrals(integrals, density, 'quadrature');

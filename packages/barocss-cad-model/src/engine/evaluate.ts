@@ -8,6 +8,7 @@ import { BarocssError, massPropertiesOf, reevaluate, exportStl, type CadPartOutp
 import { bodyMesh, withoutNativeFaces, type DisplayEdge, type DisplayMesh } from './mesh';
 import { cylinderDisplayMesh } from './cylinderDisplay';
 import { bandRailDisplayMesh } from './bandRailDisplay';
+import { loftDisplayMesh } from './loftDisplay';
 import { lumpTouches } from './lumps';
 import { friendlyCause, type FriendlyError } from './errors';
 import { bodyKeyOf, partSnapshot } from './part';
@@ -272,6 +273,13 @@ function partResult(doc: StudioDoc, snapshot: CadPartSnapshot, revision: number,
   const faceTable = faceTableFrom(snapshot.outputs); rememberFaceTable(doc, faceTable);
   return { ok: true, revision, bodies, wallTime: (performance.now() - t0) / 1000, faceTable, shopRows };
 }
+function refineLoftBody(bodies: BodyResult[], snapshot: CadPartSnapshot, doc: StudioDoc): void {
+  if (bodies.length !== 1 || snapshot.outputs.length !== 1) return;
+  const body = bodies[0], node = body.ref && doc.nodes[body.ref.node];
+  if (node?.kind !== 'loft' || !node.guides) return;
+  const mesh = loftDisplayMesh(body.mesh, snapshot.outputs[0].brep);
+  if (mesh !== body.mesh) bodies[0] = { ...body, mesh };
+}
 /** The document with its parameter-bound skeletons solved for its parameters now (O140; the same document when none moved); their refusal thrown. */
 function skeletonsNow(doc: StudioDoc): StudioDoc { return resolveSkeletons(doc).doc; }
 export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refineDisplay = false): EvalResult {
@@ -290,6 +298,7 @@ export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refin
       }
     }
     if (refineDisplay && quality === 8) {
+      refineLoftBody(result.bodies, snapshot, doc);
       const band = result.bodies.findIndex(body => body.band?.closed && body.band.exact && body.band.pairs === 2);
       const body = result.bodies[band];
       if (body && snapshot.outputs[band]) {
@@ -376,6 +385,7 @@ export function evaluatePreview(doc: StudioDoc, revision: number, quality = 8, s
       ...(slot === 'preview' && o.filletTargets ? { filletTargets: o.filletTargets } : {}),
       ...(slot === 'preview' && o.chamferTargets ? { chamferTargets: o.chamferTargets } : {}),
       ...(o.bodyCount > 1 ? { pieces: o.bodyCount } : {}), volume: null, mass: null }));
+    if (slot === 'preview' && quality === 8) refineLoftBody(bodies, snapshot, doc);
     return { ok: true, revision, bodies, wallTime: (performance.now() - t0) / 1000 };
   } catch (cause) {
     lastPreview[slot] = null;
@@ -528,6 +538,7 @@ export function placeBody(b: BodyResult, m: readonly number[], t: readonly numbe
     return placed;
   });
   const mesh = { ...src, positions, normals, edgeLines, faces, edges, bounds: { min, max } };
+  delete mesh.loftDetail; // The optional packet is in the accepted part's frame.
   const element = b.element?.kind === 'weld-bead' ? { ...b.element, report: { ...b.element.report,
     sharedSeams: b.element.report.sharedSeams.map(s => ({ ...s, path: [move(m, t, s.path[0]), move(m, t, s.path[1])] as const })) } } : b.element;
   return { ...b, mesh, ...placedMass(b, m, t), ...(b.massRef !== undefined ? { massPlace: [...(b.massPlace ?? []), { m: [...m], t: [...t] }] } : {}), ...(element ? { element } : {}) };

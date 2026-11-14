@@ -122,6 +122,7 @@ interface PointerInput {
     rendererBodies: RefObject<readonly BodyResult[]>;
     syncDisplayedBodies(renderer: ViewRenderer): void;
     syncDirect(renderer: ViewRenderer): void;
+    bodiesForMeshPicking(): readonly BodyResult[];
     isBandRail(hit: EdgeRef | null): boolean;
     selectBandRail(hit: EdgeRef | null): boolean;
     rendererInstances: RefObject<{ renderer: ViewRenderer; instances: readonly { id: string; bodies: readonly BodyResult[] }[] } | null>;
@@ -225,7 +226,7 @@ function slotRadiusAt(a: readonly number[], b: readonly number[], point: readonl
 }
 
 export function useViewportPointerInput({ canvas, camera, propsRef, rendering, focus }: PointerInput) {
-  const { renderer, rendererBodies, rendererInstances, syncDisplayedBodies, syncDirect, isBandRail, selectBandRail, request, requestRef, moving, viewState, hover } = rendering;
+  const { renderer, rendererBodies, rendererInstances, syncDisplayedBodies, syncDirect, bodiesForMeshPicking, isBandRail, selectBandRail, request, requestRef, moving, viewState, hover } = rendering;
   const { focusPick, finishFocusPick } = focus;
   const sketch = propsRef.current.sketch;
 
@@ -579,7 +580,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
   const pickThrough = (x: number, y: number, w: number, h: number, skip: ReadonlySet<string>): FaceRef | null => {
     const { origin: o, dir: d } = camera.current.ray((x / w) * 2 - 1, 1 - (y / h) * 2);
     let best: FaceRef | null = null, tBest = Infinity;
-    propsRef.current.bodies.forEach((b, bi) => {
+    bodiesForMeshPicking().forEach((b, bi) => {
       if (skip.has(b.key) || propsRef.current.hiddenBodies?.has(bi)) return;
       const { min, max } = b.mesh.bounds; let t0 = 0, t1 = tBest;
       for (let k = 0; k < 3; k++) { if (Math.abs(d[k]) < 1e-12) { if (o[k] < min[k] || o[k] > max[k]) return; continue; } let a = (min[k] - o[k]) / d[k], c = (max[k] - o[k]) / d[k]; if (a > c) [a, c] = [c, a]; t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) return; }
@@ -1179,7 +1180,8 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     const basis = ordinaryModel && !cam.ortho ? cam.basis() : null;
     const crossingViewport = crossing && mouse && ordinaryModel && cam.ortho && p.meshBoxCrossing ? c.getBoundingClientRect() : null;
     const box = { left: lx, right: hx, top: ly, bottom: hy };
-    p.bodies.forEach((b, i) => {
+    if (renderer.current) syncDisplayedBodies(renderer.current);
+    bodiesForMeshPicking().forEach((b, i) => {
       if ((ordinaryModel || p.printActive) && p.hiddenBodies?.has(i)) return;
       const P = b.mesh.positions; let inside = 0, total = 0;
       if (p.printActive) {
