@@ -1,3 +1,4 @@
+import { offsetCollapseFeedback } from '../app/offsetCollapseFeedback';
 import { offsetPlanePickFeedback } from '../app/offsetPlanePickFeedback';
 import { FilletTypeFields } from './FilletTypeFields';
 import { FilletPickedEdges } from './FilletPickedEdges';
@@ -52,6 +53,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
   const twoGuideFeedback = loftTwoGuideFeedback(active);
   const pathFeedback = sweepPathFeedback(active);
   const planePickFeedback = offsetPlanePickFeedback(active);
+  const collapseFeedback = offsetCollapseFeedback(active);
   const edgeScope = active.preview === 'ok' ? active.filletScope ?? active.chamferScope : undefined;
   const replacingAxis = active.cmd.id === REVOLVE_AXIS_EDIT;
   const pickingMirrorPlane = awaitingMirrorPlane(active.cmd.id, active.values);
@@ -82,6 +84,8 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     const bounds = featureNumberBounds(numberRule);
     const range = showCircularCount ? `Whole number from ${field.min} to ${field.max}` : numberRule ? featureNumberRange(numberRule) : null;
     const rangeId = range ? `hud-number-range-${field.key}` : undefined;
+    const collapseError = field.key === 'd' ? collapseFeedback : undefined;
+    const collapseId = 'hud-offset-collapse';
     const invalidNumber = numberRule && featureNumberInvalid(value, numberRule);
     const loftGuide = active.cmd.id === 'loft' && (field.key === 'guide' || field.key === 'guideB');
     const guideError = twoGuideFeedback?.field === field.key ? twoGuideFeedback.text : field.key === 'guide' ? guideFeedback : undefined;
@@ -97,10 +101,11 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     </NativeSelect>;
     else if (field.kind === 'text') control = <Input className={FIELD} ref={ref} type="text" aria-label={field.label} data-key={field.key} data-kind="text" maxLength={field.maxLength} value={String(value ?? '')} onChange={changeValue} />;
     else if (field.kind === 'file') control = <span className="min-w-0"><Input className={FIELD} ref={ref} type="file" aria-label={field.label} data-key={field.key} accept={field.accept} disabled={!onFile} onChange={chooseFile} /><span className="muted small">{field.filename(value ?? '') ?? 'No file prepared'}</span></span>;
-    else control = <span className="num"><Input className={FIELD + ' pr-7!'} ref={ref} type="number" aria-label={field.label} aria-invalid={invalidCount || invalidNumber || undefined} aria-describedby={rangeId} data-key={field.key} data-kind={field.kind} step={field.kind === 'count' ? 1 : 'any'} min={numberRule === 'nonzero' ? undefined : bounds.min ?? field.min} max={bounds.max ?? field.max} value={String(value ?? '')} onChange={changeValue} />
+    else control = <span className="num"><Input className={FIELD + ' pr-7!'} ref={ref} type="number" aria-label={field.label} aria-invalid={invalidCount || invalidNumber || !!collapseError || undefined} aria-describedby={[rangeId, collapseError ? collapseId : undefined].filter(Boolean).join(' ') || undefined} data-key={field.key} data-kind={field.kind} step={field.kind === 'count' ? 1 : 'any'} min={numberRule === 'nonzero' ? undefined : bounds.min ?? field.min} max={bounds.max ?? field.max} value={String(value ?? '')} onChange={changeValue} />
       {field.kind === 'mm' && <em>mm</em>}{field.kind === 'deg' && <em>°</em>}{field.kind === 'ratio' && <em>×</em>}</span>;
     return <label key={field.key} className="field"><span>{field.label}</span>
       {range ? <span className="min-w-0">{control}<span id={rangeId} className="muted small block">{range}</span></span> : control}
+      {collapseError && <span className="col-span-2"><FeatureFailureNotice error={collapseError} id={collapseId} /></span>}
       {guideError && <span className="hud-error col-span-2" id={guideErrorId} role="status">{guideError}</span>}</label>;
   };
   return (
@@ -119,7 +124,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
         }).map(step => {
           const endFace = step.label === 'End face' && isExtrudeToFace(active.cmd.id, active.values);
           const guideStep = active.cmd.id === 'loft' && step.label === 'Guides';
-          const requiresPreview = guideStep || endFace || (step.label === 'Move' && active.cmd.id === 'offset-face') || (step.label === 'Reference plane' && isOffsetToPlane(active.cmd.id, active.values))
+          const requiresPreview = guideStep || endFace || (step.label === 'Move' && (active.cmd.id === 'offset-face' || active.cmd.id === 'offset-face-edit')) || (step.label === 'Reference plane' && isOffsetToPlane(active.cmd.id, active.values))
             || (step.label === 'Axis' && replacingAxis);
           const pathError = step.label === 'Path' ? pathFeedback : step.label === 'Reference plane' ? planePickFeedback : undefined;
           const done = step.done && !pathError && (!requiresPreview || active.preview === 'ok');
@@ -160,7 +165,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           return onHoleOptions(active, { type, d, depth, cd, ch, csd });
         }} /> : null}
       {active.cmd.id === 'fill-feature-pattern' && <FillPatternHints />}
-      {active.preview === 'error' && active.error && !guideFeedback && !twoGuideFeedback && !pathFeedback && <FeatureFailureNotice error={active.error} />}
+      {active.preview === 'error' && active.error && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && <FeatureFailureNotice error={active.error} />}
       <div className="hud-actions">
         {active.cmd.id === 'mirror' && <Button variant="ghost" aria-pressed={pickingMirrorPlane}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}

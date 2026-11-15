@@ -1,3 +1,4 @@
+import { offsetCollapseFailure } from '../app/offsetCollapseFeedback';
 import { commandBuildFailure } from './commandBuildFailure';
 import { createPreviewLifetime, ownedPreview } from './previewLifetime';
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
@@ -199,7 +200,11 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
           const error = shown === candidate && result.revision === revision && terminal?.kind === cmd.id
             ? edgeFinishFailure(result.error, terminal) : result.error;
           setPreviewBodies(null);
-          setActive(a => a && { ...a, preview: 'error', error: { ...error, failedFeature } });
+          const recovery = shown === candidate && result.revision === revision
+            ? offsetCollapseFailure(cmd.id, ctx.doc, candidate, { ...error, failedFeature }) : undefined;
+          const finalError = recovery ?? { ...error, failedFeature };
+          setActive(a => a && a.cmd === cmd && a.ctx === ctx && a.values === values ? { ...a, preview: 'error', error: finalError,
+            offsetCollapse: recovery ? { cmd, ctx, values, error: finalError } : undefined } : a);
         }
         // Still a gap between the last good value and the bound: try the step-snapped middle of it next.
         // (Release does not stop this: it goes on from the value the pointer left, and Enter waits for the preview to settle on the converged value.)
