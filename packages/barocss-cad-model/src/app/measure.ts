@@ -151,7 +151,22 @@ export function measureItem(mesh: DisplayMesh, pick: MeasurePick): MeasureItem {
   }
   const { segs } = primitives(mesh, pick), e = mesh.edges[pick.edge!];
   const length = segs.reduce((acc, [a, b]) => acc + len(sub(b, a)), 0);
-  if (e.straight || segs.length < 2) return { label: 'Line', length };
+  if (e.straight) return { label: 'Line', length };
+  const circle = e.nativeCircle;
+  if (circle && Number.isFinite(circle.radius) && circle.radius > 0
+    && circle.centre.every(Number.isFinite) && circle.normal.every(Number.isFinite)
+    && Math.abs(len(circle.normal) - 1) < 1e-9) {
+    const radius = circle.radius;
+    // Circular support proves type/radius, not which arc a lone chord represents.
+    // Retain the existing sampled-arc length calculation only with multiple chords.
+    const sampled = segs.length > 1 && segs.every(([a, b]) => [a, b].every(p =>
+      p.every(Number.isFinite) && Math.abs(len(sub(p, circle.centre)) - radius) < 1e-3 * Math.max(1, radius)
+      && Math.abs(dot(sub(p, circle.centre), circle.normal)) < 1e-3 * Math.max(1, radius)));
+    return { label: 'Arc', radius, ...(sampled ? {
+      length: radius * segs.reduce((sum, [a, b]) => sum + 2 * Math.asin(Math.min(1, len(sub(b, a)) / (2 * radius))), 0),
+    } : {}) };
+  }
+  if (segs.length < 2) return { label: 'Line', length };
   // A circle through three well spread samples (the segments need not run in order), when every sample lies on it.
   const pts = segs.flat(), p = pts[0], m = pts.reduce((x, y) => len(sub(y, p)) > len(sub(x, p)) ? y : x, p), pm = unit(sub(m, p));
   const off = (x: Vec3) => len(cross(sub(x, p), pm)), q = pts.reduce((x, y) => off(y) > off(x) ? y : x, p);
