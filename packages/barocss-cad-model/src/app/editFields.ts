@@ -146,6 +146,7 @@ export function editFields(nodes: Nodes, i: number, params?: Record<string, numb
   const raw = editFieldsRaw(nodes, i, bearingAssembly, scope, params ?? scope?.doc?.parameters ?? {});
   if (!params || nodes[i]?.kind === 'linear-span-pattern' || nodes[i]?.kind === 'align') return raw;
   return raw.map(f => f.kind !== 'number' || 'bind' in f || (nodes[i]?.kind === 'sew' && f.key === 'tol')
+    || (node?.kind === 'fillet' && (f.key === 'stationAt' || f.key === 'station2At'))
     || f.key.startsWith('loftGuideControl') || f.key.endsWith('linkedInsetMM') || (nodes[i]?.kind === 'hole' && /^(step|about)[01]$/.test(f.key)) ? f : {
     ...f,
     get: n => within(params, () => f.get(n)).value,

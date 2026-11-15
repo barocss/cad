@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1407: [Supported Fillet station binding controls](notes/fillet-station-binding-mac-2026-11-15/README.md), #145; hide only unsupported percentage parameter controls, preserving direct 40% editing and native-equivalent radius binding.
+
 - D1406: [Fillet interior input boundaries](notes/fillet-station-input-mac-2026-11-15/README.md), #144; exact fraction admission parity and owned field errors, including invalid queued Apply cancellation and native-preserving recovery.
 
 - D1405: [Equal-end Fillet interior entry](notes/fillet-interior-entry-mac-2026-11-15/README.md), #146; one field condition reveals existing supported controls at End0, preserving native/Constant gates and validating direct creation, History and reopen numerically.
