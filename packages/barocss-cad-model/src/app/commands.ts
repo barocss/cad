@@ -741,7 +741,7 @@ const allCommands: Command[] = [
         ], ...shaped });
       }
       // (An end radius: the radius varies along the picked chain from its start to its end, R10.5, D100.)
-      if (r1 > 0 && Math.abs(r1 - r) > 1e-9) {
+      if (r1 > 0) {
         const ends = chainEnds(edges);
         if (!ends) throw refusal('FILLET_CHAIN', 'A varying radius needs the picked edges to form one open chain: its two ends take the two radii.');
         return withNode(ctx.doc, { kind: 'fillet', parent: refOf(body), edges: names, radius: r, radii: [{ at: ends[0], radius: r, atEnd: true }, { at: ends[1], radius: r1, atEnd: true }], ...shaped });
