@@ -1,3 +1,4 @@
+import { extrudeRailHelp } from '../app/extrudeRailHelp';
 import { useId, useState, type Dispatch, type SetStateAction, type DragEvent, type MouseEvent, type PointerEvent } from 'react';
 import type { Command, Ctx } from '@barocss/cad-model/app/commands';
 import type { SketchState } from '../viewport/Viewport';
@@ -57,9 +58,10 @@ function ModelCommandRail({ command, panels, sketchWorkspace }: Pick<ModelToolsP
   }}>
     <div className="model-commands" role="group" aria-label="Model commands">
       {named.map(c => {
-        const available = c.available(ctx);
+        const help = c.id === 'extrude' ? extrudeRailHelp(ctx, current) : undefined;
+        const available = help ?? c.available(ctx);
         return <ToolButton key={c.id} c={c} ok={available.ok} reason={available.ok ? '' : available.reason}
-          on={activeId === c.id} showLabel {...handlers}
+          on={activeId === c.id} showLabel focusHelp={!!help} helpText={help?.description} {...handlers}
           onStart={c.id === 'sketch' ? (_, event) => sketchWorkspace.request(event) : startTool}
           onPointerDown={c.id === 'sketch' ? sketchWorkspace.rememberFocus : undefined} />;
       })}
