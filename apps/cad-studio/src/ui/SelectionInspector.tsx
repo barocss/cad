@@ -1,5 +1,5 @@
 import { bodyTopologyLabel, nativeBoundaryLabel } from './bodyTopologyLabel';
-import type { ReactNode, Dispatch, SetStateAction } from 'react';
+import { useId, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import { fmt, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { selectedBodies, refOf, type Selection } from '@barocss/cad-model/app/commands';
@@ -25,6 +25,7 @@ interface SelectionInspectorProps {
 }
 /** Properties of the accepted selection; document adoption and feature editing stay in App. */
 export function SelectionInspector({ model, selection, materialSettings, display, changes, children }: SelectionInspectorProps) {
+  const faceScopeId = useId();
   const { doc, evaluated, bodies, fresh, busy, massReady } = model;
   const { material, setMaterial } = materialSettings;
   const { showBox, setShowBox, inertiaAt, setInertiaAt } = display;
@@ -51,16 +52,17 @@ export function SelectionInspector({ model, selection, materialSettings, display
           {selection.vertices.map((v, k) => <div key={k} className="kv">{selection.vertices!.length > 1 ? `Point ${k + 1}` : 'X Y Z'} <b>{v.at.map(x => fmt(Math.round(x * 1000) / 1000)).join(', ')}</b></div>)}
           {selection.vertices.length === 2 && (() => { const [a, b] = selection.vertices!.map(v => v.at), d = [0, 1, 2].map(k => b[k] - a[k]); return <><div className="kv">Distance <b>{fmt(Math.round(Math.hypot(d[0], d[1], d[2]) * 1000) / 1000)} mm</b></div><div className="kv">ΔX ΔY ΔZ <b>{d.map(x => fmt(Math.round(x * 1000) / 1000)).join(', ')}</b></div></>; })()}
         </>) : sel1?.kind === 'face' && sel1.face ? (<>
-          <div className="card-title">SELECTION · {edges ? `${faces} FACE${faces === 1 ? '' : 'S'}, ${edges} EDGE${edges === 1 ? '' : 'S'}` : 'FACE'}</div>
+          <div className="card-title">SELECTION · {edges ? `${faces} FACE${faces === 1 ? '' : 'S'}, ${edges} EDGE${edges === 1 ? '' : 'S'}` : `${faces} FACE${faces === 1 ? '' : 'S'}`}</div>
+          <div id={faceScopeId} className="muted small" style={{ overflowWrap: 'anywhere' }} aria-label="Face property and colour target">Properties and face colour: {bodyName(doc, sel1.body)} ({sel1.body.key}) · {sel1.face.name}{faces > 1 ? ' — first selected face only' : ''}.</div>
           <div className="kv">Type <b>{sel1.face.kind === 'plane' ? 'Planar' : 'Curved'}</b></div>
           {sel1.face.kind === 'plane' && <div className="kv">Normal <b>{sel1.face.normal.map(v => fmt(Math.round(v * 1000) / 1000)).join(', ')}</b></div>}
           <div className="kv">Area <b>{fmt(Math.round(sel1.face.area * 100) / 100)} mm²</b></div>
           {sel1.face.radius !== undefined && <div className="kv">Radius <b>{fmt(Math.round(sel1.face.radius * 1000) / 1000)} mm</b></div>}
           {(() => { const b = bodies[selection.faces[0]?.body], name = sel1.face.name, faces = b ? lookOf(doc, b).faces ?? {} : {}, cur = faces[name];
             const set = (c?: string) => { if (!b) return; const next = { ...faces }; if (c) next[name] = c; else delete next[name]; commit(withLook(doc, b, { faces: Object.keys(next).length ? next : undefined })); };
-            return b ? <div className="kv">Face colour <span className="swatches" role="group" aria-label="Face colour">
-              <button className={'swatch none' + (cur ? '' : ' on')} aria-label="No face colour" data-tip="The body's colour" onClick={() => set()} />
-              {BODY_COLOURS.map(c => <button key={c} className={'swatch' + (cur === c ? ' on' : '')} style={{ background: c }} aria-label={'Face colour ' + c} onClick={() => set(c)} />)}
+            return b ? <div className="kv">Face colour <span className="swatches" role="group" aria-label="Face colour" aria-describedby={faceScopeId}>
+              <button className={'swatch none' + (cur ? '' : ' on')} aria-label="No face colour" aria-describedby={faceScopeId} data-tip="The body's colour" onClick={() => set()} />
+              {BODY_COLOURS.map(c => <button key={c} className={'swatch' + (cur === c ? ' on' : '')} style={{ background: c }} aria-label={'Face colour ' + c} aria-describedby={faceScopeId} onClick={() => set(c)} />)}
             </span></div> : null; })()}
         </>) : sel1?.kind === 'edge' && sel1.edge ? (<>
           <div className="card-title">SELECTION · EDGE</div>
