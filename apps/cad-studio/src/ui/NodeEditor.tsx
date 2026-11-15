@@ -147,13 +147,15 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
   const insetTargetNode = insetTarget === undefined ? undefined : nodes[insetTarget];
   const incompleteInset = typed.insetMM === '' || typed.sourceWidth === '';
   const interiorProblems = historyFilletInteriorProblems(node, typed);
-  const missingNumbers = fields.flatMap(field => field.kind === 'number' && typed[field.key]?.trim() === '' && !interiorProblems[field.key as FilletInteriorKey] ? [field] : []);
+  const missingNumbers = fields.flatMap(field => field.kind === 'number' && typed[field.key]?.trim() === '' && historyNumberRule(draft, index, field.key) !== 'open-unit' && !interiorProblems[field.key as FilletInteriorKey] ? [field] : []);
   const hasMissingNumber = missingNumbers.length > 0;
   const invalidCounts = fields.flatMap(field => field.kind === 'number' && field.integerRange && typed[field.key]?.trim()
     && invalidInteger(Number(typed[field.key]), field.integerRange) ? [field] : []);
   const invalidDimensions = fields.flatMap(field => {
     const value = typed[field.key], rule = historyNumberRule(draft, index, field.key);
-    return field.kind === 'number' && value?.trim() && rule && featureNumberInvalid(value, rule) ? [{ field, rule }] : [];
+    if (field.kind !== 'number' || !rule) return [];
+    const invalid = rule === 'open-unit' ? featureNumberInvalid(value ?? field.get(draft), rule) : value?.trim() && featureNumberInvalid(value, rule);
+    return invalid ? [{ field, rule }] : [];
   });
   const diameterField = fields.find(field => field.kind === 'number' && field.key === 'dia');
   const countersinkField = fields.find(field => field.kind === 'number' && field.key === 'csk');
@@ -257,7 +259,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
       {readingEnd && <div className="empty" role="status">Reading exact distance…</div>}
       {hasMissingNumber && <div className="hud-error" role="status">Enter a number for {missingNumbers.map(field => field.label).join(', ')}.</div>}
       {invalidCounts.map(field => <div key={field.key} className="hud-error" role="status">{field.label} must be a whole number from {field.integerRange!.min} to {field.integerRange!.max}.</div>)}
-      {invalidDimensions.map(({ field, rule }) => <div key={field.key} id={`history-invalid-${field.key}`} className="hud-error" role="status">{field.label} · {featureNumberRange(rule)}.</div>)}
+      {invalidDimensions.filter(({ rule }) => rule !== 'open-unit').map(({ field, rule }) => <div key={field.key} id={`history-invalid-${field.key}`} className="hud-error" role="status">{field.label} · {featureNumberRange(rule)}.</div>)}
       {lengthProblem && <div className="hud-error" role="status">{lengthProblem}</div>}
       {modeProblem && <div className="hud-error" role="status">{modeProblem}</div>}
       {node?.kind === 'align' && <>
@@ -273,9 +275,9 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
         const rule = f.kind === 'number' ? historyNumberRule(draft, index, f.key) : undefined;
         const numberBounds = featureNumberBounds(rule);
         const invalidDimension = invalidDimensions.some(item => item.field === f);
-        const range = f.kind === 'number' && f.integerRange && !invalidCounts.includes(f)
+        const range = rule === 'open-unit' ? featureNumberRange(rule) : f.kind === 'number' && f.integerRange && !invalidCounts.includes(f)
           ? `Whole number from ${f.integerRange.min} to ${f.integerRange.max}` : rule && !invalidDimension ? featureNumberRange(rule) : null;
-        const rangeId = invalidDimension ? `history-invalid-${f.key}` : range ? `history-range-${f.key}` : undefined;
+        const rangeId = invalidDimension && rule !== 'open-unit' ? `history-invalid-${f.key}` : range ? `history-range-${f.key}` : undefined;
         const guideField = loftGuides && /^loftGuideControl([01])([01])$/.exec(f.key);
         const guide = guideField && loftGuides?.[guideField[1] === '0' ? 0 : 1];
         const guideId = guideField ? `${guideDescriptionId}-${guideField[1]}` : undefined;
@@ -294,7 +296,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
             Guide {Number(guideField[1]) + 1} · ({guide.controlPoints[0].join(', ')}) → ({guide.controlPoints[2].join(', ')}) mm
           </div>}
           <span>{f.label}</span>
-          {f.kind === 'number' ? <span className="num"><input ref={element => element?.setCustomValidity(interiorProblem ?? '')} type="number" step={f.integerRange ? 1 : "any"} min={f.integerRange?.min ?? numberBounds.min} max={f.integerRange?.max ?? numberBounds.max} aria-label={f.label} aria-describedby={description} aria-invalid={typed[f.key]?.trim() === '' || invalidCounts.includes(f) || invalidDimension || !!interiorProblem || failedGuideX || (f.key === 'csk' && !!countersinkProblem) || (f.key === 'olen2' && !!lengthProblem) || undefined} data-loft-guide-gap={failedGuideX || undefined} value={typed[f.key] ?? f.get(draft)} disabled={ordinaryLocked || !!(f as BindableField).param?.(draft)} onChange={e => changeNumber(f, e.target.value)} />{f.unit && <em>{f.unit}</em>}
+          {f.kind === 'number' ? <span className="num"><input ref={element => element?.setCustomValidity(interiorProblem ?? (rule === 'open-unit' && invalidDimension ? featureNumberRange(rule) + '.' : ''))} type="number" step={f.integerRange ? 1 : "any"} min={f.integerRange?.min ?? numberBounds.min} max={f.integerRange?.max ?? numberBounds.max} aria-label={f.label} aria-describedby={description} aria-invalid={typed[f.key]?.trim() === '' || invalidCounts.includes(f) || invalidDimension || !!interiorProblem || failedGuideX || (f.key === 'csk' && !!countersinkProblem) || (f.key === 'olen2' && !!lengthProblem) || undefined} data-loft-guide-gap={failedGuideX || undefined} value={typed[f.key] ?? f.get(draft)} disabled={ordinaryLocked || !!(f as BindableField).param?.(draft)} onChange={e => changeNumber(f, e.target.value)} />{f.unit && <em>{f.unit}</em>}
             {names.length > 0 && 'bind' in f && <select className="param-bind" disabled={ordinaryLocked} aria-label={`${f.label} parameter`} data-tip="Parameter" data-tip-desc="Bind this value to a named parameter (Parameters panel)" value={(f as BindableField).param(draft) ?? ''}
               onChange={e => {
                 retireEvaluation();
@@ -332,7 +334,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
               }}>{f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
             : <input type="checkbox" className="check" disabled={ordinaryLocked} aria-label={f.label} checked={f.get(draft)} onChange={e => { retireEvaluation(); setDraft(d => f.set(d, e.target.checked)); }} />}
           {interiorProblem && <div id={interiorId} role="status" className="col-span-2 hud-error">{interiorProblem}</div>}
-          {range && <span id={rangeId} className="muted small col-span-2">{range}</span>}
+          {range && <span id={rangeId} role={rule === 'open-unit' && invalidDimension ? 'status' : undefined} className={rule === 'open-unit' && invalidDimension ? 'hud-error small col-span-2' : 'muted small col-span-2'}>{range}</span>}
         </div>
       ); }) : node?.kind !== 'face-end-extrude' && <div className="empty">{node?.kind === 'sweep-curve' && onEditSketch ? 'Edit the profile dimensions with Edit sketch.' : 'This feature has no editable dimensions.'}</div>}
       {node?.kind === 'linear-span-pattern' && <LinearSpanSpacing span={node.span} count={node.count} />}

@@ -15,7 +15,7 @@ import { awaitingRevolveAxis } from '@barocss/cad-model/app/revolveAxisEdit';
 import { awaitingAlignTarget } from '@barocss/cad-model/app/alignCommand';
 import { flattenAssembly } from '@barocss/cad-model/engine/flatten';
 import { awaitingMirrorPlane, missingCommandField, type Active } from '../app/commandState';
-import { commandNumberRule, featureNumberInvalid, featureNumberRange } from '../app/featureNumberInput';
+import { commandNumberRule, featureNumberInvalid, featureNumberRange, filletSectionNumberProblem } from '../app/featureNumberInput';
 import { edgeFinishFailure, failedFeatureText } from '../app/failedFeature';
 import type { EngineClient } from '../engine/client';
 import type { ValueStore } from './valueStore';
@@ -88,6 +88,12 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
       if (interiorProblem) {
         previewFor.current = null; setPreviewBodies(null);
         setActive(a => a === active ? { ...a, preview: 'error', error: { title: 'Enter a valid interior position', hint: interiorProblem[1], detail: '', historyField: interiorProblem[0] } } : a);
+        return;
+      }
+      const sectionProblem = filletSectionNumberProblem(active);
+      if (sectionProblem) {
+        previewFor.current = null; setPreviewBodies(null);
+        setActive(a => a === active ? { ...a, preview: 'error', error: { title: 'Enter a valid section shape', hint: sectionProblem.text, detail: '', historyField: sectionProblem.key } } : a);
         return;
       }
       const missing = missingCommandField(fields, active.values);

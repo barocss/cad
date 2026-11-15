@@ -1,3 +1,4 @@
+import { filletSectionNumberProblem } from './app/featureNumberInput';
 import { hasFilletInteriorProblem } from './app/filletInteriorInput';
 import { refuseOffsetPlanePick } from './app/offsetPlanePickFeedback';
 import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
@@ -1556,7 +1557,7 @@ export function App() {
     if (awaitingExtrudeEndFace(active.cmd.id, active.values) || awaitingOffsetPlane(active.cmd.id, active.values) || awaitingRevolveAxis(active.cmd.id, active.values) || awaitingMirrorPlane(active.cmd.id, active.values)) {
       applyWhenReady.current = null; again.current = null; return;
     }
-    if (hasFilletInteriorProblem(active)) { applyWhenReady.current = null; again.current = null; return; }
+    if (hasFilletInteriorProblem(active) || filletSectionNumberProblem(active)) { applyWhenReady.current = null; again.current = null; return; }
     if (active.preview === 'busy') { applyWhenReady.current = active.cmd; return; }
     applyWhenReady.current = null;
     if (active.preview !== 'ok') { if (toFace || replaceAxis || sweep) again.current = null; return; }
@@ -3595,7 +3596,7 @@ export function App() {
     lastTyped.current = Date.now();
     handleDrag.current = null;
     const values = patchValues(current.cmd, current.ctx, current.values, { [key]: value });
-    if (hasFilletInteriorProblem({ ...current, values })) { applyWhenReady.current = null; again.current = null; }
+    if (hasFilletInteriorProblem({ ...current, values }) || filletSectionNumberProblem({ ...current, values })) { applyWhenReady.current = null; again.current = null; }
     hudValues.current = values;
     setActive({ ...current, values, preview: current.upload === 'error' ? 'error' : 'busy' });
   };

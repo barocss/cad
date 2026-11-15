@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1410: [Fillet section input range](notes/fillet-section-input-mac-2026-11-15/README.md), #121 and remaining #122 condition; native open-unit admission, one field-local message and queued Apply cancellation with actual desktop/native recovery checks.
+
 - D1409: [Fillet section binding controls, partial](notes/fillet-section-binding-mac-2026-11-15/README.md), #122 OPEN; hide unsupported Rho/Tension binding and verify numeric/radius binding recovery. The #121 field-range requirement remains.
 
 - D1408: [Supported Extrude binding controls](notes/extrude-draft-binding-mac-2026-11-15/README.md), #95; hide only unsupported Draft binding, preserving numeric angles and native-equivalent Distance parameters through Undo/Redo and Save/Open.

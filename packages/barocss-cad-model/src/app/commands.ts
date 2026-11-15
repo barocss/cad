@@ -710,8 +710,8 @@ const allCommands: Command[] = [
             when: (v: Values) => v.stationMode === 'two-interior' },
         ] : []),
         { key: 'shape', label: 'Section', kind: 'choice', options: [{ value: 'circular', label: 'Circular' }, { value: 'conic', label: 'Conic' }, { value: 'g2', label: 'Curvature (G2)' }] },
-        { key: 'rho', label: 'Rho', kind: 'ratio', min: 0.01, max: 0.99, step: 0.05, when: v => v.shape === 'conic' },
-        { key: 'tension', label: 'Tension', kind: 'ratio', min: 0.01, max: 0.99, step: 0.05, when: v => v.shape === 'g2' },
+        { key: 'rho', label: 'Rho', kind: 'ratio', min: 0, max: 1, step: 0.05, when: v => v.shape === 'conic' },
+        { key: 'tension', label: 'Tension', kind: 'ratio', min: 0, max: 1, step: 0.05, when: v => v.shape === 'g2' },
       ];
     },
     defaults: () => ({ radius: 3, endRadius: 0, stationMode: 'ends', stationAt: 50, stationRadius: 3, station2At: 75, station2Radius: 3, shape: 'circular', rho: 0.5, tension: 0.5 }),
