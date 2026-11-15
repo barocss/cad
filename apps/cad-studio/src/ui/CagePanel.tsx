@@ -7,6 +7,9 @@ import { CONTROL, FIELD } from './panelStyles';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
 
+const activeStyle = { background: 'var(--accent)', color: 'var(--accent-ink)' };
+const focusClass = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text)]';
+
 const OPS: { op: CageOp; label: string; key?: string; tip: string }[] = [
   { op: 'extrude', label: 'Extrude', key: 'E', tip: 'The picked faces (or boundary edges) out as a new region; drag the gizmo to move it — or hold Shift as you drag' },
   { op: 'insert-loop', label: 'Insert loop', key: 'L', tip: 'An edge loop across the ring through the picked edge, at its middle' },
@@ -29,13 +32,13 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
   return <aside className="card props cage-panel" aria-label="Cage editor">
     <div className="card-title">CAGE · {name}</div>
     <div className="seg" role="group" aria-label="Pick">{(['vertex', 'edge', 'face'] as CageMode[]).map((m, i) =>
-      <button key={m} className={s.mode === m ? 'on' : ''} aria-pressed={s.mode === m} data-tip={`${m[0].toUpperCase()}${m.slice(1)}s`} data-tip-desc={`Key ${i + 1}`} onClick={() => editor.setMode(m)}>{m[0].toUpperCase() + m.slice(1)}</button>)}</div>
+      <button key={m} className={focusClass} style={s.mode === m ? activeStyle : undefined} aria-pressed={s.mode === m} data-tip={`${m[0].toUpperCase()}${m.slice(1)}s`} data-tip-desc={`Key ${i + 1}`} onClick={() => editor.setMode(m)}>{m[0].toUpperCase() + m.slice(1)}</button>)}</div>
     <div className="seg" role="group" aria-label="Next overlapping pick">{(['front', 'back'] as const).map(depth =>
-      <button key={depth} className={editor.pickDepth === depth ? 'on' : ''} aria-pressed={editor.pickDepth === depth} style={editor.pickDepth === depth ? { background: 'var(--accent)', color: 'var(--accent-ink)' } : undefined} onClick={() => editor.setPickDepth(depth)}>{depth === 'front' ? 'Front candidate' : 'Back candidate'}</button>)}</div>
+      <button key={depth} className={focusClass} aria-pressed={editor.pickDepth === depth} style={editor.pickDepth === depth ? activeStyle : undefined} onClick={() => editor.setPickDepth(depth)}>{depth === 'front' ? 'Front candidate' : 'Back candidate'}</button>)}</div>
     <div className="muted small">Next pick among overlapping candidates. Existing selection stays unchanged; click again after changing depth or view.</div>
     <div className="seg" role="group" aria-label="Show">
-      <button className={!s.smooth ? 'on' : ''} aria-pressed={!s.smooth} data-tip="Box" data-tip-desc="The cage as it is (Tab)" onClick={() => s.smooth && editor.toggleSmooth()}>Box</button>
-      <button className={s.smooth ? 'on' : ''} aria-pressed={s.smooth} data-tip="Smooth" data-tip-desc="The limit surface (Tab)" onClick={() => !s.smooth && editor.toggleSmooth()}>Smooth</button></div>
+      <button className={focusClass} style={!s.smooth ? activeStyle : undefined} aria-pressed={!s.smooth} data-tip="Box" data-tip-desc="The cage as it is (Tab)" onClick={() => s.smooth && editor.toggleSmooth()}>Box</button>
+      <button className={focusClass} style={s.smooth ? activeStyle : undefined} aria-pressed={s.smooth} data-tip="Smooth" data-tip-desc="The limit surface (Tab)" onClick={() => !s.smooth && editor.toggleSmooth()}>Smooth</button></div>
     <div className={FIELD}><span>Picked</span> <b aria-label="Picked">{what}</b></div>
     {centre && <div className="muted small" aria-label="Picked cage centre">Picked centre: ({centre.map(value => Number(value.toFixed(3))).join(', ')}) mm</div>}
     <div className="cage-ops">{OPS.map(o => {
