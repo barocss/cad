@@ -549,7 +549,12 @@ export const directOps = {
     return add(d, [], r.source, [{ geometry: r.surface.id, name: 'Lofted surface' }]);
   },
   sweep(d: DirectGeometry, profile: string, rail: string) {
-    const r = buildTranslationalSweepSurface(curveOf(d, profile), curveOf(d, rail), { surfaceId: fresh(usedIds(d), 'swept'), maximumObservations: 961 });
+    if (profile === rail) throw refusal('DIRECT_PICK', 'Choose different profile and path curves.');
+    // Geometry IDs are local to each source, not identities across imported objects.
+    const used = usedIds(d);
+    const section = { ...curveOf(d, profile), id: fresh(used, 'sweep_profile') };
+    const path = { ...curveOf(d, rail), id: fresh(used, 'sweep_path') };
+    const r = buildTranslationalSweepSurface(section, path, { surfaceId: fresh(used, 'swept'), maximumObservations: 961 });
     return add(d, [], r.source, [{ geometry: r.surface.id, name: 'Swept surface' }]);
   },
 };
