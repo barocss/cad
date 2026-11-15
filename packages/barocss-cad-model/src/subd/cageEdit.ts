@@ -208,7 +208,7 @@ export function runOp(s: CageSession, op: CageOp, tolerance = 0.01, t = 0.5): Ca
   switch (op) {
     case 'select-loop': case 'select-ring': {
       const e = sel.edges[0]; if (!e) throw new SubdError('INPUT', 'pick an edge first');
-      return { ...s, sel: { ...emptyCageSel, edges: op === 'select-loop' ? edgeLoop(c, e[0], e[1]) : edgeRing(c, e[0], e[1]) } };
+      return select(s, { kind: 'edge', a: e[0], b: e[1] }, false, op === 'select-loop' ? 'loop' : 'ring');
     }
     case 'extrude': {
       if (sel.faces.length) { const d = dragged(s, [0, 0, 0], true); return step(s, d.cage, d.sel); }
