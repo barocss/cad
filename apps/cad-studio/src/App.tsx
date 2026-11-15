@@ -351,6 +351,7 @@ export function App() {
   const discardRouteRef = useRef<() => void>(() => {});
   const routeAcceptedHandoff = useRef<{ doc: StudioDoc; identity: string; evaluatedIdentity: string; revision: number; result: Extract<EvalResult, { ok: true }> } | null>(null);
   const workOwnership = useRef(createWorkOwnership<StudioDoc, StudioDoc>());
+  const [, setWorkCompletionVersion] = useState(0);
   const acceptanceScope = workOwnership.current.scope;
   const replacement = useRef<{ scope: object; identity?: WorkHistory<StudioDoc>['documentIdentity'] } | null>(null);
   const workCompletion = useRef<object | null>(null);
@@ -1045,7 +1046,13 @@ export function App() {
         setToast({ ...result.error, documentSource: { doc: docNow.current, evaluated } });
       }
     };
-    void run().catch(cause => { if (edit) refuse(cause instanceof Error ? cause.message : String(cause)); else if (current()) { setBusy(false); setToast({ title: 'Could not evaluate the part', hint: 'The previous part remains shown.', detail: String(cause), documentSource: { doc: docNow.current, evaluated } }); } }).finally(() => { workOwnership.current = finishWork(workOwnership.current, work.token); });
+    void run().catch(cause => { if (edit) refuse(cause instanceof Error ? cause.message : String(cause)); else if (current()) { setBusy(false); setToast({ title: 'Could not evaluate the part', hint: 'The previous part remains shown.', detail: String(cause), documentSource: { doc: docNow.current, evaluated } }); } }).finally(() => {
+      const previous = workOwnership.current;
+      workOwnership.current = finishWork(previous, work.token);
+      // Cached accepted-result handoffs can settle without changing any React state.
+      // Refresh handlers to the finished scope; never revive a superseded/unmounted run.
+      if (live && previous !== workOwnership.current) setWorkCompletionVersion(version => version + 1);
+    });
     return () => { live = false; workOwnership.current = finishWork(workOwnership.current, work.token); };
   }, [engine, evaluated, parameterEdit, parameterCurrent, importWorkerRecovery]);
   // (A command's preview is what the part becomes: its bodies belong to the document it commits.)
