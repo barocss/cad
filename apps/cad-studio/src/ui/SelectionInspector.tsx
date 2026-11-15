@@ -70,6 +70,7 @@ export function SelectionInspector({ model, selection, materialSettings, display
           <div className="card-title">SELECTION · EDGE</div>
           {(() => { const it = measureItem(sel1.body.mesh, { body: selection.edges[0].body, edge: selection.edges[0].edge }); return <>
             <div className="kv">Type <b>{it.label}</b></div>
+            {it.label === 'Arc' && <div className="hint">Selected arc segment · values describe this edge, not the whole source curve.</div>}
             {it.length !== undefined && <div className="kv">Length <b>{fmt(Math.round(it.length * 100) / 100)} mm</b></div>}
             {it.radius !== undefined && <div className="kv">Radius <b>{fmt(Math.round(it.radius * 1000) / 1000)} mm</b></div>}
           </>; })()}
