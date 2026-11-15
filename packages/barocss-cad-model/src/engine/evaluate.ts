@@ -1,3 +1,4 @@
+import { requireStepGeometry } from './stepOutputAdmission';
 import { bodyLookRef } from '../app/lookKey';
 import { nativeBodyTopology, type NativeBodyTopology } from './bodyTopology';
 import { provenanceOfTree, type ShopTreeProvenance } from './shopRows';
@@ -674,10 +675,11 @@ export function exportStudioStep(doc: StudioDoc, options: StudioStepOptions): St
       if (r && d.nodes[r.node]?.kind === 'band-surface') sheets.push(`${prefix}${bodyKeyOf(o.id, d.nodes)}`);
       else if (r && roleOf(d.nodes[r.node])) left.push(`${prefix}${bodyKeyOf(o.id, d.nodes)}`);
       else {
-        breps.push(o.brep);
-        if (!o.brep.bodies.length) continue; // The writer emits no body for an empty output.
-        scope.rootBodies++; scope.nativeBodies += o.brep.bodies.length;
         const look = r && /^b\d+(_.+)?$/.test(at.key) ? bodyKey(bodyLookRef(d.nodes, r), d.nodes) : at.key;
+        const label = d.bodies?.[look]?.name;
+        requireStepGeometry(o.brep, `${prefix}${label ? label + ' ' : ''}(${at.key})`, !!r && d.nodes[r.node]?.kind === 'scale');
+        breps.push(o.brep);
+        scope.rootBodies++; scope.nativeBodies += o.brep.bodies.length;
         if (d.bodies?.[look]?.hidden) scope.hiddenRootBodies++;
       }
     }
@@ -691,8 +693,11 @@ export function exportStudioStep(doc: StudioDoc, options: StudioStepOptions): St
       const at = originNode(o.id, placed, base);
       if (at !== undefined && roleOf(base.nodes[at])) left.push(`${inst.id}/${bodyKeyFor(base.nodes, at)}`);
       else {
+        const key = at === undefined ? o.id : bodyKeyFor(base.nodes, at);
+        const look = at === undefined ? key : bodyKey(bodyLookRef(base.nodes, { node: at, side: 'solid' }), base.nodes);
+        const label = base.bodies?.[look]?.name;
+        requireStepGeometry(o.brep, `${inst.name || inst.id} / ${label ? label + ' ' : ''}(${inst.id}/${key})`, at !== undefined && base.nodes[at]?.kind === 'scale');
         breps.push(o.brep);
-        if (!o.brep.bodies.length) continue;
         included = true;
         scope.placedBodies++; scope.nativeBodies += o.brep.bodies.length;
       }
