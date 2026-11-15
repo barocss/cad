@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1399: [Reference face cache ownership](notes/reference-face-cache-ownership-mac-2026-11-15/README.md), #610; include the feature owner in named-result reuse keys while retaining sketch sharing, geometry algorithms and Datum validation.
+
 - D1398: [Reference placement drafts](notes/reference-placement-draft-mac-2026-11-15/README.md), #609; current-document ownership restores saved coordinates and cancels unapplied drafts on revision, preserving Enter-only commit semantics.
 
 - D1397: [Section face-pick Escape](notes/section-face-pick-escape-mac-2026-11-15/README.md), #607; cancel only the waiting pick, retain section/selection and existing higher-priority Escape handling.

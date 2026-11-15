@@ -389,7 +389,8 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
         const tools = { dim, xy, xyz, integer, axisOf, solids, ref, featureKind, cutSource, fail, at, endpointBead }, run = operation(f, tools);
         // (O19: stored names checked against what they named before the feature builds on them, D277.)
         const expect = f.kind === 'shell' ? null : expectOf(f, fail), compute = expect && f.kind !== 'band-surface' ? expectedThen(f, tools, expect, run) : run;
-        const key = JSON.stringify([f.kind, resolvedDefinition(f, doc.parameters), ...(isEndpointBead(f) ? [endpointContext(doc.features, f.frame, doc.parameters)] : [])]), inputs = deps.map(d => results.get(d)!);
+        // Named results belong to their feature: equal geometry under another id has different persistent names.
+        const key = JSON.stringify([at, f.kind, resolvedDefinition(f, doc.parameters), ...(isEndpointBead(f) ? [endpointContext(doc.features, f.frame, doc.parameters)] : [])]), inputs = deps.map(d => results.get(d)!);
         const reused = lookup(key, inputs);
         result = reused ?? compute();
         (reused ? reusedIds : evaluated).push(at);
