@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1357 — Explicit ellipse-axis recovery](notes/ellipse-axis-recovery-mac-2026-11-15/README.md).
+
 - [D1356 — Draft history across active outlines](notes/sketch-active-history-mac-2026-11-15/README.md).
 
 - [D1355 — Selected-face count and colour target](notes/face-colour-scope-mac-2026-11-15/README.md).

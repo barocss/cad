@@ -26,6 +26,7 @@ interface SketchViewportInputs {
   currentSketchSource(): ReopenedSketchSource | undefined;
   setSketch: Dispatch<SetStateAction<SketchState | null>>;
   setSketchError(reason: string): void;
+  offerEllipseAxes?(draft: SketchState): void;
   clearOutlinePickIssue(): void;
   updateCircleDiameter(shape: Extract<SketchShape, { kind: 'circle' }>, diameter: number): void;
   setConstraintConflict(reason: string, source: Polygon, ids: readonly string[]): void;
@@ -47,7 +48,7 @@ function canRecoverLength(sketch: SketchState | null, opened: ReopenedSketchSour
 }
 
 /** Viewport gestures use Studio's existing sketch state and shape history. */
-export function studioSketchViewportActions({ liveShape, sketch, currentSketchSource, setSketch, setSketchError, clearOutlinePickIssue, updateCircleDiameter, setConstraintConflict, updateShape, trimSketch }: SketchViewportInputs): SceneSketchActions & { recoverPanelLength(source: Polygon, edge: number, value: number): boolean } {
+export function studioSketchViewportActions({ liveShape, sketch, currentSketchSource, setSketch, setSketchError, offerEllipseAxes, clearOutlinePickIssue, updateCircleDiameter, setConstraintConflict, updateShape, trimSketch }: SketchViewportInputs): SceneSketchActions & { recoverPanelLength(source: Polygon, edge: number, value: number): boolean } {
   const applyDimension = (opened: ReopenedSketchSource | undefined, source: Polygon, key: string, value: number) => {
     const result = opened ? commitInlineDimension(source, key, value) : commitDimension(source, key, value);
     if (!result.ok) {
@@ -105,8 +106,10 @@ export function studioSketchViewportActions({ liveShape, sketch, currentSketchSo
       clearOutlinePickIssue();
       if (sketch?.tool === 'dimension' && hit?.kind === 'edge' && source === sketch.shape
         && source?.kind === 'polygon' && ellipseMatches(source)) {
+        const next: SketchState = { ...sketch, picked: [], editDim: null };
         setSketchError('Edit Rx or Ry in the Ellipse section.');
-        setSketch(current => current === sketch ? { ...current, picked: [], editDim: null } : current);
+        setSketch(current => current === sketch ? next : current);
+        offerEllipseAxes?.(next);
         return;
       }
       setSketch(current => current && sketchClick(current, hit, additive));

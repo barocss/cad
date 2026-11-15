@@ -1,3 +1,4 @@
+import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
 import { returnEditorFocus } from './ui/editorReturnFocus';
 import { handoffReferenceFocus, type ReferenceFocusReceipt } from './ui/referenceFocus';
@@ -505,7 +506,7 @@ export function App() {
   /** The picked pole of the one selected direct object, and how far its gizmo has dragged it. */
   const [pole, setPole] = useState<{ id: string; key: string } | null>(null);
   const [poleDrag, setPoleDrag] = useState<Vec3 | null>(null);
-  const [sketchIssue, setSketchIssue] = useState<{ reason: string; conflict?: { doc: StudioDoc; source: SketchShape; ids: readonly string[] } } | null>(null);
+  const [sketchIssue, setSketchIssue] = useState<{ reason: string; ellipse?: { doc: StudioDoc; draft: SketchState }; conflict?: { doc: StudioDoc; source: SketchShape; ids: readonly string[] } } | null>(null);
   const setSketchError = useCallback((reason: string | null) => setSketchIssue(reason ? { reason } : null), []);
   // The last shape handed to the sketch, ahead of React's batched re-render (rapid pointer events).
   const liveShape = useRef<SketchShape | null>(null);
@@ -1919,6 +1920,7 @@ export function App() {
   };
   const overlaidLines = useOverlaidLines(doc, sketch, docNow, sketchGeneration, setActiveOutline, trimSelectedEdge);
   const sketchViewportActions = { ...studioSketchViewportActions({ liveShape, sketch, currentSketchSource, setSketch, setSketchError,
+    offerEllipseAxes: draft => setSketchIssue({ reason: 'Edit Rx or Ry in the Ellipse section.', ellipse: { doc, draft } }),
     clearOutlinePickIssue: () => setSketchIssue(issue => isOutlinePickIssue(issue?.reason) ? null : issue),
     updateCircleDiameter: (shape, diameter) => {
       const owner = renderedSketch.current;
@@ -3306,7 +3308,8 @@ export function App() {
         crossingToolSupported={usesNativeCrossings}
         placedRotationLimited={placedSketchSnaps?.sources.some(({ instance }) => !supportsPlacedBoxSnapRotation(instance.rotation))}
         onToggleObjectKind={kind => setObjectSnapKinds(kinds => toggleObjectSnapKind(kinds, kind))}
-        onExitObjectKinds={sketch.editDim ? () => sketchViewportActions.onDimEdit?.(null) : undefined} /><PathGapControls gap={pathGap} /><CircleChordControls circle={circleChord} /><OverlaidLinesControls scan={overlaidLines} /></>} toolLabel={TOOLS.find(t => t.tool === sketch.tool)!.label} finishError={sketchFinishError} error={sketchIssue?.reason ?? null}
+        onExitObjectKinds={sketch.editDim ? () => sketchViewportActions.onDimEdit?.(null) : undefined} /><PathGapControls gap={pathGap} /><CircleChordControls circle={circleChord} /><OverlaidLinesControls scan={overlaidLines} /></>} toolLabel={TOOLS.find(t => t.tool === sketch.tool)!.label} finishError={sketchFinishError} error={sketchIssue?.ellipse && !ownsEllipseAxesRecovery(sketchIssue.ellipse, doc, sketch) ? null : sketchIssue?.reason ?? null}
+        onEditEllipseAxes={ownsEllipseAxesRecovery(sketchIssue?.ellipse, doc, sketch) ? () => ownsEllipseAxesRecovery(sketchIssue?.ellipse, docNow.current, renderedSketch.current.draft) && renderedSketch.current.generation === sketchGeneration.current : undefined}
         onActivateOutline={sketch.editNode !== undefined && (sketch.tool === 'select' || sketch.tool === 'dimension') ? index => {
           const source = sketchCutInputs(sketch).shapes[index];
           const next = activateDraftOutline(sketch, draftShapeOrder(sketch).indexOf(source));

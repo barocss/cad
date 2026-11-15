@@ -160,15 +160,17 @@ const initialFiles = ['apps/cad-studio/test/ellipse-sketch-browser.mjs', 'apps/c
   'packages/barocss-cad-model/src/sketch/spline.ts', 'packages/barocss-cad-model/src/sketch/profile.ts', 'packages/barocss-cad-model/src/sketch/reopen.ts', 'packages/barocss-cad-model/src/sketch/loops.ts', 'packages/barocss-cad-model/src/sketch/settle.ts',
   'packages/barocss-cad-model/src/sketch/types.ts', 'packages/barocss-cad-model/src/sketch/entityIds.ts', 'packages/barocss-cad-model/src/engine/curveSource.ts', 'packages/barocss-cad-model/src/engine/direct.ts', 'packages/barocss-cad-model/src/engine/doc.ts'];
 const rimAdmission = process.argv[3] === '--rim-admission';
-const directDimension = process.argv[3] === '--direct-dimension';
-const f = await createFlow({ name: 'ellipse', envFrozen: rimAdmission ? 'D1093_SOURCE_FROZEN' : directDimension ? 'D1085_SOURCE_FROZEN' : 'ELLIPSE_SOURCE_FROZEN', output: process.argv[2], qualification: 'ELLIPSE_SKETCH_TOOL', initialFiles, oracleSource, inspectorSource: inspectSource,
+const axisRecovery = process.argv[3] === '--axis-recovery';
+const directDimension = axisRecovery || process.argv[3] === '--direct-dimension';
+const f = await createFlow({ name: 'ellipse', envFrozen: axisRecovery ? 'D1357_SOURCE_FROZEN' : rimAdmission ? 'D1093_SOURCE_FROZEN' : directDimension ? 'D1085_SOURCE_FROZEN' : 'ELLIPSE_SOURCE_FROZEN', output: process.argv[2], qualification: 'ELLIPSE_SKETCH_TOOL', initialFiles, oracleSource, inspectorSource: inspectSource,
   requiredFrozen: ['packages/barocss-cad-model/src/sketch/ellipse.ts', 'apps/cad-studio/src/viewport/Viewport.tsx', 'apps/cad-studio/src/ui/SketchPanel.tsx'],
   limits: ['One XY sketch plane from an empty document: one ellipse (centre (10, 5), clicks on the 1 mm grid), edited by the panel (Angle, Ry, Rx), extruded 10 mm.', 'Canvas clicks are real mouse events at pixels from window.__studioScreenOf.',
     'The too-narrow edit (Ry 5 with Rx 60) is refused; the panel field returns to its current value by itself (no Escape key is pressed: Escape would leave the sketch).',
     'Undo / Redo use the toolbar buttons when enabled, else Meta+z / Meta+Shift+z; which state one Undo returns to is recorded.', 'Product reads (the bundled inspector) are product code, not an independent oracle.',
     'The Python oracle (python3 -I, zero product imports) decides point exactness, outline deviation, area, volume, side ids and the exact NURBS curve.', 'Hashes are source provenance, not geometry oracles.'],
   snapshotExtra: () => ({ ellipseInputs: [...document.querySelectorAll('.sk-panel [role="group"][aria-label="Ellipse"] input')].map(i => ({ label: i.getAttribute('aria-label'), value: i.value })) }) });
-const { report, doc, same, toasts, dismissToasts, snapshot, command, worldClick, frame, tool, sketchPanel, editor, ready, sketchAlert, finishSketch, undo, redo, save, freshOpen, newPage, applyExtrude } = f;
+const { report, doc, same, toasts, dismissToasts, snapshot, command, worldClick, frame, tool, sketchPanel, editor, ready, sketchAlert, finishSketch, undo, redo, save, freshOpen, newPage: originalNewPage, applyExtrude } = f;
+const newPage = async () => { await originalNewPage(); if (axisRecovery) await f.page.setViewportSize({ width: Number(process.argv[4] ?? 1440), height: 900 }); };
 const ellipseTitle = () => f.page.locator('.sk-panel .card-title').filter({ hasText: /^ELLIPSE$/ });
 const ellipseRows = () => f.page.evaluate(() => [...document.querySelectorAll('.sk-panel [role="group"][aria-label="Ellipse"] input')].map(i => ({ label: i.getAttribute('aria-label'), value: i.value })));
 const panelCheck = async label => { const text = await f.sketchPanelText(); report.observations.push({ label: `${label}-panel-text`, text }); await f.persist();
@@ -267,10 +269,35 @@ await f.run(async () => {
     assert.equal(await f.page.locator('.dim-editor').count(), 0);
     assert.deepEqual(picked.doc, doc04);
     assert.deepEqual(valuesOf(await ellipseRows()), D2);
+    if (axisRecovery) {
+      const recovery = sketchPanel().getByRole('button', { name: 'Edit ellipse axes', exact: true });
+      await recovery.waitFor();
+      await tool('Select', 's');
+      assert.equal(await recovery.count(), 0, 'tool change invalidates old recovery');
+      await tool('Dimension', 'd'); await worldClick(mid);
+      await recovery.waitFor();
+      await recovery.focus(); await recovery.press('Enter');
+      await f.page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Rx');
+      assert.deepEqual(await doc(), doc04);
+      await snapshot('10b-axis-recovery-focus');
+    }
     await setField('Rx', '54');
+    if (axisRecovery) {
+      await setField('Ry', '22');
+      assert.deepEqual(valuesOf(await ellipseRows()), { ...D2, rx: 54, ry: 22 });
+      await f.page.locator('.topbar button.finish').focus();
+      await f.page.keyboard.press('Meta+z');
+      assert.deepEqual(valuesOf(await ellipseRows()), { ...D2, rx: 54 });
+      await f.page.keyboard.press('Meta+z');
+      assert.deepEqual(valuesOf(await ellipseRows()), D2);
+      await f.page.keyboard.press('Meta+Shift+z'); await f.page.keyboard.press('Meta+Shift+z');
+      assert.deepEqual(valuesOf(await ellipseRows()), { ...D2, rx: 54, ry: 22 });
+      assert.deepEqual(await doc(), doc04);
+      assert.equal(await sketchPanel().getByRole('button', { name: 'Edit ellipse axes', exact: true }).count(), 0);
+    }
     assert.equal(await sketchAlert(), null);
     const edited = await finishSketch('11-direct-ellipse-edited');
-    const expected = { ...D2, rx: 54 };
+    const expected = { ...D2, rx: 54, ...(axisRecovery ? { ry: 22 } : {}) };
     checkSketch(edited.doc.nodes[0], expected, '11');
     assert.deepEqual(edited.doc.nodes[0].sideTags, doc04.nodes[0].sideTags);
     assert.deepEqual(edited.doc.nodes[1], doc04.nodes[1]);
@@ -279,6 +306,7 @@ await f.run(async () => {
     await same(doc04);
     await redo();
     await same(edited.doc);
+    if (axisRecovery) { const saved = await save('ellipse-axis-recovery'); await freshOpen(saved.file, saved.doc, '12-axis-recovery-reopened'); }
     return;
   }
 
