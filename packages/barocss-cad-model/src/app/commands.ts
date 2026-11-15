@@ -699,7 +699,7 @@ const allCommands: Command[] = [
         ...(supportsStation || values && hasInterior(values) ? [
           { key: 'stationMode', label: 'Radius controls', kind: 'choice' as const,
             options: [{ value: 'ends', label: 'Ends' }, { value: 'interior', label: 'Ends and interior' }, { value: 'two-interior', label: 'Ends and two interior points' }],
-            when: (v: Values) => Number(v.endRadius) > 0 || hasInterior(v) },
+            when: (v: Values) => !!supportsStation || hasInterior(v) },
           { key: 'stationAt', label: two ? 'Interior 1 position (%)' : 'Interior position (%)', kind: 'number' as const, min: 0, max: 100,
             when: hasInterior },
           { key: 'stationRadius', label: two ? 'Interior 1 radius' : 'Interior radius', kind: 'mm' as const, min: 0.1,

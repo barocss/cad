@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1405: [Equal-end Fillet interior entry](notes/fillet-interior-entry-mac-2026-11-15/README.md), #146; one field condition reveals existing supported controls at End0, preserving native/Constant gates and validating direct creation, History and reopen numerically.
+
 - D1404: [Merge body conflict choices](notes/merge-body-conflict-mac-2026-11-15/README.md), #615; exact names/read-only settings and revision-owned explicit choices, preserving merge storage and scalar behavior.
 
 - D1403: [Clearance Near drafts](notes/clearance-near-draft-mac-2026-11-15/README.md), #614; transient raw input with finite-positive Enter/blur and Escape recovery, document ownership and actual candidate-count checks.
