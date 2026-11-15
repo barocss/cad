@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1415: [Shell opening recovery](notes/shell-opening-recovery-mac-2026-11-15/README.md), #125; exact temporary-opening diagnosis with current-owner/source-name guards, Cancel-first recovery and bounded independent Shell volume verification.
+
 - D1414: [Fillet corner recovery](notes/fillet-corner-recovery-mac-2026-11-15/README.md), #124; current Conic/G2 corner refusal points to explicit Circular recovery, with owned UI, real desktop lifecycle and independent offset-section volume checks.
 
 - D1413: [Legacy Loft automatic name](notes/loft-legacy-label-mac-2026-11-15/README.md), #616; effective two-section Ruled naming without document migration, verified with public rename and desktop Save/Open.

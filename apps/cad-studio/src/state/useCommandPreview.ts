@@ -1,3 +1,4 @@
+import { openingShellFailure } from './openingShellFailure';
 import { filletInteriorProblems } from '../app/filletInteriorInput';
 import { offsetCollapseFailure } from '../app/offsetCollapseFeedback';
 import { closedPerimeterFilletFailure } from './closedPerimeterFilletFailure';
@@ -214,7 +215,8 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
           const ownedFinish = shown === candidate && result.revision === revision && terminal?.kind === cmd.id;
           const finishError = ownedFinish ? edgeFinishFailure(result.error, terminal) : result.error;
           const error = ownedFinish && cmd.id === 'fillet'
-            ? closedPerimeterFilletFailure(finishError, ctx, candidate) ?? finishError : finishError;
+            ? closedPerimeterFilletFailure(finishError, ctx, candidate) ?? finishError
+            : ownedFinish && cmd.id === 'shell' ? openingShellFailure(finishError, ctx, candidate) ?? finishError : finishError;
           setPreviewBodies(null);
           const recovery = shown === candidate && result.revision === revision
             ? offsetCollapseFailure(cmd.id, ctx.doc, candidate, { ...error, failedFeature }) : undefined;
