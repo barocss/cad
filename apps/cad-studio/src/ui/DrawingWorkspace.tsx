@@ -3,6 +3,7 @@
 // points, or one straight edge, then where the dimension line goes), Diameter and Radius (a circle
 // that shows round in the view, then where the text goes). The sheet exports as SVG, PDF or DXF (R11b, O1);
 // section A–A also alone as a 1:1 DXF.
+import { drawingCanDeleteSelection } from './drawing/drawingDeletePolicy';
 import { drawsMadeOnly } from '@barocss/cad-model/drawing/scope';
 
 
@@ -839,6 +840,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (selected?.kind === kind && selected.id === id) setSelected(null);
     if (kind === 'note') setNoteDraft(null);
   };
+  const canDeleteSelection = drawingCanDeleteSelection({ tool, pending: !!pending, drag: !!drag, reattach: !!reattach, rimChoice: !!currentRimChoice, targetChoices: targetChoices.length, reselectTarget: !!reselectTarget, hasSelection: !!(selected || selectedTarget || selectedFrame) });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (shortcutHelp || e.defaultPrevented || e.isComposing || e.target instanceof HTMLInputElement
@@ -852,6 +854,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         else { setSelected(null); setSelectedTarget(null); setSelectedFrame(null); setTool('select'); }
         return;
       }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !canDeleteSelection) { e.preventDefault(); return; }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedFrame) {
         e.preventDefault();
         const frames = (settings.frames ?? []).filter(frame => frame.dim === undefined && frame.id === selectedFrame);
@@ -1140,7 +1143,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
                 onClick={() => startDiameter(currentRimChoice.view, edge)}>{rimLabel(edge)}</Button>)}
             </div>
             : <span>{bomError ?? hint}</span>}
-          {(selected || selectedTarget || selectedFrame) && <span><Kbd>Del</Kbd> remove</span>}
+          {canDeleteSelection && <span><Kbd>Del</Kbd> remove</span>}
         </div>}
       </div>
 
