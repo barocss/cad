@@ -1,3 +1,5 @@
+import { emptyBodyExportHint } from '@barocss/cad-model/engine/emptyBodyExportHint';
+import { hasExportTriangles, hasStlTriangles } from '@barocss/cad-model/engine/exportMeshAdmission';
 import { printSourceScope } from '../viewport/printSettings';
 import { bodyTopologyLabel, nativeBoundaryLabel } from '../ui/bodyTopologyLabel';
 import { useEffect, useRef, useState, type RefObject } from 'react';
@@ -90,6 +92,7 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
     const captured = { doc, shown: model.shown, evaluated, bodies: [...bodies], quality: stlQuality, name: fileName }, explicit = captured.quality !== 'automatic';
     const refuse = (hint: string, detail = '') => { setStlAsk(false); onNotice({ title: 'Could not write STL', hint, detail }); };
     if (!captured.bodies.length) { refuse('There are no root bodies to export.'); return; }
+    for (const body of captured.bodies) if (!hasExportTriangles(body.mesh.positions, body.mesh.indices)) { refuse(emptyBodyExportHint(captured.doc, body)); return; }
     if (explicit && stlHasPlacedParts) { refuse('This STL quality cannot export a document with visible placed instances. Export the placed part from its own document.'); return; }
     if (explicit) for (const body of captured.bodies) {
       if (body.lumpTouch?.length) { refuse(`${bodyName(captured.doc, body)} needs a separate STL for each touching piece. That output uses the on-screen mesh; use Automatic.`); return; }
@@ -108,7 +111,7 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
       for (const body of captured.bodies) {
         // Automatic keeps the existing display-mesh split for touching pieces.
         const lumps = !explicit && body.lumpTouch?.length ? lumpStls(body.mesh, body.key) : null;
-        if (lumps) { split++; for (const f of lumps) prepared.push({ name: `${captured.name}-${body.key}-lump${f.lump + 1}.stl`, bytes: f.bytes }); continue; }
+        if (lumps) { if (!lumps.length || lumps.some(f => !hasStlTriangles(f.bytes))) { refuse(emptyBodyExportHint(captured.doc, body)); return; } split++; for (const f of lumps) prepared.push({ name: `${captured.name}-${body.key}-lump${f.lump + 1}.stl`, bytes: f.bytes }); continue; }
         const kernel = captured.quality === 'automatic'
           ? await engine.stl(captured.evaluated, body.key)
           : await engine.stl(captured.evaluated, body.key, { segmentsPerQuarter: Number(captured.quality) });
@@ -116,7 +119,9 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
         if (kernel && 'error' in kernel) { refuse(`STL export stopped for ${bodyName(captured.doc, body)}.`, kernel.error); return; }
         if (!kernel && explicit) { refuse(`The kernel could not write ${bodyName(captured.doc, body)} at the selected STL quality. No files were downloaded.`); return; }
         if (!kernel) fallback.push(bodyName(captured.doc, body));
-        prepared.push({ name: `${captured.name}-${body.key}.stl`, bytes: kernel ?? meshToStl(body.mesh, body.key) });
+        const bytes = kernel ?? meshToStl(body.mesh, body.key);
+        if (!hasStlTriangles(bytes)) { refuse(emptyBodyExportHint(captured.doc, body)); return; }
+        prepared.push({ name: `${captured.name}-${body.key}.stl`, bytes });
       }
       // Prepare the sidecar before any download: a failed body or stale request writes no files.
       const names = prepared.map(f => f.name);

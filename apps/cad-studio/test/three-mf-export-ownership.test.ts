@@ -37,7 +37,7 @@ function fixture() {
   return { model, current };
 }
 /** Actual hook, writer and ZIP. Only the browser download sink and compression timing are controlled. */
-async function exportsOf(run: (s: ReturnType<typeof fixture> & { api: ModelExportController; downloads: { name: string; blob: Blob }[]; notices: { title: string; hint: string }[]; pause(): ReturnType<typeof hold> }) => Promise<void>, configure?: (s: ReturnType<typeof fixture>) => void) {
+async function exportsOf(run: (s: ReturnType<typeof fixture> & { api: ModelExportController; downloads: { name: string; blob: Blob }[]; notices: { title: string; hint: string }[]; pause(): ReturnType<typeof hold> }) => Promise<void>, configure?: (s: ReturnType<typeof fixture>) => void, stl: EngineClient['stl'] = async () => null) {
   const documentDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'document');
   const compressionDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'CompressionStream');
   const originalCreate = URL.createObjectURL, originalCompression = CompressionStream;
@@ -59,7 +59,7 @@ async function exportsOf(run: (s: ReturnType<typeof fixture> & { api: ModelExpor
     }
   } });
   function Probe() {
-    api = useModelExports({ ...f, fileName: 'assembly', engine: {} as EngineClient, onNotice: notice => notices.push(notice) });
+    api = useModelExports({ ...f, fileName: 'assembly', engine: { stl } as unknown as EngineClient, onNotice: notice => notices.push(notice) });
     return null;
   }
   try { renderToString(createElement(Probe)); await run({ ...f, api, downloads, notices, pause() { const held = hold(); pause = held; return held; } }); }
@@ -178,3 +178,35 @@ for (const state of ['current', 'changed document', 'changed name'] as const) {
     });
   });
 }
+
+// Controlled evaluated-result admission, through the actual hook; not a browser geometry claim.
+test('empty/mixed evaluated meshes refuse STL and 3MF without any sidecar or success', async () => {
+  for (const mixed of [false, true]) await exportsOf(async ({ api, downloads, notices }) => {
+    await api.exportStl(); await api.exportThreeMf();
+    assert.equal(downloads.length, 0);
+    assert.deepEqual(notices.map(n => n.title), ['Could not write STL', 'Could not write 3MF']);
+    assert.ok(notices.every(n => /empty-result/.test(n.hint)));
+  }, s => {
+    const empty = tetra(); empty.key = 'empty-result'; empty.mesh = { ...empty.mesh, positions: new Float32Array(), indices: new Uint32Array() };
+    s.model.bodies = mixed ? [tetra(), empty] : [empty];
+  });
+});
+test('recovery actual hook exports nonempty open sheet without requiring closed solids', async () => {
+  await exportsOf(async ({api, downloads, notices}) => {
+    await api.exportStl();
+    assert.equal(downloads.length,2); assert.match(notices.at(-1)!.title,/STL written/);
+    const bytes = await downloads[0].blob.arrayBuffer(); assert.equal(new DataView(bytes).getUint32(80,true),1);
+    await api.exportThreeMf(); assert.equal(downloads.length,3); assert.match(notices.at(-1)!.title,/3MF written/);
+  }, s => { const sheet = tetra(); sheet.mesh = {...sheet.mesh, indices:new Uint32Array([0,1,2])}; s.model.bodies=[sheet]; });
+});
+
+test('a later kernel empty STL refuses the entire prepared batch and sidecar', async () => {
+  let calls = 0;
+  await exportsOf(async ({api,downloads,notices}) => {
+    await api.exportStl(); assert.equal(calls,2); assert.equal(downloads.length,0);
+    assert.equal(notices.at(-1)!.title,'Could not write STL'); assert.match(notices.at(-1)!.hint,/second/);
+  }, s => { const second = tetra(); second.key='second'; s.model.bodies=[tetra(),second]; }, async () => {
+    calls++; const bytes=new Uint8Array(calls===1?134:84);
+    if(calls===1)new DataView(bytes.buffer).setUint32(80,1,true); return bytes;
+  });
+});

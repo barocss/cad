@@ -1,3 +1,5 @@
+import { emptyBodyExportHint } from '../engine/emptyBodyExportHint';
+import { hasExportTriangles } from '../engine/exportMeshAdmission';
 // AM5 (D76): the part (and its shown instances) as a 3MF model — each visible body an object with its material, colour
 // and face colours; with a print direction (AM4) the build items are turned so it points up, set down on the bed and
 // centred on the printer's bed when one is chosen.
@@ -47,6 +49,7 @@ export function threeMfModelOf(doc: StudioDoc, parts: readonly PartBodies[], tit
     const look = part.looks?.[bi] ?? lookOf(part.doc, b);
     if (look.hidden) continue;
     const m = b.mesh, faces = look.faces;
+    if (!hasExportTriangles(m.positions, m.indices)) return `${part.name ? part.name + ' / ' : ''}${emptyBodyExportHint(part.doc, b)}`;
     let triangleColors: (string | null)[] | undefined;
     if (faces && Object.keys(faces).length) {
       triangleColors = new Array(m.indices.length / 3);

@@ -1,3 +1,4 @@
+import { hasExportTriangles } from '../engine/exportMeshAdmission';
 // AM5 (D76): 3MF, the printing package — objects (meshes, welded), build items with their transforms, base materials
 // with display colours, face colours (as further base materials, or a Materials-extension colour group) and Production
 // extension UUIDs. Written by our own code: the model XML deflated by CompressionStream, the package by our ZIP writer.
@@ -125,7 +126,9 @@ export async function write3mf(model: ThreeMfModel): Promise<{ bytes: Uint8Array
   }
   // Base materials: one per (material, colour) of the bodies, in their order; face colours after them ('base' mode).
   const bases: { name: string; color: string }[] = [], baseIndex = new Map<string, number>(), colors: string[] = [], colorIndex = new Map<string, number>();
+  for (const o of model.objects) if (!hasExportTriangles(o.positions, o.indices)) return { error: `${o.name} has no triangles to export. Repair or remove this empty object and export again.` };
   const welded = model.objects.map(o => weld(o.positions, o.indices));
+  for (const [k, w] of welded.entries()) if (!hasExportTriangles(w.positions, w.triangles)) return { error: `${model.objects[k].name} has no triangles after vertex welding. Repair this object and export again.` };
   const objBase = model.objects.map(o => { const c = colorOf(o.color) ?? DEFAULT_COLOR; return intern(baseIndex, bases, `${o.material || 'Default'}\u0000${c}`, { name: o.material || 'Default', color: c }); });
   // (A face colour per kept triangle: its base or colour-group index, or −1 for the body's.)
   const triFace = model.objects.map((o, k) => {

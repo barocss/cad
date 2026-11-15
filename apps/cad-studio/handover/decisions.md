@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1338 — Empty STL/3MF export admission](notes/empty-export-admission-mac-2026-11-15/README.md).
+
 - [D1337 — Scale native result admission](notes/scale-admission-mac-2026-11-15/README.md).
 
 - [D1336 — Fillet radius-mode draft preservation](notes/fillet-mode-draft-mac-2026-11-15/README.md).
