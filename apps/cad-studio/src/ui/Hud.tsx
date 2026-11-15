@@ -22,6 +22,7 @@ import { HolePresets } from './HolePresets';
 import { stepNativeSelect } from './stepNativeSelect';
 import { cutPatternSourceLabel, isCutPattern, selectedCutPatternSource } from '../app/cutPatternSource';
 import { LinearSpanSpacing } from './LinearSpanSpacing';
+import { sweepPathFeedback } from '../app/sweepPathFeedback';
 import { loftGuideFeedback } from '../app/loftGuideFeedback';
 
 /** The HUD's field box: 26 px, the studio's mono type, the accent ring when focused. */
@@ -46,6 +47,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
   // (Ended before the App unmounts it.)
   if (!active) return null;
   const guideFeedback = loftGuideFeedback(active);
+  const pathFeedback = sweepPathFeedback(active);
   const edgeScope = active.preview === 'ok' ? active.filletScope ?? active.chamferScope : undefined;
   const replacingAxis = active.cmd.id === REVOLVE_AXIS_EDIT;
   const pickingMirrorPlane = awaitingMirrorPlane(active.cmd.id, active.values);
@@ -110,9 +112,10 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           const endFace = step.label === 'End face' && isExtrudeToFace(active.cmd.id, active.values);
           const requiresPreview = endFace || (step.label === 'Reference plane' && isOffsetToPlane(active.cmd.id, active.values))
             || (step.label === 'Axis' && replacingAxis);
-          const done = step.done && (!requiresPreview || active.preview === 'ok');
+          const pathError = step.label === 'Path' ? pathFeedback : undefined;
+          const done = step.done && !pathError && (!requiresPreview || active.preview === 'ok');
           return <div key={step.label} className={'hud-step' + (done ? ' done' : '')}>
-            <Icon name={done ? 'check_circle' : 'radio_button_unchecked'} small /><b>{step.label}</b><span>{step.text}</span>
+            <Icon name={done ? 'check_circle' : 'radio_button_unchecked'} small /><b>{step.label}</b><span role={pathError ? 'status' : undefined}>{pathError ?? step.text}</span>
           </div>;
         })}
       </div>}
@@ -148,7 +151,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           return onHoleOptions(active, { type, d, depth, cd, ch, csd });
         }} /> : null}
       {active.cmd.id === 'fill-feature-pattern' && <FillPatternHints />}
-      {active.preview === 'error' && active.error && !guideFeedback && <FeatureFailureNotice error={active.error} />}
+      {active.preview === 'error' && active.error && !guideFeedback && !pathFeedback && <FeatureFailureNotice error={active.error} />}
       <div className="hud-actions">
         {active.cmd.id === 'mirror' && <Button variant="ghost" aria-pressed={pickingMirrorPlane}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}

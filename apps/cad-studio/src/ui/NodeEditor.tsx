@@ -321,7 +321,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
             : <input type="checkbox" className="check" disabled={ordinaryLocked} aria-label={f.label} checked={f.get(draft)} onChange={e => { retireEvaluation(); setDraft(d => f.set(d, e.target.checked)); }} />}
           {range && <span id={rangeId} className="muted small col-span-2">{range}</span>}
         </div>
-      ); }) : node?.kind !== 'face-end-extrude' && <div className="empty">This feature has no editable dimensions.</div>}
+      ); }) : node?.kind !== 'face-end-extrude' && <div className="empty">{node?.kind === 'sweep-curve' && onEditSketch ? 'Edit the profile dimensions with Edit sketch.' : 'This feature has no editable dimensions.'}</div>}
       {node?.kind === 'linear-span-pattern' && <LinearSpanSpacing span={node.span} count={node.count} />}
       {draft[index]?.kind === 'fill-feature-pattern' && <FillPatternHints />}
       {onDelete && <button className="ghost danger" disabled={ordinaryLocked} aria-label="Delete feature" title="Delete this feature (and the sketch only it uses) · Undo restores it" onClick={event => remove(event.currentTarget)}><Icon name="delete" small /> Delete feature</button>}

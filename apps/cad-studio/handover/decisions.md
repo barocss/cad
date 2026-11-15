@@ -6,6 +6,10 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1314 — Clarify Sweep History and long path names](notes/sweep-history-copy-mac-2026-11-15/README.md).
+
+- [D1313 — Explain closed Sweep paths at the Path step](notes/sweep-closed-path-mac-2026-11-15/README.md).
+
 - [D1312 — Retain Point at curve join radius refusals](notes/curve-join-point-mac-2026-11-15/README.md).
 
 - [D1311 — Explain curve inspection at internal joins](notes/curve-join-inspection-mac-2026-11-15/README.md).
