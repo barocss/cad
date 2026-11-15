@@ -2,14 +2,14 @@
 // everywhere it is used, deleted with its uses keeping its value; a configuration is a saved set of
 // values, applied in one step. Feature values are bound to a parameter in the feature editor (ƒ). O16: its contents on
 // shadcn's Input and Button.
-import { useState } from 'react';
+import { useId, useRef, useState } from 'react';
+import { newParameterInput, type NewParameterInput } from './newParameterInput';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { addParameters, parameterUses, removeParameter, renameParameter as renamedDoc, withParameters } from '@barocss/cad-model/engine/parameters';
 import { Icon } from './atoms';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-const NAME = /^[A-Za-z_][A-Za-z0-9_]{0,31}$/;
 const without = <T,>(o: Record<string, T>, key: string): Record<string, T> => Object.fromEntries(Object.entries(o).filter(([k]) => k !== key));
 
 /** (The parameters' functions are cad-model's core, engine/parameters.ts, O21: the agent's features.parameters calls them too.) */
@@ -22,6 +22,8 @@ export function ParametersPanel({ doc, onChange, onError, onClose }: {
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [adding, setAdding] = useState({ name: '', value: '10' });
   const [configName, setConfigName] = useState('');
+  const [addError, setAddError] = useState<Extract<NewParameterInput, { ok: false }> | null>(null);
+  const addErrorId = useId(), nameInput = useRef<HTMLInputElement>(null), valueInput = useRef<HTMLInputElement>(null);
   const set = (patch: Partial<Pick<StudioDoc, 'parameters' | 'nodes' | 'configurations'>>) => onChange({ parameters: params, nodes: doc.nodes, configurations: doc.configurations, ...patch });
   const setValue = (name: string, text: string) => {
     const v = Number(text); if (text.trim() === '' || !Number.isFinite(v)) { onError(`${name} takes a number.`); return; }
@@ -46,18 +48,22 @@ export function ParametersPanel({ doc, onChange, onError, onClose }: {
     } catch (error) { onError(error instanceof Error ? error.message.replace(/^\[\w+\] /, '') : String(error)); }
   };
   const add = () => {
-    const name = adding.name.trim(), v = Number(adding.value);
-    if (!NAME.test(name)) { onError('A parameter name starts with a letter and has letters, digits and _ (up to 32).'); return; }
-    if (name in params) { onError(`There is a parameter ${name} already.`); return; }
-    if (!Number.isFinite(v)) { onError('Give the parameter a number.'); return; }
-    set({ parameters: addParameters(doc, { [name]: v }).parameters }); setAdding({ name: '', value: adding.value });
+    const checked = newParameterInput(adding.name, adding.value, params);
+    if (!checked.ok) {
+      setAddError(checked);
+      (checked.field === 'name' ? nameInput : valueInput).current?.focus();
+      return;
+    }
+    setAddError(null);
+    set({ parameters: addParameters(doc, { [checked.name]: checked.value }).parameters });
+    setAdding({ name: '', value: adding.value });
   };
   // The configuration the values match now, if any.
   const current = Object.entries(configs).find(([, vs]) => Object.keys(params).every(k => vs[k] === params[k]) && Object.keys(vs).every(k => k in params))?.[0];
   const row = 'flex items-center gap-1 py-0.5';
   return <aside className="card props" aria-label="Parameters panel">
     <div className="card-title">PARAMETERS <button className="tool tiny" aria-label="Close parameters" onClick={onClose}><Icon name="close" small /></button></div>
-    {!Object.keys(params).length && <div className="empty">Name the sizes the part depends on (H1, Width …): bind a feature’s value to one in its editor (ƒ), then change it here.</div>}
+    {!Object.keys(params).length && <div className="empty">Enter a parameter name and a number.</div>}
     {Object.entries(params).map(([name, value]) => <div key={name} className={row}>
       <Input className="min-w-0 flex-1 mono" aria-label={`Name of ${name}`} defaultValue={name} key={'n' + name}
         onBlur={e => { if (!rename(name, e.currentTarget.value)) e.currentTarget.value = name; }}
@@ -68,10 +74,15 @@ export function ParametersPanel({ doc, onChange, onError, onClose }: {
       <Button variant="ghost" size="xs" aria-label={`Delete ${name}`} data-tip="Delete" data-tip-desc="Its uses keep its value as a number" onClick={() => remove(name)}><Icon name="close" small /></Button>
     </div>)}
     <div className={row}>
-      <Input className="min-w-0 flex-1" aria-label="New parameter name" placeholder="Name" value={adding.name} onChange={e => setAdding(a => ({ ...a, name: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') add(); e.stopPropagation(); }} />
-      <Input type="number" step="any" className="w-20 text-right" aria-label="New parameter value" value={adding.value} onChange={e => setAdding(a => ({ ...a, value: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') add(); e.stopPropagation(); }} />
+      <Input className="min-w-0 flex-1" ref={nameInput} aria-invalid={addError?.field === 'name'} aria-describedby={addError?.field === 'name' ? addErrorId : undefined} aria-label="New parameter name" placeholder="Name" value={adding.name} onChange={e => { setAddError(null); setAdding(a => ({ ...a, name: e.target.value })); }} onKeyDown={e => { if (e.key === 'Enter') add(); e.stopPropagation(); }} />
+      <Input type="number" step="any" className="w-20 text-right" ref={valueInput} aria-invalid={addError?.field === 'value'} aria-describedby={addError?.field === 'value' ? addErrorId : undefined} aria-label="New parameter value" value={adding.value} onChange={e => { setAddError(null); setAdding(a => ({ ...a, value: e.target.value })); }} onKeyDown={e => { if (e.key === 'Enter') add(); e.stopPropagation(); }} />
       <Button aria-label="Add parameter" onClick={add}>Add</Button>
     </div>
+    {addError && <p id={addErrorId} role="status" className="warn small">{addError.message}</p>}
+    <details className="muted small" onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}>
+      <summary>Use parameters in features</summary>
+      Bind a feature’s value to a parameter in its editor (ƒ), then change the named value here.
+    </details>
     {Object.keys(params).length > 0 && <>
       <div className="card-title" style={{ marginTop: 10 }}>CONFIGURATIONS</div>
       {Object.keys(configs).map(c => <div key={c} className={row}>
