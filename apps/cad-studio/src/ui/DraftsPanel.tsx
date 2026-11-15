@@ -10,7 +10,7 @@ export function DraftsPanel({ drafts, onAddDrawing, onConfirm, underlays = [], o
   /** The drawings' underlays (O68), each shown or hidden. */ underlays?: readonly DocUnderlay[]; onUnderlay?(id: string, hidden: boolean): void }) {
   const open = drafts.reduce((n, d) => n + d.dims.filter(x => !x.confirmed).length, 0);
   return <div className="references" role="region" aria-label="Drafts">
-    <div className="ol-head specify-head">Drafts <span className="muted" aria-label="Drafts summary">{drafts.length ? `${open} to confirm` : 'none'}</span>
+    <div className="ol-head specify-head">Drafts {!!drafts.length && <span className="muted" aria-label="Drafts summary">{open} to confirm</span>}
       <label className="tool tiny" data-tip="Add a drawing (DXF) as a sketch draft"><input type="file" aria-label="Add drawing" accept=".dxf,.dwg" hidden onChange={e => { const f = e.target.files?.[0]; if (f) onAddDrawing(f); e.target.value = ''; }} />＋</label></div>
     {drafts.map(d => <div key={d.id} className="req" role="listitem" aria-label={`Draft ${d.id}`}>
       <span className="req-row" title={d.note ?? ''}><span className="req-mark">✎</span><b>{d.id}</b> {'image' in d.from ? d.from.image : d.from.drawing} <span className="muted">· {'image' in d.from ? 'from an image' : 'from a drawing'} · {d.nodes.length} feature{d.nodes.length === 1 ? '' : 's'}</span></span>

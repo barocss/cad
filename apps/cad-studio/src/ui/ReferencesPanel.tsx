@@ -13,6 +13,8 @@ export interface ReferencesPanelProps {
   set: ReferenceSet;
   /** Each reference's bodies in its own coordinates (their faces offered for datums). */
   local: ReadonlyMap<string, readonly BodyResult[]>;
+  errors?: ReadonlyMap<string, string>;
+  pending?: boolean;
   verdicts: readonly KeepoutResult[] | null;
   onAddFile(file: File): void;
   onPlace(id: string, at: Placement): void;
@@ -29,12 +31,13 @@ export function ReferencesPanel(p: ReferencesPanelProps) {
   const [offset, setOffset] = useState<Record<string, string>>({});
   const counts = p.verdicts ? { violated: p.verdicts.filter(v => v.verdict === 'violated').length, undecided: p.verdicts.filter(v => v.verdict === 'undecided').length } : null;
   return <div className="references" role="region" aria-label="Reference bodies">
-    <div className="ol-head specify-head">Reference bodies <span className="muted" aria-label="Reference bodies summary">{p.set.references.length} · {p.set.datums.length} datums · {p.set.keepouts.length} keep-outs{counts && (counts.violated || counts.undecided) ? ` · ${counts.violated} violated, ${counts.undecided} undecided` : ''}</span>
+    <div className="ol-head specify-head">Reference bodies {(p.set.references.length > 0 || p.set.datums.length > 0 || p.set.keepouts.length > 0) && <span className="muted" aria-label="Reference bodies summary">{p.set.references.length} · {p.set.datums.length} datums · {p.set.keepouts.length} keep-outs{counts && (counts.violated || counts.undecided) ? ` · ${counts.violated} violated, ${counts.undecided} undecided` : ''}</span>}
       <label className="tool tiny" data-tip="Add a reference (STEP, STL or OBJ, mm)"><input type="file" aria-label="Add reference" accept=".step,.stp,.stl,.obj" hidden onChange={e => { const f = e.target.files?.[0]; if (f) p.onAddFile(f); e.target.value = ''; }} />＋</label></div>
     {p.set.references.map(r => {
       const faces = (p.local.get(r.id) ?? []).flatMap(b => b.mesh.faces), at = r.at;
       return <div key={r.id} className="req" role="listitem" aria-label={`Reference ${r.id}`}>
         <span className="req-row"><span className="req-mark">◇</span><b>{r.id}</b> {r.name} <span className="muted">· locked · {'step' in r.source ? 'STEP' : 'mesh'} · {faces.length} faces</span></span>
+        {p.errors?.has(r.id) ? <div role="status" className="warn">{p.errors.get(r.id)}</div> : p.pending ? <div role="status" className="muted">Reading this reference…</div> : null}
         {(['position', 'rotation'] as const).map(k => <span key={k} className="req-edit ref-at"><span className="muted ref-at-label">{k === 'position' ? 'at mm' : 'turn °'}</span>
           {[0, 1, 2].map(i => <Input key={i} aria-label={`${r.id} ${k} ${'xyz'[i]}`} type="number" step="any" defaultValue={at[k][i]}
             onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') { const next: Placement = { position: [...at.position], rotation: [...at.rotation] }; next[k][i] = num(e.currentTarget.value, at[k][i]); p.onPlace(r.id, next); } }} />)}

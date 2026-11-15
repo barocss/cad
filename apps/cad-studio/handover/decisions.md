@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1354 — Browser idle and selection-detail disclosure](notes/browser-idle-disclosure-mac-2026-11-15/README.md).
+
 - [D1353 — Open-chain next-action guidance](notes/sketch-close-guidance-mac-2026-11-15/README.md).
 
 - [D1352 — Sketch diagnostics, point-pair and Ellipse disclosure](notes/sketch-disclosure-mac-2026-11-15/README.md).

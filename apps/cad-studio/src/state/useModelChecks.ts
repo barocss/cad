@@ -1,3 +1,4 @@
+import { readReferenceDisplay, type ReferenceDisplay } from './referenceDisplay';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { emptyDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
@@ -18,19 +19,25 @@ interface ModelCheckOptions {
 export function useModelChecks({ model, worker, onNotice: setToast }: ModelCheckOptions) {
   const { doc, evaluated, bodies, fresh, busy, active, sketch, previewBodies } = model;
   const { engine, nextRevision } = worker;
-  const [refLocal, setRefLocal] = useState<ReadonlyMap<string, BodyResult[]>>(new Map());
+  const [referenceReceipt, setReferenceReceipt] = useState<(ReferenceDisplay & { source: StudioDoc['references']; engine: EngineClient }) | null>(null);
+  const referenceOwner = useRef({ source: doc.references, engine });
+  referenceOwner.current = { source: doc.references, engine };
+  const referenceCurrent = referenceReceipt?.source === doc.references && referenceReceipt?.engine === engine;
+  const refLocal = useMemo(() => referenceCurrent ? referenceReceipt!.local : new Map<string, BodyResult[]>(), [referenceCurrent, referenceReceipt]);
+  const refErrors = useMemo(() => referenceCurrent ? referenceReceipt!.errors : new Map<string, string>(), [referenceCurrent, referenceReceipt]);
   const [keepoutBodies, setKeepoutBodies] = useState<BodyResult[]>([]);
   const [keepoutVerdicts, setKeepoutVerdicts] = useState<KeepoutResult[] | null>(null);
   // The references read (each on its own, in its own coordinates) and the keep-outs' solids made, when they change.
   useEffect(() => {
-    const set = readReferences(doc.references); let live = true;
+    const source = doc.references, set = readReferences(source); let live = true;
+    const current = () => live && referenceOwner.current.source === source && referenceOwner.current.engine === engine;
     const read = (d: StudioDoc) => engine.part(d, nextRevision(), 'read');
     void (async () => {
-      const local = new Map<string, BodyResult[]>();
-      for (const r of set.references) { try { local.set(r.id, await referenceLocal(r, read)); } catch { local.set(r.id, []); } }
+      await readReferenceDisplay(set.references, r => referenceLocal(r, read), current, result => setReferenceReceipt({ ...result, source, engine }));
+      if (!current()) return;
       const solids: BodyResult[] = [];
       for (const k of set.keepouts) { const p = withKeepout(emptyDoc(), k), e = await read(p.doc); if (e?.ok) solids.push(...e.bodies.map(b => ({ ...b, key: k.id }))); }
-      if (live) { setRefLocal(local); setKeepoutBodies(solids); }
+      if (current()) setKeepoutBodies(solids);
     })();
     return () => { live = false; };
   }, [doc.references, engine]);
@@ -81,5 +88,5 @@ export function useModelChecks({ model, worker, onNotice: setToast }: ModelCheck
     }, 350);
     return () => { live = false; clearTimeout(t); };
   }, [requirementInput, bodies, fresh, busy, active, sketch, previewBodies]);
-  return { refLocal, keepoutBodies, keepoutVerdicts, spec, specRunning, specStale: spec !== null && spec.of !== requirementInput };
+  return { refLocal, refErrors, refPending: !referenceCurrent, keepoutBodies, keepoutVerdicts, spec, specRunning, specStale: spec !== null && spec.of !== requirementInput };
 }

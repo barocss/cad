@@ -111,11 +111,11 @@ export function SelectionInspector({ model, selection, materialSettings, display
             {b.centroid ? <div className="kv">Centre of mass <b>{b.centroid.map(v => fmt(Math.round(v * 100) / 100)).join(', ')}</b></div> : b.massRef !== undefined ? <div className="kv">Centre of mass <b>…</b></div> : null}
             {!unresolved && (() => { const mp = bodyMass(b, own.density); if (!mp) return null;
               const I = inertiaAt === 'origin' ? inertiaAbout(mp.inertia, mp.mass, mp.centroid, [0, 0, 0]) : mp.inertia;
-              return <>
+              return <details className="body-inertia" onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}><summary>Inertia details</summary>
                 <label className="kv"><span>Inertia</span><select aria-label="Inertia about" value={inertiaAt} onChange={e => setInertiaAt(e.target.value as 'centre' | 'origin')}><option value="centre">about the centre of mass</option><option value="origin">about the origin</option></select></label>
                 <div className="kv inertia" aria-label="Moments of inertia">Ixx Iyy Izz <b>{[0, 1, 2].map(k => sig3(I[k][k])).join(' · ')} g·mm²</b></div>
                 <div className="kv inertia muted">Ixy Iyz Ixz <b>{[[0, 1], [1, 2], [0, 2]].map(([i, j]) => sig3(I[i][j], Math.max(I[0][0], I[1][1], I[2][2]))).join(' · ')}</b></div>
-              </>; })()}
+              </details>; })()}
             {/* (The kernel's area over the exact surfaces, as mass properties; the display mesh's only where it cannot, said.) */}
             <div className="kv" title={b.areaBasis === 'display mesh' ? 'From the display mesh: the kernel could not integrate this body' : 'Over the exact surfaces'}>Surface area <b>{quantityText(area, fmt(Math.round(area)))} mm²{b.areaBasis === 'display mesh' ? ' (mesh)' : ''}</b></div>
             <div className="kv">Faces <b>{b.mesh.faces.length}</b></div>
