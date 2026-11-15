@@ -212,7 +212,7 @@ await f.run(async () => {
   await row('Straight control').click();
   await comb().waitFor({ state: 'hidden' });
   await show();
-  assert.equal(await result().locator('b').innerText(), '0 – 0 mm⁻¹');
+  assert.equal(await result().locator('b').innerText(), '0 mm⁻¹');
   assert.equal(await panel().getByLabel('Comb scale (mm²)').count(), 0);
   await comb().waitFor({ state: 'hidden' });
   await row('reversed').click();

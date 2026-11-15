@@ -138,24 +138,24 @@ await f.run(async () => {
   await open(source,'curvature-capsule.bcad');
   const native=await f.inspect('native',source);
   await pick([10,-4,6]);
-  await show('0 – 0 mm⁻¹');
+  await show('0 mm⁻¹');
   assert.equal(await comb().count(),0);
   assert.equal(await panel().getByLabel('Comb scale (mm²)').count(),0);
   await f.snapshot('straight');
 
   f.phase = 'Pick a semicircle and measure the visible inward comb';
   await pick([24,0,6]);
-  await show('0.25 – 0.25 mm⁻¹');
+  await show('0.25 mm⁻¹');
   const screen=[await capture(4,6)];
   await panel().getByLabel('Comb scale (mm²)').selectOption('8');
   screen.push(await capture(8,6));
-  await result().getByText('0.25 – 0.25 mm⁻¹',{exact:true}).waitFor();
+  await result().getByText('0.25 mm⁻¹',{exact:true}).waitFor();
   await f.runOracle({ native, screen, height:6 },'capsule');
   await f.snapshot('arc-comb');
   await f.same(source);
   await button('Hide curvature comb',panel()).click();
   await comb().waitFor({state:'hidden'});
-  await show('0.25 – 0.25 mm⁻¹');
+  await show('0.25 mm⁻¹');
 
   f.phase = 'Replace the model with the same native IDs at another height';
   const taller=structuredClone(source);
@@ -164,7 +164,7 @@ await f.run(async () => {
   await comb().waitFor({state:'hidden'});
   assert.equal(await panel().count(),0);
   await pick([24,0,8]);
-  await show('0.25 – 0.25 mm⁻¹');
+  await show('0.25 mm⁻¹');
   const updated=await f.inspect('taller-native',taller);
   await f.runOracle({native:updated,screen:[await capture(4,8)],height:8},'taller-capsule');
   const accept = answer => {
