@@ -1,0 +1,19 @@
+import assert from 'node:assert/strict';
+import {createFlow} from './flow-helper.mjs';
+const pins=['apps/cad-studio/src/ui/NodeEditor.tsx'];
+const f=await createFlow({name:'countersink-history-input',output:process.argv[2],envFrozen:'D1362_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:'Countersink history preflight retains source and draft while enforcing outer diameter greater than bore diameter.',limits:['Z-axis three-hole row, 1024/1440 Chrome; not umbrella #22 completion.'],inspectorSource:`
+import {readFileSync} from 'node:fs';
+import {checkBrep,massPropertiesOf} from '@barocss/cad';
+import {partSnapshot} from '@barocss/cad-model/engine/part';
+const [body]=partSnapshot(JSON.parse(readFileSync(process.argv[2],'utf8'))).outputs;
+console.log(JSON.stringify({valid:checkBrep(body.brep,{strict:true}).valid,volume:massPropertiesOf(body).volume,solids:body.bodyCount}));
+`});
+const initial={format:'barocss-cad-model',schema:3,units:'mm',parameters:{},nodes:[{id:'n0',kind:'sketch',profile:'rectangle',min:[0,0],max:[40,40]},{id:'n1',kind:'extrude',sketch:0,height:12},{id:'n2',kind:'hole',parent:{node:1,side:'solid'},radius:2,center:[8,12],countersink:6,pattern:{count:3,step:[10,0]}}],outputs:{b2:{node:2,side:'solid'}},nextId:3};
+const button=(name,scope=f.page)=>scope.getByRole('button',{name,exact:true});
+const field=name=>f.editor().getByLabel(name,{exact:true});
+async function verify(label,doc,csk){const native=await f.inspect(label,doc);assert.ok(native.valid&&native.solids===1);const r=csk/2,h=r-2;const each=48*Math.PI+Math.PI*h*((r*r+2*r+4)/3-4);assert.ok(Math.abs(native.volume-(19200-3*each))<1e-6);return native;}
+await f.run(async()=>{for(const width of[1024,1440]){
+ await f.newPage();await f.page.setViewportSize({width,height:900});const[chooser]=await Promise.all([f.page.waitForEvent('filechooser'),button('Open').click()]);await chooser.setFiles({name:'countersink-row.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(initial))});await f.same(initial);await verify(`${width}-initial`,initial,6);await f.openFeatureEditor(2,'countersink row');
+ for(const value of['4','3.75']){await field('Countersink Ø').fill(value);await f.page.waitForFunction(()=>document.querySelector('input[aria-label="Countersink Ø"]')?.getAttribute('aria-invalid')==='true');assert.equal(await button('Apply',f.editor()).isDisabled(),true);assert.equal(await field('Countersink Ø').inputValue(),value);const desc=await field('Countersink Ø').evaluate(n=>(n.getAttribute('aria-describedby')??'').split(/\s+/).map(id=>document.getElementById(id)?.textContent??'').join(' '));assert.match(desc,/wider|greater|larger/i);await field('Countersink Ø').press('Enter');await f.same(initial);assert.equal(await field('Centre X').inputValue(),'8');assert.equal(await field('Step X').inputValue(),'10');}
+ await f.snapshot(`${width}-undersized-refused`);await field('Countersink Ø').fill('6');await field('Diameter').fill('6');assert.equal(await button('Apply',f.editor()).isDisabled(),true);await field('Diameter').press('Enter');await f.same(initial);await field('Diameter').fill('4');await field('Countersink Ø').fill('8');assert.equal(await button('Apply',f.editor()).isDisabled(),false);const revised=(await f.applyEditor(initial,`${width}-corrected`)).doc;assert.deepEqual(revised,{...initial,nodes:[...initial.nodes.slice(0,2),{...initial.nodes[2],countersink:8}]});await verify(`${width}-corrected`,revised,8);await f.undo();await f.same(initial);await f.redo();await f.same(revised);const save=await f.save(`${width}-countersink`);await f.freshOpen(save.file,revised,`${width}-reopened`);await verify(`${width}-reopened`,revised,8);f.report.observations.push({width,relationRefusal:true,rawDraftRetained:true,centresAndPatternRetained:true,undoRedoSaveOpen:true});
+}});
