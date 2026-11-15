@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1344 — Final References keyboard focus](notes/reference-final-focus-mac-2026-11-15/README.md).
+
 - [D1343 — Saved reference Open recovery guidance](notes/reference-open-recovery-mac-2026-11-15/README.md).
 
 - [D1342 — Native admission before merge persistence](notes/project-merge-admission-mac-2026-11-15/README.md).

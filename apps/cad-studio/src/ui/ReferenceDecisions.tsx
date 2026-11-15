@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type CSSProperties, type MouseEvent } from 'react';
+import { type CSSProperties, type MouseEvent } from 'react';
 import { featureLabel, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { featureId } from '@barocss/cad-model/engine/ids';
 import { markedReferences, referencesOf, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
@@ -13,7 +13,7 @@ interface ReferenceDecisionsProps {
   refProblems: RefProblem[];
   refChoices: { index: number; names: string[] } | null;
   previewReference(where: string, options?: ReferencePreviewOptions): void;
-  settleRef(index: number, to?: string): Promise<boolean>;
+  settleRef(index: number, to?: string, keyboardButton?: HTMLButtonElement): Promise<boolean>;
   showRefChoices(index: number): Promise<void>;
 }
 
@@ -22,21 +22,9 @@ interface ReferenceDecisionsProps {
   const referenceButtonStyle: CSSProperties = { minWidth: 0, maxWidth: '100%', whiteSpace: 'normal', overflowWrap: 'anywhere', textAlign: 'left' };
 
 export function ReferenceDecisions({ doc, referenceLabels, refMarks, refProblems, refChoices, previewReference, settleRef, showRefChoices }: ReferenceDecisionsProps) {
-  const root = useRef<HTMLElement>(null);
-  const pendingFocus = useRef<{ doc: StudioDoc; button: HTMLButtonElement } | null>(null);
-  useLayoutEffect(() => {
-    const focus = pendingFocus.current;
-    if (!focus || focus.doc === doc) return;
-    pendingFocus.current = null;
-    if (document.activeElement !== document.body || focus.button.isConnected) return;
-    const next = root.current?.querySelector<HTMLElement>('[data-reference-next]');
-    next?.focus({ preventScroll: true });
-    next?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [doc]);
   const choose = async (event: MouseEvent<HTMLButtonElement>, index: number, candidate?: string) => {
-    const focus = event.detail === 0 ? { doc, button: event.currentTarget } : null;
-    pendingFocus.current = focus;
-    if (!(await settleRef(index, candidate)) && pendingFocus.current === focus) pendingFocus.current = null;
+    const button = event.detail === 0 && document.activeElement === event.currentTarget ? event.currentTarget : undefined;
+    await settleRef(index, candidate, button);
   };
   const referenceDimension = (where: string) => doc.drawing?.dimensions.find(d => where === `dimension ${d.id}`);
   const referenceCaption = (where: string, index: number | null) => {
@@ -49,7 +37,7 @@ export function ReferenceDecisions({ doc, referenceLabels, refMarks, refProblems
     return `${label?.text ?? kind + ' dimension'} · ${view} view`;
   };
   const affectedDimensions = (name: string) => new Set(referencesOf(doc, true).refs.filter(r => r.name === name || r.was === name).map(r => referenceDimension(r.where)?.id).filter(Boolean)).size;
-  return <section ref={root} aria-label="References" style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}>
+  return <section aria-label="References" style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}>
     <div className="ol-head">References</div>
     <div className="muted">{refMarks.length} matched again · {refProblems.length} need a choice</div>
     {refMarks.map(m => {

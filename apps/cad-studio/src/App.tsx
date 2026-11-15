@@ -1,3 +1,4 @@
+import { handoffReferenceFocus, type ReferenceFocusReceipt } from './ui/referenceFocus';
 import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
 import { viewportRecoveryToast } from './viewport/viewportRecovery';
 import { useSpecificationActions } from './state/useSpecificationActions';
@@ -101,7 +102,7 @@ import { CursorReadout } from './ui/CursorReadout';
 import { iconFor } from './ui/featureIcon';
 import { NodeEditor } from './ui/NodeEditor';
 import { revokePersonRowFiles, isPersonRowFiles, type PersonRowFiles } from '@barocss/cad-model/engine/rowFiles';
-import { Profiler, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { Profiler, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { EngineClient, type ProposalOverlay } from './engine/client';
 import { beginWork, createWorkOwnership, finishWork, invalidateWork, reserveAcceptedChange, settleWorkReservation, stopOwnedWork, workEditRefusal, type WorkHistory } from './state/workOwnership';
 import type { OpenScope } from './state/openOwnership';
@@ -308,6 +309,14 @@ export function App() {
   // Even a no-op dispatch invalidates an older receipt; functional updates retain React's queued semantics.
   const saveDocumentToken = useRef<object>({});
   const openIntent = useRef<OpenScope>({});
+  const referenceBrowser = useRef<HTMLElement>(null);
+  const referenceFocus = useRef<ReferenceFocusReceipt<StudioDoc, OpenScope> | null>(null);
+  const referenceFocusRequest = useRef(0);
+  useLayoutEffect(() => {
+    const receipt = referenceFocus.current;
+    referenceFocus.current = null;
+    if (receipt) handoffReferenceFocus(receipt, doc, openIntent.current, referenceBrowser.current, document);
+  }, [doc]);
   const midpointSketch = useMidpointSketch();
   const insetRelink = useInsetRelink();
   const cancelNativeReview = useCallback((restoreInsetFocus = false) => {
@@ -2510,7 +2519,9 @@ export function App() {
     if (edges.length !== 1) { setToast({ title: 'Preview unavailable', hint: edges.length ? 'This name covers more than one displayed edge.' : 'This edge is not present in the current displayed model.', detail: '' }); return; }
     setReferencePreview(null); setDrawing(false); setRendering(false); setMeasure(null); setInstanceSel([]); setDirectSel([]); setSelection({ faces: [], edges, bodies: [] });
   };
-  const settleRef = async (index: number, to?: string) => {
+  const settleRef = async (index: number, to?: string, keyboardButton?: HTMLButtonElement) => {
+    const focusRequest = ++referenceFocusRequest.current;
+    referenceFocus.current = null;
     const open = openIntent.current;
     const current = () => openIntent.current === open && ownsEvaluatedSource() && canChangeDocument();
     const problem = refProblems.find(p => p.index === index);
@@ -2530,6 +2541,8 @@ export function App() {
       if (!result.ok) { setToast({ ...result.error, title: 'Reference not applied' }); return false; }
     }
     pushUndo(); if (!setDoc(next)) return false;
+    if (keyboardButton && focusRequest === referenceFocusRequest.current)
+      referenceFocus.current = { doc: next, scope: openIntent.current, button: keyboardButton };
     referenceProblems.current.set(next, remaining);
     setRefChoices(null); setDirty(true);
     return true;
@@ -3145,9 +3158,9 @@ export function App() {
     ? <ReferenceDecisions doc={doc} referenceLabels={referenceLabels} refMarks={refMarks} refProblems={refProblems} refChoices={refChoices}
       previewReference={previewReference} settleRef={settleRef} showRefChoices={showRefChoices} /> : null;
   const browserPanel = (
-      <Profiler id="outliner" onRender={onBlockRender}><aside className={'card outliner' + (browserOpen ? '' : ' closed')} aria-label="Browser">
+      <Profiler id="outliner" onRender={onBlockRender}><aside ref={referenceBrowser} className={'card outliner' + (browserOpen ? '' : ' closed')} aria-label="Browser">
         <div className="card-title">BROWSER <span className="muted" aria-busy={!fresh}>Base part · {fresh ? `${bodies.length} bod${bodies.length === 1 ? 'y' : 'ies'}` : busy ? 'evaluating…' : 'not up to date'}</span>
-          <ToolIconButton size="tiny" aria-label={browserOpen ? 'Collapse the browser' : 'Expand the browser'} onClick={() => {
+          <ToolIconButton data-reference-return size="tiny" aria-label={browserOpen ? 'Collapse the browser' : 'Expand the browser'} onClick={() => {
             if (browserOpen) clearReferencePreview();
             setBrowserOpen(o => { try { localStorage.setItem('cad-studio.browser', o ? 'closed' : 'open'); } catch { /* private mode */ } return !o; });
           }}><Icon name={browserOpen ? 'left_panel_close' : 'left_panel_open'} small /></ToolIconButton></div>
