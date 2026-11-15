@@ -3174,7 +3174,7 @@ export function App() {
   // an overlay toggle at the section's header, their status under the panel.)
   const previewPanel = previewMode === 'print' ? <PrintPanel resetKey={doc} options={printOptions} onOptions={commitPrintPreview} onDirection={commitPrintDirection} state={printState} reason={printReason} warnings={printWarnings} scopeHint={printScopeHint} />
     : previewMode === 'cnc' ? <CamPanel options={camOptions} onOptions={patchCam} state={camState} reason={camReason} />
-    : previewMode === 'clearance' ? <ClearancePanel near={clearanceNear} onNear={setClearanceNear} display={clearanceDisplay} reason={clearanceReason} labels={clearanceLabels} />
+    : previewMode === 'clearance' ? <ClearancePanel resetKey={doc} near={clearanceNear} onNear={setClearanceNear} display={clearanceDisplay} reason={clearanceReason} labels={clearanceLabels} />
     : previewMode === 'analysis' ? <AnalysisPanel analysis={analysis} onAnalysis={setAnalysis} map={mapKind} onMap={k => { setMapHover(null); setMouldSpread(0); setMapKind(k); }}
       printing={!!printing} pull={!!doc.mould?.pull} mapsReason={viewBackend === 'webgl2' ? 'The analysis maps are drawn with WebGPU; this browser draws with WebGL2.' : undefined} />
     : null;

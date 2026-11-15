@@ -1,3 +1,4 @@
+import { useId, useState } from 'react';
 import type { ClearancePair } from '@barocss/cad-model/team/clearanceMap';
 import { clearancePairState } from './clearanceAnalysis';
 import type { ClearanceDisplay } from './clearanceDisplay';
@@ -14,12 +15,34 @@ export function clearancePairLabel(pair: ClearancePair): string {
   if (state === 'refused') return 'Refused · overlap unclassified';
   return state[0].toUpperCase() + state.slice(1);
 }
-export function ClearancePanel({ near, onNear, display, reason, labels }: {
+export function ClearancePanel({ near, onNear, display, reason, labels, resetKey }: {
   near: number; onNear(value: number): void;
-  display: ClearanceDisplay | null; reason?: string; labels: ReadonlyMap<string, string>;
+  display: ClearanceDisplay | null; reason?: string; labels: ReadonlyMap<string, string>; resetKey?: unknown;
 }) {
+  // This analysis-only draft never enters the model or history. A new document
+  // cancels it; leaving Clearance unmounts it while App retains the committed band.
+  const statusId = useId();
+  const [draft, setDraft] = useState({ owner: resetKey, near, text: String(near) });
+  const owned = draft.owner === resetKey && draft.near === near;
+  if (!owned) setDraft({ owner: resetKey, near, text: String(near) });
+  const text = owned ? draft.text : String(near), number = Number(text);
+  const invalid = !text.trim() || !Number.isFinite(number) || number <= 0;
+  const message = invalid || number !== near ? `${invalid ? 'Enter a finite positive clearance.' : 'Not applied.'} Analysis uses ${near} mm.` : undefined;
+  const cancel = () => setDraft({ owner: resetKey, near, text: String(near) });
+  const apply = () => {
+    if (invalid) return;
+    if (number !== near) onNear(number);
+    else cancel();
+  };
   return <div className="card" style={{ padding: '6px 10px', maxWidth: 440 }} aria-label="Assembly clearance">
-    <label>Near <input aria-label="Near clearance (mm)" type="number" min={Number.MIN_VALUE} step="any" value={near} style={{ width: 64 }} onChange={event => { const n = event.target.valueAsNumber; if (Number.isFinite(n) && n > 0) onNear(n); }} /> mm</label>
+    <label>Near <input aria-label="Near clearance (mm)" type="number" min={Number.MIN_VALUE} step="any" value={text} style={{ width: 64 }}
+      aria-invalid={invalid || undefined} aria-describedby={message ? statusId : undefined}
+      onChange={event => setDraft({ owner: resetKey, near, text: event.target.value })} onBlur={apply} onKeyDown={event => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); apply(); }
+        else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancel(); }
+      }} /> mm</label>
+    {message && <div id={statusId} role="status" className={invalid ? 'warn small' : 'muted small'}>{message}</div>}
     <div role="status" aria-live="polite">{reason ?? display?.error ?? (!display || display.stage === 'evaluating' ? 'Pending · current pose not classified' : display.stage !== 'ready' ? 'Updating current pose…' : display.pairs.length ? `${display.pairs.length} candidate pair${display.pairs.length === 1 ? '' : 's'}` : `No candidate pairs within the ${numeric(near)} mm band`)}</div>
     {!!display?.pairs.length && <ul style={{ maxHeight: 190, overflowY: 'auto', paddingLeft: 16, margin: '4px 0' }}>{display.pairs.map(pair => <li key={pair.a + '|' + pair.b} data-clearance-state={clearancePairState(pair)} style={{ padding: '3px 0' }}>
       <span>{pairName(pair.a, labels)} / {pairName(pair.b, labels)}</span><br />
