@@ -2396,6 +2396,7 @@ export function App() {
       return engine.part(prefixDoc(doc, doc.nodes.length), revision.current++, 'read');
     },
     fit: () => viewport.current?.fit(),
+    getUnappliedSaveHint: () => cageEdRef.current?.session ? 'The cage draft is not included. Use Done, then save to include it.' : null,
     onNotice: setToast,
   });
   const { meshAsk, setMeshAsk, stage, repairAsk, setRepairAsk, stopStage } = meshImport;
@@ -3564,7 +3565,9 @@ export function App() {
           <ToolIconButton key="tool3" aria-label="New part" data-tip="New part" onPointerDown={workspaceModeExit.rememberFocus}
             onClick={event => {
               if (sessionBlocked('starting a new part')) return;
-              workspaceModeExit.switchWhenReady(() => replaceDoc(emptyDoc(), 'new-part'), { event });
+              workspaceModeExit.switchWhenReady(() => replaceDoc(emptyDoc(), 'new-part'), { event,
+                readFeature: () => cageEdRef.current?.session ?? commandDraft() ?? nodeEditorDraft.current,
+                title: cageEdRef.current?.session ? 'Discard cage draft and start a new part?' : undefined });
             }}><Icon name="add_box" /></ToolIconButton>,
           <TemplatePicker key="tool4" doc={doc} state={{ templatesOpen, setTemplatesOpen, templateName, setTemplateName }} open={open} onNotice={setToast}
             onTemplate={(next, focus) => {
@@ -3579,7 +3582,7 @@ export function App() {
           <ToolIconButton key="tool6" state={paramsOpen ? 'on' : 'idle'} aria-label="Parameters" data-tip="Parameters" data-tip-desc="Named sizes the part depends on, and saved sets of them (configurations)" onClick={() => setParamsOpen(v => !v)} hidden={rendering || drawing}><Icon name="function" /></ToolIconButton>,
           <ToolIconButton key="tool7" aria-label="Open" data-tip="Open" data-tip-desc="A model, worker file or supported exchange file" onPointerDown={workspaceModeExit.rememberFocus}
             onClick={event => { fileOpenFocus.current = workspaceModeExit.takeFocus(event); fileInput.current?.click(); }}><Icon name="folder_open" /></ToolIconButton>,
-          <ToolIconButton key="tool8" aria-label="Save" data-tip="Save" data-tip-key="⌘S" data-tip-desc={project.view.store ? `Into ${project.view.store.name}` : undefined} onClick={save}><Icon name="save" /></ToolIconButton>,
+          <ToolIconButton key="tool8" aria-label="Save" data-tip="Save" data-tip-key="⌘S" data-tip-desc={cageEd.session ? 'Saves the applied part only. Cage draft is excluded until Done.' : project.view.store ? `Into ${project.view.store.name}` : undefined} onClick={save}><Icon name="save" /></ToolIconButton>,
           <ToolIconButton key="tool8b" state={versionsOpen ? 'on' : 'idle'} aria-label="Project and versions" data-tip="Project & versions" data-tip-desc="Open a folder (or keep a project in this browser) to save into it, keep versions, branch and compare" onClick={() => {
             if (sessionBlocked('opening the project')) return;
             if (versionsOpen) cancelLocalCandidateReview();

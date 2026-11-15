@@ -16,6 +16,7 @@ import { clearRecovery } from '../app/recovery';
 import type { EngineClient } from '../engine/client';
 import type { OpenScope } from '../state/openOwnership';
 import { currentDocumentSave } from '../state/saveOwnership';
+import { unappliedSaveNotice } from './unappliedSaveNotice';
 import type { useProject } from '../storage/useProject';
 import { placedProposalPreview } from '../viewport/instanceEvaluation';
 import { prepareSignedFinishOpen, readDocumentFile, verifyDocumentFile, verifyStoredNativeOpen, writeDocumentFile } from './documentFile';
@@ -74,6 +75,7 @@ interface StudioDocumentFileOptions {
     commitDirect(direct: DirectGeometry, selection?: string[]): boolean;
   };
   validateSave(): Promise<EvalResult> | undefined;
+  getUnappliedSaveHint?(): string | null;
   fit(): void;
   onNotice: Dispatch<SetStateAction<FriendlyError | null>>;
 }
@@ -83,11 +85,21 @@ const OPEN_READS = 'Open reads models (.bcad, .json), worker files (.bcad-task, 
 const CANDIDATE_REVIEW_REFUSED = 'Could not review the worker candidate';
 
 /** File actions use the App's current document, dispatch and Worker ownership. */
-export function useStudioDocumentFiles({ document, ownership, worker, changes, validateSave, fit, onNotice: setToast }: StudioDocumentFileOptions) {
-  const { doc, docNow, fileName, fileNameNow, recoveryDoc, project } = document;
+export function useStudioDocumentFiles({ document, ownership, worker, changes, validateSave, getUnappliedSaveHint, fit, onNotice: setToast }: StudioDocumentFileOptions) {
+  const { doc, docNow, fileNameNow, recoveryDoc, project } = document;
   const { saveAcceptanceScope, saveDocumentToken, beginOpenIntent, currentOpenScope, isOpenCurrent, sessionBlocked, canOpenImport } = ownership;
   const { engine, workerSessionNow, nextRevision, stopImport } = worker;
   const { replaceDoc, setDocState, setFileName, setDirty, rememberRefProblems, commit, commitDirect } = changes;
+  const saveNoticeOrder = useRef(0);
+  const captureSaveNotice = (title: string) => {
+    const order = ++saveNoticeOrder.current, hint = getUnappliedSaveHint?.() ?? null;
+    const owner = { token: saveAcceptanceScope, doc, name: fileNameNow.current };
+    return () => {
+      const notice = unappliedSaveNotice({ hint, currentHint: getUnappliedSaveHint?.() ?? null, order, latest: saveNoticeOrder.current,
+        current: currentDocumentSave(owner, saveDocumentToken.current, docNow.current, fileNameNow.current) });
+      if (notice) setToast({ title, hint: notice, detail: '' });
+    };
+  };
   const handoffIntent = useRef<object | null>(null);
   const candidateIntent = useRef<{ local?: { request: TaskRunReviewRequest; status?: TaskRunStatus } }>(null);
   const runOpenIntent = useRef<{ request: TaskRunLocator; status?: TaskRunStatus }>(null);
@@ -101,11 +113,11 @@ export function useStudioDocumentFiles({ document, ownership, worker, changes, v
     try { writeDocumentFile(d, name); return true; }
     catch (e) { setToast({ title: 'Could not save', hint: e instanceof Error ? e.message : String(e), detail: '' }); return false; }
   };
-  const projectSaveReceipt = (name: string) => {
+  const projectSaveReceipt = (name: string, savedNotice: () => void) => {
     const owner = { token: saveAcceptanceScope, doc, name };
     return () => {
       if (!currentDocumentSave(owner, saveDocumentToken.current, docNow.current, fileNameNow.current)) return;
-      setDirty(false); clearRecovery();
+      setDirty(false); clearRecovery(); savedNotice();
     };
   };
   const checkedSave = (title: string, write: (name: string) => boolean | Promise<boolean>): boolean | Promise<boolean> => {
@@ -129,21 +141,27 @@ export function useStudioDocumentFiles({ document, ownership, worker, changes, v
   // (A copy still offered keeps its blobs: Restore can still bring it back.)
   const save = () => {
     if (sessionBlocked('saving')) return;
+    const savedNotice = captureSaveNotice('Applied part saved');
     void checkedSave('Could not save the model', name => {
-      if (project.view.store) return project.save(doc, name, projectSaveReceipt(name));
+      if (project.view.store) return project.save(doc, name, projectSaveReceipt(name, savedNotice));
       if (!writeFile(doc, `${name}.bcad`)) return false;
-      setDirty(false); clearRecovery(); void collectRecoveryBlobs(recoveryDoc);
+      setDirty(false); clearRecovery(); void collectRecoveryBlobs(recoveryDoc); savedNotice();
       return true;
     });
   };
   const makeVersion = async (versionName?: string) => {
     if (sessionBlocked('saving a version')) return false;
-    return checkedSave('No version made', name => project.makeVersion(doc, name, { versionName, onSaved: projectSaveReceipt(name) }));
+    const savedNotice = captureSaveNotice('Applied part version saved');
+    return checkedSave('No version made', name => project.makeVersion(doc, name, { versionName, onSaved: projectSaveReceipt(name, savedNotice) }));
   };
   /** A copy to share: without the design history, nor the proposals' prompts and plans (chat/proposals.ts). */
   const saveShared = () => {
     if (sessionBlocked('saving')) return;
-    void checkedSave('Could not save the model', name => writeFile(stripHistory(doc), `${name}-shared.bcad`));
+    const savedNotice = captureSaveNotice('Applied part shared copy downloaded');
+    void checkedSave('Could not save the model', name => {
+      if (!writeFile(stripHistory(doc), `${name}-shared.bcad`)) return false;
+      savedNotice(); return true;
+    });
   };
 
   const withTaskRunHandoff = async <T>(offer: TaskRunOffer, sourceKey: string, action: string,
