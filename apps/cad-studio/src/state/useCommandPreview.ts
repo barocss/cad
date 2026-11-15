@@ -1,4 +1,5 @@
 import { offsetCollapseFailure } from '../app/offsetCollapseFeedback';
+import { closedPerimeterFilletFailure } from './closedPerimeterFilletFailure';
 import { commandBuildFailure } from './commandBuildFailure';
 import { createPreviewLifetime, ownedPreview } from './previewLifetime';
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
@@ -197,8 +198,10 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
         }
         else if (live && current?.cmd === cmd && current.ctx === ctx && current.values === values) {
           const failedFeature = result.revision === revision ? failedFeatureText(result.error.feature, shown.nodes, ctx.doc.nodes) : undefined;
-          const error = shown === candidate && result.revision === revision && terminal?.kind === cmd.id
-            ? edgeFinishFailure(result.error, terminal) : result.error;
+          const ownedFinish = shown === candidate && result.revision === revision && terminal?.kind === cmd.id;
+          const finishError = ownedFinish ? edgeFinishFailure(result.error, terminal) : result.error;
+          const error = ownedFinish && cmd.id === 'fillet'
+            ? closedPerimeterFilletFailure(finishError, ctx, candidate) ?? finishError : finishError;
           setPreviewBodies(null);
           const recovery = shown === candidate && result.revision === revision
             ? offsetCollapseFailure(cmd.id, ctx.doc, candidate, { ...error, failedFeature }) : undefined;

@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1391: [Constant perimeter recovery](notes/constant-perimeter-recovery-mac-2026-11-15/README.md), #503 recovery alternative only; original diagnostics and native refusal retained, full-perimeter seam defect unresolved.
+
 - D1390: [Closed varying-Fillet recovery](notes/closed-varying-fillet-recovery-mac-2026-11-15/README.md), #502; prove the selected cycle before naming it, retain native refusal and existing recovery controls.
 
 - D1389: [Direct Join endpoints](notes/direct-join-endpoints-mac-2026-11-15/README.md), #497; exact compared endpoints and explicit order recovery, without snapping or native admission changes.
