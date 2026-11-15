@@ -37,7 +37,7 @@ const NONE: SketchPick[] = [];
  * tangent joints stay tangent. The app settles every edit (see sketch/settle.ts) and reports `error`. O16: the contents
  * on shadcn (Input, NativeSelect, Button, FIELD); the shell (its title) and the chip toggles are the studio's.
  */
-export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, conflictIds, onActivateOutline, toolControls, onShape, onDrivingLength, onPlace, onUi, onOffset, onUseOutline, onLinkedInset, onToCurves, onBand }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; toolControls?: ReactNode; onShape(shape: SketchShape | null): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
+export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, finishError, conflictIds, onActivateOutline, toolControls, onShape, onDrivingLength, onPlace, onUi, onOffset, onUseOutline, onLinkedInset, onToCurves, onBand }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; toolControls?: ReactNode; onShape(shape: SketchShape | null): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
   onDrivingLength?(source: Polygon, edge: number, value: number): boolean;
   /** Sets the picked outline entities or the dimension being edited in the viewport. */
   onUi?(patch: Pick<SketchState, 'picked' | 'editDim'>): void;
@@ -150,8 +150,8 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
           </NativeSelect>
         </label>}
       {toolControls}
-      {s && <div className={'sk-status' + (status.warn ? ' open' : '')} role="status"><i />{status.text}</div>}
-      {(error ?? splineError) && <div className="sk-status open" role="alert"><i />{error ?? splineError}</div>}
+      {s && !finishError && <div className={'sk-status' + (status.warn ? ' open' : '')} role="status"><i />{status.text}</div>}
+      {(finishError ?? error ?? splineError) && <div className="sk-status open" role="alert"><i />{finishError ?? error ?? splineError}</div>}
       {s && <SketchMobility owner={sketch} inspection={constraintInspection}
         onDimEdit={editDim => onUi?.({ editDim })} />}
       {s?.kind === 'rectangle' && (() => {

@@ -3307,7 +3307,7 @@ export function App() {
         crossingToolSupported={usesNativeCrossings}
         placedRotationLimited={placedSketchSnaps?.sources.some(({ instance }) => !supportsPlacedBoxSnapRotation(instance.rotation))}
         onToggleObjectKind={kind => setObjectSnapKinds(kinds => toggleObjectSnapKind(kinds, kind))}
-        onExitObjectKinds={sketch.editDim ? () => sketchViewportActions.onDimEdit?.(null) : undefined} /><PathGapControls gap={pathGap} /><CircleChordControls circle={circleChord} /><OverlaidLinesControls scan={overlaidLines} /></>} toolLabel={TOOLS.find(t => t.tool === sketch.tool)!.label} error={sketchFinishError ?? sketchIssue?.reason ?? null}
+        onExitObjectKinds={sketch.editDim ? () => sketchViewportActions.onDimEdit?.(null) : undefined} /><PathGapControls gap={pathGap} /><CircleChordControls circle={circleChord} /><OverlaidLinesControls scan={overlaidLines} /></>} toolLabel={TOOLS.find(t => t.tool === sketch.tool)!.label} finishError={sketchFinishError} error={sketchIssue?.reason ?? null}
         onActivateOutline={sketch.editNode !== undefined && (sketch.tool === 'select' || sketch.tool === 'dimension') ? index => {
           const source = sketchCutInputs(sketch).shapes[index];
           const next = activateDraftOutline(sketch, draftShapeOrder(sketch).indexOf(source));

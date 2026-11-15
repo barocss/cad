@@ -1,3 +1,4 @@
+import { openChainGuidance } from '../app/sketchOpenGuidance';
 import type { SketchShape } from '@barocss/cad-model/sketch/types';
 import type { SolveResult } from '@barocss/cad-model/sketch/profile';
 import { wellFormedBezier } from '@barocss/cad-model/sketch/bezier';
@@ -12,7 +13,7 @@ export function sketchStatus(s: SketchShape | null, solved: SolveResult | null, 
     : s.poles.length === 3 ? { text: tool === 'bezier' ? 'Quadratic Bézier · click a fourth point to make it cubic' : 'Quadratic Bézier', warn: tool === 'bezier' } : { text: 'Cubic Bézier', warn: false };
   if (s.kind !== 'polygon') return { text: 'Fully defined', warn: false };
   if (!s.closed && !s.pending && s.construction) return { text: 'Open construction line', warn: false };
-  if (!s.closed) return { text: s.pending ? 'Move to bend the arc, click to place it' : 'Open profile · click the first point to close', warn: true };
+  if (!s.closed) return { text: openChainGuidance(s, tool), warn: true };
   if (s.pending) return { text: 'Move to bend the closing arc, click to place it', warn: true };
   if (s.ellipse && ellipseMatches(s)) return { text: 'Ellipse', warn: false };
   if (!solved) return { text: 'Outline closed', warn: false };

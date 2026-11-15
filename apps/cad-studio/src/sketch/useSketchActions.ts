@@ -1,3 +1,4 @@
+import { openChainFinishGuidance } from '../app/sketchOpenGuidance';
 import { offsetRecoveryMessage } from '../app/sketchOffsetDistance';
 import { sketchOffsetTarget } from '../app/sketchOffsetTarget';
 import { emptyDirect } from '../app/directGeometry';
@@ -306,9 +307,7 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
     const { authored, protectedShapes, joined } = sketchFinishInputs(sketch);
     const openChain = sketch.band ? undefined : unfinishedChain(joined);
     if (openChain) {
-      const start = openChain.points[0].join(', '), end = openChain.points[openChain.points.length - 1].join(', ');
-      const action = openChain.pending ? 'Place the last arc or trim' : 'Close or trim';
-      setFinishRefusal({ generation: requestedGeneration, message: `${action} the open chain from (${start}) to (${end}) mm.` });
+      setFinishRefusal({ generation: requestedGeneration, message: openChainFinishGuidance(joined) });
       return;
     }
     const shapes = withIds(joined, undefined, protectedShapes);
