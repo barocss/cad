@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1380: [Curvature zoom clipping](notes/curvature-zoom-clipping-mac-2026-11-15/README.md), #148; clip annotation segments locally, preserve native measurements and knot-span boundaries.
 - D1379: [Curvature scale retention](notes/curvature-scale-retention-mac-2026-11-15/README.md), #149, retained owner resets and stale-request guards; pending focus preserved.
 
 - D1378: [Constant curvature readout](notes/constant-curvature-readout-mac-2026-11-15/README.md), #147, unchanged measurements and varying ranges.

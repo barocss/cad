@@ -1,4 +1,5 @@
 import { CurvatureComb } from './CurvatureComb';
+import { projectOverlaySegment } from './curvatureCombSegments';
 import type { CurvatureOverlay } from '../app/useEdgeCurvature';
 import type { MarkHandlers } from '../ui/SketchMarks';
 import type { ScreenBox } from '../ui/sketchConstraintMarkLayout';
@@ -967,7 +968,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     const w = c.clientWidth, h = c.clientHeight; const cam = camera.current;
     const items: React.ReactNode[] = [];
     if (props.curvatureComb && !props.modelUnavailable)
-      items.push(<CurvatureComb key="curvature-comb" overlay={props.curvatureComb} project={point => cam.project(point, w, h)} />);
+      items.push(<CurvatureComb key="curvature-comb" overlay={props.curvatureComb} projectSegment={(a, b) => projectOverlaySegment(cam, a, b, w, h)} />);
     const sk = props.sketch;
     const workArea = sk?.editDim ? modelFitArea(c) : undefined;
     const dimensionArea = sk?.editDim ? workArea ? {
