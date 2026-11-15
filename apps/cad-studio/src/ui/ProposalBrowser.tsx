@@ -19,7 +19,7 @@ const volumeOf = (list: readonly BodyResult[]) => list.reduce((s, b) => s + (b.v
 export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel the current edit to review the proposal.', doc, bodies, fresh, massReady, placedPreviewEnabled, decidedShown, setDecidedShown }: ProposalBrowserProps) {
   const { ghost, proposalBusy, reviewBlocked, isStale, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt } = controller;
   return <>{!!doc.proposals?.length && <div className="chat-proposals" role="list" aria-label="Proposals"><div className="ol-head req-head">Proposals <span className="muted">{doc.proposals.filter(p => p.status === 'open').length} open</span>
-          <ToolIconButton size="tiny" state={decidedShown ? 'on' : 'idle'} aria-label="Show decided proposals" data-tip={decidedShown ? 'Open only' : 'Show accepted and rejected'} onClick={() => setDecidedShown(f => !f)}><Icon name="history" small /></ToolIconButton></div>
+          <ToolIconButton size="tiny" state={decidedShown ? 'on' : 'idle'} data-proposal-history-toggle aria-label={decidedShown ? 'Hide decided proposals' : 'Show decided proposals'} aria-pressed={decidedShown} data-tip={decidedShown ? 'Hide decided proposals' : 'Show accepted and rejected'} onClick={() => setDecidedShown(f => !f)}><Icon name="history" small /></ToolIconButton></div>
         {doc.proposals.filter(p => decidedShown || p.status === 'open').map(p => {
           const shown = ghost?.id === p.id, stale = isStale(p), base = volumeOf(bodies);
           const blockedDescription = reviewBlocked ? `proposal-review-blocked-${p.id}` : undefined;

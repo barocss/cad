@@ -1,4 +1,4 @@
-import type { ReactNode, PointerEvent as ReactPointerEvent } from 'react';
+import { useLayoutEffect, useRef, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react';
 import { Icon } from '../ui/atoms';
 import { CHAT_STRIP } from './useLayout';
 
@@ -18,6 +18,14 @@ export function ChatColumn({ open, width, onOpen, onWidth, openProposals, decide
   proposals: ReactNode; content: ReactNode;
 }) {
   const chat = open && content !== null, shown = columnShown(chat, openProposals, decided, decidedShown);
+  const column = useRef<HTMLElement>(null), historyToggle = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    const activated = historyToggle.current;
+    historyToggle.current = null;
+    // A user toggle can replace the strip with the panel (or the reverse). Do not
+    // move focus for unrelated state updates or when the same button survives.
+    if (activated && !activated.isConnected) column.current?.querySelector<HTMLButtonElement>('[data-proposal-history-toggle]')?.focus();
+  }, [decidedShown]);
   const drag = (e: ReactPointerEvent<HTMLDivElement>) => {
     const handle = e.currentTarget, x0 = e.clientX, w0 = width;
     handle.setPointerCapture(e.pointerId);
@@ -26,12 +34,15 @@ export function ChatColumn({ open, width, onOpen, onWidth, openProposals, decide
     handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', up);
   };
   const openButton = <button className="tool" aria-label="Open chat" title={content === null ? 'The chat opens in Model view' : 'Open the chat'} disabled={content === null} onClick={() => onOpen(true)}><Icon name="chat" /></button>;
-  return <aside className={'chat-col' + (shown ? ' open' : '')} style={{ width: shown ? width : CHAT_STRIP }} aria-label="Chat column">
+  return <aside ref={column} onClickCapture={e => {
+    const toggle = (e.target as Element).closest<HTMLElement>('[data-proposal-history-toggle]');
+    historyToggle.current = toggle && e.currentTarget.contains(toggle) ? toggle : null;
+  }} className={'chat-col' + (shown ? ' open' : '')} style={{ width: shown ? width : CHAT_STRIP }} aria-label="Chat column">
     {shown ? <>
       {proposals}
-      {chat ? <div className="chat-col-chat">{content}</div> : <div className="chat-col-closed">{openButton}<span className="muted">The chat is closed.</span></div>}
+      {chat ? <div className="chat-col-chat">{content}</div> : <div className="chat-col-closed">{openButton}</div>}
       <div className="chat-resize" role="separator" aria-orientation="vertical" aria-label="Resize chat" aria-valuenow={width} onPointerDown={drag} />
     </> : <div className="chat-strip">{openButton}
-      {decided > 0 && <button className="tool" aria-label="Show decided proposals" title="Show the accepted and rejected proposals" onClick={onShowDecided}><Icon name="history" /></button>}</div>}
+      {decided > 0 && <button className="tool" data-proposal-history-toggle aria-label="Show decided proposals" aria-pressed={false} title="Show the accepted and rejected proposals" onClick={onShowDecided}><Icon name="history" /></button>}</div>}
   </aside>;
 }
