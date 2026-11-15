@@ -92,7 +92,7 @@ export function DirectPanel({ direct, selected, onChange, onSelect, onError, onH
         <div className="card-title" style={{ marginTop: 8 }}>TWO CURVES</div>
         <TwoCurveRoles direct={direct} ids={[selected[0], selected[1]]} onSelect={onSelect} />
         <div className="flex flex-wrap gap-1">
-          <Button variant="ghost" onClick={() => run(() => directOps.joinCurves(direct, selected[0], selected[1]), added)}>Join</Button>
+          <Button variant="ghost" aria-describedby="direct-join-endpoints" onClick={() => run(() => directOps.joinCurves(direct, selected[0], selected[1]), added)}>Join</Button>
           <Button variant="ghost" onClick={() => run(() => directOps.ruledSurface(direct, selected[0], selected[1]), added)}>Ruled surface</Button>
           <Button variant="ghost" title="The first curve swept along the second" onClick={() => run(() => directOps.sweep(direct, selected[0], selected[1]), added)}>Sweep</Button>
           <Button variant="ghost" title="A surface through both curves" onClick={() => run(() => directOps.loft(direct, selected), added)}>Loft</Button>
