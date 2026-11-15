@@ -23,6 +23,7 @@ import { inView, resolveLine, type Resolved } from './dimensions';
 import { samePointDependency } from './measurement';
 import { baseViewOf, type DimPoint, type DrawingDatum, type DrawingDimension, type DrawingFrame, type DrawingSettings, type EdgeRef, type ViewId, type XY } from './types';
 import { nextFreeId } from '../util/ids';
+import { placeDimensionLabels } from './layout';
 
 export const TOLERANCE_SUGGESTIONS_VERSION = 'cad-studio-tolerance-suggestions-v1';
 
@@ -244,5 +245,8 @@ export function acceptAll(i: SheetInputs, max = 30): { settings: DrawingSettings
     done.add(next.id); accepted.push(next); settings = applySuggestion(settings, next);
   }
   const moved = fixAll({ ...i, settings }, 40, f => f.kind === 'move' || f.kind === 'move-note');
-  return { settings: moved.settings, accepted };
+  // Tolerance boxes and counted labels can change packing after the initial automatic layout.
+  // Reuse its verified automatic-label pass; unsuccessful placements keep their diagnostics.
+  const labels = placeDimensionLabels(issueContext({ ...i, settings: moved.settings }));
+  return { settings: labels.settings, accepted };
 }
