@@ -22,7 +22,7 @@ const coordinate = () => f.sketchPanel().getByLabel('Point 2 X', { exact: true }
 const finish = () => f.page.locator('.topbar button.finish');
 const check = async (x, z) => {
   assert.deepEqual([Number(await coordinate().inputValue()), Number(await offset().inputValue())], [x, z]);
-  assert.match(await f.sketchPanel().locator('.card-title').first().innerText(), new RegExp('Z ' + z + '$'));
+  assert.match(await f.page.locator('[data-workspace-mode] button.sketching').innerText(), new RegExp('Z ' + z + '$'));
 };
 const key = async name => {
   await finish().focus();

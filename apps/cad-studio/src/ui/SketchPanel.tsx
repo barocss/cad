@@ -1,13 +1,12 @@
 import { applyOffsetMagnitude, parseOffsetMagnitude, OFFSET_MAGNITUDE_ERROR } from '../app/sketchOffsetDistance';
 import { sketchOffsetReadiness } from '../app/sketchOffsetTarget';
-import { planeLabel } from '@barocss/cad-model/sketch/plane';
+import { sketchStatus } from './sketchSettledStatus';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { bezierError, wellFormedBezier } from '@barocss/cad-model/sketch/bezier';
-import { isConvex } from '@barocss/cad-model/sketch/loops';
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SketchAnchor, SketchShape, SketchState } from '../viewport/Viewport';
-import { arcOf, arcPairs, canBeTangent, inferredHV, radiusToBulge, samePair, type ArcPair, type P2, type SolveResult } from '@barocss/cad-model/sketch/profile';
-import { isSettled, redundancy, solveShape, type SketchPick } from '@barocss/cad-model/sketch/rules';
+import { arcOf, arcPairs, canBeTangent, inferredHV, radiusToBulge, samePair, type ArcPair, type P2 } from '@barocss/cad-model/sketch/profile';
+import { isSettled, solveShape, type SketchPick } from '@barocss/cad-model/sketch/rules';
 import { respline, splineAutoHandles, splineEditError, splineMatches, type SplineDef } from '@barocss/cad-model/sketch/spline';
 import { ellipseMatches, type EllipseDef } from '@barocss/cad-model/sketch/ellipse';
 import { applyEllipse, ellipseConstraintRows } from './ellipsePanel';
@@ -89,7 +88,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
       <span className={NUM}><Input id={'sk-' + id} type="number" step="any" min={min} value={round(value)}
         onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v)) set(v); }} /><em>mm</em></span></label>);
   const solved = useMemo(() => isSettled(s) ? solveShape(s) : null, [s]);
-  const status = statusOf(s, solved, sketch.tool);
+  const status = sketchStatus(s, solved, sketch.tool);
   // A matching ellipse is edited by its definition: its 192 outline points, joints and arc pairs are not listed, and its constraint list is one summary row (plus any non-arc constraint).
   const ell = s?.kind === 'polygon' && !!s.ellipse && !s.pending && ellipseMatches(s);
   const constraints = s && !isSettled(s) ? (ell ? ellipseConstraintRows(inferred(s)) : inferred(s)) : [];
@@ -120,7 +119,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
 
   return (
     <aside className="card props sk-panel" aria-label="Sketch">
-      <div className="card-title">SKETCH · {toolLabel} · {planeLabel(sketch.plane)}{sketch.base ? ' · on face' : ''}</div>
+      <div className="card-title">SKETCH · {toolLabel}{sketch.base ? ' · on face' : ''}</div>
       {sketch.associationDetached && <p role="status">Link detached by a geometry or plane edit. This profile is now a snapshot.</p>}
       {onPlace && (() => {
         const anchor = sketch.anchor ?? { kind: 'xy' as const, offset: 0 };
@@ -281,25 +280,6 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
   );
 }
 
-function statusOf(s: SketchShape | null, solved: SolveResult | null, tool?: string): { text: string; warn: boolean } {
-  if (!s) return { text: '', warn: false };
-  if (s.kind === 'slot') return s.r > 0 ? { text: 'Slot · extrudes as a line + arc solid', warn: false } : { text: 'Click the second centre, then the width', warn: true };
-  if (s.kind === 'bezier') return !wellFormedBezier(s) ? { text: 'Bézier curve with unusable control points', warn: true }
-    : s.poles.length === 3 ? { text: tool === 'bezier' ? 'Quadratic Bézier · click a fourth point to make it cubic' : 'Quadratic Bézier', warn: tool === 'bezier' } : { text: 'Cubic Bézier', warn: false };
-  if (s.kind !== 'polygon') return { text: 'Fully defined · every value is dimensioned', warn: false };
-  if (!s.closed && !s.pending && s.construction) return { text: 'Open construction line', warn: false };
-  if (!s.closed) return { text: s.pending ? 'Move to bend the arc, click to place it' : 'Open profile · click the first point to close', warn: true };
-  if (s.pending) return { text: 'Move to bend the closing arc, click to place it', warn: true };
-  if (s.ellipse && ellipseMatches(s)) return { text: 'Ellipse · tangent arcs within 1e-5 of the exact curve · Make curves keeps it exact', warn: false };
-  if (!solved) return { text: 'Outline closed', warn: false };
-  if (!solved.ok) return { text: solved.reason, warn: true };
-  const curved = (s.bulges ?? []).some(Boolean);
-  const tail = curved ? ' · line + arc outline' : !isConvex(s.points) ? ' · concave, extrudes as a line + arc solid' : '';
-  const extra = redundancy(solved);
-  if (extra > 0) return { text: `Over-defined · ${extra} redundant constraint${extra > 1 ? 's' : ''} — remove one${tail}`, warn: true };
-  return solved.dof === 0 ? { text: 'Fully defined' + tail, warn: false }
-    : { text: `Under-defined · ${solved.dof} DOF left — add dimensions or constraints${tail}`, warn: true };
-}
 
 function inferred(s: SketchShape) {
   if (s.kind === 'bezier') return [];

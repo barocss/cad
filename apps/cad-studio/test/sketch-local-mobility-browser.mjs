@@ -326,9 +326,7 @@ await f.run(async () => {
   await f.sketchPanel().waitFor({ state: 'hidden' });
   await expectMarks();
   await edit();
-  await mobility().locator('summary').click();
-  await mobility().getByText('Mobility unavailable for this outline.', { exact: true }).waitFor();
-  assert.equal(await mobility().getByRole('listitem').count(), 0);
+  assert.equal(await mobility().count(), 0, 'unsupported outline has no empty mobility disclosure');
   await expectMarks();
   await f.snapshot('08-circle-replacement-unavailable');
   assert.deepEqual(f.report.downloads, []);

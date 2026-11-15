@@ -12,7 +12,7 @@ export function SketchMobility({ owner, inspection, onDimEdit }: {
   const [open, setOpen] = useState(false);
   const shape = owner.shape;
   const eligible = isSettled(shape) && !shape.construction && !owner.association ? shape : null;
-  const result = useMemo(() => open && eligible ? outlineMobility(eligible) : null, [open, eligible]);
+  const result = useMemo(() => eligible ? outlineMobility(eligible) : null, [eligible]);
   useLayoutEffect(() => () => {
     const current = inspection.get();
     if (current?.owner === owner && current.target === 'mobility') inspection.set(null);
@@ -41,11 +41,13 @@ export function SketchMobility({ owner, inspection, onDimEdit }: {
       }}>{kind === 'point' ? 'Point' : 'Edge'} {i + 1}</li>;
   };
 
+  // Unsupported outlines have no empty disclosure; a supported fully locked result remains inspectable.
+  if (!result) return null;
+
   return <details className="sk-mobility" onToggle={event => setOpen(event.currentTarget.open)} data-sketch-dimension-focus
     onBlur={event => { if (owner.editDim && !keepsDimensionDraft(event.relatedTarget)) onDimEdit(null); }}>
     <summary>Active outline mobility</summary>
-    {open && (!result ? <p role="status">Mobility unavailable for this outline.</p>
-      : result.points.length === 0 ? <p role="status">No locally movable points or edges.</p>
+    {open && (result.points.length === 0 ? <p role="status">No locally movable points or edges.</p>
         : <ul aria-label="Locally movable geometry">{result.points.map(i => row('point', i))}
           {result.edges.map(i => row('edge', i))}</ul>)}
   </details>;

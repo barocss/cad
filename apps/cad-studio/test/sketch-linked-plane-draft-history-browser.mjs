@@ -31,7 +31,7 @@ const check = async (shift, linked) => {
   const panel = f.sketchPanel();
   assert.equal(Number(await offset().inputValue()), shift);
   assert.equal(await panel.getByLabel('Sketch plane', { exact: true }).inputValue(), 'face');
-  assert.match(await panel.locator('.card-title').first().innerText(), new RegExp('Z ' + (10 + shift) + ' · on face'));
+  assert.match(await f.page.locator('[data-workspace-mode] button.sketching').innerText(), new RegExp('Z ' + (10 + shift) + '$'));
   assert.equal(await panel.getByText(/Linked face outline and inset/).isVisible(), linked);
   assert.equal(await panel.getByText(/Link detached by a geometry or plane edit/).isVisible(), !linked);
   await f.same(seed);

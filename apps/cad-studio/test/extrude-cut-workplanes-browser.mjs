@@ -40,9 +40,9 @@ const s = 0.5, c = Math.sqrt(3) / 2;
 const tilted = { origin: [0, 0, 0], normal: [0, -s, c], xAxis: [1, 0, 0] };
 const baseFixtures = [
   { label: 'right', view: 'Right', seed: { ...root, nodes: [rectangle(), { id: 'n1', kind: 'extrude', sketch: 0, height: 10 }] },
-    frame: { origin: [40, 0, 0], normal: [1, 0, 0], xAxis: [0, 1, 0], yAxis: [0, 0, 1] }, box: [[11, 3], [19, 7]], planeLabel: /X 40 · on face/ },
+    frame: { origin: [40, 0, 0], normal: [1, 0, 0], xAxis: [0, 1, 0], yAxis: [0, 0, 1] }, box: [[11, 3], [19, 7]], planeLabel: /X 40$/ },
   { label: 'tilted', view: 'Top', seed: { ...root, nodes: [{ ...rectangle(), plane: tilted }, { id: 'n1', kind: 'extrude', sketch: 0, height: 10, from: -10 }] },
-    frame: { ...tilted, yAxis: [0, c, s] }, box: [[14, 11], [26, 19]], planeLabel: /30° tilted plane · on face/ },
+    frame: { ...tilted, yAxis: [0, c, s] }, box: [[14, 11], [26, 19]], planeLabel: /30° tilted plane$/ },
 ];
 const fixtures = [...baseFixtures, { ...baseFixtures[1], label: 'tilted-draft', draft: 10 }];
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -90,7 +90,7 @@ await f.run(async () => {
     await f.page.waitForFunction(() => window.__studioSelection.selection.faces.length === 1);
     await button('Sketch', f.page.locator('.mode')).click();
     await f.sketchPanel().waitFor();
-    assert.match(await f.sketchPanel().locator('.card-title').first().innerText(), fixture.planeLabel);
+    assert.match(await f.page.locator('[data-workspace-mode] button.sketching').innerText(), fixture.planeLabel);
     for (const p of box) await click(at(frame, p));
     const sketch = await f.finishSketch(label + '-sketch');
     assert.deepEqual(sketch.doc.nodes[2].on, { node: 1, side: 'solid' });

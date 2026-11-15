@@ -64,7 +64,7 @@ await f.run(async () => {
   await f.page.waitForFunction(() => window.__studioSelection.selection.faces.length === 1);
   await button('Sketch', f.page.locator('.mode')).click();
   await f.sketchPanel().waitFor();
-  assert.match(await f.sketchPanel().locator('.card-title').first().innerText(), /Z 8 · on face/);
+  assert.match(await f.page.locator('[data-workspace-mode] button.sketching').innerText(), /Z 8$/);
   await clickWorld([14, 13, 8]);
   await clickWorld([18, 17, 8]);
   await f.sketchPanel().locator('#sk-width').waitFor();
@@ -126,6 +126,6 @@ await f.run(async () => {
   await f.openFeatureEditor(6, 'child Cut after reopening');
   await button('Edit sketch', f.editor()).click();
   await f.sketchPanel().waitFor();
-  assert.match(await f.sketchPanel().locator('.card-title').first().innerText(), /Z 6 · on face/);
+  assert.match(await f.page.locator('[data-workspace-mode] button.sketching').innerText(), /Z 6$/);
   await f.snapshot('moved-sketch-edit');
 });
