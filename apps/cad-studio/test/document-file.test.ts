@@ -202,3 +202,34 @@ test('native Open checks active tapered offsets before adopting root or nested p
   await verifyStoredNativeOpen(refused, async candidate => { current = false; return evaluate(candidate); }, insets, () => current);
   assert.deepEqual(refused, before);
 });
+
+
+test('saved changed-plane refusal gives truthful recovery without changing other Offset errors', async () => {
+  const doc = withNode(rectanglePart(20, 10, 12), {
+    kind: 'offset-face', parent: { node: 1, side: 'solid' }, faces: ['n1.top'], distance: 2,
+  });
+  const before = structuredClone(doc);
+  const insets = async () => assert.fail('this model has no inset');
+  const native = 'Offset face: the original reference face changed. Pick it again.';
+  const expected = 'Offset face: n2: The saved reference plane has changed. This saved model was not applied; your current model is unchanged. Open an earlier saved copy with the original reference plane.';
+  for (const detail of [native, `[BAD_REFERENCE] ${native}`]) {
+    const refused = async () => ({ ok: false as const, revision: 0, wallTime: 0, error: { code: 'BAD_REFERENCE', feature: 'n2', title: 'Cannot build', hint: 'Pick it again.', detail } });
+    const check = verifyStoredNativeOpen(doc, refused, insets, () => true);
+    assert.ok(check);
+    await assert.rejects(check, { message: expected });
+    let current = true;
+    await verifyStoredNativeOpen(doc, async () => { current = false; return refused(); }, insets, () => current);
+  }
+  for (const [code, detail] of [
+    ['BAD_REFERENCE', 'Offset face: the reference face is missing. Pick it again.'],
+    ['GEOMETRY', native],
+    ['BAD_REFERENCE', `${native} Additional diagnostic.`],
+  ]) {
+    const check = verifyStoredNativeOpen(doc, async () => ({ ok: false as const, revision: 0, wallTime: 0,
+      error: { code, feature: 'n2', title: 'Cannot build', hint: '', detail },
+    }), insets, () => true);
+    assert.ok(check);
+    await assert.rejects(check, { message: `Offset face: n2: ${detail} Your part is unchanged.` });
+  }
+  assert.deepEqual(doc, before);
+});

@@ -132,7 +132,16 @@ export function verifyStoredNativeOpen(opened: StudioDoc, readPart: (doc: Studio
       if (!current()) return;
       const result = await readPart(part);
       if (!current()) return;
-      if (!result.ok) throw new Error(`Offset face: ${result.error.feature ? result.error.feature + ": " : ""}${result.error.detail || result.error.title} Your part is unchanged.`);
+      if (!result.ok) {
+        const error = result.error;
+        // A saved model has not been adopted, so its reference cannot be picked again here.
+        const changedPlane = error.code === 'BAD_REFERENCE' &&
+          /^(?:\[BAD_REFERENCE\] )?Offset face: the original reference face changed\. Pick it again\.$/.test(error.detail);
+        const detail = changedPlane
+          ? 'The saved reference plane has changed. This saved model was not applied; your current model is unchanged. Open an earlier saved copy with the original reference plane.'
+          : `${error.detail || error.title} Your part is unchanged.`;
+        throw new Error(`Offset face: ${error.feature ? error.feature + ': ' : ''}${detail}`);
+      }
     }
   };
   const checkSources = () => {
