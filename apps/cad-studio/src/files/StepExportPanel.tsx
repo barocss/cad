@@ -15,6 +15,7 @@ export function StepExportPanel({ controller }: { controller: ModelExportControl
     {step.stage === 'preparing' && <p role="status">Preparing geometry and loss report…</p>}
     {step.stage === 'error' && <p role="alert">{step.error}</p>}
     {step.stage === 'ready' && <>
+      {step.scope && <p className="muted" aria-label="STEP included bodies">{step.scope.rootBodies + step.scope.placedBodies} output bodies: {step.scope.rootBodies} root bodies, including {step.scope.hiddenRootBodies} hidden; {step.scope.placedBodies} placed bodies from {step.scope.occurrences} visible occurrences. Hidden root bodies are included; hidden occurrences are omitted. Not selection-only.</p>}
       <div className="ol-head">What this file leaves out</div>
       {step.losses.length ? <ul aria-label="STEP loss report">{step.losses.map(loss => <li key={loss}>{loss}</li>)}</ul> : <p>No additional losses reported for this input.</p>}
       <p className="muted">Geometry profile: no native editing history, semantic PMI or named datum system transfer. The file/product name and generated face names are separate from user labels.</p>

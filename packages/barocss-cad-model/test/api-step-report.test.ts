@@ -23,10 +23,15 @@ function report(value: object, name?: string): StudioStep {
 }
 const box = (): StudioDoc => withNode(withNode(emptyDoc(), { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, 8] }), { kind: 'extrude', sketch: 0, height: 6 });
 const instance = (id: string, doc: StudioDoc, hidden = false): PartInstance => ({ id, name: id, doc, position: [30, 0, 0], rotation: [0, 0, 0], part: { id: 'shared', rev: '1' }, ...(hidden ? { hidden: true } : {}) });
+function publicFields({ text, source, omitted }: StudioStep) {
+  return { text, source, ...(omitted !== undefined ? { omitted } : {}) };
+}
 function matches(doc: StudioDoc, name = 'exchange') {
   const before = JSON.stringify(doc), expected = exportStudioStep(doc, { name, timestamp });
   const result = fixedClock(() => report(part(name, doc)));
-  assert.deepEqual(result, expected);
+  const { scope, ...publicReport } = expected;
+  assert.ok(scope.nativeBodies >= 0, 'Studio scope remains separate from the public Part report contract');
+  assert.deepEqual(result, publicReport);
   assert.equal(JSON.stringify(doc), before);
   return result;
 }
@@ -142,7 +147,7 @@ test('Model report performs one existing export, with no discarded second file',
   const expected = fixedClock(() => exportStudioStep(doc, { name: 'once' }), () => directTicks++);
   const model = part('once', doc);
   const actual = fixedClock(() => report(model), () => reportTicks++);
-  assert.deepEqual(actual, expected);
+  assert.deepEqual(actual, publicFields(expected));
   assert.ok(directTicks > 0, 'The real exporter must use the default file clock');
   assert.equal(reportTicks, directTicks, 'Reporting must not export once for text and again for losses');
 });
@@ -162,7 +167,7 @@ test('the existing native sphere missing-bbox validation warning reaches the pub
   const doc = withNode(emptyDoc(), { kind: 'import', name: 'sphere.step', step: massTranslationSphereStep({ radius: 4 }) });
   const expected = exportStudioStep(doc, { name: 'exchange', timestamp });
   assert.ok(expected.omitted?.includes('Bounding-box validation is not included in this STEP file.'));
-  assert.deepEqual(matches(doc), expected);
+  assert.deepEqual(matches(doc), publicFields(expected));
 });
 test('display mesh uses the same existing default STEP representation without claiming analytic source', () => {
   const doc = withNode(emptyDoc(), { kind: 'mesh', name: 'tetrahedron', unit: 'mm', representation: 'facets', positions: [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1], indices: [0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3] });

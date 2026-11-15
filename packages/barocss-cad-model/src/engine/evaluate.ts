@@ -1,3 +1,4 @@
+import { bodyLookRef } from '../app/lookKey';
 import { nativeBodyTopology, type NativeBodyTopology } from './bodyTopology';
 import { provenanceOfTree, type ShopTreeProvenance } from './shopRows';
 import { resolveSkeletons } from '../frames/skeleton';
@@ -15,7 +16,7 @@ import { loftDisplayMesh } from './loftDisplay';
 import { lumpTouches } from './lumps';
 import { friendlyCause, type FriendlyError } from './errors';
 import { bodyKeyOf, partSnapshot } from './part';
-import { placedBase, placedDoc, type PartInstance, type BodyRef, type ModelNode, type Side, type StudioDoc } from './doc';
+import { bodyKey, placedBase, placedDoc, type PartInstance, type BodyRef, type ModelNode, type Side, type StudioDoc } from './doc';
 import { placementOf } from './placement';
 import { bodyKeyFor, bodyNodeOf, featureId } from './ids';
 import { registerPartBox, type PartBox } from './assemblyCut';
@@ -600,7 +601,17 @@ export interface StudioStepOptions {
   timestamp?: string;
 }
 /** A StudioDoc's STEP file: its text, the source revision it names (O9), and what was left out. */
-export interface StudioStep { text: string; source: string; omitted?: string[] }
+export interface StudioStepScope {
+  /** Included root Model outputs, regardless of their stored visibility. */
+  rootBodies: number;
+  hiddenRootBodies: number;
+  /** Included placed Model outputs; a single output may contain several native bodies. */
+  placedBodies: number;
+  /** Visible top-level occurrences contributing at least one included output. */
+  occurrences: number;
+  nativeBodies: number;
+}
+export interface StudioStep { text: string; source: string; omitted?: string[]; scope: StudioStepScope }
 // The writer keeps printable ASCII and replaces other header/product-name characters with underscores.
 function stepNameLosses(name: string): string[] {
   return /[^\x20-\x7e]/.test(name)
@@ -656,17 +667,37 @@ function stepProfileLosses(doc: StudioDoc): string[] {
 export function exportStudioStep(doc: StudioDoc, options: StudioStepOptions): StudioStep {
   const { name, meshes } = options;
   const breps: Brep[] = [], left: string[] = [], sheets: string[] = [];
+  const scope: StudioStepScope = { rootBodies: 0, hiddenRootBodies: 0, placedBodies: 0, occurrences: 0, nativeBodies: 0 };
   const take = (d: StudioDoc, outputs: CadPartSnapshot['outputs'], prefix: string) => {
-    for (const o of outputs) { const r = keyed(o.id, d.nodes).ref; if (r && d.nodes[r.node]?.kind === 'band-surface') sheets.push(`${prefix}${bodyKeyOf(o.id, d.nodes)}`); else if (r && roleOf(d.nodes[r.node])) left.push(`${prefix}${bodyKeyOf(o.id, d.nodes)}`); else breps.push(o.brep); }
+    for (const o of outputs) {
+      const at = keyed(o.id, d.nodes), r = at.ref;
+      if (r && d.nodes[r.node]?.kind === 'band-surface') sheets.push(`${prefix}${bodyKeyOf(o.id, d.nodes)}`);
+      else if (r && roleOf(d.nodes[r.node])) left.push(`${prefix}${bodyKeyOf(o.id, d.nodes)}`);
+      else {
+        breps.push(o.brep);
+        if (!o.brep.bodies.length) continue; // The writer emits no body for an empty output.
+        scope.rootBodies++; scope.nativeBodies += o.brep.bodies.length;
+        const look = r && /^b\d+(_.+)?$/.test(at.key) ? bodyKey(bodyLookRef(d.nodes, r), d.nodes) : at.key;
+        if (d.bodies?.[look]?.hidden) scope.hiddenRootBodies++;
+      }
+    }
   };
   take(doc, snapshotOf(doc).outputs, '');
   // (O10: a copy's body by its origin node — its role and key the instance's own, not a placement transform's.)
   for (const inst of doc.instances ?? []) if (!inst.hidden) {
     const placed = placedDoc(inst, doc), base = placedBase(inst, doc);
+    let included = false;
     for (const o of placedOutputs(inst, placed, doc)) {
       const at = originNode(o.id, placed, base);
-      if (at !== undefined && roleOf(base.nodes[at])) left.push(`${inst.id}/${bodyKeyFor(base.nodes, at)}`); else breps.push(o.brep);
+      if (at !== undefined && roleOf(base.nodes[at])) left.push(`${inst.id}/${bodyKeyFor(base.nodes, at)}`);
+      else {
+        breps.push(o.brep);
+        if (!o.brep.bodies.length) continue;
+        included = true;
+        scope.placedBodies++; scope.nativeBodies += o.brep.bodies.length;
+      }
     }
+    if (included) scope.occurrences++;
   }
   if (!breps.length) throw refusal('NO_BODY', sheets.length && !left.length ? `Only band sheets: STEP of band sheets is not supported yet, and there is no other body to export (${sheets.join(', ')}).` : left.length ? 'Only infill bodies: STEP carries the exact part, and there is none to export.' : 'There is no body to export.');
   const nativeNameLosses = stepNativeNameLosses(breps);
@@ -676,7 +707,7 @@ export function exportStudioStep(doc: StudioDoc, options: StudioStepOptions): St
   // This inspects only our writer's fixed record; text() removes newlines from names.
   // A quoted product name therefore cannot forge a whole bbox record.
   if (!/^#\d+=REPRESENTATION\('bounding box',\(#\d+,#\d+\),#\d+\);$/m.test(text)) omitted.push('Bounding-box validation is not included in this STEP file.');
-  return omitted.length ? { text, source, omitted } : { text, source };
+  return omitted.length ? { text, source, omitted, scope } : { text, source, scope };
 }
 
 /** Return null for unavailable tessellation. A Float32 serialization refusal must stop export instead of triggering a fallback. */

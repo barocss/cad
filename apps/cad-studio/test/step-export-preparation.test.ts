@@ -6,7 +6,7 @@ const text = "FILE_SCHEMA(('AUTOMOTIVE_DESIGN')); geometry";
 function setup() {
   const doc = emptyDoc(); let owner: StepOwner = { doc, shown: doc, evaluated: doc, name: 'part', fresh: true, hasBody: true, hasMeshes: true };
   let preview: StepPreview | null = null;
-  const jobs: { doc: typeof doc; meshes: string; resolve(value: { text: string; omitted?: string[] } | { error: string }): void; reject(error: Error): void }[] = [];
+  const jobs: { doc: typeof doc; meshes: string; resolve(value: { text: string; omitted?: string[]; scope?: NonNullable<StepPreview['scope']> } | { error: string }): void; reject(error: Error): void }[] = [];
   const downloads: { bytes: Uint8Array; name: string; doc: unknown }[] = [], notices: string[] = [];
   const control = createStepPreparation({ current: () => owner, changed: value => { preview = value; }, notice: value => notices.push(value), step: (doc, _name, meshes) => new Promise((resolve, reject) => jobs.push({ doc, meshes, resolve, reject })), download: (bytes, name, doc) => downloads.push({ bytes, name, doc }) });
   return { control, jobs, downloads, notices, get preview() { return preview; }, get owner() { return owner; }, set owner(value) { owner = value; } };
@@ -49,4 +49,13 @@ test('shown variant placements and current decoration own the payload while eval
   s.owner = { ...s.owner, shown }; const work = s.control.prepare();
   assert.equal(s.jobs[0].doc.instances, shown.instances); assert.equal(s.jobs[0].doc.bodies, shown.bodies); assert.equal(s.jobs[0].doc.nodes, old.nodes); assert.equal(s.jobs[0].doc.outputs, old.outputs);
   s.jobs[0].resolve({ text, omitted: ['Current decoration loss'] }); await work; assert.deepEqual(s.preview?.losses, ['Current decoration loss']);
+});
+
+ test('scope travels with current prepared bytes and is cleared on visibility edits', async () => {
+  const s = setup(), work = s.control.prepare();
+  const scope = { rootBodies: 2, hiddenRootBodies: 1, placedBodies: 3, occurrences: 1, nativeBodies: 5 };
+  s.jobs[0].resolve({ text, scope }); await work;
+  assert.deepEqual(s.preview?.scope, scope); assert.notEqual(s.preview?.scope, scope);
+  s.owner = { ...s.owner, shown: { ...s.owner.shown, bodies: { b0: { hidden: true } } } };
+  s.control.reconcile(); assert.equal(s.preview, null); s.control.download(); assert.equal(s.downloads.length, 0);
 });

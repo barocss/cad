@@ -12,8 +12,8 @@ export function ModelExportDialogs({ controller }: { controller: ModelExportCont
             <option value="automatic">Automatic</option><option value="8">Draft 8</option><option value="16">Standard 16</option><option value="32">Fine 32</option>
           </select></label>
           <div className="toast-hint">{stlLossHint} Automatic allows the on-screen mesh as a fallback. Draft, Standard and Fine require BRep bodies.</div>
-          <div className="toast-hint" aria-label="STL target boundaries">Root bodies (including hidden bodies; not selection-only):
-            <ul className="max-h-32 overflow-y-auto">{stlTargets.map(body => <li key={body.key}>{body.name} ({body.key}): {body.type} · {body.boundaries}</li>)}</ul>
+          <div className="toast-hint" aria-label="STL target boundaries">Root bodies: {stlTargets.length}, including {stlTargets.filter(body => body.hidden).length} hidden. Hidden bodies are included; not selection-only:
+            <ul className="max-h-32 overflow-y-auto">{stlTargets.map(body => <li key={body.key}>{body.name} ({body.key}){body.hidden ? ' [hidden]' : ''}: {body.type} · {body.boundaries}</li>)}</ul>
             Native boundary counts are not STL mesh edge counts. {stlTargets.some(body => body.open) && 'Open surfaces may produce open STL mesh boundaries. Check the downloaded mesh before use.'}
           </div>
           <div className="row-actions"><button className="primary" disabled={stlBusy} onClick={() => void exportStl()}>{stlBusy ? 'Preparing…' : 'Export'}</button><button ref={stlCancelButton} className="ghost" onClick={cancelStlExport}>Cancel</button></div>

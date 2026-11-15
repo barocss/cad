@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { evaluateDoc, type BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
-import { bodyName } from '@barocss/cad-model/app/bodies';
+import { bodyName, lookOf } from '@barocss/cad-model/app/bodies';
 import { draftWarning } from '@barocss/cad-model/chat/drafts';
 import { sourceBytes, sourceRecord } from '@barocss/cad-model/team/source';
 import { quotePackage } from '@barocss/cad-model/mould/quote';
@@ -72,7 +72,7 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
   const [stlAsk, setStlAsk] = useState(false), [stlQuality, setStlQuality] = useState<'automatic' | '8' | '16' | '32'>('automatic'), [stlBusy, setStlBusy] = useState(false);
   const stlHasPlacedParts = model.shown.instances?.some(i => !i.hidden) ?? false;
   const stlPlacedHint = stlQuality === 'automatic' ? stlPlacedLoss : 'Draft, Standard and Fine require no visible placed parts.';
-  const stlTargets = bodies.map(body => ({ key: body.key, name: bodyName(doc, body), type: bodyTopologyLabel(body), boundaries: nativeBoundaryLabel(body), open: !!body.topology?.openShells }));
+  const stlTargets = bodies.map(body => ({ key: body.key, name: bodyName(doc, body), type: bodyTopologyLabel(body), boundaries: nativeBoundaryLabel(body), open: !!body.topology?.openShells, hidden: !!lookOf(doc, body).hidden }));
   const stlLossHint = stlHasPlacedParts ? `${stlPlacedHint} ${stlMeshLoss}` : stlMeshLoss;
   const stlGeneration = useRef(0), stlPending = useRef(false), stlCancelButton = useRef<HTMLButtonElement>(null);
   const cancelStlExport = () => { stlGeneration.current++; stlPending.current = false; setStlBusy(false); setStlAsk(false); };
@@ -126,6 +126,7 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
       downloadBytes(sidecar, `${captured.name}.source.json`, 'application/json');
       setStlAsk(false);
       const hints = [
+        `${captured.bodies.length} root bodies, including ${captured.bodies.filter(body => lookOf(captured.doc, body).hidden).length} hidden. Hidden root bodies are included.`,
         draftWarning(captured.doc),
         captured.bodies.some(body => !!body.topology?.openShells) ? 'Open surfaces were exported. STL may contain open mesh boundaries; this is not a watertightness or manufacturing certificate.' : null,
         stlHasPlacedParts ? stlPlacedLoss : null,

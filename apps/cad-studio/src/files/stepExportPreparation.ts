@@ -1,9 +1,10 @@
 // Private Studio preparation state. Bytes stay here until the explicit download action.
+import type { StudioStep } from '@barocss/cad-model/engine/evaluate';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 export type StepMeshes = 'auto' | 'tessellated' | 'planar';
 export interface StepOwner { doc: StudioDoc; shown: StudioDoc; evaluated: StudioDoc; name: string; fresh: boolean; hasBody: boolean; hasMeshes: boolean }
-export interface StepPreview { name: string; meshes: StepMeshes; hasMeshes: boolean; stage: 'preparing' | 'ready' | 'error'; profile: string; losses: readonly string[]; error?: string; size?: number }
-type StepResult = { text: string; omitted?: string[] } | { error: string };
+export interface StepPreview { name: string; meshes: StepMeshes; hasMeshes: boolean; stage: 'preparing' | 'ready' | 'error'; profile: string; losses: readonly string[]; error?: string; size?: number; scope?: StudioStep['scope'] }
+type StepResult = { text: string; omitted?: string[]; scope?: StudioStep['scope'] } | { error: string };
 interface Options {
   current(): StepOwner;
   step(doc: StudioDoc, name: string, meshes: StepMeshes): Promise<StepResult>;
@@ -35,7 +36,7 @@ export function createStepPreparation(options: Options) {
       if (!sameOwner(owner, options.current())) { cancel(); return; }
       if ('error' in result) { publish({ ...pending, stage: 'error', error: result.error }); return; }
       bytes = new TextEncoder().encode(result.text);
-      publish({ ...pending, stage: 'ready', profile: profile(result.text), losses: [...(result.omitted ?? [])], size: bytes.byteLength });
+      publish({ ...pending, stage: 'ready', profile: profile(result.text), losses: [...(result.omitted ?? [])], size: bytes.byteLength, scope: result.scope ? { ...result.scope } : undefined });
     } catch (error) {
       if (generation !== ticket) return;
       if (!sameOwner(owner, options.current())) { cancel(); return; }
