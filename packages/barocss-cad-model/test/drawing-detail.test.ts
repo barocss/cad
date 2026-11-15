@@ -20,6 +20,9 @@ import { runDrawingTool } from '../src/chat/drawing';
 import { sheetSvg } from '../src/io/svg';
 import { sheetPdf } from '../src/io/pdf';
 import { sheetDxf } from '../src/io/dxf';
+import { clipProjectionOutside } from '../src/drawing/breaks';
+import { resolvePoint, snapPoints } from '../src/drawing/dimensions';
+import { information } from '../src/drawing/layout';
 
 // CG5 DR-1: detail views. Oracles: the circle crossings of lines, circular arcs and ellipses in closed form; the
 // starter plate's (64 × 32 × 8, a Ø8 hole at 32, 16) edges inside a circle by hand; the inscribed polygon's area.
@@ -122,7 +125,10 @@ test('a detail of the plate’s front view: the top edge from 32 to 40 and the h
   const v = viewsOf(starterDoc());
   // (Front: Z up; the top edge at Z 8 from X 0 to 64; the hole Ø8 at X 32 hidden from Z 0 to 8, its sides at X 28 and 36.)
   const clip = clipProjectionToDisk(v.front, [36, 8], 4);
-  const pieces = clip.edges.flatMap(e => e.pieces.map(p => ({ visible: p.visible, c: p.curve })));
+  const raw = clip.edges.flatMap(e => e.pieces);
+  assert.equal(raw.length, 3, 'the native ink and the retained hidden face alias');
+  assert.equal(raw.filter(p => p.ink === false && !p.visible).length, 1);
+  const pieces = clip.edges.flatMap(e => e.pieces.filter(p => p.ink !== false).map(p => ({ visible: p.visible, c: p.curve })));
   const lines = pieces.filter(p => p.c.kind === 'line') as { visible: boolean; c: Extract<ProjectedCurve, { kind: 'line' }> }[];
   const top = lines.find(p => p.visible && near(p.c.a[1], 8) && near(p.c.b[1], 8))!;
   assert.ok(top, 'the top edge');
@@ -349,7 +355,7 @@ test('Detail uses drawing-wide hidden lines on the same sheet and in either spli
     assert.deepEqual(onMarks.filter(dash), [{ kind: 'line', a: [330, 100], b: [330, 80], pen: 'hidden' }]);
     assert.deepEqual(offMarks, onMarks.filter(m => !dash(m)));
     assert.deepEqual(offDetail.details, onDetail.details, 'projection and placement stay exact');
-    assert.equal(offDetail.details?.[0].projection.edges.flatMap(e => e.pieces).filter(p => !p.visible).length, 1);
+    assert.equal(offDetail.details?.[0].projection.edges.flatMap(e => e.pieces).filter(p => !p.visible && p.ink !== false).length, 1);
     assert.deepEqual(offDetail.dimensions, onDetail.dimensions, 'hidden source remains measurable');
     const [dimension] = offDetail.dimensions;
     assert.ok(dimension.ok && dimension.value === 8);
@@ -364,6 +370,37 @@ test('Detail uses drawing-wide hidden lines on the same sheet and in either spli
     }
   }
   assert.deepEqual(views, before);
+});
+
+test('a hidden alias crossing a detail keeps its original references, visibility and ink flag through clipping and breaks', () => {
+  const views = viewsOf(starterDoc()), before = structuredClone(views.front);
+  const name = 'n2.side0#1~sil1', source = views.front.edges.find(e => e.name === name)!;
+  assert.ok(source.pieces.some(p => p.ink === false && !p.visible));
+  // Both source ends are outside this crop. Emptying the alias's pieces would lose the source here.
+  const clipped = clipProjectionToDisk(views.front, [36, 4], 1);
+  const alias = clipped.edges.find(e => e.name === name)!;
+  assert.ok(alias); assert.deepEqual(alias.ends, source.ends);
+  assert.equal(alias.pieces.length, 1); assert.equal(alias.pieces[0].ink, false); assert.equal(alias.pieces[0].visible, false);
+  const broken = clipProjectionOutside(clipped, [{ axis: 1, from: 3.3, to: 3.6, gap: 0 }, { axis: 1, from: 4.4, to: 4.7, gap: 0 }]);
+  const split = broken.edges.find(e => e.name === name)!;
+  assert.equal(split.pieces.length, 3);
+  assert.ok(split.pieces.every(p => p.ink === false && !p.visible));
+  assert.deepEqual(structuredClone(broken), broken);
+  assert.ok(JSON.parse(JSON.stringify(broken)).edges.find((e: ProjectedEdge) => e.name === name).pieces.every((p: ProjectedEdge['pieces'][number]) => p.ink === false && !p.visible));
+  assert.equal(information(views.front), 3, 'four visible outline runs minus half the two hidden ink runs');
+  for (const pr of [clipped, broken]) for (const z of [0, 8]) {
+    const ref = { edge: name, at: 'end' as const, near: [36, 16, z] as [number, number, number] };
+    const point = resolvePoint(pr, ref)!; assert.ok(point && near(point[2], z));
+  }
+  assert.ok(snapPoints(clipped).every(p => p.ref.edge !== name), 'source-only alias does not override the native hidden reference');
+  const settings: DrawingSettings = { ...defaultDrawing(), sheet: 'A3', scale: 1, views: ['front'], hidden: true,
+    details: [{ id: 'B', view: 'front', center: [36, 4], radius: 1, scale: 5, at: [330, 80] }],
+    dimensions: [{ id: 'alias-height', view: 'detail:B', kind: 'linear', a: { edge: name, at: 'end', near: [36, 16, 0] }, b: { edge: name, at: 'end', near: [36, 16, 8] }, orient: 'vertical', place: [43, 4] }],
+  };
+  const { sheet } = sheetOf(settings, views);
+  assert.equal(detailGroup(sheet, 'B').marks.filter(m => 'pen' in m && m.pen === 'hidden').length, 1);
+  const [dimension] = sheet.dimensions; assert.ok(dimension.ok && dimension.value === 8);
+  assert.deepEqual(views.front, before);
 });
 
 test('Detail hidden filtering leaves clipped source pieces, tangent ink and the boundary intact', () => {

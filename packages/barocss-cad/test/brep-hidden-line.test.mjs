@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateCadPart, projectBrepHiddenLines } from '../dist/index.js';
+import { evaluateCadPart, projectBrepHiddenLines, transformBrep } from '../dist/index.js';
+import { hiddenGeneratorAlias } from '../dist/brep/brep-hidden-alias.js';
 
 const part = features => evaluateCadPart({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features }).outputs.map(o => o.brep);
 const plate = () => part([{ id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [64, 32] }, { id: 'n1', kind: 'extrude', sketch: 'n0', height: 8 }, { id: 'n2', kind: 'hole', target: 'n1', center: [32, 16], radius: 4 }]);
 const cylinder = () => part([{ id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 5 }, { id: 'n1', kind: 'extrude', sketch: 'n0', height: 10 }]);
 const FRONT = { toward: [0, -1, 0], up: [0, 0, 1] }, TOP = { toward: [0, 0, 1], up: [0, 1, 0] }, ISO = { toward: [1, -1, 1], up: [0, 0, 1] };
-const pieces = (pr, visible) => pr.edges.flatMap(e => e.pieces.filter(p => p.visible === visible).map(p => ({ ...p.curve, edge: e })));
+const pieces = (pr, visible) => pr.edges.flatMap(e => e.pieces.filter(p => p.ink !== false && p.visible === visible).map(p => ({ ...p.curve, edge: e })));
 const near = (a, b, tol = 1e-9) => Math.abs(a - b) <= tol;
 const lineIs = (c, a, b, tol = 1e-9) => (near(c.a[0], a[0], tol) && near(c.a[1], a[1], tol) && near(c.b[0], b[0], tol) && near(c.b[1], b[1], tol)) || (near(c.a[0], b[0], tol) && near(c.a[1], b[1], tol) && near(c.b[0], a[0], tol) && near(c.b[1], a[1], tol));
 
@@ -119,4 +120,49 @@ test('tangent edges on request: the fillet boundary with the top, not the seams 
 
 test('an up direction along the view direction is refused', () => {
   assert.throws(() => projectBrepHiddenLines(cylinder(), { toward: [0, 0, 1], up: [0, 0, 2] }), /parallel/);
+});
+
+test('hidden cylinder aliases retain raw sources while only native generators paint, across input owners', () => {
+  const [b] = plate(), before = structuredClone(b);
+  const check = (pr, prefix) => {
+    const native = pr.edges.find(e => e.name === `${prefix}n2.side0#1|n2.side0#2#2~sil`);
+    const alias = pr.edges.find(e => e.name === `${prefix}n2.side0#1~sil1`);
+    assert.deepEqual(native.ends, [[36, 16, 0], [36, 16, 8]]);
+    assert.equal(native.pieces.length, 1); assert.equal(native.pieces[0].visible, false);
+    assert.equal(native.pieces[0].ink, undefined);
+    assert.equal(alias.pieces.length, 1); assert.equal(alias.pieces[0].visible, false);
+    assert.equal(alias.pieces[0].ink, false);
+    assert.ok(near(alias.ends[0][2], 8) && near(alias.ends[1][2], 0), 'reverse source direction is preserved');
+  };
+  check(projectBrepHiddenLines([b], FRONT), '');
+  // Even identical objects at identical positions remain different source owners.
+  const copies = projectBrepHiddenLines([b, b], FRONT, { prefixes: ['a/', 'nested/b/'] });
+  check(copies, 'a/'); check(copies, 'nested/b/');
+  assert.equal(pieces(copies, false).length, 4);
+  const moved = transformBrep(b, { matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1], offset: [0, 50, 0] });
+  const depth = projectBrepHiddenLines([b, moved], FRONT, { prefixes: ['a/', 'b/'] });
+  assert.equal(pieces(depth, false).length, 4, 'equal projection at a different depth is not merged');
+  const reversed = projectBrepHiddenLines([moved, b], FRONT, { prefixes: ['b/', 'a/'] });
+  assert.equal(pieces(reversed, false).length, 4);
+  for (const prefix of ['a/', 'b/']) assert.equal(reversed.edges.filter(e => e.name.startsWith(prefix)).flatMap(e => e.pieces).filter(p => p.ink === false).length, 2);
+  assert.deepEqual(b, before, 'projection does not mutate B-rep names or geometry');
+});
+
+test('hidden generator identity rejects partial overlap, depth, nearby lines and foreign owners or faces', () => {
+  const source = { generator: { body: 0, faces: ['wallA', 'wallB'], native: true }, ends: [[36, 16, 0], [36, 16, 8]] };
+  const alias = { generator: { body: 0, faces: ['wallA'], native: false }, ends: [[36, 16 + 4e-15, 8], [36, 16 + 4e-15, 0]] };
+  assert.equal(hiddenGeneratorAlias(alias, source), true);
+  for (const [label, changed] of [
+    ['partial overlap', { ...alias, ends: [[36, 16, 2], [36, 16, 8]] }],
+    ['different depth', { ...alias, ends: [[36, 17, 8], [36, 17, 0]] }],
+    ['nearby not roundoff', { ...alias, ends: [[36 + 1e-7, 16, 8], [36 + 1e-7, 16, 0]] }],
+    ['other input owner', { ...alias, generator: { ...alias.generator, body: 1 } }],
+    ['other supporting face', { ...alias, generator: { ...alias.generator, faces: ['other'] } }],
+    ['native source', { ...alias, generator: { ...alias.generator, native: true } }],
+  ]) assert.equal(hiddenGeneratorAlias(changed, source), false, label);
+  assert.equal(hiddenGeneratorAlias(alias, alias), false, 'face-on-face coincidence is not merged');
+  const shifted = run => ({ ...run, ends: run.ends.map(p => p.map((x, k) => x + [1e6, -1e6, 1e6][k])) });
+  assert.equal(hiddenGeneratorAlias(shifted(alias), shifted(source)), true, 'translated roundoff-equivalent endpoints');
+  const changed = shifted(alias); changed.ends = changed.ends.map(p => [p[0], p[1] + 1e-6, p[2]]);
+  assert.equal(hiddenGeneratorAlias(changed, shifted(source)), false, 'large translation does not turn a nearby generator into an alias');
 });

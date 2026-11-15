@@ -73,7 +73,7 @@ export function chooseViews(views: DrawingViews, settings: DrawingSettings): { v
  */
 export function information(pr: DrawingViews['front']): number {
   let visible = 0, hidden = 0, round = 0;
-  for (const e of pr.edges) for (const p of e.pieces) { if (p.visible) visible++; else hidden++; }
+  for (const e of pr.edges) for (const p of e.pieces) { if (p.ink === false) continue; if (p.visible) visible++; else hidden++; }
   const seen = new Set<string>();
   for (const e of pr.edges) if (e.circle && roundIn(pr, e)) { const k = e.circle.center.map(x => Math.round(x * 1e6)).join(',') + `|${Math.round(e.circle.radius * 1e6)}`; if (!seen.has(k)) { seen.add(k); round++; } }
   return visible + 3 * round - 0.5 * hidden;

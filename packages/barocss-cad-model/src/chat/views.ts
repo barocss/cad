@@ -187,7 +187,7 @@ export async function renderViews(doc: StudioDoc, bodies: readonly BodyResult[],
     }
     // Edges: hidden first (thin, dashed), visible over them.
     for (const pass of [false, true]) for (const e of pr.edges) for (const piece of e.pieces) {
-      if (piece.visible !== pass) continue;
+      if (piece.ink === false || piece.visible !== pass) continue;
       const pts = curvePoints(piece.curve); let phase = 0;
       for (let k = 0; k + 1 < pts.length; k++) phase = pass
         ? segment(ox + X(pts[k][0]), oy + Y(pts[k][1]), ox + X(pts[k + 1][0]), oy + Y(pts[k + 1][1]), 1.6, 30, 32, 38, 0, phase)

@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1401: [Hidden drawing ink aliases](notes/hidden-ink-alias-mac-2026-11-15/README.md), #612; preserve original references and hide only proven same-owner duplicate cylinder ink. Six pre-existing drawing-test failures and API drift remain, with independent old/new export evidence.
+
 - D1400: [Reference file error recovery](notes/reference-file-error-mac-2026-11-15/README.md), #611; catch only local reads and mesh parsing, identify the file and cause, preserve document/history and downstream errors.
 
 - D1399: [Reference face cache ownership](notes/reference-face-cache-ownership-mac-2026-11-15/README.md), #610; include the feature owner in named-result reuse keys while retaining sketch sharing, geometry algorithms and Datum validation.

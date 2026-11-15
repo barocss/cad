@@ -133,7 +133,7 @@ export function clipProjectionOutside(pr: BrepProjection, breaks: readonly ViewB
   for (const e of pr.edges) {
     if (!e.pieces.length) { edges.push(e); continue; }
     let pieces: ProjectedPiece[] = [...e.pieces];
-    for (const b of breaks) { const next: ProjectedPiece[] = []; for (const p of pieces) for (const c of clipCurveOutside(p.curve, b)) next.push({ curve: c, visible: p.visible }); pieces = next; }
+    for (const b of breaks) { const next: ProjectedPiece[] = []; for (const p of pieces) for (const c of clipCurveOutside(p.curve, b)) next.push({ ...p, curve: c }); pieces = next; }
     if (pieces.length) edges.push({ ...e, pieces });
   }
   return { ...pr, edges };

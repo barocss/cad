@@ -13,6 +13,7 @@
 import { faceGeometry } from './analytic-boolean.js';
 import type { Brep } from './brep-core.js';
 import { circleOf, tessellateBrep } from './brep-tessellate.js';
+import { hiddenGeneratorAlias, type HiddenGenerator, type HiddenGeneratorRun } from './brep-hidden-alias.js';
 import type { Point } from '../types.js';
 import { cross, dot, len, lerp as lerp3, sub, unit } from '../core/vec3.js';
 
@@ -24,7 +25,11 @@ export type ProjectedCurve =
   | { readonly kind: 'line'; readonly a: ProjectedXY; readonly b: ProjectedXY }
   | { readonly kind: 'arc'; readonly center: ProjectedXY; readonly u: ProjectedXY; readonly v: ProjectedXY; readonly t0: number; readonly t1: number }
   | { readonly kind: 'polyline'; readonly points: readonly ProjectedXY[] };
-export interface ProjectedPiece { readonly curve: ProjectedCurve; readonly visible: boolean }
+export interface ProjectedPiece {
+  readonly curve: ProjectedCurve; readonly visible: boolean;
+  /** Source-only duplicate of a native silhouette: retain for references, but do not draw its ink. */
+  readonly ink?: false;
+}
 /**
  * One curve of the view: a B-rep edge (by its persistent name) or a face's silhouette (`<face>~sil<k>`).
  * `ends`: its 3D end points (none for a closed circle); `circle`: a circular edge's exact geometry (`sweep`: its angle).
@@ -69,6 +74,8 @@ interface Candidate {
    * within `rho` (the facets turning edge-on there fold over it).
    */
   own?: Own;
+  /** Exact straight cylinder generators, scoped to the input body and supporting faces. */
+  generator?: HiddenGenerator;
 }
 
 const dist2 = (a: XY, b: XY) => Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -196,7 +203,8 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
         const A = c.controlPoints[0] as Point, B = c.controlPoints[1] as Point;
         const L = dist2(P(A), P(B));
         if (L <= 1e-9 * size) continue; // seen end-on
-        into.push({ name, ...tangent, kind: kind === 'silhouette' ? 'silhouette' : 'line', ends: [A, B], circle: null, s0: 0, s1: 1, eps: 1e-5 * size,
+        const generator = kind === 'silhouette' && fs.some(f => geomOf(f).kind === 'cylinder') ? { body: bi, faces: fs, native: true } : undefined;
+        into.push({ name, ...tangent, generator, kind: kind === 'silhouette' ? 'silhouette' : 'line', ends: [A, B], circle: null, s0: 0, s1: 1, eps: 1e-5 * size,
           at: s => lerp3(A, B, s), out: (s0, s1) => ({ kind: 'line', a: P(lerp3(A, B, s0)), b: P(lerp3(A, B, s1)) }),
           samples: () => steps(0, 1, Math.ceil(L / h)) });
         continue;
@@ -297,6 +305,7 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
           const [A, B] = ch, L = dist2(P(A), P(B));
           if (L <= 1e-6 * size) return;
           silhouettes.push({ name, kind: 'silhouette', ends: [A, B], circle: null, s0: 0, s1: 1, eps, own,
+            generator: cyl ? { body: bi, faces: [face.id], native: false } : undefined,
             at: s => lerp3(A, B, s), out: (s0, s1) => ({ kind: 'line', a: P(lerp3(A, B, s0)), b: P(lerp3(A, B, s1)) }),
             samples: () => steps(0, 1, Math.ceil(L / h)) });
         } else { const cand = polylineCandidate(name, 'silhouette', ch, P, h, eps); if (cand) silhouettes.push({ ...cand, own }); }
@@ -330,12 +339,21 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
     for (const [s0, s1, vis] of runs) if (vis) visibleInk.push(flatten(c.out(s0, s1), 2e-6 * size));
   }
   edgeInk = segmentGrid(visibleInk);
+  const nativeHidden: HiddenGeneratorRun[] = [];
+  // Only roundoff-equivalent 3D runs on the same native cylinder joint are aliases. In particular,
+  // projected coincidence, another instance/depth, and partial overlaps do not establish ownership.
   for (const c of [...candidates, ...silhouettes]) {
     const pieces: ProjectedPiece[] = [];
     for (const [s0, s1, vis] of visibleRuns.get(c)!) {
       if (vis) { pieces.push({ curve: c.out(s0, s1), visible: true }); continue; }
       const sub_ = { ...c, s0, s1, samples: () => c.samples().filter(s => s > s0 && s < s1).concat([s0, s1]).sort((x, y) => x - y) };
-      for (const [a, b, off] of intervals(sub_, s => !onInk(c, s), P, minRun)) if (off) pieces.push({ curve: c.out(a, b), visible: false });
+      for (const [a, b, off] of intervals(sub_, s => !onInk(c, s), P, minRun)) if (off) {
+        const ends: [Point, Point] = [c.at(a), c.at(b)], g = c.generator;
+        const alias = g && !g.native && nativeHidden.some(n => hiddenGeneratorAlias({ generator: g, ends }, n));
+        const curve = c.out(a, b);
+        pieces.push(alias ? { curve, visible: false, ink: false } : { curve, visible: false });
+        if (g?.native) nativeHidden.push({ generator: g, ends });
+      }
     }
     edges.set(c, pieces);
   }

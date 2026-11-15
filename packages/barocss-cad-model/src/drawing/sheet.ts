@@ -127,7 +127,7 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
     const showHidden = settings.hidden && id !== 'iso';
     // Hidden pieces first, so visible ink covers them where they touch.
     for (const visible of [false, true]) for (const e of pr.edges) for (const p of e.pieces) {
-      if (p.visible !== visible || (!visible && !showHidden)) continue;
+      if (p.ink === false || p.visible !== visible || (!visible && !showHidden)) continue;
       marks.push(curveMark(v, p.curve, !visible ? 'hidden' : e.tangent ? 'thin' : 'visible'));
     }
     if (id !== 'iso' && settings.centers !== false) marks.push(...centreMarks(v, pr));
@@ -638,7 +638,7 @@ function detailGroups(layout: SheetLayout, views: DrawingViews, settings: Drawin
     const marks: Mark[] = [];
     const showHidden = settings.hidden && !isSectionRef(d.view);
     for (const visible of [false, true]) for (const e of projection.edges) for (const p of e.pieces) {
-      if (p.visible !== visible || (!visible && !showHidden)) continue;
+      if (p.ink === false || p.visible !== visible || (!visible && !showHidden)) continue;
       marks.push(curveMark(placement, p.curve, !visible ? 'hidden' : e.tangent ? 'thin' : 'visible'));
     }
     const bodies = parent.ringBodies ? cut.kept.map(i => parent.ringBodies![i]) : undefined;

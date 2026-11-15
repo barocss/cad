@@ -25,7 +25,7 @@ const f = await createFlow({
   qualification: 'One native starter-plate detail through same-sheet and split-sheet Hidden lines, history, fresh Open and real SVG/DXF 2000.',
   initialFiles: [import.meta.filename, seedFile, oracleFile, fixture],
   oracleSource: await readFile(oracleFile, 'utf8'),
-  extraFrozen: ['packages/barocss-cad-model/src/drawing/sheet.ts', 'packages/barocss-cad-model/src/drawing/sheets.ts', 'packages/barocss-cad-model/src/io/svg.ts', 'packages/barocss-cad-model/src/io/dxf.ts'],
+  extraFrozen: ['packages/barocss-cad/src/brep/brep-hidden-alias.ts', 'packages/barocss-cad/src/brep/brep-hidden-line.ts', 'packages/barocss-cad-model/src/chat/views.ts', 'packages/barocss-cad-model/src/drawing/breaks.ts', 'packages/barocss-cad-model/src/drawing/detail.ts', 'packages/barocss-cad-model/src/drawing/layout.ts', 'packages/barocss-cad-model/src/drawing/sheet.ts', 'packages/barocss-cad-model/src/drawing/sheets.ts', 'packages/barocss-cad-model/src/io/svg.ts', 'packages/barocss-cad-model/src/io/dxf.ts'],
   limits: ['Capture local emitted bytes before browser file delivery.'],
 });
 const start = f.start;

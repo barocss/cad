@@ -26,7 +26,7 @@ const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) <= eps;
 
 test('the standard views of the plate: outline visible, the hole hidden in the front and right views, round from the top', () => {
   const v = viewsOf(plate());
-  const hidden = (id: ViewId) => v[id].edges.flatMap(e => e.pieces.filter(p => !p.visible));
+  const hidden = (id: ViewId) => v[id].edges.flatMap(e => e.pieces.filter(p => !p.visible && p.ink !== false));
   assert.equal(hidden('front').length, 2); assert.equal(hidden('right').length, 2); assert.equal(hidden('top').length, 0);
   assert.deepEqual([v.front.min, v.front.max], [[0, 0], [64, 8]]);
   assert.deepEqual([v.top.min, v.top.max], [[0, 0], [64, 32]]);

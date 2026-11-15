@@ -157,7 +157,7 @@ export function clipProjectionToDisk(pr: BrepProjection, o: XY, r: number): Brep
       continue;
     }
     const pieces: ProjectedPiece[] = [];
-    for (const p of e.pieces) for (const c of clipCurveToDisk(p.curve, o, r)) pieces.push({ curve: c, visible: p.visible });
+    for (const p of e.pieces) for (const c of clipCurveToDisk(p.curve, o, r)) pieces.push({ ...p, curve: c });
     if (pieces.length) edges.push({ ...e, pieces });
   }
   return { right: pr.right, up: pr.up, toward: pr.toward, edges, min: [o[0] - r, o[1] - r], max: [o[0] + r, o[1] + r] };
