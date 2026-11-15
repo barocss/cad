@@ -4,7 +4,7 @@ import { rectangleOutline } from '@barocss/cad-model/sketch/select';
 import { canonical } from '@barocss/cad-model/util/revision';
 import { isSettled } from '@barocss/cad-model/sketch/rules';
 import type { SketchShape, SketchState } from '@barocss/cad-model/sketch/types';
-import { detachSketchLink } from '../app/sketchControls';
+import { detachSketchLink, sketchCutInputs } from '../app/sketchControls';
 
 type OutlineStep = { kind: 'outline'; shape: SketchShape };
 type DraftStep = Pick<SketchState, 'shape' | 'done' | 'association' | 'associationDetached' | 'plane' | 'anchor' | 'base' | 'editNode' | 'mainIds' | 'activeOutlineIndex' | 'tool' | 'band' | 'bandPicks'> & {
@@ -64,6 +64,30 @@ function activateNewRectangle(step: DraftStep, tool: SketchState['tool']) {
   return shape ? { shape, done: step.done.filter(item => item !== rectangle) } : null;
 }
 
+/** Selection may repartition the same authored outlines between shape and done. Never compare
+ * order-insensitively or accept a new geometry owner merely because its numbers happen to match. */
+function sameSelectionPartition(expected: DraftStep, current: DraftStep): boolean {
+  if (current.tool !== 'select' && current.tool !== 'dimension') return false;
+  if (expected.shape === current.shape && expected.activeOutlineIndex === current.activeOutlineIndex) return false;
+  const a = sketchCutInputs(expected).shapes, b = sketchCutInputs(current).shapes;
+  if (a.length !== b.length) return false;
+  return a.every((shape, index) => {
+    const other = b[index];
+    if (shape === other) return true;
+    // startPicking's only shape conversion: the exact rectangle outline, including side IDs.
+    if (shape.kind === 'rectangle') {
+      const outline = rectangleOutline(shape);
+      return !!outline && canonical(outline) === canonical(other);
+    }
+    // A tool may park a polygon with an explicit pending:false without changing any nested owner.
+    if (shape.kind !== 'polygon' || other.kind !== 'polygon' || shape.pending || other.pending) return false;
+    const keys = Object.keys(shape).filter(key => key !== 'pending');
+    return keys.length === Object.keys(other).filter(key => key !== 'pending').length
+      && keys.every(key => Object.hasOwn(other, key) && Object.is(
+        (shape as unknown as Record<string, unknown>)[key], (other as unknown as Record<string, unknown>)[key]));
+  });
+}
+
 function matches(expected: SketchStep, current: SketchStep): boolean {
   if (expected.kind === 'outline') {
     if (expected.shape === current.shape) return true;
@@ -74,8 +98,10 @@ function matches(expected: SketchStep, current: SketchStep): boolean {
   if (current.kind !== 'draft' || expected.doc !== current.doc || expected.plane !== current.plane
     || expected.anchor !== current.anchor || expected.base !== current.base
     || expected.editNode !== current.editNode || expected.mainIds !== current.mainIds
-    || expected.activeOutlineIndex !== current.activeOutlineIndex || expected.band !== current.band
+    || expected.band !== current.band
     || expected.association !== current.association || expected.associationDetached !== current.associationDetached) return false;
+  if (sameSelectionPartition(expected, current)) return true;
+  if (expected.activeOutlineIndex !== current.activeOutlineIndex) return false;
   if (expected.shape === current.shape && expected.done === current.done) return true;
   const active = activateNewRectangle(expected, current.tool);
   if (active && current.shape && canonical(active.shape) === canonical(current.shape)
