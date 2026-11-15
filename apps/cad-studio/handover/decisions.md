@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1311 — Explain curve inspection at internal joins](notes/curve-join-inspection-mac-2026-11-15/README.md).
+
 - [D1310 — Admit two co-circular spans for exact Sweep](notes/two-span-exact-arc-sweep-mac-2026-11-15/README.md).
 - [D1309 — Extend the exact circular Sweep to 120°](notes/wide-exact-arc-sweep-2026-11-15/README.md).
 - [D1308 — Keep both bore-mouth fillets editable after a radial cut](notes/radial-bore-two-mouth-fillets-2026-11-15/README.md).
