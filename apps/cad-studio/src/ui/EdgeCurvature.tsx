@@ -8,7 +8,7 @@ const scales = [1, 2, 4, 8, 16, 32, 64];
 export function EdgeCurvature({ overlay, error, pending, show, clear, setScale, kind = 'edge' }: CurvatureCombControls & { kind?: 'edge' | 'curve' }) {
   const label = kind === 'edge' ? 'Edge curvature' : 'Curve curvature';
   return <section aria-label={label} className="mt-2 space-y-1">
-    <Button size="xs" variant="outline" disabled={pending} aria-pressed={!!overlay} onClick={() => overlay ? clear() : void show()}>
+    <Button size="xs" variant="outline" aria-disabled={pending || undefined} aria-busy={pending || undefined} aria-pressed={!!overlay} onClick={() => { if (!pending) { if (overlay) clear(); else void show(); } }}>
       {pending ? 'Measuring…' : overlay ? (overlay.measurement.maximum === 0 ? 'Clear curvature' : 'Hide curvature comb') : 'Show curvature comb'}
     </Button>
     <div role="status" aria-label={label + ' result'}>

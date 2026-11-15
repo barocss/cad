@@ -9,9 +9,9 @@ export function useDirectCurveCurvature(
   direct: DirectGeometry | undefined,
   measure: typeof measureDirectCurveCurvature | undefined,
 ): CurvatureCombControls {
-  const [state, set] = useState<{ generation: number; id: string; scale: number } | null>(null);
+  const [state, set] = useState<{ generation: number; id: string; scale: number; enabled: boolean } | null>(null);
   const current = state?.id === id && state.generation === generation ? state : null;
-  const enabled = current !== null;
+  const enabled = current?.enabled === true;
   useLayoutEffect(() => {
     set(previous => previous?.id === id && previous.generation === generation ? previous : null);
   }, [id, generation]);
@@ -25,10 +25,12 @@ export function useDirectCurveCurvature(
   return {
     overlay,
     error: read?.error,
-    show() { if (id && visible) set({ generation, id, scale: 4 }); },
-    clear() { set(null); },
+    show() { if (id && visible) set(previous => ({ generation, id, enabled: true,
+      scale: previous?.id === id && previous.generation === generation ? previous.scale : 4 })); },
+    clear() { set(previous => previous?.id === id && previous.generation === generation ? { ...previous, enabled: false } : previous); },
     setScale(scale) {
-      if (current && Number.isFinite(scale) && scale >= 0.01 && scale <= 10000) set({ ...current, scale });
+      if (Number.isFinite(scale) && scale >= 0.01 && scale <= 10000)
+        set(previous => previous?.id === id && previous.generation === generation ? { ...previous, scale } : previous);
     },
   };
 }

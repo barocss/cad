@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1379: [Curvature scale retention](notes/curvature-scale-retention-mac-2026-11-15/README.md), #149, retained owner resets and stale-request guards; pending focus preserved.
+
 - D1378: [Constant curvature readout](notes/constant-curvature-readout-mac-2026-11-15/README.md), #147, unchanged measurements and varying ranges.
 
 - D1377: [G2 copy and Sweep path geometry](notes/g2-copy-path-geometry-mac-2026-11-15/README.md), #152 partial/open: no inferred legacy approximation provenance.
