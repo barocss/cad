@@ -1,3 +1,4 @@
+import { sketchOffsetTarget } from '../app/sketchOffsetTarget';
 import { emptyDirect } from '../app/directGeometry';
 import { draftShapeOrder, sketchRegion, detachSketchLink, sketchCutInputs, sketchFinishInputs } from '../app/sketchControls';
 import { emptySel } from '../app/studioConstants';
@@ -22,7 +23,7 @@ import { bezierCurve, bezierError, wellFormedBezier } from '@barocss/cad-model/s
 import { circleCurve, curvesSource, edgeCurve, ellipseCurve, outlineCurve } from '@barocss/cad-model/engine/curveSource';
 import { ellipseMatches } from '@barocss/cad-model/sketch/ellipse';
 import { isDefaultPlane, offsetPlane, standardPlane, tiltPlane, xyPlane, type SketchPlane } from '@barocss/cad-model/sketch/plane';
-import { profileOf, shapeNode } from '@barocss/cad-model/sketch/loops';
+import { profileOf } from '@barocss/cad-model/sketch/loops';
 import { startPicking } from '@barocss/cad-model/sketch/select';
 import type { Dispatch, SetStateAction, RefObject } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -126,7 +127,7 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
   /** Offsets the newest closed shape of the sketch by `d` (out when positive) as a shape beside it. */
   const offsetSketch = (d: number) => {
     if (!sketch || !ownsSketch()) return;
-    const target = sketch.shape && shapeNode(sketch.shape) ? sketch.shape : [...(sketch.done ?? [])].reverse().find(x => !x.construction && shapeNode(x));
+    const target = sketchOffsetTarget(sketch)?.shape;
     if (!target) { setToast({ title: 'Nothing to offset', hint: 'Draw a closed shape first.', detail: '' }); return; }
     const r = offsetShape(target, d);
     if ('error' in r) { setToast({ title: 'Cannot offset', hint: r.error, detail: '' }); return; }

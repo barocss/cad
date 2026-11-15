@@ -1,3 +1,4 @@
+import { sketchOffsetReadiness } from '../app/sketchOffsetTarget';
 import { planeLabel } from '@barocss/cad-model/sketch/plane';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { bezierError, wellFormedBezier } from '@barocss/cad-model/sketch/bezier';
@@ -55,7 +56,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
   // Linking adds rows above the field while it still has focus.
   useEffect(() => revealOffsetField(offsetInput.current), [sketch.association]);
   const insetError = onLinkedInset && insetRefusal?.draft === sketch ? insetRefusal : null;
-  const canLinkInset = !!onLinkedInset && !sketch.association && !sketch.shape && !sketch.done?.length;
+  const { target: offsetTarget, canLinkInset, showDistance } = sketchOffsetReadiness(sketch, !!onLinkedInset);
   const linkInset = () => {
     const message = onLinkedInset?.(offsetBy);
     setInsetRefusal(message ? { draft: sketch, message } : null);
@@ -229,7 +230,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
         </div>
       </>}
       {canLinkInset && <><Button type="button" variant="ghost" data-sketch-action onClick={linkInset}>Link face outline + inset</Button><p>Uses Offset distance below as the inward inset (mm).</p></>}
-      {onOffset && <>
+      {onOffset && (showDistance || sketch.association) && <>
         <div className="card-title" style={{ marginTop: 10 }}>OFFSET</div>
         {sketch.association && <>
           <p role="status">Linked face outline and inset · {sketch.association.insetMM} mm</p>
@@ -238,7 +239,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
             : 'To change the linked distance, return to its History editor.'}</p>
           <p>Geometry or plane edits detach this link.</p>
         </>}
-        <div className="sk-offset">
+        {showDistance && <div className="sk-offset">
           <span className="num"><Input ref={offsetInput} aria-label="Offset distance" type="number" step="any" min={0.1} value={offsetBy}
             data-sketch-action
             className="scroll-my-1"
@@ -251,9 +252,9 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
               if (canLinkInset && !event.repeat) linkInset();
             }}
             onChange={e => { setOffsetBy(Number(e.target.value)); setInsetRefusal(null); }} /><em>mm</em></span>
-          <Button variant="ghost" aria-label="Offset outward" data-tip="Offset out" data-tip-desc="A copy of the newest closed shape this far outside it (the ring between them is the profile)" onClick={() => onOffset(Math.abs(offsetBy))}>Out</Button>
-          <Button variant="ghost" aria-label="Offset inward" data-tip="Offset in" data-tip-desc="A copy of the newest closed shape this far inside it (a wall)" onClick={() => onOffset(-Math.abs(offsetBy))}>In</Button>
-        </div>
+          {offsetTarget && <Button variant="ghost" aria-label="Offset outward" data-tip="Offset out" data-tip-focus data-tip-desc={`A copy of Outline ${offsetTarget.index + 1} this far outside it (the ring between them is the profile)`} onClick={() => onOffset(Math.abs(offsetBy))}>Out</Button>}
+          {offsetTarget && <Button variant="ghost" aria-label="Offset inward" data-tip="Offset in" data-tip-focus data-tip-desc={`A copy of Outline ${offsetTarget.index + 1} this far inside it (a wall)`} onClick={() => onOffset(-Math.abs(offsetBy))}>In</Button>}
+        </div>}
         {insetError && <p id={insetErrorId} className="sk-band-err" role="alert">{insetError.message}</p>}
       </>}
       {onToCurves && <>
