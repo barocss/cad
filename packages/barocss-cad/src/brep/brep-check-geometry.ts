@@ -108,6 +108,40 @@ function descend(at: (u: number, v: number) => Point, U: readonly number[], V: r
  * The strict checks over all faces, reporting problems through `add` (kind, detail); returns the largest
  * distance of an edge sample from a surface using it. `size`: the model's extent (tolerances scale with it).
  */
+function planarWidth(rings: readonly XY[][], perimeter: number): number {
+  let area = 0; rings.forEach((r, k) => { const a = Math.abs(polygonArea(r)); area += k === 0 ? a : -a; });
+  return perimeter > 0 ? 2 * area / perimeter : 0;
+}
+/** Scale admission shares strict's planar-width test without curved Newton/lens checks. */
+export function planarScaleSliver(brep: Brep): string | undefined {
+  const loops = new Map(brep.loops.map(x => [x.id, x])), coedges = new Map(brep.coedges.map(x => [x.id, x])), edges = new Map(brep.edges.map(x => [x.id, x]));
+  for (const face of brep.faces) {
+    if (face.surface.kind === 'facets') continue;
+    const mapper = planeMapper(face); if (!mapper) continue;
+    const rings: XY[][] = []; let perimeter = 0, tolerance = 0;
+    for (const lid of face.loops) {
+      const ring: XY[] = [];
+      for (const cid of loops.get(lid)?.coedges ?? []) {
+        const c = coedges.get(cid), edge = c && edges.get(c.edge); if (!c || !edge) continue;
+        tolerance = Math.max(tolerance, edge.tolerance);
+        const at = curveEvaluator(edge.curve), [a, b] = curveDomain(edge.curve);
+        const count = edge.curve.degree === 1 && edge.curve.controlPoints.length === 2 ? SAMPLES_LINE : SAMPLES_CURVE;
+        let last: Point | undefined;
+        for (let k = 0; k < count; k++) {
+          const t = k / (count - 1), p = at(c.sense === 'forward' ? a + (b - a) * t : b - (b - a) * t);
+          if (last) perimeter += dist(last, p);
+          if (k < count - 1) ring.push(mapper.uv(p, null));
+          last = p;
+        }
+      }
+      rings.push(ring);
+    }
+    const width = planarWidth(rings, perimeter);
+    if (perimeter > 0 && width < tolerance) return `face ${face.id} is a sliver (width ${width.toExponential(2)} mm)`;
+  }
+  return undefined;
+}
+
 export function strictGeometry(brep: Brep, maps: Maps, size: number, add: (kind: string, detail: string) => void): StrictGeometry {
   let maximumEdgeSurfaceGapMM = 0;
   const cap = TOLERANCE_CAP * Math.max(1, size);
@@ -159,8 +193,8 @@ export function strictGeometry(brep: Brep, maps: Maps, size: number, add: (kind:
     if (crossing) add('geometry', `face ${face.id}: its loops cross or touch themselves or each other (${crossing})`);
     // A sliver: a planar face whose width (twice its area over its perimeter) is below its edges' tolerance.
     if (mapper.planar) {
-      let area = 0; rings.forEach((r, k) => { const a = Math.abs(polygonArea(r)); area += k === 0 ? a : -a; });
-      if (perimeter > 0 && 2 * area / perimeter < faceTol) add('geometry', `face ${face.id} is a sliver (width ${(2 * area / perimeter).toExponential(2)} mm)`);
+      const width = planarWidth(rings, perimeter);
+      if (perimeter > 0 && width < faceTol) add('geometry', `face ${face.id} is a sliver (width ${width.toExponential(2)} mm)`);
     }
   }
   return { maximumEdgeSurfaceGapMM };

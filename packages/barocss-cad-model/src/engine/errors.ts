@@ -17,6 +17,9 @@ export interface FriendlyError {
 // messages without a code, and rows naming a code unbracketed (messages carry it bare), so they stay regexes. Order
 // matters: the first row that matches wins.
 const rules: { code?: string | readonly string[]; text?: RegExp; title: string; hint: string }[] = [
+  { text: /(?:^|: )Scale cannot preserve valid geometry for this body\./,
+    title: 'Scale would lose usable geometry',
+    hint: 'Increase Factor and try again. The usable factor depends on this body and pivot; there is no single minimum for every part.' },
   { text: /the surface has no normal at a point \(it is degenerate there\)/,
     title: 'The surface normal is undefined',
     hint: 'This surface is degenerate at a point, so it cannot be thickened there. For a folded Ruled surface, align the source curves with Reverse and create a new surface. Reducing thickness does not repair the fold.' },

@@ -1,3 +1,5 @@
+import { planarScaleSliver } from '../brep/brep-check-geometry.js';
+import { checkBrep, BrepError } from '../brep/brep-core.js';
 // Transform and pattern operation cases. Shared geometry/state stays with part-model.ts.
 import { fillCutSnapshot, fillCutPlacements } from '../features/fill-cut-pattern.js';
 import { curveCutOffsets } from '../features/curve-cut-pattern.js';
@@ -98,7 +100,28 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
     case 'scale': {
       const target = solids(f.target, 'target'), k = f.factor as number, pivot = f.pivot === undefined ? [0, 0, 0] as Point : xyz(f.pivot as CadPartPoint3, 'pivot');
       if (typeof k !== 'number' || !(k > 0 && k <= 1000 && Number.isFinite(k))) fail('INPUT', 'factor must be a positive number at most 1000');
-      return () => moveAll(target, [k, 0, 0, 0, k, 0, 0, 0, k], [pivot[0] * (1 - k), pivot[1] * (1 - k), pivot[2] * (1 - k)]);
+      return () => {
+        const result = moveAll(target, [k, 0, 0, 0, k, 0, 0, 0, k], [pivot[0] * (1 - k), pivot[1] * (1 - k), pivot[2] * (1 - k)]);
+        const reject = (why: string): never => fail('GEOMETRY', `Scale cannot preserve valid geometry for this body. Increase Factor and try again; the usable factor depends on the body and pivot. ${why}`);
+        if (result.kind !== 'solid' || !result.parts.length) return reject('No output body.');
+        for (const part of result.parts) {
+          let brep: Brep;
+          // Admission must not cache under the feature id: output pieces own distinct ids.
+          try { brep = brepOf({ solid: part.solid }, at); }
+          catch (error) {
+            if (error instanceof BrepError || (error instanceof TypeError && /reading ['"]cap['"]/.test(error.message))) return reject('The scaled topology could not be constructed.');
+            throw error;
+          }
+          if (!brep.bodies.length || !brep.faces.length || !brep.vertices.length) return reject('The scaled topology is empty.');
+          const finite = (point: readonly number[]) => point.every(Number.isFinite);
+          if (brep.vertices.some(v => !finite(v.point)) || brep.edges.some(e => e.curve.controlPoints.some(p => !finite(p)))
+            || brep.faces.some(f => f.surface.kind === 'facets' ? !Array.from(f.surface.positions).every(Number.isFinite) : f.surface.controlPoints.some(row => row.some(p => !finite(p))))) return reject('The scaled coordinates are not finite.');
+          const report = checkBrep(brep);
+          if (!report.valid) return reject(report.issues[0] ?? 'The scaled topology is invalid.');
+          const sliver = planarScaleSliver(brep); if (sliver) return reject(sliver);
+        }
+        return result;
+      };
     }
     case 'linear-pattern': {
       // (A pattern of an empty result — an intersection that met nothing — is empty, as the Booleans take it: D190.)
