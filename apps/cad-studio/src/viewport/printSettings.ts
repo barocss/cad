@@ -5,11 +5,24 @@ import type { PrintOptions } from './usePrintLayers';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { DisplayMesh } from '@barocss/cad-model/engine/mesh';
 import { madeBodies } from '@barocss/cad-model/engine/elements';
-import { lookOf } from '@barocss/cad-model/app/bodies';
+import { bodyName, lookOf } from '@barocss/cad-model/app/bodies';
 
 /** What print layers slice: the bodies the part's own process makes (O160: a bought element — an O-ring, a bearing — is not printed), less those hidden. */
+export function printSourceBodies(doc: StudioDoc, bodies: readonly BodyResult[]): BodyResult[] {
+  return madeBodies(doc.nodes, bodies).filter(b => !lookOf(doc, b).hidden);
+}
 export function printSourceMeshes(doc: StudioDoc, bodies: readonly BodyResult[]): DisplayMesh[] {
-  return madeBodies(doc.nodes, bodies).filter(b => !lookOf(doc, b).hidden).map(b => b.mesh);
+  return printSourceBodies(doc, bodies).map(b => b.mesh);
+}
+/** Notice-only metadata for exactly the root bodies sliced; this does not block or change layers. */
+export function printOpenSurfaceWarnings(doc: StudioDoc, bodies: readonly BodyResult[]): readonly string[] {
+  return printSourceBodies(doc, bodies).flatMap(body => {
+    const topology = body.topology;
+    if (!topology || topology.kind === 'unknown' || !((topology.openShells ?? 0) > 0 || (topology.boundaryEdges ?? 0) > 0)) return [];
+    const boundary = topology.boundaryEdges === null ? 'native boundary edge count unavailable'
+      : `${topology.boundaryEdges} native boundary edge${topology.boundaryEdges === 1 ? '' : 's'}`;
+    return [`Open surface included: ${bodyName(doc, body)} (${body.key}), ${boundary}. Layer contours may be incomplete; open chains are omitted. Native edge counts are not layer contour counts.`];
+  });
 }
 
 export type PrintPreviewPatch = Partial<Omit<PrintPreviewSettings, 'version'>>;

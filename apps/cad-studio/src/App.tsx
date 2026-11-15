@@ -3089,7 +3089,7 @@ export function App() {
     model: { doc, bodies, marker, fresh, instanceBodies, instanceSources }, editing: { rendering, drawing, sketch, active, previewBodies, ghost, assembly, cageEd, skel },
     display: { viewAnalysis, scalarMaps, mouldShown, directShown, section, instancePreview },
     pose: { instancePoseMap, instDrag, dragTransforms, animatedOffsets, shownBodies, instancesPlaced }, settings: { clearanceEnabled, clearanceNear, isolatedInstances } });
-  const { printOptions, printReason, printState, printDisplay, camReason, camState, camDisplay, patchCam } = useManufacturingPreviews({
+  const { printOptions, printReason, printWarnings, printState, printDisplay, camReason, camState, camDisplay, patchCam } = useManufacturingPreviews({
     model: { doc, bodies, fresh, refShown }, editing: { rendering, drawing, sketch, active, previewBodies, ghost, assembly, cageEd, skel, bodyDrag },
     display: { viewAnalysis, scalarMaps, mouldShown, directShown, section }, print: { printEnabled, printing }, cam: { camEnabled, camOptions, setCamOptions } });
   const { pmiReason, pmiSheet, pmiItems, pickAnnotation } = usePmiPreview({ model: { doc, evaluated, bodies, engine, fileName },
@@ -3117,7 +3117,7 @@ export function App() {
   // (G12a: proposals are in the chat column; while one is open the column shows it, the chat open or not.)
   // (G12e: the chosen preview's settings in the dock's Preview & analysis section, the switch its enable; the 3D annotations
   // an overlay toggle at the section's header, their status under the panel.)
-  const previewPanel = previewMode === 'print' ? <PrintPanel options={printOptions} onOptions={commitPrintPreview} onDirection={commitPrintDirection} state={printState} reason={printReason} />
+  const previewPanel = previewMode === 'print' ? <PrintPanel options={printOptions} onOptions={commitPrintPreview} onDirection={commitPrintDirection} state={printState} reason={printReason} warnings={printWarnings} />
     : previewMode === 'cnc' ? <CamPanel options={camOptions} onOptions={patchCam} state={camState} reason={camReason} />
     : previewMode === 'clearance' ? <ClearancePanel near={clearanceNear} onNear={setClearanceNear} display={clearanceDisplay} reason={clearanceReason} labels={clearanceLabels} />
     : previewMode === 'analysis' ? <AnalysisPanel analysis={analysis} onAnalysis={setAnalysis} map={mapKind} onMap={k => { setMapHover(null); setMouldSpread(0); setMapKind(k); }}

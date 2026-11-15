@@ -23,7 +23,7 @@ import { instanceEvaluationCurrent, type instanceEvaluationSources } from './ins
 import { poseMatrix } from './instancePose';
 import { useClearanceAnalysis } from './useClearanceAnalysis';
 import { usePrintLayers, type PrintOptions } from './usePrintLayers';
-import { printOptionsOf, printSourceMeshes } from './printSettings';
+import { printOptionsOf, printOpenSurfaceWarnings, printSourceMeshes } from './printSettings';
 import { useCamPreview } from './camPreview';
 import type { CamOptions } from './camDisplay';
 import { pmiSelection } from './pmiGeometry';
@@ -113,6 +113,8 @@ export function useManufacturingPreviews({ model, editing, display, print, cam }
     : viewAnalysis || scalarMaps?.length || mouldShown || directShown.length ? 'Close the current analysis or direct-geometry display to preview print layers.'
     : !fresh ? 'Pending · waiting for current geometry.'
     : !printMeshes.some(m => m.indices.length) ? 'No visible solid mesh to preview.' : undefined);
+  const openPrintSources = useMemo(() => printOpenSurfaceWarnings(doc, bodies), [bodies, doc.bodies, doc.nodes]);
+  const printWarnings = !printReason ? openPrintSources : [];
   const printState = usePrintLayers(printEnabled && !printReason, printMeshes, printOptions);
   const printDisplay = printEnabled && !printReason ? printState.display : null;
   useEffect(() => { if (import.meta.env.DEV) (window as unknown as { __studioPrint: () => unknown }).__studioPrint = () => ({ reason: printReason, stage: printState.stage, display: printDisplay }); }, [printReason, printState.stage, printDisplay]);
@@ -128,7 +130,7 @@ export function useManufacturingPreviews({ model, editing, display, print, cam }
   const camState = useCamPreview(camEnabled && !camReason, doc, bodies, camOptions);
   const camDisplay = camEnabled && !camReason ? camState.display : null;
   const patchCam = useCallback((patch: Partial<CamOptions>) => setCamOptions(o => ({ ...o, ...patch })), []);
-  return { printOptions, printReason, printState, printDisplay, camReason, camState, camDisplay, patchCam };
+  return { printOptions, printReason, printWarnings, printState, printDisplay, camReason, camState, camDisplay, patchCam };
 }
 
 /** Build the drawing annotations for the model and route a picked annotation to model selection. */
