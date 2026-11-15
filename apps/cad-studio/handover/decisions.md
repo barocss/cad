@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1372: [Classify native inclined planes accurately](notes/inclined-plane-inspector-mac-2026-11-15/README.md), #127.
+
 - D1371: [Retain and identify Offset reference planes](notes/offset-reference-retention-mac-2026-11-15/README.md), #143.
 
 - D1370: [Owned Offset reference-plane feedback](notes/offset-reference-feedback-mac-2026-11-15/README.md); #142 native flow verified, other pending deliveries separate.

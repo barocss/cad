@@ -1,3 +1,4 @@
+import { selectedFaceGeometry } from './selectedFaceGeometry';
 import { bodyTopologyLabel, nativeBoundaryLabel } from './bodyTopologyLabel';
 import { useId, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import { fmt, type StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -43,6 +44,7 @@ export function SelectionInspector({ model, selection, materialSettings, display
   };
   const sel1 = selection.faces[0] ? { kind: 'face' as const, body: bodies[selection.faces[0].body], face: bodies[selection.faces[0].body]?.mesh.faces[selection.faces[0].face] }
     : selection.edges[0] ? { kind: 'edge' as const, body: bodies[selection.edges[0].body], edge: bodies[selection.edges[0].body]?.mesh.edges[selection.edges[0].edge] } : null;
+  const faceGeometry = sel1?.kind === 'face' && sel1.face ? selectedFaceGeometry(sel1.face, fresh) : null;
   const { length: faces } = selection.faces;
   const { length: edges } = selection.edges;
   const selBodies = selectedBodies(selection).map(i => bodies[i]).filter(Boolean);
@@ -54,8 +56,8 @@ export function SelectionInspector({ model, selection, materialSettings, display
         </>) : sel1?.kind === 'face' && sel1.face ? (<>
           <div className="card-title">SELECTION · {edges ? `${faces} FACE${faces === 1 ? '' : 'S'}, ${edges} EDGE${edges === 1 ? '' : 'S'}` : `${faces} FACE${faces === 1 ? '' : 'S'}`}</div>
           <div id={faceScopeId} className="muted small" style={{ overflowWrap: 'anywhere' }} aria-label="Face property and colour target">Properties and face colour: {bodyName(doc, sel1.body)} ({sel1.body.key}) · {sel1.face.name}{faces > 1 ? ' — first selected face only' : ''}.</div>
-          <div className="kv">Type <b>{sel1.face.kind === 'plane' ? 'Planar' : 'Curved'}</b></div>
-          {sel1.face.kind === 'plane' && <div className="kv">Normal <b>{sel1.face.normal.map(v => fmt(Math.round(v * 1000) / 1000)).join(', ')}</b></div>}
+          <div className="kv">Type <b>{faceGeometry?.label}</b></div>
+          {faceGeometry?.normal && <div className="kv">Normal <b>{faceGeometry.normal.map(v => String(Math.round(v * 1000) / 1000)).join(', ')}</b></div>}
           <div className="kv">Area <b>{fmt(Math.round(sel1.face.area * 100) / 100)} mm²</b></div>
           {sel1.face.radius !== undefined && <div className="kv">Radius <b>{fmt(Math.round(sel1.face.radius * 1000) / 1000)} mm</b></div>}
           {(() => { const b = bodies[selection.faces[0]?.body], name = sel1.face.name, faces = b ? lookOf(doc, b).faces ?? {} : {}, cur = faces[name];
