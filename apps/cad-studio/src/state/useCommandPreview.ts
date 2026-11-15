@@ -98,7 +98,7 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
           const current = activeStore.get();
           if (live && current?.cmd === cmd && current.values === values) {
             setPreviewBodies(null);
-            setActive(a => a && a.cmd === cmd && a.values === values ? { ...a, preview: 'error', error: commandBuildFailure(cmd.id, e) } : a);
+            setActive(a => a && a.cmd === cmd && a.values === values ? { ...a, preview: 'error', error: commandBuildFailure(cmd.id, e, ctx) } : a);
           }
           return;
         }
