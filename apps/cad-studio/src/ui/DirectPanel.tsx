@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { analyzeSurface, curveLength, curvePlaneCrossings, directOps, domainsOf, geometryOf, surfaceIntersection, type DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { SEW_TOLERANCE_LABEL } from '@barocss/cad-model/engine/sew';
 import { curveAnalysisError, inspectCurvePoint } from './curveAnalysisError';
+import { sewTrimBlockers } from './sewTrimBlockers';
 import { parseSewToleranceInput } from './sewToleranceInput';
 import { CONTROL, FIELD } from './panelStyles';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ export function DirectPanel({ direct, selected, onChange, onError, onHide, onThi
   const [gap, setGap] = useState('0'), [keep, setKeep] = useState<'outside' | 'inside'>('outside');
   const sewGap = parseSewToleranceInput(gap);
   const objs = selected.map(id => direct.objects.find(o => o.id === id)).filter((o): o is NonNullable<typeof o> => !!o);
+  const trimBlockers = sewTrimBlockers(objs);
   const geoms = objs.map(o => { try { return geometryOf(direct, o); } catch { return null; } });
   const run = (op: () => DirectGeometry, select?: (next: DirectGeometry) => string[]) => {
     try { const next = op(); onChange(next, select?.(next)); }
@@ -73,7 +75,12 @@ export function DirectPanel({ direct, selected, onChange, onError, onHide, onThi
             aria-invalid={sewGap === null} aria-describedby={sewGap === null ? 'direct-sew-tolerance-error' : undefined}
             onChange={event => setGap(event.target.value)} /></label>
         {sewGap === null && <p id="direct-sew-tolerance-error" role="status" className="muted small">Enter a non-negative tolerance, or 0 for automatic.</p>}
-        <Button variant="ghost" aria-label="Sew into a body" title="Join the surfaces along matching edges. Use 0 for automatic tolerance." disabled={sewGap === null} onClick={() => { if (sewGap !== null) onSew(selected, sewGap); }}>Sew into a body</Button>
+        {trimBlockers.length > 0 && <div id="direct-sew-trims" role="status" className="muted small">
+          <p>Sew uses whole support surfaces. These selected surfaces are trimmed:</p>
+          <ul>{trimBlockers.map(object => <li key={object.id} className="break-all">{object.position}. {object.name}</li>)}</ul>
+          <p>Select each surface separately to inspect its trims. Untrim removes all trim boundaries, including openings, and restores the whole surface. Only use Untrim if that is intended.</p>
+        </div>}
+        <Button variant="ghost" aria-describedby={trimBlockers.length ? 'direct-sew-trims' : undefined} aria-label="Sew into a body" title="Join the surfaces along matching edges. Use 0 for automatic tolerance." disabled={sewGap === null || trimBlockers.length > 0} onClick={() => { if (sewGap !== null && trimBlockers.length === 0) onSew(selected, sewGap); }}>Sew into a body</Button>
       </div>}
       {objs.length === 2 && geoms.every(x => x?.kind === 'surface') && <div className="render-section [&>[data-slot=button]]:self-start">
         <div className="card-title" style={{ marginTop: 8 }}>TWO SURFACES</div>

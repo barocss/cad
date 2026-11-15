@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { createFlow, sha256 } from './flow-helper.mjs';
+const pins = ['apps/cad-studio/src/ui/DirectPanel.tsx', 'apps/cad-studio/src/ui/sewTrimBlockers.ts', 'packages/barocss-cad-model/src/engine/sew.ts'];
+const f = await createFlow({ name: 'sew-trim-blockers', output: process.argv[2], envFrozen: 'D1316_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
+  qualification: 'Name the original trimmed Sew member before execution and explain manual Untrim consequences.',
+  limits: ['Original D339 fixture, 1024 desktop; multiple blockers covered by unit test only; no assistive technology test.'] });
+const panel = () => f.page.getByRole('complementary', { name: 'Direct geometry', exact: true });
+const button = (name, scope = panel()) => scope.getByRole('button', { name, exact: true });
+await f.run(async () => {
+  const path = 'apps/cad-studio/handover/notes/ordered-sew-snapshot-2026-10-30/studio/run-01/seed.bcad';
+  const bytes = await readFile(path), seed = JSON.parse(bytes);
+  assert.equal(sha256(bytes), 'e5348dc4f6ca7b83d04f279a8dc2af96d26a11c39c7540becb900200b4ee5689');
+  await f.newPage(); await f.page.setViewportSize({ width: 1024, height: 800 }); await f.openFile(path, 2); await f.same(seed);
+  const select = async (index, shift = false) => f.page.locator('.ol.direct').filter({ hasText: seed.direct.objects[index].name }).click({ modifiers: shift ? ['Shift'] : [] });
+  const all = async () => { for (let i = 0; i < 6; i++) await select(i, i > 0); };
+  f.phase = 'Public Trim on xmax';
+  await select(5); await select(6, true); await panel().getByLabel('Trim keeps', { exact: true }).selectOption('outside');
+  await button('Trim by the curve').click(); await f.changed(seed);
+  const trimmed = await f.doc(); assert.equal(trimmed.direct.objects[5].trims[0].uv.length, 160);
+  await all();
+  assert.equal(await button('Sew into a body').isDisabled(), true);
+  const status = panel().locator('#direct-sew-trims');
+  assert.match(await status.textContent(), /6\. D339 · xmax/);
+  assert.match(await status.textContent(), /whole support surfaces/);
+  assert.match(await status.textContent(), /Untrim removes all trim boundaries, including openings/);
+  const selection = await f.page.locator('.ol.direct.sel').allTextContents();
+  assert.equal(selection.length, 6);
+  await f.same(trimmed); await status.scrollIntoViewIfNeeded(); await f.snapshot('trimmed-member-blocked');
+  assert.equal(await f.page.getByRole('dialog', { name: 'Sew', exact: true }).count(), 0);
+  assert.deepEqual(await f.page.locator('.ol.direct.sel').allTextContents(), selection);
+  await f.undo(); await f.same(seed); await f.redo(); await f.same(trimmed);
+  f.phase = 'Manual Untrim recovery';
+  await select(5); await button('Untrim').click(); await f.changed(trimmed);
+  const whole = await f.doc(); assert.equal(whole.direct.objects[5].trims?.length ?? 0, 0);
+  await all(); assert.equal(await panel().locator('#direct-sew-trims').count(), 0); assert.equal(await button('Sew into a body').isEnabled(), true);
+  await button('Sew into a body').click();
+  const hud = f.page.getByRole('dialog', { name: 'Sew', exact: true });
+  await hud.locator('.status.ok').waitFor(); await f.same(whole);
+  await button('Apply', hud).click(); await f.changed(whole); const accepted = await f.doc();
+  assert.equal(accepted.nodes.at(-1).kind, 'sew'); assert.deepEqual(accepted.nodes.at(-1).names, seed.direct.objects.slice(0, 6).map(o => o.name));
+  await f.undo(); await f.same(whole); await f.redo(); await f.same(accepted);
+  const saved = await f.save('manual-untrim-sewn'); await f.freshOpen(saved.file, saved.doc, 'reopened');
+  f.report.observations.push({ originalTrimmedMember: '6. D339 · xmax', disabledBeforeSew: true, documentPreserved: true, manualUntrimRecovery: true, undoRedo: true, nativeSaveOpen: true });
+});
