@@ -140,7 +140,7 @@ await f.run(async () => {
   await f.page.locator('.topbar').getByRole('button', { name: 'Chat', exact: true }).click();
   const row = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
   await row.getByRole('button', { name: 'Preview', exact: true }).click();
-  await row.getByRole('button', { name: 'Before or after', exact: true }).waitFor();
+  await row.getByRole('button', { name: 'Show before', exact: true }).waitFor();
   await f.same(pending);
   await f.snapshot('01-mcp-proposal-preview');
 

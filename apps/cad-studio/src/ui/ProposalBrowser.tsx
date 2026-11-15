@@ -32,14 +32,14 @@ export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel
             <div className="muted">{stale ? <b className="stale">stale · </b> : p.rebased ? 'rebased · ' : ''}{p.summary}{p.risk.references_broken ? ` · ${p.risk.references_broken} reference${p.risk.references_broken > 1 ? 's' : ''} broken` : ''}{p.risk.hard_requirements_changed.length ? ` · hard ${p.risk.hard_requirements_changed.join(', ')}` : ''}{p.risk.approval.length ? ` · needs you (${p.risk.approval.join(', ')})` : ''} · {p.by.agent}{p.by.model ? ` (${p.by.model})` : ''}</div>
             {p.plan && <div className="proposal-plan">{p.plan}</div>}
             {shown && fresh && (problem ? <div className="muted proposal-dv">{problem}</div>
-              : <div className="mono proposal-dv">{ghost.after ? 'after' : 'before'} · volume <span aria-label="Volume change">{!massReady ? '…' : dv === null ? 'unavailable'
+              : <div className="mono proposal-dv">{ghost.after ? 'after' : 'before'} · Volume change <span aria-label="Volume change">{!massReady ? '…' : dv === null ? 'unavailable'
                 : `${dv >= 0 ? '+' : '−'}${fmt(Math.abs(dv))} mm³${!placed && base ? ` (${dv >= 0 ? '+' : '−'}${fmt(Math.abs(dv) / base * 100)}%)` : ''}`}</span></div>)}
             {shown && ghost.parts.length > 1 && <div className="proposal-parts" role="group" aria-label={`${p.id} features`}>{ghost.parts.map(q => <label key={q.id} className={'proposal-part ' + q.kind}>
               <input type="checkbox" aria-label={`Keep ${q.id}`} disabled={q.kind === 'deleted' || proposalBusy} checked={!ghost.leaveOut.includes(q.id)} onChange={e => void tickPart(q.id, e.currentTarget.checked)} />
               <span className="mono">{q.id}</span> {q.kind === 'added' ? '+' : q.kind === 'changed' ? '~' : '−'} {q.label}</label>)}</div>}
             {p.status === 'open' ? <div className="proposal-actions">
               <button className={'ghost small' + (shown ? ' on' : '')} disabled={proposalBusy || stale || (!shown && reviewBlocked)} aria-describedby={!shown ? blockedDescription : undefined} onClick={() => void showProposal(p)}>{shown ? 'Hide' : 'Preview'}</button>
-              {shown && <button className="ghost small" aria-label="Before or after" onClick={flipGhost}>{ghost.after ? 'After' : 'Before'}</button>}
+              {shown && <button className="ghost small" onClick={flipGhost}>{ghost.after ? 'Show before' : 'Show after'}</button>}
               <span className="grow" />
               <button className="ghost small" disabled={proposalBusy} onClick={() => rejectIt(p)}>Reject</button>
               {stale && p.follow_up_repair ? <span className="muted">Attach the saved follow-up again to recheck.</span>

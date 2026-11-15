@@ -152,7 +152,7 @@ await f.run(async () => {
   assert.notEqual(candidate, base);
   await f.same(pending);
   await f.snapshot('candidate-visible');
-  await button('Before or after', card()).click();
+  await button('Show before', card()).click();
   assert.equal(await shownVolume('b4'), base);
   await button('Hide', card()).click();
   assert.equal(await shownVolume('b4'), base);

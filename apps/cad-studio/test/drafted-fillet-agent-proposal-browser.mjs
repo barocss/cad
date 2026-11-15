@@ -116,7 +116,7 @@ await f.run(async () => {
   assert.ok(baseMesh-candidateMesh>18 && baseMesh-candidateMesh<20);
   await f.same(pending);
   await f.snapshot('pending-after-preview');
-  await button('Before or after',card()).click();
+  await button('Show before',card()).click();
   assert.equal(await shownBody(witness.body),baseMesh);
   await f.same(pending);
   await f.snapshot('pending-before-preview');

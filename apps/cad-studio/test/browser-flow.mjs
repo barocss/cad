@@ -3157,8 +3157,8 @@ try {
     console.log(`  O18 ghost (${renderer}): overlay ${ghostShown.method}, tinted ${ghostShown.colored.join(',') || 'none'}`);
     if (ghostShown.method !== 'boolean') assert.equal(ghostShown.colored.length, 1, JSON.stringify(ghostShown));
     await snap('proposal-ghost');
-    await page.click('[aria-label="Proposal P1"] [aria-label="Before or after"]');
-    assert.equal(await page.textContent('[aria-label="Proposal P1"] [aria-label="Before or after"]'), 'Before');
+    await page.locator('[aria-label="Proposal P1"]').getByRole('button', { name: 'Show before', exact: true }).click();
+    assert.equal(await page.locator('[aria-label="Proposal P1"]').getByRole('button', { name: 'Show after', exact: true }).textContent(), 'Show after');
     // Accepted: the hole made, the proposal kept as accepted, the rebase and the decision in the history.
     await page.locator('[aria-label="Proposal P1"] button', { hasText: /^Accept/ }).click();
     await page.waitForFunction(() => window.__studioDoc.nodes.length === 3 && window.__studioDoc.proposals[0].status === 'accepted', null, { timeout: 15000 });
@@ -8381,7 +8381,7 @@ try {
     assert.ok(hole[0] > hole[1] + 20, `red at the hole ${JSON.stringify(hole)}`);
     await snap('g12-proposal');
     // Before and after: the overlay stays; the preview cleared, it goes.
-    await page.click('[aria-label="Proposal P9"] [aria-label="Before or after"]'); await page.waitForTimeout(500); await snap('g12-proposal-before');
+    await page.locator('[aria-label="Proposal P9"]').getByRole('button', { name: 'Show before', exact: true }).click(); await page.waitForTimeout(500); await snap('g12-proposal-before');
     assert.ok(await page.evaluate(() => !!window.__studioProposalOverlay()));
     await page.locator('[aria-label="Proposal P9"] button', { hasText: 'Reject' }).click();
     await page.waitForFunction(() => !window.__studioProposalOverlay?.(), null, { timeout: 10000 });

@@ -139,7 +139,7 @@ await f.run(async () => {
     await f.same(proposed);
     await autonomy.selectOption('2');
     await proposal('P1').getByRole('button', { name: 'Preview', exact: true }).click();
-    const comparison = proposal('P1').getByRole('button', { name: 'Before or after', exact: true });
+    const comparison = proposal('P1').getByRole('button', { name: /^Show (before|after)$/, exact: true });
     await comparison.waitFor();
     const initialView = await comparison.textContent();
     await assertShape(6);

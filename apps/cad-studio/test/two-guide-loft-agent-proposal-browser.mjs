@@ -99,7 +99,7 @@ await f.run(async () => {
   await f.same(pending);
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('proposal-preview');
-  await button('Before or after', card()).click();
+  await button('Show before', card()).click();
   assert.equal(await shown(), 0);
   await button('Hide', card()).click();
   assert.equal(await shown(), 0);

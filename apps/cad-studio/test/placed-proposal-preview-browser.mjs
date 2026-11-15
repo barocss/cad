@@ -71,11 +71,11 @@ await f.run(async () => {
   const after = await f.snapshot('01-proposal-after');
   assert.equal(after.volume, '−200 mm³');
   await heights([10, 11]);
-  await card().getByRole('button', { name: 'Before or after', exact: true }).click();
+  await card().getByRole('button', { name: 'Show before', exact: true }).click();
   await heights([11, 11]);
   await f.same(pending);
   const before = await f.snapshot('02-proposal-before');
-  await card().getByRole('button', { name: 'Before or after', exact: true }).click();
+  await card().getByRole('button', { name: 'Show after', exact: true }).click();
   await heights([10, 11]);
   await card().getByRole('button', { name: 'Hide', exact: true }).click();
   await heights([11, 11]);

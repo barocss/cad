@@ -102,3 +102,40 @@ test('idle recovery enables review actions and removes recovery text; decided ca
   blocked.doc.proposals![0] = { ...proposal, status: 'rejected' };
   assert.equal(elements(browser(blocked, {}, undefined, true)).some(element => element.props.role === 'status'), false);
 });
+
+
+test('preview status names the current geometry once; switch names its next action and retains the volume delta', () => {
+  const state = controller(), before = structuredClone(state.doc);
+  type Body = Parameters<typeof ProposalBrowser>[0]['bodies'][number];
+  const ghost: NonNullable<Controller['ghost']> = { id: proposal.id, bodies: [{ volume: 10553.21467 } as Body], placed: null, after: true,
+    full: state.doc, shown: state.doc, parts: [], leaveOut: [] };
+  let flips = 0;
+  const flipGhost = () => { flips++; ghost.after = !ghost.after; };
+  for (const after of [true, false, true]) {
+    const view = ProposalBrowser({ controller: { ...state.api, ghost, isStale: () => false, flipGhost }, doc: state.doc,
+      bodies: [{ volume: 10572.34446 } as Body], fresh: true, massReady: true, placedPreviewEnabled: true,
+      decidedShown: false, setDecidedShown: () => {} });
+    const status = elements(view).find(element => element.props.className === 'mono proposal-dv'); assert.ok(status);
+    assert.equal(content(status), `${after ? 'after' : 'before'} · Volume change −19.13 mm³ (−0.18%)`);
+    const action = button(view, after ? 'Show before' : 'Show after');
+    assert.equal(action['aria-label'], undefined, 'visible action text supplies the accessible name');
+    assert.equal(action.onClick, flipGhost, 'keep the original switch callback');
+    assert.equal(button(view, 'Hide').disabled, false); assert.equal(button(view, 'Accept').disabled, false);
+    assert.equal(elements(view).some(element => element.props['aria-label'] === 'Before or after'), false);
+    if (flips < 2) (action.onClick as () => void)();
+  }
+  assert.equal(flips, 2); assert.deepEqual(state.doc, before); assert.deepEqual(state.commits, []);
+});
+
+test('preview volume-change copy retains pending and unavailable states', () => {
+  const state = controller();
+  const ghost: NonNullable<Controller['ghost']> = { id: proposal.id, bodies: [], placed: null, after: true,
+    full: state.doc, shown: state.doc, parts: [], leaveOut: [] };
+  const props: Parameters<typeof ProposalBrowser>[0] = { controller: { ...state.api, ghost, isStale: () => false }, doc: state.doc, bodies: [],
+    fresh: true, massReady: false, placedPreviewEnabled: true, decidedShown: false, setDecidedShown: () => {} };
+  const delta = (view: unknown) => elements(view).find(element => element.props['aria-label'] === 'Volume change');
+  assert.equal(content(delta(ProposalBrowser(props))), '…');
+  ghost.placed = { kind: 'ready', volumeChange: null } as unknown as NonNullable<typeof ghost.placed>;
+  props.massReady = true;
+  assert.equal(content(delta(ProposalBrowser(props))), 'unavailable');
+});
