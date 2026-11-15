@@ -4,6 +4,7 @@ import { createElement, isValidElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server.edge';
 import { emptyDoc } from '@barocss/cad-model/engine/doc';
 import { checkPrintPreview } from '@barocss/cad-model/engine/printPreview';
+import { PrintLayerHeight } from '../src/viewport/PrintLayerHeight';
 import { PrintPanel } from '../src/viewport/PrintPanel';
 import { ClearancePanel } from '../src/viewport/ClearancePanel';
 import { withPrintPreviewSettings } from '../src/viewport/printSettings';
@@ -22,16 +23,15 @@ const invalid = [0, -0, -1, NaN, Infinity, -Infinity];
 
 // Checks actual component props and callbacks, not browser-native validity or
 // spinner behavior. Those must be checked in Chrome after this source is frozen.
-test('Print layer height HTML constraints match its existing finite-positive domain without rounding or a new increment grid', () => {
+test('Print layer height retains finite-positive native constraints and exact deferred commit delegation', () => {
   const patches: unknown[] = [], doc = emptyDoc(), before = structuredClone(doc);
+  const props: Parameters<typeof PrintPanel>[0] = { options: { layer: 0, layerHeight: 0.35, printed: true, supports: true }, resetKey: doc,
+    onOptions: patch => patches.push(patch), onDirection() {}, state: { stage: 'pending', display: null } };
   for (const value of valid) {
-    const props: Parameters<typeof PrintPanel>[0] = { options: { layer: 0, layerHeight: value, printed: true, supports: true },
-      onOptions: patch => patches.push(patch), onDirection() {}, state: { stage: 'pending', display: null } };
-    const input = field(PrintPanel(props), 'Print layer height (mm)');
-    assert.equal(input.type, 'number'); assert.equal(input.min, Number.MIN_VALUE); assert.equal(input.step, 'any');
-    assert.equal(input.value, value); assert.equal(input.disabled, false);
-    assert.equal(input.onKeyDown, undefined, 'do not replace native keyboard behavior');
-    (input.onChange as (event: unknown) => void)({ target: { valueAsNumber: value } });
+    props.options.layerHeight = value;
+    const height = elements(PrintPanel(props)).find(element => element.type === PrintLayerHeight); assert.ok(height);
+    assert.equal(height.props.value, value); assert.equal(height.props.resetKey, doc);
+    (height.props.onCommit as (value: number) => void)(value);
     assert.deepEqual(patches.pop(), { layerHeight: value });
     assert.deepEqual(checkPrintPreview({ version: 1, layerHeight: value }), []);
     const saved = withPrintPreviewSettings(doc, { layerHeight: value });
@@ -39,18 +39,13 @@ test('Print layer height HTML constraints match its existing finite-positive dom
     const html = renderToStaticMarkup(createElement(PrintPanel, props));
     assert.match(html, /aria-label="Print layer height \(mm\)"[^>]*min="5e-324"[^>]*step="any"/);
   }
-  const props: Parameters<typeof PrintPanel>[0] = { options: { layer: 0, layerHeight: 0.35, printed: true, supports: true },
-    onOptions: patch => patches.push(patch), onDirection() {}, state: { stage: 'pending', display: null } };
-  const input = field(PrintPanel(props), 'Print layer height (mm)');
-  for (const value of invalid) {
-    (input.onChange as (event: unknown) => void)({ target: { valueAsNumber: value } });
-    assert.deepEqual(patches, []); assert.ok(checkPrintPreview({ version: 1, layerHeight: value }).length);
-  }
+  for (const value of invalid) assert.ok(checkPrintPreview({ version: 1, layerHeight: value }).length);
   const toggle = field(PrintPanel(props), 'Set layer height');
   (toggle.onChange as (event: unknown) => void)({ target: { checked: false } }); assert.deepEqual(patches.pop(), { layerHeight: undefined });
   (toggle.onChange as (event: unknown) => void)({ target: { checked: true } }); assert.deepEqual(patches.pop(), { layerHeight: 0.2 });
   props.options.layerHeight = undefined;
-  const estimated = field(PrintPanel(props), 'Print layer height (mm)'); assert.equal(estimated.value, 0.2); assert.equal(estimated.disabled, true);
+  const html = renderToStaticMarkup(createElement(PrintPanel, props));
+  assert.match(html, /aria-label="Print layer height \(mm\)"[^>]*disabled=""[^>]*value="0.2"/);
   assert.deepEqual(doc, before);
 });
 

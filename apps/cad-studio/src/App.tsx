@@ -3167,7 +3167,7 @@ export function App() {
   // (G12a: proposals are in the chat column; while one is open the column shows it, the chat open or not.)
   // (G12e: the chosen preview's settings in the dock's Preview & analysis section, the switch its enable; the 3D annotations
   // an overlay toggle at the section's header, their status under the panel.)
-  const previewPanel = previewMode === 'print' ? <PrintPanel options={printOptions} onOptions={commitPrintPreview} onDirection={commitPrintDirection} state={printState} reason={printReason} warnings={printWarnings} scopeHint={printScopeHint} />
+  const previewPanel = previewMode === 'print' ? <PrintPanel resetKey={doc} options={printOptions} onOptions={commitPrintPreview} onDirection={commitPrintDirection} state={printState} reason={printReason} warnings={printWarnings} scopeHint={printScopeHint} />
     : previewMode === 'cnc' ? <CamPanel options={camOptions} onOptions={patchCam} state={camState} reason={camReason} />
     : previewMode === 'clearance' ? <ClearancePanel near={clearanceNear} onNear={setClearanceNear} display={clearanceDisplay} reason={clearanceReason} labels={clearanceLabels} />
     : previewMode === 'analysis' ? <AnalysisPanel analysis={analysis} onAnalysis={setAnalysis} map={mapKind} onMap={k => { setMapHover(null); setMouldSpread(0); setMapKind(k); }}

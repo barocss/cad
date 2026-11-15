@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1394: [Print layer-height draft](notes/print-height-draft-mac-2026-11-15/README.md), #604; owned raw editing, explicit commit/cancel and saved-preview feedback without manufacturing expansion.
+
 - D1393: [Preview input constraints](notes/preview-input-step-mac-2026-11-15/README.md), #603 including Clearance Near; remove incompatible step grids, preserve existing finite-positive callbacks and draft semantics.
 
 - D1392: [Print partial layer](notes/print-partial-layer-mac-2026-11-15/README.md), #602; actual band midpoint and overhang bounds, unchanged layer count and display-only scope.

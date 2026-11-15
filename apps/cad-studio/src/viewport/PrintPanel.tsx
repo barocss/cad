@@ -1,3 +1,4 @@
+import { PrintLayerHeight } from './PrintLayerHeight';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import type { PrintOptions, PrintState } from './usePrintLayers';
 import type { PrintPreviewPatch } from './printSettings';
@@ -6,8 +7,8 @@ const directions: { label: string; value: Vec3 }[] = [
   { label: '+Z', value: [0, 0, 1] }, { label: '+X', value: [1, 0, 0] }, { label: '+Y', value: [0, 1, 0] },
   { label: '−Z', value: [0, 0, -1] }, { label: '−X', value: [-1, 0, 0] }, { label: '−Y', value: [0, -1, 0] },
 ];
-export function PrintPanel({ options, onOptions, onDirection, state, reason, warnings = [], scopeHint }: {
-  options: PrintOptions;
+export function PrintPanel({ options, onOptions, onDirection, state, reason, warnings = [], scopeHint, resetKey }: {
+  options: PrintOptions; resetKey?: unknown;
   onOptions(value: PrintPreviewPatch): void; onDirection(value: Vec3 | undefined): void; state: PrintState; reason?: string; warnings?: readonly string[]; scopeHint?: string;
 }) {
   const d = state.display, max = Math.max(0, (state.count ?? d?.summary.count ?? 1) - 1), shown = Math.min(options.layer, max);
@@ -18,7 +19,7 @@ export function PrintPanel({ options, onOptions, onDirection, state, reason, war
       <option value="default">Default +Z</option>{directions.map((x, i) => <option key={x.label} value={i}>{x.label}</option>)}{direction < 0 && options.direction && <option value="custom" disabled>Given [{options.direction.join(', ')}]</option>}
     </select></label>
     <label style={{ marginLeft: 8 }}><input type="checkbox" aria-label="Set layer height" checked={options.layerHeight !== undefined} onChange={e => onOptions({ layerHeight: e.target.checked ? 0.2 : undefined })} /> Set height</label>
-    <input aria-label="Print layer height (mm)" type="number" min={Number.MIN_VALUE} step="any" disabled={options.layerHeight === undefined} value={options.layerHeight ?? 0.2} style={{ width: 64 }} onChange={e => { const n = e.target.valueAsNumber; if (Number.isFinite(n) && n > 0) onOptions({ layerHeight: n }); }} /> mm
+    <PrintLayerHeight value={options.layerHeight} resetKey={resetKey} onCommit={layerHeight => onOptions({ layerHeight })} />
     <div><label>Layer <input aria-label="Print layer" type="range" min={0} max={max} step={1} value={shown} disabled={!state.count || !!reason} onChange={e => onOptions({ layer: e.target.valueAsNumber })} /></label> {shown + 1}</div>
     <label><input type="checkbox" aria-label="Printed up to layer" checked={options.printed} onChange={e => onOptions({ printed: e.target.checked })} /> Printed up to layer</label>
     <label style={{ marginLeft: 8 }}><input type="checkbox" aria-label="Print supports" checked={options.supports} onChange={e => onOptions({ supports: e.target.checked })} /> Supports</label>
