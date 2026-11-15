@@ -13,6 +13,7 @@ import { commitDrag, dragged, fullCage, previewTriangles, redoSession, runOp, se
 import { mirrorCage } from '@barocss/cad';
 import { Lanes } from '../engine/lanes';
 import { cageDoneReadiness, type CageBuildReceipt } from './cageCommitReadiness';
+import { cageBeginPolicy } from './cageBeginPolicy';
 
 type SubdNode = Extract<ModelNode, { kind: 'subd' }>;
 /** The cage's exact build: one lane, each step's build replacing the last. */
@@ -20,7 +21,7 @@ const CAGE_LANE = 'cage';
 export interface CageEditor {
   readonly session: CageSession | null;
   readonly doneReadiness: { ok: boolean; reason: string };
-  begin(node: number): boolean;
+  begin(node: number, discardCurrent?: boolean): boolean;
   overlay: CageOverlay | null;
   pickDepth: 'front' | 'back';
   setPickDepth(depth: 'front' | 'back'): void;
@@ -80,13 +81,15 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
     fail('Cage edit ended', 'The part changed while its cage was being edited; nothing was written. Edit the cage again.');
   }, [doc, session, fail]);
 
-  const begin = useCallback((node: number) => {
+  const begin = useCallback((node: number, discardCurrent = false) => {
     const n = doc.nodes[node];
-    if (n?.kind !== 'subd') return false;
+    const policy = cageBeginPolicy(node, n, session, from.current, discardCurrent);
+    if (policy === 'refuse' || n?.kind !== 'subd') return false;
+    if (policy === 'keep') return true;
     from.current = n;
     sessionId.current++; setPickDepth('front');
     setSession(startSession(node, n.cage, n.mirror)); setDrag(null); setExact(null); setBuildReceipt(null); return true;
-  }, [doc.nodes]);
+  }, [doc.nodes, session]);
   const guard = useCallback((f: (s: CageSession) => CageSession) => setSession(s => {
     if (!s) return s;
     try { return f(s); } catch (e) { fail('Not done', e instanceof Error ? e.message.replace(/^SubD: /, '') : String(e)); return s; }

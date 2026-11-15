@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1330 — Preserve cage drafts on reentry](notes/cage-reentry-mac-2026-11-15/README.md).
+
 - [D1329 — Protect cage drafts at Save and New part](notes/cage-draft-files-mac-2026-11-15/README.md).
 
 - [D1328 — Inspect selected edge crease states](notes/cage-crease-feedback-mac-2026-11-15/README.md).

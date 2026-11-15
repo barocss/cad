@@ -1666,6 +1666,21 @@ export function App() {
       return;
     }
     if ((cmd.build || cmd.action === 'sketch' || cmd.action === 'cage' || cmd.action === 'assembly-cut' || cmd.id === SKETCH3D_COMMAND.id) && !canChangeDocument()) return;
+    if (cmd.action === 'cage' && cageEdRef.current.session) {
+      const editor = cageEdRef.current, owner = docNow.current, n = subdNodeOf(ctx);
+      if (n === null) return;
+      const target = owner.nodes[n];
+      setPalette(false);
+      if (editor.session?.node === n) { editor.begin(n); return; }
+      workspaceModeExit.switchWhenReady(() => {
+        if (docNow.current !== owner || docNow.current.nodes[n] !== target) return;
+        if (!cageEdRef.current.begin(n, true)) return;
+        discardRouteRef.current(); setRoutePanelOpen(false); setCutDraft(null);
+        setRendering(false); setPlaying(false); setDrawing(false);
+        setSelection(emptySel); setEditNode(null);
+      }, { readFeature: () => cageEdRef.current.session, title: 'Discard cage draft and edit another cage?' });
+      return;
+    }
     const vertexSelection = cmd.id === 'sketch' && selection.vertices?.length ? selection.vertices : undefined;
     const mixedVertexBodies = vertexSelection?.length === 3 && vertexSelection.some(pick => pick.body !== vertexSelection[0].body);
     const vertexPoints = vertexSelection && nativeVertexReady &&
@@ -1742,7 +1757,7 @@ export function App() {
     }
     if (cmd.action === 'assembly-cut') { cancel(); openCut(null); return; }
     if (cmd.action === 'interference') { checkInterference(); return; }
-    if (cmd.action === 'cage') { const n = subdNodeOf(ctx); if (n !== null) { cageEd.begin(n); setSelection(emptySel); setEditNode(null); } return; }
+    if (cmd.action === 'cage') { const n = subdNodeOf(ctx); if (n !== null && cageEdRef.current.begin(n)) { setSelection(emptySel); setEditNode(null); } return; }
     if (cmd.action === 'measure') {
       // Start from the selected face, edge, or vertex.
       const face = selection.faces[0], edge = selection.edges[0], vertex = selection.vertices?.[0];
