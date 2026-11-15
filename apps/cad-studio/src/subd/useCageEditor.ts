@@ -131,7 +131,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
     }
     if (e.key === 'Tab') { e.preventDefault(); setSession(s => s && { ...s, smooth: !s.smooth }); return true; }
     const mode = ({ '1': 'vertex', '2': 'edge', '3': 'face' } as const)[e.key as '1' | '2' | '3'];
-    if (mode) { setSession(s => s && { ...s, mode, sel: { vertices: [], edges: [], faces: [] } }); return true; }
+    if (mode) { setSession(s => s && (s.mode === mode ? s : { ...s, mode, sel: { vertices: [], edges: [], faces: [] } })); return true; }
     const op = ({ e: 'extrude', l: 'insert-loop', b: 'bridge', f: 'fill', w: 'weld', c: 'crease', Delete: 'delete', Backspace: 'delete' } as Record<string, CageOp>)[e.key];
     if (op && !e.metaKey && !e.ctrlKey) { e.preventDefault(); guard(s => runOp(s, op)); return true; }
     return false;
@@ -140,7 +140,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
   return {
     session, begin, overlay, gizmo, shown, previewMs, pickDepth, setPickDepth,
     onPick: (hit, additive, grow) => guard(s => select(s, hit, additive, grow)),
-    setMode: m => setSession(s => s && { ...s, mode: m, sel: { vertices: [], edges: [], faces: [] } }),
+    setMode: m => setSession(s => s && (s.mode === m ? s : { ...s, mode: m, sel: { vertices: [], edges: [], faces: [] } })),
     toggleSmooth: () => setSession(s => s && { ...s, smooth: !s.smooth }),
     op: o => guard(s => runOp(s, o)),
     undo: () => setSession(s => s && undoSession(s)), redo: () => setSession(s => s && redoSession(s)),

@@ -35,20 +35,22 @@ export function startSession(node: number, cage: StudioCage, mirror?: MirrorAxis
 }
 /** The cage the kernel builds: the half mirrored, else as edited. */
 export const fullCage = (s: Pick<CageSession, 'cage' | 'mirror'>): StudioCage => s.mirror ? plain(mirrorCage(s.cage, s.mirror)) : s.cage;
+/** Selection-changing operations follow their actual result; an empty selection preserves the active mode. */
+const selectionMode = (sel: CageSelection, fallback: CageMode): CageMode => sel.faces.length ? 'face' : sel.edges.length ? 'edge' : sel.vertices.length ? 'vertex' : fallback;
 /** A step: the new cage (and mirror and selection) with the old one on the undo stack. */
 function step(s: CageSession, cage: StudioCage, sel: CageSelection, mirror: MirrorAxis | null = s.mirror ?? null): CageSession {
   const rest = unmirrored(s);
-  return { ...rest, ...(mirror ? { mirror } : {}), cage, sel, undo: [...s.undo.slice(-99), { cage: s.cage, ...(s.mirror ? { mirror: s.mirror } : {}), sel: s.sel }], redo: [] };
+  return { ...rest, ...(mirror ? { mirror } : {}), cage, sel, mode: selectionMode(sel, s.mode), undo: [...s.undo.slice(-99), { cage: s.cage, ...(s.mirror ? { mirror: s.mirror } : {}), sel: s.sel }], redo: [] };
 }
 export function undoSession(s: CageSession): CageSession {
   const last = s.undo[s.undo.length - 1]; if (!last) return s;
   const rest = unmirrored(s);
-  return { ...rest, ...(last.mirror ? { mirror: last.mirror } : {}), cage: last.cage, sel: last.sel, undo: s.undo.slice(0, -1), redo: [...s.redo, { cage: s.cage, ...(s.mirror ? { mirror: s.mirror } : {}), sel: s.sel }] };
+  return { ...rest, ...(last.mirror ? { mirror: last.mirror } : {}), cage: last.cage, sel: last.sel, mode: selectionMode(last.sel, s.mode), undo: s.undo.slice(0, -1), redo: [...s.redo, { cage: s.cage, ...(s.mirror ? { mirror: s.mirror } : {}), sel: s.sel }] };
 }
 export function redoSession(s: CageSession): CageSession {
   const next = s.redo[s.redo.length - 1]; if (!next) return s;
   const rest = unmirrored(s);
-  return { ...rest, ...(next.mirror ? { mirror: next.mirror } : {}), cage: next.cage, sel: next.sel, redo: s.redo.slice(0, -1), undo: [...s.undo, { cage: s.cage, ...(s.mirror ? { mirror: s.mirror } : {}), sel: s.sel }] };
+  return { ...rest, ...(next.mirror ? { mirror: next.mirror } : {}), cage: next.cage, sel: next.sel, mode: selectionMode(next.sel, s.mode), redo: s.redo.slice(0, -1), undo: [...s.undo, { cage: s.cage, ...(s.mirror ? { mirror: s.mirror } : {}), sel: s.sel }] };
 }
 
 // ---- Picking ------------------------------------------------------------------------------------------------------------
@@ -129,14 +131,15 @@ export function openRun(c: StudioCage, a: number, b: number): [number, number][]
 /** A pick applied to the selection: alone, or added / taken away (`additive`); `grow` an edge's loop (a hole's whole rim for an open edge) or ring. */
 export function select(s: CageSession, hit: CageHit | null, additive: boolean, grow?: 'loop' | 'ring'): CageSession {
   if (!hit) return additive ? s : { ...s, sel: emptyCageSel };
+  const selected = (sel: CageSelection): CageSession => ({ ...s, sel, mode: selectionMode(sel, s.mode) });
   const base = additive ? s.sel : emptyCageSel;
-  if (hit.kind === 'vertex') { const has = base.vertices.includes(hit.v); return { ...s, sel: { ...emptyCageSel, vertices: has ? base.vertices.filter(v => v !== hit.v) : [...base.vertices, hit.v] } }; }
-  if (hit.kind === 'face') { const has = base.faces.includes(hit.f); return { ...s, sel: { ...emptyCageSel, faces: has ? base.faces.filter(f => f !== hit.f) : [...base.faces, hit.f] } }; }
+  if (hit.kind === 'vertex') { const has = base.vertices.includes(hit.v); return selected({ ...emptyCageSel, vertices: has ? base.vertices.filter(v => v !== hit.v) : [...base.vertices, hit.v] }); }
+  if (hit.kind === 'face') { const has = base.faces.includes(hit.f); return selected({ ...emptyCageSel, faces: has ? base.faces.filter(f => f !== hit.f) : [...base.faces, hit.f] }); }
   const add: (readonly [number, number])[] = grow === 'loop' ? openRun(s.cage, hit.a, hit.b) ?? edgeLoop(s.cage, hit.a, hit.b) : grow === 'ring' ? edgeRing(s.cage, hit.a, hit.b) : [[hit.a, hit.b]];
   const keys = new Set(base.edges.map(([a, b]) => ek(a, b)));
   const toggled = !grow && keys.has(ek(hit.a, hit.b));
   const edges = toggled ? base.edges.filter(([a, b]) => ek(a, b) !== ek(hit.a, hit.b)) : [...base.edges, ...add.filter(([a, b]) => !keys.has(ek(a, b)))];
-  return { ...s, sel: { ...emptyCageSel, edges } };
+  return selected({ ...emptyCageSel, edges });
 }
 export const selectedVertices = (s: CageSession) => selectionVertices(s.cage, s.sel);
 /** The selection's centre (where the gizmo sits), or null. */
