@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1408: [Supported Extrude binding controls](notes/extrude-draft-binding-mac-2026-11-15/README.md), #95; hide only unsupported Draft binding, preserving numeric angles and native-equivalent Distance parameters through Undo/Redo and Save/Open.
+
 - D1407: [Supported Fillet station binding controls](notes/fillet-station-binding-mac-2026-11-15/README.md), #145; hide only unsupported percentage parameter controls, preserving direct 40% editing and native-equivalent radius binding.
 
 - D1406: [Fillet interior input boundaries](notes/fillet-station-input-mac-2026-11-15/README.md), #144; exact fraction admission parity and owned field errors, including invalid queued Apply cancellation and native-preserving recovery.

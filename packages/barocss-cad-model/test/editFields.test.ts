@@ -68,10 +68,11 @@ test('drafted anchored Cut edits positive depth and converts both draft transiti
   const tool = withNode(profile, { kind: 'extrude', sketch: 2, height: -2, draft: 10 });
   const cut = withNode(tool, { kind: 'difference', parent: target, tool: { node: 3, side: 'solid' } });
   const distance = editFields(cut.nodes, 3, { D: 4 }).find(f => f.key === 'h') as BindableField;
-  const draft = editFields(cut.nodes, 3, { D: 4 }).find(f => f.key === 'draft') as BindableField;
+  const draft = editFields(cut.nodes, 3, { D: 4 }).find(f => f.key === 'draft');
+  assert.ok(draft?.kind === 'number');
   assert.equal(distance.get(cut.nodes), 2);
   assert.equal(distance.bind(cut.nodes, 'D'), null);
-  assert.equal(draft.bind(cut.nodes, 'D'), null);
+  assert.ok(!('bind' in draft));
   assert.deepEqual(distance.set(cut.nodes, -4), cut.nodes);
   const deeper = distance.set(cut.nodes, 4);
   assert.deepEqual(deeper[3], { ...cut.nodes[3], height: -4 });
