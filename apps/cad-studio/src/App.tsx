@@ -3752,7 +3752,7 @@ export function App() {
         analysis={{ analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread }}
         picking={{ pickFilter, setPickFilter, snapStep, setSnapStep, setSelection }} explodeStore={explodeStore} />
 
-      {palette && <Palette ctx={ctx} onRun={start} onClose={() => setPalette(false)} extra={PALETTE_EXTRA} />}
+      {palette && <Palette ctx={ctx} execution={{ showingVariant: variants.showing, fresh, busy }} onRun={start} onClose={() => setPalette(false)} extra={PALETTE_EXTRA} />}
       {help && <ShortcutHelp onClose={() => setHelp(false)} />}
       <FeatureHistoryMenu doc={doc} ctx={ctx} marker={marker} historyMenu={historyMenu} close={() => setHistoryMenu(null)}
         beforeEdit={action => workspaceModeExit.switchWhenReady(action, { originFocus: historyMenu?.focus, readFeature: readFeatureTransitionDraft })}
