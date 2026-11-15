@@ -1,3 +1,4 @@
+import { drawingFixControlLoss } from './fixProtection';
 // The drawing's issue list (R14.2, O3): what is wrong on the sheet and what is missing from it, each with where it
 // is and, where one is safe, a fix. It is R14's "the drawing is right" check: a sheet with no errors reads cleanly,
 // and with no warnings it dimensions every hole, step and overall size the views show.
@@ -458,7 +459,7 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
     if (missing.length) out.push({ code: 'DATUM_UNDEFINED', severity: 'error', message: `The ${f.characteristic} frame on ${r.text} refers to datum${missing.length > 1 ? 's' : ''} ${missing.join(', ')}, which the drawing does not have.`, dims: [f.dim], view: r.dim.view });
   }
   for (const r of sheet.dimensions) {
-    if (!r.ok) { out.push({ code: 'DIMENSION_LOST', severity: 'error', message: `A ${r.dim.kind} dimension in ${viewName(r.dim.view)} is lost: ${r.reason}`, dims: [r.dim.id], view: r.dim.view, fix: { kind: 'remove', dim: r.dim.id } }); continue; }
+    if (!r.ok) { out.push({ code: 'DIMENSION_LOST', severity: 'error', message: `A ${r.dim.kind} dimension in ${viewName(r.dim.view)} is lost: ${r.reason}${drawingFixControlLoss(settings, { kind: 'remove', dim: r.dim.id }).length ? ' Fix all retains this dimension and its authored controls for review.' : ''}`, dims: [r.dim.id], view: r.dim.view, fix: { kind: 'remove', dim: r.dim.id } }); continue; }
     // (O146: a linear dimension measuring to a hidden line — a keyseat under its hub, say — is said; a section through it
     // would show it. No section is added here: that is R14's view logic, an open item.)
     if (r.dim.kind === 'linear') {
@@ -994,7 +995,7 @@ export function fixAll(i: SheetInputs, max = 40, only: (fix: DrawingFix, issue: 
   let settings = i.settings, ctx = issueContext(i), issues = drawingIssues(ctx);
   const applied: DrawingFix[] = [], tried = new Set<string>();
   for (let n = 0; n < max; n++) {
-    const next = [...issues.filter(x => x.severity === 'error'), ...issues.filter(x => x.severity === 'warning')].find(x => x.fix && only(x.fix, x) && !tried.has(JSON.stringify(x.fix)));
+    const next = [...issues.filter(x => x.severity === 'error'), ...issues.filter(x => x.severity === 'warning')].find(x => x.fix && !drawingFixControlLoss(settings, x.fix).length && only(x.fix, x) && !tried.has(JSON.stringify(x.fix)));
     if (!next) break;
     const key = JSON.stringify(next.fix); tried.add(key);
     const changed = applyFix(ctx, next.fix!);

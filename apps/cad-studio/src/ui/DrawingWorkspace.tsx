@@ -1,3 +1,4 @@
+import { drawingFixControlLoss } from '@barocss/cad-model/drawing/fixProtection';
 // The Drawing workspace: the part's standard views on a sheet, dimensioned by clicking in a view.
 // Tools: Select (click a dimension to select it, drag to move it, Delete removes it), Linear (two
 // points, or one straight edge, then where the dimension line goes), Diameter and Radius (a circle
@@ -197,6 +198,12 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     setTool('select');
   };
   const [message, setMessage] = useState<string | null>(null);
+  const [controlDeletion, setControlDeletion] = useState<{ settings: DrawingSettings; model: typeof model; sheet: number; loss: string[]; run(): void } | null>(null);
+  const currentControlDeletion = controlDeletion?.settings === wholeSettings && controlDeletion.model === model && controlDeletion.sheet === current ? controlDeletion : null;
+  const requestControlDeletion = (loss: string[], run: () => void) => {
+    if (!loss.length) { run(); return; }
+    setControlDeletion({ settings: wholeSettings, model, sheet: current, loss, run });
+  };
   const [drag, setDrag] = useState<{ id: string; place: XY } | { target: string; original: DrawingDatumTarget; place: XY } | { note: string; at: XY; grab: XY } | { detail: string; at: XY; grab: XY } | { removed: string; at: XY; grab: XY } | { pan: XY; box: [number, number, number, number] } | null>(null);
   /** The selected note's text while it is typed, and the selected dimension's tolerance fields. */
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
@@ -252,7 +259,9 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       return;
     }
     if (fix.kind === 'remove-detail') { removeDetail(fix.detail); return; }
-    onChange(applyFix({ views, layout, settings, sheet, callout, locationOwner, elements, ...(cuts.length ? { sections: cuts } : {}) }, fix));
+    requestControlDeletion(drawingFixControlLoss(settings, fix), () => {
+      onChange(applyFix({ views, layout, settings, sheet, callout, locationOwner, elements, ...(cuts.length ? { sections: cuts } : {}) }, fix));
+    });
   };
   // (O175: Fix all runs the chat's rounds, fixRound: a round that adds a section waits for the worker to cut it, and the
   // next round runs on the sheet with its view — one Fix, as the chat's fix_drawing, not a second click. The rounds stop
@@ -403,7 +412,9 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   };
   const removeFrame = (frame: DrawingFrame) => {
     if (frame.dim !== undefined) return;
-    if (commitFrames((settings.frames ?? []).filter(row => row !== frame))) { setSelectedFrame(null); setPending(null); setMessage(null); }
+    requestControlDeletion(drawingFixControlLoss(settings, { kind: 'remove-frame', frame: frame.id }), () => {
+      if (commitFrames((settings.frames ?? []).filter(row => row !== frame))) { setSelectedFrame(null); setPending(null); setMessage(null); }
+    });
   };
   const commitTargets = (datumTargets: DrawingDatumTarget[]) => {
     if (!scopeRead.scope) { setMessage(scopeRead.error ?? 'Invalid drawing scope.'); return false; }
@@ -835,6 +846,14 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       if (!onChange(next)) return;
     } else {
       if (settings.dimensions.filter(dim => dim.id === id).length !== 1) return;
+      const loss = drawingFixControlLoss(settings, { kind: 'remove', dim: id });
+      if (loss.length) {
+        requestControlDeletion(loss, () => {
+          if (onChange({ ...settings, dimensions: settings.dimensions.filter(dim => dim.id !== id),
+            ...(settings.frames?.some(frame => frame.dim === id) ? { frames: settings.frames.filter(frame => frame.dim !== id) } : {}) })) setSelected(null);
+        });
+        return;
+      }
       if (!commitDims(settings.dimensions.filter(dim => dim.id !== id))) return;
     }
     if (selected?.kind === kind && selected.id === id) setSelected(null);
@@ -847,6 +866,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey) return;
       if (e.key === '?') { e.preventDefault(); openShortcutHelp(); return; }
       if (e.key === 'Escape') {
+        setControlDeletion(null);
         setDrag(null);
         onClearReferencePreview();
         if (reattach) cancelReattachment();
@@ -1127,6 +1147,15 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         </div>
         {!!lostOccurrences.length && <div className="card dw-hint warn" role="status" aria-label="Drawing occurrence references">
           {lostOccurrences.map(loss => <span key={loss.id}>{occurrenceLossText(loss)}</span>)}
+        </div>}
+        {currentControlDeletion && <div className="card dw-hint warn" style={{ pointerEvents: 'auto' }} role="group" aria-label="Confirm drawing control removal">
+          <span>Remove this annotation and its authored controls? Undo can restore them.</span>
+          <ul>{currentControlDeletion.loss.map((loss, index) => <li key={index}>{loss}</li>)}</ul>
+          <Button variant="ghost" onClick={() => setControlDeletion(null)}>Cancel removal</Button>
+          <Button variant="destructive" onClick={() => {
+            setControlDeletion(null);
+            if (currentControlDeletion.model === currentModel.current) currentControlDeletion.run();
+          }}>Remove annotation and controls</Button>
         </div>}
         <SheetTabs whole={wholeSettings} current={current} onSelect={selectSheet} onAdd={() => { commitWhole({ ...wholeSettings, sheets: [...(wholeSettings.sheets ?? []), { id: newSheetId(wholeSettings), views: [] }] }); selectSheet(sheetTotal); }} />
         {(currentReattachment?.candidate || currentRimChoice || bomError || hint || selected || selectedTarget || selectedFrame) &&
