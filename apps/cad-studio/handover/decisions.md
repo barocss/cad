@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1352 — Sketch diagnostics, point-pair and Ellipse disclosure](notes/sketch-disclosure-mac-2026-11-15/README.md).
+
 - [D1351 — Settled Sketch state and plane disclosure](notes/sketch-settled-state-mac-2026-11-15/README.md).
 
 - [D1350 — Command search execution-state guidance](notes/palette-global-state-mac-2026-11-15/README.md).

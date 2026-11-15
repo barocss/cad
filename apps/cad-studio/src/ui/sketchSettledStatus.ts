@@ -14,7 +14,7 @@ export function sketchStatus(s: SketchShape | null, solved: SolveResult | null, 
   if (!s.closed && !s.pending && s.construction) return { text: 'Open construction line', warn: false };
   if (!s.closed) return { text: s.pending ? 'Move to bend the arc, click to place it' : 'Open profile · click the first point to close', warn: true };
   if (s.pending) return { text: 'Move to bend the closing arc, click to place it', warn: true };
-  if (s.ellipse && ellipseMatches(s)) return { text: 'Ellipse · tangent arcs within 1e-5 of the exact curve · Make curves keeps it exact', warn: false };
+  if (s.ellipse && ellipseMatches(s)) return { text: 'Ellipse', warn: false };
   if (!solved) return { text: 'Outline closed', warn: false };
   if (!solved.ok) return { text: solved.reason, warn: true };
   const curved = (s.bulges ?? []).some(Boolean);

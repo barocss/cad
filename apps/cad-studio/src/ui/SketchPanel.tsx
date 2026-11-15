@@ -1,5 +1,6 @@
 import { applyOffsetMagnitude, parseOffsetMagnitude, OFFSET_MAGNITUDE_ERROR } from '../app/sketchOffsetDistance';
 import { sketchOffsetReadiness } from '../app/sketchOffsetTarget';
+import { MAKE_CURVES_HELP, SketchSolverDiagnostics } from './sketchPresentation';
 import { sketchStatus } from './sketchSettledStatus';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { bezierError, wellFormedBezier } from '@barocss/cad-model/sketch/bezier';
@@ -233,7 +234,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
         <div className="card-title" style={{ marginTop: 10 }}>CONSTRAINTS · {constraints.length}</div>
         {constraints.map((c, i) => <div className="kv" key={i}>{c.label}<b>{c.detail}</b></div>)}
       </>}
-      {solved?.ok && <div className="kv solver">Solver<b>rank {solved.rank} · {solved.dof} DOF</b></div>}
+      {solved?.ok && <SketchSolverDiagnostics rank={solved.rank} dof={solved.dof} />}
       {onBand && (sketch.tool === 'band' || sketch.band) && <BandSection sketch={sketch} {...onBand} />}
       {onUseOutline && <>
         <div className="card-title" style={{ marginTop: 10 }}>FACE</div>
@@ -274,7 +275,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
       </>}
       {onToCurves && <>
         <div className="card-title" style={{ marginTop: 10 }}>CURVES</div>
-        <Button variant="ghost" aria-label="Make curves" data-tip="Make curves" data-tip-desc="Each shape of the sketch as a curve in space (for lofts, sweeps and ruled surfaces); the sketch is left" onClick={onToCurves}>Make curves of the sketch</Button>
+        <Button variant="ghost" aria-label="Make curves" data-tip="Make curves" data-tip-focus data-tip-desc={MAKE_CURVES_HELP} onClick={onToCurves}>Make curves of the sketch</Button>
       </>}
     </aside>
   );

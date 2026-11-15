@@ -13,6 +13,7 @@ import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { clearConstraintInspection, keepsDimensionDraft, type ConstraintComparison, type ConstraintInspection, type ConstraintInspectionStore } from '../sketch/constraintInspection';
 import { useStoreValue } from '../state/valueStore';
 import { sketchFinishInputs } from '../app/sketchControls';
+import { duplicatePointDistance } from './sketchPresentation';
 import { ConstraintList } from './ConstraintList';
 import './constraints.css';
 
@@ -122,7 +123,7 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
     </div>
     {comparisonReason && comparisonReason !== refused && <div className="sk-status open" role="status" aria-label="Constraint preview"><i />{comparisonReason}</div>}
     {twoPoints && <div className="cons-tools cons-dims" role="group" aria-label="Dimensions between the points">
-      <button type="button" aria-label="Distance between the points" title="Straight distance" onClick={() => onEditDim(circle ? twoPoints.dist : dim ?? twoPoints.dist)}><b>⤢</b><span>Distance</span></button>
+      {!duplicatePointDistance(picked, dim) && <button type="button" aria-label="Distance between the points" title="Straight distance" onClick={() => onEditDim(circle ? twoPoints.dist : dim ?? twoPoints.dist)}><b>⤢</b><span>Distance</span></button>}
       <button type="button" aria-label="Horizontal distance" title="Distance along the sketch X axis" onClick={() => onEditDim(twoPoints.dx)}><b>↔</b><span>Horizontal</span></button>
       <button type="button" aria-label="Vertical distance" title="Distance along the sketch Y axis" onClick={() => onEditDim(twoPoints.dy)}><b>↕</b><span>Vertical</span></button>
     </div>}
