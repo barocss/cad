@@ -256,7 +256,12 @@ export function runOp(s: CageSession, op: CageOp, tolerance = 0.01, t = 0.5): Ca
     case 'crease': case 'uncrease': {
       const edges = sel.edges.length ? sel.edges : sel.faces.flatMap(f => c.faces[f].map((v, i, F) => [v, F[(i + 1) % F.length]] as [number, number]));
       if (!edges.length) throw new SubdError('INPUT', 'crease: pick edges (or faces: their sides)');
-      return step(s, plain(setCreases(c, edges, op === 'crease')), s.sel);
+      // Always ask the kernel first: even an apparent no-op must reject invalid picked edges.
+      const out = setCreases(c, edges, op === 'crease');
+      const before = new Set((c.creases ?? []).map(([a, b]) => ek(a, b)));
+      const after = new Set((out.creases ?? []).map(([a, b]) => ek(a, b)));
+      if (before.size === after.size && [...before].every(key => after.has(key))) return s;
+      return step(s, plain(out), s.sel);
     }
     case 'delete': {
       if (!sel.faces.length) throw new SubdError('INPUT', 'delete: pick faces');
