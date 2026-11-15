@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1387: [Surface parameter domains](notes/surface-parameter-domain-mac-2026-11-15/README.md), #165; owned raw drafts, inclusive inspection and strictly interior Split feedback without native admission changes.
+
 - D1386: [Pole weight feedback](notes/direct-pole-weight-feedback-mac-2026-11-15/README.md), #164; preserve rejected drafts with local saved-value feedback and owner/revision reset, without relaxing native validation.
 - D1385: [Partial proposal decisions](notes/proposal-decision-scope-mac-2026-11-15/README.md), #163; display persisted exclusions, label original scope, and preserve unknown historical data without inference.
 - D1384: [Proposal preview actions](notes/proposal-preview-action-mac-2026-11-15/README.md), #159; distinguish current view from next action and label the unchanged numeric delta.

@@ -180,9 +180,9 @@ function SurfaceTools({ id, direct, run, added, onThicken }: { id: string; direc
   const dom = domainsOf(direct, id), u = dom.kind === 'surface' ? dom.u : [0, 1] as [number, number], v = dom.kind === 'surface' ? dom.v : [0, 1] as [number, number];
   const [axis, setAxis] = useState<'u' | 'v'>('u');
   const range = axis === 'u' ? u : v, mid = (range[0] + range[1]) / 2;
-  const [at, setAt] = useState(mid);
+  const [atText, setAtText] = useSurfaceDraft(direct, id, `split-${axis}-${range.join(',')}`, String(mid));
+  const at = surfaceParameter(atText), splitAllowed = at !== null && at > range[0] && at < range[1];
   const [box, setBox] = useState<[number, number, number, number]>([u[0], u[1], v[0], v[1]]);
-  useEffect(() => { setAt(mid); }, [id, axis, mid]);
   useEffect(() => { setBox([u[0], u[1], v[0], v[1]]); }, [id, u[0], u[1], v[0], v[1]]);
   const g = geometryOf(direct, direct.objects.find(o => o.id === id)!), trims = direct.objects.find(o => o.id === id)?.trims?.length ?? 0;
   return <div className="render-section [&>[data-slot=button]]:self-start">
@@ -190,11 +190,11 @@ function SurfaceTools({ id, direct, run, added, onThicken }: { id: string; direc
     {!!trims && <div className="kv">Trimmed <b>{trims} loop{trims > 1 ? 's' : ''}</b> <Button variant="ghost" size="xs" aria-label="Untrim" title="Take the trims off: the whole surface again" onClick={() => run(() => directOps.untrim(direct, id))}>Untrim</Button></div>}
     <div className="kv">Domain <b>u {u.map(x => Math.round(x * 1e4) / 1e4).join('…')} · v {v.map(x => Math.round(x * 1e4) / 1e4).join('…')}</b></div>
     <label className={FIELD}><span>Direction</span><NativeSelect className={CONTROL} aria-label="Surface direction" value={axis} onChange={e => setAxis(e.target.value as 'u' | 'v')}><option value="u">U</option><option value="v">V</option></NativeSelect></label>
-    <NumberField label={`At ${axis}`} value={at} onChange={setAt} />
+    <SurfaceParameter label={`At ${axis}`} axis={axis} range={range} value={atText} onChange={setAtText} split descriptionId={`direct-split-${encodeURIComponent(id)}-${axis}`} />
     <div className="flex flex-wrap gap-1">
-      <Button variant="ghost" onClick={() => run(() => directOps.splitSurface(direct, id, axis, at), added)}>Split</Button>
-      <Button variant="ghost" onClick={() => run(() => directOps.isoCurve(direct, id, axis, at), added)}>Iso-curve</Button>
-      <Button variant="ghost" onClick={() => run(() => directOps.insertSurfaceKnot(direct, id, axis, at))}>Insert knot</Button>
+      <Button variant="ghost" disabled={!splitAllowed} onClick={() => { if (splitAllowed && at !== null) run(() => directOps.splitSurface(direct, id, axis, at), added); }}>Split</Button>
+      <Button variant="ghost" disabled={at === null} onClick={() => { if (at !== null) run(() => directOps.isoCurve(direct, id, axis, at), added); }}>Iso-curve</Button>
+      <Button variant="ghost" disabled={at === null} onClick={() => { if (at !== null) run(() => directOps.insertSurfaceKnot(direct, id, axis, at)); }}>Insert knot</Button>
       <Button variant="ghost" onClick={() => run(() => directOps.elevateDegree(direct, id, axis))}>Raise degree</Button>
       <Button variant="ghost" onClick={() => run(() => directOps.reverseSurface(direct, id, axis), added)}>Reverse</Button>
     </div>
@@ -262,15 +262,42 @@ function Analysis({ run, formatError }: { run(): [string, string][]; formatError
   return <>{rows.map(([k, v]) => <div key={k} className="kv">{k} <b>{v}</b></div>)}</>;
 }
 
-/** A surface at (u, v): point, normal and curvatures. */
+/** Raw surface parameters are owned by the selected geometry and its native domain. */
+function useSurfaceDraft(direct: DirectGeometry, id: string, scope: string, initial: string): [string, (text: string) => void] {
+  const key = JSON.stringify([id, scope]);
+  const [draft, setDraft] = useState({ direct, key, text: initial });
+  const current = draft.direct === direct && draft.key === key;
+  if (!current) setDraft({ direct, key, text: initial });
+  // Derive the reset value now, before an old measurement or action can render.
+  return [current ? draft.text : initial, text => setDraft({ direct, key, text })];
+}
+const surfaceParameter = (text: string): number | null => text.trim() && Number.isFinite(Number(text)) ? Number(text) : null;
+
+function SurfaceParameter({ label, axis, range, value, onChange, split = false, descriptionId }: {
+  label: string; axis: 'u' | 'v'; range: [number, number]; value: string; onChange(text: string): void; split?: boolean; descriptionId: string;
+}) {
+  const number = surfaceParameter(value), invalid = number === null || (split ? number <= range[0] || number >= range[1] : number < range[0] || number > range[1]);
+  return <>
+    <label className={FIELD}><span>{label}</span><Input type="number" step="any" className="w-24" aria-label={label} value={value} min={range[0]} max={range[1]}
+      aria-invalid={invalid || undefined} aria-describedby={descriptionId} onChange={event => onChange(event.target.value)} /></label>
+    <span id={descriptionId} role={invalid ? 'status' : undefined} className={invalid ? 'warn small' : 'muted small'}>{split
+      ? `Split requires ${range[0]} < ${axis} < ${range[1]} (endpoints excluded).`
+      : `Enter a finite ${axis} from ${range[0]} to ${range[1]} (inclusive).`}</span>
+  </>;
+}
+
+/** A surface at (u, v): point, normal and curvatures, only inside its native domain. */
 function SurfacePoint({ id, direct, u, v }: { id: string; direct: DirectGeometry; u: [number, number]; v: [number, number] }) {
-  const [at, setAt] = useState<[number, number]>([(u[0] + u[1]) / 2, (v[0] + v[1]) / 2]);
-  useEffect(() => setAt([(u[0] + u[1]) / 2, (v[0] + v[1]) / 2]), [id, u[0], u[1], v[0], v[1]]);
+  const scope = `${u.join(',')}:${v.join(',')}`;
+  const [uText, setUText] = useSurfaceDraft(direct, id, `inspect-u-${scope}`, String((u[0] + u[1]) / 2));
+  const [vText, setVText] = useSurfaceDraft(direct, id, `inspect-v-${scope}`, String((v[0] + v[1]) / 2));
+  const atU = surfaceParameter(uText), atV = surfaceParameter(vText);
+  const valid = atU !== null && atV !== null && atU >= u[0] && atU <= u[1] && atV >= v[0] && atV <= v[1];
   return <>
     <div className="card-title" style={{ marginTop: 8 }}>AT (U, V)</div>
-    <NumberField label="u" value={at[0]} onChange={x => setAt([x, at[1]])} />
-    <NumberField label="v" value={at[1]} onChange={x => setAt([at[0], x])} />
-    <Analysis run={() => { const a = analyzeSurface(direct, id, at[0], at[1]); return [['Point', a.point.map(x => fmtNum(x, 3)).join(', ')], ['Normal', a.normal.map(x => fmtNum(x, 4)).join(', ')], ['Mean curvature', `${fmtNum(a.mean, 6)} /mm`], ['Gaussian', `${fmtNum(a.gaussian, 8)} /mm²`]]; }} />
+    <SurfaceParameter label="u" axis="u" range={u} value={uText} onChange={setUText} descriptionId={`direct-inspect-${encodeURIComponent(id)}-u`} />
+    <SurfaceParameter label="v" axis="v" range={v} value={vText} onChange={setVText} descriptionId={`direct-inspect-${encodeURIComponent(id)}-v`} />
+    {valid && <Analysis run={() => { const a = analyzeSurface(direct, id, atU, atV); return [['Point', a.point.map(x => fmtNum(x, 3)).join(', ')], ['Normal', a.normal.map(x => fmtNum(x, 4)).join(', ')], ['Mean curvature', `${fmtNum(a.mean, 6)} /mm`], ['Gaussian', `${fmtNum(a.gaussian, 8)} /mm²`]]; }} />}
   </>;
 }
 
