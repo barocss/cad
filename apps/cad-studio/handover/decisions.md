@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1363 — Blind-hole History depth input](notes/blind-hole-history-depth-mac-2026-11-15/README.md).
 - [D1362 — Countersink History input relation](notes/countersink-history-input-mac-2026-11-15/README.md).
 - [D1361 — Parameter input recovery](notes/parameter-input-recovery-mac-2026-11-15/README.md).
 - [D1360 — Current gap-preview feedback](notes/path-gap-feedback-mac-2026-11-15/README.md).
