@@ -1,3 +1,5 @@
+import { lookKey, rootOf } from './lookKey';
+import { featureLabel } from '../engine/doc';
 import { offsetPlaneWitness } from '../engine/offsetPlane';
 import { partBreps } from '../engine/evaluate';
 import type { BodyRef, OffsetPlaneRef } from '../engine/doc';
@@ -19,18 +21,30 @@ export const offsetFields = (allowPlane: boolean): Field[] => [
   { key: 'd', label: 'Offset', kind: 'mm', when: values => values.offsetMode !== 'to-plane' },
 ];
 
-export function resetOffsetPlane(_ctx: Ctx, values: Values, changed: readonly string[]): Values {
-  if (!changed.includes('offsetMode')) return values;
-  const rest = { ...values };
-  delete rest.endBody;
-  delete rest.endFace;
-  delete rest.keepPlane;
-  return rest;
+/** Mode changes retain the current session target; only an explicit invalid repick clears it. */
+export function resetOffsetPlane(_ctx: Ctx, values: Values, _changed: readonly string[]): Values {
+  return values;
 }
 
-export function offsetPlaneStep(values: Values, saved?: OffsetPlaneRef) {
+/** Restore a saved target only through the current unique body and exact named planar face. */
+export function restoreOffsetPlaneValues(ctx: Ctx, values: Values, saved: OffsetPlaneRef): Values {
+  const matches = ctx.bodies.flatMap((body, index) => body.ref?.node === saved.body.node && body.ref.side === saved.body.side ? [index] : []);
+  if (matches.length !== 1) return values;
+  const next = { ...values, endBody: matches[0], endFace: saved.face };
+  const target = extrudeEndFaceTarget(ctx, next);
+  return target && target.feature === saved.feature && target.face === saved.face
+    && target.body.node === saved.body.node && target.body.side === saved.body.side ? { ...next, keepPlane: 1 } : values;
+}
+
+export function offsetPlaneStep(values: Values, saved?: OffsetPlaneRef, ctx?: Ctx) {
   const name = values.endFace ?? (values.keepPlane === 1 ? saved?.face : undefined);
-  return { label: 'Reference plane', text: String(name ?? 'Pick a parallel face on another solid'), done: name !== undefined };
+  const target = ctx && extrudeEndFaceTarget(ctx, values), body = target && ctx?.bodies[Number(values.endBody)];
+  const root = body?.ref && ctx ? rootOf(ctx.doc.nodes, body.ref.node) : -1;
+  const source = ctx?.doc.nodes[root];
+  const label = body && ctx ? ctx.doc.bodies?.[lookKey(ctx.doc.nodes, body)]?.name
+    || (source ? featureLabel(source, root, ctx.doc.nodes) : body.key) : undefined;
+  const text = body && label ? `${label} (${body.key}) · ${name}` : String(name ?? 'Pick a parallel face on another solid');
+  return { label: 'Reference plane', text, done: name !== undefined };
 }
 
 export function pickOffsetPlane(ctx: Ctx, values: Values, hit: FaceSel | null, parent: BodyRef | undefined, before: number): Values | { error: string } | null {
