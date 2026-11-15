@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1413: [Legacy Loft automatic name](notes/loft-legacy-label-mac-2026-11-15/README.md), #616; effective two-section Ruled naming without document migration, verified with public rename and desktop Save/Open.
+
 - D1412: [Equal positive Fillet endpoints](notes/fillet-equal-endpoint-mode-mac-2026-11-15/README.md), #120; retain authored endpoints across equal/near-equal creation and History, with explicit general-path/closed-chain boundaries and independent desktop/native verification.
 
 - D1411: [Fillet History identity](notes/fillet-history-identity-mac-2026-11-15/README.md), #123; concise read-only Type/Radius mode/Section, preserving editable coefficients and native geometry through desktop History and Save/Open.

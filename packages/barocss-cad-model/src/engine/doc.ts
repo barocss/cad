@@ -1435,7 +1435,11 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'internal-gear': return `${node.helixAngle ? 'Helical internal gear mn' : 'Internal gear m'}${typeof node.module === 'number' ? fmt(node.module) : node.module.parameter} z${node.teeth}`;
     case 'gear': return `${node.helixAngle || (node.mesh && nodes && helical(nodes, node.mesh.gear)) ? 'Helical gear mn' : 'Spur gear m'}${typeof node.module === 'number' ? fmt(node.module) : node.module.parameter} z${node.teeth}`;
     case 'thread': return node.hex?.internal ? `Nut M${fmt(node.diameter)}×${fmt(node.pitch)}` : `${node.hex ? 'Bolt' : 'Threaded rod'} M${fmt(node.diameter)}×${fmt(node.pitch)} × ${fmt(node.length ?? 0)}`;
-    case 'loft': return `Loft ${node.sections.length} sections${node.smooth ? ' · smooth' : ''}`;
+    case 'loft': {
+      const twoRuled = node.sections.length === 2 && !Object.hasOwn(node, 'guide') && !Object.hasOwn(node, 'guides')
+        && node.sections.every(section => section !== null && typeof section === 'object' && !Array.isArray(section) && !Object.hasOwn(section, 'frame'));
+      return `Loft ${node.sections.length} sections${node.smooth && !twoRuled ? ' · smooth' : ''}`;
+    }
     case 'sweep': return `Pipe ${node.path.length === 1 ? '1 step' : `${node.path.length} steps`}`;
     case 'sweep-curve': return `Sweep along ${node.name}`;
   }
