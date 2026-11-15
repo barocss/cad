@@ -33,8 +33,19 @@ export function useSectionState(viewBackend: 'webgpu' | 'webgl2' | null) {
   }, [sectionLive, setSection]);
   const [sectionFacePick, setSectionFacePick] = useState<number | null>(null);
   const sectionFacePickRef = useRef(sectionFacePick); sectionFacePickRef.current = sectionFacePick;
+  const facePickEscape = useRef(false);
+  /** Idle Escape cancels only the waiting pick; its held-key repeats must not clear selection. */
+  const cancelSectionFacePick = useCallback((repeat: boolean) => {
+    if (repeat && facePickEscape.current) return true;
+    facePickEscape.current = sectionFacePickRef.current !== null;
+    if (!facePickEscape.current) return false;
+    // Retire the request before React renders, so an already queued face click is ordinary picking.
+    sectionFacePickRef.current = null;
+    setSectionFacePick(null);
+    return true;
+  }, []);
   const [sectionExact, setSectionExact] = useState<{ key: string; source: StudioDoc; sourceBodies: readonly BodyResult[]; bodies: BodyResult[]; from: ReadonlyMap<string, string> } | null>(null);
   const sectionRef = useRef(section); sectionRef.current = section;
 
-  return { sectionDragFrom, sectionDebug, setSectionDebug, sectionLive, section, setSection, dragSection, sectionFacePick, setSectionFacePick, sectionFacePickRef, sectionExact, setSectionExact, sectionRef };
+  return { sectionDragFrom, sectionDebug, setSectionDebug, sectionLive, section, setSection, dragSection, sectionFacePick, setSectionFacePick, cancelSectionFacePick, sectionFacePickRef, sectionExact, setSectionExact, sectionRef };
 }

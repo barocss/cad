@@ -798,7 +798,7 @@ export function App() {
   /** The view's field of view (degrees; the Render panel sets it, a saved view keeps it). */
   const [fov, setFov] = useState(32);
   const { sectionDragFrom, sectionDebug, setSectionDebug, sectionLive, section, setSection, dragSection, sectionFacePick, setSectionFacePick,
-    sectionFacePickRef, sectionExact, setSectionExact, sectionRef } = useSectionState(viewBackend);
+    sectionFacePickRef, cancelSectionFacePick, sectionExact, setSectionExact, sectionRef } = useSectionState(viewBackend);
   const resetDocumentSection = useCallback(() => {
     lanes.cancel('section');
     setSection(null);
@@ -2745,7 +2745,7 @@ export function App() {
       if (e.key === 'Enter' && (circleChord.input.read(sketch) || twoPointSnap.input.read() || arcExtensionSnap.input.read(sketch) || pathGap.input.read(sketch))) { e.preventDefault(); return; }
       if (e.key === 'Escape' && parameterEditNow.current?.kind === 'direct') { e.preventDefault(); discardDirectCandidateRef.current(); return; }
       if (e.key === 'Escape' && routePanelOpen && !active && !sketch && !assembly.draft && !measure && !cageEd.session && !skel.session) { e.preventDefault(); discardRouteRef.current(); return; }
-      if (e.key === 'Escape') { footprintRequest.current++; if (palette) setPalette(false); else if (sketch && !active && (sketch.picked?.length || sketch.editDim)) setSketch(s => s && { ...s, picked: [], editDim: null }); else if (active || sketch) cancel(); else if (assembly.draft) assembly.cancel(); else if (measure) setMeasure(null); else { setSelection(emptySel); setInstanceSel([]); setDirectSel([]); } return; }
+      if (e.key === 'Escape') { footprintRequest.current++; if (palette) setPalette(false); else if (sketch && !active && (sketch.picked?.length || sketch.editDim)) setSketch(s => s && { ...s, picked: [], editDim: null }); else if (active || sketch) cancel(); else if (assembly.draft) assembly.cancel(); else if (measure) setMeasure(null); else if (cancelSectionFacePick(e.repeat)) e.preventDefault(); else { setSelection(emptySel); setInstanceSel([]); setDirectSel([]); } return; }
       if (e.key === 'Enter' && e.target instanceof HTMLButtonElement && e.target.closest('[data-workspace-mode]')) return;
       // Enter applies; Shift-Enter applies and starts the same command again (another hole, another shape).
       if (e.key === 'Enter' && !palette && !(e.target instanceof HTMLInputElement && e.target.type === 'file')) { if (sketch) { e.preventDefault(); finishSketch(); } else if (active) { e.preventDefault(); if (e.shiftKey && active.cmd.id !== 'edit' && active.cmd.id !== EXTRUDE_END_FACE_EDIT && active.cmd.id !== REVOLVE_AXIS_EDIT && active.cmd.id !== OFFSET_FACE_EDIT && active.cmd.id !== DRAFT_EDIT) again.current = active.cmd; apply(); } return; }

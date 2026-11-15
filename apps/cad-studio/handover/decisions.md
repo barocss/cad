@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1397: [Section face-pick Escape](notes/section-face-pick-escape-mac-2026-11-15/README.md), #607; cancel only the waiting pick, retain section/selection and existing higher-priority Escape handling.
+
 - D1396: [Analysis section scope](notes/analysis-section-scope-mac-2026-11-15/README.md), #606; label actual map input provenance in the existing legend, retaining scalar data and face-editing authority.
 
 - D1395: [Analysis hover ownership](notes/analysis-hover-ownership-mac-2026-11-15/README.md), #605; invalidate transient samples by display epoch, pointer/navigation exit and renderer map readiness without scalar algorithm changes.
