@@ -56,34 +56,52 @@ export function redoSession(s: CageSession): CageSession {
 type Project = (p: [number, number, number]) => [number, number, number];
 const at = (c: StudioCage, v: number): [number, number, number] => [c.positions[3 * v], c.positions[3 * v + 1], c.positions[3 * v + 2]];
 /**
- * What the pointer (x, y, CSS px) picks in a mode: the nearest vertex within 8 px, the nearest edge within 6 px, or
- * the face under it (the nearest, by its centre's depth). The cage is drawn over the body, so nothing hides it.
+ * Pick within 8 CSS px of a vertex or 6 CSS px of an edge. Candidates within 0.5 CSS px of
+ * the closest screen distance overlap for picking: front/back chooses their projected depth.
+ * Faces retain centre-depth picking. This is a cage pick, not rendered-surface occlusion.
  */
-export function pickCage(c: StudioCage, project: Project, x: number, y: number, mode: CageMode): CageHit | null {
+export function pickCage(c: StudioCage, project: Project, x: number, y: number, mode: CageMode, depth: 'front' | 'back' = 'front'): CageHit | null {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
   const P = Array.from({ length: c.positions.length / 3 }, (_, v) => project(at(c, v)));
+  const finite = (p: readonly number[] | undefined): p is [number, number, number] => !!p && p.length === 3 && p.every(Number.isFinite);
+  const candidates: { hit: CageHit; distance: number; z: number }[] = [];
   if (mode === 'vertex') {
-    let best = -1, d0 = 8;
-    P.forEach((q, v) => { const d = Math.hypot(q[0] - x, q[1] - y); if (d < d0) { d0 = d; best = v; } });
-    return best >= 0 ? { kind: 'vertex', v: best } : null;
-  }
-  if (mode === 'edge') {
-    let best: CageHit | null = null, d0 = 6;
+    P.forEach((q, v) => {
+      if (!finite(q)) return;
+      const distance = Math.hypot(q[0] - x, q[1] - y);
+      if (distance < 8) candidates.push({ hit: { kind: 'vertex', v }, distance, z: q[2] });
+    });
+  } else if (mode === 'edge') {
     for (const e of cageTopology(c).edges.values()) {
-      const a = P[e.a], b = P[e.b], dx = b[0] - a[0], dy = b[1] - a[1], t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy || 1)));
-      const d = Math.hypot(a[0] + t * dx - x, a[1] + t * dy - y);
-      if (d < d0) { d0 = d; best = { kind: 'edge', a: e.a, b: e.b }; }
+      const a = P[e.a], b = P[e.b];
+      if (!finite(a) || !finite(b)) continue;
+      const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+      if (!Number.isFinite(length)) continue;
+      const t = length > 0 ? Math.max(0, Math.min(1, ((x - a[0]) * (dx / length) + (y - a[1]) * (dy / length)) / length)) : 0;
+      const distance = Math.hypot(a[0] + t * dx - x, a[1] + t * dy - y);
+      // An edge projected to a point has no unique screen parameter. Use its near/far endpoint.
+      const z = length === 0 ? (depth === 'back' ? Math.max(a[2], b[2]) : Math.min(a[2], b[2])) : (1 - t) * a[2] + t * b[2];
+      if (distance < 6 && Number.isFinite(z)) candidates.push({ hit: { kind: 'edge', a: e.a, b: e.b }, distance, z });
     }
-    return best;
+  } else {
+    c.faces.forEach((f, k) => {
+      if (f.length < 3 || !f.every(v => finite(P[v]))) return;
+      let inside = false;
+      for (let i = 0, j = f.length - 1; i < f.length; j = i++) {
+        const a = P[f[i]], b = P[f[j]];
+        if ((a[1] > y) !== (b[1] > y) && x < a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1])) inside = !inside;
+      }
+      if (!inside) return;
+      const z = f.reduce((sum, v) => sum + P[v][2] / f.length, 0);
+      if (Number.isFinite(z)) candidates.push({ hit: { kind: 'face', f: k }, distance: 0, z });
+    });
   }
-  let best: CageHit | null = null, z0 = Infinity;
-  c.faces.forEach((f, k) => {
-    let inside = false;
-    for (let i = 0, j = f.length - 1; i < f.length; j = i++) { const a = P[f[i]], b = P[f[j]]; if ((a[1] > y) !== (b[1] > y) && x < a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1])) inside = !inside; }
-    if (!inside) return;
-    const z = f.reduce((s, v) => s + P[v][2], 0) / f.length;
-    if (z < z0) { z0 = z; best = { kind: 'face', f: k }; }
-  });
-  return best;
+  if (!candidates.length) return null;
+  const closest = candidates.reduce((minimum, candidate) => Math.min(minimum, candidate.distance), Infinity);
+  // Fix the overlap set before sorting; pairwise epsilon comparisons are not transitive.
+  const overlaps = candidates.filter(candidate => candidate.distance <= closest + 0.5);
+  overlaps.sort((a, b) => (depth === 'back' ? b.z - a.z : a.z - b.z) || a.distance - b.distance);
+  return overlaps[0].hit;
 }
 /**
  * The open edges round the hole (or along the open chain) an open edge a–b is on, in order: a double-click on a

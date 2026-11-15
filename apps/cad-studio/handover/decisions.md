@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1321 — Overlapping cage depth selection](notes/cage-depth-picking-mac-2026-11-15/README.md).
+
 - [D1320 — Ruled endpoint correspondence and folded-surface refusal](notes/ruled-fold-guidance-mac-2026-11-15/README.md).
 
 - [D1319 — Direct curve roles and local surface direction](notes/direct-curve-role-order-mac-2026-11-15/README.md).

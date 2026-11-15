@@ -290,7 +290,7 @@ export interface ViewportTool {
 }
 
 export interface CageOverlay {
-  cage: StudioCage; mode: CageMode; sel: CageSelection; validation: CageValidation;
+  cage: StudioCage; mode: CageMode; pickDepth?: 'front' | 'back'; sel: CageSelection; validation: CageValidation;
   /** The mirrored half (drawn faint), when the cage is one half. */
   mirrored?: StudioCage | null;
 }

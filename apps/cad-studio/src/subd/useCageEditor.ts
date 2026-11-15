@@ -20,6 +20,8 @@ export interface CageEditor {
   readonly session: CageSession | null;
   begin(node: number): boolean;
   overlay: CageOverlay | null;
+  pickDepth: 'front' | 'back';
+  setPickDepth(depth: 'front' | 'back'): void;
   onPick(hit: CageHit | null, additive: boolean, grow?: 'loop' | 'ring'): void;
   gizmo: TransformGizmo | null;
   /** The bodies to show: the edited node's body replaced by the preview or the exact body of the session's cage. */
@@ -33,6 +35,7 @@ export interface CageEditor {
 
 export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise<EvalResult>, commit: (next: StudioDoc) => void, fail: (title: string, hint: string) => void): CageEditor {
   const [session, setSession] = useState<CageSession | null>(null);
+  const [pickDepth, setPickDepth] = useState<'front' | 'back'>('front');
   const [drag, setDrag] = useState<{ delta: Vec3; extrude: boolean } | null>(null);
   const [exact, setExact] = useState<{ of: CageSession; bodies: BodyResult[] } | null>(null);
   const [previewMs, setPreviewMs] = useState<number | null>(null);
@@ -66,7 +69,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
     const n = doc.nodes[node];
     if (n?.kind !== 'subd') return false;
     from.current = n;
-    sessionId.current++;
+    sessionId.current++; setPickDepth('front');
     setSession(startSession(node, n.cage, n.mirror)); setDrag(null); setExact(null); return true;
   }, [doc.nodes]);
   const guard = useCallback((f: (s: CageSession) => CageSession) => setSession(s => {
@@ -78,7 +81,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
   const live = useMemo(() => session && drag ? (() => { try { return { ...session, ...dragged(session, drag.delta, drag.extrude) }; } catch { return session; } })() : session, [session, drag]);
   // (A move keeps the topology: the session's validation stands; an extrusion's is the dragged cage's.)
   const baseValidation = useMemo(() => session ? validationOf(session) : null, [session]);
-  const overlay = useMemo((): CageOverlay | null => live ? { cage: live.cage, mode: live.mode, sel: live.sel, validation: drag?.extrude ? validationOf(live) : baseValidation!, mirrored: live.mirror ? (() => { const full = mirrorCage(live.cage, live.mirror); return { positions: [...full.positions], faces: full.faces.slice(live.cage.faces.length).map(f => [...f]) } as never; })() : null } : null, [live, drag, baseValidation]);
+  const overlay = useMemo((): CageOverlay | null => live ? { cage: live.cage, mode: live.mode, pickDepth, sel: live.sel, validation: drag?.extrude ? validationOf(live) : baseValidation!, mirrored: live.mirror ? (() => { const full = mirrorCage(live.cage, live.mirror); return { positions: [...full.positions], faces: full.faces.slice(live.cage.faces.length).map(f => [...f]) } as never; })() : null } : null, [live, drag, baseValidation, pickDepth]);
 
   // The body while dragged, or in Box mode: triangles straight from the cage (or its quick limit preview).
   const quick = useMemo(() => {
@@ -135,7 +138,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
   }, [session, done, cancel, guard, fail]);
 
   return {
-    session, begin, overlay, gizmo, shown, previewMs,
+    session, begin, overlay, gizmo, shown, previewMs, pickDepth, setPickDepth,
     onPick: (hit, additive, grow) => guard(s => select(s, hit, additive, grow)),
     setMode: m => setSession(s => s && { ...s, mode: m, sel: { vertices: [], edges: [], faces: [] } }),
     toggleSmooth: () => setSession(s => s && { ...s, smooth: !s.smooth }),

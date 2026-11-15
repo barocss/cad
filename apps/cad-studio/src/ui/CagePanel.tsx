@@ -2,7 +2,7 @@
 // validation flags, the session's undo, and Done / Cancel. O16: its operations, fields and actions on shadcn (Button,
 // NativeSelect, FIELD); the Pick and Show toggles stay the studio's segmented buttons.
 import type { CageEditor } from '../subd/useCageEditor';
-import { validationOf, type CageMode, type CageOp } from '@barocss/cad-model/subd/cageEdit';
+import { selectionCentre, validationOf, type CageMode, type CageOp } from '@barocss/cad-model/subd/cageEdit';
 import { CONTROL, FIELD } from './panelStyles';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -24,15 +24,20 @@ const OPS: { op: CageOp; label: string; key?: string; tip: string }[] = [
 export function CagePanel({ editor, name }: { editor: CageEditor; name: string }) {
   const s = editor.session; if (!s) return null;
   const v = validationOf(s), n = s.sel.vertices.length + s.sel.edges.length + s.sel.faces.length;
+  const centre = selectionCentre(s);
   const what = s.sel.faces.length ? `${s.sel.faces.length} face${s.sel.faces.length === 1 ? '' : 's'}` : s.sel.edges.length ? `${s.sel.edges.length} edge${s.sel.edges.length === 1 ? '' : 's'}` : s.sel.vertices.length ? `${s.sel.vertices.length} vertex${s.sel.vertices.length === 1 ? '' : 'es'}` : 'nothing';
   return <aside className="card props cage-panel" aria-label="Cage editor">
     <div className="card-title">CAGE · {name}</div>
     <div className="seg" role="group" aria-label="Pick">{(['vertex', 'edge', 'face'] as CageMode[]).map((m, i) =>
       <button key={m} className={s.mode === m ? 'on' : ''} aria-pressed={s.mode === m} data-tip={`${m[0].toUpperCase()}${m.slice(1)}s`} data-tip-desc={`Key ${i + 1}`} onClick={() => editor.setMode(m)}>{m[0].toUpperCase() + m.slice(1)}</button>)}</div>
+    <div className="seg" role="group" aria-label="Next overlapping pick">{(['front', 'back'] as const).map(depth =>
+      <button key={depth} className={editor.pickDepth === depth ? 'on' : ''} aria-pressed={editor.pickDepth === depth} style={editor.pickDepth === depth ? { background: 'var(--accent)', color: 'var(--accent-ink)' } : undefined} onClick={() => editor.setPickDepth(depth)}>{depth === 'front' ? 'Front candidate' : 'Back candidate'}</button>)}</div>
+    <div className="muted small">Next pick among overlapping candidates. Existing selection stays unchanged; click again after changing depth or view.</div>
     <div className="seg" role="group" aria-label="Show">
       <button className={!s.smooth ? 'on' : ''} aria-pressed={!s.smooth} data-tip="Box" data-tip-desc="The cage as it is (Tab)" onClick={() => s.smooth && editor.toggleSmooth()}>Box</button>
       <button className={s.smooth ? 'on' : ''} aria-pressed={s.smooth} data-tip="Smooth" data-tip-desc="The limit surface (Tab)" onClick={() => !s.smooth && editor.toggleSmooth()}>Smooth</button></div>
     <div className={FIELD}><span>Picked</span> <b aria-label="Picked">{what}</b></div>
+    {centre && <div className="muted small" aria-label="Picked cage centre">Picked centre: ({centre.map(value => Number(value.toFixed(3))).join(', ')}) mm</div>}
     <div className="cage-ops">{OPS.map(o => <Button key={o.op} variant="ghost" aria-label={o.label} data-tip={o.label + (o.key ? ` (${o.key})` : '')} data-tip-desc={o.tip} onClick={() => editor.op(o.op)} disabled={!n && o.op !== 'weld-near'}>{o.label}</Button>)}</div>
     <label className={FIELD}><span>Mirror</span><NativeSelect className={CONTROL} aria-label="Mirror" value={s.mirror ?? ''} onChange={e => editor.op(e.target.value ? `mirror-${e.target.value}` as CageOp : 'mirror-off')}>
       <option value="">None</option><option value="x">Across X</option><option value="y">Across Y</option><option value="z">Across Z</option></NativeSelect></label>

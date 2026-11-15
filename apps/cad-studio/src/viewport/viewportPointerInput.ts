@@ -1016,7 +1016,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     if (propsRef.current.placing) { propsRef.current.onSpot?.(spotAt(x, y, w, h), true); return; }
     // A cage being edited takes the click (a miss clears its selection; the body under it is not picked).
     const cg = propsRef.current.cage;
-    if (cg) { propsRef.current.onPickCage?.(pickCage(cg.cage, p => camera.current.project(p as Vec3, w, h), x, y, cg.mode), e.shiftKey); request(); return; }
+    if (cg) { propsRef.current.onPickCage?.(pickCage(cg.cage, p => camera.current.project(p as Vec3, w, h), x, y, cg.mode, cg.pickDepth), e.shiftKey); request(); return; }
     // (G24: a click on an annotation's text or lines picks it, before the model under it.)
     const pm = propsRef.current.annotations;
     if (pm?.length && propsRef.current.onPickAnnotation) {
@@ -1229,7 +1229,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
   const onDoubleClick = (e: MouseEvent<HTMLCanvasElement>) => {
     const p = propsRef.current, r = renderer.current; if (!r || p.sketch || p.placing) return;
     if (p.cage) {
-      const { x, y, w, h } = local(e), hit = pickCage(p.cage.cage, q => camera.current.project(q as Vec3, w, h), x, y, 'edge');
+      const { x, y, w, h } = local(e), hit = pickCage(p.cage.cage, q => camera.current.project(q as Vec3, w, h), x, y, 'edge', p.cage.pickDepth);
       if (hit) p.onPickCage?.(hit, e.shiftKey, e.altKey ? 'ring' : 'loop');
       return;
     }
