@@ -56,7 +56,15 @@ interface Transition { current(): Active | null; context(): Ctx; retire(): void;
 export function replaceFillet(options: Transition, type: FilletType, mode?: RadiusMode): void {
   const old = options.current(); if (!old?.fillet) return;
   const next = newFilletActive(type, { ...options.context(), selection: old.ctx.selection }, mode ? old.values : undefined);
-  if (mode && type === 'edge') { next.fillet!.radiusMode = mode; next.values = { ...next.values, endRadius: mode === 'constant' ? 0 : Number(old.values.endRadius) > 0 ? old.values.endRadius : old.values.radius, ...(mode === 'constant' ? { stationMode: 'ends' } : {}) }; }
+  if (mode && type === 'edge') {
+    const draft = old.fillet.radiusMode === 'varying'
+      ? Object.fromEntries(['endRadius', 'stationMode', 'stationAt', 'stationRadius', 'station2At', 'station2Radius']
+        .filter(key => key in old.values).map(key => [key, old.values[key]]))
+      : old.fillet.varyingDraft;
+    next.fillet = { ...next.fillet!, radiusMode: mode, ...(draft ? { varyingDraft: { ...draft } } : {}) };
+    next.values = mode === 'constant' ? { ...next.values, endRadius: 0, stationMode: 'ends' }
+      : { ...next.values, ...(draft ?? { endRadius: old.values.radius }) };
+  }
   options.retire(); options.clearApply(); options.select(next.ctx.selection); options.set(next);
 }
 

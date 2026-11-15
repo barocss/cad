@@ -50,7 +50,7 @@ test('same-command radius-mode switch retires old ready button owner and retains
  const ctx=context();ctx.selection.edges=[{body:0,edge:0}];let current=newFilletActive('edge',ctx,{radius:1,endRadius:2,shape:'conic',rho:0.4});current.preview='ok';const old=current;
  const options={current:()=>current,context:()=>ctx,retire:()=>{},clearApply:()=>{},select:()=>{},set:(a:typeof current)=>{current=a;}};
  replaceFillet(options,'edge','constant');assert.equal(current.values.endRadius,0);assert.equal(current.values.radius,1);assert.equal(current.values.rho,0.4);assert.equal(filletApplyCurrent(old,current),false);
- replaceFillet(options,'edge','varying');assert.equal(current.values.endRadius,1);current.values={...current.values,endRadius:2,shape:'circular'};const built=current.cmd.build!(current.ctx,current.values).nodes.at(-1)!;assert.equal(built.kind,'fillet');if(built.kind==='fillet')assert.deepEqual(built.radii?.map(r=>r.radius),[1,2]);
+ replaceFillet(options,'edge','varying');assert.equal(current.values.endRadius,2);current.values={...current.values,endRadius:2,shape:'circular'};const built=current.cmd.build!(current.ctx,current.values).nodes.at(-1)!;assert.equal(built.kind,'fillet');if(built.kind==='fillet')assert.deepEqual(built.radii?.map(r=>r.radius),[1,2]);
 });
 test('existing file feature type is read-only and rendering its editor cannot change identity, refs, bindings or payload',()=>{
  const doc=rectanglePart(30,12,6),nodes:ModelNode[]=[...doc.nodes,{id:'n2',kind:'fillet',parent:{node:1,side:'solid'},edges:['n1.side0|n1.top'],radius:{parameter:'R'},radii:[{at:[0,0,0],radius:1,atEnd:true},{at:[30,0,0],radius:2,atEnd:true}]}];const before=JSON.stringify(nodes);
@@ -141,4 +141,42 @@ test('the selected ellipse rim reports the same launch refusal for edge Fillet a
     const row = filletPaletteRows(paletteList(query, ctx), query, ctx).find(item => item.c.label === query);
     assert.deepEqual(row?.a, { ok: true });
   }
+});
+
+
+test('varying draft survives repeated Constant roundtrips while Constant builds only its shared radius', () => {
+ const ctx=context();ctx.selection.edges=[{body:0,edge:0}];
+ let current=newFilletActive('edge',ctx,{radius:1,endRadius:3,stationMode:'two-interior',stationAt:25,stationRadius:2,station2At:75,station2Radius:2.5});
+ const original=current, before=JSON.stringify(ctx.doc);
+ const options={current:()=>current,context:()=>ctx,retire:()=>{},clearApply:()=>{},select:()=>{},set:(a:Active)=>{current=a;}};
+ for(let i=0;i<3;i++){
+  replaceFillet(options,'edge','constant');
+  assert.equal(current.values.endRadius,0);assert.equal(current.values.stationMode,'ends');
+  const node=current.cmd.build!(current.ctx,current.values).nodes.at(-1)!;
+  assert.equal(node.kind,'fillet');if(node.kind==='fillet'){assert.equal(node.radius,1);assert.equal(node.radii,undefined);}
+  replaceFillet(options,'edge','varying');
+  for(const key of ['endRadius','stationMode','stationAt','stationRadius','station2At','station2Radius'])assert.equal(current.values[key],original.values[key]);
+ }
+ assert.equal(JSON.stringify(ctx.doc),before);
+ assert.equal(original.fillet?.varyingDraft,undefined);
+ assert.equal(newFilletActive('edge',ctx).fillet?.varyingDraft,undefined);
+ replaceFillet(options,'face');assert.equal(current.fillet?.varyingDraft,undefined);
+});
+test('raw invalid and zero varying entries are preserved, not silently normalized by mode changes', () => {
+ const ctx=context();ctx.selection.edges=[{body:0,edge:0}];
+ for(const endRadius of ['',0,-2,'not-a-number']){
+  let current=newFilletActive('edge',ctx,{radius:1,endRadius:3});
+  current.values={...current.values,endRadius,stationMode:'interior',stationAt:'',stationRadius:-1};
+  const options={current:()=>current,context:()=>ctx,retire:()=>{},clearApply:()=>{},select:()=>{},set:(a:Active)=>{current=a;}};
+  replaceFillet(options,'edge','constant');replaceFillet(options,'edge','varying');
+  assert.equal(current.values.endRadius,endRadius);assert.equal(current.values.stationAt,'');assert.equal(current.values.stationRadius,-1);
+ }
+});
+test('first Varying uses current shared radius; Constant edits do not overwrite remembered varying endpoints', () => {
+ const ctx=context();let current=newFilletActive('edge',ctx,{radius:2});
+ const options={current:()=>current,context:()=>ctx,retire:()=>{},clearApply:()=>{},select:()=>{},set:(a:Active)=>{current=a;}};
+ replaceFillet(options,'edge','varying');assert.equal(current.values.endRadius,2);
+ current.values={...current.values,endRadius:3};
+ replaceFillet(options,'edge','constant');current.values={...current.values,radius:1};
+ replaceFillet(options,'edge','varying');assert.equal(current.values.radius,1);assert.equal(current.values.endRadius,3);
 });
