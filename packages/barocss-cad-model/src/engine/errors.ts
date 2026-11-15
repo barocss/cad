@@ -17,6 +17,9 @@ export interface FriendlyError {
 // messages without a code, and rows naming a code unbracketed (messages carry it bare), so they stay regexes. Order
 // matters: the first row that matches wins.
 const rules: { code?: string | readonly string[]; text?: RegExp; title: string; hint: string }[] = [
+  { text: /the surface has no normal at a point \(it is degenerate there\)/,
+    title: 'The surface normal is undefined',
+    hint: 'This surface is degenerate at a point, so it cannot be thickened there. For a folded Ruled surface, align the source curves with Reverse and create a new surface. Reducing thickness does not repair the fold.' },
   { text: /loft: two guides require guide [12] endpoints to exactly match/,
     title: 'A guide misses a section corner',
     hint: 'Use the minimum X corner for the first guide and the maximum X corner for the second guide, both at minimum Y. Each guide must start on the lower section and end on the upper section.' },
