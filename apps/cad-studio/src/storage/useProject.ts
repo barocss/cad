@@ -399,9 +399,19 @@ export function useProject(cb: ProjectCallbacks) {
       /** Work switched to a branch: its head's document returned for the App to open. */
       async switchBranch(name: string, working: StudioDoc, discard = false): Promise<StudioDoc | null> {
         const { store, part, log } = live.current; if (!store || !part || !log) return null;
-        const owner = versionOwner();
-        try { const r = applyBranch(log, name, working, { discard }); return (await keepLog(store, part, r.log, owner)) && currentOpen(owner) ? r.doc : null; }
-        catch (e) { fail('Could not switch', e); return null; }
+        const request = ++restoring.current, owner = versionOwner();
+        const current = () => restoring.current === request && currentOpen(owner) && live.current.log === log;
+        try {
+          // Preserve the existing unsaved-work refusal before doing any geometry or storage work.
+          const r = applyBranch(log, name, working, { discard });
+          await call.current.validateRestore?.(r.doc, current);
+          if (!current()) return null;
+          const kept = await keepLog(store, part, r.log, owner);
+          return kept && restoring.current === request && currentOpen(owner) && live.current.log === r.log ? r.doc : null;
+        } catch (e) {
+          if (current()) fail(`Could not switch to branch ${name} of ${part}`, e);
+          return null;
+        }
       },
       /** The agent's side (DA-9): the log a turn carries, and the log a turn brings back. */
       chat: {

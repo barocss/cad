@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1341 — Native admission before branch switching](notes/project-branch-admission-mac-2026-11-15/README.md).
+
 - [D1340 — Native admission before project restoration](notes/project-restore-admission-mac-2026-11-15/README.md).
 
 - [D1339 — STEP output admission](notes/step-output-admission-mac-2026-11-15/README.md).
