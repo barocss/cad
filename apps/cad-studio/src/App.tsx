@@ -1,3 +1,4 @@
+import { returnEditorFocus } from './ui/editorReturnFocus';
 import { handoffReferenceFocus, type ReferenceFocusReceipt } from './ui/referenceFocus';
 import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
 import { viewportRecoveryToast } from './viewport/viewportRecovery';
@@ -733,6 +734,8 @@ export function App() {
   const halvesShownRef = useRef(false);
   const [ao, setAo] = useState(true);
   const [editNode, setEditNode] = useState<number | null>(null);
+  const historyEditorOpener = useRef<{ index: number; doc: StudioDoc; button: HTMLElement } | null>(null);
+  const editNodeNow = useRef(editNode); editNodeNow.current = editNode;
   const [instanceEdit, setInstanceEdit] = useState<{ owner: string; index: number } | null>(null);
   const [instanceEditPending, setInstanceEditPending] = useState(false);
   // A changed selection invalidates a pending edit even if the user selects the same occurrence again.
@@ -1468,6 +1471,14 @@ export function App() {
   };
   const { play, animatedAt, videoBusy, recordVideo, exportImage } = useRenderPlayback({ render, rendering, state: { time, setTime, playing, setPlaying, turnFrom }, viewport, fileName, onNotice: setToast });
 
+  const extrudeOpener = useRef<HTMLElement | null>(null);
+  const returnAfterEditorClose = (opener: HTMLElement | null) => {
+    const scope = openIntent.current;
+    requestAnimationFrame(() => {
+      returnEditorFocus(scope, openIntent.current, !activeStore.get() && editNodeNow.current === null, opener,
+        document.querySelector<HTMLElement>('[data-reference-return]') ?? document.querySelector<HTMLElement>('[data-workspace-mode] button:first-child'), document);
+    });
+  };
   const holeOpener = useRef<HTMLElement | null>(null);
   const holeCloseFocus = useCallback((active: Active | null) => {
     const focused = document.activeElement;
@@ -1486,6 +1497,11 @@ export function App() {
     const running = activeStore.get();
     const command = running?.cmd;
     holeCloseFocus(running);
+    if (running?.cmd.id === 'extrude' && document.activeElement?.closest('.hud')) {
+      const opener = extrudeOpener.current, scope = openIntent.current;
+      requestAnimationFrame(() => returnEditorFocus(scope, openIntent.current, !activeStore.get() && editNodeNow.current === null, opener,
+        document.querySelector<HTMLElement>('[data-reference-return]') ?? document.querySelector<HTMLElement>('[data-workspace-mode] button:first-child'), document));
+    }
     if (command) setToast(current => current?.inputPick === command ? null : current);
     discardDirectCandidateRef.current(); discardRouteRef.current(); setActive(null); setPreviewBodies(null); setSketch(null);
   }, [activeStore, holeCloseFocus, setSketch]);
@@ -1804,6 +1820,11 @@ export function App() {
       : cmd.id === 'hole' ? { ...ctx, holeSnapStep: snapStep }
       : cmd.id === 'extrude' ? { ...ctx, viewportEndFace: true }
       : cmd === LINKED_INSET_EXTRUDE ? { ...ctx, doc } : ctx;
+    if (cmd.id === 'extrude') {
+      const focused = document.activeElement;
+      extrudeOpener.current = focused instanceof HTMLElement && focused.matches('button')
+        && !!focused.closest('nav[aria-label="Tools"], [aria-label="Browser"], .history') ? focused : null;
+    }
     if (cmd.id === 'hole') {
       const focused = document.activeElement;
       holeOpener.current = focused instanceof HTMLElement && focused.closest('nav[aria-label="Tools"]') ? focused : null;
@@ -3518,7 +3539,12 @@ export function App() {
             const failure = { ...reply.error, failedFeature };
             return loftHistoryFailure(failure, doc.nodes, next.nodes, editNode) ?? failure;
           });
-        }} onDelete={doc.nodes[1]?.kind === 'rounded-rectangle-inset' ? undefined : opener => deleteNode(editNode, opener)} onClose={() => { finishEdgeEditor.cancel(); discardDirectCandidateRef.current(); setEditNode(null); }} />}
+        }} onDelete={doc.nodes[1]?.kind === 'rounded-rectangle-inset' ? undefined : opener => deleteNode(editNode, opener)} onClose={() => {
+          const opener = historyEditorOpener.current;
+          if (opener?.index === editNode && opener.doc === doc) returnAfterEditorClose(opener.button);
+          historyEditorOpener.current = null;
+          finishEdgeEditor.cancel(); discardDirectCandidateRef.current(); setEditNode(null);
+        }} />}
       </SelectionInspector>}
       </div></Profiler>
   );
@@ -3687,7 +3713,11 @@ export function App() {
           exporting={videoBusy} onExportVideo={() => { setPlaying(false); turnFrom.current = viewport.current?.getCamera() ?? null; void recordVideo(render.animation.duration, setTime, `${fileName}-render.webm`); }} />;
       })()}
       <Profiler id="history" onRender={onBlockRender}>{historyShown && <FeatureHistoryBar busy={historyBusy} doc={doc} selection={selection} editNode={editNode} marker={marker} source={{ innerSteps, freeSketches }}
-        layout={{ historyBar, historyRows, setHistoryRows, historyLabels, setHistoryLabels, historyHidden }} actions={{ pickProfile, setEditNode, setMarker, setHistoryMenu, openHistoryFeature, rememberFocus: workspaceModeExit.rememberFocus, takeFocus: workspaceModeExit.takeFocus }} />}</Profiler>
+        layout={{ historyBar, historyRows, setHistoryRows, historyLabels, setHistoryLabels, historyHidden }} actions={{ pickProfile, setEditNode: index => {
+          const focused = document.activeElement;
+          historyEditorOpener.current = focused instanceof HTMLElement && focused.matches('button.hs') ? { index, doc, button: focused } : null;
+          setEditNode(index);
+        }, setMarker, setHistoryMenu, openHistoryFeature, rememberFocus: workspaceModeExit.rememberFocus, takeFocus: workspaceModeExit.takeFocus }} />}</Profiler>
 
       {inPlace && <div className="card in-place-bar" role="status" aria-label="Editing a part in place">
         <span>Editing <b>{inPlace.name}</b>{inPlace.shared > 1 ? ` · shared by ${inPlace.shared}` : ''}</span>

@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1346 — Keyboard cancellation focus](notes/extrude-cancel-focus-mac-2026-11-15/README.md).
+
 - [D1345 — Protected Drawing Fix all](notes/protected-drawing-fix-all-mac-2026-11-15/README.md).
 
 - [D1344 — Final References keyboard focus](notes/reference-final-focus-mac-2026-11-15/README.md).
