@@ -198,6 +198,31 @@ function twoBoundaries(c: StudioCage, edges: readonly (readonly [number, number]
   void c;
   return [groups[0], groups[1]];
 }
+/** Selection-only readiness; the native operation remains responsible for the resulting geometry. */
+export function cageBoundaryReadiness(s: CageSession, op: 'fill' | 'bridge'): { ok: boolean; reason: string } {
+  const edges = s.sel.edges;
+  if (!edges.length) return { ok: false, reason: op === 'fill' ? 'Select one complete hole boundary. Use Loop on a boundary edge.' : 'Select two separate boundary loops or open chains with matching edge counts.' };
+  try {
+    const topology = cageTopology(s.cage);
+    if (edges.some(([a, b]) => topology.edges.get(ek(a, b))?.faces.length !== 1)) {
+      return { ok: false, reason: 'Select open boundary edges, not interior edges of a closed surface.' };
+    }
+    if (op === 'fill') {
+      const boundary = boundaryLoop(s.cage, edges);
+      return boundary.closed
+        ? { ok: true, reason: 'One complete hole boundary selected. Fill will attempt to close it.' }
+        : { ok: false, reason: 'Select the complete hole boundary. Use Loop on a boundary edge; an open chain cannot be filled.' };
+    }
+    const [a, b] = twoBoundaries(s.cage, edges);
+    const A = boundaryLoop(s.cage, a), B = boundaryLoop(s.cage, b);
+    if (A.closed !== B.closed) return { ok: false, reason: 'Select two closed loops or two open chains, not one of each.' };
+    if (A.vertices.length !== B.vertices.length) return { ok: false, reason: 'The two boundaries need matching edge counts.' };
+    if (A.vertices.some(v => B.vertices.includes(v))) return { ok: false, reason: 'Select two boundaries that do not share vertices.' };
+    return { ok: true, reason: 'Two matching boundaries selected. Bridge will attempt to connect them.' };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message.replace(/^SubD: /, '') : 'The boundary selection could not be checked.' };
+  }
+}
 /**
  * An operation on the selection: one step, or refused (SubdError, said by the panel). Extrude here goes out 0 (the
  * gizmo then moves it); insert-loop runs across the ring through the first selected edge, at `t` along it from its

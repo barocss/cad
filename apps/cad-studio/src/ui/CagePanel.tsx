@@ -2,7 +2,7 @@
 // validation flags, the session's undo, and Done / Cancel. O16: its operations, fields and actions on shadcn (Button,
 // NativeSelect, FIELD); the Pick and Show toggles stay the studio's segmented buttons.
 import type { CageEditor } from '../subd/useCageEditor';
-import { selectionCentre, validationOf, type CageMode, type CageOp } from '@barocss/cad-model/subd/cageEdit';
+import { cageBoundaryReadiness, selectionCentre, validationOf, type CageMode, type CageOp } from '@barocss/cad-model/subd/cageEdit';
 import { CONTROL, FIELD } from './panelStyles';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -38,7 +38,14 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
       <button className={s.smooth ? 'on' : ''} aria-pressed={s.smooth} data-tip="Smooth" data-tip-desc="The limit surface (Tab)" onClick={() => !s.smooth && editor.toggleSmooth()}>Smooth</button></div>
     <div className={FIELD}><span>Picked</span> <b aria-label="Picked">{what}</b></div>
     {centre && <div className="muted small" aria-label="Picked cage centre">Picked centre: ({centre.map(value => Number(value.toFixed(3))).join(', ')}) mm</div>}
-    <div className="cage-ops">{OPS.map(o => <Button key={o.op} variant="ghost" aria-label={o.label} data-tip={o.label + (o.key ? ` (${o.key})` : '')} data-tip-desc={o.tip} onClick={() => editor.op(o.op)} disabled={!n && o.op !== 'weld-near'}>{o.label}</Button>)}</div>
+    <div className="cage-ops">{OPS.map(o => {
+      const readiness = o.op === 'fill' || o.op === 'bridge' ? cageBoundaryReadiness(s, o.op) : null;
+      const blocked = readiness ? !readiness.ok : !n && o.op !== 'weld-near';
+      return <Button key={o.op} variant="ghost" aria-label={o.label} data-tip={o.label + (o.key ? ` (${o.key})` : '')} data-tip-desc={o.tip}
+        data-tip-off={readiness && !readiness.ok ? readiness.reason : undefined} data-tip-focus={readiness ? true : undefined}
+        aria-description={readiness?.reason} aria-disabled={readiness ? blocked : undefined} className={readiness && blocked ? 'opacity-50 cursor-not-allowed' : undefined}
+        onClick={() => { if (!blocked) editor.op(o.op); }} disabled={!readiness && blocked}>{o.label}</Button>;
+    })}</div>
     <label className={FIELD}><span>Mirror</span><NativeSelect className={CONTROL} aria-label="Mirror" value={s.mirror ?? ''} onChange={e => editor.op(e.target.value ? `mirror-${e.target.value}` as CageOp : 'mirror-off')}>
       <option value="">None</option><option value="x">Across X</option><option value="y">Across Y</option><option value="z">Across Z</option></NativeSelect></label>
     <div className="cage-checks" aria-label="Cage checks">
