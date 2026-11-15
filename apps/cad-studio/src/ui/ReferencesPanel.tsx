@@ -8,9 +8,12 @@ import type { KeepoutResult, Placement, ReferenceSet } from '@barocss/cad-model/
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
+import { ReferencePlacementFields } from './ReferencePlacementFields';
 
 export interface ReferencesPanelProps {
   set: ReferenceSet;
+  /** Current document snapshot: commits, history and Open cancel unapplied placement drafts. */
+  resetKey?: unknown;
   /** Each reference's bodies in its own coordinates (their faces offered for datums). */
   local: ReadonlyMap<string, readonly BodyResult[]>;
   errors?: ReadonlyMap<string, string>;
@@ -38,10 +41,7 @@ export function ReferencesPanel(p: ReferencesPanelProps) {
       return <div key={r.id} className="req" role="listitem" aria-label={`Reference ${r.id}`}>
         <span className="req-row"><span className="req-mark">◇</span><b>{r.id}</b> {r.name} <span className="muted">· locked · {'step' in r.source ? 'STEP' : 'mesh'} · {faces.length} faces</span></span>
         {p.errors?.has(r.id) ? <div role="status" className="warn">{p.errors.get(r.id)}</div> : p.pending ? <div role="status" className="muted">Reading this reference…</div> : null}
-        {(['position', 'rotation'] as const).map(k => <span key={k} className="req-edit ref-at"><span className="muted ref-at-label">{k === 'position' ? 'at mm' : 'turn °'}</span>
-          {[0, 1, 2].map(i => <Input key={i} aria-label={`${r.id} ${k} ${'xyz'[i]}`} type="number" step="any" defaultValue={at[k][i]}
-            onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') { const next: Placement = { position: [...at.position], rotation: [...at.rotation] }; next[k][i] = num(e.currentTarget.value, at[k][i]); p.onPlace(r.id, next); } }} />)}
-        </span>)}
+        <ReferencePlacementFields id={r.id} at={at} resetKey={p.resetKey} onPlace={p.onPlace} />
         <span className="req-edit">
           <NativeSelect aria-label={`${r.id} datum face`} value={face[r.id] ?? ''} onChange={e => setFace(f => ({ ...f, [r.id]: e.target.value }))}><option value="">face…</option>{faces.map(f => <option key={f.name} value={f.name}>{f.name} ({f.kind}{f.radius ? ` r${Math.round(f.radius * 100) / 100}` : ''})</option>)}</NativeSelect>
           <NativeSelect aria-label={`${r.id} datum kind`} value={kind[r.id] ?? 'plane'} onChange={e => setKind(k => ({ ...k, [r.id]: e.target.value as 'plane' | 'axis' | 'point' }))}><option value="plane">plane</option><option value="axis">axis</option><option value="point">point</option></NativeSelect>

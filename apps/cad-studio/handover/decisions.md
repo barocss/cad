@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1398: [Reference placement drafts](notes/reference-placement-draft-mac-2026-11-15/README.md), #609; current-document ownership restores saved coordinates and cancels unapplied drafts on revision, preserving Enter-only commit semantics.
+
 - D1397: [Section face-pick Escape](notes/section-face-pick-escape-mac-2026-11-15/README.md), #607; cancel only the waiting pick, retain section/selection and existing higher-priority Escape handling.
 
 - D1396: [Analysis section scope](notes/analysis-section-scope-mac-2026-11-15/README.md), #606; label actual map input provenance in the existing legend, retaining scalar data and face-editing authority.

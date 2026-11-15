@@ -3238,7 +3238,7 @@ export function App() {
           }}><Icon name={o.hidden ? 'visibility_off' : 'gesture'} small />{o.name}</button>)}
         <SpecifyPanel doc={doc} onAnswer={answerQuestions} onAcceptAll={acceptAll} />
         <DraftsPanel drafts={liveDrafts(doc)} underlays={doc.underlays ?? []} onUnderlay={(id, hidden) => commit({ ...doc, underlays: (doc.underlays ?? []).map(u => u.id === id ? { ...u, hidden } : u) }, false)} onAddDrawing={f => void addDrawingFile(f)} onConfirm={(key, value) => { try { commit(confirmDimension(doc, key, value, new Date().toISOString())); } catch (e) { setToast({ title: 'Dimension not changed', hint: e instanceof Error ? e.message.replace(/^\[[A-Z_]+\] /, '') : String(e), detail: '' }); } }} />
-        <ReferencesPanel set={readReferences(doc.references)} local={refLocal} errors={refErrors} pending={refPending} verdicts={keepoutVerdicts} onAddFile={f => void addReferenceFile(f)} onPlace={placeRef}
+        <ReferencesPanel set={readReferences(doc.references)} resetKey={doc} local={refLocal} errors={refErrors} pending={refPending} verdicts={keepoutVerdicts} onAddFile={f => void addReferenceFile(f)} onPlace={placeRef}
           onDatum={(reference, face, kind) => void refTool('add_datum', { reference, face, kind })} onEnvelope={(reference, offset, clearance) => void refTool('add_keepout', { around: reference, offset, shape: 'box', clearance })} onRemove={removeRef} />
         {(() => { const b = readBrief(doc.brief); return b ? <BriefPanel brief={b} onConfirm={confirmBrief} /> : null; })()}
         <RequirementsBrowser doc={doc} bodies={bodies} spec={spec} specRunning={specRunning} specStale={specStale} failingOnly={failingOnly}
