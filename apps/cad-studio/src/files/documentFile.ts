@@ -132,7 +132,7 @@ export function verifyStoredNativeOpen(opened: StudioDoc, readPart: (doc: Studio
       if (!current()) return;
       const result = await readPart(part);
       if (!current()) return;
-      if (!result.ok) throw new Error(`Offset face: ${result.error.detail || result.error.title} Your part is unchanged.`);
+      if (!result.ok) throw new Error(`Offset face: ${result.error.feature ? result.error.feature + ": " : ""}${result.error.detail || result.error.title} Your part is unchanged.`);
     }
   };
   const checkSources = () => {

@@ -436,12 +436,23 @@ export function useProject(cb: ProjectCallbacks) {
       /** A branch merged into the current one; the conflicts returned for the person to answer. */
       async merge(from: string, working: StudioDoc, resolve?: Resolutions): Promise<MergeResult | null> {
         const { store, part, log } = live.current; if (!store || !part || !log) return null;
-        const owner = versionOwner();
+        const request = ++restoring.current, owner = versionOwner();
+        const current = () => restoring.current === request && currentOpen(owner) && live.current.log === log;
+        let checkingGeometry = false;
         try {
           const r = applyMerge(log, { from, working, at: now(), resolve, note: `merged from ${from}` });
           if ('conflicts' in r) return r;
-          return (await keepLog(store, part, r.log, owner)) && currentOpen(owner) ? r : null;
-        } catch (e) { fail('Could not merge', e); return null; }
+          checkingGeometry = true;
+          await call.current.validateRestore?.(r.doc, current);
+          checkingGeometry = false;
+          if (!current()) return null;
+          const kept = await keepLog(store, part, r.log, owner);
+          return kept && restoring.current === request && currentOpen(owner) && live.current.log === r.log ? r : null;
+        } catch (e) {
+          if (current()) fail(`Could not merge from ${from} into ${log.current} for ${part}`,
+            new Error(`${say(e)}${checkingGeometry ? ' Adjust the source branch geometry or choose different conflict resolutions, then retry the merge.' : ''}`));
+          return null;
+        }
       },
     };
     return actions;
