@@ -2,7 +2,7 @@
 // validation flags, the session's undo, and Done / Cancel. O16: its operations, fields and actions on shadcn (Button,
 // NativeSelect, FIELD); the Pick and Show toggles stay the studio's segmented buttons.
 import type { CageEditor } from '../subd/useCageEditor';
-import { cageBoundaryReadiness, selectionCentre, validationOf, type CageMode, type CageOp } from '@barocss/cad-model/subd/cageEdit';
+import { cageBoundaryReadiness, selectedCageEdges, selectionCentre, validationOf, type CageMode, type CageOp } from '@barocss/cad-model/subd/cageEdit';
 import { CONTROL, FIELD } from './panelStyles';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -28,6 +28,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
   const s = editor.session; if (!s) return null;
   const v = validationOf(s), n = s.sel.vertices.length + s.sel.edges.length + s.sel.faces.length;
   const centre = selectionCentre(s);
+  const pickedEdges = selectedCageEdges(s), sharpCount = pickedEdges.filter(edge => edge.sharp).length;
   const what = s.sel.faces.length ? `${s.sel.faces.length} face${s.sel.faces.length === 1 ? '' : 's'}` : s.sel.edges.length ? `${s.sel.edges.length} edge${s.sel.edges.length === 1 ? '' : 's'}` : s.sel.vertices.length ? `${s.sel.vertices.length} vertex${s.sel.vertices.length === 1 ? '' : 'es'}` : 'nothing';
   return <aside className="card props cage-panel" aria-label="Cage editor">
     <div className="card-title">CAGE · {name}</div>
@@ -41,6 +42,11 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
       <button className={focusClass} style={s.smooth ? activeStyle : undefined} aria-pressed={s.smooth} data-tip="Smooth" data-tip-desc="The limit surface (Tab)" onClick={() => !s.smooth && editor.toggleSmooth()}>Smooth</button></div>
     <div className={FIELD}><span>Picked</span> <b aria-label="Picked">{what}</b></div>
     {centre && <div className="muted small" aria-label="Picked cage centre">Picked centre: ({centre.map(value => Number(value.toFixed(3))).join(', ')}) mm</div>}
+    {pickedEdges.length > 0 && <details className="small" aria-label="Picked edge creases">
+      <summary className={focusClass}>Picked edges: {sharpCount} sharp · {pickedEdges.length - sharpCount} smooth</summary>
+      <ul className="max-h-24 overflow-y-auto" aria-label="Individual picked edges">{pickedEdges.map(({ edge, centre: midpoint, sharp }) =>
+        <li key={edge.join(':')}>Edge {edge.join('–')}: <b>{sharp ? 'Sharp' : 'Smooth'}</b> · ({midpoint.map(value => Number(value.toFixed(3))).join(', ')}) mm</li>)}</ul>
+    </details>}
     <div className="cage-ops">{OPS.map(o => {
       const readiness = o.op === 'fill' || o.op === 'bridge' ? cageBoundaryReadiness(s, o.op) : null;
       const blocked = readiness ? !readiness.ok : !n && o.op !== 'weld-near';

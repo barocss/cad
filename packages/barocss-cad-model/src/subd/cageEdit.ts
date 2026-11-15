@@ -33,6 +33,35 @@ const ek = (a: number, b: number) => a < b ? `${a}_${b}` : `${b}_${a}`;
 export function startSession(node: number, cage: StudioCage, mirror?: MirrorAxis): CageSession {
   return { node, cage: plain(cage), ...(mirror ? { mirror } : {}), start: { cage: plain(cage), ...(mirror ? { mirror } : {}) }, mode: 'vertex', sel: emptyCageSel, smooth: true, undo: [], redo: [] };
 }
+/** The actual selected cage edges, not mirrored copies or the smoothed limit surface. */
+export interface SelectedCageEdge {
+  readonly edge: readonly [number, number];
+  readonly centre: readonly [number, number, number];
+  readonly sharp: boolean;
+}
+/** Inspection only. Invalid references/coordinates return no details rather than a misleading partial list. */
+export function selectedCageEdges(s: CageSession): readonly SelectedCageEdge[] {
+  if (!s.sel.edges.length && !s.sel.faces.length) return [];
+  const c = s.cage, nv = c.positions.length / 3;
+  const vertex = (v: number) => Number.isInteger(v) && v >= 0 && v < nv;
+  if (!Number.isInteger(nv) || c.faces.some(f => f.length < 3 || f.some(v => !vertex(v)))) return [];
+  if (!s.sel.edges.length && s.sel.faces.some(f => !Number.isInteger(f) || f < 0 || f >= c.faces.length)) return [];
+  const edges = s.sel.edges.length ? s.sel.edges : s.sel.faces.flatMap(f => c.faces[f].map((v, i, F) => [v, F[(i + 1) % F.length]] as [number, number]));
+  const topology = cageTopology(c), creases = new Set((c.creases ?? []).map(([a, b]) => ek(a, b)));
+  const seen = new Set<string>(), details: SelectedCageEdge[] = [];
+  for (const [a, b] of edges) {
+    if (!vertex(a) || !vertex(b) || a === b) return [];
+    const key = ek(a, b), e = topology.edges.get(key);
+    if (!e || e.faces.length > 2) return [];
+    if (seen.has(key)) continue;
+    const ends = [e.a, e.b] as const;
+    if (ends.some(v => [0, 1, 2].some(axis => !Number.isFinite(c.positions[3 * v + axis])))) return [];
+    // Halving first avoids overflow for finite endpoints with large coordinates.
+    const centre: [number, number, number] = [0, 1, 2].map(axis => c.positions[3 * e.a + axis] / 2 + c.positions[3 * e.b + axis] / 2) as [number, number, number];
+    details.push({ edge: [e.a, e.b], centre, sharp: creases.has(key) }); seen.add(key);
+  }
+  return details;
+}
 /** The cage the kernel builds: the half mirrored, else as edited. */
 export const fullCage = (s: Pick<CageSession, 'cage' | 'mirror'>): StudioCage => s.mirror ? plain(mirrorCage(s.cage, s.mirror)) : s.cage;
 /** Selection-changing operations follow their actual result; an empty selection preserves the active mode. */
