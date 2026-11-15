@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { analyzeSurface, curveLength, curvePlaneCrossings, directOps, domainsOf, geometryOf, surfaceIntersection, type DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { SEW_TOLERANCE_LABEL } from '@barocss/cad-model/engine/sew';
+import { TwoCurveRoles } from './TwoCurveRoles';
 import { curveAnalysisError, inspectCurvePoint } from './curveAnalysisError';
 import { sewTrimBlockers } from './sewTrimBlockers';
 import { parseSewToleranceInput } from './sewToleranceInput';
@@ -15,10 +16,11 @@ import { NativeSelect } from '@/components/ui/native-select';
  * poles). Each tool is one undoable edit; a refusal comes back as a message. O16: the contents on shadcn (Button,
  * Input, NativeSelect, FIELD); the shell (its title and Hide) is the studio's.
  */
-export function DirectPanel({ direct, selected, onChange, onError, onHide, onThicken, onSew, children }: {
+export function DirectPanel({ direct, selected, onChange, onSelect, onError, onHide, onThicken, onSew, children }: {
   direct: DirectGeometry; selected: string[];
   children?: ReactNode;
   onChange(next: DirectGeometry, select?: string[]): void;
+  onSelect?(ids: string[]): void;
   onError(message: string): void;
   onHide(ids: string[]): void;
   /** A surface thickened into a body of the part. */
@@ -88,6 +90,7 @@ export function DirectPanel({ direct, selected, onChange, onError, onHide, onThi
       </div>}
       {objs.length === 2 && curves && <div className="render-section [&>[data-slot=button]]:self-start">
         <div className="card-title" style={{ marginTop: 8 }}>TWO CURVES</div>
+        <TwoCurveRoles direct={direct} ids={[selected[0], selected[1]]} onSelect={onSelect} />
         <div className="flex flex-wrap gap-1">
           <Button variant="ghost" onClick={() => run(() => directOps.joinCurves(direct, selected[0], selected[1]), added)}>Join</Button>
           <Button variant="ghost" onClick={() => run(() => directOps.ruledSurface(direct, selected[0], selected[1]), added)}>Ruled surface</Button>

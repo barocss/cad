@@ -8,6 +8,7 @@ const DirectPanel = lazy(() => import('./DirectPanel').then(m => ({ default: m.D
 interface DirectInspectorProps {
   doc: StudioDoc;
   directSel: string[];
+  onSelect(ids: string[]): void;
   curveCurvature?: CurvatureCombControls;
   changes: { commitDirect(next: DirectGeometry, selection?: string[]): boolean };
   onSew(ids: string[], tolerance: number): void;
@@ -15,11 +16,11 @@ interface DirectInspectorProps {
   onNotice(notice: FriendlyError): void;
 }
 /** Direct surface actions keep the existing geometry checks and central commit. */
-export function DirectInspector({ doc, directSel, curveCurvature, changes, onThicken, onSew, onNotice: setToast }: DirectInspectorProps) {
+export function DirectInspector({ doc, directSel, onSelect, curveCurvature, changes, onThicken, onSew, onNotice: setToast }: DirectInspectorProps) {
   const { commitDirect } = changes;
   if (!doc.direct) return null;
   return <Suspense fallback={null}><DirectPanel direct={doc.direct} selected={directSel}
-        onChange={commitDirect} onError={m => setToast({ title: 'The operation was refused', hint: m, detail: '' })}
+        onChange={commitDirect} onSelect={onSelect} onError={m => setToast({ title: 'The operation was refused', hint: m, detail: '' })}
         onHide={ids => { commitDirect({ ...doc.direct!, objects: doc.direct!.objects.map(o => ids.includes(o.id) ? { ...o, hidden: true } : o) }, []); }}
         onThicken={onThicken}
         onSew={onSew}>{curveCurvature && <EdgeCurvature {...curveCurvature} kind="curve" />}</DirectPanel></Suspense>;

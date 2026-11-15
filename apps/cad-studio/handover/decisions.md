@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1319 — Direct curve roles and local surface direction](notes/direct-curve-role-order-mac-2026-11-15/README.md).
+
 - [D1318 — Direct Sweep across source-local IDs](notes/direct-sweep-source-ids-mac-2026-11-15/README.md).
 
 - [D1317 — Two-guide Loft field feedback](notes/two-guide-feedback-mac-2026-11-15/README.md).

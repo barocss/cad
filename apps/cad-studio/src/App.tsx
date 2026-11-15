@@ -3392,7 +3392,7 @@ export function App() {
       {!rendering && !drawing && !sketch && !measure && !instanceSel.length && <GravityExperimentPanel doc={doc} joints={jointTree?.joints ?? []} />}
       {!rendering && !sketch && !measure && !!doc.instances?.length && (assembly.draft || !!singleTop(instanceSel)) && <MatePanel assembly={assembly} instances={doc.instances} instance={singleTop(instanceSel)}
         onRefused={why => setToast({ title: 'The mate was refused', hint: why, detail: '' })} />}
-      {!rendering && !active && !sketch && !measure && !instanceSel.length && directSel.length > 0 && doc.direct && <DirectInspector doc={doc} directSel={directSel}
+      {!rendering && !active && !sketch && !measure && !instanceSel.length && directSel.length > 0 && doc.direct && <DirectInspector doc={doc} directSel={directSel} onSelect={setDirectSel}
         curveCurvature={directCurveVisible ? directCurvature : undefined}
         changes={{ commitDirect }} onThicken={(id, t, side) => {
           if (directSel.length === 1 && directSel[0] === id) start(commands.find(c => c.id === 'thicken')!, { t, side });
