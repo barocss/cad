@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1388: [Direct Thicken draft](notes/direct-thicken-draft-mac-2026-11-15/README.md), #166; no implicit old-value fallback, local invalid input feedback and unchanged native admission.
+
 - D1387: [Surface parameter domains](notes/surface-parameter-domain-mac-2026-11-15/README.md), #165; owned raw drafts, inclusive inspection and strictly interior Split feedback without native admission changes.
 
 - D1386: [Pole weight feedback](notes/direct-pole-weight-feedback-mac-2026-11-15/README.md), #164; preserve rejected drafts with local saved-value feedback and owner/revision reset, without relaxing native validation.

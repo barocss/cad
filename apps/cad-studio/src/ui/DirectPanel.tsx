@@ -175,7 +175,9 @@ function Crossings({ id, direct }: { id: string; direct: DirectGeometry }) {
 }
 
 function SurfaceTools({ id, direct, run, added, onThicken }: { id: string; direct: DirectGeometry; run: Run; added: (n: DirectGeometry) => string[]; onThicken?(id: string, thickness: number, side: 'normal' | 'reverse' | 'both'): void }) {
-  const [wall, setWall] = useState(2), [wallSide, setWallSide] = useState<'normal' | 'reverse' | 'both'>('normal');
+  const [wallText, setWallText] = useSurfaceDraft(direct, id, 'thickness', '2');
+  const wall = surfaceParameter(wallText), wallErrorId = `direct-thickness-${encodeURIComponent(id)}`;
+  const [wallSide, setWallSide] = useState<'normal' | 'reverse' | 'both'>('normal');
   const [edge, setEdge] = useState<'u-min' | 'u-max' | 'v-min' | 'v-max'>('u-max'), [reach, setReach] = useState(5);
   const dom = domainsOf(direct, id), u = dom.kind === 'surface' ? dom.u : [0, 1] as [number, number], v = dom.kind === 'surface' ? dom.v : [0, 1] as [number, number];
   const [axis, setAxis] = useState<'u' | 'v'>('u');
@@ -206,10 +208,12 @@ function SurfaceTools({ id, direct, run, added, onThicken }: { id: string; direc
     <Button variant="ghost" aria-label="Extend the surface" title="Run the surface on past the edge, straight along its tangent there" onClick={() => run(() => directOps.extendSurface(direct, id, edge, reach), added)}>Extend</Button>
     {onThicken && <>
       <div className="card-title" style={{ marginTop: 8 }}>THICKEN</div>
-      <NumberField label="Thickness" value={wall} onChange={setWall} />
+      <label className={FIELD}><span>Thickness</span><Input type="number" step="any" className="w-24" aria-label="Thickness" value={wallText}
+        aria-invalid={wall === null || undefined} aria-describedby={wall === null ? wallErrorId : undefined} onChange={event => setWallText(event.target.value)} /></label>
+      {wall === null && <span id={wallErrorId} role="status" className="warn small">Enter a finite thickness.</span>}
       <label className={FIELD}><span>Side</span><NativeSelect className={CONTROL} aria-label="Thicken side" value={wallSide} onChange={e => setWallSide(e.target.value as typeof wallSide)}>
         <option value="normal">Along the normal</option><option value="reverse">Against it</option><option value="both">Half each way</option></NativeSelect></label>
-      <Button variant="ghost" aria-label="Thicken into a body" onClick={() => onThicken(id, wall, wallSide)}>Thicken into a body</Button>
+      <Button variant="ghost" aria-label="Thicken into a body" disabled={wall === null} aria-describedby={wall === null ? wallErrorId : undefined} onClick={() => { if (wall !== null) onThicken(id, wall, wallSide); }}>Thicken into a body</Button>
     </>}
     <div className="card-title" style={{ marginTop: 8 }}>REGION</div>
     {(['u from', 'u to', 'v from', 'v to'] as const).map((l, k) => <NumberField key={l} label={l} value={box[k]} onChange={x => setBox(b => b.map((y, j) => j === k ? x : y) as typeof b)} />)}

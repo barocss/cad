@@ -12,7 +12,7 @@ import { importSource, type DirectGeometry } from '@barocss/cad-model/engine/dir
 type Props = { children?: unknown; [key: string]: unknown };
 type View = ReactElement<Props>;
 type PointProps = { id: string; direct: DirectGeometry; u: [number, number]; v: [number, number] };
-type ToolsProps = { id: string; direct: DirectGeometry; run(op: () => DirectGeometry): void; added(): string[] };
+type ToolsProps = { onThicken?(id: string, thickness: number, side: 'normal' | 'reverse' | 'both'): void; id: string; direct: DirectGeometry; run(op: () => DirectGeometry): void; added(): string[] };
 type Hooks = { useState(value: unknown): [unknown, (next: unknown) => void]; useEffect(effect: () => void, deps: unknown[]): void };
 const shared = globalThis as typeof globalThis & { __surfaceDomainHooks?: Hooks };
 const studio = existsSync(resolve('src/ui/DirectPanel.tsx')) ? process.cwd() : resolve('apps/cad-studio');
@@ -144,5 +144,39 @@ test('Split uses strict original-axis interior without restricting endpoint Iso/
     for (const draft of ['1', '7']) { change(h.render(), 'At v', draft); assert.equal(action(h.render(), 'Split').disabled, true); }
     change(h.render(), 'At v', '4'); assert.equal(action(h.render(), 'Split').disabled, false);
     change(h.render(), 'At v', '8'); h.props.direct = structuredClone(direct); assert.equal(input(h.render(), 'At v').value, '4');
+  } finally { h.cleanup(); }
+});
+
+
+test('blank and nonfinite Thickness drafts cannot silently reuse 2 or start Thicken', () => {
+  const direct = seed(), before = structuredClone(direct), calls: unknown[][] = [];
+  const props: ToolsProps = { id: direct.objects[0].id, direct, run() {}, added: () => [], onThicken: (...args) => { calls.push(args); } };
+  const h = harness(SurfaceTools, props);
+  const thickness = (view: View) => elements(view).find(element => element.props['aria-label'] === 'Thickness')!.props;
+  const enter = (draft: string) => (thickness(h.render()).onChange as (event: unknown) => void)({ target: { value: draft } });
+  try {
+    assert.equal(thickness(h.render()).value, '2');
+    for (const draft of ['', ' ', 'Infinity', '-Infinity', 'NaN']) {
+      enter(draft); const view = h.render(), field = thickness(view), start = action(view, 'Thicken into a body');
+      assert.equal(field.value, draft); assert.equal(field['aria-invalid'], true); assert.equal(start.disabled, true);
+      const message = elements(view).find(element => element.props.id === field['aria-describedby']); assert.ok(message);
+      assert.equal(text(message), 'Enter a finite thickness.'); assert.equal(message.props.role, 'status');
+      assert.equal(start['aria-describedby'], field['aria-describedby']);
+      (start.onClick as () => void)(); assert.deepEqual(calls, []);
+      assert.equal(thickness(h.render()).value, draft, 'leaving/re-rendering does not restore a hidden default');
+    }
+    enter('3'); let view = h.render(); assert.equal(thickness(view)['aria-invalid'], undefined);
+    assert.equal(thickness(view)['aria-describedby'], undefined); assert.equal(action(view, 'Thicken into a body').disabled, false);
+    (action(view, 'Thicken into a body').onClick as () => void)(); assert.deepEqual(calls, [[props.id, 3, 'normal']]);
+    const side = elements(view).find(element => element.props['aria-label'] === 'Thicken side')!;
+    (side.props.onChange as (event: unknown) => void)({ target: { value: 'both' } });
+    enter('3.125'); view = h.render(); (action(view, 'Thicken into a body').onClick as () => void)();
+    assert.deepEqual(calls[1], [props.id, 3.125, 'both']);
+    for (const draft of ['0', '-1']) { enter(draft); assert.equal(action(h.render(), 'Thicken into a body').disabled, false, 'finite admission stays with the native editor'); }
+    assert.deepEqual(direct, before);
+    enter(''); props.direct = structuredClone(direct); assert.equal(thickness(h.render()).value, '2');
+    assert.equal(thickness(h.render())['aria-invalid'], undefined, 'history reset does not retain an old field error');
+    enter(''); const other = importSource(direct, source, 'Other surface'); props.direct = other; props.id = other.objects.at(-1)!.id;
+    assert.equal(thickness(h.render()).value, '2', 'a different surface owns a fresh visible initial value');
   } finally { h.cleanup(); }
 });
