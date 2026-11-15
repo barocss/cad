@@ -1,3 +1,5 @@
+import { readOwnedNativeEdges, ownsNativeEdgeCopy } from '../app/ownedNativeEdgeCopy';
+import { nativeEdgeCurveSource } from '../app/nativeEdgeCurveSource';
 import { directTrimRestriction } from './directTrimReadiness';
 import { openChainFinishGuidance } from '../app/sketchOpenGuidance';
 import { offsetRecoveryMessage } from '../app/sketchOffsetDistance';
@@ -44,7 +46,7 @@ function unfinishedChain(shapes: readonly SketchShape[]): Polygon | undefined {
     && shape.points.length >= 2 && (!shape.closed || !!shape.pending));
 }
 interface SketchActionOptions {
-  model: { doc: StudioDoc; bodies: BodyResult[]; selection: Selection; marker: number | null };
+  model: { doc: StudioDoc; evaluated: StudioDoc; fresh: boolean; busy: boolean; bodies: BodyResult[]; selection: Selection; marker: number | null };
   editor: { sketch: SketchState | null; setSketch: Dispatch<SetStateAction<SketchState | null>>; sketchGeneration: RefObject<number>;
     recordDraft?(before: SketchState, after: SketchState): void };
   owner: { docNow: RefObject<StudioDoc>; acceptanceScope: object };
@@ -64,7 +66,7 @@ function keptFields(stored: ModelNode, placed: ModelNode): Partial<ModelNode> {
 }
 /** Sketch placement, editing and Finish retain App's dispatch and sketch generation owner. */
 export function useSketchActions({ model, editor, owner, worker, viewport, changes, onNotice: setToast }: SketchActionOptions) {
-  const { doc, bodies, selection, marker } = model;
+  const { doc, evaluated, fresh, busy, bodies, selection, marker } = model;
   const { sketch, setSketch, sketchGeneration, recordDraft } = editor;
   const sketchRenderGeneration = sketchGeneration.current;
   const [finishRefusal, setFinishRefusal] = useState<{ generation: number; message: string } | null>(null);
@@ -73,6 +75,9 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
   const { docNow, acceptanceScope } = owner;
   const { engine, nextRevision } = worker;
   const { canChangeDocument, commit, commitDirect, setSelection, setEditNode, setActive, setPreviewBodies } = changes;
+  const edgeCopyOwner = useRef({ doc, evaluated, fresh, busy, bodies, selection, scope: acceptanceScope });
+  edgeCopyOwner.current = { doc, evaluated, fresh, busy, bodies, selection, scope: acceptanceScope };
+  const edgeCopyRequest = useRef(0);
   /** The sketch's shapes as curves of the direct geometry (one per shape, through the sketch plane); the sketch is left. */
   const sketchToCurves = async () => {
     if (!sketch) return;
@@ -97,13 +102,33 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
     if (!commitDirect(next, next.objects.slice(doc.direct?.objects.length ?? 0).map(o => o.id))) return;
     setSketch(null);
   };
-  /** The picked edges as curves of the direct geometry. */
+  /** Native coefficients when owned; existing line/circle display fallback is explicitly disclosed. */
   const edgesToCurves = async () => {
-    const curves = selection.edges.flatMap(e => { const c = bodies[e.body] ? edgeCurve(bodies[e.body].mesh, e.edge) : null; return c ? [c] : []; });
-    if (!curves.length) return;
-    const { importSource } = await loadDirect();
-    const made = (doc.direct?.objects ?? []).filter(o => o.name.startsWith('Edge curve')).length, next = importSource(doc.direct ?? emptyDirect(), curvesSource('edges', curves.slice(0, 16)), `Edge curve ${made + 1}`);
-    commitDirect(next, next.objects.slice(doc.direct?.objects.length ?? 0).map(o => o.id));
+    if (!fresh || busy || !canChangeDocument()) return;
+    const captured = edgeCopyOwner.current, ticket = ++edgeCopyRequest.current;
+    const owns = () => edgeCopyRequest.current === ticket && docNow.current === doc
+      && ownsNativeEdgeCopy(captured, edgeCopyOwner.current);
+    try {
+      let approximate = false;
+      const curves = await readOwnedNativeEdges(selection.edges, async pick => {
+        const body = bodies[pick.body], edge = body?.mesh.edges[pick.edge], joint = edge?.nativeJoint;
+        if (body && joint) return engine.nativeEdgeCurve(evaluated, body.key, joint);
+        if (body && edge && (edge.straight || edge.nativeCircle)) {
+          const curve = edgeCurve(body.mesh, pick.edge);
+          if (curve) { approximate ||= !edge.straight; return { curve, edgeId: String(pick.edge), edgeName: edge.names.join(',') }; }
+        }
+        throw new Error('This displayed edge has no copyable native curve or supported line/circle display. No curve was added.');
+      }, owns);
+      if (!curves || !owns()) return;
+      const { importSource } = await loadDirect();
+      if (!owns() || !canChangeDocument()) return;
+      const made = (doc.direct?.objects ?? []).filter(o => o.name.startsWith('Edge curve')).length;
+      const next = importSource(doc.direct ?? emptyDirect(), nativeEdgeCurveSource(curves), `Edge curve ${made + 1}${approximate ? ' · Display approximation' : ''}`);
+      if (!owns()) return;
+      commitDirect(next, next.objects.slice(doc.direct?.objects.length ?? 0).map(o => o.id));
+    } catch (error) {
+      if (owns()) setToast({ title: 'Cannot copy this edge', hint: error instanceof Error ? error.message : String(error), detail: '' });
+    }
   };
   const ownsSketch = () => docNow.current === doc && sketchGeneration.current === sketchRenderGeneration;
   const commitDraft = (before: SketchState, next: SketchState) => {

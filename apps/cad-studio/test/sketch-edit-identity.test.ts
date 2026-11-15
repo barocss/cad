@@ -42,7 +42,7 @@ function actions(doc: StudioDoc, evaluate: (revision: number) => Promise<EvalRes
   };
   const transport = { evaluate: (input: StudioDoc, revision: number) => { evaluated.push(input); return evaluate(revision); } } satisfies Pick<EngineClient, 'evaluate'>;
   function Probe() {
-    api = useSketchActions({ model: { doc, bodies: [], selection: { faces: [], edges: [], bodies: [] }, marker: null },
+    api = useSketchActions({ model: { doc, evaluated: doc, fresh: true, busy: false, bodies: [], selection: { faces: [], edges: [], bodies: [] }, marker: null },
       editor: { sketch, setSketch, sketchGeneration }, owner: { docNow, acceptanceScope: {} },
       worker: { engine: transport as unknown as EngineClient, nextRevision: () => revision++ }, viewport: { current: null },
       changes: { canChangeDocument: () => true, commit: next => { accepted.push(next); docNow.current = next; return true; },

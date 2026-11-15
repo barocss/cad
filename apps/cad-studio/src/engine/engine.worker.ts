@@ -1,3 +1,4 @@
+import { readNativeEdgeCurve } from '@barocss/cad-model/engine/nativeEdgeCurve';
 /// <reference lib="webworker" />
 import { brepsFor, deferMasses, evaluateDoc, evaluatePart, evaluatePlaced, evaluatePreview, evaluateVolumes, massOfRef, shareMeshes, exportStudioStep, stlFor, type BodyResult, type EvalResult, type PartSlot } from '@barocss/cad-model/engine/evaluate';
 import { nativeMassEnvelope, type NativeMassEnvelope, type NativeMassSource } from '@barocss/cad-model/engine/nativeMassWire';
@@ -36,6 +37,7 @@ export type WorkerRequest =
   | { type: 'insetRelink'; id: number; doc: WireDoc; index: number; pick: Parameters<typeof relinkAssociativeInset>[2]; revision: number }
   | { type: 'verifyStoredInsets'; id: number; doc: WireDoc }
   | { type: 'faceEndDistance'; id: number; doc: WireDoc; index: number }
+  | { type: 'nativeEdgeCurve'; id: number; doc: WireDoc; key: string; picked: Parameters<typeof readNativeEdgeCurve>[2] }
   | { type: 'edgeContinuity'; id: number; doc: WireDoc; key: string; input: ContinuityRequest }
   | { type: 'midpointPlane'; id: number; doc: WireDoc; key: string; faces: readonly [NativeMidpointFace, NativeMidpointFace] }
   | { type: 'projectFootprint'; id: number; doc: WireDoc; key: string }
@@ -164,6 +166,11 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   }
   if (request.type === 'faceEndDistance') {
     try { post({ id: request.id, distance: currentFaceEndDistance(doc, request.index) }); }
+    catch (error) { post({ id: request.id, error: error instanceof Error ? error.message : String(error) }); }
+    return;
+  }
+  if (request.type === 'nativeEdgeCurve') {
+    try { post({ id: request.id, ...readNativeEdgeCurve(doc, request.key, request.picked) }); }
     catch (error) { post({ id: request.id, error: error instanceof Error ? error.message : String(error) }); }
     return;
   }

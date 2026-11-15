@@ -1,3 +1,4 @@
+import type { NativeEdgeCurveReply } from '@barocss/cad-model/engine/nativeEdgeCurve';
 import type { ContinuityReply, ContinuityRequest } from '@barocss/cad-model/engine/edgeContinuity';
 import { rememberFaceTable } from '@barocss/cad-model/assembly/faces';
 import type { EvalResult, PartSlot, VolumeEvaluation, StudioStep } from '@barocss/cad-model/engine/evaluate';
@@ -228,6 +229,14 @@ export class EngineClient {
     return new Promise(resolve => {
       this.pending.set(id, data => resolve(data as FaceEndDistanceReply));
       this.post(id, () => ({ type: 'faceEndDistance', id, doc: this.wire!.pack(doc), index }));
+    });
+  }
+
+  nativeEdgeCurve(doc: StudioDoc, key: string, picked: DisplayMesh['edges'][number]['nativeJoint']): Promise<NativeEdgeCurveReply> {
+    const id = this.next++;
+    return new Promise(resolve => {
+      this.pending.set(id, data => resolve(data as NativeEdgeCurveReply));
+      this.post(id, () => ({ type: 'nativeEdgeCurve', id, doc: this.wire!.pack(doc), key, picked }));
     });
   }
 

@@ -1893,7 +1893,7 @@ export function App() {
   useEffect(() => {
     if (sketch && sketchOffsetTarget(sketch)) setToast(current => current?.title === 'Nothing to offset' ? null : current);
   }, [sketch]);
-  const sketchActions = useSketchActions({ model: { doc, bodies, selection, marker },
+  const sketchActions = useSketchActions({ model: { doc, evaluated, fresh, busy, bodies, selection, marker },
     editor: { sketch, setSketch, sketchGeneration, recordDraft: recordSketchDraft }, owner: { docNow, acceptanceScope },
     worker: { engine, nextRevision: () => revision.current++ }, viewport, changes: { canChangeDocument, commit, commitDirect, setSelection, setEditNode, setActive, setPreviewBodies }, onNotice: setToast });
   const { makeSketchBand, editSketchBand, removeSketchBand, placeSketch, sketchToCurves, edgesToCurves, offsetSketch, useFaceOutline, clearSketchProfile, trimSketch, trimSelectedEdge, dragTrim, editSketch, linkSketchInset, currentSketchSource, finishError: sketchFinishError } = sketchActions;

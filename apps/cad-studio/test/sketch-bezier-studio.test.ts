@@ -23,7 +23,7 @@ function actions(sketch0: SketchState | null) {
   const accepted: StudioDoc[] = [], direct: DirectGeometry[] = [], notices: { title: string; hint?: string }[] = [], doc = emptyDoc(), docNow = { current: doc };
   const setSketch = (v: SetStateAction<SketchState | null>) => { sketch = typeof v === 'function' ? v(sketch) : v; };
   function Probe() {
-    api = useSketchActions({ model: { doc, bodies: [], selection: { faces: [], edges: [], bodies: [] }, marker: null },
+    api = useSketchActions({ model: { doc, evaluated: doc, fresh: true, busy: false, bodies: [], selection: { faces: [], edges: [], bodies: [] }, marker: null },
       editor: { sketch, setSketch, sketchGeneration: { current: 0 } }, owner: { docNow, acceptanceScope: {} },
       worker: { engine: {} as unknown as EngineClient, nextRevision: () => 1 }, viewport: { current: null },
       changes: { canChangeDocument: () => true, commit: next => { accepted.push(next); docNow.current = next; return true; },

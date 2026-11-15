@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1376: [Native edge copy](notes/native-edge-copy-mac-2026-11-15/README.md), #151; explicit legacy approximation and baseline test limits.
+
 - D1375: [Offset collapse recovery](notes/offset-collapse-recovery-mac-2026-11-15/README.md), #97 including dependent Offset; no geometry expansion.
 
 - D1374: [Selected arc scope](notes/selected-arc-scope-mac-2026-11-15/README.md) completes #150 after partial D1373.

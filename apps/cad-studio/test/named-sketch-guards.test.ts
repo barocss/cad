@@ -36,7 +36,7 @@ export function guardActions(doc: StudioDoc, current: StudioDoc = doc) {
   const setSketch = (value: SetStateAction<SketchState | null>) => { sketchWrites++; sketch = typeof value === 'function' ? value(sketch) : value; };
   const transport = { evaluate: async (input: StudioDoc, revision: number) => { evaluated.push(input); return { ok: true as const, revision, bodies: [], wallTime: 0 }; } } satisfies Pick<EngineClient, 'evaluate'>;
   function Probe() {
-    api = useSketchActions({ model: { doc, bodies: [], selection: { faces: [], edges: [], bodies: [] }, marker: null },
+    api = useSketchActions({ model: { doc, evaluated: doc, fresh: true, busy: false, bodies: [], selection: { faces: [], edges: [], bodies: [] }, marker: null },
       editor: { sketch, setSketch, sketchGeneration: { current: 0 } }, owner: { docNow, acceptanceScope: {} },
       worker: { engine: transport as unknown as EngineClient, nextRevision: () => revision++ }, viewport: { current: null },
       changes: { canChangeDocument: () => true, commit: next => { accepted.push(next); docNow.current = next; return true; },
