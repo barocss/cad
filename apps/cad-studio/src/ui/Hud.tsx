@@ -117,7 +117,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
         }).map(step => {
           const endFace = step.label === 'End face' && isExtrudeToFace(active.cmd.id, active.values);
           const guideStep = active.cmd.id === 'loft' && step.label === 'Guides';
-          const requiresPreview = guideStep || endFace || (step.label === 'Reference plane' && isOffsetToPlane(active.cmd.id, active.values))
+          const requiresPreview = guideStep || endFace || (step.label === 'Move' && active.cmd.id === 'offset-face') || (step.label === 'Reference plane' && isOffsetToPlane(active.cmd.id, active.values))
             || (step.label === 'Axis' && replacingAxis);
           const pathError = step.label === 'Path' ? pathFeedback : undefined;
           const done = step.done && !pathError && (!requiresPreview || active.preview === 'ok');
