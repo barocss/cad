@@ -109,7 +109,8 @@ export function SelectionInspector({ model, selection, materialSettings, display
               <label className="kv"><span>Material{!look.material && <span className="muted"> · {briefMaterial(doc) ? 'from the brief' : 'default'}</span>}</span>
                 <select aria-label="Material" value={unresolved ? mat.unresolved ?? '' : own.id} onChange={e => {
                   const id = e.target.value;
-                  commit(withLook(doc, b, { material: !unresolved && id === (briefMaterial(doc) ?? material) ? undefined : id }));
+                  // Choosing a material is an explicit engineering declaration, even at the default.
+                  commit(withLook(doc, b, { material: id }));
                 }}>{unresolved && <option disabled value={mat.unresolved ?? ''}>Unresolved · {mat.unresolved ?? 'Invalid ID'}</option>}{MATERIALS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
               {!unresolved && own.id !== material && <div className="kv"><span /><button className="ghost small" onClick={() => setMaterial(own.id)} data-tip="Default material" data-tip-desc="Bodies without a material of their own use it">Use as default</button></div>}
             {(() => { const top = evaluated.nodes[refOf(b).node], made = top && 'made' in top ? top.made : undefined, sizes = fastenerSizesOf(doc), t = made?.command === 'fastener' ? fastenerThread(made.values, sizes) : null;
