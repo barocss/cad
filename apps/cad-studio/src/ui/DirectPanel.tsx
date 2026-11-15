@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { analyzeCurve, analyzeSurface, curveLength, curvePlaneCrossings, directOps, domainsOf, geometryOf, surfaceIntersection, type DirectGeometry } from '@barocss/cad-model/engine/direct';
+import { analyzeSurface, curveLength, curvePlaneCrossings, directOps, domainsOf, geometryOf, surfaceIntersection, type DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { SEW_TOLERANCE_LABEL } from '@barocss/cad-model/engine/sew';
-import { curveAnalysisError } from './curveAnalysisError';
+import { curveAnalysisError, inspectCurvePoint } from './curveAnalysisError';
 import { CONTROL, FIELD } from './panelStyles';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -111,7 +111,7 @@ function CurveTools({ id, direct, run, added }: { id: string; direct: DirectGeom
     {g.kind === 'curve' && (() => { const a = g.controlPoints[0], b = g.controlPoints[g.controlPoints.length - 1], chord = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = curveLength(direct, id);
       return <div className="kv">Chord <b>{fmtNum(chord, 4)} mm{chord > 1e-9 ? ` · length ${fmtNum(L / chord, 4)}×` : ' · closed'}</b></div>; })()}
     <NumberField label="At t" value={at} onChange={setAt} />
-    <Analysis formatError={curveAnalysisError} run={() => { const a = analyzeCurve(direct, id, at); return [['Point', a.point.map(v => fmtNum(v, 3)).join(', ')], ['Radius', a.radius === null ? 'straight' : `${fmtNum(a.radius, 4)} mm`]]; }} />
+    <Analysis formatError={curveAnalysisError} run={() => { const a = inspectCurvePoint(direct, id, at); return [['Point', a.point.map(v => fmtNum(v, 3)).join(', ')], ['Radius', a.radiusNote ?? (a.radius === null ? 'straight' : `${fmtNum(a.radius, 4)} mm`)]]; }} />
     <div className="flex flex-wrap gap-1">
       <Button variant="ghost" onClick={() => run(() => directOps.splitCurve(direct, id, at), added)}>Split</Button>
       <Button variant="ghost" onClick={() => run(() => directOps.insertCurveKnot(direct, id, at))}>Insert knot</Button>
