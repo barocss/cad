@@ -170,7 +170,7 @@ export function VersionsPanel({ project, doc, onMakeVersion, onOpen, onCompare, 
         try { onCompare({ id: v.id, doc: readVersion(log, v.id), store: view.store, path: view.part, snapshot: v.snapshot }); }
         catch { onCompare(null); }
       }}>{selected?.id === v.id ? 'Hide' : 'Compare'}</Button>
-      <Button variant="ghost" size="xs" aria-label={`Restore ${v.name ?? v.id}`} onClick={() => { const d = project.restore(v.id); if (d) onOpen(d); }}>Restore</Button>
+      <Button variant="ghost" size="xs" aria-label={`Restore ${v.name ?? v.id}`} onClick={async () => { const d = await project.restore(v.id); if (d) onOpen(d); }}>Restore</Button>
     </li>)}</ul>
     {selected && (list.length > 1 || target) && <label className={ROW}>Compare to
       <NativeSelect aria-label="Compare to" value={target?.id ?? ''} onChange={event => {

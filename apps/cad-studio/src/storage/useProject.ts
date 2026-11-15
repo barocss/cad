@@ -34,6 +34,8 @@ export interface ProjectCallbacks extends OpenIntentBridge {
   confirmOpen?(focus: HTMLElement | null): Promise<boolean>;
   /** Validate geometry that must be admitted before updating the active project path. */
   validateOpen?(doc: StudioDoc, current: () => boolean): Promise<{ doc: StudioDoc; problems: Problem[] } | undefined> | undefined;
+  /** Admission only: never repair or rewrite a saved recovery/version snapshot. */
+  validateRestore?(doc: StudioDoc, current: () => boolean): Promise<void> | undefined;
   onError(title: string, hint: string): void;
   /** Placed parts whose project files differ (offered as waiting revisions), or that the project no longer has. */
   onLinked?(linked: Linked): OpenScope | void;
@@ -64,6 +66,7 @@ export function useProject(cb: ProjectCallbacks) {
   const tags = useRef<ProjectTags>({ part: null, sourceSHA256: null, log: null });
   const opening = useRef({ serial: 0 }), projectSession = useRef<object>({}), reading = useRef(0);
   const saves = useRef({ path: null as string | null, next: 0, success: 0 });
+  const restoring = useRef(0);
   const autosaves = useRef<{ owner: OpenOwner; next: number; settled: number; warned: boolean } | null>(null);
   const live = useRef(view); live.current = view;
   const call = useRef(cb); call.current = cb;
@@ -295,7 +298,21 @@ export function useProject(cb: ProjectCallbacks) {
         }
       },
       /** The offered autosave answered: restored (the caller commits it) or discarded. */
-      async settleOffered(restore: boolean) { const { store, part, offered } = live.current; set({ offered: null }); if (!restore && store && part) await clearAutosave(store, part).catch(() => {}); return restore ? offered : null; },
+      async settleOffered(restore: boolean) {
+        const request = ++restoring.current, owner = versionOwner();
+        const { store, part, offered } = live.current;
+        if (!restore) { set({ offered: null }); if (store && part) await clearAutosave(store, part).catch(() => {}); return null; }
+        if (!offered) return null;
+        const current = () => restoring.current === request && currentOpen(owner) && live.current.offered === offered;
+        try {
+          await call.current.validateRestore?.(offered, current);
+          if (!current()) return null;
+          set({ offered: null }); return offered;
+        } catch (e) {
+          if (current()) fail(`Could not restore autosaved work for ${part ?? 'this document'}`, e);
+          return null;
+        }
+      },
 
       /** Placed parts referenced by their project path checked against their files (storage/linked.ts). */
       async checkLinked(doc: StudioDoc) {
@@ -362,7 +379,19 @@ export function useProject(cb: ProjectCallbacks) {
         return kept;
       },
       /** A version's document, to work on (history is not rewound: saving it makes a new version). */
-      restore(id: string): StudioDoc | null { const { log } = live.current; try { return log ? readVersion(log, id) : null; } catch (e) { fail('Could not restore', e); return null; } },
+      async restore(id: string): Promise<StudioDoc | null> {
+        const request = ++restoring.current, owner = versionOwner(), { log, part } = live.current;
+        if (!log) return null;
+        const current = () => restoring.current === request && currentOpen(owner) && live.current.log === log;
+        try {
+          const doc = readVersion(log, id);
+          await call.current.validateRestore?.(doc, current);
+          return current() ? doc : null;
+        } catch (e) {
+          if (current()) fail(`Could not restore version ${log.versions.find(v => v.id === id)?.name ?? id} of ${part ?? 'this document'}`, e);
+          return null;
+        }
+      },
       async makeBranch(name: string, from?: string) {
         const { store, part, log } = live.current; if (!store || !part || !log) return false;
         try { return keepLog(store, part, makeBranch(log, name, { from })); } catch (e) { return fail('No branch made', e); }

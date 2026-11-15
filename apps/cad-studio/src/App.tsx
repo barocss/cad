@@ -619,6 +619,7 @@ export function App() {
     confirmOpen: focus => new Promise(resolve => workspaceModeExit.switchWhenReady(() => resolve(true), {
       originFocus: focus, onKeep: () => resolve(false),
     })),
+    validateRestore: (doc, current) => verifyStoredNativeOpen(doc, d => engine.part(d, revision.current++, 'read'), d => engine.verifyStoredInsets(d), current),
     validateOpen: async (doc, current) => {
       await verifyStoredNativeOpen(doc, d => engine.part(d, revision.current++, 'read'), d => engine.verifyStoredInsets(d), current);
       return prepareSignedFinishOpen(doc, d => engine.part(d, revision.current++, 'refs'), current);
