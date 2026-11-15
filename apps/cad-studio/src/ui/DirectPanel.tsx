@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { analyzeSurface, curveLength, curvePlaneCrossings, directOps, domainsOf, geometryOf, surfaceIntersection, type DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { SEW_TOLERANCE_LABEL } from '@barocss/cad-model/engine/sew';
 import { curveAnalysisError, inspectCurvePoint } from './curveAnalysisError';
+import { parseSewToleranceInput } from './sewToleranceInput';
 import { CONTROL, FIELD } from './panelStyles';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +25,8 @@ export function DirectPanel({ direct, selected, onChange, onError, onHide, onThi
   /** Surfaces sewn along their edges into one closed body of the part (`tolerance` mm; 0: the kernel's own). */
   onSew?(ids: string[], tolerance: number): void;
 }) {
-  const [gap, setGap] = useState(0), [keep, setKeep] = useState<'outside' | 'inside'>('outside');
+  const [gap, setGap] = useState('0'), [keep, setKeep] = useState<'outside' | 'inside'>('outside');
+  const sewGap = parseSewToleranceInput(gap);
   const objs = selected.map(id => direct.objects.find(o => o.id === id)).filter((o): o is NonNullable<typeof o> => !!o);
   const geoms = objs.map(o => { try { return geometryOf(direct, o); } catch { return null; } });
   const run = (op: () => DirectGeometry, select?: (next: DirectGeometry) => string[]) => {
@@ -66,8 +68,12 @@ export function DirectPanel({ direct, selected, onChange, onError, onHide, onThi
       })()}
       {objs.length >= 2 && onSew && geoms.every(x => x?.kind === 'surface') && <div className="render-section [&>[data-slot=button]]:self-start">
         <div className="card-title" style={{ marginTop: 8 }}>SEW</div>
-        <NumberField label={SEW_TOLERANCE_LABEL} value={gap} onChange={setGap} />
-        <Button variant="ghost" aria-label="Sew into a body" title="Join the surfaces along matching edges. Use 0 for automatic tolerance." onClick={() => onSew(selected, gap)}>Sew into a body</Button>
+        <label className={FIELD}><span>{SEW_TOLERANCE_LABEL}</span>
+          <Input type="number" step="any" min={0} aria-label={SEW_TOLERANCE_LABEL} value={gap}
+            aria-invalid={sewGap === null} aria-describedby={sewGap === null ? 'direct-sew-tolerance-error' : undefined}
+            onChange={event => setGap(event.target.value)} /></label>
+        {sewGap === null && <p id="direct-sew-tolerance-error" role="status" className="muted small">Enter a non-negative tolerance, or 0 for automatic.</p>}
+        <Button variant="ghost" aria-label="Sew into a body" title="Join the surfaces along matching edges. Use 0 for automatic tolerance." disabled={sewGap === null} onClick={() => { if (sewGap !== null) onSew(selected, sewGap); }}>Sew into a body</Button>
       </div>}
       {objs.length === 2 && geoms.every(x => x?.kind === 'surface') && <div className="render-section [&>[data-slot=button]]:self-start">
         <div className="card-title" style={{ marginTop: 8 }}>TWO SURFACES</div>
