@@ -142,7 +142,8 @@ await f.run(async () => {
   await second.selectOption('bad');
   await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
   assert.equal(await button('Apply', hud()).isEnabled(), false);
-  await hud().getByText('A guide misses a section corner', { exact: true }).waitFor();
+  await hud().getByText('Guide 2 endpoints must exactly match the max X, min Y corners of the lower and upper sections.', { exact: true }).waitFor();
+  assert.equal(await second.getAttribute('aria-invalid'), 'true');
   await f.same(initial);
   await f.snapshot('wrong-end-refused');
   await second.selectOption('b');
