@@ -1,3 +1,4 @@
+import { holeMissLocation } from './holeMissLocation';
 import { requireStepGeometry } from './stepOutputAdmission';
 import { bodyLookRef } from '../app/lookKey';
 import { nativeBodyTopology, type NativeBodyTopology } from './bodyTopology';
@@ -270,8 +271,8 @@ function snapshotOf(doc: StudioDoc): CadPartSnapshot {
 const rebuildOf = (s: CadPartSnapshot): RebuildData | undefined => s.profile && { evaluated: s.recomputation.evaluated, reused: s.recomputation.reused, profile: s.profile };
 
 /** A failed evaluation: its refusal in words, and the time it took (every evaluation's catch). */
-function failed(revision: number, cause: unknown, t0: number): EvalResult {
-  return { ok: false, revision, error: friendlyCause(cause), wallTime: (performance.now() - t0) / 1000 };
+function failed(revision: number, cause: unknown, t0: number, doc?: StudioDoc): EvalResult {
+  return { ok: false, revision, error: doc ? holeMissLocation(doc, cause, friendlyCause(cause)) : friendlyCause(cause), wallTime: (performance.now() - t0) / 1000 };
 }
 /** A part's bodies from its snapshot, its face table remembered (evaluateDoc's and evaluatePart's one path; R4 C3). */
 function partResult(doc: StudioDoc, snapshot: CadPartSnapshot, revision: number, quality: number, shopRows: readonly ShopTreeProvenance[], t0: number): Extract<EvalResult, { ok: true }> {
@@ -341,7 +342,7 @@ export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refin
     }
     return { ...result, rebuild: rebuildOf(snapshot) };
   } catch (cause) {
-    return failed(revision, cause, t0);
+    return failed(revision, cause, t0, doc);
   }
 }
 /**
@@ -354,7 +355,7 @@ export function rebuildFromScratch(doc: StudioDoc, revision: number): EvalResult
     const snapshot = partSnapshot(skeletonsNow(doc), part => evaluateCadPart(part, undefined, PROFILED));
     return { ok: true, revision, bodies: [], wallTime: (performance.now() - t0) / 1000, rebuild: rebuildOf(snapshot) };
   } catch (cause) {
-    return failed(revision, cause, t0);
+    return failed(revision, cause, t0, doc);
   }
 }
 /** The bodies with their fits' notes (R12c.2, D155; throws a fit's refusal). */
@@ -422,7 +423,7 @@ export function evaluatePreview(doc: StudioDoc, revision: number, quality = 8, s
     return { ok: true, revision, bodies, wallTime: (performance.now() - t0) / 1000 };
   } catch (cause) {
     lastPreview[slot] = null;
-    return failed(revision, cause, t0);
+    return failed(revision, cause, t0, doc);
   }
 }
 
@@ -441,7 +442,7 @@ export function evaluatePart(doc: StudioDoc, revision: number, quality = 8, slot
     const last = lastParts.get(slot), snapshot = partSnapshot(doc, part => last ? reevaluate(last, { document: part }) : evaluateCadPart(part)); lastParts.set(slot, snapshot);
     return partResult(doc, snapshot, revision, quality, shopRows, t0);
   } catch (cause) {
-    return failed(revision, cause, t0);
+    return failed(revision, cause, t0, doc);
   }
 }
 export type VolumeEvaluation = { ok: true; volumes: { key: string; volume: number | null }[]; emptyIntersection?: string }
