@@ -1,3 +1,4 @@
+import { filletInteriorProblems, type FilletInteriorKey } from '../app/filletInteriorInput';
 import { offsetCollapseFeedback } from '../app/offsetCollapseFeedback';
 import { offsetPlanePickFeedback } from '../app/offsetPlanePickFeedback';
 import { FilletTypeFields } from './FilletTypeFields';
@@ -49,6 +50,8 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
   useEffect(() => { first.current?.focus(); if (first.current instanceof HTMLInputElement && first.current.type !== 'file') first.current.select(); }, [active?.cmd.id]);
   // (Ended before the App unmounts it.)
   if (!active) return null;
+  const interiorProblems = filletInteriorProblems(active);
+  const interiorInvalid = Object.keys(interiorProblems).length > 0;
   const guideFeedback = loftGuideFeedback(active);
   const twoGuideFeedback = loftTwoGuideFeedback(active);
   const pathFeedback = sweepPathFeedback(active);
@@ -87,6 +90,8 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     const collapseError = field.key === 'd' ? collapseFeedback : undefined;
     const collapseId = 'hud-offset-collapse';
     const invalidNumber = numberRule && featureNumberInvalid(value, numberRule);
+    const interiorProblem = interiorProblems[field.key as FilletInteriorKey];
+    const interiorId = `hud-fillet-interior-${field.key}`;
     const loftGuide = active.cmd.id === 'loft' && (field.key === 'guide' || field.key === 'guideB');
     const guideError = twoGuideFeedback?.field === field.key ? twoGuideFeedback.text : field.key === 'guide' ? guideFeedback : undefined;
     const guideErrorId = `hud-loft-guide-error-${field.key}`;
@@ -101,10 +106,11 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     </NativeSelect>;
     else if (field.kind === 'text') control = <Input className={FIELD} ref={ref} type="text" aria-label={field.label} data-key={field.key} data-kind="text" maxLength={field.maxLength} value={String(value ?? '')} onChange={changeValue} />;
     else if (field.kind === 'file') control = <span className="min-w-0"><Input className={FIELD} ref={ref} type="file" aria-label={field.label} data-key={field.key} accept={field.accept} disabled={!onFile} onChange={chooseFile} /><span className="muted small">{field.filename(value ?? '') ?? 'No file prepared'}</span></span>;
-    else control = <span className="num"><Input className={FIELD + ' pr-7!'} ref={ref} type="number" aria-label={field.label} aria-invalid={invalidCount || invalidNumber || !!collapseError || undefined} aria-describedby={[rangeId, collapseError ? collapseId : undefined].filter(Boolean).join(' ') || undefined} data-key={field.key} data-kind={field.kind} step={field.kind === 'count' ? 1 : 'any'} min={numberRule === 'nonzero' ? undefined : bounds.min ?? field.min} max={bounds.max ?? field.max} value={String(value ?? '')} onChange={changeValue} />
+    else control = <span className="num"><Input className={FIELD + ' pr-7!'} ref={element => { if (ref) ref(element); element?.setCustomValidity(interiorProblem ?? ''); }} type="number" aria-label={field.label} aria-invalid={invalidCount || invalidNumber || !!collapseError || !!interiorProblem || undefined} aria-describedby={[rangeId, interiorProblem ? interiorId : undefined, collapseError ? collapseId : undefined].filter(Boolean).join(' ') || undefined} data-key={field.key} data-kind={field.kind} step={field.kind === 'count' ? 1 : 'any'} min={numberRule === 'nonzero' ? undefined : bounds.min ?? field.min} max={bounds.max ?? field.max} value={String(value ?? '')} onChange={changeValue} />
       {field.kind === 'mm' && <em>mm</em>}{field.kind === 'deg' && <em>°</em>}{field.kind === 'ratio' && <em>×</em>}</span>;
     return <label key={field.key} className="field"><span>{field.label}</span>
       {range ? <span className="min-w-0">{control}<span id={rangeId} className="muted small block">{range}</span></span> : control}
+      {interiorProblem && <span className="hud-error col-span-2" id={interiorId} role="status">{interiorProblem}</span>}
       {collapseError && <span className="col-span-2"><FeatureFailureNotice error={collapseError} id={collapseId} /></span>}
       {guideError && <span className="hud-error col-span-2" id={guideErrorId} role="status">{guideError}</span>}</label>;
   };
@@ -165,7 +171,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           return onHoleOptions(active, { type, d, depth, cd, ch, csd });
         }} /> : null}
       {active.cmd.id === 'fill-feature-pattern' && <FillPatternHints />}
-      {active.preview === 'error' && active.error && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && <FeatureFailureNotice error={active.error} />}
+      {active.preview === 'error' && active.error && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && !(active.error.historyField && interiorProblems[active.error.historyField as FilletInteriorKey]) && <FeatureFailureNotice error={active.error} />}
       <div className="hud-actions">
         {active.cmd.id === 'mirror' && <Button variant="ghost" aria-pressed={pickingMirrorPlane}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
@@ -173,7 +179,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
         <span className="grow" />
         {/* Keep native button activation from also reaching the window's Apply shortcut. */}
         <Button variant="ghost" onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }} onClick={onCancel}>Cancel</Button>
-        <Button variant="default" disabled={active.preview !== 'ok'} onClick={() => onApply(active)}>Apply</Button>
+        <Button variant="default" disabled={active.preview !== 'ok' || interiorInvalid} onClick={() => { if (!interiorInvalid) onApply(active); }}>Apply</Button>
       </div>
     </div>
   );

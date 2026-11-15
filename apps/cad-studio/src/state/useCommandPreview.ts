@@ -1,3 +1,4 @@
+import { filletInteriorProblems } from '../app/filletInteriorInput';
 import { offsetCollapseFailure } from '../app/offsetCollapseFeedback';
 import { closedPerimeterFilletFailure } from './closedPerimeterFilletFailure';
 import { commandBuildFailure } from './commandBuildFailure';
@@ -83,6 +84,12 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
       }
       let live = true; const ticket = lifetime.current.capture();
       const fields = shownFields(active.cmd.fields?.(active.ctx, active.values) ?? [], active.values);
+      const interiorProblem = Object.entries(filletInteriorProblems(active))[0];
+      if (interiorProblem) {
+        previewFor.current = null; setPreviewBodies(null);
+        setActive(a => a === active ? { ...a, preview: 'error', error: { title: 'Enter a valid interior position', hint: interiorProblem[1], detail: '', historyField: interiorProblem[0] } } : a);
+        return;
+      }
       const missing = missingCommandField(fields, active.values);
       if (missing) { setPreviewBodies(null); setActive(a => a === active ? { ...a, preview: 'error', error: { title: 'Enter a value', hint: `${missing.label} is empty.`, detail: '' } } : a); return; }
       for (const field of fields) {

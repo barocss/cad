@@ -1,3 +1,4 @@
+import { historyFilletInteriorProblems, type FilletInteriorKey } from '../app/filletInteriorInput';
 import { countersinkHistoryProblem } from '../app/countersinkHistoryInput';
 import { nodeFilletType } from '../app/filletFamily';
 import { FilletTypeFields } from './FilletTypeFields';
@@ -145,7 +146,8 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
   const insetTarget = insetSketch?.kind === 'sketch' ? insetSketch.on?.node : undefined;
   const insetTargetNode = insetTarget === undefined ? undefined : nodes[insetTarget];
   const incompleteInset = typed.insetMM === '' || typed.sourceWidth === '';
-  const missingNumbers = fields.flatMap(field => field.kind === 'number' && typed[field.key]?.trim() === '' ? [field] : []);
+  const interiorProblems = historyFilletInteriorProblems(node, typed);
+  const missingNumbers = fields.flatMap(field => field.kind === 'number' && typed[field.key]?.trim() === '' && !interiorProblems[field.key as FilletInteriorKey] ? [field] : []);
   const hasMissingNumber = missingNumbers.length > 0;
   const invalidCounts = fields.flatMap(field => field.kind === 'number' && field.integerRange && typed[field.key]?.trim()
     && invalidInteger(Number(typed[field.key]), field.integerRange) ? [field] : []);
@@ -157,7 +159,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
   const countersinkField = fields.find(field => field.kind === 'number' && field.key === 'csk');
   const countersinkProblem = node?.kind === 'hole' && diameterField?.kind === 'number' && countersinkField?.kind === 'number'
     ? countersinkHistoryProblem(typed.dia ?? diameterField.get(draft), typed.csk ?? countersinkField.get(draft)) : null;
-  const hasInvalidNumber = hasMissingNumber || invalidCounts.length > 0 || invalidDimensions.length > 0 || !!countersinkProblem;
+  const hasInvalidNumber = hasMissingNumber || invalidCounts.length > 0 || invalidDimensions.length > 0 || !!countersinkProblem || Object.keys(interiorProblems).length > 0;
   useLayoutEffect(() => {
     if (!onDraft || (!changed && !Object.keys(typed).length)) return;
     onDraft({});
@@ -279,7 +281,9 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
         const guideId = guideField ? `${guideDescriptionId}-${guideField[1]}` : undefined;
         const guideX = guideField?.[2] === '0';
         const failedGuideX = !!guideGapError && guideX;
-        const description = [rangeId, guideId, f.key === 'csk' && countersinkProblem && countersinkErrorId, failedGuideX && `${guideDescriptionId}-gap`].filter(Boolean).join(' ') || undefined;
+        const interiorProblem = interiorProblems[f.key as FilletInteriorKey];
+        const interiorId = `history-fillet-interior-${f.key}`;
+        const description = [rangeId, guideId, interiorProblem && interiorId, f.key === 'csk' && countersinkProblem && countersinkErrorId, failedGuideX && `${guideDescriptionId}-gap`].filter(Boolean).join(' ') || undefined;
         const selectedGuide = f.kind === 'choice' && f.key === 'loftGuide' && sameDraftScope
           ? f.options.find(option => option.value === loftGuideChoice)?.value : undefined;
         const refusedHistoryField = current?.error?.historyField === f.key;
@@ -290,7 +294,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
             Guide {Number(guideField[1]) + 1} · ({guide.controlPoints[0].join(', ')}) → ({guide.controlPoints[2].join(', ')}) mm
           </div>}
           <span>{f.label}</span>
-          {f.kind === 'number' ? <span className="num"><input type="number" step={f.integerRange ? 1 : "any"} min={f.integerRange?.min ?? numberBounds.min} max={f.integerRange?.max ?? numberBounds.max} aria-label={f.label} aria-describedby={description} aria-invalid={typed[f.key]?.trim() === '' || invalidCounts.includes(f) || invalidDimension || failedGuideX || (f.key === 'csk' && !!countersinkProblem) || (f.key === 'olen2' && !!lengthProblem) || undefined} data-loft-guide-gap={failedGuideX || undefined} value={typed[f.key] ?? f.get(draft)} disabled={ordinaryLocked || !!(f as BindableField).param?.(draft)} onChange={e => changeNumber(f, e.target.value)} />{f.unit && <em>{f.unit}</em>}
+          {f.kind === 'number' ? <span className="num"><input ref={element => element?.setCustomValidity(interiorProblem ?? '')} type="number" step={f.integerRange ? 1 : "any"} min={f.integerRange?.min ?? numberBounds.min} max={f.integerRange?.max ?? numberBounds.max} aria-label={f.label} aria-describedby={description} aria-invalid={typed[f.key]?.trim() === '' || invalidCounts.includes(f) || invalidDimension || !!interiorProblem || failedGuideX || (f.key === 'csk' && !!countersinkProblem) || (f.key === 'olen2' && !!lengthProblem) || undefined} data-loft-guide-gap={failedGuideX || undefined} value={typed[f.key] ?? f.get(draft)} disabled={ordinaryLocked || !!(f as BindableField).param?.(draft)} onChange={e => changeNumber(f, e.target.value)} />{f.unit && <em>{f.unit}</em>}
             {names.length > 0 && 'bind' in f && <select className="param-bind" disabled={ordinaryLocked} aria-label={`${f.label} parameter`} data-tip="Parameter" data-tip-desc="Bind this value to a named parameter (Parameters panel)" value={(f as BindableField).param(draft) ?? ''}
               onChange={e => {
                 retireEvaluation();
@@ -327,6 +331,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
                 }
               }}>{f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
             : <input type="checkbox" className="check" disabled={ordinaryLocked} aria-label={f.label} checked={f.get(draft)} onChange={e => { retireEvaluation(); setDraft(d => f.set(d, e.target.checked)); }} />}
+          {interiorProblem && <div id={interiorId} role="status" className="col-span-2 hud-error">{interiorProblem}</div>}
           {range && <span id={rangeId} className="muted small col-span-2">{range}</span>}
         </div>
       ); }) : node?.kind !== 'face-end-extrude' && <div className="empty">{node?.kind === 'sweep-curve' && onEditSketch ? 'Edit the profile dimensions with Edit sketch.' : 'This feature has no editable dimensions.'}</div>}
