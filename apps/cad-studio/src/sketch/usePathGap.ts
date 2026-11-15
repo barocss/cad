@@ -1,3 +1,4 @@
+import { pathGapPreviewDraft } from './pathGapPreviewDraft';
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { nextIdOf, withIds } from '@barocss/cad-model/sketch/entityIds';
@@ -20,6 +21,7 @@ interface OwnedDraft extends PathGapDraft {
 
 export interface PathGapInput {
   read(owner: SketchState | null): PathGapDraft | null;
+  preview(owner: SketchState, draft: PathGapDraft, plan: PathGapPlan | null): PathGapDraft | null;
   apply(owner: SketchState, draft: PathGapDraft, plan: PathGapPlan | null): void;
 }
 
@@ -64,10 +66,16 @@ export function usePathGap(doc: StudioDoc, sketch: SketchState | null, docNow: R
   }, [doc.nodes, sketch]);
   const input: PathGapInput = {
     read,
+    preview(owner, expected, plan) {
+      const value = read(owner);
+      const next = pathGapPreviewDraft(value, expected, plan);
+      if (next && next !== value) change(next);
+      return next;
+    },
     apply(owner, expected, plan) {
       const value = read(owner);
       if (!value || value !== expected) return;
-      if (!plan) { change({ ...value, notice: `The gap must fit inside the ${value.source.kind}.` }); return; }
+      if (!plan) { change({ ...value, notice: `The gap must fit inside the ${value.source.kind}. ${value.source.kind === 'circle' ? 'Reduce Gap length or pick another point on the circle.' : `Move away from the ${value.source.kind} endpoints or reduce Gap length.`}` }); return; }
       const source = value.source;
       const done = owner.done ?? [], index = done.indexOf(value.original);
       if (index < 0) return;

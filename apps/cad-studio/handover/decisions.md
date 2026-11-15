@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1360 — Current gap-preview feedback](notes/path-gap-feedback-mac-2026-11-15/README.md).
+
 - [D1359 — Overlaid Trim recovery](notes/overlaid-trim-recovery-mac-2026-11-15/README.md).
 
 - [D1358 — Readable exact inline dimensions](notes/inline-dimension-width-mac-2026-11-15/README.md).

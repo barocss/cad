@@ -899,7 +899,8 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
         const gap = propsRef.current.pathGap?.read(sk);
         if (gap) {
           const plan = p && pathGapAt(gap, sk, [p[0], p[1]], x, y);
-          sketchDraft.current.trim = plan ? { kind: 'trim', points: plan.removed, owner: sk, gap, ends: [plan.cutA, plan.cutB] } : null;
+          const currentGap = propsRef.current.pathGap?.preview(sk, gap, plan || null);
+          sketchDraft.current.trim = plan && currentGap ? { kind: 'trim', points: plan.removed, owner: sk, gap: currentGap, ends: [plan.cutA, plan.cutB] } : null;
           request();
           return;
         }
