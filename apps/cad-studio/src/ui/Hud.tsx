@@ -53,6 +53,8 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
   const interiorProblems = filletInteriorProblems(active);
   const interiorInvalid = Object.keys(interiorProblems).length > 0;
   const sectionProblem = filletSectionNumberProblem(active);
+  const sectionRecovery = active.cmd.id === 'fillet' && active.preview === 'error' && active.error?.historyField === 'shape'
+    && (active.values.shape === 'conic' || active.values.shape === 'g2') ? active.error : undefined;
   const guideFeedback = loftGuideFeedback(active);
   const twoGuideFeedback = loftTwoGuideFeedback(active);
   const pathFeedback = sweepPathFeedback(active);
@@ -96,10 +98,12 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     const loftGuide = active.cmd.id === 'loft' && (field.key === 'guide' || field.key === 'guideB');
     const guideError = twoGuideFeedback?.field === field.key ? twoGuideFeedback.text : field.key === 'guide' ? guideFeedback : undefined;
     const guideErrorId = `hud-loft-guide-error-${field.key}`;
+    const shapeError = field.key === 'shape' ? sectionRecovery : undefined;
+    const shapeErrorId = 'hud-fillet-section-recovery';
     let control: ReactNode;
     if (field.kind === 'choice') control = <NativeSelect className={FIELD} ref={ref} aria-label={field.label} data-key={field.key} data-kind="choice" value={String(value)} onChange={changeValue}
       title={loftGuide ? 'Loft copies the curve. Later edits to the source curve do not update the Loft.' : undefined}
-      aria-invalid={guideError ? true : undefined} aria-describedby={guideError ? guideErrorId : undefined}
+      aria-invalid={guideError || shapeError ? true : undefined} aria-describedby={guideError ? guideErrorId : shapeError ? shapeErrorId : undefined}
       onKeyDown={active.cmd.id === 'hole' && field.key === 'type' ? event => stepNativeSelect(event, next => onChange(field.key, next)) : undefined}>
       {field.options.map(option => <option key={option.value} value={option.value}>
         {alignTargetName && field.key === 'target' && option.value === 'face' ? alignTargetName : option.label}
@@ -112,6 +116,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     return <label key={field.key} className="field"><span>{field.label}</span>
       {range ? <span className="min-w-0">{control}<span id={rangeId} role={numberRule === 'open-unit' && invalidNumber ? 'status' : undefined} className={numberRule === 'open-unit' && invalidNumber ? 'hud-error small block' : 'muted small block'}>{range}</span></span> : control}
       {interiorProblem && <span className="hud-error col-span-2" id={interiorId} role="status">{interiorProblem}</span>}
+      {shapeError && <span className="col-span-2"><FeatureFailureNotice error={shapeError} id={shapeErrorId} /></span>}
       {collapseError && <span className="col-span-2"><FeatureFailureNotice error={collapseError} id={collapseId} /></span>}
       {guideError && <span className="hud-error col-span-2" id={guideErrorId} role="status">{guideError}</span>}</label>;
   };
@@ -172,7 +177,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           return onHoleOptions(active, { type, d, depth, cd, ch, csd });
         }} /> : null}
       {active.cmd.id === 'fill-feature-pattern' && <FillPatternHints />}
-      {active.preview === 'error' && active.error && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && !(active.error.historyField && (interiorProblems[active.error.historyField as FilletInteriorKey] || active.error.historyField === sectionProblem?.key)) && <FeatureFailureNotice error={active.error} />}
+      {active.preview === 'error' && active.error && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && !sectionRecovery && !(active.error.historyField && (interiorProblems[active.error.historyField as FilletInteriorKey] || active.error.historyField === sectionProblem?.key)) && <FeatureFailureNotice error={active.error} />}
       <div className="hud-actions">
         {active.cmd.id === 'mirror' && <Button variant="ghost" aria-pressed={pickingMirrorPlane}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}

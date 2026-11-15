@@ -68,8 +68,17 @@ export function loftHistoryFailure(error: FeatureFailure, accepted: readonly Mod
 }
 
 /** Explain failures of this edge finish without applying its advice to an upstream feature. */
-export function edgeFinishFailure(error: FriendlyError, feature: ModelNode | undefined): FriendlyError {
+export function edgeFinishFailure(error: FriendlyError, feature: ModelNode | undefined): FeatureFailure {
   if (!feature || !error.feature || error.feature !== feature.id) return error;
+  if (feature.kind === 'fillet' && error.code === 'CAPABILITY'
+    && (feature.section?.kind === 'conic' || feature.section?.kind === 'g2')) {
+    const corner = /^edge ([^\r\n]+): a (conic|G2) fillet where the ball rolls round an edge at a corner is not supported yet$/.exec(error.detail);
+    if (corner?.[0] === error.detail && feature.edges.includes(corner[1])
+      && corner[2] === (feature.section.kind === 'conic' ? 'conic' : 'G2')) {
+      return { ...error, title: 'This section cannot turn this corner',
+        hint: 'Try Circular with the same picked edges.', historyField: 'shape' };
+    }
+  }
   if (feature.kind === 'fillet' && error.code === 'GEOMETRY'
     && /^B-rep: analytic Boolean: the result is not a manifold solid\b/.test(error.detail)) {
     return { ...error, title: 'The fillet could not make a solid', hint: 'Pick another edge for this fillet.' };
