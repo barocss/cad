@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1317 — Two-guide Loft field feedback](notes/two-guide-feedback-mac-2026-11-15/README.md).
+
 - [D1316 — Explain selected trimmed Sew surfaces](notes/sew-trim-guidance-mac-2026-11-15/README.md).
 
 - [D1315 — Reject incomplete Direct Sew tolerance](notes/sew-empty-tolerance-mac-2026-11-15/README.md).

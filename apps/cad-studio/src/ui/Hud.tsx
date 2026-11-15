@@ -23,6 +23,7 @@ import { stepNativeSelect } from './stepNativeSelect';
 import { cutPatternSourceLabel, isCutPattern, selectedCutPatternSource } from '../app/cutPatternSource';
 import { LinearSpanSpacing } from './LinearSpanSpacing';
 import { sweepPathFeedback } from '../app/sweepPathFeedback';
+import { loftTwoGuideFeedback } from '../app/loftTwoGuideFeedback';
 import { loftGuideFeedback } from '../app/loftGuideFeedback';
 
 /** The HUD's field box: 26 px, the studio's mono type, the accent ring when focused. */
@@ -47,6 +48,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
   // (Ended before the App unmounts it.)
   if (!active) return null;
   const guideFeedback = loftGuideFeedback(active);
+  const twoGuideFeedback = loftTwoGuideFeedback(active);
   const pathFeedback = sweepPathFeedback(active);
   const edgeScope = active.preview === 'ok' ? active.filletScope ?? active.chamferScope : undefined;
   const replacingAxis = active.cmd.id === REVOLVE_AXIS_EDIT;
@@ -80,11 +82,12 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     const rangeId = range ? `hud-number-range-${field.key}` : undefined;
     const invalidNumber = numberRule && featureNumberInvalid(value, numberRule);
     const loftGuide = active.cmd.id === 'loft' && (field.key === 'guide' || field.key === 'guideB');
-    const guideError = field.key === 'guide' ? guideFeedback : undefined;
+    const guideError = twoGuideFeedback?.field === field.key ? twoGuideFeedback.text : field.key === 'guide' ? guideFeedback : undefined;
+    const guideErrorId = `hud-loft-guide-error-${field.key}`;
     let control: ReactNode;
     if (field.kind === 'choice') control = <NativeSelect className={FIELD} ref={ref} aria-label={field.label} data-key={field.key} data-kind="choice" value={String(value)} onChange={changeValue}
       title={loftGuide ? 'Loft copies the curve. Later edits to the source curve do not update the Loft.' : undefined}
-      aria-invalid={guideError ? true : undefined} aria-describedby={guideError ? 'hud-loft-guide-error' : undefined}
+      aria-invalid={guideError ? true : undefined} aria-describedby={guideError ? guideErrorId : undefined}
       onKeyDown={active.cmd.id === 'hole' && field.key === 'type' ? event => stepNativeSelect(event, next => onChange(field.key, next)) : undefined}>
       {field.options.map(option => <option key={option.value} value={option.value}>
         {alignTargetName && field.key === 'target' && option.value === 'face' ? alignTargetName : option.label}
@@ -96,7 +99,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
       {field.kind === 'mm' && <em>mm</em>}{field.kind === 'deg' && <em>°</em>}{field.kind === 'ratio' && <em>×</em>}</span>;
     return <label key={field.key} className="field"><span>{field.label}</span>
       {range ? <span className="min-w-0">{control}<span id={rangeId} className="muted small block">{range}</span></span> : control}
-      {guideError && <span className="hud-error col-span-2" id="hud-loft-guide-error" role="status">{guideError}</span>}</label>;
+      {guideError && <span className="hud-error col-span-2" id={guideErrorId} role="status">{guideError}</span>}</label>;
   };
   return (
     <div className="card hud" role="dialog" aria-label={active.fillet ? 'Fillet' : active.cmd.label}>
@@ -105,17 +108,21 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
       {active.cmd.place && <div className="hud-steps"><div className={'hud-step' + (active.placing ? '' : ' done')}>
         <Icon name={active.placing ? 'radio_button_unchecked' : 'check_circle'} small /><b>Place</b><span>{active.placing ? 'click where it goes (on the ground or a top face)' : 'placed — drag its arrows to size it'}</span></div></div>}
       {active.cmd.steps && <div className="hud-steps">
-        {active.cmd.steps(active.ctx, active.values).filter(step =>
-          !(edgeScope && step.label === 'Edges')
-          && !(active.cmd.id === 'loft' && step.done
-            && ((step.label === 'Guide' && active.values.guide) || step.label === 'Guides'))).map(step => {
+        {active.cmd.steps(active.ctx, active.values).filter(step => {
+          if (edgeScope && step.label === 'Edges') return false;
+          if (active.cmd.id !== 'loft') return true;
+          if (step.label === 'Guide' && step.done && active.values.guide) return false;
+          if (step.label === 'Guides' && (twoGuideFeedback || (step.done && active.preview === 'ok'))) return false;
+          return true;
+        }).map(step => {
           const endFace = step.label === 'End face' && isExtrudeToFace(active.cmd.id, active.values);
-          const requiresPreview = endFace || (step.label === 'Reference plane' && isOffsetToPlane(active.cmd.id, active.values))
+          const guideStep = active.cmd.id === 'loft' && step.label === 'Guides';
+          const requiresPreview = guideStep || endFace || (step.label === 'Reference plane' && isOffsetToPlane(active.cmd.id, active.values))
             || (step.label === 'Axis' && replacingAxis);
           const pathError = step.label === 'Path' ? pathFeedback : undefined;
           const done = step.done && !pathError && (!requiresPreview || active.preview === 'ok');
           return <div key={step.label} className={'hud-step' + (done ? ' done' : '')}>
-            <Icon name={done ? 'check_circle' : 'radio_button_unchecked'} small /><b>{step.label}</b><span role={pathError ? 'status' : undefined}>{pathError ?? step.text}</span>
+            <Icon name={done ? 'check_circle' : 'radio_button_unchecked'} small /><b>{step.label}</b><span role={pathError ? 'status' : undefined}>{pathError ?? (guideStep && step.done && active.preview !== 'ok' ? active.preview === 'error' ? 'Guide geometry was not accepted. Review the error below.' : 'Validating guide geometry…' : step.text)}</span>
           </div>;
         })}
       </div>}
@@ -151,7 +158,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           return onHoleOptions(active, { type, d, depth, cd, ch, csd });
         }} /> : null}
       {active.cmd.id === 'fill-feature-pattern' && <FillPatternHints />}
-      {active.preview === 'error' && active.error && !guideFeedback && !pathFeedback && <FeatureFailureNotice error={active.error} />}
+      {active.preview === 'error' && active.error && !guideFeedback && !twoGuideFeedback && !pathFeedback && <FeatureFailureNotice error={active.error} />}
       <div className="hud-actions">
         {active.cmd.id === 'mirror' && <Button variant="ghost" aria-pressed={pickingMirrorPlane}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
