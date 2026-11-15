@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1382: [Proposal review blocking](notes/proposal-review-blocking-mac-2026-11-15/README.md), #161; reflect existing controller guards in proposal controls, with local recovery and unchanged Hide/Reject behavior.
 - D1381: [Current Direct crossings](notes/direct-crossings-current-mac-2026-11-15/README.md), #162; bind displayed results to geometry/query ownership and discard stale results without resetting inputs.
 - D1380: [Curvature zoom clipping](notes/curvature-zoom-clipping-mac-2026-11-15/README.md), #148; clip annotation segments locally, preserve native measurements and knot-span boundaries.
 - D1379: [Curvature scale retention](notes/curvature-scale-retention-mac-2026-11-15/README.md), #149, retained owner resets and stale-request guards; pending focus preserved.

@@ -2491,6 +2491,11 @@ export function App() {
   const proposals = useProposalPreview({ model: { doc, bodies, instances: instanceBodies, marker, active: !!active, sketch: !!sketch }, worker: { engine, lanes, nextRevision: () => revision.current++ },
     changes: { commit: next => commit(next, false, false, true), currentDoc: () => docNow.current, setPreviewBodies }, chatRowFiles, onNotice: setToast });
   const { ghost, proposalOverlay, proposalBusy, evidenceRevision, isStale, partEval, acceptIt, rejectIt } = proposals;
+  const proposalReviewRecovery = proposals.reviewBlocked
+    ? active ? `Apply or cancel ${active.cmd.label} to review the proposal.`
+      : sketch ? 'Finish or cancel the sketch to review the proposal.'
+        : 'Move the rollback bar to the end to review the proposal.'
+    : undefined;
   const [decidedShown, setDecidedShown] = useState(false), [historyOpen, setHistoryOpen] = useState(false);
   routeContext.current = { blocked: busy || !fresh || !!parameterEdit || marker !== null || !!shownVariant.current || !!active || !!sketch || rendering || drawing || !!measure || !!assembly.draft || !!cageEd.session || !!skel.session || !!ghost };
   const footprintReady = nativeVertexReady && !routeContext.current.blocked && !routePanelOpen && !bodyDrag;
@@ -3811,7 +3816,7 @@ export function App() {
           Chat button stays the first [aria-label="Chat"]. The centre — top bar, viewport and its bars — is the stage.) */}
       <ChatColumn open={chat} width={layout.chatShown} onOpen={setChat} onWidth={layout.setChatWidth} openProposals={openProposals}
         decided={decidedProposals} decidedShown={decidedShown} onShowDecided={() => setDecidedShown(true)}
-        proposals={<ProposalBrowser controller={proposals} doc={doc} bodies={bodies} fresh={fresh} massReady={massReady} placedPreviewEnabled={placedPreviewEnabled} decidedShown={decidedShown} setDecidedShown={setDecidedShown} />}
+        proposals={<ProposalBrowser controller={proposals} reviewRecovery={proposalReviewRecovery} doc={doc} bodies={bodies} fresh={fresh} massReady={massReady} placedPreviewEnabled={placedPreviewEnabled} decidedShown={decidedShown} setDecidedShown={setDecidedShown} />}
         content={rendering || drawing ? null : <Suspense fallback={null}><ChatPanel versions={inPlace ? undefined : project.chat} scope={inPlace}
         approvalAttachment={approvalAttachments.selected} onClearApprovalAttachment={approvalAttachments.clear}
         faceDiagnosis={faceDiagnosis.selected} onClearFaceDiagnosis={faceDiagnosis.clear}

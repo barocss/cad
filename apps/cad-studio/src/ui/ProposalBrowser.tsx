@@ -6,6 +6,7 @@ import type { useProposalPreview } from '../state/useProposalPreview';
 import { Icon } from './atoms';
 interface ProposalBrowserProps {
   controller: ReturnType<typeof useProposalPreview>;
+  reviewRecovery?: string;
   doc: import('@barocss/cad-model/engine/doc').StudioDoc;
   bodies: BodyResult[];
   fresh: boolean;
@@ -15,12 +16,13 @@ interface ProposalBrowserProps {
   setDecidedShown: Dispatch<SetStateAction<boolean>>;
 }
 const volumeOf = (list: readonly BodyResult[]) => list.reduce((s, b) => s + (b.volume ?? 0), 0);
-export function ProposalBrowser({ controller, doc, bodies, fresh, massReady, placedPreviewEnabled, decidedShown, setDecidedShown }: ProposalBrowserProps) {
-  const { ghost, proposalBusy, isStale, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt } = controller;
+export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel the current edit to review the proposal.', doc, bodies, fresh, massReady, placedPreviewEnabled, decidedShown, setDecidedShown }: ProposalBrowserProps) {
+  const { ghost, proposalBusy, reviewBlocked, isStale, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt } = controller;
   return <>{!!doc.proposals?.length && <div className="chat-proposals" role="list" aria-label="Proposals"><div className="ol-head req-head">Proposals <span className="muted">{doc.proposals.filter(p => p.status === 'open').length} open</span>
           <ToolIconButton size="tiny" state={decidedShown ? 'on' : 'idle'} aria-label="Show decided proposals" data-tip={decidedShown ? 'Open only' : 'Show accepted and rejected'} onClick={() => setDecidedShown(f => !f)}><Icon name="history" small /></ToolIconButton></div>
         {doc.proposals.filter(p => decidedShown || p.status === 'open').map(p => {
           const shown = ghost?.id === p.id, stale = isStale(p), base = volumeOf(bodies);
+          const blockedDescription = reviewBlocked ? `proposal-review-blocked-${p.id}` : undefined;
           const placed = shown ? ghost.placed : null;
           const problem = placed?.kind === 'unavailable' ? placed.reason : placed && !placedPreviewEnabled ? 'Placed preview is unavailable in the current view.' : null;
           const delta = placed?.kind === 'ready' ? placed.volumeChange : 0;
@@ -36,13 +38,14 @@ export function ProposalBrowser({ controller, doc, bodies, fresh, massReady, pla
               <input type="checkbox" aria-label={`Keep ${q.id}`} disabled={q.kind === 'deleted' || proposalBusy} checked={!ghost.leaveOut.includes(q.id)} onChange={e => void tickPart(q.id, e.currentTarget.checked)} />
               <span className="mono">{q.id}</span> {q.kind === 'added' ? '+' : q.kind === 'changed' ? '~' : '−'} {q.label}</label>)}</div>}
             {p.status === 'open' ? <div className="proposal-actions">
-              <button className={'ghost small' + (shown ? ' on' : '')} disabled={proposalBusy || stale} onClick={() => void showProposal(p)}>{shown ? 'Hide' : 'Preview'}</button>
+              <button className={'ghost small' + (shown ? ' on' : '')} disabled={proposalBusy || stale || (!shown && reviewBlocked)} aria-describedby={!shown ? blockedDescription : undefined} onClick={() => void showProposal(p)}>{shown ? 'Hide' : 'Preview'}</button>
               {shown && <button className="ghost small" aria-label="Before or after" onClick={flipGhost}>{ghost.after ? 'After' : 'Before'}</button>}
               <span className="grow" />
               <button className="ghost small" disabled={proposalBusy} onClick={() => rejectIt(p)}>Reject</button>
               {stale && p.follow_up_repair ? <span className="muted">Attach the saved follow-up again to recheck.</span>
-                : stale ? <button className="primary small" disabled={proposalBusy} title="Recheck the proposal against the current document and review it before accepting" onClick={() => void rebaseIt(p)}>Rebase &amp; preview</button>
-                : <button className="primary small" disabled={proposalBusy} onClick={() => void acceptIt(p)}>{shown && ghost.leaveOut.length ? `Accept ${ghost.parts.length - ghost.leaveOut.length} of ${ghost.parts.length}` : 'Accept'}</button>}
+                : stale ? <button className="primary small" disabled={proposalBusy || reviewBlocked} aria-describedby={blockedDescription} title="Recheck the proposal against the current document and review it before accepting" onClick={() => void rebaseIt(p)}>Rebase &amp; preview</button>
+                : <button className="primary small" disabled={proposalBusy || reviewBlocked} aria-describedby={blockedDescription} onClick={() => void acceptIt(p)}>{shown && ghost.leaveOut.length ? `Accept ${ghost.parts.length - ghost.leaveOut.length} of ${ghost.parts.length}` : 'Accept'}</button>}
+              {reviewBlocked && <span id={blockedDescription} className="muted" role="status">{reviewRecovery}</span>}
             </div> : <div className="muted">{p.status} by {p.decided?.by}{p.decided?.note ? ` · ${p.decided.note}` : ''}</div>}
           </div>;
         })}</div>}</>;

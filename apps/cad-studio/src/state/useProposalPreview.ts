@@ -22,6 +22,7 @@ interface ProposalPreviewOptions {
 /** Proposal previews and acceptance use the existing tool path and App's central commit. */
 export function useProposalPreview({ model, worker, changes, chatRowFiles, onNotice: setToast }: ProposalPreviewOptions) {
   const { doc, bodies, instances, marker, active, sketch } = model;
+  const reviewBlocked = active || sketch || marker !== null;
   const { engine, lanes, nextRevision } = worker;
   const { commit, currentDoc, setPreviewBodies } = changes;
   // Proposals (A4.2): one shown as a ghost — the part it would leave, its changed bodies tinted — with a
@@ -100,5 +101,5 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, onNot
     setGhost(null); setPreviewBodies(null);
   };
   const rejectIt = (p: Proposal) => { const next = rejectProposal(doc, p.id); if ('error' in next || !commit(next)) return; if (ghost?.id === p.id) { setGhost(null); setPreviewBodies(null); } };
-  return { ghost, proposalOverlay, proposalBusy, evidenceRevision, isStale, partEval, resetForModelChange, updateDiff, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt };
+  return { ghost, proposalOverlay, proposalBusy, reviewBlocked, evidenceRevision, isStale, partEval, resetForModelChange, updateDiff, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt };
 }
