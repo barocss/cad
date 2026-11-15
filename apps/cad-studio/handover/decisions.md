@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1370: [Owned Offset reference-plane feedback](notes/offset-reference-feedback-mac-2026-11-15/README.md); #142 native flow verified, other pending deliveries separate.
+
 Current roadmap status is authoritative in the [roadmap index](roadmap.md).
 This page is a navigation index. It does not repeat numeric proof or reinterpret old acceptance.
 The complete original D1–D417 record body is preserved byte-for-byte in the [decision archive](decisions-history-through-D417.md).

@@ -1,3 +1,4 @@
+import { refuseOffsetPlanePick } from './app/offsetPlanePickFeedback';
 import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
 import { returnEditorFocus } from './ui/editorReturnFocus';
@@ -1951,11 +1952,14 @@ export function App() {
     const picked = face && current.cmd.onPick?.(current.ctx, current.values, { face, edge: null });
     if (!picked || typeof picked.error === 'string') {
       const hint = typeof picked?.error === 'string' ? picked.error : 'Pick one original planar face of a current solid.';
-      setToast({ title: offset ? 'Reference plane not selected' : 'End face not selected', hint, detail: '' });
+      if (offset) {
+        commandPreview.retire();
+        setActive(active => active === current ? refuseOffsetPlanePick(active, hint) : active);
+      } else setToast({ title: 'End face not selected', hint, detail: '' });
       return true;
     }
     commandPreview.retire();
-    setActive({ ...current, values: picked, preview: 'busy', error: undefined });
+    setActive({ ...current, values: picked, preview: 'busy', error: undefined, offsetPlanePickIssue: undefined });
     return true;
   };
   const pickTransformFace = (hit: ExtrudeEndHit, blocked: boolean): boolean => {

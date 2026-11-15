@@ -1,3 +1,4 @@
+import { offsetPlanePickFeedback } from '../app/offsetPlanePickFeedback';
 import { FilletTypeFields } from './FilletTypeFields';
 import { FilletPickedEdges } from './FilletPickedEdges';
 import type { FilletType, RadiusMode } from '../app/filletFamily';
@@ -50,6 +51,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
   const guideFeedback = loftGuideFeedback(active);
   const twoGuideFeedback = loftTwoGuideFeedback(active);
   const pathFeedback = sweepPathFeedback(active);
+  const planePickFeedback = offsetPlanePickFeedback(active);
   const edgeScope = active.preview === 'ok' ? active.filletScope ?? active.chamferScope : undefined;
   const replacingAxis = active.cmd.id === REVOLVE_AXIS_EDIT;
   const pickingMirrorPlane = awaitingMirrorPlane(active.cmd.id, active.values);
@@ -119,7 +121,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           const guideStep = active.cmd.id === 'loft' && step.label === 'Guides';
           const requiresPreview = guideStep || endFace || (step.label === 'Move' && active.cmd.id === 'offset-face') || (step.label === 'Reference plane' && isOffsetToPlane(active.cmd.id, active.values))
             || (step.label === 'Axis' && replacingAxis);
-          const pathError = step.label === 'Path' ? pathFeedback : undefined;
+          const pathError = step.label === 'Path' ? pathFeedback : step.label === 'Reference plane' ? planePickFeedback : undefined;
           const done = step.done && !pathError && (!requiresPreview || active.preview === 'ok');
           return <div key={step.label} className={'hud-step' + (done ? ' done' : '')}>
             <Icon name={done ? 'check_circle' : 'radio_button_unchecked'} small /><b>{step.label}</b><span role={pathError ? 'status' : undefined}>{pathError ?? (guideStep && step.done && active.preview !== 'ok' ? active.preview === 'error' ? 'Guide geometry was not accepted. Review the error below.' : 'Validating guide geometry…' : step.text)}</span>
