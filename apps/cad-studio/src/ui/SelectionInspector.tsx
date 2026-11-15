@@ -1,3 +1,4 @@
+import { bodyTopologyLabel, nativeBoundaryLabel } from './bodyTopologyLabel';
 import type { ReactNode, Dispatch, SetStateAction } from 'react';
 import { fmt, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
@@ -91,6 +92,8 @@ export function SelectionInspector({ model, selection, materialSettings, display
             </span></div>
             <label className="kv">Visible <input type="checkbox" checked={!look.hidden} onChange={e => { if (!commit(withLook(doc, b, { hidden: !e.target.checked }))) return; if (!e.target.checked) setSelection(emptySel); }} /></label>
             <label className="kv"><span>Bounds <b>{quantityText(max[0] - min[0])} × {quantityText(max[1] - min[1])} × {quantityText(max[2] - min[2])}</b></span><span className="kv-check"><input type="checkbox" aria-label="Show the bounding box" checked={showBox} onChange={e => setShowBox(e.target.checked)} /> box</span></label>
+            <div className="kv" aria-label="Body topology">Type <b>{bodyTopologyLabel(b)}</b></div>
+            <div className="kv muted" aria-label="Native boundaries">{nativeBoundaryLabel(b)}</div>
             {/* (O18: a mass still being worked out reads "…", never 0 or the last revision's.) */}
             {b.volume !== null ? <div className="kv">Volume <b>{quantityText(b.volume, fmt(Math.round(b.volume)))} mm³</b></div> : b.massRef !== undefined ? <div className="kv">Volume <b aria-label="Mass pending">…</b></div> : null}
             {/* (O179: a volume the kernel found from the mesh, said so with its bound — its mass is as good.) */}

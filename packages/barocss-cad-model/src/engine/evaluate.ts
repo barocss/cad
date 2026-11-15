@@ -1,3 +1,4 @@
+import { nativeBodyTopology, type NativeBodyTopology } from './bodyTopology';
 import { provenanceOfTree, type ShopTreeProvenance } from './shopRows';
 import { resolveSkeletons } from '../frames/skeleton';
 import { faceTableFrom, rememberFaceTable } from '../assembly/faces';
@@ -43,6 +44,8 @@ export function volumeBasisOf(m: { readonly method?: string; readonly volumeBoun
   return m.method === 'tessellated' ? { method: 'tessellated', bound: m.volumeBound ?? null } : undefined;
 }
 export interface BodyResult {
+  /** Native body/shell metadata; absent on legacy/custom results means unknown, never inferred from mass. */
+  topology?: NativeBodyTopology;
   /** `b<k>` by the stable id of the feature that made it (engine/ids.ts); `ref`: that feature's node and side now. */
   key: string;
   ref?: BodyRef;
@@ -252,7 +255,7 @@ function bodyOf(o: CadPartSnapshot['outputs'][number], doc: StudioDoc, revision:
     ...(o.member ? memberNotes(o.member, lib ?? node, doc.frames?.sections, doc.nodes, at.ref ? staleOf(doc).get(at.ref.node) : undefined, counts) : []),
   ];
   const element = elementOf(o, node);
-  return { ...at, ...(o.cylindricalWrap ? { cylindricalWrap: o.cylindricalWrap } : {}), ...(o.band ? { band: o.band } : {}), ...(notes.length ? { notes } : {}), ...(roleOf(lib) ? { role: roleOf(lib) } : {}), innerShells: inner, family: o.representation, mesh: meshOf(o.brep, revision, quality), ...mass, ...areaOf(A, o.brep, revision, quality), ...(o.bodyCount > 1 ? { pieces: o.bodyCount, ...touchField(o.brep, meshOf(o.brep, revision, quality)) } : {}),
+  return { ...at, topology: nativeBodyTopology(o.brep), ...(o.cylindricalWrap ? { cylindricalWrap: o.cylindricalWrap } : {}), ...(o.band ? { band: o.band } : {}), ...(notes.length ? { notes } : {}), ...(roleOf(lib) ? { role: roleOf(lib) } : {}), innerShells: inner, family: o.representation, mesh: meshOf(o.brep, revision, quality), ...mass, ...areaOf(A, o.brep, revision, quality), ...(o.bodyCount > 1 ? { pieces: o.bodyCount, ...touchField(o.brep, meshOf(o.brep, revision, quality)) } : {}),
     ...(o.gearPlacement ? { gear: o.gearPlacement } : {}), ...(o.bevelGear?.idealModel ? { idealModel: o.bevelGear.diagnostics.find(x => x.code === 'IDEAL_MODEL')?.message ?? 'an ideal model' } : {}), ...(o.rackPlacement ? { rack: o.rackPlacement } : {}),
     ...(o.subd && o.subd.caps ? { subd: o.subd } : {}), ...(sheet ? sheetFields(sheet) : {}), ...(o.member && m ? { cutPiece: cutPiece(o, { volume: m.volume }) } : {}), ...(element ? { element } : {}) };
 }
@@ -409,7 +412,7 @@ export function evaluatePreview(doc: StudioDoc, revision: number, quality = 8, s
         error: { code: 'CUT_NO_MATERIAL', feature: cutFeature, title: 'Cut does not remove any material',
           hint: 'Move the profile or change the distance so the cutter intersects the target.', detail: '' } };
     }
-    const bodies: BodyResult[] = snapshot.outputs.map(o => ({ ...keyed(o.id, doc.nodes), family: o.representation, mesh: meshOf(o.brep, revision, quality),
+    const bodies: BodyResult[] = snapshot.outputs.map(o => ({ ...keyed(o.id, doc.nodes), topology: nativeBodyTopology(o.brep), family: o.representation, mesh: meshOf(o.brep, revision, quality),
       ...(slot === 'preview' && o.filletTargets ? { filletTargets: o.filletTargets } : {}),
       ...(slot === 'preview' && o.chamferTargets ? { chamferTargets: o.chamferTargets } : {}),
       ...(o.bodyCount > 1 ? { pieces: o.bodyCount } : {}), volume: null, mass: null }));

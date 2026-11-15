@@ -1,3 +1,4 @@
+import { bodyTopologyLabel, nativeBoundaryLabel } from '../ui/bodyTopologyLabel';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { evaluateDoc, type BodyResult } from '@barocss/cad-model/engine/evaluate';
@@ -71,6 +72,7 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
   const [stlAsk, setStlAsk] = useState(false), [stlQuality, setStlQuality] = useState<'automatic' | '8' | '16' | '32'>('automatic'), [stlBusy, setStlBusy] = useState(false);
   const stlHasPlacedParts = model.shown.instances?.some(i => !i.hidden) ?? false;
   const stlPlacedHint = stlQuality === 'automatic' ? stlPlacedLoss : 'Draft, Standard and Fine require no visible placed parts.';
+  const stlTargets = bodies.map(body => ({ key: body.key, name: bodyName(doc, body), type: bodyTopologyLabel(body), boundaries: nativeBoundaryLabel(body), open: !!body.topology?.openShells }));
   const stlLossHint = stlHasPlacedParts ? `${stlPlacedHint} ${stlMeshLoss}` : stlMeshLoss;
   const stlGeneration = useRef(0), stlPending = useRef(false), stlCancelButton = useRef<HTMLButtonElement>(null);
   const cancelStlExport = () => { stlGeneration.current++; stlPending.current = false; setStlBusy(false); setStlAsk(false); };
@@ -125,6 +127,7 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
       setStlAsk(false);
       const hints = [
         draftWarning(captured.doc),
+        captured.bodies.some(body => !!body.topology?.openShells) ? 'Open surfaces were exported. STL may contain open mesh boundaries; this is not a watertightness or manufacturing certificate.' : null,
         stlHasPlacedParts ? stlPlacedLoss : null,
         stlMeshLoss,
         fallback.length ? `${fallback.join(', ')} ${fallback.length === 1 ? 'was' : 'were'} written from the on-screen mesh (the kernel’s tessellation refused ${fallback.length === 1 ? 'it' : 'them'}).` : null,
@@ -201,7 +204,7 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
   const changeStlQuality = (value: string) => {
     if (value === 'automatic' || value === '8' || value === '16' || value === '32') { stlGeneration.current++; setStlQuality(value); }
   };
-  return { stepAsk: !!stepPreview, stepPreview, downloadStep, stlAsk, stlQuality, stlBusy, stlLossHint, stlCancelButton, clearStepAsk, changeStlQuality,
+  return { stepAsk: !!stepPreview, stepPreview, downloadStep, stlAsk, stlQuality, stlBusy, stlLossHint, stlTargets, stlCancelButton, clearStepAsk, changeStlQuality,
     askStlExport, cancelStlExport, exportStepFile, exportStl, exportQuote, exportThreeMf };
 }
 

@@ -1,3 +1,4 @@
+import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
 import { viewportRecoveryToast } from './viewport/viewportRecovery';
 import { useSpecificationActions } from './state/useSpecificationActions';
 import { type SectionPick, useViewportPicking, type ViewportMenu } from './viewport/useViewportPicking';
@@ -3692,7 +3693,7 @@ export function App() {
       : busy && slow && <div className="card work-bar" role="status" aria-label="Working"><span className="mono">Working…</span>
         <button className="ghost small" aria-label="Cancel the computation" title="Stop this computation and take the change back" onClick={cancelWork}>Cancel</button></div>}
       <div className="corner-left">
-        <span className="mono muted">{busy ? (slow ? 'Working…' : 'Computing…') : modelUnavailable ? (bodies.length ? 'Previous result · model evaluation failed' : 'Model evaluation failed') : `${ortho ? 'Orthographic' : 'Perspective'} · ${shownBodies.length} solid${shownBodies.length === 1 ? '' : 's'} · ${Math.round(lastMs)} ms`}{!modelUnavailable && <CursorReadout sink={cursorSink} />}</span>
+        <span className="mono muted">{busy ? (slow ? 'Working…' : 'Computing…') : modelUnavailable ? (bodies.length ? 'Previous result · model evaluation failed' : 'Model evaluation failed') : `${ortho ? 'Orthographic' : 'Perspective'} · ${bodyTopologyCounts(shownBodies)} · ${Math.round(lastMs)} ms`}{!modelUnavailable && <CursorReadout sink={cursorSink} />}</span>
       </div>
 
       <ViewDisplayControls doc={doc} viewport={viewport} cornerRight={cornerRight}
