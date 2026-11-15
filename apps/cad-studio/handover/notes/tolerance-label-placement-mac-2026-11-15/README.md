@@ -9,6 +9,7 @@ Product change is limited to `packages/barocss-cad-model/src/drawing/tolerance.t
 ## Verification
 
 - Focused tolerance tests 26/26 PASS. Pinned acceptance measured 167.5 ms; repeated unresolved pass 97.5 ms. The 5,000 ms assertion is a generous regression ceiling, not an interactive latency guarantee. Browser inspector preparation measured 465.1 ms separately.
+- Additional full drawing regression after publication: 450 tests, 444 PASS and 6 FAIL in 25.55 s. Exact failed test names match the retained D1401 final run (five golden assertions and the public Move beyond-six-rows case); no new failed name. This is not a full PASS and no golden was rewritten.
 - Model and Studio TypeScript PASS after the last test edit; focused lint and diff checks PASS. Combined D1402/D1403 production build PASS.
 - Actual Chrome: separately Open the reconstructed already-accepted legacy document showing five warnings; then Open the pre-tolerance seed and use actual Accept all suggestions to obtain four warnings. Initial UI flows at 1024×800 and 1440×900 PASS, with Undo/Redo, unchanged references/values/frames/datums, actual SVG/DXF export and native Save/fresh Open. The fresh-Open helper uses its default 1440×1000 viewport, not the initial 1024 width.
 - Independent Python SVG/DXF reader checks d5's basic frame against its own strokes and all view areas, and matches exported text/frame correspondence. Other annotation clearance is additionally covered by unchanged diagnostics and unit invariants; this is not a global layout-proof claim.

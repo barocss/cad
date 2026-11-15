@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1404: [Merge body conflict choices](notes/merge-body-conflict-mac-2026-11-15/README.md), #615; exact names/read-only settings and revision-owned explicit choices, preserving merge storage and scalar behavior.
+
 - D1403: [Clearance Near drafts](notes/clearance-near-draft-mac-2026-11-15/README.md), #614; transient raw input with finite-positive Enter/blur and Escape recovery, document ownership and actual candidate-count checks.
 
 - D1402: [Tolerance annotation placement, partial](notes/tolerance-label-placement-mac-2026-11-15/README.md), #613; existing verified placement after tolerance acceptance clears only counted d5, retaining four unresolved warnings and OPEN status.

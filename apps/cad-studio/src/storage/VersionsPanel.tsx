@@ -23,6 +23,7 @@ import type { TaskRunDecision } from '../chat/taskRunOffer';
 import { CandidateReviewSection } from './CandidateReviewSection';
 import { approvedRequirementComparison } from '@barocss/cad-model/versions/approvedRequirements';
 import type { PrepareFaceRepair } from './SavedFaceReferenceRepair';
+import { MergeConflictChoices } from './MergeConflictChoices';
 
 type ComparedVersion = { id: string; doc: StudioDoc; snapshot: string };
 export type VersionComparison = ComparedVersion & {
@@ -38,9 +39,6 @@ export function currentComparisonVersion(view: ProjectActions['view'], comparing
 const KIND = { folder: 'folder', browser: 'in this browser', memory: 'in memory', cloud: 'cloud' } as const;
 const when = (at: string) => new Date(at).toLocaleString();
 const stop = (e: { stopPropagation(): void }) => e.stopPropagation();
-/** A conflict side's value, when it is one short value (a parameter's number, a name). */
-const shown = (v: unknown) => v === undefined ? ' (deleted)' : typeof v === 'number' || typeof v === 'boolean' || (typeof v === 'string' && v.length <= 24) ? ` (${String(v)})` : '';
-
 /** One line per change, as a person reads it. */
 export function changeLines(c: DocChanges): string[] {
   const out: string[] = [];
@@ -79,8 +77,6 @@ export function VersionsPanel({ project, doc, onMakeVersion, onOpen, onCompare, 
   const [versionName, setVersionName] = useState('');
   const [branchName, setBranchName] = useState('');
   const [mergeFrom, setMergeFrom] = useState('');
-  const [conflicts, setConflicts] = useState<Conflict[] | null>(null);
-  const [answers, setAnswers] = useState<Record<string, Side>>({});
   const list = useMemo(() => log ? versionsOf(log) : [], [log]);
   const head = log ? headOf(log).id : null;
   const version = currentComparisonVersion(view, comparing, list);
@@ -109,12 +105,25 @@ export function VersionsPanel({ project, doc, onMakeVersion, onOpen, onCompare, 
   }, [log, list, savedPair]);
   const others = log ? log.branches.filter(b => b.name !== log.current) : [];
   const linkedCount = useMemo(() => new Set((doc.instances ?? []).flatMap(i => linkedPath(i.part?.source) !== null ? [i.part!.id] : [])).size, [doc.instances]);
+  const mergeSource = others.find(branch => branch.name === mergeFrom)?.name ?? others[0]?.name ?? '';
+  const sourceHead = others.find(branch => branch.name === mergeSource)?.head;
+  // Answers belong to these exact working/source revisions, not a reusable
+  // conflict key such as bodies:b1 on a different branch or document.
+  const mergeOwner = useMemo(() => ({}), [store, projectDocument, doc, log?.current, head, mergeSource, sourceHead]);
+  const [mergeState, setMergeState] = useState<{ owner: object; conflicts: Conflict[] | null; answers: Record<string, Side> }>({ owner: mergeOwner, conflicts: null, answers: {} });
+  const owned = mergeState.owner === mergeOwner;
+  if (!owned) setMergeState({ owner: mergeOwner, conflicts: null, answers: {} });
+  const conflicts = owned ? mergeState.conflicts : null, answers = owned ? mergeState.answers : {};
 
   const merge = async (resolve?: Resolutions) => {
-    const r = await project.merge(mergeFrom || others[0]?.name, doc, resolve);
+    if (resolve && !owned) return;
+    const r = await project.merge(mergeSource, doc, resolve);
     if (!r) return;
-    if ('conflicts' in r) { setConflicts(r.conflicts); return; }
-    setConflicts(null); setAnswers({}); onOpen(r.doc);
+    if ('conflicts' in r) {
+      setMergeState(previous => previous.owner === mergeOwner ? { owner: mergeOwner, conflicts: r.conflicts, answers: {} } : previous);
+      return;
+    }
+    setMergeState({ owner: mergeOwner, conflicts: null, answers: {} }); onOpen(r.doc);
   };
 
   const checkpoint = checkpointReview ? <CheckpointApprovalChecks review={checkpointReview} /> : null;
@@ -205,18 +214,14 @@ export function VersionsPanel({ project, doc, onMakeVersion, onOpen, onCompare, 
         <Button type="submit" variant="ghost" aria-label="Make branch" disabled={!branchName.trim()}>Branch</Button>
       </form>
       {!!others.length && <div className={ROW}>
-        <NativeSelect aria-label="Merge from" value={mergeFrom || others[0].name} onChange={e => { setMergeFrom(e.target.value); setConflicts(null); }}>
+        <NativeSelect aria-label="Merge from" value={mergeSource} onChange={e => setMergeFrom(e.target.value)}>
           {others.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}</NativeSelect>
         <Button variant="ghost" aria-label="Merge" onClick={() => void merge()}>Merge into {log.current}</Button>
       </div>}
       {conflicts && <div className="mt-1 text-[11px]" role="alert" aria-label="Merge conflicts">
         <div className="warn">{conflicts.length} conflict{conflicts.length === 1 ? '' : 's'}: choose a side for each.</div>
-        {conflicts.map(c => <div key={c.where} className="py-0.5" aria-label={`Conflict ${c.where}`}>
-          <div title={c.message}>{c.message.replace(/^\[[A-Z_]+\] /, '')}</div>
-          {(['ours', 'theirs'] as const).map(side => <label key={side} className="mr-2 inline-flex items-center gap-1">
-            <input type="radio" name={c.where} aria-label={`${c.where} ${side}`} checked={answers[c.where] === side} onChange={() => setAnswers({ ...answers, [c.where]: side })} />
-            {side === 'ours' ? log.current : (mergeFrom || others[0]?.name)}{shown(c[side])}</label>)}
-        </div>)}
+        {conflicts.map(c => <MergeConflictChoices key={c.where} conflict={c} ours={log.current} theirs={mergeSource} answer={answers[c.where]}
+          onAnswer={side => setMergeState({ owner: mergeOwner, conflicts, answers: { ...answers, [c.where]: side } })} />)}
         <Button variant="default" aria-label="Merge with these answers" disabled={conflicts.some(c => !answers[c.where])} onClick={() => void merge({ ...answers })}>Merge with these answers</Button>
       </div>}
     </>}
