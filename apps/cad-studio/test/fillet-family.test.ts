@@ -54,7 +54,7 @@ test('same-command radius-mode switch retires old ready button owner and retains
 });
 test('existing file feature type is read-only and rendering its editor cannot change identity, refs, bindings or payload',()=>{
  const doc=rectanglePart(30,12,6),nodes:ModelNode[]=[...doc.nodes,{id:'n2',kind:'fillet',parent:{node:1,side:'solid'},edges:['n1.side0|n1.top'],radius:{parameter:'R'},radii:[{at:[0,0,0],radius:1,atEnd:true},{at:[30,0,0],radius:2,atEnd:true}]}];const before=JSON.stringify(nodes);
- const html=renderToStaticMarkup(createElement(NodeEditor,{nodes,index:2,parameters:{R:1},onApply:()=>{},onClose:()=>{},onRefuse:()=>{}}));assert.match(html,/aria-label="Fillet type"[^>]*disabled/);assert.match(html,/value="edge" selected/);assert.match(html,/value="varying" selected/);assert.equal(JSON.stringify(nodes),before);
+ const html=renderToStaticMarkup(createElement(NodeEditor,{nodes,index:2,parameters:{R:1},onApply:()=>{},onClose:()=>{},onRefuse:()=>{}}));assert.match(html,/role="group" aria-label="Fillet type"><span>Type<\/span><span>Edge<\/span>/);assert.match(html,/aria-label="Fillet radius mode"><span>Radius mode<\/span><span>Varying<\/span>/);assert.doesNotMatch(html,/<select[^>]*aria-label="Fillet (?:type|radius mode)"/);assert.equal(JSON.stringify(nodes),before);
  assert.equal(nodeFilletType({id:'n3',kind:'full-round',parent:{node:1,side:'solid'},faces:['n1.top']}),'full-round');assert.equal(nodeFilletType({id:'n4',kind:'face-fillet',parent:{node:1,side:'solid'},faces:['n1.top','n1.side0'],radius:1}),'face');
 });
 

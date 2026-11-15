@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1411: [Fillet History identity](notes/fillet-history-identity-mac-2026-11-15/README.md), #123; concise read-only Type/Radius mode/Section, preserving editable coefficients and native geometry through desktop History and Save/Open.
+
 - D1410: [Fillet section input range](notes/fillet-section-input-mac-2026-11-15/README.md), #121 and remaining #122 condition; native open-unit admission, one field-local message and queued Apply cancellation with actual desktop/native recovery checks.
 
 - D1409: [Fillet section binding controls, partial](notes/fillet-section-binding-mac-2026-11-15/README.md), #122 OPEN; hide unsupported Rho/Tension binding and verify numeric/radius binding recovery. The #121 field-range requirement remains.

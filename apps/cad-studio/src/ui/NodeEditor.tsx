@@ -211,7 +211,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
       {node?.kind === 'hole' && <HoleHistoryInputs hole={original?.kind === 'hole' ? original : node} doc={doc} index={index}
         drillDiameter={typed.dia ?? (diameterField?.kind === 'number' ? diameterField.get(draft) : undefined)} />}
       {node?.kind === 'extrude' && node.cutDepth === 'through' && <div className="field"><span>Depth</span><span>Through all</span></div>}
-      {filletType && <FilletTypeFields type={filletType} mode={draft[index]?.kind === 'fillet' && draft[index].radii ? 'varying' : 'constant'} fixed />}
+      {filletType && <FilletTypeFields type={filletType} mode={draft[index]?.kind === 'fillet' && draft[index].radii ? 'varying' : 'constant'} section={node?.kind === 'fillet' ? node.section : undefined} fixed />}
       {onEditSketch && <button className="ghost" aria-label="Edit sketch" title="Reopen the sketch this feature is made from, with its constraints" onClick={() => { retireEvaluation(); onEditSketch(); }}><Icon name="draw" small /> Edit sketch</button>}
       {insetBinding && insetTarget !== undefined && insetTargetNode && <div role="group" aria-label="Linked inset">
         <div className="field"><span>Inset source face</span><span className="break-all">{insetBinding.face}</span></div>
