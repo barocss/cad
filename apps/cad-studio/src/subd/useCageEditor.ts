@@ -12,12 +12,14 @@ import type { CageOverlay } from '../viewport/Viewport';
 import { commitDrag, dragged, fullCage, previewTriangles, redoSession, runOp, select, selectionCentre, startSession, undoSession, validationOf, type CageHit, type CageMode, type CageOp, type CageSession } from '@barocss/cad-model/subd/cageEdit';
 import { mirrorCage } from '@barocss/cad';
 import { Lanes } from '../engine/lanes';
+import { cageDoneReadiness, type CageBuildReceipt } from './cageCommitReadiness';
 
 type SubdNode = Extract<ModelNode, { kind: 'subd' }>;
 /** The cage's exact build: one lane, each step's build replacing the last. */
 const CAGE_LANE = 'cage';
 export interface CageEditor {
   readonly session: CageSession | null;
+  readonly doneReadiness: { ok: boolean; reason: string };
   begin(node: number): boolean;
   overlay: CageOverlay | null;
   pickDepth: 'front' | 'back';
@@ -37,7 +39,8 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
   const [session, setSession] = useState<CageSession | null>(null);
   const [pickDepth, setPickDepth] = useState<'front' | 'back'>('front');
   const [drag, setDrag] = useState<{ delta: Vec3; extrude: boolean } | null>(null);
-  const [exact, setExact] = useState<{ of: CageSession; bodies: BodyResult[] } | null>(null);
+  const [exact, setExact] = useState<{ of: CageSession; doc: StudioDoc; bodies: BodyResult[] } | null>(null);
+  const [buildReceipt, setBuildReceipt] = useState<CageBuildReceipt<CageSession, StudioDoc> | null>(null);
   const [previewMs, setPreviewMs] = useState<number | null>(null);
   const shift = useRef(false);
   const sessionId = useRef(0);
@@ -52,16 +55,28 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
   const lanes = useMemo(() => new Lanes(), []);
   useEffect(() => {
     if (!session || drag) return;
-    void lanes.run(CAGE_LANE, { revision: session.undo.length, source: `n${session.node}` }, () => preview(withCage(session))).then(r => { if (!r.stale && r.result.ok) setExact({ of: session, bodies: r.result.bodies }); });
-    return () => lanes.cancel(CAGE_LANE);
-  }, [session, drag, withCage, preview, lanes]);
+    let cancelled = false;
+    setBuildReceipt({ session, doc, status: 'pending' });
+    void lanes.run(CAGE_LANE, { revision: session.undo.length, source: `n${session.node}` }, () => preview(withCage(session))).then(r => {
+      if (cancelled || r.stale) return;
+      if (r.result.ok) {
+        setExact({ of: session, doc, bodies: r.result.bodies });
+        setBuildReceipt({ session, doc, status: 'success' });
+      } else {
+        setBuildReceipt({ session, doc, status: 'error', reason: `${r.result.error.title}. ${r.result.error.hint} Adjust the cage or use Cage Undo. After Extrude, move the new boundary with the gizmo before Done. The draft has not been applied.` });
+      }
+    }).catch(error => {
+      if (!cancelled) setBuildReceipt({ session, doc, status: 'error', reason: `${error instanceof Error ? error.message : String(error)}. Adjust the cage or use Cage Undo; the draft has not been applied.` });
+    });
+    return () => { cancelled = true; lanes.cancel(CAGE_LANE); };
+  }, [session, doc, drag, withCage, preview, lanes]);
 
   // The node the session began on. The part changed under it (a new part, a file opened, the agent's edit): the
   // session ends with nothing written, and says so — Done would write over the change (D84).
   const from = useRef<ModelNode | null>(null);
   useEffect(() => {
     if (!session || doc.nodes[session.node] === from.current) return;
-    setSession(null); setExact(null); setDrag(null); from.current = null;
+    setSession(null); setExact(null); setBuildReceipt(null); setDrag(null); from.current = null;
     fail('Cage edit ended', 'The part changed while its cage was being edited; nothing was written. Edit the cage again.');
   }, [doc, session, fail]);
 
@@ -70,7 +85,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
     if (n?.kind !== 'subd') return false;
     from.current = n;
     sessionId.current++; setPickDepth('front');
-    setSession(startSession(node, n.cage, n.mirror)); setDrag(null); setExact(null); return true;
+    setSession(startSession(node, n.cage, n.mirror)); setDrag(null); setExact(null); setBuildReceipt(null); return true;
   }, [doc.nodes]);
   const guard = useCallback((f: (s: CageSession) => CageSession) => setSession(s => {
     if (!s) return s;
@@ -85,16 +100,16 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
 
   // The body while dragged, or in Box mode: triangles straight from the cage (or its quick limit preview).
   const quick = useMemo(() => {
-    if (!live || (!drag && live.smooth && exact?.of === session)) return null;
+    if (!live || (!drag && live.smooth && (exact?.of === session && exact.doc === doc))) return null;
     const t0 = performance.now(), t = previewTriangles(fullCage(live), live.smooth), mesh = triangleMesh(t.positions, t.indices, t.normals, `n${live.node}.cage`);
     return { mesh, ms: performance.now() - t0 };
-  }, [live, drag, exact, session]);
+  }, [live, drag, exact, session, doc]);
   useEffect(() => { if (quick) setPreviewMs(ms => ms !== null && Math.abs(ms - quick.ms) < 0.05 ? ms : quick.ms); }, [quick]);
   const shown = useCallback((bodies: BodyResult[]): BodyResult[] => {
     if (!session) return bodies;
     if (quick) return bodies.map(b => refOf(b).node === session.node ? { ...b, mesh: quick.mesh } : b);
-    return exact?.of === session ? exact.bodies : bodies;
-  }, [session, quick, exact]);
+    return (exact?.of === session && exact.doc === doc) ? exact.bodies : bodies;
+  }, [session, quick, exact, doc]);
 
   const centre = live ? selectionCentre(session!) : null;
   const gizmo: TransformGizmo | null = session && centre ? {
@@ -109,15 +124,19 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
     },
   } : null;
 
+  const doneReadiness = cageDoneReadiness(session, doc, !!drag, buildReceipt);
   const done = useCallback(() => {
     if (!session) return;
+    if (doc.nodes[session.node] !== from.current) { fail('Cage edit changed', 'The source changed; cancel this draft and edit the current cage again.'); return; }
+    const readiness = cageDoneReadiness(session, doc, !!drag, buildReceipt);
+    if (!readiness.ok) { fail('Cage not applied', readiness.reason); return; }
     const v = validationOf(session);
     if (!v.valid) { fail('The cage is not a manifold', `${v.nonManifoldEdges.length} edges and ${v.nonManifoldVertices.length} vertices are marked red: undo, or weld or delete them.`); return; }
     // (The session ends before the document changes: the change is its own.)
-    setSession(null); setExact(null); setDrag(null); from.current = null;
+    setSession(null); setExact(null); setBuildReceipt(null); setDrag(null); from.current = null;
     if (session.undo.length) commit(withCage(session));
-  }, [session, commit, withCage, fail]);
-  const cancel = useCallback(() => { setSession(null); setExact(null); setDrag(null); from.current = null; }, []);
+  }, [session, doc, drag, buildReceipt, commit, withCage, fail]);
+  const cancel = useCallback(() => { setSession(null); setExact(null); setBuildReceipt(null); setDrag(null); from.current = null; }, []);
   const onKey = useCallback((e: KeyboardEvent): boolean => {
     if (!session) return false;
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return false;
@@ -138,7 +157,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
   }, [session, done, cancel, guard, fail]);
 
   return {
-    session, begin, overlay, gizmo, shown, previewMs, pickDepth, setPickDepth,
+    session, doneReadiness, begin, overlay, gizmo, shown, previewMs, pickDepth, setPickDepth,
     onPick: (hit, additive, grow) => guard(s => select(s, hit, additive, grow)),
     setMode: m => setSession(s => s && (s.mode === m ? s : { ...s, mode: m, sel: { vertices: [], edges: [], faces: [] } })),
     toggleSmooth: () => setSession(s => s && { ...s, smooth: !s.smooth }),

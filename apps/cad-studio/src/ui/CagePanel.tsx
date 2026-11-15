@@ -11,7 +11,7 @@ const activeStyle = { background: 'var(--accent)', color: 'var(--accent-ink)' };
 const focusClass = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text)]';
 
 const OPS: { op: CageOp; label: string; key?: string; tip: string }[] = [
-  { op: 'extrude', label: 'Extrude', key: 'E', tip: 'The picked faces (or boundary edges) out as a new region; drag the gizmo to move it — or hold Shift as you drag' },
+  { op: 'extrude', label: 'Extrude', key: 'E', tip: 'The picked faces (or boundary edges) out as a new region. Move it with the gizmo before Done, or use Cage Undo. Shift-drag also extrudes' },
   { op: 'insert-loop', label: 'Insert loop', key: 'L', tip: 'An edge loop across the ring through the picked edge, at its middle' },
   { op: 'select-loop', label: 'Loop', tip: 'The picked edge’s whole loop (double-click an edge)' },
   { op: 'select-ring', label: 'Ring', tip: 'The picked edge’s ring (Alt-double-click an edge)' },
@@ -61,7 +61,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
       <Button variant="ghost" aria-label="Redo cage step" disabled={!s.redo.length} onClick={editor.redo}>Redo</Button>
       <span className="flex-1" />
       <Button variant="ghost" aria-label="Cancel cage edit" onClick={editor.cancel}>Cancel</Button>
-      <Button variant="default" aria-label="Done editing cage" onClick={editor.done}>Done</Button>
+      <Button variant="default" aria-label="Done editing cage" data-tip="Done" data-tip-desc="Apply this cage only after its current evaluation succeeds" data-tip-off={!editor.doneReadiness.ok ? editor.doneReadiness.reason : undefined} data-tip-focus aria-description={editor.doneReadiness.reason} aria-disabled={!editor.doneReadiness.ok} className={!editor.doneReadiness.ok ? 'opacity-50' : undefined} onClick={editor.done}>Done</Button>
     </div>
   </aside>;
 }
