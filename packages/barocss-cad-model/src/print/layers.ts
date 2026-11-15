@@ -94,8 +94,11 @@ export function printLayers(meshes: readonly DisplayMesh[], o: { layerHeight?: n
   const layer = (k: number): PrintLayer => {
     const hit = cache.get(k); if (hit) return hit;
     if (!(Number.isInteger(k) && k >= 0 && k < count)) throw new RangeError(`no layer ${k} (0 to ${count - 1})`);
-    const z = (k + 0.5) * h, list = chunks[Math.floor(k / CHUNK)] ?? [];
-    const out: PrintLayer = { k, z, contours: contoursAt(P, I, list, zmin, zmax, z), overhang: merged(P, I, overhanging.filter(t => zmax[t] >= z - h / 2 && zmin[t] <= z + h / 2)), support: merged(P, I, overhanging.filter((_, j) => columns[j].z0 <= z && z <= columns[j].z1)) };
+    // Sample the actual band, including a final partial layer, rather than a
+    // nominal midpoint that can sit above the display mesh.
+    const lower = Math.min(top, k * h), upper = Math.min(top, (k + 1) * h);
+    const z = lower + (upper - lower) / 2, list = chunks[Math.floor(k / CHUNK)] ?? [];
+    const out: PrintLayer = { k, z, contours: contoursAt(P, I, list, zmin, zmax, z), overhang: merged(P, I, overhanging.filter(t => zmax[t] >= lower && zmin[t] <= upper)), support: merged(P, I, overhanging.filter((_, j) => columns[j].z0 <= z && z <= columns[j].z1)) };
     cache.set(k, out);
     return out;
   };
