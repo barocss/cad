@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1409: [Fillet section binding controls, partial](notes/fillet-section-binding-mac-2026-11-15/README.md), #122 OPEN; hide unsupported Rho/Tension binding and verify numeric/radius binding recovery. The #121 field-range requirement remains.
+
 - D1408: [Supported Extrude binding controls](notes/extrude-draft-binding-mac-2026-11-15/README.md), #95; hide only unsupported Draft binding, preserving numeric angles and native-equivalent Distance parameters through Undo/Redo and Save/Open.
 
 - D1407: [Supported Fillet station binding controls](notes/fillet-station-binding-mac-2026-11-15/README.md), #145; hide only unsupported percentage parameter controls, preserving direct 40% editing and native-equivalent radius binding.

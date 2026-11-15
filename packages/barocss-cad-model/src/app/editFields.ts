@@ -147,6 +147,7 @@ export function editFields(nodes: Nodes, i: number, params?: Record<string, numb
   if (!params || nodes[i]?.kind === 'linear-span-pattern' || nodes[i]?.kind === 'align') return raw;
   return raw.map(f => f.kind !== 'number' || 'bind' in f || (nodes[i]?.kind === 'sew' && f.key === 'tol')
     || (node?.kind === 'fillet' && (f.key === 'stationAt' || f.key === 'station2At'))
+    || (node?.kind === 'fillet' && (f.key === 'rho' || f.key === 'tension'))
     || (node?.kind === 'extrude' && f.key === 'draft')
     || f.key.startsWith('loftGuideControl') || f.key.endsWith('linkedInsetMM') || (nodes[i]?.kind === 'hole' && /^(step|about)[01]$/.test(f.key)) ? f : {
     ...f,
