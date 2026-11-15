@@ -5,7 +5,9 @@ import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
 const wide = process.argv.includes('--120');
-const turn = wide ? 2 * Math.PI / 3 : Math.PI / 2;
+const authored = process.argv.includes('--make-curves');
+const turn = authored ? Math.atan2(24, -7) : wide ? 2 * Math.PI / 3 : Math.PI / 2;
+const railRadius = authored ? 25 : 20;
 const railName = wide ? '120-degree rail' : 'Quarter rail';
 const pins = [
   'apps/cad-studio/src/App.tsx',
@@ -13,6 +15,7 @@ const pins = [
   'apps/cad-studio/scripts/cad-mcp.mjs',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
   'packages/barocss-cad-model/src/chat/part/features.ts',
+  'packages/barocss-cad-model/src/engine/curveSource.ts',
   'packages/barocss-cad-model/src/engine/errors.ts',
   'packages/barocss-cad-model/src/engine/part.ts',
   'packages/barocss-cad/src/brep/exact-sweep.ts',
@@ -20,10 +23,11 @@ const pins = [
   'packages/barocss-cad/src/part/part-model.ts',
 ];
 const f = await createFlow({
-  name: 'exact-arc-bore-sweep', output: process.argv[2], envFrozen: wide ? 'D1309_SOURCE_FROZEN' : 'D1300_SOURCE_FROZEN',
+  name: 'exact-arc-bore-sweep', output: process.argv[2],
+  envFrozen: authored ? 'D1310_SOURCE_FROZEN' : wide ? 'D1309_SOURCE_FROZEN' : 'D1300_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Sweep a mixed section with one bore along a circular rail, resize the bore, and reopen it in Studio.',
-  limits: [`Desktop Chrome WebGPU and local L1 MCP dry-run. One ${wide ? '120-degree' : '90-degree'} arc and one offset circular bore.`],
+  limits: ['Desktop Chrome WebGPU and local L1 MCP dry-run. One circular arc and one offset circular bore.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkOutput, curveDomain, evaluateCadPart, evaluateCurve, massPropertiesOf } from '@barocss/cad';
@@ -73,8 +77,8 @@ const seed = {
     sideTags: { outer: ['base', 'round', 'roof', 'back'], holes: [['bore']] },
   }],
   direct: {
-    sources: { arc: directCurve(path) },
-    objects: [{ id: 'arc', name: railName, source: 'arc', geometry: 'rail' }],
+    sources: authored ? {} : { arc: directCurve(path) },
+    objects: authored ? [] : [{ id: 'arc', name: railName, source: 'arc', geometry: 'rail' }],
   },
   outputs: {},
 };
@@ -87,13 +91,17 @@ const area = 100 + halfDisk;
 const cx = (700 + 12 * halfDisk + 250 / 3) / area;
 const outerXX = 10 * (12 ** 3 - 2 ** 3) / 3 + 144 * halfDisk + 24 * (250 / 3) + Math.PI * 5 ** 4 / 8;
 const variance = outerXX / area - cx ** 2;
+const bendZ = authored ? 0 : 4;
 
-function exactMass(radius) {
-  const holeArea = Math.PI * radius ** 2, holeRho = 20 + 8 - cx;
-  const radialMoment = 20 * area - holeRho * holeArea;
-  const radialSecond = area * (400 + variance) - holeArea * (holeRho ** 2 + radius ** 2 / 4);
-  const d = radialSecond / (turn * radialMoment);
-  return { volume: turn * radialMoment, centre: [13 + d * Math.sin(turn), -7 + d * (1 - Math.cos(turn)), 4 - holeRho * holeArea / radialMoment] };
+const nominal = { r: railRadius, x: 13, y: -7, start: 0, end: turn };
+
+function exactMass(radius, circle = nominal) {
+  const { r, x, y, start, end } = circle;
+  const holeArea = Math.PI * radius ** 2, holeRho = r + 8 - cx;
+  const radialMoment = r * area - holeRho * holeArea;
+  const radialSecond = area * (r ** 2 + variance) - holeArea * (holeRho ** 2 + radius ** 2 / 4);
+  const delta = end - start, d = radialSecond / (delta * radialMoment);
+  return { volume: delta * radialMoment, centre: [x + d * (Math.sin(end) - Math.sin(start)), y + d * (Math.cos(start) - Math.cos(end)), bendZ - holeRho * holeArea / radialMoment] };
 }
 
 async function open(file) {
@@ -101,23 +109,24 @@ async function open(file) {
   await chooser.setFiles(file);
 }
 
-async function chooseSweep() {
+async function chooseSweep(name) {
   await button('Sketch 1').click();
-  await button(railName).click();
+  await button(name).click();
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Sweep');
   return hud().getByLabel('Representation', { exact: true });
 }
 
-async function verify(doc, radius, label) {
+async function verify(doc, radius, label, rail = { name: railName, path }) {
   const sweep = doc.nodes.at(-1);
   assert.equal(sweep.kind, 'sweep-curve');
   assert.equal(sweep.mode, 'exact');
   assert.equal(sweep.sketch, 0);
-  assert.equal(sweep.name, railName);
-  assert.deepEqual(sweep.path, path);
+  assert.equal(sweep.name, rail.name);
+  assert.deepEqual(sweep.path, rail.path);
   assert.deepEqual(doc.nodes[0], seed.nodes[0]);
-  const { volume, centre: expectedCentre } = exactMass(radius);
+  const circle = rail.circle ?? nominal;
+  const { volume, centre: expectedCentre } = exactMass(radius, circle);
   const read = await f.inspect(label, doc);
   assert.ok(read.valid && read.genus === 1 && read.family === 'sweep-curve');
   assert.equal(read.method, 'closed-form');
@@ -132,18 +141,19 @@ async function verify(doc, radius, label) {
   assert.equal(bore.length, 2);
   assert.ok(bore.every(face => face.degrees.join(',') === '2,2' && face.loops.join(',') === 'outer'));
   for (const wall of read.faces.filter(face => face.degrees[0] === 2)) {
-    assert.deepEqual(wall.knotsU, wide ? [0,0,0,.5,.5,1,1,1] : [0,0,0,1,1,1]);
+    assert.deepEqual(wall.knotsU, wide || authored ? [0,0,0,.5,.5,1,1,1] : [0,0,0,1,1,1]);
   }
   let capResidual = 0;
   for (const cap of read.caps) {
-    const angle = cap.name.endsWith('.start') ? 0 : turn;
+    const angle = cap.name.endsWith('.start') ? circle.start : circle.end;
     const cos = Math.cos(angle), sin = Math.sin(angle);
     assert.deepEqual(cap.edges.map(edge => edge.degree), [2,2]);
     for (const edge of cap.edges) {
       assert.ok(edge.paired);
       for (const [x,y,z] of edge.samples) {
-        const radial = cos * (x - 13) + sin * (y + 7), plane = -sin * (x - 13) + cos * (y + 7);
-        capResidual = Math.max(capResidual, Math.abs(plane), Math.abs(Math.hypot(radial - (28 - cx), z - 5) - radius));
+        const dx = x - circle.x, dy = y - circle.y;
+        const radial = cos * dx + sin * dy, plane = -sin * dx + cos * dy;
+        capResidual = Math.max(capResidual, Math.abs(plane), Math.abs(Math.hypot(radial - (circle.r + 8 - cx), z - bendZ - 1) - radius));
       }
     }
   }
@@ -152,7 +162,7 @@ async function verify(doc, radius, label) {
   read.centroid.forEach((coordinate, i) => near(coordinate, expectedCentre[i]));
   const shown = await f.bodies();
   assert.equal(shown.bodies.length, 1);
-  near(shown.bodies[0].volume, volume);
+  near(shown.bodies[0].volume, read.volume);
   const rendered = await f.page.evaluate(() => window.__studioSection());
   assert.equal(rendered.bodies, 1);
   near(rendered.shownVolume, volume, volume * .02);
@@ -171,15 +181,54 @@ async function verifyBoreMouth(label) {
     return Math.hypot(a[0] - b[0], a[1] - b[1]) < .01;
   });
   await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
-  const x = 33 + 8 - cx;
-  const { inside, beside } = await f.page.evaluate(x => ({
-    inside: window.__studioSurfacePoint([x,-7,5]), beside: window.__studioSurfacePoint([x+2,-7,5]),
-  }), x);
+  const x = 13 + railRadius + 8 - cx;
+  const { inside, beside } = await f.page.evaluate(([x,z]) => ({
+    inside: window.__studioSurfacePoint([x,-7,z]), beside: window.__studioSurfacePoint([x+2,-7,z]),
+  }), [x, bendZ + 1]);
   // The curved tunnel can have a deeper hit. Only the nearby solid probe should see the start cap.
   assert.ok(beside && Math.abs(beside[1] + 7) < 1e-4, JSON.stringify({ inside, beside }));
   assert.ok(!inside || inside[1] > -6, JSON.stringify({ inside, beside }));
   f.report.observations.push({ label, inside, beside });
   await f.snapshot(label);
+}
+
+function circleFromEndpoints(start, join, end) {
+  const [ax,ay] = start, [bx,by] = join.map((value, i) => value - start[i]), [cx,cy] = end.map((value, i) => value - start[i]);
+  const b = bx * bx + by * by, c = cx * cx + cy * cy, twice = 2 * (bx * cy - by * cx);
+  const x = ax + (b * cy - c * by) / twice, y = ay + (c * bx - b * cx) / twice;
+  return { x, y, r: Math.hypot(ax - x, ay - y), start: Math.atan2(ay - y, ax - x), end: Math.atan2(end[1] - y, end[0] - x) };
+}
+
+async function makeRail() {
+  f.phase = 'draw and convert a circular arc in Studio';
+  await f.newPage();
+  await open({ name: 'profile-for-authored-rail.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
+  await f.same(seed);
+  await button('Sketch', f.page.locator('.mode')).click();
+  await f.sketchPanel().waitFor();
+  await f.tool('Arc', 'a');
+  const start = [38,-7], end = [6,17], through = [33,8];
+  await f.frame([start, end, through]);
+  for (const point of [start, end, through]) await f.worldClick(point);
+  await button('Make curves', f.sketchPanel()).click();
+  await f.sketchPanel().waitFor({ state: 'hidden' });
+  await f.page.waitForFunction(() => window.__studioDoc.direct?.objects.length === 1);
+  const made = (await f.snapshot('made-circular-rail')).doc;
+  assert.deepEqual(made.nodes, seed.nodes);
+  const [rail] = made.direct.objects;
+  const source = made.direct.sources[rail.source], list = property => JSON.parse(source.match(new RegExp(`${property}\\s*:\\s*(.+?);`))[1]);
+  const authoredPath = { degree: 2, knots: list('knots'), controlPoints: list('control-points'), weights: list('weights') };
+  assert.deepEqual(authoredPath.knots, [0,0,0,1,1,2,2,2]);
+  assert.deepEqual(authoredPath.controlPoints[0], [...start, 0]);
+  assert.deepEqual(authoredPath.controlPoints.at(-1), [...end, 0]);
+  assert.equal(authoredPath.weights.length, 5);
+  assert.deepEqual(authoredPath.weights.filter((_, i) => i % 2 === 0), [1,1,1]);
+  const circle = circleFromEndpoints(...[0,2,4].map(i => authoredPath.controlPoints[i]));
+  near(circle.r, railRadius, 1e-5);
+  near(circle.end - circle.start, turn, 1e-5);
+  authoredPath.weights.filter((_, i) => i % 2 === 1).forEach(weight => near(weight, Math.cos((circle.end - circle.start) / 4), 1e-9));
+  f.report.observations.push({ label: 'authored-circle', ...circle, path: authoredPath });
+  return { made, rail: { name: rail.name, path: authoredPath, circle } };
 }
 
 await f.run(async () => {
@@ -195,8 +244,9 @@ await f.run(async () => {
     return context;
   };
 
+  const { made, rail } = authored ? await makeRail() : { made: seed, rail: { name: railName, path } };
   f.phase = 'discover and dry-run the mixed section through local MCP';
-  const file = join(f.output, 'mixed-profile-source.bcad'), contents = JSON.stringify(seed);
+  const file = join(f.output, 'mixed-profile-source.bcad'), contents = JSON.stringify(made);
   await writeFile(file, contents, { flag: 'wx' });
   await withMcpSession({ app: f.app, output: f.output, clientName: 'barocss-sweep-profile-test' }, file, 'mixed-profile', async call => {
     const description = await call('describe', { command: 'sweep-curve' });
@@ -210,17 +260,17 @@ await f.run(async () => {
     } };
     const result = await call('features', { action: 'batch', dryRun: true, ops: [{ tool: 'features', args }] });
     assert.equal(result.dryRun, true);
-    near(result.change.volume, exactMass(1).volume, .001);
+    near(result.change.volume, exactMass(1, rail.circle).volume, .001);
     assert.equal(await readFile(file, 'utf8'), contents);
     f.report.observations.push({ label: 'agent-dry-run', volume: result.change.volume });
   });
 
   f.phase = 'refuse a bore tangent to the outer wall';
-  const tangent = { ...seed, parameters: { boreEdgeX: 12 } };
+  const tangent = { ...made, parameters: { boreEdgeX: 12 } };
   await f.newPage();
   await open({ name: 'tangent-bore.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(tangent)) });
   await f.same(tangent);
-  await (await chooseSweep()).selectOption('exact');
+  await (await chooseSweep(rail.name)).selectOption('exact');
   await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
   await hud().getByText(/hole is too close|strictly inside the outer profile/i).first().waitFor();
   assert.equal(await button('Apply', hud()).isDisabled(), true);
@@ -233,7 +283,7 @@ await f.run(async () => {
     await f.newPage();
     await open({ name: 'over-120-degree-arc.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(outside)) });
     await f.same(outside);
-    await (await chooseSweep()).selectOption('exact');
+    await (await chooseSweep(rail.name)).selectOption('exact');
     await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
     await hud().getByText(/30° to 120°/).first().waitFor();
     assert.equal(await button('Apply', hud()).isDisabled(), true);
@@ -244,21 +294,22 @@ await f.run(async () => {
   f.phase = 'open the mixed profile and saved Direct arc';
   await f.newPage();
   await open(file);
-  await f.same(seed);
-  const representation = await chooseSweep();
+  await f.same(made);
+  const representation = await chooseSweep(rail.name);
   f.phase = 'apply the exact circular Sweep with its bore';
   await representation.selectOption('exact');
   await hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor();
-  assert.deepEqual(await f.doc(), seed);
+  assert.deepEqual(await f.doc(), made);
   await button('Apply', hud()).click();
-  await f.changed(seed);
+  await f.changed(made);
   const accepted = await f.doc();
-  const walls = await verify(accepted, 1, 'applied');
+  assert.deepEqual(accepted.direct, made.direct);
+  const walls = await verify(accepted, 1, 'applied', rail);
   await f.snapshot('applied');
 
   const edited = (await f.setParameter('boreEdgeX', 9.5, 'bore-resized')).doc;
   assert.deepEqual(edited.nodes, accepted.nodes);
-  const editedWalls = await verify(edited, 1.5, 'edited');
+  const editedWalls = await verify(edited, 1.5, 'edited', rail);
   assert.deepEqual(editedWalls, walls, 'The outer walls do not move when the hole changes');
 
   await f.undo();
@@ -269,7 +320,7 @@ await f.run(async () => {
   await f.newPage();
   await open(saved.file);
   await f.same(edited);
-  assert.deepEqual(await verify(await f.doc(), 1.5, 'reopened'), walls);
+  assert.deepEqual(await verify(await f.doc(), 1.5, 'reopened', rail), walls);
   await verifyBoreMouth('reopened-bore-mouth');
   await f.openFeatureEditor(1, 'reopened Sweep');
   await f.editor().getByText('Exact circular arc', { exact: true }).waitFor();
@@ -277,7 +328,7 @@ await f.run(async () => {
   await f.snapshot('reopened-sweep-history');
   await withMcpSession({ app: f.app, output: f.output, clientName: 'barocss-arc-bore-test' }, saved.file, 'reopened-bore', async call => {
     const result = await call('query', { action: 'summary' });
-    near(result.facts.volume, exactMass(1.5).volume, .001);
+    near(result.facts.volume, exactMass(1.5, rail.circle).volume, .001);
     assert.deepEqual(result.features.at(-1).node, edited.nodes.at(-1));
   });
 });

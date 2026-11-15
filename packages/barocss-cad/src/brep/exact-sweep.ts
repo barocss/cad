@@ -97,12 +97,15 @@ function pathTolerance(path: Curve, refuse: Refuse): number {
   return linearToleranceMM(extent);
 }
 
-/** Recover the circular carrier of a validated single span within the native linear tolerance. */
-function circularSpan(path: Curve, refuse: Refuse) {
+/** Recover the circular carrier of one or two validated quadratic spans. */
+function circularPath(path: Curve, refuse: Refuse) {
   const unsupported = () => refuse('CAPABILITY', 'Exact sweep needs one open circular arc from 30° to 120°.');
+  const count = path.controlPoints.length;
+  if (path.degree !== 2 || (count !== 3 && count !== 5)) return unsupported();
   const [w0, w1, w2] = path.weights;
-  if (path.degree !== 2 || path.controlPoints.length !== 3 || w0 !== w2) return unsupported();
+  if (w0 !== w2 || (count === 5 && (path.knots[3] !== path.knots[4] || w0 !== path.weights[4]))) return unsupported();
   const tolerance = pathTolerance(path, refuse);
+  if (count === 5) return joinedCircularSpans(path, tolerance) ?? unsupported();
   const [start, middle, end] = path.controlPoints;
   const halfChord = scale(sub(end, start), 0.5), a = len(halfChord);
   if (a <= tolerance) return unsupported();
@@ -131,6 +134,61 @@ function circularSpan(path: Curve, refuse: Refuse) {
   const tangent = unit(add(halfChord, scale(heightDirection, circularHeight)));
   const angle = circularHeight === maxHeight ? 2 * Math.PI / 3 : 2 * Math.atan2(circularHeight, a);
   return { start, toCentre, tangent, radius: len(toCentre), angle, tolerance };
+}
+
+/** Recover a circle through both path ends and certify both spans on that one carrier. */
+function joinedCircularSpans(path: Curve, tolerance: number) {
+  const [start] = path.controlPoints;
+  const [, p1, join, p3, end] = path.controlPoints.map(point => sub(point, start));
+  const [, w1, , w3] = path.weights.map(weight => weight / path.weights[0]);
+  if (dot(sub(join, p1), sub(p3, join)) <= 0) return undefined;
+  const origin: Point = [0, 0, 0];
+  const halfChord = scale(end, 0.5), a = len(halfChord);
+  if (a <= tolerance) return undefined;
+  const chordDirection = scale(halfChord, 1 / a);
+  const midpoint = (a: Point, b: Point, c: Point, w: number) => scale(add(add(a, c), scale(b, 2 * w)), 0.5 / (1 + w));
+  // Use the largest sagitta of the join and two span midpoints to condition the circle recovery.
+  let along = 0, height = 0, sagitta = origin;
+  for (const point of [join, midpoint(origin, p1, join, w1), midpoint(join, p3, end, w3)]) {
+    const fromMid = sub(point, halfChord), x = dot(fromMid, chordDirection);
+    const perpendicular = sub(fromMid, scale(chordDirection, x)), y = len(perpendicular);
+    if (y > height) { along = x; height = y; sagitta = perpendicular; }
+  }
+  if (height <= tolerance) return undefined;
+  const heightDirection = scale(sagitta, 1 / height), axis = unit(cross(heightDirection, chordDirection));
+  const centreHeight = ((along - a) * (along + a) + height * height) / (2 * height);
+  const rawAngle = 2 * Math.atan2(a, -centreHeight);
+
+  const fit = (angle: number) => {
+    const toCentre = sub(halfChord, scale(heightDirection, a / Math.tan(angle / 2)));
+    const radial0 = scale(toCentre, -1), radius = len(radial0), tangent = unit(cross(axis, radial0));
+    const relativeJoin = sub(join, toCentre), x = dot(relativeJoin, scale(radial0, 1 / radius)), y = dot(relativeJoin, tangent);
+    const joinAngle = Math.atan2(y, x);
+    if (!(joinAngle > 0 && joinAngle < angle)) return undefined;
+    const radialJoin = scale(add(scale(radial0, x / radius), scale(tangent, y)), radius / Math.hypot(x, y));
+    const commonJoin = add(toCentre, radialJoin);
+    const joinCorrection = len(sub(join, commonJoin));
+    const spanFits = (p0: Point, pole: Point, p2: Point, radialA: Point, radialB: Point, chord: number, turn: number, weight: number) => {
+      // For a positive-weight quadratic, the projected radial cross derivative is a positive
+      // combination of these three ordered crosses. This rules out a kink that reverses travel.
+      const ra = sub(p0, toCentre), rm = sub(pole, toCentre), rb = sub(p2, toCentre);
+      if (!(dot(axis, cross(ra, rm)) > 0 && dot(axis, cross(ra, rb)) > 0 && dot(axis, cross(rm, rb)) > 0)) return false;
+      const canonicalWeight = Math.cos(turn / 2);
+      const canonicalPole = add(toCentre, scale(add(radialA, radialB), 0.5 / (canonicalWeight * canonicalWeight)));
+      const poleCorrection = Math.max(joinCorrection, len(sub(pole, canonicalPole)));
+      // Rational weights are positive. The pole error is their convex average. B1 is at most 1/2,
+      // and the canonical pole's distance to either endpoint is half the chord divided by its weight.
+      const diameter = Math.max(chord, 0.5 * chord / canonicalWeight);
+      const weightCorrection = 0.5 * Math.abs(weight - canonicalWeight) * diameter / Math.min(1, weight, canonicalWeight);
+      return poleCorrection + weightCorrection <= tolerance;
+    };
+    if (!spanFits(origin, p1, join, radial0, radialJoin, len(commonJoin), joinAngle, w1)
+      || !spanFits(join, p3, end, radialJoin, sub(end, toCentre), len(sub(end, commonJoin)), angle - joinAngle, w3)) return undefined;
+    return { start, toCentre, tangent, radius, angle, tolerance };
+  };
+  // Preserve one output span for rounded quarter arcs. Both source spans must pass this fit too.
+  return (rawAngle > Math.PI / 2 ? fit(Math.PI / 2) : undefined)
+    ?? fit(Math.max(Math.PI / 6, Math.min(2 * Math.PI / 3, rawAngle)));
 }
 
 /** Read the two encodings emitted by Studio's Edge as a curve and Make curves. */
@@ -193,7 +251,7 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
   }
 
   const hole = circularHole(holes, 'circular-arc', refuse);
-  const { start, toCentre, tangent, radius, angle, tolerance } = circularSpan(path, refuse);
+  const { start, toCentre, tangent, radius, angle, tolerance } = circularPath(path, refuse);
   if (radius > CadNumericPolicy.coordinateAbs) return refuse('PARAMETER', 'Exact sweep path radius must be at most 10000 mm.');
   if (profileRadius !== undefined && radius - profileRadius <= tolerance)
     return refuse('PARAMETER', 'Exact sweep needs a path radius larger than the profile radius.');

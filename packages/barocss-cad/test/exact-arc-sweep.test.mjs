@@ -469,6 +469,16 @@ function planarRail(turn) {
   };
 }
 
+function planarSpans(first, last, knots = [0, 0, 0, 1, 1, 2, 2, 2]) {
+  const at = (phi, radius = R) => add(bendCentre, [radius * Math.cos(phi), radius * Math.sin(phi), 0]);
+  const span = (from, to) => {
+    const weight = Math.cos((to - from) / 2);
+    return { pole: at((from + to) / 2, R / weight), weight };
+  };
+  const a = span(0, first), b = span(first, last);
+  return { degree: 2, knots, controlPoints: [at(0), a.pole, at(first), b.pole, at(last)], weights: [1, a.weight, 1, b.weight, 1] };
+}
+
 test('120-degree Sweep carries the D-profile and offset bore in two native spans without adding a seam', () => {
   const turn = 2 * Math.PI / 3, rail = planarRail(turn);
   const first = evaluateCadPart(document(rail, holedSection(1)));
@@ -491,7 +501,7 @@ test('120-degree Sweep carries the D-profile and offset bore in two native spans
   checkBore(evaluateCadPart(document(reverse, section)).outputs[0], 1, true, turn);
 });
 
-test('exact circular Sweep admits the boundary and interior turns and refuses unsupported rail spans', () => {
+test('exact circular Sweep admits the boundary and interior turns and refuses out-of-range single spans', () => {
   for (const degrees of [30, 90.001, 105]) {
     const turn = degrees * Math.PI / 180;
     checkBore(evaluateCadPart(document(planarRail(turn), holedSection(1))).outputs[0], 1, false, turn);
@@ -501,17 +511,77 @@ test('exact circular Sweep admits the boundary and interior turns and refuses un
     assert.throws(() => evaluateCadPart(document(rail)), error => error instanceof CadPartError
       && error.feature === 'w' && error.code === 'CAPABILITY' && /from 30° to 120°/.test(error.message));
   }
-  const half = planarRail(Math.PI / 3), end = half.controlPoints[2];
-  const secondMiddle = add(end, scale([-Math.sqrt(3) / 2, 0.5, 0], R / Math.sqrt(3)));
-  const multiSpan = { ...half, knots: [0, 0, 0, 0.5, 0.5, 1, 1, 1],
-    controlPoints: [...half.controlPoints, secondMiddle, planarRail(2 * Math.PI / 3).controlPoints[2]],
-    weights: [1, Math.sqrt(3) / 2, 1, Math.sqrt(3) / 2, 1],
-  };
-  assert.throws(() => evaluateCadPart(document(multiSpan)), error => error instanceof CadPartError
-    && error.feature === 'w' && error.code === 'CAPABILITY' && /needs one open circular arc/.test(error.message));
   const zeroWeight = { ...planarRail(2 * Math.PI / 3), weights: [1, 0, 1] };
   assert.throws(() => evaluateCadPart(document(zeroWeight)), error => error instanceof CadPartError
     && error.feature === 'w' && error.code === 'INPUT' && /Weights must be in/.test(error.message));
+});
+
+test('two co-circular spans carry the native D-section and bore through one 120-degree arc', () => {
+  const turn = 2 * Math.PI / 3;
+  // The 120-degree R20 sketch becomes two equal spans, with nine-place storage in Direct geometry.
+  const made = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
+    controlPoints: [[33, -7, 4], [33, 4.547005384, 4], [23, 10.320508076, 4], [13, 16.094010768, 4], [3, 10.320508076, 4]],
+    weights: [1, 0.866025404, 1, 0.866025404, 1],
+  };
+  const first = evaluateCadPart(document(made, holedSection(1)));
+  checkBore(first.outputs[0], 1, false, turn);
+  const edited = reevaluate(first, { document: document(made, holedSection(1.5)) });
+  checkBore(edited.outputs[0], 1.5, false, turn);
+  const reopened = loadCadPart(saveCadPart(edited));
+  assert.deepEqual(reopened.document.features[1].path, made);
+  assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
+
+  // Same carrier with unequal angular subspans, different parameter intervals and normalized weights.
+  const split = planarSpans(Math.PI / 4, turn, [-4, -4, -4, -3.5, -3.5, 7, 7, 7]);
+  checkBore(evaluateCadPart(document(split, holedSection(1))).outputs[0], 1, false, turn);
+  const reverse = { ...split, knots: split.knots.toReversed().map(knot => 3 - knot),
+    controlPoints: split.controlPoints.toReversed(), weights: scale(split.weights.toReversed(), 4) };
+  const section = { ...holedSection(1, 'ccw'), plane: {
+    origin: [0, 0, 0], normal: [0, 0, 1], xAxis: [Math.cos(turn), Math.sin(turn), 0],
+  } };
+  checkBore(evaluateCadPart(document(reverse, section)).outputs[0], 1, true, turn);
+});
+
+test('two spans respect the total turn limits and the rounded quarter-span representation', () => {
+  const min = Math.PI / 6;
+  checkBore(evaluateCadPart(document(planarSpans(min / 2, min), holedSection(1))).outputs[0], 1, false, min);
+  const quarter = planarSpans(Math.PI / 4, Math.PI / 2);
+  const rounded = { ...quarter, controlPoints: [[33, -7, 4], [33, 1.284271247, 4], [27.142135624, 7.142135624, 4], [21.284271247, 13, 4], [13, 13, 4]],
+    weights: [1, 0.923879533, 1, 0.923879533, 1],
+  };
+  const output = evaluateCadPart(document(rounded, holedSection(1))).outputs[0];
+  checkBore(output, 1, false, Math.PI / 2);
+  for (const face of output.brep.faces.filter(face => face.surface.degreeU === 2))
+    assert.deepEqual(face.surface.knotsU, [0, 0, 0, 1, 1, 1]);
+  const aboveQuarter = 90.001 * Math.PI / 180;
+  checkBore(evaluateCadPart(document(planarSpans(Math.PI / 4, aboveQuarter), holedSection(1))).outputs[0], 1, false, aboveQuarter);
+});
+
+test('two spans must follow a common circle, plane and direction over both complete intervals', () => {
+  const half = Math.PI / 3, turn = 2 * half, rail = planarSpans(half, turn);
+  const [start, p1, join, p3, end] = rail.controlPoints;
+  const radial = [Math.cos(half), Math.sin(half), 0];
+  const otherRadius = 25, otherCentre = add(join, scale(radial, -otherRadius));
+  const other = (angle, reach) => add(otherCentre, [reach * Math.cos(angle), reach * Math.sin(angle), 0]);
+  // The second knot interval scales with the radius, so even the parameter speeds agree at the join.
+  const c1ButDifferentCircle = { ...rail, knots: [0, 0, 0, 1, 1, 2.25, 2.25, 2.25], controlPoints: [start, p1, join,
+    other(1.5 * half, otherRadius / Math.cos(half / 2)), other(turn, otherRadius)] };
+  const wrongPlane = { ...rail, controlPoints: [start, p1, join, p3, add(end, [0, 0, 1e-4])] };
+  const poleTilt = { ...rail, controlPoints: [start, p1, join, add(p3, [0, 0, 1e-5]), end] };
+  const unequal = { ...rail, weights: [1, rail.weights[1], 1.00001, rail.weights[3], 1] };
+  const wrongWeight = { ...rail, weights: [1, rail.weights[1], 1, rail.weights[3] + 1e-5, 1] };
+  const simpleKnots = { ...rail, knots: [0, 0, 0, 1, 1.1, 2, 2, 2] };
+  const reversedAtJoin = planarSpans(turn, half);
+  const threeSpans = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
+    controlPoints: [[33, -7, 4], [33, -1.641016151, 4], [30.320508076, 3, 4], [27.641016151, 7.641016151, 4],
+      [23, 10.320508076, 4], [18.358983849, 13, 4], [13, 13, 4]],
+    weights: [1, Math.cos(Math.PI / 12), 1, Math.cos(Math.PI / 12), 1, Math.cos(Math.PI / 12), 1],
+  };
+  for (const outside of [c1ButDifferentCircle, wrongPlane, poleTilt, unequal, wrongWeight, simpleKnots, reversedAtJoin,
+    threeSpans, planarSpans(Math.PI / 12, 29.999 * Math.PI / 180), planarSpans(half, 120.001 * Math.PI / 180)]) {
+    assert.throws(() => evaluateCadPart(document(outside)), error => error instanceof CadPartError
+      && error.feature === 'w' && error.code === 'CAPABILITY' && /one open circular arc from 30° to 120°/.test(error.message));
+  }
 });
 
 test('a circular-arc Sweep refuses tangent bores, additional loops and insufficient bend-axis clearance', () => {
@@ -528,4 +598,33 @@ test('a circular-arc Sweep refuses tangent bores, additional loops and insuffici
   refused(document(rail, { ...untagged, holes: [polygon] }), 'CAPABILITY', /at most one circular hole/);
   const tight = quarterRail(dMoments(2).x - 2);
   refused(document(tight, profile), 'PARAMETER', /profile must stay clear of the bend axis/);
+});
+
+test('two-span circular carrier is invariant under a rigid world transform and native reopen', () => {
+  const rail = planarSpans(Math.PI / 5, 5 * Math.PI / 9);
+  const rotate = ([x, y, z]) => [0.36*x - 0.8*y + 0.48*z, 0.48*x + 0.6*y + 0.64*z, -0.8*x + 0.6*z];
+  const shift = [117, -63, 41];
+  const move = p => add(rotate(p), shift);
+  const plain = evaluateCadPart(document(rail));
+  const movedRail = { ...rail, controlPoints: rail.controlPoints.map(move) };
+  const movedSketch = { ...sketch, plane: { origin: shift, normal: rotate([0,0,1]), xAxis: rotate([1,0,0]) } };
+  const changed = evaluateCadPart(document(movedRail, movedSketch));
+  assert.ok(checkOutput(changed.outputs[0]).valid);
+  const before = massPropertiesOf(plain.outputs[0]), after = massPropertiesOf(changed.outputs[0]);
+  near(after.volume, before.volume);
+  pointNear(after.centroid, move(before.centroid));
+  const reopened = loadCadPart(saveCadPart(changed));
+  assert.deepEqual(reopened.document.features[1].path, movedRail);
+  assert.deepEqual(reopened.outputs[0].brep, changed.outputs[0].brep);
+});
+
+test('two-span circular rail admits tiny pole rounding but rejects excessive out-of-plane displacement', () => {
+  const rail = planarSpans(Math.PI / 3, 2 * Math.PI / 3);
+  const original = structuredClone(rail);
+  for (const offset of [1e-9, 1e-5]) {
+    const moved = { ...rail, controlPoints: rail.controlPoints.map((p,i) => i === 1 ? add(p,[0,0,offset]) : [...p]) };
+    if (offset === 1e-9) assert.ok(checkOutput(evaluateCadPart(document(moved)).outputs[0]).valid);
+    else assert.throws(() => evaluateCadPart(document(moved)), e => e instanceof CadPartError && e.code === 'CAPABILITY');
+  }
+  assert.deepEqual(rail, original);
 });

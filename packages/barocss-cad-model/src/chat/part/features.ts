@@ -47,7 +47,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
     sketch: 'stable ID of a finished sketch with one closed line-and-arc outline and up to one strictly interior circular hole. An arc Sweep also needs clearance from the bend axis.',
     path: 'stable ID of one visible Direct curve; its current path is copied',
     pathRevision: 'revision of that curve from query.summary; changed geometry requires a new proposal',
-    representation: 'required: exact-straight for one straight segment, or exact for one 30°–120° circular arc in a single rational quadratic span. The path starts at the outer profile’s area centroid. Creates a new body.',
+    representation: 'required: exact-straight for one straight segment, or exact for one 30°–120° circular arc in one or two rational quadratic spans. The path starts at the outer profile’s area centroid. Creates a new body.',
   } },
   'offset-face': { selection: 'Distance: faces [source]. To plane: faces [source, reference] in that order, on distinct current solids.', values: { offsetMode: 'distance (default) | to-plane (direct native source face and a parallel reference face)', d: 'distance along the face normal: + out (material added), − in (taken off)' } },
   box: { selection: 'none (or a top face to stack on)', values: { w: 'width along X', d: 'depth along Y', h: 'height along Z', x: 'min corner X', y: 'min corner Y', z: 'base Z' } },
