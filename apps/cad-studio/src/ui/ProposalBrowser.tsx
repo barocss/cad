@@ -22,6 +22,11 @@ export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel
           <ToolIconButton size="tiny" state={decidedShown ? 'on' : 'idle'} data-proposal-history-toggle aria-label={decidedShown ? 'Hide decided proposals' : 'Show decided proposals'} aria-pressed={decidedShown} data-tip={decidedShown ? 'Hide decided proposals' : 'Show accepted and rejected'} onClick={() => setDecidedShown(f => !f)}><Icon name="history" small /></ToolIconButton></div>
         {doc.proposals.filter(p => decidedShown || p.status === 'open').map(p => {
           const shown = ghost?.id === p.id, stale = isStale(p), base = volumeOf(bodies);
+          // Historical scope comes from the saved decision, never from replaying
+          // its operations against today's model or guessing missing labels.
+          const leftOut = p.status === 'accepted' ? [...new Set(p.decided?.left_out ?? [])] : [];
+          const partial = leftOut.length > 0;
+          const decisionNote = p.rebased && !stale && p.decided?.note === 'rebased before it was accepted' ? undefined : p.decided?.note;
           const blockedDescription = reviewBlocked ? `proposal-review-blocked-${p.id}` : undefined;
           const placed = shown ? ghost.placed : null;
           const problem = placed?.kind === 'unavailable' ? placed.reason : placed && !placedPreviewEnabled ? 'Placed preview is unavailable in the current view.' : null;
@@ -29,7 +34,7 @@ export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel
           const dv = shown && delta !== null ? volumeOf(ghost.bodies) - base + delta : null;
           return <div key={p.id} className={'proposal ' + p.status + ' risk-' + p.risk.level} role="listitem" aria-label={`Proposal ${p.id}`}>
             <div className="proposal-title"><b>{p.id}</b> {p.title} <span className={'risk-badge ' + p.risk.level} title={`${p.risk.features_touched} features touched · ${p.risk.references_broken} references broken${p.risk.hard_requirements_changed.length ? ` · hard requirements ${p.risk.hard_requirements_changed.join(', ')}` : ''}${p.risk.approval.length ? ` · always needs approval: ${p.risk.approval.join(', ')}` : ''}`}>{p.risk.level} risk</span></div>
-            <div className="muted">{stale ? <b className="stale">stale · </b> : p.rebased ? 'rebased · ' : ''}{p.summary}{p.risk.references_broken ? ` · ${p.risk.references_broken} reference${p.risk.references_broken > 1 ? 's' : ''} broken` : ''}{p.risk.hard_requirements_changed.length ? ` · hard ${p.risk.hard_requirements_changed.join(', ')}` : ''}{p.risk.approval.length ? ` · needs you (${p.risk.approval.join(', ')})` : ''} · {p.by.agent}{p.by.model ? ` (${p.by.model})` : ''}</div>
+            <div className="muted">{stale ? <b className="stale">stale · </b> : p.rebased ? 'rebased · ' : ''}{partial ? 'Original proposal: ' : ''}{p.summary}{p.risk.references_broken ? ` · ${p.risk.references_broken} reference${p.risk.references_broken > 1 ? 's' : ''} broken` : ''}{p.risk.hard_requirements_changed.length ? ` · hard ${p.risk.hard_requirements_changed.join(', ')}` : ''}{p.risk.approval.length ? ` · needs you (${p.risk.approval.join(', ')})` : ''} · {p.by.agent}{p.by.model ? ` (${p.by.model})` : ''}</div>
             {p.plan && <div className="proposal-plan">{p.plan}</div>}
             {shown && fresh && (problem ? <div className="muted proposal-dv">{problem}</div>
               : <div className="mono proposal-dv">{ghost.after ? 'after' : 'before'} · Volume change <span aria-label="Volume change">{!massReady ? '…' : dv === null ? 'unavailable'
@@ -46,7 +51,7 @@ export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel
                 : stale ? <button className="primary small" disabled={proposalBusy || reviewBlocked} aria-describedby={blockedDescription} title="Recheck the proposal against the current document and review it before accepting" onClick={() => void rebaseIt(p)}>Rebase &amp; preview</button>
                 : <button className="primary small" disabled={proposalBusy || reviewBlocked} aria-describedby={blockedDescription} onClick={() => void acceptIt(p)}>{shown && ghost.leaveOut.length ? `Accept ${ghost.parts.length - ghost.leaveOut.length} of ${ghost.parts.length}` : 'Accept'}</button>}
               {reviewBlocked && <span id={blockedDescription} className="muted" role="status">{reviewRecovery}</span>}
-            </div> : <div className="muted">{p.status} by {p.decided?.by}{p.decided?.note ? ` · ${p.decided.note}` : ''}</div>}
+            </div> : <div className="muted">{partial ? 'partially accepted' : p.status} by {p.decided?.by}{partial && <span role="group" aria-label={`${p.id} accepted scope`}> · accepted the proposal except {leftOut.join(', ')}</span>}{decisionNote ? ` · ${decisionNote}` : ''}</div>}
           </div>;
         })}</div>}</>;
 }

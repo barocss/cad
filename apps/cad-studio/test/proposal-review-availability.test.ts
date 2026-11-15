@@ -139,3 +139,61 @@ test('preview volume-change copy retains pending and unavailable states', () => 
   props.massReady = true;
   assert.equal(content(delta(ProposalBrowser(props))), 'unavailable');
 });
+
+
+test('partial decision identifies saved exclusions and marks the original proposal summary without guessing applied features', () => {
+  const state = controller();
+  state.doc.proposals![0] = { ...proposal, title: 'A Ø4 hole and a block', summary: '3 added', status: 'accepted',
+    ops: [{ tool: 'obsolete_unknown_tool', args: { misleadingLabel: 'Current Extrude' } }],
+    decided: { by: 'user', at: '2026-11-15', left_out: ['n4', 'n5', 'n4'] } };
+  const before = structuredClone(state.doc), view = browser(state, {}, undefined, true);
+  const scope = elements(view).find(element => element.props['aria-label'] === 'P1 accepted scope'); assert.ok(scope);
+  assert.equal(scope.props.role, 'group');
+  assert.equal(content(scope), ' · accepted the proposal except n4, n5');
+  assert.match(content(view), /partially accepted by user/);
+  assert.match(content(view), /Original proposal: 3 added/);
+  assert.match(content(view), /A Ø4 hole and a block/);
+  assert.doesNotMatch(content(view), /Current Extrude|Accept \d|1 of|2 of/);
+  assert.equal(state.doc.nodes.length, 0, 'the historical IDs and labels need not exist in the current model');
+  assert.equal(state.workerCalls(), 0); assert.deepEqual(state.commits, []); assert.deepEqual(state.doc, before);
+});
+
+test('full, rejected, open and legacy decisions do not invent partial acceptance scope', () => {
+  for (const scenario of [
+    { status: 'accepted' as const, decided: { by: 'user', at: '2026-11-15' } },
+    { status: 'accepted' as const, decided: { by: 'user', at: '2026-11-15', left_out: [] } },
+    { status: 'accepted' as const, decided: undefined },
+    { status: 'rejected' as const, decided: { by: 'user', at: '2026-11-15', left_out: ['n4'] } },
+    { status: 'open' as const, decided: { by: 'user', at: '2026-11-15', left_out: ['n4'] } },
+  ]) {
+    const state = controller(); state.doc.proposals![0] = { ...proposal, ...scenario };
+    const before = structuredClone(state.doc), view = browser(state, {}, undefined, true);
+    assert.equal(elements(view).some(element => element.props['aria-label'] === 'P1 accepted scope'), false);
+    assert.doesNotMatch(content(view), /partially accepted|Original proposal:|accepted the proposal except/);
+    assert.match(content(view), /Review the change/);
+    if (scenario.status !== 'open') assert.match(content(view), new RegExp(`${scenario.status} by`));
+    assert.deepEqual(state.doc, before); assert.equal(state.workerCalls(), 0);
+  }
+});
+
+test('decision rebase note is deduplicated only when the existing rebased badge conveys it', () => {
+  const state = controller();
+  const rebased = { original: 'old', from: 'previous', at: '2026-11-15', risk_was: proposal.risk };
+  const generated = 'rebased before it was accepted';
+  for (const partial of [false, true]) {
+    state.doc.proposals![0] = { ...proposal, status: 'accepted', rebased,
+      decided: { by: 'user', at: '2026-11-15', note: generated, ...(partial ? { left_out: ['n4'] } : {}) } };
+    const before = structuredClone(state.doc), view = browser(state, {}, undefined, true);
+    assert.equal(content(view).match(/rebased/g)?.length, 1);
+    assert.doesNotMatch(content(view), /rebased before it was accepted/);
+    assert.deepEqual(state.doc, before, 'deduplication is presentation-only');
+    assert.match(content(browser(state, { isStale: () => true }, undefined, true)), /rebased before it was accepted/, 'no badge means retain the saved note');
+    state.doc.proposals![0].rebased = undefined;
+    assert.match(content(browser(state, {}, undefined, true)), /rebased before it was accepted/);
+    state.doc.proposals![0].rebased = rebased;
+    state.doc.proposals![0].decided!.note = 'Rebased and checked Hole Ø4 with the owner';
+    assert.match(content(browser(state, {}, undefined, true)), /Rebased and checked Hole Ø4 with the owner/);
+    state.doc.proposals![0].decided!.note = `${generated}; checked Hole Ø4`;
+    assert.match(content(browser(state, {}, undefined, true)), /rebased before it was accepted; checked Hole Ø4/);
+  }
+});
