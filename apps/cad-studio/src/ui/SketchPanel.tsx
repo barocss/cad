@@ -1,3 +1,4 @@
+import { applyOffsetMagnitude, parseOffsetMagnitude, OFFSET_MAGNITUDE_ERROR } from '../app/sketchOffsetDistance';
 import { sketchOffsetReadiness } from '../app/sketchOffsetTarget';
 import { planeLabel } from '@barocss/cad-model/sketch/plane';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -41,7 +42,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
   /** Sets the picked outline entities or the dimension being edited in the viewport. */
   onUi?(patch: Pick<SketchState, 'picked' | 'editDim'>): void;
   /** Offsets the newest closed shape by `d` mm (out when positive) as a shape beside it. */
-  onOffset?(d: number): void;
+  onOffset?(d: number): string | undefined;
   /** Adds the face's own outline and holes (as references when `asRefs`); absent when not sketching on a face as it is. */
   onUseOutline?(asRefs: boolean): void;
   /** Replaces the empty sketch with the linked face outline and one inward inset. */
@@ -50,15 +51,29 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
   onToCurves?(): void;
   /** B1: Make band from the picked shapes (offset, width mm; no width: filled), edit the band's offset / width (`width: null`: filled), remove it (the sources stay construction). */
   onBand?: { make(offset: number, width?: number): void; edit(patch: { offset?: number; width?: number | null }): void; remove(): void } }) {
-  const [offsetBy, setOffsetBy] = useState(2);
+  const [offsetBy, setOffsetBy] = useState('2');
+  const [offsetRefusal, setOffsetRefusal] = useState<{ draft: SketchState; raw: string; message: string } | null>(null);
+  const offsetErrorId = useId();
   const [insetRefusal, setInsetRefusal] = useState<{ draft: SketchState; message: string } | null>(null);
   const offsetInput = useRef<HTMLInputElement>(null), insetErrorId = useId();
   // Linking adds rows above the field while it still has focus.
   useEffect(() => revealOffsetField(offsetInput.current), [sketch.association]);
   const insetError = onLinkedInset && insetRefusal?.draft === sketch ? insetRefusal : null;
   const { target: offsetTarget, canLinkInset, showDistance } = sketchOffsetReadiness(sketch, !!onLinkedInset);
+  const invalidMagnitude = !!offsetTarget && parseOffsetMagnitude(offsetBy) === null;
+  const offsetError = invalidMagnitude ? OFFSET_MAGNITUDE_ERROR
+    : offsetRefusal?.draft === sketch && offsetRefusal.raw === offsetBy ? offsetRefusal.message : null;
+  useEffect(() => {
+    offsetInput.current?.setCustomValidity(offsetTarget ? offsetError ?? '' : '');
+  }, [offsetTarget, offsetError]);
+  const applyOffset = (direction: 'in' | 'out') => {
+    if (!onOffset) return;
+    const message = applyOffsetMagnitude(offsetBy, direction, onOffset);
+    setOffsetRefusal(message ? { draft: sketch, raw: offsetBy, message } : null);
+    if (message) offsetInput.current?.focus();
+  };
   const linkInset = () => {
-    const message = onLinkedInset?.(offsetBy);
+    const message = onLinkedInset?.(Number(offsetBy));
     setInsetRefusal(message ? { draft: sketch, message } : null);
     if (message) offsetInput.current?.focus();
   };
@@ -240,22 +255,23 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
           <p>Geometry or plane edits detach this link.</p>
         </>}
         {showDistance && <div className="sk-offset">
-          <span className="num"><Input ref={offsetInput} aria-label="Offset distance" type="number" step="any" min={0.1} value={offsetBy}
+          <span className="num"><Input ref={offsetInput} aria-label="Offset distance" type="number" step="any" value={offsetBy}
             data-sketch-action
             className="scroll-my-1"
             onFocus={event => revealOffsetField(event.currentTarget)}
-            aria-invalid={insetError ? true : undefined} aria-describedby={insetError ? insetErrorId : undefined}
+            aria-invalid={insetError || offsetError ? true : undefined} aria-describedby={insetError ? insetErrorId : offsetError ? offsetErrorId : undefined}
             onKeyDown={event => {
               if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
               event.preventDefault();
               event.stopPropagation();
               if (canLinkInset && !event.repeat) linkInset();
             }}
-            onChange={e => { setOffsetBy(Number(e.target.value)); setInsetRefusal(null); }} /><em>mm</em></span>
-          {offsetTarget && <Button variant="ghost" aria-label="Offset outward" data-tip="Offset out" data-tip-focus data-tip-desc={`A copy of Outline ${offsetTarget.index + 1} this far outside it (the ring between them is the profile)`} onClick={() => onOffset(Math.abs(offsetBy))}>Out</Button>}
-          {offsetTarget && <Button variant="ghost" aria-label="Offset inward" data-tip="Offset in" data-tip-focus data-tip-desc={`A copy of Outline ${offsetTarget.index + 1} this far inside it (a wall)`} onClick={() => onOffset(-Math.abs(offsetBy))}>In</Button>}
+            onChange={e => { setOffsetBy(e.target.value); setInsetRefusal(null); setOffsetRefusal(null); }} /><em>mm</em></span>
+          {offsetTarget && <Button variant="ghost" aria-label="Offset outward" data-tip="Offset out" data-tip-focus data-tip-desc={`A copy of Outline ${offsetTarget.index + 1} this far outside it (the ring between them is the profile)`} disabled={invalidMagnitude} onClick={() => applyOffset('out')}>Out</Button>}
+          {offsetTarget && <Button variant="ghost" aria-label="Offset inward" data-tip="Offset in" data-tip-focus data-tip-desc={`A copy of Outline ${offsetTarget.index + 1} this far inside it (a wall)`} disabled={invalidMagnitude} onClick={() => applyOffset('in')}>In</Button>}
         </div>}
         {insetError && <p id={insetErrorId} className="sk-band-err" role="alert">{insetError.message}</p>}
+        {offsetError && <p id={offsetErrorId} className="sk-band-err" role="alert">{offsetError}</p>}
       </>}
       {onToCurves && <>
         <div className="card-title" style={{ marginTop: 10 }}>CURVES</div>

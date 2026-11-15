@@ -1,3 +1,4 @@
+import { offsetRecoveryMessage } from '../app/sketchOffsetDistance';
 import { sketchOffsetTarget } from '../app/sketchOffsetTarget';
 import { emptyDirect } from '../app/directGeometry';
 import { draftShapeOrder, sketchRegion, detachSketchLink, sketchCutInputs, sketchFinishInputs } from '../app/sketchControls';
@@ -125,12 +126,12 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
   };
 
   /** Offsets the newest closed shape of the sketch by `d` (out when positive) as a shape beside it. */
-  const offsetSketch = (d: number) => {
-    if (!sketch || !ownsSketch()) return;
+  const offsetSketch = (d: number): string | undefined => {
+    if (!sketch || !ownsSketch()) return 'The sketch changed. Try again on the current outline.';
     const target = sketchOffsetTarget(sketch)?.shape;
-    if (!target) { setToast({ title: 'Nothing to offset', hint: 'Draw a closed shape first.', detail: '' }); return; }
+    if (!target) return 'Draw a closed shape first.';
     const r = offsetShape(target, d);
-    if ('error' in r) { setToast({ title: 'Cannot offset', hint: r.error, detail: '' }); return; }
+    if ('error' in r) return offsetRecoveryMessage(r.error);
     const done = [...draftShapeOrder(sketch), r.shape];
     const next = { ...detachSketchLink(sketch), shape: null, done, activeOutlineIndex: undefined, picked: [], editDim: null };
     if (!sketch.band) {
@@ -140,8 +141,7 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
       if ('error' in candidate) {
         const original = sketchFinishInputs(sketch).joined;
         if (!unfinishedChain(original) && !('error' in profileOf(original))) {
-          setToast({ title: 'Cannot offset', hint: candidate.error, detail: '' });
-          return;
+          return offsetRecoveryMessage(candidate.error);
         }
       }
     }
