@@ -20,7 +20,17 @@ export function DimensionsList({ sheet, views, layout, scope, settings, occurren
         <div className="dw-dims">
           {sheet?.dimensions.map(r => <div key={r.dim.id} className={'dw-dim' + (selected === r.dim.id ? ' sel' : '') + (r.ok ? '' : ' lost')} title={r.ok ? undefined : occurrenceReasons.get(r.dim.id) ?? r.reason}
             >
-            <button type="button" className="dw-annotation-select" aria-pressed={selected === r.dim.id} onClick={() => onSelect(r.dim.id)}>
+            <button type="button" className="dw-annotation-select" aria-pressed={selected === r.dim.id}
+              onPointerDown={event => {
+                // Defer focus/blur until click: tolerance blur can reflow this list
+                // between pointerdown and pointerup and otherwise lose the target.
+                if (event.button === 0) event.preventDefault();
+              }} onClick={event => {
+                // Commit the old field before selecting the new dimension. Keyboard
+                // activation follows the same path; a cancelled pointer never selects.
+                event.currentTarget.focus();
+                onSelect(r.dim.id);
+              }}>
               <b>{r.ok ? dimensionLine(r, presetFor(settings)) : 'lost'}</b><span>{r.dim.kind === 'linear' ? r.dim.orient : r.dim.kind} · {r.dim.view}</span>
             </button>
             {!r.ok && r.dim.kind === 'diameter' && r.dim.view !== 'iso' && isViewId(r.dim.view) && occurrenceReasons.has(r.dim.id)
