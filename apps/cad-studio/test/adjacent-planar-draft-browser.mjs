@@ -124,6 +124,13 @@ await f.run(async () => {
   const creation = hud('Draft'), angle = creation.getByLabel('Angle', { exact: true });
   assert.equal(await creation.getByLabel('Pull', { exact: true }).inputValue(), 'z');
   assert.equal(await creation.getByLabel('Neutral plane', { exact: true }).inputValue(), 'auto');
+  for (const raw of ['0', '45', '-45']) {
+    await angle.fill(raw); await status(creation, 'refused');
+    assert.equal(await button('Apply', creation).isEnabled(), false);
+    assert.match(await creation.innerText(), /non.?zero/i); assert.match(await creation.innerText(), /45/);
+    await f.same(source);
+  }
+  await f.snapshot('creation-angle-refused');
   await angle.fill('10');
   await status(creation, 'preview');
   await f.same(source);
@@ -139,9 +146,28 @@ await f.run(async () => {
   assert.equal(new Set(node.faces).size, 2);
   await inspect('inward-native', inward, 10, original);
 
+  await f.openFeatureEditor(index, 'numeric Draft angle');
+  for (const raw of ['0', '45', '-45']) {
+    await f.editor().getByLabel('Angle', { exact: true }).fill(raw);
+    await button('Apply', f.editor()).click();
+    await f.editor().getByText(/non.?zero/i).waitFor();
+    assert.match(await f.editor().innerText(), /45/);
+    assert.equal(await f.editor().getByLabel('Angle', { exact: true }).inputValue(), raw);
+    await f.same(inward);
+  }
+  await f.snapshot('numeric-history-angle-refused');
+  await button('Reset', f.editor()).click();
+
   f.phase = 'History refuses a collapsing taper and applies an outward taper';
   const history = await edit(index);
   const editAngle = history.getByLabel('Angle', { exact: true });
+  for (const raw of ['0', '45', '-45']) {
+    await editAngle.fill(raw); await status(history, 'refused');
+    assert.equal(await button('Apply', history).isEnabled(), false);
+    assert.match(await history.innerText(), /non.?zero/i); assert.match(await history.innerText(), /45/);
+    await f.same(inward);
+  }
+  await f.snapshot('edit-draft-angle-refused');
   await editAngle.fill('40');
   await status(history, 'refused');
   assert.equal(await button('Apply', history).isEnabled(), false);

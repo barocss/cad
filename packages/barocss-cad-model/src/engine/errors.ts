@@ -16,7 +16,11 @@ export interface FriendlyError {
 // refusal helpers or cad-model's `refusal()`) and the row is `{ code: 'MY_CODE', title, hint }`. `text` rows are for older
 // messages without a code, and rows naming a code unbracketed (messages carry it bare), so they stay regexes. Order
 // matters: the first row that matches wins.
+const DRAFT_ANGLE_HELP = { title: 'Draft needs a nonzero angle below 45°',
+  hint: 'Enter a finite angle greater than −45° and less than 45°, excluding 0°. Use a positive or negative angle to choose the taper direction.' };
+
 const rules: { code?: string | readonly string[]; text?: RegExp; title: string; hint: string }[] = [
+  { code: 'DRAFT_ANGLE', ...DRAFT_ANGLE_HELP },
   { text: /(?:^|: )Scale cannot preserve valid geometry for this body\./,
     title: 'Scale would lose usable geometry',
     hint: 'Increase Factor and try again. The usable factor depends on this body and pivot; there is no single minimum for every part.' },
@@ -311,6 +315,8 @@ export function friendly(message: string, kind?: string): FriendlyError {
   const bracketed = FIRST_CODE.exec(detail)?.[1], code = bracketed ?? kind;
   if (bracketed && !detail.startsWith(`[${bracketed}]`)) detail = `[${bracketed}] ${detail.replace(`[${bracketed}] `, '').replace(`[${bracketed}]`, '').trim()}`;
   const extra = code ? { code } : {};
+  if (code === 'INPUT' && detail === 'angle must be a number of degrees, not 0, below 45 in size')
+    return { ...DRAFT_ANGLE_HELP, detail, ...extra };
   const unmatched = /^the surfaces do not close: (\d+ edges?) meet no other surface \((surfaces? [\d, ]+)\)$/.exec(detail);
   if (unmatched) return { title: 'Sew leaves unmatched edges',
     hint: `${unmatched[1]} could not be matched on ${unmatched[2]} in the listed source order. Check the gap and the tolerance.`,

@@ -1,3 +1,4 @@
+import { commandBuildFailure } from './commandBuildFailure';
 import { createPreviewLifetime, ownedPreview } from './previewLifetime';
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react';
 import { prefixDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -97,7 +98,7 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
           const current = activeStore.get();
           if (live && current?.cmd === cmd && current.values === values) {
             setPreviewBodies(null);
-            setActive(a => a && a.cmd === cmd && a.values === values ? { ...a, preview: 'error', error: { title: 'Invalid input', hint: String(e), detail: '' } } : a);
+            setActive(a => a && a.cmd === cmd && a.values === values ? { ...a, preview: 'error', error: commandBuildFailure(cmd.id, e) } : a);
           }
           return;
         }

@@ -6,6 +6,7 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1367 — Precise Draft angle recovery](notes/draft-angle-feedback-mac-2026-11-15/README.md).
 - [D1366 — Two-guide Loft regression refresh](notes/two-guide-regression-refresh-mac-2026-11-15/README.md).
 - [D1365 — Owned Hole-array miss location](notes/hole-array-miss-location-mac-2026-11-15/README.md).
 - [D1364 — Tapped Hole drill readout](notes/tapped-hole-drill-readout-mac-2026-11-15/README.md).
