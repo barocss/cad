@@ -19,7 +19,7 @@ export function ClearancePanel({ near, onNear, display, reason, labels }: {
   display: ClearanceDisplay | null; reason?: string; labels: ReadonlyMap<string, string>;
 }) {
   return <div className="card" style={{ padding: '6px 10px', maxWidth: 440 }} aria-label="Assembly clearance">
-    <label>Near <input aria-label="Near clearance (mm)" type="number" min="0.001" step="0.1" value={near} style={{ width: 64 }} onChange={event => { const n = event.target.valueAsNumber; if (Number.isFinite(n) && n > 0) onNear(n); }} /> mm</label>
+    <label>Near <input aria-label="Near clearance (mm)" type="number" min={Number.MIN_VALUE} step="any" value={near} style={{ width: 64 }} onChange={event => { const n = event.target.valueAsNumber; if (Number.isFinite(n) && n > 0) onNear(n); }} /> mm</label>
     <div role="status" aria-live="polite">{reason ?? display?.error ?? (!display || display.stage === 'evaluating' ? 'Pending · current pose not classified' : display.stage !== 'ready' ? 'Updating current pose…' : display.pairs.length ? `${display.pairs.length} candidate pair${display.pairs.length === 1 ? '' : 's'}` : `No candidate pairs within the ${numeric(near)} mm band`)}</div>
     {!!display?.pairs.length && <ul style={{ maxHeight: 190, overflowY: 'auto', paddingLeft: 16, margin: '4px 0' }}>{display.pairs.map(pair => <li key={pair.a + '|' + pair.b} data-clearance-state={clearancePairState(pair)} style={{ padding: '3px 0' }}>
       <span>{pairName(pair.a, labels)} / {pairName(pair.b, labels)}</span><br />
