@@ -327,8 +327,11 @@ await f.run(async () => {
     await beginScan(8, 1);
     await button(scan(), 'Group 1 · 2 segments').click();
     await scan().getByRole('button', { name: /segment 4 · ID e8/ }).click();
-    await button(scan(), 'Trim highlighted edge').click();
-    await f.waitToast(/requires a new sketch without stored edge IDs/i);
+    assert.equal(await button(scan(), 'Trim highlighted edge').getAttribute('aria-disabled'), 'true');
+    await button(scan(), 'Trim highlighted edge').focus();
+    await f.page.keyboard.press('Enter');
+    assert.match(await scan().innerText(), /requires a new sketch without stored edge IDs/i);
+    assert.equal(await button(scan(), 'Select highlighted edge').isEnabled(), true);
     assert.deepEqual(await shapeGraphics(), before);
     await f.same(tagged);
     await f.snapshot('05-tagged-outline-refusal');

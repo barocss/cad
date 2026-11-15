@@ -1,3 +1,4 @@
+import { directTrimRestriction, applyOverlaidTrim } from './directTrimReadiness';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
@@ -13,7 +14,7 @@ interface Scan {
   selected?: { group: number; occurrence?: number };
 }
 
-export function useOverlaidLines(doc: StudioDoc, sketch: SketchState | null, docNow: RefObject<StudioDoc>, generation: RefObject<number>, activate: (next: SketchState) => void, trim: (next: SketchState) => void) {
+export function useOverlaidLines(doc: StudioDoc, sketch: SketchState | null, docNow: RefObject<StudioDoc>, generation: RefObject<number>, activate: (next: SketchState) => void, trim: (next: SketchState) => boolean) {
   const [scan, setScan] = useState<Scan | null>(null);
   const [dragging, setDragging] = useState(false);
   const dragInProgress = useRef(false);
@@ -25,8 +26,9 @@ export function useOverlaidLines(doc: StudioDoc, sketch: SketchState | null, doc
   const highlight = visible && selection && visible.report.status === 'complete'
     ? visible.report.groups[selection.group]?.[selection.occurrence ?? 0] : undefined;
   const next = enabled && highlight && selection?.occurrence !== undefined ? selectOverlaidEdge(sketch, highlight) : null;
+  const trimRestriction = next ? directTrimRestriction(next) : null;
   return {
-    enabled, dragging, report: visible?.report, selection, highlight, canSelect: next !== null,
+    trimRestriction, enabled, dragging, report: visible?.report, selection, highlight, canSelect: next !== null,
     selectEdge() {
       if (!next || !visible || dragInProgress.current || docNow.current !== doc || visible.generation !== generation.current) return;
       setScan(null);
@@ -34,8 +36,8 @@ export function useOverlaidLines(doc: StudioDoc, sketch: SketchState | null, doc
     },
     trimEdge() {
       if (!next || !visible || dragInProgress.current || docNow.current !== doc || visible.generation !== generation.current) return;
-      setScan(null);
-      trim(next);
+      if (trimRestriction) return;
+      applyOverlaidTrim(next, trim, () => setScan(null));
     },
     onSplineDragChange(active: boolean) {
       dragInProgress.current = active;

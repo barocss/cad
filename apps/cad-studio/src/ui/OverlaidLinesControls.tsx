@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { Button } from '@/components/ui/button';
 import { OVERLAID_LINE_RESULT_LIMIT, OVERLAID_LINE_SCAN_LIMIT } from '../sketch/overlaidLines';
 import type { useOverlaidLines } from '../sketch/useOverlaidLines';
@@ -10,6 +11,7 @@ const notices = {
 const countOf = (count: number, label: string) => `${count} ${label}${count === 1 ? '' : 's'}`;
 
 export function OverlaidLinesControls({ scan }: { scan: ReturnType<typeof useOverlaidLines> }) {
+  const restrictionId = useId();
   if (!scan.enabled) return null;
   const { report, selection } = scan;
   const selectedGroup = report?.status === 'complete' && selection ? report.groups[selection.group] : undefined;
@@ -44,7 +46,10 @@ export function OverlaidLinesControls({ scan }: { scan: ReturnType<typeof useOve
       </div> : null}
       {scan.canSelect ? <div className="flex flex-wrap gap-1.5">
         <Button type="button" variant="outline" size="sm" onClick={scan.selectEdge}>Select highlighted edge</Button>
-        <Button type="button" variant="outline" size="sm" onClick={scan.trimEdge}>Trim highlighted edge</Button>
+        <Button type="button" variant="outline" size="sm" className="aria-disabled:opacity-50 aria-disabled:cursor-not-allowed" aria-disabled={!!scan.trimRestriction}
+          aria-describedby={scan.trimRestriction ? restrictionId : undefined}
+          onClick={() => { if (!scan.trimRestriction) scan.trimEdge(); }}>Trim highlighted edge</Button>
+        {scan.trimRestriction && <p id={restrictionId} className="muted small">{scan.trimRestriction} Select highlighted edge to edit its dimensions.</p>}
       </div> : null}
     </> : report ? <p role="status" className="muted small">{notices[report.status]}</p> : null}
   </section>;

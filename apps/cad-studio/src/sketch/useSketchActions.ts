@@ -1,3 +1,4 @@
+import { directTrimRestriction } from './directTrimReadiness';
 import { openChainFinishGuidance } from '../app/sketchOpenGuidance';
 import { offsetRecoveryMessage } from '../app/sketchOffsetDistance';
 import { sketchOffsetTarget } from '../app/sketchOffsetTarget';
@@ -178,24 +179,26 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
     replaceDraftShapes(sketch, r.shapes);
   };
   const trimSelectedEdge = (active: SketchState) => {
-    if (!sketch || !ownsSketch() || active.tool !== 'select' || active.shape?.kind !== 'polygon') return;
+    if (!sketch || !ownsSketch() || active.tool !== 'select' || active.shape?.kind !== 'polygon') return false;
     const pick = active.picked?.[0];
-    if (pick?.kind !== 'edge' || active.picked?.length !== 1) return;
+    if (pick?.kind !== 'edge' || active.picked?.length !== 1) return false;
     const { shapes, protectedShapes } = sketchCutInputs(active);
-    if (active.editNode !== undefined || shapes.some(shape => shape.ids?.length)) {
-      setToast({ title: 'Cannot trim the highlighted line', hint: 'Direct Trim requires a new sketch without stored edge IDs.', detail: '' });
-      return;
+    const restriction = directTrimRestriction(active);
+    if (restriction) {
+      setToast({ title: 'Cannot trim the highlighted line', hint: restriction, detail: '' });
+      return false;
     }
     const shape = shapes.indexOf(active.shape), side = pick.i;
     const first = active.shape.points[side], last = active.shape.points[(side + 1) % active.shape.points.length];
-    if (shape < 0 || !first || !last) return;
+    if (shape < 0 || !first || !last) return false;
     const at: [number, number] = [(first[0] + last[0]) / 2, (first[1] + last[1]) / 2];
     const result = trimAt(shapes, at, 1e-6, protectedShapes, { shape, side });
     if ('error' in result) {
       setToast({ title: 'Cannot trim the highlighted line', hint: 'A crossing splits the line at its midpoint. Use Trim and click the part to remove.', detail: '' });
-      return;
+      return false;
     }
     replaceDraftShapes(sketch, result.shapes);
+    return true;
   };
   /** B1: Make band from the Band tool's picks (they become construction); refused with the reason, the sketch left as it is. */
   const makeSketchBand = (offset: number, width?: number) => {
