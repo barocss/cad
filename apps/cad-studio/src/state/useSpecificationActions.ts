@@ -49,9 +49,19 @@ export function useSpecificationActions({ doc, bodies, commit, engine, revision,
   };
   const addReferenceFile = async (file: File) => {
     const name = file.name.replace(/\.[^.]+$/, '');
-    if (/\.(step|stp)$/i.test(file.name)) return refTool('add_reference', { name, step: await file.text() });
-    const m = meshInMM(readMeshFile(file.name, new Uint8Array(await file.arrayBuffer())), 'mm');
-    return refTool('add_reference', { name, mesh: { positions: m.positions, indices: m.indices } });
+    let args: Record<string, unknown>;
+    try {
+      if (/\.(step|stp)$/i.test(file.name)) args = { name, step: await file.text() };
+      else {
+        const m = meshInMM(readMeshFile(file.name, new Uint8Array(await file.arrayBuffer())), 'mm');
+        args = { name, mesh: { positions: m.positions, indices: m.indices } };
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setToast({ title: 'Reference not changed', hint: `${file.name}: ${detail.replace(/^\[[A-Z_]+\] /, '')}`, detail });
+      return;
+    }
+    return refTool('add_reference', args);
   };
   const placeRef = (id: string, at: Placement) => { const set = readReferences(doc.references); commit({ ...doc, references: { ...set, references: set.references.map(r => (r.id === id ? { ...r, at } : r)) } }, false); };
   const removeRef = (id: string) => {

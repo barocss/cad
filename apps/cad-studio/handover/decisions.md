@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1400: [Reference file error recovery](notes/reference-file-error-mac-2026-11-15/README.md), #611; catch only local reads and mesh parsing, identify the file and cause, preserve document/history and downstream errors.
+
 - D1399: [Reference face cache ownership](notes/reference-face-cache-ownership-mac-2026-11-15/README.md), #610; include the feature owner in named-result reuse keys while retaining sketch sharing, geometry algorithms and Datum validation.
 
 - D1398: [Reference placement drafts](notes/reference-placement-draft-mac-2026-11-15/README.md), #609; current-document ownership restores saved coordinates and cancels unapplied drafts on revision, preserving Enter-only commit semantics.
