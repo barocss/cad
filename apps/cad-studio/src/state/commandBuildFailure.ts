@@ -3,10 +3,19 @@ import type { Ctx } from '@barocss/cad-model/app/commands';
 import { bodyKeyFor } from '@barocss/cad-model/engine/ids';
 import { friendlyCause, type FriendlyError } from '@barocss/cad-model/engine/errors';
 import { isRefusal } from '@barocss/cad-model/engine/refusal';
+import { closedFilletPerimeter } from './closedFilletPerimeter';
 import { DRAFT_EDIT } from '@barocss/cad-model/app/draftEdit';
 
-/** Preserve legacy build errors except the owned Draft angle recovery shared with native evaluation. */
+/** Explain only owned build refusals whose command and selection prove the recovery. */
 export function commandBuildFailure(command: string, cause: unknown, ctx?: Ctx): FriendlyError {
+  if (command === 'fillet' && ctx && isRefusal(cause, 'FILLET_CHAIN')
+    && cause.message === '[FILLET_CHAIN] A varying radius needs the picked edges to form one open chain: its two ends take the two radii.') {
+    const perimeter = closedFilletPerimeter(ctx);
+    if (perimeter) return { title: 'The picked edges form a closed perimeter',
+      hint: 'Switch to Edges and select an open chain, such as the arc without its closing edges.' + (perimeter.individuallyPicked
+        ? ' Or open Edit picked edges and remove edges to open the perimeter.' : ''),
+      detail: cause.message, code: cause.code };
+  }
   if ((command === 'draft' || command === DRAFT_EDIT) && isRefusal(cause, 'DRAFT_ANGLE')) return friendlyCause(cause);
   if (command === 'offset-face' && ctx && isRefusal(cause, 'VALUE')
     && cause.message === '[VALUE] Offset face: the other cap is not a congruent native right-prism cap.'

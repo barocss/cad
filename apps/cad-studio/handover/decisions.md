@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1390: [Closed varying-Fillet recovery](notes/closed-varying-fillet-recovery-mac-2026-11-15/README.md), #502; prove the selected cycle before naming it, retain native refusal and existing recovery controls.
+
 - D1389: [Direct Join endpoints](notes/direct-join-endpoints-mac-2026-11-15/README.md), #497; exact compared endpoints and explicit order recovery, without snapping or native admission changes.
 
 - D1388: [Direct Thicken draft](notes/direct-thicken-draft-mac-2026-11-15/README.md), #166; no implicit old-value fallback, local invalid input feedback and unchanged native admission.
