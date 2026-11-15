@@ -13,6 +13,7 @@ import { useSectionState } from './viewport/useSectionState';
 import { useSectionEvaluation } from './viewport/useSectionEvaluation';
 import { useSectionDisplay } from './viewport/useSectionDisplay';
 import { useOwnedScalarHover } from './viewport/useOwnedScalarHover';
+import { mapSourceScope } from './viewport/mapSourceScope';
 import { useAnalysisMaps } from './viewport/useAnalysisMaps';
 import { useClearancePreview, useManufacturingPreviews, usePmiPreview } from './viewport/useWorkspacePreviews';
 import { ViewDisplayControls } from './ui/ViewDisplayControls';
@@ -2810,6 +2811,7 @@ export function App() {
   // on the placed parts always; none in a sketch, where the section is not shown.)
   const { scalarMaps, isoclines, mouldShown, mapLegend } = useAnalysisMaps({ doc, evaluated, shownBodies, mapKind, rendering, sketch,
     previewBodies, viewport, engine, revision, lanes, mouldResult, setMouldResult, mouldSpread, halvesShownRef, viewBackend });
+  const mapScope = mapSourceScope({ shownBodies, sectionBodies, sectionExactShown, gpuSection });
   const { sectionBox, sectionHatchOn, setSectionHatchOn, hatchStep, sectionClip, sectionLiveView, sectionHatchLines } = useSectionDisplay({
     bodies, instancesPlaced, section, sketch, gpuSection, shownBodies, sectionBodies, sectionExactShown, sectionLive, active, dragSection });
   useEffect(() => {
@@ -2952,7 +2954,7 @@ export function App() {
   const sectionDrag: FeatureHandle[] = section && !active && !sketch && bodies.length ? sectionHandles(section, sectionBox, dragSection) : [];
   const dragTransforms = useMemo(() => cmdBody !== undefined && bodyDrag ? new Map([[cmdBody, bodyDrag.matrix]]) : null, [cmdBody, bodyDrag]);
   const mapHoverOwner = useMemo(() => fresh && previewMode === 'analysis' && mapLegend && scalarMaps?.length ? {} : null,
-    [doc, evaluated, fresh, previewMode, mapKind, scalarMaps, mapLegend, shownBodies, hiddenBodies, viewBackend, animatedOffsets, dragTransforms, sectionClip]);
+    [doc, evaluated, fresh, previewMode, mapKind, scalarMaps, mapLegend, shownBodies, hiddenBodies, viewBackend, animatedOffsets, dragTransforms, sectionClip, mapScope]);
   const { hover: mapHover, setHover: setMapHover } = useOwnedScalarHover(mapHoverOwner);
 
   // The selected part instance's gizmo: moves along and turns about world axes through its box's centre
@@ -3763,7 +3765,7 @@ export function App() {
           clearDisplayModeFailure: () => setDisplayModeFailure(null), isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection }}
         view={{ ortho, sketching: !!sketch, ao, setAo, theme, setTheme, rendering, printing: !!printing, viewBackend }}
         section={{ section, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye }}
-        analysis={{ analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread }}
+        analysis={{ analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread }}
         picking={{ pickFilter, setPickFilter, snapStep, setSnapStep, setSelection }} explodeStore={explodeStore} />
 
       {palette && <Palette ctx={ctx} execution={{ showingVariant: variants.showing, fresh, busy }} onRun={start} onClose={() => setPalette(false)} extra={PALETTE_EXTRA} />}

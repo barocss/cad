@@ -1,6 +1,7 @@
 // An analysis map's legend (G6): one small element — its title and unit, the map's colours as a bar across its range with
 // the thresholds marked, the colour past it, and the value under the pointer. Drawn by the DOM when the map or the value
 // changes, not per frame.
+import type { MapSourceScope } from '../viewport/mapSourceScope';
 import type { ScalarMap } from '../viewport/scalarMaps';
 import { Button } from '@/components/ui/button';
 
@@ -16,12 +17,12 @@ function labelled(map: ScalarMap, lo: number, span: number): ScalarMap['threshol
 }
 const fmt = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2));
 
-export function MapLegend({ map, hover }: { map: ScalarMap; hover: number | null }) {
+export function MapLegend({ map, hover, scope = 'Body mesh' }: { map: ScalarMap; hover: number | null; scope?: MapSourceScope }) {
   const [lo, hi] = map.range, span = Math.max(1e-12, hi - lo), at = (v: number) => `${(((v - lo) / span) * 100).toFixed(2)}%`;
   const gradient = `linear-gradient(to right, ${map.legend.stops.map(([v, c]) => `${c} ${at(v)}`).join(', ')})`;
   return (
     <div className="card map-legend" role="group" aria-label="Map legend">
-      <div className="map-legend-head"><span>{map.legend.title}</span><span className="mono" aria-label="Map value">{hover === null ? '—' : `${fmt(hover)} ${map.unit}`}</span></div>
+      <div className="map-legend-head"><span>{map.legend.title}<span className="muted small block" aria-label="Map source scope">{scope}</span></span><span className="mono" aria-label="Map value">{hover === null ? '—' : `${fmt(hover)} ${map.unit}`}</span></div>
       <div className="map-legend-bar">
         <div className="map-legend-ramp" style={{ background: gradient }} />
         {map.above && <div className="map-legend-past" style={{ background: map.above }} title="past the range" />}

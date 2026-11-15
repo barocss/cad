@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1396: [Analysis section scope](notes/analysis-section-scope-mac-2026-11-15/README.md), #606; label actual map input provenance in the existing legend, retaining scalar data and face-editing authority.
+
 - D1395: [Analysis hover ownership](notes/analysis-hover-ownership-mac-2026-11-15/README.md), #605; invalidate transient samples by display epoch, pointer/navigation exit and renderer map readiness without scalar algorithm changes.
 
 - D1394: [Print layer-height draft](notes/print-height-draft-mac-2026-11-15/README.md), #604; owned raw editing, explicit commit/cancel and saved-preview feedback without manufacturing expansion.

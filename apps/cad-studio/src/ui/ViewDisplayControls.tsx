@@ -8,6 +8,7 @@ import type { ViewportHandle } from '../viewport/Viewport';
 import { lineDisplayMode, type DisplayMode } from '../viewport/renderer';
 import { middlePlane, type Section } from '../viewport/sectionView';
 import { SECTION_SPAN_UNAVAILABLE } from '../viewport/sectionSpan';
+import type { MapSourceScope } from '../viewport/mapSourceScope';
 import type { MapKind, ScalarMap } from '../viewport/scalarMaps';
 import type { ValueStore } from '../state/valueStore';
 import { Icon } from './atoms';
@@ -71,6 +72,7 @@ export interface ViewAnalysisControls {
   mapKind: AnalysisMap;
   setMapKind: StateSetter<AnalysisMap>;
   mapLegend: ScalarMap | null;
+  mapScope: MapSourceScope;
   mapHover: number | null;
   setMapHover: StateSetter<number | null>;
   mouldResult: ComponentProps<typeof MouldLegend>['result'];
@@ -105,7 +107,7 @@ export function ViewDisplayControls({ doc, viewport, cornerRight, display, view,
   const { ortho, sketching, ao, setAo, theme, setTheme, rendering, printing, viewBackend } = view;
   const aoAvailable = !lineDisplayMode(effectiveDisplayMode), aoActive = aoAvailable && ao;
   const { section, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye } = sectionState;
-  const { analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread } = analysisState;
+  const { analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread } = analysisState;
   const { pickFilter, setPickFilter, snapStep, setSnapStep, setSelection } = picking;
   const [sectionProblem, setSectionProblem] = useState<{ doc: StudioDoc; reason: string } | null>(null);
   const reportSectionProblem = (reason: string | null) => setSectionProblem(reason ? { doc, reason } : null);
@@ -122,7 +124,7 @@ export function ViewDisplayControls({ doc, viewport, cornerRight, display, view,
         {/* (What stands above the row, stacked so nothing overlaps: the maps' legends, the previews and display
             toggles, then the section bar nearest the row. None of it covers the history bar or the timeline.) */}
         <div className="corner-stack">
-    {mapLegend && <MapLegend map={mapLegend} hover={mapHover} />}
+    {mapLegend && <MapLegend map={mapLegend} hover={mapHover} scope={mapScope} />}
     {(mapKind === 'parting' || mapKind === 'halves') && <MouldLegend kind={mapKind} result={mouldResult} pull={!!doc.mould?.pull} spread={mouldSpread} onSpread={setMouldSpread} />}
         {/* (The previews' toggles stacked above the row, at its right: never over the history bar or the timeline.) */}
         {displayOpen && <div className="previews" role="group" aria-label="Previews">
