@@ -503,7 +503,10 @@ export class GpuRenderer implements ViewRenderer {
   }
 
   /** The map's value under a point (G6): the ray's hit on a mapped body, or null. */
-  scalarAt(x: number, y: number, camera: OrbitCamera): number | null {
+  scalarAt(x: number, y: number, camera: OrbitCamera, expectedMaps?: readonly ScalarMap[] | null): number | null {
+    // React may have a new owner before the renderer uploads that map. Never tag
+    // a previous map's sample as belonging to the new source.
+    if (expectedMaps !== undefined && this.scalarMaps !== expectedMaps) return null;
     if (!this.scalarMaps?.length) return null;
     this.sync(camera);
     const hit = this.viewer.raycast(x, y);

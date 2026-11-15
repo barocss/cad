@@ -213,7 +213,7 @@ export interface ViewRenderer {
   /** Analysis maps on the bodies (WebGPU only, G6): each body's scalar field in its colour map; null: the bodies' own look. */
   setScalarMaps?(maps: readonly import('./scalarMaps').ScalarMap[] | null): void;
   /** The map's value under a point (WebGPU only, G6), or null off the mapped bodies. */
-  scalarAt?(x: number, y: number, camera: OrbitCamera): number | null;
+  scalarAt?(x: number, y: number, camera: OrbitCamera, expectedMaps?: readonly import('./scalarMaps').ScalarMap[] | null): number | null;
   /**
    * The mould's view (WebGPU only, G6): its parting loops as lines and its halves see-through, spread apart along the pull
    * by `spread` (mm); while the halves show, picks reach only them (pickHalf), the part's bodies none.

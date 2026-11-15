@@ -387,6 +387,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
   const setOrthographic = (orthographic: boolean) => {
     const c = camera.current;
     if (c.ortho === orthographic) return;
+    propsRef.current.onHoverScalar?.(null);
     c.ortho = orthographic;
     propsRef.current.onProjectionChange?.(orthographic);
   };
@@ -399,6 +400,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
   };
   const fitted = useRef(false);
   const fitBounds = (bounds: { min: Vec3; max: Vec3 }) => {
+    propsRef.current.onHoverScalar?.(null);
     const view = canvas.current, c = camera.current;
     if (!view) return;
     c.aspect = view.clientWidth / Math.max(1, view.clientHeight);
@@ -904,7 +906,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     camera: camera.current,
     startRectangleAt: input.startRectangleAt,
     fit(box) { const b = sourceProps.printActive ? boundsForFit() : box ?? boundsForFit(); if (b) fitBounds(b); request(); },
-    setView(name) { camera.current.setView(name); const b = boundsForFit(); if (b) fitBounds(b); request(); },
+    setView(name) { propsRef.current.onHoverScalar?.(null); camera.current.setView(name); const b = boundsForFit(); if (b) fitBounds(b); request(); },
     frameSketch(min, max, plane) { pendingSketchFrame.current = { min, max, plane }; },
     faceActiveSketch() {
       const plane = propsRef.current.sketch?.plane;

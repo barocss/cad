@@ -26,6 +26,7 @@ import { ellipseClick, type EllipseDraft } from './ellipseDraft';
 import { DragTrimStroke, type DragTrimOwner, type DragTrimPlan } from './dragTrimStroke';
 import { dragAbout, dragAlong, dragIn, dragPlane, dragScale, dragTurn, GIZMO_PX, hitTest, snapTo, type FeatureHandle, type GizmoCancelReason, type GizmoHit, type Projector, type TransformGizmo } from './gizmo';
 import { pmiPick } from './pmiGeometry';
+import type { ScalarMap } from './scalarMaps';
 import type { PrintDisplay } from './printDisplay';
 import type { EdgeRef, FaceRef, SectionClip, ViewRenderer, ViewState } from './renderer';
 import { renderFocusDistance } from './renderFocus';
@@ -99,6 +100,7 @@ export interface ViewportPointerProps {
   /** The selected direct object's poles (drawn as dots; a click near one picks it), and the picked one. */
   poles?: { key: string; at: Vec3 }[];
   onPickPole?(key: string): void;
+  scalarMaps?: readonly ScalarMap[] | null;
   onHoverScalar?(value: number | null): void;
   /** Finished sketches and their selected material regions in world coordinates. */
   profiles?: { id: number; rings: Vec3[][]; picked: boolean; outerCount: number; canPickRegion: boolean; retained: boolean; pickedRegions?: number[] }[];
@@ -764,6 +766,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
   };
 
   const onPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
+    propsRef.current.onHoverScalar?.(null);
     sketchHoverPointer.current = null;
     const held = drag.current;
     if (held.circleChord && !held.moved && held.circleChord.pointer !== e.pointerId) { held.moved = true; return; }
@@ -933,11 +936,12 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     const point = surfacePoint(x, y, w, h, face) ?? planePoint(x, y, w, h, 0);
     propsRef.current.onCursor(point);
     // (G6: the map's value under the pointer, for its legend.)
-    if (propsRef.current.onHoverScalar) propsRef.current.onHoverScalar(r.scalarAt?.(x, y, camera.current) ?? null);
+    if (propsRef.current.onHoverScalar) propsRef.current.onHoverScalar(r.scalarAt?.(x, y, camera.current, propsRef.current.scalarMaps ?? null) ?? null);
   };
 
   /** The pointer left the canvas (for a panel or the toolbar, say): what it hovered is no longer hovered. */
   const onPointerLeave = () => {
+    propsRef.current.onHoverScalar?.(null);
     sketchHoverPointer.current = null;
     clearSketchSnap();
     if (sketchDraft.current.trim?.gap) { sketchDraft.current.trim = null; request(); }
@@ -1210,6 +1214,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
   };
 
   const onWheel = (e: WheelEvent<HTMLCanvasElement>) => {
+    propsRef.current.onHoverScalar?.(null);
     cancelDragTrim();
     if (drag.current.circleChord) drag.current.moved = true;
     const { x, y, w, h } = local(e);

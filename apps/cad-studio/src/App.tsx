@@ -12,6 +12,7 @@ import { sewPreviewDirect } from './viewport/sewPreviewDirect';
 import { useSectionState } from './viewport/useSectionState';
 import { useSectionEvaluation } from './viewport/useSectionEvaluation';
 import { useSectionDisplay } from './viewport/useSectionDisplay';
+import { useOwnedScalarHover } from './viewport/useOwnedScalarHover';
 import { useAnalysisMaps } from './viewport/useAnalysisMaps';
 import { useClearancePreview, useManufacturingPreviews, usePmiPreview } from './viewport/useWorkspacePreviews';
 import { ViewDisplayControls } from './ui/ViewDisplayControls';
@@ -730,7 +731,6 @@ export function App() {
   const choosePreview = useCallback((m: PreviewMode) => { setPreviewMode(m); if (m === 'analysis') setAnalysis(a => a ?? 'zebra'); }, []);
   /** The viewport's renderer (G10): the analysis maps and the mould's view are drawn on WebGPU only. */
   const [viewBackend, setViewBackend] = useState<'webgpu' | 'webgl2' | null>(null);
-  const [mapHover, setMapHover] = useState<number | null>(null);
   // (G6: the mould's view for the parting and halves maps — built in the engine worker — and how far the halves are spread.)
   const [mouldResult, setMouldResult] = useState<Awaited<ReturnType<EngineClient['mould']>> | 'working' | null>(null);
   const [mouldSpread, setMouldSpread] = useState(0);
@@ -2951,6 +2951,9 @@ export function App() {
   const cameraEye = (): Vec3 | null => { const c = viewport.current?.getCamera(); if (!c) return null; const cp = Math.cos(c.pitch); return [c.target[0] + c.distance * cp * Math.cos(c.yaw), c.target[1] + c.distance * cp * Math.sin(c.yaw), c.target[2] + c.distance * Math.sin(c.pitch)]; };
   const sectionDrag: FeatureHandle[] = section && !active && !sketch && bodies.length ? sectionHandles(section, sectionBox, dragSection) : [];
   const dragTransforms = useMemo(() => cmdBody !== undefined && bodyDrag ? new Map([[cmdBody, bodyDrag.matrix]]) : null, [cmdBody, bodyDrag]);
+  const mapHoverOwner = useMemo(() => fresh && previewMode === 'analysis' && mapLegend && scalarMaps?.length ? {} : null,
+    [doc, evaluated, fresh, previewMode, mapKind, scalarMaps, mapLegend, shownBodies, hiddenBodies, viewBackend, animatedOffsets, dragTransforms, sectionClip]);
+  const { hover: mapHover, setHover: setMapHover } = useOwnedScalarHover(mapHoverOwner);
 
   // The selected part instance's gizmo: moves along and turns about world axes through its box's centre
   // (only what its mates leave free). It follows at once on screen; let go, it is placed (mates re-solve)
@@ -3694,7 +3697,7 @@ export function App() {
         pickedPole={poleHere?.key ?? null} onPickPole={key => poleObj && setPole(pole?.id === poleObj && pole.key === key ? null : { id: poleObj, key })}
         offsets={animatedOffsets} transforms={dragTransforms} instances={viewportInstances} clearance={clearanceDisplay}
         isolatedInstances={displayScopeReason ? undefined : stepsDisp?.opaque ?? isolatedInstances}
-        clip={sectionClip} sectionHatch={sectionHatchLines} scalarMaps={scalarMaps} onHoverScalar={scalarMaps ? setMapHover : undefined}
+        clip={sectionClip} sectionHatch={sectionHatchLines} scalarMaps={scalarMaps} onHoverScalar={mapHoverOwner ? setMapHover : undefined}
         mould={mouldShown} isoclines={isoclines} proposal={ghost ? proposalOverlay : compareOverlay}
         instanceSelection={assembly.draft ? assembly.highlight.instances : steppedSelection} instanceFaces={mateFaces ? assembly.highlight.instanceFaces : measuredInstanceFaces}
         placing={!!active?.placing} placeSkip={placeSkip} onSpot={onSpot}
