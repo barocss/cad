@@ -150,13 +150,25 @@ function CurveTools({ id, direct, run, added }: { id: string; direct: DirectGeom
 
 /** Where the curve crosses a plane square to X, Y or Z, at a value. */
 function Crossings({ id, direct }: { id: string; direct: DirectGeometry }) {
-  const [axis, setAxis] = useState<'x' | 'y' | 'z'>('z'), [at, setAt] = useState(0), [found, setFound] = useState<ReturnType<typeof curvePlaneCrossings> | null>(null), [note, setNote] = useState<string | null>(null);
-  useEffect(() => { setFound(null); setNote(null); }, [id, axis, at]);
+  const [axis, setAxis] = useState<'x' | 'y' | 'z'>('z'), [at, setAt] = useState(0);
+  const [read, setRead] = useState<{
+    direct: DirectGeometry; id: string; axis: typeof axis; at: number;
+    found: ReturnType<typeof curvePlaneCrossings> | null; note: string | null;
+  } | null>(null);
+  const current = read && read.direct === direct && read.id === id && read.axis === axis && read.at === at ? read : null;
+  // Hide old answers on this render, then discard them so Undo cannot revive them.
+  // Plane inputs stay independent of the immutable geometry snapshot.
+  if (read && !current) setRead(null);
+  const found = current?.found, note = current?.note;
   return <>
     <div className="card-title" style={{ marginTop: 8 }}>CROSSINGS</div>
     <label className={FIELD}><span>Plane</span><NativeSelect className={CONTROL} aria-label="Crossing plane" value={axis} onChange={e => setAxis(e.target.value as 'x' | 'y' | 'z')}><option value="x">X =</option><option value="y">Y =</option><option value="z">Z =</option></NativeSelect></label>
     <NumberField label="At" value={at} onChange={setAt} />
-    <Button variant="ghost" aria-label="Find crossings" onClick={() => { try { setFound(curvePlaneCrossings(direct, id, axis, at)); } catch (e) { setFound(null); setNote(e instanceof Error ? e.message : String(e)); } }}>Find crossings</Button>
+    <Button variant="ghost" aria-label="Find crossings" onClick={() => {
+      const owner = { direct, id, axis, at };
+      try { setRead({ ...owner, found: curvePlaneCrossings(direct, id, axis, at), note: null }); }
+      catch (e) { setRead({ ...owner, found: null, note: e instanceof Error ? e.message : String(e) }); }
+    }}>Find crossings</Button>
     {note && !found && <div className="muted small">{note}</div>}
     {found && (found.length ? found.map((c, k) => <div key={k} className="kv" aria-label="Crossing">t {fmtNum(c.t, 5)} <b>{c.point.map(v => fmtNum(v, 3)).join(', ')}</b></div>) : <div className="muted small">The curve does not cross {axis.toUpperCase()} = {at}.</div>)}
   </>;
