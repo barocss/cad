@@ -55,7 +55,7 @@ async function settle(sketch, name, radius, length, label) {
   f.phase = label;
   await hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor();
   await hud().locator('.hud-step').filter({ hasText: 'Profile' }).getByText(`Sketch ${sketch + 1}`, { exact: true }).waitFor();
-  await hud().locator('.hud-step').filter({ hasText: 'Path' }).getByText(`${name} · Faceted`, { exact: true }).waitFor();
+  await hud().locator('.hud-step').filter({ hasText: 'Path' }).getByText(`${name} · Line`, { exact: true }).waitFor();
   await f.page.waitForFunction(v => Math.abs(window.__studioSection().shownVolume - v) < 0.01, ringVolume(radius, length));
   const state = await read();
   assert.deepEqual([state.sketches, state.paths], [[sketch], [name]]);

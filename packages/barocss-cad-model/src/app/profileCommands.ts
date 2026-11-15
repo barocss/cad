@@ -531,6 +531,12 @@ export function sweepRepresentationLabel(mode: unknown): string {
   return sweepRepresentations.find(item => item.value === mode)?.label ?? sweepRepresentations[0].label;
 }
 
+/** Describe stored path geometry, not its provenance or the output solid format. */
+export function sweepPathGeometryLabel(path: { degree: number; controlPoints: readonly unknown[] }): string {
+  if (path.degree === 1) return path.controlPoints.length === 2 ? 'Line' : 'Polyline';
+  return `Degree ${path.degree} NURBS`;
+}
+
 function exactSweepMode(value: Values[string] | undefined) {
   return value === 'exact' || value === 'exact-straight' ? value : undefined;
 }
@@ -573,7 +579,8 @@ export const sweepCurveCommand: Command = {
     const profile = oneProfile(ctx), path = pickedPath(ctx);
     return [
       { label: 'Profile', text: profile ? `Sketch ${profile.index + 1}` : 'Pick a finished sketch', done: !!profile },
-      { label: 'Path', text: typeof path === 'string' ? path : `${path.name} · ${sweepRepresentationLabel(values.representation)}`, done: typeof path !== 'string' },
+      { label: 'Path', text: typeof path === 'string' ? path : `${path.name} · ${sweepPathGeometryLabel(path.path)}`, done: typeof path !== 'string' },
+      { label: 'Solid', text: sweepRepresentationLabel(values.representation), done: true },
     ];
   },
   build: (ctx, v) => {

@@ -50,7 +50,7 @@ async function verify(expected, label) {
   assert.ok(await pathLabel.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
   await f.same(expected);
   assert.equal(await editor.getByText(`Sketch 1 · Ø${radius * 2} mm`, { exact: true }).count(), 1, 'History does not identify the applied circular profile and diameter');
-  await editor.getByText('ImportedPath_001_OuterBendAlongTheMainHousingBeforeFinalTrim_Rev03 · Copied', { exact: true }).waitFor();
+  await editor.getByText('ImportedPath_001_OuterBendAlongTheMainHousingBeforeFinalTrim_Rev03 · Line · Copied', { exact: true }).waitFor();
   await editor.getByText('30, 0, 0 mm', { exact: true }).waitFor();
   await editor.getByText('30, 0, 22 mm', { exact: true }).waitFor();
   await f.same(expected);
@@ -75,7 +75,7 @@ await f.run(async () => {
   const hud = f.page.getByRole('dialog', { name: 'Sweep', exact: true });
   await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
   await hud.getByText('Sketch 1', { exact: true }).waitFor();
-  await hud.getByText('ImportedPath_001_OuterBendAlongTheMainHousingBeforeFinalTrim_Rev03 · Faceted', { exact: true }).waitFor();
+  await hud.getByText('ImportedPath_001_OuterBendAlongTheMainHousingBeforeFinalTrim_Rev03 · Line', { exact: true }).waitFor();
   await button('Apply', hud).click();
   await f.changed(seed);
   let accepted = await f.doc();

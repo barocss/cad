@@ -42,7 +42,7 @@ async function verify(expected, label) {
   await f.openFeatureEditor(2, label);
   const editor = f.editor();
   assert.equal(await editor.getByText('Sketch 1 · Ø6 mm', { exact: true }).count(), 1, 'History does not identify the applied circular profile and diameter');
-  await editor.getByText('Rail B · Copied', { exact: true }).waitFor();
+  await editor.getByText('Rail B · Line · Copied', { exact: true }).waitFor();
   await editor.getByText('30, 0, 0 mm', { exact: true }).waitFor();
   await editor.getByText('30, 0, 22 mm', { exact: true }).waitFor();
   await f.same(expected);
@@ -66,7 +66,7 @@ await f.run(async () => {
   const hud = f.page.getByRole('dialog', { name: 'Sweep', exact: true });
   await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
   await hud.getByText('Sketch 1', { exact: true }).waitFor();
-  await hud.getByText('Rail B · Faceted', { exact: true }).waitFor();
+  await hud.getByText('Rail B · Line', { exact: true }).waitFor();
   await button('Apply', hud).click();
   await f.changed(seed);
   const accepted = await f.doc();

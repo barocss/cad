@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1377: [G2 copy and Sweep path geometry](notes/g2-copy-path-geometry-mac-2026-11-15/README.md), #152 partial/open: no inferred legacy approximation provenance.
+
 - D1376: [Native edge copy](notes/native-edge-copy-mac-2026-11-15/README.md), #151; explicit legacy approximation and baseline test limits.
 
 - D1375: [Offset collapse recovery](notes/offset-collapse-recovery-mac-2026-11-15/README.md), #97 including dependent Offset; no geometry expansion.
