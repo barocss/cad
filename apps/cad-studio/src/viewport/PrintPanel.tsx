@@ -6,14 +6,14 @@ const directions: { label: string; value: Vec3 }[] = [
   { label: '+Z', value: [0, 0, 1] }, { label: '+X', value: [1, 0, 0] }, { label: '+Y', value: [0, 1, 0] },
   { label: '−Z', value: [0, 0, -1] }, { label: '−X', value: [-1, 0, 0] }, { label: '−Y', value: [0, -1, 0] },
 ];
-export function PrintPanel({ options, onOptions, onDirection, state, reason, warnings = [] }: {
+export function PrintPanel({ options, onOptions, onDirection, state, reason, warnings = [], scopeHint }: {
   options: PrintOptions;
-  onOptions(value: PrintPreviewPatch): void; onDirection(value: Vec3 | undefined): void; state: PrintState; reason?: string; warnings?: readonly string[];
+  onOptions(value: PrintPreviewPatch): void; onDirection(value: Vec3 | undefined): void; state: PrintState; reason?: string; warnings?: readonly string[]; scopeHint?: string;
 }) {
   const d = state.display, max = Math.max(0, (state.count ?? d?.summary.count ?? 1) - 1), shown = Math.min(options.layer, max);
   const direction = options.direction ? directions.findIndex(x => x.value.every((v, i) => v === options.direction![i])) : -1;
   return <div className="card" aria-label="Print layers" style={{ padding: '6px 10px', maxWidth: 420 }}>
-    <div role="status">{reason ?? state.error ?? (state.stage !== 'ready' ? 'Pending · current source layers are not ready' : `Layer ${d!.layer.k + 1} of ${d!.summary.count} · bed Z ${d!.layer.z.toFixed(3)} mm · ${d!.layer.contours.length} closed contours`)}{!reason && state.stage === 'ready' && warnings.length > 0 && <span className="warn" aria-label="Print contour warning"> {warnings.join(' ')}</span>}</div>
+    <div role="status">{reason ?? state.error ?? (state.stage !== 'ready' ? 'Pending · current source layers are not ready' : `Layer ${d!.layer.k + 1} of ${d!.summary.count} · bed Z ${d!.layer.z.toFixed(3)} mm · ${d!.layer.contours.length} closed contours`)}{!reason && state.stage === 'ready' && warnings.length > 0 && <span className="warn" aria-label="Print contour warning"> {warnings.join(' ')}</span>}{scopeHint && <span aria-label="Print source scope"> {scopeHint}</span>}</div>
     <label>Direction <select aria-label="Print direction" value={!options.direction ? 'default' : direction >= 0 ? String(direction) : 'custom'} onChange={e => onDirection(e.target.value === 'default' ? undefined : directions[Number(e.target.value)].value)}>
       <option value="default">Default +Z</option>{directions.map((x, i) => <option key={x.label} value={i}>{x.label}</option>)}{direction < 0 && options.direction && <option value="custom" disabled>Given [{options.direction.join(', ')}]</option>}
     </select></label>

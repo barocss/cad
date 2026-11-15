@@ -11,6 +11,34 @@ import { bodyName, lookOf } from '@barocss/cad-model/app/bodies';
 export function printSourceBodies(doc: StudioDoc, bodies: readonly BodyResult[]): BodyResult[] {
   return madeBodies(doc.nodes, bodies).filter(b => !lookOf(doc, b).hidden);
 }
+export interface PrintSourceBody { readonly key: string; readonly name: string }
+export interface PrintSourceScope {
+  readonly included: readonly PrintSourceBody[];
+  readonly excludedBought: readonly PrintSourceBody[];
+}
+/** Notice-only root scope, from the same BOM/visibility rules as actual layer inputs. */
+export function printSourceScope(doc: StudioDoc, bodies: readonly BodyResult[]): PrintSourceScope {
+  const made = new Set(madeBodies(doc.nodes, bodies));
+  const included: PrintSourceBody[] = [], excludedBought: PrintSourceBody[] = [];
+  for (const body of bodies) {
+    if (lookOf(doc, body).hidden) continue;
+    (made.has(body) ? included : excludedBought).push({ key: body.key, name: bodyName(doc, body) });
+  }
+  return { included, excludedBought };
+}
+export function printSourceScopeHint(doc: StudioDoc, bodies: readonly BodyResult[]): string | undefined {
+  const scope = printSourceScope(doc, bodies);
+  if (!scope.excludedBought.length) return undefined;
+  const names = scope.excludedBought.map(body => `${body.name} (${body.key})`).join(', ');
+  return `Layer sources: ${scope.included.length} made bodies${scope.included.length ? `: ${scope.included.map(body => `${body.name} (${body.key})`).join(', ')}` : ''}. Excluded purchased bodies: ${names}. These bodies may remain visible/selectable on the canvas; they are not layer results. Change bought/made in Inspect → BOM.`;
+}
+/** Used only at the existing no-source refusal, never ahead of edit/evaluation guards. */
+export function printEmptySourceReason(doc: StudioDoc, bodies: readonly BodyResult[]): string {
+  const scope = printSourceScope(doc, bodies);
+  return !scope.included.length && scope.excludedBought.length
+    ? 'All visible root bodies are purchased and excluded from print layers. Change bought/made in Inspect → BOM.'
+    : 'No visible solid mesh to preview.';
+}
 export function printSourceMeshes(doc: StudioDoc, bodies: readonly BodyResult[]): DisplayMesh[] {
   return printSourceBodies(doc, bodies).map(b => b.mesh);
 }

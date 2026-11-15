@@ -1,3 +1,4 @@
+import { printSourceScope } from '../viewport/printSettings';
 import { bodyTopologyLabel, nativeBoundaryLabel } from '../ui/bodyTopologyLabel';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -184,9 +185,11 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
       downloadBytes(r.bytes, `${owner.name}.3mf`, 'model/3mf');
       const s = r.stats, open = s.openEdges + s.repeatedEdges;
       const grouped = model.groupedSolids;
+      const purchasedRoots = printSourceScope(captured, parts[0].bodies).excludedBought;
       const count = grouped ? `${s.objects} object${s.objects === 1 ? '' : 's'}` : `${s.objects} bod${s.objects === 1 ? 'y' : 'ies'}`;
       const assemblyLoss = captured.instances?.length ? 'Assembly hierarchy, mates and variant definitions are omitted.' : null;
       const hints = [
+        purchasedRoots.length ? `3MF includes visible purchased root bodies: ${purchasedRoots.map(body => `${body.name} (${body.key})`).join(', ')}. Print layers exclude these bodies; 3MF follows visibility, not bought/made.` : null,
         grouped ? `${grouped.objects} 3MF ${grouped.objects === 1 ? 'object contains' : 'objects contain'} ${grouped.pieces} separate solid pieces.` : null,
         draftWarning(captured),
         captured.print ? 'Turned the way it prints and set on the bed.' : 'As modelled (choose a print direction to have it turned for printing).',

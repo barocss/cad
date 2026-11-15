@@ -6,6 +6,8 @@ The complete original D1–D417 record body is preserved byte-for-byte in the [d
 
 ## Decision navigation — latest records
 
+- [D1334 — Purchased body Print and 3MF scope](notes/purchased-print-scope-mac-2026-11-15/README.md).
+
 - [D1333 — Hidden-root export scope](notes/hidden-export-scope-mac-2026-11-15/README.md).
 
 - [D1332 — Open Print source contour warning](notes/open-cage-print-mac-2026-11-15/README.md).
