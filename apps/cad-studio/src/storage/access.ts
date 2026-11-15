@@ -34,7 +34,7 @@ async function browserRoot(): Promise<DirHandle> {
 /** A project kept in this browser, by name (made when new). */
 export async function browserProject(name: string): Promise<ProjectStore> {
   const dir = await (await browserRoot()).getDirectoryHandle(name, { create: true });
-  return handleStore(dir, 'browser');
+  return handleStore(dir, 'browser', { browserProject: name });
 }
 /** The projects kept in this browser, by name. */
 export async function browserProjects(): Promise<string[]> {

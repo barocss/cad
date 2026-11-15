@@ -49,10 +49,22 @@ async function walk(dir: DirHandle, prefix: string, out: StoreEntry[]): Promise<
   }
 }
 
-export function handleStore(root: DirHandle, kind: 'folder' | 'browser'): ProjectStore {
+export interface HandleStoreScope {
+  /** Canonical direct child of OPFS projects/, supplied by access.browserProject; never a native folder name. */
+  browserProject: string;
+}
+export function handleStore(root: DirHandle, kind: 'folder' | 'browser', scope?: HandleStoreScope): ProjectStore {
   // Serialize mutations of the same path in this adapter.
   const mutations = new Map<string, Promise<void>>();
   const mutate = async <T>(path: string, operation: () => Promise<T>): Promise<T> => {
+    if (kind === 'browser' && scope) {
+      const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
+      if (!locks?.request) throw refusal('STORAGE_UNAVAILABLE', 'safe browser-project saving requires Web Locks: keep this tab open and export your document, or use a browser with Web Locks support');
+      // All cooperating tabs opening projects/<name> use this same key. The callback owns the
+      // compare-and-set check, native close/removal and receipt; independent paths stay independent.
+      // Native folders, old clients and writers bypassing this adapter are NOT covered by this lock.
+      return locks.request(`barocss:opfs:mutation:${JSON.stringify([scope.browserProject, path])}`, operation);
+    }
     const previous = mutations.get(path);
     let release!: () => void;
     const done = new Promise<void>(resolve => { release = resolve; });
