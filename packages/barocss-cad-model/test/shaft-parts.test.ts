@@ -75,3 +75,22 @@ test('An open hub keyway cannot report an imaginary floor clearance for a key', 
   const r = evaluateDoc(doc, 1); assert.equal(r.ok, false);
   if (!r.ok) assert.match(r.error.detail, /open slot without a floor; a floor-clearance fit cannot be validated/);
 });
+
+test('Dowel pin zero length means step diameter, not a curved flush end', async () => {
+  const doc: StudioDoc = { ...emptyDoc(), nodes: [{ id: 'n0', kind: 'shaft', generator: 'shaft@0', center: [0, 0], steps: [{ diameter: 20, length: 60 }], holes: [{ diameter: 4, at: 30 }] }], outputs: { b0: { node: 0, side: 'solid' } }, nextId: 1 };
+  const made = run(doc, 'pin', { bodies: [0] }), result = evaluateDoc(made, 1);
+  assert.ok(result.ok, result.ok ? '' : result.error.detail);
+  const pin = result.bodies.find(b => b.ref?.node === 1)!;
+  assert.ok(Math.abs(pin.volume! - Math.PI * 2 ** 2 * 20) < 1e-7);
+  assert.ok(pin.mesh.faces.filter(f => f.exact?.kind === 'plane').length >= 2, 'flat ends remain');
+  assert.equal((made.nodes[1] as Extract<ModelNode, { kind: 'pin' }>).length, undefined);
+  // At y=2, the shaft surface lies inside x=10, while the flat pin end stays at x=10.
+  assert.ok(10 - Math.sqrt(10 ** 2 - 2 ** 2) > 0.2);
+  const ctx: Ctx = { ...blank, doc, bodies: result.bodies.filter(b => b.ref?.node === 0), selection: { faces: [], edges: [], bodies: [0] } };
+  assert.equal(cmd('pin').fields!(ctx).find(f => f.key === 'L')!.label, 'Length (0: shaft step diameter)');
+  assert.match(cmd('pin').hint!, /step.*diameter/);
+  assert.ok(pin.notes!.some(n => n.warning && /Flat ends.*not trimmed/.test(n.text)));
+  const described = await runTool({ doc, bodies: [] }, 'describe', { command: 'pin' }, async d => evaluatePart(d, 1));
+  assert.match(described.content, /shaft step diameter/);
+  assert.doesNotMatch(described.content, /flush with the step/);
+});

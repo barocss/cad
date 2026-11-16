@@ -118,9 +118,9 @@ const ringCommand: Command = {
 
 const pinCommand: Command = {
   id: 'pin', label: 'Dowel pin', icon: 'cad-key', group: 'create', keywords: 'dowel pin',
-  hint: 'A pin in a cross hole of the selected shaft — the hole\'s diameter and the step\'s length unless given; its fit on the hole by fit classes (Fit class, Fit pair) from your tables',
+  hint: 'A pin in a cross hole of the selected shaft — the hole\'s diameter and the step\'s diameter as its length unless given; flat ends are not trimmed to the shaft surface; its fit on the hole by fit classes (Fit class, Fit pair) from your tables',
   available: ctx => { const s = pickedShaft(ctx); return !s ? no('Select a shaft (from the Shaft command).') : s.node.holes?.length ? ok : no('The shaft has no cross hole: give it one.'); },
-  fields: ctx => [{ key: 'hole', label: 'Cross hole', kind: 'count', min: 1, max: Math.max(1, pickedShaft(ctx)?.node.holes?.length ?? 1) }, { key: 'd', label: 'Ø (0: the hole\'s)', kind: 'mm', min: 0 }, { key: 'L', label: 'Length (0: flush)', kind: 'mm', min: 0 }],
+  fields: ctx => [{ key: 'hole', label: 'Cross hole', kind: 'count', min: 1, max: Math.max(1, pickedShaft(ctx)?.node.holes?.length ?? 1) }, { key: 'd', label: 'Ø (0: the hole\'s)', kind: 'mm', min: 0 }, { key: 'L', label: 'Length (0: shaft step diameter)', kind: 'mm', min: 0 }],
   defaults: () => ({ hole: 1, d: 0, L: 0 }),
   build: (ctx, v) => { const d = n(v, 'd'), L = n(v, 'L'); return withNode(ctx.doc, { kind: 'pin', shaft: pickedShaft(ctx)!.index, hole: Math.round(n(v, 'hole')), ...(d > 0 ? { diameter: d } : {}), ...(L > 0 ? { length: L } : {}) }); },
 };
