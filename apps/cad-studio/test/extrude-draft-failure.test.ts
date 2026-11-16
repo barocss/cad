@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ModelNode } from '@barocss/cad-model/engine/doc';
-import { extrudeDraftFailure } from '../src/app/extrudeDraftFailure';
+import { extrudeDraftFailure, extrudeDraftDependentFilletFailure } from '../src/app/extrudeDraftFailure';
 const nodes: ModelNode[] = [
   { id: 'n0', kind: 'sketch', profile: 'loop', segments: [{ kind: 'line', start: [-10, 0] }, { kind: 'arc', start: [10, 0], center: [0, 0], direction: 'ccw' }] },
   { id: 'n1', kind: 'extrude', sketch: 0, height: 10, draft: -10 },
@@ -21,4 +21,19 @@ test('unknown profiles, wrong feature and unrelated errors receive no inward-sup
   assert.equal(extrudeDraftFailure({ ...error, detail: 'unrelated' }, nodes, 1), undefined);
   const other: ModelNode[] = [{ id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [20, 20] }, nodes[1]];
   assert.equal(extrudeDraftFailure(error, other, 1), undefined);
+});
+
+test('Draft-only edits identify a dependent Fillet and preserve its diagnostic', () => {
+  const accepted: ModelNode[] = [...nodes, { kind: 'fillet', id: 'n2', parent: { node: 1, side: 'solid' }, edges: [], radius: 2 }];
+  const candidate: ModelNode[] = [accepted[0], { ...nodes[1], draft: 35 } as ModelNode, accepted[2]];
+  const failure = { ...error, feature: 'n2', failedFeature: 'Fillet (n2)', detail: 'actual kernel evidence' };
+  const result = extrudeDraftDependentFilletFailure(failure, accepted, candidate, 1)!;
+  assert.equal(result.historyField, 'draft'); assert.match(result.hint, /Reset.*another angle/);
+  assert.equal(result.detail, failure.detail); assert.equal(result.failedFeature, failure.failedFeature);
+  assert.equal(extrudeDraftDependentFilletFailure(failure, accepted, accepted, 1), undefined);
+  assert.equal(extrudeDraftDependentFilletFailure({ ...failure, feature: 'n1' }, accepted, candidate, 1), undefined);
+  const both = [...candidate]; both[1] = { ...candidate[1], height: 20 } as ModelNode;
+  assert.equal(extrudeDraftDependentFilletFailure(failure, accepted, both, 1), undefined);
+  const unrelated = [...candidate]; unrelated[2] = { ...accepted[2], parent: { node: 0, side: 'solid' } } as ModelNode;
+  assert.equal(extrudeDraftDependentFilletFailure(failure, accepted, unrelated, 1), undefined);
 });

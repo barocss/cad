@@ -1,4 +1,4 @@
-import { extrudeDraftFailure } from '../app/extrudeDraftFailure';
+import { extrudeDraftFailure, extrudeDraftDependentFilletFailure } from '../app/extrudeDraftFailure';
 import { varyingFilletFailure } from '../app/varyingFilletFailure';
 import { historyFilletInteriorProblems, type FilletInteriorKey } from '../app/filletInteriorInput';
 import { countersinkHistoryProblem } from '../app/countersinkHistoryInput';
@@ -188,7 +188,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
     void result.then(error => {
       if (!ownsDraft()) return;
       request.current = null;
-      setEvaluation(error ? { nodes, index, error: extrudeDraftFailure(error, draft, index) ?? varyingFilletFailure(error, draft, index), opener } : null);
+      setEvaluation(error ? { nodes, index, error: extrudeDraftDependentFilletFailure(error, nodes, draft, index) ?? extrudeDraftFailure(error, draft, index) ?? varyingFilletFailure(error, draft, index), opener } : null);
     });
   };
   const close = () => { retireEvaluation(); onClose(); };
