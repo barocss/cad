@@ -45,6 +45,8 @@ export interface ViewDisplayState {
 export interface ViewCameraControls {
   ortho: boolean;
   sketching: boolean;
+  sketchReopenCamera?: { enabled: boolean; persistent: boolean; set(enabled: boolean): void };
+  fitActiveSketch?(): void;
   ao: boolean;
   setAo: StateSetter<boolean>;
   theme: 'dark' | 'light';
@@ -104,11 +106,18 @@ export interface ViewDisplayControlsProps {
 export function ViewDisplayControls({ doc, viewport, cornerRight, display, view, section: sectionState, analysis: analysisState, picking, explodeStore }: ViewDisplayControlsProps) {
   const { displayOpen, setDisplayOpen, displayMode, setDisplayMode, effectiveDisplayMode, displayScopeReason,
     displayModeReason, displayModeNotice, clearDisplayModeFailure, isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection } = display;
-  const { ortho, sketching, ao, setAo, theme, setTheme, rendering, printing, viewBackend } = view;
+  const { ortho, sketching, ao, setAo, theme, setTheme, rendering, printing, viewBackend, sketchReopenCamera, fitActiveSketch } = view;
   const aoAvailable = !lineDisplayMode(effectiveDisplayMode), aoActive = aoAvailable && ao;
   const { section, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye } = sectionState;
   const { analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread } = analysisState;
   const { pickFilter, setPickFilter, snapStep, setSnapStep, setSelection } = picking;
+  const [sketchCameraProblem, setSketchCameraProblem] = useState<{ doc: StudioDoc; message: string } | null>(null);
+  const sketchCameraAction = (action: () => void) => {
+    if (document.activeElement?.matches('input, textarea, select') || document.activeElement?.closest('[contenteditable="true"], [role="textbox"]')) {
+      setSketchCameraProblem({ doc, message: 'Finish or cancel the current input before changing the sketch camera. Your input has not been applied.' }); return;
+    }
+    setSketchCameraProblem(null); action();
+  };
   const [sectionProblem, setSectionProblem] = useState<{ doc: StudioDoc; reason: string } | null>(null);
   const reportSectionProblem = (reason: string | null) => setSectionProblem(reason ? { doc, reason } : null);
   const toggleSection = () => {
@@ -130,6 +139,11 @@ export function ViewDisplayControls({ doc, viewport, cornerRight, display, view,
         {displayOpen && <div className="previews" role="group" aria-label="Previews">
         {/* (G21's display mode and isolate, in the column too: the Views row stays as narrow as the history bar assumes.) */}
         <div className="card views display" role="group" aria-label="Display">
+          {sketchReopenCamera && <Button size="sm" variant={sketchReopenCamera.enabled ? 'default' : 'ghost'} aria-label="Auto-frame reopened sketches" aria-pressed={sketchReopenCamera.enabled}
+            title="Automatically face and fit existing sketches when reopened. New sketches and plane changes are unchanged."
+            onPointerDown={event => event.preventDefault()} onKeyDown={keepViewToggleKeys}
+            onClick={() => sketchCameraAction(() => sketchReopenCamera.set(!sketchReopenCamera.enabled))}>Auto-frame reopened sketches</Button>}
+          {sketchReopenCamera && !sketchReopenCamera.persistent && <span role="status" aria-label="Sketch camera preference">Sketch camera preference applies to this session only; browser storage is unavailable.</span>}
           <label className="cad-display-control"><span className="sr">CAD display mode</span>
             <select aria-label="CAD display mode" aria-describedby={displayModeNotice ? 'cad-display-mode-status' : undefined} value={effectiveDisplayMode} disabled={!!displayScopeReason}
               data-display-mode-requested={displayMode} data-display-mode-effective={effectiveDisplayMode} data-display-mode-supported={!displayModeReason}
@@ -145,6 +159,7 @@ export function ViewDisplayControls({ doc, viewport, cornerRight, display, view,
         </div>
         </div>}
     {section && <SectionBar section={section} setSection={setSection} hatch={sectionHatchOn} setHatch={setSectionHatchOn} box={sectionBox} facePick={sectionFacePick} setFacePick={setSectionFacePick} onSketch={sketchSection} eye={cameraEye} onProblem={reportSectionProblem} />}
+    {sketchCameraProblem?.doc === doc && <span className="muted small" role="status" aria-label="Sketch camera input">{sketchCameraProblem.message}</span>}
     {sectionProblem?.doc === doc && <span className="muted small" role="status">{sectionProblem.reason}</span>}
         </div>
         <div className="card views" role="group" aria-label="Views">
@@ -153,6 +168,8 @@ export function ViewDisplayControls({ doc, viewport, cornerRight, display, view,
           {(['iso', 'top', 'front', 'right'] as const).map(v => <Button size="sm" variant="ghost" key={v} onClick={() => viewport.current?.setView(v)}>{v === 'iso' ? 'Iso' : v[0].toUpperCase() + v.slice(1)}</Button>)}
           {sketching && <Button size="sm" variant="ghost" aria-label="Normal to sketch" title="Normal to sketch"
             onClick={() => viewport.current?.faceActiveSketch()}><Icon name="filter_center_focus" small /></Button>}
+          {sketching && fitActiveSketch && <Button size="sm" variant="ghost" aria-label="Normal and fit sketch" title="Face and fit the current sketch plane"
+            onPointerDown={event => event.preventDefault()} onKeyDown={keepViewToggleKeys} onClick={() => sketchCameraAction(fitActiveSketch)}><Icon name="fit_screen" small /></Button>}
           <Button size="sm" variant="ghost" onClick={() => viewport.current?.fit()} title="Frame all (F)"><Icon name="fit_screen" small /></Button>
           <Button size="sm" variant={section ? 'default' : 'ghost'} className={section ? 'on' : ''} aria-label="Section view" data-tip="Section view" data-tip-desc="Cut the part open along a plane to see inside (the model is not changed)"
             onClick={toggleSection}>

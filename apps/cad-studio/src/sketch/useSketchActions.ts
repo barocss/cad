@@ -1,3 +1,4 @@
+import { manualSketchRegion } from './manualSketchRegion';
 import { readOwnedNativeEdges, ownsNativeEdgeCopy } from '../app/ownedNativeEdgeCopy';
 import { nativeEdgeCurveSource } from '../app/nativeEdgeCurveSource';
 import { directTrimRestriction } from './directTrimReadiness';
@@ -52,6 +53,7 @@ interface SketchActionOptions {
   owner: { docNow: RefObject<StudioDoc>; acceptanceScope: object };
   worker: { engine: EngineClient; nextRevision(): number };
   viewport: RefObject<ViewportHandle | null>;
+  autoFrameReopened?: boolean;
   changes: { canChangeDocument(): boolean; commit(next: StudioDoc): boolean; commitDirect(next: DirectGeometry, select?: string[]): boolean; setSelection: Dispatch<SetStateAction<Selection>>; setEditNode(value: null): void; setActive(value: null): void; setPreviewBodies(value: null): void };
   onNotice(notice: FriendlyError): void;
 }
@@ -65,7 +67,7 @@ function keptFields(stored: ModelNode, placed: ModelNode): Partial<ModelNode> {
   return kept as Partial<ModelNode>;
 }
 /** Sketch placement, editing and Finish retain App's dispatch and sketch generation owner. */
-export function useSketchActions({ model, editor, owner, worker, viewport, changes, onNotice: setToast }: SketchActionOptions) {
+export function useSketchActions({ model, editor, owner, worker, viewport, changes, onNotice: setToast, autoFrameReopened = true }: SketchActionOptions) {
   const { doc, evaluated, fresh, busy, bodies, selection, marker } = model;
   const { sketch, setSketch, sketchGeneration, recordDraft } = editor;
   const sketchRenderGeneration = sketchGeneration.current;
@@ -270,7 +272,12 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
     const draft = startPicking({ plane, tool: 'select', shape, done, base: floor?.face.base ?? (node.association ? node.on ?? node.association.source : null), ...(floor ? { anchor: floor } : {}), editNode: index, ...(reopened.band ? { band: reopened.band } : {}), ...(shape?.ids?.length ? { mainIds: shape.ids } : {}), ...(node.association ? { association: node.association } : {}), ...(positional ? { positional } : {}) }, 'select');
     reopenedDraft.current = { doc, source: stored, draft, recoveredLengths: new WeakSet() };
     setSketch(draft);
-    const [min, max] = sketchRegion(bodies, plane); viewport.current?.frameSketch(min, max, plane);
+    if (autoFrameReopened) { const [min, max] = sketchRegion(bodies, plane); viewport.current?.frameSketch(min, max, plane); }
+  };
+  const fitActiveSketch = () => {
+    if (!sketch || !ownsSketch()) return;
+    const [min, max] = manualSketchRegion(bodies, sketch, doc.parameters);
+    viewport.current?.frameActiveSketch(min, max, sketch.plane);
   };
   const linkSketchInset = (insetMM: number): string | undefined => {
     const source = sketch?.anchor?.face?.linkSource;
@@ -394,5 +401,5 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
   }, [sketch, doc, marker, commit, engine, setSketch, acceptanceScope]);
 
   const finishError = sketch && finishRefusal?.generation === sketchGeneration.current ? finishRefusal.message : null;
-  return { currentSketchSource, makeSketchBand, editSketchBand, removeSketchBand, placeSketch, sketchToCurves, edgesToCurves, offsetSketch, useFaceOutline, clearSketchProfile, trimSketch, trimSelectedEdge, dragTrim, editSketch, linkSketchInset, finishSketch, finishError };
+  return { fitActiveSketch, currentSketchSource, makeSketchBand, editSketchBand, removeSketchBand, placeSketch, sketchToCurves, edgesToCurves, offsetSketch, useFaceOutline, clearSketchProfile, trimSketch, trimSelectedEdge, dragTrim, editSketch, linkSketchInset, finishSketch, finishError };
 }

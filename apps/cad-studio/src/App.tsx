@@ -1,3 +1,4 @@
+import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { browserRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal';
 import { useBodyBrowserReveal } from './app/useBodyBrowserReveal';
 import { useContinuityLocation } from './app/useContinuityLocation';
@@ -1915,9 +1916,10 @@ export function App() {
   useEffect(() => {
     if (sketch && sketchOffsetTarget(sketch)) setToast(current => current?.title === 'Nothing to offset' ? null : current);
   }, [sketch]);
+  const sketchReopenCamera = useSketchReopenCamera();
   const sketchActions = useSketchActions({ model: { doc, evaluated, fresh, busy, bodies, selection, marker },
     editor: { sketch, setSketch, sketchGeneration, recordDraft: recordSketchDraft }, owner: { docNow, acceptanceScope },
-    worker: { engine, nextRevision: () => revision.current++ }, viewport, changes: { canChangeDocument, commit, commitDirect, setSelection, setEditNode, setActive, setPreviewBodies }, onNotice: setToast });
+    worker: { engine, nextRevision: () => revision.current++ }, viewport, autoFrameReopened: sketchReopenCamera.enabled, changes: { canChangeDocument, commit, commitDirect, setSelection, setEditNode, setActive, setPreviewBodies }, onNotice: setToast });
   const { makeSketchBand, editSketchBand, removeSketchBand, placeSketch, sketchToCurves, edgesToCurves, offsetSketch, useFaceOutline, clearSketchProfile, trimSketch, trimSelectedEdge, dragTrim, editSketch, linkSketchInset, currentSketchSource, finishError: sketchFinishError } = sketchActions;
   const circleChord = useCircleFromChord(doc, sketch, docNow, sketchGeneration, (shape, fresh) => updateShape(shape, fresh, 'chord-circle'));
   const commitBodyVisibility = (next: StudioDoc) => {
@@ -3822,7 +3824,7 @@ export function App() {
       <ViewDisplayControls doc={doc} viewport={viewport} cornerRight={cornerRight}
         display={{ displayOpen, setDisplayOpen, displayMode, setDisplayMode, effectiveDisplayMode, displayScopeReason, displayModeReason, displayModeNotice,
           clearDisplayModeFailure: () => setDisplayModeFailure(null), isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection }}
-        view={{ ortho, sketching: !!sketch, ao, setAo, theme, setTheme, rendering, printing: !!printing, viewBackend }}
+        view={{ ortho, sketching: !!sketch, sketchReopenCamera, fitActiveSketch: sketchActions.fitActiveSketch, ao, setAo, theme, setTheme, rendering, printing: !!printing, viewBackend }}
         section={{ section, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye }}
         analysis={{ analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread }}
         picking={{ pickFilter, setPickFilter, snapStep, setSnapStep, setSelection }} explodeStore={explodeStore} />

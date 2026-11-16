@@ -1,3 +1,4 @@
+import { applySketchCameraFrame, ownsSketchCameraFrame, type SketchCameraFrame } from './sketchCameraFrame';
 import { ContinuityLocation } from './ContinuityLocation';
 import type { EdgeCurvatureMeasurement } from '@barocss/cad-model/engine/edgeCurvature';
 import { CurvatureComb } from './CurvatureComb';
@@ -29,7 +30,7 @@ import type { RenderCamera } from '@barocss/cad-model/engine/render';
 import type { DirectDisplay } from '@barocss/cad-model/engine/direct';
 import { directBezierDisplay } from './directBezierDisplay';
 import { regionMesh, type ToolRegion } from '@barocss/cad-model/app/holeRegion';
-import { toWorld, type SketchPlane } from '@barocss/cad-model/sketch/plane';
+import type { SketchPlane } from '@barocss/cad-model/sketch/plane';
 import { handleLayout, type FeatureHandle } from './gizmo';
 import { gizmoMarks } from './GizmoMarks';
 import { HandleValueBox } from './HandleValueBox';
@@ -56,6 +57,7 @@ export interface ViewportHandle {
   startRectangleAt(owner: SketchState, at: [number, number]): boolean;
   /** A straight view onto the sketch plane, framing its rectangle (plane coordinates) in the area not covered by `insets` (CSS px). */
   frameSketch(min: [number, number], max: [number, number], plane: SketchPlane): void;
+  frameActiveSketch(min: [number, number], max: [number, number], plane: SketchPlane): boolean;
   faceActiveSketch(): void;
   setTheme(name: ThemeName): void; setAo(on: boolean): void;
   /** The frame as a PNG (WebGPU only). */
@@ -771,6 +773,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       return renderer.current?.pickSurfacePoint?.(q[0], q[1], camera.current) ?? null;
     };
     w.__studioEye = () => camera.current.eye();
+    w.__studioCamera = () => { const c = camera.current; return { target: [...c.target], distance: c.distance, yaw: c.yaw, pitch: c.pitch, fovY: c.fovY, ortho: c.ortho }; };
     // (O10, for the flow: tracking on or off, and the last frame tracked in each display mode.)
     w.__studioFrameCost = (on?: boolean) => { if (on !== undefined) { frameCostOn.current = on; renderer.current?.trackFrameCost(on); requestRef.current(); } return renderer.current?.frameCosts() ?? {}; };
     w.__studioDirectAt = (p: Vec3) => { const q = screen(p); return renderer.current?.pickDirect?.(q[0], q[1], camera.current) ?? null; };
@@ -886,18 +889,12 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
   }, [sketching]);
 
   // The sketch rail replaces the Model rail in the same commit as the sketch.
-  const pendingSketchFrame = useRef<{ min: [number, number]; max: [number, number]; plane: SketchPlane } | null>(null);
+  const pendingSketchFrame = useRef<SketchCameraFrame | null>(null);
   useLayoutEffect(() => {
     const frame = pendingSketchFrame.current, view = canvas.current;
     pendingSketchFrame.current = null;
-    if (!frame || !view || frame.plane !== props.sketch?.plane) return;
-    const { min, max, plane } = frame;
-    const w = Math.max(1, view.clientWidth), h = Math.max(1, view.clientHeight);
-    const area = modelFitArea(view), c = camera.current;
-    c.aspect = w / h;
-    c.faceNormal(plane.normal);
-    c.frameAt(toWorld(plane, [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2]),
-      [max[0] - min[0], max[1] - min[1]], area?.left ?? 0, area ? 1 - area.right : 0);
+    if (!view || !ownsSketchCameraFrame(frame, props.sketch?.plane)) return;
+    applySketchCameraFrame(camera.current, frame, view.clientWidth, view.clientHeight, modelFitArea(view));
     request();
   }, [props.sketch?.plane]);
 
@@ -911,6 +908,14 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     fit(box) { const b = sourceProps.printActive ? boundsForFit() : box ?? boundsForFit(); if (b) fitBounds(b); request(); },
     setView(name) { propsRef.current.onHoverScalar?.(null); camera.current.setView(name); const b = boundsForFit(); if (b) fitBounds(b); request(); },
     frameSketch(min, max, plane) { pendingSketchFrame.current = { min, max, plane }; },
+    frameActiveSketch(min, max, plane) {
+      const frame = { min, max, plane }, view = canvas.current;
+      if (!view || !ownsSketchCameraFrame(frame, propsRef.current.sketch?.plane)) return false;
+      pendingSketchFrame.current = null;
+      applySketchCameraFrame(camera.current, frame, view.clientWidth, view.clientHeight, modelFitArea(view));
+      request();
+      return true;
+    },
     faceActiveSketch() {
       const plane = propsRef.current.sketch?.plane;
       if (!plane) return;
