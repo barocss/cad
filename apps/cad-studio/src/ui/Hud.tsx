@@ -1,3 +1,4 @@
+import { filletFaceSelectionFeedback } from '../app/filletFaceSelectionFeedback';
 import { filletInteriorProblems, type FilletInteriorKey } from '../app/filletInteriorInput';
 import { offsetCollapseFeedback } from '../app/offsetCollapseFeedback';
 import { offsetPlanePickFeedback } from '../app/offsetPlanePickFeedback';
@@ -50,6 +51,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
   useEffect(() => { first.current?.focus(); if (first.current instanceof HTMLInputElement && first.current.type !== 'file') first.current.select(); }, [active?.cmd.id]);
   // (Ended before the App unmounts it.)
   if (!active) return null;
+  const faceSelectionFeedback = filletFaceSelectionFeedback(active);
   const interiorProblems = filletInteriorProblems(active);
   const interiorInvalid = Object.keys(interiorProblems).length > 0;
   const sectionProblem = filletSectionNumberProblem(active);
@@ -138,8 +140,8 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           const guideStep = active.cmd.id === 'loft' && step.label === 'Guides';
           const requiresPreview = guideStep || endFace || (step.label === 'Move' && (active.cmd.id === 'offset-face' || active.cmd.id === 'offset-face-edit')) || (step.label === 'Reference plane' && isOffsetToPlane(active.cmd.id, active.values))
             || (step.label === 'Axis' && replacingAxis);
-          const pathError = step.label === 'Path' ? pathFeedback : step.label === 'Reference plane' ? planePickFeedback : undefined;
-          const done = step.done && !pathError && (!requiresPreview || active.preview === 'ok');
+          const pathError = step.label === 'Faces' ? faceSelectionFeedback?.text : step.label === 'Path' ? pathFeedback : step.label === 'Reference plane' ? planePickFeedback : undefined;
+          const done = step.done && !(pathError && step.label !== 'Faces') && (!requiresPreview || active.preview === 'ok');
           return <div key={step.label} className={'hud-step' + (done ? ' done' : '')}>
             <Icon name={done ? 'check_circle' : 'radio_button_unchecked'} small /><b>{step.label}</b><span role={pathError ? 'status' : undefined}>{pathError ?? (guideStep && step.done && active.preview !== 'ok' ? active.preview === 'error' ? 'Guide geometry was not accepted. Review the error below.' : 'Validating guide geometry…' : step.text)}</span>
           </div>;
@@ -177,7 +179,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           return onHoleOptions(active, { type, d, depth, cd, ch, csd });
         }} /> : null}
       {active.cmd.id === 'fill-feature-pattern' && <FillPatternHints />}
-      {active.preview === 'error' && active.error && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && !sectionRecovery && !(active.error.historyField && (interiorProblems[active.error.historyField as FilletInteriorKey] || active.error.historyField === sectionProblem?.key)) && <FeatureFailureNotice error={active.error} />}
+      {active.preview === 'error' && active.error && !faceSelectionFeedback?.hideError && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && !sectionRecovery && !(active.error.historyField && (interiorProblems[active.error.historyField as FilletInteriorKey] || active.error.historyField === sectionProblem?.key)) && <FeatureFailureNotice error={active.error} />}
       <div className="hud-actions">
         {active.cmd.id === 'mirror' && <Button variant="ghost" aria-pressed={pickingMirrorPlane}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
