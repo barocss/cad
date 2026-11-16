@@ -1,3 +1,5 @@
+import { evaluateDoc } from '@barocss/cad-model/engine/evaluate';
+import { mountNodes } from '@barocss/cad-model/app/mounts';
 import { commands } from '@barocss/cad-model/app/commands';
 import { readFileSync } from 'node:fs';
 const sampleRows = JSON.parse(readFileSync('../../packages/barocss-cad-model/samples/rows/fastener-sizes.json', 'utf8')).rows;
@@ -122,3 +124,28 @@ for (const failure of ['document', 'evaluated', 'worker', 'marker', 'variant'] a
     assert.equal(owns(), false);
   });
 }
+
+function mountFixture() {
+  const f = fixture(), base: StudioDoc = { ...rectanglePart(160, 100, 10), mounts: { version: 1,
+    rows: JSON.parse(readFileSync('../../packages/barocss-cad-model/samples/rows/mounts.json', 'utf8')).rows } };
+  const result = evaluateDoc(base, 0); assert.ok(result.ok);
+  const face = result.bodies[0].mesh.faces.find(face => face.name === 'n1.top')!;
+  const ctx = { doc: base, bodies: result.bodies, selection: { bodies: [], edges: [], faces: [{ body: 0, face: face.index }] } };
+  const doc = mountNodes(ctx, { row: 'nema17', x: 80, y: 50, turn: '0', pilot: 'through' });
+  f.props.model = { ...f.props.model, doc, evaluated: doc, commandDoc: doc, editNode: doc.nodes.length - 1 };
+  f.props.commands.ctx = { ...ctx, doc };
+  f.props.owner = { ...f.props.owner, document: () => doc, evaluated: () => doc, ownsEvaluatedSource: () => true };
+  return f;
+}
+test('terminal Mount History starts grouped Edit Mount with live source ownership', () => {
+  const f = mountFixture(); const action = f.editor().savedFeatureEdit; assert.equal(action?.label, 'Edit Mount');
+  action!.start(); assert.deepEqual(f.events, ['discard', 'close']);
+  assert.equal(f.active.get()?.cmd.id, 'edit'); assert.equal(f.active.get()?.values.row, 'nema17');
+  assert.equal(f.active.get()?.ownsSource?.(), true); f.props.owner.worker = () => 2;
+  assert.equal(f.active.get()?.ownsSource?.(), false);
+});
+test('Mount source draft blocks entry and inner group rows do not offer a guessed owner', () => {
+  const f = mountFixture(); f.props.owner.hasDraft = () => true; f.editor().savedFeatureEdit!.start();
+  assert.deepEqual(f.events, []); assert.equal(f.active.get(), null);
+  f.props.model.editNode = 2; assert.equal(f.editor().savedFeatureEdit, undefined);
+});
