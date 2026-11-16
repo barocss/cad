@@ -323,7 +323,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       if (node.depth !== undefined) number('depth', 'Depth', 'mm', n => num((n as typeof node).depth), (n, v) => ({ ...(n as typeof node), depth: v }));
       if (node.countersink !== undefined) number('csk', 'Countersink Ø', 'mm', n => (n as typeof node).countersink ?? 0, (n, v) => ({ ...(n as typeof node), countersink: v }));
       if (node.pattern) {
-        number('count', 'Copies', undefined, n => (n as typeof node).pattern?.count ?? 1, (n, v) => ({ ...(n as typeof node), pattern: { ...(n as typeof node).pattern!, count: Math.max(1, Math.round(v)) } }));
+        number('count', 'Copies', undefined, n => (n as typeof node).pattern?.count ?? 1, (n, v) => ({ ...(n as typeof node), pattern: { ...(n as typeof node).pattern!, count: v } }), { min: 1, max: 64 });
         const selector = 'step' in node.pattern ? 'step' : 'about';
         const label = selector === 'step' ? 'Step ' : 'Circle centre ';
         const coordinates = (pattern: HolePattern | undefined) => {

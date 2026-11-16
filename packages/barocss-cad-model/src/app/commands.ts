@@ -597,8 +597,8 @@ const allCommands: Command[] = [
       if (v.type === 'tapped' && !fastenerSizesOf(ctx.doc)[String(v.thread)]) throw coded('FASTENER_SIZE_ROW', noSizeRow(String(v.thread)));
       const tapped = v.type === 'tapped' && fastenerSizesOf(ctx.doc)[String(v.thread)], blind = v.type === 'blind' || (v.type === 'tapped' && v.tend === 'blind');
       // Copies on the face: a row or a bolt circle (each a hole of the kernel's, one step in the history).
-      const count = Math.round(Number(v.pn));
-      if (v.pat !== 'one' && v.pat !== undefined && !(count >= 2 && count <= 64)) throw refusal('HOLE_PATTERN', 'A hole pattern has 2 to 64 holes.');
+      const count = Number(v.pn);
+      if (v.pat !== 'one' && v.pat !== undefined && !(Number.isInteger(count) && count >= 2 && count <= 64)) throw refusal('HOLE_PATTERN', 'Count must be a whole number from 2 to 64. Choose One hole for a single hole.');
       const pattern: HolePattern | undefined = v.pat === 'row' ? { count, step: [Number(v.pa), Number(v.pb)] } : v.pat === 'circle' ? { count, about: [Number(v.qa), Number(v.qb)] } : undefined;
       const rowProblem = pattern && 'step' in pattern && holeRowSpacingProblem(pattern.step, Number(v.d));
       if (rowProblem) throw refusal('HOLE_PATTERN', rowProblem);

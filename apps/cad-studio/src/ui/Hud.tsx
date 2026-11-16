@@ -86,11 +86,11 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
   };
   const renderField = (field: Field, index: number) => {
     const value = active.values[field.key], ref = index === 0 ? captureFirst : undefined;
-    const showCircularCount = active.cmd.id === 'circular-pattern' && field.key === 'count' && field.kind === 'count';
-    const invalidCount = showCircularCount && (!Number.isInteger(Number(value)) || Number(value) < (field.min ?? -Infinity) || Number(value) > (field.max ?? Infinity));
+    const showCountRange = field.kind === 'count' && ((active.cmd.id === 'circular-pattern' && field.key === 'count') || (active.cmd.id === 'hole' && field.key === 'pn'));
+    const invalidCount = showCountRange && (!Number.isInteger(Number(value)) || Number(value) < (field.min ?? -Infinity) || Number(value) > (field.max ?? Infinity));
     const numberRule = commandNumberRule(active.cmd.id, field.key, active.values.op);
     const bounds = featureNumberBounds(numberRule);
-    const range = showCircularCount ? `Whole number from ${field.min} to ${field.max}` : numberRule ? featureNumberRange(numberRule) : null;
+    const range = showCountRange ? `Whole number from ${field.min} to ${field.max}` : numberRule ? featureNumberRange(numberRule) : null;
     const rangeId = range ? `hud-number-range-${field.key}` : undefined;
     const collapseError = field.key === 'd' ? collapseFeedback : undefined;
     const collapseId = 'hud-offset-collapse';

@@ -4,7 +4,7 @@ import { createFlow } from './flow-helper.mjs';
 const pins = ['apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/ui/NodeEditor.tsx',
   'packages/barocss-cad-model/src/app/commands.ts', 'packages/barocss-cad-model/src/app/editFields.ts',
   'packages/barocss-cad-model/src/engine/part.ts'];
-const circular = process.argv[3] === '--circle';
+const circular = process.argv.includes('--circle');
 const f = await createFlow({
   name: 'hole-row-history', output: process.argv[2], envFrozen: circular ? 'D1182_SOURCE_FROZEN' : 'D1181_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
@@ -50,7 +50,7 @@ async function verify(label, doc, centres) {
 }
 
 await f.run(async () => {
-  await f.newPage();
+  await f.newPage(); await f.page.setViewportSize({ width: Number(process.argv.find(a => /^(1024|1440)$/.test(a)) ?? 1440), height: 900 });
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: 'D1181-hole-row.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(box)) });
   await f.same(box);
@@ -105,7 +105,14 @@ await f.run(async () => {
     return;
   }
   await field('Copies', hud).selectOption('row');
-  await field('Count', hud).fill('3');
+  const count = field('Count', hud);
+  assert.ok(await hud.getByText('Whole number from 2 to 64', { exact: true }).isVisible());
+  for (const invalid of ['2.4', '0', '1', '65']) {
+    await count.fill(invalid); await hud.locator('.status').filter({ hasText: /^refused$/ }).waitFor();
+    assert.equal(await count.getAttribute('aria-invalid'), 'true');
+    assert.ok(await button('Apply', hud).isDisabled()); await f.same(box);
+  }
+  await count.fill('3');
   await field('Step X', hud).fill('8');
   await field('Step Y', hud).fill('1');
   await preview();
@@ -117,6 +124,17 @@ await f.run(async () => {
   assert.deepEqual(saved.center, [8, 12]);
   await verify('hole-row-created', initial, [[8, 12], [16, 13], [24, 14]]);
   await f.openFeatureEditor(2, 'row step');
+  const copies = field('Copies', f.editor());
+  assert.ok(await f.editor().getByText('Whole number from 1 to 64', { exact: true }).isVisible());
+  for (const invalid of ['2.4', '0', '65']) {
+    await copies.fill(invalid); assert.equal(await copies.getAttribute('aria-invalid'), 'true');
+    assert.ok(await button('Apply', f.editor()).isDisabled()); await f.same(initial);
+  }
+  await copies.fill('1');
+  const single = (await f.applyEditor(initial, 'explicit-one-hole')).doc;
+  assert.equal(single.nodes[2].pattern.count, 1); await verify('explicit-one-hole', single, [[8, 12]]);
+  await f.undo(); await f.same(initial); await f.redo(); await f.same(single); await f.undo(); await f.same(initial);
+  await f.openFeatureEditor(2, 'row step restored');
   assert.equal(await field('Step X', f.editor()).count(), 1, 'No Step X input in Hole row History');
   const stepX = field('Step X', f.editor()), stepY = field('Step Y', f.editor());
   assert.equal(await stepX.inputValue(), '8');

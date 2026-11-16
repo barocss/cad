@@ -78,3 +78,28 @@ test('hole callouts: count, size or thread, through or deep, counterbore and cou
   assert.equal(holeCallout(last({ type: 'countersink', d: 6.6, csd: 13 }), `n${k}.side0`), 'Ø6.6 THRU  CSK Ø13 × 90°');
   assert.equal(holeCallout(plate.nodes, 'n1.side0|n1.top'), null);
 });
+
+test('hole pattern counts never round or clamp creation/history input', async () => {
+  const { editFields } = await import('../src/app/editFields');
+  const ctx = faceCtx('n1.top');
+  for (const pat of ['row', 'circle']) for (const type of ['through', 'counterbore']) {
+    const values = { ...hole.defaults!(ctx), pat, type, d: 4, cd: 6, ch: 2, x: 8, y: 8, pa: 8, pb: 1, qa: 16, qb: 16 };
+    for (const pn of [NaN, Infinity, -1, 0, 1, 2.4, 64.1, 65])
+      assert.throws(() => hole.build!(ctx, { ...values, pn }), /whole number from 2 to 64/);
+    for (const pn of [2, 3, 64]) {
+      const made = hole.build!(ctx, { ...values, pn });
+      for (let i = plate.nodes.length; i < made.nodes.length; i++) {
+        const node = made.nodes[i]; assert.ok(node.kind === 'hole'); assert.equal(node.pattern?.count, pn);
+        const count = editFields(made.nodes, i).find(f => f.key === 'count'); assert.ok(count?.kind === 'number');
+        assert.deepEqual(count.integerRange, { min: 1, max: 64 });
+        for (const invalid of [NaN, Infinity, -1, 0, 2.4, 65]) assert.deepEqual(count.set(made.nodes, invalid), made.nodes);
+        for (const valid of [1, 2, 64]) {
+          const changed = count.set(made.nodes, valid)[i]; assert.ok(changed.kind === 'hole');
+          assert.deepEqual(changed, { ...node, pattern: { ...node.pattern!, count: valid } });
+        }
+      }
+    }
+    const single = hole.build!(ctx, { ...values, pat: 'one', pn: 2.4 });
+    assert.ok(single.nodes.slice(plate.nodes.length).every(n => n.kind === 'hole' && n.pattern === undefined));
+  }
+});

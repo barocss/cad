@@ -275,7 +275,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
         const rule = f.kind === 'number' ? historyNumberRule(draft, index, f.key) : undefined;
         const numberBounds = featureNumberBounds(rule);
         const invalidDimension = invalidDimensions.some(item => item.field === f);
-        const range = rule === 'open-unit' ? featureNumberRange(rule) : f.kind === 'number' && f.integerRange && !invalidCounts.includes(f)
+        const range = rule === 'open-unit' ? featureNumberRange(rule) : f.kind === 'number' && f.integerRange
           ? `Whole number from ${f.integerRange.min} to ${f.integerRange.max}` : rule && !invalidDimension ? featureNumberRange(rule) : null;
         const rangeId = invalidDimension && rule !== 'open-unit' ? `history-invalid-${f.key}` : range ? `history-range-${f.key}` : undefined;
         const guideField = loftGuides && /^loftGuideControl([01])([01])$/.exec(f.key);
