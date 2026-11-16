@@ -431,7 +431,7 @@ export function App() {
   const claimBodies = useRef(false);
   const [busy, setBusy] = useState(true);
   const [selection, setSelection] = useState<Selection>(emptySel);
-  const browserSubtract = useRef<{ doc: StudioDoc; selection: Selection; index: number } | null>(null);
+  const cutSourceIntent = useRef<{ doc: StudioDoc; selection: Selection; index: number } | null>(null);
   const [pick, setPick] = useState<Vec3 | null>(null);
   // (R1d: the running command outside React state — see activeKey. The HUD subscribes to all of it.)
   const activeStore = useMemo(() => createValueStore<Active | null>(null), []), setActive = activeStore.set;
@@ -1747,7 +1747,7 @@ export function App() {
     setPalette(false); setRendering(false); setPlaying(false); setDrawing(false);
     const family = filletType(cmd.id);
     if (family && (!fresh || busy)) { setToast({ title: 'Fillet not started', hint: 'Wait for the current part to finish evaluating.', detail: '' }); return; }
-    const sourceIntent = browserSubtract.current;
+    const sourceIntent = cutSourceIntent.current;
     if (isCutPattern(cmd.id) && sourceIntent?.doc === doc && sourceIntent.selection === selection) {
       const source = selectedCutPatternSource(ctx);
       if (source !== sourceIntent.index) {
@@ -1865,6 +1865,8 @@ export function App() {
       footprintRequest.current++;
       cancelNativeReview();
       setInstanceSel([]); setDirectSel([]); assembly.cancel();
+      // Inspecting a Subtract is source intent in History just as it is in Browser.
+      cutSourceIntent.current = node.kind === 'difference' ? { doc, selection, index } : null;
       if (node.kind === 'text' || node.kind === 'text-relief' || node.kind === 'cylindrical-wrap' || node.kind === 'band-surface') {
         const command = editCommand(index, doc.nodes, doc);
         if (command) {
@@ -3244,7 +3246,7 @@ export function App() {
             rememberFocus: workspaceModeExit.rememberFocus,
             editFeature: (index, body, event) => workspaceModeExit.switchWhenReady(() => {
               const picked: Selection = { faces: [], edges: [], bodies: [body] };
-              browserSubtract.current = doc.nodes[index]?.kind === 'difference' ? { doc, selection: picked, index } : null;
+              cutSourceIntent.current = doc.nodes[index]?.kind === 'difference' ? { doc, selection: picked, index } : null;
               setEditNode(index);
               setSelection(picked);
             }, { event, readFeature: readFeatureTransitionDraft }),
