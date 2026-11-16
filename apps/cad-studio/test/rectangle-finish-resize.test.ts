@@ -24,7 +24,7 @@ test('non-Width/Depth, nonplain, held, bound and unsupported feature edits do no
  const {before,next}=fixture();assert.equal(isRectangleFinishResize(before,next,0),false);assert.equal(isRectangleFinishResize(before,before,1),false);
  const changed=(index:number,patch:object):StudioDoc=>({...next,nodes:next.nodes.map((node,i)=>i===index?{...node,...patch} as ModelNode:node)});
  for(const candidate of [changed(0,{min:[1,0]}),changed(0,{plane:'xy'}),changed(0,{holes:[]}),changed(0,{max:[0,20]}),changed(0,{max:[{parameter:'W'},20]}),changed(1,{height:12}),changed(1,{draft:1}),changed(1,{from:1}),changed(2,{radius:2}),changed(2,{held:'missing'}),changed(2,{section:{kind:'conic',rho:0.5}}),{...next,parameters:{W:40}}, {...next,nodes:[...next.nodes,next.nodes[0]]}])assert.equal(isRectangleFinishResize(before,candidate,1),false);
- for(const patch of [{radii:undefined},{rematched:{}},{held:'missing'},{suppressed:true},{radius:{parameter:'R'}},{edges:['a','b']}]){const a={...before,nodes:before.nodes.map((node,i)=>i===2?{...node,...patch} as ModelNode:node)},b:StudioDoc={...next,nodes:next.nodes.map((node,i)=>i===2?{...node,...patch} as ModelNode:node)};assert.equal(isRectangleFinishResize(a,b,1),false);}
+ for(const patch of [{radii:null},{radii:[]},{rematched:{}},{held:'missing'},{suppressed:true},{radius:{parameter:'R'}},{edges:['a','b']}]){const a={...before,nodes:before.nodes.map((node,i)=>i===2?{...node,...patch} as ModelNode:node)},b:StudioDoc={...next,nodes:next.nodes.map((node,i)=>i===2?{...node,...patch} as ModelNode:node)};assert.equal(isRectangleFinishResize(a,b,1),false);}
 });
 test('proof rejects duplicate sources, moved IDs, wrong corners, merged edges and stale or shared signatures',()=>{
  const {before,next,oldBodies,newBodies,name}=fixture();
@@ -83,5 +83,32 @@ test('terminal numeric equal-distance Chamfer reuses the full cuboid proof witho
   const a:StudioDoc={...before,nodes:before.nodes.map((n,i)=>i===2?{...chamfer,...patch} as ModelNode:n)},b:StudioDoc={...next,nodes:next.nodes.map((n,i)=>i===2?{...chamfer,...patch} as ModelNode:n)};
   assert.equal(isRectangleFinishResize(a,b,1),false);assert.equal(proveRectangleFinishResize(a,b,f.oldBodies,f.newBodies),null);
  }
- const constant:ModelNode={...old,radii:undefined};assert.equal(isRectangleFinishResize({...before,nodes:[before.nodes[0],before.nodes[1],constant]},{...next,nodes:[next.nodes[0],next.nodes[1],constant]},1),false,'constant Fillet remains outside this task');
+});
+
+
+test('constant circular Fillet retains its numeric law and updates only the proven selected signature',()=>{
+ const f=fixture(),old=f.before.nodes[2];assert.ok(old.kind==='fillet');if(old.kind!=='fillet')return;
+ const constant:ModelNode={id:old.id,kind:'fillet',parent:old.parent,edges:old.edges,radius:2,sigs:old.sigs};
+ const before:StudioDoc={...f.before,nodes:f.before.nodes.map((n,i)=>i===2?constant:n)};
+ const next:StudioDoc={...f.next,nodes:f.next.nodes.map((n,i)=>i===2?constant:n)};
+ const snapshot=structuredClone({before,next});
+ assert.ok(isRectangleFinishResize(before,next,1));
+ const result=proveRectangleFinishResize(before,next,f.oldBodies,f.newBodies);assert.ok(result);
+ assert.equal(result.nodes[0],next.nodes[0]);assert.equal(result.nodes[1],next.nodes[1]);
+ assert.deepEqual(result.nodes[2],{...constant,sigs:{...constant.sigs,[f.name]:toSig(signaturesOf(f.newBodies[0]).edges.get(f.name)!)}});
+ assert.equal(result.nodes[2].edges,constant.edges);
+ const evaluated=evaluateDoc(result,4);assert.ok(evaluated.ok,evaluated.ok?'':evaluated.error.hint);
+ if(evaluated.ok)assert.ok(Math.abs(evaluated.bodies[0].volume!-(40*25*10-40*(4-Math.PI)))<1e-8);
+ assert.deepEqual({before,next},snapshot);
+ // Undefined is the exact constant-law sentinel; malformed laws must not fall through to it.
+ for(const patch of [{radii:null},{radii:[]},{radii:{}},{radius:0},{radius:-1},{radius:NaN},{radius:Infinity},{radius:{parameter:'R'}},{section:{kind:'conic',rho:0.5}},{section:{kind:'g2'}},{held:'missing'},{suppressed:true},{rematched:{}},{edges:[f.name,'another']}]){
+  const a:StudioDoc={...before,nodes:before.nodes.map((n,i)=>i===2?{...constant,...patch} as ModelNode:n)},b:StudioDoc={...next,nodes:next.nodes.map((n,i)=>i===2?{...constant,...patch} as ModelNode:n)};
+  assert.equal(isRectangleFinishResize(a,b,1),false);assert.equal(proveRectangleFinishResize(a,b,f.oldBodies,f.newBodies),null);
+ }
+ const explicitUndefined={...constant,radii:undefined};
+ assert.ok(proveRectangleFinishResize({...before,nodes:[before.nodes[0],before.nodes[1],explicitUndefined]},{...next,nodes:[next.nodes[0],next.nodes[1],explicitUndefined]},f.oldBodies,f.newBodies));
+ const stale={...constant,sigs:{...constant.sigs,[f.name]:{...constant.sigs![f.name],s:999}}};
+ assert.equal(proveRectangleFinishResize({...before,nodes:[before.nodes[0],before.nodes[1],stale]},{...next,nodes:[next.nodes[0],next.nodes[1],stale]},f.oldBodies,f.newBodies),null);
+ const corrupt=structuredClone(f.newBodies);corrupt[0].mesh.edges[0].nativeLine=undefined;
+ assert.equal(proveRectangleFinishResize(before,next,f.oldBodies,corrupt),null,'constant laws still require the whole cuboid topology proof');
 });

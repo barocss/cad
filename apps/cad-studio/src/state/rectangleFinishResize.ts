@@ -20,7 +20,9 @@ function plain(nodes:readonly ModelNode[]):boolean {
   ||(ex.from!==undefined&&!finite(ex.from))||(ex.draft!==undefined&&ex.draft!==0))return false;
  if((f.kind!=='fillet'&&f.kind!=='chamfer')||f.parent.node!==1||f.parent.side!=='solid'||f.edges.length!==1||!f.edges[0]||f.edges[0].includes('+'))return false;
  if(f.kind==='chamfer')return only(f,['id','kind','parent','edges','distance','sigs'])&&finite(f.distance)&&f.distance>0;
- if(!only(f,['id','kind','parent','edges','radius','radii','sigs'])||!finite(f.radius)||f.radius<=0||!f.radii||f.radii.length<2||f.radii.length>4)return false;
+ if(!only(f,['id','kind','parent','edges','radius','radii','sigs'])||!finite(f.radius)||f.radius<=0)return false;
+ if(f.radii===undefined)return true; // A constant circular law has no endpoint assignment.
+ if(!Array.isArray(f.radii)||f.radii.length<2||f.radii.length>4)return false;
  const last=f.radii.length-1;
  return f.radii.every((p,i)=>p.at.length===3&&p.at.every(finite)&&finite(p.radius)&&p.radius>0
   &&(i===0||i===last?p.atEnd===true&&p.fraction===undefined:p.atEnd===undefined&&finite(p.fraction)&&p.fraction>1e-9&&p.fraction<1-1e-9&&(i===1||p.fraction-f.radii![i-1].fraction!>1e-9)))
@@ -110,8 +112,8 @@ export function proveRectangleFinishResize(before:StudioDoc,next:StudioDoc,oldBo
  const oldEdge=exactEdge(oldBody,name),newEdge=exactEdge(newBody,name);if(!oldEdge||!newEdge)return null;
  const a=corner(before,oldEdge.a),b=corner(before,oldEdge.b),c=corner(next,newEdge.a),d=corner(next,newEdge.b);
  if(!a||!b||!c||!d||!same(a,c)||!same(b,d)||a.filter((v,i)=>v!==b[i]).length!==1)return null;
- // Equal-distance Chamfer is symmetric; only varying Fillet carries an endpoint radius law.
- if(feature.kind==='fillet'){
+ // Equal-distance Chamfer and constant circular Fillet have no endpoint radius law.
+ if(feature.kind==='fillet'&&feature.radii!==undefined){
   const oldAssignment=endpointAssignment(feature,oldEdge),newAssignment=endpointAssignment(feature,newEdge);
   if(oldAssignment===null||newAssignment===null||oldAssignment!==newAssignment)return null;
  }
