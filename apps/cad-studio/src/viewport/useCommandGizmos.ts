@@ -13,10 +13,11 @@ interface CommandGizmoOptions {
   model: { doc: StudioDoc; evaluated: StudioDoc; bodies: BodyResult[]; selection: Selection; marker: number | null; editNode: number | null };
   command: { active: Active | null; ctx: Ctx; setActive: Dispatch<SetStateAction<Active | null>>; handleDrag: RefObject<{ key: string; lastOk: number; wall: number; bad: number | null; want: number; step: number; dragging: boolean } | null>; previewFor: RefObject<string | null> };
   context: { sketch: object | null; rendering: boolean; drawing: boolean; measure: readonly unknown[] | null; assemblyDraft: object | null; instanceCount: number; snapStep: number };
+  splitSource?: { evidence: Ctx['splitSourceBounds']; canStart(evidence: Ctx['splitSourceBounds']): boolean };
   drag: { bodyDrag: BodyDrag; setBodyDrag: Dispatch<SetStateAction<BodyDrag>> };
 }
 /** Command gizmos and dimension handles share the original drag refs and central command store. */
-export function useCommandGizmos({ model, command, context, drag }: CommandGizmoOptions) {
+export function useCommandGizmos({ model, command, context, drag, splitSource }: CommandGizmoOptions) {
   const { doc, evaluated, bodies, selection, marker, editNode } = model;
   const { active, ctx, setActive, handleDrag, previewFor } = command;
   const { sketch, rendering, drawing, measure, assemblyDraft, instanceCount, snapStep } = context;
@@ -70,10 +71,14 @@ export function useCommandGizmos({ model, command, context, drag }: CommandGizmo
     // The feature open in the editor, else the one the picked face or edge comes from, else the body's last.
     const one = selectedBodies(selection), index = editNode ?? featureOfPick(selection, bodies, evaluated.nodes) ?? (one.length === 1 && bodies[one[0]] ? refOf(bodies[one[0]]).node : null);
     return index === null || (marker !== null && index >= marker) ? null : editCommand(index, evaluated.nodes, doc);
-  }, [active, sketch, rendering, drawing, measure, assemblyDraft, instanceCount, selection, editNode, bodies, evaluated.nodes, doc.fastenerSizes, marker]);
-  const handleCmd = active?.cmd ?? idleEdit, handleValues = active ? active.values : idleEdit?.defaults?.(ctx) ?? {}, handleCtx = active?.ctx ?? ctx;
+  }, [active, sketch, rendering, drawing, measure, assemblyDraft, instanceCount, selection, editNode, bodies, evaluated.nodes, doc, marker]);
+  const idleCtx = splitSource?.evidence ? { ...ctx, splitSourceBounds: splitSource.evidence } : ctx;
+  const handleCmd = active?.cmd ?? idleEdit, handleValues = active ? active.values : idleEdit?.defaults?.(idleCtx) ?? {}, handleCtx = active?.ctx ?? idleCtx;
+  const evidence = handleCtx.splitSourceBounds;
+  const canUseHandle = () => evidence ? evidence.isCurrent() && !!splitSource?.canStart(evidence)
+    : active ? active.ownsSource?.() !== false : true;
   // (None while a new shape is still being placed: the click that places it must not grab one.)
-  const handles: FeatureHandle[] = handleCmd?.handles && !sketch && !active?.placing ? handleCmd.handles(handleCtx, handleValues).flatMap(h => {
+  const handles: FeatureHandle[] = handleCmd?.handles && canUseHandle() && !sketch && !active?.placing ? handleCmd.handles(handleCtx, handleValues).flatMap(h => {
     const fields = handleCmd.fields?.(handleCtx, handleValues) ?? [], field = fields.find(f => f.key === h.key), value = Number(handleValues[h.key]);
     if (!field || !Number.isFinite(value)) return [];
     // (Lengths follow the grid step: half of it for half-step arrows; angles and counts keep their own.)
@@ -86,13 +91,14 @@ export function useCommandGizmos({ model, command, context, drag }: CommandGizmo
       format: (v: number) => h.arc ? `${fmt(v)}°` : h.unit !== undefined ? `${fmt(v)}${h.unit ? ' ' + h.unit : ''}` : `${fmt(v)} mm`,
       unit: h.arc ? '°' : h.unit ?? 'mm', owner: handleCmd, editing: !!active, ...(!active ? { shiftPick: true as const } : {}),
       // (A typed value, as the HUD's: no drag bound, the preview follows.)
-      onType: (v: number) => { handleDrag.current = null; setActive(a => a ? { ...a, values: patchValues(a.cmd, a.ctx, a.values, { [h.key]: v }), preview: 'busy' } : a); },
+      onType: (v: number) => { if (!canUseHandle()) return; handleDrag.current = null; setActive(a => a ? { ...a, values: patchValues(a.cmd, a.ctx, a.values, { [h.key]: v }), preview: 'busy' } : a); },
       onDrag: (v: number, done: boolean, v2?: number) => {
+        if (!canUseHandle()) return;
         if (pair) {
           // (Both coordinates at once; a refused spot shows as the preview's error, no wall.)
           handleDrag.current = null;
           const patch = { [h.key]: v, [pair.key]: v2 ?? value2 };
-          setActive(a => a ? (a.values[h.key] === patch[h.key] && a.values[pair.key] === patch[pair.key] ? a : { ...a, values: patchValues(a.cmd, a.ctx, a.values, patch), preview: 'busy' }) : { cmd: handleCmd, values: patchValues(handleCmd, handleCtx, handleValues, patch), preview: 'busy', ctx: { ...handleCtx } });
+          setActive(a => a ? (a.values[h.key] === patch[h.key] && a.values[pair.key] === patch[pair.key] ? a : { ...a, values: patchValues(a.cmd, a.ctx, a.values, patch), preview: 'busy' }) : { cmd: handleCmd, values: patchValues(handleCmd, handleCtx, handleValues, patch), preview: 'busy', ctx: { ...handleCtx }, ...(evidence ? { ownsSource: evidence.isCurrent } : {}) });
           return;
         }
         let hd = handleDrag.current;
@@ -107,7 +113,7 @@ export function useCommandGizmos({ model, command, context, drag }: CommandGizmo
         if (done) hd.dragging = false;
         // An idle handle opens its feature's edit as the drag starts.
         setActive(a => a ? (a.values[h.key] !== v ? { ...a, values: patchValues(a.cmd, a.ctx, a.values, { [h.key]: v }), preview: 'busy' } : a)
-          : { cmd: handleCmd, values: patchValues(handleCmd, handleCtx, handleValues, { [h.key]: v }), preview: 'busy', ctx: { ...handleCtx } });
+          : { cmd: handleCmd, values: patchValues(handleCmd, handleCtx, handleValues, { [h.key]: v }), preview: 'busy', ctx: { ...handleCtx }, ...(evidence ? { ownsSource: evidence.isCurrent } : {}) });
       } }];
   }) : [];
   const settleDrag = () => { if (bodyDrag?.settling && active && previewFor.current === JSON.stringify(active.values)) setBodyDrag(null); };

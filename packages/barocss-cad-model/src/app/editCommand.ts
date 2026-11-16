@@ -79,6 +79,15 @@ function madeBounds(ctx: Ctx, index: number): { min: V3; max: V3 } | null {
 /** A split's plane (an arrow along its normal, kept inside the body) and a row's spacing and count. */
 function placedHandles(ctx: Ctx, nodes: readonly ModelNode[], index: number): HandleSpec[] {
   const n = nodes[index], was = ctx.doc.nodes[index];
+  if (n.kind === 'split' && ctx.splitSourceBounds?.doc === ctx.doc && ctx.splitSourceBounds.index === index
+    && ctx.splitSourceBounds.isCurrent()) {
+    const box = ctx.splitSourceBounds.bounds;
+    if (box.min.every((value, i) => Number.isFinite(value) && Number.isFinite(box.max[i]) && value <= box.max[i])) {
+      const normal: V3 = n.normal ?? [n.axis === 'x' ? 1 : 0, n.axis === 'y' ? 1 : 0, n.axis === 'z' ? 1 : 0];
+      const at = typeof n.at === 'number' ? n.at : ctx.doc.parameters[n.at.parameter];
+      return splitPlaneHandle(box, normal, at);
+    }
+  }
   if (n.kind === 'split' && n.normal) {
     const sides = ctx.bodies.filter(body => body.ref?.node === index);
     if (sides.length !== 2 || !sides.some(body => body.ref?.side === 'negative')

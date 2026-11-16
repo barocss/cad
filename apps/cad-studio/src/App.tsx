@@ -44,6 +44,7 @@ import { TemplatePicker } from './ui/TemplatePicker';
 import { useCommandPreview } from './state/useCommandPreview';
 import { DirectInspector } from './ui/DirectInspector';
 import { ModelTools } from './ui/ModelTools';
+import { useSplitSourceBounds } from './app/useSplitSourceBounds';
 import { useCommandGizmos } from './viewport/useCommandGizmos';
 import { useModelAppearance } from './viewport/useModelAppearance';
 import { useTwoPointSnap } from './sketch/useTwoPointSnap';
@@ -2849,7 +2850,25 @@ export function App() {
     && !bodyDrag && !ghost && !workingComparison && shownBodies === drawnBodies
     ? drawnBodies : undefined;
   const sketchGhost = useMemo(() => new Set([...(sketch ? shownBodies.map((_, i) => i) : []), ...ghostExtra.map((_, i) => shownBodies.length + i)]), [sketch, shownBodies, ghostExtra]);
+  const splitSourceOpen = openIntent.current;
+  const splitSourceBounds = useSplitSourceBounds({
+    source: { doc, commandDoc, evaluated, worker: workerSession, open: splitSourceOpen, engine,
+      marker, variant: variants.showing, fresh, busy, instances: !!doc.instances?.length || !!instanceSel.length, inPlace: !!inPlace },
+    index: editNode, enabled: !active && !sketch && !rendering && !drawing && !measure && !assembly.draft
+      && !cageEd.session && !skel.session && !section && previewMode === 'none', engine,
+    nextRevision: () => revision.current++,
+    liveSourceCurrent: () => docNow.current === doc && evaluatedRef.current === evaluated && ownsEvaluatedSource()
+      && workerSessionNow.current === workerSession && openIntent.current === splitSourceOpen
+      && markerNow.current === null && !shownVariant.current && !inPlaceNow.current,
+    editorCurrent: () => editNodeNow.current === editNode && !activeStore.get() && !nodeEditorDraft.current,
+  });
   const commandGizmos = useCommandGizmos({ model: { doc, evaluated, bodies, selection, marker, editNode }, command: { active, ctx, setActive, handleDrag, previewFor },
+    splitSource: { evidence: splitSourceBounds, canStart: evidence => {
+      const running = activeStore.get();
+      return canChangeDocument() && (running
+        ? !!evidence && running.ctx.splitSourceBounds === evidence && running.ownsSource?.() === true
+        : editNodeNow.current === editNode && !nodeEditorDraft.current);
+    } },
     context: { sketch, rendering, drawing, measure, assemblyDraft: assembly.draft, instanceCount: instanceSel.length, snapStep }, drag: { bodyDrag, setBodyDrag } });
   const { gizmo, handles, cmdBody } = commandGizmos;
   useEffect(() => commandGizmos.settleDrag(), [previewBodies, bodyDrag, active]);

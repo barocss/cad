@@ -56,7 +56,7 @@ export interface EdgeSel { body: number; edge: number }
 export interface Selection { faces: FaceSel[]; edges: EdgeSel[]; bodies: number[]; sketches?: number[]; profileRegions?: { sketch: number; indices: number[] }; vertices?: { body: number; at: [number, number, number] }[] }
 /** `direct`: the direct curves and surfaces picked (their ids). */
 /** placedPartCount overrides the evaluated document for assembly-only availability after metadata-only edits. */
-export interface Ctx { placedPartCount?: number; splitPlanePick?: FaceSel; viewportEndFace?: true; sewSnapshot?: SewSnapshot; thickenSnapshot?: ThickenSnapshot; fillPatternRegion?: FillFeaturePatternRegion; fillPatternAnchor?: readonly [number, number]; curvePatternPath?: CurveFeaturePatternPath; doc: StudioDoc; bodies: BodyResult[]; selection: Selection; pick?: [number, number, number]; holeSnapStep?: number; direct?: string[]; bearingAssembly?: BearingAssemblyInput }
+export interface Ctx { splitSourceBounds?: { doc: StudioDoc; index: number; bounds: { min: [number, number, number]; max: [number, number, number] }; isCurrent(): boolean }; placedPartCount?: number; splitPlanePick?: FaceSel; viewportEndFace?: true; sewSnapshot?: SewSnapshot; thickenSnapshot?: ThickenSnapshot; fillPatternRegion?: FillFeaturePatternRegion; fillPatternAnchor?: readonly [number, number]; curvePatternPath?: CurveFeaturePatternPath; doc: StudioDoc; bodies: BodyResult[]; selection: Selection; pick?: [number, number, number]; holeSnapStep?: number; direct?: string[]; bearingAssembly?: BearingAssemblyInput }
 
 export type Values = Record<string, number | string>;
 /** `when`: shown (and required) only for these values. */

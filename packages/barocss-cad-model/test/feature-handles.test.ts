@@ -201,3 +201,19 @@ test('Offset face: the top moved out joins material (the sides run on), moved in
   assert.ok(Math.abs(down[0].volume! - 20 * 20 * 6) < 1e-6); assert.equal(down[0].mesh.bounds.max[2], 6);
   assert.throws(() => offset.build!(ctx, { d: 0 }), /a distance/);
 });
+
+test('Split original-source bounds restore the handle without trusting downstream result bounds', () => {
+  const doc = { ...rectanglePart(40, 30, 10), nodes: [...rectanglePart(40, 30, 10).nodes,
+    {kind:'split' as const,id:'n2',parent:{node:1,side:'solid' as const},axis:'x' as const,normal:[2,2,0] as [number,number,number],at:70},
+    {kind:'hole' as const,id:'n3',parent:{node:2,side:'negative' as const},axis:'z' as const,side:'max' as const,center:[10,10] as [number,number],radius:2,depth:4}],
+    outputs:{b2_positive:{node:2,side:'positive' as const},b3:{node:3,side:'solid' as const}},nextId:4 };
+  const context=picked(doc), edit=editCommand(2,doc.nodes)!, values=edit.defaults!(context);
+  assert.deepEqual(edit.handles!(context,values),[]);
+  let current=true;
+  const proof={doc:context.doc,index:2,bounds:{min:[0,0,0] as [number,number,number],max:[40,30,10] as [number,number,number]},isCurrent:()=>current};
+  const [handle]=edit.handles!({...context,splitSourceBounds:proof},values);
+  assert.deepEqual(handle.at,[20,15,5]);assert.equal(handle.scale,Math.sqrt(8));
+  current=false;assert.deepEqual(edit.handles!({...context,splitSourceBounds:proof},values),[]);
+  current=true;assert.deepEqual(edit.handles!({...context,splitSourceBounds:{...proof,doc:{...doc}}},values),[]);
+  assert.deepEqual(edit.handles!({...context,splitSourceBounds:{...proof,index:1}},values),[]);
+});
