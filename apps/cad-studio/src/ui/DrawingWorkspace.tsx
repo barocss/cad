@@ -1222,7 +1222,13 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
           onSelect={id => { cancel(); setSelected(null); setSelectedTarget(null); setSelectedFrame(id); setDrag(null); setTool('select'); }}
           onAdd={view => placeFrame(view)} onMove={frame => { if (frame.dim === undefined) placeFrame(frame.view, frame); }} onRemove={removeFrame} />
 
-        <IssuesList sheetLabel={sheetTotal > 1 ? `${sheetName(wholeSettings, current)} of ${sheetTotal}` : undefined} issues={issues} scope={scope} views={views} fixIssue={fixIssue} fixEvery={fixEvery} onSelectDimension={id => selectAnnotationRow('dimension', id)} />
+        <IssuesList sheetLabel={sheetTotal > 1 ? `${sheetName(wholeSettings, current)} of ${sheetTotal}` : undefined} issues={issues} scope={scope} views={views} fixIssue={fixIssue} fixEvery={fixEvery} onSelectDimension={id => selectAnnotationRow('dimension', id)} onSelectTarget={id => {
+          const target = settings.datumTargets?.find(t => t.id === id);
+          if (!target) return;
+          cancel(); setSelectedTarget(id); setSelected(null); setSelectedFrame(null); setDrag(null); setTool('select');
+          const editor = document.querySelector<HTMLDetailsElement>('details[aria-label="Datum targets"]');
+          if (editor) { editor.open = true; editor.querySelector<HTMLButtonElement>(`button[data-target-id="${CSS.escape(id)}"]`)?.focus(); }
+        }} />
 
         <TolerancingList suggestions={suggestions} settings={settings} views={views} onChange={onChange} acceptEvery={acceptEvery} />
 
