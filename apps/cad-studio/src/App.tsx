@@ -1,3 +1,4 @@
+import { coordinateMessage, currentCoordinateFeedback, type CoordinateFeedback, type CoordinateIntent } from './sketch/coordinateFeedback';
 import { freeSketchProfile } from './app/freeSketchProfile';
 import { modelWheelZoomAvailable, useWheelZoomPreference } from './viewport/wheelZoomPreference';
 import { filletPickFailure } from './app/filletPickFailure';
@@ -510,6 +511,7 @@ export function App() {
   /** The picked pole of the one selected direct object, and how far its gizmo has dragged it. */
   const [pole, setPole] = useState<{ id: string; key: string } | null>(null);
   const [poleDrag, setPoleDrag] = useState<Vec3 | null>(null);
+  const [coordinateFeedback, setCoordinateFeedback] = useState<CoordinateFeedback | null>(null);
   const [sketchIssue, setSketchIssue] = useState<{ reason: string; ellipse?: { doc: StudioDoc; draft: SketchState }; conflict?: { doc: StudioDoc; source: SketchShape; ids: readonly string[] } } | null>(null);
   const setSketchError = useCallback((reason: string | null) => setSketchIssue(reason ? { reason } : null), []);
   // The last shape handed to the sketch, ahead of React's batched re-render (rapid pointer events).
@@ -522,7 +524,7 @@ export function App() {
   const renderedSketch = useRef({ draft: sketch, generation: sketchGeneration.current });
   renderedSketch.current = { draft: sketch, generation: sketchGeneration.current };
   const constructRef = useRef(false); constructRef.current = !!sketch?.construct;
-  const updateShape = useCallback((shape: SketchShape | null, fresh = false, origin?: 'panel' | 'line-point' | 'chord-circle') => {
+  const updateShape = useCallback((shape: SketchShape | null, fresh = false, origin?: 'panel' | 'line-point' | 'chord-circle', coordinate?: CoordinateIntent) => {
     const fromPanel = origin === 'panel';
     // (An open line or arc stays too: pieces meeting end to end join, and close into an outline.)
     const prev = liveShape.current, keep = fresh && prev && (shapeNode(prev) || prev.construction || prev.kind === 'bezier' || (prev.kind === 'polygon' && !prev.closed && !prev.pending && prev.points.length >= 2)) ? prev : null;
@@ -533,6 +535,10 @@ export function App() {
     if (shape?.kind === 'bezier') { const b = bezierEdit(shape); if ('error' in b) { setSketchError(b.error); return; } shape = b.shape; }
     else if (shape) { const c = !prev || fresh ? constructRef.current : !!prev.construction; shape = c ? { ...shape, construction: true } : shape.construction ? (({ construction: _c, ...rest }) => rest as SketchShape)(shape) : shape; }
     const r = settleShape(shape, keep ? null : prev); liveShape.current = r.shape;
+    const coordinateReason = fromPanel && renderedSketch.current.draft?.shape === prev
+      && renderedSketch.current.generation === sketchGeneration.current ? coordinateMessage(coordinate, prev, r.shape, r.error) : null;
+    setCoordinateFeedback(coordinateReason && r.shape ? { doc: docNow.current, shape: r.shape,
+      generation: sketchGeneration.current + 1, message: coordinateReason } : null);
     const resizedRectangle = fromPanel && prev?.kind === 'rectangle' && r.shape?.kind === 'rectangle'
       && !!shapeNode(prev) && !!shapeNode(r.shape)
       && (prev.a[0] !== r.shape.a[0] || prev.a[1] !== r.shape.a[1] || prev.b[0] !== r.shape.b[0] || prev.b[1] !== r.shape.b[1]);
@@ -3282,7 +3288,7 @@ export function App() {
           const next = activateDraftOutline(sketch, draftShapeOrder(sketch).indexOf(source));
           if (next && next !== sketch) setActiveOutline(next);
         } : undefined}
-        conflictIds={!sketchFinishError && sketchIssue?.conflict?.doc === doc && sketchIssue.conflict.source === sketch.shape ? sketchIssue?.conflict?.ids : undefined} onShape={shape => updateShape(shape, false, 'panel')} onDrivingLength={sketchViewportActions.recoverPanelLength} onPlace={sketch.editNode === undefined ? placeSketch : undefined} onUi={patch => setSketch(s => s && { ...s, ...patch })} onBand={{ make: makeSketchBand, edit: editSketchBand, remove: removeSketchBand }} outlineTools={<SketchOutlineTools sketch={sketch} onOffset={offsetSketch} onLinkedInset={sketch.anchor?.kind === 'face' && sketch.anchor.face?.linkSource && !sketch.anchor.offset && !sketch.anchor.angle ? linkSketchInset : undefined} onToCurves={sketchToCurves} onUseOutline={sketch.anchor?.kind === 'face' && sketch.anchor.face?.outline?.length && !sketch.anchor.offset && !sketch.anchor.angle
+        conflictIds={!sketchFinishError && sketchIssue?.conflict?.doc === doc && sketchIssue.conflict.source === sketch.shape ? sketchIssue?.conflict?.ids : undefined} coordinateFeedback={currentCoordinateFeedback(coordinateFeedback, doc, sketch.shape, sketchGeneration.current)} onShape={(shape, coordinate) => updateShape(shape, false, 'panel', coordinate)} onDrivingLength={sketchViewportActions.recoverPanelLength} onPlace={sketch.editNode === undefined ? placeSketch : undefined} onUi={patch => setSketch(s => s && { ...s, ...patch })} onBand={{ make: makeSketchBand, edit: editSketchBand, remove: removeSketchBand }} outlineTools={<SketchOutlineTools sketch={sketch} onOffset={offsetSketch} onLinkedInset={sketch.anchor?.kind === 'face' && sketch.anchor.face?.linkSource && !sketch.anchor.offset && !sketch.anchor.angle ? linkSketchInset : undefined} onToCurves={sketchToCurves} onUseOutline={sketch.anchor?.kind === 'face' && sketch.anchor.face?.outline?.length && !sketch.anchor.offset && !sketch.anchor.angle
         ? useFaceOutline : undefined} />} />}
       {bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <BomPanel doc={doc} name={fileName} evaluate={d => engine.part(d, revision.current++, 'read')} onCommit={next => commit(next, false)} onClose={() => setBomOpen(false)} onError={(title, hint) => setToast({ title, hint, detail: '', documentSource: { doc, name: fileName } })} />}
       {rebuildOpen && !bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <RebuildPanel store={rebuildStore} evaluated={evaluated} busy={busy} problems={assembly.problems} mode={effectiveDisplayMode} viewport={viewport} onClose={() => setRebuildOpen(false)} />}

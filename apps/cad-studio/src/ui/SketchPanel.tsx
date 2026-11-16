@@ -1,3 +1,4 @@
+import type { CoordinateIntent } from '../sketch/coordinateFeedback';
 import { SketchSolverDiagnostics } from './sketchPresentation';
 import { sketchStatus } from './sketchSettledStatus';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -28,7 +29,7 @@ const NONE: SketchPick[] = [];
  * tangent joints stay tangent. The app settles every edit (see sketch/settle.ts) and reports `error`. O16: the contents
  * on shadcn (Input, NativeSelect, Button, FIELD); the shell (its title) and the chip toggles are the studio's.
  */
-export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; toolControls?: ReactNode; onShape(shape: SketchShape | null): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
+export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
   onEditEllipseAxes?(): boolean;
   onDrivingLength?(source: Polygon, edge: number, value: number): boolean;
   /** Sets the picked outline entities or the dimension being edited in the viewport. */
@@ -111,6 +112,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
         </label>}
       {toolControls}
       {s && !finishError && <div className={'sk-status' + (status.warn ? ' open' : '')} role="status"><i />{status.text}</div>}
+      {!finishError && !error && !splineError && coordinateFeedback && <div className="sk-status open" role="status" aria-label="Coordinate input result">{coordinateFeedback}</div>}
       {(finishError ?? error ?? splineError) && <div className="sk-status open" role="alert"><i />{finishError ?? error ?? splineError}
         {!finishError && error && ell && onEditEllipseAxes && <button type="button" className="ghost" data-sketch-action
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
@@ -154,7 +156,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
               onChange={e => {
                 const v = Number(e.target.value); if (!Number.isFinite(v)) return;
                 const lengths = { ...(s.lengths ?? {}) }; delete lengths[i]; delete lengths[(i - 1 + n) % n];
-                onShape({ ...s, points: movePoint(s.points, i, k, v, s.closed), lengths });
+                onShape({ ...s, points: movePoint(s.points, i, k, v, s.closed), lengths }, { source: s, point: i, axis: k as 0 | 1, requested: v });
               }} />),
             hasEdge ? <span key={'e' + i} className="edge-cell">{b ? <em>R</em> : null}
               <Input id={'sk-' + (b ? 'rad' : 'len') + i} type="number" step="any" min={0.5} className={locked ? 'locked' : ''} value={driving ?? round(edge)}
