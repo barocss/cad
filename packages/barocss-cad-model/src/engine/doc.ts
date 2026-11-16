@@ -1316,6 +1316,12 @@ export function offsetFaceGroup(nodes: readonly ModelNode[], index: number) {
   return { d, face, target, operation, sketch, tool, start: index - 2 };
 }
 
+/** Preserve source cap identity without implying a world-space direction. */
+export function offsetFaceEndLabel(face: unknown): string {
+  return typeof face === 'string' && /\.top$/.test(face) ? 'Top end' : typeof face === 'string' && /\.bottom$/.test(face) ? 'Bottom end' : '';
+}
+function offsetFaceLabelSuffix(face: unknown): string { const end = offsetFaceEndLabel(face); return end ? ` · ${end}` : ''; }
+
 /** A shape command's solid by its shape and main sizes: Box 32×32×16, Cylinder Ø16×24, Sphere Ø20 … */
 export function shapeLabel(made: Made): string {
   const v = (k: string) => fmt(Number(made.values[k])), d = (k: string) => fmt(Number(made.values[k]) * 2);
@@ -1323,7 +1329,7 @@ export function shapeLabel(made: Made): string {
     case 'offset-face': {
       const distance = made.values?.d;
       return typeof distance === 'number' && Number.isFinite(distance)
-        ? `Offset face ${distance > 0 ? '+' : ''}${distance} mm` : 'Offset face';
+        ? `Offset face ${distance > 0 ? '+' : ''}${distance} mm${offsetFaceLabelSuffix(made.values.face)}` : 'Offset face';
     }
     case 'box': return `Box ${v('w')}×${v('d')}×${v('h')}`;
     case 'cylinder': return `Cylinder Ø${d('r')}×${v('h')}`;
@@ -1352,7 +1358,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
   switch (node.kind) {
     case 'text': return `Text · ${node.text}`;
     case 'cylindrical-wrap': return 'Cylindrical wrap';
-    case 'offset-face': return node.target ? 'Offset face to plane' : `Offset face ${node.distance > 0 ? '+' : ''}${node.distance} mm`;
+    case 'offset-face': return (node.target ? 'Offset face to plane' : `Offset face ${node.distance > 0 ? '+' : ''}${node.distance} mm`) + offsetFaceLabelSuffix(node.faces[0]);
     case 'band-surface': return 'Band surface';
     case 'text-relief': return `${node.mode === 'emboss' ? 'Text emboss' : 'Text engrave'} · ${node.text}`;
     case 'driven-sketch': return 'Sketch · driven outline';

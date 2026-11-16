@@ -5,7 +5,7 @@ import { refusal } from '../engine/refusal';
 import { canonical } from '../util/revision';
 import type { Command, Ctx } from './commands';
 import { captureOffsetPlane, offsetFields, offsetPlaneStep, pickOffsetPlane, resetOffsetPlane, restoreOffsetPlaneValues } from './offsetPlanePick';
-import { buildNativeOffsetFace, checkDirectOffsetDistance, offsetFaceCommand } from './profileCommands';
+import { buildNativeOffsetFace, checkDirectOffsetDistance, offsetFaceDescription, offsetFaceCommand } from './profileCommands';
 
 export const OFFSET_FACE_EDIT = 'offset-face-edit';
 
@@ -48,6 +48,10 @@ function capContext(doc: StudioDoc, parent: BodyRef, face: string): Ctx {
 /** Edit the direct native operation or rebuild the legacy cap recipe at its original History slot. */
 export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Command | null {
   const direct = directOffsetAt(doc, index);
+  let directSource: Ctx | undefined;
+  const describe = (getSource: () => Ctx, face: string) => {
+    try { return offsetFaceDescription(getSource(), face); } catch { return face; }
+  };
   if (direct) return {
     id: OFFSET_FACE_EDIT, label: 'Edit Offset face', icon: 'cad-extrude', group: 'modify',
     available: ctx => ctx.doc === doc ? { ok: true } : { ok: false, reason: 'Open the current Offset face in History again.' },
@@ -57,8 +61,8 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
       return direct.target && ctx.doc === doc ? restoreOffsetPlaneValues(ctx, values, direct.target) : values;
     },
     derive: resetOffsetPlane,
-    steps: (ctx, values) => [{ label: 'Face', text: direct.faces[0], done: true },
-      ...(values.offsetMode === 'to-plane' ? [offsetPlaneStep(values, direct.target, ctx)] : offsetFaceCommand.steps?.(ctx, values) ?? [])],
+    steps: (ctx, values) => [{ label: 'Face', text: describe(() => directSource ??= capContext(prefixDoc(doc, index), direct.parent, direct.faces[0]), direct.faces[0]), done: true },
+      ...(values.offsetMode === 'to-plane' ? [offsetPlaneStep(values, direct.target, ctx)] : offsetFaceCommand.steps?.(ctx, values).filter(step => step.label !== 'Face') ?? [])],
     onPick: (ctx, values, hit) => pickOffsetPlane(ctx, values, hit.face, direct.parent, index),
     build: (ctx, values) => {
       if (ctx.doc !== doc || ctx.doc.nodes[index] !== direct) return rejected('open the current Offset face in History again.');
@@ -97,7 +101,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
     available: ctx => ctx.doc === doc ? { ok: true } : { ok: false, reason: 'Open the current Offset face in History again.' },
     fields: () => offsetFields(false),
     defaults: () => ({ d: saved.d }),
-    steps: (ctx, values) => [{ label: 'Face', text: saved.face, done: true }, ...(offsetFaceCommand.steps?.(ctx, values) ?? [])],
+    steps: (ctx, values) => [{ label: 'Face', text: describe(getSource, saved.face), done: true }, ...(offsetFaceCommand.steps?.(ctx, values).filter(step => step.label !== 'Face') ?? [])],
     build: (ctx, values) => {
       if (ctx.doc !== doc || featureId(ctx.doc.nodes, index) !== key) return rejected('open the current Offset face in History again.');
       const d = Number(values.d);

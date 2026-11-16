@@ -49,7 +49,7 @@ const near = (actual, expected, bound = 1e-8) => Math.abs(actual - expected) < b
 const samePoint = (actual, expected) => actual.every((value, i) => near(value, expected[i]));
 
 async function open(doc, label) {
-  await f.newPage();
+  await f.newPage(); await f.page.setViewportSize({ width: Number(process.argv.find(x => /^(1024|1440)$/.test(x)) ?? 1440), height: 900 });
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: label + '.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) });
   await f.same(doc);
@@ -129,6 +129,7 @@ await f.run(async () => {
   await f.command('Offset face');
   const panel = hud('Offset face');
   await status(panel, 'preview');
+  assert.match(await panel.innerText(), lower ? /Bottom end.*Outward −Z/s : /Top end.*Outward \+Z/s);
   if (lower) {
     const handle = f.page.locator('g.gizmo-handle[data-handle="d"]');
     const head = await handle.locator('polygon').evaluate(polygon => {
@@ -170,6 +171,7 @@ await f.run(async () => {
   f.phase = 'Refuse a collapse in History, then move the same cap inwards';
   const history = await edit(index);
   assert.equal(await offsetField(history).inputValue(), '2');
+  assert.match(await history.innerText(), lower ? /Bottom end.*Outward −Z/s : /Top end.*Outward \+Z/s);
   const collapse = lower ? -height : 8;
   await offsetField(history).fill(String(collapse));
   await status(history, 'refused');
@@ -223,4 +225,30 @@ await f.run(async () => {
   assert.deepEqual(legacy.nodes.slice(index).map(node => node.kind), ['sketch', 'extrude', 'union']);
   assert.equal(legacy.nodes.at(-1).made.command, 'offset-face');
   assert.ok(near((await f.bodies()).bodies[0].volume, width * depth * (height + 2)));
+  f.phase = 'mixed equal offsets keep original cap identity and direction';
+  await open(seed, 'mixed-source');
+  for (const bottom of [true, false]) {
+    await pickCap(bottom); await f.page.evaluate(() => document.activeElement?.blur()); await f.command('Offset face');
+    const h = hud('Offset face'); await status(h, 'preview');
+    assert.match(await h.innerText(), bottom ? /Bottom end.*Outward −Z/s : /Top end.*Outward \+Z/s);
+    await button('Apply', h).click(); await h.waitFor({ state: 'hidden' }); await f.ready();
+  }
+  const mixed = await f.doc();
+  assert.deepEqual(mixed.nodes.slice(2).map(n => [n.faces[0], n.distance]), [['n1.bottom', 2], ['n1.top', 2]]);
+  const labels = async () => {
+    assert.match(await f.page.locator('.hs[data-node-index="2"]').getAttribute('aria-label'), /Offset face .*Bottom end/);
+    assert.match(await f.page.locator('.hs[data-node-index="3"]').getAttribute('aria-label'), /Offset face .*Top end/);
+  };
+  await labels(); await f.snapshot('mixed-history-labels');
+  const mixedEdit = await edit(2); assert.match(await mixedEdit.innerText(), /Bottom end.*Outward −Z/s);
+  await offsetField(mixedEdit).fill('-2'); await status(mixedEdit, 'preview'); await button('Apply', mixedEdit).click(); await f.changed(mixed);
+  const edited = await f.doc(); assert.deepEqual(edited.nodes[3], mixed.nodes[3]); assert.deepEqual(edited.nodes[2], { ...mixed.nodes[2], distance: -2 });
+  const shape = await f.inspect('mixed-cap-shape', edited);
+  assert.ok(shape.check.valid, JSON.stringify(shape.check));
+  assert.ok(near(shape.volume, sectionVolume(14) - sectionVolume(2), 1e-7));
+  assert.equal(Math.min(...shape.point.map(p => p[2])), 2); assert.equal(Math.max(...shape.point.map(p => p[2])), 14);
+  await f.undo(); await f.same(mixed); await f.redo(); await f.same(edited); await labels();
+  const savedMixed = await f.save('mixed-cap-labels'); await f.freshOpen(savedMixed.file, edited, 'mixed-cap-reopened'); await labels();
+  const topEdit = await edit(3); assert.match(await topEdit.innerText(), /Top end.*Outward \+Z/s); await button('Cancel', topEdit).click(); await f.same(edited);
+
 });

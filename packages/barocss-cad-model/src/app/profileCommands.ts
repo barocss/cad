@@ -6,7 +6,7 @@ import { captureSignatures } from '../engine/references';
 // (a picked profile pulled along its normal), Revolve (turned about a sketch axis), Pipe (carried along
 // runs and bends) and Loft (through two or more picked sections). A profile drawn on a body's face joins
 // that body by default; Operation can make a new body or cut it instead.
-import { isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
+import { offsetFaceEndLabel, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
 import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle, twoGuideLoftSections } from './profiles';
@@ -245,6 +245,17 @@ function offsetPlaneAvailable(ctx: Ctx): boolean {
     (!!node.draft || (!body.mesh.faces[pick.face].nativeAxisPlane && isStraightHexagonalExtrusion(ctx.doc.nodes, node))));
 }
 
+/** Display the selected original face and its outward world normal, not the signed movement. */
+export function offsetFaceDescription(ctx: Ctx, fallback = ''): string {
+  const pick = ctx.selection.faces.length === 1 ? ctx.selection.faces[0] : undefined;
+  const face = pick && ctx.bodies[pick.body]?.mesh.faces[pick.face];
+  if (!face) return fallback;
+  const end = offsetFaceEndLabel(face.name), normal = face.normal;
+  const axis = normal.findIndex((n, i) => Math.abs(Math.abs(n) - 1) < 1e-9 && normal.every((v, j) => i === j || Math.abs(v) < 1e-9));
+  const direction = axis >= 0 ? `${normal[axis] > 0 ? '+' : '−'}${'XYZ'[axis]}` : `[${normal.map(n => Number(n.toFixed(6))).join(', ')}]`;
+  return `${end ? end + ' · ' : ''}${face.name} · Outward ${direction}`;
+}
+
 /** Move an admitted native face along its signed normal. */
 export const offsetFaceCommand: Command = {
   id: 'offset-face', label: 'Offset face', icon: 'cad-extrude', group: 'modify', keywords: 'move face push pull offset direct edit press',
@@ -261,7 +272,7 @@ export const offsetFaceCommand: Command = {
   fields: ctx => offsetFields(offsetPlaneAvailable(ctx)),
   defaults: ctx => ({ d: 2, ...(offsetPlaneAvailable(ctx) ? { offsetMode: 'distance' } : {}) }),
   derive: resetOffsetPlane,
-  steps: (_ctx, v) => v.offsetMode === 'to-plane' ? [offsetPlaneStep(v)] : [{ label: 'Move', text: Number(v.d) > 0 ? `${v.d} mm out (material added)` : Number(v.d) < 0 ? `${-Number(v.d)} mm in (material taken off)` : 'give it a distance (out +, in −)', done: Number(v.d) !== 0 }],
+  steps: (ctx, v) => [{ label: 'Face', text: offsetFaceDescription(ctx), done: true }, ...(v.offsetMode === 'to-plane' ? [offsetPlaneStep(v)] : [{ label: 'Move', text: Number(v.d) > 0 ? `${v.d} mm out (material added)` : Number(v.d) < 0 ? `${-Number(v.d)} mm in (material taken off)` : 'give it a distance (out +, in −)', done: Number(v.d) !== 0 }])],
   onPick: (ctx, values, hit) => {
     const pick = ctx.selection.faces[0];
     return pickOffsetPlane(ctx, values, hit.face, pick && ctx.bodies[pick.body]?.ref, ctx.doc.nodes.length);
