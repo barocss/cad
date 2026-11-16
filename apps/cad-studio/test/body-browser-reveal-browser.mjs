@@ -18,7 +18,7 @@ for (let i = 0; i < 36; i++) {
 console.log(JSON.stringify(doc));
 ` });
 const button = name => f.page.getByRole('button', { name, exact: true });
-const reveal = () => button('Show selected body in Browser');
+const reveal = () => button('Show selection in Browser');
 const row = key => f.page.locator(`[data-browser-body-key="${key}"]`);
 async function read() {
   return f.page.evaluate(() => ({ doc: window.__studioDoc, selection: window.__studioSelection,
@@ -105,7 +105,7 @@ await f.run(async () => {
     const mixed = await read();
     await reveal().click();
     assert.deepEqual(await read(), mixed);
-    await f.page.getByRole('status', { name: 'Find body in Browser', exact: true }).filter({ hasText: /one base body/ }).waitFor();
+    await f.page.getByRole('status', { name: 'Find selection in Browser', exact: true }).filter({ hasText: /one base body/ }).waitFor();
     const replacement = structuredClone(seed);
     replacement.nodes = replacement.nodes.map(node => node.kind === 'extrude' ? { ...node, height: 9 } : node);
     await f.page.locator('input[aria-label="Model file"]').setInputFiles({ name: 'same-ids-new-document.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(replacement)) });

@@ -10,7 +10,7 @@ import { Icon } from './atoms';
 interface BodyBrowserRowsProps {
   model: { doc: StudioDoc; evaluated: StudioDoc; namesDoc: StudioDoc; bodies: BodyResult[]; fresh: boolean; busy: boolean };
   selection: Selection;
-  registerBodyRow?(key: string, row: HTMLButtonElement | null): void;
+  registerBodyRow?(key: string, row: HTMLButtonElement | null): void | (() => void);
   rows: { expanded: string[]; setExpanded: Dispatch<SetStateAction<string[]>>; renaming: string | null; setRenaming: Dispatch<SetStateAction<string | null>>; editNode: number | null; setRowHover: Dispatch<SetStateAction<number | null>> };
   changes: { commit(next: StudioDoc): boolean; commitVisibility(next: StudioDoc): boolean; setSelection: Dispatch<SetStateAction<Selection>>; setDirectSel: Dispatch<SetStateAction<string[]>>; setInstanceSel: Dispatch<SetStateAction<string[]>>;
     editFeature(index: number, body: number, event: MouseEvent<HTMLButtonElement>): void;

@@ -1,4 +1,4 @@
-import { bodyRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal';
+import { browserRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal';
 import { useBodyBrowserReveal } from './app/useBodyBrowserReveal';
 import { useContinuityLocation } from './app/useContinuityLocation';
 import { annotationCounts, printPreviewSummary } from './app/previewStatus';
@@ -3236,31 +3236,31 @@ export function App() {
     ? <ReferenceDecisions doc={doc} referenceLabels={referenceLabels} refMarks={refMarks} refProblems={refProblems} refChoices={refChoices}
       previewReference={previewReference} settleRef={settleRef} showRefChoices={showRefChoices} /> : null;
   const bodyRevealBlocked = !fresh || busy || workerFailure || shownDoc !== doc || marker !== null
-    ? 'Wait for the current base model result before finding a body.'
+    ? 'Wait for the current model result before finding the selection.'
     : active || sketch || editNode !== null || instanceEdit || renaming || parameterEdit || assembly.draft || cageEd.session || skel.session || cutDraft
-      ? 'Finish or cancel the current edit before finding a body.'
+      ? 'Finish or cancel the current edit before finding the selection.'
       : rendering || drawing || inPlace || section || measure || printEnabled || camEnabled || pmiEnabled || previewMode !== 'none' || routePanelOpen || stepsDisp || isolatedInstances || ghost || workingComparison
-        ? 'Return to the ordinary Model view before finding a base body.'
+        ? 'Return to the ordinary Model view before finding the selection.'
         : bodyDrag || instDrag || poleDrag || sectionDragFrom || dragCmd.current
-          ? 'Finish the current drag before finding a body.'
+          ? 'Finish the current drag before finding the selection.'
           : project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatView || cutListView || stepAsk || stlAsk
-            ? 'Finish the current document or dialog operation before finding a body.' : null;
+            ? 'Finish the current document or dialog operation before finding the selection.' : null;
   const bodyRevealOpenIntent = openIntent.current;
-  const bodyRevealOwner = useMemo(() => ({}), [doc, evaluated, bodies, selection, instanceSel, directSel, docGeneration, workerSession, bodyRevealOpenIntent, bodyRevealBlocked]);
+  const bodyRevealOwner = useMemo(() => ({}), [doc, evaluated, bodies, selection, instanceSel, directSel, docGeneration, workerSession, bodyRevealOpenIntent, bodyRevealBlocked, instanceBodies, instanceSources]);
   const bodyReveal = useBodyBrowserReveal(bodyRevealOwner,
-    bodyRevealTarget(selection, bodies, { instances: instanceSel.length, direct: directSel.length }, bodyRevealBlocked),
+    browserRevealTarget(selection, bodies, instanceSel, directSel.length, doc, instanceBodies, instanceSources, bodyRevealBlocked),
     browserOpen, setBrowserOpen, () => docNow.current === doc && evaluatedRef.current === evaluated && openIntent.current === bodyRevealOpenIntent &&
-      workerSessionNow.current === workerSession && !project.opening() && !dragCmd.current && !bodyRevealBlocked);
+      workerSessionNow.current === workerSession && !project.opening() && !dragCmd.current && !bodyRevealBlocked, docGeneration);
   const browserPanel = (
       <Profiler id="outliner" onRender={onBlockRender}><aside ref={referenceBrowser} className={'card outliner' + (browserOpen ? '' : ' closed')} aria-label="Browser">
         <div className="card-title">BROWSER <span className="muted" aria-busy={!fresh}>Base part · {fresh ? `${bodies.length} bod${bodies.length === 1 ? 'y' : 'ies'}` : busy ? 'evaluating…' : 'not up to date'}</span>
-          <ToolIconButton size="tiny" aria-label="Show selected body in Browser" title={bodyRevealBlocked ?? BODY_REVEAL_SCOPE}
+          <ToolIconButton size="tiny" aria-label="Show selection in Browser" title={bodyRevealBlocked ?? BODY_REVEAL_SCOPE}
             onPointerDown={bodyReveal.pointerDown} onClick={bodyReveal.reveal}><Icon name="search" small /></ToolIconButton>
           <ToolIconButton data-reference-return size="tiny" aria-label={browserOpen ? 'Collapse the browser' : 'Expand the browser'} onClick={() => {
             if (browserOpen) clearReferencePreview();
             setBrowserOpen(o => { try { localStorage.setItem('cad-studio.browser', o ? 'closed' : 'open'); } catch { /* private mode */ } return !o; });
           }}><Icon name={browserOpen ? 'left_panel_close' : 'left_panel_open'} small /></ToolIconButton></div>
-        {bodyReveal.feedback && <div role="status" className="small muted" aria-label="Find body in Browser">{bodyReveal.feedback}</div>}
+        {bodyReveal.feedback && <div role="status" className="small muted" aria-label="Find selection in Browser">{bodyReveal.feedback}</div>}
         {browserOpen && <>
         <BodyBrowserRows registerBodyRow={bodyReveal.register} model={{ doc, evaluated, namesDoc, bodies, fresh, busy }} selection={selection}
           rows={{ expanded, setExpanded, renaming, setRenaming, editNode, setRowHover }} changes={{ commit, commitVisibility: commitBodyVisibility, setSelection, setDirectSel, setInstanceSel,
@@ -3277,7 +3277,7 @@ export function App() {
           <span className="ol-eye"><Icon name="cad-sketch" small /></span>
           <button className={'ol' + (selection.sketches?.includes(k) ? ' sel' : '')} onClick={e => pickProfile(k, e.shiftKey)}>Sketch {k + 1}</button></div>)}
         {!!doc.instances?.length && <div className="ol-head">Parts placed <span className="muted">{doc.instances.length}</span></div>}
-        <OutlinerInstances instances={doc.instances ?? NO_INSTANCES} selection={instanceSel} edit={instanceEdit} locked={!!active || !!sketch || rendering || drawing}
+        <OutlinerInstances open={bodyReveal.openPaths} onToggle={bodyReveal.togglePath} registerRow={bodyReveal.registerInstance} instances={doc.instances ?? NO_INSTANCES} selection={instanceSel} edit={instanceEdit} locked={!!active || !!sketch || rendering || drawing}
           onPick={pickInstanceRow} onEdit={editInstanceRow} iconFor={iconFor} />
         {!!doc.assemblyCuts?.length && <div className="ol-head">Cuts <span className="muted">{doc.assemblyCuts.length}</span></div>}
         <OutlinerCuts cuts={doc.assemblyCuts ?? NO_CUTS} instances={doc.instances ?? NO_INSTANCES} editing={cutDraft?.editing ?? null} locked={!!active || !!sketch || rendering || drawing} onEdit={openCut} onDelete={deleteCut} />
