@@ -28,6 +28,12 @@ function EdgeContinuityRead({ picked, read }: {
       edgeSelect.current?.focus();
     }
   }, [edges, pending]);
+  useLayoutEffect(() => {
+    if (!pending && result?.status === 'unsupported'
+      && (document.activeElement === document.body || document.activeElement === inspectButton.current)) {
+      edgeSelect.current?.focus();
+    }
+  }, [pending, result]);
   useLayoutEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   async function measure(edgeId: string) {
     const reply = await read({ kind: 'measure', edgeId, curvature: true });
@@ -72,12 +78,15 @@ function EdgeContinuityRead({ picked, read }: {
       <option value="">Select native edge</option>
       {edges.map(edge => <option key={edge.id} value={edge.id}>{edge.faces.join(' / ')} · {edge.name}</option>)}
     </NativeSelect>}
-    <Button ref={inspectButton} size="xs" variant="outline" disabled={pending || !!edges && !chosen} onClick={event => void inspect(event.detail === 0)}>
+    <Button ref={inspectButton} size="xs" variant="outline" disabled={pending || !!edges && !chosen || result?.status === 'unsupported'} onClick={event => void inspect(event.detail === 0)}>
       {pending ? 'Measuring…' : edges ? 'Measure continuity' : picked ? 'Inspect edge continuity' : 'Inspect native joints'}
     </Button>
     <div role="status" aria-label="Edge continuity result">
       {error && <div className="empty">{error}</div>}
-      {result?.status === 'unsupported' && <div className="empty">Cannot measure this joint. {refusalLabel[result.reason]}</div>}
+      {result?.status === 'unsupported' && <div className="empty">
+        <div>This edge cannot be measured. Select another native edge.</div>
+        <details><summary>Measurement detail</summary>{refusalLabel[result.reason]}</details>
+      </div>}
       {result?.status === 'measured' && <>
         <div className="kv"><span>Sampled face-normal angle</span><b data-continuity-angle title="Rounded to 0.000001°. Sampled angles do not establish a continuity grade.">{continuityAngleLabel(result.minimumAngleDegrees, result.maximumAngleDegrees)}</b></div>
         {result.curvature?.status === 'measured' && <div className="kv"><span>Max sampled cross-edge curvature difference</span>

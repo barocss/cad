@@ -187,6 +187,7 @@ await f.run(async () => {
   };
   f.phase = 'Open a box and author one straight R2 fillet through the Studio command';
   await f.newPage();
+  await f.page.setViewportSize({ width: Number(process.argv.find(arg => /^\d{4}$/.test(arg)) ?? 1440), height: 900 });
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: 'box-continuity.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
   await f.same(source);
@@ -226,6 +227,10 @@ await f.run(async () => {
     await measure(row);
     if (baseline) {
       assert.equal(row.read.measurement.reason, 'missing-pcurve');
+      await result().getByText('This edge cannot be measured. Select another native edge.', { exact: true }).waitFor();
+      assert.equal(await button('Measure continuity', panel()).isDisabled(), true);
+      assert.equal(await edges().evaluate(el => el === document.activeElement), true);
+      await result().locator('summary').click();
       await result().getByText(/no native parameter curve/i).waitFor();
       assert.equal(await value().count(), 0);
     } else {
@@ -236,6 +241,7 @@ await f.run(async () => {
         await crossEdge().waitFor();
         studioCurvature[other] = Number((await crossEdge().textContent()).replace(' mm⁻¹', ''));
         const { curvature: _curvature, ...angleOnly } = row.read.measurement;
+        void _curvature;
         assert.deepEqual(angleOnly, row.angleOnly.measurement);
       }
     }
@@ -247,11 +253,27 @@ await f.run(async () => {
     for (const row of ends) {
       assert.equal(row.read.measurement.reason, 'missing-pcurve');
       await measure(row);
+      await result().getByText('This edge cannot be measured. Select another native edge.', { exact: true }).waitFor();
+      assert.equal(await button('Measure continuity', panel()).isDisabled(), true);
+      assert.equal(await edges().evaluate(el => el === document.activeElement), true);
+      await result().locator('summary').click();
       await result().getByText(/no native parameter curve/i).waitFor();
       assert.equal(await value().count(), 0);
       assert.equal(await crossEdge().count(), 0);
     }
     await f.snapshot('unsupported-end');
+    await f.same(accepted);
+    for (const row of interfaces) {
+      await edges().selectOption(row.id);
+      assert.equal(await result().getByText('This edge cannot be measured. Select another native edge.', { exact: true }).count(), 0);
+      assert.equal(await button('Measure continuity', panel()).isDisabled(), false);
+      await button('Measure continuity', panel()).click();
+      await value().waitFor();
+      assert.equal(await value().textContent(), '0°');
+      assert.match(await result().innerText(), /Native samples\s+8/);
+      await f.same(accepted);
+    }
+    await f.snapshot('recovered-supported-edge');
 
     f.phase = 'Undo and Redo restore each part and clear the inspection';
     await f.undo();
@@ -270,7 +292,7 @@ await f.run(async () => {
       await edges().selectOption({ label: rim });
       await button('Measure continuity', panel()).click();
       await result().getByText('Cross-edge curvature comparison needs a tangent joint.', { exact: true }).waitFor();
-      assert.deepEqual((await value().textContent()).replace('°', '').split('–').map(Number), [90, 90]);
+      assert.deepEqual((await value().textContent()).replace('°', '').split('–').map(Number), [90]);
       assert.equal(await crossEdge().count(), 0);
       await f.snapshot('sharp-rim');
     }
