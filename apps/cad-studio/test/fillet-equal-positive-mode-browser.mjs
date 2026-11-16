@@ -6,7 +6,7 @@ const output=process.argv[2];
 assert.ok(output&&relative(resolve(import.meta.dirname,'../../..'),resolve(output)).startsWith('../'));
 const pins=['apps/cad-studio/test/fillet-equal-positive-mode-browser.mjs','apps/cad-studio/test/flow-helper.mjs',
   'packages/barocss-cad-model/src/app/commands.ts','apps/cad-studio/src/ui/Hud.tsx','apps/cad-studio/src/ui/NodeEditor.tsx',
-  'apps/cad-studio/src/ui/FilletTypeFields.tsx','apps/cad-studio/src/app/filletFamily.ts',
+  'apps/cad-studio/src/app/featureNumberInput.ts','apps/cad-studio/src/ui/FilletTypeFields.tsx','apps/cad-studio/src/app/filletFamily.ts',
   'packages/barocss-cad-model/src/app/editFields.ts','packages/barocss-cad-model/src/engine/part.ts',
   'packages/barocss-cad/src/part/part-finish.ts','packages/barocss-cad/src/blend/rolling-ball.ts'];
 const f=await createFlow({name:'fillet-equal-positive-mode',envFrozen:'D1412_SOURCE_FROZEN',output,initialFiles:pins,requiredFrozen:pins,
@@ -101,6 +101,12 @@ async function create(size,endRadius,label){
   await chooser.setFiles({name:label+'.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(box))});await f.same(box);await pickEdge();await f.command('Fillet');
   const hud=f.page.getByRole('dialog',{name:'Fillet',exact:true});await field('Fillet radius mode',hud).selectOption('varying');await field('Radius',hud).fill('1');await field('End radius (0: same)',hud).fill(String(endRadius));
   if(await field('Radius controls',hud).count())await field('Radius controls',hud).selectOption('ends');
+  // Every creation recovers from a negative endpoint without authoring a scalar fallback.
+  const endField=field('End radius (0: same)',hud);
+  await endField.fill('-2');await status(hud,'refused');
+  assert.equal(await endField.getAttribute('aria-invalid'),'true');assert.equal(await button('Apply',hud).isDisabled(),true);
+  assert.match(await hud.innerText(),/0 mm or greater/);await f.same(box);await f.snapshot(label+'-negative-refused');
+  await endField.fill(String(endRadius));await status(hud,'preview');assert.equal(await endField.getAttribute('aria-invalid'),null);
   if(endRadius===0)await field('Fillet radius mode',hud).selectOption('constant');
   assert.equal(await field('Fillet radius mode',hud).inputValue(),endRadius===0?'constant':'varying');await status(hud,'preview');await f.same(box);await f.snapshot(label+'-hud');await button('Apply',hud).click();await f.changed(box);
   const doc=await f.doc();assert.equal(doc.nodes.length,3);assert.deepEqual(doc.nodes.slice(0,2),box.nodes);assert.deepEqual(doc.parameters,box.parameters);

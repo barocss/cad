@@ -720,6 +720,8 @@ const allCommands: Command[] = [
     build: (ctx, v) => {
       const { body, edges } = edgesOfOneBody(ctx)!, why = ellipseSideRefusal(ctx, edges); if (why) throw refusal('VALUE', why);
       const r = Number(v.radius), endRadius = Number(v.endRadius ?? 0), r1 = endRadius || 0, names = edges.flatMap(e => e.names);
+      if (!Number.isFinite(endRadius) || endRadius < 0)
+        throw refusal('VALUE', 'Set an end radius of 0 or greater. Use 0 for the same radius.');
       const section = sectionOf(v), shaped = section ? { section } : {};
       if (v.stationMode === 'interior' || v.stationMode === 'two-interior') {
         const [edge] = edges;

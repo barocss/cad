@@ -66,9 +66,18 @@ test('explicit positive endpoints retain the existing open-chain requirement for
   }
   const scalar = build({ ...ctx, selection: { ...ctx.selection, edges: top } }, 0).nodes[2]; assert.ok(scalar.kind === 'fillet'); assert.equal(scalar.radii, undefined);
 });
-test('End0 scalar sentinel and legacy negative/NaN fallback are unchanged; native still refuses invalid start radii', () => {
+test('End0 scalar sentinel remains unchanged; native still refuses invalid start radii', () => {
   const ctx = context(), scalar = build(ctx, 0);
-  for (const end of [0, -1, NaN]) assert.deepEqual(build(ctx, end), scalar, 'pre-existing ends fallback remains #76 scope');
   assert.ok(scalar.nodes[2].kind === 'fillet' && !scalar.nodes[2].radii);
   for (const radius of [0, -1, NaN, Infinity]) assert.equal(evaluateDoc(build(ctx, 1, radius), 1).ok, false);
+});
+
+test('negative and nonfinite end radii cannot silently become constant fillets', () => {
+  const ctx = context(), original = structuredClone(ctx.doc);
+  for (const end of [-2, -Number.MIN_VALUE, NaN, Infinity, -Infinity]) {
+    assert.throws(() => build(ctx, end), /end radius of 0 or greater/);
+    assert.deepEqual(ctx.doc, original);
+  }
+  const zero = build(ctx, 0).nodes[2]; assert.ok(zero.kind === 'fillet'); assert.equal(zero.radii, undefined);
+  const positive = build(ctx, 2).nodes[2]; assert.ok(positive.kind === 'fillet'); assert.deepEqual(positive.radii?.map(p => p.radius), [1, 2]);
 });
