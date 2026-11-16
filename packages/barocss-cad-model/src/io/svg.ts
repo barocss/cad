@@ -1,5 +1,6 @@
 // The sheet as SVG: one user unit per millimetre, so the file prints at the drawing's scale. Arcs are
 // exact SVG elliptical arcs (a projected circle's principal axes from its conjugate semi-diameters).
+import { refusal } from '../engine/refusal';
 import { PENS, hatch, type Mark, type Sheet } from '../drawing/sheet';
 
 const n = (v: number) => { const r = Math.round(v * 1e4) / 1e4; return Object.is(r, -0) ? '0' : String(r); };
@@ -25,7 +26,7 @@ function markSvg(m: Mark): string {
   if (m.kind === 'fill') return `<path d="M${m.points.map(p => `${n(p[0])} ${n(p[1])}`).join('L')}Z" fill="#000" stroke="none"/>`;
   if (m.kind === 'text') {
     const rot = m.angle ? ` transform="rotate(${n(-m.angle)} ${n(m.at[0])} ${n(m.at[1])})"` : '';
-    return `<text fill="#000" stroke="none" x="${n(m.at[0])}" y="${n(m.at[1])}" font-size="${n(m.size)}"${m.anchor === 'start' ? '' : ` text-anchor="${m.anchor}"`}${m.bold ? ' font-weight="bold"' : ''}${rot}>${esc(m.text)}</text>`;
+    return `<text fill="#000" stroke="none" x="${n(m.at[0])}" y="${n(m.at[1])}" font-size="${n(m.size)}"${m.anchor === 'start' ? '' : ` text-anchor="${esc(m.anchor)}"`}${m.bold ? ' font-weight="bold"' : ''}${rot}>${esc(m.text)}</text>`;
   }
   const pen = PENS[m.pen], style = `stroke-width="${pen.width}"${pen.dash ? ` stroke-dasharray="${pen.dash.join(' ')}"` : ''}`;
   if (m.kind === 'hatch') return hatch(m.rings, m.spacing, m.angle).map(markSvg).join('');
@@ -44,14 +45,29 @@ export function sheetGroupsSvg(sheet: Sheet, selected?: string | SheetAnnotation
     const active = g.standaloneFrame ? selectedFrame : g.datumTarget ? selectedTarget
       : typeof selected === 'string' ? selected : selected?.kind === g.role ? selected.id : null;
     const identity = g.standaloneFrame ? 'data-standalone-frame' : g.datumTarget ? 'data-datum-target' : 'data-dim';
-    return `<g class="${g.role}${active && g.id === active ? ' sel' : ''}"${g.view ? ` data-view="${g.view}"` : ''}${g.id ? ` ${identity}="${esc(g.id)}"` : ''}>${g.marks.map(markSvg).join('')}</g>`;
+    return `<g class="${esc(g.role)}${active && g.id === active ? ' sel' : ''}"${g.view ? ` data-view="${esc(g.view)}"` : ''}${g.id ? ` ${identity}="${esc(g.id)}"` : ''}>${g.marks.map(markSvg).join('')}</g>`;
   }).join('\n');
+}
+
+/** XML 1.0 Fifth Edition, Char production. Check JS code points before UTF-8 encoding can replace lone surrogates.
+ * Export-only: inline sheetGroupsSvg/marksSvg must remain renderable so the user can repair a bad annotation.
+ */
+function checkedXml(svg: string): string {
+  for (let offset = 0; offset < svg.length;) {
+    const point = svg.codePointAt(offset)!;
+    if (!(point === 0x9 || point === 0xA || point === 0xD || (point >= 0x20 && point <= 0xD7FF)
+      || (point >= 0xE000 && point <= 0xFFFD) || (point >= 0x10000 && point <= 0x10FFFF))) {
+      throw refusal('VALUE', `SVG export refused: XML 1.0 does not allow U+${point.toString(16).toUpperCase().padStart(4, '0')} at UTF-16 offset ${offset}. Remove this character from the drawing text or title and try again.`);
+    }
+    offset += point > 0xFFFF ? 2 : 1;
+  }
+  return svg;
 }
 
 /** A standalone SVG file of the sheet, printing at true size. */
 export function sheetSvg(sheet: Sheet, title: string): string {
   const [W, H] = sheet.size;
-  return `<?xml version="1.0" encoding="UTF-8"?>
+  return checkedXml(`<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 <title>${esc(title)}</title>
 <rect width="${W}" height="${H}" fill="#fff"/>
@@ -59,7 +75,7 @@ export function sheetSvg(sheet: Sheet, title: string): string {
 ${sheetGroupsSvg(sheet)}
 </g>
 </svg>
-`;
+`);
 }
 
 /** 11 ④: every sheet of a drawing set as its own SVG file (the title names the sheet when there are several). */

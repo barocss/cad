@@ -955,8 +955,16 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     else { setExportLoss(null); write(); }
   };
   const exportSvg = () => {
-    if (exportableSheet) confirmExport('SVG', lostOccurrences.map(occurrenceLossText), () =>
-      downloadBytes(new TextEncoder().encode(sheetSvg(exportableSheet, title)), `${fileName}${sheetSuffix}.svg`, 'image/svg+xml'));
+    if (!exportableSheet) return;
+    try {
+      // Complete serialization before offering confirmation or initiating any file delivery.
+      const bytes = new TextEncoder().encode(sheetSvg(exportableSheet, title));
+      confirmExport('SVG', lostOccurrences.map(occurrenceLossText), () =>
+        downloadBytes(bytes, `${fileName}${sheetSuffix}.svg`, 'image/svg+xml'));
+    } catch (error) {
+      setExportLoss(null);
+      onToast({ title: 'SVG not written', hint: 'Remove the unsupported character from the drawing text, then export again. Nothing was downloaded.', detail: error instanceof Error ? error.message : String(error) });
+    }
   };
   const exportPdf = () => {
     if (!sheet || !canExportPdf) return;

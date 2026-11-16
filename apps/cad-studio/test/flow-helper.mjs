@@ -86,7 +86,7 @@ export async function runOracleFile({
 /**
  * Create a flow: asserts the env, makes the output folder, writes the oracle script and returns the flow object (page helpers, report, receipt). Options:
  * name (file prefix), envFrozen (env var that must be '1'), output (artifact dir), qualification, limits, initialFiles (frozen subset), requiredFrozen (must be in the capsule), extraFrozen (more frozen files),
- * oracleSource (python text), inspectorSource (TS text for the bundled product inspector), snapshotExtra (page function adding fields to every snapshot).
+ * viteAliases (optional explicit source aliases for isolated workspace dependencies; caller freezes changed sources), oracleSource (python text), inspectorSource (TS text for the bundled product inspector), snapshotExtra (page function adding fields to every snapshot).
  */
 export async function createFlow(options) {
   const { name, envFrozen, qualification, limits = [], initialFiles = [], requiredFrozen = [], extraFrozen = [], oracleSource, inspectorSource, snapshotExtra } = options;
@@ -289,7 +289,7 @@ export async function createFlow(options) {
     for (const [file, digest] of Object.entries(report.sourceBefore)) assert.equal(report.sourceFrozen[file], digest);
     for (const need of requiredFrozen) assert.ok(report.sourceFrozen[need], `${need} is in the frozen capsule`);
     f.phase = 'actual Studio start';
-    f.server = await createServer({ root: app, configFile: join(app, 'vite.config.ts'), cacheDir: join(output, 'vite-cache'), server: { host: '127.0.0.1', port: 0, strictPort: false }, logLevel: 'error' });
+    f.server = await createServer({ root: app, configFile: join(app, 'vite.config.ts'), cacheDir: join(output, 'vite-cache'), ...(options.viteAliases ? { resolve: { alias: options.viteAliases } } : {}), server: { host: '127.0.0.1', port: 0, strictPort: false }, logLevel: 'error' });
     f.server.watcher.on('all', (event, file) => { if (['change', 'add', 'unlink'].includes(event)) report.changes.push({ event, file }); }); await f.server.listen();
     const { chromium } = createRequire(join(process.env.PW_DIR, 'package.json'))('playwright');
     f.browser = await chromium.launch({ executablePath: process.env.CHROME, headless: true, args: ['--enable-unsafe-webgpu'] }); report.chromeProcessesLaunched = 1;
