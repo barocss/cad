@@ -6,6 +6,7 @@ const output = process.argv[2];
 assert.ok(output && relative(resolve(import.meta.dirname, '../../..'), resolve(output)).startsWith('../'));
 const pins = [
   'apps/cad-studio/test/flow-helper.mjs',
+  'apps/cad-studio/src/app/offsetCollapseFeedback.ts',
   'apps/cad-studio/src/App.tsx',
   'apps/cad-studio/src/ui/NodeEditor.tsx',
   'apps/cad-studio/src/files/documentFile.ts',
@@ -204,13 +205,20 @@ await f.run(async () => {
   const history = hud('Edit Offset face');
   await status(history, 'preview');
   assert.equal(await offset(history).inputValue(), '3');
-  await offset(history).fill('-37');
+  await offset(history).fill('-36');
   await status(history, 'refused');
   assert.equal(await button('Apply', history).isDisabled(), true);
-  await history.getByText('Kernel detail', { exact: true }).click();
+  assert.equal(await offset(history).getAttribute('aria-invalid'), 'true');
+  assert.equal(await offset(history).getAttribute('aria-describedby'), 'hud-offset-collapse');
+  assert.equal(await history.locator('.hud-error').count(), 1);
+  await history.getByText(/Reduce the inward move by using a less negative Offset/).waitFor();
+  assert.ok((await history.locator('#hud-offset-collapse').innerText()).includes(wall.name));
+  assert.equal(await history.locator('#hud-offset-collapse details').getAttribute('open'), null);
   assert.match(await history.innerText(), /clos|cross|collapse/i);
   await f.same(outward);
   await f.snapshot('wall-collapse-refused');
+  await offset(history).fill('-35.9'); await status(history, 'preview');
+  assert.notEqual(await offset(history).getAttribute('aria-invalid'), 'true');
   await offset(history).fill('-35.918');
   await status(history, 'preview');
   await button('Apply', history).click();
@@ -264,6 +272,17 @@ await f.run(async () => {
   await f.waitToast(/Offset face:.*(?:clos|cross|collapse).*Your part is unchanged/i);
   await f.same(inward);
   await f.snapshot('invalid-file-unchanged');
+  await f.openFeatureEditor(index, 'inward recovery'); await button('Edit offset', f.editor()).click();
+  const recovery = hud('Edit Offset face'); await status(recovery, 'preview');
+  await offset(recovery).fill('-36'); await status(recovery, 'refused');
+  await recovery.getByText(/Reduce the inward move/).waitFor(); await f.same(inward);
+  await offset(recovery).fill('-2'); await status(recovery, 'preview');
+  assert.equal(await recovery.locator('#hud-offset-collapse').count(), 0);
+  await button('Apply', recovery).click(); await f.changed(inward); const recovered = await f.doc();
+  assert.deepEqual(recovered.nodes[index], {...node, distance:-2}); await measure('recovery-minus-two',recovered,wall.name,-2,stock);
+  await f.undo(); await f.same(inward); await f.redo(); await f.same(recovered);
+  const recoveredFile = await f.save('wall-recovered'); await f.freshOpen(recoveredFile.file,recovered,'recovered-open');
+  await measure('recovered-open-oracle',await f.doc(),wall.name,-2,stock);
   f.report.observations.push({ label: 'wall-offset', face: wall.name, handleDistance: 3, inwardDistance: -35.918,
     dragCssPixels: delta, signedRefusal: -37, exactReopen: true, identityRetained: true, shapeSHA256: result.sha256 });
 });

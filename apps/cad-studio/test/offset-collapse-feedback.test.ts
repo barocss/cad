@@ -18,7 +18,7 @@ test('real native cap refusal owns original basis and in-place recovery', () => 
   const accepted=add(seed(40,30,10,10),3), snapshot=structuredClone(accepted), candidate=change(accepted,2,-10);
   const result=evaluateDoc(candidate,1); assert.ok(!result.ok);
   const help=offsetCollapseFailure('offset-face-edit',accepted,candidate,result.error); assert.ok(help,JSON.stringify(result.error));
-  assert.match(help.hint,/original face.*n1.*n1.top/); assert.match(help.hint,/saved value \(3 mm\)/);assert.equal(help.historyField,'d');
+  assert.match(help.hint,/original face.*n1.*n1.top/); assert.match(help.hint,/Reduce the inward move/); assert.match(help.hint,/saved value \(3 mm\)/);assert.equal(help.historyField,'d');
   assert.ok(evaluateDoc(change(accepted,2,-2),1).ok); assert.deepEqual(accepted,snapshot);
   for(const command of ['offset-face','edit','draft']) assert.equal(offsetCollapseFailure(command,accepted,candidate,result.error),undefined);
   for(const error of [{...result.error,code:'INPUT'},{...result.error,detail:'other collapse'},{...result.error,feature:'missing'}]) assert.equal(offsetCollapseFailure('offset-face-edit',accepted,candidate,error),undefined);
@@ -33,4 +33,14 @@ test('real dependent second Offset is identified without changing its recipe',()
  const active={cmd:{id:'offset-face-edit'},ctx:{doc:accepted},values:{d:5},preview:'error',error:help} as unknown as Active;
  active.offsetCollapse={cmd:active.cmd,ctx:active.ctx,values:active.values,error:help};assert.equal(offsetCollapseFeedback(active),help);
  for(const altered of [{...active,values:{d:3}},{...active,ctx:{...active.ctx}},{...active,cmd:{...active.cmd}},{...active,error:{...help}},{...active,preview:'busy' as const}]) assert.equal(offsetCollapseFeedback(altered),undefined);
+});
+
+test('real inclined side collapse retains original side and gives inward recovery', () => {
+ const doc = seed(40,30,10,10), result = evaluateDoc(doc,1); assert.ok(result.ok);
+ const face = result.bodies[0].mesh.faces.find(f => f.normal[0] > .9 && f.normal[2] > .1)!;
+ const accepted = offsetFaceCommand.build!({doc,bodies:result.bodies,selection:{faces:[{body:0,face:face.index}],edges:[],bodies:[]}}, {d:3});
+ const candidate=change(accepted,2,-36), refused=evaluateDoc(candidate,1); assert.ok(!refused.ok);
+ const help=offsetCollapseFailure('offset-face-edit',accepted,candidate,refused.error); assert.ok(help);
+ assert.match(help.hint,/less negative Offset/); assert.ok(help.hint.includes(face.name));
+ assert.ok(evaluateDoc(change(accepted,2,-35.9),1).ok); assert.ok(evaluateDoc(change(accepted,2,-2),1).ok);
 });

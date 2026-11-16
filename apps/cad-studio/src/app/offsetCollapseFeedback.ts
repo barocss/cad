@@ -6,8 +6,9 @@ import type { FeatureFailure } from './failedFeature';
 
 /** Only a single native distance edit and its proven dependent Offset may own this recovery. */
 export function offsetCollapseFailure(command: string, accepted: StudioDoc, candidate: StudioDoc, error: FeatureFailure): FeatureFailure | undefined {
+  const side = error.detail === 'B-rep: drafted cap offset: the offset would close a section or cross the opposite wall';
   if (command !== 'offset-face-edit' || error.code !== 'GEOMETRY'
-    || error.detail !== 'B-rep: drafted cap offset: the offset would close a wall or cross the opposite cap'
+    || !side && error.detail !== 'B-rep: drafted cap offset: the offset would close a wall or cross the opposite cap'
     || accepted.nodes.length !== candidate.nodes.length
     || canonical({ ...accepted, nodes: [] }) !== canonical({ ...candidate, nodes: [] })) return;
   const changes = candidate.nodes.flatMap((n, i) => canonical(n) === canonical(accepted.nodes[i]) ? [] : [i]);
@@ -30,7 +31,7 @@ export function offsetCollapseFailure(command: string, accepted: StudioDoc, cand
   const basis = `${featureLabel(parent, before.parent.node, accepted.nodes)} (${featureId(accepted.nodes, before.parent.node)}) · ${before.faces[0]}`;
   const downstream = failed[0] !== index;
   return { ...error, title: downstream ? 'This edit closes a later Offset' : 'Offset reaches a geometry limit',
-    hint: `${downstream ? 'Changing this distance makes the later Offset fail. ' : ''}The offset would close a wall or cross the opposite cap. Distance starts at the original face of ${basis}, not the already offset face. Adjust Offset here or Cancel to keep the saved value (${before.distance} mm). The saved model has not changed.`, historyField: 'd' };
+    hint: `${downstream ? 'Changing this distance makes the later Offset fail. ' : ''}${side ? 'The offset would close the section or cross the opposite wall.' : 'The offset would close a wall or cross the opposite cap.'} ${!downstream && typeof after.distance === 'number' && after.distance < 0 ? 'Reduce the inward move by using a less negative Offset. ' : ''}Distance starts at the original face of ${basis}, not the already offset face. Adjust Offset here or Cancel to keep the saved value (${before.distance} mm). The saved model has not changed.`, historyField: 'd' };
 }
 export function offsetCollapseFeedback(active: Active): FeatureFailure | undefined {
   const receipt = active.offsetCollapse;
