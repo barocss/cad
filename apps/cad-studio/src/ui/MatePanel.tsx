@@ -1,6 +1,6 @@
 import { ConnectorEditor } from './MateConnector';
 import { withConnector, type Connector } from '@barocss/cad-model/assembly/connectors';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PartInstance } from '@barocss/cad-model/engine/doc';
 import { fmt } from '@barocss/cad-model/engine/doc';
 import { BASE, KIND_LABEL, mateKindsOf, mateLabel, type FaceTable, type Mate, type MateKind, type MateRef } from '@barocss/cad-model/assembly/mates';
@@ -31,6 +31,11 @@ export function faceLabel(name: string, table: FaceTable | undefined): string {
 /** Mates: the list (pick one to edit or delete it), and "Add mate": a face that stays, then a face on the part to move. */
 export function MatePanel({ assembly, instances, instance, onRefused }: { assembly: Assembly; instances: PartInstance[]; instance?: string; onRefused(reason: string): void }) {
   const { mates, problems, draft, tableFor } = assembly;
+  const draftPanel = useRef<HTMLDivElement>(null);
+  const drafting = !!draft;
+  useEffect(() => {
+    if (drafting) draftPanel.current?.scrollIntoView({ block: 'nearest' });
+  }, [drafting]);
   // (A part inside a sub-assembly, `sub1/p2`: the names down the path, "Sub › Block B".)
   const partName = (part: string) => {
     if (part === BASE) return 'Base part';
@@ -58,7 +63,7 @@ export function MatePanel({ assembly, instances, instance, onRefused }: { assemb
         {!draft && <Button variant="ghost" style={{ marginLeft: 'auto' }} onClick={assembly.start}>Add mate</Button>}</div>
       {instance && !draft && !instances.find(i => i.id === instance)?.pattern && <LockRow instance={instance} instances={instances} onLock={to => { const why = assembly.lock(instance, to); if (why) onRefused(why); }} />}
       {instance && !draft && <div className="kv" aria-label="Freedom">{instances.find(i => i.id === instance)?.name ?? instance} <b>{freedomText(instance)}</b></div>}
-      {draft && <div className="mate-draft" style={{ display: 'grid', gap: 6, marginBottom: 8 }}>
+      {draft && <div ref={draftPanel} className="mate-draft" style={{ display: 'grid', gap: 6, marginBottom: 8 }}>
         <label className={FIELD}><span>Type</span>
           <NativeSelect className={CONTROL} aria-label="Mate type" value={draft.kind} onChange={e => assembly.setDraft({ kind: e.target.value as MateKind | 'auto', ...(e.target.value === 'ball' || e.target.value === 'universal' || e.target.value === 'cylindrical' ? { flip: false } : {}) })}>
             <option value="auto">Auto</option>
@@ -68,14 +73,18 @@ export function MatePanel({ assembly, instances, instance, onRefused }: { assemb
         {draft.kind === 'angle' && <NumberField label="Angle" unit="°" value={draft.angle} onCommit={v => assembly.setDraft({ angle: v })} />}
         {draft.kind !== 'concentric' && draft.kind !== 'ball' && draft.kind !== 'universal' && draft.kind !== 'cylindrical' && <label className="field check-row"><span>Flip</span>
           <input type="checkbox" className={TICK} aria-label="Mate flip" checked={draft.flip} onChange={e => assembly.setDraft({ flip: e.target.checked })} /></label>}
-        {draft.kind === 'universal' && <div className="empty" aria-label="Universal axes">2 free turns: Stays Z is perpendicular to Moves X. Origins coincide. Mate connector limits are unavailable. Robot motion uses two rotation axes and a logical intermediate link. Coupled mates and closed loops are unsupported.</div>}
-        {draft.kind === 'cylindrical' && <div className="empty" aria-label="Cylindrical axes">1 free turn and 1 free slide along aligned connector Z axes. Mate connector limits are unavailable. Robot motion uses one axial slide and one rotation with a logical intermediate link. Coupled mates and closed loops are unsupported.</div>}
-        <PlanePicker instances={instances} onPick={assembly.pickFace} />
-        <ReferencePicker instances={instances} tableFor={tableFor} onPick={assembly.pickFace} />
         <div className="kv">1 · Stays <b>{draft.picks[0] ? refText(draft.picks[0].ref) : 'click a face'}</b></div>
         <div className="kv">2 · Moves <b>{draft.picks[1] ? refText(draft.picks[1].ref) : draft.picks[0] ? 'click a face on another part' : '—'}</b></div>
-        {draft.error ? <div className="hud-error" role="status" aria-label="Mate refused"><div className="hud-error-title">Can’t mate these faces</div>{draft.error}</div>
-          : <div className="empty">Click a face on the part that stays, then one on the part to move: two flat faces (coincident, distance, angle), two round faces (concentric, tangent), or a flat and a round one (tangent). Flat faces end up flush and facing each other. Fastened aligns connector origins, Z and X with no free motion.</div>}
+        {draft.error && <div className="hud-error" role="status" aria-label="Mate refused"><div className="hud-error-title">Can’t mate these faces</div>{draft.error}</div>}
+        {draft.kind === 'universal' && <div className="empty" aria-label="Universal axes">2 free turns: Stays Z is perpendicular to Moves X. Origins coincide.</div>}
+        {draft.kind === 'cylindrical' && <div className="empty" aria-label="Cylindrical axes">1 free turn and 1 free slide along aligned connector Z axes.</div>}
+        <PlanePicker instances={instances} onPick={assembly.pickFace} />
+        <ReferencePicker instances={instances} tableFor={tableFor} onPick={assembly.pickFace} />
+        <details>
+          <summary>Mate selection help</summary>
+          <div className="empty">Choose two flat faces (coincident, distance, angle), two round faces (concentric, tangent), or a flat and a round one (tangent). Flat faces end up flush and facing each other. Fastened aligns connector origins, Z and X with no free motion.</div>
+          {(draft.kind === 'universal' || draft.kind === 'cylindrical') && <div className="empty">Mate connector limits are unavailable. Robot motion uses {draft.kind === 'universal' ? 'two rotation axes' : 'one axial slide and one rotation'} and a logical intermediate link. Coupled mates and closed loops are unsupported.</div>}
+        </details>
         <div className="flex flex-wrap gap-1"><Button variant="ghost" onClick={assembly.cancel}>Cancel</Button></div>
       </div>}
       {mates.map((m, i) => {
