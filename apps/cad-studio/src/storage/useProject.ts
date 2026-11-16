@@ -270,7 +270,7 @@ export function useProject(cb: ProjectCallbacks) {
           return true;
         } catch (e) {
           if (!current() || order < owner.success) return false;
-          if (e instanceof BarocssError && e.code === 'STORAGE_CHANGED') return fail(`${path} changed elsewhere`, new Error(part ? 'Another window or program saved it since it was opened. Open it again, or save under another name.' : `The project already has ${path}. Save under another name.`));
+          if (e instanceof BarocssError && e.code === 'STORAGE_CHANGED') return fail(`${path} changed elsewhere`, new Error(part ? 'Another window or program saved it since it was opened. To keep your edits as a separate downloaded copy: in Project & versions, click Close, change File name, then click Save. Changing File name alone does not change this project path. Verify the downloaded copy before reopening the project file.' : `The project already has ${path}. Save under another name.`));
           return fail('Could not save', e);
         }
       },
