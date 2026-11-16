@@ -172,3 +172,33 @@ Next priorities are domain composition in the live joints card, followed by
 SketchPanel's independent outline/offset tools. ChatPanel's turn/attachment/task-run
 authority and viewport renderer recovery require explicit lifecycle contracts,
 not wholesale prop regrouping. Core App commit/undo/source authority remains central.
+
+## Sketch outline composition and stopping point (2026-11-17)
+
+`SketchOutlineTools` owns face-outline, offset, linked-inset and curve conversion
+controls, including raw distance, draft-scoped refusals, validity and focus. App
+passes the existing authorized actions directly through a composition slot; the
+shape/constraint editor no longer forwards four unrelated callbacks. The slot is
+always mounted for the sketch panel lifetime, so toggling tool availability does
+not reset local input. SketchPanel shrinks from 435 to 354 lines and its App call
+from 19 attributes to 16. Native mutation and acceptance remain unchanged.
+
+Focused tests pass (10/10). The actual offset-distance browser covers small positive
+values, negative/zero/empty refusal, local collapse recovery, linked-inset Enter,
+strict BRep/volume checks, Undo/Redo and Save/reopen at 1024 and 1440 widths.
+Screenshots and an independent source review confirm the preserved error/focus
+and lifetime boundaries. Studio types, targeted lint and production build pass.
+
+The high-prop survey now reads SceneViewport 77, ChatPanel 25, JointsPanelLive 22,
+NodeEditor 21, AssemblyStepsPanel 18 and SketchPanel 16. The first two are genuine
+remaining architectural debt: rendering/input/overlay coordination and chat turn/
+attachment/task-run authority, respectively. NodeEditor is already composed behind
+the History boundary; its options are not themselves proof of a mixed owner.
+Joints' remaining pose/path/export work and assembly-step callbacks can be split
+when a related issue requires changing them. App still owns commit/undo and async
+source authority; splitting those solely to lower its line count is not justified.
+
+This is a reasonable stopping point for the dedicated refactor pass. Resume normal
+issue delivery, keep new domain behavior in the extracted owners, and address the
+remaining large contracts in bounded issue-linked work rather than a wholesale
+prop-bag or context conversion. Existing WIP/HOLD scopes remain untouched.

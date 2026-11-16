@@ -201,6 +201,7 @@ import { Palette } from './ui/Palette';
 import { ShortcutHelp } from './ui/ShortcutHelp';
 import { InsetSourceReview } from './ui/InsetSourceReview';
 import { MidpointSketchReview } from './ui/MidpointSketchReview';
+import { SketchOutlineTools } from './ui/SketchOutlineTools';
 import { SketchPanel } from './ui/SketchPanel';
 import { Timeline } from './ui/Timeline';
 import { clearRecovery, keepRecovery, offerRecovery, settleRecovery, type Recovery } from './app/recovery';
@@ -3265,8 +3266,8 @@ export function App() {
           const next = activateDraftOutline(sketch, draftShapeOrder(sketch).indexOf(source));
           if (next && next !== sketch) setActiveOutline(next);
         } : undefined}
-        conflictIds={!sketchFinishError && sketchIssue?.conflict?.doc === doc && sketchIssue.conflict.source === sketch.shape ? sketchIssue?.conflict?.ids : undefined} onShape={shape => updateShape(shape, false, 'panel')} onDrivingLength={sketchViewportActions.recoverPanelLength} onPlace={sketch.editNode === undefined ? placeSketch : undefined} onUi={patch => setSketch(s => s && { ...s, ...patch })} onOffset={offsetSketch} onLinkedInset={sketch.anchor?.kind === 'face' && sketch.anchor.face?.linkSource && !sketch.anchor.offset && !sketch.anchor.angle ? linkSketchInset : undefined} onToCurves={sketchToCurves} onBand={{ make: makeSketchBand, edit: editSketchBand, remove: removeSketchBand }} onUseOutline={sketch.anchor?.kind === 'face' && sketch.anchor.face?.outline?.length && !sketch.anchor.offset && !sketch.anchor.angle
-        ? useFaceOutline : undefined} />}
+        conflictIds={!sketchFinishError && sketchIssue?.conflict?.doc === doc && sketchIssue.conflict.source === sketch.shape ? sketchIssue?.conflict?.ids : undefined} onShape={shape => updateShape(shape, false, 'panel')} onDrivingLength={sketchViewportActions.recoverPanelLength} onPlace={sketch.editNode === undefined ? placeSketch : undefined} onUi={patch => setSketch(s => s && { ...s, ...patch })} onBand={{ make: makeSketchBand, edit: editSketchBand, remove: removeSketchBand }} outlineTools={<SketchOutlineTools sketch={sketch} onOffset={offsetSketch} onLinkedInset={sketch.anchor?.kind === 'face' && sketch.anchor.face?.linkSource && !sketch.anchor.offset && !sketch.anchor.angle ? linkSketchInset : undefined} onToCurves={sketchToCurves} onUseOutline={sketch.anchor?.kind === 'face' && sketch.anchor.face?.outline?.length && !sketch.anchor.offset && !sketch.anchor.angle
+        ? useFaceOutline : undefined} />} />}
       {bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <BomPanel doc={doc} name={fileName} evaluate={d => engine.part(d, revision.current++, 'read')} onCommit={next => commit(next, false)} onClose={() => setBomOpen(false)} onError={(title, hint) => setToast({ title, hint, detail: '', documentSource: { doc, name: fileName } })} />}
       {rebuildOpen && !bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <RebuildPanel store={rebuildStore} evaluated={evaluated} busy={busy} problems={assembly.problems} mode={effectiveDisplayMode} viewport={viewport} onClose={() => setRebuildOpen(false)} />}
       {versionsVisible && <VersionsPanel project={project} projectOpenFocus={{ remember: workspaceModeExit.rememberFocus, take: workspaceModeExit.takeFocus }} doc={doc} onMakeVersion={makeVersion} comparing={compareBase} onCompare={setCompareBase} evaluate={evaluateVersion} checkpointReview={checkpointReview}
