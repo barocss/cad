@@ -21,7 +21,7 @@ export function threadMarks(v: ViewPlacement, pr: BrepProjection, threads: Reado
   const axes = new Map<string, { t: FaceThread; dir: readonly number[]; centres: (readonly number[])[]; radius: number; visible: boolean }>();
   for (const e of pr.edges) {
     const c = e.circle; if (!c) continue;
-    const t = [...e.name.matchAll(/\b(n\d+)\.side/g)].map(m => threads.get(m[1])).find(x => x && (x.radius === undefined || Math.abs(x.radius - c.radius) < 0.01 * x.radius + 1e-3));
+    const t = [...e.name.matchAll(/\b(n\d+(?:_p\d+)?)\.side/g)].map(m => threads.get(m[1])).find(x => x && (x.radius === undefined || Math.abs(x.radius - c.radius) < 0.01 * x.radius + 1e-3));
     if (!t) continue;
     const n = c.normal[0] < 0 || (c.normal[0] === 0 && (c.normal[1] < 0 || (c.normal[1] === 0 && c.normal[2] < 0))) ? c.normal.map(x => -x) : [...c.normal];
     // (The axis line: its direction and the centre's offset across it.)

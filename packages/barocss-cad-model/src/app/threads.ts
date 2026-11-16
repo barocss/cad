@@ -18,7 +18,13 @@ export function threadsOf(nodes: readonly ModelNode[], sizes: FastenerSizes): Ma
   const out = new Map<string, FaceThread>();
   nodes.forEach((n, i) => {
     if (n.kind === 'hole' && n.thread) {
-      const m = /^M([\d.]+)×([\d.]+)/.exec(n.thread); if (m) out.set(featureId(nodes, i), { d: Number(m[1]), pitch: Number(m[2]), radius: typeof n.radius === 'number' ? n.radius : undefined, internal: true });
+      const m = /^M([\d.]+)×([\d.]+)/.exec(n.thread);
+      if (m) {
+        const id = featureId(nodes, i), thread = { d: Number(m[1]), pitch: Number(m[2]), radius: typeof n.radius === 'number' ? n.radius : undefined, internal: true };
+        out.set(id, thread);
+        // The final cut keeps the authored ID; earlier pattern cuts use engine/part's copy IDs.
+        for (let copy = 0; copy < (n.pattern?.count ?? 1) - 1; copy++) out.set(`${id}_p${copy}`, thread);
+      }
     }
     const made = 'made' in n ? n.made : undefined;
     if (made?.command === 'fastener' && made.values.kind !== 'washer') {
@@ -39,7 +45,7 @@ export function threadLines(threads: ReadonlyMap<string, FaceThread>, mesh: Disp
   if (!threads.size) return out;
   for (const f of mesh.faces) {
     if (f.kind !== 'curved' || !f.radius) continue;
-    const t = [...f.name.matchAll(/\b(n\d+)\./g)].map(m => threads.get(m[1])).find(x => x && (x.radius === undefined || Math.abs(x.radius - f.radius!) < 0.01 * x.radius + 1e-3));
+    const t = [...f.name.matchAll(/\b(n\d+(?:_p\d+)?)\./g)].map(m => threads.get(m[1])).find(x => x && (x.radius === undefined || Math.abs(x.radius - f.radius!) < 0.01 * x.radius + 1e-3));
     if (!t) continue;
     const ax = roundFaceAxis(mesh, f.index); if (!ax) continue;
     // Its extent along the axis, and which way it faces (out: external; in: a bore).
