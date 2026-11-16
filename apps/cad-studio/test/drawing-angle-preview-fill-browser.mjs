@@ -6,11 +6,18 @@ await f.run(async()=>{
  for(const width of [1440,1024]) for(const [angle,at] of [[45,[14,4]],[135,[0,14]]]){
   await f.newPage();await f.page.setViewportSize({width,height:900});
   await f.page.setInputFiles('input[aria-label="Model file"]',{name:'triangle.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(source))});await f.same(source);
+  const original=await f.doc();
   await f.page.getByRole('button',{name:'Drawing',exact:true}).click();await f.page.waitForFunction(()=>!!window.__studioDrawingAt?.('top',0,0));
   await f.page.getByRole('button',{name:'Angle',exact:true}).click();
   const point=async p=>f.page.evaluate(([u,v])=>window.__studioDrawingAt('top',u,v),p);
   const click=async p=>{const q=await point(p);await f.page.mouse.click(q.x,q.y);};
-  await click([20,0]);await click([10,10]);const q=await point(at);await f.page.mouse.move(q.x,q.y);
+  const sideHint='Choose the side of the corner to measure, then click to place the angle · Esc cancels';
+  assert.equal(await f.page.getByText(sideHint,{exact:true}).count(),0);
+  await click([20,0]);
+  await f.page.getByText('Now the second edge · Esc cancels',{exact:true}).waitFor();
+  assert.equal(await f.page.getByText(sideHint,{exact:true}).count(),0);
+  await click([10,10]);
+  await f.page.getByText(sideHint,{exact:true}).waitFor();const q=await point(at);await f.page.mouse.move(q.x,q.y);
   const group=f.page.locator('.dw-preview').filter({has:f.page.locator('text')});await group.waitFor();
   const info=await group.evaluate(el=>({text:el.querySelector('text')?.textContent,paths:[...el.querySelectorAll('path')].map(p=>({d:p.getAttribute('d'),fill:getComputedStyle(p).fill,attr:p.getAttribute('fill')})),textFill:getComputedStyle(el.querySelector('text')).fill}));
   f.report.observations.push({width,angle,...info});await f.snapshot(`${width}-preview-${angle}`);
@@ -19,5 +26,7 @@ await f.run(async()=>{
   await f.page.mouse.click(q.x,q.y);await f.page.waitForFunction(n=>window.__studioDrawing?.().dimensions.some(d=>d.value===n),angle);
   const applied=await f.page.locator('g.dimension').last().evaluate(el=>({text:el.querySelector('text')?.textContent,arcs:[...el.querySelectorAll('path')].filter(p=>p.getAttribute('d').includes('A')).map(p=>({d:p.getAttribute('d'),fill:getComputedStyle(p).fill}))}));
   assert.equal(parseFloat(applied.text),angle);assert.deepEqual(applied.arcs.map(p=>p.d),arcs.map(p=>p.d));assert.ok(applied.arcs.every(p=>p.fill==='none'));await f.snapshot(`${width}-applied-${angle}`);
+  assert.equal(await f.page.getByText(sideHint,{exact:true}).count(),0);
+  await f.undo();await f.same(original);
  }
 });
