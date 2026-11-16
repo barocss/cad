@@ -78,3 +78,15 @@ test('History names an indirect linked inset only for edits on the source depend
   });
   assert.equal(linkedInsetHistoryFailure(error, history, candidate, 2), undefined);
 });
+
+
+test('new Hole preview omits missing-history attribution only for its exact native ID', () => {
+  const hole: ModelNode = { kind: 'hole', id: 'n45', parent: { node: 1, side: 'solid' }, center: [30, 10], radius: 4 };
+  const candidate = [...accepted, hole];
+  assert.equal(failedFeatureText('n45', candidate, accepted), undefined);
+  assert.equal(failedFeatureText('n45_p1', candidate, accepted), 'n45_p1 · no matching history step');
+  assert.equal(failedFeatureText('n99', candidate, accepted), 'n99 · no matching history step');
+  assert.equal(failedFeatureText('n45', candidate, candidate), 'Hole Ø8 (n45)');
+  assert.equal(failedFeatureText('n41', candidate, accepted), 'Fillet R8 (n41)');
+  assert.equal(failedFeatureText('n41', accepted, accepted.slice(0, 2)), 'n41 · no matching history step');
+});
