@@ -1,0 +1,9 @@
+# Retaining ring preview recovery (#32)
+
+Add a ready-only **View preview** action inside the Retaining ring HUD. It explicitly frames the currently rendered scene including the ring; it does not automatically override a person's camera, alter dimensions or apply the command. The App verifies current command ownership before framing. Enter/Space on this action cannot bubble into global command Apply. Refused/busy previews cannot use it.
+
+Validation: Chrome WebGPU at 1024/1440 on the default shaft translated to (1000,2000,3000). A no-fit initial camera reproduced an offscreen preview; existing F after leaving the field also recovered it, so no geometry placement defect was inferred. The new action provides recovery directly beside the command inputs. Final browser run covers thickness 2 refusal/disabled View preview, 1.2 recovery, Enter/Space framing without document mutation, projected ring extremities within canvas, Cancel/reopen, Apply, exact ring centroid (1000,2000,3088.65), volume π(12²−9.5²)×1.2, Undo/Redo and Save/Open. Preview screenshot inspected with ring visible on its groove. Final result `/tmp/cad-ring-preview-r5-20261116`.
+
+Hud lint PASS; final Studio TypeScript/Vite build PASS (`/tmp/cad-ring-preview-build-final.log`). App lint still reports the pre-existing unused `_k` at line2433, unrelated to the added guarded callback; not represented as lint-clean. Earlier harness attempts clarified existing Fit behavior and canvas dimensions; final run includes keyboard propagation protection.
+
+#32 completion inventory: Keyway History 858f8d891; Pipe angle 3b3c299c0; Pipe radius guidance 71d4f26e2; open-slot/no-floor notes and fit refusal 12d1a252d; this explicit Retaining ring framing recovery. Their focused notes document coverage and limitations. This resolves the reported workflows, not arbitrary geometry certification, WebGL2 or whole-suite validation. #126 held WIP and manufacturing/Physics/Rendering HOLD remain untouched.

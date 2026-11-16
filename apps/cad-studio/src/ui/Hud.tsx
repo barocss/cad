@@ -43,13 +43,14 @@ interface Props {
   onChange(key: string, value: number | string): void; onApply(owner: Active): void; onCancel(): void;
   onFilletType?(type: FilletType): void; onRadiusMode?(mode: RadiusMode): void;
   onRemoveFilletEdge?(owner: Active, edge: Active['ctx']['selection']['edges'][number]): void;
+  onFramePreview?(owner: Active): void;
   onFile?(key: string, file: File): void;
   onHoleOptions(owner: Active, patch: Values): boolean;
 }
 
 /** The floating command HUD: few fields, keyboard-first, with the kernel’s answer inline. (G12f: its fields, choices and
  * actions shadcn's Input, NativeSelect and Button, at the HUD's 26 px in the studio's mono type.) */
-export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, onRadiusMode, onRemoveFilletEdge, onHoleOptions }: Props) {
+export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, onRadiusMode, onRemoveFilletEdge, onHoleOptions, onFramePreview }: Props) {
   const active = useStoreValue(store);
   const first = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
   useEffect(() => { first.current?.focus(); if (first.current instanceof HTMLInputElement && first.current.type !== 'file') first.current.select(); }, [active?.cmd.id]);
@@ -195,6 +196,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           onClick={() => onChange('pickPlane', pickingMirrorPlane ? '' : 'yes')}>{pickingMirrorPlane ? 'Cancel plane pick' : 'Pick plane'}</Button>}
         <span className="grow" />
         {/* Keep native button activation from also reaching the window's Apply shortcut. */}
+        {active.cmd.id === 'retaining-ring' && onFramePreview && <Button variant="ghost" disabled={active.preview !== 'ok'} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }} onClick={() => onFramePreview(active)}>View preview</Button>}
         <Button variant="ghost" onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }} onClick={onCancel}>Cancel</Button>
         <Button variant="default" disabled={active.preview !== 'ok' || interiorInvalid || !!sectionProblem || draftAngleInvalid} onClick={() => { if (!interiorInvalid && !sectionProblem && !draftAngleInvalid) onApply(active); }}>Apply</Button>
       </div>

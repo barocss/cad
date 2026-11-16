@@ -3638,6 +3638,7 @@ export function App() {
   };
   const hud = active && <Hud store={activeStore} onChange={changeHudValue} onFilletType={changeFillet} onRemoveFilletEdge={removeFilletEdge}
     onRadiusMode={mode => { const a = activeStore.get(); if (a?.fillet) changeFillet(a.fillet.type, mode); }}
+    onFramePreview={owner => { if (activeStore.get() === owner && owner.preview === 'ok') viewport.current?.fit(); }}
     onFile={uploadFont} onHoleOptions={applyHoleOptions} onApply={applyHud} onCancel={cancel} />;
   return (
     <div className={'studio' + (historyShown ? ' has-history' : '') + (bottomRow.stacked ? ' history-stacked' : '') + (bottomRow.cramped ? ' stage-cramped' : '')} style={{ '--history-left': (browserPlacement === 'dock' ? HISTORY_LEFT_RAIL : HISTORY_LEFT) + 'px', '--strip-w': chatColumnShown ? '0px' : CHAT_STRIP + 'px', '--dock-strip-w': dockEdge + 'px', '--chat-col-w': (chatColumnShown ? layout.chatShown : CHAT_STRIP) + 'px', '--rail-w': sketch || rendering || drawing ? '44px' : '116px' } as CSSProperties}>
