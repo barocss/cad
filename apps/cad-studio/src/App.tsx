@@ -1993,7 +1993,7 @@ export function App() {
     if (!picked || typeof picked.error === 'string') {
       const hint = typeof picked?.error === 'string' ? picked.error
         : mirror ? (current.values.pickPlane === 'yes' ? 'Click an original planar face normal to X, Y or Z, not an edge or vertex. Cancel plane pick restores the previous preview.' : 'Use Pick plane and click an original planar face normal to X, Y or Z.')
-        : split ? 'Pick an original planar face normal to X, Y or Z.' : 'Pick an original planar face on another body.';
+        : split ? 'Pick an original planar face normal to X, Y or Z. For a tilted plane, choose Any direction and enter its Normal X/Y/Z and At values.' : 'Pick an original planar face on another body.';
       setToast({ title: `${current.cmd.label} ${split || mirror ? 'plane' : 'target'} not selected`, hint, detail: '', inputPick: current.cmd });
       return true;
     }
@@ -3593,7 +3593,7 @@ export function App() {
   const changeHudValue = (key: string, value: number | string) => {
     const current = activeStore.get();
     if (!current) return;
-    if (current.cmd.id === 'mirror' && key === 'pickPlane') setToast(notice => notice?.inputPick === current.cmd ? null : notice);
+    if ((current.cmd.id === 'mirror' && key === 'pickPlane') || (current.cmd.id === 'split' && ['axis', 'nx', 'ny', 'nz', 'at'].includes(key))) setToast(notice => notice?.inputPick === current.cmd ? null : notice);
     if (key === 'offsetMode' || current.cmd.id === 'split' || (current.cmd.id === 'mirror' && key === 'pickPlane')
       || (current.cmd.id === 'extrude' && (key === 'region'
       || (key === 'depth' && (isExtrudeToFace(current.cmd.id, current.values) || value === 'to-face'))))) {

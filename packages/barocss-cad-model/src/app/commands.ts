@@ -1062,7 +1062,7 @@ const allCommands: Command[] = [
     },
     onPick: (ctx, v, hit) => {
       const plane = splitPlaneOfPick(ctx, hit.face ?? undefined);
-      return plane ? { ...v, ...plane } : { error: 'Pick an original planar face normal to X, Y or Z.' };
+      return plane ? { ...v, ...plane } : { error: 'Pick an original planar face normal to X, Y or Z. For a tilted plane, choose Any direction and enter its Normal X/Y/Z and At values.' };
     },
     // A manual normal starts the plane through the body's middle: at = n·centre.
     derive: (ctx, v, changed) => {
@@ -1081,7 +1081,7 @@ const allCommands: Command[] = [
       const k = 'xyz'.indexOf(String(v.axis)), at = centreOf(b), dir: [number, number, number] = [0, 0, 0]; dir[k] = 1; at[k] = Number(v.at);
       return [{ key: 'at', at, dir, min: Math.ceil((b.mesh.bounds.min[k] + 0.5) * 2) / 2, max: Math.floor((b.mesh.bounds.max[k] - 0.5) * 2) / 2, step: 0.5 }];
     },
-    steps: (_ctx, v) => v.axis === 'n' ? [{ label: 'Plane', text: splitNormal(v) ? `${planeText(splitNormal(v)!)} = ${Number(v.at)}` : 'Give the plane a direction: its normal must not be zero.', done: !!splitNormal(v) }]
+    steps: (_ctx, v) => v.axis === 'n' ? (splitNormal(v) ? [{ label: 'Plane', text: `${planeText(splitNormal(v)!)} = ${Number(v.at)}`, done: true }] : [])
       : typeof v.planeFace === 'string' && v.planeFace ? [{ label: 'Plane face', text: v.planeFace, done: true }] : [],
     build: (ctx, v) => {
       if (v.axis !== 'n') return withNode(ctx.doc, { kind: 'split', parent: refOf(oneBody(ctx)!), axis: v.axis as Axis, at: Number(v.at) });

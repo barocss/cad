@@ -90,6 +90,7 @@ async function verify(label, doc, at) {
 
 await f.run(async () => {
   await f.newPage();
+  await f.page.setViewportSize({width:Number(process.argv[3]) || 1440,height:900});
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: 'D1177-angled-split.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
@@ -124,10 +125,30 @@ await f.run(async () => {
     }
     return;
   }
+  await button('Top', f.page.getByRole('group', { name: 'Views', exact: true })).click();
+  const badEdge = await f.page.evaluate(() => window.__studioScreenOf([0, 10, 10]));
+  await f.page.mouse.click(...badEdge);
+  const refused = await f.waitToast(/Split plane not selected/);
+  assert.match(refused, /Any direction/);
+  await f.same(seed);
   await field('Normal', hud).selectOption('n');
   assert.equal(await field('At', hud).inputValue(), '30');
   await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
   assert.match(await hud.innerText(), /X\+Y = 30/);
+  assert.equal(await f.page.locator('.toast').filter({hasText:'Split plane not selected'}).count(), 0);
+  await field('Normal X', hud).fill('0'); await field('Normal Y', hud).fill('0'); await field('Normal Z', hud).fill('0');
+  await hud.getByText(/Give the plane a direction: its normal must not be zero[.]/).waitFor();
+  assert.equal(await hud.getByText(/Give the plane a direction: its normal must not be zero[.]/).count(), 1);
+  assert.equal(await button('Apply', hud).isDisabled(), true);
+  await f.same(seed);
+  await field('Normal X', hud).fill('1'); await field('Normal Y', hud).fill('1'); await field('At', hud).fill('25.25');
+  await hud.locator('.status').filter({hasText:/^preview$/}).waitFor();
+  assert.match(await hud.innerText(), /X\+Y = 25.25/);
+  assert.equal(await f.page.locator('.toast').filter({hasText:'Split plane not selected'}).count(), 0);
+  await f.snapshot('numeric-recovery');
+  await field('At', hud).fill('30');
+  await hud.locator('.status').filter({hasText:/^preview$/}).waitFor();
+
   await f.same(seed);
   await f.snapshot('angled-split-preview');
   await button('Apply', hud).click();
