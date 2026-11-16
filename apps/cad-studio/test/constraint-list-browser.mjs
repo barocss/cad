@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
-const circlePickedUndo = process.argv[3] === '--circle-picked-undo';
+const multiCirclePickedUndo = process.argv[3] === '--multi-circle-picked-undo';
+const circlePickedUndo = process.argv[3] === '--circle-picked-undo' || multiCirclePickedUndo;
 const circlePickedBaseline = circlePickedUndo && process.argv.includes('--baseline');
 const fixedPointConflict = process.argv[3] === '--fixed-point-conflict';
 const edgeCircleConflict = process.argv[3] === '--edge-circle-conflict';
@@ -63,7 +64,9 @@ if (input.circles) {
     hv: { h: [0,2], v: [1,3] }, lengths: { 0: 90, 1: 60 },
     circles: [{ c: [24, 22], r: 5 }, { c: b, r: 5 }],
     rules: [{ kind: 'ccdist', a: 0, b: 1, value: input.conflict ? 35 : 26 }, { kind: 'cedge', edge: 0, circle: 0, axis: 1, value: 22 },
-      ...(input.conflict ? [{ kind: 'ccdx' as const, a: 0, b: 1, value: 24 }] : [])] }]);
+      ...(input.conflict ? [{ kind: 'ccdx' as const, a: 0, b: 1, value: 24 }] : [])] },
+    ...(input.multiple ? [{ kind: 'polygon' as const, closed: true, points: [[65,35],[80,35],[80,50],[65,50]],
+      hv: { h: [0,2], v: [1,3] }, lengths: { 0: 15, 1: 15 } }] : [])]);
   assert.ok('node' in profile);
   console.log(JSON.stringify(withNode(withNode(emptyDoc(), profile.node), { kind: 'extrude', sketch: 0, height: 5 })));
   process.exit(0);
@@ -425,11 +428,22 @@ await f.run(async () => {
     return;
   }
   if (circlePickedUndo) {
-    const source = await f.inspect('source', { circles: true });
-    await f.newPage(); await f.page.setViewportSize({ width: 1024, height: 800 });
+    const source = await f.inspect('source', { circles: true, multiple: multiCirclePickedUndo });
+    await f.newPage(); await f.page.setViewportSize({ width: multiCirclePickedUndo ? 900 : 1024, height: 800 });
     await open(source); await edit(1); await f.tool('Select', 's');
     await f.frame([[24,22],[50,22]]);
     await kind().selectOption('Distance'); await pickedOnly().check();
+    if (multiCirclePickedUndo) {
+      const outlines = f.sketchPanel().getByRole('combobox', { name: 'Active outline', exact: true });
+      const initial = await outlines.inputValue();
+      const other = await outlines.locator('option').evaluateAll((options, initial) => options.find(option => option.value !== initial && !option.disabled).value, initial);
+      await outlines.selectOption(other);
+      assert.equal(await kind().inputValue(), 'Distance');
+      assert.equal(await pickedOnly().isChecked(), true);
+      await show([], 5);
+      await outlines.selectOption(initial);
+      await show([], 9);
+    }
     await f.worldClick([29,22]); await show(['rule:0','rule:1'],9);
     const before = await f.snapshot('01-circle-picked');
     assert.match(before.picked, /circle 1/i);
@@ -452,7 +466,21 @@ await f.run(async () => {
     assert.deepEqual(current.nodes[0].outline.circles,source.nodes[0].outline.circles);
     assert.deepEqual(current.nodes[0].sideTags,source.nodes[0].sideTags);
     assert.deepEqual(current.nodes[1],source.nodes[1]);
+    if (multiCirclePickedUndo) {
+      assert.deepEqual(current.nodes[0].holes, source.nodes[0].holes);
+      assert.deepEqual(current.nodes[0].holeOutlines, source.nodes[0].holeOutlines);
+    }
     await f.undo();await f.same(source);await f.redo();await f.same(current);
+    if (multiCirclePickedUndo) {
+      await f.page.setViewportSize({ width: 1280, height: 800 });
+      const bytes = await save(current);
+      await f.newPage(); await open(current, bytes); await edit(1);
+      await kind().selectOption('Distance'); await pickedOnly().check();
+      await f.tool('Select', 's'); await f.frame([[24,22],[50,22]]);
+      await f.worldClick([29,22]); await show(['rule:0'],8);
+      await cancel(); await f.same(current);
+      await f.snapshot('06-multiple-outline-fresh-open');
+    }
     return;
   }
   if (circleDimension) {
