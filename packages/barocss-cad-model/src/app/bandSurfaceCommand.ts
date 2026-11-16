@@ -83,16 +83,18 @@ function sideText(ctx: Ctx, side: BandSide | null, what: string): { label: strin
   return { label: what, text: `${side.edges.length} edge${side.edges.length === 1 ? '' : 's'} on ${body ? body.key : `feature ${side.parent.node}`}${list.length ? ` (${closure(list)})` : ''}`, done: true };
 }
 /** The kernel's own pairing once evaluated (the band body whose stored picks are these), else the picks counted as edge names. */
-function pairingText(ctx: Ctx, a: BandSide | null, b: BandSide | null): { label: string; text: string; done: boolean } {
+function pairingText(ctx: Ctx, a: BandSide | null, b: BandSide | null, flip: boolean): { label: string; text: string; done: boolean } {
   if (!a?.edges.length || !b?.edges.length) return { label: 'Pairing', text: 'once both chains are picked', done: false };
   const evaluated = ctx.bodies.find(x => {
     const n = x.ref ? ctx.doc.nodes[x.ref.node] : undefined;
-    return !!x.band && n?.kind === 'band-surface' && JSON.stringify([n.a.edges, n.b.edges]) === JSON.stringify([a.edges, b.edges]);
+    return !!x.band && n?.kind === 'band-surface' && !n.held && !n.suppressed
+      && x.key === bodyKeyFor(ctx.doc.nodes, x.ref!.node, x.ref!.side)
+      && text(n.a) === text(a) && text(n.b) === text(b) && !!n.flip === flip;
   })?.band;
   if (evaluated) return { label: 'Pairing', text: `${evaluated.pieces[0]}↔${evaluated.pieces[1]} ${evaluated.pairing === 'pieces' ? 'pieces' : 'by length'} → ${evaluated.pairs} patches`, done: true };
   return { label: 'Pairing', text: `${a.edges.length}↔${b.edges.length} edges, paired when it is built`, done: true };
 }
-const steps = (ctx: Ctx, v: Values) => { const a = sideOf(v.a), b = sideOf(v.b); return [sideText(ctx, a, 'A'), sideText(ctx, b, 'B'), pairingText(ctx, a, b)]; };
+const steps = (ctx: Ctx, v: Values) => { const a = sideOf(v.a), b = sideOf(v.b); return [sideText(ctx, a, 'A'), sideText(ctx, b, 'B'), pairingText(ctx, a, b, v.flip === 'yes')]; };
 
 /** A click while the band runs: adds (or, clicking again, removes) a chain or a face's edges on the `which` side; null when it hit nothing. */
 function pickInto(ctx: Ctx, v: Values, which: 'a' | 'b', hit: { face: FaceSel | null; edge: EdgeSel | null }, other: BandSide | null, tooLate?: (b: BodyResult) => string | null): Values | { error: string } | null {
@@ -176,7 +178,7 @@ export class BandSurfaceEdit implements Command {
     const n = this.node(ctx);
     return { ...values, a: values.repick === 'a' ? '' : text(n.a), b: values.repick === 'b' ? '' : text(n.b) };
   }
-  steps(ctx: Ctx, v: Values) { const a = sideOf(v.a), b = sideOf(v.b); return [sideText(ctx, a, 'A'), sideText(ctx, b, 'B'), pairingText(ctx, a, b)]; }
+  steps(ctx: Ctx, v: Values) { const a = sideOf(v.a), b = sideOf(v.b); return [sideText(ctx, a, 'A'), sideText(ctx, b, 'B'), pairingText(ctx, a, b, v.flip === 'yes')]; }
   onPick(ctx: Ctx, v: Values, hit: { face: FaceSel | null; edge: EdgeSel | null }): Values | { error: string } | null {
     if (v.repick !== 'a' && v.repick !== 'b') return null;
     const which = v.repick;

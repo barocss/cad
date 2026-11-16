@@ -424,3 +424,39 @@ test('HUD pairing: edge counts before the band is evaluated, the kernel’s piec
   const sc = scenario(), c2 = context(sc, { faces: [], edges: [], bodies: [] }), e2 = editCommand(5, sc.nodes)!;
   assert.match(e2.steps!(c2, e2.defaults!(c2))[2].text, /^8↔2 by length → 10 patches$/);
 });
+
+test('HUD pairing ownership: a translated source with retained names must not borrow an earlier band report', () => {
+  const original = cylinders(), oldBand = bandOf(original);
+  // Translate consumes A but retains its names. The existing associative band
+  // remains a separate output, so both the old report and new source are real.
+  const doc = withNode(original, { kind: 'translate', parent: oldBand.a.parent, offset: [0, 0, 5] });
+  const empty = context(doc, { faces: [], edges: [], bodies: [] });
+  assert.ok(empty.bodies.some(body => body.band));
+  const ctx = { ...empty, selection: { faces: [], edges: topLoopSelection(empty, 5), bodies: [] } };
+  assert.equal(bandSurfaceCommand.available(ctx).ok, true);
+  const initial = bandSurfaceCommand.defaults!(ctx);
+  const target = indexOfBody(ctx, oldBand.b.parent.node);
+  const rim = ctx.bodies[target].mesh.edges.find(edge => edge.names.includes(oldBand.b.edges[0]))!;
+  const picked = bandSurfaceCommand.onPick!(ctx, initial, { face: null, edge: { body: target, edge: rim.index } }) as Values;
+  const picks = bandPicksOf(picked);
+  assert.deepEqual(picks[0].names, oldBand.a.edges);
+  assert.deepEqual(picks[1].names, oldBand.b.edges);
+  assert.deepEqual(picks[0].parent, solid(5));
+  const built = bandSurfaceCommand.build!(ctx, picked);
+  const result = evaluateDoc(built, 1);
+  assert.ok(result.ok, JSON.stringify(!result.ok && result.error));
+  assert.equal(result.bodies.filter(body => body.band).length, 2);
+  assert.equal(bandSurfaceCommand.steps!(ctx, picked)[2].text,
+    `${picks[0].names.length}↔${picks[1].names.length} edges, paired when it is built`);
+});
+
+test('HUD pairing ownership: History Flip draft must not borrow the accepted orientation report', () => {
+  const doc = cylinders(), ctx = context(doc, { faces: [], edges: [], bodies: [] });
+  const cmd = editCommand(4, doc.nodes)!, values = { ...cmd.defaults!(ctx), flip: 'yes' };
+  const built = cmd.build!(ctx, values);
+  assert.equal(bandOf(built).flip, true);
+  assert.ok(bodies(built).some(body => body.band));
+  const band = bandOf(doc);
+  assert.equal(cmd.steps!(ctx, values)[2].text,
+    `${band.a.edges.length}↔${band.b.edges.length} edges, paired when it is built`);
+});
