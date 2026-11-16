@@ -12,6 +12,7 @@ export function commandNumberRule(command: string, key: string, operation?: unkn
     if (key === 'len') return 'thread-length';
     if (key === 'relief' || key === 'clear') return 'nonnegative-mm';
   }
+  if (command === 'keyway' && (key === 'b' || key === 't2')) return 'positive';
   if (command === 'scale' && key === 'factor') return 'scale-factor';
   if ((command === 'draft' || command === DRAFT_EDIT) && key === 'deg') return 'draft-angle';
   if (command === 'align' && key === 'gap') return 'align-gap';
@@ -26,6 +27,7 @@ export function commandNumberRule(command: string, key: string, operation?: unkn
 
 export function historyNumberRule(nodes: readonly ModelNode[], index: number, key: string): FeatureNumberRule | undefined {
   const node = nodes[index];
+  if (node?.kind === 'keyway') return commandNumberRule('keyway', key);
   if (node?.kind === 'face-thread') return commandNumberRule('face-thread', key);
   if (node?.kind === 'scale' && key === 'k') return 'scale-factor';
   if (node?.kind === 'fillet' && ((node.section?.kind === 'conic' && key === 'rho') || (node.section?.kind === 'g2' && key === 'tension'))) return 'open-unit';
