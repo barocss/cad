@@ -323,6 +323,16 @@ export function friendly(message: string, kind?: string): FriendlyError {
   const bracketed = FIRST_CODE.exec(detail)?.[1], code = bracketed ?? kind;
   if (bracketed && !detail.startsWith(`[${bracketed}]`)) detail = `[${bracketed}] ${detail.replace(`[${bracketed}] `, '').replace(`[${bracketed}]`, '').trim()}`;
   const extra = code ? { code } : {};
+  if (code === 'BUTT_ON_OPEN_SIDE') {
+    // Only the kernel's exact location prefix identifies members; never infer a joint from prose.
+    const match = /^\[BUTT_ON_OPEN_SIDE\] point (0|[1-9]\d*): member (0|[1-9]\d*) meets member (0|[1-9]\d*): its end spans /.exec(detail);
+    const indices = match?.slice(1).map(Number);
+    const location = indices?.every(index => Number.isSafeInteger(index) && index < Number.MAX_SAFE_INTEGER)
+      ? `At Point ${indices[0] + 1}, member ${indices[1] + 1} meets member ${indices[2] + 1}. ` : '';
+    return { title: 'Butt joint would leave a gap',
+      hint: `${location}The end does not fully meet material on the through member. For a T-joint, try T-joints → Cope; otherwise change this joint or section. Check the resulting preview before applying.`,
+      detail, ...extra };
+  }
   if (code === 'INPUT' && detail === 'angle must be a number of degrees, not 0, below 45 in size')
     return { ...DRAFT_ANGLE_HELP, detail, ...extra };
   const unmatched = /^the surfaces do not close: (\d+ edges?) meet no other surface \((surfaces? [\d, ]+)\)$/.exec(detail);
