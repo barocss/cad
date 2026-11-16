@@ -127,6 +127,7 @@ await f.run(async () => {
   const entries = await f.page.evaluate(() => window.__studioDrawing().dimensions);
   assert.deepEqual(entries.map(({ id, value }) => [id, value]), [['opening', 90], ['insert', 60], ['d1', 20]]);
   await chooseTerms();
+  await stack().getByText('Independent dimensions on one view axis · Choices: mm · Results: mm', { exact: true }).waitFor();
   await verifyValues('01-clearance', -1, ['10', '9.77', '10.27']);
   await f.same(stock);
   await f.snapshot('01-clearance');
@@ -186,6 +187,19 @@ await f.run(async () => {
   assert.notEqual(printed, 'opening · 90 +0.2/-0.1 · top');
   assert.match(printed, /3\.54/);
   await verifyValues('06-inch-drawing', -1, ['10', '9.77', '10.27']);
+  await stack().getByText('Independent dimensions on one view axis · Choices: inch · Results: mm', { exact: true }).waitFor();
+  for (const unit of ['inch', 'mm']) {
+    await drawing().getByRole('combobox', { name: 'Drawing units', exact: true }).selectOption(unit);
+    await drawing().getByLabel('Dual units', { exact: true }).check();
+    await stack().getByText(`Independent dimensions on one view axis · Choices: ${unit} [${unit === 'mm' ? 'inch' : 'mm'}] · Results: mm`, { exact: true }).waitFor();
+    assert.match(await dimension(1).locator('option[value="opening"]').textContent(), /\[/);
+    await verifyValues(`06-dual-${unit}`, -1, ['10', '9.77', '10.27']);
+    await drawing().getByLabel('Dual units', { exact: true }).uncheck();
+    await stack().getByText(`Independent dimensions on one view axis · Choices: ${unit} · Results: mm`, { exact: true }).waitFor();
+    await verifyValues(`06-single-${unit}`, -1, ['10', '9.77', '10.27']);
+  }
+  await drawing().getByRole('combobox', { name: 'Drawing units', exact: true }).selectOption('inch');
+
 
   f.phase = 'Keep the analysis available after current projection options settle';
   await drawing().getByLabel('Tangent edges', { exact: true }).check();

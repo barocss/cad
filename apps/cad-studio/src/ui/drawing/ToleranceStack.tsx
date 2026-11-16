@@ -44,7 +44,7 @@ function StackTerms({ dimensions, settings }: { dimensions: readonly Resolved[] 
   };
 
   return <div className="space-y-1 py-1 text-[11px]">
-    <div className="text-muted-foreground">Independent dimensions on one view axis · Model mm</div>
+    <div className="text-muted-foreground">Independent dimensions on one view axis · Choices: {preset.units}{preset.dual ? ` [${preset.units === 'mm' ? 'inch' : 'mm'}]` : ''} · Results: mm</div>
     {terms.map((term, index) => {
       const { key, id, sign } = term;
       return <div key={key} className="flex items-center gap-1">
