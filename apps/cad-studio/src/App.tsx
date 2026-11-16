@@ -3416,7 +3416,8 @@ export function App() {
               owner: { document: () => docNow.current, evaluated: () => evaluatedRef.current, marker: () => markerNow.current,
                 variant: () => shownVariant.current, scope: () => bearingEditScope.current, worker: () => workerSessionNow.current, open: () => openIntent.current },
               worker: { engine, nextRevision: () => revision.current++ },
-              changes: { canChangeDocument, commit, applyRoundedInsetEdit, stageFeatureCandidate },
+              changes: { canChangeDocument, commit, applyRoundedInsetEdit, stageFeatureCandidate,
+                onNotice: notice => { if (!inPlaceNow.current) setToast(notice); } },
             }),
             onDelete: opener => deleteNode(editNode, opener), onClose: () => {
               const opener = historyEditorOpener.current;

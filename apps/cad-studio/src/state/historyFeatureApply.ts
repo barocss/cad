@@ -1,3 +1,5 @@
+import { holeResultPieces } from '../app/holeResultPieces';
+import type { StudioNotice } from '../app/studioNotice';
 import type { ComponentProps } from 'react';
 import { dropStaleMade, prefixDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { holePatternEditProblem } from '@barocss/cad-model/app/holePatternInput';
@@ -15,7 +17,7 @@ interface Options {
   owner: { document(): StudioDoc; evaluated(): StudioDoc; marker(): number | null; variant(): string | null;
     scope(): object; worker(): number; open(): object };
   worker: { engine: Pick<EngineClient, 'evaluate' | 'part'>; nextRevision(): number };
-  changes: { canChangeDocument(): boolean; commit(next: StudioDoc): unknown;
+  changes: { onNotice?(notice: StudioNotice): void; canChangeDocument(): boolean; commit(next: StudioDoc): unknown;
     applyRoundedInsetEdit(nodes?: StudioDoc['nodes'], sourceWidth?: number): void;
     stageFeatureCandidate(candidate: NonNullable<ReturnType<typeof preparePatternNodeCandidate>>): void };
 }
@@ -53,7 +55,12 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     return engine.evaluate(next, request).then(async reply => {
       if (!reply || !current()) return;
       if (reply.ok) {
-        if (!resize) { commit(next); return; }
+        if (!resize) {
+          const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated
+            && owner.marker() === null && !owner.variant() ? holeResultPieces(next, editNode, reply.bodies) : undefined;
+          if (commit(next) === true && notice) changes.onNotice?.({ ...notice, documentSource: { doc: owner.document() } });
+          return;
+        }
         const failure = {title:'Size not applied',hint:`The original ${next.nodes[2].kind === 'chamfer' ? 'Chamfer' : 'Fillet'} edge could not be verified. Keep the current size or explicitly replace its edge first.`,detail:'No reference was renamed or refreshed.'};
         try {
           const before = await engine.part(prefixDoc(doc,2),nextRevision(),'refs');
