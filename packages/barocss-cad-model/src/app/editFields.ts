@@ -134,7 +134,7 @@ export type BindableField = Extract<EditField, { kind: 'number' }> & { param(nod
  * Where a part-scoped edit stands (O167, F6), when no assembly input is given: the part draft's bearing context (its
  * occurrence and the other parts, as the bearing command reads it) and the fit tables the draft sees.
  */
-export interface EditScope { readonly originalLoft?: Extract<ModelNode, { kind: 'loft' }>; readonly context?: BearingAssemblyContext; readonly fits?: StudioFits; readonly doc?: Pick<StudioDoc, 'direct'> & Partial<Pick<StudioDoc, 'parameters'>> }
+export interface EditScope { readonly originalLoft?: Extract<ModelNode, { kind: 'loft' }>; readonly context?: BearingAssemblyContext; readonly fits?: StudioFits; readonly doc?: Pick<StudioDoc, 'direct'> & Partial<Pick<StudioDoc, 'parameters' | 'drives'>> }
 export function editFields(nodes: Nodes, i: number, params?: Record<string, number>, bearingAssembly?: BearingAssemblyInput, scope?: EditScope): EditField[] {
   const node = nodes[i], recipe = nodes[1];
   if (recipe?.kind === 'rounded-rectangle-inset') {
@@ -472,7 +472,16 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       if (node.kind === 'sprocket') { keyed('teeth', 'Teeth', undefined, 'teeth'); keyed('tip', 'Tip Ø', 'mm', 'tip'); keyed('w', 'Tooth width', 'mm', 'width'); }
       if (node.kind === 'pulley') { if (has('teeth')) keyed('teeth', 'Grooves (teeth)', undefined, 'teeth'); if (has('diameter')) keyed('d', 'Diameter', 'mm', 'diameter'); if (has('grooves')) keyed('n', 'Grooves', undefined, 'grooves'); if (has('width')) keyed('w', 'Face width', 'mm', 'width'); }
       if (node.kind === 'sprocket' || node.kind === 'pulley') keyed('bore', 'Bore Ø (0: none)', 'mm', 'bore', true);
-      if (node.kind === 'belt') out.push({ kind: 'choice', key: 'links', label: 'Links (a chain)', options: [{ value: 'whole', label: 'Whole' }, { value: 'even', label: 'Even' }], get: n => self<typeof node>(n).rounding ?? 'whole', set: (n, v) => replace(n, i, { ...self<typeof node>(n), rounding: v as 'whole' | 'even' }) });
+      const chainLinksEditable = (n: Nodes): boolean => {
+        const belt = n[i];
+        if (belt?.kind !== 'belt' || !belt.row || belt.wheels.length !== 2 || belt.wheels[0] === belt.wheels[1]
+          || !belt.wheels.every(index => Number.isInteger(index) && index >= 0 && index < i && n[index]?.kind === 'sprocket' && (n[index] as Extract<ModelNode, { kind: 'sprocket' }>).row === belt.row)) return false;
+        // A scope-free editCommand retains the sprocket contract; History also proves the loaded row.
+        if (!scope?.doc) return true;
+        const rows = scope.doc.drives?.rows.filter(row => row.id === belt.row) ?? [];
+        return rows.length === 1 && rows[0].kind === 'chain';
+      };
+      if (node.kind === 'belt' && chainLinksEditable(nodes)) out.push({ kind: 'choice', key: 'links', label: 'Links (a chain)', options: [{ value: 'whole', label: 'Whole' }, { value: 'even', label: 'Even' }], get: n => self<typeof node>(n).rounding ?? 'whole', set: (n, v) => chainLinksEditable(n) ? replace(n, i, { ...self<typeof node>(n), rounding: v as 'whole' | 'even' }) : [...n] });
       if (node.kind !== 'belt') keyed('rot', 'Rotation', '°', 'rotation');
       break;
     }
