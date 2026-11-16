@@ -1,4 +1,7 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
+import { NativeSelect } from '@/components/ui/native-select';
+import { CONTROL, FIELD } from './panelStyles';
+import { orderedInterference, type InterferenceOrder } from './interferenceOrder';
 import { fmt, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { DisplayMesh } from '@barocss/cad-model/engine/mesh';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
@@ -54,6 +57,18 @@ export function PinnedMeasurement({ distance, onClear }: { distance: number | nu
 export type InterferenceResult = InterferenceReport | 'busy';
 interface InterferenceInspectorProps { doc: StudioDoc; bodies: BodyResult[]; clashes: InterferenceResult; setClashes(value: null): void; setSelection: Dispatch<SetStateAction<Selection>> }
 export function InterferenceInspector({ doc, bodies, clashes, setClashes, setSelection }: InterferenceInspectorProps) {
+  return <aside className="card props" aria-label="Interference">
+    <div className="card-title">INTERFERENCE <ToolIconButton size="tiny" aria-label="Close interference" onClick={() => setClashes(null)}><Icon name="close" small /></ToolIconButton></div>
+    {clashes === 'busy' ? <div className="empty">Checking…</div>
+      : <InterferenceResults doc={doc} bodies={bodies} clashes={clashes} setSelection={setSelection} />}
+  </aside>;
+}
+
+/** Report display owns its transient ordering, not calculation or selection authority. */
+function InterferenceResults({ doc, bodies, clashes, setSelection }: Omit<InterferenceInspectorProps, 'clashes' | 'setClashes'> & { clashes: InterferenceReport }) {
+  const [state, setState] = useState<{ report: InterferenceReport; order: InterferenceOrder }>({ report: clashes, order: 'original' });
+  const order = state.report === clashes ? state.order : 'original';
+  if (state.report !== clashes) setState({ report: clashes, order: 'original' });
   const names = bodies.map(body => bodyName(doc, body));
   const label = (index: number, key: string) => {
     const name = names[index];
@@ -61,15 +76,17 @@ export function InterferenceInspector({ doc, bodies, clashes, setClashes, setSel
   };
   const pair = ({ a, b, volume }: { a: string; b: string; volume?: number }) => {
     const ia = bodies.findIndex(body => body.key === a), ib = bodies.findIndex(body => body.key === b);
-    return <button type="button" key={a + ':' + b} className="ol clash" disabled={ia < 0 || ib < 0}
+    return <button type="button" key={JSON.stringify([a, b])} className="ol clash" disabled={ia < 0 || ib < 0}
       onClick={() => setSelection({ faces: [], edges: [], bodies: [ia, ib] })}>
       <Icon name="warning" small />{label(ia, a)}{volume === undefined ? ' and ' : ' ∩ '}{label(ib, b)}
       {volume !== undefined && <span className="muted"> · {fmt(Math.round(volume * 10) / 10)} mm³</span>}
     </button>;
   };
-  return <aside className="card props" aria-label="Interference">
-        <div className="card-title">INTERFERENCE <ToolIconButton size="tiny" aria-label="Close interference" onClick={() => setClashes(null)}><Icon name="close" small /></ToolIconButton></div>
-        {clashes === 'busy' ? <div className="empty">Checking…</div> : <>
+  return <>
+    <label className={FIELD}><span>Order</span><NativeSelect className={CONTROL} aria-label="Interference order" value={order}
+      onChange={event => setState({ report: clashes, order: event.target.value as InterferenceOrder })}>
+      <option value="original">Original order</option><option value="largest">Largest volume first</option><option value="smallest">Smallest volume first</option>
+    </NativeSelect></label>
           <div aria-label="Interference check scope" className="empty">
             <div>{clashes.scope === 'all' ? 'All base bodies' : 'Selected base bodies'} · {clashes.checked.length} bodies · {clashes.pairs} {clashes.pairs === 1 ? 'pair' : 'pairs'}</div>
             <ul>{clashes.checked.map(key => {
@@ -84,11 +101,10 @@ export function InterferenceInspector({ doc, bodies, clashes, setClashes, setSel
             {clashes.failures.length === clashes.pairs ? 'Interference check failed.' : 'Interference check incomplete.'}
             {' '}{clashes.failures.length} {clashes.failures.length === 1 ? 'pair' : 'pairs'} could not be checked.
           </div>}
-          {clashes.clashes.map(pair)}
-          {clashes.failures.map(failure => <div key={failure.a + ':' + failure.b}>
+          {orderedInterference(clashes.clashes, order).map(pair)}
+          {clashes.failures.map(failure => <div key={JSON.stringify([failure.a, failure.b])}>
             {pair(failure)}
             <div className="empty">{failure.error.detail || failure.error.hint || failure.error.title}</div>
           </div>)}
-        </>}
-      </aside>;
+  </>;
 }
