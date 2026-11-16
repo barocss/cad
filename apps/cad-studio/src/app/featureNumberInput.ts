@@ -4,9 +4,14 @@ import type { ModelNode } from '@barocss/cad-model/engine/doc';
 import { CadPartLimits } from '@barocss/cad';
 import { isSketchAnchoredCut } from '@barocss/cad-model/app/editFields';
 
-export type FeatureNumberRule = 'nonzero' | 'nonnegative' | 'positive' | 'align-gap' | 'open-unit' | 'draft-angle' | 'scale-factor';
+export type FeatureNumberRule = 'nonzero' | 'thread-length' | 'nonnegative-mm' | 'nonnegative' | 'positive' | 'align-gap' | 'open-unit' | 'draft-angle' | 'scale-factor';
 
 export function commandNumberRule(command: string, key: string, operation?: unknown): FeatureNumberRule | undefined {
+  if (command === 'face-thread') {
+    if (key === 'pitch' || key === 'd' || key === 'diameter') return 'positive';
+    if (key === 'len') return 'thread-length';
+    if (key === 'relief' || key === 'clear') return 'nonnegative-mm';
+  }
   if (command === 'scale' && key === 'factor') return 'scale-factor';
   if ((command === 'draft' || command === DRAFT_EDIT) && key === 'deg') return 'draft-angle';
   if (command === 'align' && key === 'gap') return 'align-gap';
@@ -21,6 +26,7 @@ export function commandNumberRule(command: string, key: string, operation?: unkn
 
 export function historyNumberRule(nodes: readonly ModelNode[], index: number, key: string): FeatureNumberRule | undefined {
   const node = nodes[index];
+  if (node?.kind === 'face-thread') return commandNumberRule('face-thread', key);
   if (node?.kind === 'scale' && key === 'k') return 'scale-factor';
   if (node?.kind === 'fillet' && ((node.section?.kind === 'conic' && key === 'rho') || (node.section?.kind === 'g2' && key === 'tension'))) return 'open-unit';
   if (node?.kind === 'chamfer' && key === 'd') return 'positive';
@@ -37,7 +43,7 @@ export function featureNumberInvalid(value: string | number, rule: FeatureNumber
   if (!Number.isFinite(number)) return true;
   if (rule === 'scale-factor') return number <= 0 || number > 1000;
   if (rule === 'draft-angle') return number === 0 || Math.abs(number) >= 45;
-  if (rule === 'nonnegative') return number < 0;
+  if (rule === 'nonnegative' || rule === 'nonnegative-mm' || rule === 'thread-length') return number < 0;
   if (rule === 'open-unit') return number <= 0 || number >= 1;
   if (rule === 'align-gap') return number < 0 || number > CadPartLimits.length;
   return rule === 'positive' ? number <= 0 : number === 0;
@@ -46,6 +52,8 @@ export function featureNumberInvalid(value: string | number, rule: FeatureNumber
 export function featureNumberRange(rule: FeatureNumberRule): string {
   if (rule === 'scale-factor') return 'Unitless factor · greater than 0 and at most 1000';
   if (rule === 'draft-angle') return 'Greater than −45° and less than 45°, excluding 0°';
+  if (rule === 'thread-length') return '0 mm or greater · use 0 for the whole face';
+  if (rule === 'nonnegative-mm') return '0 mm or greater';
   if (rule === 'nonnegative') return '0 mm or greater · use 0 for the same radius';
   if (rule === 'open-unit') return 'Unitless section shape · greater than 0 and less than 1';
   if (rule === 'align-gap') return `From 0 to ${CadPartLimits.length} mm`;
@@ -57,7 +65,7 @@ export function featureNumberBounds(rule: FeatureNumberRule | undefined): { min?
   if (rule === 'draft-angle') return { min: -45, max: 45 };
   if (rule === 'open-unit') return { min: 0, max: 1 };
   if (rule === 'align-gap') return { min: 0, max: CadPartLimits.length };
-  return rule === 'positive' || rule === 'nonnegative' ? { min: 0 } : {};
+  return rule === 'positive' || rule === 'nonnegative' || rule === 'nonnegative-mm' || rule === 'thread-length' ? { min: 0 } : {};
 }
 
 /** Only the active section participates; hidden section drafts are not Apply inputs. */

@@ -20,6 +20,14 @@ const DRAFT_ANGLE_HELP = { title: 'Draft needs a nonzero angle below 45°',
   hint: 'Enter a finite angle greater than −45° and less than 45°, excluding 0°. Use a positive or negative angle to choose the taper direction.' };
 
 const rules: { code?: string | readonly string[]; text?: RegExp; title: string; hint: string }[] = [
+  { text: /\[FACE_THREAD_SIZE\].*length .*longer than the face/,
+    title: 'Thread length exceeds the selected face', hint: 'Shorten Length to fit the cylindrical face, or use 0 for the whole face. Reset restores the accepted thread.' },
+  { text: /\[FACE_THREAD_SIZE\].*(?:no wider than|shaft is M)/,
+    title: 'Thread nominal diameter does not fit this face', hint: 'For a hole, Nominal Ø must exceed the bore diameter. An external thread must match its shaft diameter. Change the nominal size or reset this edit.' },
+  { text: /\[FACE_THREAD_SIZE\].*(?:at least a pitch|too coarse)/,
+    title: 'Thread pitch does not fit the available material', hint: 'Reduce Pitch or increase the thread length. The usable length must contain at least one pitch after relief.' },
+  { text: /\[FACE_THREAD_RELIEF\]/,
+    title: 'Thread needs a relief groove', hint: 'Use a positive Relief groove where an external thread stops inside the face or at a shoulder.' },
   { code: 'DRAFT_ANGLE', ...DRAFT_ANGLE_HELP },
   { text: /(?:^|: )Scale cannot preserve valid geometry for this body\./,
     title: 'Scale would lose usable geometry',

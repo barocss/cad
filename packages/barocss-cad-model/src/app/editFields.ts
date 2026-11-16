@@ -731,6 +731,28 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
         } });
       break;
     case 'sew': number('tol', SEW_TOLERANCE_LABEL, 'mm', n => (n as typeof node).tolerance ?? 0, (n, v) => { const next = { ...(n as typeof node) }; sewTolerance(next.surfaces, v); if (v > 0) next.tolerance = v; else delete next.tolerance; return next; }); break;
+    case 'face-thread':
+      number('pitch', 'Pitch', 'mm', n => (n as typeof node).pitch, (n, pitch) => ({ ...(n as typeof node), pitch }));
+      number('len', 'Length (0: whole face)', 'mm', n => (n as typeof node).length ?? 0, (n, length) => {
+        const next = { ...(n as typeof node) }; if (length === 0) delete next.length; else next.length = length; return next;
+      });
+      if (node.diameter !== undefined) {
+        number('diameter', 'Nominal Ø', 'mm', n => (n as typeof node).diameter!, (n, diameter) => ({ ...(n as typeof node), diameter }));
+      }
+      if (node.diameter === undefined) number('relief', 'Relief groove', 'mm', n => (n as typeof node).relief ?? (n as typeof node).pitch, (n, relief) => ({ ...(n as typeof node), relief }));
+      for (const [key, label, options] of [
+        ['hand', 'Hand', [{ value: 'right', label: 'Right' }, { value: 'left', label: 'Left' }]],
+        ['end', 'From', [{ value: '+', label: 'The + end' }, { value: '-', label: 'The − end' }]],
+      ] as const) out.push({ kind: 'choice', key, label, options: [...options],
+        get: ns => self<typeof node>(ns)[key] ?? options[0].value,
+        set: (ns, value) => {
+          if (!options.some(option => option.value === value)) return [...ns];
+          const next = { ...self<typeof node>(ns) };
+          if (value === options[0].value) delete next[key];
+          else if (key === 'hand') next.hand = 'left'; else next.end = '-';
+          return replace(ns, i, next);
+        } });
+      break;
     case 'full-round':
       out.push({ kind: 'choice', key: 'along', label: 'Along',
         options: [{ value: 'auto', label: 'Longer side' }, { value: 'x', label: 'X' }, { value: 'y', label: 'Y' }],
