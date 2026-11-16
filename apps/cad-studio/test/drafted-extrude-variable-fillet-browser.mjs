@@ -52,6 +52,36 @@ async function filterTo(name) {
   assert.match(await filter.innerText(),new RegExp(name));
 }
 await f.run(async () => {
+  if (process.argv.includes('--support')) {
+    for (const [width, height] of [[1024, 800], [1440, 900]]) for (const angle of [8, 12]) {
+      f.phase = `${width} direct Draft ${angle} four-radius creation`;
+      await f.newPage(); await f.page.setViewportSize({ width, height });
+      const stock = { ...box, nodes: box.nodes.map((n, i) => i === 1 ? { ...n, draft: angle } : n) };
+      const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
+      await chooser.setFiles({ name: 'four-wall-draft-stock.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(stock)) });
+      await f.same(stock);
+      await button('Top', f.page.locator('.views')).click();
+      if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+      await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+      await filterTo('Edges'); await pick([20, 10 * Math.tan(angle * Math.PI / 180), 10]);
+      await f.page.waitForFunction(() => window.__studioSelection?.selection.edges.length === 1);
+      await f.command('Fillet');
+      const hud = f.page.getByRole('dialog', { name: 'Fillet', exact: true });
+      await field('Fillet radius mode', hud).selectOption('varying');
+      await field('Radius controls', hud).selectOption('two-interior');
+      for (const [name, value] of [['Radius', '1.25'], ['End radius (0: same)', '2.5'], ['Interior 1 position (%)', '25'], ['Interior 1 radius', '3'], ['Interior 2 position (%)', '62.5'], ['Interior 2 radius', '1']]) await field(name, hud).fill(value);
+      await status(hud, 'preview'); await f.same(stock);
+      await f.snapshot(`${width}-${angle}-direct-preview`);
+      await button('Apply', hud).click(); await f.changed(stock); await f.ready();
+      const made = await f.doc();
+      assert.deepEqual(made.nodes[2].radii.map(p => p.radius), [1.25, 3, 1, 2.5]);
+      await measure(made, `${width}-${angle}-direct-native`, angle, 'n1.side0|n1.top');
+      await f.undo(); await f.same(stock); await f.redo(); await f.same(made);
+      const saved = await f.save(`${width}-${angle}-direct`);
+      await f.freshOpen(saved.file, saved.doc, `${width}-${angle}-direct-open`);
+    }
+    return;
+  }
   const origin = new URL(f.server.resolvedUrls.local[0]).origin;
   const newContext = f.browser.newContext.bind(f.browser);
   f.browser.newContext = async options => {
