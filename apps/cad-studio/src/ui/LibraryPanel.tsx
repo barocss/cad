@@ -2,7 +2,8 @@
 // how many of its values are estimates, and whether an agent wrote it (confirmed or not). A part is inserted into the
 // part, or as a new placed part; a user library is added from a file, and shared with the team only when it is
 // licensed, confirmed if an agent wrote it, and passes its check (run again by the server).
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { createLibraryFileReader } from '../state/libraryFileReader';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { confirmDocLibrary, insertLibraryPart, libraries, libraryEntry, libraryInstance, registerDocLibraries, registerLibrary, shareRefusal, type LibraryEntry, type LibrarySource } from '@barocss/cad-model/library/libraries';
 import { UNLICENSED } from '@barocss/cad-model/library/sharing';
@@ -32,10 +33,14 @@ function withMould(doc: StudioDoc, patch: { pull?: [number, number, number]; fin
   if (m.pull || m.finish) next.mould = m; else delete next.mould;
   return next;
 }
-export function LibraryPanel({ doc, onCommit, onFitTableCommit, onError, onClose, onQuote }: { doc: StudioDoc; onCommit(next: StudioDoc): void; onFitTableCommit(next: StudioDoc): void; onError(title: string, message: string): void; onClose(): void; /** Writes the injection-moulding quote package (IM6). */ onQuote?(): void }) {
+export function LibraryPanel({ doc, documentSession, onCommit, onFitTableCommit, onError, onClose, onQuote }: { doc: StudioDoc; /** Accepted whole-document boundary; ordinary edits keep the session. */ documentSession: number; onCommit(next: StudioDoc): void; onFitTableCommit(next: StudioDoc): void; onError(title: string, message: string): void; onClose(): void; /** Writes the injection-moulding quote package (IM6). */ onQuote?(): void }) {
   const [, setTick] = useState(0), refresh = () => setTick(t => t + 1);
   const [variant, setVariant] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  // Only this panel/session's newest local-file read may change the shared registry.
+  // Do not remount the whole panel: team loading and catalogue drafts have their own lifetimes.
+  const fileReader = useMemo(() => createLibraryFileReader(), [documentSession]);
+  useLayoutEffect(() => () => fileReader.cancel(), [fileReader]);
   // The document's own libraries, and the team's from the chat server's folder when it has one.
   useEffect(() => { registerDocLibraries(doc); refresh(); }, [doc.libraries]);
   useEffect(() => {
@@ -63,10 +68,11 @@ export function LibraryPanel({ doc, onCommit, onFitTableCommit, onError, onClose
       onCommit(embedded ? { ...next, libraries: embedded } : next);
     } catch (cause) { onError('Could not insert the part', cause instanceof Error ? cause.message.replace(/^library: /, '') : String(cause)); }
   };
-  const addFile = async (file: File) => {
-    try { registerLibrary(JSON.parse(await file.text()), 'user'); refresh(); }
-    catch (cause) { onError('Could not add the library', cause instanceof Error ? cause.message.replace(/^library: /, '') : String(cause)); }
-  };
+  const addFile = (file: File) => fileReader.read(file, parsed => {
+    registerLibrary(parsed, 'user'); refresh();
+  }, cause => {
+    onError('Could not add the library', cause instanceof Error ? cause.message.replace(/^library: /, '') : String(cause));
+  });
   const share = async (id: string) => {
     const why = shareRefusal(id); refresh();
     if (why) { onError('Not shared', why); return; }
