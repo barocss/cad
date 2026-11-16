@@ -73,6 +73,7 @@ import { useFeatureHistory } from './state/useFeatureHistory';
 import { useAlignHistoryPreview } from './app/useAlignHistoryPreview';
 import { carrySketchSelection } from './state/profileSelection';
 import { BodyBrowserRows } from './ui/BodyBrowserRows';
+import { BodySelectionQuery } from './ui/BodySelectionQuery';
 import { RequirementsBrowser } from './ui/RequirementsBrowser';
 import { DesignHistory } from './ui/DesignHistory';
 import { MeasurementInspector, PinnedMeasurement, InterferenceInspector } from './ui/MeasurementInspector';
@@ -3149,6 +3150,9 @@ export function App() {
           : project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatView || cutListView || stepAsk || stlAsk
             ? 'Finish the current document or dialog operation before finding the selection.' : null;
   const bodyRevealOpenIntent = openIntent.current;
+  // Property-query ownership excludes selection: selecting once never turns the query into a live rule.
+  const bodyQueryOwner = useMemo(() => ({}), [doc, evaluated, bodies, docGeneration, workerSession, bodyRevealOpenIntent, bodyRevealBlocked]);
+  const bodyQueryOwnerNow = useRef(bodyQueryOwner); bodyQueryOwnerNow.current = bodyQueryOwner;
   const bodyRevealOwner = useMemo(() => ({}), [doc, evaluated, bodies, selection, instanceSel, directSel, docGeneration, workerSession, bodyRevealOpenIntent, bodyRevealBlocked, instanceBodies, instanceSources]);
   const bodyReveal = useBodyBrowserReveal(bodyRevealOwner,
     browserRevealTarget(selection, bodies, instanceSel, directSel.length, doc, instanceBodies, instanceSources, bodyRevealBlocked),
@@ -3165,6 +3169,12 @@ export function App() {
           }}><Icon name={browserOpen ? 'left_panel_close' : 'left_panel_open'} small /></ToolIconButton></div>
         {bodyReveal.feedback && <div role="status" className="small muted" aria-label="Find selection in Browser">{bodyReveal.feedback}</div>}
         {browserOpen && <>
+        <BodySelectionQuery key={docGeneration} doc={doc} bodies={bodies} owner={bodyQueryOwner} blocked={bodyRevealBlocked}
+          onSelect={(indices, owner) => {
+            if (owner !== bodyQueryOwnerNow.current || bodyRevealBlocked || docNow.current !== doc || evaluatedRef.current !== evaluated ||
+              openIntent.current !== bodyRevealOpenIntent || workerSessionNow.current !== workerSession || project.opening() || dragCmd.current || !indices.length) return false;
+            setDirectSel([]); setInstanceSel([]); setSelection({ faces: [], edges: [], bodies: indices }); return true;
+          }} />
         <BodyBrowserRows registerBodyRow={bodyReveal.register} model={{ doc, evaluated, namesDoc, bodies, fresh, busy }} selection={selection}
           rows={{ expanded, setExpanded, renaming, setRenaming, editNode, setRowHover }} changes={{ commit, commitVisibility: commitBodyVisibility, setSelection, setDirectSel, setInstanceSel,
             rememberFocus: workspaceModeExit.rememberFocus,
