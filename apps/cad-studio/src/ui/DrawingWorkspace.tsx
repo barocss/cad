@@ -1,3 +1,4 @@
+import { drawingBrokenEdgeAt, drawingBrokenPick } from './drawing/drawingBrokenPick';
 import { editDetailCrop } from './drawing/detailCropEdit';
 import { withDatumTargetAreaDraft } from './drawing/datumTargetAreaDraft';
 import { drawingFixControlLoss } from '@barocss/cad-model/drawing/fixProtection';
@@ -421,9 +422,8 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const rims = diameterRims(projection, at, 6 * mmPerPx() / v.scale, tol, visibleRimOnly, scope.kind === 'assembly');
       return { q, view, at, snap: null, edge: rims[0] ?? null, visibleRimOnly, rims };
     }
-    let snap: SnapPoint | null = null, best = tol;
-    for (const s of snaps[view] ?? []) { const d = Math.hypot(s.at[0] - at[0], s.at[1] - at[1]); if (d < best) { best = d; snap = s; } }
-    return { q, view, at, snap, edge: snap ? null : edgeAt(pr, at, 6 * mmPerPx() / v.scale) };
+    const breaks = tool === 'linear' || tool === 'angle' || tool === 'radius' ? v.breaks : undefined;
+    return { q, view, at, ...drawingBrokenPick(pr, snaps[view] ?? [], at, tol, 6 * mmPerPx() / v.scale, breaks) };
   }, [sheetPoint, layout, views, snaps, viewAt, sheet, tool, settings, scope.kind]);
 
   /** Placing a dimension (its points picked): where it goes, read in its own view wherever the pointer is on the sheet —
@@ -619,7 +619,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         setPending(null); return;
       }
       // (A straight edge under the pointer, even near its ends.)
-      const e = h.edge ?? edgeAt(pr, h.at, 6 * mmPerPx() / (placementAt(h.view)?.scale ?? 1));
+      const e = h.edge ?? drawingBrokenEdgeAt(pr, h.at, 6 * mmPerPx() / (placementAt(h.view)?.scale ?? 1), placementAt(h.view)?.breaks);
       if (!e || !e.ends || e.circle || (e.kind !== 'line' && e.kind !== 'silhouette')) { setMessage('Click a straight edge.'); return; }
       const ref: EdgeRef = { edge: e.name, near: [0, 1, 2].map(k => (e.ends![0][k] + e.ends![1][k]) / 2) as Vec3 };
       if (!pending || pending.kind !== 'angle') { setPending({ kind: 'angle', view: h.view, a: ref }); return; }
