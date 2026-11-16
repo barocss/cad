@@ -1,3 +1,4 @@
+import { varyingFilletFailure } from '../app/varyingFilletFailure';
 import { historyFilletInteriorProblems, type FilletInteriorKey } from '../app/filletInteriorInput';
 import { countersinkHistoryProblem } from '../app/countersinkHistoryInput';
 import { nodeFilletType } from '../app/filletFamily';
@@ -185,7 +186,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
     void result.then(error => {
       if (!ownsDraft()) return;
       request.current = null;
-      setEvaluation(error ? { nodes, index, error, opener } : null);
+      setEvaluation(error ? { nodes, index, error: varyingFilletFailure(error, draft, index), opener } : null);
     });
   };
   const close = () => { retireEvaluation(); onClose(); };

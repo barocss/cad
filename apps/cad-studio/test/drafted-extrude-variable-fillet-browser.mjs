@@ -132,4 +132,31 @@ await f.run(async () => {
   const saved=await f.save('drafted-extrude-variable-fillet');
   await f.freshOpen(saved.file,next,'fresh-open');
   assert.equal(await measure(await f.doc(),'reopened',12,edge),native);
+  for (const [width, height] of [[1024, 800], [1440, 900]]) {
+    await f.page.setViewportSize({ width, height });
+    await f.openFeatureEditor(2, 'varying fillet contact recovery');
+    await field('Interior 1 radius', f.editor()).fill('14');
+    await button('Apply', f.editor()).click();
+    await f.editor().getByText(/failure does not identify a single radius/).waitFor();
+    assert.equal(await f.editor().getByText(/failure does not identify a single radius/).count(), 1);
+    assert.equal(await f.editor().getByText(/round that edge first/).count(), 0);
+    await f.same(next);
+    await f.snapshot(`${width}-contact-refused`);
+    await button('Reset', f.editor()).click();
+    assert.equal(await field('Interior 1 radius', f.editor()).inputValue(), '3');
+    assert.equal(await f.editor().getByText(/failure does not identify a single radius/).count(), 0);
+    await field('Interior 1 radius', f.editor()).fill('14');
+    await button('Apply', f.editor()).click();
+    await f.editor().getByText(/failure does not identify a single radius/).waitFor();
+    await field('Interior 1 radius', f.editor()).fill('8');
+    assert.equal(await f.editor().getByText(/failure does not identify a single radius/).count(), 0);
+    await f.applyEditor(next, `${width}-contact-recovered`);
+    const recovered = await f.doc();
+    assert.deepEqual(recovered.nodes[2].radii, next.nodes[2].radii.map((p, i) => i === 1 ? { ...p, radius: 8 } : p));
+    const checked = await f.inspect(`${width}-recovered-native`, recovered);
+    assert.equal(checked.check.valid, true); assert.equal(checked.check.counts.bodies, 1);
+    await f.undo(); await f.same(next); await f.redo(); await f.same(recovered);
+    await f.undo(); await f.same(next);
+  }
+
 });
