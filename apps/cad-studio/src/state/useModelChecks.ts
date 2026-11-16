@@ -1,10 +1,10 @@
 import { readReferenceDisplay, type ReferenceDisplay } from './referenceDisplay';
+import { currentKeepoutVerdicts, keepoutSourceCurrent, type KeepoutReceipt } from './keepoutReceipt';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { emptyDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { Outcome } from '@barocss/cad-model/engine/schema/spec';
-import type { KeepoutResult } from '@barocss/cad-model/engine/schema/references';
 import { checkKeepouts, readReferences, referenceLocal, withKeepout } from '@barocss/cad-model/chat/references';
 import { checkSpec } from '@barocss/cad-model/chat/spec';
 import type { Active } from '../app/commandState';
@@ -26,7 +26,11 @@ export function useModelChecks({ model, worker, onNotice: setToast }: ModelCheck
   const refLocal = useMemo(() => referenceCurrent ? referenceReceipt!.local : new Map<string, BodyResult[]>(), [referenceCurrent, referenceReceipt]);
   const refErrors = useMemo(() => referenceCurrent ? referenceReceipt!.errors : new Map<string, string>(), [referenceCurrent, referenceReceipt]);
   const [keepoutBodies, setKeepoutBodies] = useState<BodyResult[]>([]);
-  const [keepoutVerdicts, setKeepoutVerdicts] = useState<KeepoutResult[] | null>(null);
+  const [keepoutReceipt, setKeepoutReceipt] = useState<KeepoutReceipt | null>(null);
+  const keepoutSource = { evaluated, references: doc.references, bodies, engine, fresh, busy };
+  const keepoutOwner = useRef(keepoutSource);
+  keepoutOwner.current = keepoutSource;
+  const keepoutVerdicts = currentKeepoutVerdicts(keepoutReceipt, keepoutSource);
   // The references read (each on its own, in its own coordinates) and the keep-outs' solids made, when they change.
   useEffect(() => {
     const source = doc.references, set = readReferences(source); let live = true;
@@ -44,9 +48,16 @@ export function useModelChecks({ model, worker, onNotice: setToast }: ModelCheck
   // The keep-outs checked against the part as it stands.
   useEffect(() => {
     const set = readReferences(doc.references);
-    if (!set.keepouts.length || !fresh || busy) { if (!set.keepouts.length) setKeepoutVerdicts(null); return; }
+    if (!set.keepouts.length || !fresh || busy) { if (!set.keepouts.length) setKeepoutReceipt(null); return; }
+    const source = { evaluated, references: doc.references, bodies, engine, fresh, busy };
     let live = true;
-    const t = setTimeout(() => { void checkKeepouts({ ...evaluated, references: doc.references }, bodies, d => engine.part(d, nextRevision(), 'check')).then(v => { if (live) setKeepoutVerdicts(v); }).catch(() => { if (live) setKeepoutVerdicts(null); }); }, 350);
+    const current = () => live && keepoutSourceCurrent(source, keepoutOwner.current);
+    const t = setTimeout(() => {
+      if (!current()) return;
+      void checkKeepouts({ ...evaluated, references: doc.references }, bodies, d => engine.part(d, nextRevision(), 'check'))
+        .then(verdicts => { if (current()) setKeepoutReceipt({ source, verdicts }); })
+        .catch(() => { if (current()) setKeepoutReceipt(null); });
+    }, 350);
     return () => { live = false; clearTimeout(t); };
   }, [doc.references, bodies, evaluated, fresh, busy, engine]);
   // The requirements checked against the part as it stands (chat/spec.ts), whenever either changes.
