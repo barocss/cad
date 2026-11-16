@@ -4,7 +4,7 @@ import { resolveDrivenSketch } from '../sketch/driven';
 // fields, app/editFields.ts) as a command, with arrows in the viewport where they act. Selecting a body
 // shows them; dragging one opens the edit with the usual preview, limits and Apply.
 import { bandSurfaceEditCommand } from './bandSurfaceCommand';
-import { dropStaleMade, featureLabel, parentsOf, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
+import { dropStaleMade, featureLabel, parentsOf, prefixDoc, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import { toWorld } from '../sketch/plane';
 import { refusal } from '../engine/refusal';
 import { editFields, isSketchAnchoredCut } from './editFields';
@@ -277,7 +277,10 @@ export function editCommand(index: number, nodes: readonly ModelNode[], rows: Pi
       const next = edited(ctx.doc.nodes, index, v, ctx.doc.parameters);
       const holeProblem = holePatternEditProblem(ctx.doc.nodes[index], next[index], ctx.doc.parameters);
       if (holeProblem) throw refusal('HOLE_PATTERN', holeProblem);
-      return { ...ctx.doc, nodes: dropStaleMade(ctx.doc.nodes, next) };
+      const result = { ...ctx.doc, nodes: dropStaleMade(ctx.doc.nodes, next) };
+      const before = ctx.doc.nodes[index], after = result.nodes[index];
+      return before?.kind === 'split' && after?.kind === 'split' && before.outputSide !== after.outputSide
+        ? prefixDoc(result, result.nodes.length) : result;
     },
     handles: (ctx, v) => {
       const now = edited(ctx.doc.nodes, index, v, ctx.doc.parameters), n = now[index];

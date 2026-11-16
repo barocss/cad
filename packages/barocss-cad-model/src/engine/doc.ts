@@ -1,4 +1,5 @@
 import type { RevolveAxisRef } from './revolveAxis';
+import { splitOutputNodesProblem } from './splitOutput';
 import type { PocketFloorBinding } from './pocketFloor';
 import type { FillFeaturePatternRegion, CurveFeaturePatternPath } from '@barocss/cad/api';
 import { flattenShopView, resolveShopTree } from './shopRows';
@@ -574,7 +575,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   /** Rectangular +Z top relief on one straight-sided upright slab; not text or arbitrary-surface embossing. */
   | { kind: 'rectangular-relief'; parent: BodyRef; min: [Dim, Dim]; max: [Dim, Dim]; depth: Dim; mode: 'emboss' | 'engrave' }
   /** Across `axis` = at, or with `normal` across the plane normal·p = at (an oblique cut: x + y = at for [1, 1, 0]). */
-  | { kind: 'split'; parent: BodyRef; at: Dim; axis: Axis; normal?: [number, number, number] }
+  | { kind: 'split'; parent: BodyRef; at: Dim; axis: Axis; normal?: [number, number, number]; outputSide?: 'negative' | 'positive' }
   /** The sketch swept along straight runs and bends (from the sketch plane up +Z). */
   | { kind: 'sweep'; sketch: number; path: ({ kind: 'straight'; length: Dim } | { kind: 'bend'; radius: Dim; angle: number; toward: 'x' | '-x' | 'y' | '-y' })[] }
   /** The sketch's profile swept along a curve (a NURBS path in mm, copied from a direct curve `name`): faceted. */
@@ -1200,6 +1201,8 @@ export function parentsOf(node: ModelNode): number[] {
 
 /** Solid nodes that no later solid node consumes: the visible bodies of a model prefix. */
 export function leafBodies(nodes: readonly ModelNode[]): BodyRef[] {
+  const splitProblem = splitOutputNodesProblem(nodes);
+  if (splitProblem) throw refusal('BAD_REFERENCE', splitProblem);
   // Every operation consumes what it acts on (patterns and kept mirrors include the original); a split
   // side is consumed on its own.
   const consumed = new Set<string>();
@@ -1214,7 +1217,7 @@ export function leafBodies(nodes: readonly ModelNode[]): BodyRef[] {
   const refs: BodyRef[] = [];
   nodes.forEach((node, index) => {
     if (!isSolidNode(node) || consumed.has(String(index))) return;
-    if (node.kind === 'split') (['negative', 'positive'] as const).forEach(side => { if (!consumed.has(`${index}_${side}`)) refs.push({ node: index, side }); });
+    if (node.kind === 'split') (['negative', 'positive'] as const).forEach(side => { if ((!node.outputSide || node.outputSide === side) && !consumed.has(`${index}_${side}`)) refs.push({ node: index, side }); });
     else if (node.kind === 'import' && (node.solids ?? 1) > 1) Array.from({ length: node.solids! }, (_, k) => `part${k}` as const).forEach(side => { if (!consumed.has(`${index}_${side}`)) refs.push({ node: index, side }); });
     else if (node.kind === 'frame') {
       // (Its members, from the frame's geometry worked out once here — R4 C4: frameSegmentCount and this each worked it out.)

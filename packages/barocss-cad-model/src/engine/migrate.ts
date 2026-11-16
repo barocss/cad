@@ -1,4 +1,5 @@
 import { assertRevolveAxisBindings } from './revolveAxis';
+import { splitOutputDocumentProblem } from './splitOutput';
 import { assertPocketFloorBindings } from './pocketFloor';
 import { assertDrivenSketchNode } from '../sketch/driven';
 import { validateRoundedInsetDocument } from '../sketch/internal/roundedInsetRecipe';
@@ -42,6 +43,8 @@ export function readStudioDoc(text: string): { doc: StudioDoc; notes: string[] }
   const o = raw as Record<string, unknown>;
   if (!o || typeof o !== 'object' || o.format !== 'barocss-cad-model') return { error: 'This is not a BaroCSS model file (no barocss-cad-model format).' };
   if (!Array.isArray(o.nodes)) return { error: 'This model file has no features list.' };
+  const splitProblem = splitOutputDocumentProblem(o);
+  if (splitProblem) return { error: splitProblem };
   const offsetProblem = offsetFaceDocumentProblem(o);
   if (offsetProblem) return { error: offsetProblem };
   const connectorError = documentConnectorError(o);

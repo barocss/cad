@@ -1,4 +1,5 @@
 import { resolveOffsetPlaneDistance } from './offsetPlane';
+import { splitOutputDocumentProblem } from './splitOutput';
 import { assertRevolveAxisBindings, linkedRevolveSource, resolveRevolveAxis } from './revolveAxis';
 import { assertPocketFloorBindings, pocketFloorSource, resolvePocketFloor } from './pocketFloor';
 import { resolveDrivenSketch } from '../sketch/driven';
@@ -589,6 +590,8 @@ export function currentFaceEndDistance(doc: StudioDoc, index: number): number {
 }
 
 function buildPartDocument(doc: StudioDoc, before?: number): CadPartDocument {
+  const splitProblem = splitOutputDocumentProblem(doc);
+  if (splitProblem) throw refusal('BAD_REFERENCE', splitProblem);
   const offsetProblem = offsetFaceDocumentProblem(doc);
   if (offsetProblem) throw refusal('BAD_VALUE', offsetProblem);
   validateRoundedInsetDocument(doc, false);
@@ -874,7 +877,11 @@ export function partSnapshot(doc: StudioDoc, build: (part: CadPartDocument) => C
     // is always the authored document's, the one a saved file hashes to. Both on purpose: see test/r4-skeletons.test.ts.)
     source = resolveSkeletons(source).doc;
     bearingDependencyKey(source);
-    const context = bearingContextOf(source), snapshot = withBeadRetry(source, make), reports = new Map<number, BearingReport>();
+    const context = bearingContextOf(source), nativeSnapshot = withBeadRetry(source, make), reports = new Map<number, BearingReport>();
+    // Keep kernel topology intact; exclude only the exact unconsumed native output of a chosen Split.
+    const excluded = new Set(source.nodes.flatMap((node, i) => node.kind === 'split' && node.outputSide && !node.suppressed
+      ? [`${featureId(source.nodes, i)}/${node.outputSide === 'negative' ? 1 : 0}`] : []));
+    const snapshot = excluded.size ? { ...nativeSnapshot, outputs: nativeSnapshot.outputs.filter(output => !excluded.has(output.id)) } : nativeSnapshot;
     for (const [i, n] of source.nodes.entries()) {
       const ref = bearingHousingRef(n); if (!ref || n.kind !== 'bearing' || n.suppressed) continue;
       if (!context) throw refusal('BEARING_HOUSING_REFERENCE', 'missing current assembly context');

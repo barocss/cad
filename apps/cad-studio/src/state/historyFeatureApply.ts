@@ -38,7 +38,12 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     if (cutProblem) return Promise.resolve(cutProblem);
     const hint = holePatternEditProblem(doc.nodes[editNode], patternEdit.nodes[editNode], doc.parameters);
     if (hint) return Promise.resolve({ title: 'The Hole pattern is invalid', hint, detail: '' });
-    const next = { ...doc, nodes: dropStaleMade(doc.nodes, patternEdit.nodes) };
+    const editedNodes = dropStaleMade(doc.nodes, patternEdit.nodes);
+    const previousSplit = doc.nodes[editNode], nextSplit = editedNodes[editNode];
+    const splitOutputChanged = previousSplit?.kind === 'split' && nextSplit?.kind === 'split'
+      && previousSplit.outputSide !== nextSplit.outputSide;
+    const rawNext = { ...doc, nodes: editedNodes };
+    const next = splitOutputChanged ? prefixDoc(rawNext, rawNext.nodes.length) : rawNext;
     const candidate = preparePatternNodeCandidate(doc, next, editNode);
     if (candidate) { stageFeatureCandidate(candidate); return; }
     const request = nextRevision();

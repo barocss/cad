@@ -45,3 +45,15 @@ test('History controller does not evaluate when document changes are blocked', a
   const f = fixture(); f.refuse(); await f.apply();
   assert.equal(f.calls(), 0); assert.equal(f.commits.length, 0);
 });
+
+test('Split output-side History commit rebuilds only the explicit output map', async () => {
+  const base = rectanglePart(40, 30, 10);
+  const doc: StudioDoc = { ...base, nodes: [...base.nodes, { kind:'split',id:'n2',parent:{node:1,side:'solid'},axis:'x',at:16,outputSide:'negative' }], outputs:{b2_negative:{node:2,side:'negative'}},nextId:3 };
+  const nodes = doc.nodes.map(node => node.kind === 'split' ? {...node,outputSide:'positive' as const} : node);
+  const commits: StudioDoc[]=[];const scope={},open={};
+  const apply=createHistoryFeatureApply({model:{doc,evaluated:doc,editNode:2,fresh:true,busy:false},
+    owner:{document:()=>doc,evaluated:()=>doc,scope:()=>scope,worker:()=>1,open:()=>open,marker:()=>null,variant:()=>null},
+    worker:{engine:{evaluate:async()=>({ok:true,revision:1,bodies:[],wallTime:0}),part:async()=>{throw new Error('Unexpected part call');}},nextRevision:()=>1},
+    changes:{canChangeDocument:()=>true,commit:next=>commits.push(next),applyRoundedInsetEdit:()=>{},stageFeatureCandidate:()=>{}}});
+  await apply(nodes,()=>true);assert.equal(commits.length,1);assert.deepEqual(commits[0].outputs,{b2_positive:{node:2,side:'positive'}});assert.deepEqual(doc.outputs,{b2_negative:{node:2,side:'negative'}});
+});

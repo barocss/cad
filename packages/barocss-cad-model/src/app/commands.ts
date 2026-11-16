@@ -1,5 +1,6 @@
 import { eligibleFillPatternRegions, fillFeaturePatternProblem, fillRegionSnapshot } from '../engine/fillFeaturePattern';
 import { appendMirrorRecipe } from './mirrorRecipe';
+import { splitOutputSide } from '../engine/splitOutput';
 import type { FillFeaturePatternRegion } from '@barocss/cad/api';
 import { curveFeaturePatternProblem, eligibleCurvePatternPaths, type CurveFeaturePatternPath } from '../engine/curveFeaturePattern';
 // Commands are driven by the current selection. Each one says whether it applies (and why not),
@@ -1053,10 +1054,11 @@ const allCommands: Command[] = [
     available: ctx => oneBody(ctx) ? ok : no('Select one body to split.'),
     fields: () => [{ key: 'axis', label: 'Normal', kind: 'choice', options: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z' }, { value: 'n', label: 'Any direction' }] },
       { key: 'nx', label: 'Normal X', kind: 'number', when: v => v.axis === 'n' }, { key: 'ny', label: 'Normal Y', kind: 'number', when: v => v.axis === 'n' }, { key: 'nz', label: 'Normal Z', kind: 'number', when: v => v.axis === 'n' },
-      { key: 'at', label: 'At', kind: 'mm' }],
+      { key: 'at', label: 'At', kind: 'mm' },
+      { key: 'outputSide', label: 'Output side', kind: 'choice', options: [{ value: 'both', label: 'Both' }, { value: 'negative', label: 'Negative' }, { value: 'positive', label: 'Positive' }] }],
     defaults: ctx => {
       const b = oneBody(ctx);
-      return { axis: 'x', nx: 1, ny: 1, nz: 0, at: b ? r1((b.mesh.bounds.min[0] + b.mesh.bounds.max[0]) / 2) : 0,
+      return { axis: 'x', nx: 1, ny: 1, nz: 0, outputSide: 'both', at: b ? r1((b.mesh.bounds.min[0] + b.mesh.bounds.max[0]) / 2) : 0,
         ...splitPlaneOfPick(ctx, ctx.splitPlanePick) };
     },
     onPick: (ctx, v, hit) => {
@@ -1080,12 +1082,16 @@ const allCommands: Command[] = [
       const k = 'xyz'.indexOf(String(v.axis)), at = centreOf(b), dir: [number, number, number] = [0, 0, 0]; dir[k] = 1; at[k] = Number(v.at);
       return [{ key: 'at', at, dir, min: Math.ceil((b.mesh.bounds.min[k] + 0.5) * 2) / 2, max: Math.floor((b.mesh.bounds.max[k] - 0.5) * 2) / 2, step: 0.5 }];
     },
-    steps: (_ctx, v) => v.axis === 'n' ? (splitNormal(v) ? [{ label: 'Plane', text: `${planeText(splitNormal(v)!)} = ${Number(v.at)}`, done: true }] : [])
-      : typeof v.planeFace === 'string' && v.planeFace ? [{ label: 'Plane face', text: v.planeFace, done: true }] : [],
+    steps: (_ctx, v) => [
+      ...(v.axis === 'n' ? (splitNormal(v) ? [{ label: 'Plane', text: `${planeText(splitNormal(v)!)} = ${Number(v.at)}`, done: true }] : [])
+        : typeof v.planeFace === 'string' && v.planeFace ? [{ label: 'Plane face', text: v.planeFace, done: true }] : []),
+      { label: 'Output side', text: 'Negative and Positive follow the plane normal; reversing it swaps sides. Restore Both in History before adding later features if you need both sides.', done: true },
+    ],
     build: (ctx, v) => {
-      if (v.axis !== 'n') return withNode(ctx.doc, { kind: 'split', parent: refOf(oneBody(ctx)!), axis: v.axis as Axis, at: Number(v.at) });
+      const side = splitOutputSide(v.outputSide), output = side ? { outputSide: side } : {};
+      if (v.axis !== 'n') return withNode(ctx.doc, { kind: 'split', parent: refOf(oneBody(ctx)!), axis: v.axis as Axis, at: Number(v.at), ...output });
       const n = splitNormal(v); if (!n) throw refusal('SPLIT_PLANE', 'Give the plane a direction: its normal must not be zero.');
-      return withNode(ctx.doc, { kind: 'split', parent: refOf(oneBody(ctx)!), axis: 'x', normal: n, at: Number(v.at) });
+      return withNode(ctx.doc, { kind: 'split', parent: refOf(oneBody(ctx)!), axis: 'x', normal: n, at: Number(v.at), ...output });
     },
   },
   {
