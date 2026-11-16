@@ -24,6 +24,7 @@ import { CandidateReviewSection } from './CandidateReviewSection';
 import { approvedRequirementComparison } from '@barocss/cad-model/versions/approvedRequirements';
 import type { PrepareFaceRepair } from './SavedFaceReferenceRepair';
 import { MergeConflictChoices } from './MergeConflictChoices';
+import { DrawingDimensionComparison } from './DrawingDimensionComparison';
 
 type ComparedVersion = { id: string; doc: StudioDoc; snapshot: string };
 export type VersionComparison = ComparedVersion & {
@@ -199,6 +200,7 @@ export function VersionsPanel({ project, doc, onMakeVersion, onOpen, onCompare, 
       <div className="text-muted-foreground">{targetVersion ? `${version?.name ?? version?.id} → ${targetVersion.name ?? targetVersion.id} · saved versions`
         : 'From the version to the working document'}{compared.same ? ': the same' : ''}</div>
       <ul className="m-0 list-disc pl-4">{changeLines(compared).map((l, k) => <li key={k}>{l}</li>)}</ul>
+      {!target && comparedFrom && comparedTo && <DrawingDimensionComparison before={comparedFrom} after={comparedTo} />}
     </div>}
     {approval && <ApprovedRequirementChecks key={`${version?.id}:${targetVersion?.id ?? 'working'}:${approval.proposal}:${approval.revisions.before}:${approval.revisions.after}`}
       comparison={approval} evaluate={evaluate} historical={!!targetVersion} followUp={followUp} savedPair={savedPair} onAttach={onAttachApprovalEvidence}
