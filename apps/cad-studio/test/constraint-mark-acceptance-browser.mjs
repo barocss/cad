@@ -8,9 +8,10 @@ const f = await createFlow({ name: 'constraint-mark-acceptance', output: process
   inspectorSource: `import assert from 'node:assert/strict';
 import {emptyDoc,withNode} from '@barocss/cad-model/engine/doc';
 import {profileOf} from '@barocss/cad-model/sketch/loops';
-import {solveShape,applyConstraint,type Polygon} from '@barocss/cad-model/sketch/rules';
+import {solveShape,applyConstraint,redundancy,type Polygon} from '@barocss/cad-model/sketch/rules';
 const square:Polygon={kind:'polygon',closed:true,points:[[0,0],[30,0],[30,30],[0,30]],hv:{h:[],v:[]},rules:[
- {kind:'parallel',a:0,b:2},{kind:'perpendicular',a:0,b:1},{kind:'equal',a:1,b:3},{kind:'fix',point:1,at:[30,0]}]};
+ {kind:'parallel',a:0,b:2},{kind:'perpendicular',a:0,b:1},{kind:'equal',a:0,b:1},{kind:'fix',point:1,at:[30,0]}]};
+assert.equal(redundancy(solveShape(square)),0);
 const sector:Polygon={kind:'polygon',closed:true,points:[[0,0],[30,0],[0,30]],bulges:[0,Math.tan(Math.PI/8),0]};
 const coincident=applyConstraint(sector,[{kind:'point',i:0},{kind:'edge',i:1}],'coincident');assert.ok('shape'in coincident,JSON.stringify(coincident));
 const docs=[square,coincident.shape].map(shape=>{assert.ok(solveShape(shape).ok,JSON.stringify(solveShape(shape)));const p=profileOf([shape]);assert.ok('node'in p);return withNode(emptyDoc(),p.node);});
@@ -18,7 +19,7 @@ console.log(JSON.stringify(docs));` });
 const button = name => f.page.getByRole('button', { name, exact: true });
 const marks = () => f.page.locator('.vp-overlay .cons-glyph');
 const titles = () => marks().locator('title').allTextContents();
-const expected = ['Parallel edges 1 and 3', 'Parallel edges 1 and 3', 'Perpendicular edges 1 and 2', 'Perpendicular edges 1 and 2', 'Equal edges 2 and 4', 'Equal edges 2 and 4', 'Point 2 fixed'];
+const expected = ['Parallel edges 1 and 3', 'Parallel edges 1 and 3', 'Perpendicular edges 1 and 2', 'Perpendicular edges 1 and 2', 'Equal edges 1 and 2', 'Equal edges 1 and 2', 'Point 2 fixed'];
 const settle = () => f.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 async function open(doc) { await f.page.locator('input[aria-label="Model file"]').setInputFiles({ name: 'constraint-types.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) }); await f.same(doc); }
 async function edit() { await f.page.getByRole('group', { name: 'History', exact: true }).getByRole('button', { name: /^Sketch ·/ }).click(); await f.editor().getByRole('button', { name: 'Edit sketch', exact: true }).click(); await f.sketchPanel().waitFor(); await marks().last().waitFor(); }
@@ -43,7 +44,7 @@ async function roundtrip(doc) {
 }
 await f.run(async()=>{
  const [square,sector]=await f.inspect('fixtures',{});await f.newPage({deviceScaleFactor:2});await f.page.setViewportSize({width:1280,height:900});await open(square);await edit();
- const solver=await f.sketchPanel().locator('.solver').textContent();assert.doesNotMatch(solver,/Over-defined|redundant/);await check('01-types-dpr2',expected,square);
+ const solver=await f.sketchPanel().locator('.solver').textContent();assert.doesNotMatch(await f.sketchPanel().innerText(),/Over-defined/);await check('01-types-dpr2',expected,square);
  const camera=await f.page.evaluate(()=>window.__studioCamera()),box=await f.page.locator('canvas.vp-canvas').boundingBox();
  await f.page.mouse.move(box.x+150,box.y+box.height*.7);await f.page.mouse.wheel(0,450);await f.page.waitForFunction(d=>window.__studioCamera().distance!==d,camera.distance);await check('02-zoom',expected,square);
  await f.page.mouse.down({button:'middle'});await f.page.mouse.move(box.x+180,box.y+box.height*.7+25,{steps:5});await f.page.mouse.up({button:'middle'});await f.page.setViewportSize({width:1024,height:800});await check('03-pan-resize',expected,square);assert.equal(await f.sketchPanel().locator('.solver').textContent(),solver);assert.equal(await f.page.getByLabel('Unsaved changes',{exact:true}).count(),0);
