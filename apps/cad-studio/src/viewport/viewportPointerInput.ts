@@ -1,3 +1,4 @@
+import { wheelZoomFactor } from './wheelZoomPreference';
 import { useCallback, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type RefObject, type WheelEvent } from 'react';
 import { CadPartLimits, ExtrudedProfileLimits } from '@barocss/cad';
 import type { ModelAnnotation } from '@barocss/cad-model/drawing/annotations3d';
@@ -46,6 +47,7 @@ import { pickVertex } from './vertexPick';
 import type { CageOverlay, Spot, ToolView, ViewportTool } from './Viewport';
 
 export interface ViewportPointerProps {
+  reverseWheelZoom?: boolean;
   /** Bed-frame print display, separate from the authored/native document. */
   printDisplay?: PrintDisplay | null;
   printActive?: boolean;
@@ -1218,7 +1220,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     cancelDragTrim();
     if (drag.current.circleChord) drag.current.moved = true;
     const { x, y, w, h } = local(e);
-    camera.current.zoom(Math.exp(e.deltaY * 0.0015), (x / w) * 2 - 1, 1 - (y / h) * 2); moving.current(); request();
+    camera.current.zoom(wheelZoomFactor(e, propsRef.current.reverseWheelZoom), (x / w) * 2 - 1, 1 - (y / h) * 2); moving.current(); request();
   };
 
   const endDragTrim = (pointer: number) => {

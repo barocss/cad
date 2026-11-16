@@ -1,3 +1,4 @@
+import { modelWheelZoomAvailable, useWheelZoomPreference } from './viewport/wheelZoomPreference';
 import { filletPickFailure } from './app/filletPickFailure';
 import { createEvaluationEvidence } from './state/evaluationEvidence';
 import { candidateReferenceProblem, refreshCandidateReferences } from './state/candidateReferences';
@@ -1888,6 +1889,8 @@ export function App() {
     if (sketch && sketchOffsetTarget(sketch)) setToast(current => current?.title === 'Nothing to offset' ? null : current);
   }, [sketch]);
   const sketchReopenCamera = useSketchReopenCamera();
+  const wheelZoom = useWheelZoomPreference();
+  const modelWheelZoom = modelWheelZoomAvailable(rendering, !!printing, printEnabled, camEnabled) ? wheelZoom : undefined;
   const sketchActions = useSketchActions({ model: { doc, evaluated, fresh, busy, bodies, selection, marker },
     editor: { sketch, setSketch, sketchGeneration, recordDraft: recordSketchDraft }, owner: { docNow, acceptanceScope },
     worker: { engine, nextRevision: () => revision.current++ }, viewport, autoFrameReopened: sketchReopenCamera.enabled, changes: { canChangeDocument, commit, commitDirect, setSelection, setEditNode, setActive, setPreviewBodies }, onNotice: setToast });
@@ -3509,7 +3512,7 @@ export function App() {
         }} />
       </header></Profiler>
       <div className="stage">
-      <SceneViewport ref={viewport} onProjectionChange={setOrtho} onRecoveryNotice={next => setToast(current => viewportRecoveryToast(current, next))}
+      <SceneViewport reverseWheelZoom={modelWheelZoom?.enabled} ref={viewport} onProjectionChange={setOrtho} onRecoveryNotice={next => setToast(current => viewportRecoveryToast(current, next))}
         poses={{ poseStore, explodeStore, jointTree, bodies: drawnBodies, instancesPlaced: viewportPlacements, cpuInstanceSection }} liveSection={sectionLiveView}
         displayMode={effectiveDisplayMode} requestedDisplayMode={displayMode} displayModeReason={displayModeReason}
         bandRailPicking={!active && !finishEdgePicking && !section && !measure && !assembly.draft}
@@ -3589,7 +3592,7 @@ export function App() {
       <ViewDisplayControls doc={doc} viewport={viewport} cornerRight={cornerRight}
         display={{ displayOpen, setDisplayOpen, displayMode, setDisplayMode, effectiveDisplayMode, displayScopeReason, displayModeReason, displayModeNotice,
           clearDisplayModeFailure: () => setDisplayModeFailure(null), isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection }}
-        view={{ ortho, sketching: !!sketch, sketchReopenCamera, fitActiveSketch: sketchActions.fitActiveSketch, ao, setAo, theme, setTheme, rendering, printing: !!printing, viewBackend }}
+        view={{ ortho, sketching: !!sketch, wheelZoom: modelWheelZoom, sketchReopenCamera, fitActiveSketch: sketchActions.fitActiveSketch, ao, setAo, theme, setTheme, rendering, printing: !!printing, viewBackend }}
         section={{ section, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye }}
         analysis={{ analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread }}
         picking={{ pickFilter, setPickFilter, snapStep, setSnapStep, setSelection }} explodeStore={explodeStore} />

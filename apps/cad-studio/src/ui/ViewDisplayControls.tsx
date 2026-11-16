@@ -45,6 +45,7 @@ export interface ViewDisplayState {
 export interface ViewCameraControls {
   ortho: boolean;
   sketching: boolean;
+  wheelZoom?: { enabled: boolean; persistent: boolean; set(enabled: boolean): void };
   sketchReopenCamera?: { enabled: boolean; persistent: boolean; set(enabled: boolean): void };
   fitActiveSketch?(): void;
   ao: boolean;
@@ -106,7 +107,7 @@ export interface ViewDisplayControlsProps {
 export function ViewDisplayControls({ doc, viewport, cornerRight, display, view, section: sectionState, analysis: analysisState, picking, explodeStore }: ViewDisplayControlsProps) {
   const { displayOpen, setDisplayOpen, displayMode, setDisplayMode, effectiveDisplayMode, displayScopeReason,
     displayModeReason, displayModeNotice, clearDisplayModeFailure, isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection } = display;
-  const { ortho, sketching, ao, setAo, theme, setTheme, rendering, printing, viewBackend, sketchReopenCamera, fitActiveSketch } = view;
+  const { ortho, sketching, ao, setAo, theme, setTheme, rendering, printing, viewBackend, wheelZoom, sketchReopenCamera, fitActiveSketch } = view;
   const aoAvailable = !lineDisplayMode(effectiveDisplayMode), aoActive = aoAvailable && ao;
   const { section, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye } = sectionState;
   const { analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread } = analysisState;
@@ -139,6 +140,11 @@ export function ViewDisplayControls({ doc, viewport, cornerRight, display, view,
         {displayOpen && <div className="previews" role="group" aria-label="Previews">
         {/* (G21's display mode and isolate, in the column too: the Views row stays as narrow as the history bar assumes.) */}
         <div className="card views display" role="group" aria-label="Display">
+          {wheelZoom && <Button size="sm" variant={wheelZoom.enabled ? 'default' : 'ghost'} aria-label="Reverse wheel zoom" aria-pressed={wheelZoom.enabled}
+            title="Reverse unmodified wheel zoom in Model and Sketch only. Modified wheel gestures and Drawing are unchanged."
+            onPointerDown={event => event.preventDefault()} onKeyDown={keepViewToggleKeys}
+            onClick={() => sketchCameraAction(() => wheelZoom.set(!wheelZoom.enabled))}>Reverse wheel zoom</Button>}
+          {wheelZoom && !wheelZoom.persistent && <span role="status" aria-label="Wheel zoom preference">Wheel zoom preference applies to this session only; browser storage is unavailable.</span>}
           {sketchReopenCamera && <Button size="sm" variant={sketchReopenCamera.enabled ? 'default' : 'ghost'} aria-label="Auto-frame reopened sketches" aria-pressed={sketchReopenCamera.enabled}
             title="Automatically face and fit existing sketches when reopened. New sketches and plane changes are unchanged."
             onPointerDown={event => event.preventDefault()} onKeyDown={keepViewToggleKeys}
