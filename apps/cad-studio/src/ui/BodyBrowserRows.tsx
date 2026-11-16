@@ -10,6 +10,7 @@ import { Icon } from './atoms';
 interface BodyBrowserRowsProps {
   model: { doc: StudioDoc; evaluated: StudioDoc; namesDoc: StudioDoc; bodies: BodyResult[]; fresh: boolean; busy: boolean };
   selection: Selection;
+  registerBodyRow?(key: string, row: HTMLButtonElement | null): void;
   rows: { expanded: string[]; setExpanded: Dispatch<SetStateAction<string[]>>; renaming: string | null; setRenaming: Dispatch<SetStateAction<string | null>>; editNode: number | null; setRowHover: Dispatch<SetStateAction<number | null>> };
   changes: { commit(next: StudioDoc): boolean; commitVisibility(next: StudioDoc): boolean; setSelection: Dispatch<SetStateAction<Selection>>; setDirectSel: Dispatch<SetStateAction<string[]>>; setInstanceSel: Dispatch<SetStateAction<string[]>>;
     editFeature(index: number, body: number, event: MouseEvent<HTMLButtonElement>): void;
@@ -17,7 +18,7 @@ interface BodyBrowserRowsProps {
   meshBadges(index: number, body: BodyResult, steps: readonly number[]): ReactNode;
 }
 /** Body rows and their feature lists; row state survives Browser visibility changes in App. */
-export function BodyBrowserRows({ model, selection, rows, changes, meshBadges }: BodyBrowserRowsProps) {
+export function BodyBrowserRows({ model, selection, rows, changes, meshBadges, registerBodyRow }: BodyBrowserRowsProps) {
   const { doc, evaluated, namesDoc, bodies, fresh, busy } = model;
   const { expanded, setExpanded, renaming, setRenaming, editNode, setRowHover } = rows;
   const { commit, commitVisibility, setSelection, setDirectSel, setInstanceSel, editFeature, rememberFocus } = changes;
@@ -40,7 +41,7 @@ export function BodyBrowserRows({ model, selection, rows, changes, meshBadges }:
               ? <input className="ol-name-edit" autoFocus defaultValue={bodyName(doc, b)} aria-label="Body name"
                 onKeyDown={e => { if (e.key === 'Enter') { commit(withLook(doc, b, { name: e.currentTarget.value.trim() })); setRenaming(null); } else if (e.key === 'Escape') setRenaming(null); e.stopPropagation(); }}
                 onBlur={e => { if (e.currentTarget.value.trim() !== bodyName(doc, b)) commit(withLook(doc, b, { name: e.currentTarget.value.trim() })); setRenaming(null); }} />
-              : <button className={'ol' + (sel ? ' sel' : '')} onClick={pick} onDoubleClick={() => setRenaming(b.key)} title="Double-click to rename">
+              : <button data-browser-body-key={b.key} ref={row => registerBodyRow?.(b.key, row)} className={'ol' + (sel ? ' sel' : '')} onClick={pick} onDoubleClick={() => setRenaming(b.key)} title="Double-click to rename">
                 {bodyName(doc, b)}{(() => { const last = lastFeature(doc, b); return last ? <span className="muted"> · {last}</span> : null; })()}</button>}
             {meshBadges(i, b, steps)}
           </div>

@@ -1,3 +1,5 @@
+import { bodyRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal';
+import { useBodyBrowserReveal } from './app/useBodyBrowserReveal';
 import { useContinuityLocation } from './app/useContinuityLocation';
 import { annotationCounts, printPreviewSummary } from './app/previewStatus';
 import { filletSectionNumberProblem } from './app/featureNumberInput';
@@ -3233,15 +3235,34 @@ export function App() {
   const referenceDecisions = !sketch && !active && !rendering && (refMarks.length > 0 || refProblems.length > 0)
     ? <ReferenceDecisions doc={doc} referenceLabels={referenceLabels} refMarks={refMarks} refProblems={refProblems} refChoices={refChoices}
       previewReference={previewReference} settleRef={settleRef} showRefChoices={showRefChoices} /> : null;
+  const bodyRevealBlocked = !fresh || busy || workerFailure || shownDoc !== doc || marker !== null
+    ? 'Wait for the current base model result before finding a body.'
+    : active || sketch || editNode !== null || instanceEdit || renaming || parameterEdit || assembly.draft || cageEd.session || skel.session || cutDraft
+      ? 'Finish or cancel the current edit before finding a body.'
+      : rendering || drawing || inPlace || section || measure || printEnabled || camEnabled || pmiEnabled || previewMode !== 'none' || routePanelOpen || stepsDisp || isolatedInstances || ghost || workingComparison
+        ? 'Return to the ordinary Model view before finding a base body.'
+        : bodyDrag || instDrag || poleDrag || sectionDragFrom || dragCmd.current
+          ? 'Finish the current drag before finding a body.'
+          : project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatView || cutListView || stepAsk || stlAsk
+            ? 'Finish the current document or dialog operation before finding a body.' : null;
+  const bodyRevealOpenIntent = openIntent.current;
+  const bodyRevealOwner = useMemo(() => ({}), [doc, evaluated, bodies, selection, instanceSel, directSel, docGeneration, workerSession, bodyRevealOpenIntent, bodyRevealBlocked]);
+  const bodyReveal = useBodyBrowserReveal(bodyRevealOwner,
+    bodyRevealTarget(selection, bodies, { instances: instanceSel.length, direct: directSel.length }, bodyRevealBlocked),
+    browserOpen, setBrowserOpen, () => docNow.current === doc && evaluatedRef.current === evaluated && openIntent.current === bodyRevealOpenIntent &&
+      workerSessionNow.current === workerSession && !project.opening() && !dragCmd.current && !bodyRevealBlocked);
   const browserPanel = (
       <Profiler id="outliner" onRender={onBlockRender}><aside ref={referenceBrowser} className={'card outliner' + (browserOpen ? '' : ' closed')} aria-label="Browser">
         <div className="card-title">BROWSER <span className="muted" aria-busy={!fresh}>Base part · {fresh ? `${bodies.length} bod${bodies.length === 1 ? 'y' : 'ies'}` : busy ? 'evaluating…' : 'not up to date'}</span>
+          <ToolIconButton size="tiny" aria-label="Show selected body in Browser" title={bodyRevealBlocked ?? BODY_REVEAL_SCOPE}
+            onPointerDown={bodyReveal.pointerDown} onClick={bodyReveal.reveal}><Icon name="search" small /></ToolIconButton>
           <ToolIconButton data-reference-return size="tiny" aria-label={browserOpen ? 'Collapse the browser' : 'Expand the browser'} onClick={() => {
             if (browserOpen) clearReferencePreview();
             setBrowserOpen(o => { try { localStorage.setItem('cad-studio.browser', o ? 'closed' : 'open'); } catch { /* private mode */ } return !o; });
           }}><Icon name={browserOpen ? 'left_panel_close' : 'left_panel_open'} small /></ToolIconButton></div>
+        {bodyReveal.feedback && <div role="status" className="small muted" aria-label="Find body in Browser">{bodyReveal.feedback}</div>}
         {browserOpen && <>
-        <BodyBrowserRows model={{ doc, evaluated, namesDoc, bodies, fresh, busy }} selection={selection}
+        <BodyBrowserRows registerBodyRow={bodyReveal.register} model={{ doc, evaluated, namesDoc, bodies, fresh, busy }} selection={selection}
           rows={{ expanded, setExpanded, renaming, setRenaming, editNode, setRowHover }} changes={{ commit, commitVisibility: commitBodyVisibility, setSelection, setDirectSel, setInstanceSel,
             rememberFocus: workspaceModeExit.rememberFocus,
             editFeature: (index, body, event) => workspaceModeExit.switchWhenReady(() => {
