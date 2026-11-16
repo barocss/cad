@@ -74,3 +74,21 @@ async revision callback has not gained a new cancellation policy. Remaining
 large slices include generic feature-editor composition, parameter candidate
 coordination, and the wider workspace shell. Decompose those by ownership rather
 than by arbitrary line count.
+
+## Third extraction (2026-11-16)
+
+`ui/HistoryFeatureEditor.tsx` now composes the base-part feature editor, read-only
+Fillet/Align evidence, rounded-inset affordances and saved Draft/Offset/Hole-layout/
+end-face command entry. App still owns the accepted-document apply controller,
+feature draft retirement, direct candidate cleanup and focus restoration on close.
+The component's owner accessors preserve the existing source checks before and
+after asynchronous face-end distance reads. App is now 3,685 lines, 300 fewer than
+the original baseline; this count is a checkpoint, not the architectural goal.
+
+Six more tests cover prop/evidence forwarding, source-sketch navigation,
+discard/close/launch ordering, stale/rolled-back/busy admission and late distance
+replies. Combined focused suite: 41/41. Actual Studio regressions pass for canceled
+workspace/history draft navigation, saved end-face binding/cancel/reopen, and
+exact-distance detach including canceled reads. Screenshots retain the expected
+feature fields and unchanged geometry on refusal. No new feature, reference
+policy or lifecycle behavior is introduced.

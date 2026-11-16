@@ -1,3 +1,4 @@
+import { HistoryFeatureEditor } from './ui/HistoryFeatureEditor';
 import { createCommandHudActions } from './app/commandHudActions';
 import { InstanceInspector } from './ui/InstanceInspector';
 import { createHistoryFeatureApply } from './state/historyFeatureApply';
@@ -5,7 +6,7 @@ import { useFilletEndpointDisplay } from './state/useFilletEndpointDisplay';
 import { createCommandReferencePicking, type CommandPickScope } from './app/commandReferencePicking';
 import type { StudioNotice } from './app/studioNotice';
 import { filletStationInputKey } from './app/filletEndpoints';
-import { SHARED_HOLE_LAYOUT_EDIT, sharedHoleLayoutCommand, sharedHoleLayoutPair } from './app/sharedHoleLayout';
+import { SHARED_HOLE_LAYOUT_EDIT } from './app/sharedHoleLayout';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { browserRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal';
 import { useBodyBrowserReveal } from './app/useBodyBrowserReveal';
@@ -89,9 +90,8 @@ import { RobotInspector } from './robot/RobotInspector';
 import { shownExtrudeEndFace } from './app/extrudeEndFace';
 import { awaitingOffsetPlane, isOffsetToPlane } from '@barocss/cad-model/app/offsetPlanePick';
 import { awaitingExtrudeEndFace, EXTRUDE_END_FACE_EDIT, isExtrudeToFace } from '@barocss/cad-model/app/extrudeEndFacePick';
-import { editSavedExtrudeEndFaceCommand, canEditSavedExtrudeEndFace } from '@barocss/cad-model/app/extrudeEndFaceEdit';
-import { canEditSavedOffsetFace, editSavedOffsetFaceCommand, OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
-import { DRAFT_EDIT, editSavedDraftCommand } from '@barocss/cad-model/app/draftEdit';
+import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
+import { DRAFT_EDIT } from '@barocss/cad-model/app/draftEdit';
 import { awaitingRevolveAxis, editSavedRevolveAxisCommand, joinedRevolveStock, REVOLVE_AXIS_EDIT } from '@barocss/cad-model/app/revolveAxisEdit';
 import { filletLaunchAvailability, filletType, newFilletActive, pickedFilletSelection, prepareFilletPick, replaceFilletSelection, replaceFillet, type FilletType, type RadiusMode } from './app/filletFamily';
 import { alignFaceBinding } from '@barocss/cad-model/app/alignCommand';
@@ -114,7 +114,6 @@ import { emptySel, NO_CUTS, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } fro
 import { routeMessage } from './app/routeSession';
 import { CursorReadout } from './ui/CursorReadout';
 import { iconFor } from './ui/featureIcon';
-import { NodeEditor } from './ui/NodeEditor';
 import { revokePersonRowFiles, isPersonRowFiles, type PersonRowFiles } from '@barocss/cad-model/engine/rowFiles';
 import { Profiler, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { EngineClient, type ProposalOverlay } from './engine/client';
@@ -3401,77 +3400,34 @@ export function App() {
           picked={continuityPick.picked} selectedDisplayEdge={continuityPick.edge !== undefined} source={evaluated} location={continuityLocation}
           read={readContinuity} />}
         {curvaturePick && <EdgeCurvature {...curvature} />}
-        {editNode !== null && <NodeEditor onFilletStations={publishFilletStations} filletEndpoints={replacementEndpointLocations ?? historyEndpointLocations} alignPreview={historyAlign} readAlignTargets={doc.nodes[editNode]?.kind === 'align' ? readAlignHistoryTargets : undefined} edgeReplacement={finishEdgeEditor.available ? {
-          start: finishEdgeEditor.start, cancel: finishEdgeEditor.cancel, apply: finishEdgeEditor.apply,
-          draft: finishEdgeEditor.current,
-        } : undefined} onDraft={reportNodeEditorDraft} nodes={doc.nodes} parameters={doc.parameters} doc={doc} pending={parameterEdit?.kind === 'direct'} pendingLabel={parameterEdit?.roundedInset ? 'Checking the rounded inset…' : doc.nodes[editNode]?.kind === 'fill-feature-pattern' ? 'Checking the fill cut pattern…' : 'Checking the path cut pattern…'} bearingAssembly={{ root: doc, owner: 'base' }} onRefuse={m => setToast({ title: 'Cannot bind that value', hint: m, detail: '' })} index={editNode}
-          onDetachInset={editNode === 2 && doc.nodes[1]?.kind === 'rounded-rectangle-inset' ? () => applyRoundedInsetEdit() : undefined}
-          insetSourceWidth={editNode === 2 && doc.nodes[1]?.kind === 'rounded-rectangle-inset' && doc.nodes[0]?.kind === 'sketch' ? roundedInsetSourceWidth(doc.nodes[0]) : undefined}
-          insetRelinkProblem={insetRelinkReadinessHere?.problem}
-          onRelinkInset={insetRelinkReadinessHere && !insetRelinkReadinessHere.problem ? { start: reviewInsetSource, cancel: insetRelink.cancel, reviewing: !!insetReview } : undefined}
-          onEditSketch={(() => {
-          const n = doc.nodes[editNode], s = n?.kind === 'sketch' || n?.kind === 'driven-sketch' ? editNode : n && 'sketch' in n ? n.sketch : null;
-          if (s === null || (doc.nodes[s]?.kind !== 'sketch' && doc.nodes[s]?.kind !== 'driven-sketch')) return undefined;
-          return () => {
-            if (doc.nodes[s]?.kind === 'driven-sketch') { setToast({ title: 'Cannot edit sketch', hint: 'Unbind the line length before editing this sketch.', detail: '' }); return; }
-            editSketch(s);
-          };
-        })()} onReplaceAxis={replaceRevolveAxis ? () => void startRevolveAxisReplacement() : undefined}
-          onEditDraft={editSavedDraftCommand(commandDoc, editNode) ? () => {
-            if (!ownsEvaluatedSource() || markerNow.current !== null || shownVariant.current || !fresh || busy || !canChangeDocument()) return;
-            const cmd = editSavedDraftCommand(commandDoc, editNode);
-            if (!cmd) return;
-            discardFeatureDraft();
-            setEditNode(null);
-            setActive({ cmd, ctx, values: cmd.defaults?.(ctx) ?? {}, preview: 'busy' });
-          } : undefined}
-          onEditSharedHoleLayout={sharedHoleLayoutPair(doc.nodes, editNode) ? () => {
-            if (docNow.current !== doc || !ownsEvaluatedSource() || markerNow.current !== null || shownVariant.current || !fresh || busy || nodeEditorDraft.current || !canChangeDocument()) return;
-            const pair = sharedHoleLayoutPair(doc.nodes, editNode);
-            if (!pair) return;
-            const cmd = sharedHoleLayoutCommand(doc, pair, () => docNow.current === doc && markerNow.current === null && !shownVariant.current
-              && evaluatedRef.current === evaluated && workerSessionNow.current === workerSession);
-            if (!cmd.available(ctx).ok) return;
-            discardFeatureDraft(); setEditNode(null);
-            setActive({ cmd, ctx, values: cmd.defaults?.(ctx) ?? {}, preview: 'busy' });
-          } : undefined}
-          onEditOffset={canEditSavedOffsetFace(commandDoc, editNode) ? () => {
-            if (!ownsEvaluatedSource() || markerNow.current !== null || shownVariant.current || !fresh || busy || !canChangeDocument()) return;
-            const cmd = editSavedOffsetFaceCommand(commandDoc, editNode);
-            if (!cmd) return;
-            discardFeatureDraft();
-            setEditNode(null);
-            setActive({ cmd, ctx, values: cmd.defaults?.(ctx) ?? {}, preview: 'busy' });
-          } : undefined} onPickEndFace={canEditSavedExtrudeEndFace(doc, editNode) ? () => {
-          if (docNow.current !== doc || evaluatedRef.current !== evaluated || markerNow.current !== null || shownVariant.current
-            || !fresh || busy || !canChangeDocument()) {
-            setToast({ title: 'End face not started', hint: 'Show the master at the latest History and wait for the model.', detail: '' });
-            return;
-          }
-          const cmd = editSavedExtrudeEndFaceCommand(commandDoc, editNode);
-          if (!cmd) return;
-          discardFeatureDraft();
-          setEditNode(null);
-          setActive({ cmd, ctx, values: cmd.defaults?.(ctx) ?? {}, preview: 'busy' });
-        } : undefined} readFaceEndDistance={async () => {
-          const current = () => docNow.current === doc && evaluatedRef.current === evaluated && markerNow.current === null && !shownVariant.current;
-          if (!current() || !fresh || busy || !canChangeDocument()) {
-            return { error: 'Show the master at the latest History and wait for the model before detaching.' };
-          }
-          const result = await engine.faceEndDistance(doc, editNode);
-          return current() ? result : { error: 'The source changed. Open the current feature again.' };
-        }} onApply={createHistoryFeatureApply({
-          model: { doc, evaluated, editNode, fresh, busy },
-          owner: { document: () => docNow.current, evaluated: () => evaluatedRef.current, marker: () => markerNow.current,
-            variant: () => shownVariant.current, scope: () => bearingEditScope.current, worker: () => workerSessionNow.current, open: () => openIntent.current },
-          worker: { engine, nextRevision: () => revision.current++ },
-          changes: { canChangeDocument, commit, applyRoundedInsetEdit, stageFeatureCandidate },
-        })} onDelete={doc.nodes[1]?.kind === 'rounded-rectangle-inset' ? undefined : opener => deleteNode(editNode, opener)} onClose={() => {
-          const opener = historyEditorOpener.current;
-          if (opener?.index === editNode && opener.doc === doc) returnAfterEditorClose(opener.button);
-          historyEditorOpener.current = null;
-          finishEdgeEditor.cancel(); discardDirectCandidateRef.current(); setEditNode(null);
-        }} />}
+        {editNode !== null && <HistoryFeatureEditor
+          model={{ doc, evaluated, commandDoc, editNode, fresh, busy, workerSession }}
+          owner={{ document: () => docNow.current, evaluated: () => evaluatedRef.current, marker: () => markerNow.current,
+            variant: () => shownVariant.current, worker: () => workerSessionNow.current, hasDraft: () => !!nodeEditorDraft.current, ownsEvaluatedSource }}
+          commands={{ ctx, discardFeatureDraft, closeForCommand: () => setEditNode(null), setActive, editSketch,
+            replaceAxis: replaceRevolveAxis ? () => void startRevolveAxisReplacement() : undefined }}
+          inset={{ roundedPending: !!parameterEdit?.roundedInset, detach: () => applyRoundedInsetEdit(), problem: insetRelinkReadinessHere?.problem,
+            relink: insetRelinkReadinessHere && !insetRelinkReadinessHere.problem ? { start: reviewInsetSource, cancel: insetRelink.cancel, reviewing: !!insetReview } : undefined }}
+          worker={engine} canChangeDocument={canChangeDocument} onNotice={setToast}
+          editor={{ onFilletStations: publishFilletStations, filletEndpoints: replacementEndpointLocations ?? historyEndpointLocations,
+            alignPreview: historyAlign, readAlignTargets: readAlignHistoryTargets,
+            edgeReplacement: finishEdgeEditor.available ? { start: finishEdgeEditor.start, cancel: finishEdgeEditor.cancel,
+              apply: finishEdgeEditor.apply, draft: finishEdgeEditor.current } : undefined,
+            onDraft: reportNodeEditorDraft, pending: parameterEdit?.kind === 'direct',
+            onApply: createHistoryFeatureApply({
+              model: { doc, evaluated, editNode, fresh, busy },
+              owner: { document: () => docNow.current, evaluated: () => evaluatedRef.current, marker: () => markerNow.current,
+                variant: () => shownVariant.current, scope: () => bearingEditScope.current, worker: () => workerSessionNow.current, open: () => openIntent.current },
+              worker: { engine, nextRevision: () => revision.current++ },
+              changes: { canChangeDocument, commit, applyRoundedInsetEdit, stageFeatureCandidate },
+            }),
+            onDelete: opener => deleteNode(editNode, opener), onClose: () => {
+              const opener = historyEditorOpener.current;
+              if (opener?.index === editNode && opener.doc === doc) returnAfterEditorClose(opener.button);
+              historyEditorOpener.current = null;
+              finishEdgeEditor.cancel(); discardDirectCandidateRef.current(); setEditNode(null);
+            },
+          }} />}
       </SelectionInspector>}
       </div></Profiler>
   );
