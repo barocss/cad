@@ -1414,7 +1414,12 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'mesh': return `Mesh ${node.name}`;
     case 'subd': return `SubD ${node.name} (${node.cage.faces.length} ${node.cage.faces.every(f => f.length === 4) ? 'quads' : 'faces'})`;
     case 'library': return node.name;
-    case 'rack': return `Rack m${typeof node.module === 'number' ? fmt(node.module) : node.module.parameter} × ${node.teeth}`;
+    case 'rack': {
+      if (!node.mesh) return `Rack m${n(node.module)} × ${node.teeth}`;
+      const parent = nodes?.[node.mesh.gear];
+      return parent?.kind === 'gear' ? `Rack m${n(parent.module)} × ${node.teeth}`
+        : `Rack linked to feature ${node.mesh.gear + 1} × ${node.teeth}`;
+    }
     case 'bearing': return `Bearing ${node.row} on step ${node.step}`;
     case 'oring-gland': return `O-ring gland (${node.gland}) for ${node.ring}`;
     case 'oring': return `O-ring in n${node.gland}`;

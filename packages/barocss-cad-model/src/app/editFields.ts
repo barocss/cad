@@ -380,7 +380,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
     case 'chamfer': number('d', 'Distance', 'mm', n => num((n as typeof node).distance), (n, v) => ({ ...(n as typeof node), distance: v })); break;
     case 'rack': {
       const k = (n: ModelNode) => n as typeof node;
-      number('m', 'Module', 'mm', n => num(k(n).module), (n, v) => ({ ...k(n), module: v }));
+      if (!node.mesh) number('m', 'Module', 'mm', n => num(k(n).module), (n, v) => k(n).mesh ? n : ({ ...k(n), module: v }));
       number('z', 'Teeth', undefined, n => k(n).teeth, (n, v) => ({ ...k(n), teeth: Math.round(v) }));
       number('b', 'Face width', 'mm', n => num(k(n).faceWidth), (n, v) => ({ ...k(n), faceWidth: v }));
       number('h', 'Height', 'mm', n => num(k(n).height), (n, v) => ({ ...k(n), height: v }));
@@ -388,7 +388,16 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       // The root (R12b.1b, D131): the basic rack's root fillet (spur-rack@1) or the schematic corner (@0).
       out.push({ kind: 'choice', key: 'root', label: 'Root', options: [{ value: 'spur-rack@1', label: 'Filleted (the basic rack)' }, { value: 'spur-rack@0', label: 'Schematic' }], get: n => self<typeof node>(n).generator,
         set: (n, v) => { const next = { ...self<typeof node>(n), generator: v as 'spur-rack@0' | 'spur-rack@1' }; if (v !== 'spur-rack@1') delete next.rootFillet; return replace(n, i, next); } });
-      if (node.generator === 'spur-rack@1') number('rf', 'Root fillet', 'mm', n => num(k(n).rootFillet ?? 0.38 * num(k(n).module)), (n, v) => { const next = { ...k(n) }; if (Math.abs(v - 0.38 * num(next.module)) < 1e-12) delete next.rootFillet; else next.rootFillet = v; return next; });
+      const rootDefault = (n: Nodes) => {
+        const rack = self<typeof node>(n), parent = rack.mesh ? n[rack.mesh.gear] : undefined;
+        // The kernel takes the linked gear's normal module, not the rack's stored creation-time copy.
+        const module = rack.mesh ? parent?.kind === 'gear' ? parent.module : NaN : rack.module;
+        // A derived default is not a binding of the rack's own rootFillet field.
+        return 0.38 * (typeof module === 'number' ? module : parameters[module.parameter] ?? NaN);
+      };
+      if (node.generator === 'spur-rack@1') out.push({ kind: 'number', key: 'rf', label: 'Root fillet', unit: 'mm',
+        get: n => self<typeof node>(n).rootFillet !== undefined ? num(self<typeof node>(n).rootFillet!) : rootDefault(n),
+        set: (n, v) => { const next = { ...self<typeof node>(n) }; if (Math.abs(v - rootDefault(n)) < 1e-12) delete next.rootFillet; else next.rootFillet = v; return replace(n, i, next); } });
       if (!node.mesh) number('ang', 'Angle', '°', n => k(n).angle ?? 0, (n, v) => ({ ...k(n), angle: v }));
       else {
         number('dir', 'Direction', '°', n => k(n).mesh!.direction ?? -90, (n, v) => ({ ...k(n), mesh: { ...k(n).mesh!, direction: v } }));
