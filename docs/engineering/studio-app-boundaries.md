@@ -150,3 +150,25 @@ The native mass/client/reference focused suite passes 18/18. Parameter retry and
 real Worker mass/BOM/Undo/Redo/Save/reopen browser flows pass. The existing mass
 browser driver now opens the current Inertia details disclosure before reading it.
 This is a state ownership improvement, not an attempt to move the main effect as-is.
+
+## High-prop consumers: print viewport boundary (2026-11-17)
+
+A JSX call-site survey found SceneViewport (77 attributes), ChatPanel (25),
+RobotInspector's JointsPanelLive (25), HistoryFeatureEditor's NodeEditor (21),
+SketchPanel (19), and AssemblyStepsPanel (18). Counts locate coupling, not a target
+for hiding fields in generic prop bags. SceneViewport already isolates live pose
+and section subscriptions; its renderer/pointer/overlay contract remains broad.
+
+`viewport/usePrintViewport.ts` now owns display-only print adaptation: selection
+and colour remapping, model-space callback coordinates, synthetic cap/edge body
+fallbacks, and suppression of model-space edit overlays. Viewport owns renderer,
+camera and input lifetimes; the adapter cannot commit a document. Original memo
+dependencies and stable empty display inputs are preserved. Five characterization
+tests plus existing layer/source tests pass (9/9). The actual partial-layer browser
+flow passes across six print directions, two viewport sizes, display toggles,
+Undo/Redo and Save/reopen; its screenshots were reviewed.
+
+Next priorities are domain composition in the live joints card, followed by
+SketchPanel's independent outline/offset tools. ChatPanel's turn/attachment/task-run
+authority and viewport renderer recovery require explicit lifecycle contracts,
+not wholesale prop regrouping. Core App commit/undo/source authority remains central.
