@@ -1,5 +1,8 @@
-import { isRectangleFinishResize, proveRectangleFinishResize } from './state/rectangleFinishResize';
-import { activeFilletEndpoints, filletStationInputKey, filletEdgeEndpoints, withFilletStations, type FilletStationDraft, type FilletEndpoints } from './app/filletEndpoints';
+import { createHistoryFeatureApply } from './state/historyFeatureApply';
+import { useFilletEndpointDisplay } from './state/useFilletEndpointDisplay';
+import { createCommandReferencePicking, type CommandPickScope } from './app/commandReferencePicking';
+import type { StudioNotice } from './app/studioNotice';
+import { filletStationInputKey } from './app/filletEndpoints';
 import { SHARED_HOLE_LAYOUT_EDIT, sharedHoleLayoutCommand, sharedHoleLayoutPair } from './app/sharedHoleLayout';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { browserRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal';
@@ -8,7 +11,6 @@ import { useContinuityLocation } from './app/useContinuityLocation';
 import { annotationCounts, printPreviewSummary } from './app/previewStatus';
 import { filletSectionNumberProblem } from './app/featureNumberInput';
 import { hasFilletInteriorProblem } from './app/filletInteriorInput';
-import { refuseOffsetPlanePick } from './app/offsetPlanePickFeedback';
 import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
 import { returnEditorFocus } from './ui/editorReturnFocus';
@@ -76,26 +78,21 @@ import { continuitySelection } from './app/edgeContinuitySelection';
 import { MeshFileDialogs } from './files/MeshFileDialogs';
 import { useRouteBundleEditor } from './state/useRouteBundleEditor';
 import { cutPatternSourceLabel, isCutPattern, selectedCutPatternSource } from './app/cutPatternSource';
-import { rectangularCutEditProblem } from './app/rectangularCutEdit';
 import { moveRenderAppearance } from './app/moveRenderAppearance';
-import { prepareLinearPatternHoleEdit } from './app/patternHoleSpacing';
-import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument, insertedCurvePartProblem, prepareDirectCurveCandidate, preparePatternNodeCandidate } from './app/directCurveCandidate';
+import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument, insertedCurvePartProblem, prepareDirectCurveCandidate } from './app/directCurveCandidate';
 import { LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
 import { ReferenceDecisions, type ReferencePreviewOptions } from './ui/ReferenceDecisions';
 import { useRobotExports } from './robot/useRobotExports';
 import { RobotInspector } from './robot/RobotInspector';
-import { sourceRevolveAxis, type RevolveAxisHit } from './app/revolveAxisPick';
-import { shownExtrudeEndFace, sourceExtrudeEndFace, type ExtrudeEndHit } from './app/extrudeEndFace';
+import { shownExtrudeEndFace } from './app/extrudeEndFace';
 import { awaitingOffsetPlane, isOffsetToPlane } from '@barocss/cad-model/app/offsetPlanePick';
 import { awaitingExtrudeEndFace, EXTRUDE_END_FACE_EDIT, isExtrudeToFace } from '@barocss/cad-model/app/extrudeEndFacePick';
 import { editSavedExtrudeEndFaceCommand, canEditSavedExtrudeEndFace } from '@barocss/cad-model/app/extrudeEndFaceEdit';
 import { canEditSavedOffsetFace, editSavedOffsetFaceCommand, OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
 import { DRAFT_EDIT, editSavedDraftCommand } from '@barocss/cad-model/app/draftEdit';
-import { holePatternEditProblem } from '@barocss/cad-model/app/holePatternInput';
 import { awaitingRevolveAxis, editSavedRevolveAxisCommand, joinedRevolveStock, REVOLVE_AXIS_EDIT } from '@barocss/cad-model/app/revolveAxisEdit';
 import { filletApplyCurrent, filletLaunchAvailability, filletType, newFilletActive, pickedFilletSelection, prepareFilletPick, replaceFilletSelection, replaceFillet, type FilletType, type RadiusMode } from './app/filletFamily';
 import { alignFaceBinding } from '@barocss/cad-model/app/alignCommand';
-import { originalTransformFace } from './app/transformFacePick';
 import { currentNativePlanePick, midpointFaces, midpointSelectionHint, SKETCH_AT_MIDPOINT } from './app/midpointSketch';
 import { insetRelinkReadiness } from '@barocss/cad-model/app/associativeInsetRelink';
 import { footprintBody, PROJECT_TO_SKETCH } from './app/materialFootprint';
@@ -136,7 +133,7 @@ import { supportsPlacedBoxSnapRotation } from './viewport/placedBoxSnap';
 import { contentKey, evaluationKey } from '@barocss/cad-model/engine/evalMemo';
 import { bearingEditCurrent, bearingFaceInput, captureBearingEditSession, prepareBearingEdit, type BearingEditSession } from './app/bearingEdit';
 import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skeleton';
-import { offsetFaceGroup, carryOver, dropStaleMade, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
+import { offsetFaceGroup, carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { bodyKeyFor, cutAfter, featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
 import { candidatesFor, captureSignatures, confirmReference, markedReferences, referencesOf, refreshSignatures, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
@@ -263,9 +260,8 @@ import { ReferencesPanel } from './ui/ReferencesPanel';
 import { placeReference, readReferences } from '@barocss/cad-model/chat/references';
 import { confirmDimension, liveDrafts } from '@barocss/cad-model/chat/drafts';
 import { DraftsPanel } from './ui/DraftsPanel';
-import { retargetSweep, sweepPath, SWEEP_CURVE, extrudeProfile } from '@barocss/cad-model/app/profileCommands';
+import { sweepPath, SWEEP_CURVE, extrudeProfile } from '@barocss/cad-model/app/profileCommands';
 import { editCommand } from '@barocss/cad-model/app/editCommand';
-import { failedFeatureText, linkedInsetHistoryFailure, loftHistoryFailure } from './app/failedFeature';
 import { useHeldFinishEdge } from './state/useHeldFinishEdge';
 import { flattenAssembly } from '@barocss/cad-model/engine/flatten';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
@@ -602,12 +598,7 @@ export function App() {
   const onCursor = useCallback((p: Vec3 | null) => cursorSink.current?.(p), []);
   // (`action`: one button on the toast, e.g. Undo after the agent applied a change directly, D41.)
   const [workerFailure, setWorkerFailure] = useState<FriendlyError | null>(null);
-  const [notice, setToast] = useState<(FriendlyError & {
-    action?: { label: string; run(): void };
-    bodyCopy?: true;
-    inputPick?: Command;
-    documentSource?: { doc: StudioDoc; name?: string; evaluated?: StudioDoc; placed?: { view: StudioDoc; workerSession: number } };
-  }) | null>(null);
+  const [notice, setToast] = useState<StudioNotice | null>(null);
   const clearBodyClipboard = useCallback(() => {
     clipboard.current = null;
     setToast(current => current?.bodyCopy ? null : current);
@@ -1967,113 +1958,13 @@ export function App() {
 
   const viewBodiesRef = useRef<BodyResult[]>(null!);
   const sectionPickRef = useRef<SectionPick>(() => ({ face: null, edge: null, cap: false }));
-  const commandPickScope = useRef<{ bodies: readonly BodyResult[]; hidden: ReadonlySet<number>; preview: boolean } | null>(null);
-  const pickCommandReferenceFace = (hit: ExtrudeEndHit, blocked: boolean): boolean => {
-    const current = activeStore.get();
-    if (!current) return false;
-    const offset = isOffsetToPlane(current.cmd.id, current.values);
-    if (!offset && !isExtrudeToFace(current.cmd.id, current.values)) return false;
-    applyWhenReady.current = null;
-    again.current = null;
-    if (docNow.current !== doc || evaluatedRef.current !== evaluated || current.ctx.doc !== commandDoc) {
-      commandPreview.retire();
-      setActive(null);
-      return true;
-    }
-    const scope = commandPickScope.current;
-    const face = !blocked && scope && hit.face && !scope.hidden.has(hit.face.body)
-      ? sourceExtrudeEndFace(current, scope.bodies, hit) : null;
-    const picked = face && current.cmd.onPick?.(current.ctx, current.values, { face, edge: null });
-    if (!picked || typeof picked.error === 'string') {
-      const hint = typeof picked?.error === 'string' ? picked.error : 'Pick one original planar face of a current solid.';
-      if (offset) {
-        commandPreview.retire();
-        setActive(active => active === current ? refuseOffsetPlanePick(active, hint) : active);
-      } else setToast({ title: 'End face not selected', hint, detail: '' });
-      return true;
-    }
-    commandPreview.retire();
-    setActive({ ...current, values: picked, preview: 'busy', error: undefined, offsetPlanePickIssue: undefined });
-    return true;
-  };
-  const pickTransformFace = (hit: ExtrudeEndHit, blocked: boolean): boolean => {
-    const current = activeStore.get();
-    if (!current || !['split', 'align', 'mirror'].includes(current.cmd.id)) return false;
-    const split = current.cmd.id === 'split', mirror = current.cmd.id === 'mirror';
-    if (!split && !mirror && !current.ctx.selection.faces.length) return true;
-    if (!hit.face && !hit.edge && !hit.vertex && !hit.instance && !hit.direct) return true;
-    applyWhenReady.current = null;
-    again.current = null;
-    if (current.ctx.doc !== commandDoc || !ownsEvaluatedSource()) {
-      commandPreview.retire();
-      setActive(null);
-      return true;
-    }
-    const scope = commandPickScope.current;
-    const face = !blocked && scope && hit.face && !scope.hidden.has(hit.face.body)
-      ? originalTransformFace(current.ctx, doc, scope.bodies, hit, split || mirror) : null;
-    const picked = face && current.cmd.onPick?.(current.ctx, current.values, { face, edge: null });
-    if (!picked || typeof picked.error === 'string') {
-      const hint = typeof picked?.error === 'string' ? picked.error
-        : mirror ? (current.values.pickPlane === 'yes' ? 'Click an original planar face normal to X, Y or Z, not an edge or vertex. Cancel plane pick restores the previous preview.' : 'Use Pick plane and click an original planar face normal to X, Y or Z.')
-        : split ? 'Pick an original planar face normal to X, Y or Z. For a tilted plane, choose Any direction and enter its Normal X/Y/Z and At values.' : 'Pick an original planar face on another body.';
-      setToast({ title: `${current.cmd.label} ${split || mirror ? 'plane' : 'target'} not selected`, hint, detail: '', inputPick: current.cmd });
-      return true;
-    }
-    setToast(notice => notice?.inputPick === current.cmd ? null : notice);
-    commandPreview.retire();
-    setActive({ ...current, values: mirror ? { ...picked, pickPlane: '' } : picked, preview: 'busy', error: undefined });
-    return true;
-  };
-  const pickRevolveAxis = (hit: RevolveAxisHit, blocked: boolean): boolean => {
-    const current = activeStore.get();
-    if (current?.cmd.id !== 'revolve' && current?.cmd.id !== REVOLVE_AXIS_EDIT) return false;
-    if (!hit.edge && !hit.instance && !hit.direct) return true;
-    applyWhenReady.current = null;
-    again.current = null;
-    if (docNow.current !== doc || evaluatedRef.current !== evaluated || current.ctx.doc !== commandDoc) {
-      commandPreview.retire();
-      setActive(null);
-      return true;
-    }
-    const scope = commandPickScope.current;
-    const ownsPreview = current.preview === 'ok' && previewFor.current === JSON.stringify(current.values);
-    const edge = !blocked && scope && hit.edge && !scope.hidden.has(hit.edge.body)
-      ? sourceRevolveAxis(current, scope.bodies, hit, ownsPreview, scope.preview) : null;
-    const picked = edge && current.cmd.onPick?.(current.ctx, current.values, { face: null, edge });
-    if (!picked || typeof picked.error === 'string') {
-      setToast({ title: 'Axis not selected', hint: typeof picked?.error === 'string' ? picked.error : 'Pick one original straight edge in the sketch plane.', detail: '', inputPick: current.cmd });
-      return true;
-    }
-    setToast(notice => notice?.inputPick === current.cmd ? null : notice);
-    commandPreview.retire();
-    setActive({ ...current, values: picked, preview: 'busy', error: undefined });
-    return true;
-  };
-  const retargetActiveSweep = (input: { profile: number } | { path: string }): boolean => {
-    const current = activeStore.get();
-    if (current?.cmd.id !== SWEEP_CURVE) return false;
-    applyWhenReady.current = null;
-    again.current = null;
-    if (current.ctx.doc !== commandDoc || !ownsEvaluatedSource()) {
-      commandPreview.retire(); setActive(null);
-      return true;
-    }
-    const next = retargetSweep(current.ctx, input);
-    if ('error' in next) {
-      setToast({ title: 'Sweep input not changed', hint: next.error, detail: '', inputPick: current.cmd });
-      return true;
-    }
-    setToast(notice => notice?.inputPick === current.cmd ? null : notice);
-    const { op, ...inputs } = current.values;
-    const operation = current.cmd.fields?.(next, current.values).some(field => field.key === 'op');
-    const values = operation ? { ...inputs, op: op ?? 'new' } : inputs;
-    commandPreview.retire();
-    setSelection(next.selection);
-    setDirectSel(next.direct ?? []);
-    setActive({ ...current, ctx: next, values, preview: 'busy', error: undefined });
-    return true;
-  };
+  const commandPickScope = useRef<CommandPickScope | null>(null);
+  const { pickCommandReferenceFace, pickTransformFace, pickRevolveAxis, retargetActiveSweep } = createCommandReferencePicking({
+    model: { doc, commandDoc, isCurrent: () => docNow.current === doc && evaluatedRef.current === evaluated, ownsEvaluatedSource },
+    command: { activeStore, scope: commandPickScope, previewFor, retire: commandPreview.retire,
+      clearQueuedApply: () => { applyWhenReady.current = null; again.current = null; } },
+    selection: { setSelection, setDirectSel }, onNotice: setToast,
+  });
   const replaceRevolveAxis = editNode === null ? null : editSavedRevolveAxisCommand(commandDoc, editNode);
   const readAlignHistoryTargets = useCallback(async () => {
     if (editNode === null || marker !== null || shownVariant.current || !ownsEvaluatedSource()) return [];
@@ -2096,38 +1987,12 @@ export function App() {
       });
     });
   }, [doc, editNode, engine, marker, ownsEvaluatedSource]);
-  const [historyFilletEnds, setHistoryFilletEnds] = useState<{doc: StudioDoc; index: number; worker: number; locations: FilletEndpoints} | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    const index = editNode, node = index === null ? null : doc.nodes[index];
-    if(index === null || node?.kind !== 'fillet' || !node.radii || marker !== null || variants.showing || !fresh || busy || instanceSel.length || inPlace) return;
-    const current = () => !cancelled && docNow.current === doc && workerSessionNow.current === workerSession && markerNow.current === null && !shownVariant.current;
-    engine.part(prefixDoc(doc,index), revision.current++, 'refs').then(result => {
-      if(!current())return;
-      const parents = result.ok ? result.bodies.filter(body => body.ref?.node === node.parent.node && body.ref.side === node.parent.side) : [];
-      const edges = parents.length === 1 ? parents[0].mesh.edges.filter(edge => node.edges.length === 1 && edge.names.includes(node.edges[0])) : [];
-      setHistoryFilletEnds({doc,index,worker:workerSession,locations:filletEdgeEndpoints(edges.length === 1 ? edges[0] : undefined,node)});
-    }).catch(() => { if(current())setHistoryFilletEnds({doc,index,worker:workerSession,locations:{reason:'The original edge could not be read; endpoint locations are unavailable.'}}); });
-    return () => {cancelled = true;};
-  }, [doc, editNode, workerSession, engine, marker, variants.showing, fresh, busy, instanceSel, inPlace]);
-  const [filletStationDraft, setFilletStationDraft] = useState<FilletStationDraft | null>(null);
-  const publishFilletStations = useCallback((payload: FilletStationDraft) => {
-    setFilletStationDraft(payload);
-    return () => setFilletStationDraft(current => current === payload ? null : current);
-  }, []);
-  const savedHistoryEndpointLocations = editNode !== null && doc.nodes[editNode]?.kind === 'fillet' && doc.nodes[editNode].radii && !active && marker === null && !variants.showing && fresh && !busy && !instanceSel.length && !inPlace
-    ? historyFilletEnds?.doc === doc && historyFilletEnds.index === editNode && historyFilletEnds.worker === workerSession ? historyFilletEnds.locations : {reason:'Reading original edge endpoint locations…'} : null;
-  const historyEndpointLocations = savedHistoryEndpointLocations && filletStationDraft?.nodes === doc.nodes && filletStationDraft.index === editNode && filletStationDraft.original === doc.nodes[editNode]
-    ? withFilletStations(savedHistoryEndpointLocations,filletStationDraft.fractions) : savedHistoryEndpointLocations;
-  const endpointSource = useRef<{ctx: Active['ctx']; doc: StudioDoc; worker: number} | null>(null);
-  const endpointContextCurrent = !!active && active.ctx.doc === commandDoc && evaluatedRef.current === evaluated && ownsEvaluatedSource();
-  if (!active) endpointSource.current = null;
-  else if (endpointContextCurrent && endpointSource.current?.ctx !== active.ctx) endpointSource.current = {ctx:active.ctx,doc,worker:workerSession};
-  const endpointSourceCurrent = endpointContextCurrent && !!active && endpointSource.current?.ctx === active.ctx
-    && endpointSource.current.doc === doc && endpointSource.current.worker === workerSession
-    && fresh && !busy && marker === null && !variants.showing && !instanceSel.length && !inPlace
-    && active.ctx.doc.nodes.length === doc.nodes.length && active.ctx.doc.nodes.every((node,i) => node === doc.nodes[i]);
-  const filletEndpointLocations = active ? endpointSourceCurrent ? activeFilletEndpoints(active) : null : historyEndpointLocations;
+  const { historyEndpointLocations, filletEndpointLocations, publishFilletStations } = useFilletEndpointDisplay({
+    model: { doc, evaluated, commandDoc, editNode, workerSession, marker, variantShown: variants.showing, fresh, busy,
+      instanceSel, inPlace, active },
+    owner: { docNow, evaluatedRef, workerSessionNow, markerNow, shownVariant, ownsEvaluatedSource },
+    worker: { engine, nextRevision: () => revision.current++ },
+  });
   const axisReplacementRequest = useRef(0);
   const startRevolveAxisReplacement = async () => {
     if (editNode === null || !replaceRevolveAxis || !ownsEvaluatedSource() || markerNow.current !== null || shownVariant.current
@@ -2481,7 +2346,8 @@ export function App() {
       setToast({ title: 'No sheet feature', hint: 'This body does not start from a sheet plate or profile.', detail: '' });
       return;
     }
-    const { kFactor: _k, ...sheet } = node;
+    const { kFactor, ...sheet } = node;
+    void kFactor; // A bend table replaces the scalar allowance.
     const next = { ...doc, nodes: doc.nodes.map((item, index) => index === i ? { ...sheet, bendTable: table as BendTable } : item) };
     const reply = await engine.evaluate(prefixDoc(next, next.nodes.length), revision.current++);
     if (!current() || !reply) return;
@@ -3644,49 +3510,13 @@ export function App() {
           }
           const result = await engine.faceEndDistance(doc, editNode);
           return current() ? result : { error: 'The source changed. Open the current feature again.' };
-        }} onApply={(nodes, ownsDraft, sourceWidth) => {
-          if (doc.nodes[1]?.kind === 'rounded-rectangle-inset') { applyRoundedInsetEdit(nodes, sourceWidth); return; }
-          if (!canChangeDocument()) return;
-          if (doc.nodes[editNode]?.kind === 'face-end-extrude' && nodes[editNode]?.kind === 'extrude'
-            && (markerNow.current !== null || shownVariant.current || evaluatedRef.current !== evaluated || !fresh || busy)) {
-            return Promise.resolve({ title: 'Distance not applied', hint: 'Show the master at the latest History and wait for the model before detaching.', detail: '' });
-          }
-          const scope = bearingEditScope.current;
-          const patternEdit = prepareLinearPatternHoleEdit(doc, nodes, editNode);
-          if ('error' in patternEdit) return Promise.resolve(patternEdit.error);
-          const cutProblem = rectangularCutEditProblem(doc, patternEdit.nodes, editNode);
-          if (cutProblem) return Promise.resolve(cutProblem);
-          const hint = holePatternEditProblem(doc.nodes[editNode], patternEdit.nodes[editNode], doc.parameters);
-          if (hint) return Promise.resolve({ title: 'The Hole pattern is invalid', hint, detail: '' });
-          const next = { ...doc, nodes: dropStaleMade(doc.nodes, patternEdit.nodes) };
-          const candidate = preparePatternNodeCandidate(doc, next, editNode);
-          if (candidate) { stageFeatureCandidate(candidate); return; }
-          const request = revision.current++;
-          const resize = isRectangleFinishResize(doc,next,editNode), worker = workerSessionNow.current, open = openIntent.current;
-          const current = () => ownsDraft() && docNow.current === doc && bearingEditScope.current === scope
-            && workerSessionNow.current === worker && openIntent.current === open;
-          return engine.evaluate(next, request).then(async reply => {
-            if (!reply || !current()) return;
-            if (reply.ok) {
-              if (!resize) { commit(next); return; }
-              const failure = {title:'Size not applied',hint:`The original ${next.nodes[2].kind === 'chamfer' ? 'Chamfer' : 'Fillet'} edge could not be verified. Keep the current size or explicitly replace its edge first.`,detail:'No reference was renamed or refreshed.'};
-              try {
-                const before = await engine.part(prefixDoc(doc,2),revision.current++,'refs');
-                if (!current()) return;
-                const after = await engine.part(prefixDoc(next,2),revision.current++,'refs');
-                if (!current() || markerNow.current !== null || shownVariant.current) return;
-                const refreshed = before.ok && after.ok ? proveRectangleFinishResize(doc,next,before.bodies,after.bodies) : null;
-                if (!refreshed) return failure;
-                commit(refreshed); return;
-              } catch { if (current()) return failure; return; }
-            }
-            const insetFailure = reply.revision === request ? linkedInsetHistoryFailure(reply.error, doc.nodes, next.nodes, editNode) : undefined;
-            if (insetFailure) return insetFailure;
-            const failedFeature = reply.revision === request ? failedFeatureText(reply.error.feature, next.nodes, doc.nodes) : undefined;
-            const failure = { ...reply.error, failedFeature };
-            return loftHistoryFailure(failure, doc.nodes, next.nodes, editNode) ?? failure;
-          });
-        }} onDelete={doc.nodes[1]?.kind === 'rounded-rectangle-inset' ? undefined : opener => deleteNode(editNode, opener)} onClose={() => {
+        }} onApply={createHistoryFeatureApply({
+          model: { doc, evaluated, editNode, fresh, busy },
+          owner: { document: () => docNow.current, evaluated: () => evaluatedRef.current, marker: () => markerNow.current,
+            variant: () => shownVariant.current, scope: () => bearingEditScope.current, worker: () => workerSessionNow.current, open: () => openIntent.current },
+          worker: { engine, nextRevision: () => revision.current++ },
+          changes: { canChangeDocument, commit, applyRoundedInsetEdit, stageFeatureCandidate },
+        })} onDelete={doc.nodes[1]?.kind === 'rounded-rectangle-inset' ? undefined : opener => deleteNode(editNode, opener)} onClose={() => {
           const opener = historyEditorOpener.current;
           if (opener?.index === editNode && opener.doc === doc) returnAfterEditorClose(opener.button);
           historyEditorOpener.current = null;
