@@ -15,6 +15,7 @@ import type { CamDisplay } from './camDisplay';
 import { camStockBounds } from './camOverlayGeometry';
 import type { ModelAnnotation } from '@barocss/cad-model/drawing/annotations3d';
 import { pmiDrawings, pmiFacingKey, pmiLabels } from './pmiGeometry';
+import { pmiSvgAnchorVisible, pmiSvgCameraKey, pmiSvgTextBounds, type PmiSvgCommit } from './pmiSvgBounds';
 import { printSceneBounds } from './printProjection';
 import { usePrintViewport } from './usePrintViewport';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
@@ -518,9 +519,16 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
   };
   requestRef.current = request;
 
+  const pmiSvgCommit = useRef<PmiSvgCommit | null>(null);
   const input = useViewportPointerInput({
     canvas, camera, propsRef,
     rendering: { renderer, rendererBodies, rendererInstances, syncDisplayedBodies, syncDirect, isBandRail: hit => !!bandRail(hit), selectBandRail, request, requestRef, moving, viewState, hover,
+      pmiTextBounds: () => {
+        const r = renderer.current, c = canvas.current, items = propsRef.current.annotations;
+        if (r?.setOverlayLabels) return undefined; // GPU rendering and picking remain unchanged.
+        if (!r || !c || !items) return new Map();
+        return pmiSvgTextBounds(pmiSvgCommit.current, { items, renderer: r, canvas: c, cameraKey: pmiSvgCameraKey(camera.current, c) }, camera.current);
+      },
       bodiesForMeshPicking: () => {
         const uploaded = uploadedBodies.current, source = propsRef.current.bodies;
         // The surface packets retain canonical selection indices. The sheet-band packet has its own rails.
@@ -933,12 +941,19 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
   const pmiSvg = (items: readonly ModelAnnotation[], selected: string | null) => {
     const c = canvas.current; if (!c) return null;
     const w = c.clientWidth, h = c.clientHeight, texts: React.ReactNode[] = [];
-    for (const a of items) for (const [k, t] of a.texts.entries()) {
+    const r = renderer.current; if (!r || r.setOverlayLabels) return null;
+    const owner = { items, renderer: r, canvas: c, cameraKey: pmiSvgCameraKey(camera.current, c) };
+    let committed: PmiSvgCommit | null = null;
+    for (const [ai, a] of items.entries()) for (const [k, t] of a.texts.entries()) {
+      if (!t.text.trim() || !pmiSvgAnchorVisible(t.at, camera.current)) continue;
       const q = camera.current.project(t.at as Vec3, w, h);
       if (!Number.isFinite(q[0]) || !Number.isFinite(q[1])) continue;
-      texts.push(<text key={a.id + ':' + k} x={q[0]} y={q[1]} textAnchor={t.align} className={'pmi-text' + (a.id === selected ? ' sel' : '')}>{t.text}</text>);
+      texts.push(<text data-pmi-id={a.id} data-pmi-item={ai} data-pmi-text={k} key={a.id + ':' + k} x={q[0]} y={q[1]} textAnchor={t.align} className={'pmi-text' + (a.id === selected ? ' sel' : '')}>{t.text}</text>);
     }
-    return <svg className="vp-overlay pmi" width={w} height={h} aria-hidden="true">{texts}</svg>;
+    return <svg ref={element => {
+      if (element) { committed = { ...owner, element }; pmiSvgCommit.current = committed; }
+      else if (pmiSvgCommit.current === committed) pmiSvgCommit.current = null;
+    }} className="vp-overlay pmi" width={w} height={h} aria-hidden="true">{texts}</svg>;
   };
   const overlay = () => {
     /** The overlay lines are the engine's (G7): only their labels, points and texts stay SVG. */

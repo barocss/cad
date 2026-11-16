@@ -96,12 +96,16 @@ function segmentDistance(px: number, py: number, a: [number, number], b: [number
   const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((px - a[0]) * dx + (py - a[1]) * dy) / l2)) : 0;
   return Math.hypot(a[0] + t * dx - px, a[1] + t * dy - py);
 }
-/** The annotation nearest the pointer within `radius` px: by its texts' baseline spans and its lines on screen. */
-export function pmiPick(items: readonly ModelAnnotation[], project: Project, x: number, y: number, radius = 8): string | null {
+export type PmiTextBounds = Map<string, { left: number; top: number; right: number; bottom: number }[]>;
+/** Existing GPU spans, or exact current SVG text boxes when supplied; line distance and array-first ties are unchanged. */
+export function pmiPick(items: readonly ModelAnnotation[], project: Project, x: number, y: number, radius = 8, textBounds?: PmiTextBounds): string | null {
   let best: string | null = null, bestD = radius;
   for (const a of items) {
     let d = Infinity;
-    for (const t of a.texts) {
+    if (textBounds) {
+      for (const box of textBounds.get(a.id) ?? []) if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) d = 0;
+    }
+    for (const t of textBounds ? [] : a.texts) {
       // (The text's span along its direction: about 0.6 of its height a character, from where its alignment puts it.)
       const width = 0.6 * t.height * t.text.length, k = ALIGN[t.align];
       const s = [t.at[0] - t.dir[0] * width * k, t.at[1] - t.dir[1] * width * k, t.at[2] - t.dir[2] * width * k] as Vec3;

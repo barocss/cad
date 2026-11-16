@@ -26,7 +26,7 @@ import type { OrbitCamera } from './camera';
 import { ellipseClick, type EllipseDraft } from './ellipseDraft';
 import { DragTrimStroke, type DragTrimOwner, type DragTrimPlan } from './dragTrimStroke';
 import { dragAbout, dragAlong, dragIn, dragPlane, dragScale, dragTurn, GIZMO_PX, hitTest, snapTo, type FeatureHandle, type GizmoCancelReason, type GizmoHit, type Projector, type TransformGizmo } from './gizmo';
-import { pmiPick } from './pmiGeometry';
+import { pmiPick, type PmiTextBounds } from './pmiGeometry';
 import type { ScalarMap } from './scalarMaps';
 import type { PrintDisplay } from './printDisplay';
 import type { EdgeRef, FaceRef, SectionClip, ViewRenderer, ViewState } from './renderer';
@@ -127,6 +127,7 @@ interface PointerInput {
     syncDisplayedBodies(renderer: ViewRenderer): void;
     syncDirect(renderer: ViewRenderer): void;
     bodiesForMeshPicking(): readonly BodyResult[];
+    pmiTextBounds(): PmiTextBounds | undefined;
     isBandRail(hit: EdgeRef | null): boolean;
     selectBandRail(hit: EdgeRef | null): boolean;
     rendererInstances: RefObject<{ renderer: ViewRenderer; instances: readonly { id: string; bodies: readonly BodyResult[] }[] } | null>;
@@ -1027,7 +1028,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     // (G24: a click on an annotation's text or lines picks it, before the model under it.)
     const pm = propsRef.current.annotations;
     if (pm?.length && propsRef.current.onPickAnnotation) {
-      const id = pmiPick(pm, p => { const q = camera.current.project(p, w, h); return Number.isFinite(q[0]) && Number.isFinite(q[1]) ? [q[0], q[1]] : null; }, x, y);
+      const id = pmiPick(pm, p => { const q = camera.current.project(p, w, h); return Number.isFinite(q[0]) && Number.isFinite(q[1]) ? [q[0], q[1]] : null; }, x, y, 8, rendering.pmiTextBounds());
       if (id) { propsRef.current.onPickAnnotation(id); request(); return; }
     }
     const sk = propsRef.current.sketch;
