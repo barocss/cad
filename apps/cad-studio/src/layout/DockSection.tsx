@@ -7,7 +7,7 @@ import { Icon } from '../ui/atoms';
  * A section of the dock (G12c): a header — its title, a one-line summary chip, a chevron — that folds its content away;
  * the open state kept per viewer under `id`. `actions`: controls at the header's right, beside the fold (G12e).
  */
-export function DockSection({ id, title, summary, summaryCollapsedOnly = false, actions, children, onCollapse, expandOn }: { id: string; title: string; summary?: ReactNode; summaryCollapsedOnly?: boolean; actions?: ReactNode; children: ReactNode; onCollapse?(): void; expandOn?: object }) {
+export function DockSection({ id, title, summary, summaryCollapsedOnly = false, actions, status, children, onCollapse, expandOn }: { id: string; title: string; summary?: ReactNode; summaryCollapsedOnly?: boolean; actions?: ReactNode; status?: ReactNode; children: ReactNode; onCollapse?(): void; expandOn?: object }) {
   const key = 'studio.dock.' + id;
   const [open, setOpen] = useState(() => { try { return localStorage.getItem(key) !== 'closed'; } catch { return true; } });
   useLayoutEffect(() => { if (expandOn) setOpen(true); }, [expandOn]);
@@ -22,6 +22,7 @@ export function DockSection({ id, title, summary, summaryCollapsedOnly = false, 
       </CollapsibleTrigger>
       {actions && <div className="dock-section-actions">{actions}</div>}
     </div>
+    {status}
     <CollapsibleContent className="dock-section-body">{children}</CollapsibleContent>
   </Collapsible>;
 }

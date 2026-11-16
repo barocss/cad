@@ -11,7 +11,7 @@ export function PrintPanel({ options, onOptions, onDirection, state, reason, war
   options: PrintOptions; resetKey?: unknown;
   onOptions(value: PrintPreviewPatch): void; onDirection(value: Vec3 | undefined): void; state: PrintState; reason?: string; warnings?: readonly string[]; scopeHint?: string;
 }) {
-  const d = state.display, max = Math.max(0, (state.count ?? d?.summary.count ?? 1) - 1), shown = Math.min(options.layer, max);
+  const d = !reason && state.stage === 'ready' ? state.display : null, max = Math.max(0, (state.count ?? d?.summary.count ?? 1) - 1), shown = Math.min(options.layer, max);
   const direction = options.direction ? directions.findIndex(x => x.value.every((v, i) => v === options.direction![i])) : -1;
   return <div className="card" aria-label="Print layers" style={{ padding: '6px 10px', maxWidth: 420 }}>
     <div role="status">{reason ?? state.error ?? (state.stage !== 'ready' ? 'Pending · current source layers are not ready' : `Layer ${d!.layer.k + 1} of ${d!.summary.count} · bed Z ${d!.layer.z.toFixed(3)} mm · ${d!.layer.contours.length} closed contours`)}{!reason && state.stage === 'ready' && warnings.length > 0 && <span className="warn" aria-label="Print contour warning"> {warnings.join(' ')}</span>}{scopeHint && <span aria-label="Print source scope"> {scopeHint}</span>}</div>
@@ -20,14 +20,15 @@ export function PrintPanel({ options, onOptions, onDirection, state, reason, war
     </select></label>
     <label style={{ marginLeft: 8 }}><input type="checkbox" aria-label="Set layer height" checked={options.layerHeight !== undefined} onChange={e => onOptions({ layerHeight: e.target.checked ? 0.2 : undefined })} /> Set height</label>
     <PrintLayerHeight value={options.layerHeight} resetKey={resetKey} onCommit={layerHeight => onOptions({ layerHeight })} />
-    <div><label>Layer <input aria-label="Print layer" type="range" min={0} max={max} step={1} value={shown} disabled={!state.count || !!reason} onChange={e => onOptions({ layer: e.target.valueAsNumber })} /></label> {shown + 1}</div>
+    <div><label>Layer <input aria-label="Print layer" type="range" min={0} max={max} step={1} value={shown} disabled={!state.count || !!reason} onChange={e => onOptions({ layer: e.target.valueAsNumber })} /></label> {d && <span aria-label="Selected print layer">{shown + 1}</span>}</div>
     <label><input type="checkbox" aria-label="Printed up to layer" checked={options.printed} onChange={e => onOptions({ printed: e.target.checked })} /> Printed up to layer</label>
     <label style={{ marginLeft: 8 }}><input type="checkbox" aria-label="Print supports" checked={options.supports} onChange={e => onOptions({ supports: e.target.checked })} /> Supports</label>
     {d && <div>Top {d.top.toFixed(3)} mm · {d.summary.supportColumns.length} support columns · {d.summary.supportVolume.toFixed(3)} mm³
       <details><summary>Model → bed (mm)</summary><code>{[0, 1, 2, 3].map(row => [0, 1, 2, 3].map(col => d.summary.modelToBed[col * 4 + row].toFixed(3)).join(' ')).join('\n')}</code></details>
     </div>}
     {/* (G12c: compact — the colours as chips, NOT FOR PRODUCTION shown; the estimate's terms and notes behind Details.) */}
-    <div className="legend-chips"><span className="legend-chip"><i style={{ background: '#3cc8e0' }} />contours</span><span className="legend-chip"><i style={{ background: '#f0a030' }} />overhang</span><span className="legend-chip"><i style={{ background: '#4caf7d' }} />support</span><span className="nfp-chip">NOT FOR PRODUCTION</span></div>
+    {d && <div className="legend-chips"><span className="legend-chip"><i style={{ background: '#3cc8e0' }} />contours</span><span className="legend-chip"><i style={{ background: '#f0a030' }} />overhang</span><span className="legend-chip"><i style={{ background: '#4caf7d' }} />support</span></div>}
+    <span className="nfp-chip">NOT FOR PRODUCTION</span>
     <details className="panel-details"><summary>Details</summary>Display mesh estimate · {options.layerHeight === undefined ? '0.2 mm layer height is estimated' : 'Layer height set'} · Not production-ready. Preview caps select bodies, not original faces. Layer settings are included when you save the document.</details>
   </div>;
 }

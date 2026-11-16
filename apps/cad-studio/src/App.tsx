@@ -1,3 +1,4 @@
+import { annotationCounts, printPreviewSummary } from './app/previewStatus';
 import { filletSectionNumberProblem } from './app/featureNumberInput';
 import { hasFilletInteriorProblem } from './app/filletInteriorInput';
 import { refuseOffsetPlanePick } from './app/offsetPlanePickFeedback';
@@ -3192,10 +3193,9 @@ export function App() {
     : previewMode === 'analysis' ? <AnalysisPanel analysis={analysis} onAnalysis={setAnalysis} map={mapKind} onMap={k => { setMapHover(null); setMouldSpread(0); setMapKind(k); }}
       printing={!!printing} pull={!!doc.mould?.pull} mapsReason={viewBackend === 'webgl2' ? 'The analysis maps are drawn with WebGPU; this browser draws with WebGL2.' : undefined} />
     : null;
-  const previewOverlay = <label className="overlay-toggle" title="The drawing's annotations on the model, with any preview"><input type="checkbox" checked={pmiEnabled} aria-label="3D annotations" onChange={e => setPmiEnabled(e.target.checked)} /> 3D annotations</label>;
+  const previewOverlay = <label className="overlay-toggle" title="Drawing annotations in Model view; hidden while editing or showing Print/CNC"><input type="checkbox" checked={pmiEnabled} aria-label="3D annotations" onChange={e => setPmiEnabled(e.target.checked)} /> 3D annotations</label>;
   const previewOverlayStatus = pmiEnabled && <div role="status" className="overlay-status">{pmiReason ?? pmiSheet.error ?? (pmiSheet.busy || !pmiSheet.annotations ? 'Pending · building the drawing\'s sheet'
-            : !pmiItems?.length ? 'No annotations on the model yet: dimension the part in the Drawing workspace.'
-            : `${pmiItems.length} annotation${pmiItems.length === 1 ? '' : 's'} from the drawing${pmiSheet.annotations.left.length ? ` · ${pmiSheet.annotations.left.length} only on the sheet` : ''}${pmiSelected ? ` · ${pmiItems.find(a => a.id === pmiSelected)?.text.join(' ') ?? ''}` : ''}`)}</div>;
+            : `${annotationCounts(pmiItems?.length ?? 0, pmiSheet.annotations.left.length)}${pmiSelected ? ` · ${pmiItems?.find(a => a.id === pmiSelected)?.text.join(' ') ?? ''}` : ''}`)}</div>;
   // (G12b: the right dock — the Browser (its mount movable: browserPlacement), the running command's HUD and the inspector;
   // the HUD floats at the stage's right as before when the dock is a strip.)
   const browserPlacement = BROWSER_PLACEMENT;
@@ -3831,7 +3831,7 @@ export function App() {
           onCreateDraftChange={next => { discardRouteRef.current(); setRouteCreate(next); setRoutePhase('draft'); }} onMoveDraftChange={changeRouteMove}
           onBundleChange={selectRouteBundle} onCreate={createRoute} onPreview={previewRoute} onApply={applyRoute} onCancel={discardRoute}
           onDetach={detachRoute} onClose={() => { discardRouteRef.current(); setRoutePanelOpen(false); }} /> : inspector}
-        <PreviewSection mode={previewMode} onMode={choosePreview} panel={previewPanel} overlay={previewOverlay} overlayStatus={previewOverlayStatus} />
+        <PreviewSection mode={previewMode} onMode={choosePreview} panel={previewPanel} overlay={previewOverlay} overlayStatus={previewOverlayStatus} overlaySuspended={!!pmiReason} summary={previewMode === 'print' ? printPreviewSummary(printReason, printState.stage, printState.error) : undefined} />
       </Dock>
       {/* (G12a: the chat column, shown at the left (order: -1) and full height; after the stage in the document, so the top bar's
           Chat button stays the first [aria-label="Chat"]. The centre — top bar, viewport and its bars — is the stage.) */}
