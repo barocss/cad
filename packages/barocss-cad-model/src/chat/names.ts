@@ -68,18 +68,39 @@ export function resolveFace(nodes: readonly ModelNode[], bodies: readonly BodyRe
   return found;
 }
 
-/** An edge name's face part without its occurrence mark (`n1.side0#2` → `n1.side0`). */
-const faceOfPart = (part: string) => part.replace(/#\d+$/, '');
-/** The edge names an edge selector stands for, or why none. */
+/** The edge names an edge selector stands for, or why none/too many. */
 export function resolveEdge(nodes: readonly ModelNode[], bodies: readonly BodyResult[], sel: unknown): string[] | string {
   if (typeof sel === 'string') return [sel];
   if (!isObj(sel) || !Array.isArray(sel.between) || sel.between.length !== 2) return `an edge selector is {between: [face, face]}: ${JSON.stringify(sel)}`;
-  const [a, b] = sel.between.map(f => resolveFace(nodes, bodies, f));
+  const between = sel.between;
+  const [a, b] = between.map(f => resolveFace(nodes, bodies, f));
   if (typeof a === 'string') return a; if (typeof b === 'string') return b;
   if (a.length !== 1 || b.length !== 1) return 'each face of "between" must be one face';
-  // (A face met twice by one edge's name is written "n1.side0#2": a cylinder's side meets each cap once, A5.5.)
-  const edge = bodies.flatMap(body => body.mesh.edges.flatMap(e => e.names.filter(name => { const p = name.split('|').map(faceOfPart); return p.includes(a[0]) && p.includes(b[0]); })))[0];
-  return edge ? [edge] : `faces ${a[0]} and ${b[0]} share no edge`;
+  // Resolve display identities, not pieces of edge names: #k may be a tooth
+  // identity rather than an occurrence suffix, and one display edge may own
+  // several native names. Preserve the selector's body restriction here.
+  const faces = [a[0], b[0]].map((name, side) => bodies.flatMap((body, index) => {
+    const selector = between[side];
+    if (isObj(selector) && typeof selector.on === 'string' && selector.on !== body.key) return [];
+    return body.mesh.faces.filter(face => matchesFaceName(face, name)).map(face => ({ body: index, face: face.index }));
+  }));
+  for (let i = 0; i < faces.length; i++) {
+    if (!faces[i].length) return `no face named "${[a[0], b[0]][i]}"`;
+    if (faces[i].length > 1) return `face "${[a[0], b[0]][i]}" fits ${faces[i].length} display faces; name one or narrow it ("on": a body)`;
+  }
+  const [left, right] = faces.map(hits => hits[0]);
+  if (left.body !== right.body) return `faces ${a[0]} and ${b[0]} share no edge (different bodies)`;
+  if (left.face === right.face) return 'each face of "between" must be a different face';
+  const edges = bodies[left.body].mesh.edges.filter(edge => edge.faces.includes(left.face) && edge.faces.includes(right.face));
+  if (!edges.length) return `faces ${a[0]} and ${b[0]} share no edge`;
+  if (edges.length > 1) return `faces ${a[0]} and ${b[0]} fit ${edges.length} edges: ${edges.flatMap(edge => edge.names).sort().join(', ')}; name one edge explicitly`;
+  const names = [...new Set(edges[0].names)].sort();
+  // Downstream resolveNames is name-based: do not emit a name that could
+  // select an identically named edge on another body or display entity.
+  const uniqueNames = names.filter(name => !bodies.some((body, index) => body.mesh.edges.some(edge => edge.names.includes(name) && (index !== left.body || edge.index !== edges[0].index))));
+  if (!uniqueNames.length)
+    return `the shared edge of ${a[0]} and ${b[0]} has no unambiguous name`;
+  return [uniqueNames[0]];
 }
 
 /** Selectors (and names) to names, with what each selector resolved to; `error` when one resolves to none. */
