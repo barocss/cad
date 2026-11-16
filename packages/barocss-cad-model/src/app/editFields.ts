@@ -731,6 +731,16 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
         } });
       break;
     case 'sew': number('tol', SEW_TOLERANCE_LABEL, 'mm', n => (n as typeof node).tolerance ?? 0, (n, v) => { const next = { ...(n as typeof node) }; sewTolerance(next.surfaces, v); if (v > 0) next.tolerance = v; else delete next.tolerance; return next; }); break;
+    case 'full-round':
+      out.push({ kind: 'choice', key: 'along', label: 'Along',
+        options: [{ value: 'auto', label: 'Longer side' }, { value: 'x', label: 'X' }, { value: 'y', label: 'Y' }],
+        get: ns => self<typeof node>(ns).along ?? 'auto', set: (ns, value) => {
+          if (value !== 'auto' && value !== 'x' && value !== 'y') return [...ns];
+          const next = { ...self<typeof node>(ns) };
+          if (value === 'auto') delete next.along; else next.along = value;
+          return replace(ns, i, next);
+        } });
+      break;
     case 'draft':
       number('deg', 'Angle', '°', n => (n as typeof node).angle, (n, v) => ({ ...(n as typeof node), angle: v }));
       if (node.neutral !== undefined) number('neutral', 'Neutral coordinate', 'mm', n => num((n as typeof node).neutral!), (n, v) => ({ ...(n as typeof node), neutral: v }));
