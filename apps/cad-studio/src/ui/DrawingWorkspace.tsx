@@ -1,3 +1,4 @@
+import { editDetailCrop } from './drawing/detailCropEdit';
 import { withDatumTargetAreaDraft } from './drawing/datumTargetAreaDraft';
 import { drawingFixControlLoss } from '@barocss/cad-model/drawing/fixProtection';
 // The Drawing workspace: the part's standard views on a sheet, dimensioned by clicking in a view.
@@ -149,6 +150,20 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   };
   /** An edit of the sheet shown. */
   const onChange = (next: DrawingSettings) => commitWhole(mergeSheet(wholeSettings, current, next));
+  const cropReady = sourceCurrent && projectionCurrent && !busy && !!scopeRead.scope;
+  const cropOwner = useMemo(() => ({}), [wholeSettings, sourceDoc, model, modelInput, workerSession, current, cropReady]);
+  const liveCrop = useRef({ owner: cropOwner, settings: wholeSettings, ready: cropReady, model });
+  liveCrop.current = { owner: cropOwner, settings: wholeSettings, ready: cropReady, model };
+  const crop = {
+    owner: cropOwner, ready: cropReady, annotated: annotatedDetailLetters(wholeSettings),
+    apply(detail: NonNullable<DrawingSettings['details']>[number], fields: Parameters<typeof editDetailCrop>[2], owner: object) {
+      const live = liveCrop.current;
+      const result = editDetailCrop(live.settings, detail, fields, owner, live.owner, live.ready && currentModel.current === live.model);
+      if ('error' in result) return result.error;
+      if (result.settings === live.settings) return null;
+      return commitWhole(result.settings) ? null : 'The drawing could not be changed. Reopen the crop editor.';
+    },
+  };
   const [dxfSection, setDxfSection] = useState<string | null>(null);
   const [tool, setTool] = useState<Tool>('select');
   const [shortcutHelp, setShortcutHelp] = useState(false);
@@ -1221,7 +1236,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
         <SheetsMenu whole={wholeSettings} current={current} onChange={(next, then) => { commitWhole(next); if (then !== undefined) selectSheet(then); }} />
 
-        <DetailsList settings={settings} sheet={sheet} layout={layout} onChange={onChange} onRemove={removeDetail} />
+        <DetailsList crop={crop} settings={settings} sheet={sheet} layout={layout} onChange={onChange} onRemove={removeDetail} />
 
         <BreaksList settings={settings} views={views} onChange={onChange} onRefused={why => onToast({ title: 'Break unchanged', hint: why, detail: '' })} />
 
