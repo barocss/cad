@@ -1,3 +1,4 @@
+import { SHARED_HOLE_LAYOUT_EDIT, sharedHoleLayoutCommand, sharedHoleLayoutPair } from './app/sharedHoleLayout';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { browserRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal';
 import { useBodyBrowserReveal } from './app/useBodyBrowserReveal';
@@ -1559,6 +1560,9 @@ export function App() {
     // (R1d: the command as it is now, its values and preview state — the App may not have rendered since they changed.)
     const active = activeStore.get();
     if (!active?.cmd.build || !canChangeDocument()) return;
+    if (active.cmd.id === SHARED_HOLE_LAYOUT_EDIT && !active.cmd.available(active.ctx).ok) {
+      commandPreview.retire(); applyWhenReady.current = null; again.current = null; setActive(null); setPreviewBodies(null); return;
+    }
     const toFace = isExtrudeToFace(active.cmd.id, active.values) || isOffsetToPlane(active.cmd.id, active.values);
     const region = active.cmd.id === 'extrude' && active.values.region !== undefined && active.values.region !== 'all';
     const replaceAxis = active.cmd.id === REVOLVE_AXIS_EDIT;
@@ -1581,6 +1585,9 @@ export function App() {
     // The preview is what the part becomes: shown as the part at once (no step back to the old bodies
     // while the committed document evaluates).
     const next = active.cmd.build(active.ctx, active.values);
+    if (active.cmd.id === SHARED_HOLE_LAYOUT_EDIT && next === doc) {
+      applyWhenReady.current = null; again.current = null; setActive(null); setPreviewBodies(null); return;
+    }
     if (active.cmd === LINKED_INSET_EXTRUDE) {
       if (active.ctx.doc !== doc || markerNow.current !== null || !fresh || busy || !massReady) {
         setToast({ title: 'Linked inset not created', hint: 'Show the latest History and wait for the current sketch.', detail: '' });
@@ -2775,7 +2782,7 @@ export function App() {
       if (e.key === 'Escape') { footprintRequest.current++; if (palette) setPalette(false); else if (sketch && !active && (sketch.picked?.length || sketch.editDim)) setSketch(s => s && { ...s, picked: [], editDim: null }); else if (active || sketch) cancel(); else if (assembly.draft) assembly.cancel(); else if (measure) setMeasure(null); else if (cancelSectionFacePick(e.repeat)) e.preventDefault(); else { setSelection(emptySel); setInstanceSel([]); setDirectSel([]); } return; }
       if (e.key === 'Enter' && e.target instanceof HTMLButtonElement && e.target.closest('[data-workspace-mode]')) return;
       // Enter applies; Shift-Enter applies and starts the same command again (another hole, another shape).
-      if (e.key === 'Enter' && !palette && !(e.target instanceof HTMLInputElement && e.target.type === 'file')) { if (sketch) { e.preventDefault(); finishSketch(); } else if (active) { e.preventDefault(); if (e.shiftKey && active.cmd.id !== 'edit' && active.cmd.id !== EXTRUDE_END_FACE_EDIT && active.cmd.id !== REVOLVE_AXIS_EDIT && active.cmd.id !== OFFSET_FACE_EDIT && active.cmd.id !== DRAFT_EDIT) again.current = active.cmd; apply(); } return; }
+      if (e.key === 'Enter' && !palette && !(e.target instanceof HTMLInputElement && e.target.type === 'file')) { if (sketch) { e.preventDefault(); finishSketch(); } else if (active) { e.preventDefault(); if (e.shiftKey && active.cmd.id !== 'edit' && active.cmd.id !== EXTRUDE_END_FACE_EDIT && active.cmd.id !== REVOLVE_AXIS_EDIT && active.cmd.id !== OFFSET_FACE_EDIT && active.cmd.id !== DRAFT_EDIT && active.cmd.id !== SHARED_HOLE_LAYOUT_EDIT) again.current = active.cmd; apply(); } return; }
       // A sketch tool key still works from a number box (letters are no numbers): it leaves the box.
       const numberBox = e.target instanceof HTMLInputElement && e.target.type === 'number' && !e.target.classList.contains('dim-edit');
       if (palette || (typing && !(sketch && numberBox && !e.metaKey && !e.ctrlKey && !e.altKey && /^[a-z]$/i.test(e.key)))) return;
@@ -3565,6 +3572,16 @@ export function App() {
             setEditNode(null);
             setActive({ cmd, ctx, values: cmd.defaults?.(ctx) ?? {}, preview: 'busy' });
           } : undefined}
+          onEditSharedHoleLayout={sharedHoleLayoutPair(doc.nodes, editNode) ? () => {
+            if (docNow.current !== doc || !ownsEvaluatedSource() || markerNow.current !== null || shownVariant.current || !fresh || busy || nodeEditorDraft.current || !canChangeDocument()) return;
+            const pair = sharedHoleLayoutPair(doc.nodes, editNode);
+            if (!pair) return;
+            const cmd = sharedHoleLayoutCommand(doc, pair, () => docNow.current === doc && markerNow.current === null && !shownVariant.current
+              && evaluatedRef.current === evaluated && workerSessionNow.current === workerSession);
+            if (!cmd.available(ctx).ok) return;
+            discardFeatureDraft(); setEditNode(null);
+            setActive({ cmd, ctx, values: cmd.defaults?.(ctx) ?? {}, preview: 'busy' });
+          } : undefined}
           onEditOffset={canEditSavedOffsetFace(commandDoc, editNode) ? () => {
             if (!ownsEvaluatedSource() || markerNow.current !== null || shownVariant.current || !fresh || busy || !canChangeDocument()) return;
             const cmd = editSavedOffsetFaceCommand(commandDoc, editNode);
@@ -3663,6 +3680,7 @@ export function App() {
       || owner.cmd.id === SWEEP_CURVE || current.cmd.id === SWEEP_CURVE
       || owner.cmd.id === OFFSET_FACE_EDIT || current.cmd.id === OFFSET_FACE_EDIT
       || owner.cmd.id === DRAFT_EDIT || current.cmd.id === DRAFT_EDIT
+      || owner.cmd.id === SHARED_HOLE_LAYOUT_EDIT || current.cmd.id === SHARED_HOLE_LAYOUT_EDIT
       || isExtrudeToFace(owner.cmd.id, owner.values) || isExtrudeToFace(current.cmd.id, current.values)
       || isOffsetToPlane(owner.cmd.id, owner.values) || isOffsetToPlane(current.cmd.id, current.values)
       || (current.cmd.id === 'extrude' && owner.values.region !== current.values.region))) return;

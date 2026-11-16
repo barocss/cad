@@ -1,3 +1,4 @@
+import { sharedHoleLayoutPair } from '../app/sharedHoleLayout';
 import { extrudeDraftFailure, extrudeDraftDependentFilletFailure } from '../app/extrudeDraftFailure';
 import { varyingFilletFailure } from '../app/varyingFilletFailure';
 import { historyFilletInteriorProblems, type FilletInteriorKey } from '../app/filletInteriorInput';
@@ -29,7 +30,7 @@ function invalidInteger(value: number, range: { min: number; max: number }): boo
   return !Number.isInteger(value) || value < range.min || value > range.max;
 }
 
-export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRelinkInset, insetRelinkProblem, onDetachInset, insetSourceWidth, onDelete, readFaceEndDistance, onPickEndFace, onReplaceAxis, onEditOffset, onEditDraft, readAlignTargets, alignPreview, edgeReplacement, parameters, onRefuse, bearingAssembly, doc, onDraft, pending = false, pendingLabel = 'Checking the current bearing and housing…' }: { nodes: ModelNode[]; index: number; onApply(nodes: ModelNode[], ownsDraft: () => boolean, sourceWidth?: number): void | Promise<FeatureFailure | undefined>; onClose(): void; onEditSketch?(): void; onRelinkInset?: { start(opener: HTMLButtonElement): void; cancel(): void; reviewing: boolean }; insetRelinkProblem?: string; onDetachInset?(): void; insetSourceWidth?: number; onDelete?(opener: HTMLElement): void; readFaceEndDistance?(): Promise<FaceEndDistanceReply>; onPickEndFace?(): void; onReplaceAxis?(): void; onEditOffset?(): void; onEditDraft?(): void; readAlignTargets?(): Promise<AlignTargetOption[]>; alignPreview?: ReturnType<typeof useAlignHistoryPreview>; edgeReplacement?: { start(): void; cancel(): void; apply(): void; draft: { name: string | null; pending?: boolean } | null }; parameters: Record<string, number>; onRefuse(message: string): void; bearingAssembly?: BearingAssemblyInput; doc?: StudioDoc; onDraft?(owner: object | null): void; pending?: boolean; pendingLabel?: string }) {
+export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRelinkInset, insetRelinkProblem, onDetachInset, insetSourceWidth, onDelete, readFaceEndDistance, onPickEndFace, onReplaceAxis, onEditOffset, onEditDraft, onEditSharedHoleLayout, readAlignTargets, alignPreview, edgeReplacement, parameters, onRefuse, bearingAssembly, doc, onDraft, pending = false, pendingLabel = 'Checking the current bearing and housing…' }: { nodes: ModelNode[]; index: number; onApply(nodes: ModelNode[], ownsDraft: () => boolean, sourceWidth?: number): void | Promise<FeatureFailure | undefined>; onClose(): void; onEditSketch?(): void; onRelinkInset?: { start(opener: HTMLButtonElement): void; cancel(): void; reviewing: boolean }; insetRelinkProblem?: string; onDetachInset?(): void; insetSourceWidth?: number; onDelete?(opener: HTMLElement): void; readFaceEndDistance?(): Promise<FaceEndDistanceReply>; onPickEndFace?(): void; onReplaceAxis?(): void; onEditOffset?(): void; onEditDraft?(): void; onEditSharedHoleLayout?(): void; readAlignTargets?(): Promise<AlignTargetOption[]>; alignPreview?: ReturnType<typeof useAlignHistoryPreview>; edgeReplacement?: { start(): void; cancel(): void; apply(): void; draft: { name: string | null; pending?: boolean } | null }; parameters: Record<string, number>; onRefuse(message: string): void; bearingAssembly?: BearingAssemblyInput; doc?: StudioDoc; onDraft?(owner: object | null): void; pending?: boolean; pendingLabel?: string }) {
   // The draft is the whole node list: a sketch dimension changes the sketch the feature is made from.
   const [draft, setDraft] = useState<ModelNode[]>(nodes);
   // What is typed in a number box until it reads as a number (so a box can be cleared and retyped).
@@ -72,6 +73,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
     setModeProblem(null);
   };
   const original = nodes[index], originalLoft = original?.kind === 'loft' ? original : undefined;
+  const sharedHolePair = onEditSharedHoleLayout ? sharedHoleLayoutPair(nodes, index) : null;
   const fields = editFields(draft, index, parameters, bearingAssembly, { doc, originalLoft }).filter(f => f.kind !== 'number' || !Number.isNaN(f.get(draft)));
   const changeNumber = (field: Extract<(typeof fields)[number], { kind: 'number' }>, text: string) => {
     retireEvaluation();
@@ -211,6 +213,13 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
         ? `Linked edge ${node.axisRef.edge}` : node.dir ? 'Fixed edge' : `Sketch ${node.axis.toUpperCase()}`}</span></div>}
       {node?.kind === 'loft' && node.sections.length === 2 && !node.guide && <div className="field"><span>Mode</span><span>{node.guides ? 'Two guides' : 'Ruled · 2 sections'}</span></div>}
       {node?.kind === 'sweep-curve' && <SweepHistoryInputs sweep={node} profile={draft[node.sketch]} parameters={parameters} />}
+      {sharedHolePair && <div role="group" aria-label="Shared hole layout">
+        <div className="small">{sharedHolePair.first.id} · Ø{Number(sharedHolePair.first.radius) * 2} through + {sharedHolePair.second.id} · Ø{Number(sharedHolePair.second.radius) * 2}, depth {String(sharedHolePair.second.depth)} mm.</div>
+        <div className="small">Centre [{sharedHolePair.first.center.map(String).join(', ')}] · {sharedHolePair.first.pattern ? <>Copies {sharedHolePair.first.pattern.count} · {'step' in sharedHolePair.first.pattern ? 'Step [' + sharedHolePair.first.pattern.step.join(', ') + ']' : 'Circle centre [' + sharedHolePair.first.pattern.about.join(', ') + ']'}</> : 'One hole'}</div>
+        <div className="small">These separate features currently share a centre and copy layout. Creation provenance is unavailable. This is an explicit one-time edit of both, not a persistent link; diameters and depths stay independent.</div>
+        <button type="button" className="ghost" disabled={ordinaryLocked || changed || hasInvalidNumber || Object.keys(typed).length > 0 || !sameDraftScope}
+          onClick={onEditSharedHoleLayout}>Edit shared layout…</button>
+      </div>}
       {node?.kind === 'hole' && <HoleHistoryInputs hole={original?.kind === 'hole' ? original : node} doc={doc} index={index}
         drillDiameter={typed.dia ?? (diameterField?.kind === 'number' ? diameterField.get(draft) : undefined)} />}
       {node?.kind === 'extrude' && node.cutDepth === 'through' && <div className="field"><span>Depth</span><span>Through all</span></div>}
