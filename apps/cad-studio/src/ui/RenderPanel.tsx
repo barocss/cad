@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { compileGpu, materialShader } from '@barocss/gpu';
 import { APPEARANCES, MATERIAL_TEMPLATE, SCENE_TEMPLATE, anglesOf, directionFrom, validateRenderShadowLights, type Appearance, type Hex, type RenderLight, type RenderPost, type RenderSettings, FINISH_KINDS, type AppearanceFinish, type FinishKind, type StudioKind } from '@barocss/cad-model/engine/render';
+import { pointShadowConflict, shadowRadiusHint } from './renderShadowHint';
 import { Icon } from './atoms';
 import type { RenderPathTraceSession } from '../viewport/renderer';
 import { CONTROL, FIELD, NUM, SLIDER, TICK } from './panelStyles';
@@ -112,11 +113,12 @@ export function RenderPanel({ render, note, lookDisabled, selectedKeys, onChange
     } catch (error) { if (traceEpoch.current === epoch) setTraceError(error instanceof Error ? error.message : String(error)); }
   };
   const [tab, setTab] = useState<'look' | 'lights' | 'scene' | 'source'>('look');
+  const [shadowErrors, setShadowErrors] = useState<Record<number, string>>({});
   const [lightError, setLightError] = useState<string | null>(null);
   const [radiusDrafts, setRadiusDrafts] = useState<Record<number, string>>({});
   const [radiusErrors, setRadiusErrors] = useState<Record<number, string>>({});
   // Light indices can change on removal or Undo. Do not carry a draft onto another light.
-  useEffect(() => { setRadiusDrafts({}); setRadiusErrors({}); setLightError(null); }, [render.lights]);
+  useEffect(() => { setRadiusDrafts({}); setRadiusErrors({}); setShadowErrors({}); setLightError(null); }, [render.lights]);
   const current: Appearance = selectedKeys.length ? render.appearances[selectedKeys[0]] ?? render.defaultAppearance : render.defaultAppearance;
   const setLook = (patch: Partial<Appearance>) => {
     if (lookDisabled) return;
@@ -129,11 +131,14 @@ export function RenderPanel({ render, note, lookDisabled, selectedKeys, onChange
     for (const k of selectedKeys) delete appearances[k];
     onChange({ ...render, appearances });
   };
-  const changeLights = (lights: readonly RenderLight[], radiusIndex?: number) => {
-    try { changeRenderLights(render, lights, onChange); setLightError(null); setRadiusDrafts({}); setRadiusErrors({}); }
+  const changeLights = (lights: readonly RenderLight[], radiusIndex?: number, shadowIndex?: number) => {
+    try { changeRenderLights(render, lights, onChange); setShadowErrors({}); setLightError(null); setRadiusDrafts({}); setRadiusErrors({}); }
     catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (radiusIndex === undefined) setLightError(message);
+      if (shadowIndex !== undefined) {
+        const conflict = lights[shadowIndex]?.castShadow ? pointShadowConflict(render.lights, shadowIndex) : null;
+        setShadowErrors(errors => ({ ...errors, [shadowIndex]: conflict ?? message })); setLightError(null);
+      } else if (radiusIndex === undefined) setLightError(message);
       else setRadiusErrors(errors => ({ ...errors, [radiusIndex]: message }));
     }
   };
@@ -270,7 +275,7 @@ export function RenderPanel({ render, note, lookDisabled, selectedKeys, onChange
       </fieldset>}
 
       {tab === 'lights' && <div className="render-section [&>[data-slot=button]]:self-start">
-        <div className="muted small">Shadow limits: first 4 sun lights, first 4 spot lights, and one of the first 8 point lights.</div>
+        <details className="muted small"><summary>Shadow limits</summary>First 4 sun lights, first 4 spot lights, and one of the first 8 point lights.</details>
         {lightError && <div className="diag sticky top-0 z-10 bg-card" role="alert">{lightError}</div>}
         {render.lights.map((l, i) => {
           const [az, el] = anglesOf(l.kind === 'point' ? [0, 0, -1] : l.direction);
@@ -288,7 +293,10 @@ export function RenderPanel({ render, note, lookDisabled, selectedKeys, onChange
             {l.kind !== 'directional' && <>{slider('Range', l.range, v => setLight(i, { ...l, range: v }), 0, 1000, 5)}<div className="muted small">{l.range ? `Fades out over ${l.range} mm` : 'Range 0: no fall-off with distance'}</div></>}
             {slider('Intensity', l.intensity, v => setLight(i, { ...l, intensity: v }), 0, 5)}
             {color('Colour', l.color, v => setLight(i, { ...l, color: v }))}
-            {check('Shadow', !!l.castShadow, v => setLight(i, { ...l, castShadow: v }), `Light ${i + 1} shadow`)}
+            <label className={FIELD}><span>Shadow</span><input type="checkbox" className={TICK} aria-label={`Light ${i + 1} shadow`} checked={!!l.castShadow}
+              aria-invalid={!!shadowErrors[i]} aria-describedby={shadowErrors[i] ? `light-shadow-error-${i}` : undefined}
+              onChange={e => changeLights(render.lights.map((light, k) => k === i ? { ...light, castShadow: e.target.checked } : light), undefined, i)} /></label>
+            {shadowErrors[i] && <div className="diag" role="alert" id={`light-shadow-error-${i}`}>{shadowErrors[i]}</div>}
             {l.kind !== 'directional' && <>
               <label className={FIELD}><span>Shadow radius</span><span className={NUM}><Input type="number" min={0} step="any" aria-label={`Light ${i + 1} shadow radius mm`}
                 aria-invalid={!!radiusErrors[i]} aria-describedby={`light-shadow-radius-${i}${radiusErrors[i] ? ` light-shadow-radius-error-${i}` : ''}`} placeholder="Default (0 mm)" value={radiusDrafts[i] ?? (l.shadowRadius === undefined ? '' : String(l.shadowRadius))}
@@ -304,7 +312,7 @@ export function RenderPanel({ render, note, lookDisabled, selectedKeys, onChange
                     setRadiusErrors(errors => { const next = { ...errors }; delete next[i]; return next; });
                   }
                 }} /><em>mm</em></span></label>
-              <div className="muted small" id={`light-shadow-radius-${i}`}>{l.castShadow ? '0 mm uses the default edge. A larger radius softens the shadow.' : 'Radius is kept while shadow is off.'}</div>
+              <div className="muted small" id={`light-shadow-radius-${i}`}>{shadowRadiusHint(l)}</div>
               {radiusErrors[i] && <div className="diag" role="alert" id={`light-shadow-radius-error-${i}`}>{radiusErrors[i]}</div>}
             </>}
           </div>;
