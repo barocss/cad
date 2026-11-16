@@ -66,3 +66,12 @@ test('Shaft parts (R12c.3b) in the chat: key, keyway, retaining-ring and pin are
   const evaluate = async (d: StudioDoc) => evaluatePart(d, 1), state: ChatState = { doc: emptyDoc(), bodies: [] };
   for (const c of ['key', 'keyway', 'retaining-ring', 'pin']) { const d = await runTool(state, 'describe', { command: c }, evaluate); assert.ok(!d.isError, `${c}: ${d.content}`); }
 });
+
+test('An open hub keyway cannot report an imaginary floor clearance for a key', () => {
+  let doc = cmd('shaft').build!(blank, cmd('shaft').defaults!(blank));
+  const tube = cmd('tube'); doc = tube.build!({ ...blank, doc }, { ...tube.defaults!(blank), r: 12, ri: 10, h: 22, x: 0, y: 0, z: 4 });
+  doc = run(doc, 'keyway', { face: `n${doc.nodes.length - 1}.hole0.side0` }, { b: 6, t2: 3.4 });
+  doc = run(doc, 'key', { bodies: [0] }, { h: 6 });
+  const r = evaluateDoc(doc, 1); assert.equal(r.ok, false);
+  if (!r.ok) assert.match(r.error.detail, /open slot without a floor; a floor-clearance fit cannot be validated/);
+});

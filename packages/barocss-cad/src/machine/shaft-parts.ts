@@ -40,7 +40,7 @@ const mm = (x: number) => +x.toFixed(6);
 /** The shaft as placed: its report and the map from its own frame (axis +Z) into the part. */
 export interface PlacedShaft { readonly report: ShaftReport; readonly place: BrepAffine }
 /** A hub keyway as cut: its sizes, the bore's axis and the keyway's direction from it. */
-export interface KeywayReport { readonly face: string; readonly width: number; readonly depth: number; readonly boreRadius: number; readonly floorRadius: number; readonly axisPoint: Point; readonly axis: Point; readonly direction: Point; readonly angle: number; readonly from: number; readonly to: number }
+export interface KeywayReport { readonly face: string; readonly width: number; readonly depth: number; readonly boreRadius: number; readonly floorRadius: number; readonly openSlot?: boolean; readonly axisPoint: Point; readonly axis: Point; readonly direction: Point; readonly angle: number; readonly from: number; readonly to: number }
 export interface KeyFitClasses { readonly tables: readonly FitTable[]; readonly key: string; readonly seat?: string; readonly hub?: string }
 export interface KeyReport {
   readonly keyseat: number; readonly width: number; readonly height: number; readonly length: number; readonly ends: 'round' | 'square';
@@ -87,7 +87,13 @@ export function keywayCut(target: Brep, spec: { readonly face: string; readonly 
   const inner = Math.sqrt(r * r - b * b / 4) - Math.min(0.5, r / 4), origin = add(cyl.c as Point, add(scl(u, inner), scl(a, lo - 1)));
   const tool = prism(`${id}__kw`, { profile: 'rectangle', min: [-b / 2, 0], max: [b / 2, hi - lo + 2], plane: { origin, normal: u, xAxis: v } }, r + t2 - inner);
   const brep = booleanAnalytic(target, named(tool, `${id}.keyway`), 'difference');
-  return { brep, report: { face: spec.face, width: b, depth: t2, boreRadius: r, floorRadius: r + t2, axisPoint: [...cyl.c] as Point, axis: a, direction: u, angle: deg, from: lo, to: hi } };
+  // A through-wall slot has no surviving planar floor at the requested tool depth.
+  const hasFloor = brep.faces.some(f => {
+    if (!f.name?.startsWith(`${id}.keyway`)) return false;
+    const g = faceGeometry(f);
+    return g.kind === 'plane' && dot(g.n, u) < -1 + 1e-8 && Math.abs(dot(sub(g.o, cyl.c as Point), u) - (r + t2)) < 1e-6;
+  });
+  return { brep, report: { face: spec.face, width: b, depth: t2, ...(!hasFloor ? { openSlot: true } : {}), boreRadius: r, floorRadius: r + t2, axisPoint: [...cyl.c] as Point, axis: a, direction: u, angle: deg, from: lo, to: hi } };
 }
 
 /** A parallel key in keyseat `spec.keyseat` of a placed shaft; with a hub keyway, checked against it. */
@@ -122,6 +128,7 @@ export function keySolid(shaft: PlacedShaft, spec: { readonly keyseat: number; r
     const off = sub(k.axisPoint, originW), offAxis = Math.hypot(...sub(off, scl(axisW, dot(off, axisW))));
     if (Math.abs(Math.abs(dot(k.axis, axisW)) - 1) > 1e-9 || offAxis > 1e-6) fail('KEY_FIT', `the hub's bore is not on the shaft's axis (${mm(offAxis)} mm off)`);
     if (dot(k.direction, seatDir) < 1 - 1e-9) fail('KEY_FIT', `the hub's keyway is not over keyseat ${seat.index} (${mm(Math.acos(Math.max(-1, Math.min(1, dot(k.direction, seatDir)))) * 180 / Math.PI)}° round from it)`);
+    if (k.openSlot) fail('KEY_FIT', 'the hub keyway is an open slot without a floor; a floor-clearance fit cannot be validated');
     const top = rf + h, clear = k.floorRadius - top, kplay = k.width - b;
     if (clear <= EPS) fail('KEY_FIT', `the key's top at ${mm(top)} mm from the axis reaches the keyway's floor at ${mm(k.floorRadius)} (t1 + t2 − h = ${mm(seat.depth + k.depth - h)} with the bore at the shaft's size)`);
     if (kplay < -EPS) fail('KEY_FIT', `the key is ${mm(b)} wide in a ${mm(k.width)} mm keyway: widen the keyway (its fit on the key's width goes in the classes)`);

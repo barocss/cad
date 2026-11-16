@@ -1,0 +1,9 @@
+# Keyway open-slot reporting (#32 partial)
+
+The keyway report previously treated the requested cutter depth as an existing floor even after cutting through the outer wall. Detect a surviving generated planar floor from the Boolean result (cut face ownership, normal opposite cut direction and intended plane). When none survives, transient `KeywayReport.openSlot` is true and Studio says “open slot, no floor (requested depth …)” instead of displaying an imaginary floor radius. `floorRadius` remains the requested cutter-end radius for compatibility; consumers must check `openSlot` before using it as a physical floor. Key fit refuses floor-clearance validation for an open hub slot rather than publishing a fictional clearance. No document schema or cut geometry changed.
+
+Verification: new model test 1/1 checks Ø40 and Ø24 outer hubs with Ø20 bore at 0°/90°; existing shaft-parts plus open-hub fit refusal 4/4 PASS. Focused lint and Studio TypeScript/Vite build PASS. Chrome WebGPU browser at 1024/1440 passed changing depth 1→3.4 and angle 0→90 on Ø24/20×22 tube: original floor 11, applied open-slot message, reduced volume, retained parent/face, Undo restoring floor note, Redo, Save/Open and angle reset. Screenshot of selected open slot and visible no-floor note reviewed. Results `/tmp/cad-keyway-open-slot-r2-20261116`; build `/tmp/cad-keyway-open-slot-build.log`.
+
+Initial browser assertion did not select the body, so Generator notes were not displayed; fixed the harness selection, final frozen run passed. No production workaround for that harness failure.
+
+Limitations: detection reports whether any generated floor survives, not its full area coverage on arbitrary stepped hubs. No arbitrary angled/partial-floor certification, WebGL2 or whole-suite claim. #32 remains OPEN for Retaining ring preview framing. #126 protected WIP and held manufacturing/Physics/Rendering scopes untouched.

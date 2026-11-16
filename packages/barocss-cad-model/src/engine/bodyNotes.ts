@@ -334,7 +334,9 @@ export function shaftPartNotes(o: CadPartSnapshot['outputs'][number]): { text: s
     const deviation = (x: number) => `${x > 0 ? '+' : x < 0 ? '−' : ''}${mm(Math.abs(x))}`;
     for (const [where, f] of [['seat', k.seatFit], ['hub\'s keyway', k.hubFit]] as const) if (f) out.push({ text: `Width fit in the ${where}: ${f.hole.class}/${f.shaft.class} at ${mm(k.width)} mm — ${f.kind}, ${deviation(f.clearanceMin)} to ${deviation(f.clearanceMax)} mm clearance${f.estimate ? ' (an estimate)' : ''}`, ...(f.estimate ? { warning: true } : {}) });
   }
-  if (o.keyway) { const w = o.keyway; out.push({ text: `Keyway ${mm(w.width)} wide, ${mm(w.depth)} deep in the Ø${mm(2 * w.boreRadius)} bore (its floor ${mm(w.floorRadius)} from the axis), ${mm(w.to - w.from)} long at ${mm(w.angle)}°` }); }
+  if (o.keyway) { const w = o.keyway; out.push({ text: w.openSlot
+    ? `Keyway ${mm(w.width)} wide in the Ø${mm(2 * w.boreRadius)} bore: open slot, no floor (requested depth ${mm(w.depth)}), ${mm(w.to - w.from)} long at ${mm(w.angle)}°`
+    : `Keyway ${mm(w.width)} wide, ${mm(w.depth)} deep in the Ø${mm(2 * w.boreRadius)} bore (its floor ${mm(w.floorRadius)} from the axis), ${mm(w.to - w.from)} long at ${mm(w.angle)}°` }); }
   if (o.ring) { const r = o.ring; out.push({ text: `Retaining ring ${mm(r.thickness)} thick, Ø${mm(r.innerDiameter)} to Ø${mm(r.outerDiameter)} in groove ${r.groove}: ${mm(r.axialPlay)} axial play` }); if (r.estimate) out.push({ text: 'The ring\'s sizes are an estimate: your ring\'s row gives them', warning: true }); else if (r.source) out.push({ text: `Its groove checked against your ring row (${r.source})` }); }
   if (o.pin) { const p = o.pin; out.push({ text: `Pin Ø${mm(p.diameter)} × ${mm(p.length)} in cross hole ${p.hole} (Ø${mm(p.holeDiameter)}): ${mm(p.clearance)} clearance` }); }
   out.push({ text: 'Sizes are yours (your own rows: none built in); not validated for manufacturing', warning: true });
