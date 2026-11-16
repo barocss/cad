@@ -1,3 +1,4 @@
+import { freeSketchProfile } from './app/freeSketchProfile';
 import { modelWheelZoomAvailable, useWheelZoomPreference } from './viewport/wheelZoomPreference';
 import { filletPickFailure } from './app/filletPickFailure';
 import { createEvaluationEvidence } from './state/evaluationEvidence';
@@ -127,7 +128,7 @@ import { scheduleProjectOpenFit } from './app/projectOpenFit';
 import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
 import { type DisplayMode, type DisplayModeStatus } from './viewport/renderer';
 import { retainedSectionEdges } from './viewport/sectionEdgePick';
-import { currentPocketSketch, toPartDocument } from '@barocss/cad-model/engine/part';
+import { toPartDocument } from '@barocss/cad-model/engine/part';
 import { bindPocketFloor, canBindPocketFloor, type PocketFloorBinding } from '@barocss/cad-model/engine/pocketFloor';
 import { placedDoc, type PartInstance } from '@barocss/cad-model/engine/doc';
 import { placementOf } from '@barocss/cad-model/engine/placement';
@@ -237,7 +238,7 @@ import { sweepLinks } from '@barocss/cad-model/robot/sweep';
 import { sweepTimed } from '@barocss/cad-model/robot/ccd';
 import { Lanes } from './engine/lanes';
 import { useAssembly } from './assembly/useAssembly';
-import { pickedSketches, planeOf, profileRings, unusedSketches } from '@barocss/cad-model/app/profiles';
+import { pickedSketches, planeOf, unusedSketches } from '@barocss/cad-model/app/profiles';
 import { addedHoles, holeGroup, holeRegions, type ToolRegion } from '@barocss/cad-model/app/holeRegion';
 import { threadLines, threadsOf } from '@barocss/cad-model/app/threads';
 import { fastenerSizesOf } from '@barocss/cad-model/engine/fastenerSizeRows';
@@ -287,9 +288,6 @@ import { orderedVertexPlane, planeLabel, planeOfDisplayFace, xyPlane } from '@ba
 import { shapeNode } from '@barocss/cad-model/sketch/loops';
 import { isSettled } from '@barocss/cad-model/sketch/rules';
 import { createDraftHistory, draftHistoryState, outlineHistoryState, restoreDraftHistory } from './sketch/draftHistory';
-
-// A free sketch's outlines at the document's parameter values; none when a parameter it uses is missing.
-const ringsOf = (n: SketchNode, params: StudioDoc['parameters']) => { try { return profileRings(n, params); } catch (e) { if (!isRefusal(e, 'PARAMETER_UNKNOWN') && !(n.profile === 'band' && isRefusal(e, 'VALUE'))) throw e; return []; } }; // (A band that cannot be made shows no outline; the evaluation error says why.)
 
 // Workspaces off the first screen load when first opened (the chat's tools, the drawing and the render panel).
 const ChatPanel = lazy(() => import('./ui/ChatPanel').then(m => ({ default: m.ChatPanel })));
@@ -2061,12 +2059,7 @@ export function App() {
   const retainedProfiles = useMemo(() => new Set(evaluated.nodes.flatMap(node =>
     node.kind === 'region-extrude' ? [node.sketch] : [])), [evaluated.nodes]);
   const profiles = useMemo(() => sketch ? [] : freeSketches.map(i => {
-    const node = evaluated.nodes[i] as SketchNode;
-    let rings: ReturnType<typeof profileRings>;
-    try { rings = ringsOf(node.pocketFloor ? currentPocketSketch(evaluated, i) : node, shownDoc.parameters); }
-    catch (error) { if (!node.pocketFloor) throw error; rings = []; }
-    const outerCount = (node.regions?.length ?? 0) + 1;
-    const canPickRegion = outerCount > 1 && !!node.sideTags?.regions && !node.holes?.length;
+    const { rings, outerCount, canPickRegion } = freeSketchProfile(evaluated, i, shownDoc.parameters);
     const pickedRegions = canPickRegion && selection.profileRegions?.sketch === i ? selection.profileRegions.indices : undefined;
     return { id: i, rings, picked: !!selection.sketches?.includes(i), outerCount, canPickRegion, pickedRegions, retained: retainedProfiles.has(i) };
   }), [freeSketches, evaluated, shownDoc.parameters, selection.sketches, selection.profileRegions, retainedProfiles, sketch]);
