@@ -284,6 +284,16 @@ export function heldByRevision(doc: StudioDoc, id: string): HeldLook[] {
   return p ? (doc.instances ?? []).filter(i => i.part?.id === id).flatMap(i => i.looks ? heldOf(i, p.doc) : []) : [];
 }
 
+/** Current and proposed holds, once per body of one occurrence; current reason wins. */
+export function heldLooksForInstance(doc: StudioDoc, part: string): HeldLook[] {
+  const inst = doc.instances?.find(i => i.id === part);
+  if (!inst) return [];
+  const current = heldLooks(doc).filter(h => h.part === part);
+  const pending = inst.part ? heldByRevision(doc, inst.part.id).filter(h => h.part === part) : [];
+  const seen = new Set<string>();
+  return [...current, ...pending].filter(h => { if (seen.has(h.body)) return false; seen.add(h.body); return true; });
+}
+
 /** A look as the occurrence's override says, for listing: its key, the override, and the held problem if its body is gone. */
 export function instanceLooksListing(doc: StudioDoc, part: string): { body: string; look: InstanceLook; held?: string }[] {
   const inst = (doc.instances ?? []).find(i => i.id === part);

@@ -1,0 +1,7 @@
+# Deduplicate held appearance warnings (#38 partial)
+
+The Instance inspector concatenated current-revision holds and proposed-revision holds. When both revisions lacked the same body, one override was counted and shown twice. `heldLooksForInstance` combines the lists by body key within the selected occurrence, retaining the current reason when both exist. Pending-only holds remain visible. Other occurrences are not merged, and no stored override or revision is changed.
+
+Validation: focused aggregation test 1/1 and existing model instance-looks suite 26/26 PASS. Focused core lint and Studio TypeScript/Vite build PASS. App's previously reported unused `_k` is unrelated and not claimed lint-clean. Chrome WebGPU browser `held-look-summary-browser.mjs` at 1024/1440 PASS: two instances with same missing b3 hidden setting and pending Rev D each show exactly one alert/1 held, switching instances preserves document, Keep Rev C retains both overrides, Undo/Redo and Save/Open preserve state. Pending 1024 screenshot inspected. Results `/tmp/cad-held-look-summary-20261116`; build `/tmp/cad-held-look-build.log`.
+
+#38 remains OPEN: removing held settings while their body is absent and broader revision failure/keyboard flows are not addressed by this patch. No WebGL2 or complete-suite claim. #126 WIP untouched. Parent #44's #36 entry was separately checked only after verifying #36 CLOSED; #38 remains unchecked.

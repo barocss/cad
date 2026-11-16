@@ -220,7 +220,7 @@ import { InstancePanel } from './ui/InstancePanel';
 import { InstanceJointsControls } from './ui/InstanceJoints';
 import { InstanceLooksControls } from './ui/InstanceLooks';
 import { instanceLookRows, useInstanceLooks } from './state/useInstanceLooks';
-import { heldByRevision, heldLooks, resetInstanceLook, setInstanceLook } from '@barocss/cad-model/assembly/looks';
+import { heldLooksForInstance, heldLooks, resetInstanceLook, setInstanceLook } from '@barocss/cad-model/assembly/looks';
 import { setInstanceJoints } from '@barocss/cad-model/assembly/flexible';
 import { InstancePatternControls } from './ui/InstancePattern';
 import { addInstancePattern, deleteInstancePattern, editInstancePattern, expandPatterns, patternDeleteRefusal, skipOccurrence } from '@barocss/cad-model/assembly/patterns';
@@ -3463,7 +3463,7 @@ export function App() {
             onAdd={o => patternEdit(() => addInstancePattern(doc, o), 'Pattern not changed', true)} onEdit={o => patternEdit(() => editInstancePattern(doc, o), 'Pattern not changed', true)}
             onDelete={id => patternEdit(() => deleteInstancePattern(doc, id))} onSkip={() => { patternEdit(() => skipOccurrence(doc, inst.id)); setInstanceSel([]); }} />}
           looks={<InstanceLooksControls rows={instanceLookRows(inst, instanceBodies.get(inst.id), doc)} readOnly={!!inst.pattern}
-            held={[...heldLooks(doc).filter(h => h.part === inst.id), ...(inst.part ? heldByRevision(doc, inst.part.id).filter(h => h.part === inst.id) : [])].map(h => h.problem)}
+            held={heldLooksForInstance(doc, inst.id).map(h => h.problem)}
             onSet={(key, patch) => patternEdit(() => setInstanceLook(doc, { part: inst.id, body: key, patch }), 'Look not changed')}
             onReset={(key, field) => patternEdit(() => resetInstanceLook(doc, { part: inst.id, body: key, field }), 'Look not changed')} />}
           joints={inst.doc.instances?.length ? <InstanceJointsControls inst={inst}
