@@ -43,6 +43,10 @@ function StackTerms({ dimensions, settings }: { dimensions: readonly Resolved[] 
     setTerms(current => current.map(term => term.key === key ? { ...term, ...update } : term));
   };
 
+  if (dimensions && choices.length < 2) return <div role="status" className="py-1 text-[11px] text-muted-foreground">
+    {choices.length === 0 ? 'Add two linear dimensions' : 'Add one more linear dimension'} with tolerances on the same view axis.
+  </div>;
+
   return <div className="space-y-1 py-1 text-[11px]">
     <div className="text-muted-foreground">Independent dimensions on one view axis · Choices: {preset.units}{preset.dual ? ` [${preset.units === 'mm' ? 'inch' : 'mm'}]` : ''} · Results: mm</div>
     {terms.map((term, index) => {

@@ -121,6 +121,28 @@ await f.run(async () => {
   f.phase = 'Open the real assembly drawing and calculate a three-term clearance';
   await f.newPage();
   await f.page.setViewportSize({ width: Number(process.argv[3] ?? 1440), height: 900 });
+  for (const count of [0, 1, 2]) {
+    const insufficient = structuredClone(source);
+    insufficient.drawing.title = `Insufficient stack ${count}`;
+    insufficient.drawing.dimensions = insufficient.drawing.dimensions.slice(0, count);
+    await openFixture(insufficient, `stack-${count}.bcad`);
+    await mode('Drawing');
+    await f.page.waitForFunction(n => window.__studioDrawing?.()?.dimensions.length === n, count);
+    await stack().locator('summary').click();
+    if (count === 2) {
+      await dimension(1).selectOption('opening');await dimension(2).selectOption('insert');
+      await f.page.waitForFunction(() => document.querySelector('[data-stack-value="minimum"]')?.textContent === '29.85 mm');
+      assert.equal(await stack().getByText(/Add (two|one more) linear dimension/).count(), 0);
+      await mode('Model');continue;
+    }
+    const hint = count ? 'Add one more linear dimension with tolerances on the same view axis.' : 'Add two linear dimensions with tolerances on the same view axis.';
+    await stack().getByText(hint, { exact: true }).waitFor();
+    assert.equal(await stack().getByRole('combobox').count(), 0);
+    assert.equal(await button('Add term', stack()).count(), 0);
+    await stack().locator('summary').click();
+    assert.equal(await stack().getByText(hint, { exact: true }).isVisible(), false);
+    await mode('Model');
+  }
   await openFixture(source, 'stack-assembly.bcad');
   await openStack();
   const stock = await f.doc();
