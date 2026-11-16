@@ -159,7 +159,7 @@ export function VersionsPanel({ project, doc, onMakeVersion, onOpen, onCompare, 
     {linkedCount > 0 && <div className={ROW}><span className="text-muted-foreground">{linkedCount} placed part{linkedCount === 1 ? '' : 's'} linked to project files</span>
       <Button variant="ghost" size="xs" aria-label="Check placed parts" onClick={() => void project.checkLinked(doc)}>Check</Button></div>}
     {view.offered && <div className="mt-1 rounded-md border px-2 py-1.5 text-[11px]" role="status" aria-label="Autosaved work">
-      Work on {view.part} since its last save was kept.{' '}
+      A recovery copy of {view.part} differs from the saved file. It may be older or from another window. Restore replaces the current document; the saved file stays unchanged until you Save.{' '}
       <Button variant="ghost" size="xs" aria-label="Restore autosaved work" onClick={async () => { const d = await project.settleOffered(true); if (d) onOpen(d); }}>Restore</Button>
       <Button variant="ghost" size="xs" aria-label="Discard autosaved work" onClick={() => void project.settleOffered(false)}>Discard</Button>
     </div>}
