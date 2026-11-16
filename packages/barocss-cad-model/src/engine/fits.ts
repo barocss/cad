@@ -15,7 +15,12 @@ type Output = { readonly id: string; readonly brep: Brep };
 /** Tables added (each checked; one with an id held already replaces it) and removed by id. */
 export function editFitTables(doc: StudioDoc, add: readonly unknown[], remove: readonly string[] = []): { doc: StudioDoc } | { error: string } {
   const r = editRows<FitTable>(doc.fits?.tables ?? [], add, remove, { problem: t => { const p = fitTableProblem(t); return p ? `[FIT_TABLE] ${p}` : null; }, noun: 'fit table', list: 'tables' });
-  return 'error' in r ? r : { doc: { ...doc, fits: { ...(doc.fits ?? { version: 1 }), version: 1, tables: r.rows } } };
+  if ('error' in r) return r;
+  // Lookup uses the first matching table. Replacing an existing id must not silently
+  // move it behind an overlapping table and change the effective manufacturing limits.
+  const order = new Map((doc.fits?.tables ?? []).filter(t => !remove.includes(t.id)).map((t, i) => [t.id, i]));
+  const tables = [...r.rows].sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity));
+  return { doc: { ...doc, fits: { ...(doc.fits ?? { version: 1 }), version: 1, tables } } };
 }
 /** A face's class set (or cleared with null); its pairs go with it when cleared. */
 export function setFaceClass(doc: StudioDoc, face: string, cls: string | null): StudioDoc {

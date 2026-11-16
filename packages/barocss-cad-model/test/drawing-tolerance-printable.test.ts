@@ -104,3 +104,12 @@ test('an explicit point tolerance and a fit share their final nominal precision 
     else { assert.ok(marks.some(m => m.text === 'Ø1.18110 H7 (limits not printable)')); assert.deepEqual(marks.slice(-2).map(m => m.text), ['-.18110', '-.18110']); }
   }
 });
+
+test('issue 35: diameter 12.7 with symmetric 0.254 remains equal in mm and inch',()=>{
+ for(const unit of ['mm','inch'] as const){
+  const pair=deviationPair(0.254,-0.254,presetFor({units:unit}),unit,12.7);
+  assert.equal(pair.printable,true);assert.equal(pair.equal,true);
+  assert.equal(Number(pair.upper),unit==='mm'?0.254:0.01);
+  assert.equal(Number(pair.lower),unit==='mm'?-0.254:-0.01);
+ }
+});
