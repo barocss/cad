@@ -70,3 +70,7 @@
 .sk-mobility li:hover, .sk-mobility li:focus-visible { border-color: var(--accent); background: var(--accent-soft); }
 .cons-tools.cons-dims { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+@layer legacy {
+.sk-constraint-crowding { position: absolute; top: 12px; z-index: 3; padding: 6px 9px; border: 1px solid var(--muted); border-radius: 5px; background: var(--panel); color: var(--text); font-size: 12px; line-height: 1.35; pointer-events: none; }
+}

@@ -7,7 +7,7 @@ import { arcOf, type P2 } from '@barocss/cad-model/sketch/profile';
 import { dimensionLabel, dimensionValue, drivingDimensionValue, samePick, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
 import type { Project } from '@barocss/cad-model/sketch/select';
 import { InlineSketchDimension, type DimensionAxis } from './InlineSketchDimension';
-import { constraintMarkSize, placeConstraintMarks, type ScreenBox } from './sketchConstraintMarkLayout';
+import { constraintMarkSize, placeConstraintMarksDetailed, type ScreenBox } from './sketchConstraintMarkLayout';
 import './constraints.css';
 
 export interface MarkHandlers {
@@ -187,7 +187,8 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
   });
 
   if (rail) dimensionBoxes.push(rail);
-  const placements = placeConstraintMarks(glyphs.map(mark => mark.preferred), dimensionBoxes, view);
+  const layout = placeConstraintMarksDetailed(glyphs.map(mark => mark.preferred), dimensionBoxes, view);
+  const placements = layout.positions;
   const { width, height } = constraintMarkSize;
   glyphs.forEach(({ preferred, target, text, key, title }, i) => {
     const [x, y] = placements[i];
@@ -217,6 +218,13 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
         onConfirm={value => onDimCommit?.(editDim, value, s)} onClose={() => onDimEdit?.(null)}
         onAxis={pair ? (axis: DimensionAxis) => onDimEdit?.(axes[axis] + pair[1] + '_' + pair[2]) : undefined} />;
     }
+  }
+  if (layout.budgetExceeded || layout.crowdedCount) {
+    const left = Math.max(12, rail ? rail.x + rail.width + 12 : 12);
+    html = <>{html}<div role="status" aria-label="Constraint symbol crowding" className="sk-constraint-crowding"
+      style={{ left, top: Math.max(52, (rail?.y ?? 40) + 8), maxWidth: Math.max(160, Math.min(360, view.width - left - 16)) }}>
+      {layout.budgetExceeded ? 'Constraint symbol layout limit reached.' : 'Constraint symbols are crowded.'} Zoom in or inspect the Constraints list. All symbols are retained.
+    </div></>;
   }
   return { under, svg, html };
 }

@@ -1,0 +1,91 @@
+{
+  "doc": {
+    "format": "barocss-cad-model",
+    "schema": 3,
+    "units": "mm",
+    "parameters": {},
+    "nodes": [
+      {
+        "kind": "sketch",
+        "profile": "circle",
+        "center": [
+          0,
+          0
+        ],
+        "radius": 6.35,
+        "id": "n0"
+      },
+      {
+        "kind": "extrude",
+        "sketch": 0,
+        "height": 10,
+        "id": "n1"
+      }
+    ],
+    "outputs": {
+      "b1": {
+        "node": 1,
+        "side": "solid"
+      }
+    },
+    "nextId": 2
+  },
+  "nativeBodyCount": 1,
+  "edge": {
+    "name": "n1.bottom|n1.side0#2",
+    "circle": {
+      "center": [
+        -2.6645352591003757e-15,
+        -8.881784197001252e-16,
+        0
+      ],
+      "radius": 6.3500000000000005,
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "full": false,
+      "sweep": 3.141592653589793
+    }
+  },
+  "outputs": [
+    {
+      "unit": "mm",
+      "value": 12.700000000000001,
+      "radius": 6.3500000000000005,
+      "pair": {
+        "upper": "+0.254",
+        "lower": "-0.253",
+        "printable": true,
+        "equal": false,
+        "digits": 3,
+        "nominal": "12.7",
+        "tight": false
+      },
+      "line": "Ø12.7 +0.254/-0.253",
+      "texts": [
+        "Ø12.7 +0.254/-0.253"
+      ]
+    },
+    {
+      "unit": "inch",
+      "value": 12.700000000000001,
+      "radius": 6.3500000000000005,
+      "pair": {
+        "upper": "+.010",
+        "lower": "-.009",
+        "printable": true,
+        "equal": false,
+        "digits": 3,
+        "nominal": ".500",
+        "tight": false
+      },
+      "line": "Ø.500 +.010/-.009",
+      "texts": [
+        "Ø.500 +.010/-.009"
+      ]
+    }
+  ],
+  "sourceInputUnchanged": true
+}

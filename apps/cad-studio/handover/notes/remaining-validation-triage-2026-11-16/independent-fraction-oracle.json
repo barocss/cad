@@ -1,0 +1,20 @@
+[
+  {
+    "unit": "mm",
+    "trueLower": "12446000000000001/1000000000000000",
+    "trueUpper": "12954000000000001/1000000000000000",
+    "printedLower": "12447/1000",
+    "printedUpper": "6477/500",
+    "trueZoneWidened": false,
+    "equal": false
+  },
+  {
+    "unit": "inch",
+    "trueLower": "12446000000000001/25400000000000000",
+    "trueUpper": "12954000000000001/25400000000000000",
+    "printedLower": "491/1000",
+    "printedUpper": "51/100",
+    "trueZoneWidened": false,
+    "equal": false
+  }
+]

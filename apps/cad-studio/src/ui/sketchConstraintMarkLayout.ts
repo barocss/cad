@@ -23,11 +23,19 @@ function collides(a: ScreenBox, b: ScreenBox): boolean {
     && a.y < b.y + b.height + gap && b.y < a.y + a.height + gap;
 }
 
-/** Move a visible mark in screen space. Keep its original placement when there is no room nearby. */
-export function placeConstraintMarks(preferred: readonly Point[], dimensions: readonly ScreenBox[], view: { width: number; height: number }): Point[] {
-  if (preferred.length > maxMarks) return [...preferred];
+export interface ConstraintMarkPlacement {
+  positions: Point[];
+  /** Visible marks that exhausted the local placement candidates. Not evaluated when over budget. */
+  crowdedCount: number;
+  budgetExceeded: boolean;
+}
+
+/** Move visible marks locally; report fallback without changing the placement or work budget. */
+export function placeConstraintMarksDetailed(preferred: readonly Point[], dimensions: readonly ScreenBox[], view: { width: number; height: number }): ConstraintMarkPlacement {
+  if (preferred.length > maxMarks) return { positions: [...preferred], crowdedCount: 0, budgetExceeded: true };
   const occupied = [...dimensions];
-  return preferred.map(point => {
+  let crowdedCount = 0;
+  const positions = preferred.map(point => {
     const original = markBox(point);
     if (!point.every(Number.isFinite) || original.x + original.width < 0 || original.x > view.width
       || original.y + original.height < 0 || original.y > view.height) return point;
@@ -40,6 +48,13 @@ export function placeConstraintMarks(preferred: readonly Point[], dimensions: re
       return dx || dy ? next : point;
     }
     occupied.push(original);
+    crowdedCount++;
     return point;
   });
+  return { positions, crowdedCount, budgetExceeded: false };
+}
+
+/** Compatibility wrapper for consumers that only need positions. */
+export function placeConstraintMarks(preferred: readonly Point[], dimensions: readonly ScreenBox[], view: { width: number; height: number }): Point[] {
+  return placeConstraintMarksDetailed(preferred, dimensions, view).positions;
 }
