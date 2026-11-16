@@ -58,6 +58,21 @@ async function unavailable(label) {
   return { distance, status, overlay: state.overlay };
 }
 
+async function closeHelp(label) {
+  const done = button('Done measuring');
+  assert.equal(await panel().locator('kbd').count(), 0, 'No inline Esc footer');
+  await done.hover();
+  await f.page.locator('.tooltip').getByText('Esc', { exact: true }).waitFor();
+  await f.page.mouse.move(400, 100);
+  await f.page.keyboard.press('Tab');
+  await done.focus();
+  await f.page.locator('.tooltip').getByText('Esc', { exact: true }).waitFor();
+  const id = await done.getAttribute('aria-describedby'); assert.ok(id);
+  assert.match(await f.page.locator(`[id="${id}"]`).innerText(), /Done measuring.*Esc/s);
+  await f.snapshot('help-' + label);
+  await done.evaluate(element => element.blur());
+}
+
 await f.run(async () => {
   const origin = new URL(f.server.resolvedUrls.local[0]).origin;
   const newContext = f.browser.newContext.bind(f.browser);
@@ -71,12 +86,16 @@ await f.run(async () => {
     return context;
   };
   await f.newPage();
+  await f.page.setViewportSize({ width: Number(process.argv.find(arg => /^(1024|1440)$/.test(arg)) ?? 1440), height: 900 });
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: 'measure-target-suppression.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
   await f.same(source);
   await clickModelCommand(f.page, 'Inspect', 'Measure');
   await panel().waitFor();
+  await panel().getByText('Click a face, edge, or vertex to measure from.', { exact: true }).waitFor();
+  await closeHelp('initial');
   await cap('Top', [10,6,8]);
+  await panel().getByText('Click a face, edge, or vertex to measure to.', { exact: true }).waitFor();
   await panel().getByText('Planar face', { exact: true }).waitFor();
   await cap('Bottom', [30,6,16]);
   await readDistance('first-to-middle', '10', '8');
@@ -89,6 +108,8 @@ await f.run(async () => {
   const suppressed = await f.doc();
   assert.equal(suppressed.nodes[3].suppressed, true);
   const first = await unavailable('suppressed');
+  assert.equal(await panel().locator(':scope > .empty:not(.measure-item)').count(), 0, 'No orphan footer for unavailable target');
+  await closeHelp('unavailable');
   await f.undo(); await f.same(source);
   await readDistance('undo-restores-middle', '10', '8');
   await f.redo(); await f.same(suppressed);
@@ -104,5 +125,11 @@ await f.run(async () => {
   await cap('Bottom', [52,6,28]);
   await readDistance('explicit-third', '28.28', '20');
   await f.same(suppressed);
+  await closeHelp('complete');
+  await f.page.keyboard.press('Escape');
+  await panel().waitFor({ state: 'hidden' }); await f.same(suppressed);
+  await clickModelCommand(f.page, 'Inspect', 'Measure');
+  await panel().waitFor(); await button('Done measuring').click();
+  await panel().waitFor({ state: 'hidden' }); await f.same(suppressed);
   assert.deepEqual(f.report.downloads, []);
 });
