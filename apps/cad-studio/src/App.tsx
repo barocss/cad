@@ -1,3 +1,4 @@
+import { activeFilletEndpoints, filletEdgeEndpoints, type FilletEndpoints } from './app/filletEndpoints';
 import { SHARED_HOLE_LAYOUT_EDIT, sharedHoleLayoutCommand, sharedHoleLayoutPair } from './app/sharedHoleLayout';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { browserRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal';
@@ -2093,6 +2094,31 @@ export function App() {
       });
     });
   }, [doc, editNode, engine, marker, ownsEvaluatedSource]);
+  const [historyFilletEnds, setHistoryFilletEnds] = useState<{doc: StudioDoc; index: number; worker: number; locations: FilletEndpoints} | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const index = editNode, node = index === null ? null : doc.nodes[index];
+    if(index === null || node?.kind !== 'fillet' || !node.radii || marker !== null || variants.showing || !fresh || busy || instanceSel.length || inPlace) return;
+    const current = () => !cancelled && docNow.current === doc && workerSessionNow.current === workerSession && markerNow.current === null && !shownVariant.current;
+    engine.part(prefixDoc(doc,index), revision.current++, 'refs').then(result => {
+      if(!current())return;
+      const parents = result.ok ? result.bodies.filter(body => body.ref?.node === node.parent.node && body.ref.side === node.parent.side) : [];
+      const edges = parents.length === 1 ? parents[0].mesh.edges.filter(edge => node.edges.length === 1 && edge.names.includes(node.edges[0])) : [];
+      setHistoryFilletEnds({doc,index,worker:workerSession,locations:filletEdgeEndpoints(edges.length === 1 ? edges[0] : undefined,node)});
+    }).catch(() => { if(current())setHistoryFilletEnds({doc,index,worker:workerSession,locations:{reason:'The original edge could not be read; endpoint locations are unavailable.'}}); });
+    return () => {cancelled = true;};
+  }, [doc, editNode, workerSession, engine, marker, variants.showing, fresh, busy, instanceSel, inPlace]);
+  const historyEndpointLocations = editNode !== null && doc.nodes[editNode]?.kind === 'fillet' && doc.nodes[editNode].radii && !active && marker === null && !variants.showing && fresh && !busy && !instanceSel.length && !inPlace
+    ? historyFilletEnds?.doc === doc && historyFilletEnds.index === editNode && historyFilletEnds.worker === workerSession ? historyFilletEnds.locations : {reason:'Reading original edge endpoint locations…'} : null;
+  const endpointSource = useRef<{ctx: Active['ctx']; doc: StudioDoc; worker: number} | null>(null);
+  const endpointContextCurrent = !!active && active.ctx.doc === commandDoc && evaluatedRef.current === evaluated && ownsEvaluatedSource();
+  if (!active) endpointSource.current = null;
+  else if (endpointContextCurrent && endpointSource.current?.ctx !== active.ctx) endpointSource.current = {ctx:active.ctx,doc,worker:workerSession};
+  const endpointSourceCurrent = endpointContextCurrent && !!active && endpointSource.current?.ctx === active.ctx
+    && endpointSource.current.doc === doc && endpointSource.current.worker === workerSession
+    && fresh && !busy && marker === null && !variants.showing && !instanceSel.length && !inPlace
+    && active.ctx.doc.nodes.length === doc.nodes.length && active.ctx.doc.nodes.every((node,i) => node === doc.nodes[i]);
+  const filletEndpointLocations = active ? endpointSourceCurrent ? activeFilletEndpoints(active) : null : historyEndpointLocations;
   const axisReplacementRequest = useRef(0);
   const startRevolveAxisReplacement = async () => {
     if (editNode === null || !replaceRevolveAxis || !ownsEvaluatedSource() || markerNow.current !== null || shownVariant.current
@@ -3548,7 +3574,7 @@ export function App() {
           picked={continuityPick.picked} selectedDisplayEdge={continuityPick.edge !== undefined} source={evaluated} location={continuityLocation}
           read={readContinuity} />}
         {curvaturePick && <EdgeCurvature {...curvature} />}
-        {editNode !== null && <NodeEditor alignPreview={historyAlign} readAlignTargets={doc.nodes[editNode]?.kind === 'align' ? readAlignHistoryTargets : undefined} edgeReplacement={finishEdgeEditor.available ? {
+        {editNode !== null && <NodeEditor filletEndpoints={historyEndpointLocations} alignPreview={historyAlign} readAlignTargets={doc.nodes[editNode]?.kind === 'align' ? readAlignHistoryTargets : undefined} edgeReplacement={finishEdgeEditor.available ? {
           start: finishEdgeEditor.start, cancel: finishEdgeEditor.cancel, apply: finishEdgeEditor.apply,
           draft: finishEdgeEditor.current,
         } : undefined} onDraft={reportNodeEditorDraft} nodes={doc.nodes} parameters={doc.parameters} doc={doc} pending={parameterEdit?.kind === 'direct'} pendingLabel={parameterEdit?.roundedInset ? 'Checking the rounded inset…' : doc.nodes[editNode]?.kind === 'fill-feature-pattern' ? 'Checking the fill cut pattern…' : 'Checking the path cut pattern…'} bearingAssembly={{ root: doc, owner: 'base' }} onRefuse={m => setToast({ title: 'Cannot bind that value', hint: m, detail: '' })} index={editNode}
@@ -3686,7 +3712,7 @@ export function App() {
       || (current.cmd.id === 'extrude' && owner.values.region !== current.values.region))) return;
     apply();
   };
-  const hud = active && <Hud store={activeStore} onChange={changeHudValue} onFilletType={changeFillet} onRemoveFilletEdge={removeFilletEdge}
+  const hud = active && <Hud filletEndpoints={filletEndpointLocations} store={activeStore} onChange={changeHudValue} onFilletType={changeFillet} onRemoveFilletEdge={removeFilletEdge}
     onRadiusMode={mode => { const a = activeStore.get(); if (a?.fillet) changeFillet(a.fillet.type, mode); }}
     onFramePreview={owner => { if (activeStore.get() === owner && owner.preview === 'ok') viewport.current?.fit(); }}
     onFile={uploadFont} onHoleOptions={applyHoleOptions} onApply={applyHud} onCancel={cancel} />;
@@ -3768,7 +3794,7 @@ export function App() {
         bandRailPicking={!active && !finishEdgePicking && !section && !measure && !assembly.draft}
         onDisplayModeStatus={onDisplayModeStatus} onBackend={setViewBackend}
         modelUnavailable={modelUnavailable} bodies={cageInputActive ? cageEd.shown(shownBodies) : viewBodies} selection={cageInputActive ? emptySel : shownSelection}
-        ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? curvature.overlay} continuityLocation={continuityLocation.curve} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
+        ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? curvature.overlay} continuityLocation={continuityLocation.curve} filletEndpoints={filletEndpointLocations} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
         gizmo={cageInputActive ? cageEd.gizmo : routeGizmo ?? gizmo ?? instGizmo ?? poleGizmo} cage={cageInputActive ? cageEd.overlay : null} onPickCage={cageInputActive ? cageEd.onPick : undefined} tool={skel.tool}
         handles={sectionDrag.length ? sectionDrag : handles} instancePreview={instancePreview} contactLinks={contactShown && motionContact ? motionContact.links : undefined}
         render={rendering ? render : null} analysis={rendering ? null : viewAnalysis}

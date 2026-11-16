@@ -99,7 +99,7 @@ async function create(size,endRadius,label){
   f.phase=label+' public HUD creation';await f.newPage();await f.page.setViewportSize(size);
   const [chooser]=await Promise.all([f.page.waitForEvent('filechooser'),button('Open').click()]);
   await chooser.setFiles({name:label+'.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(box))});await f.same(box);await pickEdge();await f.command('Fillet');
-  const hud=f.page.getByRole('dialog',{name:'Fillet',exact:true});await field('Fillet radius mode',hud).selectOption('varying');await field('Radius',hud).fill('1');await field('End radius (0: same)',hud).fill(String(endRadius));
+  const hud=f.page.getByRole('dialog',{name:'Fillet',exact:true});await field('Fillet radius mode',hud).selectOption('varying');await field(/^(?:Start radius|Radius)$/,hud).fill('1');await field('End radius (0: same)',hud).fill(String(endRadius));
   if(await field('Radius controls',hud).count())await field('Radius controls',hud).selectOption('ends');
   // Every creation recovers from a negative endpoint without authoring a scalar fallback.
   const endField=field('End radius (0: same)',hud);

@@ -147,7 +147,7 @@ await f.run(async () => {
     const hud=f.page.getByRole('dialog',{name:'Fillet',exact:true});
     assert.equal(await field('Radius controls',hud).count(),0,'Constant hides station controls');
     await field('Fillet radius mode',hud).selectOption('varying');
-    await field('Radius',hud).fill('1');
+    await field(/^(?:Start radius|Radius)$/,hud).fill('1');
     await field('End radius (0: same)',hud).fill('0');
     assert.equal(await field('End radius (0: same)',hud).inputValue(),'0');
     await field('Radius controls',hud).waitFor();

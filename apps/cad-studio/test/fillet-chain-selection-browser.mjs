@@ -193,7 +193,7 @@ async function checkScope(hud, picked, added, constant = true) {
     assert.equal(await field.innerText(), String(names.length));
     assert.deepEqual((await field.getAttribute('title')).split('\n').filter(Boolean).sort(), [...names].sort());
   }
-  if (constant) { assert.doesNotMatch(await scope.innerText(), /Radius/); assert.equal(await hud.getByLabel('Radius', {exact:true}).inputValue(), '1'); }
+  if (constant) { assert.doesNotMatch(await scope.innerText(), /Radius/); assert.equal(await hud.getByLabel(/^(?:Start radius|Radius)$/, {exact:true}).inputValue(), '1'); }
 }
 
 async function checkRemoval(seed, stock, top, seedEdge, topNames) {
@@ -207,7 +207,7 @@ async function checkRemoval(seed, stock, top, seedEdge, topNames) {
   await selectRim(true, top, seedEdge.index);
   await clickModelCommand(f.page, 'Modify', 'Fillet');
   const hud = f.page.getByRole('dialog', { name: 'Fillet', exact: true });
-  await hud.getByLabel('Radius', { exact: true }).fill('1');
+  await hud.getByLabel(/^(?:Start radius|Radius)$/, { exact: true }).fill('1');
   await hud.locator('.status.ok').waitFor();
   await checkScope(hud, topNames, []);
 
@@ -282,7 +282,7 @@ async function checkVarying(seed, top, seedEdge) {
   await clickModelCommand(f.page, 'Modify', 'Fillet');
   let hud = f.page.getByRole('dialog', { name: 'Fillet', exact: true });
   await hud.getByLabel('Fillet radius mode', { exact: true }).selectOption('varying');
-  await hud.getByLabel('Radius', { exact: true }).fill('1');
+  await hud.getByLabel(/^(?:Start radius|Radius)$/, { exact: true }).fill('1');
   await hud.getByLabel('End radius (0: same)', { exact: true }).fill('3');
   await hud.locator('.status.error').waitFor();
   assert.match(await hud.getByRole('status').innerText(), /an open chain/i);
@@ -306,15 +306,17 @@ async function checkVarying(seed, top, seedEdge) {
   await clickModelCommand(f.page, 'Modify', 'Fillet');
   hud = f.page.getByRole('dialog', { name: 'Fillet', exact: true });
   await hud.getByLabel('Fillet radius mode', { exact: true }).selectOption('varying');
-  await hud.getByLabel('Radius', { exact: true }).fill('1');
+  await hud.getByLabel(/^(?:Start radius|Radius)$/, { exact: true }).fill('1');
   await hud.getByLabel('End radius (0: same)', { exact: true }).fill('3');
   await hud.locator('.status.ok').waitFor();
   await f.same(box);
   await f.snapshot('varying-open-preview');
   await checkScope(hud, edge.names, [], false);
   const scope = hud.getByRole('group', { name: 'Fillet scope' });
-  assert.match(await scope.innerText(), /Picked start radius\s+1 mm/);
-  assert.match(await scope.innerText(), /Picked end radius\s+3 mm/);
+  assert.doesNotMatch(await scope.innerText(), /Picked start radius/);
+  assert.equal(await hud.getByLabel('Start radius', {exact:true}).inputValue(), '1');
+  assert.doesNotMatch(await scope.innerText(), /Picked end radius/);
+  assert.equal(await hud.getByLabel('End radius (0: same)', {exact:true}).inputValue(), '3');
   await button(hud, 'Apply').click();
   await f.changed(box);
   const next = (await f.snapshot('varying-open-applied')).doc;
@@ -400,7 +402,7 @@ await f.run(async () => {
     await f.snapshot(`${label}-selected`);
     await clickModelCommand(f.page, 'Modify', 'Fillet');
     const hud = f.page.getByRole('dialog', { name: 'Fillet', exact: true });
-    await hud.getByLabel('Radius', { exact: true }).fill('1');
+    await hud.getByLabel(/^(?:Start radius|Radius)$/, { exact: true }).fill('1');
     await f.page.waitForFunction(() => document.querySelector('.hud .status')?.textContent === 'preview', null, { timeout: 60000 });
     await f.same(seed);
     await f.snapshot(`${label}-preview`);

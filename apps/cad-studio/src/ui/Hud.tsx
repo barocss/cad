@@ -1,3 +1,5 @@
+import type { FilletEndpoints } from '../app/filletEndpoints';
+import { FilletEndpointNotice } from './FilletEndpointNotice';
 import { extrudeDraftFeedback } from '../app/extrudeDraftFailure';
 import { draftDependentHoleFeedback } from '../app/draftDependentHoleFeedback';
 import { hasInlineFilletRadiusError } from '../app/filletRadiusNotice';
@@ -38,6 +40,7 @@ import { loftGuideFeedback } from '../app/loftGuideFeedback';
 const FIELD = 'h-[26px]! w-full px-1.5! text-xs! font-medium [font-family:var(--mono)] bg-[var(--bg)] focus-visible:ring-1 focus-visible:ring-primary';
 
 interface Props {
+  filletEndpoints?: FilletEndpoints | null;
   /** The running command (R1d): the HUD subscribes to it — its values, preview state and error — not the App. */
   store: ValueStore<Active | null>;
   onChange(key: string, value: number | string): void; onApply(owner: Active): void; onCancel(): void;
@@ -50,7 +53,7 @@ interface Props {
 
 /** The floating command HUD: few fields, keyboard-first, with the kernel’s answer inline. (G12f: its fields, choices and
  * actions shadcn's Input, NativeSelect and Button, at the HUD's 26 px in the studio's mono type.) */
-export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, onRadiusMode, onRemoveFilletEdge, onHoleOptions, onFramePreview }: Props) {
+export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFile, onFilletType, onRadiusMode, onRemoveFilletEdge, onHoleOptions, onFramePreview }: Props) {
   const active = useStoreValue(store);
   const first = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
   useEffect(() => { first.current?.focus(); if (first.current instanceof HTMLInputElement && first.current.type !== 'file') first.current.select(); }, [active?.cmd.id]);
@@ -93,7 +96,8 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     input.value = '';
     if (file && key) onFile?.(key, file);
   };
-  const renderField = (field: Field, index: number) => {
+  const renderField = (input: Field, index: number) => {
+    const field = active.fillet?.radiusMode === 'varying' && input.key === 'radius' ? {...input,label:'Start radius'} : input;
     const value = active.values[field.key], ref = index === 0 ? captureFirst : undefined;
     const showCountRange = field.kind === 'count' && ((active.cmd.id === 'circular-pattern' && field.key === 'count') || (active.cmd.id === 'hole' && field.key === 'pn'));
     const invalidCount = showCountRange && (!Number.isInteger(Number(value)) || Number(value) < (field.min ?? -Infinity) || Number(value) > (field.max ?? Infinity));
@@ -157,15 +161,13 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           </div>;
         })}
       </div>}
+      {active.fillet?.radiusMode === 'varying' && <FilletEndpointNotice locations={filletEndpoints ?? {reason:'Original endpoint locations are unavailable for the current source.'}} />}
       {edgeScope && <div className="hud-steps" role="group" aria-label={active.filletScope ? 'Fillet scope' : 'Chamfer scope'}>
         <div className="field"><span>Picked native edges</span><span title={edgeScope.picked.join('\n')}>{edgeScope.picked.length}</span></div>
         {edgeScope.added
           ? <div className="field"><span>Tangent edges added</span><span title={edgeScope.added.join('\n')}>{edgeScope.added.length}</span></div>
           : <p className="small muted">Exact tangent scope unavailable</p>}
-        {active.filletScope && (active.filletScope.pickedRadii ? <>
-          <div className="field"><span>Picked start radius</span><span>{active.filletScope.pickedRadii[0]} mm</span></div>
-          <div className="field"><span>Picked end radius</span><span>{active.filletScope.pickedRadii[1]} mm</span></div>
-        </> : active.fillet?.radiusMode !== 'constant' ? <div className="field"><span>Radius</span><span>{active.filletScope.radius} mm</span></div> : null)}
+
       </div>}
       {active.fillet?.type === 'edge' && onRemoveFilletEdge && active.ctx.selection.edges.length > 0
         && <FilletPickedEdges active={active} onRemove={onRemoveFilletEdge} />}

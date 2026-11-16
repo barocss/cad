@@ -9,7 +9,7 @@ const hud=()=>f.page.getByRole('dialog',{name:'Fillet',exact:true});
 const button=(name,scope=f.page)=>scope.getByRole('button',{name,exact:true});
 const settled=()=>f.page.waitForFunction(()=>document.querySelector('.hud .status')?.textContent?.trim()==='preview',null,{timeout:60000});
 const mode=value=>hud().getByLabel('Fillet radius mode',{exact:true}).selectOption(value);
-const start=()=>hud().getByLabel('Radius',{exact:true});
+const start=()=>hud().getByLabel(/^(?:Start radius|Radius)$/,{exact:true});
 const end=()=>hud().getByLabel('End radius (0: same)',{exact:true});
 await f.run(async()=>{
  const fixture=JSON.parse(await readFile(resolve(f.app,'test/fixtures/bracket.bcad'),'utf8'));fixture.nodes[1].height=20;const file=join(process.argv[2],'box.bcad');await writeFile(file,JSON.stringify(fixture));

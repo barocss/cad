@@ -133,7 +133,7 @@ await f.run(async () => {
   await f.command('Fillet');
   const hud=f.page.getByRole('dialog',{name:'Fillet',exact:true});
   await field('Fillet radius mode',hud).selectOption('varying');
-  await field('Radius',hud).fill('1');
+  await field(/^(?:Start radius|Radius)$/,hud).fill('1');
   await field('End radius (0: same)',hud).fill('4');
   await field('Radius controls',hud).selectOption('interior');
   await field('Interior radius',hud).fill('2');
