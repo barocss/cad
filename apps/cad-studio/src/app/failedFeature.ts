@@ -112,3 +112,19 @@ export function splitDependentHoleFailure(error: FeatureFailure, accepted: reado
   if (!/misses the target/i.test(error.detail)) return;
   return { ...error, hint: 'Restore the previous Split At or Normal, or select Reset. To move the Hole centre, close this edit first and edit that Hole in History.' };
 }
+
+/** Only an owned Hole depth-only edit may interpret this exact native point-contact refusal. */
+export function holeDepthContactFailure(error: FeatureFailure, accepted: readonly ModelNode[], candidate: readonly ModelNode[], index: number): FeatureFailure | undefined {
+  const before = accepted[index], after = candidate[index];
+  if (before?.kind !== 'hole' || after?.kind !== 'hole' || !before.id || before.id !== after.id
+    || error.feature !== before.id || error.code !== 'GEOMETRY'
+    || accepted.filter(node => node.id === before.id).length !== 1 || candidate.filter(node => node.id === before.id).length !== 1
+    || accepted.length !== candidate.length || accepted.some((node, i) => i !== index && node !== candidate[i])
+    || typeof before.depth !== 'number' || !Number.isFinite(before.depth)
+    || typeof after.depth !== 'number' || !Number.isFinite(after.depth) || before.depth === after.depth
+    || JSON.stringify(before) !== JSON.stringify({ ...after, depth: before.depth })) return;
+  const match = /^B-rep: analytic Boolean: the result's boundary touches itself at \(([^(),]+), ([^(),]+), ([^(),]+)\), where one surface only touches another: not a manifold solid \(the inputs touch along an edge or at a vertex\)$/.exec(error.detail);
+  if (!match || !match.slice(1).every(value => /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value) && Number.isFinite(Number(value)))) return;
+  return { ...error, title: 'Hole depth creates a point contact',
+    hint: `The result touches itself at (${match.slice(1).join(', ')}) mm. Change Depth or select Reset to restore the accepted Hole.` };
+}
