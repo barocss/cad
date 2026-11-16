@@ -15,8 +15,9 @@ import type { MeasureTarget } from '../app/measureTargets';
 import type { InterferenceReport } from '../app/checkInterference';
 interface MeasurementInspectorProps { pickFilter: MeasurePickFilter; targets: MeasureTarget[]; items: ({ pick: MeasurePick; mesh: DisplayMesh } | null)[]; measured: ReturnType<typeof measureBetween> | null; approximateDistance?: boolean; onClose(): void; onPin?(): void }
 export function MeasurementInspector({ pickFilter, targets, items, measured, approximateDistance, onClose, onPin }: MeasurementInspectorProps) {
-  return <aside className="card props" aria-label="Measurement">
+  return <aside className="card props" aria-label="Measurement" tabIndex={-1} aria-keyshortcuts="Alt+M">
         <div className="card-title">MEASURE <ToolIconButton size="tiny" aria-label="Done measuring" data-tip="Done measuring" data-tip-key="Esc" data-tip-focus="" onClick={onClose}><Icon name="close" small /></ToolIconButton></div>
+        <div className="muted small">Alt+M · focus measurement details</div>
         {targets.map((target, k) => {
           const item = items[k], slot = k ? 'To' : 'From';
           if (!item) return <div key={k} className="measure-item empty" role="status">{slot} · {target.label} ({target.occurrence ? target.occurrence.id + '/' : ''}{target.body}) is unavailable. Select a new {slot} target. {measurePickHint(pickFilter, k ? 'to' : 'from')}</div>;
@@ -36,14 +37,15 @@ export function MeasurementInspector({ pickFilter, targets, items, measured, app
           {measured.axes && <div className="kv" aria-label="Axes">Axes <b>{measured.axes.coaxial ? 'coaxial' : `${measureQuantityText(measured.axes.angle, 3)}° apart, ${measureQuantityText(measured.axes.offset, 3)} mm off`} <span className="muted">({measureAxesBasis})</span></b></div>}
           <div className="kv">ΔX ΔY ΔZ <b>{measured.b.map((v, k) => measureQuantityText(v - measured.a[k], 2)).join(', ')}</b></div>
         </>}
-        {onPin && <Button size="sm" variant="ghost" onClick={onPin}>Pin measurement</Button>}
+        {onPin && <Button size="sm" variant="ghost" data-measure-focus onClick={onPin}>Pin measurement</Button>}
         {!items.some(item => !item) && <div className="empty">{targets.length < 2 ? measurePickHint(pickFilter, targets.length ? 'to' : 'from') : 'Click again to start over.'}</div>}
       </aside>;
 }
 
 export function PinnedMeasurement({ distance, onClear }: { distance: number | null; onClear(): void }) {
-  return <aside className="card props" aria-label="Pinned measurement">
-    <div className="card-title">PINNED MEASUREMENT <ToolIconButton size="tiny" aria-label="Clear pinned measurement" onClick={onClear}><Icon name="close" small /></ToolIconButton></div>
+  return <aside className="card props" aria-label="Pinned measurement" tabIndex={-1} aria-keyshortcuts="Alt+M">
+    <div className="card-title">PINNED MEASUREMENT <ToolIconButton size="tiny" data-measure-focus aria-label="Clear pinned measurement" onClick={onClear}><Icon name="close" small /></ToolIconButton></div>
+    <div className="muted small">Alt+M · focus measurement details</div>
     {distance === null ? <div className="empty" role="status">Measurement unavailable.</div>
       : <div className="kv">Normal distance <b>{measureQuantityText(distance, 3)} mm</b></div>}
   </aside>;

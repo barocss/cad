@@ -59,21 +59,43 @@ await f.run(async () => {
     return context;
   };
   await f.newPage();
+  const width = Number(process.argv[3] ?? 1024);
+  await f.page.setViewportSize({ width, height: width === 900 ? 760 : 800 });
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: 'measure-context-pin.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
   await f.same(source);
   f.phase = 'Use the accepted native top face as the right-click Measure origin';
   await cap('Top', [10,6,8], 'right');
   await f.page.getByRole('menuitem', { name: /^Measure from here(?:$| )/ }).click();
+  await f.page.keyboard.press('Alt+KeyM');
   await panel().getByText('Planar face', { exact: true }).waitFor();
   await cap('Bottom', [10,6,0]);
   await readDistance('context-measure-eight', '8', '8');
   const pin = button('Pin measurement');
   assert.equal(await pin.count(), 1, 'right-click Measure must offer the native pin');
-  await pin.click();
+  await f.page.keyboard.press('Alt+KeyM');
+  assert.equal(await pin.evaluate(e => e === document.activeElement), true);
+  await f.page.keyboard.press('Enter');
   const pinned = f.page.getByRole('complementary', { name: 'Pinned measurement', exact: true });
   await pinned.getByText('8 mm', { exact: true }).waitFor();
   await f.snapshot('pinned-eight');
+  if (width === 900) {
+    await button('Open chat').click();
+    await button('Close the dock').click();
+    await f.page.waitForFunction(() => window.__studioOverlayTexts?.()['measure:label']?.includes('8 mm'));
+    await f.page.keyboard.press('Alt+KeyM');
+    await pinned.waitFor();
+    assert.equal(await button('Clear pinned measurement').evaluate(e => e === document.activeElement), true);
+    await f.same(source);
+    // Offline chat has a disabled composer; exercise the same typing guard on its enabled select.
+    const input = f.page.getByRole('combobox', { name: 'Autonomy', exact: true });
+    await input.focus(); await f.page.keyboard.press('Alt+KeyM');
+    assert.equal(await input.evaluate(e => e === document.activeElement), true);
+    await button('Close the dock').click();
+    await f.page.keyboard.press('Alt+KeyM'); await pinned.waitFor();
+    await f.snapshot('chat-open-shortcut');
+    await button('Close chat').click();
+  }
 
   f.phase = 'Edit the native extrusion and confirm pin and independent selection';
   await f.openFeatureEditor(1, 'Extrude');
@@ -81,7 +103,7 @@ await f.run(async () => {
   const edited = await f.applyEditor(source, 'edited');
   assert.equal(edited.doc.nodes[1].height, 13.25);
   await pinned.getByText('13.25 mm', { exact: true }).waitFor();
-  await f.closeEditor();
+  if (await f.editor().isVisible()) await f.closeEditor();
   await cap('Top', [10,6,13.25]);
   await f.page.waitForFunction(() => window.__studioSelection?.selection.faces.length === 1);
   await pinned.getByText('13.25 mm', { exact: true }).waitFor();
@@ -90,7 +112,9 @@ await f.run(async () => {
   await f.redo(); await f.same(edited.doc);
   await pinned.getByText('13.25 mm', { exact: true }).waitFor();
   await f.snapshot('pinned-after-redo');
-  await pinned.getByRole('button', { name: 'Clear pinned measurement', exact: true }).click();
+  await f.page.keyboard.press('Alt+KeyM');
+  assert.equal(await button('Clear pinned measurement').evaluate(e => e === document.activeElement), true);
+  await f.page.keyboard.press('Enter');
   await pinned.waitFor({ state: 'hidden' });
   await f.same(edited.doc);
   assert.deepEqual(f.report.downloads, []);

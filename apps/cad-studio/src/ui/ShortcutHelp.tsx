@@ -8,7 +8,7 @@ import { ToolIconButton } from '@/components/ui/tool-button';
 import { Icon, Kbd } from './atoms';
 
 const GROUPS: [string, string][] = [['create', 'Create'], ['modify', 'Modify'], ['pattern', 'Pattern'], ['combine', 'Combine'], ['inspect', 'Inspect']];
-const GENERAL: [string, string][] = [['Space', 'Find a command'], ['Enter', 'Apply'], ['⇧Enter', 'Apply, then the same command again'], ['Esc', 'Cancel, or clear the selection'], ['Del', 'Delete what is picked'],
+const GENERAL: [string, string][] = [['Space', 'Find a command'], ['Alt+M', 'Focus current measurement / pin (opens the dock)'], ['Enter', 'Apply'], ['⇧Enter', 'Apply, then the same command again'], ['Esc', 'Cancel, or clear the selection'], ['Del', 'Delete what is picked'],
   ['⌘Z / ⇧⌘Z', 'Undo / redo'], ['⌘D', 'Duplicate a body'], ['⌘C / ⌘V', 'Copy a body / paste a copy beside it'],
   ['← → ↑ ↓', 'Nudge the picked body 1 mm in X / Y (Shift: 10 mm)'], ['PgUp / PgDn', 'Nudge it in Z'], ['⌘S', 'Save'], ['F', 'Fit the view (to what is picked)'], ['?', 'This list']];
 const MOUSE: [string, string][] = [['Click', 'Pick a face or an edge'], ['Shift-click', 'Add to the pick'], ['Drag', 'Window select (left to right: inside; right to left: touching)'],

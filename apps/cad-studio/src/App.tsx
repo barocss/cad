@@ -814,6 +814,7 @@ export function App() {
   const [browserOpen, setBrowserOpen] = useState(() => { try { return localStorage.getItem('cad-studio.browser') !== 'closed'; } catch { return true; } });
   // Measuring: up to two picked faces or edges (null: not measuring).
   const [measure, setMeasure] = useState<MeasureTarget[] | null>(null);
+  const [measurementFocus, setMeasurementFocus] = useState(false);
   const measureNativeReady = useRef(false);
   const [pinnedMeasure, setPinnedMeasure] = useState<{ pair: PinnedFacePair; generation: number; worker: number; project: typeof project.view.store } | null>(null);
   const pinOwned = pinnedMeasure?.generation === docGeneration && pinnedMeasure.worker === workerSession && pinnedMeasure.project === project.view.store ? pinnedMeasure : null;
@@ -2722,6 +2723,10 @@ export function App() {
       const undoKey = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z';
       // Leave text history and focused control activation to the browser.
       if (undoKey && typing) return;
+      if (!typing && e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.code === 'KeyM' || e.key.toLowerCase() === 'm')
+        && !rendering && !drawing && !sketch && !active && (measure || pinOwned)) {
+        e.preventDefault(); layout.setDockSheet(true); setMeasurementFocus(true); return;
+      }
       const control = target instanceof Element && target.closest('button, summary, select, [role="button"], [role="menuitem"]');
       if ((e.key === 'Enter' || e.key === ' ') && control) return;
       if (e.key === 'Tab' && (control || typing || (target instanceof HTMLElement && target.tabIndex >= 0))) return;
@@ -3042,6 +3047,13 @@ export function App() {
   const openProposals = doc.proposals?.filter(p => p.status === 'open').length ?? 0, decidedProposals = (doc.proposals?.length ?? 0) - openProposals;
   const chatColumnShown = columnShown(chat && !rendering && !drawing, openProposals, decidedProposals, decidedShown);
   const dockDocked = layout.dockDocked(chatColumnShown ? layout.chatShown : 0);
+  useEffect(() => {
+    if (!measurementFocus) return;
+    const panel = document.querySelector<HTMLElement>('aside[aria-label="Measurement"], aside[aria-label="Pinned measurement"]');
+    const target = panel?.querySelector<HTMLElement>('[data-measure-focus]') ?? panel;
+    target?.focus(); target?.scrollIntoView({ block: 'nearest' });
+    setMeasurementFocus(false);
+  }, [measurementFocus, layout.dockSheet]);
   const reviewView = placedPreviewEnabled && !inPlace && !variantsOpen && !bomOpen && !libraryOpen && !paramsOpen
     && !stepAsk && !routePanelOpen && fresh && marker === null && !ghost && !workingComparison;
   const visibleCandidate = (occurrence: string) => (!isolatedInstances || isolatedInstances.includes(occurrence))
