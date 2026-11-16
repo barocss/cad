@@ -1523,7 +1523,7 @@ export function App() {
     // (R1d: the command as it is now, its values and preview state — the App may not have rendered since they changed.)
     const active = activeStore.get();
     if (!active?.cmd.build || !canChangeDocument()) return;
-    if (active.cmd.id === SHARED_HOLE_LAYOUT_EDIT && !active.cmd.available(active.ctx).ok) {
+    if ((active.ownsSource && !active.ownsSource()) || (active.cmd.id === SHARED_HOLE_LAYOUT_EDIT && !active.cmd.available(active.ctx).ok)) {
       commandPreview.retire(); applyWhenReady.current = null; again.current = null; setActive(null); setPreviewBodies(null); return;
     }
     const toFace = isExtrudeToFace(active.cmd.id, active.values) || isOffsetToPlane(active.cmd.id, active.values);

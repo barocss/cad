@@ -1,3 +1,4 @@
+import { fastenerHistoryEdit } from '@barocss/cad-model/app/editCommand';
 import type { ComponentProps, Dispatch, SetStateAction } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { Ctx } from '@barocss/cad-model/app/commands';
@@ -32,6 +33,7 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
   const { doc, evaluated, commandDoc, editNode, fresh, busy, workerSession } = model;
   const { ctx, discardFeatureDraft, closeForCommand, setActive, editSketch, replaceAxis } = commands;
   const { ownsEvaluatedSource } = owner;
+  const savedFastener = fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc);
   return <NodeEditor {...editor} nodes={doc.nodes} parameters={doc.parameters} doc={doc} index={editNode}
     bearingAssembly={{ root: doc, owner: 'base' }}
     readAlignTargets={doc.nodes[editNode]?.kind === 'align' ? editor.readAlignTargets : undefined}
@@ -49,6 +51,17 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
         editSketch(s);
       };
     })()} onReplaceAxis={replaceAxis}
+    savedFeatureEdit={savedFastener ? { label: savedFastener.command.label, start: () => {
+      if (owner.document() !== doc || owner.evaluated() !== evaluated || owner.worker() !== workerSession
+        || !ownsEvaluatedSource() || owner.marker() !== null || owner.variant() || owner.hasDraft()
+        || !fresh || busy || ctx.doc !== commandDoc || !canChangeDocument()) return;
+      const saved = fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc);
+      if (!saved || !saved.command.available(ctx).ok) return;
+      discardFeatureDraft(); closeForCommand();
+      setActive({ cmd: saved.command, ctx, values: saved.command.defaults?.(ctx) ?? {}, preview: 'busy',
+        ownsSource: () => owner.document() === doc && owner.evaluated() === evaluated
+          && owner.worker() === workerSession && owner.marker() === null && !owner.variant() });
+    } } : undefined}
     onEditDraft={editSavedDraftCommand(commandDoc, editNode) ? () => {
       if (!ownsEvaluatedSource() || owner.marker() !== null || owner.variant() || !fresh || busy || !canChangeDocument()) return;
       const cmd = editSavedDraftCommand(commandDoc, editNode);

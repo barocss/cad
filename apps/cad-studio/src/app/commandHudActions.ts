@@ -63,7 +63,7 @@ export function createCommandHudActions({ commandDoc, activeStore, preview, pend
   const applyHud = (owner: Active) => {
     const current = activeStore.get();
     if (!current || !filletApplyCurrent(owner, current)) return;
-    if (owner !== current && (owner.cmd.id === 'mirror' || current.cmd.id === 'mirror' || owner.cmd.id === REVOLVE_AXIS_EDIT || current.cmd.id === REVOLVE_AXIS_EDIT
+    if (owner !== current && (owner.ownsSource || current.ownsSource || owner.cmd.id === 'mirror' || current.cmd.id === 'mirror' || owner.cmd.id === REVOLVE_AXIS_EDIT || current.cmd.id === REVOLVE_AXIS_EDIT
       || owner.cmd.id === SWEEP_CURVE || current.cmd.id === SWEEP_CURVE
       || owner.cmd.id === OFFSET_FACE_EDIT || current.cmd.id === OFFSET_FACE_EDIT
       || owner.cmd.id === DRAFT_EDIT || current.cmd.id === DRAFT_EDIT

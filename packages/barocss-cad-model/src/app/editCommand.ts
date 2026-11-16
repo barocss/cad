@@ -176,6 +176,44 @@ function shapeEdit(index: number, nodes: readonly ModelNode[], rows: Pick<Studio
   return { ...cmd, id: 'edit', label: `Edit ${cmd.label}`, group: 'modify', available: () => ok, defaults: () => ({ ...made.values }), build: rebuild, place: undefined };
 }
 
+/** A History row belongs to one complete, exactly replayable saved Fastener group, or none. */
+export function fastenerHistoryEdit(index: number, nodes: readonly ModelNode[], rows: Pick<StudioDoc, 'fastenerSizes'> & Partial<Pick<StudioDoc, 'parameters'>> = {}): { command: Command; ownerIndex: number; startIndex: number } | null {
+  if (!Number.isInteger(index) || index < 0 || index >= nodes.length) return null;
+  const owners: { ownerIndex: number; startIndex: number }[] = [];
+  for (const [ownerIndex, node] of nodes.entries()) {
+    if (!('made' in node) || node.made?.command !== 'fastener') continue;
+    const count = node.made.nodes ?? 2, startIndex = ownerIndex - count + 1;
+    if (!Number.isInteger(count) || count < 1 || startIndex < 0) {
+      // A malformed owner cannot establish where its group starts.
+      if (ownerIndex >= index) return null;
+      continue;
+    }
+    if (index >= startIndex && index <= ownerIndex) owners.push({ ownerIndex, startIndex });
+  }
+  if (owners.length !== 1) return null;
+  const { ownerIndex, startIndex } = owners[0];
+  // No nested or overlapping command may also claim any member of this group.
+  for (const [at, node] of nodes.entries()) {
+    if (at === ownerIndex || !('made' in node) || !node.made) continue;
+    const count = node.made.nodes ?? 2, start = at - count + 1;
+    if (at >= startIndex && at <= ownerIndex) return null;
+    if (Number.isInteger(count) && count > 0 && start <= ownerIndex && at >= startIndex) return null;
+  }
+  const edit = shapeEdit(ownerIndex, nodes, rows);
+  if (!edit?.build) return null;
+  const owns = (ctx: Ctx) => ctx.doc.nodes.length === nodes.length && nodes.every((node, i) => ctx.doc.nodes[i] === node)
+    && ctx.doc.fastenerSizes === rows.fastenerSizes;
+  const command: Command = { ...edit,
+    fields: edit.fields && ((ctx, values) => edit.fields!(ctx, values).filter(field => field.key !== 'insert')),
+    available: ctx => owns(ctx) ? edit.available(ctx) : { ok: false, reason: 'The saved fastener source changed. Open its History again.' },
+    build: (ctx, values) => {
+      if (!owns(ctx)) throw refusal('VALUE', 'The saved fastener source changed. Open its History again.');
+      if (values.insert === 'instance') throw refusal('VALUE', 'Edit this saved fastener in its current part. Inserting an assembly instance is a separate command.');
+      return edit.build!(ctx, values);
+    } };
+  return { command, ownerIndex, startIndex };
+}
+
 /** Check that Studio can rebuild these two authored nodes through the standard Box command. */
 export function isEditableBox(nodes: readonly ModelNode[], sketchIndex: number): boolean {
   const extrusion = nodes[sketchIndex + 1];

@@ -1,3 +1,6 @@
+import { commands } from '@barocss/cad-model/app/commands';
+import { readFileSync } from 'node:fs';
+const sampleRows = JSON.parse(readFileSync('../../packages/barocss-cad-model/samples/rows/fastener-sizes.json', 'utf8')).rows;
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { ComponentProps, ReactElement } from 'react';
@@ -63,3 +66,59 @@ test('busy History cannot transition to end-face picking', () => {
   const f = fixture(); f.props.model.busy = true; f.editor().onPickEndFace?.();
   assert.equal(f.active.get(), null); assert.deepEqual(f.events, []);
 });
+
+function fastenerFixture() {
+  const f = fixture(), cmd = commands.find(c => c.id === 'fastener')!;
+  const ctx = { ...f.props.commands.ctx, doc: { ...rectanglePart(64, 32, 8), fastenerSizes: { version: 1 as const, rows: sampleRows } } };
+  const doc = cmd.build!(ctx, { ...cmd.defaults!(ctx), kind: 'hex-bolt', size: 'M6', length: '20',
+    joint: 'nut', model: 'cosmetic', x: 32, y: 16, z: 8, grip: 8, holeD: 6.6 });
+  f.props.model = { ...f.props.model, doc, evaluated: doc, commandDoc: doc, editNode: doc.nodes.length - 1 };
+  f.props.commands.ctx = { ...ctx, doc };
+  f.props.owner = { ...f.props.owner, document: () => doc, evaluated: () => doc, ownsEvaluatedSource: () => true };
+  return f;
+}
+test('saved Fastener History starts the existing grouped command with placement and fit evidence', () => {
+  const f = fastenerFixture(), action = f.editor().savedFeatureEdit;
+  assert.equal(action?.label, 'Edit Fastener'); action!.start();
+  assert.deepEqual(f.events, ['discard', 'close']);
+  assert.equal(f.active.get()?.cmd.label, 'Edit Fastener');
+  assert.equal(f.active.get()?.values.holeD, 6.6);
+  assert.equal(f.active.get()?.values.joint, 'nut');
+  assert.equal(f.active.get()?.ctx, f.props.commands.ctx);
+});
+for (const failure of ['document', 'evaluated', 'worker', 'marker', 'variant', 'draft', 'fresh', 'busy', 'permission', 'source', 'context'] as const) {
+  test(`saved Fastener transition refuses ${failure} without discarding or launching`, () => {
+    const f = fastenerFixture();
+    if (failure === 'fresh') f.props.model.fresh = false;
+    if (failure === 'busy') f.props.model.busy = true;
+    if (failure === 'context') f.props.commands.ctx = { ...f.props.commands.ctx, doc: { ...f.props.model.doc } };
+    const action = f.editor().savedFeatureEdit; assert.ok(action);
+    if (failure === 'document') f.props.owner.document = () => ({ ...f.props.model.doc });
+    if (failure === 'evaluated') f.props.owner.evaluated = () => ({ ...f.props.model.evaluated });
+    if (failure === 'worker') f.props.owner.worker = () => 2;
+    if (failure === 'marker') f.props.owner.marker = () => 0;
+    if (failure === 'variant') f.props.owner.variant = () => 'other';
+    if (failure === 'draft') f.props.owner.hasDraft = () => true;
+    // These functions are captured when rendered, as in the other saved-command entries.
+    if (failure === 'permission') { f.props.canChangeDocument = () => false; f.editor().savedFeatureEdit!.start(); }
+    else if (failure === 'source') { f.props.owner.ownsEvaluatedSource = () => false; f.editor().savedFeatureEdit!.start(); }
+    else action.start();
+    assert.deepEqual(f.events, []); assert.equal(f.active.get(), null);
+  });
+}
+test('ordinary feature History does not offer grouped Fastener entry', () => {
+  assert.equal(fixture().editor().savedFeatureEdit, undefined);
+});
+
+for (const failure of ['document', 'evaluated', 'worker', 'marker', 'variant'] as const) {
+  test(`launched saved Fastener retains live ${failure} ownership until Apply`, () => {
+    const f = fastenerFixture(); f.editor().savedFeatureEdit!.start();
+    const owns = f.active.get()!.ownsSource!; assert.equal(owns(), true);
+    if (failure === 'document') f.props.owner.document = () => ({ ...f.props.model.doc });
+    if (failure === 'evaluated') f.props.owner.evaluated = () => ({ ...f.props.model.evaluated });
+    if (failure === 'worker') f.props.owner.worker = () => 2;
+    if (failure === 'marker') f.props.owner.marker = () => 0;
+    if (failure === 'variant') f.props.owner.variant = () => 'other';
+    assert.equal(owns(), false);
+  });
+}

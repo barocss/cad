@@ -52,3 +52,9 @@ for (const id of ['mirror', 'revolve-axis-edit', 'offset-face-edit', 'draft-hist
     assert.deepEqual(f.events, []); f.actions.applyHud(f.store.get()!); assert.deepEqual(f.events, ['apply']);
   });
 }
+test('saved-source HUD ignores a replaced snapshot but admits the current owner', () => {
+  const f = fixture('edit'); f.active.ownsSource = () => true;
+  f.store.set({ ...f.active, values: { x: 44 } });
+  f.actions.applyHud(f.active); assert.deepEqual(f.events, []);
+  f.actions.applyHud(f.store.get()!); assert.deepEqual(f.events, ['apply']);
+});
