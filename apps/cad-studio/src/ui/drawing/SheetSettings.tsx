@@ -42,7 +42,6 @@ export function SheetSettings({ sheet: { scopeRead, scope, views, layout, sectio
           {(sourceDoc.instances ?? []).map(i => <option key={i.id} value={`part:${i.id}`}>Part: {i.id}</option>)}
           <option value="assembly">Assembly</option>
         </NativeSelect></label>
-        {scope.kind === 'assembly' && <div className="empty">Auto-dimension is available for a part scope. Assembly scope keeps its BOM table and balloons.</div>}
         <label className={FIELD}><span>Size</span><NativeSelect className={CONTROL} aria-label="Sheet size" value={settings.sheet} onChange={e => onChange({ ...settings, sheet: e.target.value as 'A4' })}>
           <option value="A4">A4 landscape</option><option value="A3">A3 landscape</option></NativeSelect></label>
         <label className={FIELD}><span>Scale</span><NativeSelect className={CONTROL} aria-label="Scale" value={settings.scale ?? 'auto'} onChange={e => { const v = e.target.value; const rest = { ...settings }; delete rest.scale; onChange(v === 'auto' ? rest : { ...rest, scale: Number(v) }); }}>
