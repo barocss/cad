@@ -1,3 +1,4 @@
+import { filletPickFailure } from './app/filletPickFailure';
 import { createEvaluationEvidence } from './state/evaluationEvidence';
 import { candidateReferenceProblem, refreshCandidateReferences } from './state/candidateReferences';
 import { HistoryFeatureEditor } from './ui/HistoryFeatureEditor';
@@ -2003,7 +2004,7 @@ export function App() {
     const current = activeStore.get(); if (!current?.fillet) return false;
     if (docNow.current !== doc || evaluatedRef.current !== evaluated || current.ctx.doc !== ctx.doc) { commandPreview.retire(); applyWhenReady.current = null; setActive(null); return true; }
     const selection = prepareFilletPick(current, viewBodiesRef.current, hit, additive, () => { applyWhenReady.current = null; });
-    if (!selection) { setToast({ title: 'Selection not changed', hint: 'Choose an unchanged face or edge of the source body. Generated or ambiguous preview references cannot be selected.', detail: 'The accepted selection is unchanged. Apply was not queued.' }); return true; }
+    if (!selection) { setToast(filletPickFailure(current)); return true; }
     replaceFilletSelection({ current: activeStore.get, context: () => ctx, retire: commandPreview.retire, clearApply: () => { applyWhenReady.current = null; }, set: setActive, select: setSelection }, selection); return true;
   };
   const removeFilletEdge = (owner: Active, edge: Selection['edges'][number]) => {
