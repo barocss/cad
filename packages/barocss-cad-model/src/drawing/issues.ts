@@ -41,7 +41,7 @@ import { detailScale } from './detail';
 import { viewBreaksOf } from './breaks';
 import { ambiguousFrameDimensions, ambiguousFrameMessage, frameNotes, frameRules } from './controls';
 import { UNPRINTABLE_FIT_LIMITS, deviationPair, frameValue, presetFor, type DrawingUnits, type FrameRounding } from './standard';
-import { fmtMM, type Resolved } from './dimensions';
+import { fmtMM, resolvePoint, type Resolved } from './dimensions';
 import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewId, isSectionRef, nextSectionId, sectionLetter, sectionsOf, withSections, type DimPoint, type SectionViewId, type DimView, type DrawingDimension, type DrawingSettings, type DrawingViews, type ViewId, type XY } from './types';
 
 export const DRAWING_ISSUES_VERSION = 'cad-studio-drawing-issues-v1';
@@ -465,7 +465,12 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
     if (r.dim.kind === 'linear') {
       // (A point is on a hidden line when no visible edge of the view ends there: a corner a hidden edge also ends at is seen.)
       const pr = projectionOf(ctx.views, ctx.sheet, r.dim.view);
-      const on = pr ? [r.dim.a, r.dim.b].filter(p => p.at === 'end' && !seenAt(pr, p.near)) : [];
+      // Saved near points select an endpoint; they are not its position after a model edit.
+      const on = pr ? [r.dim.a, r.dim.b].filter(p => {
+        if (p.at !== 'end') return false;
+        const current = resolvePoint(pr, p);
+        return current !== null && !seenAt(pr, current);
+      }) : [];
       // (O148 X3: a keyseat's or a keyway's — the section square to its axis through its middle, as the fix.)
       const sec = on.length ? sectionFor(ctx, r.dim) : null;
       if (on.length) out.push({ code: 'DIM_ON_HIDDEN', severity: 'warning', message: `Dimension ${r.text} measures to ${on.length > 1 ? 'hidden lines' : 'a hidden line'} in ${viewName(r.dim.view)}: ${sec?.text ?? 'a section through it would show it (none is added for it).'}`, dims: [r.dim.id], view: r.dim.view, ...(sec?.fix ? { fix: sec.fix } : {}) });
