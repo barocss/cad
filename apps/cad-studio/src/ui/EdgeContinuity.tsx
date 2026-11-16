@@ -8,8 +8,9 @@ import { continuityAngleLabel } from './continuityAngleLabel';
 
 type Result = Extract<ContinuityReply, { measurement: unknown }>['measurement'];
 
-function EdgeContinuityRead({ picked, read }: {
+function EdgeContinuityRead({ picked, selectedDisplayEdge = false, read }: {
   picked: Extract<ContinuityRequest, { kind: 'list' }>['picked'];
+  selectedDisplayEdge?: boolean;
   read(input: ContinuityRequest): Promise<ContinuityReply>;
 }) {
   const [edges, setEdges] = useState<ContinuityEdge[] | null>(null);
@@ -19,14 +20,16 @@ function EdgeContinuityRead({ picked, read }: {
   const [error, setError] = useState('');
   const live = useRef(false);
   const edgeSelect = useRef<HTMLSelectElement>(null);
+  const resultStatus = useRef<HTMLDivElement>(null);
   const inspectButton = useRef<HTMLButtonElement>(null);
   const focusList = useRef(false);
   useLayoutEffect(() => {
     if (pending || !focusList.current) return;
     focusList.current = false;
     // Disabling the initiating button can send focus to body. Do not steal it from another control.
-    if (edges?.length && (document.activeElement === document.body || document.activeElement === inspectButton.current)) {
-      edgeSelect.current?.focus();
+    if (document.activeElement === document.body || document.activeElement === inspectButton.current) {
+      if (edges?.length) edgeSelect.current?.focus();
+      else if (edges?.length === 0) resultStatus.current?.focus();
     }
   }, [edges, pending]);
   useLayoutEffect(() => {
@@ -60,7 +63,7 @@ function EdgeContinuityRead({ picked, read }: {
       }
       setEdges(reply.edges);
       if (!reply.edges.length) {
-        setError('No native edges join two supported faces.');
+        setError('This body has no measurable native face joints. Select a different native solid; mesh edges cannot provide this measurement.');
         return;
       }
       if (reply.selected) {
@@ -74,15 +77,21 @@ function EdgeContinuityRead({ picked, read }: {
     }
   }
   return <section aria-label="Edge continuity" className="mt-2 space-y-1">
+    {selectedDisplayEdge && !picked && <div className="empty" data-continuity-scope>
+      This displayed edge has no unique native joint mapping. Browse the body's native joints instead; the list does not identify this selected edge.
+    </div>}
+    {edges && edges.length > 0 && <div className="empty" data-continuity-list-scope>
+      Measurement uses the native edge chosen below. The viewport selection stays unchanged.
+    </div>}
     {edges && edges.length > 0 && <NativeSelect ref={edgeSelect} aria-label="Native shared edge" value={chosen} disabled={pending}
       onChange={event => { setChosen(event.target.value); setResult(null); setError(''); }}>
       <option value="">Select native edge</option>
       {edges.map(edge => <option key={edge.id} value={edge.id}>{edge.faces.join(' / ')} · {edge.name}</option>)}
     </NativeSelect>}
-    <Button ref={inspectButton} size="xs" variant="outline" disabled={pending || !!edges && !chosen || result?.status === 'unsupported'} onClick={event => void inspect(event.detail === 0)}>
+    {edges?.length !== 0 && <Button ref={inspectButton} size="xs" variant="outline" disabled={pending || !!edges && !chosen || result?.status === 'unsupported'} onClick={event => void inspect(event.detail === 0)}>
       {pending ? 'Measuring…' : edges ? 'Measure continuity' : picked ? 'Inspect edge continuity' : 'Inspect native joints'}
-    </Button>
-    <div role="status" aria-label="Edge continuity result">
+    </Button>}
+    <div ref={resultStatus} tabIndex={-1} role="status" aria-label="Edge continuity result">
       {error && <div className="empty">{error}</div>}
       {result?.status === 'unsupported' && <div className="empty">
         <div>{continuityRecovery(result.reason)}</div>

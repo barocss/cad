@@ -3506,7 +3506,7 @@ export function App() {
         display={{ showBox, setShowBox, inertiaAt, setInertiaAt }} changes={{ commit, setSelection, edgesToCurves, loadBendTable, setFlatView, setCutListView, separate }}>
         {continuityPick && !lookOf(doc, continuityPick.body).hidden && <EdgeContinuity
           key={JSON.stringify([docGeneration, workerSession, continuityPick.body.key, continuityPick.edge, continuityPick.picked])}
-          picked={continuityPick.picked} source={evaluated}
+          picked={continuityPick.picked} selectedDisplayEdge={continuityPick.edge !== undefined} source={evaluated}
           read={readContinuity} />}
         {curvaturePick && <EdgeCurvature {...curvature} />}
         {editNode !== null && <NodeEditor alignPreview={historyAlign} readAlignTargets={doc.nodes[editNode]?.kind === 'align' ? readAlignHistoryTargets : undefined} edgeReplacement={finishEdgeEditor.available ? {
