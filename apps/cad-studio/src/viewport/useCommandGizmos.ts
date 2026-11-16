@@ -1,3 +1,4 @@
+import { draggedScaleFactor } from './draggedScaleFactor';
 import { useMemo, useRef, type Dispatch, type SetStateAction, type RefObject } from 'react';
 import { fmt, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
@@ -48,7 +49,7 @@ export function useCommandGizmos({ model, command, context, drag }: CommandGizmo
       const pivot: Vec3 = [Number(values.px), Number(values.py), Number(values.pz)];
       return { origin: pivot, scale: true,
         onScale: (factor, done) => {
-          const from = begin(), k = Math.round(Number(from.factor) * factor * 100) / 100, m = new Float64Array(16);
+          const from = begin(), k = draggedScaleFactor(Number(from.factor), factor), m = new Float64Array(16);
           m[0] = m[5] = m[10] = k; m[15] = 1; m[12] = pivot[0] * (1 - k); m[13] = pivot[1] * (1 - k); m[14] = pivot[2] * (1 - k);
           show({ factor: k }, m, done);
         } };

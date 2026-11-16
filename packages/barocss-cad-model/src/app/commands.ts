@@ -816,7 +816,7 @@ const allCommands: Command[] = [
   {
     id: 'scale', label: 'Scale', icon: 'cad-scale', hint: 'Grow or shrink a body about its centre: drag the gizmo’s cube or type the factor', group: 'modify', keywords: 'resize enlarge shrink factor',
     available: ctx => oneBody(ctx) ? ok : no('Select one body to scale.'),
-    fields: () => [{ key: 'factor', label: 'Factor', kind: 'ratio', min: 0.01, max: 1000 },
+    fields: () => [{ key: 'factor', label: 'Factor', kind: 'ratio', min: 0, max: 1000 },
       { key: 'px', label: 'Pivot X', kind: 'mm' }, { key: 'py', label: 'Pivot Y', kind: 'mm' }, { key: 'pz', label: 'Pivot Z', kind: 'mm' }],
     defaults: ctx => { const c = centreOf(oneBody(ctx)); return { factor: 1, px: c[0], py: c[1], pz: c[2] }; },
     build: (ctx, v) => withNode(ctx.doc, { kind: 'scale', parent: refOf(oneBody(ctx)!), factor: Number(v.factor), pivot: [Number(v.px), Number(v.py), Number(v.pz)] }),
