@@ -92,6 +92,7 @@ async function check(label, doc, angle) {
 
 await f.run(async () => {
   await f.newPage();
+  const width = Number(process.argv[3] ?? 1440); await f.page.setViewportSize({ width, height: width === 1024 ? 800 : 900 });
   f.phase = 'Open the editable XY half-disk sketch and start Extrude';
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: 'half-disk-sketch.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
@@ -101,6 +102,9 @@ await f.run(async () => {
   await f.openExtrudeHud();
   const hud = f.hud(), draft = field('Draft', hud);
   await field('Distance', hud).fill(String(height));
+  await draft.fill('-10');
+  await hud.getByText('Outward Draft is not supported for this half-disk', { exact: true }).waitFor();
+  assert.equal(await draft.getAttribute('aria-invalid'), 'true'); await f.same(seed);
   await draft.fill('35');
   await hud.getByText('The draft is too steep for this height', { exact: true }).waitFor();
   assert.equal(await button('Apply', hud).isEnabled(), false);
@@ -122,6 +126,17 @@ await f.run(async () => {
 
   const editor = f.editor();
   await f.openFeatureEditor(1, 'drafted half-disk Extrude');
+  await field('Draft', editor).fill('35');
+  await button('Apply', editor).click();
+  await editor.getByText('The draft is too steep for this height', { exact: true }).waitFor();
+  assert.equal(await field('Draft', editor).getAttribute('aria-invalid'), 'true');
+  assert.equal(await button('Apply', editor).isDisabled(), true); await f.same(created);
+  await field('Draft', editor).press('Enter');
+  assert.equal(await button('Apply', editor).isDisabled(), true); await f.same(created);
+  await f.snapshot('history-collapse-refused');
+  await button('Reset', editor).click();
+  assert.equal(await field('Draft', editor).inputValue(), '10');
+  assert.equal(await editor.getByText('The draft is too steep for this height', { exact: true }).count(), 0);
   await field('Draft', editor).fill('14');
   const changed = (await f.applyEditor(created, 'half-disk-edited')).doc;
   assert.deepEqual(changed.nodes[1], { ...created.nodes[1], draft: 14 });

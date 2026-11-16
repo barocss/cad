@@ -1,3 +1,4 @@
+import { extrudeDraftFailure } from '../app/extrudeDraftFailure';
 import { varyingFilletFailure } from '../app/varyingFilletFailure';
 import { historyFilletInteriorProblems, type FilletInteriorKey } from '../app/filletInteriorInput';
 import { countersinkHistoryProblem } from '../app/countersinkHistoryInput';
@@ -175,7 +176,8 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
   }, [readAlignPreview, previewAlignDraft, draft, nodes, index]);
   const alignResult = previewAlignDraft ? alignPreview?.result : null;
   const apply = (opener?: HTMLElement) => {
-    if (!changed || pending || edgeReplacement?.draft || incompleteInset || hasInvalidNumber || lengthProblem || request.current) return;
+    if (!changed || pending || edgeReplacement?.draft || incompleteInset || hasInvalidNumber || lengthProblem || request.current
+      || node?.kind === 'extrude' && current?.error?.historyField === 'draft') return;
     setModeProblem(null);
     const ticket = {};
     request.current = ticket;
@@ -186,7 +188,7 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
     void result.then(error => {
       if (!ownsDraft()) return;
       request.current = null;
-      setEvaluation(error ? { nodes, index, error: varyingFilletFailure(error, draft, index), opener } : null);
+      setEvaluation(error ? { nodes, index, error: extrudeDraftFailure(error, draft, index) ?? varyingFilletFailure(error, draft, index), opener } : null);
     });
   };
   const close = () => { retireEvaluation(); onClose(); };
@@ -290,14 +292,16 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
         const selectedGuide = f.kind === 'choice' && f.key === 'loftGuide' && sameDraftScope
           ? f.options.find(option => option.value === loftGuideChoice)?.value : undefined;
         const refusedHistoryField = current?.error?.historyField === f.key;
+        const extrudeFailure = node?.kind === 'extrude' && f.key === 'draft' && refusedHistoryField ? current?.error : undefined;
         return (
         <div key={f.key} className="field">
           {f.key === 'csk' && countersinkProblem && <div id={countersinkErrorId} role="status" className="col-span-2 hud-error">{countersinkProblem}</div>}
           {guideX && guide && <div id={guideId} className="col-span-2 small mono break-words">
             Guide {Number(guideField[1]) + 1} · ({guide.controlPoints[0].join(', ')}) → ({guide.controlPoints[2].join(', ')}) mm
           </div>}
+          {extrudeFailure && <span className="col-span-2"><FeatureFailureNotice id={historyErrorId} error={extrudeFailure} /></span>}
           <span>{f.label}</span>
-          {f.kind === 'number' ? <span className="num"><input ref={element => element?.setCustomValidity(interiorProblem ?? ((rule === 'scale-factor' || rule === 'open-unit' || node?.kind === 'chamfer' && rule === 'positive') && invalidDimension ? featureNumberRange(rule) + '.' : ''))} type="number" step={f.integerRange ? 1 : "any"} min={f.integerRange?.min ?? numberBounds.min} max={f.integerRange?.max ?? numberBounds.max} aria-label={f.label} aria-describedby={description} aria-invalid={typed[f.key]?.trim() === '' || invalidCounts.includes(f) || invalidDimension || !!interiorProblem || failedGuideX || (f.key === 'csk' && !!countersinkProblem) || (f.key === 'olen2' && !!lengthProblem) || undefined} data-loft-guide-gap={failedGuideX || undefined} value={typed[f.key] ?? f.get(draft)} disabled={ordinaryLocked || !!(f as BindableField).param?.(draft)} onChange={e => changeNumber(f, e.target.value)} />{f.unit && <em>{f.unit}</em>}
+          {f.kind === 'number' ? <span className="num"><input ref={element => element?.setCustomValidity(interiorProblem ?? ((rule === 'scale-factor' || rule === 'open-unit' || node?.kind === 'chamfer' && rule === 'positive') && invalidDimension ? featureNumberRange(rule) + '.' : ''))} type="number" step={f.integerRange ? 1 : "any"} min={f.integerRange?.min ?? numberBounds.min} max={f.integerRange?.max ?? numberBounds.max} aria-label={f.label} aria-describedby={extrudeFailure ? historyErrorId : description} aria-invalid={!!extrudeFailure || typed[f.key]?.trim() === '' || invalidCounts.includes(f) || invalidDimension || !!interiorProblem || failedGuideX || (f.key === 'csk' && !!countersinkProblem) || (f.key === 'olen2' && !!lengthProblem) || undefined} data-loft-guide-gap={failedGuideX || undefined} value={typed[f.key] ?? f.get(draft)} disabled={ordinaryLocked || !!(f as BindableField).param?.(draft)} onChange={e => changeNumber(f, e.target.value)} />{f.unit && <em>{f.unit}</em>}
             {names.length > 0 && 'bind' in f && <select className="param-bind" disabled={ordinaryLocked} aria-label={`${f.label} parameter`} data-tip="Parameter" data-tip-desc="Bind this value to a named parameter (Parameters panel)" value={(f as BindableField).param(draft) ?? ''}
               onChange={e => {
                 retireEvaluation();
@@ -346,8 +350,8 @@ export function NodeEditor({ nodes, index, onApply, onClose, onEditSketch, onRel
       {!current && alignResult?.kind === 'ready' && <div className="small" role="status">Align preview</div>}
       {!current && alignResult?.kind === 'error' && <FeatureFailureNotice error={alignResult.error} />}
       <div ref={failureArea} className={current?.error?.linkedInsetFeature ? 'scroll-mb-2' : undefined}>
-        {current?.error && <FeatureFailureNotice id={guideGapError ? `${guideDescriptionId}-gap` : current.error.historyField ? historyErrorId : undefined} error={current.error} />}
-        {fields.length > 0 && <div className="row-actions"><button ref={applyButton} className="primary" disabled={!changed || pending || !!edgeReplacement?.draft || incompleteInset || hasInvalidNumber || !!lengthProblem || (current !== null && !current.error)} onClick={event => apply(event.currentTarget)}>Apply</button><button ref={resetButton} className="ghost" disabled={(!changed && !hasInsetDraft && !incompleteInset && !hasInvalidNumber && !lengthProblem && !loftGuideChoice) || pending} onClick={() => { retireEvaluation(); setDraft(nodes); setTyped({}); setLengthProblem(null); setLoftGuideChoice(null); }}>Reset</button></div>}
+        {current?.error && !(node?.kind === 'extrude' && current.error.historyField === 'draft') && <FeatureFailureNotice id={guideGapError ? `${guideDescriptionId}-gap` : current.error.historyField ? historyErrorId : undefined} error={current.error} />}
+        {fields.length > 0 && <div className="row-actions"><button ref={applyButton} className="primary" disabled={!changed || pending || !!edgeReplacement?.draft || incompleteInset || hasInvalidNumber || !!lengthProblem || (current !== null && (!current.error || node?.kind === 'extrude' && current.error.historyField === 'draft'))} onClick={event => apply(event.currentTarget)}>Apply</button><button ref={resetButton} className="ghost" disabled={(!changed && !hasInsetDraft && !incompleteInset && !hasInvalidNumber && !lengthProblem && !loftGuideChoice) || pending} onClick={() => { retireEvaluation(); setDraft(nodes); setTyped({}); setLengthProblem(null); setLoftGuideChoice(null); }}>Reset</button></div>}
       </div>
     </div>
   );
