@@ -552,7 +552,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
         number('zm', 'Mate\'s teeth', undefined, n => g(n).mateTeeth, (n, v) => ({ ...g(n), mateTeeth: Math.round(v) }));
         number('sigma', 'Shaft angle Σ', '°', n => g(n).shaftAngle ?? 90, (n, v) => { const next = { ...g(n) }; if (v === 90) delete next.shaftAngle; else next.shaftAngle = v; return next; });
         // (R12b.4, D135: the spiral — 0 straight; a cutter radius given is the user's own, the estimate's flag goes.)
-        number('beta', 'Spiral angle β', '°', n => g(n).spiral?.angle ?? 0, (n, v) => { const next = { ...g(n) }; if (v > 0) next.spiral = { hand: 'left', cutterRadius: meanConeDistance(next), cutterEstimate: true, ...next.spiral, angle: v }; else delete next.spiral; return next; });
+        number('beta', 'Spiral angle β', '°', n => g(n).spiral?.angle ?? 0, (n, v) => { const next = { ...g(n) }; if (v > 0) next.spiral = next.spiral ? { ...next.spiral, angle: v } : { hand: 'left', cutterRadius: meanConeDistance(next), cutterEstimate: true, angle: v }; else delete next.spiral; return next; });
         if (node.spiral) {
           out.push({ kind: 'choice', key: 'hand', label: 'Hand', options: [{ value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }], get: n => self<typeof node>(n).spiral?.hand ?? 'left', set: (n, v) => replace(n, i, { ...self<typeof node>(n), spiral: { ...self<typeof node>(n).spiral!, hand: v as 'right' | 'left' } }) });
           number('rc', 'Cutter radius', 'mm', n => num(g(n).spiral!.cutterRadius), (n, v) => { const s = { ...g(n).spiral!, cutterRadius: v }; delete s.cutterEstimate; return { ...g(n), spiral: s }; });
