@@ -1323,7 +1323,7 @@ export function shapeLabel(made: Made): string {
     case 'offset-face': {
       const distance = made.values?.d;
       return typeof distance === 'number' && Number.isFinite(distance)
-        ? `Offset face ${distance > 0 ? '+' : ''}${fmt(distance)} mm` : 'Offset face';
+        ? `Offset face ${distance > 0 ? '+' : ''}${distance} mm` : 'Offset face';
     }
     case 'box': return `Box ${v('w')}×${v('d')}×${v('h')}`;
     case 'cylinder': return `Cylinder Ø${d('r')}×${v('h')}`;
@@ -1352,7 +1352,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
   switch (node.kind) {
     case 'text': return `Text · ${node.text}`;
     case 'cylindrical-wrap': return 'Cylindrical wrap';
-    case 'offset-face': return node.target ? 'Offset face to plane' : `Offset face ${node.distance > 0 ? '+' : ''}${fmt(node.distance)} mm`;
+    case 'offset-face': return node.target ? 'Offset face to plane' : `Offset face ${node.distance > 0 ? '+' : ''}${node.distance} mm`;
     case 'band-surface': return 'Band surface';
     case 'text-relief': return `${node.mode === 'emboss' ? 'Text emboss' : 'Text engrave'} · ${node.text}`;
     case 'driven-sketch': return 'Sketch · driven outline';

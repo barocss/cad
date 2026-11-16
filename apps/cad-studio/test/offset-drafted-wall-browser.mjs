@@ -153,6 +153,7 @@ await f.run(async () => {
 
   f.phase = 'Open the authored taper and select the inclined +X wall';
   await f.newPage();
+  await f.page.setViewportSize({ width: Number(process.argv[3] ?? 1440), height: 900 });
   const [open] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await open.setFiles({ name: 'drafted-wall.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
@@ -210,14 +211,43 @@ await f.run(async () => {
   assert.match(await history.innerText(), /clos|cross|collapse/i);
   await f.same(outward);
   await f.snapshot('wall-collapse-refused');
-  await offset(history).fill('-2');
+  await offset(history).fill('-35.918');
   await status(history, 'preview');
   await button('Apply', history).click();
   await f.changed(outward);
   const inward = await f.doc();
-  assert.deepEqual(inward.nodes[index], { ...node, distance: -2 });
+  assert.deepEqual(inward.nodes[index], { ...node, distance: -35.918 });
   assert.deepEqual(inward.nodes.slice(0, index), seed.nodes);
-  const result = await measure('inward-oracle', inward, wall.name, -2, stock);
+  const result = await measure('inward-oracle', inward, wall.name, -35.918, stock);
+  const labels = async distance => {
+    const name = `Offset face ${distance} mm`;
+    const historyButton = f.page.locator(`.hs[data-node-index="${index}"]`);
+    assert.equal(await historyButton.getAttribute('aria-label'), name);
+    assert.ok((await historyButton.getAttribute('title')).startsWith(name + ' ·'));
+    const show = button('Show its features');
+    if (await show.count()) await show.click();
+    await f.page.locator('.ol-step').getByText(name, { exact: true }).waitFor();
+  };
+  await labels(-35.918);
+  await f.openFeatureEditor(index, 'precise wall offset');
+  await button('Edit offset', f.editor()).click();
+  await status(history, 'preview');
+  assert.equal(await offset(history).inputValue(), '-35.918');
+  await offset(history).fill('-35.92');
+  await status(history, 'refused');
+  assert.equal(await button('Apply', history).isDisabled(), true);
+  await f.same(inward);
+  await offset(history).fill('-35.916');
+  await status(history, 'preview');
+  await button('Apply', history).click();
+  await f.changed(inward);
+  await labels(-35.916);
+  const preciseEdit = await f.doc();
+  await measure('second-precise-oracle', preciseEdit, wall.name, -35.916, stock);
+  await f.undo(); await f.same(inward); await labels(-35.918);
+  await f.redo(); await f.same(preciseEdit); await labels(-35.916);
+  await f.undo(); await f.same(inward);
+
   await f.undo();
   await f.same(outward);
   await f.redo();
@@ -226,13 +256,14 @@ await f.run(async () => {
   f.phase = 'Save and reopen the accepted wall edit in a fresh Studio context';
   const file = await f.save('drafted-wall');
   await f.freshOpen(file.file, inward, 'wall-file-opened');
-  assert.equal((await measure('reopened-oracle', await f.doc(), wall.name, -2, stock)).sha256, result.sha256);
+  assert.equal((await measure('reopened-oracle', await f.doc(), wall.name, -35.918, stock)).sha256, result.sha256);
+  await labels(-35.918);
   const invalid = { ...inward, nodes: [...seed.nodes, { ...node, distance: -37 }] };
   const [bad] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await bad.setFiles({ name: 'collapsed-wall.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(invalid)) });
   await f.waitToast(/Offset face:.*(?:clos|cross|collapse).*Your part is unchanged/i);
   await f.same(inward);
   await f.snapshot('invalid-file-unchanged');
-  f.report.observations.push({ label: 'wall-offset', face: wall.name, handleDistance: 3, inwardDistance: -2,
+  f.report.observations.push({ label: 'wall-offset', face: wall.name, handleDistance: 3, inwardDistance: -35.918,
     dragCssPixels: delta, signedRefusal: -37, exactReopen: true, identityRetained: true, shapeSHA256: result.sha256 });
 });
