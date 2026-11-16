@@ -1,3 +1,4 @@
+import { SewSourceList } from './SewSourceList';
 import { splitPlaneProblem } from '@barocss/cad-model/app/splitPlaneInput';
 import type { FilletEndpoints, FilletStationDraft } from '../app/filletEndpoints';
 import { FilletEndpointNotice } from './FilletEndpointNotice';
@@ -261,6 +262,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
           <option value="span">Total span</option>
         </select>
       </div>}
+      {node?.kind === 'sew' && <SewSourceList names={node.names} />}
       {splitProblem && <p role="status" className="hud-error">{splitProblem}</p>}
       {node?.kind === 'split' && <p className="small muted">
         Negative and Positive follow the plane normal; reversing the normal swaps their physical sides.

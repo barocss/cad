@@ -1,3 +1,4 @@
+import { sewGapLocation } from './sewGapLocation';
 import { holeMissLocation } from './holeMissLocation';
 import { requireStepGeometry } from './stepOutputAdmission';
 import { bodyLookRef } from '../app/lookKey';
@@ -272,7 +273,7 @@ const rebuildOf = (s: CadPartSnapshot): RebuildData | undefined => s.profile && 
 
 /** A failed evaluation: its refusal in words, and the time it took (every evaluation's catch). */
 function failed(revision: number, cause: unknown, t0: number, doc?: StudioDoc): EvalResult {
-  return { ok: false, revision, error: doc ? holeMissLocation(doc, cause, friendlyCause(cause)) : friendlyCause(cause), wallTime: (performance.now() - t0) / 1000 };
+  return { ok: false, revision, error: doc ? sewGapLocation(doc, cause, holeMissLocation(doc, cause, friendlyCause(cause))) : friendlyCause(cause), wallTime: (performance.now() - t0) / 1000 };
 }
 /** A part's bodies from its snapshot, its face table remembered (evaluateDoc's and evaluatePart's one path; R4 C3). */
 function partResult(doc: StudioDoc, snapshot: CadPartSnapshot, revision: number, quality: number, shopRows: readonly ShopTreeProvenance[], t0: number): Extract<EvalResult, { ok: true }> {

@@ -2,14 +2,16 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
-const pins = ['apps/cad-studio/src/ui/DirectPanel.tsx', 'apps/cad-studio/src/ui/NodeEditor.tsx',
+const domeLast = process.argv.includes('--dome-last');
+let copiedNames = [];
+const pins = ['apps/cad-studio/test/sew-gap-diagnostics-browser.mjs', 'apps/cad-studio/src/ui/SewSourceList.tsx', 'packages/barocss-cad-model/src/engine/sewGapLocation.ts', 'apps/cad-studio/src/ui/DirectPanel.tsx', 'apps/cad-studio/src/ui/NodeEditor.tsx',
   'packages/barocss-cad-model/src/engine/errors.ts', 'packages/barocss-cad-model/src/app/sewCommand.ts',
   'packages/barocss-cad-model/src/app/editFields.ts', 'packages/barocss-cad/src/brep/sew-solid.ts'];
 const f = await createFlow({
   name: 'sew-gap-diagnostics', output: process.argv[2], envFrozen: 'D1191_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Use consistent automatic Sew tolerance and name unmatched surfaces in the original gap fixture.',
-  limits: ['Exact local moved dome fixture; one selected order; actual desktop WebGPU.'],
+  limits: ['Exact local moved dome fixture; chosen first/last dome order; actual desktop WebGPU; no external STEP reader.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkBrep, evaluateSurface, massPropertiesOf, surfaceDomain } from '@barocss/cad';
@@ -37,7 +39,7 @@ async function readNotice(panel) {
   await detail.waitFor();
   assert.equal(await detail.getAttribute('open'), null);
   const raw = await detail.locator('code').textContent();
-  assert.match(raw, /8 edges.*surfaces 1, 3, 4, 5, 6/);
+  assert.match(raw, domeLast ? /8 edges.*surfaces 2, 3, 4, 5, 6/ : /8 edges.*surfaces 1, 3, 4, 5, 6/);
   return { copy: await notice.locator(':scope > div').evaluateAll(nodes => nodes.slice(0, 2).map(node => node.textContent)), raw };
 }
 
@@ -52,7 +54,9 @@ await f.run(async () => {
   await f.same(source);
 
   f.phase = 'Select the six direct source surfaces in historical order';
-  for (const [index, object] of source.direct.objects.entries()) {
+  const ordered = domeLast ? [...source.direct.objects.slice(1), source.direct.objects[0]] : source.direct.objects;
+  copiedNames = ordered.map(object => object.name);
+  for (const [index, object] of ordered.entries()) {
     const row = f.page.locator('.ol.direct').filter({ hasText: object.name });
     assert.equal(await row.count(), 1);
     await row.click({ modifiers: index ? ['Shift'] : [] });
@@ -66,6 +70,7 @@ await f.run(async () => {
   const apply = button('Apply', hud);
   await hud.locator('.status.error').waitFor();
   const previewNotice = await readNotice(hud);
+  assert.equal(await hud.getByText(/Failed feature/).count(), 0);
   assert.equal(await apply.isEnabled(), false);
   await f.same(source);
   await f.snapshot('below-gap-refused');
@@ -86,7 +91,7 @@ await f.run(async () => {
   const feature = accepted.nodes[0];
   assert.equal(feature.kind, 'sew');
   assert.equal(feature.tolerance, 0.021);
-  assert.deepEqual(feature.names, source.direct.objects.map(object => object.name));
+  assert.deepEqual(feature.names, copiedNames);
   assert.ok(accepted.direct.objects.every(object => object.hidden));
   const native = await f.inspect('sew-native', accepted);
   assert.ok(native.valid && native.faces === 6 && native.edges === 12 && native.vertices === 8 && native.solids === 1);
@@ -97,6 +102,8 @@ await f.run(async () => {
   f.phase = 'Reject 0.019 in History and recover with the automatic value';
   await f.openFeatureEditor(0, 'Sew tolerance History');
   const editor = f.editor();
+  await editor.getByText(`Copied sources · ${copiedNames.length}`, { exact: true }).click();
+  assert.deepEqual(await editor.getByRole('list', { name: 'Copied Sew sources' }).locator('li').allTextContents(), copiedNames);
   const field = editor.getByLabel(/^Tolerance(?: \(0: automatic\))?$/);
   const historyLabel = await field.getAttribute('aria-label');
   await field.fill('0.019');
@@ -111,7 +118,11 @@ await f.run(async () => {
   assert.match(historyLabel ?? '', /0: automatic/i);
   for (const { copy } of [previewNotice, historyNotice]) {
     assert.equal(copy[0], 'Sew leaves unmatched edges');
-    assert.match(copy[1], /8 edges.*surfaces 1, 3, 4, 5, 6/i);
+    assert.match(copy[1], /8 edges/i);
+    for (const [index, name] of copiedNames.entries()) {
+      if (name.includes('floor')) assert.ok(!copy[1].includes(name));
+      else assert.ok(copy[1].includes(`${index + 1}. ${name}`), copy[1]);
+    }
     assert.match(copy[1], /gap.*tolerance/i);
   }
 
@@ -129,4 +140,9 @@ await f.run(async () => {
   await f.same(accepted);
   await f.redo();
   await f.same(automatic);
+  await f.page.locator('input[aria-label="Model file"]').setInputFiles({ name: 'sew-copies.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(automatic)) });
+  await f.same(automatic); await f.openFeatureEditor(0);
+  await f.editor().getByText(`Copied sources · ${copiedNames.length}`, { exact: true }).click();
+  assert.deepEqual(await f.editor().getByRole('list', { name: 'Copied Sew sources' }).locator('li').allTextContents(), copiedNames);
+  await f.closeEditor(); assert.deepEqual(f.report.downloads, []);
 });
