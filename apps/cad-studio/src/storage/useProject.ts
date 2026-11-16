@@ -67,7 +67,7 @@ export function useProject(cb: ProjectCallbacks) {
   const opening = useRef({ serial: 0 }), projectSession = useRef<object>({}), reading = useRef(0);
   const saves = useRef({ path: null as string | null, next: 0, success: 0 });
   const restoring = useRef(0);
-  const autosaves = useRef<{ owner: OpenOwner; next: number; settled: number; warned: boolean; checkpoint?: StoreFile } | null>(null);
+  const autosaves = useRef<{ owner: OpenOwner; next: number; settled: number; warned: boolean; checkpoint?: StoreFile; boundary?: { through: number; saved: StoreFile } } | null>(null);
   const live = useRef(view); live.current = view;
   const call = useRef(cb); call.current = cb;
   // (The versions a turn's call asked for and did not have: sent with the next turn, DA-9.)
@@ -247,9 +247,11 @@ export function useProject(cb: ProjectCallbacks) {
         const owner = saves.current, order = ++owner.next;
         const current = () => saves.current === owner && live.current.store === store && (live.current.part === part || live.current.part === path);
         const currentSuccess = () => current() && owner.success === order;
-        // Capture only this document session's already completed checkpoint. Later autosaves remain eligible.
+        // Only autosaves already requested by this session can predate this Save.
         const autosave = autosaves.current;
-        const checkpoint = autosave && currentVersion(autosave.owner) ? autosave.checkpoint : undefined;
+        const preceding = autosave && currentVersion(autosave.owner) ? autosave : undefined;
+        const through = preceding?.next ?? 0;
+        const checkpoint = preceding?.checkpoint;
         try {
           const written = await writePart(store, path, doc, { expect: versionWrite ? versionWrite.expect : part ? tags.current.part : null });
           versionWrite?.didWrite(written);
@@ -257,10 +259,13 @@ export function useProject(cb: ProjectCallbacks) {
           // A newer document edit must not leave this file's tag behind its own successful write.
           tags.current.part = written.tag;
           tags.current.sourceSHA256 = taskSourceSHA(written.bytes);
-          if (checkpoint) {
+          if (preceding) preceding.boundary = { through, saved: written };
+          // A pre-Save request may have completed while the primary file was being written.
+          const completed = preceding && preceding.settled <= through ? preceding.checkpoint : checkpoint;
+          if (completed) {
             // Optional provenance must not delay a successful Save or keep its accepted tag stale.
             // Failure/interruption leaves recovery available with the existing unknown-age warning.
-            void rememberSavedCheckpoint(store, path, written, checkpoint).catch(() => {});
+            void rememberSavedCheckpoint(store, path, written, completed).catch(() => {});
           }
           set({ part: path, offered: null });
           if (!part) {
@@ -296,6 +301,11 @@ export function useProject(cb: ProjectCallbacks) {
           const written = await writeAutosave(store, part, doc);
           if (autosaves.current !== state || !currentVersion(owner) || order < state.settled) return;
           state.settled = order; state.warned = false; state.checkpoint = written;
+          const boundary = state.boundary;
+          if (boundary && order <= boundary.through) {
+            // A late pre-Save receipt is provenance, not permission to remove recovery bytes.
+            void rememberSavedCheckpoint(store, part, boundary.saved, written).catch(() => {});
+          }
         } catch (e) {
           // A failure belongs to the document that asked for this copy, not a later edit or successful write.
           if (autosaves.current !== state || !currentOpen(owner) || order < state.settled) return;

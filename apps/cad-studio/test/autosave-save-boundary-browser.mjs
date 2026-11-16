@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { createFlow } from './flow-helper.mjs';
-const f = await createFlow({name:'autosave-save-boundary',envFrozen:'AUTOSAVE_BOUNDARY_FROZEN',output:process.argv[2],qualification:'Own completed pre-Save recovery checkpoint is suppressed without deletion; newer recovery remains available',initialFiles:['apps/cad-studio/test/autosave-save-boundary-browser.mjs'],requiredFrozen:['apps/cad-studio/src/storage/project.ts','apps/cad-studio/src/storage/useProject.ts'],limits:['Actual desktop Chrome OPFS only. Native folders and in-flight checkpoints begun before Save are not qualified. Unknown checkpoints remain eligible.']});
+const pending = process.env.AUTOSAVE_BOUNDARY_PENDING === '1';
+const f = await createFlow({name:pending?'autosave-pending-save-boundary':'autosave-save-boundary',envFrozen:'AUTOSAVE_BOUNDARY_FROZEN',output:process.argv[2],qualification:'Own pre-Save recovery checkpoint is suppressed without deletion; newer recovery remains available',initialFiles:['apps/cad-studio/test/autosave-save-boundary-browser.mjs'],requiredFrozen:['apps/cad-studio/src/storage/project.ts','apps/cad-studio/src/storage/useProject.ts'],limits:['Actual desktop Chrome OPFS only. Native folders are not qualified. Pending mode holds the actual OPFS writable close before the explicit Save. Unknown checkpoints remain eligible.']});
 await f.run(async () => {
   await f.newPage();
   const name=`save-boundary-${Date.now()}`;
@@ -20,12 +21,23 @@ await f.run(async () => {
   };
   await open();
   const read=async(path)=>f.page.evaluate(async({name,path})=>{try{let p=await navigator.storage.getDirectory();for(const dir of ['projects',name,...path.split('/').slice(0,-1)])p=await p.getDirectoryHandle(dir);const h=await p.getFileHandle(path.split('/').at(-1));return JSON.parse(await(await h.getFile()).text());}catch(e){if(e.name==='NotFoundError')return null;throw e;}},{name,path});
+  if(pending) await f.page.evaluate(()=>{
+    const dirs=new WeakSet(), files=new WeakSet();
+    const getDir=FileSystemDirectoryHandle.prototype.getDirectoryHandle;
+    const getFile=FileSystemDirectoryHandle.prototype.getFileHandle;
+    const create=FileSystemFileHandle.prototype.createWritable;
+    FileSystemDirectoryHandle.prototype.getDirectoryHandle=async function(name,...args){const h=await getDir.call(this,name,...args);if(name==='autosave'||dirs.has(this))dirs.add(h);return h;};
+    FileSystemDirectoryHandle.prototype.getFileHandle=async function(...args){const h=await getFile.call(this,...args);if(dirs.has(this))files.add(h);return h;};
+    FileSystemFileHandle.prototype.createWritable=async function(...args){const w=await create.call(this,...args);if(files.has(this)&&!window.__heldAutosave){const close=w.close.bind(w);w.close=async()=>{window.__heldAutosave=true;await new Promise(resolve=>{window.__releaseAutosave=resolve;});return close();};}return w;};
+  });
   await f.setParameter('H',11,'01-autosave-edit');
   await f.page.waitForTimeout(1200);
-  assert.equal((await read('.barocss/autosave/part.bcad')).parameters.H,11);
+  if(pending) await f.page.waitForFunction(()=>window.__heldAutosave===true);
+  else assert.equal((await read('.barocss/autosave/part.bcad')).parameters.H,11);
   const panel=await f.openParameters();const field=panel.getByLabel('Value of H',{exact:true});await field.fill('14');await field.press('Enter');
   await f.page.getByRole('button',{name:'Save',exact:true}).click();
   await f.page.waitForFunction(()=>!document.querySelector('[aria-label="Unsaved changes"]'));
+  if(pending) await f.page.evaluate(()=>window.__releaseAutosave());
   await f.closeParameters(panel);await f.page.waitForTimeout(1200);
   assert.equal((await read('part.bcad')).parameters.H,14);
   assert.equal((await read('.barocss/autosave/part.bcad')).parameters.H,11);

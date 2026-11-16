@@ -258,3 +258,57 @@ test('pending recovery metadata cannot delay Save or poison a subsequent Save ta
     } finally { pause.release(); }
   });
 });
+
+for (const finish of ['after Save', 'during Save'] as const) {
+  test(`a pre-Save autosave finishing ${finish} is retired without delaying Save`, async () => {
+    await project(async (api, seen, dir) => {
+      const path = autosavePath('a.bcad'), pause = hold();
+      dir.writes.set(path, async () => { dir.writes.delete(path); await pause.wait(); });
+      const pending = api.autosave(b);
+      await pause.entered;
+      if (finish === 'during Save') {
+        const savePause = hold();
+        dir.writes.set('a.bcad', async () => { dir.writes.delete('a.bcad'); await savePause.wait(); });
+        const saving = api.save(c, 'a');
+        await savePause.entered;
+        pause.release(); await pending;
+        savePause.release(); assert.equal(await saving, true);
+      } else {
+        assert.equal(await api.save(c, 'a'), true);
+        pause.release(); await pending;
+      }
+      // Optional metadata is deliberately asynchronous.
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(await readAutosave(dir.store, 'a.bcad'), null);
+      assert.equal(dir.removals(), 0);
+      assert.deepEqual(seen.errors, []);
+      await api.autosave(a);
+      assert.ok(await readAutosave(dir.store, 'a.bcad'));
+    });
+  });
+}
+test('an autosave requested after Save starts remains recoverable', async () => {
+  await project(async (api, _seen, dir) => {
+    await api.autosave(b);
+    const pause = hold();
+    dir.writes.set('a.bcad', async () => { dir.writes.delete('a.bcad'); await pause.wait(); });
+    const saving = api.save(c, 'a');
+    await pause.entered;
+    await api.autosave(a);
+    pause.release(); assert.equal(await saving, true);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.ok(await readAutosave(dir.store, 'a.bcad'));
+  });
+});
+test('a failed Save cannot retire its pending autosave', async () => {
+  await project(async (api, _seen, dir) => {
+    const path = autosavePath('a.bcad'), pause = hold();
+    dir.writes.set(path, async () => { dir.writes.delete(path); await pause.wait(); });
+    const pending = api.autosave(b);
+    await pause.entered;
+    dir.writes.set('a.bcad', async () => { throw denied(); });
+    assert.equal(await api.save(c, 'a'), false);
+    pause.release(); await pending;
+    assert.ok(await readAutosave(dir.store, 'a.bcad'));
+  });
+});
