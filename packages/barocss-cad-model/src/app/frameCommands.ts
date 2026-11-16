@@ -7,7 +7,7 @@ import { refusal } from '../engine/refusal';
 
 const ok = { ok: true as const };
 const KINDS = [{ value: 'rect-tube', label: 'Rectangular tube' }, { value: 'round-tube', label: 'Round tube' }, { value: 'angle', label: 'Angle' }, { value: 'channel', label: 'Channel' }, { value: 'i-beam', label: 'I/H beam' }, { value: 'tslot', label: 'T-slot (20 class)' }];
-const ANCHORS: FrameAnchor[] = ['centroid', 'origin', 'bottom-left', 'bottom', 'bottom-right', 'left', 'center', 'right', 'top-left', 'top', 'top-right'];
+export const ANCHORS: readonly FrameAnchor[] = ['centroid', 'origin', 'bottom-left', 'bottom', 'bottom-right', 'left', 'center', 'right', 'top-left', 'top', 'top-right'];
 const is = (...kinds: string[]) => (v: Values) => kinds.includes(String(v.section));
 
 /** The section's fields by kind; a radius prefill's label says it is an estimate. FRc (O117): with a section library, its rows too. */

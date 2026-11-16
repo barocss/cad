@@ -1,3 +1,4 @@
+import { ANCHORS } from './frameCommands';
 import { loftSectionSourceFields } from './loftSectionEdit';
 import { copyLoftGuide } from './loftGuides';
 import { SEW_TOLERANCE_LABEL, sewTolerance } from '../engine/sew';
@@ -23,6 +24,21 @@ export type EditField =
   | { kind: 'number'; key: string; label: string; unit?: 'mm' | '°' | '%'; integerRange?: { min: number; max: number }; get(nodes: Nodes): number; set(nodes: Nodes, value: number): ModelNode[] }
   | { kind: 'choice'; key: string; label: string; options: { value: string; label: string }[]; get(nodes: Nodes): string; set(nodes: Nodes, value: string): ModelNode[] }
   | { kind: 'toggle'; key: string; label: string; get(nodes: Nodes): boolean; set(nodes: Nodes, value: boolean): ModelNode[] };
+
+/** The global anchor only; explicit member overrides retain their own placement. */
+function frameAnchorField(index: number, kind: 'frame' | 'frame-member'): EditField {
+  return { kind: 'choice', key: 'anchor', label: kind === 'frame' ? 'Lines through' : 'Line through',
+    options: ANCHORS.map(value => ({ value, label: value })),
+    get: nodes => { const node = nodes[index]; return node?.kind === kind ? node.anchor ?? 'centroid' : 'centroid'; },
+    set: (nodes, value) => {
+      const node = nodes[index], anchor = ANCHORS.find(option => option === value);
+      if (node?.kind !== kind || !anchor) return [...nodes];
+      const next = { ...node };
+      if (anchor === 'centroid') delete next.anchor; else next.anchor = anchor;
+      return nodes.map((node, i) => i === index ? next : node);
+    },
+  };
+}
 
 /**
  * A dimension's number. A parameter reference reads as its value while a field with the document's
@@ -632,6 +648,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       break;
     }
     case 'frame': {
+      out.push(frameAnchorField(i, 'frame'));
       // (FR2, D124: the frame's section — editing one drops its estimate flag — its roll, and each skeleton point.)
       type F = Extract<ModelNode, { kind: 'frame' }>;
       if (node.section.kind !== 'sketch') for (const key of [...new Set([...Object.keys(node.section), ...(node.section.kind === 'channel' ? ['toeRadius', 'flangeSlope'] : [])])].filter(k => k !== 'kind' && k !== 'cells' && k !== 'openSlots')) {
@@ -725,6 +742,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       break;
     }
     case 'frame-member': {
+      out.push(frameAnchorField(i, 'frame-member'));
       // (FR1, D123: the section's dimensions — editing one drops its estimate flag — the member's length along its line, its roll.)
       type M = Extract<ModelNode, { kind: 'frame-member' }>;
       const sec = node.section;
