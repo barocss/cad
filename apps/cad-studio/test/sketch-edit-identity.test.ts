@@ -204,6 +204,16 @@ function constructionOf(doc: StudioDoc): SketchShape[] {
   return sketch.construction as SketchShape[];
 }
 
+/** This hook harness has no history stack; actual Redo preservation is covered by sketch-trim-draft-history-browser. */
+function assertNoOpFinish(f: ReturnType<typeof actions>, doc: StudioDoc, before: StudioDoc) {
+  assert.equal(f.notices.length, 0);
+  assert.equal(f.accepted.length, 0);
+  assert.equal(f.evaluated.length, 0);
+  assert.equal(f.sketch, null);
+  assert.equal(f.docNow.current, doc, 'no-op retains the exact accepted document');
+  assert.deepEqual(doc, before, 'all node fields, IDs, outputs and nextId stay unchanged');
+}
+
 async function finishConstructionEdit(doc: StudioDoc, change: (editing: SketchState) => SketchState) {
   const before = structuredClone(doc), f = actions(doc); f.api.editSketch(0);
   assert.ok(f.sketch); f.setSketch(change(f.sketch)); f.render(); f.api.finishSketch(); await setImmediate();
@@ -232,10 +242,12 @@ test('D461: actual Finish after the D348 line-line Round keeps untouched constru
   assert.deepEqual(accepted.nodes.slice(1), doc.nodes.slice(1), 'downstream Extrude and fillet refs/signatures stay exact');
 });
 
-test('D461: no-op in-place Finish preserves the original construction record without a pending field', async () => {
-  const doc = d348Fixture(), f = await finishConstructionEdit(doc, editing => editing);
-  assert.deepEqual(constructionOf(f.accepted[0]), constructionOf(doc));
-  assert.equal('pending' in constructionOf(f.accepted[0])[0], false);
+test('D461: no-op in-place Finish preserves the original construction record without evaluation or migration', async () => {
+  const doc = d348Fixture(), before = structuredClone(doc), original = constructionOf(doc), f = actions(doc);
+  f.api.editSketch(0); f.render(); f.api.finishSketch(); await setImmediate();
+  assertNoOpFinish(f, doc, before);
+  assert.equal(constructionOf(f.docNow.current), original);
+  assert.equal('pending' in original[0], false);
 });
 
 test('D461: edited construction coordinates or authored properties use the current allocation path, not the old record', async () => {
@@ -284,18 +296,30 @@ test('D461: an attached circle reserves its ID and blocks an ambiguous construct
   assert.equal(result.ids!.length, 2); assert.ok(!result.ids!.includes('e11'));
 });
 
-test('D461: ambiguous IDs, pending true and current per-point IDs do not qualify for legacy restoration', async () => {
-  for (const mode of ['duplicate', 'pending', 'current']) {
+for (const mode of ['duplicate', 'pending', 'current'] as const) {
+  function constructionFixture() {
     const doc = d348Fixture(), original = constructionOf(doc)[0]; assert.ok(original.kind === 'polygon');
     if (mode === 'duplicate') (doc.nodes[0] as Extract<ModelNode, { kind: 'sketch' }>).construction = [original, { ...original, points: [[0, 50], [60, 50]] }];
     else if (mode === 'pending') original.pending = true;
     else original.ids = ['e11', 'e12'];
-    const f = await finishConstructionEdit(doc, editing => editing), result = constructionOf(f.accepted[0])[0];
+    return doc;
+  }
+  // This SSR harness remounts refs on render(); unchanged malformed-record ownership is
+  // not tested here. Actual no-op ownership/Redo remains covered by the browser receipt.
+  test(`D461: actual profile edit retains the ${mode} construction allocation contract`, async () => {
+    const doc = constructionFixture();
+    const f = await finishConstructionEdit(doc, editing => {
+      assert.ok(editing.shape?.kind === 'polygon');
+      const rounded = roundCorner(editing.shape, 4, 2); assert.ok('shape' in rounded);
+      const settled = settleShape(rounded.shape, editing.shape); assert.equal(settled.error, null);
+      return { ...editing, shape: settled.shape };
+    });
+    const result = constructionOf(f.accepted[0])[0];
     assert.ok(result.kind === 'polygon'); assert.equal(result.pending, false); assert.equal(result.ids!.length, 2);
     if (mode === 'current') assert.deepEqual(result.ids, ['e11', 'e12']);
     else assert.ok(!result.ids!.includes('e11'));
-  }
-});
+  });
+}
 
 test('Edit sketch then Finish retains source and fill IDs, nextId, captured snapshot and native file identity', async () => {
   const { doc, index } = source(), before = structuredClone(doc), original = doc.nodes[index];
@@ -353,11 +377,9 @@ test('D349: reopen then Finish without a change keeps the sketch\'s body and nod
   const { doc, index, on } = bodySketch(), before = structuredClone(doc), stored = doc.nodes[index] as unknown as Record<string, unknown>;
   assert.deepEqual(stored.on, on);
   const f = actions(doc); f.api.editSketch(index); f.render(); f.api.finishSketch(); await setImmediate();
-  assert.equal(f.notices.length, 0); assert.equal(f.accepted.length, 1);
-  assert.deepEqual(f.accepted[0].nodes[index], doc.nodes[index]);
-  assert.equal(f.evaluated.length, 1); assert.deepEqual(f.evaluated[0].nodes[index], f.accepted[0].nodes[index], 'the evaluated and accepted sketch carry the same fields');
-  assert.deepEqual(f.accepted[0].nodes.filter((_, i) => i !== index), doc.nodes.filter((_, i) => i !== index)); assert.deepEqual(doc, before);
-  assert.ok(extrudeFields(f.accepted[0], index, on).includes('op'), 'the Extrude Operation field is still offered');
+  assertNoOpFinish(f, doc, before);
+  assert.equal(f.docNow.current.nodes[index], doc.nodes[index]);
+  assert.ok(extrudeFields(f.docNow.current, index, on).includes('op'), 'the Extrude Operation field is still offered');
 });
 
 test('D349: a reopened sketch edit keeps its body', async () => {
@@ -382,10 +404,10 @@ test('D355: Edit sketch then Finish on a rectangle with a circle hole (and a Bez
   assert.equal(fresh.accepted.length, 1);
   const doc = fresh.accepted[0], index = doc.nodes.length - 1, stored = doc.nodes[index] as unknown as { sideTags?: { outer: string[] } };
   assert.ok(stored.sideTags, 'the node carries side tags');
-  const f = actions(doc); f.api.editSketch(index);
+  const before = structuredClone(doc), f = actions(doc); f.api.editSketch(index);
   f.render(); f.api.finishSketch(); await setImmediate();
-  assert.equal(f.notices.length, 0); assert.equal(f.accepted.length, 1);
-  assert.deepEqual((f.accepted[0].nodes[index] as unknown as { sideTags?: unknown }).sideTags, stored.sideTags);
+  assertNoOpFinish(f, doc, before);
+  assert.deepEqual((f.docNow.current.nodes[index] as unknown as { sideTags?: unknown }).sideTags, stored.sideTags);
 });
 
 test('D356: a rectangle bound to a parameter reopens, finishes unchanged with its binding, and evaluates', async () => {
@@ -431,9 +453,9 @@ test('D358: a circle main with a rectangle region reopens and finishes unchanged
   const stored = profileOf([{ kind: 'circle', c: [0, 0], r: 5 }, { kind: 'polygon', closed: true, points: [[20, -5], [40, -5], [40, 5], [20, 5]], bulges: [0, 0, 0, 0] }]);
   assert.ok('node' in stored && stored.node.profile === 'circle' && stored.node.sideTags);
   const doc = withNode(base, stored.node), index = doc.nodes.length - 1;
-  const f = actions(doc); f.api.editSketch(index); f.render(); f.api.finishSketch(); await setImmediate();
-  assert.equal(f.notices.length, 0); assert.equal(f.accepted.length, 1);
-  const node = f.accepted[0].nodes[index] as unknown as { profile: string; radius: number; sideTags: unknown };
+  const before = structuredClone(doc), f = actions(doc); f.api.editSketch(index); f.render(); f.api.finishSketch(); await setImmediate();
+  assertNoOpFinish(f, doc, before);
+  const node = f.docNow.current.nodes[index] as unknown as { profile: string; radius: number; sideTags: unknown };
   assert.equal(node.profile, 'circle'); assert.equal(node.radius, 5); assert.deepEqual(node.sideTags, stored.node.sideTags);
 });
 
@@ -454,17 +476,17 @@ test('D358: reopen a circle main with two rectangle regions, switch to a drawing
   const stored = profileOf([{ kind: 'circle', c: [0, 0], r: 5 }, rect(20, 40), rect(50, 70)]);
   assert.ok('node' in stored && stored.node.profile === 'circle');
   const doc = withNode(base, stored.node), index = doc.nodes.length - 1;
-  const f = actions(doc); f.api.editSketch(index);
+  const before = structuredClone(doc), f = actions(doc); f.api.editSketch(index);
   const editing = f.sketch; assert.ok(editing?.shape?.kind === 'polygon', 'Select edits one rectangle region'); if (!editing) return;
   // The panel's tool buttons: the edited shape goes aside and the drawing tool starts with no shape.
   f.setSketch(switchTool(editing, 'circle'));
   assert.equal(f.sketch?.shape, null); assert.equal(f.sketch?.tool, 'circle');
   f.render(); f.api.finishSketch(); await setImmediate();
-  assert.equal(f.notices.length, 0); assert.equal(f.accepted.length, 1);
-  const node = f.accepted[0].nodes[index] as unknown as { profile: string; radius: number; regions: { start: number[] }[][] };
+  assertNoOpFinish(f, doc, before);
+  const node = f.docNow.current.nodes[index] as unknown as { profile: string; radius: number; regions: { start: number[] }[][] };
   assert.equal(node.profile, 'circle'); assert.equal(node.radius, 5);
   assert.deepEqual(node.regions.map(r => r[0].start), [[20, -5], [50, -5]]);
-  assert.deepEqual((f.accepted[0].nodes[index] as { sideTags?: unknown }).sideTags, (stored.node as { sideTags?: unknown }).sideTags);
+  assert.deepEqual((f.docNow.current.nodes[index] as { sideTags?: unknown }).sideTags, (stored.node as { sideTags?: unknown }).sideTags);
 });
 
 const openLine: SketchShape = { kind: 'polygon', closed: false, points: [[30, 0], [40, 0]], bulges: [0, 0], ids: ['line-a', 'line-b'] };
