@@ -1,5 +1,5 @@
 import { renderRangeHint } from './renderRangeHint';
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useId, type RefObject } from 'react';
 import { compileGpu, materialShader } from '@barocss/gpu';
 import { APPEARANCES, MATERIAL_TEMPLATE, SCENE_TEMPLATE, anglesOf, directionFrom, validateRenderShadowLights, type Appearance, type Hex, type RenderLight, type RenderPost, type RenderSettings, FINISH_KINDS, type AppearanceFinish, type FinishKind, type StudioKind } from '@barocss/cad-model/engine/render';
 import { pointShadowConflict, shadowRadiusHint } from './renderShadowHint';
@@ -113,6 +113,7 @@ export function RenderPanel({ render, note, lookDisabled, selectedKeys, onChange
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) { if (traceEpoch.current === epoch) setTraceError(error instanceof Error ? error.message : String(error)); }
   };
+  const unavailableId = useId();
   const [tab, setTab] = useState<'look' | 'lights' | 'scene' | 'source'>('look');
   const [shadowErrors, setShadowErrors] = useState<Record<number, string>>({});
   const [lightError, setLightError] = useState<string | null>(null);
@@ -197,24 +198,23 @@ export function RenderPanel({ render, note, lookDisabled, selectedKeys, onChange
   return (
     <aside className="card props render-panel" aria-label="Render">
       <div className="card-title">RENDER
-        <button className="tool tiny" aria-label="Export image" title="Export the view as a PNG" disabled={!available || !geometryReady || (method === 'path-tracing' && !traceSamples)} onClick={() => { if (method === 'path-tracing') void exportStill(); else onExport(); }}><Icon name="photo_camera" small /></button></div>
-      {!available && <div className="empty">Rendering needs a browser with WebGPU. The view below is the modelling look.</div>}
+        <button className="tool tiny" aria-label="Export image" title="Export the view as a PNG" aria-describedby={!available ? unavailableId : undefined} disabled={!available || !geometryReady || (method === 'path-tracing' && !traceSamples)} onClick={() => { if (method === 'path-tracing') void exportStill(); else onExport(); }}><Icon name="photo_camera" small /></button></div>
+      {!available && <div id={unavailableId} tabIndex={0} role="status" className="empty">Rendering, image export and picking focus need WebGPU. The modelling viewport stays interactive. You can still edit and save render settings.</div>}
       <label className={FIELD}><span>Render method</span><NativeSelect className={CONTROL} aria-label="Render method" value={method} onChange={event => {
         disposeTrace(); setTraceRunning(false); setTraceBusy(false); setTraceSamples(0); setTracePreviewSamples(0); setTraceError(null); setMethod(event.target.value as typeof method);
       }}><option value="raster">Raster</option><option value="path-tracing">Path tracing</option></NativeSelect></label>
       {method === 'path-tracing' && <div className="render-section" aria-label="Path tracing" data-trace-running={traceRunning}>
-        {!available && <div role="status">Path tracing needs WebGPU. The WebGL2 viewport stays interactive.</div>}
-        <div className="muted small">A frozen still. Camera and scene changes stay in the live view. Start again to use them.</div>
-        <div className="muted small">The still includes surfaces, materials, tone mapping and colour grading. Bloom, depth of field, outlines, overlays and shadow catchers stay in the live view.</div>
+        {available && <div className="muted small">A frozen still. Camera and scene changes stay in the live view. Start again to use them.</div>}
+        {available && <div className="muted small">The still includes surfaces, materials, tone mapping and colour grading. Bloom, depth of field, outlines, overlays and shadow catchers stay in the live view.</div>}
         <div className="flex flex-wrap gap-1">
-          <Button variant="ghost" aria-label="Start path tracing" disabled={!available || !geometryReady || traceRunning || traceBusy} onClick={() => { void startTrace(); }}>Start</Button>
+          <Button variant="ghost" aria-label="Start path tracing" aria-describedby={!available ? unavailableId : undefined} disabled={!available || !geometryReady || traceRunning || traceBusy} onClick={() => { void startTrace(); }}>Start</Button>
           <Button variant="ghost" aria-label="Stop path tracing" disabled={!traceRunning && !traceBusy} onClick={stopTrace}>Stop</Button>
         </div>
-        <output aria-label="Path trace samples">{traceBusy ? 'Preparing still…' : `${traceSamples} samples`}</output>
-        <label className={FIELD}><span>Denoise still</span><input type="checkbox" className={TICK} aria-label="Denoise still" checked={denoise} onChange={event => {
+        {available && <output aria-label="Path trace samples">{traceBusy ? 'Preparing still…' : `${traceSamples} samples`}</output>}
+        {available && <label className={FIELD}><span>Denoise still</span><input type="checkbox" className={TICK} aria-label="Denoise still" checked={denoise} onChange={event => {
           denoiseRef.current = event.target.checked; setDenoise(event.target.checked);
           if (trace.current?.samples) void showTrace(trace.current, traceEpoch.current);
-        }} /></label>
+        }} /></label>}
         <canvas ref={tracePreview} aria-label="Path trace preview" width={0} height={0} style={{ width: '100%', height: 'auto' }} />
         {tracePreviewSamples > 0 && <div className="muted small">{trace.current?.width} × {trace.current?.height} px · preview {tracePreviewSamples} samples · frozen still</div>}
         {traceError && <div role="alert" className="diag">{traceError}</div>}
@@ -378,9 +378,9 @@ export function RenderPanel({ render, note, lookDisabled, selectedKeys, onChange
           onChange={e => { const focus = Number(e.target.value); if (Number.isFinite(focus) && focus > 0) setPost({ depthOfField: { focus, blur: post.depthOfField?.blur ?? 0 } }); }} onKeyDown={e => e.stopPropagation()} /><em>mm</em></span></label>
         <label className={FIELD}><span>Blur radius</span><span className={NUM}><Input type="number" aria-label="Blur radius" min={0} max={24} step={0.5} value={post.depthOfField?.blur ?? 0}
           onChange={e => { const blur = Number(e.target.value); if (Number.isFinite(blur) && blur >= 0 && blur <= 24) setPost({ depthOfField: { focus: post.depthOfField?.focus ?? render.camera?.distance ?? 160, blur } }); }} onKeyDown={e => e.stopPropagation()} /><em>px</em></span></label>
-        <Button variant="ghost" disabled={!available} aria-pressed={pickingFocus} onClick={pickFocus}>{pickingFocus ? 'Cancel focus pick' : 'Pick focus on part'}</Button>
+        <Button variant="ghost" disabled={!available} aria-describedby={!available ? unavailableId : undefined} aria-pressed={pickingFocus} onClick={pickFocus}>{pickingFocus ? 'Cancel focus pick' : 'Pick focus on part'}</Button>
         {pickingFocus && <div role="status" className="muted small">Click a surface to set focus. A background click cancels.</div>}
-        {!available && <div role="status" className="muted small">Depth of field needs WebGPU. Your focus and blur settings are saved.</div>}
+        {!available && <div role="status" className="muted small">Focus and blur values can still be edited and saved; they do not change this modelling preview.</div>}
         <div className="flex flex-wrap gap-1">
           <Button variant="ghost" onClick={onSaveCamera}>Save this view</Button>
           <Button variant="ghost" disabled={!render.camera} onClick={onUseCamera}>Go to saved view</Button>
