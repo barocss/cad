@@ -57,11 +57,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
     })}</div>
     <label className={FIELD}><span>Mirror</span><NativeSelect className={CONTROL} aria-label="Mirror" value={s.mirror ?? ''} onChange={e => editor.op(e.target.value ? `mirror-${e.target.value}` as CageOp : 'mirror-off')}>
       <option value="">None</option><option value="x">Across X</option><option value="y">Across Y</option><option value="z">Across Z</option></NativeSelect></label>
-    <div className="cage-checks" aria-label="Cage checks">
-      {!v.valid && <div className="warn">Not a manifold: {v.nonManifoldEdges.length} edges, {v.nonManifoldVertices.length} vertices (red)</div>}
-      <div className="muted small">{v.poles.length} poles (ringed: G1 caps there) · {v.ngons.length} n-gons (tinted) · {v.boundaryEdges.length} open edges{v.darts.length ? ` · ${v.darts.length} darts` : ''} · {s.cage.faces.length} faces</div>
-      {editor.previewMs !== null && <div className="muted small" aria-label="Preview time">Preview {editor.previewMs.toFixed(1)} ms</div>}
-    </div>
+    <CageChecks validation={v} faces={s.cage.faces.length} previewMs={editor.previewMs} />
     <div className="flex items-center gap-1 pt-1">
       <Button variant="ghost" aria-label="Undo cage step" disabled={!s.undo.length} onClick={editor.undo}>Undo</Button>
       <Button variant="ghost" aria-label="Redo cage step" disabled={!s.redo.length} onClick={editor.redo}>Redo</Button>
@@ -70,4 +66,22 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
       <Button variant="default" aria-label="Done editing cage" data-tip="Done" data-tip-desc="Apply this cage only after its current evaluation succeeds" data-tip-off={!editor.doneReadiness.ok ? editor.doneReadiness.reason : undefined} data-tip-focus aria-description={editor.doneReadiness.reason} aria-disabled={!editor.doneReadiness.ok} className={!editor.doneReadiness.ok ? 'opacity-50' : undefined} onClick={editor.done}>Done</Button>
     </div>
   </aside>;
+}
+
+
+export function CageChecks({ validation: v, faces, previewMs }: {
+  validation: ReturnType<typeof validationOf>; faces: number; previewMs: number | null;
+}) {
+  const active = [v.ngons.length ? `${v.ngons.length} n-gons (tinted)` : '',
+    v.boundaryEdges.length ? `${v.boundaryEdges.length} open edges` : '',
+    v.darts.length ? `${v.darts.length} darts` : ''].filter(Boolean).join(' · ');
+  return <div className="cage-checks" aria-label="Cage checks">
+    {!v.valid && <div className="warn" role="status">Not a manifold: {v.nonManifoldEdges.length} edges, {v.nonManifoldVertices.length} vertices (red)</div>}
+    {active && <div className="muted small" role="status">{active}</div>}
+    <details>
+      <summary className={focusClass}>Cage details</summary>
+      <div className="muted small">{v.poles.length} poles (ringed: G1 caps there) · {v.ngons.length} n-gons (tinted) · {v.boundaryEdges.length} open edges{v.darts.length ? ` · ${v.darts.length} darts` : ''} · {faces} faces</div>
+      {previewMs !== null && <div className="muted small" aria-label="Preview time">Preview {previewMs.toFixed(1)} ms</div>}
+    </details>
+  </div>;
 }
