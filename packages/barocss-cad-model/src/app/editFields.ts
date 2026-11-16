@@ -485,6 +485,17 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       }
       break;
     }
+    case 'pin': {
+      for (const [key, property, label] of [
+        ['d', 'diameter', "Ø (0: the hole's)"], ['L', 'length', 'Length (0: shaft step diameter)'],
+      ] as const) number(key, label, 'mm', n => n.kind === 'pin' ? n[property] ?? 0 : NaN, (n, value) => {
+        if (n.kind !== 'pin') return n;
+        const next = { ...n };
+        if (value === 0) delete next[property]; else next[property] = value;
+        return next;
+      });
+      break;
+    }
     case 'shaft': {
       // (R12c.3a, D156: each step's diameter and length; the shoulders' fillets and the chamfers together; the keyseats' and grooves' sizes.)
       const g = (n: ModelNode) => n as typeof node;
