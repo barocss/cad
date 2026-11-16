@@ -22,13 +22,14 @@ export function ToleranceEditor({ selDim, settings, tolDraft, setTolDraft, commi
             const clearDraft = () => setTolDraft(m => { const rest = { ...m }; delete rest[key]; return rest; });
             const apply = () => {
               const raw = tolDraft[key]; if (raw === undefined) return;
+              if (key !== 'code' && !raw.trim()) { setMessage('Enter a tolerance value. An empty field is not zero; enter 0 explicitly when intended.'); clearDraft(); return; }
               const next = { ...t, [key]: key === 'code' ? raw.trim() : Number(raw) } as Tolerance;
               const ok = next.kind === 'fit' ? /^[A-Za-z]{1,2}\d{1,2}$/.test(next.code) : next.kind === 'symmetric' ? Number.isFinite(next.value) && next.value > 0 : Number.isFinite(next.upper) && Number.isFinite(next.lower) && next.upper >= next.lower;
-              if (ok) commitDims(settings.dimensions.map(d => d.id === selDim.id ? { ...d, tol: next } as DrawingDimension : d));
+              if (ok) { setMessage(null); commitDims(settings.dimensions.map(d => d.id === selDim.id ? { ...d, tol: next } as DrawingDimension : d)); }
               else setMessage(next.kind === 'fit' ? 'A fit is a letter or two and a grade, as H7 or js6.' : next.kind === 'symmetric' ? 'A ± tolerance is a number above 0.' : 'The upper deviation must not be below the lower.');
               clearDraft();
             };
-            return <label key={key} className={FIELD}><span>{label}</span><Input className={CONTROL} aria-label={`Tolerance ${label}`} type={key === 'code' ? 'text' : 'number'} step="any" value={shown}
+            return <label key={key} className={FIELD}><span>{label}{key !== 'code' && ` (${selDim.kind === 'angle' ? '°' : 'mm'})`}</span><Input className={CONTROL} aria-label={`Tolerance ${label}`} aria-description={key === 'code' ? undefined : `Enter ${selDim.kind === 'angle' ? 'degrees' : 'millimetres, even when the drawing displays inches'}. Empty is not zero.`} type={key === 'code' ? 'text' : 'number'} step="any" value={shown}
               onChange={e => setTolDraft(m => ({ ...m, [key]: e.target.value }))} onBlur={apply} onKeyDown={e => {
                 if (e.key === 'Enter') e.currentTarget.blur();
                 if (e.key === 'Escape' && tolDraft[key] !== undefined) {
