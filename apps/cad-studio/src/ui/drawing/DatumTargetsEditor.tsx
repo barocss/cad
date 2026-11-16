@@ -26,9 +26,12 @@ export function DatumTargetsEditor({ settings, views, hiddenViews, selected, cho
   const conflicts = datumTargetConflicts(rows);
   const set = (patch: Partial<DatumTargetDraft>) => onDraft({ ...draft, ...patch });
   return <details open aria-label="Datum targets"><summary>Datum targets ({rows.length})</summary>
-    <p className="text-[11px] text-muted-foreground">{draft.kind === 'point' ? 'A point is a straight edge endpoint. Overlapping endpoints require an exact edge choice.' : draft.kind === 'line' ? 'A line is two points picked in a view. It does not follow the geometry.' : 'An area is centred on a point picked in a view. It does not follow the geometry.'}</p>
+
     <label className={FIELD} style={TARGET_FIELD}><span>Kind</span><NativeSelect className={CONTROL} aria-label="Datum target kind" value={draft.kind} onChange={e => set({ kind: e.target.value as DatumTargetKind })}>
       <option value="point">Point</option><option value="line">Line</option><option value="area">Area</option></NativeSelect></label>
+    <details className="text-[11px]" style={TARGET_WRAP}><summary>Kind help</summary>
+      <p>Point targets follow a straight edge endpoint. Line and area targets use fixed view points and do not follow model geometry.</p>
+    </details>
     {draft.kind === 'area' && <>
       <label className={FIELD} style={TARGET_FIELD}><span>Area shape</span><NativeSelect className={CONTROL} aria-label="Datum target area shape" value={draft.shape} onChange={e => set({ shape: e.target.value as 'circle' | 'rect' })}>
         <option value="circle">Circle</option><option value="rect">Rectangle</option></NativeSelect></label>

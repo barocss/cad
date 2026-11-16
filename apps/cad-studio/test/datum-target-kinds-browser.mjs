@@ -92,20 +92,31 @@ await f.run(async () => {
     const file = join(f.output, `${label}.svg`); await download.saveAs(file); return readFile(file, 'utf8');
   };
 
-  await f.newPage(); f.phase = 'open, drawing'; await f.openFile(fixture, 2); await enterDrawing(); await f.snapshot('01-drawing');
+  await f.newPage(); await f.page.setViewportSize({ width: Number(process.argv[3] ?? 1440), height: 900 }); f.phase = 'open, drawing'; await f.openFile(fixture, 2); await enterDrawing(); await f.snapshot('01-drawing');
   if (!(await box().evaluate(e => e.open))) await box().locator('summary').click();
+
+  f.phase = 'idle and point guidance';
+  const help = box().locator('details').filter({ has: f.page.locator('summary:text-is("Kind help")') });
+  assert.equal(await help.evaluate(e => e.open), false);
+  await help.locator('summary').click();
+  assert.ok(await help.getByText('Point targets follow', { exact: false }).isVisible());
+  await help.locator('summary').click();
+  assert.equal(await box().locator(':scope > p').count(), 0);
+  await box().getByRole('button', { name: 'Add datum target', exact: true }).click();
+  await hint('^Click a straight edge endpoint');
+  await f.page.keyboard.press('Escape');
 
   f.phase = 'area target'; await box().getByLabel('Datum target kind', { exact: true }).selectOption('area');
   await box().getByLabel('Datum target area shape', { exact: true }).selectOption('circle');
   await box().getByLabel('Datum target area diameter', { exact: true }).fill('4');
-  await box().getByRole('button', { name: 'Add datum target', exact: true }).click(); await hint('centre|center');
+  await box().getByRole('button', { name: 'Add datum target', exact: true }).click(); await hint('^Click the centre of the target area');
   await clickView(AREA_AT); await hint('symbol');
   const before = await f.doc(); await clickView([-10, 10]); await f.changed(before);
   const one = await f.doc(); assert.equal(targets(one).length, 1); await f.snapshot('02-area');
 
   f.phase = 'line target'; await box().getByLabel('Datum target kind', { exact: true }).selectOption('line');
-  await box().getByRole('button', { name: 'Add datum target', exact: true }).click(); await hint('end|line');
-  await clickView(LINE_FROM); await hint('other end'); await clickView(LINE_TO); await hint('symbol');
+  await box().getByRole('button', { name: 'Add datum target', exact: true }).click(); await hint('^Click the first end of the target line');
+  await clickView(LINE_FROM); await hint('other end'); await clickView(LINE_FROM); await hint('two distinct points'); await f.same(one); await clickView(LINE_TO); await hint('symbol');
   await clickView([40, 14]); await f.changed(one);
   const two = await f.doc(); assert.equal(targets(two).length, 2); await f.snapshot('03-line');
 
