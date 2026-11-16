@@ -11,7 +11,9 @@ import { emptyDoc, withNode } from '@barocss/cad-model/engine/doc';
 import { evaluateDoc } from '@barocss/cad-model/engine/evaluate';
 import { assemblyPlacedBodies, clearanceMap } from '@barocss/cad-model/team/clearanceMap';
 
-type Props = { near: number; resetKey?: unknown; onNear(value: number): void; display: null; labels: ReadonlyMap<string, string> };
+import type { ClearanceDisplay } from '../src/viewport/clearanceDisplay';
+
+type Props = { near: number; resetKey?: unknown; onNear(value: number): void; display: ClearanceDisplay | null; labels: ReadonlyMap<string, string> };
 type ElementProps = { children?: unknown; [key: string]: unknown };
 type View = ReactElement<ElementProps>;
 const shared = globalThis as typeof globalThis & { __clearanceNearState?: (initial: unknown) => [unknown, (next: unknown) => void] };
@@ -139,4 +141,29 @@ test('committed Near drives actual 14 mm gap candidates at 13.9/14/20 without ch
     }
     assert.equal(JSON.stringify(doc), before, 'analysis editing never serializes draft data or changes source geometry');
   } finally { h.cleanup(); }
+});
+
+test('empty Clearance keeps one current-band status, no legend, and interpretation help', () => {
+ const h=fixture(true,.2);
+ try {
+  h.props.display={version:'clearance-map-v1',request:1,revision:'test',near:.2,stage:'ready',pairs:[],overlays:[]};
+  const view=h.render();
+  assert.match(text(view),/No candidate pairs within the current Near band/);
+  assert.doesNotMatch(text(view),/0\.2 mm band|Orange:|near or pending/);
+  assert.equal(elements(view).filter(e=>e.props.className==='legend-chips').length,0);
+  assert.match(text(view),/Gaps are measured from display meshes/);
+  h.props.display.stage='evaluating';assert.match(text(h.render()),/Pending · current pose not classified/);
+  h.props.display.stage='error';h.props.display.error='Analysis unavailable';assert.match(text(h.render()),/Analysis unavailable/);
+ }finally{h.cleanup();}
+});
+test('candidate Clearance keeps one legend, names, gap and refusal details', () => {
+ const h=fixture();
+ try {
+  h.props.labels=new Map([['a','Bracket A'],['b','Bracket B']]);
+  h.props.display={version:'clearance-map-v1',request:1,revision:'test',near:1,stage:'ready',overlays:[],pairs:[{a:'a',b:'b',state:'near',minGap:.5,pose:'pose',closest:{a:[0,0,0],b:[.5,0,0],faceA:'face-a',faceB:'face-b'}}]};
+  let view=h.render();assert.equal(elements(view).filter(e=>e.props.className==='legend-chips').length,1);
+  assert.match(text(view),/Bracket A \/ Bracket BNear · mesh gap 0.5 mm/);
+  h.props.display={...h.props.display,pairs:[{...h.props.display.pairs[0],state:'contact',minGap:0,overlap:{refused:'Unsupported intersection fixture'}}]};
+  view=h.render();assert.match(text(view),/Refused · overlap unclassified/);assert.match(text(view),/Unsupported intersection fixture/);
+ }finally{h.cleanup();}
 });

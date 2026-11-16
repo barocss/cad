@@ -43,7 +43,7 @@ export function ClearancePanel({ near, onNear, display, reason, labels, resetKey
         else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancel(); }
       }} /> mm</label>
     {message && <div id={statusId} role="status" className={invalid ? 'warn small' : 'muted small'}>{message}</div>}
-    <div role="status" aria-live="polite">{reason ?? display?.error ?? (!display || display.stage === 'evaluating' ? 'Pending · current pose not classified' : display.stage !== 'ready' ? 'Updating current pose…' : display.pairs.length ? `${display.pairs.length} candidate pair${display.pairs.length === 1 ? '' : 's'}` : `No candidate pairs within the ${numeric(near)} mm band`)}</div>
+    <div role="status" aria-live="polite">{reason ?? display?.error ?? (!display || display.stage === 'evaluating' ? 'Pending · current pose not classified' : display.stage !== 'ready' ? 'Updating current pose…' : display.pairs.length ? `${display.pairs.length} candidate pair${display.pairs.length === 1 ? '' : 's'}` : 'No candidate pairs within the current Near band')}</div>
     {!!display?.pairs.length && <ul style={{ maxHeight: 190, overflowY: 'auto', paddingLeft: 16, margin: '4px 0' }}>{display.pairs.map(pair => <li key={pair.a + '|' + pair.b} data-clearance-state={clearancePairState(pair)} style={{ padding: '3px 0' }}>
       <span>{pairName(pair.a, labels)} / {pairName(pair.b, labels)}</span><br />
       <strong>{clearancePairLabel(pair)}</strong> · mesh gap {numeric(pair.minGap)} mm
@@ -52,7 +52,7 @@ export function ClearancePanel({ near, onNear, display, reason, labels, resetKey
       {pair.overlap && 'refused' in pair.overlap && <div>{pair.overlap.refused}</div>}
     </li>)}</ul>}
     {/* (G12c: compact — the states' colours as chips; what the results are behind Details.) */}
-    <div className="legend-chips"><span className="legend-chip"><i style={{ background: '#fa8a1f' }} />near or pending</span><span className="legend-chip"><i style={{ background: '#f02120' }} />overlap</span><span className="legend-chip"><i style={{ background: '#42a8f0' }} />touching</span><span className="legend-chip"><i style={{ background: '#21b88a' }} />designed</span><span className="legend-chip"><i style={{ background: 'repeating-linear-gradient(45deg, #ff2020 0 2px, transparent 2px 4px)' }} />refused</span></div>
-    <details className="panel-details"><summary>Details</summary>Model geometry results · display analysis. Orange: near or pending · red: overlap · blue: touching · teal: designed · red hatch: refused.</details>
+    {!!display?.pairs.length && <div className="legend-chips"><span className="legend-chip"><i style={{ background: '#fa8a1f' }} />near or pending</span><span className="legend-chip"><i style={{ background: '#f02120' }} />overlap</span><span className="legend-chip"><i style={{ background: '#42a8f0' }} />touching</span><span className="legend-chip"><i style={{ background: '#21b88a' }} />designed</span><span className="legend-chip"><i style={{ background: 'repeating-linear-gradient(45deg, #ff2020 0 2px, transparent 2px 4px)' }} />refused</span></div>}
+    <details className="panel-details"><summary>Details</summary>Model geometry results · display analysis. Gaps are measured from display meshes. Contact overlap is classified separately; pending or refused is not a confirmed clear result.</details>
   </div>;
 }
