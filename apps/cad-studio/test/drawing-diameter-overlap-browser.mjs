@@ -131,6 +131,33 @@ await f.run(async () => {
   assert.equal(stock.drawing.hidden, false);
   await choose('hidden-off-p1', right, { id: 'p1', name: 'Plate 1' });
 
+  f.phase = 'Undo retires diameter placement before another sheet click';
+  await button('Diameter', tools()).click(); await click(...right);
+  await candidates.getByRole('button', { name: /Plate 2/ }).click();
+  await hover(47, 54); await preview().waitFor();
+  await f.undo();
+  await drawing().getByLabel('Hidden lines', { exact: true }).waitFor();
+  assert.equal(await drawing().getByLabel('Hidden lines', { exact: true }).isChecked(), true);
+  await ownerHint.getByText('The drawing changed. Select the rim again.', { exact: true }).waitFor();
+  await hover(47, 54);
+  assert.equal(await preview().count(), 0);
+  assert.equal((await f.doc()).drawing.dimensions.length, 0);
+  await f.snapshot('undo-retired-diameter');
+  const invalidated = await f.doc();
+  await click(47, 54); await f.same(invalidated);
+  assert.equal((await f.doc()).drawing.dimensions.length, 0);
+  await f.redo(); await f.same(stock);
+  await choose('redo-reselect-p2', right, { id: 'p2', name: 'Plate 2' });
+
+  f.phase = 'Escape clears the warning owned by Diameter';
+  await button('Diameter', tools()).click();
+  await click(10, 0);
+  await ownerHint.getByText('Click a circle or an arc.', { exact: true }).waitFor();
+  await f.page.keyboard.press('Escape');
+  assert.equal(await ownerHint.getByText('Click a circle or an arc.', { exact: true }).count(), 0);
+  assert.equal(await button('Select', tools()).getAttribute('aria-pressed'), 'true');
+  await f.same(stock);
+
   f.phase = 'A coincident lower rim without drawn pieces is excluded';
   await mode('Model');
   await f.page.locator('.ol.instance:not(.nested)').filter({ hasText: 'Plate 2' }).first().click();

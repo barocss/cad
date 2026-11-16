@@ -12,7 +12,7 @@ import { drawsMadeOnly } from '@barocss/cad-model/drawing/scope';
 
 
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { toSig } from '@barocss/cad-model/engine/references';
@@ -207,6 +207,13 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     setTool('select');
   };
   const [message, setMessage] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    if (pending?.kind !== 'diameter' || !pending.source) return;
+    if (pending.source.projection === views && pending.source.settings === settings && !busy) return;
+    setPending(null);
+    setHover(null);
+    setMessage('The drawing changed. Select the rim again.');
+  }, [pending, views, settings, busy]);
   const [controlDeletion, setControlDeletion] = useState<{ settings: DrawingSettings; model: typeof model; sheet: number; loss: string[]; run(): void } | null>(null);
   const currentControlDeletion = controlDeletion?.settings === wholeSettings && controlDeletion.model === model && controlDeletion.sheet === current ? controlDeletion : null;
   const requestControlDeletion = (loss: string[], run: () => void) => {
@@ -885,7 +892,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         onClearReferencePreview();
         if (reattach) cancelReattachment();
         else if (pending || currentRimChoice || targetChoices.length || reselectTarget) cancel();
-        else { setSelected(null); setSelectedTarget(null); setSelectedFrame(null); setTool('select'); }
+        else { setSelected(null); setSelectedTarget(null); setSelectedFrame(null); setTool('select'); setMessage(null); }
         return;
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && !canDeleteSelection) { e.preventDefault(); return; }
