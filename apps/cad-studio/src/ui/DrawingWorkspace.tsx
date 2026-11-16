@@ -1,3 +1,4 @@
+import { withDatumTargetAreaDraft } from './drawing/datumTargetAreaDraft';
 import { drawingFixControlLoss } from '@barocss/cad-model/drawing/fixProtection';
 // The Drawing workspace: the part's standard views on a sheet, dimensioned by clicking in a view.
 // Tools: Select (click a dimension to select it, drag to move it, Delete removes it), Linear (two
@@ -524,7 +525,10 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (tool === 'datum-target') {
       if (busy) { setMessage('Wait for the current drawing.'); return; }
       if (pending?.kind === 'datum-target') {
-        const target = { ...pending.target, place: fromSheet(layout!.views[pending.view], h.q) };
+        const currentTarget = pending.moving ? pending.target : withDatumTargetAreaDraft(pending.target, targetDraft);
+        const target = { ...currentTarget, place: fromSheet(layout!.views[pending.view], h.q) };
+        const why = checkDatumTargetOptions({ datumTargets: [target] })[0];
+        if (why) { setMessage(why.message); return; }
         const resolved = resolveDatumTarget(views[pending.view], target);
         if (!resolved.ok) { setMessage(`${resolved.code}: ${resolved.reason}`); return; }
         const rows = settings.datumTargets ?? [];
@@ -1199,7 +1203,16 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
         <DatumsEditor settings={settings} views={views} scale={layout?.scale ?? 1} onChange={onChange} onRefused={setMessage} />
 
-        <DatumTargetsEditor draft={targetDraft} onDraft={next => { if (next.kind !== targetDraft.kind && (pending?.kind === 'datum-line' || (pending?.kind === 'datum-target' && !pending.moving))) cancel(); setTargetDraft(next); }} settings={settings} views={busy ? null : views} hiddenViews={VIEW_IDS.filter(id => !!layout?.views[id].hidden)} selected={selectedTarget} choices={targetChoices} onInspect={setInspectedTarget} onChoose={target => { chooseTarget(target); svg.current?.focus(); }} onSelect={id => { setSelectedTarget(id); setSelected(null); setSelectedFrame(null); setTool('select'); cancel(); }}
+        <DatumTargetsEditor draft={targetDraft} onDraft={next => {
+          if (next.kind !== targetDraft.kind && (pending?.kind === 'datum-line' || (pending?.kind === 'datum-target' && !pending.moving))) cancel();
+          else if (pending?.kind === 'datum-target' && !pending.moving && pending.target.kind === 'area') {
+            const target = withDatumTargetAreaDraft(pending.target, next);
+            const why = checkDatumTargetOptions({ datumTargets: [target] })[0];
+            if (why) setMessage(why.message);
+            else { setPending({ ...pending, target }); setMessage('Click where the target symbol goes. Esc cancels.'); }
+          }
+          setTargetDraft(next);
+        }} settings={settings} views={busy ? null : views} hiddenViews={VIEW_IDS.filter(id => !!layout?.views[id].hidden)} selected={selectedTarget} choices={targetChoices} onInspect={setInspectedTarget} onChoose={target => { chooseTarget(target); svg.current?.focus(); }} onSelect={id => { setSelectedTarget(id); setSelected(null); setSelectedFrame(null); setTool('select'); cancel(); }}
           onAdd={() => { setTool('datum-target'); cancel(); }} onMove={target => { setTool('datum-target'); chooseTarget(target, true); }}
           onReselect={target => { cancel(); if (layout?.views[target.view].hidden) { setMessage('Show the target view before selecting its endpoint again.'); return; } setTool('datum-target'); setReselectTarget(target); setSelected(null); setSelectedTarget(target.id); setMessage(`Select the target endpoint again in the ${target.view} view. Its symbol position will be kept. Esc cancels.`); }}
           onCommit={commitTargets} onRefused={setMessage} />
