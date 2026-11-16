@@ -14,3 +14,9 @@ Display offers Reverse wheel zoom for Model/Sketch. Origin-local studio.reverse-
 NOT_RUN: physical trackpad pinch/natural-scroll behavior, alternate devices/DPI/browser, dedicated renderer-recreation and tiny-model/clamp browser cases. Existing camera implementation/tests remain unchanged; no whole-navigation certification. #267 remains open for explicit remaining acceptance accounting.
 
 Run with Node22/shared heavy gate: `node scripts/test.mjs wheel-zoom-preference small-camera-scale camera-projector camera-relative-query analysis-hover-pointer`; `WHEEL_ZOOM_PREFERENCE_FROZEN=1 PW_DIR=... CHROME=... node test/wheel-zoom-preference-browser.mjs OUTPUT` (add `--input-only` for focused active-input check).
+
+## Contract closeout
+
+The eight first-scope functional requirements are met: accessible off-by-default control; immediate unmodified canvas-wheel direction only; explicit touchpad-scroll inclusion and preserved modifier paths; unchanged deltaMode/speed; origin-only safe persistence; no document/history/selection/view-preset writes; Model/Sketch scope with other consumers excluded; and active-input/panel boundaries. Hardware/alternate-browser items in the broader verification plan remain NOT_RUN, not new feature requirements or promises of device certification.
+
+Additional actual-pointer-consumer tests cover tiny distance0.002, ordinary160 and near-upper19999 in both projections/directions with ±120 and ±10000 deltas. Independent target-plane arithmetic verifies cursor anchoring and exact existing clamps[0.001,20000]; no product camera helper is used for the expected projection/factor. Final focused5/5 (one added test includes48 cases), tsc/lint/build PASS. Existing broader25/25 and actual Chrome receipts are retained, not rerun. Tooltip explicitly includes unmodified touchpad scrolling. No camera numerical changes.

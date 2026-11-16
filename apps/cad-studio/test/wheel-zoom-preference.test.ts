@@ -68,3 +68,25 @@ test('Model/Sketch scope excludes render and all manufacturing preview states wi
     assert.equal(wheelZoomFactor({ deltaY: 100 }, available ? true : undefined), Math.exp(mask === 0 ? -.15 : .15));
   }
 });
+
+
+test('real wheel consumer keeps off-center anchors at tiny scale and both clamps in either direction', () => {
+  for (const ortho of [false, true]) for (const reverse of [false, true]) for (const distance of [.002, 160, 19999]) {
+    for (const deltaY of [-120, 120, -10000, 10000]) {
+      const r = pointerRig(), c = r.camera; c.ortho = ortho; c.distance = distance; c.aspect = 1;
+      r.props.reverseWheelZoom = reverse;
+      const right = [-Math.sin(c.yaw), Math.cos(c.yaw), 0];
+      const up = [-Math.sin(c.pitch) * Math.cos(c.yaw), -Math.sin(c.pitch) * Math.sin(c.yaw), Math.cos(c.pitch)];
+      const h = distance * Math.tan(c.fovY / 2);
+      const point = c.target.map((v, i) => v + h * (.3 * right[i] + .2 * up[i]));
+      r.handlers.onWheel({ clientX: 65, clientY: 40, deltaY } as Parameters<typeof r.handlers.onWheel>[0]);
+      assert.equal(c.distance, Math.max(.001, Math.min(20000, distance * Math.exp(deltaY * .0015 * (reverse ? -1 : 1)))));
+      // Independent target-plane projection, not the product camera projector or zoom helper.
+      const offset = point.map((v, i) => v - c.target[i]), half = c.distance * Math.tan(c.fovY / 2);
+      const x = offset.reduce((a, v, i) => a + v * right[i], 0) / half;
+      const y = offset.reduce((a, v, i) => a + v * up[i], 0) / half;
+      assert.ok(Math.abs(x - .3) < 1e-7 && Math.abs(y - .2) < 1e-7);
+      assert.ok(c.target.every(Number.isFinite));
+    }
+  }
+});

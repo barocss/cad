@@ -141,7 +141,7 @@ export function ViewDisplayControls({ doc, viewport, cornerRight, display, view,
         {/* (G21's display mode and isolate, in the column too: the Views row stays as narrow as the history bar assumes.) */}
         <div className="card views display" role="group" aria-label="Display">
           {wheelZoom && <Button size="sm" variant={wheelZoom.enabled ? 'default' : 'ghost'} aria-label="Reverse wheel zoom" aria-pressed={wheelZoom.enabled}
-            title="Reverse unmodified wheel zoom in Model and Sketch only. Modified wheel gestures and Drawing are unchanged."
+            title="Reverse unmodified wheel zoom, including touchpad scrolling, in Model and Sketch only. Modified wheel gestures and Drawing are unchanged."
             onPointerDown={event => event.preventDefault()} onKeyDown={keepViewToggleKeys}
             onClick={() => sketchCameraAction(() => wheelZoom.set(!wheelZoom.enabled))}>Reverse wheel zoom</Button>}
           {wheelZoom && !wheelZoom.persistent && <span role="status" aria-label="Wheel zoom preference">Wheel zoom preference applies to this session only; browser storage is unavailable.</span>}
