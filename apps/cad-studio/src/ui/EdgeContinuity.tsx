@@ -1,3 +1,4 @@
+import { continuityRecovery } from './continuityRecovery';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { ContinuityEdge, ContinuityReply, ContinuityRequest } from '@barocss/cad-model/engine/edgeContinuity';
 import { Button } from '@/components/ui/button';
@@ -84,7 +85,7 @@ function EdgeContinuityRead({ picked, read }: {
     <div role="status" aria-label="Edge continuity result">
       {error && <div className="empty">{error}</div>}
       {result?.status === 'unsupported' && <div className="empty">
-        <div>This edge cannot be measured. Select another native edge.</div>
+        <div>{continuityRecovery(result.reason)}</div>
         <details><summary>Measurement detail</summary>{refusalLabel[result.reason]}</details>
       </div>}
       {result?.status === 'measured' && <>

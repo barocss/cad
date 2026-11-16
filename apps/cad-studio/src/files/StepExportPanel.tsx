@@ -1,3 +1,4 @@
+import { stepContinuityNotice } from '../ui/continuityRecovery';
 import type { ModelExportController } from './useModelExports';
 
 /** One preparation panel in the existing right dock; only Export downloads. */
@@ -18,7 +19,8 @@ export function StepExportPanel({ controller }: { controller: ModelExportControl
       {step.scope && <p className="muted" aria-label="STEP included bodies">{step.scope.rootBodies + step.scope.placedBodies} output bodies: {step.scope.rootBodies} root bodies, including {step.scope.hiddenRootBodies} hidden; {step.scope.placedBodies} placed bodies from {step.scope.occurrences} visible occurrences. Hidden root bodies are included; hidden occurrences are omitted. Not selection-only.</p>}
       <div className="ol-head">What this file leaves out</div>
       {step.losses.length ? <ul aria-label="STEP loss report">{step.losses.map(loss => <li key={loss}>{loss}</li>)}</ul> : <p>No additional losses reported for this input.</p>}
-      <p className="muted">Geometry profile: no native editing history, semantic PMI or named datum system transfer. The file/product name and generated face names are separate from user labels.</p>
+      <p className="muted">Geometry profile: no semantic PMI or named datum system transfer. The file/product name and generated face names are separate from user labels.</p>
+      <p className="muted" aria-label="STEP continuity inspection">{stepContinuityNotice}</p>
     </>}
     <div className="row-actions"><button className="primary" disabled={step.stage !== 'ready'} onClick={downloadStep}>Export</button><button className="ghost" onClick={clearStepAsk}>Cancel</button></div>
   </section>;

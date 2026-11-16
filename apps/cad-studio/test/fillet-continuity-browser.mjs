@@ -227,7 +227,7 @@ await f.run(async () => {
     await measure(row);
     if (baseline) {
       assert.equal(row.read.measurement.reason, 'missing-pcurve');
-      await result().getByText('This edge cannot be measured. Select another native edge.', { exact: true }).waitFor();
+      await result().getByText(/If this model came from STEP/).waitFor();
       assert.equal(await button('Measure continuity', panel()).isDisabled(), true);
       assert.equal(await edges().evaluate(el => el === document.activeElement), true);
       await result().locator('summary').click();
@@ -253,7 +253,7 @@ await f.run(async () => {
     for (const row of ends) {
       assert.equal(row.read.measurement.reason, 'missing-pcurve');
       await measure(row);
-      await result().getByText('This edge cannot be measured. Select another native edge.', { exact: true }).waitFor();
+      await result().getByText(/If this model came from STEP/).waitFor();
       assert.equal(await button('Measure continuity', panel()).isDisabled(), true);
       assert.equal(await edges().evaluate(el => el === document.activeElement), true);
       await result().locator('summary').click();
@@ -265,7 +265,7 @@ await f.run(async () => {
     await f.same(accepted);
     for (const row of interfaces) {
       await edges().selectOption(row.id);
-      assert.equal(await result().getByText('This edge cannot be measured. Select another native edge.', { exact: true }).count(), 0);
+      assert.equal(await result().getByText(/If this model came from STEP/).count(), 0);
       assert.equal(await button('Measure continuity', panel()).isDisabled(), false);
       await button('Measure continuity', panel()).click();
       await value().waitFor();
