@@ -2,6 +2,7 @@
 // dimension's references resolve against the current projection, and the value it reads — always
 // from the model's 3D geometry in mm, so a dimension follows the part as it changes.
 import type { BrepProjection, ProjectedCurve, ProjectedEdge } from '@barocss/cad';
+import { isSectionRef } from './types';
 import type { CentreRef, DimPoint, DimView, DrawingDimension, EdgeRef, Vec3, XY } from './types';
 import { dot } from '../engine/vec3';
 import { nextFreeId } from '../util/ids';
@@ -194,22 +195,25 @@ export function closestDetailRim(arcs: readonly CircularArc[], label: XY): XY | 
 export function resolveDimension(views: Partial<Record<DimView, BrepProjection>>, dim: DrawingDimension, detail?: Pick<DrawingDetail, 'center' | 'radius'>, showHidden = false, detailParent?: BrepProjection): Resolved {
   const pr = views[dim.view];
   if (!pr) return { ok: false, dim, reason: `Its view (${dim.view}) is not on the sheet.` };
+  // A missing projected reference does not establish that its source feature was deleted.
+  const section = isSectionRef(dim.view);
+  const missingEdge = section ? 'An edge it measured cannot be found in the current section. Check the section position and the source feature.' : 'An edge it measured is no longer in the part.';
   if (dim.kind === 'angle') {
     const a = resolveLine(pr, dim.a), b = resolveLine(pr, dim.b);
-    if (!a || !b) return { ok: false, dim, reason: 'An edge it measured is no longer in the part.' };
+    if (!a || !b) return { ok: false, dim, reason: missingEdge };
     const g = angleBetween(a, b, dim.place);
     if (!g) return { ok: false, dim, reason: 'Its two edges are now parallel in this view.' };
     return { ok: true, kind: 'angle', dim, vertex: g.vertex, from: g.from, to: g.to, ends: g.ends, value: g.degrees, text: valueText({ kind: 'angle', value: g.degrees }, fmtMM) };
   }
   if (dim.kind === 'pcd') {
     const c = pitchCircle(pr, dim.ring);
-    if (!c) return { ok: false, dim, reason: 'Its holes are gone, or no longer on one circle.' };
+    if (!c) return { ok: false, dim, reason: section ? 'Its holes cannot be resolved as one circle in the current section. Check the section position and the source features.' : 'Its holes are gone, or no longer on one circle.' };
     if (Math.abs(dot(c.normal, pr.toward)) < 1 - 1e-6) return { ok: false, dim, reason: 'Its circle no longer shows round in this view.' };
     return { ok: true, kind: 'pcd', dim, center: inView(pr, c.center), center3: c.center, radius: c.radius, members: c.members.map(p => inView(pr, p)), even: c.even, value: 2 * c.radius, text: valueText({ kind: 'pcd', value: 2 * c.radius, members: c.members, even: c.even }, fmtMM) };
   }
   if (dim.kind === 'linear') {
     const a = resolvePoint(pr, dim.a), b = resolvePoint(pr, dim.b);
-    if (!a || !b) return { ok: false, dim, reason: 'An edge it measured is no longer in the part.' };
+    if (!a || !b) return { ok: false, dim, reason: missingEdge };
     const value = linearValue(pr, a, b, dim.orient);
     if (value < 1e-9) return { ok: false, dim, reason: 'Its two points now coincide in this view.' };
     return { ok: true, kind: 'linear', dim, a: inView(pr, a), b: inView(pr, b), value, text: valueText({ kind: 'linear', value }, fmtMM) };
@@ -217,7 +221,7 @@ export function resolveDimension(views: Partial<Record<DimView, BrepProjection>>
   const best = closestCircleEdge(pr, dim);
   if (!best?.circle) {
     const source = dim.kind === 'diameter' && detail && detailParent && closestCircleEdge(detailParent, dim);
-    return { ok: false, dim, reason: source ? noDrawableDetailArc : 'The circle it measured is no longer in the part.' };
+    return { ok: false, dim, reason: source ? noDrawableDetailArc : section ? 'The circle it measured cannot be found in the current section. Check the section position and the source feature.' : 'The circle it measured is no longer in the part.' };
   }
   if (!roundIn(pr, best)) return { ok: false, dim, reason: 'The circle no longer shows round in this view.' };
   const r = best.circle.radius, value = dim.kind === 'diameter' ? 2 * r : r;
