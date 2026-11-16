@@ -106,11 +106,11 @@ export function SectionBar({ section, setSection, hatch, setHatch, box, facePick
     <span className="muted">Section</span>
     <ToggleGroup type="single" className="seg" aria-label="Section mode" value={section.mode} onValueChange={v => { if (v) mode(v as Section['mode']); }}>{(['plane', 'box', 'planes', 'cutout'] as const).map(m =>
       <ToggleGroupItem key={m} value={m} className={section.mode === m ? 'on' : ''}
-        {...(m === 'cutout' ? { 'data-tip': 'Cut-out', 'data-tip-desc': 'Take a corner out: a quarter (two planes) or an eighth (three), the rest kept' } : {})}>{m === 'plane' ? 'Plane' : m === 'box' ? 'Box' : m === 'planes' ? 'Planes' : 'Cut-out'}</ToggleGroupItem>)}</ToggleGroup>
+        {...(m === 'box' ? { 'data-tip': 'Section box', 'data-tip-desc': "Drag a face's arrow to move that side of the section box.", 'data-tip-focus': '' } : m === 'cutout' ? { 'data-tip': 'Cut-out', 'data-tip-desc': 'Take a corner out: a quarter (two planes) or an eighth (three), the rest kept' } : {})}>{m === 'plane' ? 'Plane' : m === 'box' ? 'Box' : m === 'planes' ? 'Planes' : 'Cut-out'}</ToggleGroupItem>)}</ToggleGroup>
     {section.mode === 'plane' && <>{axisButtons(0)}{faceButton(0)}{flip(0)}
       {section.planes[0].face && <span className="mono muted" aria-label="Face-derived section position">{label(section.planes[0])}</span>}
       <Button size="sm" variant="ghost" aria-label="Sketch the section" data-tip="Sketch the section" data-tip-desc="Copy the visible cut outlines into an independent sketch" onClick={onSketch}><Icon name="cad-sketch" small /></Button></>}
-    {section.mode === 'box' && <><span className="muted small">drag a face's arrow</span>
+    {section.mode === 'box' && <>
       <Button size="sm" variant="ghost" aria-label="Reset the section box" data-tip="Reset the box" data-tip-desc="The box round the part, a tenth in from each face" onClick={() => set(boxSection(box.min, box.max).planes, 'box')}><Icon name="restart_alt" small /></Button></>}
     {(section.mode === 'planes' || section.mode === 'cutout') && <>{section.planes.map((p, i) => <span key={i} className="section-plane" aria-label={`Section plane ${i + 1}`}>
       <span className="mono small" aria-label={`Section plane ${i + 1} is`}>{label(p)}</span>{axisButtons(i)}{faceButton(i)}{flip(i)}
