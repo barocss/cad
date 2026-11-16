@@ -67,7 +67,10 @@ test('only the owned varying-Fillet branch and a connected cycle receive closed-
   legacy('chamfer', cause, ctx); legacy('face-fillet', cause, ctx); legacy('fillet', cause);
   legacy('fillet', new Error(`[FILLET_CHAIN] ${message}`), ctx);
   legacy('fillet', refusal('VALUE', message), ctx);
-  legacy('fillet', refusal('FILLET_CHAIN', 'An interior radius needs one original straight edge.'), ctx);
+  const interior = commandBuildFailure('fillet', refusal('FILLET_CHAIN', 'An interior radius needs one original straight edge.'), ctx);
+  assert.match(interior.hint, /3 edges are picked.*Edit picked edges/);
+  assert.equal(interior.code, 'FILLET_CHAIN');
+  assert.equal(interior.detail, '[FILLET_CHAIN] An interior radius needs one original straight edge.');
   legacy('fillet', refusal('FILLET_CHAIN', message + ' extra'), ctx);
   legacy('fillet', refusal('REFUSED', 'Constant full perimeter failed'), ctx);
   const translated = triangle.map(([a, b]) => [a.map(value => value + 10) as Point, b.map(value => value + 10) as Point] as [Point, Point]);
