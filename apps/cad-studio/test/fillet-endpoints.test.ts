@@ -38,3 +38,16 @@ test('station input subscription changes immediately for fractions and modes, no
  assert.equal(filletStationInputKey({...active,cmd:{id:'hole'}}),'');
  assert.equal(filletStationInputKey(null),'');
 });
+
+test('one unmerged open native circle exposes exact ordered endpoints, never chord interior positions',()=>{
+ const arc:DisplayEdge={...edge,nativeLine:undefined,straight:false,axis:null,a:[8,0,10],b:[0,8,10],nativeCircle:{centre:[0,0,10],normal:[0,0,1],radius:8},nativeJoint:{edgeId:'rim',faces:['cap','wall']}};
+ const authored={...node,radii:[{at:[8,0,10] as [number,number,number],radius:0.6,atEnd:true as const},{at:[0,8,10] as [number,number,number],radius:1.2,atEnd:true as const}]};
+ const expected={start:arc.a,end:arc.b,curved:true};
+ assert.deepEqual(filletEdgeEndpoints(arc),expected);
+ assert.deepEqual(filletEdgeEndpoints({...arc,a:arc.b,b:arc.a},authored),expected);
+ const interior=withFilletStations(filletEdgeEndpoints(arc),[0.5]);assert.ok('start'in interior);if('start'in interior){assert.deepEqual(interior.start,arc.a);assert.equal(interior.stations,undefined);assert.match(interior.stationProblem!,/straight edge/);}
+ const roundtrip=withFilletStations(withFilletStations(filletEdgeEndpoints(arc),[]),[0.25]);assert.ok('start'in roundtrip && roundtrip.curved && !roundtrip.stations);
+ const illegal={...authored,radii:[authored.radii[0],{at:[4,4,10] as [number,number,number],radius:1,fraction:0.5},authored.radii[1]]};
+ const history=filletEdgeEndpoints(arc,illegal);assert.ok('start'in history && !history.stations && history.stationProblem);
+ for(const patch of [{b:arc.a},{names:['a','b']},{nativeJoint:undefined},{nativeJoint:{edgeId:'rim',faces:['cap','cap'] as const}},{nativeCircle:{...arc.nativeCircle!,radius:NaN}},{nativeCircle:{...arc.nativeCircle!,radius:0}},{nativeCircle:{...arc.nativeCircle!,normal:[0,0,0] as [number,number,number]}}])assert.ok('reason'in filletEdgeEndpoints({...arc,...patch}));
+});
