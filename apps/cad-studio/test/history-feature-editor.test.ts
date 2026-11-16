@@ -202,3 +202,27 @@ test('SubD primitive draft blocks entry and a changed cage never gains primitive
   f.props.model = { ...f.props.model, doc: changed, evaluated: changed, commandDoc: changed };
   assert.equal(f.editor().savedFeatureEdit, undefined);
 });
+
+function mirrorFixture() {
+  const f = fixture(), base = rectanglePart(40, 24, 10), result = evaluateDoc(base, 0); assert.ok(result.ok);
+  const ctx = { doc: base, bodies: result.bodies, selection: { bodies: [0], edges: [], faces: [] } };
+  const command = commands.find(c => c.id === 'mirror')!, doc = command.build!(ctx, { plane: 'yz', at: 40 });
+  f.props.model = { ...f.props.model, doc, evaluated: doc, commandDoc: doc, editNode: doc.nodes.length - 1 };
+  f.props.commands.ctx = { ...ctx, doc };
+  f.props.owner = { ...f.props.owner, document: () => doc, evaluated: () => doc, ownsEvaluatedSource: () => true };
+  return f;
+}
+test('each saved Mirror group row opens one atomic editor with current source ownership', () => {
+  for (const index of [2, 3, 4]) {
+    const f = mirrorFixture(); f.props.model.editNode = index;
+    const action = f.editor().savedFeatureEdit; assert.equal(action?.label, 'Edit Mirror'); action!.start();
+    assert.deepEqual(f.events, ['discard', 'close']); assert.equal(f.active.get()?.values.at, 40);
+    assert.equal(f.active.get()?.ownsSource?.(), true); f.props.owner.worker = () => 2;
+    assert.equal(f.active.get()?.ownsSource?.(), false);
+  }
+});
+test('Mirror source draft blocks grouped entry and ordinary source rows do not inherit it', () => {
+  const f = mirrorFixture(); f.props.owner.hasDraft = () => true; f.editor().savedFeatureEdit!.start();
+  assert.deepEqual(f.events, []); assert.equal(f.active.get(), null);
+  f.props.model.editNode = 1; assert.equal(f.editor().savedFeatureEdit, undefined);
+});

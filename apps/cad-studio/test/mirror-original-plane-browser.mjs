@@ -119,7 +119,7 @@ await f.run(async () => {
   const applied = (await f.snapshot('mirror-applied')).doc;
   await native('mirror-native', applied, baseline ? 10 : 0);
   if (baseline) throw new Error('Original bottom click in merged preview used the top Z=10 instead of bottom Z=0.');
-  assert.deepEqual(applied.nodes.at(-1), { kind: 'mirror', parent: { node: 2, side: 'solid' }, plane: 'xy', id: 'n3' });
+  assert.deepEqual(applied.nodes.at(-1), { kind: 'mirror', parent: { node: 2, side: 'solid' }, plane: 'xy', id: 'n3', made: { command: 'mirror', values: { plane: 'xy', at: 0 }, nodes: 1 } });
   await f.undo();
   await f.same(seed);
   await f.redo();

@@ -550,10 +550,10 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   | FaceEndExtrudeNode
   /** The sketch turned about its X or Y axis (through `origin`, default the sketch origin) towards +Z. */
   | { kind: 'revolve'; sketch: number; axis: 'x' | 'y'; origin?: [Dim, Dim]; angle: number; /** Any direction in the sketch plane (a picked edge), instead of its X or Y. */ dir?: [number, number]; axisRef?: RevolveAxisRef; made?: Made }
-  | { kind: 'translate'; parent: BodyRef; offset: [Dim, Dim, Dim] }
+  | { kind: 'translate'; parent: BodyRef; offset: [Dim, Dim, Dim]; made?: Made }
   /** About the axis through `pivot` (none: the origin, as parts placed by rotation steps). */
   | { kind: 'rotate'; parent: BodyRef; axis: Axis; angle: number; pivot?: [Dim, Dim, Dim]; made?: Made }
-  | { kind: 'mirror'; parent: BodyRef; plane: 'xy' | 'xz' | 'yz'; keep?: boolean }
+  | { kind: 'mirror'; parent: BodyRef; plane: 'xy' | 'xz' | 'yz'; keep?: boolean; made?: Made }
   /** About `pivot` (none: the origin). */
   | AlignNode
   | { kind: 'scale'; parent: BodyRef; factor: number; pivot?: [Dim, Dim, Dim] }

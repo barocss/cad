@@ -1,4 +1,5 @@
 import { eligibleFillPatternRegions, fillFeaturePatternProblem, fillRegionSnapshot } from '../engine/fillFeaturePattern';
+import { appendMirrorRecipe } from './mirrorRecipe';
 import type { FillFeaturePatternRegion } from '@barocss/cad/api';
 import { curveFeaturePatternProblem, eligibleCurvePatternPaths, type CurveFeaturePatternPath } from '../engine/curveFeaturePattern';
 // Commands are driven by the current selection. Each one says whether it applies (and why not),
@@ -864,17 +865,13 @@ const allCommands: Command[] = [
     // The kernel mirrors across planes through the origin: a plane elsewhere is reached by a move there and back.
     build: (ctx, v) => {
       const selected = oneBody(ctx)!;
-      const body = refOf(selected), k = MIRROR_AXIS[String(v.plane)], at = Number(v.at) || 0;
+      const body = refOf(selected);
       if (v.result === 'reflected') {
         if (!selected.sheet) throw refusal('SHEET_PICK', 'Select a sheet-metal body for Reflected body only.');
         if (v.plane !== 'yz' || Number(v.at) !== 0) throw refusal('SHEET_VALUE', mirrorReplacementPlane);
         return withNode(ctx.doc, { kind: 'mirror', parent: body, plane: 'yz', keep: false });
       }
-      if (!at) return withNode(ctx.doc, { kind: 'mirror', parent: body, plane: v.plane as 'yz' });
-      const shift = (d: number): [number, number, number] => { const o: [number, number, number] = [0, 0, 0]; o[k] = d; return o; };
-      let doc = withNode(ctx.doc, { kind: 'translate', parent: body, offset: shift(-at) });
-      doc = withNode(doc, { kind: 'mirror', parent: { node: doc.nodes.length - 1, side: 'solid' }, plane: v.plane as 'yz' });
-      return withNode(doc, { kind: 'translate', parent: { node: doc.nodes.length - 1, side: 'solid' }, offset: shift(at) });
+      return appendMirrorRecipe(ctx.doc, body, v, !selected.sheet);
     },
   },
   {
