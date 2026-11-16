@@ -1,0 +1,17 @@
+# Robot workspace responsibility composition
+
+Moves a cohesive existing workspace responsibility out of the high-prop RobotInspector → JointsPanelLive → JointsPanel chain: deepest-link/farthest-hull tool selection, mapping action/refusal, N/h/contact-free local inputs, summary, JSON serialization and Hide are now owned by RobotWorkspacePanel. Four workspace-specific props become one ReactNode composition slot. This is not an object wrapper around the same forwarding contract.
+
+The slot is always mounted at the same position; only its non-fixed-joint input UI is conditionally visible. N/h/contact-free state therefore retains the old JointsPanel lifetime, including live pose rerenders. The shared workspace result stays in useJoints, including jointTree-change clearing and viewport cloud ownership. JointsPanelLive still exclusively subscribes to live pose/time/input stores; no new subscription, automatic calculation effect, commit, undo or document mutation was introduced. Path checking, motion controls and robot exports are unchanged. Existing deepest-link and hull-point first-tie selection is preserved. Tree/end selection remains outside the original mapping refusal boundary; failed mapping keeps the prior map.
+
+## Verification
+
+- Focused native tests3/3 PASS: chain-2r leaf/hull-tip selection vs direct native workspaceMap, deterministic map and document/tree nonmutation; ccd-post contact-free option actually excludes colliding samples; unlimited slide refuses NO_RANGE. These characterize existing mapping, not a new numerical accuracy certificate.
+- Studio tsc, lint for all changed TS/TSX and test, diff --check PASS. Production build4.66s PASS.
+- Actual frozen Studio `/tmp/cad-robot-workspace-browser-02` PASS: N200/h5/contact-free true, Map and actual voxel overlay; JSON download interception verifies filename/MIME/raw map/counts without making a physical download; manual joint pose20° and Home retain inputs and identical map; Hide removes cloud/result without changing inputs; re-map identical; samples0 disables Map and preserves previous result; New part/reopen clears map. Accepted document and dirty state remain unchanged throughout preview actions. Reviewed `02-live-pose-inputs-retained.png`.
+- The first browser run `/tmp/cad-robot-workspace-browser-01` failed the document equality check because the raw conformance fixture contained unsolved placements a[0,0,30],b[0,0,60]. Assembly admission legitimately solved them to a[10,10,10],b[50,10,15]. No other document difference or dirty state was present. The final driver pins those solved fixture placements before Open, retaining strict full-document equality rather than weakening it.
+- Initial tsc caught the notice capability being overtyped as a full state setter; it now accepts only the existing FriendlyError notice capability. Final tsc passed. Independent read review checked slot mount/lifetime and original error boundary.
+
+Scope is existing static preview behavior only. No Physics/Motion activation, motion playback, robot export/download, new accuracy contract, dependency update or WIP/HOLD change. Full suites and remote CI are not claimed. The separate viewport print adapter is integrated independently.
+
+From Studio with standard PW_DIR/CHROME and heavy gate: `ROBOT_WORKSPACE_FROZEN=1 node test/robot-workspace-composition-browser.mjs <output>`; `node scripts/test.mjs robot-workspace-panel`.

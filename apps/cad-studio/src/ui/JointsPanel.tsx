@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import type { PartInstance } from '@barocss/cad-model/engine/doc';
 import { BASE } from '@barocss/cad-model/assembly/mates';
 import type { Joint, JointTree, JointType } from '@barocss/cad-model/robot/joints';
@@ -45,7 +45,7 @@ export interface FrameReadout { name: string; link: string; kind?: 'tool' | 'sen
  * and (RM2) a slider a moving joint to pose it — degrees for a turn, mm for a slide — Home, and one joint played back
  * and forth. A follower moves with its leader (no slider of its own). The pose is a preview: nothing is saved.
  */
-export function JointsPanel({ tree, instances, onBase, values, onValue, onHome, playing, onPlay, gears, frames, links, onExportUrdf, onExportMjcf, onCheckPath, path, ready = true, holding, waypoints = 0, onAddWaypoint, onClearWaypoints, onWorkspace, workspace, onWorkspaceDownload, onWorkspaceHide, onExportSdf, onExportUsd, motion, motionControls }: {
+export function JointsPanel({ tree, instances, onBase, values, onValue, onHome, playing, onPlay, gears, frames, links, onExportUrdf, onExportMjcf, onCheckPath, path, ready = true, holding, waypoints = 0, onAddWaypoint, onClearWaypoints, workspacePanel, onExportSdf, onExportUsd, motion, motionControls }: {
   tree: JointTree; instances: PartInstance[]; onBase(base: string): void;
   values: Record<string, number>; onValue(key: string, v: number): void; onHome(): void; playing: string | null; onPlay(key: string | null): void; gears: GearLine[];
   /** Each link's mass properties (RM3), in its link frame. */
@@ -60,8 +60,8 @@ export function JointsPanel({ tree, instances, onBase, values, onValue, onHome, 
   onCheckPath?(): void;
   /** The waypoints recorded (RM9a), and recording one at the pose shown, or clearing them. */
   waypoints?: number; onAddWaypoint?(): void; onClearWaypoints?(): void;
-  /** Maps the end link's workspace (RM9b): N samples, voxels of h mm, poses in self-contact left out when asked; its summary, download and hide. */
-  onWorkspace?(samples: number, h: number, contactFree: boolean): void; workspace?: string | null; onWorkspaceDownload?(): void; onWorkspaceHide?(): void;
+  /** Domain-owned workspace controls, kept outside the live pose subscription. */
+  workspacePanel?: ReactNode;
   path?: { text: string; contact: boolean; /** #2229: the sweep ran out of its sample budget: not certified, not a collision. */ uncertified?: boolean } | null;
   /** Every part evaluated: the masses, exports and the path check wait until then. */
   ready?: boolean;
@@ -72,7 +72,7 @@ export function JointsPanel({ tree, instances, onBase, values, onValue, onHome, 
   /** The motion through the waypoints (RS2), when there is one to play, and its controls. */
   motion?: MotionReadout | null; motionControls?: MotionControls;
 }) {
-  const [wsN, setWsN] = useState(20000), [wsH, setWsH] = useState(10), [wsFree, setWsFree] = useState(false), [massesOpen, setMassesOpen] = useState(false);
+  const [massesOpen, setMassesOpen] = useState(false);
   const [homeReset, setHomeReset] = useState(0);
   const massLinks = links?.filter(l => l.part !== null) ?? [];
   const name = (link: string) => tree.links.find(l => l.id === link)?.name ?? (link === BASE ? 'Base part' : instances.find(i => i.id === link)?.name ?? link);
@@ -129,12 +129,7 @@ export function JointsPanel({ tree, instances, onBase, values, onValue, onHome, 
         {motionControls.choice === null && <MotionSave saved={motionControls.saved} disabled={!(motion.duration > 0)} onSave={motionControls.onSave} />}
       </div>}
       {path && <div className={path.contact || path.uncertified ? 'hud-error' : 'kv muted'} role="status" aria-label="Path check">{path.text}</div>}
-      {onWorkspace && tree.joints.some(j => j.type !== 'fixed') && <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-0.5 text-[11px] [&>label]:inline-flex [&>label]:items-center [&>label]:gap-1 [&>label]:whitespace-nowrap" aria-label="Workspace">
-        <label>N <Input type="number" aria-label="Workspace samples" min={100} max={200000} step={1000} value={wsN} onChange={e => setWsN(Number(e.target.value))} style={{ width: 70 }} /></label>
-        <label> h <Input type="number" aria-label="Workspace voxel" min={0.5} step={1} value={wsH} onChange={e => setWsH(Number(e.target.value))} style={{ width: 48 }} /> mm</label>
-        <label title="Leave out poses where two links interpenetrate (RM6's exact test): slower"> <input type="checkbox" className={TICK} aria-label="Workspace contact-free" checked={wsFree} onChange={e => setWsFree(e.target.checked)} /> contact-free</label>
-        <Button variant="ghost" aria-label="Map workspace" disabled={!ready || !(wsN >= 1 && wsH > 0)} title="The positions the end link's joint point reaches over the joints' ranges, coloured by manipulability" onClick={() => onWorkspace(wsN, wsH, wsFree)}>Workspace</Button></div>}
-      {workspace && <div className="kv muted" role="status" aria-label="Workspace summary">{workspace} {onWorkspaceDownload && <Button variant="ghost" aria-label="Download workspace" onClick={onWorkspaceDownload}>JSON</Button>}{onWorkspaceHide && <Button variant="ghost" aria-label="Hide workspace" onClick={onWorkspaceHide}>Hide</Button>}</div>}
+      {workspacePanel}
       <div className="flex flex-wrap gap-1">{tree.joints.some(j => j.type !== 'fixed') && <Button variant="ghost" aria-label="Joints home" onClick={() => { setHomeReset(previous => previous + 1); onHome(); }}>Home</Button>}
         {onAddWaypoint && Object.values(values).some(v => v !== 0) && <Button variant="ghost" aria-label="Add waypoint" title="Record this pose as a waypoint: Check path goes through the waypoints in order, then to the pose shown" onClick={onAddWaypoint}>Add waypoint</Button>}
         {onClearWaypoints && waypoints > 0 && <Button variant="ghost" aria-label="Clear waypoints" onClick={onClearWaypoints}>Clear {waypoints} waypoint{waypoints === 1 ? '' : 's'}</Button>}

@@ -1,14 +1,13 @@
+import { RobotWorkspacePanel } from './RobotWorkspacePanel';
 import { convexHull } from '@barocss/cad';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { BASE } from '@barocss/cad-model/assembly/mates';
 import { motionOf } from '@barocss/cad-model/robot/motion';
 import { sweepLinks } from '@barocss/cad-model/robot/sweep';
 import { sweepTimed } from '@barocss/cad-model/robot/ccd';
-import { workspaceMap } from '@barocss/cad-model/robot/workspace';
 import { JointsPanelLive } from '../ui/JointsPanelLive';
 import { draftPath, pathLimits, refuseMotionSweep, timedMotion, type LoopMotionContext } from '../state/motion';
 import { poseKinematics, type useJoints } from '../state/useJoints';
-import { downloadBytes } from '../ui/files';
 import type { RobotExportController } from './useRobotExports';
 
 export interface RobotInspectorChanges {
@@ -67,20 +66,8 @@ export function RobotInspector({ controller, motion: joints, loopMotionContext, 
             setJointWaypoints(w => [...w, { ...(fk?.values ?? v) }]);
           } catch (error) { reportMotionError(error); }
         }} onClearWaypoints={() => { setJointWaypoints([]); setPathCheck(null); }}
-        onWorkspace={(n, h, free) => {
-          // (RM9b: the deepest link's joint point over the joints' ranges; a slide without limits refused, said so.)
-          const depth = (l: string): number => { const j = jointTree.joints.find(x => x.child === l); return j ? 1 + depth(j.parent) : 0; }, end = jointTree.links.reduce((b, l) => depth(l.id) > depth(b.id) ? l : b, jointTree.links[0]).id;
-          try {
-            // (The tool point: the end link's farthest hull point from its joint at the solved pose — its tip.)
-            const links = sweepLinks(jointTree, p => p === BASE ? bodies : instanceBodies.get(p)?.bodies, pts => convexHull(pts).positions), own = jointTree.joints.find(j => j.child === end)?.origin ?? [0, 0, 0];
-            const hull = links.find(l => l.link === end)?.hull; let tool: number[] | undefined, far = -1;
-            if (hull) for (let i = 0; i < hull.length; i += 3) { const d = Math.hypot(hull[i] - own[0], hull[i + 1] - own[1], hull[i + 2] - own[2]); if (d > far) { far = d; tool = [hull[i], hull[i + 1], hull[i + 2]]; } }
-            setWorkspace(workspaceMap(jointTree, { link: end, samples: n, h, ...(tool ? { tool } : {}), ...(free ? { links } : {}) }));
-          } catch (e) { setToast({ title: 'Workspace not mapped', hint: e instanceof Error ? e.message.replace(/^\[[A-Z_]+\] /, '') : String(e), detail: '' }); }
-        }}
-        workspace={workspace ? `Workspace of ${workspace.samples} poses${workspace.excluded ? ` (${workspace.excluded} in self-contact left out)` : ''}: ${workspace.voxels.length} voxels of ${workspace.h} mm, reach ${workspace.reach.toFixed(1)} mm, best manipulability ${Math.max(0, ...workspace.voxels.map(v => v.w)).toExponential(3)}` : null}
-        onWorkspaceDownload={() => workspace && downloadBytes(new TextEncoder().encode(JSON.stringify(workspace)), `${fileName}-workspace.json`, 'application/json')}
-        onWorkspaceHide={() => setWorkspace(null)}
+        workspacePanel={<RobotWorkspacePanel tree={jointTree} readBodies={p => p === BASE ? bodies : instanceBodies.get(p)?.bodies}
+          ready={robotReady} workspace={workspace} onChange={setWorkspace} fileName={fileName} onNotice={setToast} />}
         path={pathCheck} ready={robotReady}
         onCheckPath={() => {
           try { refuseMotionSweep(jointTree); }
