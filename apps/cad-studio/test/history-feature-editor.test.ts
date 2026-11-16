@@ -149,3 +149,30 @@ test('Mount source draft blocks entry and inner group rows do not offer a guesse
   assert.deepEqual(f.events, []); assert.equal(f.active.get(), null);
   f.props.model.editNode = 2; assert.equal(f.editor().savedFeatureEdit, undefined);
 });
+
+function connectorFixture() {
+  const f = fixture(), base: StudioDoc = { ...rectanglePart(40, 20, 10), connectors: { version: 1, rows: [{ id: 'port', estimate: true, opening: { shape: 'rect', width: 8, height: 4, depth: 6 }, body: { shape: 'rect', width: 7, height: 3, length: 7 }, keepOut: { margin: 1, depth: 15 } }] } };
+  const result = evaluateDoc(base, 0); assert.ok(result.ok);
+  const face = result.bodies[0].mesh.faces.find(face => face.name === 'n1.top')!;
+  const ctx = { doc: base, bodies: result.bodies, selection: { bodies: [], edges: [], faces: [{ body: 0, face: face.index }] } };
+  const command = commands.find(c => c.id === 'connector')!, doc = command.build!(ctx, command.defaults!(ctx));
+  f.props.model = { ...f.props.model, doc, evaluated: doc, commandDoc: doc, editNode: 2 };
+  f.props.commands.ctx = { ...ctx, doc };
+  f.props.owner = { ...f.props.owner, document: () => doc, evaluated: () => doc, ownsEvaluatedSource: () => true };
+  return f;
+}
+test('connector History shares guarded admission for opening and body with live source ownership', () => {
+  const f = connectorFixture();
+  for (const index of [2, 3]) { f.props.model.editNode = index; assert.equal(f.editor().savedFeatureEdit?.label, 'Edit connector placement'); }
+  f.editor().savedFeatureEdit!.start(); assert.deepEqual(f.events, ['discard', 'close']);
+  assert.equal(f.active.get()?.cmd.id, 'edit'); assert.equal(f.active.get()?.ownsSource?.(), true);
+  f.props.owner.worker = () => 2; assert.equal(f.active.get()?.ownsSource?.(), false);
+});
+test('connector History blocks stale or drafted sources before command creation', () => {
+  for (const changed of ['draft', 'document'] as const) {
+    const f = connectorFixture(), action = f.editor().savedFeatureEdit!;
+    if (changed === 'draft') f.props.owner.hasDraft = () => true;
+    else f.props.owner.document = () => ({ ...f.props.model.doc });
+    action.start(); assert.deepEqual(f.events, []); assert.equal(f.active.get(), null);
+  }
+});

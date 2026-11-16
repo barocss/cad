@@ -1,3 +1,4 @@
+import { connectorHistoryEdit } from '@barocss/cad-model/app/connectorEdit';
 import { mountHistoryEdit } from '@barocss/cad-model/app/mountEdit';
 import { fastenerHistoryEdit } from '@barocss/cad-model/app/editCommand';
 import type { ComponentProps, Dispatch, SetStateAction } from 'react';
@@ -34,7 +35,7 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
   const { doc, evaluated, commandDoc, editNode, fresh, busy, workerSession } = model;
   const { ctx, discardFeatureDraft, closeForCommand, setActive, editSketch, replaceAxis } = commands;
   const { ownsEvaluatedSource } = owner;
-  const savedCommand = () => fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc)?.command ?? mountHistoryEdit(commandDoc, editNode);
+  const savedCommand = () => fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc)?.command ?? mountHistoryEdit(commandDoc, editNode) ?? connectorHistoryEdit(commandDoc, editNode);
   const savedFeature = savedCommand();
   return <NodeEditor {...editor} nodes={doc.nodes} parameters={doc.parameters} doc={doc} index={editNode}
     bearingAssembly={{ root: doc, owner: 'base' }}

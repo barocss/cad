@@ -8,7 +8,7 @@ Actual frozen-source Chrome verified existing creation behavior on main `9fbb969
 - Independent stadium-area prism formulas agree with plate-cut and connector-body native volumes within 1e-6 mm³.
 - Undo/Redo and in-memory reopen retain exact accepted documents; two bodies remain. No browser errors or downloads. Placement screenshot reviewed.
 
-The same run reproduced a real remaining gap: opening History shows `This feature has no editable dimensions.` No position/rotation edit or saved-command re-entry exists. The driver currently records that gap as an explicit baseline assertion; update it when delivering placement editing.
+The same run reproduced a real remaining gap: opening History shows `This feature has no editable dimensions.` No position/rotation edit or saved-command re-entry exists. That baseline gap is resolved by the bounded editor in [Owned Connector History placement](../connector-history-placement-2026-11-16/README.md); the driver now verifies that editor.
 
 ## Safe follow-up boundary
 
