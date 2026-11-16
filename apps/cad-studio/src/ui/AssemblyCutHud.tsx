@@ -1,7 +1,7 @@
 import type { PartInstance } from '@barocss/cad-model/engine/doc';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { CUT_DIRS, type CutAxis, type CutDraft } from '../app/assemblyCutDraft';
+import { CUT_DIRS, CUT_TARGETS_REQUIRED, type CutAxis, type CutDraft } from '../app/assemblyCutDraft';
 import { Icon } from './atoms';
 import { FIELD } from './panelStyles';
 
@@ -38,8 +38,8 @@ export function AssemblyCutHud({ draft, instances, problem, onChange, onAddSelec
           <select aria-label="Cut direction" value={draft.dir} onChange={e => set('dir', e.target.value as CutAxis)}>
             {draft.dir === 'Custom' && <option value="Custom">Custom (as made)</option>}
             {(Object.keys(CUT_DIRS) as CutAxis[]).map(a => <option key={a} value={a}>{a.replace('-', '−')}</option>)}</select></label>
-        <div className={FIELD}><span>Depth mm</span>
-          <span className="flex items-center gap-1.5"><input aria-label="Cut depth" className={NUMBER} type="number" step="any" disabled={draft.through} value={draft.depth} onChange={e => set('depth', e.target.value)} />
+        <div className={FIELD}><span>{draft.through ? 'Extent' : 'Depth mm'}</span>
+          <span className="flex items-center gap-1.5">{!draft.through && <input aria-label="Cut depth" className={NUMBER} type="number" step="any" value={draft.depth} onChange={e => set('depth', e.target.value)} />}
             <label className="flex items-center gap-0.5"><input type="checkbox" className="size-3.5" aria-label="Through" checked={draft.through} onChange={e => set('through', e.target.checked)} />Through</label></span></div>
         <div className="flex flex-col gap-0.5" role="group" aria-label="Parts to cut">
           <div className="flex items-center justify-between text-[11px]"><span className="text-muted-foreground">Parts</span>
@@ -47,17 +47,17 @@ export function AssemblyCutHud({ draft, instances, problem, onChange, onAddSelec
           <div className="flex flex-wrap gap-1">
             {draft.targets.length ? draft.targets.map(id => <span key={id} className="inline-flex items-center gap-0.5 rounded-full border border-border px-1.5 py-px text-[11px]" data-target={id}>
               {nameOf(id)}<button className="tool tiny" aria-label={`Do not cut ${nameOf(id)}`} onClick={() => set('targets', draft.targets.filter(t => t !== id))}><Icon name="close" small /></button></span>)
-              : <span className="text-[11px] text-muted-foreground">None: select a part, then Add selected.</span>}
+              : <span className="text-[11px] text-muted-foreground">None: select a part in the Browser or view, then Add selected.</span>}
           </div>
         </div>
         <Collapsible>
           <CollapsibleTrigger className="flex w-full cursor-pointer items-center gap-1 bg-transparent p-0 text-left text-[11px] text-foreground hover:text-[var(--accent)] [&[data-state=open]_.ui-icon]:rotate-90"><Icon name="chevron_right" small />Details</CollapsibleTrigger>
           <CollapsibleContent className="flex flex-col gap-0.5 pt-1">
             <label className={FIELD}><span>Name</span><input aria-label="Cut name" className="w-32 min-w-0" type="text" maxLength={60} value={draft.name} onChange={e => set('name', e.target.value)} /></label>
-            <div className="text-[10px] text-muted-foreground">A depth cuts one way from the profile plane, along the direction; Through cuts the whole part along the direction, both ways from the plane (a part longer than 10,000 mm cannot be cut through). The rectangle's width runs along X (along Y for a cut along X). Each part's definition stays whole; mates still read its uncut faces.</div>
+            <div className="text-[10px] text-muted-foreground">{draft.through ? 'Through cuts the whole part along the direction, both ways from the plane (a part longer than 10,000 mm cannot be cut through).' : 'A depth cuts one way from the profile plane, along the direction.'}{draft.profile === 'rectangle' && " The rectangle's width runs along X (along Y for a cut along X)."} Each part's definition stays whole; mates still read its uncut faces.</div>
           </CollapsibleContent>
         </Collapsible>
-        {problem && <div className="empty warn" role="alert">{problem}</div>}
+        {problem && !(draft.targets.length === 0 && problem === CUT_TARGETS_REQUIRED) && <div className="empty warn" role="alert">{problem}</div>}
         <div className="flex gap-1.5">
           <Button variant="default" disabled={!!problem} onClick={onApply}>{draft.editing ? 'Apply' : 'Cut'}</Button>
           <Button variant="ghost" onClick={onCancel}>Cancel</Button>

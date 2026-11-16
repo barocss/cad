@@ -54,10 +54,42 @@ async function check(label, original, cut) {
 }
 
 await f.run(async () => {
+  // #60: contextual copy and depth preservation at both supported desktop widths.
+  for (const width of [1024, 1440]) {
+    await f.newPage(); await f.page.setViewportSize({ width, height: 900 }); await f.openFile(fixture, 2);
+    const untouched = await f.doc(); await pick('Plate 1'); await f.page.evaluate(() => document.activeElement?.blur()); await f.command('Assembly cut'); await hud().waitFor();
+    await hud().getByRole('button', { name: 'Details', exact: true }).click();
+    assert.equal(await hud().getByLabel('Cut depth', { exact: true }).count(), 0);
+    assert.doesNotMatch(await hud().innerText(), /rectangle's width/);
+    assert.match(await hud().innerText(), /both ways from the plane/);
+    assert.match(await hud().innerText(), /mates still read its uncut faces/);
+    await hud().getByRole('button', { name: 'Do not cut Plate 1', exact: true }).click();
+    assert.equal(await hud().getByText('None: select a part in the Browser or view, then Add selected.', { exact: true }).count(), 1);
+    assert.doesNotMatch(await hud().innerText(), /Pick the parts to cut/);
+    assert.equal(await hud().getByRole('button', { name: 'Cut', exact: true }).isDisabled(), true);
+    await hud().getByLabel('Cut profile', { exact: true }).selectOption('rectangle');
+    assert.match(await hud().innerText(), /rectangle's width/);
+    await hud().getByLabel('Through', { exact: true }).uncheck();
+    await hud().getByLabel('Cut depth', { exact: true }).fill('7');
+    assert.match(await hud().innerText(), /A depth cuts one way/);
+    assert.doesNotMatch(await hud().innerText(), /both ways from the plane/);
+    await hud().getByLabel('Through', { exact: true }).check();
+    assert.equal(await hud().getByLabel('Cut depth', { exact: true }).count(), 0);
+    await hud().getByLabel('Through', { exact: true }).uncheck();
+    assert.equal(await hud().getByLabel('Cut depth', { exact: true }).inputValue(), '7');
+    await hud().getByLabel('Cut profile', { exact: true }).selectOption('circle');
+    await hud().getByLabel('Radius mm', { exact: true }).fill('');
+    assert.match(await hud().getByRole('alert').innerText(), /radius is not a number/);
+    await hud().getByLabel('Radius mm', { exact: true }).fill('4');
+    await pick('Plate 1'); await hud().getByRole('button', { name: 'Add selected', exact: true }).click();
+    assert.doesNotMatch(await hud().innerText(), /None: select a part|Pick the parts to cut/);
+    await f.snapshot('context-' + width);
+    await hud().getByRole('button', { name: 'Cancel', exact: true }).click(); await hud().waitFor({ state: 'hidden' }); await f.same(untouched);
+  }
   await f.newPage(); await f.openFile(fixture, 2); const original = await f.doc(); await f.snapshot('01-opened'); await check('01-opened', original, []);
 
   f.phase = 'new cut on both plates'; await pick('Plate 1');
-  await f.command('Assembly cut'); await hud().waitFor();
+  await f.page.evaluate(() => document.activeElement?.blur()); await f.command('Assembly cut'); await hud().waitFor();
   assert.deepEqual(await chips(), ['p1'], 'the selected part is the first target');
   await hud().getByLabel('Radius mm', { exact: true }).fill('4');
   await hud().getByLabel('Centre X', { exact: true }).fill('30'); await hud().getByLabel('Centre Y', { exact: true }).fill('20'); await hud().getByLabel('Centre Z', { exact: true }).fill('10');

@@ -45,9 +45,10 @@ export function cutOfDraft(draft: CutDraft): AddAssemblyCutOptions | string {
 }
 
 /** Why the draft cannot be applied (plain words), or undefined: its numbers, its sizes and its targets, as the model checks them. Cheap: asked on every keystroke. */
+export const CUT_TARGETS_REQUIRED = 'Pick the parts to cut: select them in the Browser or the view.';
 export function draftProblem(doc: StudioDoc, draft: CutDraft): string | undefined {
   const o = cutOfDraft(draft); if (typeof o === 'string') return o;
-  if (!draft.targets.length) return 'Pick the parts to cut: select them in the Browser or the view.';
+  if (!draft.targets.length) return CUT_TARGETS_REQUIRED;
   return assemblyCutProblem(doc, { id: draft.editing ?? 'cut-preview', ...o });
 }
 /** The trial of each draft cut against each document, kept while the document stands. */
