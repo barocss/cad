@@ -73,6 +73,42 @@ async function check(label, patterns, count) {
 async function changedTo(previous, label) { await f.changed(previous); await f.ready(); return f.snapshot(label); }
 
 await f.run(async () => {
+  for (const [width, height] of [[1024, 800], [1440, 900]]) {
+    await f.newPage(); await f.page.setViewportSize({ width, height });
+    for (const kind of ['linear', 'circular']) {
+      await f.page.setViewportSize({ width, height });
+      f.phase = `${width} ${kind} refusal recovery`;
+      await f.openFile(fixture, 2); await pick('Cube');
+      if (kind === 'circular') { const x = panel().getByLabel('Instance X').first(); await x.fill('50'); await x.press('Enter'); await f.ready(); }
+      const before = await f.doc();
+      await panel().getByRole('button', { name: 'Pattern…', exact: true }).click();
+      const form = panel().getByRole('group', { name: 'Instance pattern' });
+      await form.getByLabel('Pattern kind').selectOption(kind);
+      await form.getByLabel('Pattern count').fill(kind === 'linear' ? '2.5' : '4');
+      await form.getByLabel(kind === 'linear' ? 'Pattern spacing' : 'Pattern angle').fill(kind === 'linear' ? '25' : '91');
+      await form.getByLabel('Pattern axis').selectOption(kind === 'linear' ? 'X' : 'Z');
+      for (let retry = 0; retry < 2; retry++) {
+        await form.getByRole('button', { name: 'Make pattern', exact: true }).click();
+        await form.getByLabel('Pattern refused').waitFor();
+        assert.deepEqual(await f.doc(), before);
+        assert.equal(await form.getByLabel('Pattern refused').count(), 1);
+        assert.equal(await form.getByLabel('Pattern count').inputValue(), kind === 'linear' ? '2.5' : '4');
+      }
+      await f.snapshot(`${width}-${kind}-refused`);
+      await form.getByLabel(kind === 'linear' ? 'Pattern count' : 'Pattern angle').fill(kind === 'linear' ? '3' : '90');
+      assert.equal(await form.getByLabel('Pattern refused').count(), 0);
+      await form.getByRole('button', { name: 'Make pattern', exact: true }).click();
+      await f.changed(before); await f.ready();
+      const accepted = await check(`${width}-${kind}-recovered`, 1, kind === 'linear' ? 2 : 3);
+      await form.getByLabel('Pattern count').fill('2.5');
+      await form.getByRole('button', { name: 'Apply', exact: true }).click();
+      await form.getByLabel('Pattern refused').waitFor();
+      assert.deepEqual(await f.doc(), accepted);
+      await f.undo(); await f.same(before); await f.redo(); await f.same(accepted);
+      const saved = await f.save(`${width}-${kind}-recovered`);
+      await f.freshOpen(saved.file, saved.doc, `${width}-${kind}-reopened`); assert.deepEqual(await f.doc(), accepted);
+    }
+  }
   await f.newPage(); await f.openFile(fixture, 2); const original = await f.doc(); await f.snapshot('01-opened');
 
   f.phase = 'linear pattern'; await pick('Cube');

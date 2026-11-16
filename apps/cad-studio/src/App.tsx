@@ -1355,10 +1355,14 @@ export function App() {
     return true;
   }, [doc, marker, acceptanceScope]);
   // Roadmap 10 ③: a pattern edit through the model (its refusal as a notice), committed with its occurrences.
-  const patternEdit = (run: () => { doc: StudioDoc }, refused = 'Pattern not changed') => {
+  const patternEdit = (run: () => { doc: StudioDoc }, refused = 'Pattern not changed', inline = false): string | undefined => {
     let next: StudioDoc;
-    try { next = run().doc; } catch (e) { setToast({ title: refused, hint: e instanceof Error ? e.message : String(e), detail: '' }); return; }
-    commit(next);
+    try { next = run().doc; } catch (e) {
+      const hint = e instanceof Error ? e.message : String(e);
+      if (!inline) setToast({ title: refused, hint, detail: '' });
+      return hint;
+    }
+    return commit(next) ? undefined : 'The change was not accepted. Review the document notice before trying again.';
   };
   // Roadmap 10 ⑤: Apply makes (or changes) the cut through the model, one undo step; a cut deleted, or undone, closes its HUD.
   const applyCut = () => {
@@ -3444,7 +3448,7 @@ export function App() {
           shared={inst.part ? sharing(doc, inst.part.id).length : 0} pending={inst.part ? doc.pendingParts?.[inst.part.id] : undefined}
           onEditPart={() => startInPlace(inst.id)} onIndependent={() => commitParts(makeIndependent(doc, inst.id))}
           pattern={<InstancePatternControls inst={inst} pattern={doc.instancePatterns?.find(p => p.seed === inst.id)} occurrenceOf={inst.pattern ? doc.instancePatterns?.find(p => p.id === inst.pattern!.id) : undefined}
-            onAdd={o => patternEdit(() => addInstancePattern(doc, o))} onEdit={o => patternEdit(() => editInstancePattern(doc, o))}
+            onAdd={o => patternEdit(() => addInstancePattern(doc, o), 'Pattern not changed', true)} onEdit={o => patternEdit(() => editInstancePattern(doc, o), 'Pattern not changed', true)}
             onDelete={id => patternEdit(() => deleteInstancePattern(doc, id))} onSkip={() => { patternEdit(() => skipOccurrence(doc, inst.id)); setInstanceSel([]); }} />}
           looks={<InstanceLooksControls rows={instanceLookRows(inst, instanceBodies.get(inst.id), doc)} readOnly={!!inst.pattern}
             held={[...heldLooks(doc).filter(h => h.part === inst.id), ...(inst.part ? heldByRevision(doc, inst.part.id).filter(h => h.part === inst.id) : [])].map(h => h.problem)}
