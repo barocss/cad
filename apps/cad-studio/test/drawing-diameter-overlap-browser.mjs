@@ -46,6 +46,8 @@ await f.run(async () => {
     return context;
   };
   await f.newPage();
+  const width = Number(process.argv[3] ?? 1440);
+  await f.page.setViewportSize({ width, height: width === 1024 ? 800 : 900 });
   const doc = JSON.parse(await readFile(join(f.repo, fixture), 'utf8'));
   const plate = doc.instances[0].doc;
   const holed = { ...plate, nodes: [...plate.nodes, { kind: 'hole', parent: { node: 1, side: 'solid' }, radius: 4, center: [30, 20], face: 'n1.top', id: 'n2' }],
@@ -88,7 +90,14 @@ await f.run(async () => {
     await hover(47, 54);
     assert.equal(await preview().count(), 0);
     await f.snapshot(label + '-choices');
-    await candidates.getByRole('button', { name: new RegExp(owner.name) }).click();
+    assert.equal(await candidates.getByRole('button').first().evaluate(e => e === document.activeElement), true);
+    const target = candidates.getByRole('button', { name: new RegExp(owner.name) });
+    if (!(await target.evaluate(e => e === document.activeElement))) await f.page.keyboard.press('Tab');
+    assert.equal(await target.evaluate(e => e === document.activeElement), true);
+    await f.page.keyboard.press('Enter');
+    await candidates.waitFor({ state: 'detached' });
+    assert.equal(await f.page.locator('svg[aria-label="Drawing sheet"]').evaluate(e => e === document.activeElement), true);
+    await f.same(stock);
     assert.match(await ownerHint.textContent(), new RegExp(owner.name));
     await click(47, 54);
     await f.changed(stock);
@@ -110,6 +119,7 @@ await f.run(async () => {
   await candidates.waitFor();
   await f.page.keyboard.press('Escape');
   await candidates.waitFor({ state: 'detached' });
+  assert.equal(await f.page.locator('svg[aria-label="Drawing sheet"]').evaluate(e => e === document.activeElement), true);
   await f.same(stock);
 
   f.phase = 'Hide hidden lines while the visible rim chooser is open';

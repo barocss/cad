@@ -166,6 +166,13 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   const [selectedFrame, setSelectedFrame] = useState<string | null>(null);
   const [rimChoice, setRimChoice] = useState<{ view: DimView; projection: DrawingViews; settings: DrawingSettings; rims: readonly ProjectedEdge[] } | null>(null);
   const currentRimChoice = tool === 'diameter' && views && !busy && rimChoice?.projection === views && rimChoice.settings === settings ? rimChoice : null;
+  const rimChoices = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!currentRimChoice) return;
+    // Let the sheet pointer event finish its native focus handling first.
+    const timer = setTimeout(() => rimChoices.current?.querySelector('button')?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, [currentRimChoice]);
   const rimLabel = (edge: ProjectedEdge) => {
     const path = drawingOccurrencePath(edge.name);
     if (!path) return 'Base part';
@@ -507,6 +514,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
   const startDiameter = (view: DimView, edge: ProjectedEdge) => {
     if (!edge.circle || !views || busy) return;
+    if (currentRimChoice) svg.current?.focus();
     setRimChoice(null);
     if (currentReattachment) {
       if (view !== currentReattachment.original.view) return;
@@ -871,6 +879,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement || e.metaKey || e.ctrlKey) return;
       if (e.key === '?') { e.preventDefault(); openShortcutHelp(); return; }
       if (e.key === 'Escape') {
+        if (currentRimChoice) { e.preventDefault(); svg.current?.focus(); }
         setControlDeletion(null);
         setDrag(null);
         onClearReferencePreview();
@@ -1181,7 +1190,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
               <Button variant="default" onClick={confirmReattachment}>Reattach</Button>
             </div>
             : currentRimChoice
-            ? <div className="dw-rim-choice" role="group" aria-label="Choose diameter rim">
+            ? <div ref={rimChoices} className="dw-rim-choice" role="group" aria-label="Choose diameter rim">
               {currentRimChoice.rims.map(edge => <Button key={edge.name} variant="outline"
                 onClick={() => startDiameter(currentRimChoice.view, edge)}>{rimLabel(edge)}</Button>)}
             </div>
