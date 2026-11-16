@@ -1,3 +1,4 @@
+import { useContinuityLocation } from './app/useContinuityLocation';
 import { annotationCounts, printPreviewSummary } from './app/previewStatus';
 import { filletSectionNumberProblem } from './app/featureNumberInput';
 import { hasFilletInteriorProblem } from './app/filletInteriorInput';
@@ -3160,6 +3161,12 @@ export function App() {
   const curvatureOwner = useMemo(() => curvaturePick ? {} : null,
     [evaluated, docGeneration, workerSession, curvaturePick, continuityKey, continuityOpen]);
   const curvature = useEdgeCurvature(curvatureOwner, curvaturePick, readContinuity);
+  const continuityVisible = !!continuityPick && !lookOf(doc, continuityPick.body).hidden &&
+    !printEnabled && !camEnabled && !measure && !directSel.length && !instanceSel.length && !isolatedInstances && !stepsDisp?.opaque &&
+    !assembly.draft && !sketch && !cageEd.session && !skel.session && editNode === null;
+  const continuityLocationOwner = useMemo(() => continuityVisible ? {} : null,
+    [continuityVisible, evaluated, docGeneration, workerSession, continuityKey, continuityPick?.edge, continuityOpen]);
+  const continuityLocation = useContinuityLocation(continuityLocationOwner, readContinuity);
   const directCurveId = poleObj;
   const directCurveVisible = !!directCurveId && !workerFailure && !printEnabled && !camEnabled &&
     !drawing && !rendering && !section && !inPlace && !active && !ghost && !workingComparison &&
@@ -3506,7 +3513,7 @@ export function App() {
         display={{ showBox, setShowBox, inertiaAt, setInertiaAt }} changes={{ commit, setSelection, edgesToCurves, loadBendTable, setFlatView, setCutListView, separate }}>
         {continuityPick && !lookOf(doc, continuityPick.body).hidden && <EdgeContinuity
           key={JSON.stringify([docGeneration, workerSession, continuityPick.body.key, continuityPick.edge, continuityPick.picked])}
-          picked={continuityPick.picked} selectedDisplayEdge={continuityPick.edge !== undefined} source={evaluated}
+          picked={continuityPick.picked} selectedDisplayEdge={continuityPick.edge !== undefined} source={evaluated} location={continuityLocation}
           read={readContinuity} />}
         {curvaturePick && <EdgeCurvature {...curvature} />}
         {editNode !== null && <NodeEditor alignPreview={historyAlign} readAlignTargets={doc.nodes[editNode]?.kind === 'align' ? readAlignHistoryTargets : undefined} edgeReplacement={finishEdgeEditor.available ? {
@@ -3718,7 +3725,7 @@ export function App() {
         bandRailPicking={!active && !finishEdgePicking && !section && !measure && !assembly.draft}
         onDisplayModeStatus={onDisplayModeStatus} onBackend={setViewBackend}
         modelUnavailable={modelUnavailable} bodies={cageInputActive ? cageEd.shown(shownBodies) : viewBodies} selection={cageInputActive ? emptySel : shownSelection}
-        ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? curvature.overlay} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
+        ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? curvature.overlay} continuityLocation={continuityLocation.curve} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
         gizmo={cageInputActive ? cageEd.gizmo : routeGizmo ?? gizmo ?? instGizmo ?? poleGizmo} cage={cageInputActive ? cageEd.overlay : null} onPickCage={cageInputActive ? cageEd.onPick : undefined} tool={skel.tool}
         handles={sectionDrag.length ? sectionDrag : handles} instancePreview={instancePreview} contactLinks={contactShown && motionContact ? motionContact.links : undefined}
         render={rendering ? render : null} analysis={rendering ? null : viewAnalysis}

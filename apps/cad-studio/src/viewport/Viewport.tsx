@@ -1,3 +1,5 @@
+import { ContinuityLocation } from './ContinuityLocation';
+import type { EdgeCurvatureMeasurement } from '@barocss/cad-model/engine/edgeCurvature';
 import { CurvatureComb } from './CurvatureComb';
 import { projectOverlaySegment } from './curvatureCombSegments';
 import type { CurvatureOverlay } from '../app/useEdgeCurvature';
@@ -97,6 +99,7 @@ const NO_CONSTRAINT_INSPECTION = createConstraintInspection();
 interface Props extends ViewportPointerProps, MarkHandlers {
   modelUnavailable?: boolean;
   curvatureComb?: CurvatureOverlay | null;
+  continuityLocation?: EdgeCurvatureMeasurement | null;
   constraintInspection?: ConstraintInspectionStore;
   overlaidLine?: OverlaidLine;
   /** G23 CNC: the preview's stock, paths, remaining stock and tool (world coordinates), beside the native bodies. */
@@ -971,6 +974,8 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     const items: React.ReactNode[] = [];
     if (props.curvatureComb && !props.modelUnavailable)
       items.push(<CurvatureComb key="curvature-comb" overlay={props.curvatureComb} projectSegment={(a, b) => projectOverlaySegment(cam, a, b, w, h)} />);
+    if (props.continuityLocation && !props.modelUnavailable)
+      items.push(<ContinuityLocation key="continuity-location" curve={props.continuityLocation} project={point => projectOverlaySegment(cam, point, point, w, h)?.[0] ?? null} />);
     const sk = props.sketch;
     const workArea = sk?.editDim ? modelFitArea(c) : undefined;
     const dimensionArea = sk?.editDim ? workArea ? {

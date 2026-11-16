@@ -8,9 +8,10 @@ import { continuityAngleLabel } from './continuityAngleLabel';
 
 type Result = Extract<ContinuityReply, { measurement: unknown }>['measurement'];
 
-function EdgeContinuityRead({ picked, selectedDisplayEdge = false, read }: {
+function EdgeContinuityRead({ picked, selectedDisplayEdge = false, location, read }: {
   picked: Extract<ContinuityRequest, { kind: 'list' }>['picked'];
   selectedDisplayEdge?: boolean;
+  location?: { choose(edgeId: string): void; error?: string };
   read(input: ContinuityRequest): Promise<ContinuityReply>;
 }) {
   const [edges, setEdges] = useState<ContinuityEdge[] | null>(null);
@@ -40,6 +41,7 @@ function EdgeContinuityRead({ picked, selectedDisplayEdge = false, read }: {
   }, [pending, result]);
   useLayoutEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   async function measure(edgeId: string) {
+    location?.choose(edgeId);
     const reply = await read({ kind: 'measure', edgeId, curvature: true });
     if (!live.current) return;
     if ('measurement' in reply) setResult(reply.measurement);
@@ -81,13 +83,14 @@ function EdgeContinuityRead({ picked, selectedDisplayEdge = false, read }: {
       This displayed edge has no unique native joint mapping. Browse the body's native joints instead; the list does not identify this selected edge.
     </div>}
     {edges && edges.length > 0 && <div className="empty" data-continuity-list-scope>
-      Measurement uses the native edge chosen below. The viewport selection stays unchanged.
+      Measurement uses the native edge chosen below. Amber dots locate samples on that edge, including through geometry; they are not the viewport selection.
     </div>}
     {edges && edges.length > 0 && <NativeSelect ref={edgeSelect} aria-label="Native shared edge" value={chosen} disabled={pending}
-      onChange={event => { setChosen(event.target.value); setResult(null); setError(''); }}>
+      onChange={event => { setChosen(event.target.value); location?.choose(event.target.value); setResult(null); setError(''); }}>
       <option value="">Select native edge</option>
       {edges.map(edge => <option key={edge.id} value={edge.id}>{edge.faces.join(' / ')} · {edge.name}</option>)}
     </NativeSelect>}
+    {location?.error && <div className="empty" role="status">{location.error}</div>}
     {edges?.length !== 0 && <Button ref={inspectButton} size="xs" variant="outline" disabled={pending || !!edges && !chosen || result?.status === 'unsupported'} onClick={event => void inspect(event.detail === 0)}>
       {pending ? 'Measuring…' : edges ? 'Measure continuity' : picked ? 'Inspect edge continuity' : 'Inspect native joints'}
     </Button>}

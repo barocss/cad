@@ -8,6 +8,7 @@ const driver = 'apps/cad-studio/test/edge-continuity-browser.mjs';
 const f = await createFlow({
   name: 'edge-continuity', output, envFrozen: 'D1258_SOURCE_FROZEN',
   initialFiles: [driver],
+  extraFrozen: ['packages/barocss-cad-model/src/engine/edgeContinuity.ts'],
   requiredFrozen: [driver, 'apps/cad-studio/src/ui/EdgeContinuity.tsx', 'packages/barocss-cad-model/src/engine/edgeContinuity.ts'],
   qualification: 'Measure native normal angles at a perpendicular rim and a tangent shared edge using the Studio worker.',
   limits: ['One authored capsule extrusion, one sharp planar rim, one tangent plane–cylinder strut. Read-only in Model view.'],
