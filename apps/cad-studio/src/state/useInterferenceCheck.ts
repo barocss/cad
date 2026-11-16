@@ -22,14 +22,14 @@ export function useInterferenceCheck(source: Source, ownsInput: () => boolean, e
     active.current = null;
     setResult(null);
   }, []);
-  const start = useCallback(async (bodies: readonly BodyResult[]) => {
+  const start = useCallback(async (bodies: readonly BodyResult[], scope: 'all' | 'selected' = 'selected') => {
     if (!ownsInput()) return;
     const run = { source };
     active.current = run;
     setResult({ run, value: 'busy' });
     const current = () => active.current === run && ownsInput();
     const checked = await checkInterferencePairs(source.input, bodies, probe => engine.volumes(probe), current);
-    if (checked && current()) setResult(previous => previous?.run === run && current() ? { run, value: checked } : previous);
+    if (checked && current()) setResult(previous => previous?.run === run && current() ? { run, value: { ...checked, scope } } : previous);
   }, [source, ownsInput, engine]);
   return {
     result: result?.run.source === source ? result.value : null, close, start,

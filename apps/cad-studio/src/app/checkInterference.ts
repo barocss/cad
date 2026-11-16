@@ -7,6 +7,8 @@ import type { VolumeReply } from '../engine/client';
 
 interface Pair { a: string; b: string }
 export interface InterferenceReport {
+  checked: string[];
+  scope?: 'all' | 'selected';
   pairs: number;
   clashes: (Pair & { volume: number })[];
   failures: (Pair & { error: FriendlyError })[];
@@ -25,7 +27,7 @@ function intersectionVolume(reply: VolumeReply, key: string): number | FriendlyE
 
 /** Check the selected pairs against the existing bounds and volume thresholds. */
 export async function checkInterferencePairs(doc: StudioDoc, bodies: readonly BodyResult[], volumes: (probe: StudioDoc) => Promise<VolumeReply>, current = () => true): Promise<InterferenceReport | null> {
-  const report: InterferenceReport = { pairs: bodies.length * (bodies.length - 1) / 2, clashes: [], failures: [] };
+  const report: InterferenceReport = { checked: bodies.map(body => body.key), pairs: bodies.length * (bodies.length - 1) / 2, clashes: [], failures: [] };
   for (let i = 0; i < bodies.length; i++) for (let j = i + 1; j < bodies.length; j++) {
     if (!current()) return null;
     const a = bodies[i], b = bodies[j], A = a.mesh.bounds, B = b.mesh.bounds;

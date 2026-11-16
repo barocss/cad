@@ -69,14 +69,14 @@ test('aggregation keeps the independently successful pair when another probe ref
     doc, bodies, clashes, setClashes() {}, setSelection() {},
   }));
   assert.match(markup('busy'), /Checking…/);
-  assert.match(markup({ pairs: 1, clashes: [], failures: [] }), /No bodies overlap\./);
+  assert.match(markup({ checked: ['b1', 'b3'], pairs: 1, clashes: [], failures: [] }), /No bodies overlap\./);
   const partial = markup(result);
   assert.match(partial, /Interference check incomplete\. 1 pair could not be checked/);
   assert.match(partial, /Repeated \(b1\) ∩ Repeated \(b3\)/);
   assert.match(partial, /500 mm³/);
   assert.match(partial, /Second probe did not complete/);
   assert.doesNotMatch(partial, /No bodies overlap\./);
-  assert.match(markup({ pairs: 1, clashes: [], failures: result.failures }), /Interference check failed/);
+  assert.match(markup({ checked: ['b1', 'b3'], pairs: 1, clashes: [], failures: result.failures }), /Interference check failed/);
 });
 
 test('a retired inspection drops each reply shape and does not submit the next pair', async () => {
@@ -101,4 +101,14 @@ test('a retired inspection drops each reply shape and does not submit the next p
   }
   const obsolete = await checkInterferencePairs(doc, bodies, async () => assert.fail('unexpected probe'), () => false);
   assert.equal(obsolete, null);
+});
+
+test('report records tested body keys, hidden inclusion and fixed selection scope', async () => {
+ const {doc,bodies}=setup();
+ const report=await checkInterferencePairs(doc,bodies,async probe=>({ok:true,volumes:[{key:bodyKeyFor(probe.nodes,probe.nodes.length-1),volume:0}]}));assert.ok(report);
+ assert.deepEqual(report.checked,bodies.map(b=>b.key));
+ const hidden={...doc,bodies:{...doc.bodies,b3:{name:'Hidden B',hidden:true}}};
+ const markup=renderToStaticMarkup(createElement(InterferenceInspector,{doc:hidden,bodies,clashes:{...report,scope:'all'},setClashes(){},setSelection(){}}));
+ assert.match(markup,/All base bodies/);assert.match(markup,/Hidden B.*hidden \(included\)/);assert.match(markup,/Changing selection does not rerun/);
+ const selected=await checkInterferencePairs(doc,[bodies[0],bodies[2]],async()=>assert.fail('disjoint bounds need no probe'));assert.ok(selected);assert.deepEqual(selected.checked,['b1','b5']);assert.equal(selected.pairs,1);
 });

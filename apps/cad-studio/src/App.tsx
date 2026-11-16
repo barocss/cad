@@ -1093,7 +1093,7 @@ export function App() {
     const picked = selectedBodies(selection);
     const list = picked.length > 1 ? picked.map(index => bodies[index]).filter(Boolean) : bodies.slice();
     setEditNode(null);
-    void interference.start(list);
+    void interference.start(list, picked.length > 1 ? 'selected' : 'all');
   }, [fresh, busy, selection, bodies, interference.start, setToast]);
   discardDirectCandidateRef.current = () => {
     const pending = parameterEditNow.current;

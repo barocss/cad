@@ -4,7 +4,7 @@ import type { DisplayMesh } from '@barocss/cad-model/engine/mesh';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { Selection } from '@barocss/cad-model/app/commands';
 import { measureItem, type measureBetween, type MeasurePick } from '@barocss/cad-model/app/measure';
-import { bodyName } from '@barocss/cad-model/app/bodies';
+import { bodyName, lookOf } from '@barocss/cad-model/app/bodies';
 import { Button } from '@/components/ui/button';
 import { ToolIconButton } from '@/components/ui/tool-button';
 import { Icon } from './atoms';
@@ -70,6 +70,15 @@ export function InterferenceInspector({ doc, bodies, clashes, setClashes, setSel
   return <aside className="card props" aria-label="Interference">
         <div className="card-title">INTERFERENCE <ToolIconButton size="tiny" aria-label="Close interference" onClick={() => setClashes(null)}><Icon name="close" small /></ToolIconButton></div>
         {clashes === 'busy' ? <div className="empty">Checking…</div> : <>
+          <div aria-label="Interference check scope" className="empty">
+            <div>{clashes.scope === 'all' ? 'All base bodies' : 'Selected base bodies'} · {clashes.checked.length} bodies · {clashes.pairs} {clashes.pairs === 1 ? 'pair' : 'pairs'}</div>
+            <ul>{clashes.checked.map(key => {
+              const index = bodies.findIndex(body => body.key === key);
+              return <li key={key}>{label(index, key)}{index >= 0 && lookOf(doc, bodies[index]).hidden ? ' · hidden (included)' : ''}</li>;
+            })}</ul>
+            <div>Results belong to this check. Changing selection does not rerun it.</div>
+            {clashes.scope === 'all' && <div>Select at least two bodies to check only that selection.</div>}
+          </div>
           {!clashes.failures.length && !clashes.clashes.length && <div className="empty">No bodies overlap.</div>}
           {!!clashes.failures.length && <div className="empty">
             {clashes.failures.length === clashes.pairs ? 'Interference check failed.' : 'Interference check incomplete.'}
