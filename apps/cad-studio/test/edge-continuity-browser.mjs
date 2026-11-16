@@ -108,6 +108,7 @@ await f.run(async () => {
     return context;
   };
   await f.newPage();
+  await f.page.setViewportSize({ width: Number(process.argv[3] ?? 1440), height: 900 });
   f.phase = 'Pick the perpendicular rim in the viewport and inspect its native edge';
   await open(source, 'capsule-edge-inspection.bcad');
   const native = await f.inspect('native', source);
@@ -124,9 +125,15 @@ await f.run(async () => {
   await selectFilter('Bodies');
   await clickWorld([10, 0, 6]);
   await f.page.waitForFunction(() => window.__studioSelection?.selection.bodies.length === 1);
-  await button('Inspect native joints', panel()).click();
+  await button('Inspect native joints', panel()).focus();
+  await f.page.keyboard.press('Enter');
+  await edges().waitFor();
+  await f.page.waitForFunction(() => !document.querySelector('[aria-label="Native shared edge"]')?.disabled);
+  assert.equal(await edges().evaluate(el => document.activeElement === el), true, 'keyboard inspection focuses the new native-edge selector');
   await edges().selectOption(ids[tangent]);
-  await button('Measure continuity', panel()).click();
+  await f.page.keyboard.press('Tab');
+  assert.equal(await button('Measure continuity', panel()).evaluate(el => document.activeElement === el), true, 'forward Tab reaches Measure continuity');
+  await f.page.keyboard.press('Enter');
   measured[tangent] = await readAngle();
   await f.snapshot('02-tangent-joint');
   assert.equal(await edges().inputValue(), ids[tangent]);

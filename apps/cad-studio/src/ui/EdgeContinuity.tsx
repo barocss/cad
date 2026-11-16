@@ -15,6 +15,17 @@ function EdgeContinuityRead({ picked, read }: {
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState('');
   const live = useRef(false);
+  const edgeSelect = useRef<HTMLSelectElement>(null);
+  const inspectButton = useRef<HTMLButtonElement>(null);
+  const focusList = useRef(false);
+  useLayoutEffect(() => {
+    if (pending || !focusList.current) return;
+    focusList.current = false;
+    // Disabling the initiating button can send focus to body. Do not steal it from another control.
+    if (edges?.length && (document.activeElement === document.body || document.activeElement === inspectButton.current)) {
+      edgeSelect.current?.focus();
+    }
+  }, [edges, pending]);
   useLayoutEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   async function measure(edgeId: string) {
     const reply = await read({ kind: 'measure', edgeId, curvature: true });
@@ -22,7 +33,8 @@ function EdgeContinuityRead({ picked, read }: {
     if ('measurement' in reply) setResult(reply.measurement);
     else setError('error' in reply ? reply.error : 'The edge could not be measured.');
   }
-  async function inspect() {
+  async function inspect(keyboard: boolean) {
+    focusList.current = keyboard && !edges;
     setPending(true);
     setResult(null);
     setError('');
@@ -53,12 +65,12 @@ function EdgeContinuityRead({ picked, read }: {
     }
   }
   return <section aria-label="Edge continuity" className="mt-2 space-y-1">
-    {edges && edges.length > 0 && <NativeSelect aria-label="Native shared edge" value={chosen} disabled={pending}
+    {edges && edges.length > 0 && <NativeSelect ref={edgeSelect} aria-label="Native shared edge" value={chosen} disabled={pending}
       onChange={event => { setChosen(event.target.value); setResult(null); setError(''); }}>
       <option value="">Select native edge</option>
       {edges.map(edge => <option key={edge.id} value={edge.id}>{edge.faces.join(' / ')} · {edge.name}</option>)}
     </NativeSelect>}
-    <Button size="xs" variant="outline" disabled={pending || !!edges && !chosen} onClick={() => void inspect()}>
+    <Button ref={inspectButton} size="xs" variant="outline" disabled={pending || !!edges && !chosen} onClick={event => void inspect(event.detail === 0)}>
       {pending ? 'Measuring…' : edges ? 'Measure continuity' : picked ? 'Inspect edge continuity' : 'Inspect native joints'}
     </Button>
     <div role="status" aria-label="Edge continuity result">
