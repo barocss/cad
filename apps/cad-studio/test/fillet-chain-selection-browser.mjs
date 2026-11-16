@@ -193,7 +193,7 @@ async function checkScope(hud, picked, added, constant = true) {
     assert.equal(await field.innerText(), String(names.length));
     assert.deepEqual((await field.getAttribute('title')).split('\n').filter(Boolean).sort(), [...names].sort());
   }
-  if (constant) assert.match(await scope.innerText(), /Radius\s+1 mm/);
+  if (constant) { assert.doesNotMatch(await scope.innerText(), /Radius/); assert.equal(await hud.getByLabel('Radius', {exact:true}).inputValue(), '1'); }
 }
 
 async function checkRemoval(seed, stock, top, seedEdge, topNames) {
@@ -285,7 +285,7 @@ async function checkVarying(seed, top, seedEdge) {
   await hud.getByLabel('Radius', { exact: true }).fill('1');
   await hud.getByLabel('End radius (0: same)', { exact: true }).fill('3');
   await hud.locator('.status.error').waitFor();
-  assert.match(await hud.getByRole('status').innerText(), /one open chain/i);
+  assert.match(await hud.getByRole('status').innerText(), /an open chain/i);
   assert.equal(await button(hud, 'Apply').isEnabled(), false);
   await f.same(seed);
   await f.snapshot('closed-rim-refused');
