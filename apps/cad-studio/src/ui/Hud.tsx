@@ -75,6 +75,8 @@ export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFil
   const extrudeFeedback = extrudeDraftFeedback(active);
   const dependentHoleFeedback = draftDependentHoleFeedback(active);
   const edgeScope = active.preview === 'ok' ? active.filletScope ?? active.chamferScope : undefined;
+  const shapedSourceScope = active.cmd.id === 'fillet' && active.fillet?.type === 'edge'
+    && active.preview === 'ok' && !edgeScope && (active.values.shape === 'conic' || active.values.shape === 'g2');
   const replacingAxis = active.cmd.id === REVOLVE_AXIS_EDIT;
   const pickingMirrorPlane = awaitingMirrorPlane(active.cmd.id, active.values);
   const alignTargetBody = active.cmd.id === 'align' ? active.ctx.bodies[Number(active.values.targetBody)] : undefined;
@@ -157,10 +159,11 @@ export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFil
           const pathError = step.label === 'Faces' ? faceSelectionFeedback?.text : step.label === 'Path' ? pathFeedback : step.label === 'Reference plane' ? planePickFeedback : undefined;
           const done = step.done && !(pathError && step.label !== 'Faces') && (!requiresPreview || active.preview === 'ok');
           return <div key={step.label} className={'hud-step' + (done ? ' done' : '')}>
-            <Icon name={done ? 'check_circle' : 'radio_button_unchecked'} small /><b>{step.label}</b><span role={pathError ? 'status' : undefined}>{pathError ?? (guideStep && step.done && active.preview !== 'ok' ? active.preview === 'error' ? 'Guide geometry was not accepted. Review the error below.' : 'Validating guide geometry…' : step.text)}</span>
+            <Icon name={done ? 'check_circle' : 'radio_button_unchecked'} small /><b>{shapedSourceScope && step.label === 'Edges' ? 'Selected source edges' : step.label}</b><span role={pathError ? 'status' : undefined}>{pathError ?? (guideStep && step.done && active.preview !== 'ok' ? active.preview === 'error' ? 'Guide geometry was not accepted. Review the error below.' : 'Validating guide geometry…' : step.text)}</span>
           </div>;
         })}
       </div>}
+      {shapedSourceScope && <p className="small muted">This count describes the source selection, not the complete fillet scope. Exact tangent scope unavailable.</p>}
       {active.fillet?.radiusMode === 'varying' && <FilletEndpointNotice locations={filletEndpoints ?? {reason:'Original endpoint locations are unavailable for the current source.'}} />}
       {edgeScope && <div className="hud-steps" role="group" aria-label={active.filletScope ? 'Fillet scope' : 'Chamfer scope'}>
         <div className="field"><span>Picked native edges</span><span title={edgeScope.picked.join('\n')}>{edgeScope.picked.length}</span></div>
