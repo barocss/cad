@@ -535,7 +535,12 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       // (R12b.5, D136: its module, diameter and hand are the wheel's — edit the wheel; its own here.)
       const g = (n: ModelNode) => n as typeof node;
       number('starts', 'Starts', undefined, n => g(n).starts, (n, v) => ({ ...g(n), starts: Math.max(1, Math.min(4, Math.round(v))) }));
-      out.push({ kind: 'choice', key: 'form', label: 'Worm form', options: [{ value: 'ZI', label: 'ZI (involute helicoid)' }, { value: 'ZA', label: 'ZA (straight axial sides)' }], get: n => self<typeof node>(n).form, set: (n, v) => replace(n, i, { ...self<typeof node>(n), form: v as 'ZI' | 'ZA' }) });
+      const throated = (n: Nodes) => n[self<typeof node>(n).mesh.gear]?.kind === 'worm-wheel';
+      out.push({ kind: 'choice', key: 'form', label: 'Worm form', options: throated(nodes)
+        ? [{ value: 'ZA', label: 'ZA (required for a throated wheel)' }]
+        : [{ value: 'ZI', label: 'ZI (involute helicoid)' }, { value: 'ZA', label: 'ZA (straight axial sides)' }],
+        get: n => self<typeof node>(n).form,
+        set: (n, v) => throated(n) && v === 'ZI' ? [...n] : replace(n, i, { ...self<typeof node>(n), form: v as 'ZI' | 'ZA' }) });
       number('L', 'Length', 'mm', n => num(g(n).length), (n, v) => ({ ...g(n), length: v }));
       number('bore', 'Bore', 'mm', n => num(g(n).bore ?? 0), (n, v) => ({ ...g(n), bore: v }));
       number('ds', 'Thinner by (axial)', 'mm', n => num(g(n).thicknessReduction ?? 0), (n, v) => ({ ...g(n), thicknessReduction: v }));
