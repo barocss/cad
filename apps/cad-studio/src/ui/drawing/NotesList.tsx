@@ -1,7 +1,7 @@
 // The drawing's NOTES (O16: split from DrawingWorkspace, on shadcn's components): each note's first line and leader; the selected one's text.
 import { useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import type { DrawingNote, DrawingSettings } from '@barocss/cad-model/drawing/types';
-import { Icon, Kbd } from '../atoms';
+import { Icon } from '../atoms';
 import { Button } from '@/components/ui/button';
 
 export function NotesList({ settings, selected, selNote, noteDraft, setNoteDraft, noteBox, onSelect, remove, onRemoveLeader, onDuplicate, onChange }: {
@@ -20,7 +20,6 @@ export function NotesList({ settings, selected, selNote, noteDraft, setNoteDraft
             </button>
             <Button variant="ghost" size="xs" aria-label={`Remove note ${n.id}`} onClick={e => { e.stopPropagation(); remove(n.id); }}><Icon name="close" small /></Button>
           </div>)}
-          {!settings.notes?.length && <div className="empty"><Kbd>N</Kbd> adds a note: click the paper, or a view for a leader first.</div>}
           {selNote && <>
             <textarea ref={noteBox} className="dw-note-edit" aria-label="Note text" rows={3} value={noteDraft ?? selNote.text}
               onChange={e => setNoteDraft(e.target.value)}

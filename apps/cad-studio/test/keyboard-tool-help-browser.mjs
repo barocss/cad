@@ -53,6 +53,12 @@ await f.run(async () => {
     f.phase = 'Drawing tool descriptions, dialog and restoration';
     await button('Drawing', mode).click();
     await f.page.getByLabel('Drawing sheet', { exact: true }).waitFor();
+    const settings = f.page.getByRole('complementary', { name: 'Drawing settings', exact: true });
+    assert.equal(await settings.getByText(/Pick a dimension tool/).count(), 0);
+    assert.equal(await settings.getByText(/adds a note: click the paper/).count(), 0);
+    assert.match(await settings.innerText(), /DIMENSIONS\s+0/);
+    assert.match(await settings.innerText(), /NOTES\s+0/);
+    assert.equal(await button('Auto-dimension', settings).count(), 1);
     const drawing = f.page.getByRole('navigation', { name: 'Drawing tools', exact: true });
     const select = button('Select', drawing), linear = button('Linear dimension', drawing), diameter = button('Diameter', drawing);
     await select.focus();
@@ -70,9 +76,14 @@ await f.run(async () => {
     await help.waitFor();
     const diameterRow = help.locator('.help-row').filter({ hasText: 'Diameter' });
     assert.equal(await diameterRow.locator('kbd').textContent(), 'O');
+    for (const [name, key] of [['Angle', 'A'], ['Note', 'N']]) {
+      const row = help.locator('.help-row').filter({ hasText: name });
+      assert.equal(await row.locator('kbd').textContent(), key);
+    }
     await f.snapshot('drawing-help-' + viewport.width);
     await f.page.keyboard.press('Escape');
     await help.waitFor({ state: 'hidden' });
+    await f.page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "Diameter");
     assert.ok(await diameter.evaluate(el => document.activeElement === el));
     await f.page.keyboard.press('Enter');
     assert.equal(await diameter.getAttribute('aria-pressed'), 'true');
@@ -85,6 +96,16 @@ await f.run(async () => {
     assert.equal(await select.getAttribute('aria-pressed'), 'true');
     await f.page.keyboard.press('o');
     assert.equal(await diameter.getAttribute('aria-pressed'), 'true');
+    await f.page.keyboard.press('a');
+    await f.page.getByRole('status').getByText('Click two straight edges, then the side of their corner the angle goes on', { exact: true }).waitFor();
+    await point(10, 0);
+    await f.page.getByRole('status').getByText('Now the second edge · Esc cancels', { exact: true }).waitFor();
+    await f.page.keyboard.press('Escape');await f.page.keyboard.press('Escape');
+    await f.page.keyboard.press('n');
+    await f.page.getByRole('status').getByText('Click on the paper for a note, or on a view for a leader and then where its text goes', { exact: true }).waitFor();
+    await point(10, 10);
+    await f.page.getByRole('status').getByText('Click where the note’s text goes · Esc cancels', { exact: true }).waitFor();
+    await f.page.keyboard.press('Escape');await f.page.keyboard.press('Escape');
     await f.same(original);
   }
   if (baseline) throw Error('Focused buttons provide no help, and Drawing has no keyboard help dialog.');
