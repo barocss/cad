@@ -1,3 +1,4 @@
+import { draftDependentHoleFeedback } from '../app/draftDependentHoleFeedback';
 import { hasInlineFilletRadiusError } from '../app/filletRadiusNotice';
 import { draftNeutralFeedback } from '../app/draftNeutralFeedback';
 import { filletFaceSelectionFeedback } from '../app/filletFaceSelectionFeedback';
@@ -66,6 +67,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
   const planePickFeedback = offsetPlanePickFeedback(active);
   const collapseFeedback = offsetCollapseFeedback(active);
   const neutralFeedback = draftNeutralFeedback(active);
+  const dependentHoleFeedback = draftDependentHoleFeedback(active);
   const edgeScope = active.preview === 'ok' ? active.filletScope ?? active.chamferScope : undefined;
   const replacingAxis = active.cmd.id === REVOLVE_AXIS_EDIT;
   const pickingMirrorPlane = awaitingMirrorPlane(active.cmd.id, active.values);
@@ -184,7 +186,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           return onHoleOptions(active, { type, d, depth, cd, ch, csd });
         }} /> : null}
       {active.cmd.id === 'fill-feature-pattern' && <FillPatternHints />}
-      {active.preview === 'error' && active.error && !faceSelectionFeedback?.hideError && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && !neutralFeedback && !sectionRecovery && !hasInlineFilletRadiusError(active) && !(active.cmd.id === 'scale' && featureNumberInvalid(active.values.factor, 'scale-factor') && active.error.title === 'Enter a valid Factor') && !(draftAngleInvalid && active.error.code === 'DRAFT_ANGLE') && !(active.error.historyField && (interiorProblems[active.error.historyField as FilletInteriorKey] || active.error.historyField === sectionProblem?.key)) && <FeatureFailureNotice error={active.error} />}
+      {active.preview === 'error' && active.error && !faceSelectionFeedback?.hideError && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && !neutralFeedback && !sectionRecovery && !hasInlineFilletRadiusError(active) && !(active.cmd.id === 'scale' && featureNumberInvalid(active.values.factor, 'scale-factor') && active.error.title === 'Enter a valid Factor') && !(draftAngleInvalid && active.error.code === 'DRAFT_ANGLE') && !(active.error.historyField && (interiorProblems[active.error.historyField as FilletInteriorKey] || active.error.historyField === sectionProblem?.key)) && <FeatureFailureNotice error={dependentHoleFeedback ?? active.error} />}
       <div className="hud-actions">
         {active.cmd.id === 'mirror' && <Button variant="ghost" aria-pressed={pickingMirrorPlane}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}

@@ -50,5 +50,27 @@ await f.run(async () => {
   await f.undo(); await f.same(source); await f.redo(); await f.same(doc);
   const saved = await f.save('tilted-recovered-' + width); await f.freshOpen(saved.file, doc, 'reopened-' + width);
   f.report.observations.push({ width, removedVolume: initial.volume - result.volume });
+  await f.page.setViewportSize({ width, height: width === 1024 ? 800 : 900 });
+  await f.openFeatureEditor(2, 'upstream Draft'); await button('Edit draft', f.editor()).click();
+  const edit = hud('Edit Draft'); await edit.getByLabel('Angle', { exact: true }).fill('20');
+  await preview(edit); await button('Apply', edit).click(); await f.changed(doc); const accepted = await f.doc();
+  const native = await f.inspect(`draft-hole-20-${width}`, accepted);
+  assert.equal(native.valid, true); assert.ok(Math.abs(native.volume - 2163.1602929137) < 1e-6);
+  await f.openFeatureEditor(2, 'upstream Draft refusal'); await button('Edit draft', f.editor()).click();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await edit.getByLabel('Pull', { exact: true }).selectOption('x');
+    await edit.getByText('This Draft change prevents the later Hole', { exact: true }).waitFor();
+    assert.equal(await edit.getByText(/Restore the previous Pull or Angle/).count(), 1);
+    await edit.getByText(/Failed feature.*Hole/).waitFor();
+    assert.equal(await button('Apply', edit).isDisabled(), true); await f.same(accepted);
+    await f.snapshot(`${width}-downstream-hole-refused-${attempt}`);
+    await edit.getByLabel('Pull', { exact: true }).selectOption('-x'); await preview(edit);
+    assert.equal(await edit.getByText(/Restore the previous Pull or Angle/).count(), 0);
+  }
+  await button('Cancel', edit).click(); await f.same(accepted);
+  await f.undo(); await f.same(doc); await f.redo(); await f.same(accepted);
+  const recovered = await f.save(`draft-hole-recovered-${width}`);
+  await f.freshOpen(recovered.file, accepted, `draft-hole-reopened-${width}`);
+
  }
 });
