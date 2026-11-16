@@ -1021,7 +1021,7 @@ export function sweepBrep(profile: readonly ProfileSegmentInput[], steps: readon
     const origin: XY = [sx * st.radius, sy * st.radius], direction: XY = sx ? [0, 1] : [1, 0];
     let turned: Brep;
     try { turned = revolveProfile({ id: tag, profile: outer, axis: { origin, direction }, angle: st.angle, ...(sideTags ? { sideTags } : {}) }); }
-    catch (cause) { if (cause instanceof BrepError && /axis/.test(cause.message)) fail('PARAMETER', `bend ${k}: the profile reaches the bend's axis (use a radius larger than the profile's reach towards ${side})`); throw cause; }
+    catch (cause) { if (cause instanceof BrepError && /axis/.test(cause.message)) fail('PARAMETER', `bend ${k}: the profile crosses or touches the bend's axis between vertices (increase the radius towards ${side}; contact at profile vertices may be supported)`); throw cause; }
     pieces.push(place(turned!, k));
     const input = { id: tag, profile: outer, axis: { origin, direction }, angle: st.angle };
     masses.push({ local: d => revolveMassProperties(input, d), axes: [x, y, z], offset: o });
