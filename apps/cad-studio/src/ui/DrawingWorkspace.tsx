@@ -185,6 +185,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     setRimChoice(null);
     if (tool === 'diameter') setTool('select');
   }, [reattach, currentReattachment, tool]);
+  const [inspectedTarget, setInspectedTarget] = useState<DrawingDatumTarget | null>(null);
   const [targetChoices, setTargetChoices] = useState<DrawingDatumTarget[]>([]);
   const [reselectTarget, setReselectTarget] = useState<DrawingDatumTarget | null>(null);
   const [targetDraft, setTargetDraft] = useState<DatumTargetDraft>(DEFAULT_TARGET_DRAFT);
@@ -1029,6 +1030,15 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     const parts: string[] = [];
     const P = (x: DimView) => placementOf(layout, sheet ?? undefined, x)!, R = (x: DimView) => projectionOf(views, sheet ?? undefined, x)!;
     const v = hover ? P(hover.view) : null;
+    if (inspectedTarget && targetChoices.includes(inspectedTarget)) {
+      const pr = views[inspectedTarget.view], resolved = resolveDatumTarget(pr, inspectedTarget);
+      const edge = resolved.ok ? pr.edges.find(e => e.name === inspectedTarget.point?.edge) : undefined;
+      const placement = P(inspectedTarget.view);
+      if (edge?.ends && placement && !placement.hidden) {
+        const [a, b] = edge.ends.map(p => toSheet(placement, inView(pr, p)));
+        return `<g class="dw-hover" aria-label="Datum endpoint candidate preview" pointer-events="none">${marksSvg([{ kind: 'line', a, b, pen: 'visible' }])}</g>`;
+      }
+    }
     if (pending?.kind === 'note' && hover) {
       const t = toSheet(layout.views[pending.leader.view], pending.leader.at);
       parts.push(`<g class="dw-preview"><line x1="${t[0]}" y1="${t[1]}" x2="${hover.q[0]}" y2="${hover.q[1]}" stroke-width="0.25"/></g><circle class="dw-pick" cx="${t[0]}" cy="${t[1]}" r="0.9"/>`);
@@ -1092,7 +1102,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       }
     }
     return parts.join('');
-  }, [layout, views, bodies, hover, pending, tool, settings]);
+  }, [layout, views, bodies, hover, pending, tool, settings, inspectedTarget, targetChoices]);
 
   // The dimension being dragged is drawn where it goes.
   const shownMarkup = useMemo(() => {
@@ -1133,7 +1143,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
       <div className="dw-canvas">
         <div className="dw-paper">
-          {layout && <svg ref={svg} viewBox={viewBox.join(' ')} className={drag && 'pan' in drag ? 'dw-pan' : ''} aria-label="Drawing sheet" data-scale={layout.scale}
+          {layout && <svg ref={svg} tabIndex={-1} viewBox={viewBox.join(' ')} className={drag && 'pan' in drag ? 'dw-pan' : ''} aria-label="Drawing sheet" data-scale={layout.scale}
             onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={() => setHover(null)} onWheel={onWheel}>
             <rect className="dw-sheet" x={0} y={0} width={W} height={H} fill="#fff" />
             <g fill="none" stroke="#000" strokeLinecap="round" strokeLinejoin="round" fontFamily="Helvetica, Arial, sans-serif" dangerouslySetInnerHTML={{ __html: shownMarkup }} />
@@ -1189,7 +1199,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
         <DatumsEditor settings={settings} views={views} scale={layout?.scale ?? 1} onChange={onChange} onRefused={setMessage} />
 
-        <DatumTargetsEditor draft={targetDraft} onDraft={next => { if (next.kind !== targetDraft.kind && (pending?.kind === 'datum-line' || (pending?.kind === 'datum-target' && !pending.moving))) cancel(); setTargetDraft(next); }} settings={settings} views={busy ? null : views} hiddenViews={VIEW_IDS.filter(id => !!layout?.views[id].hidden)} selected={selectedTarget} choices={targetChoices} onChoose={chooseTarget} onSelect={id => { setSelectedTarget(id); setSelected(null); setSelectedFrame(null); setTool('select'); cancel(); }}
+        <DatumTargetsEditor draft={targetDraft} onDraft={next => { if (next.kind !== targetDraft.kind && (pending?.kind === 'datum-line' || (pending?.kind === 'datum-target' && !pending.moving))) cancel(); setTargetDraft(next); }} settings={settings} views={busy ? null : views} hiddenViews={VIEW_IDS.filter(id => !!layout?.views[id].hidden)} selected={selectedTarget} choices={targetChoices} onInspect={setInspectedTarget} onChoose={target => { chooseTarget(target); svg.current?.focus(); }} onSelect={id => { setSelectedTarget(id); setSelected(null); setSelectedFrame(null); setTool('select'); cancel(); }}
           onAdd={() => { setTool('datum-target'); cancel(); }} onMove={target => { setTool('datum-target'); chooseTarget(target, true); }}
           onReselect={target => { cancel(); if (layout?.views[target.view].hidden) { setMessage('Show the target view before selecting its endpoint again.'); return; } setTool('datum-target'); setReselectTarget(target); setSelected(null); setSelectedTarget(target.id); setMessage(`Select the target endpoint again in the ${target.view} view. Its symbol position will be kept. Esc cancels.`); }}
           onCommit={commitTargets} onRefused={setMessage} />

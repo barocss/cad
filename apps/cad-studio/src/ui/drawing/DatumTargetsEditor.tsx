@@ -1,4 +1,5 @@
 // Point targets use stored exact edge references; line and area targets are placed by view points. Unresolved targets remain visible in this list.
+import { inView } from '@barocss/cad-model/drawing/dimensions';
 import { useState, type CSSProperties } from 'react';
 import { datumTargetConflicts, datumTargetSizeText, resolveDatumTarget, type DatumTargetKind, type DrawingDatumTarget } from '@barocss/cad-model/drawing/datumTargets';
 import type { DrawingSettings, DrawingViews, ViewId } from '@barocss/cad-model/drawing/types';
@@ -16,8 +17,9 @@ const TARGET_ACTION: CSSProperties = { ...TARGET_WRAP, height: 'auto' };
 export interface DatumTargetDraft { kind: DatumTargetKind; shape: 'circle' | 'rect'; d: string; w: string; h: string; moveable: boolean }
 export const DEFAULT_TARGET_DRAFT: DatumTargetDraft = { kind: 'point', shape: 'circle', d: '6', w: '6', h: '4', moveable: false };
 
-export function DatumTargetsEditor({ settings, views, hiddenViews, selected, choices, draft, onDraft, onChoose, onSelect, onAdd, onMove, onReselect, onCommit, onRefused }: {
+export function DatumTargetsEditor({ settings, views, hiddenViews, selected, choices, draft, onDraft, onChoose, onInspect, onSelect, onAdd, onMove, onReselect, onCommit, onRefused }: {
   settings: DrawingSettings; views: DrawingViews | null; hiddenViews: ViewId[]; selected: string | null; choices: DrawingDatumTarget[]; draft: DatumTargetDraft; onDraft(draft: DatumTargetDraft): void;
+  onInspect(target: DrawingDatumTarget | null): void;
   onChoose(target: DrawingDatumTarget): void; onSelect(id: string): void; onAdd(): void; onMove(target: DrawingDatumTarget): void;
   onReselect(target: DrawingDatumTarget): void;
   onCommit(rows: DrawingDatumTarget[]): boolean; onRefused(message: string): void;
@@ -47,13 +49,20 @@ export function DatumTargetsEditor({ settings, views, hiddenViews, selected, cho
     </details>}
     <Button variant="ghost" size="xs" aria-label="Add datum target" disabled={!views || rows.length >= 200} onClick={onAdd}>{draft.kind === 'point' ? 'Add point target' : draft.kind === 'line' ? 'Add line target' : 'Add area target'}</Button>
     {choices.length > 0 && <div role="group" aria-label="Overlapping endpoint choices">
-      <p className="text-[11px]">Choose an endpoint by its current position (mm):</p>
+      <p className="text-[11px]">Choose the edge to attach to (model mm):</p>
       {choices.map((target, i) => {
         const current = views && resolveDatumTarget(views[target.view], target);
-        return <Button key={i} variant="ghost" size="xs" title={target.point?.edge} className="h-auto max-w-full whitespace-normal text-left" onClick={() => {
+        const projection = views?.[target.view], edge = projection?.edges.find(e => e.name === target.point?.edge);
+        const ends = edge?.ends;
+        const direction = projection && ends ? (() => {
+          const a = inView(projection, ends[0]), b = inView(projection, ends[1]);
+          return Math.abs(a[1] - b[1]) < 1e-6 ? 'Horizontal' : Math.abs(a[0] - b[0]) < 1e-6 ? 'Vertical' : 'Slanted';
+        })() : 'Direction unavailable';
+        const pair = ends?.map(p => `[${p.map(n => Number(n.toFixed(3))).join(', ')}]`).join(' → ');
+        return <Button key={i} onMouseEnter={() => onInspect(target)} onMouseLeave={() => onInspect(null)} onFocus={() => onInspect(target)} onBlur={() => onInspect(null)} variant="ghost" size="xs" title={target.point?.edge} className="h-auto max-w-full whitespace-normal text-left" onClick={() => {
         const r = views && resolveDatumTarget(views[target.view], target);
         if (!r) onRefused('Wait for the current drawing.'); else if (!r.ok) onRefused(r.reason); else onChoose(target);
-      }}>Endpoint {i + 1} · {current?.ok ? `[${current.at.join(', ')}] mm` : 'Position unavailable'}</Button>;
+      }}>Endpoint {i + 1} · {direction} · {current?.ok ? `${pair} mm` : 'Position unavailable'}</Button>;
       })}
     </div>}
     {rows.map((target, index) => <TargetRow key={`${index}:${target.id}`} target={target} views={views} hidden={hiddenViews.includes(target.view)} conflict={conflicts.has(target)} selected={selected === target.id}

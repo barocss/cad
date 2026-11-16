@@ -1,0 +1,9 @@
+# Coincident datum endpoint choice (#109)
+
+Candidate buttons show projected edge direction and both model-space endpoints (rounded to 0.001 mm for display). Hover or keyboard focus highlights that candidate's complete straight edge on the drawing. Preview is gated on membership in the current candidate list, a currently resolvable target signature and visible view; it never chooses or changes a reference. Choosing a candidate returns focus to the drawing SVG, retaining Escape and placement flow. The captured edge/endpoint/signature is passed unchanged to the existing target creation path.
+
+Chrome WebGPU PASS at 1440x900 and 1024x900 using bracket.bcad front-view corner [0,6]: horizontal/vertical labels differ; hover first candidate and keyboard-focus second show different preview lines; Enter removes the candidate preview and focuses Drawing sheet; placing the symbol stores the chosen exact edge reference. Undo/Redo and Save/fresh Open retain the reference. Existing area/line target flow, invalid identical endpoints, recovery, SVG export and independent Python coordinate/symbol oracle also pass. The 1024px focused-candidate screenshot was inspected.
+
+Editor and driver ESLint pass. Studio TypeScript/build pass. DrawingWorkspace retains the same five existing unused-variable ESLint errors (DrawingFix, _sig, _was, _leader, _sheet), no new errors. An initial test used Playwright visible on a zero-height horizontal SVG line group; it now waits for attachment and compares preview markup, with visual screenshot inspection.
+
+Run `DATUM_TARGET_KINDS_SOURCE_FROZEN=1 ... node apps/cad-studio/test/datum-target-kinds-browser.mjs OUTPUT WIDTH`. Different bodies with exactly coincident complete edges, Section/Detail recovery, screen readers, PDF/DXF and full repository suite not run. This is a bounded target-choice UI fix, not a change to reference matching or geometry.

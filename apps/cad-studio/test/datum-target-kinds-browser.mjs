@@ -104,7 +104,32 @@ await f.run(async () => {
   assert.equal(await box().locator(':scope > p').count(), 0);
   await box().getByRole('button', { name: 'Add datum target', exact: true }).click();
   await hint('^Click a straight edge endpoint');
-  await f.page.keyboard.press('Escape');
+  const beforePoint = await f.doc();
+  await clickView(LINE_FROM);
+  const choices = box().getByRole('group', { name: 'Overlapping endpoint choices' });
+  const candidates = choices.getByRole('button');
+  assert.equal(await candidates.count(), 2);
+  const labels = await candidates.allTextContents();
+  assert.ok(labels.some(s => s.includes('Horizontal')) && labels.some(s => s.includes('Vertical')), labels.join('; '));
+  const preview = f.page.getByLabel('Datum endpoint candidate preview', { exact: true });
+  await candidates.nth(0).hover(); await preview.waitFor({ state: 'attached' });
+  const firstPreview = await preview.innerHTML();
+  await candidates.nth(1).focus(); await preview.waitFor({ state: 'attached' });
+  assert.notEqual(await preview.innerHTML(), firstPreview, 'focused candidate highlights a different edge');
+  await f.snapshot('01b-candidate-preview');
+  const chosenEdge = await candidates.nth(1).getAttribute('title');
+  await candidates.nth(1).press('Enter'); await hint('symbol');
+  assert.equal(await f.page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Drawing sheet');
+  assert.equal(await preview.count(), 0);
+  await clickView([-10, 10]); await f.changed(beforePoint);
+  const pointDoc = await f.doc(); assert.equal(targets(pointDoc)[0].point.edge, chosenEdge);
+  await f.undo(); await f.same(beforePoint); await f.redo(); await f.same(pointDoc);
+  const pointSaved = await f.save('datum-target-point-candidate');
+  await f.freshOpen(pointSaved.file, pointDoc, '01c-point-fresh-open'); await enterDrawing();
+  assert.equal(targets(await f.doc())[0].point.edge, chosenEdge);
+  // Start the independent area/line oracle from the original fixture again.
+  await f.openFile(fixture, 2); await enterDrawing();
+  if (!(await box().evaluate(e => e.open))) await box().locator('summary').click();
 
   f.phase = 'area target'; await box().getByLabel('Datum target kind', { exact: true }).selectOption('area');
   await box().getByLabel('Datum target area shape', { exact: true }).selectOption('circle');
