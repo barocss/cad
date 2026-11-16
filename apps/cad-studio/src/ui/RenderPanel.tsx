@@ -1,3 +1,4 @@
+import { renderRangeHint } from './renderRangeHint';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { compileGpu, materialShader } from '@barocss/gpu';
 import { APPEARANCES, MATERIAL_TEMPLATE, SCENE_TEMPLATE, anglesOf, directionFrom, validateRenderShadowLights, type Appearance, type Hex, type RenderLight, type RenderPost, type RenderSettings, FINISH_KINDS, type AppearanceFinish, type FinishKind, type StudioKind } from '@barocss/cad-model/engine/render';
@@ -185,9 +186,9 @@ export function RenderPanel({ render, note, lookDisabled, selectedKeys, onChange
   // a shader on top leaves it chosen. Choosing one replaces all of those, so a finish never carries over to one without.)
   const preset = APPEARANCES.find(p => PRESET_KEYS.every(k => JSON.stringify(p.appearance[k]) === JSON.stringify(current[k])))?.id ?? '';
 
-  const slider = (label: string, value: number, set: (v: number) => void, min = 0, max = 1, step = 0.01) => (
+  const slider = (label: string, value: number, set: (v: number) => void, min = 0, max = 1, step = 0.01, help?: { unit: string; text: string }) => (
     <label className={FIELD} key={label}><span>{label}</span>
-      <span className={SLIDER}><input type="range" aria-label={label} min={min} max={max} step={step} value={value} onChange={e => set(Number(e.target.value))} /><em>{Math.round(value * 100) / 100}</em></span></label>);
+      <span className={SLIDER}><input type="range" aria-label={label} data-tip={help ? `${label} (${help.unit})` : undefined} data-tip-desc={help?.text} data-tip-focus={help ? true : undefined} aria-valuetext={help ? `${value} ${help.unit}` : undefined} min={min} max={max} step={step} value={value} onChange={e => set(Number(e.target.value))} /><em>{Math.round(value * 100) / 100}{help ? ' ' + help.unit : ''}</em></span></label>);
   const color = (label: string, value: Hex, set: (v: Hex) => void) => (
     <label className={FIELD} key={label}><span>{label}</span><input type="color" className="w-[62%]" aria-label={label} value={full(value)} onChange={e => set(e.target.value as Hex)} /></label>);
   const check = (label: string, value: boolean, set: (v: boolean) => void, name = label) => (
@@ -290,7 +291,7 @@ export function RenderPanel({ render, note, lookDisabled, selectedKeys, onChange
               <label className={FIELD} key={a}><span>{a}</span><span className={NUM}><Input type="number" step="any" aria-label={`Light ${i + 1} ${a}`} value={l.position[k]}
                 onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v)) { const p = [...l.position] as [number, number, number]; p[k] = v; setLight(i, { ...l, position: p }); } }} /><em>mm</em></span></label>))}
             {l.kind === 'spot' && slider('Cone', l.angle, v => setLight(i, { ...l, angle: v }), 5, 80, 1)}
-            {l.kind !== 'directional' && <>{slider('Range', l.range, v => setLight(i, { ...l, range: v }), 0, 1000, 5)}<div className="muted small">{l.range ? `Fades out over ${l.range} mm` : 'Range 0: no fall-off with distance'}</div></>}
+            {l.kind !== 'directional' && slider('Range', l.range, v => setLight(i, { ...l, range: v }), 0, 1000, 5, { unit: 'mm', text: renderRangeHint })}
             {slider('Intensity', l.intensity, v => setLight(i, { ...l, intensity: v }), 0, 5)}
             {color('Colour', l.color, v => setLight(i, { ...l, color: v }))}
             <label className={FIELD}><span>Shadow</span><input type="checkbox" className={TICK} aria-label={`Light ${i + 1} shadow`} checked={!!l.castShadow}
