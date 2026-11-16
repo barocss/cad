@@ -111,6 +111,7 @@ await f.run(async () => {
   await f.page.waitForFunction(() => window.__studioSection().shownKeys.join() === 'b2');
   await clickAt([24, 14, 0]);
   await hud().locator('.status.ok').waitFor();
+  assert.match(await hud().innerText(), /Later face changes do not move the mirror plane/);
   await f.snapshot('clicked-bottom');
   await f.same(seed);
   await button('Apply', hud()).click();
@@ -123,8 +124,10 @@ await f.run(async () => {
   await f.same(seed);
   await f.redo();
   await f.same(applied);
-  const saved = await f.save('mirror-pick-recovery');
-  await f.freshOpen(saved.file, applied, 'mirror-reopened');
+  const [reopen] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
+  await reopen.setFiles({ name: 'mirror-reopened.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(applied)) });
+  await f.same(applied);
+  assert.deepEqual(f.report.downloads, []);
   await native('mirror-reopened-native', applied, 0);
   await f.page.getByRole('complementary', { name: 'Browser', exact: true }).locator('.ol:not(.ol-step)').first().click();
   await clickModelCommand(f.page, 'Pattern', 'Mirror');

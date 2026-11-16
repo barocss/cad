@@ -847,7 +847,8 @@ const allCommands: Command[] = [
     steps: (_, v) => v.pickPlane === 'yes'
       ? [{ label: 'Pick plane', text: 'Click an original planar face normal to X, Y or Z. Cancel plane pick restores the previous preview.', done: false },
         ...(v.planeFace ? [{ label: 'Previous face', text: String(v.planeFace), done: false }] : [])]
-      : v.planeFace ? [{ label: 'Plane face', text: String(v.planeFace), done: true }] : [],
+      : v.planeFace ? [{ label: 'Plane face', text: String(v.planeFace), done: true },
+        { label: 'Fixed plane', text: 'Uses this face’s current plane position. Later face changes do not move the mirror plane.', done: true }] : [],
     onPick: (ctx, v, hit) => {
       const face = hit.face && ctx.bodies[hit.face.body]?.mesh.faces[hit.face.face];
       if (!face?.nativePlaneName || !face.nativeAxisPlane) return { error: 'Pick an original planar face normal to X, Y or Z.' };

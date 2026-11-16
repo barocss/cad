@@ -1,0 +1,7 @@
+# Mirror picked-face snapshot guidance (#26)
+
+A picked face supplies a fixed numeric plane, not an associative reference. The Mirror HUD now states that it uses the face's current plane position and later face changes do not move the mirror plane. Existing source face identification remains visible. Manual Plane/Plane at editing clears that face provenance; replacement picking retains Previous face and Cancel recovery guidance. No native geometry or document payload changed.
+
+Verification: two focused command-step tests PASS; Model TypeScript and affected lint PASS; Studio browser-driver lint and production build (4.15s) PASS. Actual 1440x900 Chrome mirror-original-plane-browser PASS: original bottom selection rather than generated preview, invalid edge refusal, repeated picking, keyboard Cancel plane pick, fixed-plane notice, Apply, Undo/Redo, in-memory JSON reopen, strict native B-rep/analytic volume/centroid/bounds and final Escape. Applied preview screenshot visually reviewed. No physical downloads. Native fixture uses Z0; moving a separate reference body was not rerun because this change only describes the unchanged fixed-coordinate contract.
+
+#26 remains open. Grouped nonzero Mirror History still exposes separate Translate/Mirror/Translate nodes; face-linked behavior, grouped editing and other Split/Align criteria are not delivered here. Protected #126 WIP and all HOLDs remain untouched.
