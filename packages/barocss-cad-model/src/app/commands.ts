@@ -673,7 +673,7 @@ const allCommands: Command[] = [
       if (!sel) return no('Select edges of one body to chamfer (Shift-click for more), or a face for all its edges.');
       const why = ellipseSideRefusal(ctx, sel.edges); return why ? no(why) : ok;
     },
-    fields: () => [{ key: 'distance', label: 'Distance', kind: 'mm', min: 0.1 }],
+    fields: () => [{ key: 'distance', label: 'Distance', kind: 'mm', min: 0 }],
     defaults: () => ({ distance: 2 }),
     steps: edgeSteps,
     handles: (ctx, v) => edgeHandle(ctx, 'distance', Number(v.distance), 'chamfer'),

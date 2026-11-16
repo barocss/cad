@@ -13,6 +13,7 @@ export function commandNumberRule(command: string, key: string, operation?: unkn
   if (command === 'extrude' && key === 'h' && operation === 'cut') return 'positive';
   if ((command === 'box' || command === 'extrude') && key === 'h') return 'nonzero';
   if (command === 'fillet' && key === 'endRadius') return 'nonnegative';
+  if (command === 'chamfer' && key === 'distance') return 'positive';
   if (command === 'fillet' && key === 'radius') return 'positive';
   if (command === 'fillet' && (key === 'rho' || key === 'tension')) return 'open-unit';
 }
@@ -20,6 +21,7 @@ export function commandNumberRule(command: string, key: string, operation?: unkn
 export function historyNumberRule(nodes: readonly ModelNode[], index: number, key: string): FeatureNumberRule | undefined {
   const node = nodes[index];
   if (node?.kind === 'fillet' && ((node.section?.kind === 'conic' && key === 'rho') || (node.section?.kind === 'g2' && key === 'tension'))) return 'open-unit';
+  if (node?.kind === 'chamfer' && key === 'd') return 'positive';
   if (node?.kind === 'align' && key === 'gap') return 'align-gap';
   if (node?.kind === 'hole' && node.depth !== undefined && key === 'depth') return 'positive';
   if (key.endsWith('linkedInsetMM')) return 'positive';
