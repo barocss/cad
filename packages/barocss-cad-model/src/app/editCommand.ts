@@ -173,7 +173,12 @@ function shapeEdit(index: number, nodes: readonly ModelNode[], rows: Pick<Studio
     }
     if (JSON.stringify(replay) !== JSON.stringify(nodes.slice(start, index + 1))) return null;
   } catch { return null; }
-  return { ...cmd, id: 'edit', label: `Edit ${cmd.label}`, group: 'modify', available: () => ok, defaults: () => ({ ...made.values }), build: rebuild, place: undefined };
+  const steps = made.command === 'fastener' && cmd.steps
+    ? (ctx: Ctx, values: Values) => cmd.steps!(ctx, values).map(step => step.label === 'Hole'
+      ? { ...step, label: 'Saved hole', done: false, text: `${step.text}. Snapshot only, not linked to the current hole. If the hole moved, update Axis at X/Y and Seat at Z.` }
+      : step)
+    : cmd.steps;
+  return { ...cmd, id: 'edit', label: `Edit ${cmd.label}`, group: 'modify', available: () => ok, defaults: () => ({ ...made.values }), build: rebuild, place: undefined, steps };
 }
 
 /** A History row belongs to one complete, exactly replayable saved Fastener group, or none. */

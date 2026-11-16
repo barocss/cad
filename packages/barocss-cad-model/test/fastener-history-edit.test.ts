@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { emptyDoc, type StudioDoc } from '../src/engine/doc';
-import { commands, type Ctx } from '../src/app/commands';
-import { fastenerHistoryEdit } from '../src/app/editCommand';
+import { commands, patchValues, type Ctx } from '../src/app/commands';
+import { fastenerHistoryEdit, editCommand } from '../src/app/editCommand';
 import { evaluateDoc } from '../src/engine/evaluate';
 import { withSampleRows } from './person-file';
 const ctx:Ctx={doc:withSampleRows(emptyDoc()),bodies:[],selection:{faces:[],edges:[],bodies:[]}},create=commands.find(c=>c.id==='fastener')!;
@@ -58,4 +58,21 @@ test('History fixes the existing part ownership and refuses an injected assembly
  assert.throws(()=>command.build!(c,{...values,insert:'instance'}),/current part/);
  assert.deepEqual(doc,snapshot);
  const edited=command.build!(c,{...values,insert:'part',length:'30'});assert.equal(edited.instances,doc.instances);assert.ok(edited.nodes.length>0);assert.ok(evaluateDoc(edited,1).ok);
+});
+
+
+test('saved fit is an unchecked snapshot in grouped and direct History, not a current hole measurement',()=>{
+ const doc=fixture(),c={...ctx,doc},last=doc.nodes.length-1,group=open(doc)!.command,direct=editCommand(last,doc.nodes,doc)!;
+ const original=structuredClone(doc);
+ for(const edit of [group,direct]){
+  const values=edit.defaults!(c),steps=edit.steps!(c,values),saved=steps.find(s=>s.label==='Saved hole');
+  assert.ok(saved);assert.equal(saved.done,false);assert.match(saved.text,/Ø9: clearance for M8/);
+  assert.match(saved.text,/Snapshot only, not linked to the current hole/);assert.match(saved.text,/Axis at X\/Y and Seat at Z/);
+  assert.equal(steps.some(s=>s.label==='Hole'),false);
+  const same=patchValues(edit,c,values,{x:'20'});assert.ok(edit.steps!(c,same).some(s=>s.label==='Saved hole'));
+  const moved=patchValues(edit,c,values,{x:44});assert.equal(moved.holeD,0);assert.equal(edit.steps!(c,moved).some(s=>s.label==='Saved hole'),false);
+  const tight={...values,holeD:6.6};assert.equal(edit.steps!(c,tight).find(s=>s.label==='Saved hole')?.done,false);assert.throws(()=>edit.build!(c,tight),/FASTENER_HOLE_FIT/);
+ }
+ const live=create.steps!(ctx,group.defaults!(c));assert.equal(live.find(s=>s.label==='Hole')?.done,true);assert.equal(live.some(s=>s.label==='Saved hole'),false);
+ assert.deepEqual(doc,original);
 });
