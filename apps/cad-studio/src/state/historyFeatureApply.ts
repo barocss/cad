@@ -6,7 +6,7 @@ import type { EngineClient } from '../engine/client';
 import { prepareLinearPatternHoleEdit } from '../app/patternHoleSpacing';
 import { rectangularCutEditProblem } from '../app/rectangularCutEdit';
 import { preparePatternNodeCandidate } from '../app/directCurveCandidate';
-import { linkedInsetHistoryFailure, failedFeatureText, loftHistoryFailure } from '../app/failedFeature';
+import { linkedInsetHistoryFailure, failedFeatureText, loftHistoryFailure, splitDependentHoleFailure } from '../app/failedFeature';
 import { isRectangleFinishResize, proveRectangleFinishResize } from './rectangleFinishResize';
 
 type Apply = ComponentProps<typeof NodeEditor>['onApply'];
@@ -64,7 +64,8 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
       if (insetFailure) return insetFailure;
       const failedFeature = reply.revision === request ? failedFeatureText(reply.error.feature, next.nodes, doc.nodes) : undefined;
       const failure = { ...reply.error, failedFeature };
-      return loftHistoryFailure(failure, doc.nodes, next.nodes, editNode) ?? failure;
+      return (reply.revision === request ? splitDependentHoleFailure(failure, doc.nodes, next.nodes, editNode) : undefined)
+        ?? loftHistoryFailure(failure, doc.nodes, next.nodes, editNode) ?? failure;
     });
   };
 }

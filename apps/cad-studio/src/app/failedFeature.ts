@@ -90,3 +90,14 @@ export function edgeFinishFailure(error: FriendlyError, feature: ModelNode | und
   }
   return error;
 }
+
+/** Recovery belongs to the upstream Split editor, not to the unchanged downstream Hole. */
+export function splitDependentHoleFailure(error: FeatureFailure, accepted: readonly ModelNode[], candidate: readonly ModelNode[], index: number): FeatureFailure | undefined {
+  const before = accepted[index], after = candidate[index];
+  if (before?.kind !== 'split' || after?.kind !== 'split' || before.id !== after.id
+    || !error.feature || !/misses the target/i.test(error.detail)
+    || accepted.length !== candidate.length || accepted.some((node, i) => i !== index && node !== candidate[i])) return;
+  const failed = nodeIndexOf(candidate, error.feature);
+  if (failed <= index || candidate[failed]?.kind !== 'hole' || !isSourceDependency(candidate, failed, index)) return;
+  return { ...error, hint: 'Restore the previous Split At or Normal, or select Reset. To move the Hole centre, close this edit first and edit that Hole in History.' };
+}
