@@ -1,3 +1,4 @@
+import { commitDetailPaperDrag, detailPaperDragAt } from './drawing/detailPaperDrag';
 import { pickVisibleDetailRim, reconnectDetailDiameter, visibleDetailRim } from './drawing/detailDiameterReattachment';
 import { drawingBrokenEdgeAt, drawingBrokenPick } from './drawing/drawingBrokenPick';
 import { editDetailCrop } from './drawing/detailCropEdit';
@@ -239,7 +240,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (!loss.length) { run(); return; }
     setControlDeletion({ settings: wholeSettings, model, sheet: current, loss, run });
   };
-  const [drag, setDrag] = useState<{ id: string; place: XY } | { target: string; original: DrawingDatumTarget; place: XY } | { note: string; at: XY; grab: XY } | { detail: string; at: XY; grab: XY } | { removed: string; at: XY; grab: XY } | { pan: XY; box: [number, number, number, number] } | null>(null);
+  const [drag, setDrag] = useState<{ id: string; place: XY } | { target: string; original: DrawingDatumTarget; place: XY } | { note: string; at: XY; grab: XY } | { detail: string; original: DrawingDetail; owner: object; initialAt: XY; initialPointer: XY; at: XY; grab: XY } | { removed: string; at: XY; grab: XY } | { pan: XY; box: [number, number, number, number] } | null>(null);
   /** The selected note's text while it is typed, and the selected dimension's tolerance fields. */
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
   const [tolDraft, setTolDraft] = useState<Record<string, string>>({});
@@ -811,7 +812,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const sd = det && settings.details?.find(x => x.id === det.id);
       if (det && sd && qd) {
         const at = toSheet(det.placement, sd.center);
-        setSelected(null); setDrag({ detail: det.id, at, grab: [qd[0] - at[0], qd[1] - at[1]] }); (e.currentTarget as Element).setPointerCapture(e.pointerId); return;
+        setSelected(null); setDrag({ detail: det.id, original: sd, owner: cropOwner, initialAt: at, initialPointer: qd, at, grab: [qd[0] - at[0], qd[1] - at[1]] }); (e.currentTarget as Element).setPointerCapture(e.pointerId); return;
       }
       // (DR-4: a removed section grabbed anywhere in its box moves it; its place is its box's centre.)
       const rem = !target && qd ? sheet?.sections?.find(x => x.form === 'removed' && qd[0] >= x.placement.box[0] && qd[0] <= x.placement.box[2] && qd[1] >= x.placement.box[1] && qd[1] <= x.placement.box[3]) : undefined;
@@ -839,7 +840,8 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     }
     if (drag && ('note' in drag || 'detail' in drag || 'removed' in drag)) {
       const q = sheetPoint(e.clientX, e.clientY);
-      if (q) setDrag({ ...drag, at: [Math.round((q[0] - drag.grab[0]) * 10) / 10, Math.round((q[1] - drag.grab[1]) * 10) / 10] });
+      if (q) setDrag({ ...drag, at: 'detail' in drag ? detailPaperDragAt(drag.initialAt, drag.initialPointer, q)
+        : [Math.round((q[0] - drag.grab[0]) * 10) / 10, Math.round((q[1] - drag.grab[1]) * 10) / 10] });
       return;
     }
     if (drag && 'target' in drag) {
@@ -871,8 +873,11 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       setDrag(null); return;
     }
     if (drag && 'detail' in drag) {
-      const d = settings.details?.find(x => x.id === drag.detail);
-      if (d && (d.at?.[0] !== drag.at[0] || d.at?.[1] !== drag.at[1])) onChange({ ...settings, details: settings.details!.map(x => x.id === d.id ? { ...x, at: drag.at } : x) });
+      const live = liveCrop.current;
+      if (drag.owner === live.owner && live.ready && currentModel.current === live.model) {
+        const next = commitDetailPaperDrag(settings, drag.original, drag.initialAt, drag.at);
+        if (next !== settings) onChange(next);
+      }
       setDrag(null); return;
     }
     if (drag && 'note' in drag) {
