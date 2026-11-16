@@ -15,7 +15,7 @@ export function StandaloneFramesEditor({ settings, availableViews, selected, rea
   const frames = (settings.frames ?? []).filter((f): f is Extract<DrawingFrame, { view: DimView }> => f.dim === undefined);
   return <details open aria-label="Standalone geometric controls" style={WRAP}>
     <summary>Standalone geometric controls ({frames.length})</summary>
-    <p className="text-[11px] text-muted-foreground">Choose a visible view, then click where the frame goes. This annotation does not measure geometry.</p>
+    <details className="text-[11px]" style={WRAP}><summary>Frame help</summary><p>This annotation belongs to the selected view but does not measure geometry. Place it anywhere on the sheet.</p></details>
     <label style={{ ...WRAP, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 4 }}>Frame view
       <NativeSelect aria-label="Standalone frame view" value={view} style={{ minWidth: 0, maxWidth: '100%' }} onChange={e => setView(e.target.value as DimView)}>
         {Array.from(new Set([view, ...availableViews])).map(id => <option key={id} value={id}>{id}{availableViews.includes(id) ? '' : ' (not shown)'}</option>)}

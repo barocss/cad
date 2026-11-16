@@ -89,10 +89,10 @@ await f.run(async () => {
   const near = (a, b, why) => { assert.ok(Math.abs(a[0] - b[0]) <= TOL && Math.abs(a[1] - b[1]) <= TOL, `${why}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`); };
   const sheetReady = () => f.page.waitForFunction(() => { const d = window.__studioDrawing?.(); return !!d && Array.isArray(d.dimensions) && !!document.querySelector('svg[aria-label="Drawing sheet"]'); }, null, { timeout: 60000 });
   const enterDrawing = async () => { if (!(await f.page.locator(SHEET).count())) await f.page.click('.mode button:text-is("Drawing")'); await sheetReady(); };
-  const placingHint = () => f.page.waitForFunction(() => /Click where the standalone frame goes/.test(document.querySelector('.dw-hint')?.textContent ?? ''), null, { timeout: 15000 });
+  const placingHint = () => f.page.waitForFunction(() => /Click the sheet to place the frame\. View:/.test(document.querySelector('.dw-hint')?.textContent ?? ''), null, { timeout: 15000 });
   // A real click at a view-mm point of the view, through the readonly pixel hook; asserts the pixel is over the sheet.
-  const clickView = async ([u, v]) => {
-    const px = await f.page.evaluate(([view, u, v]) => window.__studioDrawingAt?.(view, u, v), [VIEW, u, v]); assert.ok(px && Number.isFinite(px.x), 'pixel of the view point');
+  const clickView = async ([u, v], view = VIEW) => {
+    const px = await f.page.evaluate(([view, u, v]) => window.__studioDrawingAt?.(view, u, v), [view, u, v]); assert.ok(px && Number.isFinite(px.x), 'pixel of the view point');
     assert.ok(await f.page.evaluate(p => !!document.elementFromPoint(p.x, p.y)?.closest('svg[aria-label="Drawing sheet"]'), px), 'the view point is on the sheet, not under a panel');
     await f.page.mouse.click(px.x, px.y); await f.page.waitForTimeout(200); return px;
   };
@@ -109,10 +109,32 @@ await f.run(async () => {
   };
 
   // 0. Open the fixture, enter the Drawing workspace.
-  await f.newPage(); f.phase = 'open fixture'; await f.openFile(fixture, 2); await f.page.click('.mode button:text-is("Drawing")'); await sheetReady();
+  await f.newPage(); await f.page.setViewportSize({ width: Number(process.argv[3] ?? 1440), height: 900 }); f.phase = 'open fixture'; await f.openFile(fixture, 2); await f.page.click('.mode button:text-is("Drawing")'); await sheetReady();
   const s00 = await f.snapshot('00-drawing'); assert.deepEqual(frames(s00.doc), [], 'no frames yet'); assert.equal(await groupCount(), 0);
   assert.equal(await f.page.locator('[aria-label="Standalone geometric controls"]').count(), 1, 'the standalone controls section');
   const docBase = s00.doc;
+
+  f.phase = 'front guidance and cancellation';
+  const panel = f.page.getByLabel('Standalone geometric controls', { exact: true });
+  assert.equal(await panel.locator(':scope > p').count(), 0);
+  const help = panel.locator('details').filter({ has: f.page.locator('summary:text-is("Frame help")') });
+  assert.equal(await help.evaluate(e => e.open), false);
+  await help.locator('summary').click(); assert.ok(await help.getByText('This annotation belongs', { exact: false }).isVisible());
+  await help.locator('summary').click();
+  await f.page.getByLabel('Standalone frame view', { exact: true }).selectOption('front');
+  const add = f.page.getByRole('button', { name: 'Add standalone frame', exact: true });
+  await add.click(); await placingHint();
+  assert.match(await f.page.locator('.dw-hint').textContent(), /View: front view/);
+  await f.page.keyboard.press('Escape'); await f.same(docBase);
+  await add.click(); await placingHint();
+  await clickView([-10, 10], 'front'); await waitFrames('fr => fr.length === 1'); await f.ready();
+  const frontDoc = await f.doc(); assert.equal(frames(frontDoc)[0].view, 'front'); near(frames(frontDoc)[0].place, [-10, 10], 'front frame outside geometry');
+  await f.page.getByRole('button', { name: 'Move standalone frame 1', exact: true }).click(); await placingHint();
+  await f.page.keyboard.press('Escape'); await f.same(frontDoc);
+  await f.page.getByRole('button', { name: 'Move standalone frame 1', exact: true }).click(); await placingHint();
+  await clickView([-5, 11], 'front'); await f.changed(frontDoc);
+  await f.snapshot('00b-front-sheet-placement');
+  await f.undo(); await f.same(frontDoc); await f.undo(); await f.same(docBase);
 
   // 1. Add standalone frame in the right view at a known view-mm point.
   f.phase = 'add standalone frame';
@@ -176,6 +198,11 @@ await f.run(async () => {
 
   // 7. Delete the frame, Undo restores it identically.
   f.phase = 'delete frame'; const beforeDelete = await f.doc(); await f.page.getByRole('button', { name: 'Remove standalone frame 1', exact: true }).click();
+  const confirmation = f.page.getByRole('group', { name: 'Confirm drawing control removal' });
+  await confirmation.waitFor(); await f.same(beforeDelete);
+  await confirmation.getByRole('button', { name: 'Cancel removal', exact: true }).click(); await f.same(beforeDelete);
+  await f.page.getByRole('button', { name: 'Remove standalone frame 1', exact: true }).click();
+  await confirmation.getByRole('button', { name: 'Remove annotation and controls', exact: true }).click();
   await f.page.waitForFunction(() => !(window.__studioDoc?.drawing?.frames?.length), null, { timeout: 30000 }); await f.ready();
   const s09 = await f.snapshot('09-deleted'); assert.deepEqual(frames(s09.doc), []); assert.equal(await groupCount(), 0); assert.deepEqual(s09.doc.nodes, beforeDelete.nodes); assert.deepEqual(rest(s09.doc), rest(beforeDelete));
   f.phase = 'undo delete'; await f.undo(); await f.same(beforeDelete); await f.page.waitForSelector(`${SHEET} [data-standalone-frame="${FRAME}"]`, { timeout: 30000 });
