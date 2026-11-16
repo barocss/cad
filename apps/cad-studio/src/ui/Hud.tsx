@@ -1,3 +1,4 @@
+import { draftNeutralFeedback } from '../app/draftNeutralFeedback';
 import { filletFaceSelectionFeedback } from '../app/filletFaceSelectionFeedback';
 import { filletInteriorProblems, type FilletInteriorKey } from '../app/filletInteriorInput';
 import { offsetCollapseFeedback } from '../app/offsetCollapseFeedback';
@@ -62,6 +63,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
   const pathFeedback = sweepPathFeedback(active);
   const planePickFeedback = offsetPlanePickFeedback(active);
   const collapseFeedback = offsetCollapseFeedback(active);
+  const neutralFeedback = draftNeutralFeedback(active);
   const edgeScope = active.preview === 'ok' ? active.filletScope ?? active.chamferScope : undefined;
   const replacingAxis = active.cmd.id === REVOLVE_AXIS_EDIT;
   const pickingMirrorPlane = awaitingMirrorPlane(active.cmd.id, active.values);
@@ -92,8 +94,8 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     const bounds = featureNumberBounds(numberRule);
     const range = showCountRange ? `Whole number from ${field.min} to ${field.max}` : numberRule ? featureNumberRange(numberRule) : null;
     const rangeId = range ? `hud-number-range-${field.key}` : undefined;
-    const collapseError = field.key === 'd' ? collapseFeedback : undefined;
-    const collapseId = 'hud-offset-collapse';
+    const collapseError = field.key === 'd' ? collapseFeedback : field.key === 'neutral' ? neutralFeedback : undefined;
+    const collapseId = field.key === 'neutral' ? 'hud-draft-neutral' : 'hud-offset-collapse';
     const invalidNumber = numberRule && featureNumberInvalid(value, numberRule);
     const interiorProblem = interiorProblems[field.key as FilletInteriorKey];
     const interiorId = `hud-fillet-interior-${field.key}`;
@@ -179,7 +181,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           return onHoleOptions(active, { type, d, depth, cd, ch, csd });
         }} /> : null}
       {active.cmd.id === 'fill-feature-pattern' && <FillPatternHints />}
-      {active.preview === 'error' && active.error && !faceSelectionFeedback?.hideError && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && !sectionRecovery && !(active.error.historyField && (interiorProblems[active.error.historyField as FilletInteriorKey] || active.error.historyField === sectionProblem?.key)) && <FeatureFailureNotice error={active.error} />}
+      {active.preview === 'error' && active.error && !faceSelectionFeedback?.hideError && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && !neutralFeedback && !sectionRecovery && !(active.error.historyField && (interiorProblems[active.error.historyField as FilletInteriorKey] || active.error.historyField === sectionProblem?.key)) && <FeatureFailureNotice error={active.error} />}
       <div className="hud-actions">
         {active.cmd.id === 'mirror' && <Button variant="ghost" aria-pressed={pickingMirrorPlane}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
