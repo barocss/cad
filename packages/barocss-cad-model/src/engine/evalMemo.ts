@@ -66,7 +66,7 @@ export function contentKey(doc: StudioDoc): string {
   const rows = doc.frames?.sections?.length ? `\u0002${JSON.stringify(doc.frames.sections)}` : '';
   const welds = doc.frames?.welds?.length ? `\u0003${JSON.stringify(doc.frames.welds)}` : '';
   const ownership = doc.frames?.beadOwnership !== undefined ? `\u0004${JSON.stringify(doc.frames.beadOwnership)}` : '';
-  return `${doc.nodes.map(nodeKey).join('\u0001')}\u0002${JSON.stringify(doc.parameters ?? null)}${rows}${welds}${ownership}\u0005${JSON.stringify({ fits: doc.fits, bearings: doc.bearings, orings: doc.orings, rings: doc.rings, drives: doc.drives, connectors: doc.connectors, fastenerSizes: doc.fastenerSizes, castingRules: doc.castingRules })}${bearingDependencyKey(doc) ?? ''}`;
+  return `${doc.nodes.map(nodeKey).join('\u0001')}\u0002${JSON.stringify(doc.parameters ?? null)}${rows}${welds}${ownership}\u0005${JSON.stringify({ fits: doc.fits, bearings: doc.bearings, orings: doc.orings, rings: doc.rings, drives: doc.drives, connectors: doc.connectors, fastenerSizes: doc.fastenerSizes, castingRules: doc.castingRules, mounts: doc.mounts })}${bearingDependencyKey(doc) ?? ''}`;
 }
 /** What an evaluation of the document reads, as a key. */
 export function evaluationKey(doc: StudioDoc): string {

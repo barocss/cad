@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {createFlow} from './flow-helper.mjs';
+const f=await createFlow({name:'mount-catalogue',output:process.argv[2],envFrozen:'MOUNT_CATALOGUE_FROZEN',initialFiles:['apps/cad-studio/test/mount-catalogue-browser.mjs'],qualification:'Library mount-row load refreshes same-session Mount choices, preview and Undo/Redo.',limits:['Shipped rows used only as local QA fixtures, not manufacturing-approved data. No physical downloads.']});
+const source={format:'barocss-cad-model',schema:3,units:'mm',parameters:{},nodes:[{id:'n0',kind:'sketch',profile:'rectangle',min:[0,0],max:[160,100]},{id:'n1',kind:'extrude',sketch:0,height:10}],outputs:{b1:{node:1,side:'solid'}},nextId:2};
+const hud=()=>f.page.locator('.hud');
+async function start(){await f.ready();await f.page.keyboard.press('Escape');await f.page.getByRole('button',{name:'Top',exact:true}).click();await f.page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));const xy=await f.page.evaluate(()=>window.__studioScreenOf([80,50,10]));await f.page.mouse.click(...xy);await f.page.waitForFunction(()=>window.__studioSelection.selection.faces.length===1);await f.command('Mount');await hud().waitFor();}
+async function close(){await hud().getByRole('button',{name:'Cancel',exact:true}).click();await hud().waitFor({state:'hidden'});}
+async function rowCount(){return hud().getByLabel('Mount',{exact:true}).locator('option').count();}
+await f.run(async()=>{
+ await f.newPage();await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'mount-catalogue.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(source))});await f.same(source);
+ await start();assert.equal(await hud().getByRole('button',{name:'Apply',exact:true}).isDisabled(),true);await close();
+ await f.page.getByRole('button',{name:'Library',exact:true}).click();await f.page.getByRole('button',{name:'Load sample mounts',exact:true}).click();await f.changed(source);const loaded=await f.doc();assert.equal(loaded.mounts.rows.length,4);await f.page.getByRole('button',{name:'Close library',exact:true}).click();
+ await start();assert.equal(await rowCount(),4,'loaded mount choices are current without document reload');await f.page.waitForFunction(()=>[...document.querySelectorAll('.hud button')].some(b=>b.textContent.trim()==='Apply'&&!b.disabled),null,{timeout:30000});await f.snapshot('01-current-catalogue');await close();await f.same(loaded);
+ await f.undo();await f.same(source);await start();assert.equal(await hud().getByRole('button',{name:'Apply',exact:true}).isDisabled(),true);await close();await f.redo();await f.same(loaded);await start();assert.equal(await rowCount(),4);await f.page.waitForFunction(()=>[...document.querySelectorAll('.hud button')].some(b=>b.textContent.trim()==='Apply'&&!b.disabled),null,{timeout:30000});
+ await hud().getByRole('button',{name:'Apply',exact:true}).click();await f.changed(loaded);await hud().waitFor({state:'hidden'});const mounted=await f.doc();assert.equal(mounted.nodes.at(-1).made.command,'mount');assert.deepEqual(mounted.mounts,loaded.mounts);assert.deepEqual(mounted.rowSources,loaded.rowSources);await f.snapshot('02-mounted-current-rows');await f.undo();await f.same(loaded);await f.redo();await f.same(mounted);assert.deepEqual(f.report.downloads,[]);
+});
