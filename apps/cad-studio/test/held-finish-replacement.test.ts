@@ -35,3 +35,25 @@ test('constant fillet and chamfer keep their existing unconstrained edge replace
   assert.ok(heldFinishReplaceable(node));const source=withNode(rectanglePart(30,20,10),node),next=heldFinishReplacement(source,2,curved,[curved],sig);assert.ok(next);assert.equal(next.nodes[2].kind,node.kind);assert.ok('edges'in next.nodes[2]);if('edges'in next.nodes[2])assert.deepEqual(next.nodes[2].edges,['new-edge']);
  }
 });
+
+test('one and two interior positions reassign along candidate direction without changing the authored law',()=>{
+ for(const fractions of [[0.12345678912345678],[0.25,0.75]])for(const reverse of [false,true]){
+  const controls=[finish.radii![0],...fractions.map(fraction=>({at:[fraction*10,0,0] as [number,number,number],radius:2,fraction})),finish.radii![1]];
+  const node={...finish,radii:controls},source=withNode(rectanglePart(30,20,10),node),before=structuredClone(source),selected=reverse?{...edge,a:edge.b,b:edge.a}:edge;
+  assert.ok(heldFinishReplaceable(node));const candidate=heldFinishCandidate(node,selected,[selected]);assert.ok('endpoints'in candidate);if(!('endpoints'in candidate))return;
+  assert.deepEqual(candidate.endpoints!.stations,fractions.map((fraction,i)=>({label:fractions.length===1?'Interior':`Interior ${i+1}`,fraction,at:selected.a.map((v,k)=>v+(selected.b[k]-v)*fraction)})));
+  const next=heldFinishReplacement(source,2,selected,[selected],sig);assert.ok(next);const changed=next.nodes[2];assert.equal(changed.kind,'fillet');if(changed.kind!=='fillet')return;
+  assert.deepEqual(changed.radii!.map(p=>p.radius),controls.map(p=>p.radius));assert.deepEqual(changed.radii!.map(p=>p.fraction),controls.map(p=>p.fraction));
+  assert.deepEqual(changed.radii!.map(p=>p.at),[selected.a,...candidate.endpoints!.stations!.map(p=>p.at),selected.b]);
+  assert.equal(changed.id,source.nodes[2].id);assert.deepEqual(source,before);
+ }
+});
+test('invalid interior fractions, ordering, endpoint flags, coordinates and bound radii are not offered',()=>{
+ const interior={at:[5,0,0] as [number,number,number],radius:2,fraction:0.5};
+ const laws=[...[-1,0,1e-9,1-1e-9,1,NaN,Infinity].map(fraction=>[ {...interior,fraction} ]),
+  [{...interior,fraction:0.75},{...interior,fraction:0.25}], [{...interior,fraction:0.5},{...interior,fraction:0.5+1e-10}],
+  [{...interior,atEnd:true as const}], [{...interior,fraction:undefined}], [{...interior,radius:{parameter:'Inner'}}],
+  [{...interior,radius:0}], [{...interior,radius:Infinity}], [{...interior,at:[NaN,0,0] as [number,number,number]}],
+  [{...interior,fraction:0.2},{...interior,fraction:0.4},{...interior,fraction:0.6}]];
+ for(const inner of laws)assert.equal(heldFinishReplaceable({...finish,radii:[finish.radii![0],...inner,finish.radii![1]]}),false);
+});
