@@ -807,6 +807,9 @@ export function ringFillet(body: Brep, input: RingInput): { brep: Brep; report: 
   if (!breaks.length) breaks.push({ s: 0, a: first[0].a, b: first[0].b });
   // (Breaks at one place — both contacts leaving their faces where a chain ends square — are one: the later's faces.)
   for (let k = breaks.length - 1; k > 0; k--) if (breaks[k].s - breaks[k - 1].s < 1e-6 * L) { breaks[k - 1] = { ...breaks[k], s: breaks[k - 1].s }; breaks.splice(k, 1); }
+  // An exact terminal break starts no stretch: the preceding stretch still includes s1.
+  // Do not loft repeated endpoint sections into a zero-length patch.
+  if (!closed) while (breaks.length > 1 && breaks.at(-1)!.s === s1) breaks.pop();
   // 2. Stations evenly within each stretch between breaks (an even count, about N in all by length; an open chain ends
   //    with one more at its end), each solved on its stretch's faces; refined as the h⁴ rate predicts.
   for (let N = fixedStations ?? N0, tries = 0; ; tries++) {

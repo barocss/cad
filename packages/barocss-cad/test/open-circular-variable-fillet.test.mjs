@@ -17,14 +17,14 @@ const stock = {
 const edgeName = 'e.side1|e.top';
 const angle = point => Math.atan2(point[1], point[0]);
 
-function evaluate(startRadius, endRadius, reverseRecords = false) {
+function evaluate(startRadius, endRadius, reverseRecords = false, liveHeight = height, authoredHeight = height) {
   const radii = [
-    { at: [stockRadius, 0, height], radius: startRadius, atEnd: true },
-    { at: [0, stockRadius, height], radius: endRadius, atEnd: true },
+    { at: [stockRadius, 0, authoredHeight], radius: startRadius, atEnd: true },
+    { at: [0, stockRadius, authoredHeight], radius: endRadius, atEnd: true },
   ];
   if (reverseRecords) radii.reverse();
   return evaluateCadPart({ ...stock, features: [
-    ...stock.features, { id: 'f', kind: 'fillet', target: 'e', edges: [edgeName], radii },
+    ...stock.features.map(f => f.kind === 'extrude' ? {...f, height:liveHeight} : f), { id: 'f', kind: 'fillet', target: 'e', edges: [edgeName], radii },
   ] }).outputs[0];
 }
 
@@ -105,4 +105,16 @@ test('a radius which passes the radial rim stock refuses without partial geometr
   const before = structuredClone(stock);
   assert.throws(() => evaluate(0.6, 10), error => error.code === 'CONTACT_LEAVES_FACE' && error.details.category === 'PARAMETER');
   assert.deepEqual(stock, before);
+});
+
+
+test('an exact terminal break does not loft a zero-length patch after height edits', () => {
+  for (const authoredHeight of [10, 12]) {
+    const output = evaluate(1.2, 0.6, false, 12, authoredHeight);
+    const checked = checkBrep(output.brep, {strict:true});
+    assert.ok(checked.valid, JSON.stringify(checked.issues));
+    assert.equal(checked.counts.shells, 1);
+    assert.equal(checked.topology[0].genus, 0);
+    assert.ok(Math.abs(massPropertiesOf(output).volume - (expectedVolume(1.2, 0.6) + 2 * Math.PI * stockRadius ** 2 / 4)) < 2e-6);
+  }
 });
