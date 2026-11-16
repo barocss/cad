@@ -34,22 +34,31 @@ export interface VariantsState {
 }
 
 export function useVariants(doc: StudioDoc): VariantsState {
-  const [{ scope, working }, setDraft] = useState(() => ({ scope: {}, working: NO_DRAFT }));
-  const setWorking = useCallback((next: Values) => {
-    setDraft(current => current.scope === scope && current.working !== next ? { scope, working: next } : current);
-  }, [scope]);
-  // Call with an accepted document switch so the next render cannot evaluate the old draft on the new master.
-  const resetDocumentDraft = useCallback(() => setDraft({ scope: {}, working: NO_DRAFT }), []);
   const v = doc.variability, active = v?.variants?.find(x => x.name === v.active);
-  // (Another set made active — by the card, the agent or an undo — starts from its own values.)
-  useEffect(() => { setWorking(NO_DRAFT); }, [v?.active, active?.values, setWorking]);
   const base = useMemo<Values>(() => v ? { ...Object.fromEntries(v.inputs.map(i => [i.name, i.default])), ...(active?.values ?? {}) } : {}, [v, active]);
+  const [{ scope, working, accepted }, setDraft] = useState(() => ({ scope: {}, working: NO_DRAFT, accepted: NO_DRAFT }));
+  const setWorking = useCallback((next: Values) => {
+    let valid = true;
+    try { if (v) variantOf(doc, { ...base, ...next }); }
+    catch (e) { if (isRefusal(e, ...VARIANT_CODES)) valid = false; else throw e; }
+    setDraft(current => current.scope === scope && current.working !== next
+      ? { scope, working: next, accepted: valid ? next : current.accepted } : current);
+  }, [scope, doc, v, base]);
+  // An accepted document switch retires both invalid text and its last valid preview.
+  const resetDocumentDraft = useCallback(() => setDraft({ scope: {}, working: NO_DRAFT, accepted: NO_DRAFT }), []);
+  // Another set made active (including Undo) starts from its own values. Avoid
+  // resetting on ordinary model renders just because the setter captures doc.
+  useEffect(() => { setDraft(current => ({ ...current, working: NO_DRAFT, accepted: NO_DRAFT })); }, [v?.active, active?.values]);
   const out = useMemo(() => {
     if (!v) return { shown: doc, problems: [] as Problem[], error: null };
     const values = { ...base, ...working };
     try { const r = variantOf(doc, values); return { shown: r.doc, problems: r.problems, error: null }; }
-    catch (e) { if (isRefusal(e, ...VARIANT_CODES)) return { shown: doc, problems: [] as Problem[], error: e.message }; throw e; }
-  }, [doc, v, base, working]);
-  const showing = out.shown === doc ? null : active && !Object.keys(working).some(k => working[k] !== active.values[k]) ? active.name : `${active?.name ?? MASTER}, edited`;
+    catch (e) {
+      if (!isRefusal(e, ...VARIANT_CODES)) throw e;
+      try { const previous = variantOf(doc, { ...base, ...accepted }); return { shown: previous.doc, problems: previous.problems, error: e.message }; }
+      catch (fallback) { if (!isRefusal(fallback, ...VARIANT_CODES)) throw fallback; return { shown: doc, problems: [] as Problem[], error: e.message }; }
+    }
+  }, [doc, v, base, working, accepted]);
+  const showing = out.shown === doc ? null : active && !Object.keys(accepted).some(k => accepted[k] !== base[k]) ? active.name : `${active?.name ?? MASTER}, edited`;
   return { base, working, setWorking, resetDocumentDraft, ...out, showing };
 }
