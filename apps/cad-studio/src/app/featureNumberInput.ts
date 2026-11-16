@@ -4,7 +4,7 @@ import type { ModelNode } from '@barocss/cad-model/engine/doc';
 import { CadPartLimits } from '@barocss/cad';
 import { isSketchAnchoredCut } from '@barocss/cad-model/app/editFields';
 
-export type FeatureNumberRule = 'nonzero' | 'thread-length' | 'nonnegative-mm' | 'nonnegative' | 'positive' | 'align-gap' | 'open-unit' | 'draft-angle' | 'scale-factor';
+export type FeatureNumberRule = 'pipe-angle' | 'nonzero' | 'thread-length' | 'nonnegative-mm' | 'nonnegative' | 'positive' | 'align-gap' | 'open-unit' | 'draft-angle' | 'scale-factor';
 
 export function commandNumberRule(command: string, key: string, operation?: unknown): FeatureNumberRule | undefined {
   if (command === 'face-thread') {
@@ -12,6 +12,7 @@ export function commandNumberRule(command: string, key: string, operation?: unkn
     if (key === 'len') return 'thread-length';
     if (key === 'relief' || key === 'clear') return 'nonnegative-mm';
   }
+  if (command === 'pipe' && key === 'bendAngle') return 'pipe-angle';
   if (command === 'keyway' && (key === 'b' || key === 't2')) return 'positive';
   if (command === 'scale' && key === 'factor') return 'scale-factor';
   if ((command === 'draft' || command === DRAFT_EDIT) && key === 'deg') return 'draft-angle';
@@ -43,6 +44,7 @@ export function historyNumberRule(nodes: readonly ModelNode[], index: number, ke
 export function featureNumberInvalid(value: string | number, rule: FeatureNumberRule): boolean {
   const number = Number(value);
   if (!Number.isFinite(number)) return true;
+  if (rule === 'pipe-angle') return number <= 0 || number > 180;
   if (rule === 'scale-factor') return number <= 0 || number > 1000;
   if (rule === 'draft-angle') return number === 0 || Math.abs(number) >= 45;
   if (rule === 'nonnegative' || rule === 'nonnegative-mm' || rule === 'thread-length') return number < 0;
@@ -52,6 +54,7 @@ export function featureNumberInvalid(value: string | number, rule: FeatureNumber
 }
 
 export function featureNumberRange(rule: FeatureNumberRule): string {
+  if (rule === 'pipe-angle') return 'Greater than 0° and at most 180°';
   if (rule === 'scale-factor') return 'Unitless factor · greater than 0 and at most 1000';
   if (rule === 'draft-angle') return 'Greater than −45° and less than 45°, excluding 0°';
   if (rule === 'thread-length') return '0 mm or greater · use 0 for the whole face';
@@ -63,6 +66,7 @@ export function featureNumberRange(rule: FeatureNumberRule): string {
 }
 
 export function featureNumberBounds(rule: FeatureNumberRule | undefined): { min?: number; max?: number } {
+  if (rule === 'pipe-angle') return { min: 0, max: 180 };
   if (rule === 'scale-factor') return { min: 0, max: 1000 };
   if (rule === 'draft-angle') return { min: -45, max: 45 };
   if (rule === 'open-unit') return { min: 0, max: 1 };
