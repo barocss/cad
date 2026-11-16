@@ -1,5 +1,5 @@
 import { BODY_COLOURS } from '@barocss/cad-model/app/bodies';
-import type { InstanceLookPatch, LookSource } from '@barocss/cad-model/assembly/looks';
+import type { HeldLook, InstanceLookPatch, LookSource } from '@barocss/cad-model/assembly/looks';
 import { MATERIALS } from '@barocss/cad-model/library/materials';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { InstanceLookRow } from '../state/useInstanceLooks';
@@ -26,13 +26,13 @@ function Overridden({ source, label, onReset }: { source: LookSource | undefined
 export function InstanceLooksControls({ rows, held = [], readOnly = false, detailsOpen, onSet, onReset }: {
   rows: readonly InstanceLookRow[];
   /** Plain-word problems: looks whose body the part no longer has, or would not have once the waiting revision is accepted. */
-  held?: readonly string[];
+  held?: readonly (string | HeldLook)[];
   /** A pattern's occurrence: its looks are its seed's. */
   readOnly?: boolean;
   /** Details open to begin with (closed when left out). */
   detailsOpen?: boolean;
   onSet(key: string, patch: InstanceLookPatch): void;
-  onReset(key: string, field: 'color' | 'material' | 'hidden' | `face:${string}`): void;
+  onReset(key: string, field?: 'color' | 'material' | 'hidden' | `face:${string}`): void;
 }) {
   if (!rows.length && !held.length) return null;
   return (
@@ -75,7 +75,10 @@ export function InstanceLooksControls({ rows, held = [], readOnly = false, detai
                 <div className="text-[10px] text-muted-foreground">Colour: {sourceText(look.from.color)} · Material: {sourceText(look.from.material)} · Visible: {sourceText(look.from.hidden)}</div>
               </div>);
           })}
-          {held.map(h => <div key={h} className="empty warn" role="alert">{h}</div>)}
+          {held.map(h => <div key={typeof h === 'string' ? h : h.body} className="empty warn" role="alert">
+            {typeof h === 'string' ? h : h.problem}
+            {typeof h !== 'string' && <button className="tool tiny" disabled={readOnly} aria-label={`Reset held appearance for ${h.body}`} title="Remove all saved appearance overrides for this body on this occurrence" onClick={() => onReset(h.body)}>Reset held appearance</button>}
+          </div>)}
         </CollapsibleContent>
       </Collapsible>
     </div>);

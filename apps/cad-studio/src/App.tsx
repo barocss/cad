@@ -3463,7 +3463,7 @@ export function App() {
             onAdd={o => patternEdit(() => addInstancePattern(doc, o), 'Pattern not changed', true)} onEdit={o => patternEdit(() => editInstancePattern(doc, o), 'Pattern not changed', true)}
             onDelete={id => patternEdit(() => deleteInstancePattern(doc, id))} onSkip={() => { patternEdit(() => skipOccurrence(doc, inst.id)); setInstanceSel([]); }} />}
           looks={<InstanceLooksControls rows={instanceLookRows(inst, instanceBodies.get(inst.id), doc)} readOnly={!!inst.pattern}
-            held={heldLooksForInstance(doc, inst.id).map(h => h.problem)}
+            held={heldLooksForInstance(doc, inst.id)}
             onSet={(key, patch) => patternEdit(() => setInstanceLook(doc, { part: inst.id, body: key, patch }), 'Look not changed')}
             onReset={(key, field) => patternEdit(() => resetInstanceLook(doc, { part: inst.id, body: key, field }), 'Look not changed')} />}
           joints={inst.doc.instances?.length ? <InstanceJointsControls inst={inst}

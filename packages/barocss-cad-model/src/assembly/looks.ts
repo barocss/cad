@@ -163,12 +163,16 @@ export interface InstanceLookPatch { color?: string | null; material?: string | 
 export interface SetInstanceLookOptions { part: string; body: string; patch: InstanceLookPatch }
 export interface ResetInstanceLookOptions { part: string; body: string; /** One field, or `face:<name>` for one face colour; left out: every field of this body. */ field?: LookField | `face:${string}` }
 
-function target(doc: StudioDoc, o: { part: string; body: string }): { inst: PartInstance; full: string; path: string[]; key: string } {
+function target(doc: StudioDoc, o: { part: string; body: string }, resetting = false): { inst: PartInstance; full: string; path: string[]; key: string } {
   const instances = doc.instances ?? [], names = instances.map(i => i.id).join(', ') || 'none';
   if (typeof o.part !== 'string' || typeof o.body !== 'string' || !o.body) throw refusal('VALUE', 'A look is set on a part and one of its bodies: {"part": "<part id>", "body": "<body key, as the part lists it>"}.');
   const p = splitPart(o.part), b = splitKey(o.body), inst = instances.find(i => i.id === p.host);
   if (!inst) throw refusal('NO_PART', `No part "${o.part}"; parts: ${names}${o.part === 'base' ? ' (the base part\'s looks are its own: set them on its bodies)' : ''}.`);
   const path = [...p.path, ...b.path], chain = chainOf(inst, path);
+  const full = lookPathKey(path, b.key);
+  // Removing a saved override is safe even when its body or nested part has disappeared.
+  // Setting still requires a live target; never infer or redirect a held key.
+  if (resetting && Object.hasOwn(inst.looks ?? {}, full)) return { inst, full, path, key: b.key };
   if (!chain) { throw refusal('VALUE', `${inst.name} (${inst.id}) has no part "${path.join('/')}" inside it${inst.doc.instances?.length ? ` (its parts: ${inst.doc.instances.map(i => i.id).join(', ')})` : ' (it holds no parts)'}.`); }
   const last = chain[chain.length - 1];
   if (!keyExists(last.doc, b.key)) throw refusal('VALUE', `${last.name} (${path.length ? `${inst.id}/${path.join('/')}` : inst.id}) has no body "${b.key}": the keys are those its bodies are listed by (partLooks, get_assembly).`);
@@ -242,7 +246,7 @@ export function setInstanceLooks(doc: StudioDoc, part: string, looks: Record<str
 
 /** reset: one field (or face colour) of an occurrence's look back to the definition's, or all of the body's. */
 export function resetInstanceLook(doc: StudioDoc, o: ResetInstanceLookOptions): { doc: StudioDoc } {
-  const t = target(doc, o), who = `${t.inst.name} (${t.inst.id})`;
+  const t = target(doc, o, true), who = `${t.inst.name} (${t.inst.id})`;
   const driven = drivenRefusal(doc, t.inst.id, 'reset the look on its seed, or edit the pattern.');
   if (driven) throw driven;
   const looks = { ...t.inst.looks }, had = looks[t.full];
