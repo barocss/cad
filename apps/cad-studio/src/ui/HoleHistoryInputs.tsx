@@ -12,6 +12,7 @@ export function HoleHistoryInputs({ hole, doc, index, drillDiameter }: { hole: H
     <div className="field"><span>Entry face</span><span>{hole.face ?? `Body end ${side === 'min' ? '−' : '+'}${axis}`}</span></div>
     <div className="field"><span>Drill direction</span><span>{side === undefined ? `Along ${axis} from entry face` : (side === 'min' ? '+' : '−') + axis}</span></div>
     <div className="field"><span>Ends</span><span>{hole.depth === undefined ? 'Through' : 'To a depth'}</span></div>
+    {hole.thread && <p className="small">Selecting a different Thread also sets Diameter to its loaded tap drill. A bound Diameter must be unbound first. The thread remains cosmetic.</p>}
     {hole.thread && <div className="field"><span>Thread</span><span>{hole.thread} · Cosmetic{thread && <><br /><span>{thread.drill}</span><br /><span>{thread.comparison}</span></>}</span></div>}
   </div>;
 }

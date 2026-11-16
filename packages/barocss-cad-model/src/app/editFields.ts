@@ -1,3 +1,4 @@
+import { checkFastenerSizeRow } from '../engine/fastenerSizeRows';
 import { ANCHORS } from './frameCommands';
 import { setSplitOutputSide } from '../engine/splitOutput';
 import { loftSectionSourceFields } from './loftSectionEdit';
@@ -25,6 +26,27 @@ export type EditField =
   | { kind: 'number'; key: string; label: string; unit?: 'mm' | '°' | '%'; integerRange?: { min: number; max: number }; get(nodes: Nodes): number; set(nodes: Nodes, value: number): ModelNode[] }
   | { kind: 'choice'; key: string; label: string; options: { value: string; label: string }[]; get(nodes: Nodes): string; set(nodes: Nodes, value: string): ModelNode[] }
   | { kind: 'toggle'; key: string; label: string; get(nodes: Nodes): boolean; set(nodes: Nodes, value: boolean): ModelNode[] };
+
+/** Explicit replacement of an existing cosmetic thread and its drill; never infer a catalogue row. */
+function holeThreadField(nodes: Nodes, index: number, scope?: EditScope): EditField {
+  const original = nodes[index] as Extract<ModelNode, { kind: 'hole' }>;
+  const rows = () => scope?.doc?.fastenerSizes?.rows ?? [];
+  const eligible = () => rows().filter(row => rows().filter(other => other.id === row.id).length === 1 && checkFastenerSizeRow(row).length === 0);
+  const designation = (row: ReturnType<typeof rows>[number]) => `${row.id}×${row.pitch}`;
+  const options = eligible().map(row => ({ value: designation(row), label: `${row.id} × ${row.pitch} (drill Ø${row.tap})${row.estimate ? ' (estimate)' : ''}` }));
+  if (!options.some(option => option.value === original.thread)) options.unshift({ value: original.thread!, label: `Saved ${original.thread} — no unique loaded row` });
+  return { kind: 'choice', key: 'thread', label: 'Thread', options,
+    get: current => current[index]?.kind === 'hole' ? current[index].thread ?? '' : '',
+    set: (current, value) => {
+      const hole = current[index];
+      if (hole?.kind !== 'hole' || !hole.thread || value === hole.thread) return [...current];
+      const row = eligible().find(row => designation(row) === value);
+      if (!row) throw new Error('Choose a unique valid loaded thread row.');
+      if (typeof hole.radius !== 'number') throw new Error('Unbind the Diameter parameter before changing Thread.');
+      return current.map((node, i) => i === index ? { ...hole, thread: designation(row), radius: row.tap / 2 } : node);
+    },
+  };
+}
 
 /** The global anchor only; explicit member overrides retain their own placement. */
 function frameAnchorField(index: number, kind: 'frame' | 'frame-member'): EditField {
@@ -170,7 +192,7 @@ export type BindableField = Extract<EditField, { kind: 'number' }> & { param(nod
  * Where a part-scoped edit stands (O167, F6), when no assembly input is given: the part draft's bearing context (its
  * occurrence and the other parts, as the bearing command reads it) and the fit tables the draft sees.
  */
-export interface EditScope { readonly originalLoft?: Extract<ModelNode, { kind: 'loft' }>; readonly context?: BearingAssemblyContext; readonly fits?: StudioFits; readonly doc?: Pick<StudioDoc, 'direct'> & Partial<Pick<StudioDoc, 'parameters' | 'drives' | 'frames'>> }
+export interface EditScope { readonly originalLoft?: Extract<ModelNode, { kind: 'loft' }>; readonly context?: BearingAssemblyContext; readonly fits?: StudioFits; readonly doc?: Pick<StudioDoc, 'direct'> & Partial<Pick<StudioDoc, 'parameters' | 'drives' | 'frames' | 'fastenerSizes'>> }
 export function editFields(nodes: Nodes, i: number, params?: Record<string, number>, bearingAssembly?: BearingAssemblyInput, scope?: EditScope): EditField[] {
   const node = nodes[i], recipe = nodes[1];
   if (recipe?.kind === 'rounded-rectangle-inset') {
@@ -354,6 +376,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       break;
     }
     case 'hole':
+      if (node.thread) out.push(holeThreadField(nodes, i, scope));
       number('dia', 'Diameter', 'mm', n => num((n as typeof node).radius) * 2, (n, v) => ({ ...(n as typeof node), radius: v / 2 }));
       HOLE_PLANE[node.axis ?? 'z'].forEach((axis, k) => number('c' + k, 'Centre ' + axis.toUpperCase(), 'mm', n => num((n as typeof node).center[k]), (n, v) => { const c = [...(n as typeof node).center] as [Dim, Dim]; c[k] = v; return { ...(n as typeof node), center: c }; }));
       if (node.depth !== undefined) number('depth', 'Depth', 'mm', n => num((n as typeof node).depth), (n, v) => ({ ...(n as typeof node), depth: v }));
