@@ -103,3 +103,18 @@ test('hole pattern counts never round or clamp creation/history input', async ()
     assert.ok(single.nodes.slice(plate.nodes.length).every(n => n.kind === 'hole' && n.pattern === undefined));
   }
 });
+
+
+test('Hole distinguishes missing and multiple entry faces without changing selection', () => {
+  const ctx = faceCtx('n1.top');
+  const empty = { ...ctx, selection: { ...ctx.selection, faces: [] } };
+  const multiple = { ...ctx, selection: { ...ctx.selection, faces: [...ctx.selection.faces, ...faceCtx('n1.side0').selection.faces] } };
+  const before = structuredClone(multiple.selection);
+  assert.deepEqual(hole.available!(empty), { ok: false, reason: 'Select the flat face where the hole goes in.' });
+  assert.deepEqual(hole.available!(multiple), { ok: false, reason: 'Leave only one flat face selected where the hole goes in.' });
+  assert.deepEqual(multiple.selection, before);
+  assert.equal(hole.available!(ctx).ok, true);
+  const tilted = { ...ctx, bodies: [{ ...ctx.bodies[0], mesh: { ...ctx.bodies[0].mesh,
+    faces: ctx.bodies[0].mesh.faces.map(face => ({ ...face, normal: [0.5, 0, 0.866] as [number, number, number] })) } }] };
+  assert.deepEqual(hole.available!(tilted), { ok: false, reason: 'Holes go into a flat face facing ±X, ±Y or ±Z.' });
+});

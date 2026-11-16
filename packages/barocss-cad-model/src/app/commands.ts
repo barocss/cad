@@ -529,7 +529,8 @@ const allCommands: Command[] = [
   {
     id: 'hole', label: 'Hole', icon: 'cad-hole', hint: 'A round hole into a flat face: through, to a depth, counterbored, countersunk or tapped', shortcut: 'H', group: 'create', keywords: 'drill bore through side cross counterbore blind countersink countersunk csk tapped thread tap',
     available: ctx => {
-      if (ctx.selection.faces.length !== 1) return no('Select the flat face where the hole goes in.');
+      if (ctx.selection.faces.length === 0) return no('Select the flat face where the hole goes in.');
+      if (ctx.selection.faces.length > 1) return no('Leave only one flat face selected where the hole goes in.');
       const f = ctx.selection.faces[0], face = ctx.bodies[f.body].mesh.faces[f.face];
       if (face.kind !== 'plane' || !holeAxis(face.normal)) return no('Holes go into a flat face facing ±X, ±Y or ±Z.');
       return ok;
