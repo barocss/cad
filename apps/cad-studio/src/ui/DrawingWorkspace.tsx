@@ -1,3 +1,4 @@
+import { pickVisibleDetailRim, reconnectDetailDiameter, visibleDetailRim } from './drawing/detailDiameterReattachment';
 import { drawingBrokenEdgeAt, drawingBrokenPick } from './drawing/drawingBrokenPick';
 import { editDetailCrop } from './drawing/detailCropEdit';
 import { withDatumTargetAreaDraft } from './drawing/datumTargetAreaDraft';
@@ -92,6 +93,7 @@ type DiameterReattachment = {
   original: Extract<DrawingDimension, { kind: 'diameter' | 'radius' }>;
   settings: DrawingSettings;
   projection: DrawingViews;
+  detailOwner?: object;
   candidate?: { edge: string; near: Vec3; label: string; diameter: number };
 };
 type DetailMove = { detail: DrawingDetail; owner: DrawingSettings; model: StudioDoc; parentSheet: number };
@@ -202,7 +204,8 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     return `${label} (${path})`;
   };
   const [reattach, setReattach] = useState<DiameterReattachment | null>(null);
-  const currentReattachment = tool === 'diameter' && !busy && reattach?.projection === views && reattach.settings === settings ? reattach : null;
+  const currentReattachment = tool === 'diameter' && !busy && reattach?.projection === views && reattach.settings === settings
+    && (!reattach.detailOwner || (reattach.detailOwner === cropOwner && cropReady && currentModel.current === model)) ? reattach : null;
   useEffect(() => {
     if (!reattach || currentReattachment) return;
     setReattach(null);
@@ -414,7 +417,9 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     const view = viewAt(q), v = view && placementOf(layout, sheet ?? undefined, view), pr = view && projectionOf(views, sheet ?? undefined, view); if (!view || !v || !pr) return null;
     const at = fromSheet(v, q), tol = 9 * mmPerPx() / v.scale;
     if (tool === 'diameter' && isDetailRef(view)) {
-      return { q, view, at, snap: null, edge: edgeAt(pr, at, 6 * mmPerPx() / v.scale, !showDetailHidden(settings, view)) };
+      return { q, view, at, snap: null, edge: currentReattachment?.detailOwner
+        ? pickVisibleDetailRim(pr, at, 6 * mmPerPx() / v.scale)
+        : edgeAt(pr, at, 6 * mmPerPx() / v.scale, !showDetailHidden(settings, view)) };
     }
     if (tool === 'diameter' && isViewId(view)) {
       const visibleRimOnly = !settings.hidden || view === 'iso';
@@ -424,7 +429,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     }
     const breaks = tool === 'linear' || tool === 'angle' || tool === 'radius' ? v.breaks : undefined;
     return { q, view, at, ...drawingBrokenPick(pr, snaps[view] ?? [], at, tol, 6 * mmPerPx() / v.scale, breaks) };
-  }, [sheetPoint, layout, views, snaps, viewAt, sheet, tool, settings, scope.kind]);
+  }, [sheetPoint, layout, views, snaps, viewAt, sheet, tool, settings, scope.kind, currentReattachment]);
 
   /** Placing a dimension (its points picked): where it goes, read in its own view wherever the pointer is on the sheet —
    *  beyond the views' reach too (hoverAt finds a view only within 30 mm), so a click out on the paper places it. */
@@ -509,12 +514,16 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   const startReattachment = (id: string) => {
     const originals = settings.dimensions.filter(dim => dim.id === id);
     const original = originals[0];
+    const detailRepair = original?.kind === 'diameter' && scope.kind === 'part' && isDetailRef(original.view)
+      && cropReady && currentModel.current === model && !!detailFor(settings, original.view)
+      && !!sheet?.details?.some(d => `detail:${d.id}` === original.view)
+      && !!sheet?.dimensions.some(r => r.dim === original && !r.ok);
     if (!views || busy || originals.length !== 1 || wholeSettings.dimensions.filter(dim => dim.id === id).length !== 1
-      || original.kind !== 'diameter' || original.view === 'iso' || !isViewId(original.view) || !lossByDimension.has(id)) return;
+      || original.kind !== 'diameter' || (!detailRepair && (original.view === 'iso' || !isViewId(original.view) || !lossByDimension.has(id)))) return;
     cancel();
     setTool('diameter');
     setSelected({ kind: 'dimension', id });
-    setReattach({ original, settings, projection: views });
+    setReattach({ original, settings, projection: views, ...(detailRepair ? { detailOwner: cropOwner } : {}) });
   };
 
   const cancelReattachment = () => {
@@ -525,10 +534,21 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   const confirmReattachment = () => {
     if (!currentReattachment?.candidate || !views) return;
     const { original, candidate } = currentReattachment;
-    const { sig: _sig, was: _was, ...retained } = original;
-    const next = { ...retained, edge: candidate.edge, near: candidate.near };
-    const resolved = resolveDimension(views, next);
-    if (!resolved.ok) { setMessage(resolved.reason); return; }
+    let next: typeof original;
+    if (currentReattachment.detailOwner) {
+      const live = liveCrop.current, pr = projectionAt(original.view), detail = detailFor(settings, original.view);
+      if (currentReattachment.detailOwner !== live.owner || !live.ready || currentModel.current !== live.model
+        || scope.kind !== 'part' || wholeSettings.dimensions.filter(d => d.id === original.id).length !== 1 || !pr || !detail) { cancelReattachment(); return; }
+      const repaired = reconnectDetailDiameter(settings, original, pr, detail, candidate);
+      if (!repaired) { setMessage('The selected rim is no longer drawable in this detail. Select a current visible rim.'); return; }
+      next = repaired;
+    } else {
+      const { sig: _sig, was: _was, ...retained } = original;
+      void _sig; void _was;
+      next = { ...retained, edge: candidate.edge, near: candidate.near };
+      const resolved = resolveDimension(views, next);
+      if (!resolved.ok) { setMessage(resolved.reason); return; }
+    }
     if (commitDims(settings.dimensions.map(dim => dim === original ? next : dim))) {
       cancelReattachment();
     }
@@ -540,6 +560,10 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     setRimChoice(null);
     if (currentReattachment) {
       if (view !== currentReattachment.original.view) return;
+      if (currentReattachment.detailOwner) {
+        const pr = projectionAt(view);
+        if (!pr || !visibleDetailRim(pr, edge)) { setMessage('Select a visible circular arc in this detail.'); return; }
+      }
       setReattach({ ...currentReattachment,
         candidate: { edge: edge.name, near: [...edge.circle.center] as Vec3, label: rimLabel(edge), diameter: 2 * edge.circle.radius } });
       return;
@@ -652,7 +676,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const e = h.edge ?? (h.snap ? pr.edges.find(x => x.name === h.snap!.ref.edge && x.circle) ?? null : null);
       if (!e?.circle) { setMessage('Click a circle or an arc.'); return; }
       if (!roundIn(pr, e)) { setMessage(`This circle is not round in the ${viewLabel(h.view)} — dimension it where it shows as a circle.`); return; }
-      if (tool === 'diameter' && h.rims) startDiameter(h.view, e);
+      if (tool === 'diameter' && (h.rims || currentReattachment)) startDiameter(h.view, e);
       else setPending({ kind: tool, view: h.view, edge: e.name, near: [...e.circle.center] as Vec3 });
       return;
     }

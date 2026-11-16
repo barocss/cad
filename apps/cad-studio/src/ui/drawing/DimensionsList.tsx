@@ -2,7 +2,7 @@
 import { useId } from 'react';
 import { dimensionLine } from '@barocss/cad-model/drawing/sheet';
 import { presetFor } from '@barocss/cad-model/drawing/standard';
-import { isViewId, type DrawingSettings } from '@barocss/cad-model/drawing/types';
+import { isDetailRef, isViewId, type DrawingSettings } from '@barocss/cad-model/drawing/types';
 import type { useDrawingSheet } from '../useDrawingSheet';
 import { Icon } from '../atoms';
 import { Button } from '@/components/ui/button';
@@ -37,7 +37,8 @@ export function DimensionsList({ sheet, views, layout, scope, settings, occurren
               }}>
               <b>{r.ok ? dimensionLine(r, presetFor(settings)) : 'lost'}</b><span>{r.dim.kind === 'linear' ? r.dim.orient : r.dim.kind} · {r.dim.view}</span>
             </button>
-            {!r.ok && r.dim.kind === 'diameter' && r.dim.view !== 'iso' && isViewId(r.dim.view) && occurrenceReasons.has(r.dim.id)
+            {!r.ok && r.dim.kind === 'diameter' && ((r.dim.view !== 'iso' && isViewId(r.dim.view) && occurrenceReasons.has(r.dim.id))
+              || (scope.kind === 'part' && isDetailRef(r.dim.view) && sheet?.details?.some(d => `detail:${d.id}` === r.dim.view)))
               && <Button variant="ghost" size="xs" aria-label={`Reattach diameter ${r.dim.id}`} onClick={() => onReattach(r.dim.id)}>Reattach</Button>}
             <Button variant="ghost" size="xs" aria-label={`Remove dimension ${r.ok ? r.text : r.dim.id}`} onClick={e => { e.stopPropagation(); remove(r.dim.id); }}><Icon name="close" small /></Button>
           </div>)}

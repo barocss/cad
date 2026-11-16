@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { createFlow } from './flow-helper.mjs';
+const baseline=process.argv.includes('--baseline');
+const {input:{document:model}}=JSON.parse(await readFile(new URL('../../../packages/barocss-cad/conformance/r14/starter-plate/case.json',import.meta.url),'utf8'));
+const detail={id:'B',view:'top',center:[32,16],radius:6,scale:5,at:[180,85]};
+const dim={id:'legacy-diameter',kind:'diameter',view:'detail:B',edge:'legacy-missing-rim',near:[32,16,8],place:[41,21],tol:{kind:'symmetric',value:.15}};
+const frame={id:'b-frame',characteristic:'flatness',value:.07,datums:[],dim:'legacy-diameter'};
+const base={...model,drawing:{scope:{kind:'part'},sheet:'A3',projection:'third',scale:2,hidden:false,title:'Legacy detail reconnect',views:['front','top'],details:[detail],dimensions:[dim],frames:[frame],sheets:[{id:'s2',size:'A4',views:['detail:B']}]}};
+const f=await createFlow({name:'detail-diameter-reconnect',output:process.argv[2],envFrozen:'DETAIL_RECONNECT_FROZEN',initialFiles:['apps/cad-studio/test/detail-diameter-reconnect-browser.mjs'],qualification:'A saved lost Detail diameter is retained until explicit visible-rim confirmation.',limits:['Synthetic legacy missing-edge reference without signature, one top Detail on another sheet. No physical exports.']});
+const button=(name,scope=f.page)=>scope.getByRole('button',{name,exact:true});
+const preview=()=>f.page.getByRole('group',{name:'Confirm diameter reattachment',exact:true});
+async function lost(){await f.page.waitForFunction(()=>window.__studioDrawing?.()?.dimensions?.some(d=>d.id==='legacy-diameter'&&d.lost),null,{timeout:30000});}
+async function pick(){const p=await f.page.evaluate(()=>window.__studioDrawingAt('detail:B',32,20));assert.ok(p);await f.page.mouse.click(p.x,p.y);}
+async function open(doc){await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'legacy-detail.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(doc))});await f.page.waitForFunction(()=>window.__studioDoc?.drawing?.title==='Legacy detail reconnect',null,{timeout:30000});await f.ready();assert.deepEqual(await f.doc(),doc);await button('Drawing').click();await f.page.getByRole('tab',{name:'Sheet 2',exact:true}).click();await f.page.waitForFunction(()=>window.__studioDrawing?.()?.details?.some(d=>d.id==='B'),null,{timeout:30000});}
+await f.run(async()=>{
+ await f.newPage();await open(base);const original=await f.doc();await lost();await f.snapshot('01-original-lost');
+ const command=button('Reattach diameter legacy-diameter');if(baseline){assert.equal(await command.count(),0);await f.same(original);return;}
+ await command.click();const blank=await f.page.evaluate(()=>window.__studioDrawingAt('detail:B',32,16));await f.page.mouse.click(blank.x,blank.y);assert.equal(await preview().count(),0);await f.same(original);await pick();await preview().waitFor();assert.match(await preview().innerText(),/Ø8/);await f.same(original);await f.snapshot('02-pending-confirmation');await button('Cancel',preview()).click();await preview().waitFor({state:'detached'});await lost();await f.same(original);
+ await command.click();await pick();await preview().waitFor();await f.page.locator('svg[aria-label="Drawing sheet"]').focus();await f.page.keyboard.press('Escape');await preview().waitFor({state:'detached'});await f.same(original);
+ await command.click();await pick();await preview().waitFor();await f.page.getByRole('tab',{name:'Sheet 1',exact:true}).click();await preview().waitFor({state:'detached'});await f.page.getByRole('tab',{name:'Sheet 2',exact:true}).click();await f.same(original);await lost();
+ await command.click();await pick();await preview().waitFor();await f.page.getByLabel('Detail B scale',{exact:true}).selectOption('2');await preview().waitFor({state:'detached'});await f.changed(original);await f.undo();await f.same(original);await lost();
+ await command.click();await pick();await preview().waitFor();await button('New part').click();await f.ready();await preview().waitFor({state:'detached'});await open(base);await lost();await f.same(original);assert.equal(await preview().count(),0);
+ await command.click();await pick();await preview().waitFor();await button('Reattach',preview()).click();await f.changed(original);const repaired=await f.doc();const next=repaired.drawing.dimensions[0];assert.equal(next.id,dim.id);assert.equal(next.view,dim.view);assert.deepEqual(next.place,dim.place);assert.deepEqual(next.tol,dim.tol);assert.notEqual(next.edge,dim.edge);assert.deepEqual(repaired,{...original,drawing:{...original.drawing,dimensions:[next]}});await f.page.waitForFunction(()=>Math.abs(window.__studioDrawing?.()?.dimensions?.find(d=>d.id==='legacy-diameter')?.value-8)<1e-8,null,{timeout:30000});await f.snapshot('03-confirmed');
+ await f.undo();await f.same(original);await lost();await f.redo();await f.same(repaired);await f.page.waitForFunction(()=>Math.abs(window.__studioDrawing?.()?.dimensions?.find(d=>d.id==='legacy-diameter')?.value-8)<1e-8,null,{timeout:30000});await f.snapshot('04-redo');
+ await button('Model').click();await button('New part').click();await f.ready();await open(repaired);await f.page.waitForFunction(()=>Math.abs(window.__studioDrawing?.()?.dimensions?.find(d=>d.id==='legacy-diameter')?.value-8)<1e-8,null,{timeout:30000});await f.snapshot('05-reopened');assert.deepEqual(f.report.downloads,[]);
+});
