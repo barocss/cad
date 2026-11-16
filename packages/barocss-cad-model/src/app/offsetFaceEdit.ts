@@ -45,6 +45,38 @@ function capContext(doc: StudioDoc, parent: BodyRef, face: string): Ctx {
   return { doc, bodies, selection: { faces: [{ body, face: faces[0].index }], edges: [], bodies: [] } };
 }
 
+/** Legacy cap tools are stored at absolute source coordinates. Do not publish
+ * an upstream edit when a later authored recipe would silently stay there. */
+function preserveFollowingOffsetRecipes(doc: StudioDoc, index: number): StudioDoc {
+  const dependent = new Map<number, boolean>();
+  const dependsOnEdit = (node: number): boolean => {
+    if (node === index) return true;
+    if (node < index || !doc.nodes[node]) return false;
+    const cached = dependent.get(node); if (cached !== undefined) return cached;
+    // History references point backwards; this also fails closed for a cycle.
+    dependent.set(node, true);
+    const result = usesOf(doc.nodes[node], doc.nodes).some(dependsOnEdit);
+    dependent.set(node, result); return result;
+  };
+  for (let later = index + 1; later < doc.nodes.length; later++) {
+    const group = offsetFaceGroup(doc.nodes, later);
+    if (!group || group.operation.suppressed || group.operation.held || !dependsOnEdit(group.target.node)) continue;
+    const hint = `downstream Offset face ${featureId(doc.nodes, later)} depends on the original cap. Cancel this edit, remove that downstream Offset, then edit this Offset and recreate the downstream Offset on the current cap.`;
+    try {
+      const source = capContext(prefixDoc(doc, group.start), group.target, group.face);
+      const ids = doc.nodes.slice(group.start, later + 1).map((_, i) => featureId(doc.nodes, group.start + i));
+      const original = doc.nodes.slice(group.start, later + 1).map((node, i) => {
+        if (i !== 2) return node;
+        const result = { ...node } as ModelNode & { made?: unknown };
+        delete result.made; delete result.bought; return result;
+      });
+      const rebuilt = buildNativeOffsetFace(source, group.d, ids);
+      if (canonical(rebuilt.nodes.slice(group.start)) !== canonical(original)) return rejected(hint);
+    } catch { return rejected(hint); }
+  }
+  return doc;
+}
+
 /** Edit the direct native operation or rebuild the legacy cap recipe at its original History slot. */
 export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Command | null {
   const direct = directOffsetAt(doc, index);
@@ -78,7 +110,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
         if (distance === priorDistance) return doc;
         nodes[index] = { ...recipe, distance };
       }
-      return { ...doc, nodes };
+      return preserveFollowingOffsetRecipes({ ...doc, nodes }, index);
     },
   };
   const saved = offsetHistory(doc, index);
@@ -120,6 +152,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
       const updated = { ...operation, made: { ...saved.operation.made!, values: { d, face: saved.face } },
         ...(saved.operation.bought === undefined ? {} : { bought: saved.operation.bought }) };
       const candidate = { ...doc, nodes: [...doc.nodes.slice(0, start), sketch, tool, updated, ...doc.nodes.slice(index + 1)] };
+      preserveFollowingOffsetRecipes(candidate, index);
       last = { distance: d, doc: candidate };
       return candidate;
     },

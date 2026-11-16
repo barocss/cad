@@ -401,3 +401,29 @@ test('Offset on a tapered lower cap moves in its outward direction and retains t
   assert.deepEqual(created.nodes[index], node);
   assert.deepEqual(source.nodes.slice(0, 1), base.nodes.slice(0, 1));
 });
+
+
+test('legacy Offset chain refuses an upstream edit before a downstream absolute tool can go stale', async () => {
+  const seed = rectanglePart(40, 30, 10);
+  const first = offsetFaceCommand.build!(context(seed), { d: 3 });
+  const chain = offsetFaceCommand.build!(context(first), { d: -4 });
+  assert.ok(offsetFaceGroup(chain.nodes, 4)); assert.ok(offsetFaceGroup(chain.nodes, 7));
+  const original = structuredClone(chain), native = bodyOf(chain); closed(native);
+  assert.deepEqual(bounds(native), { min: [0, 0, 0], max: [40, 30, 9] }); near(brepMassProperties(native, 1).volume, 10800);
+  const edit = editSavedOffsetFaceCommand(chain, 4)!;
+  assert.equal(edit.build!(context(chain), { d: 3 }), chain);
+  assert.throws(() => edit.build!(context(chain), { d: 1 }), /downstream Offset face n7.*Cancel this edit.*recreate/);
+  assert.deepEqual(chain, original);
+  const opened = await readStudioFile(encodeStudioFile(chain)); assert.ok('doc' in opened);
+  const reopened = editSavedOffsetFaceCommand(opened.doc, 4)!;
+  assert.throws(() => reopened.build!(context(opened.doc), { d: 1 }), /downstream Offset face n7/);
+  // Recovery: edit the upstream recipe without a downstream absolute tool,
+  // then author the same intended -4 on the current Z11 cap.
+  const firstEdit = editSavedOffsetFaceCommand(first, 4)!;
+  const changed = firstEdit.build!(context(first), { d: 1 });
+  const recreated = offsetFaceCommand.build!(context(changed), { d: -4 });
+  const recovered = bodyOf(recreated); closed(recovered);
+  assert.deepEqual(bounds(recovered), { min: [0, 0, 0], max: [40, 30, 7] }); near(brepMassProperties(recovered, 1).volume, 8400);
+  const lastEdit = editSavedOffsetFaceCommand(chain, 7)!;
+  assert.ok(lastEdit.build!(context(chain), { d: -3 }));
+});
