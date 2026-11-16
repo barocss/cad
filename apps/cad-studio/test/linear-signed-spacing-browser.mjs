@@ -4,10 +4,11 @@ import { clickModelCommand } from './model-rail-helper.mjs';
 
 const pins = ['apps/cad-studio/src/viewport/useCommandGizmos.ts', 'apps/cad-studio/src/state/useCommandPreview.ts',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts', 'packages/barocss-cad-model/src/app/commands.ts'];
-const countDrag = process.argv[3] === '--count';
+const halfBoundary = process.argv[3] === '--half';
+const countDrag = halfBoundary || process.argv[3] === '--count';
 const f = await createFlow({
   name: 'linear-signed-spacing', output: process.argv[2], envFrozen: countDrag ? 'D1194_SOURCE_FROZEN' : 'D1193_SOURCE_FROZEN',
-  initialFiles: pins, requiredFrozen: pins,
+  initialFiles: [...pins, 'apps/cad-studio/test/linear-signed-spacing-browser.mjs'], requiredFrozen: pins,
   qualification: countDrag ? 'One signed spacing interval on the Count arrow adds one separate body.'
     : 'Drag a signed Linear Pattern spacing through zero and check the separate bodies.',
   limits: ['Desktop WebGPU, X direction with separate bodies, one dragged handle.'],
@@ -96,11 +97,15 @@ await f.run(async () => {
     const count = hud.getByLabel('Count', { exact: true });
     try {
       f.phase = 'Move inward and outward by one signed copy interval';
-      for (const [delta, wanted] of [[16, 2], [-16, 4]]) {
+      const samples = halfBoundary ? [[7.84, 3], [8, null], [8.16, 2], [7.84, 3], [-7.84, 3], [-8, null], [-8.16, 4], [-7.84, 3], [-16, 4]] : [[16, 2], [-16, 4]];
+      for (const [delta, wanted] of samples) {
         await move(delta);
         await f.page.waitForFunction(() => document.querySelector('.hud .status')?.textContent === 'preview');
-        await f.snapshot(`count-${wanted}-drag`);
-        assert.equal(Number(await count.inputValue()), wanted, 'A signed interval must change Count by exactly one');
+        await f.snapshot(`count-${delta}-drag`);
+        const actual = Number(await count.inputValue());
+        if (wanted !== null) assert.equal(actual, wanted, 'Count must cross the half-interval boundary and recover in the same drag');
+        else assert.ok([delta > 0 ? 2 : 3, delta > 0 ? 3 : 4].includes(actual));
+        f.report.observations.push({ deltaMM: delta, wanted, actual, exactHalfScreenSample: wanted === null });
         assert.equal(Number(await spacing.inputValue()), -16);
         await f.same(seed);
       }
