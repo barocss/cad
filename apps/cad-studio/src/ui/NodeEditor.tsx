@@ -1,4 +1,4 @@
-import type { FilletEndpoints } from '../app/filletEndpoints';
+import type { FilletEndpoints, FilletStationDraft } from '../app/filletEndpoints';
 import { FilletEndpointNotice } from './FilletEndpointNotice';
 import { sharedHoleLayoutPair } from '../app/sharedHoleLayout';
 import { extrudeDraftFailure, extrudeDraftDependentFilletFailure } from '../app/extrudeDraftFailure';
@@ -32,9 +32,10 @@ function invalidInteger(value: number, range: { min: number; max: number }): boo
   return !Number.isInteger(value) || value < range.min || value > range.max;
 }
 
-export function NodeEditor({ filletEndpoints, nodes, index, onApply, onClose, onEditSketch, onRelinkInset, insetRelinkProblem, onDetachInset, insetSourceWidth, onDelete, readFaceEndDistance, onPickEndFace, onReplaceAxis, onEditOffset, onEditDraft, onEditSharedHoleLayout, readAlignTargets, alignPreview, edgeReplacement, parameters, onRefuse, bearingAssembly, doc, onDraft, pending = false, pendingLabel = 'Checking the current bearing and housing…' }: { filletEndpoints?: FilletEndpoints | null; nodes: ModelNode[]; index: number; onApply(nodes: ModelNode[], ownsDraft: () => boolean, sourceWidth?: number): void | Promise<FeatureFailure | undefined>; onClose(): void; onEditSketch?(): void; onRelinkInset?: { start(opener: HTMLButtonElement): void; cancel(): void; reviewing: boolean }; insetRelinkProblem?: string; onDetachInset?(): void; insetSourceWidth?: number; onDelete?(opener: HTMLElement): void; readFaceEndDistance?(): Promise<FaceEndDistanceReply>; onPickEndFace?(): void; onReplaceAxis?(): void; onEditOffset?(): void; onEditDraft?(): void; onEditSharedHoleLayout?(): void; readAlignTargets?(): Promise<AlignTargetOption[]>; alignPreview?: ReturnType<typeof useAlignHistoryPreview>; edgeReplacement?: { start(): void; cancel(): void; apply(): void; draft: { name: string | null; pending?: boolean } | null }; parameters: Record<string, number>; onRefuse(message: string): void; bearingAssembly?: BearingAssemblyInput; doc?: StudioDoc; onDraft?(owner: object | null): void; pending?: boolean; pendingLabel?: string }) {
+export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, onApply, onClose, onEditSketch, onRelinkInset, insetRelinkProblem, onDetachInset, insetSourceWidth, onDelete, readFaceEndDistance, onPickEndFace, onReplaceAxis, onEditOffset, onEditDraft, onEditSharedHoleLayout, readAlignTargets, alignPreview, edgeReplacement, parameters, onRefuse, bearingAssembly, doc, onDraft, pending = false, pendingLabel = 'Checking the current bearing and housing…' }: { onFilletStations?(draft: FilletStationDraft): () => void; filletEndpoints?: FilletEndpoints | null; nodes: ModelNode[]; index: number; onApply(nodes: ModelNode[], ownsDraft: () => boolean, sourceWidth?: number): void | Promise<FeatureFailure | undefined>; onClose(): void; onEditSketch?(): void; onRelinkInset?: { start(opener: HTMLButtonElement): void; cancel(): void; reviewing: boolean }; insetRelinkProblem?: string; onDetachInset?(): void; insetSourceWidth?: number; onDelete?(opener: HTMLElement): void; readFaceEndDistance?(): Promise<FaceEndDistanceReply>; onPickEndFace?(): void; onReplaceAxis?(): void; onEditOffset?(): void; onEditDraft?(): void; onEditSharedHoleLayout?(): void; readAlignTargets?(): Promise<AlignTargetOption[]>; alignPreview?: ReturnType<typeof useAlignHistoryPreview>; edgeReplacement?: { start(): void; cancel(): void; apply(): void; draft: { name: string | null; pending?: boolean } | null }; parameters: Record<string, number>; onRefuse(message: string): void; bearingAssembly?: BearingAssemblyInput; doc?: StudioDoc; onDraft?(owner: object | null): void; pending?: boolean; pendingLabel?: string }) {
   // The draft is the whole node list: a sketch dimension changes the sketch the feature is made from.
   const [draft, setDraft] = useState<ModelNode[]>(nodes);
+  const [stationDraftOrigin, setStationDraftOrigin] = useState({nodes,index});
   // What is typed in a number box until it reads as a number (so a box can be cleared and retyped).
   const [typed, setTyped] = useState<Record<string, string>>({});
   const [lengthProblem, setLengthProblem] = useState<string | null>(null);
@@ -57,7 +58,7 @@ export function NodeEditor({ filletEndpoints, nodes, index, onApply, onClose, on
     recoveredLengths.current = new WeakSet();
     return () => { request.current = null; };
   }, [nodes, index]);
-  useEffect(() => { setDraft(nodes); setTyped({}); setEvaluation(null); setModeProblem(null); setLengthProblem(null); setReadingEnd(false); setLoftGuideChoice(null); }, [nodes, index]);
+  useEffect(() => { setStationDraftOrigin({nodes,index}); setDraft(nodes); setTyped({}); setEvaluation(null); setModeProblem(null); setLengthProblem(null); setReadingEnd(false); setLoftGuideChoice(null); }, [nodes, index]);
   const current = evaluation?.nodes === nodes && evaluation.index === index ? evaluation : null;
   useLayoutEffect(() => {
     const opener = current?.opener, error = current?.error;
@@ -173,6 +174,14 @@ export function NodeEditor({ filletEndpoints, nodes, index, onApply, onClose, on
     onDraft({});
     return () => onDraft(null);
   }, [onDraft, changed, draft, typed, nodes, index]);
+  useLayoutEffect(() => {
+    if(!onFilletStations || !sameDraftScope || stationDraftOrigin.nodes !== nodes || stationDraftOrigin.index !== index || node?.kind !== 'fillet' || !node.radii)return;
+    const fractions=node.radii.slice(1,-1).map((point,i)=>{
+      const raw=typed[i===0?'stationAt':'station2At'];
+      return raw===undefined ? point.fraction ?? NaN : raw.trim() ? Number(raw)/100 : NaN;
+    });
+    return onFilletStations({nodes,index,original:nodes[index],fractions});
+  }, [onFilletStations, sameDraftScope, stationDraftOrigin, node, typed, nodes, index]);
   const readAlignPreview = alignPreview?.read;
   const previewAlignDraft = sameDraftScope && node?.kind === 'align' && !node.suppressed && nodes !== draft && !ordinaryLocked && !hasInvalidNumber;
   useLayoutEffect(() => {

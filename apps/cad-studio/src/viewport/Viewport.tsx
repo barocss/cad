@@ -983,9 +983,9 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       items.push(<CurvatureComb key="curvature-comb" overlay={props.curvatureComb} projectSegment={(a, b) => projectOverlaySegment(cam, a, b, w, h)} />);
     if (props.filletEndpoints && 'start' in props.filletEndpoints && !props.modelUnavailable) {
       const ends = props.filletEndpoints;
-      items.push(<g key="fillet-endpoints" aria-label="Fillet endpoints" pointerEvents="none">{(['Start','End'] as const).map(label => {
-        const at = label === 'Start' ? ends.start : ends.end, p = projectOverlaySegment(cam, at, at, w, h)?.[0];
-        return p ? <g key={label} data-fillet-endpoint={label} data-position={at.join(',')} aria-label={`${label} endpoint`}><circle cx={p[0]} cy={p[1]} r={5} fill={label === 'Start' ? '#55d9ff' : '#ffc247'} stroke="#191919" strokeWidth={2}/><text x={p[0]+9} y={p[1]-9} fill="white" stroke="#191919" strokeWidth={3} paintOrder="stroke" fontSize={13}>{label}</text></g> : null;
+      items.push(<g key="fillet-endpoints" aria-label="Fillet endpoints" pointerEvents="none">{[{label:'Start',at:ends.start},{label:'End',at:ends.end},...(ends.stations ?? [])].map(({label,at}) => {
+        const p = projectOverlaySegment(cam, at, at, w, h)?.[0];
+        return p ? <g key={label} data-fillet-endpoint={label === 'Start' || label === 'End' ? label : undefined} data-fillet-station={label.startsWith('Interior') ? label : undefined} data-position={at.join(',')} aria-label={`${label} endpoint`}><circle cx={p[0]} cy={p[1]} r={5} fill={label === 'Start' ? '#55d9ff' : '#ffc247'} stroke="#191919" strokeWidth={2}/><text x={p[0]+9} y={p[1]-9} fill="white" stroke="#191919" strokeWidth={3} paintOrder="stroke" fontSize={13}>{label}</text></g> : null;
       })}</g>);
     }
     if (props.continuityLocation && !props.modelUnavailable)

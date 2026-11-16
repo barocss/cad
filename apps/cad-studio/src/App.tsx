@@ -1,4 +1,4 @@
-import { activeFilletEndpoints, filletEdgeEndpoints, type FilletEndpoints } from './app/filletEndpoints';
+import { activeFilletEndpoints, filletStationInputKey, filletEdgeEndpoints, withFilletStations, type FilletStationDraft, type FilletEndpoints } from './app/filletEndpoints';
 import { SHARED_HOLE_LAYOUT_EDIT, sharedHoleLayoutCommand, sharedHoleLayoutPair } from './app/sharedHoleLayout';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { browserRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal';
@@ -449,6 +449,7 @@ export function App() {
   }, [activeStore, fontUpload]);
   const hudValues = useRef<Values | null>(null);
   useSyncExternalStore(activeStore.subscribe, () => activeKey(activeStore.get(), hudValues.current));
+  useSyncExternalStore(activeStore.subscribe, () => filletStationInputKey(activeStore.get()));
   const active = activeStore.get();
   const [previewBodies, setPreviewBodies] = useState<BodyResult[] | null>(null);
   /**
@@ -2108,8 +2109,15 @@ export function App() {
     }).catch(() => { if(current())setHistoryFilletEnds({doc,index,worker:workerSession,locations:{reason:'The original edge could not be read; endpoint locations are unavailable.'}}); });
     return () => {cancelled = true;};
   }, [doc, editNode, workerSession, engine, marker, variants.showing, fresh, busy, instanceSel, inPlace]);
-  const historyEndpointLocations = editNode !== null && doc.nodes[editNode]?.kind === 'fillet' && doc.nodes[editNode].radii && !active && marker === null && !variants.showing && fresh && !busy && !instanceSel.length && !inPlace
+  const [filletStationDraft, setFilletStationDraft] = useState<FilletStationDraft | null>(null);
+  const publishFilletStations = useCallback((payload: FilletStationDraft) => {
+    setFilletStationDraft(payload);
+    return () => setFilletStationDraft(current => current === payload ? null : current);
+  }, []);
+  const savedHistoryEndpointLocations = editNode !== null && doc.nodes[editNode]?.kind === 'fillet' && doc.nodes[editNode].radii && !active && marker === null && !variants.showing && fresh && !busy && !instanceSel.length && !inPlace
     ? historyFilletEnds?.doc === doc && historyFilletEnds.index === editNode && historyFilletEnds.worker === workerSession ? historyFilletEnds.locations : {reason:'Reading original edge endpoint locations…'} : null;
+  const historyEndpointLocations = savedHistoryEndpointLocations && filletStationDraft?.nodes === doc.nodes && filletStationDraft.index === editNode && filletStationDraft.original === doc.nodes[editNode]
+    ? withFilletStations(savedHistoryEndpointLocations,filletStationDraft.fractions) : savedHistoryEndpointLocations;
   const endpointSource = useRef<{ctx: Active['ctx']; doc: StudioDoc; worker: number} | null>(null);
   const endpointContextCurrent = !!active && active.ctx.doc === commandDoc && evaluatedRef.current === evaluated && ownsEvaluatedSource();
   if (!active) endpointSource.current = null;
@@ -3574,7 +3582,7 @@ export function App() {
           picked={continuityPick.picked} selectedDisplayEdge={continuityPick.edge !== undefined} source={evaluated} location={continuityLocation}
           read={readContinuity} />}
         {curvaturePick && <EdgeCurvature {...curvature} />}
-        {editNode !== null && <NodeEditor filletEndpoints={historyEndpointLocations} alignPreview={historyAlign} readAlignTargets={doc.nodes[editNode]?.kind === 'align' ? readAlignHistoryTargets : undefined} edgeReplacement={finishEdgeEditor.available ? {
+        {editNode !== null && <NodeEditor onFilletStations={publishFilletStations} filletEndpoints={historyEndpointLocations} alignPreview={historyAlign} readAlignTargets={doc.nodes[editNode]?.kind === 'align' ? readAlignHistoryTargets : undefined} edgeReplacement={finishEdgeEditor.available ? {
           start: finishEdgeEditor.start, cancel: finishEdgeEditor.cancel, apply: finishEdgeEditor.apply,
           draft: finishEdgeEditor.current,
         } : undefined} onDraft={reportNodeEditorDraft} nodes={doc.nodes} parameters={doc.parameters} doc={doc} pending={parameterEdit?.kind === 'direct'} pendingLabel={parameterEdit?.roundedInset ? 'Checking the rounded inset…' : doc.nodes[editNode]?.kind === 'fill-feature-pattern' ? 'Checking the fill cut pattern…' : 'Checking the path cut pattern…'} bearingAssembly={{ root: doc, owner: 'base' }} onRefuse={m => setToast({ title: 'Cannot bind that value', hint: m, detail: '' })} index={editNode}
