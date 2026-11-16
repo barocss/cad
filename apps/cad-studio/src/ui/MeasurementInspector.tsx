@@ -13,14 +13,27 @@ import { ToolIconButton } from '@/components/ui/tool-button';
 import { Icon } from './atoms';
 import { measurePickHint, type MeasurePickFilter } from './measurePickHint';
 import { measureQuantityText } from './quantityText';
+import { measureSecondaryText, useMeasureSecondaryUnit } from './measureSecondaryUnits';
 import { measureAxesBasis } from '../app/measureProvenance';
 import type { MeasureTarget } from '../app/measureTargets';
 import type { InterferenceReport } from '../app/checkInterference';
 interface MeasurementInspectorProps { pickFilter: MeasurePickFilter; targets: MeasureTarget[]; items: ({ pick: MeasurePick; mesh: DisplayMesh } | null)[]; measured: ReturnType<typeof measureBetween> | null; approximateDistance?: boolean; onClose(): void; onPin?(): void }
 export function MeasurementInspector({ pickFilter, targets, items, measured, approximateDistance, onClose, onPin }: MeasurementInspectorProps) {
+  const secondary = useMeasureSecondaryUnit();
+  const extra = (value: number, dimension: 'length' | 'area' = 'length') => {
+    const text = secondary.unit === 'inch' ? measureSecondaryText(value, dimension) : null;
+    return text ? ` (${text})` : '';
+  };
   return <aside className="card props" aria-label="Measurement" tabIndex={-1} aria-keyshortcuts="Alt+M">
         <div className="card-title">MEASURE <ToolIconButton size="tiny" aria-label="Done measuring" data-tip="Done measuring" data-tip-key="Esc" data-tip-focus="" onClick={onClose}><Icon name="close" small /></ToolIconButton></div>
         <div className="muted small">Alt+M · focus measurement details</div>
+        <label className={FIELD}><span>Secondary units</span><NativeSelect className={CONTROL} aria-label="Measure secondary units" value={secondary.unit}
+          onChange={event => secondary.set(event.target.value === 'inch' ? 'inch' : 'none')}
+          onKeyDown={event => { event.stopPropagation(); if (event.key === 'Escape') { event.preventDefault(); onClose(); } }}
+          onKeyUp={event => event.stopPropagation()}>
+          <option value="none">None</option><option value="inch">inch</option>
+        </NativeSelect></label>
+        {!secondary.persistent && <div className="empty" role="status" aria-label="Measure unit preference">Secondary units apply to this session only; browser storage is unavailable.</div>}
         {targets.map((target, k) => {
           const item = items[k], slot = k ? 'To' : 'From';
           if (!item) return <div key={k} className="measure-item empty" role="status">{slot} · {target.label} ({target.occurrence ? target.occurrence.id + '/' : ''}{target.body}) is unavailable. Select a new {slot} target. {measurePickHint(pickFilter, k ? 'to' : 'from')}</div>;
@@ -28,17 +41,17 @@ export function MeasurementInspector({ pickFilter, targets, items, measured, app
           return <div key={k} className="measure-item">
           <div className="kv">{slot} <b>{it.label}</b></div>
           <div className="kv">Body <b>{target.label} ({target.occurrence ? target.occurrence.id + '/' : ''}{target.body})</b></div>
-          {it.length !== undefined && <div className="kv">Length <b>{measureQuantityText(it.length, 2)} mm</b></div>}
-          {it.area !== undefined && <div className="kv">Area <b>{measureQuantityText(it.area, 2)} mm²{it.areaBasis === 'display mesh' ? ' (mesh)' : ''}</b></div>}
-          {it.radius !== undefined && <div className="kv">Radius <b>{measureQuantityText(it.radius, 3)} mm</b></div>}
+          {it.length !== undefined && <div className="kv">Length <b>{measureQuantityText(it.length, 2)} mm{extra(it.length)}</b></div>}
+          {it.area !== undefined && <div className="kv">Area <b>{measureQuantityText(it.area, 2)} mm²{it.areaBasis === 'display mesh' ? ' (mesh)' : ''}{extra(it.area, 'area')}</b></div>}
+          {it.radius !== undefined && <div className="kv">Radius <b>{measureQuantityText(it.radius, 3)} mm{extra(it.radius)}</b></div>}
         </div>; })}
         {measured && <>
           <div className="card-title" style={{ marginTop: 10 }}>BETWEEN</div>
-          <div className="kv">Distance <b>{measureQuantityText(measured.distance, 3)} mm{approximateDistance ? ' (mesh approximation)' : ''}</b></div>
-          {measured.normalDistance !== undefined && <div className="kv">Normal distance <b>{measureQuantityText(measured.normalDistance, 3)} mm</b></div>}
+          <div className="kv">Distance <b>{measureQuantityText(measured.distance, 3)} mm{approximateDistance ? ' (mesh approximation)' : ''}{extra(measured.distance)}</b></div>
+          {measured.normalDistance !== undefined && <div className="kv">Normal distance <b>{measureQuantityText(measured.normalDistance, 3)} mm{extra(measured.normalDistance)}</b></div>}
           {measured.angle !== undefined && <div className="kv">Angle <b>{measureQuantityText(measured.angle, 2)}°</b></div>}
-          {measured.axes && <div className="kv" aria-label="Axes">Axes <b>{measured.axes.coaxial ? 'coaxial' : `${measureQuantityText(measured.axes.angle, 3)}° apart, ${measureQuantityText(measured.axes.offset, 3)} mm off`} <span className="muted">({measureAxesBasis})</span></b></div>}
-          <div className="kv">ΔX ΔY ΔZ <b>{measured.b.map((v, k) => measureQuantityText(v - measured.a[k], 2)).join(', ')}</b></div>
+          {measured.axes && <div className="kv" aria-label="Axes">Axes <b>{measured.axes.coaxial ? 'coaxial' : `${measureQuantityText(measured.axes.angle, 3)}° apart, ${measureQuantityText(measured.axes.offset, 3)} mm off${extra(measured.axes.offset)}`} <span className="muted">({measureAxesBasis})</span></b></div>}
+          <div className="kv">ΔX ΔY ΔZ <b>{measured.b.map((v, k) => measureQuantityText(v - measured.a[k], 2)).join(', ')} mm{secondary.unit === 'inch' && ` (${measured.b.map((v, k) => measureSecondaryText(v - measured.a[k]) ?? 'unavailable').join(', ')})`}</b></div>
         </>}
         {onPin && <Button size="sm" variant="ghost" data-measure-focus onClick={onPin}>Pin measurement</Button>}
         {!items.some(item => !item) && <div className="empty">{targets.length < 2 ? measurePickHint(pickFilter, targets.length ? 'to' : 'from') : 'Click again to start over.'}</div>}

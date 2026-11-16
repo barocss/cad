@@ -38,7 +38,7 @@ test('Measure passes every scalar to the existing nonzero display policy before 
   assert.match(html, /Normal distance <b>4\.00e-4 mm<\/b>/);
   assert.match(html, /Angle <b>4\.00e-3°<\/b>/);
   assert.match(html, /Axes <b>4\.00e-4° apart, 4\.00e-3 mm off.*mesh fit.*<\/b>/);
-  assert.match(html, /ΔX ΔY ΔZ <b>-4\.00e-3, 4\.00e-3, 0<\/b>/);
+  assert.match(html, /ΔX ΔY ΔZ <b>-4\.00e-3, 4\.00e-3, 0 mm<\/b>/);
   assert.deepEqual(measured, before);
 
   const native = { ...synthetic, mesh: { ...synthetic.mesh,
@@ -53,7 +53,7 @@ test('Measure keeps exact zeros, ordinary values, missing values and the coaxial
   });
   assert.match(ordinary, /Distance <b>1\.23 mm<\/b>/);
   assert.match(ordinary, /Axes <b>coaxial.*mesh fit.*<\/b>/);
-  assert.match(ordinary, /ΔX ΔY ΔZ <b>0, 0, 1\.23<\/b>/);
+  assert.match(ordinary, /ΔX ΔY ΔZ <b>0, 0, 1\.23 mm<\/b>/);
   assert.doesNotMatch(ordinary, /Normal distance|Angle <b>/);
   const zero = inspector({ distance: -0, normalDistance: 0, angle: -0, a: [0, 0, 0], b: [0, -0, 0] });
   assert.match(zero, /Distance <b>0 mm<\/b>/);
@@ -62,7 +62,7 @@ test('Measure keeps exact zeros, ordinary values, missing values and the coaxial
   const exceptional = inspector({ distance: Infinity, normalDistance: NaN, a: [0, 0, 0], b: [Number.MIN_VALUE, 0, 0] });
   assert.match(exceptional, /Distance <b>Infinity mm<\/b>/);
   assert.match(exceptional, /Normal distance <b>NaN mm<\/b>/);
-  assert.match(exceptional, /ΔX ΔY ΔZ <b>4\.94e-324, 0, 0<\/b>/);
+  assert.match(exceptional, /ΔX ΔY ΔZ <b>4\.94e-324, 0, 0 mm<\/b>/);
 });
 
 test('the two Measure label precisions retain their existing nonzero rounding', () => {
