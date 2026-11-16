@@ -8,17 +8,18 @@ import { bodyName } from '@barocss/cad-model/app/bodies';
 import { Button } from '@/components/ui/button';
 import { ToolIconButton } from '@/components/ui/tool-button';
 import { Icon } from './atoms';
+import { measurePickHint, type MeasurePickFilter } from './measurePickHint';
 import { measureQuantityText } from './quantityText';
 import { measureAxesBasis } from '../app/measureProvenance';
 import type { MeasureTarget } from '../app/measureTargets';
 import type { InterferenceReport } from '../app/checkInterference';
-interface MeasurementInspectorProps { targets: MeasureTarget[]; items: ({ pick: MeasurePick; mesh: DisplayMesh } | null)[]; measured: ReturnType<typeof measureBetween> | null; approximateDistance?: boolean; onClose(): void; onPin?(): void }
-export function MeasurementInspector({ targets, items, measured, approximateDistance, onClose, onPin }: MeasurementInspectorProps) {
+interface MeasurementInspectorProps { pickFilter: MeasurePickFilter; targets: MeasureTarget[]; items: ({ pick: MeasurePick; mesh: DisplayMesh } | null)[]; measured: ReturnType<typeof measureBetween> | null; approximateDistance?: boolean; onClose(): void; onPin?(): void }
+export function MeasurementInspector({ pickFilter, targets, items, measured, approximateDistance, onClose, onPin }: MeasurementInspectorProps) {
   return <aside className="card props" aria-label="Measurement">
         <div className="card-title">MEASURE <ToolIconButton size="tiny" aria-label="Done measuring" data-tip="Done measuring" data-tip-key="Esc" data-tip-focus="" onClick={onClose}><Icon name="close" small /></ToolIconButton></div>
         {targets.map((target, k) => {
           const item = items[k], slot = k ? 'To' : 'From';
-          if (!item) return <div key={k} className="measure-item empty" role="status">{slot} · {target.label} ({target.occurrence ? target.occurrence.id + '/' : ''}{target.body}) is unavailable. Select a new {slot} target.</div>;
+          if (!item) return <div key={k} className="measure-item empty" role="status">{slot} · {target.label} ({target.occurrence ? target.occurrence.id + '/' : ''}{target.body}) is unavailable. Select a new {slot} target. {measurePickHint(pickFilter, k ? 'to' : 'from')}</div>;
           const it = measureItem(item.mesh, item.pick);
           return <div key={k} className="measure-item">
           <div className="kv">{slot} <b>{it.label}</b></div>
@@ -36,7 +37,7 @@ export function MeasurementInspector({ targets, items, measured, approximateDist
           <div className="kv">ΔX ΔY ΔZ <b>{measured.b.map((v, k) => measureQuantityText(v - measured.a[k], 2)).join(', ')}</b></div>
         </>}
         {onPin && <Button size="sm" variant="ghost" onClick={onPin}>Pin measurement</Button>}
-        {!items.some(item => !item) && <div className="empty">{targets.length < 2 ? `Click a face, edge, or vertex to measure ${targets.length ? 'to' : 'from'}.` : 'Click again to start over.'}</div>}
+        {!items.some(item => !item) && <div className="empty">{targets.length < 2 ? measurePickHint(pickFilter, targets.length ? 'to' : 'from') : 'Click again to start over.'}</div>}
       </aside>;
 }
 
