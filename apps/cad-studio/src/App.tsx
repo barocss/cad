@@ -1075,7 +1075,7 @@ export function App() {
   const namesDoc = fresh || !bodiesFor ? doc : bodiesFor;
 
   const bodiesRef = useRef(bodies); bodiesRef.current = bodies;
-  const ctx: Ctx = { doc: commandDoc, bodies, selection, pick: pick ?? undefined, direct: directSel, bearingAssembly: { root: doc, owner: 'base' } };
+  const ctx: Ctx = { doc: commandDoc, placedPartCount: doc.instances?.length ?? 0, bodies, selection, pick: pick ?? undefined, direct: directSel, bearingAssembly: { root: doc, owner: 'base' } };
   const evaluatedRef = useRef(evaluated); evaluatedRef.current = evaluated;
   const interferenceGeneration = workOwnership.current.generation;
   const interferenceSource = useMemo(() => ({

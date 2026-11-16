@@ -53,7 +53,8 @@ export interface EdgeSel { body: number; edge: number }
 /** `vertices`: corners picked (ends of edges), by body and position. */
 export interface Selection { faces: FaceSel[]; edges: EdgeSel[]; bodies: number[]; sketches?: number[]; profileRegions?: { sketch: number; indices: number[] }; vertices?: { body: number; at: [number, number, number] }[] }
 /** `direct`: the direct curves and surfaces picked (their ids). */
-export interface Ctx { splitPlanePick?: FaceSel; viewportEndFace?: true; sewSnapshot?: SewSnapshot; thickenSnapshot?: ThickenSnapshot; fillPatternRegion?: FillFeaturePatternRegion; fillPatternAnchor?: readonly [number, number]; curvePatternPath?: CurveFeaturePatternPath; doc: StudioDoc; bodies: BodyResult[]; selection: Selection; pick?: [number, number, number]; holeSnapStep?: number; direct?: string[]; bearingAssembly?: BearingAssemblyInput }
+/** placedPartCount overrides the evaluated document for assembly-only availability after metadata-only edits. */
+export interface Ctx { placedPartCount?: number; splitPlanePick?: FaceSel; viewportEndFace?: true; sewSnapshot?: SewSnapshot; thickenSnapshot?: ThickenSnapshot; fillPatternRegion?: FillFeaturePatternRegion; fillPatternAnchor?: readonly [number, number]; curvePatternPath?: CurveFeaturePatternPath; doc: StudioDoc; bodies: BodyResult[]; selection: Selection; pick?: [number, number, number]; holeSnapStep?: number; direct?: string[]; bearingAssembly?: BearingAssemblyInput }
 
 export type Values = Record<string, number | string>;
 /** `when`: shown (and required) only for these values. */
@@ -1131,7 +1132,7 @@ const allCommands: Command[] = [
     available: ctx => ctx.bodies.length > 1 ? ok : no('Interference needs two or more bodies.'), action: 'interference' },
   // (Roadmap 10 ⑤: a hole or pocket across placed parts, made in the assembly; the HUD is the studio's, the cut the model's, assembly/cuts.ts.)
   { id: 'assembly-cut', label: 'Assembly cut', icon: 'cad-hole', hint: 'A hole or pocket across placed parts, cut in the assembly: each part keeps its own definition', group: 'modify', keywords: 'cut hole pocket through across parts assembly occurrence',
-    available: ctx => ctx.doc.instances?.length ? ok : no('Assembly cut needs placed parts: add a part to the assembly first.'), action: 'assembly-cut' },
+    available: ctx => (ctx.placedPartCount ?? ctx.doc.instances?.length ?? 0) > 0 ? ok : no('Assembly cut needs placed parts: add a part to the assembly first.'), action: 'assembly-cut' },
   // (R8.2, D81: the picked SubD body's cage, or the part's only SubD.)
   { id: 'subd-edit', label: 'Edit cage', icon: 'cad-subd', hint: 'Edit a SubD body\u2019s cage: pick vertices, edges or faces; move, extrude, insert loops, bridge, fill, weld, crease, mirror', group: 'modify', keywords: 'subd subdivision cage edit vertex edge face loop extrude crease mirror',
     available: ctx => subdNodeOf(ctx) !== null ? ok : no('Pick a SubD body (its cage is edited).'), action: 'cage' },
