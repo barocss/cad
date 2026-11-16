@@ -56,6 +56,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
   const interiorProblems = filletInteriorProblems(active);
   const interiorInvalid = Object.keys(interiorProblems).length > 0;
   const sectionProblem = filletSectionNumberProblem(active);
+  const draftAngleInvalid = commandNumberRule(active.cmd.id, 'deg') === 'draft-angle' && featureNumberInvalid(active.values.deg, 'draft-angle');
   const sectionRecovery = active.cmd.id === 'fillet' && active.preview === 'error' && active.error?.historyField === 'shape'
     && (active.values.shape === 'conic' || active.values.shape === 'g2') ? active.error : undefined;
   const guideFeedback = loftGuideFeedback(active);
@@ -115,10 +116,10 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
     </NativeSelect>;
     else if (field.kind === 'text') control = <Input className={FIELD} ref={ref} type="text" aria-label={field.label} data-key={field.key} data-kind="text" maxLength={field.maxLength} value={String(value ?? '')} onChange={changeValue} />;
     else if (field.kind === 'file') control = <span className="min-w-0"><Input className={FIELD} ref={ref} type="file" aria-label={field.label} data-key={field.key} accept={field.accept} disabled={!onFile} onChange={chooseFile} /><span className="muted small">{field.filename(value ?? '') ?? 'No file prepared'}</span></span>;
-    else control = <span className="num"><Input className={FIELD + ' pr-7!'} ref={element => { if (ref) ref(element); element?.setCustomValidity(interiorProblem ?? (numberRule === 'open-unit' && invalidNumber ? featureNumberRange(numberRule) + '.' : '')); }} type="number" aria-label={field.label} aria-invalid={invalidCount || invalidNumber || !!collapseError || !!interiorProblem || undefined} aria-describedby={[rangeId, interiorProblem ? interiorId : undefined, collapseError ? collapseId : undefined].filter(Boolean).join(' ') || undefined} data-key={field.key} data-kind={field.kind} step={field.kind === 'count' ? 1 : 'any'} min={numberRule === 'nonzero' ? undefined : bounds.min ?? field.min} max={bounds.max ?? field.max} value={String(value ?? '')} onChange={changeValue} />
+    else control = <span className="num"><Input className={FIELD + ' pr-7!'} ref={element => { if (ref) ref(element); element?.setCustomValidity(interiorProblem ?? ((numberRule === 'open-unit' || numberRule === 'draft-angle') && invalidNumber ? featureNumberRange(numberRule) + '.' : '')); }} type="number" aria-label={field.label} aria-invalid={invalidCount || invalidNumber || !!collapseError || !!interiorProblem || undefined} aria-describedby={[rangeId, interiorProblem ? interiorId : undefined, collapseError ? collapseId : undefined].filter(Boolean).join(' ') || undefined} data-key={field.key} data-kind={field.kind} step={field.kind === 'count' ? 1 : 'any'} min={numberRule === 'nonzero' ? undefined : bounds.min ?? field.min} max={bounds.max ?? field.max} value={String(value ?? '')} onChange={changeValue} />
       {field.kind === 'mm' && <em>mm</em>}{field.kind === 'deg' && <em>°</em>}{field.kind === 'ratio' && numberRule !== 'open-unit' && <em>×</em>}</span>;
     return <label key={field.key} className="field"><span>{field.label}</span>
-      {range ? <span className="min-w-0">{control}<span id={rangeId} role={numberRule === 'open-unit' && invalidNumber ? 'status' : undefined} className={numberRule === 'open-unit' && invalidNumber ? 'hud-error small block' : 'muted small block'}>{range}</span></span> : control}
+      {range ? <span className="min-w-0">{control}<span id={rangeId} role={(numberRule === 'open-unit' || numberRule === 'draft-angle') && invalidNumber ? 'status' : undefined} className={(numberRule === 'open-unit' || numberRule === 'draft-angle') && invalidNumber ? 'hud-error small block' : 'muted small block'}>{range}</span></span> : control}
       {interiorProblem && <span className="hud-error col-span-2" id={interiorId} role="status">{interiorProblem}</span>}
       {shapeError && <span className="col-span-2"><FeatureFailureNotice error={shapeError} id={shapeErrorId} /></span>}
       {collapseError && <span className="col-span-2"><FeatureFailureNotice error={collapseError} id={collapseId} /></span>}
@@ -181,7 +182,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
           return onHoleOptions(active, { type, d, depth, cd, ch, csd });
         }} /> : null}
       {active.cmd.id === 'fill-feature-pattern' && <FillPatternHints />}
-      {active.preview === 'error' && active.error && !faceSelectionFeedback?.hideError && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && !neutralFeedback && !sectionRecovery && !(active.error.historyField && (interiorProblems[active.error.historyField as FilletInteriorKey] || active.error.historyField === sectionProblem?.key)) && <FeatureFailureNotice error={active.error} />}
+      {active.preview === 'error' && active.error && !faceSelectionFeedback?.hideError && !guideFeedback && !twoGuideFeedback && !pathFeedback && !collapseFeedback && !neutralFeedback && !sectionRecovery && !(draftAngleInvalid && active.error.code === 'DRAFT_ANGLE') && !(active.error.historyField && (interiorProblems[active.error.historyField as FilletInteriorKey] || active.error.historyField === sectionProblem?.key)) && <FeatureFailureNotice error={active.error} />}
       <div className="hud-actions">
         {active.cmd.id === 'mirror' && <Button variant="ghost" aria-pressed={pickingMirrorPlane}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
@@ -189,7 +190,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
         <span className="grow" />
         {/* Keep native button activation from also reaching the window's Apply shortcut. */}
         <Button variant="ghost" onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }} onClick={onCancel}>Cancel</Button>
-        <Button variant="default" disabled={active.preview !== 'ok' || interiorInvalid || !!sectionProblem} onClick={() => { if (!interiorInvalid && !sectionProblem) onApply(active); }}>Apply</Button>
+        <Button variant="default" disabled={active.preview !== 'ok' || interiorInvalid || !!sectionProblem || draftAngleInvalid} onClick={() => { if (!interiorInvalid && !sectionProblem && !draftAngleInvalid) onApply(active); }}>Apply</Button>
       </div>
     </div>
   );

@@ -12,7 +12,7 @@ export const readDraftPull = (value: unknown): DraftPull => isDraftPull(value) ?
 export const draftPulls = pulls;
 
 export const draftInputs = (): Field[] => [
-  { key: 'deg', label: 'Angle', kind: 'deg', min: -44, max: 44, step: 1 },
+  { key: 'deg', label: 'Angle', kind: 'deg', min: -45, max: 45, step: 1 },
   { key: 'pull', label: 'Pull', kind: 'choice', options: pulls.map(pull => ({ value: pull, label: draftLabel(pull) })) },
   { key: 'neutralMode', label: 'Neutral plane', kind: 'choice', options: [
     { value: 'auto', label: 'Body end' }, { value: 'fixed', label: 'Fixed coordinate' },
