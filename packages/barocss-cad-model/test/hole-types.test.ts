@@ -116,5 +116,7 @@ test('Hole distinguishes missing and multiple entry faces without changing selec
   assert.equal(hole.available!(ctx).ok, true);
   const tilted = { ...ctx, bodies: [{ ...ctx.bodies[0], mesh: { ...ctx.bodies[0].mesh,
     faces: ctx.bodies[0].mesh.faces.map(face => ({ ...face, normal: [0.5, 0, 0.866] as [number, number, number] })) } }] };
-  assert.deepEqual(hole.available!(tilted), { ok: false, reason: 'Holes go into a flat face facing ±X, ±Y or ±Z.' });
+  const curved = { ...ctx, bodies: [{ ...ctx.bodies[0], mesh: { ...ctx.bodies[0].mesh, faces: ctx.bodies[0].mesh.faces.map(face => ({ ...face, kind: 'curved' as const })) } }] };
+  assert.deepEqual(hole.available!(curved), { ok: false, reason: 'The selected face is not flat. Select a flat face facing ±X, ±Y or ±Z instead.' });
+  assert.deepEqual(hole.available!(tilted), { ok: false, reason: 'The selected flat face is tilted. Select a flat face facing ±X, ±Y or ±Z instead.' });
 });

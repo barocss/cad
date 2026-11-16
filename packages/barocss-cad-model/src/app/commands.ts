@@ -532,7 +532,8 @@ const allCommands: Command[] = [
       if (ctx.selection.faces.length === 0) return no('Select the flat face where the hole goes in.');
       if (ctx.selection.faces.length > 1) return no('Leave only one flat face selected where the hole goes in.');
       const f = ctx.selection.faces[0], face = ctx.bodies[f.body].mesh.faces[f.face];
-      if (face.kind !== 'plane' || !holeAxis(face.normal)) return no('Holes go into a flat face facing ±X, ±Y or ±Z.');
+      if (face.kind !== 'plane') return no('The selected face is not flat. Select a flat face facing ±X, ±Y or ±Z instead.');
+      if (!holeAxis(face.normal)) return no('The selected flat face is tilted. Select a flat face facing ±X, ±Y or ±Z instead.');
       return ok;
     },
     fields: ctx => {
