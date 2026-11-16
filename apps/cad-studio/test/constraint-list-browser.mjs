@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
+const circlePickedUndo = process.argv[3] === '--circle-picked-undo';
+const circlePickedBaseline = circlePickedUndo && process.argv.includes('--baseline');
 const fixedPointConflict = process.argv[3] === '--fixed-point-conflict';
 const edgeCircleConflict = process.argv[3] === '--edge-circle-conflict';
 const circleConflict = process.argv[3] === '--circle-conflict';
@@ -12,7 +14,7 @@ const pins = [
   'apps/cad-studio/test/constraint-list-browser.mjs',
   'apps/cad-studio/src/App.tsx',
   'apps/cad-studio/src/viewport/studioSketchViewportActions.ts',
-  ...(pickedUndo ? ['apps/cad-studio/src/sketch/draftHistory.ts'] : []),
+  ...((pickedUndo || circlePickedUndo) ? ['apps/cad-studio/src/sketch/draftHistory.ts'] : []),
   'apps/cad-studio/src/sketch/constraintList.ts',
   'apps/cad-studio/src/sketch/constraintInspection.ts',
   'apps/cad-studio/src/ui/ConstraintList.tsx',
@@ -21,7 +23,7 @@ const pins = [
   'packages/barocss-cad-model/src/sketch/rules.ts',
 ];
 const f = await createFlow({
-  name: 'constraint-list', output: process.argv[2], envFrozen: fixedPointConflict ? 'D1105_SOURCE_FROZEN' : edgeCircleConflict ? 'D1104_SOURCE_FROZEN' : circleConflict ? 'D1103_SOURCE_FROZEN' : conflictFocus ? 'D1089_SOURCE_FROZEN' : circleDimension ? 'D1088_SOURCE_FROZEN' : pickedUndo ? 'D1087_SOURCE_FROZEN' : removalFocus ? 'D1086_SOURCE_FROZEN' : 'D880_SOURCE_FROZEN',
+  name: 'constraint-list', output: process.argv[2], envFrozen: circlePickedUndo ? 'CIRCLE_PICKED_UNDO_FROZEN' : fixedPointConflict ? 'D1105_SOURCE_FROZEN' : edgeCircleConflict ? 'D1104_SOURCE_FROZEN' : circleConflict ? 'D1103_SOURCE_FROZEN' : conflictFocus ? 'D1089_SOURCE_FROZEN' : circleDimension ? 'D1088_SOURCE_FROZEN' : pickedUndo ? 'D1087_SOURCE_FROZEN' : removalFocus ? 'D1086_SOURCE_FROZEN' : 'D880_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Filter the current sketch constraint list without changing geometry or row ownership.',
   limits: ['Desktop Studio with a straight rectangle, a separate straight ruled outline, and an ellipse.'],
@@ -420,6 +422,37 @@ await f.run(async () => {
     await open(accepted);
     await edit(1);
     assert.equal(await list().getByText('circle 1 – circle 2 = 20', { exact: true }).count(), 1);
+    return;
+  }
+  if (circlePickedUndo) {
+    const source = await f.inspect('source', { circles: true });
+    await f.newPage(); await f.page.setViewportSize({ width: 1024, height: 800 });
+    await open(source); await edit(1); await f.tool('Select', 's');
+    await f.frame([[24,22],[50,22]]);
+    await kind().selectOption('Distance'); await pickedOnly().check();
+    await f.worldClick([29,22]); await show(['rule:0','rule:1'],9);
+    const before = await f.snapshot('01-circle-picked');
+    assert.match(before.picked, /circle 1/i);
+    await row('rule:0').getByRole('button',{name:/^Remove /}).click();
+    await show(['rule:0'],8); const removed = await f.snapshot('02-circle-rule-removed');
+    assert.equal(removed.picked,before.picked); await f.same(source);
+    await f.undo(); await show(circlePickedBaseline ? [] : ['rule:0','rule:1'],9);
+    const restored = await f.snapshot('03-circle-picked-undo');
+    assert.equal(await pickedOnly().isChecked(),true);
+    if(circlePickedBaseline) assert.notEqual(restored.picked,before.picked);
+    else assert.equal(restored.picked,before.picked);
+    assert.deepEqual(restored.doc,source);
+    await f.redo(); await show(circlePickedBaseline ? [] : ['rule:0'],8);
+    const redone=await f.snapshot('04-circle-picked-redo');
+    if(!circlePickedBaseline) assert.equal(redone.picked,before.picked);
+    await f.same(source);
+    if(circlePickedBaseline){await cancel(); await f.same(source); return;}
+    const current=(await f.finishSketch('05-circle-rule-finished')).doc;
+    assert.deepEqual(current.nodes[0].outline.rules,[source.nodes[0].outline.rules[1]]);
+    assert.deepEqual(current.nodes[0].outline.circles,source.nodes[0].outline.circles);
+    assert.deepEqual(current.nodes[0].sideTags,source.nodes[0].sideTags);
+    assert.deepEqual(current.nodes[1],source.nodes[1]);
+    await f.undo();await f.same(source);await f.redo();await f.same(current);
     return;
   }
   if (circleDimension) {

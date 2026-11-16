@@ -178,8 +178,15 @@ export function restoreDraftHistory(sketch: SketchState, step: RestoredStep): Sk
     const sameEdges = isSettled(before) && isSettled(after) && ids && ids.length === before.points.length
       && ids.length === after.points.length && ids.length === after.ids?.length
       && new Set(ids).size === ids.length && ids.every((id, i) => id && id === after.ids?.[i] && !!before.bulges?.[i] === !!after.bulges?.[i]);
-    const picked = sameEdges ? (sketch.picked ?? []).filter(pick => pick.kind === 'edge' && !pick.done
-      && !!ids[pick.i]) : [];
+    // Attached circles have their own stable side IDs. Never infer their identity from a
+    // centre/radius or reuse indices after attachment/removal/reordering.
+    const circleIds = isSettled(before) ? before.circleIds : undefined;
+    const sameCircles = sameEdges && isSettled(before) && isSettled(after) && circleIds
+      && circleIds.length === before.circles?.length && circleIds.length === after.circles?.length
+      && circleIds.length === after.circleIds?.length && new Set(circleIds).size === circleIds.length
+      && circleIds.every((id, i) => id && id === after.circleIds?.[i]);
+    const picked = sameEdges ? (sketch.picked ?? []).filter(pick => !pick.done && Number.isInteger(pick.i)
+      && (pick.kind === 'edge' ? !!ids[pick.i] : pick.kind === 'circle' && sameCircles && !!circleIds[pick.i])) : [];
     const restored = { ...detachSketchLink(sketch), shape: step.shape, picked, editDim: null };
     if (sketch.tool !== 'trim' || sketch.shape) return restored;
     const main = orderedMainDraft(sketch)?.[0];

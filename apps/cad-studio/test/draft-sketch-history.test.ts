@@ -169,3 +169,21 @@ test('outline replay retains current edge picks only while the side identities a
     assert.deepEqual(restoreDraftHistory(draft, outlineHistoryState(target)).picked, []);
   }
 });
+
+test('outline constraint Undo/Redo retains attached circle picks through exact ordered circle IDs', () => {
+  const before = { ...outline(40), circles: [{ c: [10, 10] as [number, number], r: 2 }, { c: [25, 10] as [number, number], r: 3 }], circleIds: ['c1', 'c2'], rules: [{ kind: 'ccdist' as const, a: 0, b: 1, value: 15 }] };
+  const after = { ...before, rules: [] }, history = createDraftHistory();
+  history.push(outlineHistoryState(before), outlineHistoryState(after));
+  const draft: SketchState = { tool: 'select', shape: after, plane: xyPlane(), picked: [{ kind: 'circle', i: 0 }, { kind: 'circle', i: 1 }, { kind: 'circle', i: 2 }, { kind: 'circle', i: .5 }, { kind: 'circle', i: 0, done: true }, { kind: 'point', i: 0 }] };
+  const saved = structuredClone(draft), undo = history.undo(draftHistoryState(emptyDoc(), draft)); assert.ok(undo);
+  const restored = restoreDraftHistory(draft, undo);
+  assert.deepEqual(restored.picked, [{ kind: 'circle', i: 0 }, { kind: 'circle', i: 1 }]);
+  const redo = history.redo(draftHistoryState(emptyDoc(), restored)); assert.ok(redo);
+  assert.deepEqual(restoreDraftHistory(restored, redo).picked, restored.picked);
+  assert.deepEqual(draft, saved);
+  for (const change of [
+    { circleIds: undefined }, { circleIds: ['c1'] }, { circleIds: ['c1', 'c1'] }, { circleIds: ['', 'c2'] },
+    { circleIds: ['c2', 'c1'] }, { circleIds: ['c1', 'other'] }, { circles: before.circles.slice(0, 1) },
+    { ids: undefined }, { ids: ['other', 'e2', 'e3', 'e4'] },
+  ]) assert.deepEqual(restoreDraftHistory(draft, outlineHistoryState({ ...before, ...change })).picked, [], JSON.stringify(change));
+});
