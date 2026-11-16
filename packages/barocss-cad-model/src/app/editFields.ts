@@ -9,7 +9,7 @@ import type { StudioDoc } from '../engine/doc';
 // The editable dimensions of a feature, including those of the sketch it is made from: each field
 // reads its value from the document's nodes and writes a changed copy of them (sketch edits change the
 // sketch node, so every feature made from it follows).
-import { frameGeometry, HOLE_PLANE, withExtrusionHeight, type Axis, type Dim, type FrameCorners, type FrameNotch, type HolePattern, type ModelNode, type SketchNode } from '../engine/doc';
+import { sectionLabel, frameGeometry, HOLE_PLANE, withExtrusionHeight, type Axis, type Dim, type FrameCorners, type FrameNotch, type HolePattern, type ModelNode, type SketchNode } from '../engine/doc';
 import { outlineFields } from '../sketch/outlineFields';
 import { outlineOf } from '../sketch/loops';
 import { mainShape, resolveSketchDims } from '../sketch/reopen';
@@ -35,6 +35,25 @@ function frameAnchorField(index: number, kind: 'frame' | 'frame-member'): EditFi
       if (node?.kind !== kind || !anchor) return [...nodes];
       const next = { ...node };
       if (anchor === 'centroid') delete next.anchor; else next.anchor = anchor;
+      return nodes.map((node, i) => i === index ? next : node);
+    },
+  };
+}
+
+/** Only an existing library-backed section can select a different authored row. */
+function frameSectionRowField(nodes: Nodes, index: number, scope?: EditScope): EditField {
+  const original = nodes[index] as Extract<ModelNode, { kind: 'frame' | 'frame-member' }>;
+  const rows = () => scope?.doc?.frames?.sections ?? [];
+  const unique = (id: string) => id.length > 0 && rows().filter(row => row.id === id).length === 1;
+  const current = original.section.kind === 'library' ? original.section.id : '';
+  const options = rows().filter(row => unique(row.id)).map(row => ({ value: row.id, label: `${row.name ?? row.id} (${row.id}) · ${sectionLabel(row.section, String)}${row.estimate ? ' (estimate)' : ''}` }));
+  if (!unique(current)) options.unshift({ value: current, label: `${current || '(empty ID)'} (${rows().some(row => row.id === current) ? 'ambiguous' : 'missing'} section row)` });
+  return { kind: 'choice', key: 'sectionRow', label: 'Section row', options,
+    get: nodes => { const node = nodes[index]; return node?.kind === original.kind && node.section.kind === 'library' ? node.section.id : ''; },
+    set: (nodes, id) => {
+      const node = nodes[index];
+      if (node?.kind !== original.kind || node.section.kind !== 'library' || !unique(id)) return [...nodes];
+      const next = { ...node, section: { ...node.section, id } };
       return nodes.map((node, i) => i === index ? next : node);
     },
   };
@@ -150,7 +169,7 @@ export type BindableField = Extract<EditField, { kind: 'number' }> & { param(nod
  * Where a part-scoped edit stands (O167, F6), when no assembly input is given: the part draft's bearing context (its
  * occurrence and the other parts, as the bearing command reads it) and the fit tables the draft sees.
  */
-export interface EditScope { readonly originalLoft?: Extract<ModelNode, { kind: 'loft' }>; readonly context?: BearingAssemblyContext; readonly fits?: StudioFits; readonly doc?: Pick<StudioDoc, 'direct'> & Partial<Pick<StudioDoc, 'parameters' | 'drives'>> }
+export interface EditScope { readonly originalLoft?: Extract<ModelNode, { kind: 'loft' }>; readonly context?: BearingAssemblyContext; readonly fits?: StudioFits; readonly doc?: Pick<StudioDoc, 'direct'> & Partial<Pick<StudioDoc, 'parameters' | 'drives' | 'frames'>> }
 export function editFields(nodes: Nodes, i: number, params?: Record<string, number>, bearingAssembly?: BearingAssemblyInput, scope?: EditScope): EditField[] {
   const node = nodes[i], recipe = nodes[1];
   if (recipe?.kind === 'rounded-rectangle-inset') {
@@ -651,7 +670,8 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       out.push(frameAnchorField(i, 'frame'));
       // (FR2, D124: the frame's section — editing one drops its estimate flag — its roll, and each skeleton point.)
       type F = Extract<ModelNode, { kind: 'frame' }>;
-      if (node.section.kind !== 'sketch') for (const key of [...new Set([...Object.keys(node.section), ...(node.section.kind === 'channel' ? ['toeRadius', 'flangeSlope'] : [])])].filter(k => k !== 'kind' && k !== 'cells' && k !== 'openSlots')) {
+      if (node.section.kind === 'library') out.push(frameSectionRowField(nodes, i, scope));
+      if (node.section.kind !== 'sketch' && node.section.kind !== 'library') for (const key of [...new Set([...Object.keys(node.section), ...(node.section.kind === 'channel' ? ['toeRadius', 'flangeSlope'] : [])])].filter(k => k !== 'kind' && k !== 'cells' && k !== 'openSlots')) {
         number('s.' + key, MEMBER_FIELD_LABELS[key] ?? key, key === 'flangeSlope' ? undefined : 'mm', n => num(((n as F).section as unknown as Record<string, Dim>)[key] ?? 0), (n, v) => {
           const f = n as F, estimates = f.estimates?.filter(e => e !== key);
           const next: F = { ...f, section: { ...f.section, [key]: v } as F['section'] };
@@ -746,7 +766,8 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       // (FR1, D123: the section's dimensions — editing one drops its estimate flag — the member's length along its line, its roll.)
       type M = Extract<ModelNode, { kind: 'frame-member' }>;
       const sec = node.section;
-      if (sec.kind !== 'sketch') for (const key of [...new Set([...Object.keys(sec), ...(sec.kind === 'channel' ? ['toeRadius', 'flangeSlope'] : [])])].filter(k => k !== 'kind' && k !== 'cells' && k !== 'openSlots')) {
+      if (sec.kind === 'library') out.push(frameSectionRowField(nodes, i, scope));
+      if (sec.kind !== 'sketch' && sec.kind !== 'library') for (const key of [...new Set([...Object.keys(sec), ...(sec.kind === 'channel' ? ['toeRadius', 'flangeSlope'] : [])])].filter(k => k !== 'kind' && k !== 'cells' && k !== 'openSlots')) {
         number('s.' + key, MEMBER_FIELD_LABELS[key] ?? key, key === 'flangeSlope' ? undefined : 'mm', n => num(((n as M).section as unknown as Record<string, Dim>)[key] ?? 0), (n, v) => {
           const m = n as M, estimates = m.estimates?.filter(e => e !== key);
           const next: M = { ...m, section: { ...m.section, [key]: v } as M['section'] };
