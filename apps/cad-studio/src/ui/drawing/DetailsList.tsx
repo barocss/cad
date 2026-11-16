@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { DrawingDetail } from '@barocss/cad-model/drawing/detail';
+import { resetDetailPaperPosition } from './detailPaperPosition';
 import type { DetailCropFields } from './detailCropEdit';
 // The drawing's detail views (CG5, DR-1): each with its letter and parent, its scale (Auto: the smallest standard scale at
 // least twice the sheet's) and a remove button. A detail is added with the Detail view tool (E) on the sheet; dragged by
@@ -31,6 +32,9 @@ export function DetailsList({ settings, sheet, layout, onChange, onRemove, crop 
           {SCALES.map(s => <option key={s} value={s}>{scaleLabel(s)}</option>)}
         </NativeSelect>
         <Button variant="ghost" size="xs" aria-label={`Remove detail ${d.id}`} title={`Remove detail ${d.id}`} onClick={() => onRemove(d.id)}><Icon name="close" small /></Button>
+        <Button variant="ghost" size="xs" aria-label={`Reset detail ${d.id} paper position`} disabled={!d.at}
+          title="Automatically place this detail on its assigned sheet. Preserves its crop, scale and annotations; does not shrink it if there is no room."
+          onClick={() => onChange(resetDetailPaperPosition(settings, d))}>Auto-place</Button>
         <DetailCropEditor detail={d} crop={crop} />
         {!shown && missing && <div className="empty" style={{ color: 'var(--warn)' }}>{missing.why === 'parent' ? `Its ${parentName(d.view)} is not on the sheet.` : missing.why === 'room' ? 'No free room on the sheet for it.' : 'Its circle holds no line of the part.'}</div>}
       </div>;
