@@ -92,3 +92,47 @@ workspace/history draft navigation, saved end-face binding/cancel/reopen, and
 exact-distance detach including canceled reads. Screenshots retain the expected
 feature fields and unchanged geometry on refusal. No new feature, reference
 policy or lifecycle behavior is introduced.
+
+## Fourth extraction: candidate reference evidence (2026-11-16)
+
+`state/candidateReferences.ts` owns one domain contract rather than another slice
+of JSX: check final-body reference names against accepted/candidate bodies, then
+refresh signatures using exact parent geometry. Its preflight remains synchronous;
+missing names still refuse before the refresh request. Parent lookup retains the
+same-input result, accepted-result cache, then worker-read order. A worker reply
+must still be current and contain the exact named parent source.
+
+The helper does **not** own evaluation scheduling, candidate acceptance, mass
+updates, work tokens, Undo or installation. App's post-await ownership check remains
+mandatory even for cache-only/no-reference paths. No aliases are invented and no
+reference matching policy changes. Five native geometry tests cover missing
+final-body names, source immutability, successful parent evidence, accepted cache
+reuse, stale worker replies and missing parent names. Combined focused suite is
+46/46. Actual parameter invalid-geometry/retry and staged direct surface parameter
+workflows pass, including source retention, Undo/Redo and Save/reopen. App is 3,666
+lines; the purpose of this extraction is independently testable reference policy,
+not the 19-line reduction.
+
+### Next ownership boundary, before moving the main effect
+
+The remaining evaluation effect serves both ordinary document evaluation and
+parameter/direct/rounded-inset candidates. It shares `acceptedEvaluation`,
+`parameterHandoff`, `parameterMass` and work-run identity with App's admission and
+mass callback. Moving the whole effect behind a large bag of setters would hide
+that coupling rather than remove it. Keep it in App until the following contract
+is established:
+
+1. One candidate/evaluation controller owns staged result evidence and result
+   reuse. It receives explicit source document/input identity and a run token;
+   App retains document-change authority and the only accepted-document commit.
+2. Acceptance returns the installed target identity, not just a success flag.
+   A result handoff can be consumed once and only for that exact identity/key.
+3. Deferred masses patch only matching staged/installed result identities. Neither
+   stale mass data nor cache reuse may revive canceled work or mark it fresh.
+4. First add characterization tests for display-only cancellation/reuse,
+   document Open and worker replacement, marker/variant changes, rejected commit,
+   direct-candidate cancellation, and mass arrival both before and after handoff.
+   Then move the state and lifecycle together in one reviewed change.
+
+This is the next substantial architecture step. Do not split each setter or
+condition into its own wrapper merely to lower App's line count.

@@ -1,3 +1,4 @@
+import { candidateReferenceProblem, refreshCandidateReferences } from './state/candidateReferences';
 import { HistoryFeatureEditor } from './ui/HistoryFeatureEditor';
 import { createCommandHudActions } from './app/commandHudActions';
 import { InstanceInspector } from './ui/InstanceInspector';
@@ -136,9 +137,8 @@ import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skel
 import { offsetFaceGroup, carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { bodyKeyFor, cutAfter, featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
-import { candidatesFor, captureSignatures, confirmReference, markedReferences, referencesOf, refreshSignatures, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
+import { candidatesFor, captureSignatures, confirmReference, markedReferences, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
 import { type BodyResult, type EvalResult } from '@barocss/cad-model/engine/evaluate';
-import { signaturesOf, type Signature } from '@barocss/cad-model/engine/rematch';
 import type { DrawingReferenceLabel, DrawingReferencePreview } from './ui/DrawingWorkspace';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
@@ -987,30 +987,11 @@ export function App() {
       if (edit) {
         if (!result.ok) { refuse(result.error.detail || result.error.hint); return; }
         parameterMass.current = { request: edit.request, result };
-        const oldNames = { faces: new Map<string, Signature>(), edges: new Map<string, Signature>() }, nextNames = { faces: new Map<string, Signature>(), edges: new Map<string, Signature>() };
-        for (const [list, names] of [[bodiesRef.current, oldNames], [result.bodies, nextNames]] as const) for (const body of list) {
-          const found = signaturesOf(body);
-          for (const kind of ['faces', 'edges'] as const) for (const [name, signature] of found[kind]) names[kind].set(name, signature);
-        }
-        // Missing names are held for an explicit choice; never choose a suffix or alias here.
-        for (const ref of referencesOf(edit.next, true).refs) {
-          if (ref.rematched || ref.node !== null || ref.part !== undefined) continue;
-          const kind = ref.edge ? 'edges' : 'faces', before = oldNames[kind].get(ref.name), after = nextNames[kind].get(ref.name);
-          if (!before || !after || before.kind !== after.kind) { refuse(`The reference at ${ref.where} needs an explicit choice.`); return; }
-        }
-        const next = await refreshSignatures(edit.next, result.bodies, async part => {
-          const partKey = evaluationKey(part);
-          if (partKey === key) return result;
-          if (acceptedEvaluation.current?.key === partKey) return acceptedEvaluation.current.result;
-          const parent = await engine.part(part, revision.current++, 'refs');
-          if (!current() || !parent?.ok) throw new Error('A reference parent could not be evaluated for this parameter change.');
-          for (const ref of referencesOf(edit.next, true).refs) {
-            if (ref.rematched || ref.node !== part.nodes.length || !ref.parent) continue;
-            const body = parent.bodies.find(b => b.key === bodyKeyFor(edit.next.nodes, ref.parent!.node, ref.parent!.side));
-            if (!body || !signaturesOf(body)[ref.edge ? 'edges' : 'faces'].has(ref.name)) throw new Error(`The reference at ${ref.where} needs an explicit choice.`);
-          }
-          return parent;
-        });
+        const referenceProblem = candidateReferenceProblem(edit.next, bodiesRef.current, result.bodies);
+        if (referenceProblem) { refuse(referenceProblem); return; }
+        const next = await refreshCandidateReferences({ candidate: edit.next, key, result,
+          accepted: () => acceptedEvaluation.current,
+          evaluateParent: part => engine.part(part, revision.current++, 'refs'), isCurrent: current });
         if (!current()) return;
         // Compute the handoff key before accepting: a failed key cannot partially commit the candidate.
         const nextKey = evaluationKey(prefixDoc(next, next.nodes.length));
