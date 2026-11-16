@@ -195,6 +195,13 @@ await f.run(async () => {
   f.phase = 'Withhold a removed term and recalculate after Undo';
   const inches = await f.doc();
   await dimRow(2).getByRole('button', { name: /^Remove dimension/ }).click();
+  const removal = f.page.getByRole('group', { name: 'Confirm drawing control removal', exact: true });
+  await removal.waitFor();
+  await f.same(inches);
+  await button('Cancel removal', removal).click();
+  await f.same(inches);
+  await dimRow(2).getByRole('button', { name: /^Remove dimension/ }).click();
+  await button('Remove annotation and controls', removal).click();
   await refused(/Dimension d1 is missing/i);
   assert.match(await dimension(3).locator('option[value="d1"]').textContent(), /Unavailable/);
 
