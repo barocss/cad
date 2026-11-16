@@ -1,3 +1,4 @@
+import { isRectangleFinishResize, proveRectangleFinishResize } from './state/rectangleFinishResize';
 import { activeFilletEndpoints, filletStationInputKey, filletEdgeEndpoints, withFilletStations, type FilletStationDraft, type FilletEndpoints } from './app/filletEndpoints';
 import { SHARED_HOLE_LAYOUT_EDIT, sharedHoleLayoutCommand, sharedHoleLayoutPair } from './app/sharedHoleLayout';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
@@ -3661,9 +3662,24 @@ export function App() {
           const candidate = preparePatternNodeCandidate(doc, next, editNode);
           if (candidate) { stageFeatureCandidate(candidate); return; }
           const request = revision.current++;
-          return engine.evaluate(next, request).then(reply => {
-            if (!reply || !ownsDraft() || docNow.current !== doc || bearingEditScope.current !== scope) return;
-            if (reply.ok) { commit(next); return; }
+          const resize = isRectangleFinishResize(doc,next,editNode), worker = workerSessionNow.current, open = openIntent.current;
+          const current = () => ownsDraft() && docNow.current === doc && bearingEditScope.current === scope
+            && workerSessionNow.current === worker && openIntent.current === open;
+          return engine.evaluate(next, request).then(async reply => {
+            if (!reply || !current()) return;
+            if (reply.ok) {
+              if (!resize) { commit(next); return; }
+              const failure = {title:'Size not applied',hint:'The original Fillet edge could not be verified. Keep the current size or explicitly replace its edge first.',detail:'No reference was renamed or refreshed.'};
+              try {
+                const before = await engine.part(prefixDoc(doc,2),revision.current++,'refs');
+                if (!current()) return;
+                const after = await engine.part(prefixDoc(next,2),revision.current++,'refs');
+                if (!current() || markerNow.current !== null || shownVariant.current) return;
+                const refreshed = before.ok && after.ok ? proveRectangleFinishResize(doc,next,before.bodies,after.bodies) : null;
+                if (!refreshed) return failure;
+                commit(refreshed); return;
+              } catch { if (current()) return failure; return; }
+            }
             const insetFailure = reply.revision === request ? linkedInsetHistoryFailure(reply.error, doc.nodes, next.nodes, editNode) : undefined;
             if (insetFailure) return insetFailure;
             const failedFeature = reply.revision === request ? failedFeatureText(reply.error.feature, next.nodes, doc.nodes) : undefined;
