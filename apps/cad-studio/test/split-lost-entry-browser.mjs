@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import {createFlow} from './flow-helper.mjs';
+const f=await createFlow({name:'split-lost-entry',output:process.argv[2],envFrozen:'SPLIT_ENTRY_FROZEN',initialFiles:['apps/cad-studio/test/split-lost-entry-browser.mjs','apps/cad-studio/src/app/failedFeature.ts','apps/cad-studio/src/state/historyFeatureApply.ts'],qualification:'Reproduce a named Hole entry face lost by a Split History edit without changing the accepted model.'});
+const doc={format:'barocss-cad-model',schema:3,units:'mm',parameters:{},nodes:[{kind:'sketch',id:'n0',profile:'rectangle',min:[0,0],max:[40,30]},{kind:'extrude',id:'n1',sketch:0,height:10},{kind:'split',id:'n2',parent:{node:1,side:'solid'},axis:'x',normal:[2,2,0],at:70},{kind:'hole',id:'n3',parent:{node:2,side:'negative'},axis:'z',side:'max',center:[10,10],radius:2,depth:4,face:'n1.top'}],outputs:{b2_positive:{node:2,side:'positive'},b3:{node:3,side:'solid'}},nextId:4};
+const button=(name,scope=f.page)=>scope.getByRole('button',{name,exact:true});
+await f.run(async()=>{
+ await f.newPage();await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'split-hole.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(doc))});await f.same(doc);
+
+ const history=()=>Promise.all(['Undo','Redo'].map(name=>button(name).isEnabled()));
+ const beforeHistory=await history();
+ await f.openFeatureEditor(2);
+ await f.editor().getByLabel('Normal X',{exact:true}).fill('0');
+ await f.editor().getByLabel('Normal Y',{exact:true}).fill('0');
+ await f.editor().getByLabel('Normal Z',{exact:true}).fill('1');
+ await f.editor().getByLabel('At',{exact:true}).fill('5');
+ await button('Apply',f.editor()).click();
+ await f.editor().getByText('The Hole entry face is missing',{exact:true}).waitFor();
+ await f.editor().getByText(/The saved entry face n1[.]top/).waitFor();
+ await f.same(doc);assert.deepEqual(await history(),beforeHistory);
+ assert.match(await f.editor().innerText(),/Failed feature.*Hole.*n3/);
+ assert.equal(await f.editor().locator('code').textContent(),'no face n1.top on the target');
+ await f.snapshot('lost-entry-refusal');
+ await button('Reset',f.editor()).click();
+ assert.equal(await f.editor().getByLabel('At',{exact:true}).inputValue(),'70');
+ assert.equal(await f.editor().getByLabel('Normal X',{exact:true}).inputValue(),'2');
+ assert.equal(await f.editor().getByLabel('Normal Z',{exact:true}).inputValue(),'0');
+ assert.equal(await f.editor().getByText('The Hole entry face is missing',{exact:true}).count(),0);
+ await f.editor().getByLabel('At',{exact:true}).fill('80');
+ const recovered=(await f.applyEditor(doc,'restored-source-applied')).doc;
+ assert.deepEqual(recovered.nodes[3],doc.nodes[3]);
+ const bodies=(await f.bodies()).bodies;assert.equal(bodies.length,2);
+ assert.ok(Math.abs(bodies.reduce((sum,b)=>sum+b.volume,0)-(12000-16*Math.PI))<1e-6);
+ await f.undo();await f.same(doc);await f.redo();await f.same(recovered);
+ await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'recovered-entry.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(recovered))});
+ await f.same(recovered);assert.equal((await f.doc()).nodes[3].face,'n1.top');
+ await f.openFeatureEditor(2);assert.equal(await f.editor().getByLabel('At',{exact:true}).inputValue(),'80');await f.closeEditor();
+ assert.deepEqual(f.report.downloads,[]);
+});

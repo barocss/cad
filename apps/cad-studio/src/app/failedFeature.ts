@@ -95,9 +95,16 @@ export function edgeFinishFailure(error: FriendlyError, feature: ModelNode | und
 export function splitDependentHoleFailure(error: FeatureFailure, accepted: readonly ModelNode[], candidate: readonly ModelNode[], index: number): FeatureFailure | undefined {
   const before = accepted[index], after = candidate[index];
   if (before?.kind !== 'split' || after?.kind !== 'split' || before.id !== after.id
-    || !error.feature || !/misses the target/i.test(error.detail)
+    || !error.feature
     || accepted.length !== candidate.length || accepted.some((node, i) => i !== index && node !== candidate[i])) return;
   const failed = nodeIndexOf(candidate, error.feature);
-  if (failed <= index || candidate[failed]?.kind !== 'hole' || !isSourceDependency(candidate, failed, index)) return;
+  const hole = candidate[failed];
+  if (failed <= index || hole?.kind !== 'hole' || !isSourceDependency(candidate, failed, index)) return;
+  if (error.code === 'REFERENCE' && typeof hole.face === 'string' && hole.face
+    && error.detail === `no face ${hole.face} on the target`) {
+    return { ...error, title: 'The Hole entry face is missing',
+      hint: `The saved entry face ${hole.face} is no longer on the Hole target. Restore the previous Split At or Normal, or select Reset. The Hole reference has not been changed.` };
+  }
+  if (!/misses the target/i.test(error.detail)) return;
   return { ...error, hint: 'Restore the previous Split At or Normal, or select Reset. To move the Hole centre, close this edit first and edit that Hole in History.' };
 }
