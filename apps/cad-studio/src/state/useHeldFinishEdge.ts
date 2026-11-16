@@ -1,4 +1,6 @@
+import { heldFinishReplaceable, heldFinishCandidate, heldFinishReplacement, type ReplacementEndpoints } from './heldFinishReplacement';
 import { useLayoutEffect, useRef, useState } from 'react';
+import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
 import type { ModelNode, StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult, EvalResult } from '@barocss/cad-model/engine/evaluate';
 import { bodyKeyFor } from '@barocss/cad-model/engine/ids';
@@ -22,11 +24,12 @@ interface Options {
 
 export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsSource, evaluate, accept, notice }: Options) {
   const node = index === null ? undefined : doc.nodes[index];
-  const finish: Finish | null = node?.held && (node.kind === 'chamfer' || (node.kind === 'fillet' && !node.radii)) && node.edges.length === 1 ? node : null;
+  const finish: Finish | null = heldFinishReplaceable(node) && !(node.kind === 'fillet' && node.radii && index !== doc.nodes.length - 1) ? node : null;
   const problem = finish && problems.find(p => p.node === index && p.name === finish.edges[0]);
   // A terminal held feature exposes its source as a passthrough body.
-  const body = finish && index !== null && bodies.find(b => b.key === bodyKeyFor(doc.nodes, index, 'solid'));
-  const [draft, setDraft] = useState<{ doc: StudioDoc; index: number; name: string | null; pending?: boolean } | null>(null);
+  const sources = finish && index !== null ? bodies.filter(b => b.key === bodyKeyFor(doc.nodes, index, 'solid')) : [];
+  const body = finish?.kind === 'fillet' && finish.radii ? sources.length === 1 ? sources[0] : undefined : sources[0];
+  const [draft, setDraft] = useState<{ doc: StudioDoc; index: number; name: string | null; endpoints?: ReplacementEndpoints; edge?: DisplayEdge; pending?: boolean } | null>(null);
   const ticket = useRef<object | null>(null);
   useLayoutEffect(() => {
     ticket.current = null;
@@ -39,11 +42,12 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   const pick = (hit: Hit) => {
     if (!current || !body) return false;
     if (current.pending) return true;
-    const names = hit.edgeMesh === body.mesh && hit.edge && !hit.instance ? body.mesh.edges[hit.edge.edge]?.names : undefined;
-    if (names?.length === 1 && names[0] && !names[0].includes('+')) {
-      setDraft({ ...current, name: names[0] });
-    } else {
-      notice({ title: 'Edge not selected', hint: 'Select one edge on the body of this feature.', detail: '' });
+    const edge = hit.edgeMesh === body.mesh && hit.edge && !hit.instance ? body.mesh.edges[hit.edge.edge] : undefined;
+    const candidate = finish && heldFinishCandidate(finish,edge,body.mesh.edges);
+    if(candidate && !('error' in candidate)) setDraft({...current,...candidate,edge});
+    else {
+      setDraft({...current,name:null,endpoints:undefined,edge:undefined});
+      notice({title:'Edge not selected',hint:candidate && 'error' in candidate ? candidate.error : 'Select one edge on the body of this feature.',detail:''});
     }
     return true;
   };
@@ -52,9 +56,12 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
     const { name } = current;
     const signature = signaturesOf(body).edges.get(name);
     if (!signature || signature.shared) return;
-    const { held: _held, suppressed: _suppressed, rematched: _rematched, ...feature } = finish;
-    const next = { ...doc, nodes: doc.nodes.map((node, index) => index === current.index
-      ? { ...feature, edges: [name], sigs: { [name]: toSig(signature) } } : node) };
+    const candidates = body.mesh.edges.filter(edge => edge.names.length === 1 && edge.names[0] === name);
+    const varying=finish.kind==='fillet'&&!!finish.radii;
+    if(!candidates.length || (varying && (candidates.length!==1 || current.edge!==candidates[0] || !current.endpoints
+      || !current.endpoints.start.every((value,i)=>value===candidates[0].a[i]) || !current.endpoints.end.every((value,i)=>value===candidates[0].b[i]))))return;
+    const next = heldFinishReplacement(doc,current.index,candidates[0],body.mesh.edges,toSig(signature));
+    if(!next)return;
     const request = {};
     ticket.current = request;
     setDraft({ ...current, pending: true });
