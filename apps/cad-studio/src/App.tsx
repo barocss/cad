@@ -1,3 +1,4 @@
+import { createEvaluationEvidence } from './state/evaluationEvidence';
 import { candidateReferenceProblem, refreshCandidateReferences } from './state/candidateReferences';
 import { HistoryFeatureEditor } from './ui/HistoryFeatureEditor';
 import { createCommandHudActions } from './app/commandHudActions';
@@ -419,10 +420,7 @@ export function App() {
   const parameterRequest = useRef(0);
   const [parameterEdit, setParameterEdit] = useState<{ kind?: 'direct'; failureTitle?: string; roundedInset?: 'create' | 'edit' | 'detach'; request: number; base: StudioDoc; baseInput: StudioDoc; input: StudioDoc; next: StudioDoc; accept(next: StudioDoc): void } | null>(null);
   const parameterEditNow = useRef(parameterEdit); parameterEditNow.current = parameterEdit;
-  const acceptedEvaluation = useRef<{ key: string; result: Extract<EvalResult, { ok: true }> } | null>(null);
-  // Only a parameter transition may hand a result to the next effect once; ordinary evaluations still run.
-  const parameterHandoff = useRef<{ target: StudioDoc; key: string; result: Extract<EvalResult, { ok: true }> } | null>(null);
-  const parameterMass = useRef<{ request: number; result: Extract<EvalResult, { ok: true }>; target?: StudioDoc; installedFor?: StudioDoc } | null>(null);
+  const evaluationEvidence = useMemo(createEvaluationEvidence, []);
   /** Bodies set at once for the commit about to happen (a command's preview, an emptied part): claimed by its document. */
   const claimBodies = useRef(false);
   const [busy, setBusy] = useState(true);
@@ -484,7 +482,7 @@ export function App() {
     const got = new Map(masses.map(m => [m.ref, m.fields]));
     // Retain candidate patches during reference refresh and the handoff to the accepted bodies.
     // withMasses applies the existing exact native-source/ref/field guard to both copies.
-    if (parameterMass.current) parameterMass.current.result.bodies = withMasses(parameterMass.current.result.bodies, got);
+    evaluationEvidence.patchMasses(got);
     routeEditor.patchMasses(got);
     if (routeAcceptedHandoff.current) routeAcceptedHandoff.current.result.bodies = withMasses(routeAcceptedHandoff.current.result.bodies, got);
     setBodies(bs => withMasses(bs, got));
@@ -938,8 +936,8 @@ export function App() {
     let live = true;
     if (parameterEdit && !parameterCurrent) {
       // A display-only edit cancels the candidate without evaluating the unchanged accepted model again.
-      if (parameterEdit.baseInput === evaluated && acceptedEvaluation.current) parameterHandoff.current = { target: docNow.current, ...acceptedEvaluation.current, result: { ...acceptedEvaluation.current.result, bodies: bodiesRef.current } };
-      if (parameterMass.current?.request === parameterEdit.request && !parameterMass.current.target) parameterMass.current = null;
+      if (parameterEdit.baseInput === evaluated) evaluationEvidence.restoreAccepted(docNow.current, bodiesRef.current);
+      evaluationEvidence.discardUninstalled(parameterEdit.request);
       if (parameterEdit.kind === 'direct') parameterEditNow.current = null;
       setParameterEdit(null); return;
     }
@@ -951,9 +949,8 @@ export function App() {
     const current = () => live && workOwnership.current.run?.token === work.token && (!edit || (parameterRequest.current === edit.request && docNow.current === edit.base && evaluatedRef.current === evaluated && !shownVariant.current));
     const refuse = (detail: string, hint = 'The accepted part and its references are unchanged.') => {
       if (!edit || !current()) return;
-      const accepted = acceptedEvaluation.current;
-      if (accepted) parameterHandoff.current = { target: edit.base, ...accepted, result: { ...accepted.result, bodies: bodiesRef.current } };
-      if (parameterMass.current?.request === edit?.request && !parameterMass.current?.target) parameterMass.current = null;
+      evaluationEvidence.restoreAccepted(edit.base, bodiesRef.current);
+      evaluationEvidence.discardUninstalled(edit.request);
       if (edit.kind === 'direct') parameterEditNow.current = null;
       setParameterEdit(null); setBusy(false);
       setToast({ title: edit.failureTitle ?? (edit.kind === 'direct' ? 'Direct geometry not changed' : 'Parameters not changed'), hint, detail });
@@ -972,25 +969,26 @@ export function App() {
           return;
         }
       }
-      const key = evaluationKey(input), handoff = !edit ? parameterHandoff.current : null;
+      const key = evaluationKey(input), handoff = !edit ? evaluationEvidence.takeHandoff() : null;
       const routeHandoff = !edit ? routeAcceptedHandoff.current : null;
-      if (!edit) { parameterHandoff.current = null; routeAcceptedHandoff.current = null; }
+      if (!edit) routeAcceptedHandoff.current = null;
       // Only the exact accepted route document can consume its final result, once.
       const routeResult = routeHandoff && routeHandoff.doc === doc && marker === null && !variants.showing
         && routeHandoff.identity === routeBundleDocumentIdentity(doc) && routeHandoff.evaluatedIdentity === routeBundleDocumentIdentity(evaluated)
         && routeHandoff.result.revision === routeHandoff.revision ? routeHandoff.result : null;
       // A configuration-only parameter edit can keep the already fresh accepted result too.
-      const result = edit && acceptedEvaluation.current?.key === key ? acceptedEvaluation.current.result
+      const accepted = evaluationEvidence.accepted();
+      const result = edit && accepted?.key === key ? accepted.result
         : handoff?.target === docNow.current && handoff.key === key ? handoff.result : routeResult ?? await engine.evaluate(input, revision.current++);
       if (!current()) return;
       if (!result) { if (edit) refuse('The evaluation was superseded.'); else setBusy(false); return; }
       if (edit) {
         if (!result.ok) { refuse(result.error.detail || result.error.hint); return; }
-        parameterMass.current = { request: edit.request, result };
+        evaluationEvidence.stage(edit.request, result);
         const referenceProblem = candidateReferenceProblem(edit.next, bodiesRef.current, result.bodies);
         if (referenceProblem) { refuse(referenceProblem); return; }
         const next = await refreshCandidateReferences({ candidate: edit.next, key, result,
-          accepted: () => acceptedEvaluation.current,
+          accepted: evaluationEvidence.accepted,
           evaluateParent: part => engine.part(part, revision.current++, 'refs'), isCurrent: current });
         if (!current()) return;
         // Compute the handoff key before accepting: a failed key cannot partially commit the candidate.
@@ -1000,8 +998,7 @@ export function App() {
         try { edit.accept(next); } finally { workCompletion.current = null; }
         if (docNow.current === edit.base) { refuse('The parameter change was not accepted.'); return; }
         const installed = docNow.current;
-        parameterHandoff.current = { target: installed, key: nextKey, result };
-        if (parameterMass.current?.request === edit.request) parameterMass.current.target = installed;
+        evaluationEvidence.accept(edit.request, installed, nextKey, result);
         if (edit.kind === 'direct') parameterEditNow.current = null;
         setParameterEdit(null);
         return;
@@ -1009,10 +1006,10 @@ export function App() {
       setBusy(false); setLastMs(lastEvalMs.current = result.wallTime * 1000);
       rebuildStore.set({ doc: evaluated, result });
       if (result.ok) {
-        acceptedEvaluation.current = { key, result };
+        evaluationEvidence.remember(key, result);
         const prev = bodiesRef.current;
         setBodies(result.bodies); setBodiesFor(evaluated); claimBodies.current = false;
-        if (handoff && parameterMass.current?.result === result && parameterMass.current.target === docNow.current) parameterMass.current.installedFor = evaluated;
+        if (handoff) evaluationEvidence.markInstalled(result, docNow.current, evaluated);
         if (chatSelection.current) setSelection(resolveNames(result.bodies, chatSelection.current).selection); else setSelection(sel => carrySelection(sel, prev, result.bodies));
         if (again.current) { setRestart(again.current); again.current = null; }
         chatSelection.current = null;
@@ -1036,11 +1033,7 @@ export function App() {
   const fresh = bodiesFor === evaluated;
   const modelUnavailable = !fresh && !busy;
   useEffect(() => {
-    const pending = parameterMass.current;
-    if (!pending?.target) return;
-    if (pending.target !== doc || (pending.installedFor && pending.installedFor !== evaluated)) { parameterMass.current = null; return; }
-    // The actual accepted array is installed and no deferred patch remains to bridge.
-    if (pending.installedFor === evaluated && bodiesFor === evaluated && sameMeshes(bodies, pending.result.bodies) && !bodies.some(b => b.massRef !== undefined)) parameterMass.current = null;
+    evaluationEvidence.settle(doc, evaluated, bodiesFor, bodies);
   }, [doc, evaluated, bodiesFor, bodies]);
   // (Tests: the bodies shown are the current document's and nothing is computing — set in the commit that changes the
   // document, so a test never reads the last document's bodies as this one's, D109.)
@@ -1073,8 +1066,8 @@ export function App() {
     const pending = parameterEditNow.current;
     if (pending?.kind !== 'direct') return;
     parameterRequest.current++; parameterEditNow.current = null;
-    if (acceptedEvaluation.current) parameterHandoff.current = { target: docNow.current, ...acceptedEvaluation.current, result: { ...acceptedEvaluation.current.result, bodies: bodiesRef.current } };
-    if (parameterMass.current && !parameterMass.current.target) parameterMass.current = null;
+    evaluationEvidence.restoreAccepted(docNow.current, bodiesRef.current);
+    evaluationEvidence.discardUninstalled();
     const run = workOwnership.current.run;
     if (run?.candidate) workOwnership.current = finishWork(workOwnership.current, run.token);
     setParameterEdit(null); setBusy(false);
@@ -2078,15 +2071,15 @@ export function App() {
   useEffect(() => { if (!busy) { setSlow(false); return; } const t = setTimeout(() => setSlow(true), 1000); return () => clearTimeout(t); }, [busy]);
   const invalidateDocumentWork = () => {
     workOwnership.current = invalidateWork(workOwnership.current); undoFor.current = null; workCompletion.current = null;
-    parameterRequest.current++; parameterEditNow.current = null; setParameterEdit(null); parameterHandoff.current = null;
-    if (parameterMass.current && !parameterMass.current.target) parameterMass.current = null;
+    parameterRequest.current++; parameterEditNow.current = null; setParameterEdit(null); evaluationEvidence.clearHandoff();
+    evaluationEvidence.discardUninstalled();
     setBusy(false);
   };
   // A failed or restarted worker cannot supply current caches or finish an older import.
   const invalidateWorkerResults = () => {
     // A content match cannot carry worker provenance across restart. Keep old pixels stale until recomputed.
     setCandidateReview(null);
-    acceptedEvaluation.current = null; parameterHandoff.current = null; routeAcceptedHandoff.current = null; parameterMass.current = null;
+    evaluationEvidence.reset(); routeAcceptedHandoff.current = null;
     claimBodies.current = false; setBodiesFor(null); discardRouteRef.current();
     setInstanceBodies(new Map()); workerSessionNow.current++; setWorkerSession(workerSessionNow.current);
     setBusy(false); setSlow(false); setPreviewBodies(null);
@@ -3312,8 +3305,8 @@ export function App() {
           if (!ownCandidate && !canChangeDocument()) return;
           const request = ++parameterRequest.current;
           const cancelCandidate = () => {
-            if (parameterEdit?.base === doc && acceptedEvaluation.current) parameterHandoff.current = { target: doc, ...acceptedEvaluation.current, result: { ...acceptedEvaluation.current.result, bodies } };
-            if (parameterMass.current && !parameterMass.current.target) parameterMass.current = null;
+            if (parameterEdit?.base === doc) evaluationEvidence.restoreAccepted(doc, bodies);
+            evaluationEvidence.discardUninstalled();
             setParameterEdit(null);
           };
           // (O140: the skeletons bound to a parameter re-solved with it — a conflict refused, the parameter named, nothing changed.)
@@ -3322,8 +3315,8 @@ export function App() {
           catch (e) { cancelCandidate(); if (!isRefusal(e, ...SKELETON_CODES)) throw e; setToast({ title: 'That value does not hold', hint: e.message.replace(/^\[\w+\] /, ''), detail: 'The parameters are as they were.' }); return; }
           if (!fresh || !massReady || shownVariant.current || refProblems.length) { cancelCandidate(); setToast({ title: 'Parameters not changed', hint: refProblems.length ? 'Choose the unresolved references first.' : !massReady ? 'Wait for the accepted part’s mass results before changing parameters.' : 'Wait for the accepted part to finish evaluating.', detail: '' }); return; }
           // Keep deferred mass updates with the accepted result when a candidate is refused.
-          if (acceptedEvaluation.current) acceptedEvaluation.current = { ...acceptedEvaluation.current, result: { ...acceptedEvaluation.current.result, bodies } };
-          if (parameterMass.current && !parameterMass.current.target) parameterMass.current = null;
+          evaluationEvidence.retainAcceptedBodies(bodies);
+          evaluationEvidence.discardUninstalled();
           setParameterEdit({ request, base: doc, baseInput: evaluated, input: prefixDoc(r.doc, r.doc.nodes.length), next: r.doc, accept: next => commit(next, false) });
         }} onError={m => setToast({ title: 'Parameters', hint: m, detail: '' })} />}
       {rendering && !sketch && <Suspense fallback={null}><RenderPanel render={render} lookDisabled={renderKeysOf(instanceSel).mode === 'disabled' && !selectedBodies(selection).length} note={renderKeysOf(instanceSel).nested ? 'A part inside a sub-assembly is styled through its sub-assembly: select the sub-assembly.' : undefined} onError={m => {

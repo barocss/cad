@@ -136,3 +136,17 @@ is established:
 
 This is the next substantial architecture step. Do not split each setter or
 condition into its own wrapper merely to lower App's line count.
+
+## Fifth extraction: result evidence lifecycle (2026-11-16)
+
+`state/evaluationEvidence.ts` now privately owns accepted-result cache, single-use
+result handoff and deferred candidate mass evidence. App supplies lifecycle events
+instead of mutating three separate refs. It still owns run tokens, current-source
+checks, document acceptance and UI installation; consuming a handoff does not itself
+authorize reuse. Seven characterization cases fix exact target identity, accepted
+restore, mass arrival before/after acceptance, request-specific cancellation,
+worker reset and retirement when an equal-content document has different identity.
+The native mass/client/reference focused suite passes 18/18. Parameter retry and
+real Worker mass/BOM/Undo/Redo/Save/reopen browser flows pass. The existing mass
+browser driver now opens the current Inertia details disclosure before reading it.
+This is a state ownership improvement, not an attempt to move the main effect as-is.

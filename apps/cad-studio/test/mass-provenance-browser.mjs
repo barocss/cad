@@ -185,6 +185,8 @@ const labels = new Set();
 const capture = async label => { assert.ok(!labels.has(label)); labels.add(label); return f.snapshot(label); };
 const selectBody = async () => {
   await f.page.locator('.outliner .ol', { hasText: 'Box' }).first().click();
+  const inertia = f.page.locator('details.body-inertia:not([open]) > summary');
+  if (await inertia.count()) await inertia.click();
   await f.page.getByLabel('Moments of inertia', { exact: true }).waitFor();
   await f.page.getByLabel('Inertia about', { exact: true }).selectOption('centre');
 };
