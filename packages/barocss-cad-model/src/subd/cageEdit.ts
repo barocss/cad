@@ -213,6 +213,8 @@ export function commitDrag(s: CageSession, delta: readonly number[], extrude: bo
   // refuses — a Shift-click on the gizmo did that, D84. Extrude-then-drag is the E key's.)
   if (delta.every(x => x === 0)) return s;
   const d = dragged(s, delta, extrude);
+  // A mirror-plane constraint may consume a nonzero pointer drag completely.
+  if (!extrude && d.cage.positions.every((value, i) => value === s.cage.positions[i])) return s;
   return step(s, d.cage, d.sel);
 }
 
@@ -281,7 +283,11 @@ export function runOp(s: CageSession, op: CageOp, tolerance = 0.01, t = 0.5): Ca
     case 'bridge': { const [a, b] = twoBoundaries(c, sel.edges); return step(s, plain(bridge(c, a, b)), emptyCageSel); }
     case 'fill': { const out = fillHole(c, sel.edges); return step(s, plain(out), { ...emptyCageSel, faces: [out.faces.length - 1] }); }
     case 'weld': return step(s, plain(weldVertices(c, selectedVertices(s))), emptyCageSel);
-    case 'weld-near': return step(s, plain(weldWithin(c, selectedVertices(s), tolerance)), emptyCageSel);
+    case 'weld-near': {
+      const vertices = selectedVertices(s);
+      if (vertices.length < 2) throw new SubdError('INPUT', 'weld near: pick at least two vertices (or edges/faces containing them)');
+      return step(s, plain(weldWithin(c, vertices, tolerance)), emptyCageSel);
+    }
     case 'crease': case 'uncrease': {
       const edges = sel.edges.length ? sel.edges : sel.faces.flatMap(f => c.faces[f].map((v, i, F) => [v, F[(i + 1) % F.length]] as [number, number]));
       if (!edges.length) throw new SubdError('INPUT', 'crease: pick edges (or faces: their sides)');

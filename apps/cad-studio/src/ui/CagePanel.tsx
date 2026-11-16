@@ -2,7 +2,7 @@
 // validation flags, the session's undo, and Done / Cancel. O16: its operations, fields and actions on shadcn (Button,
 // NativeSelect, FIELD); the Pick and Show toggles stay the studio's segmented buttons.
 import type { CageEditor } from '../subd/useCageEditor';
-import { cageBoundaryReadiness, selectedCageEdges, selectionCentre, validationOf, type CageMode, type CageOp } from '@barocss/cad-model/subd/cageEdit';
+import { cageBoundaryReadiness, selectedCageEdges, selectedVertices, selectionCentre, validationOf, type CageMode, type CageOp } from '@barocss/cad-model/subd/cageEdit';
 import { CONTROL, FIELD } from './panelStyles';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -48,7 +48,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
         <li key={edge.join(':')}>Edge {edge.join('–')}: <b>{sharp ? 'Sharp' : 'Smooth'}</b> · ({midpoint.map(value => Number(value.toFixed(3))).join(', ')}) mm</li>)}</ul>
     </details>}
     <div className="cage-ops">{OPS.map(o => {
-      const readiness = o.op === 'fill' || o.op === 'bridge' ? cageBoundaryReadiness(s, o.op) : null;
+      const readiness = o.op === 'fill' || o.op === 'bridge' ? cageBoundaryReadiness(s, o.op) : o.op === 'weld-near' ? { ok: selectedVertices(s).length >= 2, reason: selectedVertices(s).length < 2 ? 'Pick at least two vertices (or edges/faces containing them) before Weld near.' : 'Merge picked vertices within 0.01 mm.' } : null;
       const blocked = readiness ? !readiness.ok : !n && o.op !== 'weld-near';
       return <Button key={o.op} variant="ghost" aria-label={o.label} data-tip={o.label + (o.key ? ` (${o.key})` : '')} data-tip-desc={o.tip}
         data-tip-off={readiness && !readiness.ok ? readiness.reason : undefined} data-tip-focus={readiness ? true : undefined}
@@ -57,6 +57,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
     })}</div>
     <label className={FIELD}><span>Mirror</span><NativeSelect className={CONTROL} aria-label="Mirror" value={s.mirror ?? ''} onChange={e => editor.op(e.target.value ? `mirror-${e.target.value}` as CageOp : 'mirror-off')}>
       <option value="">None</option><option value="x">Across X</option><option value="y">Across Y</option><option value="z">Across Z</option></NativeSelect></label>
+    <div className="muted small" aria-label="Mirror source and replacement">Mirror keeps the positive side of the chosen axis and replaces the negative side with its reflection. Vertices on the mirror plane stay on it. Cage Undo restores the previous shape; Cancel discards this edit.</div>
     <CageChecks validation={v} faces={s.cage.faces.length} previewMs={editor.previewMs} />
     <div className="flex items-center gap-1 pt-1">
       <Button variant="ghost" aria-label="Undo cage step" disabled={!s.undo.length} onClick={editor.undo}>Undo</Button>
