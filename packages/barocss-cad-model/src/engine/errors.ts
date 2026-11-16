@@ -335,6 +335,11 @@ export function friendly(message: string, kind?: string): FriendlyError {
       hint: `${location}The end does not fully meet material on the through member. For a T-joint, try T-joints → Cope; otherwise change this joint or section. Check the resulting preview before applying.`,
       detail, ...extra };
   }
+  if (code === 'GEOMETRY' && (detail === 'profile relief component leaves the selected cap or target material'
+    || detail === 'profile relief exact containment leaves the selected cap or target material'))
+    return { title: 'Text relief extends outside the selected face',
+      hint: "Adjust Baseline X and Baseline Y, or reduce Em size, so every text stroke stays inside the selected face's remaining material.",
+      detail, ...extra };
   if (code === 'INPUT' && detail === 'angle must be a number of degrees, not 0, below 45 in size')
     return { ...DRAFT_ANGLE_HELP, detail, ...extra };
   const unmatched = /^the surfaces do not close: (\d+ edges?) meet no other surface \((surfaces? [\d, ]+)\)$/.exec(detail);

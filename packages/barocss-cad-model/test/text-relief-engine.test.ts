@@ -8,6 +8,7 @@ import { blobRefs, blobsAsBase64, blobsFromBase64, dropBlobs, evictBlobs, fontRe
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { featureLabel, leafBodies, parentsOf, prefixDoc, textDocumentProblem, textNodeProblem, textReliefNodeProblem, usesOf, withNode, type ModelNode, type NodeExtras, type StudioDoc, type TextReliefNode } from '../src/engine/doc';
 import { evaluateDoc } from '../src/engine/evaluate';
+import { friendly } from '../src/engine/errors';
 import { flattenAssembly } from '../src/engine/flatten';
 import { fontFromBytes, readFontSource, type FontSource } from '../src/engine/font/source';
 import { featureId, fromFeature, nodeIndexOf, nodesOfName } from '../src/engine/ids';
@@ -216,4 +217,34 @@ test('assembly flatten keeps source text opaque, shifts its parent/face signatur
   assert.ok(relief.sigs?.[relief.faces[0]]); assert.deepEqual(relief.at, [5, 5]);
   assert.deepEqual(relief.font, font); assert.equal(relief.text, 'A'); assert.equal(relief.font.source, 'Provided font n1.top');
   assert.deepEqual(child, before); assert.equal(toPartDocument(flat).features.some(feature => feature.kind === 'profile-relief'), true);
+});
+
+
+test('outside text strokes expose face containment and actionable placement help without rewriting the document', async () => {
+  const font = await realFont(), seed = base();
+  const doc = captured(seed, { ...recipe(seed, font), at: [-100, -100] }), before = structuredClone(doc);
+  const result = evaluateDoc(doc, 1);
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+  assert.equal(result.error.code, 'GEOMETRY');
+  assert.equal(result.error.title, 'Text relief extends outside the selected face');
+  assert.match(result.error.hint, /Baseline X.*Baseline Y.*Em size/);
+  assert.match(result.error.detail, /^profile relief (?:component|exact containment) leaves the selected cap or target material$/);
+  assert.deepEqual(doc, before);
+});
+
+
+test('containment help matches only the exact native geometry refusals, retaining diagnostic detail', () => {
+  for (const text of ['component', 'exact containment']) {
+    const message = `profile relief ${text} leaves the selected cap or target material`;
+    const error = friendly(`n2: ${message}`, 'GEOMETRY');
+    assert.equal(error.title, 'Text relief extends outside the selected face');
+    assert.equal(error.detail, message); assert.equal(error.code, 'GEOMETRY');
+    assert.notEqual(friendly(message, 'CAPABILITY').title, error.title);
+  }
+  for (const message of [
+    'profile relief component does not meet the requested cap/material clearance',
+    'profile relief component overlap or contact is outside the initial scope',
+    'profile relief depth must be positive and a pocket must stay below the slab thickness',
+  ]) assert.notEqual(friendly(message, 'GEOMETRY').title, 'Text relief extends outside the selected face');
 });
