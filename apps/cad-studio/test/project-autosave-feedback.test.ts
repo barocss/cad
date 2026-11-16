@@ -211,3 +211,50 @@ test('a fresh Open of the same path owns a new autosave outage notice', async ()
     const offered = await api.settleOffered(true); assert.ok(offered); same(offered, c);
   });
 });
+
+test('Save hides only its own completed older checkpoint and preserves subsequent recovery', async () => {
+  await project(async (api, seen, dir) => {
+    await api.autosave(b);
+    const prior = dir.files.get(autosavePath('a.bcad'))!.bytes.slice();
+    assert.equal(await api.save(c, 'a'), true);
+    assert.equal(await readAutosave(dir.store, 'a.bcad'), null);
+    assert.deepEqual(dir.files.get(autosavePath('a.bcad'))!.bytes, prior);
+    assert.equal(dir.removals(), 0);
+    assert.equal(await api.openPart('a.bcad'), true);
+    assert.equal(await api.settleOffered(true), null);
+    await api.autosave(b);
+    assert.ok(await readAutosave(dir.store, 'a.bcad'));
+    assert.deepEqual(seen.errors, []);
+  });
+});
+test('Save leaves unknown checkpoints from another session eligible', async () => {
+  await project(async (api, _seen, dir) => {
+    await writeAutosave(dir.store, 'a.bcad', b);
+    assert.equal(await api.save(c, 'a'), true);
+    assert.ok(await readAutosave(dir.store, 'a.bcad'));
+  });
+});
+test('recovery metadata failure does not turn a successful primary Save into failure', async () => {
+  await project(async (api, _seen, dir) => {
+    await api.autosave(b);
+    dir.writes.set('.barocss/autosave-saved/a.bcad.json', async () => { throw denied(); });
+    assert.equal(await api.save(c, 'a'), true);
+    assert.ok(await readAutosave(dir.store, 'a.bcad'));
+    assert.equal(dir.removals(), 0);
+  });
+});
+
+test('pending recovery metadata cannot delay Save or poison a subsequent Save tag', async () => {
+  await project(async (api, seen, dir) => {
+    await api.autosave(b);
+    const pause = hold();
+    dir.writes.set('.barocss/autosave-saved/a.bcad.json', async () => { dir.writes.delete('.barocss/autosave-saved/a.bcad.json'); await pause.wait(); });
+    const first = api.save(c, 'a');
+    try {
+      await pause.entered;
+      assert.equal(await first, true);
+      assert.equal(await api.save(a, 'a'), true);
+      assert.deepEqual(seen.errors, []);
+    } finally { pause.release(); }
+  });
+});

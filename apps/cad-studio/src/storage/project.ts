@@ -5,6 +5,7 @@
 //   .barocss/autosave/<part>.bcad      the work since the last save, a moment after each change
 // A version log is written as recovery is (O9): its documents first, then the log naming them, so a log never names a
 // document that was not kept.
+import { sha256Hex } from '@barocss/cad-model/util/digest';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { encodeStudioFile, readStudioFile, encodeStudioSnapshot, readStudioSnapshot } from '@barocss/cad-model/engine/container';
 import { checkVersions, type VersionLog } from '@barocss/cad-model/versions/log';
@@ -13,6 +14,7 @@ import { refusal, type ProjectStore, type StoreEntry, type StoreFile } from './s
 export const META = '.barocss';
 export const versionsPath = (part: string) => `${META}/versions/${part}.json`;
 export const snapshotPath = (key: string) => `${META}/snapshots/${key}.bcad`;
+export const autosaveSaveBoundaryPath = (part: string) => `${META}/autosave-saved/${part}.json`;
 export const autosavePath = (part: string) => `${META}/autosave/${part}`;
 const isPart = (path: string) => /\.bcad$/i.test(path) && !path.startsWith(`${META}/`);
 
@@ -68,7 +70,25 @@ export async function readVersions(store: ProjectStore, part: string): Promise<{
 }
 
 /** The work since the last save, kept in the project. */
-export const writeAutosave = (store: ProjectStore, part: string, doc: StudioDoc) => store.write(autosavePath(part), encodeStudioFile(doc));
+export async function writeAutosave(store: ProjectStore, part: string, doc: StudioDoc) {
+  const bytes = encodeStudioFile(doc);
+  return { ...await store.write(autosavePath(part), bytes), bytes };
+}
+/** A checkpoint this tab completed before Save. Never remove or rewrite its recovery bytes. */
+export async function rememberSavedCheckpoint(store: ProjectStore, part: string, saved: StoreFile, checkpoint: StoreFile): Promise<void> {
+  const boundary = { format: 'barocss-autosave-save-boundary', savedTag: saved.tag, savedSHA256: sha256Hex(saved.bytes),
+    checkpointTag: checkpoint.tag, checkpointSHA256: sha256Hex(checkpoint.bytes) };
+  await store.write(autosaveSaveBoundaryPath(part), new TextEncoder().encode(JSON.stringify(boundary)));
+}
+async function predatesKnownSave(store: ProjectStore, part: string, saved: StoreFile, checkpoint: StoreFile): Promise<boolean> {
+  try {
+    const file = await store.read(autosaveSaveBoundaryPath(part));
+    if (!file) return false;
+    const b = JSON.parse(new TextDecoder().decode(file.bytes));
+    return b?.format === 'barocss-autosave-save-boundary' && b.savedTag === saved.tag && b.checkpointTag === checkpoint.tag
+      && b.savedSHA256 === sha256Hex(saved.bytes) && b.checkpointSHA256 === sha256Hex(checkpoint.bytes);
+  } catch { return false; } // Missing, unreadable or malformed provenance must never suppress recovery.
+}
 /** The autosaved work, when there is some and it differs from the saved document. */
 export async function readAutosave(store: ProjectStore, part: string): Promise<ReadPart | null> {
   const copy = await store.read(autosavePath(part));
@@ -78,7 +98,7 @@ export async function readAutosave(store: ProjectStore, part: string): Promise<R
   if ('error' in r) return r;
   const saved = await store.read(part);
   // (Saved since: the same bytes as the document are nothing to offer.)
-  if (saved && sameBytes(saved.bytes, encodeStudioFile(r.doc))) return null;
+  if (saved && (sameBytes(saved.bytes, encodeStudioFile(r.doc)) || await predatesKnownSave(store, part, saved, copy))) return null;
   return r;
 }
 export const clearAutosave = (store: ProjectStore, part: string) => store.remove(autosavePath(part));

@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { createFlow } from './flow-helper.mjs';
+const f = await createFlow({name:'autosave-save-boundary',envFrozen:'AUTOSAVE_BOUNDARY_FROZEN',output:process.argv[2],qualification:'Own completed pre-Save recovery checkpoint is suppressed without deletion; newer recovery remains available',initialFiles:['apps/cad-studio/test/autosave-save-boundary-browser.mjs'],requiredFrozen:['apps/cad-studio/src/storage/project.ts','apps/cad-studio/src/storage/useProject.ts'],limits:['Actual desktop Chrome OPFS only. Native folders and in-flight checkpoints begun before Save are not qualified. Unknown checkpoints remain eligible.']});
+await f.run(async () => {
+  await f.newPage();
+  const name=`save-boundary-${Date.now()}`;
+  const doc=JSON.parse(await readFile(new URL('./fixtures/bracket.bcad',import.meta.url),'utf8'));
+  doc.parameters.H=10; doc.nodes[1].height={parameter:'H'};
+  await f.page.evaluate(async ({name,doc})=>{
+    const root=await navigator.storage.getDirectory(); const projects=await root.getDirectoryHandle('projects',{create:true});const p=await projects.getDirectoryHandle(name,{create:true});
+    const h=await p.getFileHandle('part.bcad',{create:true});const w=await h.createWritable();await w.write(JSON.stringify(doc));await w.close();
+  },{name,doc});
+  const open=async()=>{
+    await f.page.getByRole('button',{name:'Project and versions',exact:true}).click();
+    const panel=f.page.getByRole('complementary',{name:'Versions panel',exact:true});
+    await panel.getByRole('textbox',{name:'Browser project name',exact:true}).fill(name);
+    await panel.getByRole('button',{name:'Project in this browser',exact:true}).click();
+    await panel.getByRole('button',{name:'Open part.bcad',exact:true}).click();await f.page.waitForFunction(()=>typeof window.__studioDoc?.parameters?.H === 'number');await f.ready();
+  };
+  await open();
+  const read=async(path)=>f.page.evaluate(async({name,path})=>{try{let p=await navigator.storage.getDirectory();for(const dir of ['projects',name,...path.split('/').slice(0,-1)])p=await p.getDirectoryHandle(dir);const h=await p.getFileHandle(path.split('/').at(-1));return JSON.parse(await(await h.getFile()).text());}catch(e){if(e.name==='NotFoundError')return null;throw e;}},{name,path});
+  await f.setParameter('H',11,'01-autosave-edit');
+  await f.page.waitForTimeout(1200);
+  assert.equal((await read('.barocss/autosave/part.bcad')).parameters.H,11);
+  const panel=await f.openParameters();const field=panel.getByLabel('Value of H',{exact:true});await field.fill('14');await field.press('Enter');
+  await f.page.getByRole('button',{name:'Save',exact:true}).click();
+  await f.page.waitForFunction(()=>!document.querySelector('[aria-label="Unsaved changes"]'));
+  await f.closeParameters(panel);await f.page.waitForTimeout(1200);
+  assert.equal((await read('part.bcad')).parameters.H,14);
+  assert.equal((await read('.barocss/autosave/part.bcad')).parameters.H,11);
+  assert.equal((await read('.barocss/autosave-saved/part.bcad.json')).format,'barocss-autosave-save-boundary');
+  await f.snapshot('02-save-retains-checkpoint');
+  await f.page.reload();await f.ready();await open();
+  assert.equal((await f.doc()).parameters.H,14);
+  assert.equal(await f.page.getByRole('status',{name:'Autosaved work',exact:true}).count(),0);
+  await f.snapshot('03-reopen-no-stale-offer');
+  await f.setParameter('H',15,'04-newer-edit');await f.page.waitForTimeout(1200);
+  assert.equal((await read('.barocss/autosave/part.bcad')).parameters.H,15);
+  await f.page.reload();await f.ready();await open();
+  const warning=f.page.getByRole('status',{name:'Autosaved work',exact:true});await warning.waitFor();
+  await warning.getByRole('button',{name:'Restore autosaved work',exact:true}).click();await f.ready();
+  assert.equal((await f.doc()).parameters.H,15);assert.equal((await read('part.bcad')).parameters.H,14);
+  await f.snapshot('05-newer-checkpoint-restored');
+});
