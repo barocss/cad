@@ -94,7 +94,7 @@ test('hole pattern counts never round or clamp creation/history input', async ()
         assert.deepEqual(count.integerRange, { min: 1, max: 64 });
         for (const invalid of [NaN, Infinity, -1, 0, 2.4, 65]) assert.deepEqual(count.set(made.nodes, invalid), made.nodes);
         for (const valid of [1, 2, 64]) {
-          const changed = count.set(made.nodes, valid)[i]; assert.ok(changed.kind === 'hole');
+          const changed: StudioDoc['nodes'][number] = count.set(made.nodes, valid)[i]; assert.ok(changed.kind === 'hole');
           assert.deepEqual(changed, { ...node, pattern: { ...node.pattern!, count: valid } });
         }
       }
