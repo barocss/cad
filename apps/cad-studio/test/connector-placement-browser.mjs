@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {createFlow} from './flow-helper.mjs';
+const f=await createFlow({name:'connector-placement',output:process.argv[2],envFrozen:'CONNECTOR_PLACEMENT_FROZEN',initialFiles:['packages/barocss-cad-model/src/app/connectorCommands.ts','apps/cad-studio/test/connector-placement-browser.mjs'],qualification:'Connector face placement, rotation, keepout creation and refusal retain the intended source.'});
+const row={id:'test-port',name:'Test port',estimate:true,opening:{shape:'stadium',width:8.34,height:2.56,depth:6.2},body:{shape:'stadium',width:8.25,height:2.4,length:6.51},keepOut:{margin:1,depth:15}};
+const base={format:'barocss-cad-model',schema:3,units:'mm',parameters:{},nodes:[{kind:'sketch',profile:'rectangle',min:[0,0],max:[40,20],id:'n0'},{kind:'extrude',sketch:0,height:10,id:'n1'}],outputs:{b1:{node:1,side:'solid'}},nextId:2,connectors:{version:1,rows:[row]}};
+const open=doc=>f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'connector.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(doc))});
+const hud=()=>f.page.locator('.hud'),field=name=>hud().getByLabel(name,{exact:true});
+async function start(){await open(base);await f.same(base);await f.page.getByRole('button',{name:'Top',exact:true}).click();await f.page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));const at=await f.page.evaluate(()=>window.__studioScreenOf([20,10,10]));await f.page.mouse.click(...at);await f.page.waitForFunction(()=>window.__studioSelection.selection.faces.length===1);await f.command('Connector opening');await hud().waitFor();}
+const ready=()=>f.page.waitForFunction(()=>[...document.querySelectorAll('.hud button')].some(b=>b.textContent.trim()==='Apply'&&!b.disabled),null,{timeout:30000});
+const stadium=(w,h)=>(w-h)*h+Math.PI*h*h/4;
+await f.run(async()=>{
+ await f.newPage();await start();await field("Off the face's centre along its width").fill('17');await f.page.waitForFunction(()=>document.querySelector('.hud .status')?.textContent?.includes('refused'));assert.match(await hud().locator('.hud-error').innerText(),/does not fit on that face/);await f.same(base);await f.snapshot('01-off-face-refusal');
+ await field("Off the face's centre along its width").fill('5');await field('Rotation').fill('90');await ready();await hud().getByRole('button',{name:'Apply',exact:true}).click();await f.changed(base);await hud().waitFor({state:'hidden'});const made=await f.doc();const opening=made.nodes[2];assert.equal(opening.kind,'connector-opening');assert.equal(opening.face,'n1.top');assert.equal(opening.rotation,90);assert.ok(opening.center.every((v,i)=>Math.abs(v-[20,15,10][i])<1e-8));assert.equal(made.nodes[3].opening,2);assert.equal(made.references.keepouts.length,1);assert.equal(made.references.keepouts[0].id,'connector-n2');
+ const bodies=(await f.bodies()).bodies;assert.equal(bodies.length,2);for(const want of [8000-stadium(8.34,2.56)*6.2,stadium(8.25,2.4)*6.51])assert.ok(bodies.some(b=>Math.abs(b.volume-want)<1e-6));await f.snapshot('02-placed-connector');
+ await f.openFeatureEditor(2);assert.match(await f.editor().innerText(),/no editable dimensions/i);await f.snapshot('03-history-placement-gap');await f.closeEditor();await f.same(made);
+ await f.undo();await f.same(base);await f.redo();await f.same(made);await open(made);await f.same(made);assert.equal((await f.bodies()).bodies.length,2);assert.deepEqual(f.report.downloads,[]);
+});
