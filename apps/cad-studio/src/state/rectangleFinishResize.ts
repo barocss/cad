@@ -18,8 +18,9 @@ function plain(nodes:readonly ModelNode[]):boolean {
   ||![...sk.min,...sk.max].every(finite)||!(Number(sk.max[0])>Number(sk.min[0])&&Number(sk.max[1])>Number(sk.min[1])))return false;
  if(ex.kind!=='extrude'||ex.sketch!==0||!only(ex,['id','kind','sketch','height','from','draft'])||!finite(ex.height)||ex.height<=0
   ||(ex.from!==undefined&&!finite(ex.from))||(ex.draft!==undefined&&ex.draft!==0))return false;
- if(f.kind!=='fillet'||!only(f,['id','kind','parent','edges','radius','radii','sigs'])||f.parent.node!==1||f.parent.side!=='solid'
-  ||f.edges.length!==1||!f.edges[0]||f.edges[0].includes('+')||!finite(f.radius)||f.radius<=0||!f.radii||f.radii.length<2||f.radii.length>4)return false;
+ if((f.kind!=='fillet'&&f.kind!=='chamfer')||f.parent.node!==1||f.parent.side!=='solid'||f.edges.length!==1||!f.edges[0]||f.edges[0].includes('+'))return false;
+ if(f.kind==='chamfer')return only(f,['id','kind','parent','edges','distance','sigs'])&&finite(f.distance)&&f.distance>0;
+ if(!only(f,['id','kind','parent','edges','radius','radii','sigs'])||!finite(f.radius)||f.radius<=0||!f.radii||f.radii.length<2||f.radii.length>4)return false;
  const last=f.radii.length-1;
  return f.radii.every((p,i)=>p.at.length===3&&p.at.every(finite)&&finite(p.radius)&&p.radius>0
   &&(i===0||i===last?p.atEnd===true&&p.fraction===undefined:p.atEnd===undefined&&finite(p.fraction)&&p.fraction>1e-9&&p.fraction<1-1e-9&&(i===1||p.fraction-f.radii![i-1].fraction!>1e-9)))
@@ -101,7 +102,7 @@ function endpointAssignment(feature:Extract<ModelNode,{kind:'fillet'}>,edge:Disp
 }
 /** Proof, not geometric rematching: whole native topology bijection AND the same semantic rectangle corners. */
 export function proveRectangleFinishResize(before:StudioDoc,next:StudioDoc,oldBodies:readonly BodyResult[],newBodies:readonly BodyResult[]):StudioDoc|null {
- if(!isRectangleFinishResize(before,next,1))return null;const feature=next.nodes[2];if(feature.kind!=='fillet')return null;
+ if(!isRectangleFinishResize(before,next,1))return null;const feature=next.nodes[2];if(feature.kind!=='fillet'&&feature.kind!=='chamfer')return null;
  const name=feature.edges[0],oldBody=parent(before,oldBodies),newBody=parent(next,newBodies);if(!oldBody||!newBody)return null;
  const oldTopology=rectangleTopology(before,oldBody),newTopology=rectangleTopology(next,newBody);
  if(!oldTopology||!newTopology||!equalRoles(oldTopology.edgeRoles,newTopology.edgeRoles)||!equalRoles(oldTopology.faceNames,newTopology.faceNames)
@@ -109,8 +110,11 @@ export function proveRectangleFinishResize(before:StudioDoc,next:StudioDoc,oldBo
  const oldEdge=exactEdge(oldBody,name),newEdge=exactEdge(newBody,name);if(!oldEdge||!newEdge)return null;
  const a=corner(before,oldEdge.a),b=corner(before,oldEdge.b),c=corner(next,newEdge.a),d=corner(next,newEdge.b);
  if(!a||!b||!c||!d||!same(a,c)||!same(b,d)||a.filter((v,i)=>v!==b[i]).length!==1)return null;
- const oldAssignment=endpointAssignment(feature,oldEdge),newAssignment=endpointAssignment(feature,newEdge);
- if(oldAssignment===null||newAssignment===null||oldAssignment!==newAssignment)return null;
+ // Equal-distance Chamfer is symmetric; only varying Fillet carries an endpoint radius law.
+ if(feature.kind==='fillet'){
+  const oldAssignment=endpointAssignment(feature,oldEdge),newAssignment=endpointAssignment(feature,newEdge);
+  if(oldAssignment===null||newAssignment===null||oldAssignment!==newAssignment)return null;
+ }
  const oldSig=signaturesOf(oldBody).edges.get(name),newSig=signaturesOf(newBody).edges.get(name);
  if(!oldSig||!newSig||oldSig.shared!==undefined||newSig.shared!==undefined||!same(feature.sigs?.[name],toSig(oldSig)))return null;
  return {...next,nodes:next.nodes.map((node,i)=>i===2?{...feature,sigs:{...feature.sigs,[name]:toSig(newSig)}}:node)};

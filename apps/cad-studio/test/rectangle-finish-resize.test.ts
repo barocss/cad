@@ -71,3 +71,17 @@ test('whole cuboid topology permits coherent opaque ID relabeling but rejects al
  const partial=structuredClone(newBodies);partial[0].mesh.edges[0].nativeJoint!.edgeId='one-only';assert.equal(proveRectangleFinishResize(before,next,oldBodies,partial),null);
  const swapped=structuredClone(newBodies),[a,b]=swapped[0].mesh.edges;[a.nativeJoint!.edgeId,b.nativeJoint!.edgeId]=[b.nativeJoint!.edgeId,a.nativeJoint!.edgeId];assert.equal(proveRectangleFinishResize(before,next,oldBodies,swapped),null);
 });
+
+test('terminal numeric equal-distance Chamfer reuses the full cuboid proof without an endpoint law',()=>{
+ const f=fixture(),old=f.before.nodes[2];assert.ok(old.kind==='fillet');if(old.kind!=='fillet')return;
+ const chamfer:ModelNode={id:old.id,kind:'chamfer',parent:old.parent,edges:old.edges,distance:2,sigs:old.sigs};
+ const before={...f.before,nodes:f.before.nodes.map((n,i)=>i===2?chamfer:n)},next={...f.next,nodes:f.next.nodes.map((n,i)=>i===2?chamfer:n)};
+ assert.ok(isRectangleFinishResize(before,next,1));const result=proveRectangleFinishResize(before,next,f.oldBodies,f.newBodies);assert.ok(result);
+ const changed=result.nodes[2];assert.equal(changed.kind,'chamfer');assert.deepEqual(changed,{...chamfer,sigs:{...chamfer.sigs,[f.name]:toSig(signaturesOf(f.newBodies[0]).edges.get(f.name)!)}});
+ assert.equal(changed.edges,chamfer.edges);const evaluation=evaluateDoc(result,3);assert.ok(evaluation.ok);if(evaluation.ok)assert.ok(Math.abs(evaluation.bodies[0].volume!-(40*25*10-40*2*2/2))<1e-8);
+ for(const patch of [{distance:0},{distance:-1},{distance:NaN},{distance:Infinity},{distance:{parameter:'D'}},{distance2:3},{angle:30},{section:{kind:'conic',rho:0.5}},{held:'missing'},{suppressed:true},{rematched:{}},{edges:['a','b']}]){
+  const a:StudioDoc={...before,nodes:before.nodes.map((n,i)=>i===2?{...chamfer,...patch} as ModelNode:n)},b:StudioDoc={...next,nodes:next.nodes.map((n,i)=>i===2?{...chamfer,...patch} as ModelNode:n)};
+  assert.equal(isRectangleFinishResize(a,b,1),false);assert.equal(proveRectangleFinishResize(a,b,f.oldBodies,f.newBodies),null);
+ }
+ const constant:ModelNode={...old,radii:undefined};assert.equal(isRectangleFinishResize({...before,nodes:[before.nodes[0],before.nodes[1],constant]},{...next,nodes:[next.nodes[0],next.nodes[1],constant]},1),false,'constant Fillet remains outside this task');
+});

@@ -3669,7 +3669,7 @@ export function App() {
             if (!reply || !current()) return;
             if (reply.ok) {
               if (!resize) { commit(next); return; }
-              const failure = {title:'Size not applied',hint:'The original Fillet edge could not be verified. Keep the current size or explicitly replace its edge first.',detail:'No reference was renamed or refreshed.'};
+              const failure = {title:'Size not applied',hint:`The original ${next.nodes[2].kind === 'chamfer' ? 'Chamfer' : 'Fillet'} edge could not be verified. Keep the current size or explicitly replace its edge first.`,detail:'No reference was renamed or refreshed.'};
               try {
                 const before = await engine.part(prefixDoc(doc,2),revision.current++,'refs');
                 if (!current()) return;
