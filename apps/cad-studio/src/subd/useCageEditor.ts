@@ -1,3 +1,4 @@
+import { updateSubdCage } from '@barocss/cad-model/subd/cageProvenance';
 // R8.2 (D81): the cage editor in the App — a session on one subd node: its overlay, picking, the gizmo (Shift held
 // as a drag starts: extrude), the body shown (while dragged: the quick limit preview; after: the exact body, built
 // once per step), the keys (1 2 3 modes, Tab Box/Smooth, ⌘Z the session's undo, Enter Done, Esc Cancel), and Done
@@ -15,7 +16,6 @@ import { Lanes } from '../engine/lanes';
 import { cageDoneReadiness, type CageBuildReceipt } from './cageCommitReadiness';
 import { cageBeginPolicy } from './cageBeginPolicy';
 
-type SubdNode = Extract<ModelNode, { kind: 'subd' }>;
 /** The cage's exact build: one lane, each step's build replacing the last. */
 const CAGE_LANE = 'cage';
 export interface CageEditor {
@@ -50,7 +50,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
     addEventListener('keydown', down); addEventListener('keyup', up);
     return () => { removeEventListener('keydown', down); removeEventListener('keyup', up); };
   }, []);
-  const withCage = useCallback((s: CageSession): StudioDoc => ({ ...doc, nodes: doc.nodes.map((n, i) => i === s.node ? (() => { const node: Partial<SubdNode> = { ...(n as SubdNode) }; delete node.mirror; return { ...node, cage: s.cage, ...(s.mirror ? { mirror: s.mirror } : {}) } as ModelNode; })() : n) }), [doc]);
+  const withCage = useCallback((s: CageSession): StudioDoc => ({ ...doc, nodes: doc.nodes.map((node, i) => i === s.node && node.kind === 'subd' ? updateSubdCage(node, s.cage, s.mirror ?? undefined) : node) }), [doc]);
   // The exact body after each step (not while dragged): the kernel's build of the document with the session's cage.
   // (R4b: on its O9 lane — a newer step's build, or the session gone, makes an older reply stale, never shown.)
   const lanes = useMemo(() => new Lanes(), []);

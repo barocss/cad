@@ -9,6 +9,7 @@ import { commitDrag, emptyCageSel, runOp, selectedVertices, startSession, valida
 import type { ToolDefinition } from './api';
 import { r6Signed as r6 } from '../util/round';
 import { isObj, isVec3 } from '../util/guards';
+import { updateSubdCage } from '../subd/cageProvenance';
 
 type SubdNode = Extract<ModelNode, { kind: 'subd' }>;
 type V3 = [number, number, number];
@@ -73,8 +74,7 @@ function cageSummary(n: SubdNode, s: CageSession): Record<string, unknown> {
 function withCage(doc: StudioDoc, s: CageSession): StudioDoc {
   return { ...doc, nodes: doc.nodes.map((n, i) => {
     if (i !== s.node) return n;
-    const node = { ...(n as SubdNode) } as Partial<SubdNode>; delete node.mirror;
-    return { ...node, cage: s.cage, ...(s.mirror ? { mirror: s.mirror } : {}) } as ModelNode;
+    return updateSubdCage(n as SubdNode, s.cage, s.mirror);
   }) };
 }
 

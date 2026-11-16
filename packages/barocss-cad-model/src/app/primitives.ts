@@ -5,6 +5,7 @@ import { bevelGearDimensions, wormDimensions, wormWheelSpec, checkWormPair } fro
 import { withNode, type CamLawName, type LoopSegment, type ModelNode, type StudioDoc } from '../engine/doc';
 import type { Command, Ctx, HandleSpec, Values } from './commands';
 import { refusal } from '../engine/refusal';
+import { subdPrimitiveValues } from './subdPrimitiveRecipe';
 
 const ok = { ok: true as const };
 const r1 = (v: number) => Math.round(v * 10) / 10;
@@ -320,9 +321,10 @@ export const primitives: Command[] = [
     place: centred,
     handles: (_, v) => { const [R, r, x, y, z] = n(v, 'R', 'r', 'x', 'y', 'z'); return [puck([x, y, z]), arrow('R', [x + R + r, y, z + r], X, { min: 1 }), arrow('r', [x + R, y, z + 2 * r], Z, { scale: 0.5 })]; },
     build: (ctx, v) => {
-      const [R, r] = n(v, 'R', 'r');
-      if (!(r < R)) throw refusal('PRIMITIVE_SIZE', 'The tube radius must be smaller than the ring radius.');
-      return withNode(ctx.doc, { kind: 'subd', name: 'torus', cage: torusCage(R, r, Math.round(Number(v.nu)), Math.round(Number(v.nv)), n(v, 'x', 'y', 'z') as [number, number, number]) });
+      const values = subdPrimitiveValues('subd-torus', v), { R, r, nu, nv, x, y, z } = values;
+      const cage = torusCage(R, r, nu, nv, [x, y, z]);
+      if (!cage.positions.every(Number.isFinite)) throw refusal('PRIMITIVE_SIZE', 'SubD primitive coordinates must remain finite.');
+      return withNode(ctx.doc, { kind: 'subd', name: 'torus', cage, made: { command: 'subd-torus', values, nodes: 1 } });
     },
   },
   {
@@ -333,9 +335,10 @@ export const primitives: Command[] = [
     place: centred,
     handles: (_, v) => { const [r, ri, h, x, y, z] = n(v, 'r', 'ri', 'h', 'x', 'y', 'z'); return [puck([x, y, z]), arrow('r', [x + r, y, z + h / 2], X, { min: 1 }), arrow('ri', [x - ri, y, z + h], [-1, 0, 0], { min: 0.5 }), arrow('h', [x + (r + ri) / 2, y, z + h], Z, { min: 1 })]; },
     build: (ctx, v) => {
-      const [r, ri, h] = n(v, 'r', 'ri', 'h');
-      if (!(ri < r)) throw refusal('PRIMITIVE_SIZE', 'The inner radius must be smaller than the outer one.');
-      return withNode(ctx.doc, { kind: 'subd', name: 'tube', cage: tubeCage(r, ri, h, Math.round(Number(v.nu)), Math.round(Number(v.nh)), n(v, 'x', 'y', 'z') as [number, number, number]) });
+      const values = subdPrimitiveValues('subd-tube', v), { r, ri, h, nu, nh, x, y, z } = values;
+      const cage = tubeCage(r, ri, h, nu, nh, [x, y, z]);
+      if (!cage.positions.every(Number.isFinite)) throw refusal('PRIMITIVE_SIZE', 'SubD primitive coordinates must remain finite.');
+      return withNode(ctx.doc, { kind: 'subd', name: 'tube', cage, made: { command: 'subd-tube', values, nodes: 1 } });
     },
   },
   {

@@ -801,7 +801,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
    * numbers); the body is its exact limit surface, bicubic B-spline faces `<id>.patch<k>` (a sheet when the cage has a boundary).
    */
   // (`mirror`: the cage is one half, mirrored across that plane through the origin for the body, R8.2, D81.)
-  | { kind: 'subd'; name: string; cage: { positions: number[]; faces: number[][]; creases?: [number, number][] }; mirror?: 'x' | 'y' | 'z' }
+  | { kind: 'subd'; name: string; cage: { positions: number[]; faces: number[][]; creases?: [number, number][] }; mirror?: 'x' | 'y' | 'z'; made?: Made }
   /** Direct surfaces (copied, by their names) sewn along their edges into one closed solid; edges `tolerance` mm apart still meet. */
   | { kind: 'sew'; names: string[]; surfaces: { degreeU: number; degreeV: number; knotsU: number[]; knotsV: number[]; controlPoints: [number, number, number][][]; weights: number[][] }[]; tolerance?: number }
   /** Draft on named side faces: angle in degrees, signed principal pull (default +Z), neutral world coordinate in mm (default the body's minimum for positive pull, maximum for negative pull). */

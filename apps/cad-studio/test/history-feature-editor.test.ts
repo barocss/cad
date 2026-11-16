@@ -176,3 +176,29 @@ test('connector History blocks stale or drafted sources before command creation'
     action.start(); assert.deepEqual(f.events, []); assert.equal(f.active.get(), null);
   }
 });
+
+function subdPrimitiveFixture() {
+  const f = fixture(), source = rectanglePart(10, 10, 10), command = commands.find(c => c.id === 'subd-torus')!;
+  const ctx = { doc: source, bodies: [], selection: { bodies: [], edges: [], faces: [] } };
+  const doc = command.build!(ctx, { R: 12, r: 3, nu: 8, nv: 4, x: 30, y: 0, z: 0 });
+  f.props.model = { ...f.props.model, doc, evaluated: doc, commandDoc: doc, editNode: 2 };
+  f.props.commands.ctx = { ...ctx, doc };
+  f.props.owner = { ...f.props.owner, document: () => doc, evaluated: () => doc, ownsEvaluatedSource: () => true };
+  return f;
+}
+test('owned SubD primitive enters saved command and retires on source change', () => {
+  const f = subdPrimitiveFixture(), action = f.editor().savedFeatureEdit;
+  assert.equal(action?.label, 'Edit SubD torus');action!.start();
+  assert.deepEqual(f.events, ['discard', 'close']);assert.equal(f.active.get()?.values.nu, 8);
+  assert.equal(f.active.get()?.ownsSource?.(), true);f.props.owner.document = () => ({ ...f.props.model.doc });
+  assert.equal(f.active.get()?.ownsSource?.(), false);
+});
+test('SubD primitive draft blocks entry and a changed cage never gains primitive controls', () => {
+  const f = subdPrimitiveFixture(); f.props.owner.hasDraft = () => true; f.editor().savedFeatureEdit!.start();
+  assert.deepEqual(f.events, []);
+  const doc = f.props.model.doc, node = doc.nodes[2];assert.equal(node.kind, 'subd');if(node.kind!=='subd')return;
+  const positions = [...node.cage.positions];positions[0] += 1;
+  const changed = { ...doc, nodes: doc.nodes.map((n,i)=>i===2?{...node,cage:{...node.cage,positions}}:n) };
+  f.props.model = { ...f.props.model, doc: changed, evaluated: changed, commandDoc: changed };
+  assert.equal(f.editor().savedFeatureEdit, undefined);
+});
