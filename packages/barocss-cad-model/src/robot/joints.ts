@@ -299,7 +299,7 @@ export function jointTree(input: TreeInput): JointTree {
     parent.set(best[1], best[0]); order.push(best[1]); used.add(pairKey(best[0], best[1]));
   }
   const links: Link[] = order.map(p => ({ id: p, part: p, name: nameOf(p) })), joints: Joint[] = [];
-  for (const p of parts) if (!parent.has(p)) problems.push({ code: 'NOT_CONNECTED', message: `${nameOf(p)} is joined to no other part by mates and is not fixed: it is not in the robot.`, parts: [p] });
+  for (const p of parts) if (!parent.has(p)) problems.push({ code: 'NOT_CONNECTED', message: `${nameOf(p)} (${p}) is not reachable from the selected base ${nameOf(base)} (${base}) through the accepted mate/fixed paths, so it is excluded from this joint tree. Check the selected base and existing relationships.`, parts: [p] });
 
   const limitOf = (key: string, type: JointType): Joint['limit'] => { const s = settings.joints?.[key]; return s ? jointSettingsIn(type, s) : undefined; };
   for (const child of order.slice(1)) {
