@@ -3,6 +3,8 @@ import type { ContinuityEdge, ContinuityReply, ContinuityRequest } from '@barocs
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
 
+import { continuityAngleLabel } from './continuityAngleLabel';
+
 type Result = Extract<ContinuityReply, { measurement: unknown }>['measurement'];
 
 function EdgeContinuityRead({ picked, read }: {
@@ -77,7 +79,7 @@ function EdgeContinuityRead({ picked, read }: {
       {error && <div className="empty">{error}</div>}
       {result?.status === 'unsupported' && <div className="empty">Cannot measure this joint. {refusalLabel[result.reason]}</div>}
       {result?.status === 'measured' && <>
-        <div className="kv"><span>Sampled face-normal angle</span><b data-continuity-angle>{formatValue(result.minimumAngleDegrees)} – {formatValue(result.maximumAngleDegrees)}°</b></div>
+        <div className="kv"><span>Sampled face-normal angle</span><b data-continuity-angle title="Rounded to 0.000001°. Sampled angles do not establish a continuity grade.">{continuityAngleLabel(result.minimumAngleDegrees, result.maximumAngleDegrees)}</b></div>
         {result.curvature?.status === 'measured' && <div className="kv"><span>Max sampled cross-edge curvature difference</span>
           <b data-continuity-curvature>{formatValue(result.curvature.maximumDifference)} mm⁻¹</b></div>}
         {result.curvature?.status === 'unavailable' && <div className="empty" data-continuity-curvature-unavailable>

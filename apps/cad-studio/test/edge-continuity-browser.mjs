@@ -90,7 +90,8 @@ async function readAngle() {
   const value = result().locator('[data-continuity-angle]');
   await value.waitFor();
   const text = await value.textContent();
-  assert.ok(text.endsWith('°'));
+  assert.ok(text === '0°' || text === '90°', `single rounded angle: ${text}`);
+  assert.match(await value.getAttribute('title'), /Rounded to 0\.000001°/);
   assert.match(await result().innerText(), /Native samples\s+8/);
   return text.slice(0, -1).split('–').map(Number);
 }
