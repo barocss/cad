@@ -21,3 +21,37 @@ test('several display edges of one name (a split chain) are all highlighted once
   const sel = bandHighlight([body(1, [['n'], ['m'], ['n']])], [{ side: 'a', parent: { node: 1, side: 'solid' }, names: ['n', 'n'] }]);
   assert.deepEqual(sel?.edges, [{ body: 0, edge: 0 }, { body: 0, edge: 2 }]);
 });
+
+import { activeBandHighlight } from '../src/app/bandHighlight';
+import { BandSurfaceEdit, bandSurfaceCommand } from '@barocss/cad-model/app/bandSurfaceCommand';
+import { emptyDoc, type ModelNode } from '@barocss/cad-model/engine/doc';
+import type { Active } from '../src/app/commandState';
+
+function activeBand() {
+  const node: Extract<ModelNode, { kind: 'band-surface' }> = { kind: 'band-surface', id: 'band', version: 1,
+    a: { parent: { node: 1, side: 'solid' }, edges: ['a'] }, b: { parent: { node: 3, side: 'solid' }, edges: ['b'] } };
+  const doc = { ...emptyDoc(), nodes: [node] };
+  const cmd = new BandSurfaceEdit(0, node.id);
+  const ctx = { doc, bodies: [], selection: { faces: [], edges: [], bodies: [] } };
+  const active: Active = { cmd, ctx, preview: 'ok', values: cmd.defaults(ctx) };
+  return { doc, active };
+}
+
+test('History Band and creation resolve current names against shown body order', () => {
+  const { doc, active } = activeBand(), shown = [body(3, [['b']]), body(1, [['a']])];
+  const expected = { faces: [], edges: [{ body: 1, edge: 0 }, { body: 0, edge: 0 }], bodies: [] };
+  assert.deepEqual(activeBandHighlight(active, doc, shown), expected);
+  assert.deepEqual(activeBandHighlight({ ...active, cmd: bandSurfaceCommand }, doc, shown), expected);
+  assert.deepEqual(activeBandHighlight({ ...active, values: { ...active.values, a: '' } }, doc, shown)?.edges, [{ body: 0, edge: 0 }]);
+  assert.deepEqual(activeBandHighlight(active, doc, [body(5, [['a']]), body(3, [['b']])])?.edges, [{ body: 1, edge: 0 }], 'consumed parent is not inferred from identical names');
+});
+
+test('stale source, replaced History owner, unrelated edits and cancellation have no Band highlight', () => {
+  const { doc, active } = activeBand(), shown = [body(1, [['a']]), body(3, [['b']])];
+  assert.equal(activeBandHighlight(active, { ...doc }, shown), null);
+  assert.equal(activeBandHighlight({ ...active, ownsSource: () => false }, doc, shown), null);
+  const replaced = { ...doc, nodes: doc.nodes.map(n => ({ ...n, id: 'other' })) };
+  assert.equal(activeBandHighlight({ ...active, ctx: { ...active.ctx, doc: replaced } }, replaced, shown), null);
+  assert.equal(activeBandHighlight({ ...active, cmd: { ...bandSurfaceCommand, id: 'edit' } }, doc, shown), null);
+  assert.equal(activeBandHighlight(null, doc, shown), null);
+});

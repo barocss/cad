@@ -107,8 +107,7 @@ import { ModelExportDialogs } from './files/ModelExportDialogs';
 import { StepExportPanel } from './files/StepExportPanel';
 import { changesBeyondVariability } from './app/documentChanges';
 import { sameMeshes, withMasses, samePlacement, meshVolume } from './app/bodyResults';
-import { bandPicksOf } from '@barocss/cad-model/app/bandSurfaceCommand';
-import { bandHighlight } from './app/bandHighlight';
+import { activeBandHighlight } from './app/bandHighlight';
 import { activateDraftOutline, draftShapeOrder, sketchCutInputs, TOOLS, sketchRegion, switchTool, detachSketchLink, bezierEdit } from './app/sketchControls';
 import { ellipseError } from '@barocss/cad-model/sketch/ellipse';
 import { detachRoundedInsetRecipe, resizeRoundedInsetSource, roundedInsetSourceWidth, validateRoundedInsetDocument } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
@@ -2750,7 +2749,8 @@ export function App() {
   });
   const sectionFrom = nextSerial(evaluated);
   // (The Band surface command highlights what it has picked — A and B — while it runs, also when its preview hides the selection.)
-  const bandShown = active?.cmd.id === 'band-surface' ? bandHighlight(bodies, bandPicksOf(active.values)) : null;
+  const bandShown = fresh && !busy && (shownBodies === drawnBodies || shownBodies === previewBodies)
+    ? activeBandHighlight(active, commandDoc, shownBodies) : null;
   commandPickScope.current = fresh && !busy && !section && !sketch && !inPlace && !cageEd.session && !routePreviewBodies
     && !ghost && !rendering && !drawing && !bodyDrag && previewMode === 'none' && (shownBodies === drawnBodies || shownBodies === previewBodies)
     ? { bodies: shownBodies, hidden: hiddenBodies, preview: shownBodies === previewBodies } : null;
