@@ -49,6 +49,41 @@ async function edit(act) { const before = await f.doc(); await act(); await f.ch
 const want = (explode, view) => [{ name: 'Blocks', add: ['b1', 'b2'], explode: 0, view: false }, { name: 'Post', add: ['post'], explode: 0, view }, { name: 'Cap', add: ['cap'], explode, view: false }];
 
 await f.run(async () => {
+  for (const [width, height] of [[1024, 800], [1440, 900]]) {
+    await f.newPage(); await f.page.setViewportSize({ width, height });
+    await f.openFile(fixture, 2); const initial = await f.doc();
+    await f.page.evaluate(() => document.activeElement?.blur());
+    await f.command('Assembly steps');
+    await pick('Block 1'); await edit(() => button('New step from selection').click());
+    await pick('Post'); await edit(() => button('New step from selection').click());
+    const before = await f.doc();
+    await button('Previous step').click();
+    assert.equal(await button('Collapse Steps').locator('[data-slot="badge"]').count(), 0);
+    await button('Collapse Steps').click();
+    assert.match(await button('Expand Steps').innerText(), /1\/2/);
+    await button('Expand Steps').click();
+    await button('Go to its step').click();
+    assert.equal((await shown()).position, 'Step 2 of 2');
+    await button('Previous step').click(); await pick('Cap');
+    await panel().getByText('Cap is in no step. Hidden until the last step. Use Add selected to include it here.', { exact: true }).waitFor();
+    assert.equal(await gizmos(), 0);
+    const details = panel().getByRole('button', { name: /^Details: 1 notice$/ });
+    await details.focus(); await f.page.keyboard.press('Enter');
+    await panel().getByLabel('Show waiting parts faded').check();
+    await panel().getByText('Cap is in no step. Shown faded until the last step. Use Add selected to include it here.', { exact: true }).waitFor();
+    await panel().getByLabel('Show waiting parts faded').uncheck();
+    await f.snapshot(`${width}-unassigned-hidden`);
+    await button('Next step').click();
+    await panel().getByText('Cap is in no step. Shown at this last step. Use Add selected to include it here.', { exact: true }).waitFor();
+    assert.deepEqual(await f.doc(), before, 'navigation and fade do not edit document');
+    await button('Previous step').click();
+    const assigned = await edit(() => button('Add selected parts to this step').click());
+    assert.ok(assigned.assemblySteps[0].add.includes('cap'));
+    assert.deepEqual(assigned.instances, initial.instances); assert.deepEqual(assigned.nodes, initial.nodes); assert.deepEqual(assigned.mates, initial.mates);
+    await f.undo(); await f.same(before); await f.redo(); await f.same(assigned);
+    const saved = await f.save(`${width}-assigned`);
+    await f.freshOpen(saved.file, saved.doc, `${width}-assigned-reopened`);
+  }
   await f.newPage(); await f.openFile(fixture, 2); const original = await f.doc(); await f.snapshot('01-opened');
 
   assert.equal(await explodeLabel(), 'Explode', 'explode off before the steps');

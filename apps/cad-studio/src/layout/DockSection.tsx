@@ -7,7 +7,7 @@ import { Icon } from '../ui/atoms';
  * A section of the dock (G12c): a header — its title, a one-line summary chip, a chevron — that folds its content away;
  * the open state kept per viewer under `id`. `actions`: controls at the header's right, beside the fold (G12e).
  */
-export function DockSection({ id, title, summary, actions, children, onCollapse, expandOn }: { id: string; title: string; summary?: ReactNode; actions?: ReactNode; children: ReactNode; onCollapse?(): void; expandOn?: object }) {
+export function DockSection({ id, title, summary, summaryCollapsedOnly = false, actions, children, onCollapse, expandOn }: { id: string; title: string; summary?: ReactNode; summaryCollapsedOnly?: boolean; actions?: ReactNode; children: ReactNode; onCollapse?(): void; expandOn?: object }) {
   const key = 'studio.dock.' + id;
   const [open, setOpen] = useState(() => { try { return localStorage.getItem(key) !== 'closed'; } catch { return true; } });
   useLayoutEffect(() => { if (expandOn) setOpen(true); }, [expandOn]);
@@ -16,7 +16,7 @@ export function DockSection({ id, title, summary, actions, children, onCollapse,
     <div className="dock-section-bar">
       <CollapsibleTrigger className="dock-section-head" aria-label={(open ? 'Collapse ' : 'Expand ') + title}>
         <span className="card-title">{title.toUpperCase()}</span>
-        {summary !== undefined && <Badge variant="secondary">{summary}</Badge>}
+        {summary !== undefined && (!summaryCollapsedOnly || !open) && <Badge variant="secondary">{summary}</Badge>}
         <span className="grow" />
         <Icon name={open ? 'expand_less' : 'expand_more'} small />
       </CollapsibleTrigger>

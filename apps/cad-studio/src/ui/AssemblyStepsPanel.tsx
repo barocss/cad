@@ -40,7 +40,7 @@ export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, o
 }) {
   const steps = stepsOf(doc), n = steps.length, step = steps[index], instances: readonly PartInstance[] = doc.instances ?? [];
   const nameOf = (id: string) => instances.find(i => i.id === id)?.name ?? id, placed = (id: string) => instances.some(i => i.id === id);
-  return <aside className="card props" aria-label="Assembly steps panel"><DockSection id="steps" title="Steps" summary={n ? `${index + 1}/${n}` : '0'}
+  return <aside className="card props" aria-label="Assembly steps panel"><DockSection id="steps" title="Steps" summaryCollapsedOnly summary={n ? `${index + 1}/${n}` : '0'}
     actions={<Button size="xs" variant="ghost" aria-label="Close steps" title="Close the steps: all parts are shown again" onClick={onClose}><Icon name="close" small /></Button>}>
     <div className="flex flex-col gap-1.5">
       <Button variant="default" aria-label="New step from selection" title="The selected parts become a new last step (a part is in one step only)" onClick={onNew}><Icon name="add" small />New step from selection</Button>
@@ -56,7 +56,7 @@ export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, o
             <span className="min-w-0 flex-1 truncate">{k + 1}. {s.name}</span><span className="muted">{s.add.length}</span></button></li>)}
         </ul>
         {offer?.kind === 'go' && <Button size="xs" variant="secondary" aria-label="Go to its step" title={`${nameOf(offer.part)} is introduced in step ${offer.index + 1}`} onClick={() => onGo(offer.index)}>Go to its step: {offer.name}</Button>}
-        {offer?.kind === 'none' && <div className="text-[11px] text-muted-foreground" role="status">{nameOf(offer.part)} is in no step.</div>}
+        {offer?.kind === 'none' && <div className="text-[11px] text-muted-foreground" role="status">{nameOf(offer.part)} is in no step. {index === n - 1 ? 'Shown at this last step.' : faded ? 'Shown faded until the last step.' : 'Hidden until the last step.'} Use Add selected to include it here.</div>}
         <label className={FIELD}><span>Name</span><CommitText key={step.id} aria-label="Step name" className="w-36" maxLength={60} required value={step.name} onCommit={v => onRename(step.id, v)} /></label>
         <div className="flex flex-col gap-0.5" role="group" aria-label="Parts of this step">
           <div className="flex items-center justify-between text-[11px]"><span className="text-muted-foreground">Parts</span>
@@ -81,12 +81,12 @@ export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, o
           <Button size="xs" variant="ghost" aria-label="Delete step" title="Delete this step: its parts are in no step, nothing is moved" onClick={() => onDelete(step.id)}><Icon name="delete" small /></Button>
         </div>
         <Collapsible>
-          <CollapsibleTrigger className="flex w-full cursor-pointer items-center gap-1 bg-transparent p-0 text-left text-[11px] text-foreground hover:text-[var(--accent)] [&[data-state=open]_.ui-icon]:rotate-90" aria-label="Details"><Icon name="chevron_right" small />Details{problems.length ? ' ·' : ''}</CollapsibleTrigger>
+          <CollapsibleTrigger className="flex w-full cursor-pointer items-center gap-1 bg-transparent p-0 text-left text-[11px] text-foreground hover:text-[var(--accent)] [&[data-state=open]_.ui-icon]:rotate-90" aria-label={problems.length ? `Details: ${problems.length} notice${problems.length === 1 ? '' : 's'}` : 'Details'}><Icon name="chevron_right" small />Details{problems.length ? ` · ${problems.length} notice${problems.length === 1 ? '' : 's'}` : ''}</CollapsibleTrigger>
           <CollapsibleContent className="flex flex-col gap-1 pt-1">
             <label className={FIELD}><span>Note</span><CommitText key={step.id} multiline aria-label="Step note" className="h-12 w-40 min-w-0" maxLength={500} value={step.note ?? ''} onCommit={v => onNote(step.id, v)} /></label>
             <label className={FIELD}><span>Show waiting parts faded</span><input type="checkbox" className={TICK} aria-label="Show waiting parts faded" checked={faded} onChange={e => onFaded(e.target.checked)} /></label>
             {problems.map(p => <div key={p} className="text-[10px] text-muted-foreground" role="status">{p}</div>)}
-            <div className="text-[10px] text-muted-foreground">Steps explain the assembly; they never move a part, a mate, the BOM or an export. Waiting parts are left out of the view (or drawn faded), the step's own parts are highlighted, the explode scale and the view apply only while this panel is open. A part in no step shows at the last step.{faded ? ' Faded waiting parts fade the base part too.' : ''}</div>
+            <div className="text-[10px] text-muted-foreground">Display only: parts, mates, BOM and exports stay unchanged. Current-step parts are highlighted; explode and camera apply while Steps is open. Waiting parts are {faded ? 'faded, including the base part' : 'hidden'}.</div>
           </CollapsibleContent>
         </Collapsible>
       </>}
