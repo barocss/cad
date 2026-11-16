@@ -188,7 +188,7 @@ export function Hud({ store, onChange, onApply, onCancel, onFile, onFilletType, 
       <div className="hud-actions">
         {active.cmd.id === 'mirror' && <Button variant="ghost" aria-pressed={pickingMirrorPlane}
           onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
-          onClick={() => onChange('pickPlane', pickingMirrorPlane ? '' : 'yes')}>Pick plane</Button>}
+          onClick={() => onChange('pickPlane', pickingMirrorPlane ? '' : 'yes')}>{pickingMirrorPlane ? 'Cancel plane pick' : 'Pick plane'}</Button>}
         <span className="grow" />
         {/* Keep native button activation from also reaching the window's Apply shortcut. */}
         <Button variant="ghost" onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }} onClick={onCancel}>Cancel</Button>

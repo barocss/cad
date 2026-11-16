@@ -55,6 +55,7 @@ async function native(label, doc, offset) {
 }
 await f.run(async () => {
   await f.newPage();
+  await f.page.setViewportSize({width:Number(process.argv[3]) || 1440,height:900});
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: 'mirror-plane.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
@@ -80,6 +81,7 @@ await f.run(async () => {
     await f.page.waitForFunction(() => window.__studioSection().shownKeys.join() === 'b2');
     await f.same(seed);
     assert.equal(await button('Apply', hud()).isDisabled(), true);
+    assert.equal(await f.page.locator('.toast').filter({hasText:'Mirror plane not selected'}).count(), 0);
     await f.snapshot('original-plane-pick-mode');
   }
   await clickAt([24, 14, 0]);
@@ -87,6 +89,28 @@ await f.run(async () => {
   await hud().locator('.status.ok').waitFor();
   assert.equal(await field('Plane').inputValue(), 'xy');
   assert.equal(await field('Plane at').inputValue(), baseline ? '10' : '0');
+  await button('Pick plane', hud()).click();
+  await f.page.waitForFunction(() => window.__studioSection().shownKeys.join() === 'b2');
+  assert.equal(await button('Apply', hud()).isDisabled(), true);
+  assert.match(await hud().innerText(), /Previous face/);
+  assert.match(await hud().innerText(), /Cancel plane pick restores/);
+  await clickAt([40, 12, 0]);
+  await f.waitToast(/Mirror plane not selected/);
+  assert.match(await f.page.locator('.toast').innerText(), /Click an original planar face/);
+  assert.doesNotMatch(await f.page.locator('.toast').innerText(), /Use Pick plane/);
+  assert.equal(await field('Plane').inputValue(), 'xy');
+  assert.equal(await field('Plane at').inputValue(), '0');
+  await button('Cancel plane pick', hud()).focus();
+  await f.page.keyboard.press('Enter');
+  await hud().locator('.status.ok').waitFor();
+  assert.equal(await button('Pick plane', hud()).count(), 1);
+  assert.equal(await f.page.locator('.toast').filter({hasText:'Mirror plane not selected'}).count(), 0);
+  assert.doesNotMatch(await hud().innerText(), /Previous face|XY at Z/);
+  await f.same(seed);
+  await button('Pick plane', hud()).click();
+  await f.page.waitForFunction(() => window.__studioSection().shownKeys.join() === 'b2');
+  await clickAt([24, 14, 0]);
+  await hud().locator('.status.ok').waitFor();
   await f.snapshot('clicked-bottom');
   await f.same(seed);
   await button('Apply', hud()).click();
@@ -98,5 +122,15 @@ await f.run(async () => {
   await f.undo();
   await f.same(seed);
   await f.redo();
+  await f.same(applied);
+  const saved = await f.save('mirror-pick-recovery');
+  await f.freshOpen(saved.file, applied, 'mirror-reopened');
+  await native('mirror-reopened-native', applied, 0);
+  await f.page.getByRole('complementary', { name: 'Browser', exact: true }).locator('.ol:not(.ol-step)').first().click();
+  await clickModelCommand(f.page, 'Pattern', 'Mirror');
+  await button('Pick plane', hud()).click();
+  await button('Cancel plane pick', hud()).waitFor();
+  await f.page.keyboard.press('Escape');
+  await hud().waitFor({ state: 'hidden' });
   await f.same(applied);
 });

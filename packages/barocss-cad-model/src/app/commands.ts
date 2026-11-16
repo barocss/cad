@@ -843,8 +843,10 @@ const allCommands: Command[] = [
       if (!b || !changed.includes('plane')) return v;
       return { ...v, at: r1(b.mesh.bounds.max[MIRROR_AXIS[String(v.plane)]]) };
     },
-    steps: (_, v) => [{ label: 'Plane', text: `${String(v.plane).toUpperCase()} at ${'XYZ'[MIRROR_AXIS[String(v.plane)]]} ${String(v.at)}`, done: v.pickPlane !== 'yes' },
-      ...(v.planeFace ? [{ label: 'Plane face', text: String(v.planeFace), done: v.pickPlane !== 'yes' }] : [])],
+    steps: (_, v) => v.pickPlane === 'yes'
+      ? [{ label: 'Pick plane', text: 'Click an original planar face normal to X, Y or Z. Cancel plane pick restores the previous preview.', done: false },
+        ...(v.planeFace ? [{ label: 'Previous face', text: String(v.planeFace), done: false }] : [])]
+      : v.planeFace ? [{ label: 'Plane face', text: String(v.planeFace), done: true }] : [],
     onPick: (ctx, v, hit) => {
       const face = hit.face && ctx.bodies[hit.face.body]?.mesh.faces[hit.face.face];
       if (!face?.nativePlaneName || !face.nativeAxisPlane) return { error: 'Pick an original planar face normal to X, Y or Z.' };
