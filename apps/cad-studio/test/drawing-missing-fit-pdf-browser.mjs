@@ -35,9 +35,20 @@ const pdf = async label => {
   assert.equal(bytes.subarray(0, 8).toString(), '%PDF-1.4');
   const file = join(output, label + '.pdf');
   await writeFile(file, bytes);
-  const info = execFileSync('pdfinfo', [file], { encoding: 'utf8' });
-  assert.match(info, /^Pages:\s+1$/m);
-  assert.match(info, /^Page size:.*\(A3\)/m);
+  if (process.platform === 'darwin') {
+    // PDFKit is part of macOS: inspect real page geometry without requiring Poppler.
+    const script = `import Foundation; import PDFKit
+let doc = PDFDocument(url: URL(fileURLWithPath: CommandLine.arguments[1]))!
+let box = doc.page(at: 0)!.bounds(for: .mediaBox)
+print("\\(doc.pageCount) \\(box.width) \\(box.height)")`;
+    const [count, width, height] = execFileSync('/usr/bin/swift', ['-e', script, file], { encoding: 'utf8' }).trim().split(/\s+/).map(Number);
+    assert.equal(count, 1); const sizes = [width, height].sort((a,b)=>a-b);
+    assert.ok(Math.abs(sizes[0]-297*72/25.4)<1 && Math.abs(sizes[1]-420*72/25.4)<1);
+  } else {
+    const info = execFileSync('pdfinfo', [file], { encoding: 'utf8' });
+    assert.match(info, /^Pages:\s+1$/m);
+    assert.match(info, /^Page size:.*\(A3\)/m);
+  }
   const text = Array.from(bytes.toString('latin1').matchAll(/\(((?:\\.|[^()\\])*)\) Tj/g), match =>
     match[1].replace(/\\([0-7]{3}|[()\\])/g, (_, escape) => escape.length === 3 ? String.fromCharCode(parseInt(escape, 8)) : escape),
   ).join('\n');
