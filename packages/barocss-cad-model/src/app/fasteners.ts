@@ -118,6 +118,9 @@ export function fastenerNodes(doc: StudioDoc, v: Values, sizes: FastenerSizes = 
 function buildFastener(doc: StudioDoc, v: Values, sizes: FastenerSizes): { doc: StudioDoc; extra: { node: number; name: string }[] } {
   const size = sizes[String(v.size)]; if (!size) throw coded('FASTENER_SIZE_ROW', noSizeRow(String(v.size)));
   const x = Number(v.x), y = Number(v.y), z = Number(v.z), len = Number(v.length), at = (h: number) => (h ? { from: h } : {}), kind = String(v.kind);
+  const holeD = Number(v.holeD);
+  if (threaded(kind) && Number.isFinite(holeD) && holeD > 0 && holeFit(size, holeD).fit === 'tight')
+    throw refusal('FASTENER_HOLE_FIT', `Ø${holeD} is too small for M${size.d}: clearance Ø${size.clearance[0]}+, tap drill Ø${size.tap}. Choose a fitting size or place the fastener away from this hole.`);
   if (![x, y, z].every(Number.isFinite)) throw refusal('FASTENER_POSITION', 'Give the fastener a position (X, Y and Z in mm).');
   const ls = lengthsOf(kind, size);
   if (threaded(kind) && !ls.includes(len)) throw refusal('FASTENER_LENGTH', `${String(v.size)} ${kind === 'hex-bolt' ? 'bolts' : 'screws'} come ${ls[0]}–${ls[ls.length - 1]} mm long (${ls.join(', ')}).`);
@@ -231,7 +234,11 @@ export const fastenerCommand: Command = {
   // shortest length that does for it.
   // At a hole's rim (place gives the hole): the size it is for and how — through and clear: washer + nut; a tap drill:
   // tapped (O7: here, where the document's sizes are known).
-  derive: (ctx, v, changed) => {
+  derive: (ctx, v, changed, previous) => {
+    if (previous && !changed.includes('holeD') && changed.some(key => (key === 'x' || key === 'y' || key === 'z')
+      && String(previous[key]).trim() !== '' && String(v[key]).trim() !== ''
+      && Number.isFinite(Number(previous[key])) && Number.isFinite(Number(v[key])) && Number(previous[key]) !== Number(v[key])))
+      v = { ...v, holeD: 0, holeDepth: 0, through: '0' };
     const sizes = fastenerSizesOf(ctx.doc);
     if (changed.includes('holeD') && Number(v.holeD) > 0 && threaded(String(v.kind))) {
       const fit = sizeForHole(Number(v.holeD), sizes);

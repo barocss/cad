@@ -91,14 +91,14 @@ export interface Command {
    * `hole`: placed at a round hole's rim (its diameter, depth and whether it runs through).
    */
   place?(values: Values, point: [number, number, number], normal?: [number, number, number], hole?: PlacedHole): Values;
-  /** Values that follow others (a move's Δ and the position it lands at): `changed` are the keys just set. */
-  derive?(ctx: Ctx, values: Values, changed: readonly string[]): Values;
+  /** Values that follow others (a move's Δ and the position it lands at): `changed` are the keys just set; `previous` is supplied by patchValues before the patch. */
+  derive?(ctx: Ctx, values: Values, changed: readonly string[], previous?: Values): Values;
 }
 
 /** The values after `patch`, with the ones that follow them recomputed. */
 export function patchValues(cmd: Command, ctx: Ctx, values: Values, patch: Values): Values {
   const next = { ...values, ...patch };
-  return cmd.derive ? cmd.derive(ctx, next, Object.keys(patch)) : next;
+  return cmd.derive ? cmd.derive(ctx, next, Object.keys(patch), values) : next;
 }
 /**
  * The values a caller gave all at once (the agent's run_command, the facade's verbs), each kept as given; the others

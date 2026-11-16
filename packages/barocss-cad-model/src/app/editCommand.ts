@@ -161,7 +161,18 @@ function shapeEdit(index: number, nodes: readonly ModelNode[], rows: Pick<Studio
   const rebuild = (ctx: Ctx, v: Values) => replaceRange(ctx.doc, start, n, cmd.build!({ ...ctx, doc: { ...ctx.doc, nodes: ctx.doc.nodes.slice(0, start) } }, v).nodes.slice(start));
   // (The probe has the document's fastener sizes, O7: a fastener rebuilds from its size's row.)
   const probe: Ctx = { doc: { nodes: [...nodes], ...(rows.fastenerSizes ? { fastenerSizes: rows.fastenerSizes } : {}) } as Ctx['doc'], bodies: [], selection: { faces: [], edges: [], bodies: [] } };
-  try { if (JSON.stringify(rebuild(probe, made.values).nodes.slice(start, index + 1)) !== JSON.stringify(nodes.slice(start, index + 1))) return null; } catch { return null; }
+  try {
+    // holeD is fit evidence, never a geometry input. Legacy mismatches can still open for repair;
+    // only this recognition probe omits that evidence, not the returned edit/build command.
+    const replayHole = made.command === 'fastener' && Object.hasOwn(made.values, 'holeD');
+    const replay = rebuild(probe, replayHole ? { ...made.values, holeD: 0 } : made.values).nodes.slice(start, index + 1);
+    if (replayHole) {
+      const top = replay[replay.length - 1];
+      if (!top || !('made' in top) || top.made?.command !== 'fastener') return null;
+      replay[replay.length - 1] = { ...top, made: { ...top.made, values: { ...top.made.values, holeD: made.values.holeD } } };
+    }
+    if (JSON.stringify(replay) !== JSON.stringify(nodes.slice(start, index + 1))) return null;
+  } catch { return null; }
   return { ...cmd, id: 'edit', label: `Edit ${cmd.label}`, group: 'modify', available: () => ok, defaults: () => ({ ...made.values }), build: rebuild, place: undefined };
 }
 
