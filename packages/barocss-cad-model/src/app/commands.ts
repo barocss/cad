@@ -1,3 +1,4 @@
+import { splitNormalProblem } from './splitPlaneInput';
 import { eligibleFillPatternRegions, fillFeaturePatternProblem, fillRegionSnapshot } from '../engine/fillFeaturePattern';
 import { appendMirrorRecipe } from './mirrorRecipe';
 import { splitOutputSide } from '../engine/splitOutput';
@@ -338,7 +339,7 @@ function remembered(cmd: Command): Command {
 /** A split's normal from its values, or null when it is zero (or not a number). */
 function splitNormal(v: Values): [number, number, number] | null {
   const n = [Number(v.nx), Number(v.ny), Number(v.nz)] as [number, number, number];
-  return n.every(Number.isFinite) && Math.hypot(...n) > 1e-9 ? n : null;
+  return splitNormalProblem(n) || !(Math.hypot(...n) > 1e-9) ? null : n;
 }
 
 function splitPlaneOfPick(ctx: Ctx, pick: FaceSel | undefined): Values | null {

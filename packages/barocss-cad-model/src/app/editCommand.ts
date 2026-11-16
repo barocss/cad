@@ -1,3 +1,4 @@
+import { splitPlaneProblem, splitPlaneText } from './splitPlaneInput';
 import { currentLinkedRevolveAxis, currentPocketSketch } from '../engine/part';
 import { resolveDrivenSketch } from '../sketch/driven';
 // Editing a feature already in the part by dragging: the feature's own dimensions (the feature editor's
@@ -276,14 +277,22 @@ export function editCommand(index: number, nodes: readonly ModelNode[], rows: Pi
   const fields = editFields(nodes, index, rows.parameters).filter(f => f.kind !== 'toggle' && !(f.kind === 'number' && Number.isNaN(f.get(nodes))));
   if (!fields.length) return null;
   return {
-    id: 'edit', label: `Edit ${featureLabel(node, index, nodes)}`, icon: 'edit', group: 'modify', hint: 'Change this feature',
+    id: 'edit', label: node.kind === 'split' ? 'Edit Split' : `Edit ${featureLabel(node, index, nodes)}`, icon: 'edit', group: 'modify', hint: 'Change this feature',
     available: () => ok,
     fields: (): Field[] => fields.map(f => f.kind === 'choice' ? { key: f.key, label: f.label, kind: 'choice' as const, options: f.options } : { key: f.key, label: f.label, kind: (f.kind === 'number' && f.unit === '°' ? 'deg' : 'mm') as 'deg' | 'mm' }),
     defaults: (ctx: Ctx) => Object.fromEntries(fields.map(f => [f.key, f.get(ctx.doc.nodes) as number | string])),
+    ...(node.kind === 'split' ? { steps: (ctx: Ctx, v: Values) => {
+      const current = edited(ctx.doc.nodes, index, v, ctx.doc.parameters)[index];
+      if (current.kind !== 'split' || splitPlaneProblem(current)) return [];
+      const at = typeof current.at === 'number' ? current.at : ctx.doc.parameters[current.at.parameter];
+      return Number.isFinite(at) ? [{ label: 'Plane', text: `${current.normal ? splitPlaneText(current.normal) : current.axis.toUpperCase()} = ${at}`, done: true }] : [];
+    } } : {}),
     build: (ctx, v) => {
       if (isSketchAnchoredCut(ctx.doc.nodes, index) && 'h' in v && (!Number.isFinite(Number(v.h)) || Number(v.h) <= 0))
         throw refusal('VALUE', 'Cut Distance must be greater than 0 mm.');
       const next = edited(ctx.doc.nodes, index, v, ctx.doc.parameters);
+      const splitProblem = splitPlaneProblem(next[index]);
+      if (splitProblem) throw refusal('SPLIT_PLANE', splitProblem);
       const holeProblem = holePatternEditProblem(ctx.doc.nodes[index], next[index], ctx.doc.parameters);
       if (holeProblem) throw refusal('HOLE_PATTERN', holeProblem);
       const result = { ...ctx.doc, nodes: dropStaleMade(ctx.doc.nodes, next) };
@@ -293,6 +302,7 @@ export function editCommand(index: number, nodes: readonly ModelNode[], rows: Pi
     },
     handles: (ctx, v) => {
       const now = edited(ctx.doc.nodes, index, v, ctx.doc.parameters), n = now[index];
+      if (splitPlaneProblem(n)) return [];
       if (n.kind === 'extrude' || n.kind === 'revolve') {
         const raw = now[n.sketch];
         if (raw?.kind === 'sketch' && raw.pocketFloor) {

@@ -1,3 +1,4 @@
+import { splitPlaneProblem } from '@barocss/cad-model/app/splitPlaneInput';
 import type { FilletEndpoints, FilletStationDraft } from '../app/filletEndpoints';
 import { FilletEndpointNotice } from './FilletEndpointNotice';
 import { sharedHoleLayoutPair } from '../app/sharedHoleLayout';
@@ -168,7 +169,8 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
   const countersinkField = fields.find(field => field.kind === 'number' && field.key === 'csk');
   const countersinkProblem = node?.kind === 'hole' && diameterField?.kind === 'number' && countersinkField?.kind === 'number'
     ? countersinkHistoryProblem(typed.dia ?? diameterField.get(draft), typed.csk ?? countersinkField.get(draft)) : null;
-  const hasInvalidNumber = hasMissingNumber || invalidCounts.length > 0 || invalidDimensions.length > 0 || !!countersinkProblem || Object.keys(interiorProblems).length > 0;
+  const splitProblem = splitPlaneProblem(node);
+  const hasInvalidNumber = !!splitProblem || hasMissingNumber || invalidCounts.length > 0 || invalidDimensions.length > 0 || !!countersinkProblem || Object.keys(interiorProblems).length > 0;
   useLayoutEffect(() => {
     if (!onDraft || (!changed && !Object.keys(typed).length)) return;
     onDraft({});
@@ -259,6 +261,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
           <option value="span">Total span</option>
         </select>
       </div>}
+      {splitProblem && <p role="status" className="hud-error">{splitProblem}</p>}
       {node?.kind === 'split' && <p className="small muted">
         Negative and Positive follow the plane normal; reversing the normal swaps their physical sides.
         {index !== nodes.length - 1 && ` Output side: ${node.outputSide ?? 'both'}. Change output sides only while Split is the last feature; later features may depend on its sides.`}
