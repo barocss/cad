@@ -30,8 +30,9 @@
 .dw-snap { fill: none; stroke: #d08a00; stroke-width: 0.45; }
 .dw-pick { fill: #d08a00; }
 .dw-hover { fill: none; stroke: #d08a00; stroke-width: 0.9; stroke-opacity: 0.7; }
+.dw-preview { fill: none; }
 .dw-preview line, .dw-preview path, .dw-preview polyline { stroke: #b06f00; }
-.dw-preview path[fill], .dw-preview text { fill: #b06f00; }
+.dw-preview path[fill='#000'], .dw-preview text { fill: #b06f00; }
 .dimension { cursor: pointer; }
 .dimension.sel line, .dimension.sel path, .dimension.sel polyline { stroke: #c27a00; }
 .dimension.sel path[fill='#000'], .dimension.sel text { fill: #c27a00; }
