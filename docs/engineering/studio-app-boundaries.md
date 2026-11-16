@@ -46,3 +46,31 @@ Actual Studio browser regressions pass for:
 Studio TypeScript, targeted lint (including App and new tests), and production
 build are required before publishing. No kernel capability, document schema,
 reference policy, native picking scope or HOLD/WIP scope is expanded.
+
+## Second extraction (2026-11-16)
+
+App now has 3,729 lines (256 fewer than the initial baseline). Two more cohesive
+boundaries replace inline inspector and command event code:
+
+- `ui/InstanceInspector.tsx` composes the selected placed-part/bearing panel,
+  pattern, occurrence appearance, sub-assembly joints and revision controls.
+  The App still owns visibility, selection, bearing session and commit/undo.
+  The component receives only the assembly ground/remove capabilities it uses.
+- `app/commandHudActions.ts` admits hole presets, HUD input and Apply events.
+  It preserves queued Apply/repeat retirement ordering, source and snapshot
+  ownership checks, preview retirement, and the subscribed value publication.
+  It cannot write an accepted document directly.
+
+Eleven additional tests cover HUD event ordering, notice ownership, hole preset
+admission, stale Apply snapshots, inspector visibility, free-copy semantics and
+selection cleanup only after an accepted removal. Combined focused suite: 35/35.
+Actual Studio instance pattern and looks/revision drivers and the Fillet station
+HUD driver pass. They include independent placement/BOM arithmetic, Undo/Redo,
+Save/reopen, invalid pattern/removal refusals, appearance reset and live/stale
+preview handling. Screenshots were reviewed for instance controls and geometry.
+
+This is a structural change, not a revision-import lifecycle fix: the pre-existing
+async revision callback has not gained a new cancellation policy. Remaining
+large slices include generic feature-editor composition, parameter candidate
+coordination, and the wider workspace shell. Decompose those by ownership rather
+than by arbitrary line count.

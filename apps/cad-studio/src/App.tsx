@@ -1,3 +1,5 @@
+import { createCommandHudActions } from './app/commandHudActions';
+import { InstanceInspector } from './ui/InstanceInspector';
 import { createHistoryFeatureApply } from './state/historyFeatureApply';
 import { useFilletEndpointDisplay } from './state/useFilletEndpointDisplay';
 import { createCommandReferencePicking, type CommandPickScope } from './app/commandReferencePicking';
@@ -91,7 +93,7 @@ import { editSavedExtrudeEndFaceCommand, canEditSavedExtrudeEndFace } from '@bar
 import { canEditSavedOffsetFace, editSavedOffsetFaceCommand, OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
 import { DRAFT_EDIT, editSavedDraftCommand } from '@barocss/cad-model/app/draftEdit';
 import { awaitingRevolveAxis, editSavedRevolveAxisCommand, joinedRevolveStock, REVOLVE_AXIS_EDIT } from '@barocss/cad-model/app/revolveAxisEdit';
-import { filletApplyCurrent, filletLaunchAvailability, filletType, newFilletActive, pickedFilletSelection, prepareFilletPick, replaceFilletSelection, replaceFillet, type FilletType, type RadiusMode } from './app/filletFamily';
+import { filletLaunchAvailability, filletType, newFilletActive, pickedFilletSelection, prepareFilletPick, replaceFilletSelection, replaceFillet, type FilletType, type RadiusMode } from './app/filletFamily';
 import { alignFaceBinding } from '@barocss/cad-model/app/alignCommand';
 import { currentNativePlanePick, midpointFaces, midpointSelectionHint, SKETCH_AT_MIDPOINT } from './app/midpointSketch';
 import { insetRelinkReadiness } from '@barocss/cad-model/app/associativeInsetRelink';
@@ -108,7 +110,6 @@ import { ellipseError } from '@barocss/cad-model/sketch/ellipse';
 import { detachRoundedInsetRecipe, resizeRoundedInsetSource, roundedInsetSourceWidth, validateRoundedInsetDocument } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
 import { roundedInsetMinimumSpan } from '@barocss/cad-model/sketch/internal/roundedRectangleInset';
 import { awaitingMirrorPlane, activeKey, type Active } from './app/commandState';
-import { canUseHolePresets } from './app/holePresets';
 import { emptySel, NO_CUTS, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
 import { routeMessage } from './app/routeSession';
 import { CursorReadout } from './ui/CursorReadout';
@@ -220,14 +221,8 @@ import { assertRouteBundleDocument, routeBundleDocumentIdentity } from '@barocss
 import { loadUserLibraries, setLibraryStore } from '@barocss/cad-model/library/libraries';
 import { browserStore } from './ui/browserStore';
 import { processProfile } from '@barocss/cad-model/library/materials';
-import { InstancePanel } from './ui/InstancePanel';
-import { InstanceJointsControls } from './ui/InstanceJoints';
-import { InstanceLooksControls } from './ui/InstanceLooks';
-import { instanceLookRows, useInstanceLooks } from './state/useInstanceLooks';
-import { heldLooksForInstance, heldLooks, resetInstanceLook, setInstanceLook } from '@barocss/cad-model/assembly/looks';
-import { setInstanceJoints } from '@barocss/cad-model/assembly/flexible';
-import { InstancePatternControls } from './ui/InstancePattern';
-import { addInstancePattern, deleteInstancePattern, editInstancePattern, expandPatterns, patternDeleteRefusal, skipOccurrence } from '@barocss/cad-model/assembly/patterns';
+import { useInstanceLooks } from './state/useInstanceLooks';
+import { expandPatterns } from '@barocss/cad-model/assembly/patterns';
 /** The document with its instance patterns' occurrences made again from their seeds (roadmap 10 ③): every instance edit keeps them in step. */
 const withPatterns = (d: StudioDoc): StudioDoc => d.instancePatterns?.length ? expandPatterns(d) : d;
 import { TooltipLayer } from './ui/Tooltip';
@@ -266,7 +261,7 @@ import { useHeldFinishEdge } from './state/useHeldFinishEdge';
 import { flattenAssembly } from '@barocss/cad-model/engine/flatten';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
 import { elsewhereOf, openAccepted, beginInPlace, editInPlaceRefusal, finishInPlace, inPlaceBlock, sessionChanged, stacksAfter, type InPlaceSession } from './app/editInPlace';
-import { acceptRevision, dismissRevision, freshPartId, makeIndependent, offerRevision, revisionOf, sharing } from '@barocss/cad-model/assembly/definitions';
+import { freshPartId, revisionOf } from '@barocss/cad-model/assembly/definitions';
 import { alignMove, gizmoAxes, movedInstance, previewMatrix, turnedInstance, type InstanceDrag } from '@barocss/cad-model/assembly/drag';
 import { BASE, type Mate } from '@barocss/cad-model/assembly/mates';
 import type { DirectGeometry } from '@barocss/cad-model/engine/direct';
@@ -3376,57 +3371,12 @@ export function App() {
             if (faceDiagnosis.attach(selection, doc)) setChat(true);
           } : undefined} /> : null;
       })()}
-      {!rendering && !sketch && !measure && instanceSel.length === 1 && (() => {
-        const inst = doc.instances?.find(i => i.id === instanceSel[0]);
-        if (!inst) return null;
-        const list = doc.instances!;
-        if (selectedBearingEdit) {
-          if (bomOpen || libraryOpen || paramsOpen || drawing || active) return null;
-          const session = selectedBearingEdit.session;
-          return <aside className="card props" aria-label="Part bearing properties">
-            <div className="card-title">{inst.name} <ToolIconButton size="tiny" aria-label="Back to part properties" onClick={() => setInstanceEdit(null)}><Icon name="arrow_back" small /></ToolIconButton></div>
-            {session ? <NodeEditor key={`${session.owner}:${session.index}`} nodes={session.view.nodes} parameters={session.view.parameters} index={session.index}
-              bearingAssembly={{ root: doc, owner: session.owner }} pending={instanceEditPending}
-              onRefuse={hint => setToast({ title: 'Bearing not changed', hint, detail: '' })}
-              onApply={nodes => void applyInstanceBearing(session, nodes)} onClose={() => setInstanceEdit(null)} />
-              : <div className="empty warn" role="alert">{selectedBearingEdit.error}</div>}
-          </aside>;
-        }
-        return <InstancePanel inst={inst} bodies={instanceBodies.get(inst.id)?.bodies}
-          onChange={next => commitInstances(list.map(i => i.id === inst.id ? next : i))}
-          onDuplicate={() => { const newId = nextInstanceId(doc, 'inst');
-            // (A copy of an occurrence is a free part: not the pattern's, not fixed by it.)
-            const copy: PartInstance = inst.pattern ? { ...inst, pattern: undefined, grounded: undefined } : inst;
-            commitInstances([...list, { ...copy, id: newId, name: `${inst.name} copy`, position: [inst.position[0] + 20, inst.position[1] + 20, inst.position[2]] }], [newId]); }}
-          onGround={on => { const why = assembly.ground(inst.id, on); if (why) setToast({ title: 'Can’t fix this part in place', hint: why, detail: '' }); }}
-          shared={inst.part ? sharing(doc, inst.part.id).length : 0} pending={inst.part ? doc.pendingParts?.[inst.part.id] : undefined}
-          onEditPart={() => startInPlace(inst.id)} onIndependent={() => commitParts(makeIndependent(doc, inst.id))}
-          pattern={<InstancePatternControls inst={inst} pattern={doc.instancePatterns?.find(p => p.seed === inst.id)} occurrenceOf={inst.pattern ? doc.instancePatterns?.find(p => p.id === inst.pattern!.id) : undefined}
-            onAdd={o => patternEdit(() => addInstancePattern(doc, o), 'Pattern not changed', true)} onEdit={o => patternEdit(() => editInstancePattern(doc, o), 'Pattern not changed', true)}
-            onDelete={id => patternEdit(() => deleteInstancePattern(doc, id))} onSkip={() => { patternEdit(() => skipOccurrence(doc, inst.id)); setInstanceSel([]); }} />}
-          looks={<InstanceLooksControls rows={instanceLookRows(inst, instanceBodies.get(inst.id), doc)} readOnly={!!inst.pattern}
-            held={heldLooksForInstance(doc, inst.id)}
-            onSet={(key, patch) => patternEdit(() => setInstanceLook(doc, { part: inst.id, body: key, patch }), 'Look not changed')}
-            onReset={(key, field) => patternEdit(() => resetInstanceLook(doc, { part: inst.id, body: key, field }), 'Look not changed')} />}
-          joints={inst.doc.instances?.length ? <InstanceJointsControls inst={inst}
-            onSet={values => patternEdit(() => setInstanceJoints(doc, { part: inst.id, joints: values }), 'Joints not changed')}
-            onReset={() => patternEdit(() => setInstanceJoints(doc, { part: inst.id, joints: {}, replace: true }), 'Joints not changed')} /> : undefined}
-          onRevision={async file => {
-            const read = await readStudioFile(new Uint8Array(await file.arrayBuffer()));
-            if ('error' in read) { setToast({ title: 'Could not read that part', hint: read.error, detail: '' }); return; }
-            const r = offerRevision(doc, inst.part!.id, read.doc, file.name);
-            if ('error' in r) setToast({ title: 'Nothing to update', hint: r.error, detail: '' }); else {
-              commitParts(r.doc);
-              // (Roadmap 10 ①: the occurrences' own looks stay; those whose body the revision lacks are named now, held when it is accepted.)
-              if (r.held.length) setToast({ title: `${r.held.length} look${r.held.length > 1 ? 's' : ''} would be held`, hint: r.held.map(h => h.problem).join(' '), detail: '' });
-            }
-          }}
-          onAccept={() => { let next: StudioDoc; try { next = acceptRevision(doc, inst.part!.id); } catch (e) { setToast({ title: 'Revision not accepted', hint: e instanceof Error ? e.message : String(e), detail: '' }); return; } const held = heldLooks(next); commitParts(next);
-            if (held.length) setToast({ title: `${held.length} look${held.length > 1 ? 's' : ''} held`, hint: held.map(h => h.problem).join(' '), detail: '' }); }} onDismiss={() => commitParts(dismissRevision(doc, inst.part!.id))}
-          onRemove={() => {
-            const held = patternDeleteRefusal(doc, inst.id); if (held) { setToast({ title: 'Can’t remove this part', hint: held.message, detail: '' }); return; }
-            if (!commitAssembly(list.filter(i => i.id !== inst.id), assembly.without(inst.id))) return; setInstanceSel([]); }} />;
-      })()}
+      {!rendering && !sketch && !measure && instanceSel.length === 1 && <InstanceInspector
+        model={{ doc, selectedId: instanceSel[0], entry: instanceBodies.get(instanceSel[0]) }}
+        bearing={{ selected: selectedBearingEdit, blocked: bomOpen || libraryOpen || paramsOpen || drawing || !!active,
+          pending: instanceEditPending, close: () => setInstanceEdit(null), apply: applyInstanceBearing }}
+        assembly={assembly} changes={{ commitInstances, commitParts, commitAssembly, patternEdit, startInPlace,
+          clearSelection: () => setInstanceSel([]) }} onNotice={setToast} />}
       {!rendering && !sketch && !measure && jointTree && !assembly.draft && !instanceSel.length && <RobotInspector controller={robotExports} motion={joints} loopMotionContext={loopMotionContext} chosenMotion={chosenMotion}
         video={{ busy: videoBusy, record: recordVideo }} changes={{ canChangeDocument, pushUndo, setDoc, setDirty }} />}
       {!rendering && !drawing && !sketch && !measure && !instanceSel.length && <GravityExperimentPanel doc={doc} joints={jointTree?.joints ?? []} />}
@@ -3525,49 +3475,13 @@ export function App() {
       </SelectionInspector>}
       </div></Profiler>
   );
-  const applyHoleOptions = (owner: Active, patch: Values) => {
-    const current = activeStore.get();
-    if (!current || current.cmd !== owner.cmd || current.ctx !== owner.ctx || current.ctx.doc !== commandDoc ||
-        current.cmd.id !== 'hole' || !canUseHolePresets(current.values) || !canChangeDocument()) return false;
-    applyWhenReady.current = null;
-    commandPreview.retire();
-    const values = patchValues(current.cmd, current.ctx, current.values, patch);
-    hudValues.current = values;
-    setActive({ ...current, values, preview: 'busy', error: undefined });
-    return true;
-  };
-  // The HUD subscribes to values it edits without a parent render.
-  const changeHudValue = (key: string, value: number | string) => {
-    const current = activeStore.get();
-    if (!current) return;
-    if ((current.cmd.id === 'mirror' && key === 'pickPlane') || (current.cmd.id === 'split' && ['axis', 'nx', 'ny', 'nz', 'at'].includes(key))) setToast(notice => notice?.inputPick === current.cmd ? null : notice);
-    if (key === 'offsetMode' || current.cmd.id === 'split' || (current.cmd.id === 'mirror' && key === 'pickPlane')
-      || (current.cmd.id === 'extrude' && (key === 'region'
-      || (key === 'depth' && (isExtrudeToFace(current.cmd.id, current.values) || value === 'to-face'))))) {
-      applyWhenReady.current = null;
-      again.current = null;
-      commandPreview.retire();
-    }
-    lastTyped.current = Date.now();
-    handleDrag.current = null;
-    const values = patchValues(current.cmd, current.ctx, current.values, { [key]: value });
-    if (hasFilletInteriorProblem({ ...current, values }) || filletSectionNumberProblem({ ...current, values })) { applyWhenReady.current = null; again.current = null; }
-    hudValues.current = values;
-    setActive({ ...current, values, preview: current.upload === 'error' ? 'error' : 'busy' });
-  };
-  const applyHud = (owner: Active) => {
-    const current = activeStore.get();
-    if (!current || !filletApplyCurrent(owner, current)) return;
-    if (owner !== current && (owner.cmd.id === 'mirror' || current.cmd.id === 'mirror' || owner.cmd.id === REVOLVE_AXIS_EDIT || current.cmd.id === REVOLVE_AXIS_EDIT
-      || owner.cmd.id === SWEEP_CURVE || current.cmd.id === SWEEP_CURVE
-      || owner.cmd.id === OFFSET_FACE_EDIT || current.cmd.id === OFFSET_FACE_EDIT
-      || owner.cmd.id === DRAFT_EDIT || current.cmd.id === DRAFT_EDIT
-      || owner.cmd.id === SHARED_HOLE_LAYOUT_EDIT || current.cmd.id === SHARED_HOLE_LAYOUT_EDIT
-      || isExtrudeToFace(owner.cmd.id, owner.values) || isExtrudeToFace(current.cmd.id, current.values)
-      || isOffsetToPlane(owner.cmd.id, owner.values) || isOffsetToPlane(current.cmd.id, current.values)
-      || (current.cmd.id === 'extrude' && owner.values.region !== current.values.region))) return;
-    apply();
-  };
+  const { applyHoleOptions, changeHudValue, applyHud } = createCommandHudActions({
+    commandDoc, activeStore, canChangeDocument, apply,
+    preview: { retire: commandPreview.retire, typed: () => { lastTyped.current = Date.now(); handleDrag.current = null; },
+      publishValues: values => { hudValues.current = values; } },
+    pending: { clearApply: () => { applyWhenReady.current = null; }, clearRepeat: () => { again.current = null; } },
+    onNotice: setToast,
+  });
   const hud = active && <Hud filletEndpoints={filletEndpointLocations} store={activeStore} onChange={changeHudValue} onFilletType={changeFillet} onRemoveFilletEdge={removeFilletEdge}
     onRadiusMode={mode => { const a = activeStore.get(); if (a?.fillet) changeFillet(a.fillet.type, mode); }}
     onFramePreview={owner => { if (activeStore.get() === owner && owner.preview === 'ok') viewport.current?.fit(); }}
