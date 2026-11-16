@@ -71,3 +71,56 @@ test('unsupported tolerance grammar is incomplete without normalizing raw zero',
  }
  const {from,to}=changed({tol:{kind:'deviation',upper:-.1,lower:-.2}});assert.deepEqual(drawingDimensionChanges(from,to).incomplete,[]);
 });
+
+test('all five authored kinds keep exact tolerance changes and units',()=>{
+ const rim={edge:'circle',near:[1,2,3] as [number,number,number]};
+ const dimensions:DrawingDimension[]=[d1,d2,
+  {id:'diameter',kind:'diameter',view:'front',...rim,place:[0,0]},
+  {id:'radius',kind:'radius',view:'front',...rim,place:[0,0]},
+  {id:'pcd',kind:'pcd',view:'top',ring:[rim,{...rim,edge:'b'},{...rim,edge:'c'}],place:[0,0]},
+ ];
+ for(const dimension of dimensions){
+  const from=fixture();from.drawing!.dimensions=[{...dimension,tol:{kind:'symmetric',value:.1}}];
+  const to=structuredClone(from);to.drawing!.dimensions[0].tol={kind:'symmetric',value:.05};
+  const result=drawingDimensionChanges(from,to);assert.deepEqual(result.incomplete,[]);assert.equal(result.changes.length,1);
+  assert.deepEqual(result.changes[0].fields,['tolerance']);assert.equal(result.changes[0].after!.toleranceUnit,dimension.kind==='angle'?'degrees':'mm');
+ }
+});
+test('absent, added and removed tolerances reverse exactly; deviation bounds and fit class are independent',()=>{
+ const absent=fixture();delete absent.drawing!.dimensions[0].tol;
+ const present=structuredClone(absent);present.drawing!.dimensions[0].tol={kind:'symmetric',value:.1};
+ const added=drawingDimensionChanges(absent,present),removed=drawingDimensionChanges(present,absent);
+ assert.deepEqual(added.incomplete,[]);assert.deepEqual(added.changes[0].fields,['tolerance']);
+ assert.equal((added.changes[0].before!.definition as DrawingDimension).tol,undefined);
+ assert.deepEqual(removed.changes[0].before,added.changes[0].after);assert.deepEqual(removed.changes[0].after,added.changes[0].before);
+ for(const [oldTol,newTol] of [
+  [{kind:'deviation',upper:.2,lower:-.1},{kind:'deviation',upper:.3,lower:-.1}],
+  [{kind:'deviation',upper:.2,lower:-.1},{kind:'deviation',upper:.2,lower:-.15}],
+  [{kind:'fit',code:'H7'},{kind:'fit',code:'H8'}],
+ ] satisfies [NonNullable<DrawingDimension['tol']>,NonNullable<DrawingDimension['tol']>][]){
+  const from=fixture();from.drawing!.dimensions[0].tol=oldTol;const to=structuredClone(from);to.drawing!.dimensions[0].tol=newTol;
+  const r=drawingDimensionChanges(from,to);assert.deepEqual(r.incomplete,[]);assert.deepEqual(r.changes[0].fields,['tolerance']);
+  assert.deepEqual((r.changes[0].before!.definition as DrawingDimension).tol,oldTol);assert.deepEqual((r.changes[0].after!.definition as DrawingDimension).tol,newTol);
+ }
+});
+test('tiny raw differences survive display rounding and inch/dual do not convert stored millimetres',()=>{
+ const a=.10000000001,b=.10000000002;assert.equal(a.toFixed(4),b.toFixed(4));
+ const from=fixture();from.drawing!.dimensions[0].tol={kind:'symmetric',value:a};
+ const to=structuredClone(from);to.drawing!.units='inch';to.drawing!.dual=true;
+ assert.deepEqual(drawingDimensionChanges(from,to),{changes:[],incomplete:[]});
+ to.drawing!.dimensions[0].tol={kind:'symmetric',value:b};const r=drawingDimensionChanges(from,to);
+ assert.deepEqual(r.changes[0].fields,['tolerance']);assert.equal(r.changes[0].after!.toleranceUnit,'mm');
+ assert.deepEqual((r.changes[0].after!.definition as DrawingDimension).tol,{kind:'symmetric',value:b});
+});
+test('identical definitions with different IDs are removal/addition, never an inferred match',()=>{
+ const from=fixture();from.drawing!.dimensions=[structuredClone(d1)];const to=structuredClone(from);to.drawing!.dimensions[0].id='replacement';
+ const r=drawingDimensionChanges(from,to);assert.deepEqual(r.incomplete,[]);assert.deepEqual(r.changes.map(c=>[c.id,c.change]),[['D1','removed'],['replacement','added']]);
+ assert.deepEqual(drawingDimensionChanges(to,from).changes.map(c=>[c.id,c.change]),[['replacement','removed'],['D1','added']]);
+});
+test('removing an additional sheet returns inherited legacy section dimensions to first sheet',()=>{
+ const from=fixture();from.drawing!.section={y:5};from.drawing!.dimensions[0].view='section:A';from.drawing!.sheets=[{id:'S2',name:'Second',views:['front']}];
+ const to=structuredClone(from);delete to.drawing!.sheets;const saved=JSON.stringify([from,to]);const r=drawingDimensionChanges(from,to);
+ assert.deepEqual(r.incomplete,[]);assert.equal(r.changes.length,1);assert.deepEqual(r.changes[0].fields,['sheet']);
+ assert.deepEqual(r.changes[0].before!.sheet,{id:'S2',number:2,name:'Second'});assert.deepEqual(r.changes[0].after!.sheet,{id:null,number:1,name:'Sheet 1'});
+ assert.equal(r.changes[0].after!.view,'section:A');assert.deepEqual(r.changes[0].before!.definition,r.changes[0].after!.definition);assert.equal(JSON.stringify([from,to]),saved);
+});
