@@ -120,6 +120,7 @@ await f.run(async () => {
 
   f.phase = 'Open the real assembly drawing and calculate a three-term clearance';
   await f.newPage();
+  await f.page.setViewportSize({ width: Number(process.argv[3] ?? 1440), height: 900 });
   await openFixture(source, 'stack-assembly.bcad');
   await openStack();
   const stock = await f.doc();
@@ -136,12 +137,34 @@ await f.run(async () => {
   await stack().getByRole('combobox', { name: 'Stack sign 3', exact: true }).selectOption('-1');
   await dimension(3).selectOption('insert');
   await refused(/only once|duplicate/i);
-  await button('Remove stack term 3', stack()).click();
+  await button('Remove stack term 3', stack()).focus();
+  await f.page.keyboard.press('Enter');
+  assert.equal(await dimension(2).evaluate(el => el === document.activeElement), true, 'removing last term focuses previous dimension');
   await f.page.waitForFunction(() => document.querySelector('[data-stack-value="minimum"]')?.textContent === '29.85 mm');
   await button('Add term', stack()).click();
   await dimension(3).selectOption('d1');
   await verifyValues('03-restored-shim', -1, ['10', '9.77', '10.27']);
   await f.same(stock);
+
+  if (process.argv.includes('--focus-only')) {
+    for (const index of [2, 1]) {
+      await button(`Remove stack term ${index}`, stack()).focus();
+      await f.page.keyboard.press('Enter');
+      assert.equal(await dimension(index).evaluate(el => el === document.activeElement), true, 'focus follows the next surviving row');
+      await dimension(1).selectOption('opening');
+      await dimension(2).selectOption('insert');
+      await stack().getByRole('combobox', { name: 'Stack sign 1', exact: true }).selectOption('1');
+      await stack().getByRole('combobox', { name: 'Stack sign 2', exact: true }).selectOption('-1');
+      await f.page.waitForFunction(() => document.querySelector('[data-stack-value="minimum"]')?.textContent === '29.85 mm');
+      await button('Add term', stack()).focus();
+      await f.page.keyboard.press('Enter');
+      await dimension(3).selectOption('d1');
+      await verifyValues(`restored-after-removing-${index}`, -1, ['10', '9.77', '10.27']);
+    }
+    await f.same(stock);
+    await f.snapshot('keyboard-removal-restored');
+    return;
+  }
 
   f.phase = 'Refuse missing and fit tolerances, then restore the authored zone using Undo';
   await dimRow(2).locator('.dw-annotation-select').click();

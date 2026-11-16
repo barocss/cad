@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { Resolved } from '@barocss/cad-model/drawing/dimensions';
 import { dimensionLine } from '@barocss/cad-model/drawing/sheet';
 import { presetFor } from '@barocss/cad-model/drawing/standard';
@@ -18,6 +18,14 @@ interface Term {
 function StackTerms({ dimensions, settings }: { dimensions: readonly Resolved[] | null; settings: DrawingSettings }) {
   const [terms, setTerms] = useState<Term[]>([{ key: 0, id: '', sign: 1 }, { key: 1, id: '', sign: -1 }]);
   const nextKey = useRef(2);
+  const dimensionControls = useRef(new Map<number, HTMLSelectElement>());
+  const focusAfterRemoval = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const key = focusAfterRemoval.current;
+    if (key === null) return;
+    focusAfterRemoval.current = null;
+    dimensionControls.current.get(key)?.focus();
+  }, [terms]);
   const preset = presetFor(settings);
   const choices = (dimensions ?? []).flatMap(r => r.dim.kind !== 'linear' ? [] : [{
     id: r.dim.id,
@@ -44,14 +52,19 @@ function StackTerms({ dimensions, settings }: { dimensions: readonly Resolved[] 
           onChange={e => edit(key, { sign: e.target.value === '1' ? 1 : -1 })}>
           <option value="1">+</option><option value="-1">−</option>
         </NativeSelect>
-        <NativeSelect className="flex-1" aria-label={`Stack dimension ${index + 1}`} value={changed(term) ? '' : id} disabled={!dimensions}
+        <NativeSelect ref={node => { if (node) dimensionControls.current.set(key, node); else dimensionControls.current.delete(key); }} className="flex-1" aria-label={`Stack dimension ${index + 1}`} value={changed(term) ? '' : id} disabled={!dimensions}
           onChange={e => edit(key, { id: e.target.value, measurement: byId.get(e.target.value)?.measurement })}>
           <option value="">Select dimension</option>
           {id && !byId.has(id) && <option value={id}>{id} · Unavailable</option>}
           {choices.map(choice => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
         </NativeSelect>
         {terms.length > 2 && <Button size="xs" variant="ghost" aria-label={`Remove stack term ${index + 1}`}
-          onClick={() => setTerms(current => current.filter(term => term.key !== key))}><Icon name="close" small /></Button>}
+          onClick={event => {
+            if (event.detail === 0 || document.activeElement === event.currentTarget) {
+              focusAfterRemoval.current = (terms[index + 1] ?? terms[index - 1]).key;
+            }
+            setTerms(current => current.filter(term => term.key !== key));
+          }}><Icon name="close" small /></Button>}
       </div>;
     })}
     <Button size="xs" variant="ghost" disabled={!dimensions || terms.length >= choices.length}
