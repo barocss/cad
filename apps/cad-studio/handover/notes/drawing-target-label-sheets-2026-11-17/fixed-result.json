@@ -1,0 +1,119 @@
+{
+  "status": "PASS",
+  "failure": "",
+  "observations": [
+    {
+      "first": [
+        {
+          "id": "target-1",
+          "letter": "A",
+          "number": 1,
+          "view": "front",
+          "place": [
+            -9.999997517419239,
+            10.000001453218005
+          ],
+          "kind": "area",
+          "area": {
+            "shape": "circle",
+            "at": [
+              15,
+              3
+            ],
+            "d": 2
+          }
+        }
+      ],
+      "afterSecond": [
+        {
+          "id": "target-1",
+          "letter": "A",
+          "number": 1,
+          "view": "front",
+          "place": [
+            -9.999997517419239,
+            10.000001453218005
+          ],
+          "kind": "area",
+          "area": {
+            "shape": "circle",
+            "at": [
+              15,
+              3
+            ],
+            "d": 2
+          }
+        },
+        {
+          "id": "target-2",
+          "letter": "A",
+          "number": 2,
+          "view": "right",
+          "place": [
+            -9.999998122926733,
+            10.00000127156575
+          ],
+          "kind": "area",
+          "area": {
+            "shape": "circle",
+            "at": [
+              6,
+              3
+            ],
+            "d": 2
+          }
+        }
+      ]
+    },
+    {
+      "afterCollision": [
+        {
+          "id": "target-1",
+          "letter": "A",
+          "number": 1,
+          "view": "front",
+          "place": [
+            -9.999997517419239,
+            10.000001453218005
+          ],
+          "kind": "area",
+          "area": {
+            "shape": "circle",
+            "at": [
+              15,
+              3
+            ],
+            "d": 2
+          }
+        },
+        {
+          "id": "target-2",
+          "letter": "A",
+          "number": 2,
+          "view": "right",
+          "place": [
+            -9.999998122926733,
+            10.00000127156575
+          ],
+          "kind": "area",
+          "area": {
+            "shape": "circle",
+            "at": [
+              6,
+              3
+            ],
+            "d": 2
+          }
+        }
+      ]
+    },
+    {
+      "refusedCollision": true,
+      "validLabelChange": true,
+      "nativeOpen": true,
+      "actualSvgLabels": true,
+      "undoRedo": true
+    }
+  ],
+  "sourceFrozenThroughCleanup": true
+}

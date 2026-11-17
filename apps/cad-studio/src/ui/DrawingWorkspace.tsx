@@ -461,6 +461,12 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (datumTargets.length > 200 || datumTargetConflicts(datumTargets).size) { setMessage('Datum targets need at most 200 rows with unique IDs and letter-number pairs.'); return false; }
     // Saved legacy rows may remain untouched while one row is explicitly repaired. New objects stay strict.
     const existing = new Set(settings.datumTargets ?? []), changed = datumTargets.filter(row => !existing.has(row));
+    const mergedTargets = mergeSheet(wholeSettings, current, { ...settings, datumTargets }).datumTargets ?? [];
+    const conflicts = datumTargetConflicts(mergedTargets);
+    // Other sheets (including unresolved targets) reserve their labels too. Untouched legacy peers stay repairable.
+    if (mergedTargets.length > 200 || changed.some(row => conflicts.has(row))) {
+      setMessage('Datum targets need at most 200 rows with unique IDs and letter-number pairs across all sheets.'); return false;
+    }
     const why = checkDatumTargetOptions({ datumTargets: changed })[0];
     if (why) { setMessage(why.message); return false; }
     onChange({ ...settings, datumTargets }); setPending(null); setTargetChoices([]); return true;
