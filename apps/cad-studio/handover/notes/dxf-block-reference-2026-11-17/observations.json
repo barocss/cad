@@ -1,0 +1,171 @@
+{
+  "status": "PASS",
+  "observations": [
+    {
+      "name": "direct",
+      "sha256": "11cf5af80e71e7f0b6718e04d57fb985b01045dbd82a8d3038478630e97a0478",
+      "error": "[DXF_UNSUPPORTED] drawing visibility cannot be preserved. 1 INSERT on layer \"0\" (external block visibility is unsupported for \"External\" (external reference; external content was not loaded))",
+      "preserved": [
+        "Doc",
+        "fileName",
+        "dirty",
+        "Undo/Redo",
+        "selection"
+      ]
+    },
+    {
+      "name": "overlay",
+      "sha256": "a306d63fabb7d515ddae899ce7e8d0acd8a9ac560d0c57e3744f2365ed86ad22",
+      "error": "[DXF_UNSUPPORTED] drawing visibility cannot be preserved. 1 INSERT on layer \"0\" (external block visibility is unsupported for \"External\" (xref overlay; external content was not loaded))",
+      "preserved": [
+        "Doc",
+        "fileName",
+        "dirty",
+        "Undo/Redo",
+        "selection"
+      ]
+    },
+    {
+      "name": "dependent",
+      "sha256": "bcfa79da47749df3123e11973ae1eb687c334b5f62006c3f1e5b194134091005",
+      "error": "[DXF_UNSUPPORTED] drawing visibility cannot be preserved. 1 INSERT on layer \"0\" (external block visibility is unsupported for \"External\" (externally dependent; external content was not loaded))",
+      "preserved": [
+        "Doc",
+        "fileName",
+        "dirty",
+        "Undo/Redo",
+        "selection"
+      ]
+    },
+    {
+      "name": "url-path",
+      "sha256": "84aeb8244d7159470a947736d197b04429aa7fcb75ca83ab703e1c0fa6aeea08",
+      "error": "[DXF_UNSUPPORTED] drawing visibility cannot be preserved. 1 INSERT on layer \"0\" (external block visibility is unsupported for \"External\" (xref path present; external content was not loaded))",
+      "preserved": [
+        "Doc",
+        "fileName",
+        "dirty",
+        "Undo/Redo",
+        "selection"
+      ]
+    },
+    {
+      "name": "unc-path",
+      "sha256": "4e383acfeca381a8ad2972e59f915a1840f0e1125cb943aab5d9b377bebf7e38",
+      "error": "[DXF_UNSUPPORTED] drawing visibility cannot be preserved. 1 INSERT on layer \"0\" (external block visibility is unsupported for \"External\" (xref path present; external content was not loaded))",
+      "preserved": [
+        "Doc",
+        "fileName",
+        "dirty",
+        "Undo/Redo",
+        "selection"
+      ]
+    },
+    {
+      "flags": 32,
+      "sha256": "d727f1140612d8abc92a4904d8de458210b557c04dac6bd9efc1f811ccc8bc39",
+      "independentExpected": {
+        "underlayPolylines": [
+          [
+            [
+              100,
+              50
+            ],
+            [
+              120,
+              50
+            ]
+          ],
+          [
+            [
+              120,
+              50
+            ],
+            [
+              120,
+              60
+            ]
+          ],
+          [
+            [
+              120,
+              60
+            ],
+            [
+              100,
+              60
+            ]
+          ],
+          [
+            [
+              100,
+              60
+            ],
+            [
+              100,
+              50
+            ]
+          ]
+        ],
+        "profileRegions": 0
+      },
+      "sameReadGeometryAsFlag0": true
+    },
+    {
+      "flags": 64,
+      "sha256": "d63330cd7a7ec17c443515ac51938e77ebdeb28863d048fff4a8669586723847",
+      "independentExpected": {
+        "underlayPolylines": [
+          [
+            [
+              100,
+              50
+            ],
+            [
+              120,
+              50
+            ]
+          ],
+          [
+            [
+              120,
+              50
+            ],
+            [
+              120,
+              60
+            ]
+          ],
+          [
+            [
+              120,
+              60
+            ],
+            [
+              100,
+              60
+            ]
+          ],
+          [
+            [
+              100,
+              60
+            ],
+            [
+              100,
+              50
+            ]
+          ]
+        ],
+        "profileRegions": 0
+      },
+      "sameReadGeometryAsFlag0": true
+    }
+  ],
+  "network": {
+    "referencedRequests": 0,
+    "externalAttempts": 0,
+    "scope": "Browser request/route surveillance; no OS-wide filesystem audit."
+  },
+  "sourceFreeze": "1031 source entries unchanged; no browser errors/downloads; cleanup complete"
+}

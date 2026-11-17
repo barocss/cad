@@ -95,8 +95,15 @@ export function createDxfVisibility(groups: readonly Group[]) {
     block(name: string, layer: string, flagsText: string | undefined, hasExternalPath: boolean): boolean {
       const flags = integer(flagsText, 0);
       if (flags === null || flags < 0 || flags > 127) { flag('INSERT', layer, 'invalid block flags for ' + quoted(name), true); return false; }
-      if (hasExternalPath || (flags & (4 | 8 | 16 | 32 | 64))) {
-        flag('INSERT', layer, 'external block visibility is unsupported for ' + quoted(name));
+      // BLOCK bits 32/64 are input-ignored status, not evidence of missing external content.
+      const external: string[] = [];
+      if (flags & 4) external.push('external reference');
+      if (flags & 8) external.push('xref overlay');
+      if (flags & 16) external.push('externally dependent');
+      if (hasExternalPath) external.push('xref path present');
+      if (external.length) {
+        flag('INSERT', layer, 'external block visibility is unsupported for ' + quoted(name)
+          + ' (' + external.join(', ') + '; external content was not loaded)');
         return false;
       }
       return true;

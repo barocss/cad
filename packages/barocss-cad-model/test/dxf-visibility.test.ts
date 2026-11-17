@@ -110,3 +110,66 @@ test('reachable external blocks are refused without loading paths; unused ones d
     assert.deepEqual(readDxfSketch(drawing(outline, undefined, blocks)).underlay.polylines, []);
   }
 });
+
+test('BLOCK input-only status bits 32 and 64 do not discard included local geometry', () => {
+  const entities = [...outline, ...insert('Local', '0', 5)];
+  const expected = readDxfSketch(drawing(entities, undefined, block('Local', line('0'))));
+  for (const flags of [32, 64, 96]) {
+    const actual = readDxfSketch(drawing(entities, undefined, block('Local', line('0'), flags)));
+    assert.deepEqual(actual, expected);
+    assert.deepEqual(actual.underlay.polylines, [[[5, 1], [7, 1]]]);
+  }
+});
+
+test('direct xref, overlay, dependent and path-only inputs refuse distinctly without disclosing paths', () => {
+  for (const [flags, reason] of [[4, 'external reference'], [8, 'xref overlay'], [16, 'externally dependent'], [36, 'external reference'], [72, 'xref overlay'], [112, 'externally dependent']] as const) {
+    for (const children of [[], line('0')]) {
+      const text = drawing([...circle(10, '0'), ...insert('External')], undefined, block('External', children, flags));
+      assert.throws(() => readDxfSketch(text), error => error instanceof Error && error.message.includes(reason) && error.message.includes('external content was not loaded'));
+      const result = runDraftTool(emptyDoc(), 'import_drawing', { dxf: text, name: 'External' });
+      assert.ok('error' in result); assert.ok(!('doc' in result));
+    }
+  }
+  for (const path of ['relative/private.dwg', '/synthetic/private.dwg', '\\\\synthetic\\private.dwg', 'https://synthetic.invalid/private.dwg']) {
+    const blocks = [...block('Outer', insert('External')), ...block('External', line('0'), 32, path)];
+    assert.throws(() => readDxfSketch(drawing([...outline, ...insert('Outer')], undefined, blocks)), error => {
+      assert.ok(error instanceof Error); assert.match(error.message, /xref path present/); assert.ok(!error.message.includes(path)); return true;
+    });
+    assert.deepEqual(readDxfSketch(drawing(outline, undefined, blocks)).underlay.polylines, []);
+  }
+});
+
+test('ignored BLOCK status preserves nested mirror rotation and MINSERT results; ordinary empty blocks stay empty', () => {
+  const entities = [...outline, ...insert('Outer', '0', 8), 41, -2, 42, 3, 50, 90, 70, 2, 71, 2, 44, 4, 45, 5];
+  const blocks = (flags: number) => [...block('Outer', insert('Inner', '0', 3), flags), ...block('Inner', line('0'), flags)];
+  const expected = readDxfSketch(drawing(entities, undefined, blocks(0)));
+  assert.equal(expected.underlay.polylines.length, 4);
+  for (const flags of [32, 64, 96]) assert.deepEqual(readDxfSketch(drawing(entities, undefined, blocks(flags))), expected);
+  assert.deepEqual(readDxfSketch(drawing([...outline, ...insert('Empty')], undefined, block('Empty', []))).underlay.polylines, []);
+  assert.throws(() => readDxfSketch(drawing([...outline, ...insert('Missing')])), /does not define/);
+});
+
+test('ignored BLOCK status preserves inch-to-mm scaling with independent coordinates', () => {
+  const header = [0, 'SECTION', 2, 'HEADER', 9, '$INSUNITS', 70, 1, 0, 'ENDSEC'].join('\n') + '\n';
+  const input = (flags: number) => header + drawing([...outline, ...insert('Local', '0', 5)], undefined, block('Local', line('0'), flags));
+  const expected = readDxfSketch(input(0));
+  for (const flags of [0, 32, 64, 96]) {
+    const actual = readDxfSketch(input(flags));
+    assert.deepEqual(actual, expected);
+    const points = actual.underlay.polylines[0];
+    assert.equal(points.length, 2);
+    for (const [i, want] of [[127, 25.4], [177.8, 25.4]].entries())
+      for (let axis = 0; axis < 2; axis++) assert.ok(Math.abs(points[i][axis] - want[axis]) < 1e-10);
+  }
+});
+
+test('external refusal counts checked INSERT visits, not unknown entities or unexpanded array cells', () => {
+  const array = (name: string) => [...insert(name), 70, 3, 71, 2, 44, 4, 45, 5];
+  const external = block('External', [], 4);
+  assert.throws(() => readDxfSketch(drawing([...outline, ...array('External')], undefined, external)),
+    /1 INSERT on layer "0".*external reference/);
+  const nested = [...block('Outer', insert('External')), ...external];
+  assert.throws(() => readDxfSketch(drawing([...outline, ...array('Outer')], undefined, nested)),
+    /6 INSERT on layer "0".*external reference/);
+  assert.deepEqual(readDxfSketch(drawing(outline, undefined, nested)), readDxfSketch(drawing(outline)));
+});
