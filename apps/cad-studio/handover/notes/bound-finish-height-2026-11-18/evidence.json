@@ -1,0 +1,430 @@
+{
+  "cad-bound-height-baseline-fillet": {
+    "status": "PASS",
+    "phase": "open feature editor 1",
+    "observations": [
+      {
+        "label": "baseline-safe-refusal",
+        "attemptedHeight": 30,
+        "acceptedHeight": 10,
+        "sourceUnchanged": true,
+        "geometryUnchanged": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "nativeOracleResults": [
+      {
+        "label": "01-original",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 11965.663706143592,
+          "nativeVolume": 11965.663706143594,
+          "workerVolume": 11965.663706143594
+        }
+      },
+      {
+        "label": "baseline-still-height10",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 11965.663706143592,
+          "nativeVolume": 11965.663706143594,
+          "workerVolume": 11965.663706143594
+        }
+      },
+      {
+        "label": "baseline-cancel-preserves",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 11965.663706143592,
+          "nativeVolume": 11965.663706143594,
+          "workerVolume": 11965.663706143594
+        }
+      }
+    ],
+    "changedSourceFiles": [],
+    "ownedSourceHashes": {
+      "apps/cad-studio/src/state/historyFeatureApply.ts": "f9ccbd50083c03d7d5354876ae4059771ce1712300e9da580150f1b2df6d8cbc",
+      "apps/cad-studio/src/state/rectangleFinishResize.ts": "b1c604ffcc383354f5bd4fe9b2fd756b258dd26572d6d19ae914fe025e8c73c3",
+      "apps/cad-studio/test/rectangle-bound-finish-height-browser.mjs": "4d81ae67a5e356d3f79f1fd6d80dc59c31fb60647a63842ac803fb7ce2e73f58"
+    }
+  },
+  "cad-bound-height-baseline-chamfer": {
+    "status": "PASS",
+    "phase": "open feature editor 1",
+    "observations": [
+      {
+        "label": "baseline-safe-refusal",
+        "attemptedHeight": 30,
+        "acceptedHeight": 10,
+        "sourceUnchanged": true,
+        "geometryUnchanged": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "nativeOracleResults": [
+      {
+        "label": "01-original",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 11920,
+          "nativeVolume": 11920,
+          "workerVolume": 11920
+        }
+      },
+      {
+        "label": "baseline-still-height10",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 11920,
+          "nativeVolume": 11920,
+          "workerVolume": 11920
+        }
+      },
+      {
+        "label": "baseline-cancel-preserves",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 11920,
+          "nativeVolume": 11920,
+          "workerVolume": 11920
+        }
+      }
+    ],
+    "changedSourceFiles": [],
+    "ownedSourceHashes": {
+      "apps/cad-studio/src/state/historyFeatureApply.ts": "f9ccbd50083c03d7d5354876ae4059771ce1712300e9da580150f1b2df6d8cbc",
+      "apps/cad-studio/src/state/rectangleFinishResize.ts": "b1c604ffcc383354f5bd4fe9b2fd756b258dd26572d6d19ae914fe025e8c73c3",
+      "apps/cad-studio/test/rectangle-bound-finish-height-browser.mjs": "4d81ae67a5e356d3f79f1fd6d80dc59c31fb60647a63842ac803fb7ce2e73f58"
+    }
+  },
+  "cad-662-fillet-fixed-01": {
+    "status": "PASS",
+    "phase": "fresh Open 11-bound-reopened",
+    "observations": [],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "nativeOracleResults": [
+      {
+        "label": "01-original",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 11965.663706143592,
+          "nativeVolume": 11965.663706143594,
+          "workerVolume": 11965.663706143594
+        }
+      },
+      {
+        "label": "02-taller-native",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 35965.66370614359,
+          "nativeVolume": 35965.66370614359,
+          "workerVolume": 35965.66370614359
+        }
+      },
+      {
+        "label": "undo-height10",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 11965.663706143592,
+          "nativeVolume": 11965.663706143594,
+          "workerVolume": 11965.663706143594
+        }
+      },
+      {
+        "label": "redo-height30",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 35965.66370614359,
+          "nativeVolume": 35965.66370614359,
+          "workerVolume": 35965.66370614359
+        }
+      },
+      {
+        "label": "reopened-height30",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 35965.66370614359,
+          "nativeVolume": 35965.66370614359,
+          "workerVolume": 35965.66370614359
+        }
+      },
+      {
+        "label": "native-height-14",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 16765.66370614359,
+          "nativeVolume": 16765.663706143605,
+          "workerVolume": 16765.663706143605
+        }
+      },
+      {
+        "label": "native-height-40",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47965.66370614359,
+          "nativeVolume": 47965.66370614356,
+          "workerVolume": 47965.66370614356
+        }
+      },
+      {
+        "label": "invalid-preserves-height40",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47965.66370614359,
+          "nativeVolume": 47965.66370614356,
+          "workerVolume": 47965.66370614356
+        }
+      },
+      {
+        "label": "recovery-cancel-height40",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47965.66370614359,
+          "nativeVolume": 47965.66370614356,
+          "workerVolume": 47965.66370614356
+        }
+      },
+      {
+        "label": "08-radius3-native",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47922.74333882308,
+          "nativeVolume": 47922.74333882309,
+          "workerVolume": 47922.74333882309
+        }
+      },
+      {
+        "label": "09-parameter-undo",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47965.66370614359,
+          "nativeVolume": 47965.66370614356,
+          "workerVolume": 47965.66370614356
+        }
+      },
+      {
+        "label": "10-parameter-redo",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47922.74333882308,
+          "nativeVolume": 47922.74333882309,
+          "workerVolume": 47922.74333882309
+        }
+      },
+      {
+        "label": "12-bound-reopened-native",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47922.74333882308,
+          "nativeVolume": 47922.74333882309,
+          "workerVolume": 47922.74333882309
+        }
+      }
+    ],
+    "changedSourceFiles": [],
+    "ownedSourceHashes": {
+      "apps/cad-studio/src/state/historyFeatureApply.ts": "f9ccbd50083c03d7d5354876ae4059771ce1712300e9da580150f1b2df6d8cbc",
+      "apps/cad-studio/src/state/rectangleFinishResize.ts": "cfd8db34f7f81e83e70d3712135b486dcf671c7b256a29e84cf455d018c61858",
+      "apps/cad-studio/test/rectangle-bound-finish-height-browser.mjs": "4d81ae67a5e356d3f79f1fd6d80dc59c31fb60647a63842ac803fb7ce2e73f58"
+    }
+  },
+  "cad-662-chamfer-fixed-01": {
+    "status": "PASS",
+    "phase": "fresh Open 11-bound-reopened",
+    "observations": [],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "nativeOracleResults": [
+      {
+        "label": "01-original",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 11920,
+          "nativeVolume": 11920,
+          "workerVolume": 11920
+        }
+      },
+      {
+        "label": "02-taller-native",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 35920,
+          "nativeVolume": 35920,
+          "workerVolume": 35920
+        }
+      },
+      {
+        "label": "undo-height10",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 11920,
+          "nativeVolume": 11920,
+          "workerVolume": 11920
+        }
+      },
+      {
+        "label": "redo-height30",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 35920,
+          "nativeVolume": 35920,
+          "workerVolume": 35920
+        }
+      },
+      {
+        "label": "reopened-height30",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 35920,
+          "nativeVolume": 35920,
+          "workerVolume": 35920
+        }
+      },
+      {
+        "label": "native-height-14",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 16720,
+          "nativeVolume": 16720,
+          "workerVolume": 16720
+        }
+      },
+      {
+        "label": "native-height-40",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47920,
+          "nativeVolume": 47920,
+          "workerVolume": 47920
+        }
+      },
+      {
+        "label": "invalid-preserves-height40",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47920,
+          "nativeVolume": 47920,
+          "workerVolume": 47920
+        }
+      },
+      {
+        "label": "recovery-cancel-height40",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47920,
+          "nativeVolume": 47920,
+          "workerVolume": 47920
+        }
+      },
+      {
+        "label": "08-radius3-native",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47820,
+          "nativeVolume": 47820,
+          "workerVolume": 47820
+        }
+      },
+      {
+        "label": "09-parameter-undo",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47920,
+          "nativeVolume": 47920,
+          "workerVolume": 47920
+        }
+      },
+      {
+        "label": "10-parameter-redo",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47820,
+          "nativeVolume": 47820,
+          "workerVolume": 47820
+        }
+      },
+      {
+        "label": "12-bound-reopened-native",
+        "exit": 0,
+        "result": {
+          "status": "PASS",
+          "expectedVolume": 47820,
+          "nativeVolume": 47820,
+          "workerVolume": 47820
+        }
+      }
+    ],
+    "changedSourceFiles": [],
+    "ownedSourceHashes": {
+      "apps/cad-studio/src/state/historyFeatureApply.ts": "f9ccbd50083c03d7d5354876ae4059771ce1712300e9da580150f1b2df6d8cbc",
+      "apps/cad-studio/src/state/rectangleFinishResize.ts": "cfd8db34f7f81e83e70d3712135b486dcf671c7b256a29e84cf455d018c61858",
+      "apps/cad-studio/test/rectangle-bound-finish-height-browser.mjs": "4d81ae67a5e356d3f79f1fd6d80dc59c31fb60647a63842ac803fb7ce2e73f58"
+    }
+  }
+}

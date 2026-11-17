@@ -34,9 +34,9 @@ function plain(nodes:readonly ModelNode[],parameters?:StudioDoc['parameters']):b
   &&(i===0||i===last?p.atEnd===true&&p.fraction===undefined:p.atEnd===undefined&&finite(p.fraction)&&p.fraction>1e-9&&p.fraction<1-1e-9&&(i===1||p.fraction-f.radii![i-1].fraction!>1e-9)))
   &&f.radii[0].at.some((v,i)=>v!==f.radii![last].at[i]);
 }
-/** Height-only edit, with no endpoint law to reassign. Other size edits retain their existing admission. */
+/** Numeric Height-only edit, with an unchanged valid finish binding and no endpoint law to reassign. */
 export function isRectangleFinishHeightResize(before:StudioDoc,next:StudioDoc,index:number):boolean {
- if(index!==1||before.direct!==undefined||next.direct!==undefined||before.instances?.length||next.instances?.length||!plain(before.nodes)||!plain(next.nodes))return false;
+ if(index!==1||before.direct!==undefined||next.direct!==undefined||before.instances?.length||next.instances?.length||!plain(before.nodes,before.parameters)||!plain(next.nodes,next.parameters))return false;
  const old=before.nodes[1],now=next.nodes[1],finish=before.nodes[2];
  return old.kind==='extrude'&&now.kind==='extrude'&&old.height!==now.height
   &&(finish.kind==='chamfer'||finish.kind==='fillet'&&finish.radii===undefined)

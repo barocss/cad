@@ -74,13 +74,14 @@ test('Changing parameters or a finish binding is not a size-only edit', () => {
   const p = patched(f, { radius: { parameter: 'EndR' } });
   assert.equal(isRectangleFinishResize(f.before, p.next, 1), false);
 });
-test('Bound height and combined height/width edits remain excluded', () => {
+test('Bound constant finish permits numeric Height alone, not varying or combined size edits', () => {
   for (const kind of ['constant', 'chamfer', 'mixed'] as const) {
     const f = fixture(kind);
     for (const source of [f.before, f.next]) {
       const next = { ...source, nodes: source.nodes.map(n => n.kind === 'extrude' ? { ...n, height: 30 } : n) };
-      assert.equal(isRectangleFinishHeightResize(f.before, next, 1), false);
-      assert.equal(isRectangleFinishResize(f.before, next, 1), false);
+      const admitted = source === f.before && kind !== 'mixed';
+      assert.equal(isRectangleFinishHeightResize(f.before, next, 1), admitted);
+      assert.equal(isRectangleFinishResize(f.before, next, 1), admitted);
     }
   }
 });
