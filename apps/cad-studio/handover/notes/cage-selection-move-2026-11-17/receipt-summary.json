@@ -1,0 +1,32 @@
+{
+  "status": "PASS",
+  "qualification": "Numeric XYZ mm translation on two selected faces, immutable baseline, no-op/cancel/history and native persistence.",
+  "oracles": [],
+  "files": [
+    {
+      "file": "/private/tmp/cad-625-move-browser-01/selection-move.bcad",
+      "hash": "611997ccf8b0d9b6e09600aabc55a2e67d6fa82e2e0e4a3ee9653a2b1391c7fc",
+      "semanticEquality": true
+    }
+  ],
+  "downloads": [
+    {
+      "phase": "native Save selection-move",
+      "suggestedFilename": "Untitled.bcad"
+    }
+  ],
+  "observations": [],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One box and two connected top faces in Studio. Mirror and drag-equivalence covered by pure tests; local frames unsupported."
+  ],
+  "visualReview": "PASS: actual pixels inspected; preview pending exact evaluation and accepted fresh-open distinguished"
+}

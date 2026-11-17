@@ -1,0 +1,10 @@
+# #625 numeric world-axis selection move
+
+2026-11-17. Tested baseline d5124b77c plus this change. Bounded follow-up to numeric rotation/scale, not issue-wide completion.
+
+- Move selection: signed finite distance in mm along world X/Y/Z. Pivot is intentionally absent. Unique selected vertex/edge/face vertices only; all other coordinates, faces and creases unchanged. Existing mirror seam stays fixed. No extrusion, local frame or final-surface dimension claim.
+- All candidates are recomputed from the immutable draft baseline, not accumulated. Zero/no-effective-change retains history/redo. Invalid input retains baseline. Existing exact-receipt Apply, Cancel/Escape, ownership and session Done gates reused without hook changes.
+- Model focused **33/33 PASS**, including four new independent numeric tests: all axes and signs, vertex/edge/multiface, existing commitDrag equivalence, mirrored seams, no-op, undo/redo, stale selections/nonfinite/overflow refusal. Studio focused **18/18 PASS**. Model/Studio types, changed TypeScript lint and production build PASS. Independent review: no blocker.
+- Actual 1440×1000 Chrome/WebGPU Studio **PASS**, first run: off-origin 30×20×16 cage box, two top faces, X/Y/Z values -1/.5/1.5 computed independently, input Escape, Cancel, zero Apply, Z+2 Apply, cage/document Undo/Redo, native Save/fresh Open semantic equality. Source watcher stable; no page/console errors; all owned contexts/browser/server closed.
+- `selection-move-preview.png` shows the quick cage preview at Z+2 with exact check still pending. `fresh-open.png` shows the saved accepted smooth result after readiness permitted Apply/Done. Actual pixels inspected. Cage top z28 is not the final smooth-surface maximum; bounds display ~17.91 mm height. No manufacturing tolerance guarantee.
+- Existing rotation/scale pure regressions passed; their browser flow was not rerun in this follow-up. Pointercancel/lost capture and delayed/reversed exact response browser injection were not run; gizmo and exact hook unchanged. Local normal/tangent/UV frame and rotate/scale dragging remain open in #625. No HOLD widened.

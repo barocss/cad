@@ -24,3 +24,13 @@ test('invalid values and explicit vertex IDs preserve baseline including redo',(
   const r=previewCageTransform(base,{...input,...patch});assert.ok(r.error);assert.equal(r.session,base);assert.equal(r.session.redo,base.redo);
  }
 });
+test('numeric move uses baseline mm, ignores pivot, retains redo on invalid and zero moves',()=>{
+ const move:CageTransformInput={...input,kind:'move',axis:0,vertex:'invalid'};
+ for(const value of ['-2','1','3']){
+  const r=previewCageTransform(s,{...move,value});assert.equal(r.error,null);assert.equal(r.pivot,null);
+  assert.deepEqual(r.session.cage.positions,[10+Number(value),20,30,14+Number(value),20,30,14,24,30,10,24,30]);assert.equal(r.session.undo.length,1);
+ }
+ const base=undoSession(previewCageTransform(s,{...move,value:'2'}).session);
+ for(const value of ['','NaN','Infinity']){const r=previewCageTransform(base,{...move,value});assert.ok(r.error);assert.equal(r.session,base);}
+ assert.equal(previewCageTransform(base,{...move,value:'0'}).session,base);
+});

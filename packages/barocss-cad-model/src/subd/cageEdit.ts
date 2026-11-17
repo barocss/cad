@@ -303,6 +303,7 @@ export function insetCageSelection(s: CageSession, distance: number): CageSessio
 }
 
 export type CageSelectionTransform =
+  | { kind: 'move'; axis: 0 | 1 | 2; distance: number }
   | { kind: 'rotate'; axis: 0 | 1 | 2; degrees: number; pivot: readonly [number, number, number] }
   | { kind: 'scale'; factor: number; pivot: readonly [number, number, number] };
 /** Transform only selected cage vertices from this immutable baseline. Mirror-seam coordinates stay fixed.
@@ -316,13 +317,15 @@ export function transformCageSelection(s: CageSession, transform: CageSelectionT
   if (s.sel.edges.some(([a, b]) => !topology.edges.has(ek(a, b)))) throw new SubdError('INPUT', 'transform: selected edge is not in this cage');
   const vertices = selectedVertices(s);
   if (!vertices.length) throw new SubdError('INPUT', 'transform: pick vertices, edges or faces first');
-  if (transform.pivot.length !== 3 || transform.pivot.some(v => !Number.isFinite(v))) throw new SubdError('INPUT', 'transform: pivot must be finite');
+  if (transform.kind !== 'move' && (transform.pivot.length !== 3 || transform.pivot.some(v => !Number.isFinite(v)))) throw new SubdError('INPUT', 'transform: pivot must be finite');
   if (transform.kind === 'rotate' && (![0, 1, 2].includes(transform.axis) || !Number.isFinite(transform.degrees))) throw new SubdError('INPUT', 'rotate: use a world axis and finite degrees');
   if (transform.kind === 'scale' && (!Number.isFinite(transform.factor) || transform.factor <= 0)) throw new SubdError('INPUT', 'scale: factor must be finite and greater than zero');
+  if (transform.kind === 'move' && (![0, 1, 2].includes(transform.axis) || !Number.isFinite(transform.distance))) throw new SubdError('INPUT', 'move: use a world axis and finite distance in mm');
   const angle = transform.kind === 'rotate' ? transform.degrees % 360 : 0;
-  if (transform.kind === 'rotate' ? angle === 0 : transform.factor === 1) return s;
+  if (transform.kind === 'move' ? transform.distance === 0 : transform.kind === 'rotate' ? angle === 0 : transform.factor === 1) return s;
   const positions = [...c.positions], radians = angle * Math.PI / 180, cosine = Math.cos(radians), sine = Math.sin(radians);
   for (const v of vertices) {
+    if (transform.kind === 'move') { positions[3 * v + transform.axis] += transform.distance; continue; }
     const p = at(c, v).map((x, k) => x - transform.pivot[k]);
     const q = [...p];
     if (transform.kind === 'scale') for (let k = 0; k < 3; k++) q[k] *= transform.factor;

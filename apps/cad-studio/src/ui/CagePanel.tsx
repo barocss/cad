@@ -65,6 +65,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
     })}</div>
     <div className="flex flex-wrap gap-1">
       <Button variant="ghost" disabled={s.mode !== 'face' || s.sel.faces.length !== 1} data-tip="Inset face" data-tip-desc="One planar convex quad; inward cage distance in mm. Not final smooth wall thickness" onClick={() => editor.previewInset('1')}>Inset face</Button>
+      <Button variant="ghost" disabled={!n} onClick={() => editor.previewTransform({ kind: 'move', axis: 2, value: '0', pivot: 'centre', vertex: '' })}>Move selection</Button>
       <Button variant="ghost" disabled={!n} onClick={() => editor.previewTransform({ kind: 'rotate', axis: 2, value: '0', pivot: 'centre', vertex: '' })}>Rotate selection</Button>
       <Button variant="ghost" disabled={!n} onClick={() => editor.previewTransform({ kind: 'scale', axis: 2, value: '1', pivot: 'centre', vertex: '' })}>Scale selection</Button>
     </div>
