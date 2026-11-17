@@ -1,0 +1,763 @@
+{
+  "status": "PASS",
+  "qualification": "New dimensions cannot acquire an existing geometric control whose saved target is missing.",
+  "observations": [
+    {
+      "mode": "auto",
+      "ids": [
+        "d2",
+        "d3",
+        "d4"
+      ],
+      "controls": 0
+    },
+    {
+      "mode": "auto",
+      "svgControlAbsent": true,
+      "svgDimensionPresent": true
+    },
+    {
+      "mode": "manual",
+      "ids": [
+        "d2"
+      ],
+      "controls": 0
+    },
+    {
+      "mode": "manual",
+      "svgControlAbsent": true,
+      "svgDimensionPresent": true
+    },
+    {
+      "mode": "continuation",
+      "ids": [
+        "d2"
+      ],
+      "controls": 0
+    },
+    {
+      "mode": "continuation",
+      "svgControlAbsent": true,
+      "svgDimensionPresent": true
+    }
+  ],
+  "sourceFrozenCount": 1076,
+  "frozenSourcesUnchanged": true,
+  "savedFiles": [
+    {
+      "file": "auto-saved.bcad",
+      "hash": "3929b8fd67e91ebb24357712d5d4ed422e0c6f628e35ed958f0fa5d2827c6b9f",
+      "semanticEquality": true
+    },
+    {
+      "file": "manual-saved.bcad",
+      "hash": "f4abd2743de9c3d6a2461c2cf9d7f8b861beeb0bf8566e3b753f64854ff8d23a",
+      "semanticEquality": true
+    },
+    {
+      "file": "continuation-saved.bcad",
+      "hash": "2963f0b51e42d200470e73479aeeac417fb810c340e9456d789b2ded34fee07c",
+      "semanticEquality": true
+    }
+  ],
+  "documents": [
+    {
+      "label": "auto-created",
+      "drawing": {
+        "sheet": "A4",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": true,
+        "title": "Held frame identity",
+        "dimensions": [
+          {
+            "view": "top",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                0
+              ]
+            },
+            "b": {
+              "edge": "n1.bottom|n1.side2",
+              "at": "end",
+              "near": [
+                0,
+                32,
+                0
+              ]
+            },
+            "orient": "vertical",
+            "place": [
+              -10,
+              16
+            ],
+            "id": "d2",
+            "auto": true
+          },
+          {
+            "view": "front",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                0
+              ]
+            },
+            "b": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                64,
+                0,
+                0
+              ]
+            },
+            "orient": "horizontal",
+            "place": [
+              32,
+              -10
+            ],
+            "id": "d3",
+            "auto": true
+          },
+          {
+            "view": "front",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                0
+              ]
+            },
+            "b": {
+              "edge": "n1.side0|n1.top",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                8
+              ]
+            },
+            "orient": "vertical",
+            "place": [
+              74,
+              4
+            ],
+            "id": "d4",
+            "auto": true
+          }
+        ],
+        "views": [
+          "front",
+          "top",
+          "iso"
+        ],
+        "frames": [
+          {
+            "id": "held-control",
+            "dim": "d1",
+            "characteristic": "flatness",
+            "value": 0.25,
+            "datums": []
+          }
+        ]
+      }
+    },
+    {
+      "label": "auto-reopened",
+      "drawing": {
+        "sheet": "A4",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": true,
+        "title": "Held frame identity",
+        "dimensions": [
+          {
+            "view": "top",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                0
+              ]
+            },
+            "b": {
+              "edge": "n1.bottom|n1.side2",
+              "at": "end",
+              "near": [
+                0,
+                32,
+                0
+              ]
+            },
+            "orient": "vertical",
+            "place": [
+              -10,
+              16
+            ],
+            "id": "d2",
+            "auto": true
+          },
+          {
+            "view": "front",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                0
+              ]
+            },
+            "b": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                64,
+                0,
+                0
+              ]
+            },
+            "orient": "horizontal",
+            "place": [
+              32,
+              -10
+            ],
+            "id": "d3",
+            "auto": true
+          },
+          {
+            "view": "front",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                0
+              ]
+            },
+            "b": {
+              "edge": "n1.side0|n1.top",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                8
+              ]
+            },
+            "orient": "vertical",
+            "place": [
+              74,
+              4
+            ],
+            "id": "d4",
+            "auto": true
+          }
+        ],
+        "views": [
+          "front",
+          "top",
+          "iso"
+        ],
+        "frames": [
+          {
+            "id": "held-control",
+            "dim": "d1",
+            "characteristic": "flatness",
+            "value": 0.25,
+            "datums": []
+          }
+        ]
+      }
+    },
+    {
+      "label": "auto-final",
+      "drawing": {
+        "sheet": "A4",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": true,
+        "title": "Held frame identity",
+        "dimensions": [
+          {
+            "view": "top",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                0
+              ]
+            },
+            "b": {
+              "edge": "n1.bottom|n1.side2",
+              "at": "end",
+              "near": [
+                0,
+                32,
+                0
+              ]
+            },
+            "orient": "vertical",
+            "place": [
+              -10,
+              16
+            ],
+            "id": "d2",
+            "auto": true
+          },
+          {
+            "view": "front",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                0
+              ]
+            },
+            "b": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                64,
+                0,
+                0
+              ]
+            },
+            "orient": "horizontal",
+            "place": [
+              32,
+              -10
+            ],
+            "id": "d3",
+            "auto": true
+          },
+          {
+            "view": "front",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                0
+              ]
+            },
+            "b": {
+              "edge": "n1.side0|n1.top",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                8
+              ]
+            },
+            "orient": "vertical",
+            "place": [
+              74,
+              4
+            ],
+            "id": "d4",
+            "auto": true
+          }
+        ],
+        "views": [
+          "front",
+          "top",
+          "iso"
+        ],
+        "frames": [
+          {
+            "id": "held-control",
+            "dim": "d1",
+            "characteristic": "flatness",
+            "value": 0.25,
+            "datums": []
+          }
+        ]
+      }
+    },
+    {
+      "label": "manual-created",
+      "drawing": {
+        "sheet": "A4",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": true,
+        "title": "Held frame identity",
+        "dimensions": [
+          {
+            "id": "d2",
+            "view": "front",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.side0|n1.top",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                8
+              ]
+            },
+            "b": {
+              "edge": "n1.side0|n1.top",
+              "at": "end",
+              "near": [
+                64,
+                0,
+                8
+              ]
+            },
+            "orient": "horizontal",
+            "place": [
+              32.00000468319095,
+              20.000004178589478
+            ]
+          }
+        ],
+        "frames": [
+          {
+            "id": "held-control",
+            "dim": "d1",
+            "characteristic": "flatness",
+            "value": 0.25,
+            "datums": []
+          }
+        ]
+      }
+    },
+    {
+      "label": "manual-reopened",
+      "drawing": {
+        "sheet": "A4",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": true,
+        "title": "Held frame identity",
+        "dimensions": [
+          {
+            "id": "d2",
+            "view": "front",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.side0|n1.top",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                8
+              ]
+            },
+            "b": {
+              "edge": "n1.side0|n1.top",
+              "at": "end",
+              "near": [
+                64,
+                0,
+                8
+              ]
+            },
+            "orient": "horizontal",
+            "place": [
+              32.00000468319095,
+              20.000004178589478
+            ]
+          }
+        ],
+        "frames": [
+          {
+            "id": "held-control",
+            "dim": "d1",
+            "characteristic": "flatness",
+            "value": 0.25,
+            "datums": []
+          }
+        ]
+      }
+    },
+    {
+      "label": "manual-final",
+      "drawing": {
+        "sheet": "A4",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": true,
+        "title": "Held frame identity",
+        "dimensions": [
+          {
+            "id": "d2",
+            "view": "front",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.side0|n1.top",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                8
+              ]
+            },
+            "b": {
+              "edge": "n1.side0|n1.top",
+              "at": "end",
+              "near": [
+                64,
+                0,
+                8
+              ]
+            },
+            "orient": "horizontal",
+            "place": [
+              32.00000468319095,
+              20.000004178589478
+            ]
+          }
+        ],
+        "frames": [
+          {
+            "id": "held-control",
+            "dim": "d1",
+            "characteristic": "flatness",
+            "value": 0.25,
+            "datums": []
+          }
+        ]
+      }
+    },
+    {
+      "label": "continuation-created",
+      "drawing": {
+        "sheet": "A4",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": true,
+        "title": "Held frame identity",
+        "dimensions": [
+          {
+            "view": "top",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                0
+              ]
+            },
+            "b": {
+              "edge": "n1.bottom|n1.side2",
+              "at": "end",
+              "near": [
+                0,
+                32,
+                0
+              ]
+            },
+            "orient": "vertical",
+            "place": [
+              69,
+              16
+            ],
+            "id": "d2",
+            "auto": true
+          }
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Top sheet",
+            "views": [
+              "top"
+            ]
+          }
+        ],
+        "frames": [
+          {
+            "id": "held-control",
+            "dim": "d1",
+            "characteristic": "flatness",
+            "value": 0.25,
+            "datums": []
+          }
+        ]
+      }
+    },
+    {
+      "label": "continuation-reopened",
+      "drawing": {
+        "sheet": "A4",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": true,
+        "title": "Held frame identity",
+        "dimensions": [
+          {
+            "view": "top",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                0
+              ]
+            },
+            "b": {
+              "edge": "n1.bottom|n1.side2",
+              "at": "end",
+              "near": [
+                0,
+                32,
+                0
+              ]
+            },
+            "orient": "vertical",
+            "place": [
+              69,
+              16
+            ],
+            "id": "d2",
+            "auto": true
+          }
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Top sheet",
+            "views": [
+              "top"
+            ]
+          }
+        ],
+        "frames": [
+          {
+            "id": "held-control",
+            "dim": "d1",
+            "characteristic": "flatness",
+            "value": 0.25,
+            "datums": []
+          }
+        ]
+      }
+    },
+    {
+      "label": "continuation-final",
+      "drawing": {
+        "sheet": "A4",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": true,
+        "title": "Held frame identity",
+        "dimensions": [
+          {
+            "view": "top",
+            "kind": "linear",
+            "a": {
+              "edge": "n1.bottom|n1.side0",
+              "at": "end",
+              "near": [
+                0,
+                0,
+                0
+              ]
+            },
+            "b": {
+              "edge": "n1.bottom|n1.side2",
+              "at": "end",
+              "near": [
+                0,
+                32,
+                0
+              ]
+            },
+            "orient": "vertical",
+            "place": [
+              69,
+              16
+            ],
+            "id": "d2",
+            "auto": true
+          }
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Top sheet",
+            "views": [
+              "top"
+            ]
+          }
+        ],
+        "frames": [
+          {
+            "id": "held-control",
+            "dim": "d1",
+            "characteristic": "flatness",
+            "value": 0.25,
+            "datums": []
+          }
+        ]
+      }
+    }
+  ],
+  "independentSvgChecks": [
+    {
+      "mode": "auto",
+      "dimensions": 3,
+      "heldControlAbsent": true
+    },
+    {
+      "mode": "manual",
+      "dimensions": 1,
+      "heldControlAbsent": true
+    },
+    {
+      "mode": "continuation",
+      "dimensions": 1,
+      "heldControlAbsent": true
+    }
+  ]
+}

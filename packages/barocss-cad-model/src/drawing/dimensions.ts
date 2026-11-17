@@ -5,6 +5,7 @@ import type { BrepProjection, ProjectedCurve, ProjectedEdge } from '@barocss/cad
 import { isSectionRef } from './types';
 import type { CentreRef, DimPoint, DimView, DrawingDimension, EdgeRef, Vec3, XY } from './types';
 import { dot } from '../engine/vec3';
+import type { DrawingFrame } from './controls';
 import { nextFreeId } from '../util/ids';
 import { formatNumber, type LengthFormat, type UnitPrecision } from './standard';
 import type { DrawingDetail } from './detail';
@@ -255,4 +256,7 @@ export function orientFor(a: XY, b: XY, place: XY): 'horizontal' | 'vertical' | 
   return 'aligned';
 }
 
-export const newDimensionId = (dims: readonly DrawingDimension[]) => nextFreeId('d', new Set(dims.map(d => d.id)));
+/** Existing dimension identities, including missing targets still held by authored control frames. */
+export const reservedDimensionIds = (dims: readonly DrawingDimension[], frames: readonly DrawingFrame[] = []): Set<string> =>
+  new Set([...dims.map(d => d.id), ...frames.flatMap(frame => frame.dim === undefined ? [] : [frame.dim])]);
+export const newDimensionId = (dims: readonly DrawingDimension[], frames: readonly DrawingFrame[] = []) => nextFreeId('d', reservedDimensionIds(dims, frames));

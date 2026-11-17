@@ -628,7 +628,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (tool === 'linear') {
       if (pending?.kind === 'linear' && pending.b) {
         const a = pointIn(pr, pending.a), b = pointIn(pr, pending.b);
-        commitDims([...settings.dimensions, { id: newDimensionId(wholeSettings.dimensions), view: pending.view, kind: 'linear', a: pending.a, b: pending.b, orient: orientFor(a, b, place), place }]);
+        commitDims([...settings.dimensions, { id: newDimensionId(wholeSettings.dimensions, wholeSettings.frames), view: pending.view, kind: 'linear', a: pending.a, b: pending.b, orient: orientFor(a, b, place), place }]);
         setPending(null); return;
       }
       if (pending?.kind === 'linear' && pending.view !== h.view) { setMessage('Pick the second point in the same view.'); return; }
@@ -646,7 +646,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     }
     if (tool === 'angle') {
       if (pending?.kind === 'angle' && pending.b) {
-        commitDims([...settings.dimensions, { id: newDimensionId(wholeSettings.dimensions), view: pending.view, kind: 'angle', a: pending.a, b: pending.b, place }]);
+        commitDims([...settings.dimensions, { id: newDimensionId(wholeSettings.dimensions, wholeSettings.frames), view: pending.view, kind: 'angle', a: pending.a, b: pending.b, place }]);
         setPending(null); return;
       }
       // (A straight edge under the pointer, even near its ends.)
@@ -664,7 +664,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         if (pending.source && (pending.source.projection !== views || pending.source.settings !== settings || busy)) {
           cancel(); setMessage('The drawing changed. Select the rim again.'); return;
         }
-        const dim: DrawingDimension = { id: newDimensionId(wholeSettings.dimensions), view: pending.view, kind: tool, edge: pending.edge, near: pending.near, place };
+        const dim: DrawingDimension = { id: newDimensionId(wholeSettings.dimensions, wholeSettings.frames), view: pending.view, kind: tool, edge: pending.edge, near: pending.near, place };
         if (tool === 'diameter' && isDetailRef(dim.view)) {
           const resolved = resolveDimension({ [dim.view]: pr }, dim, detailFor(settings, dim.view), showDetailHidden(settings, dim.view));
           if (!resolved.ok) { setMessage(resolved.reason); return; }

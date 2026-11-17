@@ -26,6 +26,8 @@ export interface SheetContext {
   allViews: ViewId[];
   /** Existing dimension IDs reserved by the other sheets. */
   dimensionIdsOnOtherSheets?: readonly string[];
+  /** All saved control targets, including missing dimensions owned by a different sheet. */
+  heldDimensionIds?: readonly string[];
   /** Details whose circle is on this sheet but whose view is on another; details drawn here whose circle is on another. */
   circleOnly: string[]; viewOnly: string[];
   /** The same for removed sections: the cutting line is here, the section on another; the section is here, its line on another. */
@@ -175,6 +177,7 @@ export function forSheet(s: DrawingSettings, k: number): DrawingSettings {
   out.sheetContext = {
     n: k + 1, of: n, sheets: Array.from({ length: n }, (_, j) => ({ name: sheetName(s, j), size: sheetSize(s, j) })), where, allViews: shown,
     dimensionIdsOnOtherSheets: s.dimensions.filter(dim => !here(dim.view)).map(dim => dim.id),
+    heldDimensionIds: [...new Set((s.frames ?? []).flatMap(frame => frame.dim === undefined ? [] : [frame.dim]))],
     circleOnly: circleOnly.map(d => d.id), viewOnly: drawnDetails.filter(d => (at.get(d.view) ?? 0) !== k).map(d => d.id),
     lineOnly: lineOnly.map(x => x.id), sectionViewOnly: drawnSections.filter(x => x.removed && (at.get(x.view) ?? 0) !== k).map(x => x.id),
     stale: k === 0 ? staleSheetViews(s).map(x => x.why) : [],
