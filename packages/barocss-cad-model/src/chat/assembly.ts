@@ -196,18 +196,22 @@ export async function runAssemblyTool(state: State, name: string, args: Record<s
       const position = args.position === undefined ? undefined : vec3(args.position), rotation = args.rotation === undefined ? undefined : vec3(args.rotation);
       if (inst && (position === null || rotation === null)) return fail(doc, '"position" and "rotation" are [x, y, z] (mm; degrees about X, then Y, then Z).');
       try {
-        const next = placePart(doc, { part: String(args.part), ...(position ? { position } : {}), ...(rotation ? { rotation } : {}), ...(typeof args.name === 'string' && args.name.trim() ? { name: args.name.trim() } : {}),
+        let next = placePart(doc, { part: String(args.part), ...(position ? { position } : {}), ...(rotation ? { rotation } : {}), ...(typeof args.name === 'string' && args.name.trim() ? { name: args.name.trim() } : {}),
           ...(args.grounded === undefined ? {} : { grounded: !!args.grounded }), ...(args.hidden === undefined ? {} : { hidden: !!args.hidden }) });
+        const extra: Record<string, unknown> = {};
         // (Roadmap 10 4: a sub-assembly occurrence's own joint values, assembly/flexible.ts — degrees for a turn, mm for a slide.)
         if (args.joints !== undefined) {
           const posed = setInstanceJoints(next.doc, { part: String(args.part), joints: args.joints as Record<string, number | null> }), now = instanceJointsOf(posed.doc, String(args.part));
-          return reported(doc, posed, `placed ${inst!.id}`, { joints: now.joints, ...(now.problem ? { problem: now.problem } : {}) });
+          next = posed;
+          Object.assign(extra, { joints: now.joints, ...(now.problem ? { problem: now.problem } : {}) });
         }
         // (Roadmap 10 ①: this occurrence's own looks, assembly/looks.ts — by body key; null: back to the definition's.)
         if (args.looks !== undefined) {
           const looked = setInstanceLooks(next.doc, String(args.part), args.looks as Record<string, InstanceLookPatch | null>);
-          return reported(doc, { ...next, doc: looked.doc }, `placed ${inst!.id}`, { looks: instanceLooksListing(looked.doc, inst!.id) });
+          next = { ...next, doc: looked.doc };
+          extra.looks = instanceLooksListing(looked.doc, inst!.id);
         }
+        if (args.joints !== undefined || args.looks !== undefined) return reported(doc, next, `placed ${inst!.id}`, extra);
         const by = mates.filter(m => hostOf(m.b.part) === inst!.id);
         return reported(doc, next, `placed ${inst!.id}`,
           by.length && (args.position !== undefined || args.rotation !== undefined) ? { note: `${by.length} mate${by.length > 1 ? 's' : ''} still place it: the solver keeps what they fix and moves it only where they leave it free` } : {});

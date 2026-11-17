@@ -1,0 +1,64 @@
+{
+  "status": "PASS",
+  "qualification": "A joint-plus-appearance command applies both fields or keeps the original document.",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Actual dispatcher/evaluator results consumed by Studio native Open, not a malformed-input numeric UI flow."
+  ],
+  "phase": "fresh Open bad-joint-reopened",
+  "frozenSourceCount": 1299,
+  "frozenSourceUnchanged": true,
+  "files": [
+    {
+      "file": "valid-saved.bcad",
+      "hash": "01da3232f4fb024bf5f4dd4391787fee3529cd5d97e94e54a207ba9b8182b341",
+      "semanticEquality": true
+    },
+    {
+      "file": "bad-look-saved.bcad",
+      "hash": "382cefc0f602b7162b8c15fbf1374269dab6b00dd5d6e12cdae95021edc4b45b",
+      "semanticEquality": true
+    },
+    {
+      "file": "bad-joint-saved.bcad",
+      "hash": "382cefc0f602b7162b8c15fbf1374269dab6b00dd5d6e12cdae95021edc4b45b",
+      "semanticEquality": true
+    }
+  ],
+  "dispatcher": [
+    {
+      "mode": "valid",
+      "held": [],
+      "changed": true,
+      "isError": false,
+      "content": "{\"ok\":true,\"did\":\"placed sub2\",\"joints\":[{\"key\":\"base~lid\",\"type\":\"continuous\",\"parent\":\"base\",\"child\":\"lid\",\"value\":45}],\"looks\":[{\"body\":\"b1\",\"look\":{\"color\":\"#00ff00\",\"material\":\"steel\"}}],\"parts\":[{\"id\":\"sub1\",\"name\":\"Hinge 1\",\"position\":[0,0,0],\"rotation\":[0,0,0],\"grounded\":true},{\"id\":\"sub2\",\"name\":\"Hinge 2\",\"position\":[200,0,0],\"rotation\":[0,0,0],\"grounded\":true}]}"
+    },
+    {
+      "mode": "bad-look",
+      "held": [],
+      "changed": false,
+      "isError": true,
+      "content": "{\"ok\":false,\"error\":\"[VALUE] Hinge 2 (sub2): the colour must be a colour like \\\"#d9534f\\\" (or null for the definition's), not \\\"invalid-colour\\\".\"}"
+    },
+    {
+      "mode": "bad-joint",
+      "held": [],
+      "changed": false,
+      "isError": true,
+      "content": "{\"ok\":false,\"error\":\"[VALUE] Hinge 2 (sub2) has no joint \\\"missing\\\"; its joints: base~lid.\"}"
+    }
+  ],
+  "visualReview": "Observed green body, Steel (mild), joint 45 degrees; no held appearance; green body retained after Save/Open."
+}
