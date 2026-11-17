@@ -1,0 +1,110 @@
+{
+  "issue": 235,
+  "parent": "fa89811a3",
+  "scope": "actual OPFS persistence and representative BOM consumer; no product changes",
+  "status": "PASS",
+  "run": "/tmp/cad-isolation-persistence-01",
+  "receiptSHA256": "06f48fbb19556ea8e8fb2e43756c98f48fd642b5014e150c9c2da11d3ea142ce",
+  "driverSHA256": "2b7131e3ac33e5fc0da56ae67180cb0ac87974110b6956c50d0d0d761c1b6d64",
+  "screenshotSHA256": "7f8b2972afc75a866c3ec88831ff24020682999b3264696417388403687d9ed3",
+  "files": [
+    {
+      "name": "isolation-parts.bcad",
+      "bytes": 3976,
+      "sha256": "e10be770af187df79624fd0d4243d775d6c1a8c4be10effa77363dbcb65e6c64",
+      "method": "Actual named OPFS writable.close completion before baseline/isolated raw-byte reads; fresh Open exact Doc and bytes"
+    }
+  ],
+  "observations": [
+    {
+      "beforeBom": {
+        "rows": [
+          "#ItemQtyRowSource",
+          "1A4\u2014\u2014made"
+        ],
+        "totals": "4 parts \u00b7 0 bought elements \u00b7 10.8 g (the parts')",
+        "quantities": [
+          "4"
+        ]
+      },
+      "isolatedBom": {
+        "rows": [
+          "#ItemQtyRowSource",
+          "1A4\u2014\u2014made"
+        ],
+        "totals": "4 parts \u00b7 0 bought elements \u00b7 10.8 g (the parts')",
+        "quantities": [
+          "4"
+        ]
+      },
+      "reopenedBom": {
+        "rows": [
+          "#ItemQtyRowSource",
+          "1A4\u2014\u2014made"
+        ],
+        "totals": "4 parts \u00b7 0 bought elements \u00b7 10.8 g (the parts')",
+        "quantities": [
+          "4"
+        ]
+      },
+      "fullAuthoredInstances": [
+        {
+          "id": "p1",
+          "hidden": false,
+          "part": {
+            "id": "own-A",
+            "rev": "A",
+            "source": "own-A.bcad"
+          }
+        },
+        {
+          "id": "p2",
+          "hidden": false,
+          "part": {
+            "id": "own-B",
+            "rev": "A",
+            "source": "own-B.bcad"
+          }
+        },
+        {
+          "id": "p3",
+          "hidden": false,
+          "part": {
+            "id": "own-C",
+            "rev": "A",
+            "source": "own-C.bcad"
+          }
+        },
+        {
+          "id": "p4",
+          "hidden": true,
+          "part": {
+            "id": "own-D",
+            "rev": "A",
+            "source": "own-D.bcad"
+          }
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "downloads": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "verification": {
+    "syntax": "PASS",
+    "scopedLint": "PASS",
+    "actualSessionExit": 0
+  },
+  "notRun": [
+    "WebGL fallback",
+    "all blocked modes exhaustively",
+    "individual STEP/drawing export files",
+    "native CLI"
+  ]
+}
