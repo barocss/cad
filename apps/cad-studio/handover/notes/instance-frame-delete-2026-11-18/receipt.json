@@ -1,0 +1,37 @@
+{
+  "status": "PASS",
+  "qualification": "Inspector Remove preserves a part whose sketch a base frame follows; unrelated removal and Undo remain usable.",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Existing FRf2 deletion refusal, no new reference or frame schema."
+  ],
+  "phase": "fresh Open frame-reopened",
+  "observations": [
+    {
+      "refused": {
+        "isError": true,
+        "changed": false,
+        "content": "{\"ok\":false,\"error\":\"[FRAME_PART_IN_USE] p1 holds the sketch n0 that feature 0 (Frame RHS 40\u00d740\u00d73 \u00b7 4 members \u00b7 on p1's sketch n0) follows: give those frames their own points, or delete them, first.\"}",
+        "unchanged": true
+      }
+    }
+  ],
+  "sourceFrozenCount": 1298,
+  "sourceUnchanged": true,
+  "visualReview": "Refusal names FRAME_PART_IN_USE while p1 remains selected; reopened model has four frame bodies and p1.",
+  "files": [
+    {
+      "file": "frame-preserved.bcad",
+      "semanticEquality": true,
+      "hash": "bdbde04e2229f044650c1aaa31f441254a7d057dd57dc0c7ca2aad40bbe324a2"
+    }
+  ]
+}

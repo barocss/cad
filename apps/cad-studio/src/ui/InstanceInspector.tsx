@@ -1,4 +1,6 @@
 import { InstanceBriefNotes } from './InstanceBriefNotes';
+import { checkPartDelete } from '@barocss/cad-model/frames/skeleton';
+import { firstProblem } from '@barocss/cad-model/engine/refusal';
 import { useLayoutEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import type { StudioDoc, PartInstance, ModelNode } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
@@ -103,5 +105,6 @@ export function InstanceInspector({ model, bearing, assembly, changes, onNotice:
       if (held.length) setToast({ title: `${held.length} look${held.length > 1 ? 's' : ''} held`, hint: held.map(h => h.problem).join(' '), detail: '' }); }} onDismiss={() => commitParts(dismissRevision(doc, inst.part!.id))}
     onRemove={() => {
       const held = patternDeleteRefusal(doc, inst.id); if (held) { setToast({ title: 'Can’t remove this part', hint: held.message, detail: '' }); return; }
+      const followed = firstProblem(checkPartDelete(doc, inst.id)); if (followed) { setToast({ title: 'Can’t remove this part', hint: followed, detail: '' }); return; }
       if (!commitAssembly(list.filter(i => i.id !== inst.id), assembly.without(inst.id))) return; clearSelection(); }} />;
 }
