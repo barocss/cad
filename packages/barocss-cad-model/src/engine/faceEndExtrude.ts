@@ -130,7 +130,7 @@ function targetPolygon(brep: Brep, face: BrepFace, { axes: [u, v, w], sign }: En
 }
 
 type LiteralRectangle = Extract<SketchNode, { profile: 'rectangle' }> & { min: [number, number]; max: [number, number] };
-type LiteralTriangle = Omit<Extract<SketchNode, { profile: 'polygon' }>, 'points'> & { points: [[number, number], [number, number], [number, number]] };
+type LiteralPolygon = Omit<Extract<SketchNode, { profile: 'polygon' }>, 'points'> & { points: [number, number][] };
 
 type LiteralCircle = Omit<Extract<SketchNode, { profile: 'circle' }>, 'center' | 'radius'> & { center: [number, number]; radius: number };
 function literalCircle(sketch: Extract<SketchNode, { profile: 'circle' }>): sketch is LiteralCircle {
@@ -143,21 +143,42 @@ function literalCircle(sketch: Extract<SketchNode, { profile: 'circle' }>): sket
   return center.every(c => typeof c === 'number' && finiteCoordinate(c - radius) && finiteCoordinate(c + radius));
 }
 
-function literalTriangle(sketch: Extract<SketchNode, { profile: 'polygon' }>): sketch is LiteralTriangle {
+/** Exact global convexity plus the existing minimum edge/altitude boundary. */
+function admittedPolygon(points: readonly (readonly number[])[]): boolean {
+  const n = points.length;
+  if (n < 3 || n > 8 || !points.every(p => p.length === 2 && p.every(finiteCoordinate))) return false;
+  const polygon: ExactPoint[] = points.map(p => [exact(p[0]), exact(p[1])]);
+  const winding = turn(polygon[0], polygon[1], polygon[2]) > 0n ? 1n : -1n;
+  for (let i = 0; i < n; i++) {
+    const a = points[i], b = points[(i + 1) % n], length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (length <= CadNumericPolicy.linearTolerance) return false;
+    for (let j = 0; j < n; j++) {
+      if (j === i || j === (i + 1) % n) continue;
+      if (winding * turn(polygon[i], polygon[(i + 1) % n], polygon[j]) <= 0n) return false;
+      const c = points[j], area = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+      if (area <= CadNumericPolicy.linearTolerance * length) return false;
+    }
+  }
+  return true;
+}
+function literalPolygon(sketch: Extract<SketchNode, { profile: 'polygon' }>): sketch is LiteralPolygon {
   const p = sketch.points;
-  if (!Array.isArray(p) || p.length !== 3 || !p.every(q => Array.isArray(q) && q.length === 2 && q.every(finiteCoordinate))) return false;
+  if (!Array.isArray(p) || !p.every(q => Array.isArray(q) && q.length === 2 && q.every(finiteCoordinate))) return false;
   const points = p as [number, number][];
-  const lengths = points.map((q, i) => Math.hypot(q[0] - points[(i + 1) % 3][0], q[1] - points[(i + 1) % 3][1]));
-  if (lengths.some(length => length <= CadNumericPolicy.linearTolerance)) return false;
-  const [a, b, c] = points;
-  const twiceArea = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
-  if (twiceArea <= CadNumericPolicy.linearTolerance * Math.max(...lengths)) return false;
+  if (!admittedPolygon(points)) return false;
+  // The existing editor writes >8-point outlines as loop profiles. Do not admit
+  // a polygon whose ordinary Edit sketch/Finish would change this recipe's kind.
+  if (points.length > 3 && ['holes', 'regions', 'holeOutlines', 'regionLengths', 'on', 'association', 'pocketFloor'].some(key => (sketch as unknown as Record<string, unknown>)[key] !== undefined)) return false;
+  const frame = faceEndAxes(sketch.plane);
+  if (!frame) return false;
+  const { axes: [u, v] } = frame, origin = sketch.plane?.origin ?? [0, 0, 0];
+  if (!admittedPolygon(points.map(p => [origin[u] + p[0], origin[v] + p[1]]))) return false;
   const outline: unknown = sketch.outline;
   if (outline !== undefined) {
-    if (!record(outline) || !Array.isArray(outline.points) || outline.points.length !== 3
+    if (!record(outline) || !Array.isArray(outline.points) || outline.points.length !== points.length
       || !outline.points.every((q, i) => Array.isArray(q) && q.length === 2 && q.every((v, j) => v === points[i][j]))) return false;
     if (outline.bulges !== undefined && (!Array.isArray(outline.bulges)
-      || (outline.bulges.length !== 0 && outline.bulges.length !== 3)
+      || (outline.bulges.length !== 0 && outline.bulges.length !== points.length)
       || !outline.bulges.every(v => typeof v === 'number' && Number.isFinite(v) && v === 0))) return false;
     if (outline.spline !== undefined || outline.ellipse !== undefined) return false;
     for (const key of ['circles', 'tangents', 'equalRadii', 'concentric']) {
@@ -184,11 +205,11 @@ function faceEndAxes(plane: DocPlane | undefined): EndFrame | null {
   return null;
 }
 
-export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is LiteralRectangle | LiteralTriangle | LiteralCircle {
+export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is LiteralRectangle | LiteralPolygon | LiteralCircle {
   if (sketch?.kind !== 'sketch' || sketch.suppressed || faceEndAxes(sketch.plane) === null || sketch.on
     || sketch.association || sketch.regions?.length || sketch.holes?.length) return false;
   if (sketch.profile === 'circle') return literalCircle(sketch);
-  if (sketch.profile === 'polygon') return literalTriangle(sketch);
+  if (sketch.profile === 'polygon') return literalPolygon(sketch);
   return sketch.profile === 'rectangle'
     && Array.isArray(sketch.min) && sketch.min.length === 2 && sketch.min.every(finiteCoordinate)
     && Array.isArray(sketch.max) && sketch.max.length === 2 && sketch.max.every(finiteCoordinate);
@@ -197,7 +218,7 @@ export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is
 /** Resolve from the live preceding native results. A consumed target has no eligible output. */
 export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, prefix: readonly CadPartFeature[]): number {
   const sketch = doc.nodes[node.sketch];
-  if (!isFaceEndExtrudeSketch(sketch)) throw invalid('the source needs a literal rectangle, straight triangle or circle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane.');
+  if (!isFaceEndExtrudeSketch(sketch)) throw invalid('the source needs a literal rectangle, straight convex polygon of 3 to 8 points or circle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane.');
   const axes = faceEndAxes(sketch.plane)!;
   const { axes: [u, v, w], sign } = axes, origin = sketch.plane?.origin ?? [0, 0, 0];
   // Bounds use the actual native profile fields, never the editor's optional outline snapshot.

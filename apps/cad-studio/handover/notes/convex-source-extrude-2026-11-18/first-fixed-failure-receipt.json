@@ -1,0 +1,1186 @@
+{
+  "status": "FAIL",
+  "qualification": "Qualify a literal convex polygon in the Front XZ convex six-sided source frame and its original opposing native end face.",
+  "visualReview": "ROOT_MUST_VIEW_SCREENSHOTS",
+  "states": [
+    {
+      "label": "01-translated-preview",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -5,
+              -3
+            ],
+            "max": [
+              15,
+              9
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "from": 20,
+            "height": 5
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "polygon",
+            "points": [
+              [
+                0,
+                3
+              ],
+              [
+                2,
+                0
+              ],
+              [
+                8,
+                0
+              ],
+              [
+                10,
+                3
+              ],
+              [
+                8,
+                6
+              ],
+              [
+                2,
+                6
+              ]
+            ],
+            "outline": {
+              "points": [
+                [
+                  0,
+                  3
+                ],
+                [
+                  2,
+                  0
+                ],
+                [
+                  8,
+                  0
+                ],
+                [
+                  10,
+                  3
+                ],
+                [
+                  8,
+                  6
+                ],
+                [
+                  2,
+                  6
+                ]
+              ],
+              "hv": {
+                "h": [],
+                "v": []
+              }
+            },
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            },
+            "sideTags": {
+              "outer": [
+                "hex-a",
+                "hex-b",
+                "hex-c",
+                "hex-d",
+                "hex-e",
+                "hex-f"
+              ]
+            }
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 3
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1200,
+            "centroid": [
+              17,
+              77.5,
+              -3.999999999999999
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": [
+          "b3"
+        ]
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": [],
+          "sketches": [
+            2
+          ]
+        },
+        "bodies": 1,
+        "active": "extrude",
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": "ExtrudepreviewProfileSketch 3End facen1.bottomDepthDistanceTo faceCancelApply",
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 5",
+        "Sketch \u00b7 polygon"
+      ],
+      "dirty": false,
+      "historyControls": [
+        false,
+        true
+      ]
+    },
+    {
+      "label": "02-translated-accepted",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -5,
+              -3
+            ],
+            "max": [
+              15,
+              9
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "from": 20,
+            "height": 5
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "polygon",
+            "points": [
+              [
+                0,
+                3
+              ],
+              [
+                2,
+                0
+              ],
+              [
+                8,
+                0
+              ],
+              [
+                10,
+                3
+              ],
+              [
+                8,
+                6
+              ],
+              [
+                2,
+                6
+              ]
+            ],
+            "outline": {
+              "points": [
+                [
+                  0,
+                  3
+                ],
+                [
+                  2,
+                  0
+                ],
+                [
+                  8,
+                  0
+                ],
+                [
+                  10,
+                  3
+                ],
+                [
+                  8,
+                  6
+                ],
+                [
+                  2,
+                  6
+                ]
+              ],
+              "hv": {
+                "h": [],
+                "v": []
+              }
+            },
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            },
+            "sideTags": {
+              "outer": [
+                "hex-a",
+                "hex-b",
+                "hex-c",
+                "hex-d",
+                "hex-e",
+                "hex-f"
+              ]
+            }
+          },
+          {
+            "kind": "face-end-extrude",
+            "sketch": 2,
+            "target": {
+              "body": {
+                "node": 1,
+                "side": "solid"
+              },
+              "feature": "n1",
+              "face": "n1.bottom"
+            },
+            "id": "n3"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1200,
+            "centroid": [
+              17,
+              77.5,
+              -3.999999999999999
+            ],
+            "massRef": null
+          },
+          {
+            "key": "b3",
+            "volume": 960.0000000000001,
+            "centroid": [
+              17,
+              90,
+              -4
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": [],
+          "sketches": [
+            2
+          ]
+        },
+        "bodies": 2,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 5",
+        "Extrude to face"
+      ],
+      "dirty": true,
+      "historyControls": [
+        false,
+        true
+      ]
+    },
+    {
+      "label": "03-travel-refused",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -5,
+              -3
+            ],
+            "max": [
+              15,
+              9
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "from": 20,
+            "height": 5
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "polygon",
+            "points": [
+              [
+                0,
+                3
+              ],
+              [
+                2,
+                0
+              ],
+              [
+                8,
+                0
+              ],
+              [
+                10,
+                3
+              ],
+              [
+                8,
+                6
+              ],
+              [
+                2,
+                6
+              ]
+            ],
+            "outline": {
+              "points": [
+                [
+                  0,
+                  3
+                ],
+                [
+                  2,
+                  0
+                ],
+                [
+                  8,
+                  0
+                ],
+                [
+                  10,
+                  3
+                ],
+                [
+                  8,
+                  6
+                ],
+                [
+                  2,
+                  6
+                ]
+              ],
+              "hv": {
+                "h": [],
+                "v": []
+              }
+            },
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            },
+            "sideTags": {
+              "outer": [
+                "hex-a",
+                "hex-b",
+                "hex-c",
+                "hex-d",
+                "hex-e",
+                "hex-f"
+              ]
+            }
+          },
+          {
+            "kind": "face-end-extrude",
+            "sketch": 2,
+            "target": {
+              "body": {
+                "node": 1,
+                "side": "solid"
+              },
+              "feature": "n1",
+              "face": "n1.bottom"
+            },
+            "id": "n3"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1200,
+            "centroid": [
+              17,
+              77.5,
+              -3.999999999999999
+            ],
+            "massRef": null
+          },
+          {
+            "key": "b3",
+            "volume": 960.0000000000001,
+            "centroid": [
+              17,
+              90,
+              -4
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": [],
+          "sketches": [
+            2
+          ]
+        },
+        "bodies": 2,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 5",
+        "Extrude to face"
+      ],
+      "dirty": true,
+      "historyControls": [
+        false,
+        true
+      ]
+    },
+    {
+      "label": "04-translated-post-open",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -5,
+              -3
+            ],
+            "max": [
+              15,
+              9
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "from": 40,
+            "height": 5
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "polygon",
+            "points": [
+              [
+                0,
+                3
+              ],
+              [
+                2,
+                0
+              ],
+              [
+                8,
+                0
+              ],
+              [
+                10,
+                3
+              ],
+              [
+                8,
+                6
+              ],
+              [
+                2,
+                6
+              ]
+            ],
+            "outline": {
+              "points": [
+                [
+                  0,
+                  3
+                ],
+                [
+                  2,
+                  0
+                ],
+                [
+                  8,
+                  0
+                ],
+                [
+                  10,
+                  3
+                ],
+                [
+                  8,
+                  6
+                ],
+                [
+                  2,
+                  6
+                ]
+              ],
+              "hv": {
+                "h": [],
+                "v": []
+              }
+            },
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            },
+            "sideTags": {
+              "outer": [
+                "hex-a",
+                "hex-b",
+                "hex-c",
+                "hex-d",
+                "hex-e",
+                "hex-f"
+              ]
+            }
+          },
+          {
+            "kind": "face-end-extrude",
+            "sketch": 2,
+            "target": {
+              "body": {
+                "node": 1,
+                "side": "solid"
+              },
+              "feature": "n1",
+              "face": "n1.bottom"
+            },
+            "id": "n3"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1200,
+            "centroid": [
+              17,
+              57.5,
+              -3.999999999999999
+            ],
+            "massRef": null
+          },
+          {
+            "key": "b3",
+            "volume": 1920.0000000000002,
+            "centroid": [
+              17,
+              80,
+              -4
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 2,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 5",
+        "Extrude to face"
+      ],
+      "dirty": true,
+      "historyControls": [
+        false,
+        true
+      ]
+    },
+    {
+      "label": "failure",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -5,
+              -3
+            ],
+            "max": [
+              15,
+              9
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "from": 40,
+            "height": 5
+          },
+          {
+            "kind": "sketch",
+            "profile": "polygon",
+            "points": [
+              [
+                -1,
+                3
+              ],
+              [
+                2,
+                0
+              ],
+              [
+                8,
+                0
+              ],
+              [
+                10,
+                3
+              ],
+              [
+                8,
+                6
+              ],
+              [
+                2,
+                6
+              ]
+            ],
+            "outline": {
+              "points": [
+                [
+                  -1,
+                  3
+                ],
+                [
+                  2,
+                  0
+                ],
+                [
+                  8,
+                  0
+                ],
+                [
+                  10,
+                  3
+                ],
+                [
+                  8,
+                  6
+                ],
+                [
+                  2,
+                  6
+                ]
+              ],
+              "hv": {
+                "h": [],
+                "v": []
+              }
+            },
+            "sideTags": {
+              "outer": [
+                "hex-a",
+                "hex-b",
+                "hex-c",
+                "hex-d",
+                "hex-e",
+                "hex-f"
+              ]
+            },
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            },
+            "id": "n2"
+          },
+          {
+            "kind": "face-end-extrude",
+            "sketch": 2,
+            "target": {
+              "body": {
+                "node": 1,
+                "side": "solid"
+              },
+              "feature": "n1",
+              "face": "n1.bottom"
+            },
+            "id": "n3"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1200,
+            "centroid": [
+              17,
+              57.5,
+              -3.999999999999999
+            ],
+            "massRef": null
+          },
+          {
+            "key": "b3",
+            "volume": 2040.000000000001,
+            "centroid": [
+              16.725490196078432,
+              80,
+              -4
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 2,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 5",
+        "Extrude to face"
+      ],
+      "dirty": true,
+      "historyControls": [
+        false,
+        true
+      ]
+    }
+  ],
+  "reads": [],
+  "oracles": [],
+  "files": [
+    {
+      "name": "POLYGON_SOURCE-face-end.bcad",
+      "bytes": 2255,
+      "sha256": "e5b6c64f6581ff11227924ee431dc94e3bcca787ba8b4b2faa29db153be05273"
+    }
+  ],
+  "downloads": [],
+  "observations": [
+    {
+      "label": "translated-applied",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 80,
+      "travel": 20,
+      "extrusionVolumeMm3": 960,
+      "nativeCorners": 20
+    },
+    {
+      "label": "negative-world-target-moved",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 70,
+      "travel": 30,
+      "extrusionVolumeMm3": 1440,
+      "nativeCorners": 20
+    },
+    {
+      "label": "translated-first-undo",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 80,
+      "travel": 20,
+      "extrusionVolumeMm3": 960,
+      "nativeCorners": 20
+    },
+    {
+      "label": "translated-first-redo",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 70,
+      "travel": 30,
+      "extrusionVolumeMm3": 1440,
+      "nativeCorners": 20
+    },
+    {
+      "label": "translated-reopened",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 70,
+      "travel": 30,
+      "extrusionVolumeMm3": 1440,
+      "nativeCorners": 20
+    },
+    {
+      "label": "translated-post-open-target-moved",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 60,
+      "travel": 40,
+      "extrusionVolumeMm3": 1920,
+      "nativeCorners": 20
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One Front XZ convex six-sided source convex polygon, positive travel, one current opposed native rectangular cap, desktop WebGPU."
+  ],
+  "sourceBeforeCount": 5,
+  "virtualSources": [
+    {
+      "label": "inspector",
+      "hash": "d59d19d5746403fea1664792b7bfe4f12c50cf79b4661a53c27d2412c7710bcc",
+      "virtualInputExcluded": "<checkout>/apps/cad-studio/translated-extrude-end-face-inspector.ts"
+    }
+  ],
+  "sourceFrozenCount": 1071,
+  "failure": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.topbar button.finish')\u001b[22m\n\u001b[2m    - locator resolved to <button data-slot=\"button\" class=\"inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md border border-transparent font-medium transition-colors cursor-pointer disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3.5 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 h-7 px-2.5 text-xs finish\">\u2026</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m    - element is not stable\u001b[22m\n\u001b[2m  - retrying click action\u001b[22m\n\u001b[2m    - waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m  - element was detached from the DOM, retrying\u001b[22m\n\n    at f.finishSketch (<checkout>/apps/cad-studio/test/flow-helper.mjs:204:119)\n    at <checkout>/apps/cad-studio/test/translated-extrude-end-face-browser.mjs:272:13\n    at async f.run (<checkout>/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file://<checkout>/apps/cad-studio/test/translated-extrude-end-face-browser.mjs:168:1",
+  "sourceAfterCleanupCount": 1071,
+  "phase": "Finish sketch polygon-first-vertex-finished",
+  "sourceUnchanged": false
+}

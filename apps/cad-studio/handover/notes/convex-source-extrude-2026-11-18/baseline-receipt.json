@@ -1,0 +1,256 @@
+{
+  "status": "PASS",
+  "qualification": "Measure the pre-extension command and Open behavior on a Front XZ convex six-sided source source.",
+  "visualReview": "ROOT_MUST_VIEW_SCREENSHOTS",
+  "states": [
+    {
+      "label": "00-pre-extension-refusal",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -5,
+              -3
+            ],
+            "max": [
+              15,
+              9
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "from": 20,
+            "height": 5
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "polygon",
+            "points": [
+              [
+                0,
+                3
+              ],
+              [
+                2,
+                0
+              ],
+              [
+                8,
+                0
+              ],
+              [
+                10,
+                3
+              ],
+              [
+                8,
+                6
+              ],
+              [
+                2,
+                6
+              ]
+            ],
+            "outline": {
+              "points": [
+                [
+                  0,
+                  3
+                ],
+                [
+                  2,
+                  0
+                ],
+                [
+                  8,
+                  0
+                ],
+                [
+                  10,
+                  3
+                ],
+                [
+                  8,
+                  6
+                ],
+                [
+                  2,
+                  6
+                ]
+              ],
+              "hv": {
+                "h": [],
+                "v": []
+              }
+            },
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            },
+            "sideTags": {
+              "outer": [
+                "hex-a",
+                "hex-b",
+                "hex-c",
+                "hex-d",
+                "hex-e",
+                "hex-f"
+              ]
+            }
+          },
+          {
+            "id": "n3",
+            "kind": "face-end-extrude",
+            "sketch": 2,
+            "target": {
+              "body": {
+                "node": 1,
+                "side": "solid"
+              },
+              "feature": "n1",
+              "face": "n1.bottom"
+            }
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4
+      },
+      "bodies": {
+        "fresh": false,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1200,
+            "centroid": [
+              17,
+              77.5,
+              -3.999999999999999
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [
+        "The kernel could not build thisUndo the last change, or adjust the values and try again.Details[VALUE] Extrude to face: the source needs a literal rectangle, straight triangle or circle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane."
+      ],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 5",
+        "Extrude to face"
+      ],
+      "dirty": false,
+      "historyControls": [
+        false,
+        true
+      ]
+    }
+  ],
+  "reads": [],
+  "oracles": [],
+  "files": [],
+  "downloads": [],
+  "observations": [
+    {
+      "label": "pre-extension-refusal",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "fixedDistancePreview": 8,
+      "notice": "The kernel could not build thisUndo the last change, or adjust the values and try again.Details[VALUE] Extrude to face: the source needs a literal rectangle, straight triangle or circle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane.",
+      "failedGeometryFresh": false,
+      "undoRestoredSeed": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One Front XZ convex six-sided source convex polygon, positive travel, one current opposed native rectangular cap, desktop WebGPU."
+  ],
+  "sourceBeforeCount": 5,
+  "virtualSources": [
+    {
+      "label": "inspector",
+      "hash": "d59d19d5746403fea1664792b7bfe4f12c50cf79b4661a53c27d2412c7710bcc",
+      "virtualInputExcluded": "<checkout>/apps/cad-studio/translated-extrude-end-face-inspector.ts"
+    }
+  ],
+  "sourceFrozenCount": 1071,
+  "sourceAfterCount": 1071,
+  "sourceAfterCleanupCount": 1071,
+  "phase": "the pre-extension Studio opens the authored recipe and cannot evaluate it",
+  "sourceUnchanged": true
+}

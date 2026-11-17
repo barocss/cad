@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
-const baseline = process.argv.includes('--baseline'), rotated = process.argv.includes('--rotated'), front = process.argv.includes('--front'), triangle = process.argv.includes('--triangle'), circle = process.argv.includes('--circle'), convexTarget = process.argv.includes('--convex-target');
+const baseline = process.argv.includes('--baseline'), rotated = process.argv.includes('--rotated'), front = process.argv.includes('--front'), triangle = process.argv.includes('--triangle'), circle = process.argv.includes('--circle'), convexTarget = process.argv.includes('--convex-target'), polygonSource = process.argv.includes('--polygon-source');
 assert.ok(!(triangle && circle) && (!(triangle || circle) || front), 'Profile variants require --front and are mutually exclusive');
 assert.ok(!convexTarget || (front && !circle && !triangle && !rotated), '--convex-target requires --front with a rectangle source');
-const profileName = circle ? 'circle' : triangle ? 'triangle' : 'rectangle';
-const decision = convexTarget ? 'CONVEX_TARGET' : circle ? 'CIRCLE_END_FACE' : triangle ? 'TRIANGLE_END_FACE' : front ? 'FRONT_END_FACE' : rotated ? 'D844' : 'D843';
-const frameName = convexTarget ? 'Front XZ rectangle to convex quadrilateral' : circle ? 'Front XZ circular standoff' : triangle ? 'Front XZ triangular rib' : front ? 'standard Front XZ' : rotated ? 'cardinal YZ' : 'translated XY';
+assert.ok(!polygonSource || (front && !circle && !triangle && !rotated && !convexTarget), '--polygon-source requires --front and no other profile/target mode');
+const profileName = polygonSource ? 'convex polygon' : circle ? 'circle' : triangle ? 'triangle' : 'rectangle';
+const decision = polygonSource ? 'POLYGON_SOURCE' : convexTarget ? 'CONVEX_TARGET' : circle ? 'CIRCLE_END_FACE' : triangle ? 'TRIANGLE_END_FACE' : front ? 'FRONT_END_FACE' : rotated ? 'D844' : 'D843';
+const frameName = polygonSource ? 'Front XZ convex six-sided source' : convexTarget ? 'Front XZ rectangle to convex quadrilateral' : circle ? 'Front XZ circular standoff' : triangle ? 'Front XZ triangular rib' : front ? 'standard Front XZ' : rotated ? 'cardinal YZ' : 'translated XY';
 const pins = [
   'apps/cad-studio/test/translated-extrude-end-face-browser.mjs',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
@@ -60,12 +61,14 @@ const recipe = {
   id: 'n3', kind: 'face-end-extrude', sketch: 2,
   target: { body: { node: 1, side: 'solid' }, feature: 'n1', face: 'n1.bottom' },
 };
-const sourceAt = (localZ, bound, radius=3) => ({
+const polygonPoints = (firstX=0) => [[firstX,3],[2,0],[8,0],[10,3],[8,6],[2,6]];
+const polygonTags = ['hex-a','hex-b','hex-c','hex-d','hex-e','hex-f'];
+const sourceAt = (localZ, bound, radius=3, firstX=0) => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
     targetProfile,
     { id: 'n1', kind: 'extrude', sketch: 0, from: targetStart(localZ), height: 5 },
-    circle ? { id:'n2',kind:'sketch',profile:'circle',center:[5,3],radius,plane,sideTags:{outer:['standoff']} } : triangle ? { id: 'n2', kind: 'sketch', profile: 'polygon', points: [[0,0],[10,0],[0,6]], plane, sideTags: { outer: ['rib-a','rib-b','rib-c'] } } : { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, front ? 6 : 10], plane },
+    polygonSource ? {id:'n2',kind:'sketch',profile:'polygon',points:polygonPoints(firstX),outline:{points:polygonPoints(firstX),hv:{h:[],v:[]}},plane,sideTags:{outer:polygonTags}} : circle ? { id:'n2',kind:'sketch',profile:'circle',center:[5,3],radius,plane,sideTags:{outer:['standoff']} } : triangle ? { id: 'n2', kind: 'sketch', profile: 'polygon', points: [[0,0],[10,0],[0,6]], plane, sideTags: { outer: ['rib-a','rib-b','rib-c'] } } : { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, front ? 6 : 10], plane },
     ...(bound ? [recipe] : []),
   ],
   outputs: { b1: { node: 1, side: 'solid' }, ...(bound ? { b3: { node: 3, side: 'solid' } } : {}) }, nextId: bound ? 4 : 3,
@@ -81,8 +84,8 @@ async function open(file, doc) {
   await chooser.setFiles({ name: file, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) });
 }
 
-async function geometry(label, travel, radius=3) {
-  const expected = sourceAt(travel, true, radius);
+async function geometry(label, travel, radius=3, firstX=0) {
+  const expected = sourceAt(travel, true, radius, firstX);
   assert.deepEqual(await f.doc(), expected);
   await f.ready();
   const native = await f.inspect(label, expected);
@@ -94,13 +97,13 @@ async function geometry(label, travel, radius=3) {
   const targetExtent = world([0, 0, travel])[normalAxis];
   for (const [id, us, vs, lo, hi, volume, centroid] of [
     ['n1', [-5, 15], front ? [-3, 9] : [-5, 15], travel, travel + 5, convexTarget ? 1100 : front ? 1200 : 2000, world([convexTarget ? 175/33 : 5, convexTarget ? 83/33 : front ? 3 : 5, travel + 2.5])],
-    ['n3', [0, 10], front ? [0, 6] : [0, 10], 0, travel, (circle ? Math.PI*radius**2 : triangle ? 30 : front ? 60 : 100) * travel, world([triangle ? 10/3 : 5, triangle ? 2 : front ? 3 : 5, travel / 2])],
+    ['n3', [0, 10], front ? [0, 6] : [0, 10], 0, travel, (polygonSource ? (firstX===0?48:51) : circle ? Math.PI*radius**2 : triangle ? 30 : front ? 60 : 100) * travel, world([polygonSource ? (firstX===0?5:241/51) : triangle ? 10/3 : 5, triangle ? 2 : front ? 3 : 5, travel / 2])],
   ]) {
     const exact = native.outputs.find(output => output.id === id);
     assert.ok(exact?.valid && exact.count === 1);
-    if (!(circle && id === 'n3')) assert.equal(exact.corners.length, triangle && id === 'n3' ? 6 : 8);
+    if (!(circle && id === 'n3')) assert.equal(exact.corners.length, polygonSource && id === 'n3' ? 12 : triangle && id === 'n3' ? 6 : 8);
     // Independent shoelace oracle: target area 220, centroid (175/33,83/33).
-    const corners = convexTarget && id === 'n1' ? targetPoints.flatMap(([x,y])=>[lo,hi].map(z=>world([x,y,z]))) : triangle && id === 'n3' ? [[0,0],[10,0],[0,6]].flatMap(([x,y]) => [lo,hi].map(z => world([x,y,z]))) : us.flatMap(x => vs.flatMap(y => [lo, hi].map(z => world([x, y, z]))));
+    const corners = polygonSource && id === 'n3' ? polygonPoints(firstX).flatMap(([x,y])=>[lo,hi].map(z=>world([x,y,z]))) : convexTarget && id === 'n1' ? targetPoints.flatMap(([x,y])=>[lo,hi].map(z=>world([x,y,z]))) : triangle && id === 'n3' ? [[0,0],[10,0],[0,6]].flatMap(([x,y]) => [lo,hi].map(z => world([x,y,z]))) : us.flatMap(x => vs.flatMap(y => [lo, hi].map(z => world([x, y, z]))));
     if (!(circle && id === 'n3')) assert.ok(corners.every(point => exact.corners.some(corner => corner.every((value, i) => near(value, point[i])))));
     if (circle && id === 'n3') {
       const start=world([5,3,0]),heightAt=p=>p.reduce((s,n,i)=>s+(n-start[i])*normal[i],0);
@@ -112,9 +115,9 @@ async function geometry(label, travel, radius=3) {
       const caps=exact.surfaces.filter(s=>s.kind==='plane');assert.equal(caps.length,2);
       for(const h of [0,travel])assert.ok(caps.some(p=>near(heightAt(p.o),h)&&p.n.every((n,i)=>near(n,(h===0?-1:1)*normal[i]))));
     }
-    if (triangle && id === 'n3') for (const [i,tag] of ['rib-a','rib-b','rib-c'].entries()) {
+    if ((triangle || polygonSource) && id === 'n3') for (const [i,tag] of (polygonSource ? polygonTags : ['rib-a','rib-b','rib-c']).entries()) {
       const wall=exact.walls.find(face=>face.name===`n3.side[${tag}]`);assert.ok(wall);
-      const p=[[0,0],[10,0],[0,6]],ends=[p[i],p[(i+1)%3]].flatMap(([x,y])=>[0,travel].map(z=>world([x,y,z])));
+      const p=polygonSource ? polygonPoints(firstX) : [[0,0],[10,0],[0,6]],ends=[p[i],p[(i+1)%p.length]].flatMap(([x,y])=>[0,travel].map(z=>world([x,y,z])));
       assert.ok(ends.every(p=>wall.points.some(q=>q.every((n,j)=>near(n,p[j])))));
       assert.ok(wall.points.every(p=>ends.some(q=>q.every((n,j)=>near(n,p[j])))));
     }
@@ -126,7 +129,7 @@ async function geometry(label, travel, radius=3) {
       assert.ok(measured.centroid.every((value, i) => near(value, centroid[i])));
     }
   }
-  f.report.observations.push({ label, offset, normalAxis, sourceExtent: offset[normalAxis], targetAndEndExtent: targetExtent, travel, extrusionVolumeMm3: (circle ? Math.PI*radius**2 : triangle ? 30 : front ? 60 : 100) * travel, nativeCorners: native.outputs.reduce((sum,o)=>sum+o.corners.length,0) });
+  f.report.observations.push({ label, offset, normalAxis, sourceExtent: offset[normalAxis], targetAndEndExtent: targetExtent, travel, extrusionVolumeMm3: (polygonSource ? (firstX===0?48:51) : circle ? Math.PI*radius**2 : triangle ? 30 : front ? 60 : 100) * travel, nativeCorners: native.outputs.reduce((sum,o)=>sum+o.corners.length,0) });
 }
 
 async function pickLowerCap() {
@@ -169,7 +172,7 @@ await f.run(async () => {
   await open(name, seed);
   await f.same(seed);
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await button(f.page.getByRole('group', { name: 'History', exact: true }), circle ? 'Sketch · circle' : triangle ? 'Sketch · polygon' : 'Sketch · rectangle').click();
+  await button(f.page.getByRole('group', { name: 'History', exact: true }), circle ? 'Sketch · circle' : (triangle || polygonSource) ? 'Sketch · polygon' : 'Sketch · rectangle').click();
   await f.editor().waitFor();
   await f.closeEditor();
   await f.openExtrudeHud();
@@ -196,7 +199,7 @@ await f.run(async () => {
     await hud.waitFor({ state: 'hidden' });
     f.phase = 'the pre-extension Studio opens the authored recipe and cannot evaluate it';
     await open(decision + '-unsupported-candidate.bcad', sourceAt(20, true));
-    const notice = await f.waitToast(/literal rectangle(?: or straight triangle)? on (the default|a default or translated) XY plane/i);
+    const notice = await f.waitToast(polygonSource ? /literal rectangle, straight triangle or circle on/i : /literal rectangle(?: or straight triangle)? on (the default|a default or translated) XY plane/i);
     assert.deepEqual(await f.doc(), sourceAt(20, true));
     const failed = await f.snapshot('00-pre-extension-refusal');
     assert.equal(failed.bodies.fresh, false);
@@ -262,6 +265,14 @@ await f.run(async () => {
   await geometry('translated-post-open-target-moved', 40);
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('04-translated-post-open');
+  if(polygonSource){
+    f.phase='reopened polygon source first vertex X edit';
+    await f.openFeatureEditor(3,'polygon source edit');await button(f.editor(),'Edit sketch').click();await f.sketchPanel().waitFor();
+    const first=f.sketchPanel().getByLabel('Point 1 X',{exact:true});assert.equal(await first.inputValue(),'0');await first.fill('-1');await first.press('Tab');
+    await f.finishSketch('polygon-first-vertex-finished');await geometry('polygon-first-vertex-edited',40,3,-1);
+    await f.undo();await geometry('polygon-source-edit-undo',40);await f.redo();await geometry('polygon-source-edit-redo',40,3,-1);
+    await button(f.page,'Iso').click();await f.page.getByTitle('Frame all (F)',{exact:true}).click();await f.snapshot('05-reopened-polygon-source-edit');
+  }
   if(circle){
     await f.openFeatureEditor(3,'standoff source radius');
     await button(f.editor(),'Edit sketch').click();

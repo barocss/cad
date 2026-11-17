@@ -31,8 +31,8 @@ test('triangle containment uses literal points and rejects a narrow target',()=>
  const doc=fixture(),target=doc.nodes[0];assert.ok(target.kind==='sketch'&&target.profile==='rectangle');
  assert.throws(()=>toPartDocument({...doc,nodes:doc.nodes.map((n,i)=>i===0?{...target,max:[11,5]}:n)}),/entire projected profile/);
 });
-test('nonliteral, nontriangle and degenerate source points are refused',()=>{
- const variants:Triangle['points'][]=[[[0,0],[10,0],[5,0]],[[0,0],[0,0],[0,6]],[[0,0],[NaN,0],[0,6]],[[0,0],[10001,0],[0,6]],[[0,0],[10,0],[10,6],[0,6]],[[0,0],[{parameter:'width'},0],[0,6]]];
+test('nonliteral and degenerate source points are refused',()=>{
+ const variants:Triangle['points'][]=[[[0,0],[10,0],[5,0]],[[0,0],[0,0],[0,6]],[[0,0],[NaN,0],[0,6]],[[0,0],[10001,0],[0,6]],[[0,0],[{parameter:'width'},0],[0,6]]];
  for(const p of variants){const doc=fixture(),source=doc.nodes[2] as Triangle;doc.parameters={width:10};doc.nodes[2]={...source,points:p,outline:undefined};assert.throws(()=>toPartDocument(doc));}
 });
 test('stale or curved outline metadata cannot override the actual triangle profile',()=>{
