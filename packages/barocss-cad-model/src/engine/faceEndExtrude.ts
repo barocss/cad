@@ -1,4 +1,4 @@
-import { CadNumericPolicy, CadPartLimits, checkOutput, coedgeVertices, evaluateCadPart, faceGeometry, type Brep, type BrepFace, type CadPartFeature, type Point } from '@barocss/cad';
+import { CadNumericPolicy, CadPartLimits, ExtrudedProfileLimits, checkOutput, coedgeVertices, evaluateCadPart, faceGeometry, type Brep, type BrepFace, type CadPartFeature, type Point } from '@barocss/cad';
 import { NODE_EXTRA_FIELDS, type DocPlane, type FaceEndExtrudeNode, type ModelNode, type NodeExtras, type SketchNode, type StudioDoc } from './doc';
 import { refusal } from './refusal';
 
@@ -120,6 +120,17 @@ function targetRectangle(brep: Brep, face: BrepFace, { axes: [u, v, w], sign }: 
 type LiteralRectangle = Extract<SketchNode, { profile: 'rectangle' }> & { min: [number, number]; max: [number, number] };
 type LiteralTriangle = Omit<Extract<SketchNode, { profile: 'polygon' }>, 'points'> & { points: [[number, number], [number, number], [number, number]] };
 
+type LiteralCircle = Omit<Extract<SketchNode, { profile: 'circle' }>, 'center' | 'radius'> & { center: [number, number]; radius: number };
+function literalCircle(sketch: Extract<SketchNode, { profile: 'circle' }>): sketch is LiteralCircle {
+  const { center, radius } = sketch;
+  if (!Array.isArray(center) || center.length !== 2 || !center.every(finiteCoordinate)
+    || typeof radius !== 'number' || !Number.isFinite(radius) || radius < ExtrudedProfileLimits.minimumRadiusMM) return false;
+  if (sketch.outline !== undefined || sketch.holes !== undefined || sketch.regions !== undefined
+    || sketch.on !== undefined || sketch.association !== undefined || sketch.pocketFloor !== undefined
+    || sketch.holeOutlines !== undefined || sketch.regionLengths !== undefined) return false;
+  return center.every(c => typeof c === 'number' && finiteCoordinate(c - radius) && finiteCoordinate(c + radius));
+}
+
 function literalTriangle(sketch: Extract<SketchNode, { profile: 'polygon' }>): sketch is LiteralTriangle {
   const p = sketch.points;
   if (!Array.isArray(p) || p.length !== 3 || !p.every(q => Array.isArray(q) && q.length === 2 && q.every(finiteCoordinate))) return false;
@@ -161,9 +172,10 @@ function faceEndAxes(plane: DocPlane | undefined): EndFrame | null {
   return null;
 }
 
-export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is LiteralRectangle | LiteralTriangle {
+export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is LiteralRectangle | LiteralTriangle | LiteralCircle {
   if (sketch?.kind !== 'sketch' || sketch.suppressed || faceEndAxes(sketch.plane) === null || sketch.on
     || sketch.association || sketch.regions?.length || sketch.holes?.length) return false;
+  if (sketch.profile === 'circle') return literalCircle(sketch);
   if (sketch.profile === 'polygon') return literalTriangle(sketch);
   return sketch.profile === 'rectangle'
     && Array.isArray(sketch.min) && sketch.min.length === 2 && sketch.min.every(finiteCoordinate)
@@ -173,12 +185,12 @@ export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is
 /** Resolve from the live preceding native results. A consumed target has no eligible output. */
 export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, prefix: readonly CadPartFeature[]): number {
   const sketch = doc.nodes[node.sketch];
-  if (!isFaceEndExtrudeSketch(sketch)) throw invalid('the source needs a literal rectangle or straight triangle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane.');
+  if (!isFaceEndExtrudeSketch(sketch)) throw invalid('the source needs a literal rectangle, straight triangle or circle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane.');
   const axes = faceEndAxes(sketch.plane)!;
   const { axes: [u, v, w], sign } = axes, origin = sketch.plane?.origin ?? [0, 0, 0];
-  // The native profile uses node.points, never the editor's optional outline snapshot.
-  const min = sketch.profile === 'rectangle' ? sketch.min : [Math.min(...sketch.points.map(p => p[0])), Math.min(...sketch.points.map(p => p[1]))];
-  const max = sketch.profile === 'rectangle' ? sketch.max : [Math.max(...sketch.points.map(p => p[0])), Math.max(...sketch.points.map(p => p[1]))];
+  // Bounds use the actual native profile fields, never the editor's optional outline snapshot.
+  const min = sketch.profile === 'rectangle' ? sketch.min : sketch.profile === 'circle' ? sketch.center.map(c => c - sketch.radius) : [Math.min(...sketch.points.map(p => p[0])), Math.min(...sketch.points.map(p => p[1]))];
+  const max = sketch.profile === 'rectangle' ? sketch.max : sketch.profile === 'circle' ? sketch.center.map(c => c + sketch.radius) : [Math.max(...sketch.points.map(p => p[0])), Math.max(...sketch.points.map(p => p[1]))];
   const u0 = origin[u] + min[0], v0 = origin[v] + min[1];
   const u1 = origin[u] + max[0], v1 = origin[v] + max[1];
   if (![u0, v0, u1, v1].every(finiteCoordinate)) throw invalid('the projected source is outside the native coordinate range.');

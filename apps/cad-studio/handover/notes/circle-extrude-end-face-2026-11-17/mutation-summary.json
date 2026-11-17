@@ -1,0 +1,71 @@
+{
+  "source": "packages/barocss-cad-model/src/engine/faceEndExtrude.ts",
+  "sourceHashBefore": "c2d850f93f10c469d750269ae0e833b58f6fdfc3cc704575e5c6f7eaa9e99d45",
+  "sourceHashAfter": "c2d850f93f10c469d750269ae0e833b58f6fdfc3cc704575e5c6f7eaa9e99d45",
+  "runs": [
+    {
+      "name": "baseline-before",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 33,
+      "fail": 0
+    },
+    {
+      "name": "omit-radius-bbox",
+      "substitution": [
+        "sketch.center.map(c => c + sketch.radius)",
+        "sketch.center.map(c => c)"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 31,
+      "fail": 2,
+      "killed": true
+    },
+    {
+      "name": "omit-local-range",
+      "substitution": [
+        "return center.every(c => typeof c === 'number' && finiteCoordinate(c - radius) && finiteCoordinate(c + radius));",
+        "return true;"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 32,
+      "fail": 1,
+      "killed": true
+    },
+    {
+      "name": "omit-outline-refusal",
+      "substitution": [
+        "sketch.outline !== undefined || sketch.holes !== undefined",
+        "false || sketch.holes !== undefined"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 31,
+      "fail": 2,
+      "killed": true
+    },
+    {
+      "name": "omit-min-radius",
+      "substitution": [
+        "radius < ExtrudedProfileLimits.minimumRadiusMM",
+        "false"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 31,
+      "fail": 2,
+      "killed": true
+    },
+    {
+      "name": "baseline-final",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 33,
+      "fail": 0
+    }
+  ]
+}

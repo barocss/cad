@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
-const baseline = process.argv.includes('--baseline'), rotated = process.argv.includes('--rotated'), front = process.argv.includes('--front'), triangle = process.argv.includes('--triangle');
-const decision = triangle ? 'TRIANGLE_END_FACE' : front ? 'FRONT_END_FACE' : rotated ? 'D844' : 'D843';
-const frameName = triangle ? 'Front XZ triangular rib' : front ? 'standard Front XZ' : rotated ? 'cardinal YZ' : 'translated XY';
+const baseline = process.argv.includes('--baseline'), rotated = process.argv.includes('--rotated'), front = process.argv.includes('--front'), triangle = process.argv.includes('--triangle'), circle = process.argv.includes('--circle');
+assert.ok(!(triangle && circle) && (!(triangle || circle) || front), 'Profile variants require --front and are mutually exclusive');
+const profileName = circle ? 'circle' : triangle ? 'triangle' : 'rectangle';
+const decision = circle ? 'CIRCLE_END_FACE' : triangle ? 'TRIANGLE_END_FACE' : front ? 'FRONT_END_FACE' : rotated ? 'D844' : 'D843';
+const frameName = circle ? 'Front XZ circular standoff' : triangle ? 'Front XZ triangular rib' : front ? 'standard Front XZ' : rotated ? 'cardinal YZ' : 'translated XY';
 const pins = [
   'apps/cad-studio/test/translated-extrude-end-face-browser.mjs',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
@@ -15,8 +17,8 @@ const f = await createFlow({
   name: 'translated-extrude-end-face', output: process.argv[2], envFrozen: decision + '_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: baseline ? `Measure the pre-extension command and Open behavior on a ${frameName} source.`
-    : `Qualify a literal rectangle in the ${frameName} frame and its original opposing native end face.`,
-  limits: [`One ${frameName} rectangle, positive travel, one current opposed native rectangular cap, desktop WebGPU.`],
+    : `Qualify a literal ${profileName} in the ${frameName} frame and its original opposing native end face.`,
+  limits: [`One ${frameName} ${profileName}, positive travel, one current opposed native rectangular cap, desktop WebGPU.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { toPartDocument } from '@barocss/cad-model/engine/part';
@@ -28,6 +30,7 @@ console.log(JSON.stringify({
   extrusion: part.features.find(feature => feature.id === 'n3'),
   outputs: result.outputs.map(output => ({
     id: output.id, valid: checkOutput(output).valid, count: output.bodyCount, mass: massPropertiesOf(output),
+    surfaces: output.brep.faces.map(face=>({name:face.name,...faceGeometry(face)})),
     corners: output.brep.vertices.map(vertex => vertex.point),
     walls: output.brep.faces.filter(face => face.name?.startsWith('n3.side[')).map(face => ({name:face.name,points:face.loops.flatMap(id => output.brep.loops.find(loop => loop.id === id).coedges.flatMap(id => { const coedge=output.brep.coedges.find(c => c.id === id),edge=output.brep.edges.find(e => e.id === coedge.edge);return edge.vertices.map(id => output.brep.vertices.find(v => v.id === id).point); }))})),
     faces: output.brep.faces.filter(face => face.name === output.id + (output.id === 'n1' ? '.bottom' : '.top'))
@@ -55,12 +58,12 @@ const recipe = {
   id: 'n3', kind: 'face-end-extrude', sketch: 2,
   target: { body: { node: 1, side: 'solid' }, feature: 'n1', face: 'n1.bottom' },
 };
-const sourceAt = (localZ, bound) => ({
+const sourceAt = (localZ, bound, radius=3) => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
     targetProfile,
     { id: 'n1', kind: 'extrude', sketch: 0, from: targetStart(localZ), height: 5 },
-    triangle ? { id: 'n2', kind: 'sketch', profile: 'polygon', points: [[0,0],[10,0],[0,6]], plane, sideTags: { outer: ['rib-a','rib-b','rib-c'] } } : { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, front ? 6 : 10], plane },
+    circle ? { id:'n2',kind:'sketch',profile:'circle',center:[5,3],radius,plane,sideTags:{outer:['standoff']} } : triangle ? { id: 'n2', kind: 'sketch', profile: 'polygon', points: [[0,0],[10,0],[0,6]], plane, sideTags: { outer: ['rib-a','rib-b','rib-c'] } } : { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, front ? 6 : 10], plane },
     ...(bound ? [recipe] : []),
   ],
   outputs: { b1: { node: 1, side: 'solid' }, ...(bound ? { b3: { node: 3, side: 'solid' } } : {}) }, nextId: bound ? 4 : 3,
@@ -76,8 +79,8 @@ async function open(file, doc) {
   await chooser.setFiles({ name: file, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) });
 }
 
-async function geometry(label, travel) {
-  const expected = sourceAt(travel, true);
+async function geometry(label, travel, radius=3) {
+  const expected = sourceAt(travel, true, radius);
   assert.deepEqual(await f.doc(), expected);
   await f.ready();
   const native = await f.inspect(label, expected);
@@ -89,13 +92,23 @@ async function geometry(label, travel) {
   const targetExtent = world([0, 0, travel])[normalAxis];
   for (const [id, us, vs, lo, hi, volume, centroid] of [
     ['n1', [-5, 15], front ? [-3, 9] : [-5, 15], travel, travel + 5, front ? 1200 : 2000, world([5, front ? 3 : 5, travel + 2.5])],
-    ['n3', [0, 10], front ? [0, 6] : [0, 10], 0, travel, (triangle ? 30 : front ? 60 : 100) * travel, world([triangle ? 10/3 : 5, triangle ? 2 : front ? 3 : 5, travel / 2])],
+    ['n3', [0, 10], front ? [0, 6] : [0, 10], 0, travel, (circle ? Math.PI*radius**2 : triangle ? 30 : front ? 60 : 100) * travel, world([triangle ? 10/3 : 5, triangle ? 2 : front ? 3 : 5, travel / 2])],
   ]) {
     const exact = native.outputs.find(output => output.id === id);
     assert.ok(exact?.valid && exact.count === 1);
-    assert.equal(exact.corners.length, triangle && id === 'n3' ? 6 : 8);
+    if (!(circle && id === 'n3')) assert.equal(exact.corners.length, triangle && id === 'n3' ? 6 : 8);
     const corners = triangle && id === 'n3' ? [[0,0],[10,0],[0,6]].flatMap(([x,y]) => [lo,hi].map(z => world([x,y,z]))) : us.flatMap(x => vs.flatMap(y => [lo, hi].map(z => world([x, y, z]))));
-    assert.ok(corners.every(point => exact.corners.some(corner => corner.every((value, i) => near(value, point[i])))));
+    if (!(circle && id === 'n3')) assert.ok(corners.every(point => exact.corners.some(corner => corner.every((value, i) => near(value, point[i])))));
+    if (circle && id === 'n3') {
+      const start=world([5,3,0]),heightAt=p=>p.reduce((s,n,i)=>s+(n-start[i])*normal[i],0);
+      const radial=p=>Math.hypot(...p.map((n,i)=>n-start[i]-heightAt(p)*normal[i]));
+      const cylinders=exact.surfaces.filter(s=>s.kind==='cylinder');assert.ok(cylinders.length>0);
+      assert.ok(exact.surfaces.every(s=>s.kind==='plane'||s.kind==='cylinder'));
+      for(const side of cylinders){assert.equal(side.out,1);assert.ok(near(side.r,radius));assert.ok(near(radial(side.c),0));assert.ok(near(Math.abs(side.a.reduce((sum,n,i)=>sum+n*normal[i],0)),1));assert.match(side.name,/^n3\.side\[standoff\]/);}
+      assert.ok(exact.corners.length>=4);for(const p of exact.corners){assert.ok(near(radial(p),radius));assert.ok(near(heightAt(p),0)||near(heightAt(p),travel));}
+      const caps=exact.surfaces.filter(s=>s.kind==='plane');assert.equal(caps.length,2);
+      for(const h of [0,travel])assert.ok(caps.some(p=>near(heightAt(p.o),h)&&p.n.every((n,i)=>near(n,(h===0?-1:1)*normal[i]))));
+    }
     if (triangle && id === 'n3') for (const [i,tag] of ['rib-a','rib-b','rib-c'].entries()) {
       const wall=exact.walls.find(face=>face.name===`n3.side[${tag}]`);assert.ok(wall);
       const p=[[0,0],[10,0],[0,6]],ends=[p[i],p[(i+1)%3]].flatMap(([x,y])=>[0,travel].map(z=>world([x,y,z])));
@@ -110,7 +123,7 @@ async function geometry(label, travel) {
       assert.ok(measured.centroid.every((value, i) => near(value, centroid[i])));
     }
   }
-  f.report.observations.push({ label, offset, normalAxis, sourceExtent: offset[normalAxis], targetAndEndExtent: targetExtent, travel, extrusionVolumeMm3: (triangle ? 30 : front ? 60 : 100) * travel, nativeCorners: triangle ? 14 : 16 });
+  f.report.observations.push({ label, offset, normalAxis, sourceExtent: offset[normalAxis], targetAndEndExtent: targetExtent, travel, extrusionVolumeMm3: (circle ? Math.PI*radius**2 : triangle ? 30 : front ? 60 : 100) * travel, nativeCorners: native.outputs.reduce((sum,o)=>sum+o.corners.length,0) });
 }
 
 async function pickLowerCap() {
@@ -153,7 +166,7 @@ await f.run(async () => {
   await open(name, seed);
   await f.same(seed);
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await button(f.page.getByRole('group', { name: 'History', exact: true }), triangle ? 'Sketch · polygon' : 'Sketch · rectangle').click();
+  await button(f.page.getByRole('group', { name: 'History', exact: true }), circle ? 'Sketch · circle' : triangle ? 'Sketch · polygon' : 'Sketch · rectangle').click();
   await f.editor().waitFor();
   await f.closeEditor();
   await f.openExtrudeHud();
@@ -165,7 +178,7 @@ await f.run(async () => {
     await hud.waitFor({ state: 'hidden' });
     f.phase = 'the pre-extension Studio opens the authored recipe and cannot evaluate it';
     await open(decision + '-unsupported-candidate.bcad', sourceAt(20, true));
-    const notice = await f.waitToast(/literal rectangle on (the default|a default or translated) XY plane/i);
+    const notice = await f.waitToast(/literal rectangle(?: or straight triangle)? on (the default|a default or translated) XY plane/i);
     assert.deepEqual(await f.doc(), sourceAt(20, true));
     const failed = await f.snapshot('00-pre-extension-refusal');
     assert.equal(failed.bodies.fresh, false);
@@ -231,5 +244,12 @@ await f.run(async () => {
   await geometry('translated-post-open-target-moved', 40);
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('04-translated-post-open');
+  if(circle){
+    await f.openFeatureEditor(3,'standoff source radius');
+    await button(f.editor(),'Edit sketch').click();
+    await f.sketchPanel().waitFor();
+    await f.sketchPanel().locator('input#sk-diameter').fill('8');
+    await f.finishSketch('reopened-radius-accepted');await geometry('reopened-radius-edited',40,4);await f.undo();await geometry('radius-undo',40,3);await f.redo();await geometry('radius-redo',40,4);await button(f.page,'Iso').click();await f.page.getByTitle('Frame all (F)',{exact:true}).click();await f.snapshot('05-reopened-radius-edit');
+  }
   assert.deepEqual(f.report.downloads, []);
 });

@@ -1,0 +1,123 @@
+{
+  "status": "PASS",
+  "qualification": "Qualify a literal triangle in the Front XZ triangular rib frame and its original opposing native end face.",
+  "limits": [
+    "One Front XZ triangular rib triangle, positive travel, one current opposed native rectangular cap, desktop WebGPU."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1067,
+  "sourceAfterCleanupCount": 1067,
+  "observations": [
+    {
+      "label": "translated-applied",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 80,
+      "travel": 20,
+      "extrusionVolumeMm3": 600,
+      "nativeCorners": 14
+    },
+    {
+      "label": "negative-world-target-moved",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 70,
+      "travel": 30,
+      "extrusionVolumeMm3": 900,
+      "nativeCorners": 14
+    },
+    {
+      "label": "translated-first-undo",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 80,
+      "travel": 20,
+      "extrusionVolumeMm3": 600,
+      "nativeCorners": 14
+    },
+    {
+      "label": "translated-first-redo",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 70,
+      "travel": 30,
+      "extrusionVolumeMm3": 900,
+      "nativeCorners": 14
+    },
+    {
+      "label": "translated-reopened",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 70,
+      "travel": 30,
+      "extrusionVolumeMm3": 900,
+      "nativeCorners": 14
+    },
+    {
+      "label": "translated-post-open-target-moved",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 60,
+      "travel": 40,
+      "extrusionVolumeMm3": 1200,
+      "nativeCorners": 14
+    }
+  ],
+  "files": [
+    {
+      "name": "TRIANGLE_END_FACE-face-end.bcad",
+      "bytes": 1614,
+      "sha256": "855b6cb3cf02bb07da9509299bdc1ed6a5ab70029230c956687cff3550dd2519"
+    }
+  ],
+  "states": [
+    "01-translated-preview",
+    "02-translated-accepted",
+    "03-travel-refused",
+    "04-translated-post-open"
+  ],
+  "sourceBefore": {
+    "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+    "apps/cad-studio/test/translated-extrude-end-face-browser.mjs": "25379326f03bf5c2db167d675c9abed05d564bb91329901b852f8b27a9e39a1d",
+    "packages/barocss-cad-model/src/app/profileCommands.ts": "9d7dace1a36a3bbd6940c8d9486732a31f263160c11a0b1b73159c3f7e9cf4dc",
+    "packages/barocss-cad-model/src/engine/faceEndExtrude.ts": "c2d850f93f10c469d750269ae0e833b58f6fdfc3cc704575e5c6f7eaa9e99d45",
+    "packages/barocss-cad-model/src/engine/part.ts": "3f86bfd0ff23c2d678de916ef908a013c5e727201c19d3122149cb7cdb67f0ef"
+  }
+}
