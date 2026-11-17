@@ -1,5 +1,5 @@
 import { InstanceBriefNotes } from './InstanceBriefNotes';
-import type { Dispatch, SetStateAction } from 'react';
+import { useLayoutEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import type { StudioDoc, PartInstance, ModelNode } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { Mate } from '@barocss/cad-model/assembly/mates';
@@ -41,6 +41,12 @@ export function InstanceInspector({ model, bearing, assembly, changes, onNotice:
   const { selected: selectedBearingEdit, blocked: bearingBlocked, pending: instanceEditPending,
     close: closeBearing, apply: applyInstanceBearing } = bearing;
   const { commitInstances, commitParts, commitAssembly, patternEdit, startInPlace, clearSelection } = changes;
+  // A file chooser request belongs to this accepted document and selected inspector. A newer file
+  // choice (including one that fails), selection change or unmount retires its delayed result.
+  const revisionBlocked = !!selectedBearingEdit || bearingBlocked || instanceEditPending;
+  const revisionRead = useRef(0), revisionOwner = useRef({ doc, selectedId, blocked: revisionBlocked });
+  revisionOwner.current = { doc, selectedId, blocked: revisionBlocked };
+  useLayoutEffect(() => { revisionRead.current++; return () => { revisionRead.current++; }; }, [doc, selectedId, revisionBlocked]);
   const inst = doc.instances?.find(i => i.id === selectedId);
   if (!inst) return null;
   const list = doc.instances!;
@@ -77,13 +83,20 @@ export function InstanceInspector({ model, bearing, assembly, changes, onNotice:
       onSet={values => patternEdit(() => setInstanceJoints(doc, { part: inst.id, joints: values }), 'Joints not changed')}
       onReset={() => patternEdit(() => setInstanceJoints(doc, { part: inst.id, joints: {}, replace: true }), 'Joints not changed')} /> : undefined}
     onRevision={async file => {
-      const read = await readStudioFile(new Uint8Array(await file.arrayBuffer()));
-      if ('error' in read) { setToast({ title: 'Could not read that part', hint: read.error, detail: '' }); return; }
-      const r = offerRevision(doc, inst.part!.id, read.doc, file.name);
-      if ('error' in r) setToast({ title: 'Nothing to update', hint: r.error, detail: '' }); else {
-        commitParts(r.doc);
-        // (Roadmap 10 ①: the occurrences' own looks stay; those whose body the revision lacks are named now, held when it is accepted.)
-        if (r.held.length) setToast({ title: `${r.held.length} look${r.held.length > 1 ? 's' : ''} would be held`, hint: r.held.map(h => h.problem).join(' '), detail: '' });
+      const request = ++revisionRead.current;
+      const current = () => request === revisionRead.current && revisionOwner.current.doc === doc && revisionOwner.current.selectedId === selectedId && !revisionOwner.current.blocked;
+      if (!current()) return;
+      try {
+        const read = await readStudioFile(new Uint8Array(await file.arrayBuffer()));
+        if (!current()) return;
+        if ('error' in read) { setToast({ title: 'Could not read that part', hint: read.error, detail: '' }); return; }
+        const r = offerRevision(doc, inst.part!.id, read.doc, file.name);
+        if ('error' in r) setToast({ title: 'Nothing to update', hint: r.error, detail: '' }); else if (commitParts(r.doc)) {
+          // The occurrences' own looks stay; those whose body the revision lacks are held when accepted.
+          if (r.held.length) setToast({ title: `${r.held.length} look${r.held.length > 1 ? 's' : ''} would be held`, hint: r.held.map(h => h.problem).join(' '), detail: '' });
+        }
+      } catch (error) {
+        if (current()) setToast({ title: 'Could not read that part', hint: error instanceof Error ? error.message : String(error), detail: '' });
       }
     }}
     onAccept={() => { let next: StudioDoc; try { next = acceptRevision(doc, inst.part!.id); } catch (e) { setToast({ title: 'Revision not accepted', hint: e instanceof Error ? e.message : String(e), detail: '' }); return; } const held = heldLooks(next); commitParts(next);

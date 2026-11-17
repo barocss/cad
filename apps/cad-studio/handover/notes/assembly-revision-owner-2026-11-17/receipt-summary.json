@@ -1,0 +1,32 @@
+{
+  "status": "PASS",
+  "qualification": "Late real revision-file reads cannot replace newer assembly edits, another document, another selected owner, or a newer file offer.",
+  "observations": [
+    {
+      "newX": 17,
+      "afterLateReadX": 17,
+      "pending": false
+    },
+    {
+      "selectionRoundtrip": true,
+      "staleValidOpenIgnored": true,
+      "newestOfferWins": "F",
+      "staleInvalidSilent": true,
+      "currentOfferAccept": true,
+      "undoRedoNativeOpen": true
+    }
+  ],
+  "limits": [
+    "Real File.arrayBuffer resolution is delayed; bytes and product parsing are not fabricated. Three synthetic drilled plates, no external project watcher or nested/mated assembly."
+  ],
+  "sourceUnchangedDuringRun": true,
+  "baseline": {
+    "placementEditOverwrite": "NOT_REPRODUCED: existing App guard retained X17",
+    "selectionRoundTrip": "FAIL: old file registered pending E",
+    "newerInvalidFile": "FAIL: old file registered pending E after newer read failure"
+  },
+  "firstFixedRun": {
+    "status": "FAIL",
+    "reason": "test left current invalid-file toast open before checking stale error absence; explicitly dismissing that expected toast fixed the assertion without another product edit"
+  }
+}
