@@ -66,6 +66,7 @@ import { IssuesList } from './drawing/IssuesList';
 import { TolerancingList } from './drawing/TolerancingList';
 import { DimensionsList } from './drawing/DimensionsList';
 import { DatumsEditor } from './drawing/DatumsEditor';
+import { nextDatumTargetIdentity } from './drawing/datumTargetIdentity';
 import { DatumTargetsEditor, DEFAULT_TARGET_DRAFT, type DatumTargetDraft } from './drawing/DatumTargetsEditor';
 import { checkDatumTargetOptions, datumTargetConflicts, datumTargetEndpoint, resolveDatumTarget, type DatumTargetPoint, type DrawingDatumTarget } from '@barocss/cad-model/drawing/datumTargets';
 import { FrameEditor } from './drawing/FrameEditor';
@@ -495,12 +496,10 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
   /** A line or area target: its points are clicked in a view (a snapped edge end or centre, else the exact point). */
   const pickFreeTarget = (h: Hover, view: ViewId) => {
-    const rows = settings.datumTargets ?? [], round = (p: readonly number[]): XY => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100];
-    if (rows.length >= 200) { setMessage('A drawing can contain up to 200 datum targets.'); return; }
+    const identity = nextDatumTargetIdentity(wholeSettings.datumTargets), round = (p: readonly number[]): XY => [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100];
+    if (!identity) { setMessage('A drawing can contain up to 200 datum targets and needs an unused A1–A99 number for a new target.'); return; }
     const picked = round(h.snap ? h.snap.at : h.at);
-    let n = 1; while (rows.some(t => t.letter === 'A' && t.number === n)) n++;
-    let id = 'target-1', k = 2; while (rows.some(t => t.id === id)) id = `target-${k++}`;
-    const head = { id, letter: 'A', number: n, view, place: round(h.at) };
+    const head = { ...identity, view, place: round(h.at) };
     if (targetDraft.kind === 'line') {
       if (pending?.kind !== 'datum-line') { setPending({ kind: 'datum-line', view, from: picked }); setMessage('Click the other end of the target line. Esc cancels.'); return; }
       if (pending.view !== view) { setMessage(`Pick the other end in the ${pending.view} view.`); return; }
@@ -600,14 +599,12 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       if (!reselectTarget && targetDraft.kind !== 'point') { pickFreeTarget(h, h.view); return; }
       if (reselectTarget && h.view !== reselectTarget.view) { setMessage(`Select a current endpoint in the target's ${reselectTarget.view} view.`); return; }
       if (!bodies) { setMessage('Wait for the current drawing bodies before selecting a target endpoint.'); return; }
-      const rows = settings.datumTargets ?? [];
-      if (!reselectTarget && rows.length >= 200) { setMessage('A drawing can contain up to 200 point targets.'); return; }
+      const identity = nextDatumTargetIdentity(wholeSettings.datumTargets);
+      if (!reselectTarget && !identity) { setMessage('A drawing can contain up to 200 datum targets and needs an unused A1–A99 number for a new target.'); return; }
       const pr = views[h.view], placement = layout!.views[h.view];
-      let n = 1; while (rows.some(t => t.letter === 'A' && t.number === n)) n++;
-      let id = 'target-1', k = 2; while (rows.some(t => t.id === id)) id = `target-${k++}`;
       const picked = endpointSnap(pr, h.at, 9 * mmPerPx() / placement.scale, bodies);
       if (picked.error) { setMessage(picked.error); return; }
-      const candidates = picked.points.map((point): DrawingDatumTarget => reselectTarget ? { ...reselectTarget, point } as DrawingDatumTarget : { id, letter: 'A', number: n, view: h.view as ViewId, place: [...h.at] as XY, point, ...(targetDraft.moveable ? { moveable: true as const } : {}) });
+      const candidates = picked.points.map((point): DrawingDatumTarget => reselectTarget ? { ...reselectTarget, point } as DrawingDatumTarget : { ...identity!, view: h.view as ViewId, place: [...h.at] as XY, point, ...(targetDraft.moveable ? { moveable: true as const } : {}) });
       if (!candidates.length) { setMessage('Select a visible straight edge endpoint. Circle centres and curved edges are not supported.'); return; }
       if (candidates.length > 1) { setTargetChoices(candidates); setMessage('Endpoints overlap here. Choose the exact edge and endpoint in Point datum targets.'); return; }
       const resolved = resolveDatumTarget(pr, candidates[0]);

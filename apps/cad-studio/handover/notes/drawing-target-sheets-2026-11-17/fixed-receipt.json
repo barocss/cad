@@ -1,0 +1,94 @@
+{
+  "status": "PASS",
+  "qualification": "Point, line and area target identities stay unique across sheets while original target geometry and endpoint references remain exact.",
+  "observations": [
+    {
+      "first": [
+        {
+          "id": "target-1",
+          "letter": "A",
+          "number": 1,
+          "view": "front",
+          "place": [
+            -9.999997517419239,
+            10.000001453218005
+          ],
+          "kind": "area",
+          "area": {
+            "shape": "circle",
+            "at": [
+              15,
+              3
+            ],
+            "d": 2
+          }
+        }
+      ],
+      "afterSecond": [
+        {
+          "id": "target-1",
+          "letter": "A",
+          "number": 1,
+          "view": "front",
+          "place": [
+            -9.999997517419239,
+            10.000001453218005
+          ],
+          "kind": "area",
+          "area": {
+            "shape": "circle",
+            "at": [
+              15,
+              3
+            ],
+            "d": 2
+          }
+        },
+        {
+          "id": "target-2",
+          "letter": "A",
+          "number": 2,
+          "view": "right",
+          "place": [
+            -9.999998122926733,
+            10.00000127156575
+          ],
+          "kind": "area",
+          "area": {
+            "shape": "circle",
+            "at": [
+              6,
+              3
+            ],
+            "d": 2
+          }
+        }
+      ]
+    },
+    {
+      "allIds": [
+        "target-1",
+        "target-2",
+        "target-3",
+        "target-4"
+      ],
+      "allLabels": [
+        "A1",
+        "A2",
+        "A3",
+        "A4"
+      ],
+      "firstTargetsPreserved": true,
+      "nativeOpen": true,
+      "actualSvgLabels": true,
+      "undoRedo": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "limits": [
+    "Synthetic 30x12x6 plate, front/right views; no new standards, datum fitting, PDF/DXF or manufacturing qualification."
+  ],
+  "sourceFrozenUnchangedThroughCleanup": true,
+  "visualReview": "Viewed actual screenshots: second-sheet A1 before; distinct A2 area and A4 point with endpoint readback after native reopen."
+}

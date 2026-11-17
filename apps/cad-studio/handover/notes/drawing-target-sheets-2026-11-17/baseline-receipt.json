@@ -1,0 +1,77 @@
+{
+  "status": "FAIL",
+  "qualification": "Point, line and area target identities stay unique across sheets while original target geometry and endpoint references remain exact.",
+  "observations": [
+    {
+      "first": [
+        {
+          "id": "target-1",
+          "letter": "A",
+          "number": 1,
+          "view": "front",
+          "place": [
+            -9.999997517419239,
+            10.000001453218005
+          ],
+          "kind": "area",
+          "area": {
+            "shape": "circle",
+            "at": [
+              15,
+              3
+            ],
+            "d": 2
+          }
+        }
+      ],
+      "afterSecond": [
+        {
+          "id": "target-1",
+          "letter": "A",
+          "number": 1,
+          "view": "front",
+          "place": [
+            -9.999997517419239,
+            10.000001453218005
+          ],
+          "kind": "area",
+          "area": {
+            "shape": "circle",
+            "at": [
+              15,
+              3
+            ],
+            "d": 2
+          }
+        },
+        {
+          "id": "target-1",
+          "letter": "A",
+          "number": 1,
+          "view": "right",
+          "place": [
+            -9.999998122926733,
+            10.00000127156575
+          ],
+          "kind": "area",
+          "area": {
+            "shape": "circle",
+            "at": [
+              6,
+              3
+            ],
+            "d": 2
+          }
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "limits": [
+    "Synthetic 30x12x6 plate, front/right views; no new standards, datum fitting, PDF/DXF or manufacturing qualification."
+  ],
+  "sourceFrozenUnchangedThroughCleanup": true,
+  "visualReview": "Viewed actual screenshots: second-sheet A1 before; distinct A2 area and A4 point with endpoint readback after native reopen.",
+  "failure": "AssertionError [ERR_ASSERTION]: second sheet must reserve first-sheet target ID\n+ actual - expected\n\n+ 'target-1'\n- 'target-2'\n          ^"
+}
