@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rectanglePart, withNode } from '@barocss/cad-model/engine/doc';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
-import { heldFinishCandidate, heldFinishReplaceable, heldFinishReplacement, type HeldFinish } from '../src/state/heldFinishReplacement';
+import { heldFinishRadiusText, heldFinishCandidate, heldFinishReplaceable, heldFinishReplacement, type HeldFinish } from '../src/state/heldFinishReplacement';
 const finish:Extract<HeldFinish,{kind:'fillet'}>={id:'repair',kind:'fillet',parent:{node:1,side:'solid'},edges:['missing'],radius:1,held:'missing edge',suppressed:true,radii:[{at:[0,0,0],radius:1,atEnd:true},{at:[10,0,0],radius:3,atEnd:true}]};
 const edge:DisplayEdge={index:0,faces:[0,1],a:[0,20,10],b:[30,20,10],straight:true,axis:'x',names:['new-edge'],nativeLine:true};
 const sig={k:'curve' as const,p:[15,20,10] as [number,number,number],s:30};
@@ -16,7 +16,7 @@ test('explicit replacement preserves radius values and feature identity and assi
  assert.equal(result.nodes[0],doc.nodes[0]);assert.equal(result.outputs,doc.outputs);assert.deepEqual(doc,before);
  const reverse={...edge,a:edge.b,b:edge.a};const candidate=heldFinishCandidate(finish,reverse,[reverse]);assert.ok('endpoints'in candidate);if('endpoints'in candidate)assert.deepEqual(candidate.endpoints,{start:edge.b,end:edge.a});
 });
-test('only terminal numeric unshaped two-end laws are offered',()=>{
+test('unshaped two-end laws require valid values or resolvable parameters and terminal replacement',()=>{
  assert.ok(heldFinishReplaceable(finish));
  const cases:HeldFinish[]=[{...finish,held:undefined},{...finish,edges:['a','b']},{...finish,section:{kind:'conic',rho:0.5}},{...finish,radius:{parameter:'R'}},{...finish,radii:[]},{...finish,radii:[finish.radii![0]]},{...finish,radii:finish.radii!.map(p=>({...p,atEnd:undefined}))},{...finish,radii:finish.radii!.map(p=>({...p,fraction:0.5}))},{...finish,radii:finish.radii!.map(p=>({...p,radius:{parameter:'R'}}))},{...finish,radii:finish.radii!.map(p=>({...p,radius:NaN}))},{...finish,radii:finish.radii!.map(p=>({...p,radius:0}))},{...finish,radii:finish.radii!.map(p=>({...p,at:[0,0,0]}))}];
  for(const item of cases)assert.equal(heldFinishReplaceable(item),false);
@@ -48,7 +48,7 @@ test('one and two interior positions reassign along candidate direction without 
   assert.equal(changed.id,source.nodes[2].id);assert.deepEqual(source,before);
  }
 });
-test('invalid interior fractions, ordering, endpoint flags, coordinates and bound radii are not offered',()=>{
+test('invalid interior geometry and unresolved bound radii are not offered',()=>{
  const interior={at:[5,0,0] as [number,number,number],radius:2,fraction:0.5};
  const laws=[...[-1,0,1e-9,1-1e-9,1,NaN,Infinity].map(fraction=>[ {...interior,fraction} ]),
   [{...interior,fraction:0.75},{...interior,fraction:0.25}], [{...interior,fraction:0.5},{...interior,fraction:0.5+1e-10}],
@@ -57,3 +57,47 @@ test('invalid interior fractions, ordering, endpoint flags, coordinates and boun
   [{...interior,fraction:0.2},{...interior,fraction:0.4},{...interior,fraction:0.6}]];
  for(const inner of laws)assert.equal(heldFinishReplaceable({...finish,radii:[finish.radii![0],...inner,finish.radii![1]]}),false);
 });
+
+test('bound and mixed radii retain their exact authored objects while candidate direction assigns positions',()=>{
+ const start={parameter:'StartR'},end={parameter:'EndR'},inner={parameter:'InnerR'};
+ for(const reverse of [false,true]) {
+  const node={...finish,radius:start,radii:[{...finish.radii![0],radius:start},{at:[2.5,0,0] as [number,number,number],radius:inner,fraction:0.25},{at:[7.5,0,0] as [number,number,number],radius:2,fraction:0.75},{...finish.radii![1],radius:end}]};
+  const source={...withNode(rectanglePart(30,20,10),node),parameters:{StartR:1,EndR:3,InnerR:2}},before=structuredClone(source);
+  const selected=reverse?{...edge,a:edge.b,b:edge.a}:edge;
+  assert.ok(heldFinishReplaceable(node,source.parameters));
+  assert.ok('name'in heldFinishCandidate(node,selected,[selected],source.parameters));
+  const next=heldFinishReplacement(source,2,selected,[selected],sig);assert.ok(next);
+  const changed=next.nodes[2];assert.equal(changed.kind,'fillet');if(changed.kind!=='fillet')return;
+  assert.equal(changed.radius,start);assert.equal(changed.radii![0].radius,start);assert.equal(changed.radii![1].radius,inner);assert.equal(changed.radii![3].radius,end);
+  assert.deepEqual(changed.radii!.map(p=>p.at),[selected.a,...[0.25,0.75].map(f=>selected.a.map((v,k)=>v+(selected.b[k]-v)*f)),selected.b]);
+  assert.deepEqual(changed.radii!.map(p=>p.fraction),node.radii.map(p=>p.fraction));
+  assert.equal(next.parameters,source.parameters);assert.equal(changed.parent,node.parent);assert.equal(next.outputs,source.outputs);assert.deepEqual(source,before);
+  assert.equal(heldFinishReplacement({...source,parameters:{...source.parameters,InnerR:0}},2,selected,[selected],sig),null);
+ }
+});
+
+test('bound radius admission requires an exact reference and an own finite positive parameter at every station',()=>{
+ const bound={parameter:'R'};
+ for(const position of ['base','start','interior','end'] as const){
+  const controls=[finish.radii![0],{at:[5,0,0] as [number,number,number],radius:2,fraction:0.5},finish.radii![1]];
+  const node={...finish,radius:position==='base'?bound:1,radii:controls.map((p,i)=>({...p,radius:i===({start:0,interior:1,end:2,base:-1}[position])?bound:p.radius}))};
+  assert.ok(heldFinishReplaceable(node,{R:1}));
+  for(const parameters of [{},...[-1,0,NaN,Infinity,-Infinity].map(R=>({R})),Object.create({R:1}) as Record<string,number>]){
+   assert.equal(heldFinishReplaceable(node,parameters),false);
+   assert.ok('error'in heldFinishCandidate(node,edge,[edge],parameters));
+   assert.equal(heldFinishReplacement({...withNode(rectanglePart(30,20,10),node),parameters},2,edge,[edge],sig),null);
+  }
+ }
+ const malformed={parameter:'R',extra:1};
+ assert.equal(heldFinishReplaceable({...finish,radius:malformed},{R:1}),false);
+ const inherited=Object.assign(Object.create({parameter:'R'}),{extra:1});
+ assert.equal(heldFinishReplaceable({...finish,radius:inherited},{R:1}),false);
+ assert.equal(heldFinishReplaceable({...finish,radius:{parameter:'constructor'}},{}),false);
+});
+
+ test('replacement radius review distinguishes bound current values from unavailable bindings',()=>{
+  assert.equal(heldFinishRadiusText(1.234567891,{}),'1.234567891');
+  assert.equal(heldFinishRadiusText({parameter:'StartR'},{StartR:1}),'StartR (1)');
+  assert.equal(heldFinishRadiusText({parameter:'StartR'},{StartR:2}),'StartR (2)');
+  for(const parameters of [{},{StartR:NaN},{StartR:0}] as Record<string,number>[])assert.equal(heldFinishRadiusText({parameter:'StartR'},parameters),'StartR (unavailable)');
+ });

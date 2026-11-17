@@ -24,7 +24,7 @@ interface Options {
 
 export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsSource, evaluate, accept, notice }: Options) {
   const node = index === null ? undefined : doc.nodes[index];
-  const finish: Finish | null = heldFinishReplaceable(node) && !(node.kind === 'fillet' && node.radii && index !== doc.nodes.length - 1) ? node : null;
+  const finish: Finish | null = heldFinishReplaceable(node, doc.parameters) && !(node.kind === 'fillet' && node.radii && index !== doc.nodes.length - 1) ? node : null;
   const problem = finish && problems.find(p => p.node === index && p.name === finish.edges[0]);
   // A terminal held feature exposes its source as a passthrough body.
   const sources = finish && index !== null ? bodies.filter(b => b.key === bodyKeyFor(doc.nodes, index, 'solid')) : [];
@@ -43,7 +43,7 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
     if (!current || !body) return false;
     if (current.pending) return true;
     const edge = hit.edgeMesh === body.mesh && hit.edge && !hit.instance ? body.mesh.edges[hit.edge.edge] : undefined;
-    const candidate = finish && heldFinishCandidate(finish,edge,body.mesh.edges);
+    const candidate = finish && heldFinishCandidate(finish,edge,body.mesh.edges,doc.parameters);
     if(candidate && !('error' in candidate)) setDraft({...current,...candidate,edge});
     else {
       setDraft({...current,name:null,endpoints:undefined,edge:undefined});

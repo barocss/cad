@@ -1,0 +1,143 @@
+{
+  "parent": "ae4af80a6fed20b0b55078fe9cf9f0491b4e49b3",
+  "attempts": [
+    {
+      "label": "baseline01",
+      "status": "PASS",
+      "rawReceipt": "/tmp/cad-held-bound-fillet-before-01/receipt.json",
+      "rawReceiptSHA256": "9e4de0f50561014bab0173c526e79f80830c555a4d11dab023a85df3fd0a56c9",
+      "sourceInitialSubsetCount": 5,
+      "sourceFrozenCount": 534,
+      "sourceAfterCleanupCount": 534,
+      "sourceCapsules": {
+        "source-frozen.json": "83dba4080db032eefb306454f2eec98e754a416b789c8807eb52eb98f61f4b97",
+        "source-after.json": "83dba4080db032eefb306454f2eec98e754a416b789c8807eb52eb98f61f4b97",
+        "source-after-cleanup.json": "83dba4080db032eefb306454f2eec98e754a416b789c8807eb52eb98f61f4b97"
+      },
+      "changes": [],
+      "errors": [],
+      "consoleErrors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "baseline",
+          "replaceButtons": 0,
+          "boundFieldsPreserved": true,
+          "held": "\"n1.side6|n1.side7\" could be n1.side1|n1.side2 or n1.side2|n1.side3 or n1.side0|n1.side1 or n1.side0|n1.side3",
+          "numericalShape": "Existing numeric fixture, same parameter values; no independent native re-evaluation performed."
+        }
+      ],
+      "rawVisualReview": "ROOT_MUST_VIEW_SCREENSHOTS"
+    },
+    {
+      "label": "after01",
+      "status": "PASS",
+      "rawReceipt": "/tmp/cad-held-bound-fillet-after-01/receipt.json",
+      "rawReceiptSHA256": "9f007b2fa9074358b36eb4b1ac82cc7dfdc3f2f97b2227c2e1134868c33f89e9",
+      "sourceInitialSubsetCount": 5,
+      "sourceFrozenCount": 534,
+      "sourceAfterCleanupCount": 534,
+      "sourceCapsules": {
+        "source-frozen.json": "427b95fac2614848713dd8b2e798ad2865bab978c293ae9c6d3ac32d6e49e523",
+        "source-after.json": "427b95fac2614848713dd8b2e798ad2865bab978c293ae9c6d3ac32d6e49e523",
+        "source-after-cleanup.json": "427b95fac2614848713dd8b2e798ad2865bab978c293ae9c6d3ac32d6e49e523"
+      },
+      "changes": [],
+      "errors": [],
+      "consoleErrors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "after",
+          "fullDocExpectedExact": true,
+          "preservedParameters": {
+            "StartR": 2,
+            "EndR": 3
+          },
+          "preservedRadius": {
+            "parameter": "StartR"
+          },
+          "preservedControls": [
+            {
+              "at": [
+                0,
+                0,
+                20
+              ],
+              "radius": {
+                "parameter": "StartR"
+              },
+              "atEnd": true
+            },
+            {
+              "at": [
+                30,
+                0,
+                20
+              ],
+              "radius": {
+                "parameter": "EndR"
+              },
+              "atEnd": true
+            }
+          ],
+          "undoRedoExact": true,
+          "actualDownloadAndFreshOpen": true,
+          "publicParameterReevaluation": {
+            "parameter": "StartR",
+            "from": 1,
+            "to": 2,
+            "beforeVolume": 7172.101761241656,
+            "afterVolume": 7159.225651045537,
+            "limits": "Application current-body read, not an independent native geometry accuracy oracle"
+          }
+        }
+      ],
+      "rawVisualReview": "ROOT_MUST_VIEW_SCREENSHOTS"
+    }
+  ],
+  "artifacts": {
+    "before01-bound-held.png": {
+      "bytes": 237742,
+      "sha256": "06ea7a6a17db3f1c040060da14e5b8394201cbd26c35f6d0b59285b998cc6717"
+    },
+    "after02-bound-staged.png": {
+      "bytes": 124754,
+      "sha256": "6c51f6d1bf6102d0c784f8e330ec6005c0f5411d88217c4d67880a620423f484"
+    },
+    "after07-fresh-bound-history.png": {
+      "bytes": 247810,
+      "sha256": "ec91e8e790b55ce409cc85f665526c1047364e884f70f4ae2e4ac057f85cfd07"
+    },
+    "bound-replaced.bcad": {
+      "bytes": 1392,
+      "sha256": "0f73efd4cfd306f2425f72f5e6dde1e9f754a23ab6269c74e1ce51e91b5e319c"
+    },
+    "authored-fixture.bcad": {
+      "bytes": 1398,
+      "sha256": "f264d09a7f588e84613925888d2e1f81caecd6b680a34fca2f4a93e76bb276d4"
+    },
+    "accepted-held.bcad": {
+      "bytes": 1553,
+      "sha256": "b51df46cc07b1355869197eb4bfa87bd948a676ab72bc11abce7fe04e35512ef"
+    },
+    "independent-saved-parser.py": {
+      "bytes": 912,
+      "sha256": "d723e59112274aaa2946e6f522cdbf892401428102aa840467052b6724f0f7c7"
+    }
+  },
+  "limits": [
+    "Actual bound two-end law only; interior station coverage is focused helper tests.",
+    "Actual JSON proves structural Dim preservation; object identity belongs to focused tests.",
+    "Volume is current application read, not a new independent native accuracy oracle."
+  ]
+}

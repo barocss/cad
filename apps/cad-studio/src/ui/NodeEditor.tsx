@@ -1,3 +1,4 @@
+import { heldFinishRadiusText } from '../state/heldFinishReplacement';
 import { SewSourceList } from './SewSourceList';
 import { splitPlaneProblem } from '@barocss/cad-model/app/splitPlaneInput';
 import type { FilletEndpoints, FilletStationDraft } from '../app/filletEndpoints';
@@ -287,9 +288,9 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
         <span className="small break-all" role="status">{edgeReplacement.draft.name ?? 'Select an edge on the feature body.'}</span>
         {edgeReplacement.draft.endpoints && node?.kind === 'fillet' && node.radii && <div className="small" role="status">
           <div>This choice assigns the saved Start/End radii to the new edge in the displayed direction. Interior positions keep their saved fractions.</div>
-          <div>Start R{String(node.radii[0].radius)} → ({edgeReplacement.draft.endpoints.start.join(', ')})</div>
-          {edgeReplacement.draft.endpoints.stations?.map((station,i)=><div key={station.label}>{station.label} {station.fraction*100}% R{String(node.radii![i+1].radius)} → ({station.at.join(', ')})</div>)}
-          <div>End R{String(node.radii.at(-1)!.radius)} → ({edgeReplacement.draft.endpoints.end.join(', ')})</div>
+          <div>Start R{heldFinishRadiusText(node.radii[0].radius,parameters)} → ({edgeReplacement.draft.endpoints.start.join(', ')})</div>
+          {edgeReplacement.draft.endpoints.stations?.map((station,i)=><div key={station.label}>{station.label} {station.fraction*100}% R{heldFinishRadiusText(node.radii![i+1].radius,parameters)} → ({station.at.join(', ')})</div>)}
+          <div>End R{heldFinishRadiusText(node.radii.at(-1)!.radius,parameters)} → ({edgeReplacement.draft.endpoints.end.join(', ')})</div>
         </div>}
         <div className="row-actions">
           <button className="primary" type="button" aria-label="Apply edge replacement"

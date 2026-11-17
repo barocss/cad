@@ -1,0 +1,26 @@
+{
+  "file": "bound-replaced.bcad",
+  "originalNodes": [
+    {
+      "id": "n0",
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        0,
+        0
+      ],
+      "max": [
+        30,
+        12
+      ]
+    },
+    {
+      "id": "n1",
+      "kind": "extrude",
+      "sketch": 0,
+      "height": 20
+    }
+  ],
+  "beforeVolume": 7172.101761241656,
+  "afterVolume": 7159.225651045537
+}
