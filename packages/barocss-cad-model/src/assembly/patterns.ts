@@ -18,7 +18,15 @@ export { PATTERN_MAX, PATTERN_MIN, PATTERN_SPACING_MAX };
 type Tuple3 = [number, number, number];
 /** A copy of a vector as given (a value that is not one is left for `check` to refuse). */
 const copy3 = <T>(v: T): T => Array.isArray(v) ? [...v] as T : v;
-const unit = (v: readonly number[]): Tuple3 => { const n = Math.hypot(v[0], v[1], v[2]); return [v[0] / n, v[1] / n, v[2] / n]; };
+const unit = (v: readonly number[]): Tuple3 => {
+  const n = Math.hypot(v[0], v[1], v[2]);
+  // Preserve ordinary arithmetic. Accepted finite directions can still overflow their norm or
+  // lose relative precision in the subnormal range; rescale only those exceptional magnitudes.
+  if (Number.isFinite(n) && n >= 2 ** -1022) return [v[0] / n, v[1] / n, v[2] / n];
+  const scale = Math.max(Math.abs(v[0]), Math.abs(v[1]), Math.abs(v[2]));
+  const x = v[0] / scale, y = v[1] / scale, z = v[2] / scale, length = Math.hypot(x, y, z);
+  return [x / length, y / length, z / length];
+};
 
 /** The occurrences k = 1 … count − 1 of a pattern, not skipped, as the seed would have them placed. */
 function occurrencesOf(seed: PartInstance, p: InstancePattern): PartInstance[] {

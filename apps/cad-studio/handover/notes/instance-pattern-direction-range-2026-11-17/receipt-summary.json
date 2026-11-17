@@ -1,0 +1,80 @@
+{
+  "status": "PASS",
+  "receiptSha256": "75b8e2c66713d1edd8eb28816fbe46cd76fb3b7874e7da5e650666dc18e1ad5f",
+  "observations": [
+    {
+      "label": "large",
+      "direction": [
+        1.7976931348623157e+308,
+        1.7976931348623157e+308,
+        1.7976931348623157e+308
+      ],
+      "positions": [
+        [
+          10,
+          10,
+          10
+        ],
+        [
+          20,
+          20,
+          20
+        ]
+      ]
+    },
+    {
+      "label": "small",
+      "direction": [
+        5e-324,
+        5e-324,
+        5e-324
+      ],
+      "positions": [
+        [
+          10,
+          10,
+          10
+        ],
+        [
+          20,
+          20,
+          20
+        ]
+      ]
+    },
+    {
+      "label": "fresh-open",
+      "direction": [
+        5e-324,
+        5e-324,
+        5e-324
+      ],
+      "positions": [
+        [
+          10,
+          10,
+          10
+        ],
+        [
+          20,
+          20,
+          20
+        ]
+      ]
+    }
+  ],
+  "limits": [
+    "Linear equal-components direction at MAX_VALUE and MIN_VALUE. Circular extreme directions are Model-tested separately. No new general geometry-accuracy or exchange-output claim."
+  ],
+  "downloadCount": 1,
+  "baseline": {
+    "tests": 6,
+    "pass": 2,
+    "fail": 4,
+    "receiptSha256": "d2fbb850ac67fb89f8e600c9854e30b709d0f9e4e9963d677e344ca65baf7d93"
+  },
+  "modelFinal": {
+    "pass": 33,
+    "fail": 0
+  }
+}
