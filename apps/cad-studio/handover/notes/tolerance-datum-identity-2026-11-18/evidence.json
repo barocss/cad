@@ -1,0 +1,108 @@
+{
+  "status": "PASS",
+  "qualification": "Accepting a datum suggestion must retain existing datum identities without collision.",
+  "observations": [
+    {
+      "mode": "same-sheet",
+      "datums": [
+        {
+          "id": "datum-A",
+          "letter": "Z",
+          "view": "front",
+          "place": [
+            16,
+            -9
+          ],
+          "edge": {
+            "edge": "n1.bottom|n1.side0",
+            "near": [
+              32,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "id": "datum-A-2",
+          "letter": "A",
+          "view": "front",
+          "place": [
+            48,
+            -9
+          ],
+          "edge": {
+            "edge": "n1.bottom|n1.side0",
+            "near": [
+              32,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "mode": "other-sheet",
+      "datums": [
+        {
+          "id": "datum-A",
+          "letter": "Z",
+          "view": "top",
+          "place": [
+            16,
+            -9
+          ],
+          "edge": {
+            "edge": "n1.side0|n1.top",
+            "near": [
+              32,
+              0,
+              8
+            ]
+          }
+        },
+        {
+          "id": "datum-A-2",
+          "letter": "A",
+          "view": "front",
+          "place": [
+            16,
+            -9
+          ],
+          "edge": {
+            "edge": "n1.bottom|n1.side0",
+            "near": [
+              32,
+              0,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "sourceFrozenCount": 1165,
+  "frozenSourcesUnchanged": true,
+  "savedFiles": [
+    {
+      "file": "same-sheet-saved.bcad",
+      "hash": "ba87b998a007e5cd46e1e766f2b4975a62f4b600c69e40cdcfac40a1ac357136",
+      "semanticEquality": true
+    },
+    {
+      "file": "other-sheet-saved.bcad",
+      "hash": "ec90af074b5f73219522eba7de4799978f5c15f19a2999f6d79bfef34f14c70d",
+      "semanticEquality": true
+    }
+  ],
+  "svg": [
+    {
+      "mode": "same-sheet",
+      "newDatumAAndOriginalZReferencePresent": true
+    },
+    {
+      "mode": "other-sheet",
+      "newDatumAAndOriginalZReferencePresent": true
+    }
+  ]
+}

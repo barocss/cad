@@ -37,6 +37,8 @@ export interface SheetContext {
   /** Whether balloons (a drawing-level setting) are drawn on this sheet: where the first view they can sit on is. (Weld symbols follow each joint's own view.) */
   balloonsHere: boolean;
   /** The datum letters the whole drawing has (features and targets), and the first datum feature of each letter: a frame on this sheet may name a datum on another, and a repeated letter is reported once. */
+  /** Datum IDs in the whole drawing, reserved for newly generated suggestions. */
+  datumIds?: readonly string[];
   datumLetters: string[]; datumFirst: Record<string, string>;
 }
 
@@ -183,6 +185,7 @@ export function forSheet(s: DrawingSettings, k: number): DrawingSettings {
     stale: k === 0 ? staleSheetViews(s).map(x => x.why) : [],
     balloonsHere: balloonSheet(s, at) === k,
     datumLetters: [...new Set([...(s.datums ?? []).map(d => d.letter), ...(s.datumTargets ?? []).map(t => t.letter)])],
+    datumIds: (s.datums ?? []).map(d => d.id),
     datumFirst: Object.fromEntries((s.datums ?? []).filter((d, j, all) => all.findIndex(o => o.letter === d.letter) === j).map(d => [d.letter, d.id])),
   };
   return out;

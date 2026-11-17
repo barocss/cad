@@ -189,13 +189,16 @@ export function toleranceSuggestions(ctx: IssueContext): ToleranceSuggestion[] {
     { name: 'left side', area: (right.max[0] - right.min[0]) * (right.max[1] - right.min[1]), at: edgeAlong(ctx, 'front', 0, false), view: 'front' as const },
   ].filter(x => x.at).sort((a, b) => b.area - a.area);
   const have = new Set((s.datums ?? []).map(d => d.letter)), letters = ['A', 'B', 'C'], named: string[] = [];
+  const datumIds = new Set([...(s.sheetContext?.datumIds ?? []), ...(s.datums ?? []).map(d => d.id)]);
   sides.forEach((side, i) => {
     const letter = letters[i];
     if (have.has(letter)) { named.push(letter); return; }
     const place = datumPlace(ctx, side.view, side.at!.line, letter, side.at!.ref);
     if (!place) return;
     named.push(letter);
-    out.push({ id: `datum-${letter}`, kind: 'datum', message: `Datum ${letter}: the ${side.name} (${['primary', 'secondary', 'tertiary'][i]}, the ${['largest', 'next largest', 'third'][i]} flat side).`, basis: 'the part’s largest flat sides, square to each other, in order of area', estimate: false, change: { kind: 'datum', datum: { id: `datum-${letter}`, letter, view: side.view, edge: side.at!.ref, place } } });
+    const baseId = `datum-${letter}`, datumId = datumIds.has(baseId) ? nextFreeId(`${baseId}-`, datumIds, 2) : baseId;
+    datumIds.add(datumId);
+    out.push({ id: `datum-${letter}`, kind: 'datum', message: `Datum ${letter}: the ${side.name} (${['primary', 'secondary', 'tertiary'][i]}, the ${['largest', 'next largest', 'third'][i]} flat side).`, basis: 'the part’s largest flat sides, square to each other, in order of area', estimate: false, change: { kind: 'datum', datum: { id: datumId, letter, view: side.view, edge: side.at!.ref, place } } });
   });
   // (A frame names the datums the drawing has or is offered: none it could not place.)
   const datums = letters.filter(l => named.includes(l) || have.has(l));
