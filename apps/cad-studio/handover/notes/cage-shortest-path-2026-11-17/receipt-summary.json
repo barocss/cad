@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "qualification": "Minimum edge-count path from two vertex picks; deterministic ties, selection-only history, crease and native persistence.",
+  "limits": [
+    "One regular closed box in actual Studio; disconnected/pole/invalid cases are pure tests. No length-weighted or crease-barrier mode."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "native": {
+    "sha256": "c40a8d395e1e377aaa0d2849fae1e05737329d64a1524fb432f804077767fbd6",
+    "semanticEquality": true
+  }
+}

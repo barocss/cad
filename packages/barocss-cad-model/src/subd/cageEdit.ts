@@ -209,6 +209,40 @@ export function connectedSelection(s: CageSession, action: 'grow' | 'shrink' | '
   return { ...s, sel };
 }
 
+/** Minimum edge-count path between exactly two picked vertices. Ties use ascending vertex IDs,
+ * starting at the lower seed ID, independent of pick order, face order, coordinates and creases.
+ * Returns only path edges in Edge mode; never adds geometry or a history step.
+ */
+export function shortestCagePath(s: CageSession): CageSession {
+  if (s.mode !== 'vertex' || s.sel.vertices.length !== 2 || s.sel.edges.length || s.sel.faces.length) {
+    throw new SubdError('INPUT', 'shortest path: pick exactly two vertices (Shift-click the second)');
+  }
+  const c = s.cage, nv = c.positions.length / 3;
+  if (!Number.isInteger(nv) || c.faces.some(f => f.length < 3 || new Set(f).size !== f.length || f.some(v => !Number.isInteger(v) || v < 0 || v >= nv))) {
+    throw new SubdError('INPUT', 'shortest path: invalid cage topology');
+  }
+  if (s.sel.vertices.some(v => !Number.isInteger(v) || v < 0 || v >= nv) || s.sel.vertices[0] === s.sel.vertices[1]) {
+    throw new SubdError('INPUT', 'shortest path: pick two distinct current cage vertices again');
+  }
+  const [start, end] = [...s.sel.vertices].sort((a, b) => a - b);
+  const topology = cageTopology(c), neighbours = Array.from({ length: nv }, () => new Set<number>());
+  for (const e of topology.edges.values()) { neighbours[e.a].add(e.b); neighbours[e.b].add(e.a); }
+  const parent = new Map<number, number>([[start, start]]), queue = [start];
+  for (let at = 0; at < queue.length && !parent.has(end); at++) {
+    const v = queue[at];
+    for (const next of [...neighbours[v]].sort((a, b) => a - b)) {
+      if (parent.has(next)) continue;
+      parent.set(next, v); queue.push(next);
+    }
+  }
+  if (!parent.has(end)) throw new SubdError('INPUT', 'shortest path: the vertices are in disconnected cage components; selection unchanged');
+  const vertices = [end];
+  while (vertices[vertices.length - 1] !== start) vertices.push(parent.get(vertices[vertices.length - 1])!);
+  vertices.reverse();
+  const edges = vertices.slice(1).map((v, i) => [vertices[i], v] as [number, number]);
+  return { ...s, mode: 'edge', sel: { ...emptyCageSel, edges } };
+}
+
 export const selectedVertices = (s: CageSession) => selectionVertices(s.cage, s.sel);
 /** The selection's centre (where the gizmo sits), or null. */
 export function selectionCentre(s: CageSession): [number, number, number] | null {
@@ -257,7 +291,7 @@ export function commitDrag(s: CageSession, delta: readonly number[], extrude: bo
   return step(s, d.cage, d.sel);
 }
 
-export type CageOp = 'extrude' | 'insert-loop' | 'bridge' | 'fill' | 'weld' | 'weld-near' | 'crease' | 'uncrease' | 'delete' | 'select-loop' | 'select-ring' | 'select-grow' | 'select-shrink' | 'select-linked' | 'mirror-x' | 'mirror-y' | 'mirror-z' | 'mirror-off';
+export type CageOp = 'extrude' | 'insert-loop' | 'bridge' | 'fill' | 'weld' | 'weld-near' | 'crease' | 'uncrease' | 'delete' | 'select-loop' | 'select-ring' | 'select-grow' | 'select-shrink' | 'select-linked' | 'select-path' | 'mirror-x' | 'mirror-y' | 'mirror-z' | 'mirror-off';
 /** Two boundary edge sets from one selection: its edges split into connected chains. */
 function twoBoundaries(c: StudioCage, edges: readonly (readonly [number, number])[]): [(readonly [number, number])[], (readonly [number, number])[]] {
   const groups: (readonly [number, number])[][] = [];
@@ -304,6 +338,7 @@ export function cageBoundaryReadiness(s: CageSession, op: 'fill' | 'bridge'): { 
 export function runOp(s: CageSession, op: CageOp, tolerance = 0.01, t = 0.5): CageSession {
   const c = s.cage, sel = s.sel;
   switch (op) {
+    case 'select-path': return shortestCagePath(s);
     case 'select-grow': return connectedSelection(s, 'grow');
     case 'select-shrink': return connectedSelection(s, 'shrink');
     case 'select-linked': return connectedSelection(s, 'linked');
