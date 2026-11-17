@@ -26,7 +26,11 @@ export function previewCageTransform(base: CageSession, input: CageTransformInpu
       pivot = base.cage.positions.slice(3 * v, 3 * v + 3) as [number, number, number];
     }
     if (!pivot) throw new Error('Pick cage elements first.');
-    const transform = input.kind === 'rotate' ? { kind: 'rotate' as const, axis: input.axis, degrees: value, pivot } : { kind: 'scale' as const, factor: value, pivot };
+    const transform = input.kind === 'rotate'
+      ? input.frame && input.frame !== 'world'
+        ? { kind: 'rotate-along' as const, direction: cageLocalDirection(base, input.frame), degrees: value, pivot }
+        : { kind: 'rotate' as const, axis: input.axis, degrees: value, pivot }
+      : { kind: 'scale' as const, factor: value, pivot };
     return { session: transformCageSelection(base, transform), error: null, pivot };
   } catch (error) { return { session: base, error: error instanceof Error ? error.message.replace(/^SubD: /, '') : String(error), pivot: null }; }
 }

@@ -308,6 +308,7 @@ export type CageSelectionTransform =
   | { kind: 'move-proportional'; axis: 0 | 1 | 2; distance: number; radius: number }
   | { kind: 'move-along'; direction: readonly [number, number, number]; distance: number }
   | { kind: 'move'; axis: 0 | 1 | 2; distance: number }
+  | { kind: 'rotate-along'; direction: readonly [number, number, number]; degrees: number; pivot: readonly [number, number, number] }
   | { kind: 'rotate'; axis: 0 | 1 | 2; degrees: number; pivot: readonly [number, number, number] }
   | { kind: 'scale'; factor: number; pivot: readonly [number, number, number] };
 /** Transform only selected cage vertices from this immutable baseline. Mirror-seam coordinates stay fixed.
@@ -326,10 +327,11 @@ export function transformCageSelection(s: CageSession, transform: CageSelectionT
   if (transform.kind === 'scale' && (!Number.isFinite(transform.factor) || transform.factor <= 0)) throw new SubdError('INPUT', 'scale: factor must be finite and greater than zero');
   if ((transform.kind === 'move' || transform.kind === 'move-proportional') && (![0, 1, 2].includes(transform.axis) || !Number.isFinite(transform.distance))) throw new SubdError('INPUT', 'move: use a world axis and finite distance in mm');
   const weights = transform.kind === 'move-proportional' ? cageProportionalWeights(s, transform.radius) : null;
-  const direction = transform.kind === 'move-along' ? normalizedCageDirection(transform.direction) : null;
+  const direction = transform.kind === 'move-along' || transform.kind === 'rotate-along' ? normalizedCageDirection(transform.direction) : null;
   if (transform.kind === 'move-along' && !Number.isFinite(transform.distance)) throw new SubdError('INPUT', 'move: use finite distance in mm');
-  const angle = transform.kind === 'rotate' ? transform.degrees % 360 : 0;
-  if (transform.kind === 'move' || transform.kind === 'move-along' || transform.kind === 'move-proportional' ? transform.distance === 0 : transform.kind === 'rotate' ? angle === 0 : transform.factor === 1) return s;
+  if (transform.kind === 'rotate-along' && !Number.isFinite(transform.degrees)) throw new SubdError('INPUT', 'rotate: use finite degrees');
+  const angle = transform.kind === 'rotate' || transform.kind === 'rotate-along' ? transform.degrees % 360 : 0;
+  if (transform.kind === 'move' || transform.kind === 'move-along' || transform.kind === 'move-proportional' ? transform.distance === 0 : transform.kind === 'rotate' || transform.kind === 'rotate-along' ? angle === 0 : transform.factor === 1) return s;
   const positions = [...c.positions], radians = angle * Math.PI / 180, cosine = Math.cos(radians), sine = Math.sin(radians);
   for (const v of weights ? weights.flatMap((w, i) => w > 0 ? [i] : []) : vertices) {
     if (transform.kind === 'move-proportional') { positions[3*v+transform.axis] += weights![v]*transform.distance; continue; }
@@ -338,7 +340,18 @@ export function transformCageSelection(s: CageSession, transform: CageSelectionT
     const p = at(c, v).map((x, k) => x - transform.pivot[k]);
     const q = [...p];
     if (transform.kind === 'scale') for (let k = 0; k < 3; k++) q[k] *= transform.factor;
-    else {
+    else if (transform.kind === 'rotate-along') {
+      // Rodrigues: positive angle follows the right-hand rule about the baseline unit axis.
+      const n = direction!, scale = Math.max(...p.map(Math.abs));
+      // A point on this axis is invariant. Compare normalized directions at roundoff scale,
+      // not with a model-unit tolerance; retain the original coordinate bit-for-bit.
+      const unitP = scale === 0 ? [0, 0, 0] : p.map(x => x / scale);
+      const products = [[n[1]*unitP[2], n[2]*unitP[1]], [n[2]*unitP[0], n[0]*unitP[2]], [n[0]*unitP[1], n[1]*unitP[0]]];
+      if (products.every(([a, b]) => Math.abs(a-b) <= 4 * Number.EPSILON * (Math.abs(a)+Math.abs(b)))) continue;
+      const cross = [n[1]*p[2]-n[2]*p[1], n[2]*p[0]-n[0]*p[2], n[0]*p[1]-n[1]*p[0]];
+      const second = [n[1]*cross[2]-n[2]*cross[1], n[2]*cross[0]-n[0]*cross[2], n[0]*cross[1]-n[1]*cross[0]];
+      for (let k = 0; k < 3; k++) q[k] = p[k] + cross[k]*sine + second[k]*(1-cosine);
+    } else {
       const a = (transform.axis + 1) % 3, b = (transform.axis + 2) % 3;
       q[a] = cosine * p[a] - sine * p[b]; q[b] = sine * p[a] + cosine * p[b];
     }

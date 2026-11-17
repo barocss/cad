@@ -60,3 +60,12 @@ test('quad plane U/V move independently from baseline and reject proportional co
  const bad=previewCageTransform(face,{...move,proportional:true,radius:'10'});assert.ok(bad.error);assert.equal(bad.session,face);
  assert.equal(previewCageTransform(face,{...move,value:'0'}).session,face);
 });
+test('local rotation frame and explicit pivot use baseline; unsupported frames preserve baseline',()=>{
+ const face=select(startSession(0,cage),{kind:'face',f:0},false);
+ const rotate:CageTransformInput={...input,frame:'face',vertex:'0'};
+ const r=previewCageTransform(face,rotate);assert.equal(r.error,null);assert.deepEqual(r.pivot,[10,20,30]);
+ const expected=[10,20,30,10,24,30,6,24,30,6,20,30];r.session.cage.positions.forEach((v,i)=>assert.ok(Math.abs(v-expected[i])<1e-12));
+ assert.equal(previewCageTransform(face,{...rotate,value:'360'}).session,face);
+ const bad=previewCageTransform(s,rotate);assert.ok(bad.error);assert.equal(bad.session,s);
+ assert.equal(previewCageTransform(face,{...rotate,vertex:'-1'}).session,face);
+});

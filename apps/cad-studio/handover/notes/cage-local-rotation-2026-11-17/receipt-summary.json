@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "qualification": "Numeric rotation about a tilted face normal with independent conjugated planar rotation oracle.",
+  "files": [
+    {
+      "file": "local-rotation.bcad",
+      "hash": "0d0cf2a51d268a6b19035eedce9625af0b39993742a8b96540efe17cb61c6467",
+      "semanticEquality": true
+    }
+  ],
+  "downloads": [
+    {
+      "phase": "native Save local-rotation",
+      "suggestedFilename": "Untitled.bcad"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One box, normal rotation on a 15-degree tilted quad and explicit pivot. Other local axes/mirror/refusals covered by pure tests. No drag support."
+  ],
+  "visualReview": "PASS: actual pixels inspected; pending cage preview distinct from accepted fresh-open",
+  "priorRun": "Normal rotation browser passed before independent oblique-edge no-op defect was discovered. Final run includes no-op regression after fix."
+}
