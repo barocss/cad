@@ -20,6 +20,7 @@ import { castingProfileOf } from '../engine/castingRuleRows';
 import { nextFreeId } from '../util/ids';
 import { refusal } from '../engine/refusal';
 import { nextInstanceId } from '../assembly/takenIds';
+import { tablesFor } from '../assembly/faces';
 
 /** Where a library comes from: built into the studio, shared by a team, or the user's own. */
 export type LibrarySource = 'built-in' | 'team' | 'user';
@@ -217,6 +218,25 @@ export function snapByInterfaces(doc: StudioDoc, a: { part: string; interface: s
     mates.push({ id, kind, a: { part: a.part, face: fa }, b: { part: b.part, face: fb } });
   }
   if (!mates.length) return { error: `${a.interface} and ${b.interface} name no faces in common to mate (plane, axis)` };
+  // A snap's real mates remain flush/on-axis. Never silently discard an offset
+  // across their constrained directions. Read named faces, not an assumed frame z:
+  // a user library's interface frame need not agree with its named mate face.
+  if (offset.some(v => v !== 0)) {
+    const zero = placeByInterfaces(A.itf, B.itf), delta = p.translation.map((v, k) => v - zero.translation[k]);
+    const table = tablesFor(doc), facesA = table(a.part), facesB = table(b.part);
+    for (const mate of mates) {
+      const fa = facesA?.[mate.a.face], fb = facesB?.[mate.b.face];
+      let constrained = 0;
+      if (mate.kind === 'coincident' && fa?.kind === 'plane' && fb?.kind === 'plane') {
+        constrained = Math.abs(delta.reduce((n, v, k) => n + v * fa.normal[k], 0));
+      } else if (mate.kind === 'concentric' && fa?.kind === 'cylinder' && fb?.kind === 'cylinder') {
+        const along = delta.reduce((n, v, k) => n + v * fa.axis[k], 0);
+        constrained = Math.hypot(...delta.map((v, k) => v - along * fa.axis[k]));
+      }
+      // Same positional tolerance as the assembly solver (mates.ts POS_TOL).
+      if (constrained > 1e-6) return { error: `Offset conflicts with the ${mate.kind} mate on ${a.interface} and ${b.interface}: keep the offset in the mate's free directions (within 0.000001 mm). Nothing was snapped.` };
+    }
+  }
   const instances = doc.instances!.map(i => i.id === b.part ? { ...i, position, rotation } : i);
   return { doc: { ...doc, instances, mates: [...(doc.mates ?? []), ...mates] }, mates };
 }

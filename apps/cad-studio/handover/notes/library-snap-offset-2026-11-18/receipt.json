@@ -1,0 +1,65 @@
+{
+  "status": "PASS",
+  "qualification": "Incompatible normal snap offsets are refused atomically; a free offset remains usable and persistent.",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Actual grouped dispatcher and evaluator consumed by Studio, not a numeric UI input defect.",
+    "Guard covers actual plane-plane and cylinder-cylinder mate geometry; other mate shape semantics are unchanged."
+  ],
+  "phase": "fresh Open normal-negative-reopened",
+  "sourceFrozenCount": 1298,
+  "sourceUnchanged": true,
+  "visualReview": "Free offset inspector [0,8.2,25], Coincident mate; refused normal offset [50,50,50] and no mates.",
+  "files": [
+    {
+      "file": "free-offset-saved.bcad",
+      "semanticEquality": true,
+      "hash": "f65d38c09cb81039689c1a8745bde5eabd62572d30a8d02ac4d045c786d3e75d"
+    },
+    {
+      "file": "normal-positive-saved.bcad",
+      "semanticEquality": true,
+      "hash": "709f8ea4842dad16f8ba2dff9bc604722447ff944e28ad1d7cd484c558afdf16"
+    },
+    {
+      "file": "normal-negative-saved.bcad",
+      "semanticEquality": true,
+      "hash": "709f8ea4842dad16f8ba2dff9bc604722447ff944e28ad1d7cd484c558afdf16"
+    }
+  ],
+  "dispatcher": [
+    {
+      "z": 0,
+      "changed": true,
+      "isError": false,
+      "content": "{\"ok\":true,\"did\":\"snapped p2.seat onto p1.slot-t1\",\"mates\":[{\"id\":\"m1\",\"kind\":\"coincident\",\"a\":{\"part\":\"p1\",\"face\":\"lib1_t1x.side1\"},\"b\":{\"part\":\"p2\",\"face\":\"lib1_n.side5\"}}],\"parts\":[{\"id\":\"p1\",\"name\":\"Rail\",\"position\":[0,0,0],\"rotation\":[0,0,0]},{\"id\":\"p2\",\"name\":\"Nut\",\"position\":[0,8.2,25],\"rotation\":[0,0,0]}]}",
+      "inputUnchanged": true
+    },
+    {
+      "z": 5,
+      "changed": false,
+      "isError": true,
+      "content": "{\"ok\":false,\"error\":\"Offset conflicts with the coincident mate on slot-t1 and seat: keep the offset in the mate's free directions (within 0.000001 mm). Nothing was snapped.\"}",
+      "inputUnchanged": true
+    },
+    {
+      "z": -5,
+      "changed": false,
+      "isError": true,
+      "content": "{\"ok\":false,\"error\":\"Offset conflicts with the coincident mate on slot-t1 and seat: keep the offset in the mate's free directions (within 0.000001 mm). Nothing was snapped.\"}",
+      "inputUnchanged": true
+    }
+  ]
+}
