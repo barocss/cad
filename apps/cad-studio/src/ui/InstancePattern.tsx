@@ -12,10 +12,11 @@ type Axis = keyof typeof AXES | 'Custom';
 /** The axis a direction is exactly (+X, +Y, +Z), else 'Custom': a direction a chat or a file made is shown as it is and kept unless the choice changes. */
 export const axisOf = (v: readonly number[]): Axis => (Object.keys(AXES) as (keyof typeof AXES)[]).find(a => AXES[a].every((x, k) => x === v[k])) ?? 'Custom';
 
-export interface Draft { kind: 'linear' | 'circular'; count: string; spacing: string; angle: string; axis: Axis; originX: string; originY: string; originZ: string }
+export interface Draft { kind: 'linear' | 'circular'; count: string; spacing: string; angle: string; axis: Axis; originX: string; originY: string; originZ: string; vectorX: string; vectorY: string; vectorZ: string }
 export function draftOf(p: InstancePattern | undefined): Draft {
   const origin = p?.kind === 'circular' ? p.origin : [0, 0, 0];
-  const coordinates = { originX: String(origin[0]), originY: String(origin[1]), originZ: String(origin[2]) };
+  const vector = !p ? AXES.X : p.kind === 'linear' ? p.dir : p.axis;
+  const coordinates = { vectorX: String(vector[0]), vectorY: String(vector[1]), vectorZ: String(vector[2]), originX: String(origin[0]), originY: String(origin[1]), originZ: String(origin[2]) };
   if (!p) return { kind: 'linear', count: '3', spacing: '20', angle: '120', axis: 'X', ...coordinates };
   return p.kind === 'linear' ? { kind: 'linear', count: String(p.count), spacing: String(p.spacing), angle: '120', axis: axisOf(p.dir), ...coordinates }
     : { kind: 'circular', count: String(p.count), spacing: '20', angle: String(p.angle), axis: axisOf(p.axis), ...coordinates };
@@ -26,11 +27,19 @@ export function patternOrigin(draft: Draft): [number, number, number] {
   return [draft.originX, draft.originY, draft.originZ].map(x => x.trim() === '' ? NaN : Number(x)) as [number, number, number];
 }
 
+/** Cardinal choices and explicit custom vectors share the existing Model direction contract. */
+export function patternVector(draft: Draft): [number, number, number] {
+  return draft.axis === 'Custom'
+    ? [draft.vectorX, draft.vectorY, draft.vectorZ].map(x => x.trim() === '' ? NaN : Number(x)) as [number, number, number]
+    : [...AXES[draft.axis]];
+}
+
 /** What Apply sends for an existing pattern: its numbers, and the direction/axis/origin only when changed (a custom one stays as it is). */
 export function patternEdit(pattern: InstancePattern, draft: Draft): EditPatternOptions {
   const origin = patternOrigin(draft);
   const moved = pattern.kind === 'circular' && origin.some((v, i) => v !== pattern.origin[i]);
-  const count = Number(draft.count), turned = draft.axis !== draftOf(pattern).axis && draft.axis !== 'Custom' ? [...AXES[draft.axis]] as [number, number, number] : undefined;
+  const vector = patternVector(draft), previous = pattern.kind === 'linear' ? pattern.dir : pattern.axis;
+  const count = Number(draft.count), turned = vector.some((v, i) => v !== previous[i]) ? vector : undefined;
   return pattern.kind === 'linear' ? { id: pattern.id, count, spacing: Number(draft.spacing), ...(turned ? { dir: turned } : {}) } : { id: pattern.id, count, angle: Number(draft.angle), ...(turned ? { axis: turned } : {}), ...(moved ? { origin } : {}) };
 }
 
@@ -60,7 +69,7 @@ export function InstancePatternControls({ inst, pattern, occurrenceOf, onAdd, on
     let why: string | undefined;
     if (pattern) why = onEdit(patternEdit(pattern, draft));
     else {
-      const count = Number(draft.count), dir = [...AXES[draft.axis === 'Custom' ? 'X' : draft.axis]] as [number, number, number];
+      const count = Number(draft.count), dir = patternVector(draft);
       why = onAdd(draft.kind === 'linear' ? { seed: inst.id, kind: 'linear', count, spacing: Number(draft.spacing), dir } : { seed: inst.id, kind: 'circular', count, angle: Number(draft.angle), axis: dir, origin: patternOrigin(draft) });
     }
     setError(why);
@@ -78,7 +87,14 @@ export function InstancePatternControls({ inst, pattern, occurrenceOf, onAdd, on
         ? <label className={FIELD}><span>Spacing mm</span><input aria-label="Pattern spacing" type="number" step="any" value={draft.spacing} onChange={e => set('spacing', e.target.value)} /></label>
         : <label className={FIELD}><span>Angle °</span><input aria-label="Pattern angle" type="number" step="any" value={draft.angle} onChange={e => set('angle', e.target.value)} /></label>}
       <label className={FIELD}><span>{kind === 'linear' ? 'Along' : 'About'}</span>
-        <select aria-label="Pattern axis" value={draft.axis} onChange={e => set('axis', e.target.value)}>{(pattern && draftOf(pattern).axis === 'Custom' ? ['Custom', ...Object.keys(AXES)] as Axis[] : Object.keys(AXES) as Axis[]).map(a => <option key={a} value={a}>{a === 'Custom' ? 'Custom (as made)' : a}</option>)}</select></label>
+        <select aria-label="Pattern axis" value={draft.axis} onChange={e => set('axis', e.target.value)}>{([...Object.keys(AXES), 'Custom'] as Axis[]).map(a => <option key={a} value={a}>{a}</option>)}</select></label>
+      {draft.axis === 'Custom' && <fieldset className="flex flex-col gap-1"><legend>{kind === 'linear' ? 'Direction vector' : 'Axis direction'}</legend>
+        {(['X', 'Y', 'Z'] as const).map(a => {
+          const key = `vector${a}` as 'vectorX' | 'vectorY' | 'vectorZ';
+          return <label key={a} className={FIELD}><span>{a}</span><input aria-label={`Pattern direction ${a}`} type="number" step="any" value={draft[key]} onChange={e => set(key, e.target.value)} /></label>;
+        })}
+        <span className="muted">Direction only; length does not change spacing or angle.</span>
+      </fieldset>}
       {kind === 'circular' && <fieldset className="flex flex-col gap-1"><legend>Axis origin · mm</legend>
         {(['X', 'Y', 'Z'] as const).map(a => {
           const key = `origin${a}` as 'originX' | 'originY' | 'originZ';

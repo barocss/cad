@@ -1,0 +1,150 @@
+{
+  "status": "PASS",
+  "receiptSha256": "62fc5585ed589db59fba103b0d525a54a624b4f8ffdd2681a4de292976da8465",
+  "observations": [
+    {
+      "label": "linear-positive",
+      "pattern": {
+        "seed": "cube",
+        "kind": "linear",
+        "count": 3,
+        "spacing": 10,
+        "dir": [
+          0,
+          3,
+          4
+        ],
+        "id": "pat1"
+      },
+      "positions": [
+        [
+          0,
+          6,
+          8
+        ],
+        [
+          0,
+          12,
+          16
+        ]
+      ]
+    },
+    {
+      "label": "linear-negative",
+      "pattern": {
+        "seed": "cube",
+        "kind": "linear",
+        "count": 3,
+        "spacing": 10,
+        "dir": [
+          0,
+          3,
+          -4
+        ],
+        "id": "pat1"
+      },
+      "positions": [
+        [
+          0,
+          6,
+          -8
+        ],
+        [
+          0,
+          12,
+          -16
+        ]
+      ]
+    },
+    {
+      "label": "reopened",
+      "pattern": {
+        "seed": "cube",
+        "kind": "linear",
+        "count": 3,
+        "spacing": 10,
+        "dir": [
+          0,
+          3,
+          -4
+        ],
+        "id": "pat1"
+      },
+      "positions": [
+        [
+          0,
+          6,
+          -8
+        ],
+        [
+          0,
+          12,
+          -16
+        ]
+      ]
+    },
+    {
+      "label": "cardinal-return",
+      "pattern": {
+        "seed": "cube",
+        "kind": "linear",
+        "count": 3,
+        "spacing": 10,
+        "dir": [
+          1,
+          0,
+          0
+        ],
+        "id": "pat1"
+      },
+      "positions": [
+        [
+          10,
+          0,
+          0
+        ],
+        [
+          20,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "label": "circular-custom",
+      "pattern": {
+        "seed": "cube",
+        "kind": "circular",
+        "count": 3,
+        "angle": 90,
+        "axis": [
+          0,
+          3,
+          4
+        ],
+        "origin": [
+          10,
+          20,
+          30
+        ],
+        "id": "pat1"
+      },
+      "positions": [
+        [
+          8,
+          30.400000000000002,
+          -22.799999999999997
+        ],
+        [
+          -30,
+          -3.199999999999992,
+          2.3999999999999915
+        ]
+      ]
+    }
+  ],
+  "limits": [
+    "One cube seed and two copies; direction [0,3,4], Z sign edit, one circular quarter-turn fixture. Literal independent positions; no new Model/schema, nested patterns, mates or exchange output."
+  ],
+  "downloadCount": 1
+}

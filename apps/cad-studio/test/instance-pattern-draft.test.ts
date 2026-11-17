@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { InstancePattern } from '@barocss/cad-model/engine/doc';
-import { axisOf, draftOf, patternEdit, patternOrigin, restorePatternOccurrence } from '../src/ui/InstancePattern';
+import { axisOf, draftOf, patternEdit, patternOrigin, patternVector, restorePatternOccurrence } from '../src/ui/InstancePattern';
 
 // Row 10 ③ audit 1 (#9): the pattern panel's Apply sends a direction or an axis only when the choice changed; one a chat
 // or a file made (-X, a diagonal) shows as Custom and stays as it is.
@@ -50,4 +50,15 @@ test('restoring one occurrence preserves every other skip and the authored sourc
   assert.deepEqual(p.skip, [1, 3, 5]);
   assert.notStrictEqual(restorePatternOccurrence(p, 2).skip, p.skip);
   assert.deepEqual(restorePatternOccurrence({ ...p, skip: [3] }, 3), { id: p.id, skip: [] });
+});
+
+test('custom vector authoring and editing sends exact direction while cardinal choices remain explicit', () => {
+  const p = linear([0, 3, 4]), d = draftOf(p);
+  assert.deepEqual(patternVector(d), [0, 3, 4]);
+  assert.deepEqual(patternEdit(p, { ...d, vectorY: '-3' }), { id: p.id, count: 4, spacing: 20, dir: [0, -3, 4] });
+  assert.deepEqual(patternVector({ ...d, axis: 'X' }), [1, 0, 0]);
+  assert.deepEqual(patternVector({ ...draftOf(undefined), axis: 'Custom', vectorX: '0', vectorY: '3', vectorZ: '4' }), [0, 3, 4]);
+  assert.equal(Number.isNaN(patternVector({ ...d, vectorX: '' })[0]), true);
+  const c: InstancePattern = { id: 'pat2', seed: 'p1', kind: 'circular', count: 3, angle: 90, axis: [0, 3, 4], origin: [10, 20, 30] };
+  assert.deepEqual(patternEdit(c, { ...draftOf(c), vectorZ: '-4' }), { id: c.id, count: 3, angle: 90, axis: [0, 3, -4] });
 });
