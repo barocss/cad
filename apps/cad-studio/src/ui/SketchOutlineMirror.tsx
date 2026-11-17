@@ -32,7 +32,7 @@ export function SketchOutlineMirror({ sketch, doc, onApply }: {
       }
     }}>
     <legend>Mirror outline in place</legend>
-    <p className="muted small">Replaces one independent, unconstrained straight outline. No copy is kept. The mirror line is in sketch X/Y, not world space. Geometry changes only on Apply.</p>
+    <p className="muted small">Replaces one independent straight outline, preserving horizontal/vertical and edge-length constraints. Other constraints are not supported. No copy is kept. The mirror line is in sketch X/Y, not world space. Geometry changes only on Apply.</p>
     <label>Mirror line <NativeSelect aria-label="Outline mirror line" value={draft.axis}
       onChange={event => update({ axis: event.target.value as Draft['axis'] })}>
       <option value="x">X = coordinate (vertical)</option><option value="y">Y = coordinate (horizontal)</option>

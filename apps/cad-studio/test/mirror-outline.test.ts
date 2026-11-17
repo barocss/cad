@@ -29,7 +29,7 @@ test('concave straight outline remains a valid line-loop snapshot, not a silentl
  assert.deepEqual(accepted({...s,shape:r},'y',1),s.shape);
 });
 test('constrained/derived/linked/multiple source refusal preserves source without dropping metadata',()=>{
- for(const patch of [{hv:undefined},{hv:{h:[0],v:[]}},{rules:[{kind:'fix' as const,point:0,at:[2,3] as [number,number]}]},{lengths:{0:6}},{radii:{0:3}},{bulges:[.2]},{fromSpline:true as const},{fromEllipse:true as const},{construction:true as const},{circles:[{c:[4,4] as [number,number],r:1}]}]){const s=state();s.shape={...source,...patch};const before=structuredClone(s);assert.ok('error'in mirrorOutline(s,'x',0));assert.deepEqual(s,before);}
+ for(const patch of [{hv:undefined},{rules:[{kind:'fix' as const,point:0,at:[2,3] as [number,number]}]},{radii:{0:3}},{bulges:[.2]},{fromSpline:true as const},{fromEllipse:true as const},{construction:true as const},{circles:[{c:[4,4] as [number,number],r:1}]}]){const s=state();s.shape={...source,...patch};const before=structuredClone(s);assert.ok('error'in mirrorOutline(s,'x',0));assert.deepEqual(s,before);}
  for(const patch of [{association:{}},{band:{}},{bandPicks:['e4']},{done:[{kind:'circle',c:[20,20],r:1}]}])assert.ok('error'in mirrorOutline({...state(),...patch} as SketchState,'x',0));
 });
 test('finite range, malformed axis, collapsed and self-crossing guards apply before and after mirror',()=>{

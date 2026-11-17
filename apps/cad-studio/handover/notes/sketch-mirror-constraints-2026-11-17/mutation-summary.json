@@ -1,0 +1,71 @@
+{
+  "source": "apps/cad-studio/src/sketch/mirrorOutline.ts",
+  "sourceHashBefore": "be042ee7d378cd6e2364baf42e23ba5e3b22a010b404a516a83ded7efafff7fc",
+  "sourceHashAfter": "be042ee7d378cd6e2364baf42e23ba5e3b22a010b404a516a83ded7efafff7fc",
+  "runs": [
+    {
+      "name": "baseline-before",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 15,
+      "fail": 0
+    },
+    {
+      "name": "skip-metadata-validation",
+      "substitution": [
+        "if(error)return {error};",
+        "if(false)return {error};"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 14,
+      "fail": 1,
+      "killed": true
+    },
+    {
+      "name": "drop-length-metadata",
+      "substitution": [
+        "const shape={...source,points};",
+        "const shape={...source,points,lengths:undefined};"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 11,
+      "fail": 4,
+      "killed": true
+    },
+    {
+      "name": "bypass-settle-exact",
+      "substitution": [
+        "if(constrained){",
+        "if(false){"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 14,
+      "fail": 1,
+      "killed": true
+    },
+    {
+      "name": "skip-source-length-residual",
+      "substitution": [
+        "Math.abs(Math.hypot(b[0]-a[0],b[1]-a[1])-length)>CadNumericPolicy.linearTolerance",
+        "false"
+      ],
+      "additional": null,
+      "status": 0,
+      "pass": 15,
+      "fail": 0,
+      "killed": false
+    },
+    {
+      "name": "baseline-final",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 15,
+      "fail": 0
+    }
+  ]
+}

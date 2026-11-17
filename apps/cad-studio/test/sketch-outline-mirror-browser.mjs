@@ -16,7 +16,7 @@ const input=JSON.parse(readFileSync(process.argv[2],'utf8'));
 if(input.points){
  const shape={kind:'polygon',closed:true,points:input.points,hv:{h:[],v:[]}};
  const make=s=>withNode(withNode(emptyDoc(),profileOf([s]).node),{kind:'extrude',sketch:0,height:5});
- console.log(JSON.stringify({free:make(shape),locked:make({...shape,lengths:{0:Math.hypot(20,2)}})}));
+ console.log(JSON.stringify({free:make(shape),locked:make({...shape,rules:[{kind:'fix',point:1,at:input.points[1]}]})}));
 }else{
  const output=evaluateCadPart(toPartDocument(input)).outputs[0];
  const b=output.brep, vertices=new Map(b.vertices.map(v=>[v.id,v.point])), edges=new Map(b.edges.map(e=>[e.id,e])), coedges=new Map(b.coedges.map(c=>[c.id,c])), loops=new Map(b.loops.map(l=>[l.id,l]));

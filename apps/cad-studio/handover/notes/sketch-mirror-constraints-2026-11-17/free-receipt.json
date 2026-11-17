@@ -1,0 +1,33 @@
+{
+  "status": "PASS",
+  "qualification": "Explicit in-place reflection of one independent unconstrained straight outline, existing history and native project persistence.",
+  "limits": [
+    "One asymmetric four-point profile and its constrained refusal counterpart. Chrome desktop. No constraint removal or solver widening."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1062,
+  "sourceAfterCleanupCount": 1062,
+  "files": [
+    {
+      "file": "mirrored-outline.bcad",
+      "hash": "1a955116a1151d7774fcd10963f5e43bd44e6e13bc546e4ff43d18dea460437f",
+      "semanticEquality": true
+    }
+  ],
+  "states": [
+    "01-x-zero-mirror",
+    "02-custom-line-before-apply",
+    "03-finished",
+    "04-fresh-open",
+    "05-constrained-refusal",
+    "06-refusal-finished"
+  ]
+}
