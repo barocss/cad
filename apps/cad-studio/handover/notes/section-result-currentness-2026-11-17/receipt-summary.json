@@ -1,0 +1,28 @@
+{
+  "baseline": {
+    "status": "PASS",
+    "receiptSha256": "9a7b2a1a4fd0f0505dcbb426170bdb2ad75e7f247051ec1b07d2ac5c337d437e",
+    "source": "source-frozen.json",
+    "staleErrorVisible": 1,
+    "limits": [
+      "Synthetic native box only. Real Worker responses held and released unchanged. No export, persistence or general race-matrix claim."
+    ]
+  },
+  "fixed": {
+    "status": "PASS",
+    "receiptSha256": "a5e953bb8e27e5411aa76f08c62c286e2c164bc31de9d811d27e73e410c641f7",
+    "source": "source-frozen.json",
+    "staleErrorVisible": 0,
+    "limits": [
+      "Synthetic native box only. Real Worker responses held and released unchanged. No export, persistence or general race-matrix claim."
+    ],
+    "oracle": {
+      "bounds": {
+        "width": 40,
+        "height": 16
+      },
+      "sourceVolume": 1600,
+      "undoRedo": "PASS"
+    }
+  }
+}

@@ -85,7 +85,9 @@ export function useDrawingSheet(active: boolean, { engine, doc: sourceDoc, bodie
   const views = projected && projected.model === model && projected.engine === engine && projected.inputKey === projectionKey && projected.side === (settings.orientation ?? 'y-') ? projected.views : null;
   /** The sections as last cut (O148 X1; each with why it could not be cut). */
   const [rawCutsMade, setCutsMade] = useState<SectionCut[] | null>(null);
-  const cutsMade = projected?.model === model ? rawCutsMade : null;
+  // A section result belongs to the same complete request as its views, not just the model.
+  // Cut/orientation edits and worker replacement must hide old results and errors while awaiting a reply.
+  const cutsMade = views ? rawCutsMade : null;
   const projectionCurrent = !!views && !scoped.error && projected?.inputKey === projectionKey && projected.engine === engine;
   const [error, setError] = useState<string | null>(null);
   /** The part has no body yet: the panel says so, and nothing is raised as an error. */
@@ -110,7 +112,7 @@ export function useDrawingSheet(active: boolean, { engine, doc: sourceDoc, bodie
 
   const title = settings.title ?? fileName;
   // (The sections the settings list, as cut for them: one whose letter, view or place changed is cut again first.)
-  const cuts = useMemo(() => sheetSections((projected?.model === model ? cutsMade ?? [] : []).filter(c => cutList.some(x => sameSection(x, c)))), [cutsMade, cutKey, projected, model]);
+  const cuts = useMemo(() => sheetSections((cutsMade ?? []).filter(c => cutList.some(x => sameSection(x, c)))), [cutsMade, cutKey]);
   const sectionA = sectionList.find(x => x.id === 'A' && x.view === 'front'), cutA = cutsMade?.find(c => c.id === 'A' && c.view === 'front');
   const layout = useMemo(() => views && layoutSheet(views, settings, sectionExtents(settings, cuts)), [views, settings, cuts]);
   // Diameter dimensions on a hole read as its callout (count, size or thread, depth, counterbore or countersink).
