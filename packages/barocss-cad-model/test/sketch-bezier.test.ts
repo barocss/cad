@@ -132,10 +132,13 @@ test('trim, extend and split: a Bezier is no cutting edge and is left untouched;
   assert.ok('error' in extendAt([bz], [0, 0], 5));
 });
 
-test('the DXF of a sketch skips a Bezier; offset refuses it; it is no profile node, no corners, and its outline is its samples', () => {
+test('the DXF exports reference Beziers as SPLINE; offset still refuses them; it is no profile node, no corners, and its outline is its samples', () => {
   const rect: SketchShape = { kind: 'rectangle', a: [0, 0], b: [10, 6] }, profile = profileOf([rect]); assert.ok('node' in profile);
   const ref = line([0, 8], [5, 8]), withBez = sketchDxf({ ...profile.node, construction: [bz, bzC, ref] } as SketchNode, {}), without = sketchDxf({ ...profile.node, construction: [ref] } as SketchNode, {});
-  assert.equal(withBez.text, without.text);
+  // #253 deliberately replaces the former silent-skip policy, without changing profile/offset semantics.
+  assert.equal(withBez.report.modelSpace.SPLINE, 2);
+  assert.equal(without.report.modelSpace.SPLINE ?? 0, 0);
+  assert.equal(withBez.report.modelSpace.LWPOLYLINE, without.report.modelSpace.LWPOLYLINE);
   assert.deepEqual(offsetShape(bz, 1), { error: 'A Bézier curve is not offset.' });
   assert.equal(shapeNode(bz), null); assert.equal(cornersOf(bz), null);
   assert.deepEqual(shapeOutline(bz), bezierSamples(Q)); assert.equal(shapeOutline(bz).length, 33);

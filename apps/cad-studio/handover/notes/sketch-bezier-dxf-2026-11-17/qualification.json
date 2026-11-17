@@ -1,0 +1,85 @@
+{
+  "base": "f00394b73deeae646aa4285b84a0bde8fc54b5a6",
+  "issue": 253,
+  "status": "BOUNDED_PASS_ISSUE_OPEN",
+  "checks": {
+    "modelFocused": "18/18 PASS",
+    "studioFocused": "5/5 PASS",
+    "modelTsc": "PASS",
+    "studioTsc": "PASS",
+    "affectedModelLint": "PASS",
+    "studioBuild": "PASS 5.46s",
+    "independentReview": "blockers 0"
+  },
+  "runs": [
+    {
+      "artifact": "cad-bezier-dxf-01",
+      "receiptSha256": "181d39262317979770f4d55c2be043dd3c7604877eca8d25e0108d24524c09bb",
+      "status": "FAIL",
+      "phase": "open feature editor 0",
+      "oracleResults": [],
+      "errors": [],
+      "consoleErrors": [],
+      "sourceChanges": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    {
+      "artifact": "cad-bezier-dxf-02",
+      "receiptSha256": "b2420c1adf087e8204b424670bd85e0fc4ba855f24b0b73ad03bcf7184578031",
+      "status": "FAIL",
+      "phase": "DXF 07-reopened",
+      "oracleResults": [
+        {
+          "label": "05-authored",
+          "exit": 0
+        },
+        {
+          "label": "07-reopened",
+          "exit": 0
+        }
+      ],
+      "errors": [],
+      "consoleErrors": [],
+      "sourceChanges": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    {
+      "artifact": "cad-bezier-dxf-03",
+      "receiptSha256": "f66dcba106681317f10e22ea94f132810c3e550cd8defe3700cb989d3ddd9641",
+      "status": "PASS",
+      "phase": "invalid finite curve Open",
+      "oracleResults": [
+        {
+          "label": "10-edited",
+          "exit": 0
+        }
+      ],
+      "errors": [],
+      "consoleErrors": [],
+      "sourceChanges": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    }
+  ],
+  "commands": [
+    "node packages/barocss-cad-model/scripts/test.mjs sketch-bezier",
+    "node node_modules/typescript/bin/tsc --noEmit -p packages/barocss-cad-model",
+    "node apps/cad-studio/scripts/test.mjs sketch-bezier-studio",
+    "cd apps/cad-studio && node ../../node_modules/typescript/bin/tsc --noEmit",
+    "cd apps/cad-studio && node ../../node_modules/vite/bin/vite.js build",
+    "BEZIER_DXF_FROZEN=1 PW_DIR=<installed-playwright> CHROME=<installed-chrome> node test/bezier-dxf-browser.mjs <output> [retained-run-02]"
+  ]
+}
