@@ -20,14 +20,14 @@ interface RowProps {
   nestedSel: string | null;
   onToggle(path: string): void;
   registerRow?(path: string, row: HTMLButtonElement | null): void | (() => void);
-  onPick(id: string): void;
+  onPick(id: string, additive?: boolean): void;
   onEdit(id: string, index: number): void;
   isolationAction?(inst: PartInstance): ReactNode;
   iconFor(node: ModelNode): string;
 }
 
 const InstanceRow = memo(function InstanceRow({ inst, selected, only, editIndex, locked, open, nestedSel, onToggle, onPick, onEdit, iconFor, registerRow, isolationAction }: RowProps) {
-  const button = <button data-browser-instance-path={inst.id} ref={row => registerRow?.(inst.id, row)} className={'ol instance' + (selected ? ' sel' : '') + (inst.hidden ? ' hidden-obj' : '')} onClick={() => onPick(inst.id)}>
+  const button = <button data-browser-instance-path={inst.id} ref={row => registerRow?.(inst.id, row)} className={'ol instance' + (selected ? ' sel' : '') + (inst.hidden ? ' hidden-obj' : '')} title="Click to select; Ctrl/Cmd-click to toggle a part" onClick={e => onPick(inst.id, e.ctrlKey || e.metaKey)}>
     <Icon name={inst.hidden ? 'visibility_off' : 'widgets'} small />{inst.name}</button>;
   const expandable = hasNestedParts(inst), isOpen = expandable && open.has(inst.id);
   return <>
@@ -53,7 +53,7 @@ export const OutlinerInstances = memo(function OutlinerInstances({ instances, se
   selection: readonly string[];
   edit: { owner: string; index: number } | null;
   locked: boolean;
-  onPick(id: string): void;
+  onPick(id: string, additive?: boolean): void;
   onEdit(id: string, index: number): void;
   isolationAction?(inst: PartInstance): ReactNode;
   iconFor(node: ModelNode): string;

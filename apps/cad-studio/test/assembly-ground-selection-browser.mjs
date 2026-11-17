@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { createFlow } from './flow-helper.mjs';
+const base = JSON.parse(await readFile(new URL('./fixtures/assembly-steps.bcad', import.meta.url), 'utf8'));
+const f = await createFlow({ name: 'assembly-ground-selection', envFrozen: 'ASSEMBLY_GROUND_SELECTION_FROZEN', output: process.argv[2], qualification: 'Reachable outliner batch Fix/Unfix with atomic history and native persistence.', initialFiles: ['apps/cad-studio/test/assembly-ground-selection-browser.mjs', 'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/assembly/groundSelection.ts', 'apps/cad-studio/src/assembly/useAssembly.ts', 'apps/cad-studio/src/ui/OutlinerInstances.tsx', 'apps/cad-studio/src/ui/SelectedInstancesPanel.tsx'], limits: ['Static top-level occurrences only. No viewport multiselect, solver expansion or motion qualification. Pattern/nested/missing refusals separately unit tested.'] });
+const row = id => f.page.locator(`[data-browser-instance-path="${id}"]`);
+const panel = () => f.page.getByRole('complementary', { name: 'Selected placed parts', exact: true });
+const button = name => panel().getByRole('button', { name, exact: true });
+const withoutGround = d => d.instances.map(({ grounded: _grounded, ...i }) => i);
+await f.run(async () => {
+  await f.newPage(); await f.page.locator('input[aria-label="Model file"]').setInputFiles({ name: 'batch-fix.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(base)) });
+  await f.page.waitForFunction(() => window.__studioDoc?.instances?.some(i => i.id === 'b2')); await f.ready();
+  const before = await f.doc();
+  await row('b1').click(); await row('b2').click({ modifiers: ['Meta'] }); await panel().waitFor(); await f.snapshot('01-selected');
+  await button('Fix selected in place').click(); await f.changed(before); const fixed = await f.doc();
+  assert.ok(fixed.instances.filter(i => ['b1', 'b2'].includes(i.id)).every(i => i.grounded));
+  assert.deepEqual(withoutGround(fixed), withoutGround(before)); assert.deepEqual(fixed.mates ?? [], before.mates ?? []); assert.deepEqual(fixed.nodes, before.nodes);
+  await f.snapshot('02-fixed'); await f.undo(); await f.same(before); await f.redo(); await f.same(fixed);
+  await button('Unfix selected').click(); await f.changed(fixed); const free = await f.doc();
+  assert.ok(free.instances.filter(i => ['b1', 'b2'].includes(i.id)).every(i => !i.grounded)); assert.deepEqual(withoutGround(free), withoutGround(before));
+  await f.undo(); await f.same(fixed); await f.redo(); await f.same(free);
+  await row('b2').click({ modifiers: ['Meta'] }); await panel().waitFor({ state: 'hidden' }); await f.page.getByRole('complementary', { name: 'Instance', exact: true }).waitFor();
+  await row('b2').focus(); await f.page.keyboard.press('Enter'); await panel().waitFor({ state: 'hidden' }); assert.ok((await row('b2').getAttribute('class')).includes('sel'));
+  await row('b1').click({ modifiers: ['Meta'] }); await panel().waitFor(); await f.page.keyboard.press('Escape'); await panel().waitFor({ state: 'hidden' }); await f.same(free);
+  await row('b1').click(); await row('b2').click({ modifiers: ['Meta'] }); await panel().waitFor(); await button('Fix selected in place').click(); await f.changed(free); const persisted = await f.doc();
+  const saved = await f.save('batch-fixed'); await f.freshOpen(saved.file, saved.doc, '03-reopened'); await panel().waitFor({ state: 'hidden' }); await f.same(persisted); assert.ok(persisted.instances.filter(i => ['b1', 'b2'].includes(i.id)).every(i => i.grounded));
+  await row('b1').click(); await row('b2').click({ modifiers: ['Meta'] }); await panel().waitFor(); await row('cap').click(); await panel().waitFor({ state: 'hidden' });
+  // A valid existing directional mate makes the entire mixed batch refuse, including the free cap.
+  const mated = { ...free, mates: [{ id: 'batch-mate', kind: 'coincident', a: { part: 'b1', face: 'origin:xy' }, b: { part: 'b2', face: 'origin:xy' } }] };
+  await f.page.locator('input[aria-label="Model file"]').setInputFiles({ name: 'batch-mated.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(mated)) });
+  await f.page.waitForFunction(() => window.__studioDoc?.mates?.[0]?.id === 'batch-mate'); await f.ready(); await panel().waitFor({ state: 'hidden' });
+  await row('cap').click(); await row('b2').click({ modifiers: ['Meta'] }); await panel().waitFor(); const matedBefore = await f.doc();
+  await button('Fix selected in place').click(); await f.page.getByText('Selected parts not changed', { exact: true }).waitFor(); await f.same(matedBefore); await f.snapshot('04-mate-refusal');
+});

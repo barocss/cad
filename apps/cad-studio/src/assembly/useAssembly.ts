@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import type { PartInstance, StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { validateBallOptions, validateFastenedOptions, validateUniversalOptions, validateCylindricalOptions } from '@barocss/cad-model/assembly/connectors';
+import { groundSelection } from './groundSelection';
 import { FaceClient } from './faceClient';
 import { flattenAssembly } from '@barocss/cad-model/engine/flatten';
 import { faceOriginOf, flatFaceOf, hostOf, occurrenceProblem, pathTable, splitPart } from '@barocss/cad-model/engine/occurrences';
@@ -41,6 +42,7 @@ export interface Assembly {
   remove(id: string): void;
   /** Fixes an instance in place or frees it; the reason when a mate still moves it. */
   ground(id: string, on: boolean): string | null;
+  groundMany(ids: readonly string[], on: boolean): string | null;
   /** The mates without those on a part (when it is removed). */
   without(part: string): Mate[];
   /**
@@ -279,6 +281,13 @@ export function useAssembly({ doc, evaluated, bodies, instanceBodies, setDoc, co
       const by = mates.filter(m => hostOf(m.b.part) === id);
       if (on && by.length) return `${by.length} mate${by.length > 1 ? 's' : ''} move${by.length > 1 ? '' : 's'} this part. Delete ${by.length > 1 ? 'them' : 'it'} first, or fix the other part instead.`;
       commit(instances.map(i => i.id === id ? { ...i, grounded: on || undefined } : i), mates); return null;
+    },
+    groundMany: (ids, on) => {
+      if (facesPending()) return FACES_PENDING;
+      const next = groundSelection(doc, ids, on);
+      if (next.error !== undefined) return next.error;
+      if (next.instances.some((i, index) => i !== instances[index])) commit(next.instances, mates);
+      return null;
     },
     without: part => mates.filter(m => hostOf(m.a.part) !== part && hostOf(m.b.part) !== part),
     highlight: (() => {

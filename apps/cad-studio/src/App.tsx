@@ -1,3 +1,5 @@
+import { pickPlacedPart } from './assembly/groundSelection';
+import { SelectedInstancesPanel } from './ui/SelectedInstancesPanel';
 import { commitOutlineRotation } from './sketch/outlineRotationCommit';
 import { usePinnedMass } from './state/usePinnedMass';
 import { PinnedMassControls } from './ui/PinnedMassControls';
@@ -1888,8 +1890,8 @@ export function App() {
   // Placing a new shape: it follows the pointer over the ground and upward faces; a click or a drop sets
   // it there. Dragging a shape's button from the rail onto the viewport starts it as the drag comes in.
   const dragCmd = useRef<string | null>(null);
-  // (R1c: the outliner's placed parts — a part picked, or one of its bearings opened to edit; setters only, so stable.)
-  const pickInstanceRow = useCallback((id: string) => { setSelection(emptySel); setDirectSel([]); setInstanceSel([id]); setInstanceEdit(null); }, []);
+  // Outliner picks clear the edit owner; additive selection retains only current top-level occurrences.
+  const pickInstanceRow = useCallback((id: string, additive = false) => { setSelection(emptySel); setDirectSel([]); setInstanceSel(previous => pickPlacedPart(previous.filter(value => doc.instances?.some(i => i.id === value)), id, additive)); setInstanceEdit(null); }, [doc.instances]);
   const editInstanceRow = useCallback((id: string, index: number) => {
     setBomOpen(false); setLibraryOpen(false); setParamsOpen(false); setSelection(emptySel); setDirectSel([]); setEditNode(null); setInstanceSel([id]); setInstanceEdit({ owner: id, index });
   }, []);
@@ -3454,6 +3456,13 @@ export function App() {
             if (faceDiagnosis.attach(selection, doc)) setChat(true);
           } : undefined} /> : null;
       })()}
+      {!rendering && !drawing && !sketch && !measure && !active && !assembly.draft && !bomOpen && !libraryOpen && !paramsOpen && instanceSel.length > 1
+        && instanceSel.every(id => !id.includes('/') && doc.instances?.some(i => i.id === id)) && <SelectedInstancesPanel
+          instances={doc.instances!.filter(i => instanceSel.includes(i.id))} onGround={on => {
+            if (!canChangeDocument()) return;
+            const error = assembly.groundMany(instanceSel, on);
+            if (error) setToast({ title: 'Selected parts not changed', hint: error, detail: '' });
+          }} />}
       {!rendering && !sketch && !measure && instanceSel.length === 1 && <InstanceInspector
         model={{ doc, selectedId: instanceSel[0], entry: instanceBodies.get(instanceSel[0]) }}
         bearing={{ selected: selectedBearingEdit, blocked: bomOpen || libraryOpen || paramsOpen || drawing || !!active,
