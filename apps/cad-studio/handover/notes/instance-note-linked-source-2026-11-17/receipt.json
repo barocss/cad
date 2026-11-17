@@ -1,0 +1,171 @@
+{
+  "status": "PASS",
+  "qualification": "Public OPFS Check placed parts, Keep/recheck/Accept note-only linked revision with BOM mapping and intact baseline",
+  "visualReview": "Screenshots 02, 05, 08 inspected; synthetic fixture, no personal information. Baseline status below viewport is DOM/assertion evidence, not readable screenshot evidence.",
+  "reads": [],
+  "oracles": [
+    {
+      "label": "01-initial-A",
+      "expectedStatus": "PASS",
+      "inputPath": "/tmp/cad-note-linked-source-after-01/01-initial-A-oracle-input.json",
+      "inputSHA256": "ccfaf49323e6840b6b7760e1c2a6e527df23abfcdd4cd535e934abedd1d63943",
+      "stdoutPath": "/tmp/cad-note-linked-source-after-01/01-initial-A-oracle.json",
+      "stderrPath": "/tmp/cad-note-linked-source-after-01/01-initial-A-oracle.stderr.txt",
+      "exitPath": "/tmp/cad-note-linked-source-after-01/01-initial-A-oracle-exit.json",
+      "stdoutSHA256": "416daffad067232a44843716d4ad74266990211ef7617dd924a8a0a36ea2fbdf",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "signal": null,
+      "error": null,
+      "stdout": {
+        "status": "PASS",
+        "qty": 3,
+        "mappedIDs": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "sharedValue": "Synthetic linked intent A",
+        "baselineExact": true,
+        "geometryAndPlacementsExact": true
+      },
+      "stderr": "",
+      "parseError": null
+    },
+    {
+      "label": "03-pending-BOM-A",
+      "expectedStatus": "PASS",
+      "inputPath": "/tmp/cad-note-linked-source-after-01/03-pending-BOM-A-oracle-input.json",
+      "inputSHA256": "78f6750b2b81aad5db921fe8f075b2c3bfd5c45821ea6feedf8dc2796528f083",
+      "stdoutPath": "/tmp/cad-note-linked-source-after-01/03-pending-BOM-A-oracle.json",
+      "stderrPath": "/tmp/cad-note-linked-source-after-01/03-pending-BOM-A-oracle.stderr.txt",
+      "exitPath": "/tmp/cad-note-linked-source-after-01/03-pending-BOM-A-oracle-exit.json",
+      "stdoutSHA256": "416daffad067232a44843716d4ad74266990211ef7617dd924a8a0a36ea2fbdf",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "signal": null,
+      "error": null,
+      "stdout": {
+        "status": "PASS",
+        "qty": 3,
+        "mappedIDs": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "sharedValue": "Synthetic linked intent A",
+        "baselineExact": true,
+        "geometryAndPlacementsExact": true
+      },
+      "stderr": "",
+      "parseError": null
+    },
+    {
+      "label": "06-accepted-BOM-B",
+      "expectedStatus": "PASS",
+      "inputPath": "/tmp/cad-note-linked-source-after-01/06-accepted-BOM-B-oracle-input.json",
+      "inputSHA256": "5a230f7f901e10b5b000cac593f503fc7b8744d2f2b1120d7271b0e08b2c7dae",
+      "stdoutPath": "/tmp/cad-note-linked-source-after-01/06-accepted-BOM-B-oracle.json",
+      "stderrPath": "/tmp/cad-note-linked-source-after-01/06-accepted-BOM-B-oracle.stderr.txt",
+      "exitPath": "/tmp/cad-note-linked-source-after-01/06-accepted-BOM-B-oracle-exit.json",
+      "stdoutSHA256": "fcdda0274b7affa04db6803fae6f9161db43f84738f86ae8742b50fbe0b43b0f",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "signal": null,
+      "error": null,
+      "stdout": {
+        "status": "PASS",
+        "qty": 3,
+        "mappedIDs": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "sharedValue": "Synthetic linked intent B",
+        "baselineExact": true,
+        "geometryAndPlacementsExact": true
+      },
+      "stderr": "",
+      "parseError": null
+    },
+    {
+      "label": "08-reopened-BOM-B",
+      "expectedStatus": "PASS",
+      "inputPath": "/tmp/cad-note-linked-source-after-01/08-reopened-BOM-B-oracle-input.json",
+      "inputSHA256": "5a230f7f901e10b5b000cac593f503fc7b8744d2f2b1120d7271b0e08b2c7dae",
+      "stdoutPath": "/tmp/cad-note-linked-source-after-01/08-reopened-BOM-B-oracle.json",
+      "stderrPath": "/tmp/cad-note-linked-source-after-01/08-reopened-BOM-B-oracle.stderr.txt",
+      "exitPath": "/tmp/cad-note-linked-source-after-01/08-reopened-BOM-B-oracle-exit.json",
+      "stdoutSHA256": "fcdda0274b7affa04db6803fae6f9161db43f84738f86ae8742b50fbe0b43b0f",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "signal": null,
+      "error": null,
+      "stdout": {
+        "status": "PASS",
+        "qty": 3,
+        "mappedIDs": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "sharedValue": "Synthetic linked intent B",
+        "baselineExact": true,
+        "geometryAndPlacementsExact": true
+      },
+      "stderr": "",
+      "parseError": null
+    }
+  ],
+  "files": [
+    {
+      "file": "/tmp/cad-note-linked-source-after-01/linked-notes-B.bcad",
+      "hash": "d09eeb3cf80b17696485d854e60fdf5ebc0b5a118e15b1511a9dfebacfab90c7",
+      "semanticEquality": true
+    }
+  ],
+  "downloads": [
+    {
+      "phase": "native Save linked-notes-B",
+      "suggestedFilename": "assembly.bcad"
+    }
+  ],
+  "observations": [
+    {
+      "syntheticSourceWriteOnly": true,
+      "publicLinkedCheckKeepRecheckAccept": true,
+      "baselineExact": true,
+      "pendingUsesAcceptedA": true,
+      "acceptedUsesB": true,
+      "defaultCsvExact": true,
+      "projectSavedJSONExact": true,
+      "nativeDownloadFreshOpen": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "OPFS source file writes are synthetic fixture setup, not a source-note authoring UI claim.",
+    "No native folder picker, user approval, manufacturing certification, geometry or mass accuracy claim."
+  ],
+  "oracleSource": {
+    "hash": "5476dfaf819823d60034264a32a283b186b8b287e4e20cc8b0bb930e0e1aa000",
+    "productImports": 0
+  },
+  "chromeProcessesLaunched": 1,
+  "phase": "fresh Open 07-fresh-open",
+  "rawReceiptSHA256": "5bf377436eef022d1986c919964dfb824ed06060afe657c36ea438a3290f96d6",
+  "sourceCapsule": {
+    "initialSubsetCount": 4,
+    "frozenCount": 1265,
+    "afterCleanupCount": 1265,
+    "unchanged": true
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "label": "01-initial-A",
+  "expectedStatus": "PASS",
+  "inputPath": "/tmp/cad-note-linked-source-after-01/01-initial-A-oracle-input.json",
+  "inputSHA256": "ccfaf49323e6840b6b7760e1c2a6e527df23abfcdd4cd535e934abedd1d63943",
+  "stdoutPath": "/tmp/cad-note-linked-source-after-01/01-initial-A-oracle.json",
+  "stderrPath": "/tmp/cad-note-linked-source-after-01/01-initial-A-oracle.stderr.txt",
+  "exitPath": "/tmp/cad-note-linked-source-after-01/01-initial-A-oracle-exit.json",
+  "stdoutSHA256": "416daffad067232a44843716d4ad74266990211ef7617dd924a8a0a36ea2fbdf",
+  "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "exit": 0,
+  "signal": null,
+  "error": null
+}

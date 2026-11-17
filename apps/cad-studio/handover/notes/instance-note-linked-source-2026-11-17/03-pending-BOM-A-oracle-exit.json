@@ -1,0 +1,14 @@
+{
+  "label": "03-pending-BOM-A",
+  "expectedStatus": "PASS",
+  "inputPath": "/tmp/cad-note-linked-source-after-01/03-pending-BOM-A-oracle-input.json",
+  "inputSHA256": "78f6750b2b81aad5db921fe8f075b2c3bfd5c45821ea6feedf8dc2796528f083",
+  "stdoutPath": "/tmp/cad-note-linked-source-after-01/03-pending-BOM-A-oracle.json",
+  "stderrPath": "/tmp/cad-note-linked-source-after-01/03-pending-BOM-A-oracle.stderr.txt",
+  "exitPath": "/tmp/cad-note-linked-source-after-01/03-pending-BOM-A-oracle-exit.json",
+  "stdoutSHA256": "416daffad067232a44843716d4ad74266990211ef7617dd924a8a0a36ea2fbdf",
+  "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "exit": 0,
+  "signal": null,
+  "error": null
+}

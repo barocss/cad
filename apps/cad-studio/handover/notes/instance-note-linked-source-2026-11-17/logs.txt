@@ -1,0 +1,77 @@
+## /tmp/cad-notes-linked-focused.log
+Original SHA256: ddbd8a1014a5812a6205284721a547a1b920410613fb3cf86431f8cc7062dae7
+✘ [ERROR] Expected ")" but found ";"
+
+    test/instance-notes-linked-revision.test.ts:88:118:
+      88 │ ...ons(doc, store)).doc, before = JSON.stringify(accepted.baselines);
+         │                                                                     ^
+         ╵                                                                     )
+
+<HOME>/github/barocss/cad-d1274/node_modules/esbuild/lib/main.js:1467
+  let error = new Error(text);
+              ^
+
+Error: Build failed with 1 error:
+test/instance-notes-linked-revision.test.ts:88:118: ERROR: Expected ")" but found ";"
+    at failureErrorWithLog (<HOME>/github/barocss/cad-d1274/node_modules/esbuild/lib/main.js:1467:15)
+    at <HOME>/github/barocss/cad-d1274/node_modules/esbuild/lib/main.js:926:25
+    at <HOME>/github/barocss/cad-d1274/node_modules/esbuild/lib/main.js:878:52
+    at buildResponseToResult (<HOME>/github/barocss/cad-d1274/node_modules/esbuild/lib/main.js:924:7)
+    at <HOME>/github/barocss/cad-d1274/node_modules/esbuild/lib/main.js:951:16
+    at responseCallbacks.<computed> (<HOME>/github/barocss/cad-d1274/node_modules/esbuild/lib/main.js:603:9)
+    at handleIncomingPacket (<HOME>/github/barocss/cad-d1274/node_modules/esbuild/lib/main.js:658:12)
+    at Socket.readFromStdout (<HOME>/github/barocss/cad-d1274/node_modules/esbuild/lib/main.js:581:7)
+    at Socket.emit (node:events:519:28)
+    at addChunk (node:internal/streams/readable:561:12) {
+  errors: [Getter/Setter],
+  warnings: [Getter/Setter]
+}
+
+Node.js v22.19.0
+
+## /tmp/cad-notes-linked-focused2.log
+Original SHA256: 11614aa1bd70ec03218241d9988c880bf0430fd2790719dd7ab89c2439b52da5
+TAP version 13
+# Subtest: note-only file change is offered through linked storage without changing accepted notes or baseline inputs
+ok 1 - note-only file change is offered through linked storage without changing accepted notes or baseline inputs
+  ---
+  duration_ms: 9.6465
+  type: 'test'
+  ...
+# Subtest: Keep dismisses only the pending offer; recheck and Accept update shared notes while preserving all other owned data
+ok 2 - Keep dismisses only the pending offer; recheck and Accept update shared notes while preserving all other owned data
+  ---
+  duration_ms: 3.245917
+  type: 'test'
+  ...
+# Subtest: container storage round trip preserves accepted note fields, links and immutable baseline record
+ok 3 - container storage round trip preserves accepted note fields, links and immutable baseline record
+  ---
+  duration_ms: 1.736541
+  type: 'test'
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 308.661416
+
+## /tmp/cad-notes-linked-tsc.log
+Original SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+
+## /tmp/cad-notes-linked-lint.log
+Original SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+
+## /tmp/cad-note-linked-driver-lint.log
+Original SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+
+## /tmp/cad-note-linked-actual01.log
+Original SHA256: e727fed31e20db9300ffbfc12cc8e3fbd4905c0a403f074387d42b6b9f5da6f2
+{"status":"PASS","phase":"fresh Open 07-fresh-open","output":"/tmp/cad-note-linked-source-after-01"}

@@ -1,0 +1,269 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [],
+  "outputs": {},
+  "nextId": 0,
+  "instances": [
+    {
+      "id": "p1",
+      "name": "Synthetic box",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 2,
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "brief": {
+          "version": 1,
+          "notes": {
+            "value": "Synthetic linked intent B",
+            "basis": "stated",
+            "source": "Synthetic source file B"
+          },
+          "purpose": {
+            "value": "Preserved purpose",
+            "basis": "stated",
+            "source": "fixture"
+          }
+        }
+      },
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "part": {
+        "id": "sharedA",
+        "rev": "B",
+        "source": "./source.bcad"
+      }
+    },
+    {
+      "id": "p2",
+      "name": "Synthetic box",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 2,
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "brief": {
+          "version": 1,
+          "notes": {
+            "value": "Synthetic linked intent B",
+            "basis": "stated",
+            "source": "Synthetic source file B"
+          },
+          "purpose": {
+            "value": "Preserved purpose",
+            "basis": "stated",
+            "source": "fixture"
+          }
+        }
+      },
+      "position": [
+        15,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "part": {
+        "id": "sharedA",
+        "rev": "B",
+        "source": "./source.bcad"
+      }
+    },
+    {
+      "id": "p3",
+      "name": "Synthetic box",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 2,
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "brief": {
+          "version": 1,
+          "notes": {
+            "value": "Synthetic linked intent A",
+            "basis": "assumed",
+            "source": "Test fixture only",
+            "why": "Not a real approval"
+          },
+          "purpose": {
+            "value": "Preserved purpose",
+            "basis": "stated",
+            "source": "fixture"
+          }
+        }
+      },
+      "position": [
+        30,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "part": {
+        "id": "independentB",
+        "rev": "A"
+      }
+    }
+  ],
+  "baselines": {
+    "version": 1,
+    "baselines": [
+      {
+        "id": "BL1",
+        "kind": "bom",
+        "parent": null,
+        "parentDigest": null,
+        "state": "approved",
+        "content": {
+          "bom": {
+            "lines": [
+              {
+                "item": "Synthetic box",
+                "parts": [
+                  "p1",
+                  "p2",
+                  "p3"
+                ],
+                "qty": 3,
+                "material": null,
+                "mass": 0.81,
+                "source": null
+              }
+            ],
+            "totalQty": 3,
+            "totalMass": 0.81
+          },
+          "interfaces": {
+            "version": 1,
+            "datums": [],
+            "keepouts": [],
+            "holePatterns": [],
+            "envelopes": [],
+            "budgets": {}
+          }
+        },
+        "pins": {
+          "interfaces": "7f26653eb349d42d662496337a5888b0c4419de9c9936948b8e7ce3041c0893f",
+          "bom": "816fb11de1d21ae3dd8fef6386347b85f2fd2f4e1e8b250999b1c44a236b5cf7",
+          "parts": {
+            "p1": "be05ad07d1ec528e9a3d0c5109fa21c35229571373e7de189a7a14c2c37ca1d0",
+            "p2": "27e26d4953892e7423cdf3d86c5cdd367a55aa57af40e0043ece03db6634d10e",
+            "p3": "dd8e493e3cd9bc966c560f1c9d35451793e85787b75853e8c0b851d447df652e"
+          }
+        },
+        "moves": [
+          {
+            "to": "review",
+            "at": "2026-11-17T00:00:00Z"
+          },
+          {
+            "to": "approved",
+            "at": "2026-11-17T00:00:01Z"
+          }
+        ],
+        "digest": "0a85bce4e9d56a41da883d7d20137a58ab2275bf2bf611169dac4c4935689957"
+      }
+    ]
+  }
+}

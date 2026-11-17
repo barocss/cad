@@ -1,0 +1,14 @@
+{
+  "label": "08-reopened-BOM-B",
+  "expectedStatus": "PASS",
+  "inputPath": "/tmp/cad-note-linked-source-after-01/08-reopened-BOM-B-oracle-input.json",
+  "inputSHA256": "5a230f7f901e10b5b000cac593f503fc7b8744d2f2b1120d7271b0e08b2c7dae",
+  "stdoutPath": "/tmp/cad-note-linked-source-after-01/08-reopened-BOM-B-oracle.json",
+  "stderrPath": "/tmp/cad-note-linked-source-after-01/08-reopened-BOM-B-oracle.stderr.txt",
+  "exitPath": "/tmp/cad-note-linked-source-after-01/08-reopened-BOM-B-oracle-exit.json",
+  "stdoutSHA256": "fcdda0274b7affa04db6803fae6f9161db43f84738f86ae8742b50fbe0b43b0f",
+  "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "exit": 0,
+  "signal": null,
+  "error": null
+}
