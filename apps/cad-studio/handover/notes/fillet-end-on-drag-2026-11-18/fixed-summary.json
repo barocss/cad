@@ -1,0 +1,184 @@
+{
+  "status": "PASS",
+  "qualification": "Observe a real pointer drag of a new Fillet radius handle aligned with the orthographic camera",
+  "observations": [
+    {
+      "label": "end-on-pointer",
+      "camera": {
+        "target": [
+          14.994144883348905,
+          13.09719430116526,
+          6.480545561327253
+        ],
+        "distance": 106.36933486847185,
+        "yaw": -1.5707964655549849,
+        "pitch": 0.7853981205617085,
+        "fovY": 0.5585053606381855,
+        "ortho": true
+      },
+      "projection": {
+        "a": [
+          652.0607626421884,
+          611.0209882723658
+        ],
+        "b": [
+          652.0607853890604,
+          611.0209783416985
+        ],
+        "length": 2.4820119613689927e-05
+      },
+      "start": 2,
+      "samples": [
+        {
+          "dx": 20,
+          "dy": 0,
+          "value": 2,
+          "cursor": "grab",
+          "readout": "Radius 2 mm"
+        },
+        {
+          "dx": 50,
+          "dy": 0,
+          "value": 2,
+          "cursor": "grab",
+          "readout": "Radius 2 mm"
+        },
+        {
+          "dx": 50,
+          "dy": -30,
+          "value": 4,
+          "cursor": "grab",
+          "readout": "Radius 4 mm"
+        },
+        {
+          "dx": 0,
+          "dy": -50,
+          "value": 5,
+          "cursor": "grab",
+          "readout": "Radius 5 mm"
+        },
+        {
+          "dx": 0,
+          "dy": 0,
+          "value": 2,
+          "cursor": "grab",
+          "readout": "Radius 2 mm"
+        }
+      ],
+      "changed": true,
+      "documentUnchanged": true,
+      "handle": {
+        "root": [
+          652.060791015625,
+          611.02099609375
+        ],
+        "html": "<g class=\"gizmo-handle\" data-handle=\"radius\"><title>Radius: when viewed end-on, drag up to increase or down to decrease. Sensitivity is fixed when the drag starts.</title><line x1=\"652.0607658590818\" y1=\"611.0209868679575\" x2=\"643.7942200018273\" y2=\"614.6299367157023\" stroke=\"#000\" stroke-opacity=\"0.35\" stroke-width=\"4\" stroke-linecap=\"round\"></line><line x1=\"652.0607658590818\" y1=\"611.0209868679575\" x2=\"643.7942200018273\" y2=\"614.6299367157023\" stroke-width=\"2\" stroke-linecap=\"round\"></line><polygon points=\"652.1,611.0 643.6,619.1 643.8,614.6 640.4,611.8\"></polygon><circle cx=\"652.0607658590818\" cy=\"611.0209868679575\" r=\"3.5\"></circle></g>"
+      }
+    },
+    {
+      "label": "independent-screen-scale-oracle",
+      "value": 3.5,
+      "expected": 3.5,
+      "metric": {
+        "perMm": 16.3929500430822,
+        "snap": 1
+      },
+      "pixels": 24
+    },
+    {
+      "label": "zoom-during-held-pointer",
+      "pixels": 24,
+      "value": 3.5,
+      "frozenCoefficient": true
+    },
+    {
+      "label": "independent-screen-scale-oracle",
+      "value": 3,
+      "expected": 3,
+      "metric": {
+        "perMm": 30.779576115309993,
+        "snap": 1
+      },
+      "pixels": 24
+    },
+    {
+      "label": "two-zoom-fresh-gestures",
+      "delta": 24,
+      "first": 3.5,
+      "second": 3,
+      "beforeZoom": {
+        "target": [
+          15.818147945371013,
+          12.479008059927983,
+          5.862359381467798
+        ],
+        "distance": 88.84713682326488,
+        "yaw": -1.5707964655549849,
+        "pitch": 0.7853981205617085,
+        "fovY": 0.5585053606381855,
+        "ortho": true
+      },
+      "afterZoom": {
+        "target": [
+          15.818147945371013,
+          12.479008059927983,
+          5.862359381467798
+        ],
+        "distance": 56.65143562950518,
+        "yaw": -1.5707964655549849,
+        "pitch": 0.7853981205617085,
+        "fovY": 0.5585053606381855,
+        "ortho": true
+      }
+    },
+    {
+      "label": "independent-screen-scale-oracle",
+      "value": 3.5,
+      "expected": 3.5,
+      "metric": {
+        "perMm": 16.392950601875633,
+        "snap": 1
+      },
+      "pixels": 24
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceBeforeCount": 7,
+  "sourceAfterCleanupCount": 1075,
+  "limits": [
+    "Single new Fillet on a 40\u00d730\u00d710 rectangle top edge. Camera changes use actual right-button orbit. No runtime handler calls or synthetic state writes; History handles, perspective end-on rays and command replacement during a held pointer are not browser-qualified. Two orthographic zooms are exercised; perspective behavior remains focused-test scope."
+  ],
+  "oracles": {
+    "05-redo-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 11894.84510006475,
+      "nativeVolume": 11894.845100064756,
+      "workerVolume": 11894.845100064756
+    },
+    "06-typed-equivalent-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 11894.84510006475,
+      "nativeVolume": 11894.845100064756,
+      "workerVolume": 11894.845100064756
+    },
+    "04-drag-applied-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 11894.84510006475,
+      "nativeVolume": 11894.845100064756,
+      "workerVolume": 11894.845100064756
+    },
+    "08-reopened-native-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 11894.84510006475,
+      "nativeVolume": 11894.845100064756,
+      "workerVolume": 11894.845100064756
+    }
+  }
+}

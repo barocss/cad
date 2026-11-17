@@ -89,6 +89,7 @@ export function useCommandGizmos({ model, command, context, drag, splitSource }:
     if (pair && !Number.isFinite(value2)) return [];
     return [{ id: pair ? `${h.key}+${pair.key}` : h.key, at: h.at, dir: h.dir, label: pair ? label.replace(/ \w$/, '') : label, value, screenOffset: h.screenOffset, ...(h.arc ? { arc: h.arc } : {}),
       ...(pair ? { plane: { dir2: pair.dir, value2, toValue2: snap } } : {}),
+      ...(active && handleCmd.id === 'fillet' && h.key === 'radius' && !h.arc && !pair ? { scalarDragSession: active.ctx } : {}),
       toValue: snap,
       format: (v: number) => h.arc ? `${fmt(v)}°` : h.unit !== undefined ? `${fmt(v)}${h.unit ? ' ' + h.unit : ''}` : `${fmt(v)} mm`,
       unit: h.arc ? '°' : h.unit ?? 'mm', owner: handleCmd, editing: !!active, ...(!active ? { shiftPick: true as const } : {}),

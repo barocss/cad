@@ -36,6 +36,8 @@ export interface TransformGizmo {
 export interface FeatureHandle {
   id: string; at: Vec3; dir: Vec3; label: string; value: number;
   screenOffset?: number;
+  /** New Fillet scalar drag only: immutable command context owns its pointer-down conversion. */
+  scalarDragSession?: object;
   /**
    * An angle instead (degrees): an arc about `axis` through `centre`, from `from` (a point on it) as far
    * as the value; dragging it round sweeps the angle, `toValue` getting the degrees swept.

@@ -1,3 +1,4 @@
+import { captureScalarHandleDrag, scalarHandleDragValue, type ScalarHandleDrag } from './scalarHandleDrag';
 import { wheelZoomFactor } from './wheelZoomPreference';
 import { useCallback, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type RefObject, type WheelEvent } from 'react';
 import { CadPartLimits, ExtrudedProfileLimits } from '@barocss/cad';
@@ -180,6 +181,7 @@ interface PointerDrag {
   handleAt?: Vec3;
   shiftPickHandle?: FeatureHandle;
   handleToValue?: FeatureHandle['toValue'];
+  scalarHandleDrag?: ScalarHandleDrag | null;
   factor?: number;
   gizmo?: TransformGizmo;
   sessionKey?: string | number;
@@ -704,7 +706,15 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     const p = propsRef.current, g = d.gizmo ?? p.gizmo, P = projector(), hit = d.hit!;
     d.x = x; d.y = y;
     if (hit.kind === 'handle') {
-      const hd = p.handles?.[hit.index]; if (!hd) return;
+      const hd = p.handles?.[hit.index];
+      if (d.scalarHandleDrag !== undefined) {
+        const value = scalarHandleDragValue(d.scalarHandleDrag, hd, d.from!, [x, y]);
+        if (value === null || !hd) { cancelGizmo('session-change', d.pointerId); return; }
+        d.value = value; hd.onDrag(value, done);
+        if (done) valueBox.current = { id: hd.id, owner: hd.owner };
+        return;
+      }
+      if (!hd) return;
       // An arc adds up the angle swept round its centre step by step; an arrow measures mm along it — from the handle where
       // the drag began (G14: a handle drawn where its value now is, as SceneViewport's section handles are in each frame,
       // would measure each step from a moved point, and the release from another: its value one snap off the last shown).
@@ -808,6 +818,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
       const shiftPickHandle = e.shiftKey && e.pointerType === 'mouse' && hd?.shiftPick && (filter === 'face' || filter === 'edge') ? hd : undefined;
       drag.current = { mode: 'gizmo', x, y, moved: false, hit, shiftPickHandle, from: [x, y], last: [x, y], turned: 0, start: hd?.value, start2: hd?.plane?.value2,
         handleAt: hd ? [...hd.at] as Vec3 : undefined, handleToValue: hd?.toValue,
+        scalarHandleDrag: hd?.scalarDragSession ? captureScalarHandleDrag(hd, projector()) : undefined,
         origin: propsRef.current.gizmo ? [...propsRef.current.gizmo.origin] as Vec3 : undefined, gizmo: g, pointerId: e.pointerId, sessionKey: g?.sessionKey };
       g?.onStart?.(e.pointerId);
       return;

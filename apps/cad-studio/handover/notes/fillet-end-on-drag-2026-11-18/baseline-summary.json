@@ -1,0 +1,92 @@
+{
+  "status": "PASS",
+  "qualification": "Observe a real pointer drag of a new Fillet radius handle aligned with the orthographic camera",
+  "observations": [
+    {
+      "label": "end-on-pointer",
+      "camera": {
+        "target": [
+          14.994144883348905,
+          13.09719430116526,
+          6.480545561327253
+        ],
+        "distance": 106.36933486847185,
+        "yaw": -1.5707964655549849,
+        "pitch": 0.7853981205617085,
+        "fovY": 0.5585053606381855,
+        "ortho": true
+      },
+      "projection": {
+        "a": [
+          652.0607626421884,
+          611.0209882723658
+        ],
+        "b": [
+          652.0607853890604,
+          611.0209783416985
+        ],
+        "length": 2.4820119613689927e-05
+      },
+      "start": 2,
+      "samples": [
+        {
+          "dx": 20,
+          "dy": 0,
+          "value": 2,
+          "cursor": "grab",
+          "readout": "Radius 2 mm"
+        },
+        {
+          "dx": 50,
+          "dy": 0,
+          "value": 2,
+          "cursor": "grab",
+          "readout": "Radius 2 mm"
+        },
+        {
+          "dx": 50,
+          "dy": -30,
+          "value": 2,
+          "cursor": "grab",
+          "readout": "Radius 2 mm"
+        },
+        {
+          "dx": 0,
+          "dy": -50,
+          "value": 2,
+          "cursor": "grab",
+          "readout": "Radius 2 mm"
+        },
+        {
+          "dx": 0,
+          "dy": 0,
+          "value": 2,
+          "cursor": "grab",
+          "readout": "Radius 2 mm"
+        }
+      ],
+      "changed": false,
+      "documentUnchanged": true,
+      "handle": {
+        "root": [
+          652.060791015625,
+          611.02099609375
+        ],
+        "html": "<g class=\"gizmo-handle\" data-handle=\"radius\"><line x1=\"652.0607658590818\" y1=\"611.0209868679575\" x2=\"643.7942200018273\" y2=\"614.6299367157023\" stroke=\"#000\" stroke-opacity=\"0.35\" stroke-width=\"4\" stroke-linecap=\"round\"></line><line x1=\"652.0607658590818\" y1=\"611.0209868679575\" x2=\"643.7942200018273\" y2=\"614.6299367157023\" stroke-width=\"2\" stroke-linecap=\"round\"></line><polygon points=\"652.1,611.0 643.6,619.1 643.8,614.6 640.4,611.8\"></polygon><circle cx=\"652.0607658590818\" cy=\"611.0209868679575\" r=\"3.5\"></circle></g>"
+      }
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceBeforeCount": 5,
+  "sourceAfterCleanupCount": 560,
+  "limits": [
+    "Single new Fillet on a 40\u00d730\u00d710 rectangle top edge. Camera changes use actual right-button orbit. No runtime handler calls or synthetic state writes; History handles are not qualified."
+  ],
+  "oracles": {}
+}
