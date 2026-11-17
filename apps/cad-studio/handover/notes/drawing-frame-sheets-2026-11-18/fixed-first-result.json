@@ -1,0 +1,46 @@
+{
+  "status": "FAIL",
+  "failure": "AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:\n\n  assert.ok((await readFile(file,'utf8')).includes('>0.1</text>'))\n\n",
+  "observations": [
+    {
+      "first": [
+        {
+          "id": "frame-1",
+          "view": "front",
+          "place": [
+            -9.999997517419239,
+            10.000001453218005
+          ],
+          "characteristic": "position",
+          "value": 0.1,
+          "datums": []
+        }
+      ],
+      "afterSecond": [
+        {
+          "id": "frame-1",
+          "view": "front",
+          "place": [
+            -9.999997517419239,
+            10.000001453218005
+          ],
+          "characteristic": "position",
+          "value": 0.1,
+          "datums": []
+        },
+        {
+          "id": "frame-2",
+          "view": "right",
+          "place": [
+            -9.999998122926733,
+            10.00000127156575
+          ],
+          "characteristic": "position",
+          "value": 0.1,
+          "datums": []
+        }
+      ]
+    }
+  ],
+  "sourceFrozenThroughCleanup": true
+}

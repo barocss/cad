@@ -1,3 +1,4 @@
+import { nextStandaloneFrameId } from './drawing/frameIdentity';
 import { commitDetailPaperDrag, detailPaperDragAt } from './drawing/detailPaperDrag';
 import { pickVisibleDetailRim, reconnectDetailDiameter, visibleDetailRim } from './drawing/detailDiameterReattachment';
 import { drawingBrokenEdgeAt, drawingBrokenPick } from './drawing/drawingBrokenPick';
@@ -446,7 +447,8 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   const commitDims = (dimensions: DrawingDimension[]) => onChange({ ...settings, dimensions });
   const commitFrames = (frames: DrawingFrame[]) => {
     if (!scopeRead.scope) { setMessage(scopeRead.error ?? 'Invalid drawing scope.'); return false; }
-    const why = checkDrawingFrames({ frames }, settings.frames ?? [])[0];
+    const mergedFrames = mergeSheet(wholeSettings, current, { ...settings, frames }).frames ?? [];
+    const why = checkDrawingFrames({ frames: mergedFrames }, wholeSettings.frames ?? [])[0];
     if (why) { setMessage(why.message); return false; }
     onChange({ ...settings, frames: readFrames(frames) }); return true;
   };
@@ -492,9 +494,8 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     const placement = placementAt(view);
     if (busy || !views || !placement || placement.hidden) { setMessage('Show the frame view and wait for the current drawing before placing a frame.'); return; }
     if (frame && frame.dim !== undefined) return;
-    const frames = settings.frames ?? [];
-    if (!frame && frames.length >= 200) { setMessage('A drawing can contain up to 200 geometric control frames.'); return; }
-    let id = 'frame-1', index = 2; while (frames.some(row => row.id === id)) id = `frame-${index++}`;
+    const id = frame?.id ?? nextStandaloneFrameId(wholeSettings.frames);
+    if (id === null) { setMessage('A drawing can contain up to 200 geometric control frames.'); return; }
     cancel(); setSelected(null); setSelectedTarget(null); setSelectedFrame(frame?.id ?? null); setTool('select'); setDrag(null);
     setPending({ kind: 'standalone-frame', view, frame: frame ?? { id, view, place: [0, 0], characteristic: 'position', value: 0.1, datums: [] }, moving: !!frame, settingsKey: JSON.stringify(settings), sourceDoc, model });
     setMessage(`Click the sheet to place the frame. View: ${viewLabel(view)}. Esc cancels.`);

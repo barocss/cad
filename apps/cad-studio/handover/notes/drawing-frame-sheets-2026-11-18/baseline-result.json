@@ -1,0 +1,35 @@
+{
+  "status": "FAIL",
+  "failure": "AssertionError [ERR_ASSERTION]: second-sheet frame must not disappear due to reused ID\n\n1 !== 2\n\n",
+  "observations": [
+    {
+      "first": [
+        {
+          "id": "frame-1",
+          "view": "front",
+          "place": [
+            -9.999997517419239,
+            10.000001453218005
+          ],
+          "characteristic": "position",
+          "value": 0.1,
+          "datums": []
+        }
+      ],
+      "afterSecond": [
+        {
+          "id": "frame-1",
+          "view": "front",
+          "place": [
+            -9.999997517419239,
+            10.000001453218005
+          ],
+          "characteristic": "position",
+          "value": 0.1,
+          "datums": []
+        }
+      ]
+    }
+  ],
+  "sourceFrozenThroughCleanup": true
+}
