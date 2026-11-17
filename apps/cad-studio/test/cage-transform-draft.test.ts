@@ -34,3 +34,11 @@ test('numeric move uses baseline mm, ignores pivot, retains redo on invalid and 
  for(const value of ['','NaN','Infinity']){const r=previewCageTransform(base,{...move,value});assert.ok(r.error);assert.equal(r.session,base);}
  assert.equal(previewCageTransform(base,{...move,value:'0'}).session,base);
 });
+test('local move frames use immutable edge direction and quad normal; invalid frame selection retains baseline',()=>{
+ const move:CageTransformInput={...input,kind:'move',frame:'edge',value:'2',vertex:'ignored'};
+ const edge=previewCageTransform(s,move);assert.equal(edge.error,null);assert.deepEqual(edge.session.cage.positions,[12,20,30,16,20,30,14,24,30,10,24,30]);
+ const face=select(startSession(0,cage),{kind:'face',f:0},false);
+ const normal=previewCageTransform(face,{...move,frame:'face'});assert.equal(normal.error,null);assert.deepEqual(normal.session.cage.positions,[10,20,32,14,20,32,14,24,32,10,24,32]);
+ const invalid=previewCageTransform(s,{...move,frame:'face'});assert.ok(invalid.error);assert.equal(invalid.session,s);
+ assert.equal(previewCageTransform(s,{...move,frame:'world',value:'0'}).session,s);
+});

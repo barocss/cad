@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "qualification": "Single-edge tangent and tilted single-quad normal numeric movement.",
+  "files": [
+    {
+      "file": "local-move.bcad",
+      "hash": "5f8257b65b067da10d71cc3180e03456553c1e9fd730b55c23a6962f42478553",
+      "semanticEquality": true
+    }
+  ],
+  "downloads": [
+    {
+      "phase": "native Save local-move",
+      "suggestedFilename": "Untitled.bcad"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One box, single edge and a 15-degree tilted quad. Multi-selection refusal covered. UV/local rotation and arbitrary faces unsupported."
+  ],
+  "visualReview": "PASS: actual pixels inspected; pending cage preview and accepted fresh-open distinguished"
+}

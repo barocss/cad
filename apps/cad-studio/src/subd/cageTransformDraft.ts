@@ -1,13 +1,18 @@
+import { cageLocalDirection } from '@barocss/cad-model/subd/cageLocalDirection';
 import { selectionCentre, transformCageSelection, type CageSession } from '@barocss/cad-model/subd/cageEdit';
 export interface CageTransformInput {
   kind: 'move' | 'rotate' | 'scale'; axis: 0 | 1 | 2; value: string;
+  frame?: 'world' | 'edge' | 'face';
   pivot: 'centre' | 'vertex'; vertex: string;
 }
 export function previewCageTransform(base: CageSession, input: CageTransformInput): { session: CageSession; error: string | null; pivot: readonly [number, number, number] | null } {
   try {
     const value = input.value.trim() === '' ? NaN : Number(input.value);
     if (!Number.isFinite(value)) throw new Error('Enter a finite value.');
-    if (input.kind === 'move') return { session: transformCageSelection(base, { kind: 'move', axis: input.axis, distance: value }), error: null, pivot: null };
+    if (input.kind === 'move') {
+      const transform = !input.frame || input.frame === 'world' ? { kind: 'move' as const, axis: input.axis, distance: value } : { kind: 'move-along' as const, direction: cageLocalDirection(base, input.frame), distance: value };
+      return { session: transformCageSelection(base, transform), error: null, pivot: null };
+    }
     let pivot = selectionCentre(base);
     if (input.pivot === 'vertex') {
       const v = input.vertex.trim() === '' ? NaN : Number(input.vertex);
