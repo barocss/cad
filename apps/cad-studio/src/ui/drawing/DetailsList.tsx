@@ -29,6 +29,7 @@ export function DetailsList({ settings, sheet, layout, onChange, onRemove, crop 
         <span>Detail {d.id} · {parentName(d.view)}</span>
         <NativeSelect className={CONTROL} aria-label={`Detail ${d.id} scale`} value={d.scale ?? 'auto'} onChange={e => { const v = e.target.value; set(list.map(x => { if (x.id !== d.id) return x; const rest = { ...x }; delete rest.scale; return v === 'auto' ? rest : { ...rest, scale: Number(v) }; })); }}>
           <option value="auto">Auto{layout && d.scale === undefined ? ` (${scaleLabel(detailScale(d, layout.scale))})` : ''}</option>
+          {d.scale !== undefined && !SCALES.includes(d.scale) && <option value={d.scale}>{d.scale}:1 (custom)</option>}
           {SCALES.map(s => <option key={s} value={s}>{scaleLabel(s)}</option>)}
         </NativeSelect>
         <Button variant="ghost" size="xs" aria-label={`Remove detail ${d.id}`} title={`Remove detail ${d.id}`} onClick={() => onRemove(d.id)}><Icon name="close" small /></Button>

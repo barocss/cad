@@ -1,0 +1,65 @@
+{
+  "status": "PASS",
+  "qualification": "Native custom detail scale displayed faithfully rather than silently showing Auto; standard edit, history and native save/reopen.",
+  "observations": [
+    {
+      "scale": 1.25,
+      "box": [
+        302.5,
+        77.5,
+        317.5,
+        92.5
+      ]
+    },
+    {
+      "scale": 2,
+      "box": [
+        298,
+        73,
+        322,
+        97
+      ]
+    },
+    {
+      "scale": 1.25,
+      "box": [
+        302.5,
+        77.5,
+        317.5,
+        92.5
+      ]
+    },
+    {
+      "scale": 2,
+      "box": [
+        298,
+        73,
+        322,
+        97
+      ]
+    },
+    {
+      "scale": 1.25,
+      "box": [
+        302.5,
+        77.5,
+        317.5,
+        92.5
+      ]
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One top-view detail, custom 1.25 scale. No arbitrary scale authoring, PDF or physical exports."
+  ],
+  "sourceFrozenCount": 541,
+  "chromeProcessesLaunched": 1
+}
