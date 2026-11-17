@@ -1,0 +1,96 @@
+{
+  "parent": "951fe302f2ea9e11a028f1ea008eed114a255e79",
+  "runs": [
+    {
+      "run": "cad-drag-trim-interruption-01",
+      "status": "FAIL",
+      "phase": "tab-switch: held three-cut stroke",
+      "receiptSHA256": "49b4d0af4061f00c1aa06313738baeb320e9af8e24659d1c040eca185e53395b",
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "sourceUnchangedThroughCleanup": true,
+      "sourceCount": 521,
+      "errors": [],
+      "consoleErrors": []
+    },
+    {
+      "run": "cad-drag-trim-interruption-02",
+      "status": "FAIL",
+      "phase": "tab-switch: held three-cut stroke",
+      "receiptSHA256": "f818601d2cfd34b75418a782d1080ba99db921a7d0d552554da4bbcb3bb251c5",
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "sourceUnchangedThroughCleanup": true,
+      "sourceCount": 521,
+      "errors": [],
+      "consoleErrors": []
+    },
+    {
+      "run": "cad-drag-trim-interruption-03",
+      "status": "FAIL",
+      "phase": "tab-switch: held three-cut stroke",
+      "receiptSHA256": "4b5881843523d6b07b4feb6dd4f22378c2b7a745d7b176d0e5a1d6bc117dedb2",
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "sourceUnchangedThroughCleanup": true,
+      "sourceCount": 521,
+      "errors": [],
+      "consoleErrors": []
+    },
+    {
+      "run": "cad-drag-trim-capture-04",
+      "status": "FAIL",
+      "phase": "native-lostcapture: held three-cut stroke",
+      "receiptSHA256": "740d0bae8bf991e42770a578f45fca2b4fbc4e8950c631d941f41c2293d57002",
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "sourceUnchangedThroughCleanup": true,
+      "sourceCount": 521,
+      "errors": [],
+      "consoleErrors": []
+    },
+    {
+      "run": "cad-drag-trim-capture-05",
+      "status": "PASS",
+      "phase": "native-lostcapture: independent retry and one Undo",
+      "receiptSHA256": "a046d4e795e33b54c55ba99600fcc2044a5d5d8876aed331ceaf7c39ef909f3a",
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "sourceUnchangedThroughCleanup": true,
+      "sourceCount": 521,
+      "errors": [],
+      "consoleErrors": []
+    }
+  ],
+  "captureEvents": [
+    {
+      "label": "native-lostcapture",
+      "events": [
+        {
+          "type": "lostpointercapture",
+          "trusted": true,
+          "id": 1
+        }
+      ],
+      "cancelledWithoutCommit": true
+    }
+  ],
+  "tabSwitch": "NOT_QUALIFIED",
+  "nativeGeometry": "NOT_RUN; no product geometry change",
+  "productChange": false
+}

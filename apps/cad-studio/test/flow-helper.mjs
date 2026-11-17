@@ -292,7 +292,7 @@ export async function createFlow(options) {
     f.server = await createServer({ root: app, configFile: join(app, 'vite.config.ts'), cacheDir: join(output, 'vite-cache'), ...(options.viteAliases ? { resolve: { alias: options.viteAliases } } : {}), server: { host: '127.0.0.1', port: 0, strictPort: false }, logLevel: 'error' });
     f.server.watcher.on('all', (event, file) => { if (['change', 'add', 'unlink'].includes(event)) report.changes.push({ event, file }); }); await f.server.listen();
     const { chromium } = createRequire(join(process.env.PW_DIR, 'package.json'))('playwright');
-    f.browser = await chromium.launch({ executablePath: process.env.CHROME, headless: true, args: ['--enable-unsafe-webgpu'] }); report.chromeProcessesLaunched = 1;
+    f.browser = await chromium.launch({ executablePath: process.env.CHROME, headless: options.headless ?? true, args: ['--enable-unsafe-webgpu'] }); report.chromeProcessesLaunched = 1;
   };
 
   /** Run `body(flow)` after start(); then assert no page / console errors and no file changes and that the source capsule is unchanged (PASS); on any failure record FAIL and a 'failure' snapshot; always close context / browser / server, re-check the capsule after cleanup, write the receipt and print the one-line result. */
