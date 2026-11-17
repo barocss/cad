@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
-const baseline = process.argv.includes('--baseline'), rotated = process.argv.includes('--rotated'), front = process.argv.includes('--front');
-const decision = front ? 'FRONT_END_FACE' : rotated ? 'D844' : 'D843';
-const frameName = front ? 'standard Front XZ' : rotated ? 'cardinal YZ' : 'translated XY';
+const baseline = process.argv.includes('--baseline'), rotated = process.argv.includes('--rotated'), front = process.argv.includes('--front'), triangle = process.argv.includes('--triangle');
+const decision = triangle ? 'TRIANGLE_END_FACE' : front ? 'FRONT_END_FACE' : rotated ? 'D844' : 'D843';
+const frameName = triangle ? 'Front XZ triangular rib' : front ? 'standard Front XZ' : rotated ? 'cardinal YZ' : 'translated XY';
 const pins = [
   'apps/cad-studio/test/translated-extrude-end-face-browser.mjs',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
@@ -29,6 +29,7 @@ console.log(JSON.stringify({
   outputs: result.outputs.map(output => ({
     id: output.id, valid: checkOutput(output).valid, count: output.bodyCount, mass: massPropertiesOf(output),
     corners: output.brep.vertices.map(vertex => vertex.point),
+    walls: output.brep.faces.filter(face => face.name?.startsWith('n3.side[')).map(face => ({name:face.name,points:face.loops.flatMap(id => output.brep.loops.find(loop => loop.id === id).coedges.flatMap(id => { const coedge=output.brep.coedges.find(c => c.id === id),edge=output.brep.edges.find(e => e.id === coedge.edge);return edge.vertices.map(id => output.brep.vertices.find(v => v.id === id).point); }))})),
     faces: output.brep.faces.filter(face => face.name === output.id + (output.id === 'n1' ? '.bottom' : '.top'))
       .map(face => {
         const plane = faceGeometry(face);
@@ -59,7 +60,7 @@ const sourceAt = (localZ, bound) => ({
   nodes: [
     targetProfile,
     { id: 'n1', kind: 'extrude', sketch: 0, from: targetStart(localZ), height: 5 },
-    { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, front ? 6 : 10], plane },
+    triangle ? { id: 'n2', kind: 'sketch', profile: 'polygon', points: [[0,0],[10,0],[0,6]], plane, sideTags: { outer: ['rib-a','rib-b','rib-c'] } } : { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, front ? 6 : 10], plane },
     ...(bound ? [recipe] : []),
   ],
   outputs: { b1: { node: 1, side: 'solid' }, ...(bound ? { b3: { node: 3, side: 'solid' } } : {}) }, nextId: bound ? 4 : 3,
@@ -88,13 +89,19 @@ async function geometry(label, travel) {
   const targetExtent = world([0, 0, travel])[normalAxis];
   for (const [id, us, vs, lo, hi, volume, centroid] of [
     ['n1', [-5, 15], front ? [-3, 9] : [-5, 15], travel, travel + 5, front ? 1200 : 2000, world([5, front ? 3 : 5, travel + 2.5])],
-    ['n3', [0, 10], front ? [0, 6] : [0, 10], 0, travel, (front ? 60 : 100) * travel, world([5, front ? 3 : 5, travel / 2])],
+    ['n3', [0, 10], front ? [0, 6] : [0, 10], 0, travel, (triangle ? 30 : front ? 60 : 100) * travel, world([triangle ? 10/3 : 5, triangle ? 2 : front ? 3 : 5, travel / 2])],
   ]) {
     const exact = native.outputs.find(output => output.id === id);
     assert.ok(exact?.valid && exact.count === 1);
-    assert.equal(exact.corners.length, 8);
-    const corners = us.flatMap(x => vs.flatMap(y => [lo, hi].map(z => world([x, y, z]))));
+    assert.equal(exact.corners.length, triangle && id === 'n3' ? 6 : 8);
+    const corners = triangle && id === 'n3' ? [[0,0],[10,0],[0,6]].flatMap(([x,y]) => [lo,hi].map(z => world([x,y,z]))) : us.flatMap(x => vs.flatMap(y => [lo, hi].map(z => world([x, y, z]))));
     assert.ok(corners.every(point => exact.corners.some(corner => corner.every((value, i) => near(value, point[i])))));
+    if (triangle && id === 'n3') for (const [i,tag] of ['rib-a','rib-b','rib-c'].entries()) {
+      const wall=exact.walls.find(face=>face.name===`n3.side[${tag}]`);assert.ok(wall);
+      const p=[[0,0],[10,0],[0,6]],ends=[p[i],p[(i+1)%3]].flatMap(([x,y])=>[0,travel].map(z=>world([x,y,z])));
+      assert.ok(ends.every(p=>wall.points.some(q=>q.every((n,j)=>near(n,p[j])))));
+      assert.ok(wall.points.every(p=>ends.some(q=>q.every((n,j)=>near(n,p[j])))));
+    }
     assert.equal(exact.faces.length, 1);
     assert.ok(exact.faces[0].normal?.every((value, i) => near(value, (id === 'n1' ? -1 : 1) * normal[i])));
     assert.ok(exact.faces[0].levels.length >= 4 && exact.faces[0].levels.every(z => near(z, targetExtent)));
@@ -103,7 +110,7 @@ async function geometry(label, travel) {
       assert.ok(measured.centroid.every((value, i) => near(value, centroid[i])));
     }
   }
-  f.report.observations.push({ label, offset, normalAxis, sourceExtent: offset[normalAxis], targetAndEndExtent: targetExtent, travel, extrusionVolumeMm3: (front ? 60 : 100) * travel, nativeCorners: 16 });
+  f.report.observations.push({ label, offset, normalAxis, sourceExtent: offset[normalAxis], targetAndEndExtent: targetExtent, travel, extrusionVolumeMm3: (triangle ? 30 : front ? 60 : 100) * travel, nativeCorners: triangle ? 14 : 16 });
 }
 
 async function pickLowerCap() {
@@ -146,7 +153,7 @@ await f.run(async () => {
   await open(name, seed);
   await f.same(seed);
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await button(f.page.getByRole('group', { name: 'History', exact: true }), 'Sketch · rectangle').click();
+  await button(f.page.getByRole('group', { name: 'History', exact: true }), triangle ? 'Sketch · polygon' : 'Sketch · rectangle').click();
   await f.editor().waitFor();
   await f.closeEditor();
   await f.openExtrudeHud();

@@ -118,6 +118,32 @@ function targetRectangle(brep: Brep, face: BrepFace, { axes: [u, v, w], sign }: 
 }
 
 type LiteralRectangle = Extract<SketchNode, { profile: 'rectangle' }> & { min: [number, number]; max: [number, number] };
+type LiteralTriangle = Omit<Extract<SketchNode, { profile: 'polygon' }>, 'points'> & { points: [[number, number], [number, number], [number, number]] };
+
+function literalTriangle(sketch: Extract<SketchNode, { profile: 'polygon' }>): sketch is LiteralTriangle {
+  const p = sketch.points;
+  if (!Array.isArray(p) || p.length !== 3 || !p.every(q => Array.isArray(q) && q.length === 2 && q.every(finiteCoordinate))) return false;
+  const points = p as [number, number][];
+  const lengths = points.map((q, i) => Math.hypot(q[0] - points[(i + 1) % 3][0], q[1] - points[(i + 1) % 3][1]));
+  if (lengths.some(length => length <= CadNumericPolicy.linearTolerance)) return false;
+  const [a, b, c] = points;
+  const twiceArea = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+  if (twiceArea <= CadNumericPolicy.linearTolerance * Math.max(...lengths)) return false;
+  const outline: unknown = sketch.outline;
+  if (outline !== undefined) {
+    if (!record(outline) || !Array.isArray(outline.points) || outline.points.length !== 3
+      || !outline.points.every((q, i) => Array.isArray(q) && q.length === 2 && q.every((v, j) => v === points[i][j]))) return false;
+    if (outline.bulges !== undefined && (!Array.isArray(outline.bulges)
+      || (outline.bulges.length !== 0 && outline.bulges.length !== 3)
+      || !outline.bulges.every(v => typeof v === 'number' && Number.isFinite(v) && v === 0))) return false;
+    if (outline.spline !== undefined || outline.ellipse !== undefined) return false;
+    for (const key of ['circles', 'tangents', 'equalRadii', 'concentric']) {
+      if (outline[key] !== undefined && (!Array.isArray(outline[key]) || outline[key].length !== 0)) return false;
+    }
+    if (outline.radii !== undefined && (!record(outline.radii) || Object.keys(outline.radii).length !== 0)) return false;
+  }
+  return true;
+}
 
 function exactAxis(vector: unknown, axis: Axis): boolean {
   return Array.isArray(vector) && vector.length === 3 && vector[0] === Number(axis === 0)
@@ -135,9 +161,11 @@ function faceEndAxes(plane: DocPlane | undefined): EndFrame | null {
   return null;
 }
 
-export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is LiteralRectangle {
-  return sketch?.kind === 'sketch' && sketch.profile === 'rectangle' && !sketch.suppressed && faceEndAxes(sketch.plane) !== null && !sketch.on
-    && !sketch.association && !sketch.regions?.length && !sketch.holes?.length
+export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is LiteralRectangle | LiteralTriangle {
+  if (sketch?.kind !== 'sketch' || sketch.suppressed || faceEndAxes(sketch.plane) === null || sketch.on
+    || sketch.association || sketch.regions?.length || sketch.holes?.length) return false;
+  if (sketch.profile === 'polygon') return literalTriangle(sketch);
+  return sketch.profile === 'rectangle'
     && Array.isArray(sketch.min) && sketch.min.length === 2 && sketch.min.every(finiteCoordinate)
     && Array.isArray(sketch.max) && sketch.max.length === 2 && sketch.max.every(finiteCoordinate);
 }
@@ -145,11 +173,14 @@ export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is
 /** Resolve from the live preceding native results. A consumed target has no eligible output. */
 export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, prefix: readonly CadPartFeature[]): number {
   const sketch = doc.nodes[node.sketch];
-  if (!isFaceEndExtrudeSketch(sketch)) throw invalid('the source needs a literal rectangle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane.');
+  if (!isFaceEndExtrudeSketch(sketch)) throw invalid('the source needs a literal rectangle or straight triangle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane.');
   const axes = faceEndAxes(sketch.plane)!;
   const { axes: [u, v, w], sign } = axes, origin = sketch.plane?.origin ?? [0, 0, 0];
-  const u0 = origin[u] + sketch.min[0], v0 = origin[v] + sketch.min[1];
-  const u1 = origin[u] + sketch.max[0], v1 = origin[v] + sketch.max[1];
+  // The native profile uses node.points, never the editor's optional outline snapshot.
+  const min = sketch.profile === 'rectangle' ? sketch.min : [Math.min(...sketch.points.map(p => p[0])), Math.min(...sketch.points.map(p => p[1]))];
+  const max = sketch.profile === 'rectangle' ? sketch.max : [Math.max(...sketch.points.map(p => p[0])), Math.max(...sketch.points.map(p => p[1]))];
+  const u0 = origin[u] + min[0], v0 = origin[v] + min[1];
+  const u1 = origin[u] + max[0], v1 = origin[v] + max[1];
   if (![u0, v0, u1, v1].every(finiteCoordinate)) throw invalid('the projected source is outside the native coordinate range.');
   if (u0 >= u1 || v0 >= v1) throw invalid('the source rectangle needs a positive width and height.');
   const target = doc.nodes[node.target.body.node];
