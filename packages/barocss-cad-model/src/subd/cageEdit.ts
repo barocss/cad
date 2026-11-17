@@ -7,6 +7,8 @@ import {
   mirrorCage, moveVertices, selectionVertices, setCreases, SubdError, subdPreviewMesh, validateCage, weldVertices, weldWithin, type Cage, type CageValidation, type MirrorAxis,
 } from '@barocss/cad';
 
+import { insetPlanarQuad } from './cageInset';
+
 export type CageMode = 'vertex' | 'edge' | 'face';
 export interface CageSelection { readonly vertices: readonly number[]; readonly edges: readonly (readonly [number, number])[]; readonly faces: readonly number[] }
 export const emptyCageSel: CageSelection = { vertices: [], edges: [], faces: [] };
@@ -289,6 +291,15 @@ export function commitDrag(s: CageSession, delta: readonly number[], extrude: bo
   // A mirror-plane constraint may consume a nonzero pointer drag completely.
   if (!extrude && d.cage.positions.every((value, i) => value === s.cage.positions[i])) return s;
   return step(s, d.cage, d.sel);
+}
+
+/** One selected planar convex quad becomes an inner quad plus a surrounding ring. */
+export function insetCageSelection(s: CageSession, distance: number): CageSession {
+  if (s.mode !== 'face' || s.sel.faces.length !== 1 || s.sel.vertices.length || s.sel.edges.length) throw new SubdError('INPUT', 'inset: pick exactly one quad face');
+  const face = s.sel.faces[0], vertices = s.cage.faces[face];
+  if (s.mirror && vertices?.some(v => onPlane(s).includes(v))) throw new SubdError('INPUT', 'inset: faces touching the mirror seam are not supported');
+  const cage = insetPlanarQuad(s.cage, face, distance);
+  return step(s, plain(cage), { ...emptyCageSel, faces: [face] });
 }
 
 export type CageSelectionTransform =

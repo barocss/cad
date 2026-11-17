@@ -1,0 +1,42 @@
+{
+  "inset": {
+    "status": "PASS",
+    "qualification": "One planar convex quad inset, baseline preview/cancel, inner face selection into existing Extrude and native persistence.",
+    "limits": [
+      "One regular box in actual Studio; tilted/invalid/mirror-seam fixtures are pure tests. No multi-face regions or wall thickness."
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "native": {
+      "sha256": "56bf3a4c2f2078812081963c191b97fc701b16e5f3c21b0106ab2d3a012c8de6",
+      "semanticEquality": true
+    }
+  },
+  "transformRegression": {
+    "status": "PASS",
+    "qualification": "Baseline numeric world-axis rotation and uniform scale on selected faces, explicit pivot, no-op/cancel/history and native persistence.",
+    "limits": [
+      "One box, two connected top faces, Z rotation and uniform scale in actual Studio. Other axes/mirror/input edge cases are pure tests. No drag/local frame support."
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "native": {
+      "sha256": "21322c14cfb6147762c589eeec2a69800d173d4e496feb6c8c82692e4b569882",
+      "semanticEquality": true
+    }
+  }
+}
