@@ -1,0 +1,67 @@
+{
+  "status": "PASS",
+  "qualification": "Native removed-section custom scale displayed faithfully rather than silently showing sheet inheritance; standard edit, history and native save/reopen.",
+  "observations": [
+    {
+      "scale": 1.25,
+      "box": [
+        240,
+        80,
+        320,
+        90
+      ]
+    },
+    {
+      "scale": 2,
+      "box": [
+        216,
+        77,
+        344,
+        93
+      ]
+    },
+    {
+      "scale": 1.25,
+      "box": [
+        240,
+        80,
+        320,
+        90
+      ]
+    },
+    {
+      "scale": 2,
+      "box": [
+        216,
+        77,
+        344,
+        93
+      ]
+    },
+    {
+      "scale": 1.25,
+      "box": [
+        240,
+        80,
+        320,
+        90
+      ]
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "limits": [
+    "One removed front section, custom 1.25 scale. No arbitrary scale authoring, PDF or physical exports."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "baseline": {
+    "status": "FAIL",
+    "failure": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n'sheet' !== '1.25'\n\n    at check (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/section-custom-scale-browser.mjs:11:36)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/section-custom-scale-browser.mjs:13:416\n    at async f.run (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/section-custom-scale-browser.mjs:12:1"
+  },
+  "visualReview": "Before and reopened screenshots inspected; unchanged manual placement overlaps adjacent view, not addressed by scale readback."
+}
