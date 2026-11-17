@@ -1,0 +1,716 @@
+{
+  "cad-658-baseline-01": {
+    "status": "PASS",
+    "phase": "open feature editor 1",
+    "observations": [
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                342.21367527069873,
+                708.3411381068871
+              ],
+              [
+                897.7654708489505,
+                291.67450142640615
+              ]
+            ],
+            "pxPerMm": 13.889410044469514,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "clear-rectangle-undo",
+        "undoEnabled": false
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "failure": "",
+    "changedSourceFiles": []
+  },
+  "cad-658-fixed-01": {
+    "status": "FAIL",
+    "phase": "open feature editor 1",
+    "observations": [
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                342.21367527069873,
+                708.3411381068871
+              ],
+              [
+                897.7654708489505,
+                291.67450142640615
+              ]
+            ],
+            "pxPerMm": 13.889410044469514,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "clear-rectangle-undo",
+        "undoEnabled": true
+      },
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                342.21367527069873,
+                708.3411381068871
+              ],
+              [
+                897.7654708489505,
+                291.67450142640615
+              ]
+            ],
+            "pxPerMm": 13.889410044469514,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                337.7718767361666,
+                641.1146884042063
+              ],
+              [
+                761.1086792717113,
+                429.4453464991108
+              ]
+            ],
+            "pxPerMm": 7.055734845575785,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "failure": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Undo', exact: true })\u001b[22m\n\u001b[2m    - locator resolved to <button disabled type=\"button\" aria-label=\"Undo\" data-tip-key=\"\u2318Z\" data-slot=\"tool-button\" data-tip=\"Undo sketch edit\" class=\"tool inline-flex items-center justify-center rounded-md border-0 bg-transparent p-0 text-[color:var(--text-2)] cursor-pointer transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-default disabled:opacity-35\">\u2026</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 \u00d7 waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 \u00d7 waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is not enabled\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    58 \u00d7 waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m       - element is not enabled\u001b[22m\n\u001b[2m     - retrying click action\u001b[22m\n\u001b[2m       - waiting 500ms\u001b[22m\n\n    at <repo>/apps/cad-studio/test/sketch-rectangle-placement-history-browser.mjs:29:632\n    at async f.run (<repo>/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file://<repo>/apps/cad-studio/test/sketch-rectangle-placement-history-browser.mjs:18:1",
+    "changedSourceFiles": []
+  },
+  "cad-658-degenerate-baseline": {
+    "status": "PASS",
+    "phase": "open feature editor 1",
+    "observations": [
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                342.21367527069873,
+                708.3411381068871
+              ],
+              [
+                897.7654708489505,
+                291.67450142640615
+              ]
+            ],
+            "pxPerMm": 13.889410044469514,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "clear-rectangle-undo",
+        "undoEnabled": true
+      },
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                342.21367527069873,
+                708.3411381068871
+              ],
+              [
+                897.7654708489505,
+                291.67450142640615
+              ]
+            ],
+            "pxPerMm": 13.889410044469514,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                337.7718767361666,
+                641.1146884042063
+              ],
+              [
+                761.1086792717113,
+                429.4453464991108
+              ]
+            ],
+            "pxPerMm": 7.055734845575785,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "tool-Circle",
+        "buttons": 1
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "degenerate-same-point",
+        "undoEnabled": false
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "failure": "",
+    "changedSourceFiles": []
+  },
+  "cad-658-final-02": {
+    "status": "FAIL",
+    "phase": "open feature editor 1",
+    "observations": [
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                342.21367527069873,
+                708.3411381068871
+              ],
+              [
+                897.7654708489505,
+                291.67450142640615
+              ]
+            ],
+            "pxPerMm": 13.889410044469514,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "clear-rectangle-undo",
+        "undoEnabled": true
+      },
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                256.8471936354925,
+                734.8891855774426
+              ],
+              [
+                883.1263065137932,
+                265.1798771545506
+              ]
+            ],
+            "pxPerMm": 15.657640318225333,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                337.7718767361666,
+                641.1146884042063
+              ],
+              [
+                761.1086792717113,
+                429.4453464991108
+              ]
+            ],
+            "pxPerMm": 7.055734845575785,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "tool-Circle",
+        "buttons": 1
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "degenerate-same-point",
+        "undoRedo": true,
+        "documentUnchanged": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "failure": "AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:\n\n  assert.ok(invalid.some(r=>r.width===0||r.height===0))\n\n    at file://<repo>/apps/cad-studio/test/sketch-rectangle-placement-history-browser.mjs:33:114\n    at async f.run (file://<repo>/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file://<repo>/apps/cad-studio/test/sketch-rectangle-placement-history-browser.mjs:18:1",
+    "changedSourceFiles": []
+  },
+  "cad-658-final-03": {
+    "status": "PASS",
+    "phase": "fresh Open 09-reopened",
+    "observations": [
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                342.21367527069873,
+                708.3411381068871
+              ],
+              [
+                897.7654708489505,
+                291.67450142640615
+              ]
+            ],
+            "pxPerMm": 13.889410044469514,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "clear-rectangle-undo",
+        "undoEnabled": true
+      },
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                342.21367527069873,
+                708.3411381068871
+              ],
+              [
+                897.7654708489505,
+                291.67450142640615
+              ]
+            ],
+            "pxPerMm": 13.889410044469514,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                337.7718767361666,
+                641.1146884042063
+              ],
+              [
+                761.1086792717113,
+                429.4453464991108
+              ]
+            ],
+            "pxPerMm": 7.055734845575785,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "tool-Circle",
+        "buttons": 1
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "degenerate-same-point",
+        "undoRedo": true,
+        "documentUnchanged": true
+      },
+      {
+        "label": "degenerate-zero-width",
+        "undoRedo": true,
+        "documentUnchanged": true
+      },
+      {
+        "label": "degenerate-zero-height",
+        "undoRedo": true,
+        "documentUnchanged": true
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "tool-Select",
+        "buttons": 1
+      },
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                337.7718767361666,
+                641.1146884042063
+              ],
+              [
+                549.4444447135007,
+                500
+              ]
+            ],
+            "pxPerMm": 7.055734845575785,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "label": "06-extruded-extrude-hud",
+        "operation": null,
+        "depthSelect": 0,
+        "hudText": "ExtrudepreviewProfileSketch 1DistancemmAny number except 0 mmDraft\u00b0CancelApply"
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "failure": "",
+    "changedSourceFiles": [],
+    "sourceHashes": {
+      "apps/cad-studio/src/App.tsx": "32d53f4a4c9070020147f4aa31e479c7b64f4c3194d5d9cd25fef9ff515a6806",
+      "apps/cad-studio/src/app/sketchControls.ts": "53331f0abd850177099d728a9f2bb204288c28927a8bf0b0acb903125401d2c6",
+      "apps/cad-studio/src/sketch/draftHistory.ts": "935dd396405be63d26dd1e9a35fd58d74f561f8d4b086ca681e841685171ca72",
+      "apps/cad-studio/src/viewport/viewportPointerInput.ts": "a434777c2bd6663fb4705e50f0139f201bb709e422519ef7251ad6a4af94a7d3",
+      "apps/cad-studio/test/sketch-rectangle-placement-history-browser.mjs": "795fa4fa3e8947a8af6d1d11f6a56d50473a7f95bc99e68c826a8582d6909051"
+    }
+  },
+  "cad-658-band-final3": {
+    "status": "PASS",
+    "phase": "Finish sketch 02-band-undo-edit-recovered",
+    "observations": [
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                272.76662504835076,
+                708.3411381068871
+              ],
+              [
+                967.2073078932198,
+                291.67450142640615
+              ]
+            ],
+            "pxPerMm": 13.889410044469628,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      },
+      {
+        "refused": true,
+        "clearUndoRedo": true,
+        "rectangleUndoRedo": true,
+        "escapeReopen": true,
+        "width": 4,
+        "expectedVolume": 1343.7167544041135,
+        "actualVolume": 1343.7167544041145
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 561,
+    "failure": "",
+    "changedSourceFiles": []
+  },
+  "cad-658-clear-final3": {
+    "status": "PASS",
+    "phase": "Finish sketch 04-finished",
+    "observations": [
+      {
+        "label": "framing",
+        "tries": [
+          {
+            "canvas": [
+              0,
+              0,
+              1140,
+              1000
+            ],
+            "px": [
+              [
+                411.6627066246478,
+                638.892354236625
+              ],
+              [
+                828.3268657728967,
+                361.1145966670555
+              ],
+              [
+                883.8967394985051,
+                638.892354236625
+              ],
+              [
+                1022.7891021084631,
+                638.892354236625
+              ]
+            ],
+            "pxPerMm": 13.889236260995858,
+            "allOnCanvas": true
+          }
+        ]
+      },
+      {
+        "initialShapes": 2,
+        "restoredShapes": 2
+      },
+      {
+        "label": "tool-Rectangle",
+        "buttons": 1
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 561,
+    "failure": "",
+    "changedSourceFiles": []
+  }
+}

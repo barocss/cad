@@ -80,7 +80,7 @@ export interface ViewportPointerProps {
   onPickChain?(body: number, edge: number): void;
   onPick(hit: { face: FaceRef | null; edge: EdgeRef | null; edgeMesh?: BodyResult['mesh']; point: Vec3 | null; direct?: string; instance?: string; instanceFace?: FaceRef; instanceCap?: { body: number }; vertex?: { body: number; at: Vec3 } }, additive: boolean): void;
   /** `fresh`: a new shape starts (the current one, if closed, is kept beside it). */
-  onSketchShape(shape: SketchShape | null, fresh?: boolean, origin?: 'line-point'): void;
+  onSketchShape(shape: SketchShape | null, fresh?: boolean, origin?: 'line-point' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish'): void;
   onSplineDragChange?(active: boolean): void;
   onCursor(p: Vec3 | null): void;
   /** Use projected triangle overlap for crossing boxes in the idle native Model view. */
@@ -277,7 +277,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     liveShape.current = sketch?.shape ?? null;
     if (!sketch?.shape) { drafting.current = false; slotStage.current = 0; }
   }
-  const emit = (shape: SketchShape | null, fresh = false, origin?: 'line-point') => { liveShape.current = shape; propsRef.current.onSketchShape(shape, fresh, origin); };
+  const emit = (shape: SketchShape | null, fresh = false, origin?: 'line-point' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish') => { liveShape.current = shape; propsRef.current.onSketchShape(shape, fresh, origin); };
   /** The grid step (mm) points snap to: the studio's setting (0: off, to a micrometre). */
   const snap = (v: number) => { const st = propsRef.current.snapStep ?? 1; return st > 0 ? Math.round(Math.round(v / st) * st * 1000) / 1000 : Math.round(v * 1000) / 1000; };
   const sketchDraft = useRef<SketchOverlayDraft>({ cursor: null });
@@ -447,7 +447,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
   const startRectangleAt = (owner: SketchState, at: [number, number]) => {
     if (propsRef.current.sketch !== owner || owner.tool !== 'rectangle' || drafting.current) return false;
     drafting.current = true;
-    emit({ kind: 'rectangle', a: at, b: at }, true);
+    emit({ kind: 'rectangle', a: at, b: at }, true, 'rectangle-start');
     request();
     return true;
   };
@@ -554,7 +554,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     showSketchSnap(sketch, target, point);
     const shape = liveShape.current;
     if (sketch.tool === 'rectangle' && drafting.current && shape?.kind === 'rectangle'
-      && (shape.b[0] !== target.at[0] || shape.b[1] !== target.at[1])) emit({ ...shape, b: target.at });
+      && (shape.b[0] !== target.at[0] || shape.b[1] !== target.at[1])) emit({ ...shape, b: target.at }, false, 'rectangle-preview');
     requestRef.current();
   }, [objectKinds, sketch, extensionDraft, chordActive, crossingBodies, canvas, clearSketchSnap, propsRef, requestRef]);
   const surfacePoint = (x: number, y: number, w: number, h: number, face: FaceRef | null): Vec3 | null => {
@@ -928,7 +928,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
         sketchDraft.current.trim = points ? { kind, points, owner: sk } : null;
       }
       else if (s && c) {
-        if (s.kind === 'rectangle' && drafting.current) emit({ ...s, b: c });
+        if (s.kind === 'rectangle' && drafting.current) emit({ ...s, b: c }, false, 'rectangle-preview');
         if (s.kind === 'circle' && drafting.current) emit({ ...s, r: circleRadiusAt(s.c, c, !!at?.snap) });
         if (s.kind === 'slot' && drafting.current) {
           if (slotStage.current === 1) emit({ ...s, b: c });
@@ -1119,7 +1119,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
       }
       if (sk.tool === 'rectangle') {
         if (!drafting.current) startRectangleAt(sk, c);
-        else { drafting.current = false; if (s && s.kind === 'rectangle') emit({ ...s, b: c }); }
+        else { drafting.current = false; if (s && s.kind === 'rectangle') emit({ ...s, b: c }, false, 'rectangle-finish'); }
       } else if (sk.tool === 'circle') {
         if (!drafting.current) {
           drafting.current = true;
