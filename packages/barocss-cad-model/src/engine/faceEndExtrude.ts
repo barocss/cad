@@ -66,10 +66,12 @@ export function faceEndExtrudeProblem(input: unknown): string | null {
 
 type Axis = 0 | 1 | 2;
 type AxisOrder = readonly [Axis, Axis, Axis];
-const XY: AxisOrder = [0, 1, 2], YZ: AxisOrder = [1, 2, 0];
+type EndFrame = { axes: AxisOrder; sign: 1 | -1 };
+const XY: EndFrame = { axes: [0, 1, 2], sign: 1 }, YZ: EndFrame = { axes: [1, 2, 0], sign: 1 };
+const FRONT: EndFrame = { axes: [0, 2, 1], sign: -1 };
 
 /** A complete native rectangular trim whose outward normal opposes the extrusion. */
-function targetRectangle(brep: Brep, face: BrepFace, [u, v, w]: AxisOrder) {
+function targetRectangle(brep: Brep, face: BrepFace, { axes: [u, v, w], sign }: EndFrame) {
   const surface = face.surface;
   if (surface.kind !== 'surface' || surface.degreeU !== 1 || surface.degreeV !== 1
     || surface.controlPoints.length !== 2 || surface.controlPoints.some(row => row.length !== 2)) throw invalid('the target needs a native plane parallel to the sketch.');
@@ -77,7 +79,7 @@ function targetRectangle(brep: Brep, face: BrepFace, [u, v, w]: AxisOrder) {
   if (!poles.every(point => point.every(finiteCoordinate) && point[w] === level)) throw invalid('the target needs a native plane parallel to the sketch.');
   const plane = faceGeometry(face);
   if (plane.kind !== 'plane' || !withinTolerance(plane.o[w], level) || !withinTolerance(plane.n[u], 0)
-    || !withinTolerance(plane.n[v], 0) || !withinTolerance(plane.n[w], -1)) {
+    || !withinTolerance(plane.n[v], 0) || !withinTolerance(plane.n[w], -sign)) {
     throw invalid('the target face normal must oppose the extrusion direction.');
   }
   const loop = face.loops.length === 1 ? brep.loops.find(loop => loop.id === face.loops[0]) : undefined;
@@ -122,12 +124,14 @@ function exactAxis(vector: unknown, axis: Axis): boolean {
     && vector[1] === Number(axis === 1) && vector[2] === Number(axis === 2);
 }
 
-/** Only the two admitted exact raw frames reach the native prism placement. */
-function faceEndAxes(plane: DocPlane | undefined): AxisOrder | null {
+/** Only the three admitted exact raw frames reach the native prism placement. */
+function faceEndAxes(plane: DocPlane | undefined): EndFrame | null {
   if (plane === undefined) return XY;
   if (!Array.isArray(plane?.origin) || plane.origin.length !== 3 || !plane.origin.every(finiteCoordinate)) return null;
   if (exactAxis(plane.normal, 2) && exactAxis(plane.xAxis, 0)) return XY;
   if (exactAxis(plane.normal, 0) && exactAxis(plane.xAxis, 1)) return YZ;
+  if (Array.isArray(plane.normal) && plane.normal.length === 3 && plane.normal[0] === 0 && plane.normal[1] === -1
+    && plane.normal[2] === 0 && exactAxis(plane.xAxis, 0)) return FRONT;
   return null;
 }
 
@@ -141,9 +145,9 @@ export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is
 /** Resolve from the live preceding native results. A consumed target has no eligible output. */
 export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, prefix: readonly CadPartFeature[]): number {
   const sketch = doc.nodes[node.sketch];
-  if (!isFaceEndExtrudeSketch(sketch)) throw invalid('the source needs a literal rectangle on a default or translated XY plane, or on the supported +X-normal YZ plane.');
+  if (!isFaceEndExtrudeSketch(sketch)) throw invalid('the source needs a literal rectangle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane.');
   const axes = faceEndAxes(sketch.plane)!;
-  const [u, v, w] = axes, origin = sketch.plane?.origin ?? [0, 0, 0];
+  const { axes: [u, v, w], sign } = axes, origin = sketch.plane?.origin ?? [0, 0, 0];
   const u0 = origin[u] + sketch.min[0], v0 = origin[v] + sketch.min[1];
   const u1 = origin[u] + sketch.max[0], v1 = origin[v] + sketch.max[1];
   if (![u0, v0, u1, v1].every(finiteCoordinate)) throw invalid('the projected source is outside the native coordinate range.');
@@ -159,8 +163,8 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   if (faces.length !== 1) throw missing('the named target face is missing or ambiguous.');
   const box = targetRectangle(brep, faces[0], axes);
   if (u0 < box.min[0] || v0 < box.min[1] || u1 > box.max[0] || v1 > box.max[1]) throw invalid('the target face must contain the entire projected profile.');
-  const height = box.level - origin[w];
+  const height = sign * (box.level - origin[w]);
   if (height <= CadNumericPolicy.linearTolerance || height > CadPartLimits.length) throw invalid('the target must be ahead of the source in the positive extrusion direction.');
-  if (!withinTolerance(origin[w] + height, box.level)) throw invalid('the reconstructed end is outside the native linear tolerance.');
+  if (!withinTolerance(origin[w] + sign * height, box.level)) throw invalid('the reconstructed end is outside the native linear tolerance.');
   return height;
 }

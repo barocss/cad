@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
-const baseline = process.argv.includes('--baseline'), rotated = process.argv.includes('--rotated');
-const decision = rotated ? 'D844' : 'D843';
-const frameName = rotated ? 'cardinal YZ' : 'translated XY';
+const baseline = process.argv.includes('--baseline'), rotated = process.argv.includes('--rotated'), front = process.argv.includes('--front');
+const decision = front ? 'FRONT_END_FACE' : rotated ? 'D844' : 'D843';
+const frameName = front ? 'standard Front XZ' : rotated ? 'cardinal YZ' : 'translated XY';
 const pins = [
   'apps/cad-studio/test/translated-extrude-end-face-browser.mjs',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
@@ -23,7 +23,7 @@ import { toPartDocument } from '@barocss/cad-model/engine/part';
 import { checkOutput, evaluateCadPart, faceGeometry, massPropertiesOf } from '@barocss/cad';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const part = toPartDocument(doc), result = evaluateCadPart(part);
-const axis = doc.nodes[2].plane.normal.indexOf(1);
+const axis = doc.nodes[2].plane.normal.findIndex(value => value !== 0);
 console.log(JSON.stringify({
   extrusion: part.features.find(feature => feature.id === 'n3'),
   outputs: result.outputs.map(output => ({
@@ -42,13 +42,13 @@ console.log(JSON.stringify({
     historyControls: ['Undo', 'Redo'].map(name => document.querySelector(`button[aria-label="${name}"]`).disabled),
   }),
 });
-const offset = rotated ? [-100, 12, -7] : [12, -7, -100], normalAxis = rotated ? 0 : 2;
-const normal = rotated ? [1, 0, 0] : [0, 0, 1], xAxis = rotated ? [0, 1, 0] : [1, 0, 0];
+const offset = front ? [12, 100, -7] : rotated ? [-100, 12, -7] : [12, -7, -100], normalAxis = front ? 1 : rotated ? 0 : 2;
+const normal = front ? [0, -1, 0] : rotated ? [1, 0, 0] : [0, 0, 1], xAxis = rotated ? [0, 1, 0] : [1, 0, 0];
 const plane = { origin: offset, normal, xAxis };
-const world = ([x, y, z]) => rotated ? [z + offset[0], x + offset[1], y + offset[2]] : [x + offset[0], y + offset[1], z + offset[2]];
-const targetStart = travel => rotated ? travel : world([0, 0, travel])[2];
-const targetProfile = rotated
-  ? { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [-5, -5], max: [15, 15], plane }
+const world = ([x, y, z]) => front ? [x + offset[0], offset[1] - z, y + offset[2]] : rotated ? [z + offset[0], x + offset[1], y + offset[2]] : [x + offset[0], y + offset[1], z + offset[2]];
+const targetStart = travel => rotated || front ? travel : world([0, 0, travel])[2];
+const targetProfile = rotated || front
+  ? { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [-5, front ? -3 : -5], max: [15, front ? 9 : 15], plane }
   : { id: 'n0', kind: 'sketch', profile: 'rectangle', min: world([-5, -5, 0]).slice(0, 2), max: world([15, 15, 0]).slice(0, 2) };
 const recipe = {
   id: 'n3', kind: 'face-end-extrude', sketch: 2,
@@ -59,7 +59,7 @@ const sourceAt = (localZ, bound) => ({
   nodes: [
     targetProfile,
     { id: 'n1', kind: 'extrude', sketch: 0, from: targetStart(localZ), height: 5 },
-    { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, 10], plane },
+    { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, front ? 6 : 10], plane },
     ...(bound ? [recipe] : []),
   ],
   outputs: { b1: { node: 1, side: 'solid' }, ...(bound ? { b3: { node: 3, side: 'solid' } } : {}) }, nextId: bound ? 4 : 3,
@@ -86,14 +86,14 @@ async function geometry(label, travel) {
   assert.deepEqual(bodies.map(body => body.key), ['b1', 'b3']);
   assert.equal(native.outputs.length, 2);
   const targetExtent = world([0, 0, travel])[normalAxis];
-  for (const [id, square, lo, hi, volume, centroid] of [
-    ['n1', [-5, 15], travel, travel + 5, 2000, world([5, 5, travel + 2.5])],
-    ['n3', [0, 10], 0, travel, 100 * travel, world([5, 5, travel / 2])],
+  for (const [id, us, vs, lo, hi, volume, centroid] of [
+    ['n1', [-5, 15], front ? [-3, 9] : [-5, 15], travel, travel + 5, front ? 1200 : 2000, world([5, front ? 3 : 5, travel + 2.5])],
+    ['n3', [0, 10], front ? [0, 6] : [0, 10], 0, travel, (front ? 60 : 100) * travel, world([5, front ? 3 : 5, travel / 2])],
   ]) {
     const exact = native.outputs.find(output => output.id === id);
     assert.ok(exact?.valid && exact.count === 1);
     assert.equal(exact.corners.length, 8);
-    const corners = square.flatMap(x => square.flatMap(y => [lo, hi].map(z => world([x, y, z]))));
+    const corners = us.flatMap(x => vs.flatMap(y => [lo, hi].map(z => world([x, y, z]))));
     assert.ok(corners.every(point => exact.corners.some(corner => corner.every((value, i) => near(value, point[i])))));
     assert.equal(exact.faces.length, 1);
     assert.ok(exact.faces[0].normal?.every((value, i) => near(value, (id === 'n1' ? -1 : 1) * normal[i])));
@@ -103,12 +103,12 @@ async function geometry(label, travel) {
       assert.ok(measured.centroid.every((value, i) => near(value, centroid[i])));
     }
   }
-  f.report.observations.push({ label, offset, normalAxis, sourceExtent: offset[normalAxis], targetAndEndExtent: targetExtent, travel, extrusionVolumeMm3: 100 * travel, nativeCorners: 16 });
+  f.report.observations.push({ label, offset, normalAxis, sourceExtent: offset[normalAxis], targetAndEndExtent: targetExtent, travel, extrusionVolumeMm3: (front ? 60 : 100) * travel, nativeCorners: 16 });
 }
 
 async function pickLowerCap() {
   await button(f.page, 'View cube directions').click();
-  const view = rotated ? 'Left' : 'Bottom';
+  const view = front ? 'Back' : rotated ? 'Left' : 'Bottom';
   await f.page.getByRole('menuitem', { name: view, exact: true }).click();
   await f.page.waitForFunction(name => {
     const labels = [...document.querySelectorAll('.view-cube .vc-label')];
@@ -117,7 +117,7 @@ async function pickLowerCap() {
   const pixel = await f.page.evaluate(point => {
     const xy = window.__studioScreenOf(point);
     return xy && document.elementFromPoint(...xy)?.closest('.vp-canvas') ? xy : null;
-  }, world([13, 13, 20]));
+  }, world([13, front ? 7 : 13, 20]));
   assert.ok(pixel);
   await f.page.mouse.click(...pixel);
 }
@@ -133,7 +133,7 @@ async function setTargetStart(travel, expected) {
   } else {
     const error = f.editor().locator('.hud-error');
     await error.waitFor();
-    assert.match(await error.textContent(), rotated ? /positive extrusion direction/i : /positive (Z|extrusion direction)/i);
+    assert.match(await error.textContent(), rotated || front ? /positive extrusion direction/i : /positive (Z|extrusion direction)/i);
     assert.deepEqual(await f.doc(), before);
     await f.closeEditor();
   }

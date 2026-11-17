@@ -1,0 +1,42 @@
+{
+  "status": "PASS",
+  "qualification": "Measure the pre-extension command and Open behavior on a standard Front XZ source.",
+  "limits": [
+    "One standard Front XZ rectangle, positive travel, one current opposed native rectangular cap, desktop WebGPU."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1066,
+  "sourceAfterCleanupCount": 1066,
+  "observations": [
+    {
+      "label": "pre-extension-refusal",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "fixedDistancePreview": 8,
+      "notice": "The kernel could not build thisUndo the last change, or adjust the values and try again.Details[VALUE] Extrude to face: the source needs a literal rectangle on a default or translated XY plane, or on the supported +X-normal YZ plane.",
+      "failedGeometryFresh": false,
+      "undoRestoredSeed": true
+    }
+  ],
+  "files": [],
+  "states": [
+    "00-pre-extension-refusal"
+  ],
+  "sourceHashes": {
+    "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+    "apps/cad-studio/test/translated-extrude-end-face-browser.mjs": "fa5abdcfaef411192521a4f4f2780c43837a0bd4c66a65e6a603dd30fa0602fa",
+    "packages/barocss-cad-model/src/app/profileCommands.ts": "9d7dace1a36a3bbd6940c8d9486732a31f263160c11a0b1b73159c3f7e9cf4dc",
+    "packages/barocss-cad-model/src/engine/faceEndExtrude.ts": "e02d1bb53c903da372cdb6b8607ef98055025d195cf022abcb77d8c81bdd58ad",
+    "packages/barocss-cad-model/src/engine/part.ts": "3f86bfd0ff23c2d678de916ef908a013c5e727201c19d3122149cb7cdb67f0ef"
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "status": "PASS",
+  "qualification": "Qualify a literal rectangle in the cardinal YZ frame and its original opposing native end face.",
+  "limits": [
+    "One cardinal YZ rectangle, positive travel, one current opposed native rectangular cap, desktop WebGPU."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1066,
+  "sourceAfterCleanupCount": 1066,
+  "observations": [
+    {
+      "label": "translated-applied",
+      "offset": [
+        -100,
+        12,
+        -7
+      ],
+      "normalAxis": 0,
+      "sourceExtent": -100,
+      "targetAndEndExtent": -80,
+      "travel": 20,
+      "extrusionVolumeMm3": 2000,
+      "nativeCorners": 16
+    },
+    {
+      "label": "negative-world-target-moved",
+      "offset": [
+        -100,
+        12,
+        -7
+      ],
+      "normalAxis": 0,
+      "sourceExtent": -100,
+      "targetAndEndExtent": -70,
+      "travel": 30,
+      "extrusionVolumeMm3": 3000,
+      "nativeCorners": 16
+    },
+    {
+      "label": "translated-first-undo",
+      "offset": [
+        -100,
+        12,
+        -7
+      ],
+      "normalAxis": 0,
+      "sourceExtent": -100,
+      "targetAndEndExtent": -80,
+      "travel": 20,
+      "extrusionVolumeMm3": 2000,
+      "nativeCorners": 16
+    },
+    {
+      "label": "translated-first-redo",
+      "offset": [
+        -100,
+        12,
+        -7
+      ],
+      "normalAxis": 0,
+      "sourceExtent": -100,
+      "targetAndEndExtent": -70,
+      "travel": 30,
+      "extrusionVolumeMm3": 3000,
+      "nativeCorners": 16
+    },
+    {
+      "label": "translated-reopened",
+      "offset": [
+        -100,
+        12,
+        -7
+      ],
+      "normalAxis": 0,
+      "sourceExtent": -100,
+      "targetAndEndExtent": -70,
+      "travel": 30,
+      "extrusionVolumeMm3": 3000,
+      "nativeCorners": 16
+    },
+    {
+      "label": "translated-post-open-target-moved",
+      "offset": [
+        -100,
+        12,
+        -7
+      ],
+      "normalAxis": 0,
+      "sourceExtent": -100,
+      "targetAndEndExtent": -60,
+      "travel": 40,
+      "extrusionVolumeMm3": 4000,
+      "nativeCorners": 16
+    }
+  ],
+  "files": [
+    {
+      "name": "D844-face-end.bcad",
+      "bytes": 1430,
+      "sha256": "dd6dc291dbf510d1fa6ce1610fba7b24375cccc676908135df8bb0cb23c9e890"
+    }
+  ],
+  "states": [
+    "01-translated-preview",
+    "02-translated-accepted",
+    "03-travel-refused",
+    "04-translated-post-open"
+  ],
+  "sourceHashes": {
+    "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+    "apps/cad-studio/test/translated-extrude-end-face-browser.mjs": "7447daf2050039cf9f8047446f5ea43261f0cbb6a956100a8cf01fd0bad8b484",
+    "packages/barocss-cad-model/src/app/profileCommands.ts": "9d7dace1a36a3bbd6940c8d9486732a31f263160c11a0b1b73159c3f7e9cf4dc",
+    "packages/barocss-cad-model/src/engine/faceEndExtrude.ts": "b2ecd76a56664b4cc880430bc9b2ecc90044a137ab1e363ec9acb4a4efd8a1e2",
+    "packages/barocss-cad-model/src/engine/part.ts": "3f86bfd0ff23c2d678de916ef908a013c5e727201c19d3122149cb7cdb67f0ef"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "source": "packages/barocss-cad-model/src/engine/faceEndExtrude.ts",
+  "sourceHashBefore": "b2ecd76a56664b4cc880430bc9b2ecc90044a137ab1e363ec9acb4a4efd8a1e2",
+  "sourceHashAfter": "b2ecd76a56664b4cc880430bc9b2ecc90044a137ab1e363ec9acb4a4efd8a1e2",
+  "runs": [
+    {
+      "name": "baseline-before",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 21,
+      "fail": 0
+    },
+    {
+      "name": "unsigned-target-normal",
+      "substitution": [
+        "withinTolerance(plane.n[w], -sign)",
+        "withinTolerance(plane.n[w], -1)"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 18,
+      "fail": 3,
+      "killed": true
+    },
+    {
+      "name": "unsigned-height",
+      "substitution": [
+        "sign * (box.level - origin[w])",
+        "box.level - origin[w]"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 19,
+      "fail": 2,
+      "killed": true
+    },
+    {
+      "name": "unsigned-end",
+      "substitution": [
+        "origin[w] + sign * height",
+        "origin[w] + height"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 20,
+      "fail": 1,
+      "killed": true
+    },
+    {
+      "name": "reversed-front-frame",
+      "substitution": [
+        "plane.normal[1] === -1",
+        "plane.normal[1] === 1"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 18,
+      "fail": 3,
+      "killed": true
+    },
+    {
+      "name": "baseline-final",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 21,
+      "fail": 0
+    }
+  ]
+}
