@@ -89,13 +89,14 @@ test('creation retains existing signed and large-spread geometry without new ran
   }
   assert.equal(pattern(count(create(-540), 3)).angle, -270);
   const zero = evaluateDoc(create(0), 1); assert.equal(zero.ok, false, 'zero step is still refused by existing native admission');
-  const single = create(270, 1); assert.equal(pattern(single).angle, Infinity);
+  assert.throws(() => create(270, 1), error => isRefusal(error, 'VALUE'), 'UI creation refuses Count1');
+  const single = create(270); Object.assign(pattern(single), { count: 1, angle: Infinity });
   assert.throws(() => toPartDocument(single), error => isRefusal(error, 'VALUE'), 'partial count1 creation is still refused, never repaired to a new admitted shape');
 });
 
 test('legacy absence preserves exact old count arithmetic and serialization; X/Y and separate paths keep their graphs', async () => {
   const old = legacy(create(270)); assert.equal(pattern(count(old, 7)).angle, 360 / 7);
-  assert.equal(pattern(count(old, 0)).angle, 360); assert.ok(!Object.hasOwn(pattern(count(old, 2)), 'span'));
+  assert.deepEqual(count(old, 0), old, 'UI invalid Count preserves the legacy node'); assert.ok(!Object.hasOwn(pattern(count(old, 2)), 'span'));
   assert.deepEqual(await saved(old), old);
   for (const axis of ['x', 'y']) {
     assert.throws(() => create(270, 9, axis), error => isRefusal(error, 'VALUE'));
@@ -112,7 +113,9 @@ test('legacy absence preserves exact old count arithmetic and serialization; X/Y
 });
 
 for (const schema of [3, 4] as const) test(`schema${schema} Save/load retains partial intent and Count1 round trip`, async () => {
-  const doc = inSchema(create(-900), schema), one = count(doc, 1);
+  const doc = inSchema(create(-900), schema), one = structuredClone(doc);
+  assert.deepEqual(count(doc, 1), doc, 'UI Count1 is refused independently of legacy serialization');
+  Object.assign(pattern(one), { count: 1, angle: 360 }); // Explicit historical native recipe, not a UI edit.
   assert.equal(pattern(one).angle, 360); assert.equal(pattern(one).span, -900);
   const reopened = await saved(one); assert.equal(reopened.schema, schema); assert.deepEqual(pattern(reopened), pattern(one));
   const four = count(reopened, 4); assert.equal(pattern(four).angle, -300); assert.equal(pattern(four).span, -900);
@@ -145,7 +148,9 @@ test('typed read and direct compile reject malformed or contradictory metadata, 
 
 test('invalid counts retain existing native admission instead of metadata clamping or a new positive span rule', () => {
   for (const value of [0, -1, 65]) {
-    const doc = count(create(270), value); assert.equal(pattern(doc).count, value);
+    const initial = create(270); assert.deepEqual(count(initial, value), initial, 'UI invalid Count preserves the document');
+    const doc = structuredClone(initial); Object.assign(pattern(doc), { count: value, angle: 90 });
+    assert.equal(pattern(doc).count, value);
     const native = toPartDocument(doc).features.at(-1)!; assert.equal(native.kind, 'circular-pattern');
     const result = evaluateDoc(doc, 1); assert.equal(result.ok, false);
     if (!result.ok) assert.match(result.error.detail, /count must be an integer/);

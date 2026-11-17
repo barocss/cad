@@ -950,6 +950,16 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       number('count', 'Count', undefined, n => (n as typeof node).count, (n, v) => ({ ...(n as typeof node), count: v }));
       break;
     case 'circular-pattern':
+      // A Z axis is a line through XY; preserve its authored Z and all distribution metadata.
+      if (node.axis === 'z') [0, 1].forEach(k => number('axisAt' + k, 'Axis at ' + 'XY'[k], 'mm',
+        n => n.kind === 'circular-pattern' && n.axis === 'z' ? num(n.pivot?.[k] ?? 0) : NaN,
+        (n, value) => {
+          if (n.kind !== 'circular-pattern' || n.axis !== 'z' || !Number.isFinite(value)) return n;
+          if ((n.pivot?.[k] ?? 0) === value) return n;
+          const pivot: [Dim, Dim, Dim] = n.pivot ? [...n.pivot] : [0, 0, 0];
+          pivot[k] = value;
+          return { ...n, pivot };
+        }));
       number('count', 'Count', undefined, n => (n as typeof node).count, (n, count) => {
         const pattern = n as typeof node;
         if (pattern.axis === 'z' && pattern.span !== undefined) return { ...pattern, count, angle: circularPatternStep(pattern.span, count) };

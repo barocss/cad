@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "qualification": "Actual History has Count but no Z axis location fields before change.",
+  "limits": [
+    "Z One body only; no span or axis-direction editing, no broad topology or noncardinal precision claim."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceAfterCount": 1043,
+  "sourceAfterCleanupCount": 1043,
+  "originalReceiptSHA256": "166b60368583dd6f5d87223743f28d9c6a6954edfe5516703a44e00493da7202",
+  "sourceUnchanged": true,
+  "sourceFrozenManifestSHA256": "ae7e2189ff5af55cb36e427e02fbe80c5bbc9cb08767c6c3e8c52a6c8c688853",
+  "sourceBeforeManifestSHA256": "6935556e7161bf8b43ee3e1fe41004b3fcee1be5129132a67d62a4d45dce77a2"
+}

@@ -1,0 +1,874 @@
+=== /tmp/cad-z-axis-focused.log SHA256 82dd95ae62676b50550914858199a9ffadc175d90f0b3ae2663dc013c01f1933 ===
+TAP version 13
+# Subtest: Z axis coordinates start at origin; only the explicit coordinate changes
+ok 1 - Z axis coordinates start at origin; only the explicit coordinate changes
+  ---
+  duration_ms: 3.822041
+  type: 'test'
+  ...
+# Subtest: preserves explicit Z, signed/legacy distribution and other coordinate bindings
+ok 2 - preserves explicit Z, signed/legacy distribution and other coordinate bindings
+  ---
+  duration_ms: 1.155292
+  type: 'test'
+  ...
+# Subtest: finite admission and captured field do not reinterpret unsupported axes or nodes
+ok 3 - finite admission and captured field do not reinterpret unsupported axes or nodes
+  ---
+  duration_ms: 0.105542
+  type: 'test'
+  ...
+# Subtest: existing BindableField contract identifies bound coordinate and explicitly unbinds only it
+ok 4 - existing BindableField contract identifies bound coordinate and explicitly unbinds only it
+  ---
+  duration_ms: 0.358375
+  type: 'test'
+  ...
+# Subtest: both X/Y result modes reject unsupported counts before constructing any copies
+ok 5 - both X/Y result modes reject unsupported counts before constructing any copies
+  ---
+  duration_ms: 29.522833
+  type: 'test'
+  ...
+# Subtest: axis-sensitive Count fields keep the raw values and the existing Z range and spread
+ok 6 - axis-sensitive Count fields keep the raw values and the existing Z range and spread
+  ---
+  duration_ms: 2.074
+  type: 'test'
+  ...
+# Subtest: both Z result modes refuse invalid counts and accept both field bounds
+ok 7 - both Z result modes refuse invalid counts and accept both field bounds
+  ---
+  duration_ms: 6.386625
+  type: 'test'
+  ...
+# Subtest: supported counts preserve native quarter-turn corners, disjoint solids and output ownership
+ok 8 - supported counts preserve native quarter-turn corners, disjoint solids and output ownership
+  ---
+  duration_ms: 202.314708
+  type: 'test'
+  ...
+# Subtest: native legacy X/Y Count1 and Count4 documents still round-trip
+ok 9 - native legacy X/Y Count1 and Count4 documents still round-trip
+  ---
+  duration_ms: 46.572958
+  type: 'test'
+  ...
+# Subtest: 270 partial and 360 full turns retain distinct intent despite identical original step/count
+ok 10 - 270 partial and 360 full turns retain distinct intent despite identical original step/count
+  ---
+  duration_ms: 7.466875
+  type: 'test'
+  ...
+# Subtest: 180 partial spread includes endpoints after Count4 to3, while full-circle steps retain creation rounding
+ok 11 - 180 partial spread includes endpoints after Count4 to3, while full-circle steps retain creation rounding
+  ---
+  duration_ms: 1.04525
+  type: 'test'
+  ...
+# Subtest: creation retains existing signed and large-spread geometry without new range admission
+not ok 12 - creation retains existing signed and large-spread geometry without new range admission
+  ---
+  duration_ms: 8.510166
+  type: 'test'
+  location: '/private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:126764:1'
+  failureType: 'testCodeFailure'
+  error: '[VALUE] Z circular patterns use a whole-number Count from 2 to 36, including the original.'
+  code: 'VALUE'
+  name: 'BarocssError'
+  stack: |-
+    refusal (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:49900:44)
+    Object.build (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:96328:19)
+    create (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:126695:18)
+    TestContext.<anonymous> (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:126774:18)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: legacy absence preserves exact old count arithmetic and serialization; X/Y and separate paths keep their graphs
+not ok 13 - legacy absence preserves exact old count arithmetic and serialization; X/Y and separate paths keep their graphs
+  ---
+  duration_ms: 0.508667
+  type: 'test'
+  location: '/private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:126778:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    90 !== 360
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 360
+  actual: 90
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:126781:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: schema3 Save/load retains partial intent and Count1 round trip
+not ok 14 - schema3 Save/load retains partial intent and Count1 round trip
+  ---
+  duration_ms: 0.288541
+  type: 'test'
+  location: '/private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:126800:30'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    -300 !== 360
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 360
+  actual: -300
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:126802:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: schema4 Save/load retains partial intent and Count1 round trip
+not ok 15 - schema4 Save/load retains partial intent and Count1 round trip
+  ---
+  duration_ms: 5.852
+  type: 'test'
+  location: '/private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:126800:30'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    -300 !== 360
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 360
+  actual: -300
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:126802:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: typed read and direct compile reject malformed or contradictory metadata, including suppressed and nested nodes
+ok 16 - typed read and direct compile reject malformed or contradictory metadata, including suppressed and nested nodes
+  ---
+  duration_ms: 8.261792
+  type: 'test'
+  ...
+# Subtest: invalid counts retain existing native admission instead of metadata clamping or a new positive span rule
+not ok 17 - invalid counts retain existing native admission instead of metadata clamping or a new positive span rule
+  ---
+  duration_ms: 0.171375
+  type: 'test'
+  location: '/private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:126852:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    4 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 4
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-model-test-hTWISm/circular-pattern-span.test.mjs:126855:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: offline edit_feature accepts coherent whole-node intent/pivot, refuses stale intent atomically, and permits explicit legacy replacement
+ok 18 - offline edit_feature accepts coherent whole-node intent/pivot, refuses stale intent atomically, and permits explicit legacy replacement
+  ---
+  duration_ms: 35.872875
+  type: 'test'
+  ...
+# Subtest: edit fields: an extrude edits its sketch's width and corner as well as its distance
+ok 19 - edit fields: an extrude edits its sketch's width and corner as well as its distance
+  ---
+  duration_ms: 31.637125
+  type: 'test'
+  ...
+# Subtest: edit fields: a circle extrude edits its diameter; a parameter-driven size is left out
+ok 20 - edit fields: a circle extrude edits its diameter; a parameter-driven size is left out
+  ---
+  duration_ms: 32.895416
+  type: 'test'
+  ...
+# Subtest: an attached Cut Distance moves its start with the end held on the sketch
+ok 21 - an attached Cut Distance moves its start with the end held on the sketch
+  ---
+  duration_ms: 28.529167
+  type: 'test'
+  ...
+# Subtest: drafted anchored Cut edits positive depth and converts both draft transitions around the same sketch
+ok 22 - drafted anchored Cut edits positive depth and converts both draft transitions around the same sketch
+  ---
+  duration_ms: 1.840958
+  type: 'test'
+  ...
+# Subtest: edit fields: choice and toggle fields — a loft turns smooth, a pipe bends the other way, a pattern counts
+ok 23 - edit fields: choice and toggle fields — a loft turns smooth, a pipe bends the other way, a pattern counts
+  ---
+  duration_ms: 133.225041
+  type: 'test'
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 18
+# fail 5
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1075.7265
+
+
+=== /tmp/cad-z-axis-head-span.log SHA256 eadfc53c3c96faa044b60aeb479d4db3ace0177b47247e4542f7048c54a641ae ===
+TAP version 13
+# Subtest: 270 partial and 360 full turns retain distinct intent despite identical original step/count
+ok 1 - 270 partial and 360 full turns retain distinct intent despite identical original step/count
+  ---
+  duration_ms: 6.388
+  type: 'test'
+  ...
+# Subtest: 180 partial spread includes endpoints after Count4 to3, while full-circle steps retain creation rounding
+ok 2 - 180 partial spread includes endpoints after Count4 to3, while full-circle steps retain creation rounding
+  ---
+  duration_ms: 1.139417
+  type: 'test'
+  ...
+# Subtest: creation retains existing signed and large-spread geometry without new range admission
+not ok 3 - creation retains existing signed and large-spread geometry without new range admission
+  ---
+  duration_ms: 7.960834
+  type: 'test'
+  location: '/private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:126751:1'
+  failureType: 'testCodeFailure'
+  error: '[VALUE] Z circular patterns use a whole-number Count from 2 to 36, including the original.'
+  code: 'VALUE'
+  name: 'BarocssError'
+  stack: |-
+    refusal (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:49900:44)
+    Object.build (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:96328:19)
+    create (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:126682:18)
+    TestContext.<anonymous> (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:126761:18)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: legacy absence preserves exact old count arithmetic and serialization; X/Y and separate paths keep their graphs
+not ok 4 - legacy absence preserves exact old count arithmetic and serialization; X/Y and separate paths keep their graphs
+  ---
+  duration_ms: 0.508292
+  type: 'test'
+  location: '/private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:126765:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    90 !== 360
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 360
+  actual: 90
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:126768:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: schema3 Save/load retains partial intent and Count1 round trip
+not ok 5 - schema3 Save/load retains partial intent and Count1 round trip
+  ---
+  duration_ms: 0.245791
+  type: 'test'
+  location: '/private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:126787:30'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    -300 !== 360
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 360
+  actual: -300
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:126789:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: schema4 Save/load retains partial intent and Count1 round trip
+not ok 6 - schema4 Save/load retains partial intent and Count1 round trip
+  ---
+  duration_ms: 4.991375
+  type: 'test'
+  location: '/private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:126787:30'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    -300 !== 360
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 360
+  actual: -300
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:126789:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: typed read and direct compile reject malformed or contradictory metadata, including suppressed and nested nodes
+ok 7 - typed read and direct compile reject malformed or contradictory metadata, including suppressed and nested nodes
+  ---
+  duration_ms: 7.151041
+  type: 'test'
+  ...
+# Subtest: invalid counts retain existing native admission instead of metadata clamping or a new positive span rule
+not ok 8 - invalid counts retain existing native admission instead of metadata clamping or a new positive span rule
+  ---
+  duration_ms: 0.176
+  type: 'test'
+  location: '/private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:126839:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+
+    4 !== 0
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 0
+  actual: 4
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/kd/q2hh9cdj51zblmfh_3pd0p_h0000gn/T/cad-z-head-qSeoTu/span.mjs:126842:12)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: offline edit_feature accepts coherent whole-node intent/pivot, refuses stale intent atomically, and permits explicit legacy replacement
+ok 9 - offline edit_feature accepts coherent whole-node intent/pivot, refuses stale intent atomically, and permits explicit legacy replacement
+  ---
+  duration_ms: 34.034375
+  type: 'test'
+  ...
+1..9
+# tests 9
+# suites 0
+# pass 4
+# fail 5
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 484.663667
+HEAD_BASELINE_EXIT 1
+
+
+=== /tmp/cad-z-axis-final2-focused.log SHA256 92d3436afd7bc5c29fa3fd28100ef4d036ae65860e4b8e1a48ac27e56d96390c ===
+TAP version 13
+# Subtest: Z axis coordinates start at origin; only the explicit coordinate changes
+ok 1 - Z axis coordinates start at origin; only the explicit coordinate changes
+  ---
+  duration_ms: 2.459
+  type: 'test'
+  ...
+# Subtest: preserves explicit Z, signed/legacy distribution and other coordinate bindings
+ok 2 - preserves explicit Z, signed/legacy distribution and other coordinate bindings
+  ---
+  duration_ms: 1.501541
+  type: 'test'
+  ...
+# Subtest: finite admission and captured field do not reinterpret unsupported axes or nodes
+ok 3 - finite admission and captured field do not reinterpret unsupported axes or nodes
+  ---
+  duration_ms: 0.133583
+  type: 'test'
+  ...
+# Subtest: existing BindableField contract identifies bound coordinate and explicitly unbinds only it
+ok 4 - existing BindableField contract identifies bound coordinate and explicitly unbinds only it
+  ---
+  duration_ms: 0.405666
+  type: 'test'
+  ...
+# Subtest: both X/Y result modes reject unsupported counts before constructing any copies
+ok 5 - both X/Y result modes reject unsupported counts before constructing any copies
+  ---
+  duration_ms: 21.363625
+  type: 'test'
+  ...
+# Subtest: axis-sensitive Count fields keep the raw values and the existing Z range and spread
+ok 6 - axis-sensitive Count fields keep the raw values and the existing Z range and spread
+  ---
+  duration_ms: 2.842084
+  type: 'test'
+  ...
+# Subtest: both Z result modes refuse invalid counts and accept both field bounds
+ok 7 - both Z result modes refuse invalid counts and accept both field bounds
+  ---
+  duration_ms: 5.042417
+  type: 'test'
+  ...
+# Subtest: supported counts preserve native quarter-turn corners, disjoint solids and output ownership
+ok 8 - supported counts preserve native quarter-turn corners, disjoint solids and output ownership
+  ---
+  duration_ms: 114.666334
+  type: 'test'
+  ...
+# Subtest: native legacy X/Y Count1 and Count4 documents still round-trip
+ok 9 - native legacy X/Y Count1 and Count4 documents still round-trip
+  ---
+  duration_ms: 23.785459
+  type: 'test'
+  ...
+# Subtest: 270 partial and 360 full turns retain distinct intent despite identical original step/count
+ok 10 - 270 partial and 360 full turns retain distinct intent despite identical original step/count
+  ---
+  duration_ms: 7.175167
+  type: 'test'
+  ...
+# Subtest: 180 partial spread includes endpoints after Count4 to3, while full-circle steps retain creation rounding
+ok 11 - 180 partial spread includes endpoints after Count4 to3, while full-circle steps retain creation rounding
+  ---
+  duration_ms: 1.084542
+  type: 'test'
+  ...
+# Subtest: creation retains existing signed and large-spread geometry without new range admission
+ok 12 - creation retains existing signed and large-spread geometry without new range admission
+  ---
+  duration_ms: 8.53125
+  type: 'test'
+  ...
+# Subtest: legacy absence preserves exact old count arithmetic and serialization; X/Y and separate paths keep their graphs
+ok 13 - legacy absence preserves exact old count arithmetic and serialization; X/Y and separate paths keep their graphs
+  ---
+  duration_ms: 3.008292
+  type: 'test'
+  ...
+# Subtest: schema3 Save/load retains partial intent and Count1 round trip
+ok 14 - schema3 Save/load retains partial intent and Count1 round trip
+  ---
+  duration_ms: 0.796583
+  type: 'test'
+  ...
+# Subtest: schema4 Save/load retains partial intent and Count1 round trip
+ok 15 - schema4 Save/load retains partial intent and Count1 round trip
+  ---
+  duration_ms: 7.416
+  type: 'test'
+  ...
+# Subtest: typed read and direct compile reject malformed or contradictory metadata, including suppressed and nested nodes
+ok 16 - typed read and direct compile reject malformed or contradictory metadata, including suppressed and nested nodes
+  ---
+  duration_ms: 4.801708
+  type: 'test'
+  ...
+# Subtest: invalid counts retain existing native admission instead of metadata clamping or a new positive span rule
+ok 17 - invalid counts retain existing native admission instead of metadata clamping or a new positive span rule
+  ---
+  duration_ms: 4.264625
+  type: 'test'
+  ...
+# Subtest: offline edit_feature accepts coherent whole-node intent/pivot, refuses stale intent atomically, and permits explicit legacy replacement
+ok 18 - offline edit_feature accepts coherent whole-node intent/pivot, refuses stale intent atomically, and permits explicit legacy replacement
+  ---
+  duration_ms: 31.32675
+  type: 'test'
+  ...
+# Subtest: edit fields: an extrude edits its sketch's width and corner as well as its distance
+ok 19 - edit fields: an extrude edits its sketch's width and corner as well as its distance
+  ---
+  duration_ms: 21.968667
+  type: 'test'
+  ...
+# Subtest: edit fields: a circle extrude edits its diameter; a parameter-driven size is left out
+ok 20 - edit fields: a circle extrude edits its diameter; a parameter-driven size is left out
+  ---
+  duration_ms: 24.063417
+  type: 'test'
+  ...
+# Subtest: an attached Cut Distance moves its start with the end held on the sketch
+ok 21 - an attached Cut Distance moves its start with the end held on the sketch
+  ---
+  duration_ms: 18.166083
+  type: 'test'
+  ...
+# Subtest: drafted anchored Cut edits positive depth and converts both draft transitions around the same sketch
+ok 22 - drafted anchored Cut edits positive depth and converts both draft transitions around the same sketch
+  ---
+  duration_ms: 1.596167
+  type: 'test'
+  ...
+# Subtest: edit fields: choice and toggle fields — a loft turns smooth, a pipe bends the other way, a pattern counts
+ok 23 - edit fields: choice and toggle fields — a loft turns smooth, a pipe bends the other way, a pattern counts
+  ---
+  duration_ms: 108.70025
+  type: 'test'
+  ...
+1..23
+# tests 23
+# suites 0
+# pass 23
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1081.766167
+
+
+=== /tmp/cad-z-axis-final2-model-tsc.log SHA256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 ===
+
+
+=== /tmp/cad-z-axis-final2-lint.log SHA256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 ===
+
+
+=== /tmp/cad-z-axis-studio-tsc.log SHA256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 ===
+
+
+=== /tmp/cad-z-axis-driver-lint.log SHA256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 ===
+
+
+=== /tmp/cad-z-axis-build.log SHA256 85931883d83209dce0d8d7f8db6335f65885a2e9605f1dd57b8c80cc5e686eb9 ===
+
+> @barocss/cad-studio-app@0.0.0 build /private/tmp/cad-robot-workspace-20261117/apps/cad-studio
+> tsc --noEmit && vite build
+
+vite v8.3.1 building client environment for production...
+transforming...
+[INEFFECTIVE_DYNAMIC_IMPORT] ../../packages/barocss-cad-model/src/engine/direct.ts is dynamically imported by ../../packages/barocss-cad-model/src/engine/directModule.ts but also statically imported by ../../packages/barocss-cad-model/src/engine/curveFeaturePattern.ts, ../../packages/barocss-cad-model/src/engine/routeBundle.ts, dynamic import will not move module into another chunk.
+
+[INEFFECTIVE_DYNAMIC_IMPORT] ../../packages/barocss-cad-model/src/engine/direct.ts is dynamically imported by ../../packages/barocss-cad-model/src/engine/directModule.ts but also statically imported by ../../packages/barocss-cad-model/src/engine/curveFeaturePattern.ts, ../../packages/barocss-cad-model/src/engine/routeBundle.ts, dynamic import will not move module into another chunk.
+
+[INEFFECTIVE_DYNAMIC_IMPORT] ../../packages/barocss-cad-model/src/chat/requirementEvidence.ts is dynamically imported by ../../packages/barocss-cad-model/src/chat/nestedParameterProposal.ts but also statically imported by ../../packages/barocss-cad-model/src/chat/nestedFaceRepair.ts, ../../packages/barocss-cad-model/src/chat/outputs.ts, ../../packages/barocss-cad-model/src/versions/approvedRequirements.ts, ../../packages/barocss-cad-model/src/versions/requirementFollowUp.ts, dynamic import will not move module into another chunk.
+
+✓ 3554 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                          1.45 kB │ gzip:   0.59 kB
+dist/assets/requirementFollowUp-Cg2JkFhi.js              1.84 kB
+dist/assets/approvedRequirements-BLxZOnxJ.js             4.25 kB
+dist/assets/outputs-Bfwqa1C7.js                         28.40 kB
+dist/assets/print.worker-DGGImq0f.js                   366.23 kB
+dist/assets/faces.worker-qlduPfFS.js                 1,856.00 kB
+dist/assets/clearance.worker-CHOy9Ib9.js             2,142.79 kB
+dist/assets/cam.worker-D_N12g0w.js                   2,772.41 kB
+dist/assets/engine.worker-DAazBDRt.js                4,129.71 kB
+dist/assets/ChatPanel-K7a0PETf.css                       2.51 kB │ gzip:   0.95 kB
+dist/assets/DrawingWorkspace-DGFmOJGL.css                3.92 kB │ gzip:   1.30 kB
+dist/assets/index-DMl1JBGJ.css                          78.40 kB │ gzip:  16.09 kB
+dist/assets/preload-helper-B2SsaV8q.js                   1.37 kB │ gzip:   0.76 kB
+dist/assets/stl-BjZuqtr2.js                              1.51 kB │ gzip:   0.87 kB
+dist/assets/gripper-83cuFXbh.js                          1.72 kB │ gzip:   0.60 kB
+dist/assets/gear-joint-3TiXXxRK.js                       1.81 kB │ gzip:   0.60 kB
+dist/assets/pan-tilt-CnF2o7-B.js                         2.09 kB │ gzip:   0.66 kB
+dist/assets/gantry-ppp-DtmHEV3c.js                       2.21 kB │ gzip:   0.58 kB
+dist/assets/arm-2r-DZlmFL9a.js                           2.26 kB │ gzip:   0.59 kB
+dist/assets/scara-BEzOCPEP.js                            3.42 kB │ gzip:   0.76 kB
+dist/assets/four-bar-DsDNgl1V.js                         3.61 kB │ gzip:   0.83 kB
+dist/assets/triangle-bvh-CWEzQwGa.js                     4.87 kB │ gzip:   2.32 kB
+dist/assets/approvedRequirements-BsR07Un7.js             5.04 kB │ gzip:   2.09 kB
+dist/assets/arm-6r-D-nRNLgU.js                           7.35 kB │ gzip:   0.92 kB
+dist/assets/RenderPanel-Bbig1ZkH.js                     28.68 kB │ gzip:   8.05 kB
+dist/assets/path-trace-DkG-1fMV.js                      30.50 kB │ gzip:  10.82 kB
+dist/assets/DirectPanel-B8vv2dt5.js                     31.83 kB │ gzip:   8.84 kB
+dist/assets/exact-affine-plane-internal-C1ywh6Sc.js     78.58 kB │ gzip:  23.56 kB
+dist/assets/DrawingWorkspace-CtxDSuKt.js               141.12 kB │ gzip:  39.71 kB
+dist/assets/ChatPanel-S1307aOR.js                      245.44 kB │ gzip:  69.60 kB
+dist/assets/localHeightPlan-DoOguS2O.js                402.06 kB │ gzip: 129.72 kB
+dist/assets/direct-DbtyeLgJ.js                         431.54 kB │ gzip: 120.11 kB
+dist/assets/requirementEvidence-CCHhCLCl.js            482.45 kB │ gzip: 166.33 kB
+dist/assets/toleranceStack-2uXsH3pi.js                 565.96 kB │ gzip: 186.91 kB
+dist/assets/thickenCommand-BULwPb9u.js               2,222.65 kB │ gzip: 750.15 kB
+dist/assets/index-BVOfs8Aj.js                        2,278.41 kB │ gzip: 723.25 kB
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-collapsible/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-collapsible/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-toggle-group/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-toggle-group/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dialog/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dialog/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/cmdk/dist/index.mjs" may not be preserved when bundling.
+ - module level directive may not be preserved in ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/cmdk/dist/index.mjs at 0..13
+  │
+  │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-tooltip/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-tooltip/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-primitive/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-primitive/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-direction/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-direction/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-presence/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-presence/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-toggle/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-toggle/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-focus-scope/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-portal/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-portal/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-menu/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-menu/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-focus-guards/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-focus-guards/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-roving-focus/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-roving-focus/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-visually-hidden/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-visually-hidden/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-popper/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-popper/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-collection/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-collection/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/swr/dist/config-context-ext53wcz.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/swr/dist/config-context-ext53wcz.mjs:1:1 ]
+   │
+ 1 │ 'use client';
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-arrow/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-arrow/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/lucide-react/dist/esm/context.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/lucide-react/dist/esm/context.mjs:2:1 ]
+   │
+ 2 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/lucide-react/dist/esm/Icon.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/lucide-react/dist/esm/Icon.mjs:2:1 ]
+   │
+ 2 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[INEFFECTIVE_DYNAMIC_IMPORT] src/files/taskRunHandoff.ts is dynamically imported by src/files/useStudioDocumentFiles.ts but also statically imported by src/files/useStudioDocumentFiles.ts, dynamic import will not move module into another chunk.
+
+[INEFFECTIVE_DYNAMIC_IMPORT] ../../packages/barocss-cad-model/src/chat/requirementEvidence.ts is dynamically imported by ../../packages/barocss-cad-model/src/chat/nestedParameterProposal.ts but also statically imported by src/files/taskCheckpoint.ts, src/files/workingApprovalChecks.ts, src/storage/ApprovedRequirementChecks.tsx, src/storage/checkSavedFaceRepair.ts, src/storage/faceRepairEvidence.ts, ..., dynamic import will not move module into another chunk.
+
+✓ built in 5.39s
+
+
+=== /tmp/cad-z-axis-before-01.log SHA256 98ba2bcf5d7f143c37cd9941bef68894edf4d613f515a7d5ab64fe432b38e15f ===
+{"status":"PASS","phase":"open feature editor 2","output":"/tmp/cad-z-axis-before-01"}
+
+
+=== /tmp/cad-z-axis-after-01.log SHA256 f3a2112064875a3bf4d5ac281f88c0d79f03c649878046a22aedc03587d20f69 ===
+{"status":"PASS","phase":"open feature editor 2","output":"/tmp/cad-z-axis-after-01"}
+
+Final Model tsc after EOF-only source cleanup: PASS (exit 0).
+Original log SHA256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+Public log formatting additionally removes ANSI colour codes and trailing whitespace; original hashes above are retained.
