@@ -19,17 +19,19 @@ const studio = existsSync(resolve('src/ui/DirectPanel.tsx')) ? process.cwd() : r
 const { build } = createRequire(join(studio, 'package.json'))('esbuild') as typeof import('esbuild');
 const temporary = await mkdtemp(join(tmpdir(), 'cad-surface-domain-'));
 let SurfacePoint: (props: PointProps) => View, SurfaceTools: (props: ToolsProps) => View;
+let DirectMoveControls: (props: MoveProps) => View;
+type MoveProps = { direct: DirectGeometry; selected: string[]; onMove(by: [number, number, number]): void };
 let SurfaceParameter: (props: Props) => View, Analysis: (props: Props) => View;
 try {
   const outfile = join(temporary, 'panel.mjs');
   await build({ entryPoints: [join(studio, 'src/ui/DirectPanel.tsx')], outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
     plugins: [{ name: 'surface-domain-hooks', setup(builder) {
-      builder.onLoad({ filter: /DirectPanel\.tsx$/ }, args => ({ contents: readFileSync(args.path, 'utf8') + '\nexport { SurfacePoint, SurfaceTools, SurfaceParameter, Analysis };', loader: 'tsx', resolveDir: dirname(args.path) }));
+      builder.onLoad({ filter: /DirectPanel\.tsx$/ }, args => ({ contents: readFileSync(args.path, 'utf8') + '\nexport { SurfacePoint, SurfaceTools, SurfaceParameter, Analysis, DirectMoveControls };', loader: 'tsx', resolveDir: dirname(args.path) }));
       builder.onResolve({ filter: /^react$/ }, args => args.importer.endsWith('/DirectPanel.tsx') ? { path: 'react', namespace: 'surface-domain-hooks' } : undefined);
       builder.onLoad({ filter: /.*/, namespace: 'surface-domain-hooks' }, () => ({ contents: 'export const useState=(...a)=>globalThis.__surfaceDomainHooks.useState(...a),useEffect=(...a)=>globalThis.__surfaceDomainHooks.useEffect(...a);' }));
     } }],
   });
-  ({ SurfacePoint, SurfaceTools, SurfaceParameter, Analysis } = await import(pathToFileURL(outfile).href));
+  ({ SurfacePoint, SurfaceTools, SurfaceParameter, Analysis, DirectMoveControls } = await import(pathToFileURL(outfile).href));
 } finally { await rm(temporary, { recursive: true, force: true }); }
 
 function elements(node: unknown): View[] {
@@ -232,6 +234,29 @@ test('Region owns all four raw bounds and blocks blank/nonfinite scheduling with
     assert.equal(calls.length, 3, 'finite interval validity remains with the producer, without clamping');
     change(h.render(), 'v to', ''); const other = importSource(direct, source, 'Other surface'); props.direct = other; props.id = other.objects.at(-1)!.id;
     assert.deepEqual(labels.map(name => input(h.render(), name).value), initial);
+    assert.deepEqual(direct, before);
+  } finally { h.cleanup(); }
+});
+
+
+test('Move owns finite raw vector drafts by exact direct and stable selected IDs', () => {
+  const direct = seed(), before = structuredClone(direct), calls: number[][] = [];
+  const props: MoveProps = { direct, selected: [direct.objects[0].id], onMove: by => calls.push(by) };
+  const h = harness(DirectMoveControls, props), labels = ['ΔX', 'ΔY', 'ΔZ'];
+  const field = (label: string) => elements(h.render()).find(e => e.props['aria-label'] === label)!.props;
+  const enter = (label: string, value: string) => (field(label).onChange as (e: unknown) => void)({ target: { value } });
+  try {
+    for (const label of labels) for (const raw of ['', ' ', 'NaN', 'Infinity', '-Infinity']) {
+      enter(label, raw); const start = action(h.render(), 'Move');
+      assert.equal(field(label).value, raw); assert.equal(field(label)['aria-invalid'], true); assert.equal(start.disabled, true);
+      assert.equal(start['aria-describedby'], field(label)['aria-describedby']);
+      (start.onClick as () => void)(); assert.deepEqual(calls, []);
+      props.direct = structuredClone(direct); assert.deepEqual(labels.map(l => field(l).value), ['0', '0', '10']);
+    }
+    enter('ΔX', '-2.5'); enter('ΔY', '0'); enter('ΔZ', '2.5');
+    props.selected = [...props.selected]; assert.equal(field('ΔX').value, '-2.5', 'new equivalent selection array preserves drafts');
+    (action(h.render(), 'Move').onClick as () => void)(); assert.deepEqual(calls, [[-2.5, 0, 2.5]]);
+    props.selected = ['other']; assert.deepEqual(labels.map(l => field(l).value), ['0', '0', '10']);
     assert.deepEqual(direct, before);
   } finally { h.cleanup(); }
 });

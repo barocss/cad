@@ -52,7 +52,7 @@ export function DirectPanel({ direct, selected, onChange, onSelect, onError, onH
       {one ? <Rename key={one.id} direct={direct} id={one.id} name={one.name} onRename={n => run(() => directOps.rename(direct, one.id, n))} />
         : objs.map(o => <div key={o.id} className="kv">Name <b>{o.name}</b></div>)}
       {one && g?.kind === 'curve' && children}
-      <Transform onMove={by => run(() => directOps.move(direct, selected, by))} onRotate={(axis, deg) => run(() => directOps.rotate(direct, selected, axis, deg))}
+      <Transform moveControls={<DirectMoveControls direct={direct} selected={selected} onMove={by => run(() => directOps.move(direct, selected, by))} />} onRotate={(axis, deg) => run(() => directOps.rotate(direct, selected, axis, deg))}
         onScale={k => run(() => directOps.scale(direct, selected, k))} onDuplicate={() => run(() => directOps.duplicate(direct, selected), added)}
         onStretch={k => run(() => directOps.stretch(direct, selected, k))} onShear={(a, b, k) => run(() => directOps.shear(direct, selected, a, b, k))} />
       {one && g?.kind === 'curve' && <CurveTools id={one.id} direct={direct} run={run} added={added} />}
@@ -295,17 +295,34 @@ function Rename({ direct, id, name, onRename }: { direct: DirectGeometry; id: st
     onBlur={() => { if (text.trim() && text.trim() !== name.trim()) onRename(text); }} onKeyDown={e => { if (e.key === 'Enter' && text.trim() && text.trim() !== name.trim()) onRename(text); }} /></label>;
 }
 
+/** Only Move owns these drafts; other transform controls keep their existing lifetime. */
+function DirectMoveControls({ direct, selected, onMove }: { direct: DirectGeometry; selected: readonly string[]; onMove(by: [number, number, number]): void }) {
+  const owner = JSON.stringify([...selected].sort());
+  const x = useSurfaceDraft(direct, owner, 'move-x', '0');
+  const y = useSurfaceDraft(direct, owner, 'move-y', '0');
+  const z = useSurfaceDraft(direct, owner, 'move-z', '10');
+  const drafts = [x, y, z], values = drafts.map(([value]) => surfaceParameter(value));
+  const finite = values.every(value => value !== null), errorId = 'direct-move-vector-error';
+  return <>
+    {(['ΔX', 'ΔY', 'ΔZ'] as const).map((label, i) => <label key={label} className={FIELD}><span>{label}</span><Input type="number" step="any" className="w-24" aria-label={label} value={drafts[i][0]}
+      aria-invalid={values[i] === null || undefined} aria-describedby={values[i] === null ? errorId : undefined} onChange={event => drafts[i][1](event.target.value)} /></label>)}
+    {!finite && <span id={errorId} role="status" className="warn small">Enter finite values for all three move distances.</span>}
+    <Button variant="ghost" disabled={!finite} aria-describedby={!finite ? errorId : undefined} onClick={() => {
+      const [a, b, c] = values;
+      if (a !== null && b !== null && c !== null) onMove([a, b, c]);
+    }}>Move</Button>
+  </>;
+}
+
 /** Move by a vector, turn about an axis through the centre, scale about the centre, or duplicate. */
 type Ax = 'x' | 'y' | 'z';
-function Transform({ onMove, onRotate, onScale, onDuplicate, onStretch, onShear }: { onMove(by: [number, number, number]): void; onRotate(axis: Ax, deg: number): void; onScale(k: number): void; onDuplicate(): void; onStretch(k: [number, number, number]): void; onShear(along: Ax, by: Ax, k: number): void }) {
+function Transform({ moveControls, onRotate, onScale, onDuplicate, onStretch, onShear }: { moveControls: ReactNode; onRotate(axis: Ax, deg: number): void; onScale(k: number): void; onDuplicate(): void; onStretch(k: [number, number, number]): void; onShear(along: Ax, by: Ax, k: number): void }) {
   const [st, setSt] = useState<[number, number, number]>([1, 1, 2]), [along, setAlong] = useState<Ax>('x'), [byAx, setByAx] = useState<Ax>('z'), [sk, setSk] = useState(0.5);
   const axisPick = (label: string, v: Ax, set: (a: Ax) => void) => <label className={FIELD}><span>{label}</span><NativeSelect className={CONTROL} aria-label={label} value={v} onChange={e => set(e.target.value as Ax)}><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></NativeSelect></label>;
-  const [by, setBy] = useState<[number, number, number]>([0, 0, 10]);
   const [axis, setAxis] = useState<'x' | 'y' | 'z'>('z'), [deg, setDeg] = useState(90), [k, setK] = useState(2);
   return <div className="render-section [&>[data-slot=button]]:self-start">
     <div className="card-title" style={{ marginTop: 8 }}>TRANSFORM</div>
-    {(['ΔX', 'ΔY', 'ΔZ'] as const).map((l, i) => <NumberField key={l} label={l} value={by[i]} onChange={x => setBy(b => b.map((y, j) => j === i ? x : y) as typeof b)} />)}
-    <Button variant="ghost" onClick={() => onMove(by)}>Move</Button>
+    {moveControls}
     <label className={FIELD}><span>Axis</span><NativeSelect className={CONTROL} aria-label="Rotation axis" value={axis} onChange={e => setAxis(e.target.value as 'x' | 'y' | 'z')}><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></NativeSelect></label>
     <NumberField label="Angle °" value={deg} onChange={setDeg} />
     <Button variant="ghost" onClick={() => onRotate(axis, deg)}>Rotate</Button>
