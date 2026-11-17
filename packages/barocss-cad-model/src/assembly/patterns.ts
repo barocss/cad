@@ -5,6 +5,7 @@
 import type { InstancePattern, PartInstance, StudioDoc } from '../engine/doc';
 import { firstProblem, refusal, type CadModelCode } from '../engine/refusal';
 import { axisAngle, clean, DEG, eulerOf, matMul, placementOf, type Mat3 } from '../engine/placement';
+import { takenInstanceIds } from './takenIds';
 import { freshPartId, revisionOf } from './definitions';
 import { patternProblem, patternsProblem, PATTERN_MAX, PATTERN_MIN, PATTERN_SPACING_MAX } from './patternCheck';
 import { solveDoc, type Edited, type SolveProblem } from './edit';
@@ -122,9 +123,11 @@ function referenced(doc: StudioDoc, gone: readonly PartInstance[], what: string)
 /** The least `pat<n>` that no pattern, placed part, mate or other field of the document has or names (a deleted pattern's id is not taken again while a frame still points at its copies). */
 function freshPatternId(doc: StudioDoc): string {
   const used = (t: string, id: string) => t === id || t.startsWith(`${id}-`);
+  // Held drawing and bearing references survive removal. A new pattern is not their old owner.
+  const reserved = [...takenInstanceIds(doc)];
   for (let n = 1; ; n++) {
     const id = `pat${n}`;
-    if (!(doc.instancePatterns ?? []).some(p => p.id === id) && !(doc.instances ?? []).some(i => used(i.id, id)) && !referrerOf(doc, t => used(t, id))) return id;
+    if (!(doc.instancePatterns ?? []).some(p => p.id === id) && !reserved.some(t => used(t, id)) && !referrerOf(doc, t => used(t, id))) return id;
   }
 }
 
