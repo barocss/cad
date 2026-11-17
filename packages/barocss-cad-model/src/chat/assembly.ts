@@ -144,6 +144,8 @@ async function describe(doc: StudioDoc, base: BodyResult[], evaluate: Evaluate, 
 }
 
 const vec3 = (v: unknown): [number, number, number] | null => isVec3(v) ? v : null;
+/** Omitted placement keeps the default; malformed explicit input must not become the origin. */
+const badNewPlacement = (args: Record<string, unknown>) => [args.position, args.rotation].some(v => v !== undefined && (!isVec3(v) || ![0, 1, 2].every(k => Object.hasOwn(v, k))));
 
 async function changed(doc: StudioDoc, next: StudioDoc, what: string, base: BodyResult[], evaluate: Evaluate, extra: Record<string, unknown> = {}): Promise<AssemblyOutcome> {
   const s = solveDoc(next, doc.instances);
@@ -181,6 +183,7 @@ export async function runAssemblyTool(state: State, name: string, args: Record<s
     case 'add_part': {
       const label = typeof args.name === 'string' && args.name.trim() ? args.name.trim() : null;
       if (!label) return fail(doc, '"name" is required (e.g. "Shaft").');
+      if (badNewPlacement(args)) return fail(doc, '"position" and "rotation" must be three finite numbers [x, y, z] (mm; degrees about X, then Y, then Z).');
       try {
         const copy = args.copy_of !== undefined ? partCopy(doc, String(args.copy_of)) : undefined;
         const r = addPart(doc, { name: label, ...(copy ? { doc: copy } : {}), position: vec3(args.position) ?? [0, 0, 0], rotation: vec3(args.rotation) ?? [0, 0, 0], grounded: !!args.grounded });
@@ -302,6 +305,7 @@ export async function runAssemblyTool(state: State, name: string, args: Record<s
       return { doc, content: json({ libraries: out, note: 'insert_part {library, part, variant?, params?} adds one as a new placed part; snap_part {a: {part, interface}, b: {part, interface}, offset?} places b onto a by their interfaces with real mates' }), isError: false, changed: false, summary: `${out.length} librar${out.length === 1 ? 'y' : 'ies'}` };
     }
     case 'insert_part': {
+      if (badNewPlacement(args)) return fail(doc, '"position" and "rotation" must be three finite numbers [x, y, z] (mm; degrees about X, then Y, then Z).');
       if (typeof args.library !== 'string' || typeof args.part !== 'string') return fail(doc, '"library" and "part" are required (list_library lists them).');
       const params = args.params === undefined ? undefined : isObj(args.params) && Object.values(args.params).every(v => typeof v === 'number') ? args.params as Record<string, number> : null;
       if (params === null) return fail(doc, '"params" maps parameter names to numbers.');

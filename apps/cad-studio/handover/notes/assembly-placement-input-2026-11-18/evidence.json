@@ -1,0 +1,449 @@
+{
+  "status": "PASS",
+  "qualification": "Explicit malformed new-part placement is refused; valid tool result remains usable in Studio.",
+  "sourceFrozenCount": 1298,
+  "observations": [
+    {
+      "results": [
+        {
+          "action": "add_part",
+          "valid": false,
+          "changed": false,
+          "isError": true,
+          "content": "{\"ok\":false,\"error\":\"\\\"position\\\" and \\\"rotation\\\" must be three finite numbers [x, y, z] (mm; degrees about X, then Y, then Z).\"}",
+          "inputUnchanged": true,
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  12,
+                  10
+                ],
+                "id": "n0"
+              },
+              {
+                "kind": "extrude",
+                "sketch": 0,
+                "height": 8,
+                "id": "n1"
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            "nextId": 2
+          }
+        },
+        {
+          "action": "add_part",
+          "valid": true,
+          "changed": true,
+          "isError": false,
+          "content": "{\"ok\":true,\"did\":\"added part p1 \\\"Copy\\\" (a copy of base)\",\"part\":\"p1\",\"note\":\"build or edit it with the part tools and \\\"part\\\": id\",\"parts\":[{\"id\":\"p1\",\"name\":\"Copy\",\"position\":[80,20,12],\"rotation\":[0,0,90]}]}",
+          "inputUnchanged": true,
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  12,
+                  10
+                ],
+                "id": "n0"
+              },
+              {
+                "kind": "extrude",
+                "sketch": 0,
+                "height": 8,
+                "id": "n1"
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            "nextId": 2,
+            "instances": [
+              {
+                "id": "p1",
+                "name": "Copy",
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [
+                    {
+                      "kind": "sketch",
+                      "profile": "rectangle",
+                      "min": [
+                        0,
+                        0
+                      ],
+                      "max": [
+                        12,
+                        10
+                      ],
+                      "id": "n0"
+                    },
+                    {
+                      "kind": "extrude",
+                      "sketch": 0,
+                      "height": 8,
+                      "id": "n1"
+                    }
+                  ],
+                  "outputs": {
+                    "b1": {
+                      "node": 1,
+                      "side": "solid"
+                    }
+                  },
+                  "nextId": 2
+                },
+                "position": [
+                  80,
+                  20,
+                  12
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  90
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "action": "insert",
+          "valid": false,
+          "changed": false,
+          "isError": true,
+          "content": "{\"ok\":false,\"error\":\"\\\"position\\\" and \\\"rotation\\\" must be three finite numbers [x, y, z] (mm; degrees about X, then Y, then Z).\"}",
+          "inputUnchanged": true,
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  12,
+                  10
+                ],
+                "id": "n0"
+              },
+              {
+                "kind": "extrude",
+                "sketch": 0,
+                "height": 8,
+                "id": "n1"
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            "nextId": 2
+          }
+        },
+        {
+          "action": "insert",
+          "valid": true,
+          "changed": true,
+          "isError": false,
+          "content": "{\"ok\":true,\"did\":\"inserted p1 \\\"Enclosure base\\\" from enclosure\",\"part\":\"p1\",\"interfaces\":[{\"id\":\"rim\",\"role\":\"enclosure-rim\",\"accepts\":[\"enclosure-lid-rim\"]}],\"warnings\":[\"lt = 1 mm is an estimate (the lip's thickness (the inner part of the wall))\",\"lh = 2 mm is an estimate (the lip's height)\",\"c = 0.2 mm is an estimate (the clearance round the lip, in the groove)\",\"rim: unknown \u2014 needs minWall (the process's thinnest wall)\",\"lip: unknown \u2014 needs minWall (the process's thinnest wall)\"],\"parts\":[{\"id\":\"p1\",\"name\":\"Enclosure base\",\"position\":[80,20,12],\"rotation\":[0,0,90]}]}",
+          "inputUnchanged": true,
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  12,
+                  10
+                ],
+                "id": "n0"
+              },
+              {
+                "kind": "extrude",
+                "sketch": 0,
+                "height": 8,
+                "id": "n1"
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            "nextId": 2,
+            "instances": [
+              {
+                "id": "p1",
+                "name": "Enclosure base",
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [
+                    {
+                      "kind": "library",
+                      "name": "Enclosure base",
+                      "library": {
+                        "library": "enclosure",
+                        "version": "0.7.0",
+                        "part": "enclosure-base",
+                        "params": {},
+                        "values": {
+                          "L": 80,
+                          "W": 50,
+                          "w": 2,
+                          "lt": 1,
+                          "lh": 2,
+                          "c": 0.2,
+                          "hs": 20
+                        }
+                      },
+                      "prefix": "lib1",
+                      "features": [
+                        {
+                          "id": "lib1_so",
+                          "kind": "sketch",
+                          "profile": "rectangle",
+                          "min": [
+                            0,
+                            0
+                          ],
+                          "max": [
+                            80,
+                            50
+                          ]
+                        },
+                        {
+                          "id": "lib1_ob",
+                          "kind": "extrude",
+                          "sketch": "lib1_so",
+                          "height": 20
+                        },
+                        {
+                          "id": "lib1_si",
+                          "kind": "sketch",
+                          "profile": "rectangle",
+                          "min": [
+                            2,
+                            2
+                          ],
+                          "max": [
+                            78,
+                            48
+                          ]
+                        },
+                        {
+                          "id": "lib1_ci",
+                          "kind": "extrude",
+                          "sketch": "lib1_si",
+                          "height": 20,
+                          "from": 2
+                        },
+                        {
+                          "id": "lib1_shell",
+                          "kind": "difference",
+                          "target": "lib1_ob",
+                          "tool": "lib1_ci"
+                        },
+                        {
+                          "id": "lib1_ls",
+                          "kind": "sketch",
+                          "profile": "rectangle",
+                          "min": [
+                            1,
+                            1
+                          ],
+                          "max": [
+                            79,
+                            49
+                          ],
+                          "holes": [
+                            [
+                              {
+                                "kind": "line",
+                                "start": [
+                                  2,
+                                  2
+                                ]
+                              },
+                              {
+                                "kind": "line",
+                                "start": [
+                                  78,
+                                  2
+                                ]
+                              },
+                              {
+                                "kind": "line",
+                                "start": [
+                                  78,
+                                  48
+                                ]
+                              },
+                              {
+                                "kind": "line",
+                                "start": [
+                                  2,
+                                  48
+                                ]
+                              }
+                            ]
+                          ]
+                        },
+                        {
+                          "id": "lib1_lip",
+                          "kind": "extrude",
+                          "sketch": "lib1_ls",
+                          "height": 2,
+                          "from": 20
+                        },
+                        {
+                          "id": "lib1_base",
+                          "kind": "union",
+                          "target": "lib1_shell",
+                          "tool": "lib1_lip"
+                        }
+                      ],
+                      "outputs": [
+                        "lib1_base"
+                      ],
+                      "interfaces": [
+                        {
+                          "id": "rim",
+                          "role": "enclosure-rim",
+                          "accepts": [
+                            "enclosure-lid-rim"
+                          ],
+                          "frame": {
+                            "origin": [
+                              40,
+                              25,
+                              20
+                            ],
+                            "z": [
+                              0,
+                              0,
+                              1
+                            ],
+                            "x": [
+                              1,
+                              0,
+                              0
+                            ]
+                          },
+                          "faces": {
+                            "plane": "lib1_ob.top"
+                          },
+                          "description": "its rim at the split, the lip standing on its inner part"
+                        }
+                      ],
+                      "warnings": [
+                        "lt = 1 mm is an estimate (the lip's thickness (the inner part of the wall))",
+                        "lh = 2 mm is an estimate (the lip's height)",
+                        "c = 0.2 mm is an estimate (the clearance round the lip, in the groove)",
+                        "rim: unknown \u2014 needs minWall (the process's thinnest wall)",
+                        "lip: unknown \u2014 needs minWall (the process's thinnest wall)"
+                      ],
+                      "id": "n0"
+                    }
+                  ],
+                  "outputs": {
+                    "b0": {
+                      "node": 0,
+                      "side": "solid"
+                    }
+                  },
+                  "nextId": 1
+                },
+                "position": [
+                  80,
+                  20,
+                  12
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  90
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "frozenSourcesUnchanged": true,
+  "savedFiles": [
+    {
+      "file": "add_part-refused-saved.bcad",
+      "hash": "5ad2c0216d78e28a3d312ca29374e9d13f6ae5720a1858c2aadc619bcac17351",
+      "semanticEquality": true
+    },
+    {
+      "file": "add_part-valid-saved.bcad",
+      "hash": "62ca0f6df07f7e419b8dd028d9351bf6ddde8597c91fab954c9346472d5e5780",
+      "semanticEquality": true
+    },
+    {
+      "file": "insert-refused-saved.bcad",
+      "hash": "5ad2c0216d78e28a3d312ca29374e9d13f6ae5720a1858c2aadc619bcac17351",
+      "semanticEquality": true
+    },
+    {
+      "file": "insert-valid-saved.bcad",
+      "hash": "e7183f424b879062cfc96ff6ce519bf90c03221fbd930075c621378eb9ffc3fe",
+      "semanticEquality": true
+    }
+  ]
+}
