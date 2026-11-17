@@ -66,9 +66,9 @@ test('Slot replay rejects clone, order changes, extra owners and foreign source 
   const h = createDraftHistory(); push(h, a, b); assert.equal(h.undo(draftHistoryState({ ...doc }, b)), null);
   const r = createDraftHistory(); push(r, a, b); const u = replay(r, b); assert.equal(r.redo(draftHistoryState({ ...doc }, u)), null);
 });
-test('Slot exception does not admit Trim, Ellipse tool or active polygon partitions', () => {
+test('Slot exception does not admit Trim or active polygon partitions', () => {
   const polygon: SketchShape = { kind: 'polygon', points: [[0, 0], [10, 0], [0, 10]], closed: true };
-  for (const b of [draft({ tool: 'trim', shape: slot() }), draft({ tool: 'ellipse', shape: slot() }), draft({ shape: polygon })]) {
+  for (const b of [draft({ tool: 'trim', shape: slot() }), draft({ shape: polygon })]) {
     const h = createDraftHistory(); push(h, draft(), b);
     assert.equal(h.available(draftHistoryState(doc, { ...b, tool: 'slot', shape: null, done: [b.shape!] })).undo, false);
   }

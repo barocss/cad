@@ -72,17 +72,38 @@ function activateNewRectangle(step: DraftStep, tool: SketchState['tool']) {
   return shape ? { shape, done: step.done.filter(item => item !== rectangle) } : null;
 }
 
+/** Only the authored Ellipse tool owner, not an arbitrary polygon with matching coordinates. */
+function completedEllipse(shape: SketchShape): boolean {
+  return shape.kind === 'polygon' && shape.closed === true && !shape.pending
+    && shape.fromEllipse === true && !!shape.ellipse;
+}
+function placementPartition(step: DraftStep): boolean {
+  // Undo/Redo retains the current tool, so an earlier placement's shape can be active
+  // under another placement tool. Identity comes from the ordered owners, not the tool label.
+  return (step.tool === 'ellipse' || step.tool === 'rectangle' || step.tool === 'circle' || step.tool === 'slot')
+    && (!step.shape || completedEllipse(step.shape) || step.shape.kind === 'rectangle' || step.shape.kind === 'circle' || step.shape.kind === 'slot');
+}
+function samePlacementOwner(a: SketchShape, b: SketchShape): boolean {
+  if (a === b) return true;
+  if (!completedEllipse(a) || !completedEllipse(b)) return false;
+  // switchTool only adds pending:false. Every geometry/source member retains exact identity.
+  const keys = Object.keys(a).filter(key => key !== 'pending');
+  return keys.length === Object.keys(b).filter(key => key !== 'pending').length
+    && keys.every(key => Object.hasOwn(b, key) && Object.is(
+      (a as unknown as Record<string, unknown>)[key], (b as unknown as Record<string, unknown>)[key]));
+}
+
 /** Selection may repartition the same authored outlines between shape and done. Never compare
  * order-insensitively or accept a new geometry owner merely because its numbers happen to match. */
 function sameSelectionPartition(expected: DraftStep, current: DraftStep): boolean {
-  // Rectangle/Circle/Slot selection parks the same authored objects before the next placement.
-  if (current.tool !== 'select' && current.tool !== 'dimension' && current.tool !== 'rectangle' && current.tool !== 'circle' && current.tool !== 'slot') return false;
+  // Placement selection parks the same authored owners before the next placement.
+  if (current.tool !== 'select' && current.tool !== 'dimension' && current.tool !== 'rectangle' && current.tool !== 'circle' && current.tool !== 'slot' && current.tool !== 'ellipse') return false;
   if (expected.shape === current.shape && expected.activeOutlineIndex === current.activeOutlineIndex) return false;
   const a = sketchCutInputs(expected).shapes, b = sketchCutInputs(current).shapes;
   if (a.length !== b.length) return false;
-  if (current.tool === 'rectangle' || current.tool === 'circle' || current.tool === 'slot') return (expected.tool === 'rectangle' || expected.tool === 'circle' || expected.tool === 'slot')
-    && [expected.shape, current.shape].every(shape => !shape || shape.kind === 'rectangle' || shape.kind === 'circle' || shape.kind === 'slot')
-    && a.every((shape, index) => shape === b[index]);
+  if (current.tool === 'rectangle' || current.tool === 'circle' || current.tool === 'slot' || current.tool === 'ellipse')
+    return placementPartition(expected) && placementPartition(current)
+      && a.every((shape, index) => samePlacementOwner(shape, b[index]));
   return a.every((shape, index) => {
     const other = b[index];
     if (shape === other) return true;

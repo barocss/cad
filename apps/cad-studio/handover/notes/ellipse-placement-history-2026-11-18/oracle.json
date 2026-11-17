@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "productImports": 0,
+  "mode": "sketch",
+  "points": 192,
+  "sideIds": 192,
+  "worstFitImplicit": 6.661338147750939e-16,
+  "worstFitPosition": 2.9605947323337506e-16,
+  "worstOutlineDistance": 2.116110453912688e-05,
+  "worstOutlineDistanceRelative": 1.7634253782605732e-06,
+  "outlineArea": 226.1947055925037,
+  "exactArea": 226.1946710584651,
+  "areaRelativeToExact": 1.526739708020571e-07,
+  "outlineVolume": 678.5841167775111,
+  "studioVolume": 678.5841167775073,
+  "volumeRelativeToOutline": 5.528667046657969e-15,
+  "volumeRelativeToExact": 1.526739652733892e-07
+}
