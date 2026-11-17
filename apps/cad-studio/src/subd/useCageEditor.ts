@@ -14,6 +14,7 @@ import { commitDrag, dragged, fullCage, previewTriangles, redoSession, runOp, se
 import { mirrorCage } from '@barocss/cad';
 import { Lanes } from '../engine/lanes';
 import { cageDoneReadiness, type CageBuildReceipt } from './cageCommitReadiness';
+import { previewCageTransform, type CageTransformInput } from './cageTransformDraft';
 import { previewCageLoop } from './cageLoopDraft';
 import { cageBeginPolicy } from './cageBeginPolicy';
 
@@ -21,6 +22,9 @@ import { cageBeginPolicy } from './cageBeginPolicy';
 const CAGE_LANE = 'cage';
 export interface CageEditor {
   readonly session: CageSession | null;
+  readonly transformDraft: { base: CageSession; input: CageTransformInput; error: string | null; pivot: readonly [number, number, number] | null } | null;
+  readonly transformReady: boolean;
+  previewTransform(input: CageTransformInput): void; applyTransform(): void; cancelTransform(): void;
   readonly loopDraft: { base: CageSession; value: string; error: string | null } | null;
   readonly loopReady: boolean;
   readonly loopStatus: string;
@@ -44,6 +48,8 @@ export interface CageEditor {
 export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise<EvalResult>, commit: (next: StudioDoc) => void, fail: (title: string, hint: string) => void): CageEditor {
   const [session, setSession] = useState<CageSession | null>(null);
   const [loopDraft, setLoopDraft] = useState<{ base: CageSession; value: string; error: string | null } | null>(null);
+  const [transformDraft, setTransformDraft] = useState<CageEditor['transformDraft']>(null);
+  const previewActive = !!loopDraft || !!transformDraft;
   const [pickDepth, setPickDepth] = useState<'front' | 'back'>('front');
   const [drag, setDrag] = useState<{ delta: Vec3; extrude: boolean } | null>(null);
   const [exact, setExact] = useState<{ of: CageSession; doc: StudioDoc; bodies: BodyResult[] } | null>(null);
@@ -83,7 +89,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
   const from = useRef<ModelNode | null>(null);
   useEffect(() => {
     if (!session || doc.nodes[session.node] === from.current) return;
-    setLoopDraft(null); setSession(null); setExact(null); setBuildReceipt(null); setDrag(null); from.current = null;
+    setLoopDraft(null); setTransformDraft(null); setSession(null); setExact(null); setBuildReceipt(null); setDrag(null); from.current = null;
     fail('Cage edit ended', 'The part changed while its cage was being edited; nothing was written. Edit the cage again.');
   }, [doc, session, fail]);
 
@@ -93,24 +99,35 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
     if (policy === 'refuse' || n?.kind !== 'subd') return false;
     if (policy === 'keep') return true;
     from.current = n;
-    sessionId.current++; setPickDepth('front'); setLoopDraft(null);
+    sessionId.current++; setPickDepth('front'); setLoopDraft(null); setTransformDraft(null);
     setSession(startSession(node, n.cage, n.mirror)); setDrag(null); setExact(null); setBuildReceipt(null); return true;
   }, [doc.nodes, session]);
   const guard = useCallback((f: (s: CageSession) => CageSession) => setSession(s => {
-    if (!s || loopDraft) return s;
+    if (!s || previewActive) return s;
     try { return f(s); } catch (e) { fail('Not done', e instanceof Error ? e.message.replace(/^SubD: /, '') : String(e)); return s; }
-  }), [fail, loopDraft]);
+  }), [fail, previewActive]);
 
   const previewLoop = useCallback((value: string) => {
     const base = loopDraft?.base ?? session;
-    if (!base || drag) return;
+    if (!base || drag || transformDraft) return;
     const result = previewCageLoop(base, value);
     setLoopDraft({ base, value, error: result.error }); setSession(result.session);
-  }, [loopDraft, session, drag]);
+  }, [loopDraft, session, drag, transformDraft]);
   const cancelLoop = useCallback(() => { if (loopDraft) { setSession(loopDraft.base); setLoopDraft(null); } }, [loopDraft]);
   const applyLoop = useCallback(() => {
     if (loopDraft && !loopDraft.error && cageDoneReadiness(session, doc, !!drag, buildReceipt).ok) setLoopDraft(null);
   }, [loopDraft, session, doc, drag, buildReceipt]);
+
+  const previewTransform = useCallback((input: CageTransformInput) => {
+    const base = transformDraft?.base ?? session;
+    if (!base || drag || loopDraft) return;
+    const result = previewCageTransform(base, input);
+    setTransformDraft({ base, input, error: result.error, pivot: result.pivot }); setSession(result.session);
+  }, [transformDraft, session, drag, loopDraft]);
+  const cancelTransform = useCallback(() => { if (transformDraft) { setSession(transformDraft.base); setTransformDraft(null); } }, [transformDraft]);
+  const applyTransform = useCallback(() => {
+    if (transformDraft && !transformDraft.error && cageDoneReadiness(session, doc, !!drag, buildReceipt).ok) setTransformDraft(null);
+  }, [transformDraft, session, doc, drag, buildReceipt]);
 
   // (The session as it would be with the drag so far: one object per session and drag, so what derives from it is computed once.)
   const live = useMemo(() => session && drag ? (() => { try { return { ...session, ...dragged(session, drag.delta, drag.extrude) }; } catch { return session; } })() : session, [session, drag]);
@@ -132,7 +149,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
   }, [session, quick, exact, doc]);
 
   const centre = live ? selectionCentre(session!) : null;
-  const gizmo: TransformGizmo | null = session && centre && !loopDraft ? {
+  const gizmo: TransformGizmo | null = session && centre && !previewActive ? {
     sessionKey: `cage:${sessionId.current}`,
     onCancel: () => setDrag(null),
     origin: [centre[0] + (drag?.delta[0] ?? 0), centre[1] + (drag?.delta[1] ?? 0), centre[2] + (drag?.delta[2] ?? 0)], move: [0, 1, 2],
@@ -144,25 +161,25 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
     },
   } : null;
 
-  const doneReadiness = loopDraft ? { ok: false, reason: 'Apply or cancel the loop preview first.' } : cageDoneReadiness(session, doc, !!drag, buildReceipt);
+  const doneReadiness = previewActive ? { ok: false, reason: 'Apply or cancel the cage preview first.' } : cageDoneReadiness(session, doc, !!drag, buildReceipt);
   const done = useCallback(() => {
     if (!session) return;
-    if (loopDraft) { fail('Loop preview active', 'Apply or cancel the loop preview first.'); return; }
+    if (previewActive) { fail('Cage preview active', 'Apply or cancel the cage preview first.'); return; }
     if (doc.nodes[session.node] !== from.current) { fail('Cage edit changed', 'The source changed; cancel this draft and edit the current cage again.'); return; }
     const readiness = cageDoneReadiness(session, doc, !!drag, buildReceipt);
     if (!readiness.ok) { fail('Cage not applied', readiness.reason); return; }
     const v = validationOf(session);
     if (!v.valid) { fail('The cage is not a manifold', `${v.nonManifoldEdges.length} edges and ${v.nonManifoldVertices.length} vertices are marked red: undo, or weld or delete them.`); return; }
     // (The session ends before the document changes: the change is its own.)
-    setLoopDraft(null); setSession(null); setExact(null); setBuildReceipt(null); setDrag(null); from.current = null;
+    setLoopDraft(null); setTransformDraft(null); setSession(null); setExact(null); setBuildReceipt(null); setDrag(null); from.current = null;
     if (session.undo.length) commit(withCage(session));
-  }, [session, doc, drag, buildReceipt, commit, withCage, fail, loopDraft]);
-  const cancel = useCallback(() => { setLoopDraft(null); setSession(null); setExact(null); setBuildReceipt(null); setDrag(null); from.current = null; }, []);
+  }, [session, doc, drag, buildReceipt, commit, withCage, fail, previewActive]);
+  const cancel = useCallback(() => { setLoopDraft(null); setTransformDraft(null); setSession(null); setExact(null); setBuildReceipt(null); setDrag(null); from.current = null; }, []);
   const onKey = useCallback((e: KeyboardEvent): boolean => {
     if (!session) return false;
     const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement;
-    if (loopDraft) {
-      if (e.key === 'Escape') { e.preventDefault(); cancelLoop(); return true; }
+    if (previewActive) {
+      if (e.key === 'Escape') { e.preventDefault(); if (loopDraft) cancelLoop(); else cancelTransform(); return true; }
       if (typing && !((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's')) return false;
       e.preventDefault(); return true;
     }
@@ -181,15 +198,15 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
     const op = ({ e: 'extrude', l: 'insert-loop', b: 'bridge', f: 'fill', w: 'weld', c: 'crease', Delete: 'delete', Backspace: 'delete' } as Record<string, CageOp>)[e.key];
     if (op && !e.metaKey && !e.ctrlKey) { e.preventDefault(); if (op === 'insert-loop') previewLoop('0.5'); else guard(s => runOp(s, op)); return true; }
     return false;
-  }, [session, done, cancel, guard, fail, loopDraft, cancelLoop, previewLoop]);
+  }, [session, done, cancel, guard, fail, previewActive, loopDraft, cancelLoop, cancelTransform, previewLoop]);
 
   return {
-    session, loopDraft, loopStatus: cageDoneReadiness(session, doc, !!drag, buildReceipt).reason, loopReady: !!loopDraft && !loopDraft.error && cageDoneReadiness(session, doc, !!drag, buildReceipt).ok, previewLoop, applyLoop, cancelLoop, doneReadiness, begin, overlay, gizmo, shown, previewMs, pickDepth, setPickDepth,
+    session, transformDraft, transformReady: !!transformDraft && !transformDraft.error && cageDoneReadiness(session, doc, !!drag, buildReceipt).ok, previewTransform, applyTransform, cancelTransform, loopDraft, loopStatus: cageDoneReadiness(session, doc, !!drag, buildReceipt).reason, loopReady: !!loopDraft && !loopDraft.error && cageDoneReadiness(session, doc, !!drag, buildReceipt).ok, previewLoop, applyLoop, cancelLoop, doneReadiness, begin, overlay, gizmo, shown, previewMs, pickDepth, setPickDepth,
     onPick: (hit, additive, grow) => guard(s => select(s, hit, additive, grow)),
-    setMode: m => setSession(s => s && (loopDraft ? s : s.mode === m ? s : { ...s, mode: m, sel: { vertices: [], edges: [], faces: [] } })),
-    toggleSmooth: () => setSession(s => s && (loopDraft ? s : { ...s, smooth: !s.smooth })),
-    op: o => { if (loopDraft) return; if (o === 'insert-loop') previewLoop('0.5'); else guard(s => runOp(s, o)); },
-    undo: () => setSession(s => s && (loopDraft ? s : undoSession(s))), redo: () => setSession(s => s && (loopDraft ? s : redoSession(s))),
+    setMode: m => setSession(s => s && (previewActive ? s : s.mode === m ? s : { ...s, mode: m, sel: { vertices: [], edges: [], faces: [] } })),
+    toggleSmooth: () => setSession(s => s && (previewActive ? s : { ...s, smooth: !s.smooth })),
+    op: o => { if (previewActive) return; if (o === 'insert-loop') previewLoop('0.5'); else guard(s => runOp(s, o)); },
+    undo: () => setSession(s => s && (previewActive ? s : undoSession(s))), redo: () => setSession(s => s && (previewActive ? s : redoSession(s))),
     done, cancel, onKey,
   };
 }

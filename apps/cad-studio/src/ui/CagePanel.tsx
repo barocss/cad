@@ -1,3 +1,4 @@
+import { CageTransformControls } from './CageTransformControls';
 // R8.2 (D81): the cage editor's panel — mode, Box/Smooth, the operations on the selection, the mirror, what the
 // validation flags, the session's undo, and Done / Cancel. O16: its operations, fields and actions on shadcn (Button,
 // NativeSelect, FIELD); the Pick and Show toggles stay the studio's segmented buttons.
@@ -36,7 +37,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
   const what = s.sel.faces.length ? `${s.sel.faces.length} face${s.sel.faces.length === 1 ? '' : 's'}` : s.sel.edges.length ? `${s.sel.edges.length} edge${s.sel.edges.length === 1 ? '' : 's'}` : s.sel.vertices.length ? `${s.sel.vertices.length} vertex${s.sel.vertices.length === 1 ? '' : 'es'}` : 'nothing';
   return <aside className="card props cage-panel" aria-label="Cage editor">
     <div className="card-title">CAGE · {name}</div>
-    <fieldset disabled={!!editor.loopDraft} className="contents">
+    <fieldset disabled={!!editor.loopDraft || !!editor.transformDraft} className="contents">
     <div className="seg" role="group" aria-label="Pick">{(['vertex', 'edge', 'face'] as CageMode[]).map((m, i) =>
       <button key={m} className={focusClass} style={s.mode === m ? activeStyle : undefined} aria-pressed={s.mode === m} data-tip={`${m[0].toUpperCase()}${m.slice(1)}s`} data-tip-desc={`Key ${i + 1}`} onClick={() => editor.setMode(m)}>{m[0].toUpperCase() + m.slice(1)}</button>)}</div>
     <div className="seg" role="group" aria-label="Next overlapping pick">{(['front', 'back'] as const).map(depth =>
@@ -60,6 +61,10 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
         aria-description={readiness?.reason} aria-disabled={readiness ? blocked : undefined} className={readiness && blocked ? 'opacity-50 cursor-not-allowed' : undefined}
         onClick={() => { if (!blocked) editor.op(o.op); }} disabled={!readiness && blocked}>{o.label}</Button>;
     })}</div>
+    <div className="flex gap-1">
+      <Button variant="ghost" disabled={!n} onClick={() => editor.previewTransform({ kind: 'rotate', axis: 2, value: '0', pivot: 'centre', vertex: '' })}>Rotate selection</Button>
+      <Button variant="ghost" disabled={!n} onClick={() => editor.previewTransform({ kind: 'scale', axis: 2, value: '1', pivot: 'centre', vertex: '' })}>Scale selection</Button>
+    </div>
     <label className={FIELD}><span>Mirror</span><NativeSelect className={CONTROL} aria-label="Mirror" value={s.mirror ?? ''} onChange={e => editor.op(e.target.value ? `mirror-${e.target.value}` as CageOp : 'mirror-off')}>
       <option value="">None</option><option value="x">Across X</option><option value="y">Across Y</option><option value="z">Across Z</option></NativeSelect></label>
     <div className="muted small" aria-label="Mirror source and replacement">Mirror keeps the positive side of the chosen axis and replaces the negative side with its reflection. Vertices on the mirror plane stay on it. Cage Undo restores the previous shape; Cancel discards this edit.</div>
@@ -72,10 +77,11 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
       {editor.loopDraft.error && <div role="status" className="warn">{editor.loopDraft.error}</div>}
       <div className="flex gap-1"><Button variant="ghost" onClick={editor.cancelLoop}>Cancel loop preview</Button><Button disabled={!editor.loopReady} onClick={editor.applyLoop}>Apply loop</Button></div>
     </div>}
+    <CageTransformControls editor={editor} />
     <CageChecks validation={v} faces={s.cage.faces.length} previewMs={editor.previewMs} />
     <div className="flex items-center gap-1 pt-1">
-      <Button variant="ghost" aria-label="Undo cage step" disabled={!!editor.loopDraft || !s.undo.length} onClick={editor.undo}>Undo</Button>
-      <Button variant="ghost" aria-label="Redo cage step" disabled={!!editor.loopDraft || !s.redo.length} onClick={editor.redo}>Redo</Button>
+      <Button variant="ghost" aria-label="Undo cage step" disabled={!!editor.loopDraft || !!editor.transformDraft || !s.undo.length} onClick={editor.undo}>Undo</Button>
+      <Button variant="ghost" aria-label="Redo cage step" disabled={!!editor.loopDraft || !!editor.transformDraft || !s.redo.length} onClick={editor.redo}>Redo</Button>
       <span className="flex-1" />
       <Button variant="ghost" aria-label="Cancel cage edit" onClick={editor.cancel}>Cancel</Button>
       <Button variant="default" aria-label="Done editing cage" data-tip="Done" data-tip-desc="Apply this cage only after its current evaluation succeeds" data-tip-off={!editor.doneReadiness.ok ? editor.doneReadiness.reason : undefined} data-tip-focus aria-description={editor.doneReadiness.reason} aria-disabled={!editor.doneReadiness.ok} className={!editor.doneReadiness.ok ? 'opacity-50' : undefined} onClick={editor.done}>Done</Button>

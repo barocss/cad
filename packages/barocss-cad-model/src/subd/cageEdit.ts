@@ -291,6 +291,42 @@ export function commitDrag(s: CageSession, delta: readonly number[], extrude: bo
   return step(s, d.cage, d.sel);
 }
 
+export type CageSelectionTransform =
+  | { kind: 'rotate'; axis: 0 | 1 | 2; degrees: number; pivot: readonly [number, number, number] }
+  | { kind: 'scale'; factor: number; pivot: readonly [number, number, number] };
+/** Transform only selected cage vertices from this immutable baseline. Mirror-seam coordinates stay fixed.
+ * This is cage editing, not a rigid transform of the final smooth surface. No-op transformations add no history.
+ */
+export function transformCageSelection(s: CageSession, transform: CageSelectionTransform): CageSession {
+  const c = s.cage, nv = c.positions.length / 3, validVertex = (v: number) => Number.isInteger(v) && v >= 0 && v < nv;
+  if (!Number.isInteger(nv) || c.positions.some(v => !Number.isFinite(v)) || c.faces.some(f => f.length < 3 || f.some(v => !validVertex(v)))) throw new SubdError('INPUT', 'transform: invalid cage coordinates or topology');
+  if (s.sel.vertices.some(v => !validVertex(v)) || s.sel.edges.some(([a, b]) => !validVertex(a) || !validVertex(b)) || s.sel.faces.some(f => !Number.isInteger(f) || f < 0 || f >= c.faces.length)) throw new SubdError('INPUT', 'transform: pick current cage elements again');
+  const topology = cageTopology(c);
+  if (s.sel.edges.some(([a, b]) => !topology.edges.has(ek(a, b)))) throw new SubdError('INPUT', 'transform: selected edge is not in this cage');
+  const vertices = selectedVertices(s);
+  if (!vertices.length) throw new SubdError('INPUT', 'transform: pick vertices, edges or faces first');
+  if (transform.pivot.length !== 3 || transform.pivot.some(v => !Number.isFinite(v))) throw new SubdError('INPUT', 'transform: pivot must be finite');
+  if (transform.kind === 'rotate' && (![0, 1, 2].includes(transform.axis) || !Number.isFinite(transform.degrees))) throw new SubdError('INPUT', 'rotate: use a world axis and finite degrees');
+  if (transform.kind === 'scale' && (!Number.isFinite(transform.factor) || transform.factor <= 0)) throw new SubdError('INPUT', 'scale: factor must be finite and greater than zero');
+  const angle = transform.kind === 'rotate' ? transform.degrees % 360 : 0;
+  if (transform.kind === 'rotate' ? angle === 0 : transform.factor === 1) return s;
+  const positions = [...c.positions], radians = angle * Math.PI / 180, cosine = Math.cos(radians), sine = Math.sin(radians);
+  for (const v of vertices) {
+    const p = at(c, v).map((x, k) => x - transform.pivot[k]);
+    const q = [...p];
+    if (transform.kind === 'scale') for (let k = 0; k < 3; k++) q[k] *= transform.factor;
+    else {
+      const a = (transform.axis + 1) % 3, b = (transform.axis + 2) % 3;
+      q[a] = cosine * p[a] - sine * p[b]; q[b] = sine * p[a] + cosine * p[b];
+    }
+    for (let k = 0; k < 3; k++) positions[3 * v + k] = q[k] + transform.pivot[k];
+  }
+  const result = plain(keepOnPlane({ ...c, positions }, s.mirror ?? 'x', onPlane(s)));
+  if (result.positions.some(v => !Number.isFinite(v))) throw new SubdError('INPUT', 'transform: coordinates overflow; reduce the value or change pivot');
+  if (result.positions.every((v, i) => v === c.positions[i])) return s;
+  return step(s, result, s.sel);
+}
+
 export type CageOp = 'extrude' | 'insert-loop' | 'bridge' | 'fill' | 'weld' | 'weld-near' | 'crease' | 'uncrease' | 'delete' | 'select-loop' | 'select-ring' | 'select-grow' | 'select-shrink' | 'select-linked' | 'select-path' | 'mirror-x' | 'mirror-y' | 'mirror-z' | 'mirror-off';
 /** Two boundary edge sets from one selection: its edges split into connected chains. */
 function twoBoundaries(c: StudioCage, edges: readonly (readonly [number, number])[]): [(readonly [number, number])[], (readonly [number, number])[]] {

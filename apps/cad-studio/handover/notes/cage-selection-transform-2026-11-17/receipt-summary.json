@@ -1,0 +1,42 @@
+{
+  "transform": {
+    "status": "PASS",
+    "qualification": "Baseline numeric world-axis rotation and uniform scale on selected faces, explicit pivot, no-op/cancel/history and native persistence.",
+    "limits": [
+      "One box, two connected top faces, Z rotation and uniform scale in actual Studio. Other axes/mirror/input edge cases are pure tests. No drag/local frame support."
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "native": {
+      "sha256": "21322c14cfb6147762c589eeec2a69800d173d4e496feb6c8c82692e4b569882",
+      "semanticEquality": true
+    }
+  },
+  "loopRegression": {
+    "status": "PASS",
+    "qualification": "Loop ratio preview replaces topology from one baseline; Apply owns one step, Cancel preserves source, native reopen preserves accepted cage.",
+    "limits": [
+      "One closed quad box in actual Studio. Existing edge-loop slide is not implemented; no B-rep or smooth dimensional claim."
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "native": {
+      "sha256": "2d24212c3e63b0e21daac95b898b8628ba76802fe0bc93ad00763072dc91cc1c",
+      "semanticEquality": true
+    }
+  }
+}
