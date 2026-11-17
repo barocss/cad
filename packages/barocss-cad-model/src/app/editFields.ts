@@ -699,7 +699,21 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       number('r', 'Bend radius', 'mm', n => num((n as S).bendRadius), (n, v) => ({ ...(n as S), bendRadius: v }));
       // (A bend table instead of one K: no K field; R12.4.)
       if (node.kFactor !== undefined) number('k', 'K-factor', undefined, n => (n as S).kFactor!, (n, v) => ({ ...(n as S), kFactor: v }) as S);
-      if (node.kind === 'sheet-contour') number('w', 'Width', 'mm', n => num((n as Extract<ModelNode, { kind: 'sheet-contour' }>).width), (n, v) => ({ ...(n as Extract<ModelNode, { kind: 'sheet-contour' }>), width: v }));
+      if (node.kind === 'sheet-contour') {
+        type Contour = Extract<ModelNode, { kind: 'sheet-contour' }>;
+        number('w', 'Width', 'mm', n => num((n as Contour).width), (n, v) => ({ ...(n as Contour), width: v }));
+        // Authored section coordinates, not inferred L/U/hat dimensions. Keep point order,
+        // material side and the plane unchanged; the native evaluator validates each draft.
+        node.path.forEach((_, p) => [0, 1].forEach(axis => {
+          number(`path${p}.${axis}`, `Path point ${p + 1} local ${'XY'[axis]}`, 'mm', n => num((n as Contour).path[p][axis]), (n, v) => {
+            const contour = n as Contour;
+            return { ...contour, path: contour.path.map((point, index) => {
+              if (index !== p) return point;
+              const next: [Dim, Dim] = [...point]; next[axis] = v; return next;
+            }) };
+          });
+        }));
+      }
       break;
     }
     case 'frame': {

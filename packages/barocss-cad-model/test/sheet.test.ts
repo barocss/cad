@@ -53,8 +53,8 @@ test('D116 Sheet profile: an L, a U, a Z and a hat standing on XZ, the textbook 
   // An L at 120°; a K outside 0–1 refused.
   assert.equal(bodiesOf(cmd.build!(ctx, { ...d, angle: 120, x: 0 })).length, 1);
   assert.throws(() => cmd.build!(ctx, { ...d, k: 1.5 }), /K-factor lies from 0/);
-  // The feature editor: thickness, radius, K and width.
-  assert.deepEqual(editFields(doc.nodes, 0).map(f => f.key), ['t', 'r', 'k', 'w']);
+  // The feature editor: sheet rules, width and the authored local path coordinates.
+  assert.deepEqual(editFields(doc.nodes, 0).map(f => f.key), ['t', 'r', 'k', 'w', 'path0.0', 'path0.1', 'path1.0', 'path1.1', 'path2.0', 'path2.1']);
   const read = readStudioDoc(JSON.stringify(doc)); assert.ok('doc' in read, JSON.stringify(read)); assert.equal(read.doc.nodes[0].kind, 'sheet-contour');
 });
 
@@ -186,7 +186,7 @@ test('D120 a sheet on a bend table: its notes name the table and each bend\'s ro
   assert.equal(notes[0], 'Sheet metal: 2 mm thick, bends of inner radius 3 mm, K from bend table shop-2mm (2 rows)');
   assert.match(notes[1], /^bend1: 90°, allowance [\d.]+ mm, setback 5 mm, deduction 4\.2 mm; K [\d.]+ from row 0$/);
   assert.ok(Math.abs(b.flat!.box.max[0] - 80.8) < 1e-9 && b.sheet!.bendTable === 'shop-2mm');
-  assert.deepEqual(editFields(doc.nodes, 0).map(f => f.key), ['t', 'r', 'w']);
+  assert.deepEqual(editFields(doc.nodes, 0).map(f => f.key), ['t', 'r', 'w', 'path0.0', 'path0.1', 'path1.0', 'path1.1', 'path2.0', 'path2.1']);
   // At 105°: interpolated between the rows, one of them an estimate — said as a warning.
   const th = 105 * Math.PI / 180, [b2] = bodiesOf(withNode(emptyDoc(), { ...node, path: [[0, 0], [50, 0], [50 + 35 * Math.cos(th), 35 * Math.sin(th)]] }));
   const n2 = b2.notes!.find(n => /^bend1/.test(n.text))!;
