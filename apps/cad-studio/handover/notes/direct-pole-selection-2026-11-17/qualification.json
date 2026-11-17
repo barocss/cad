@@ -1,0 +1,109 @@
+{
+  "before": {
+    "status": "PASS",
+    "qualification": "Baseline: public viewport P1 selection versus panel Control point and XYZ edit target.",
+    "observations": [
+      {
+        "label": "baseline mismatch",
+        "viewportPickedIndex": 1,
+        "viewportTarget": [
+          12,
+          6,
+          0
+        ],
+        "panelControlPoint": "0",
+        "panelXYZ": [
+          0,
+          0,
+          0
+        ],
+        "docUnchanged": true,
+        "targetContract": "App poleHere drives gizmo; panel row.key drives XYZ/Weight. Selection-only reproduction, no drag or edit claimed."
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 521,
+    "sourceAfterCleanupCount": 521
+  },
+  "after": {
+    "status": "PASS",
+    "qualification": "Single source-owned pole selection across viewport, fields, Undo/Redo and Open",
+    "observations": [
+      {
+        "label": "viewport panel agreement",
+        "viewportPickedIndex": 1,
+        "panelControlPoint": "1",
+        "panelXYZ": [
+          12,
+          6,
+          0
+        ],
+        "docUnchanged": true
+      },
+      {
+        "label": "owner lifecycle",
+        "sameCoordinateDraftReset": true,
+        "explicitEditCarriesSelection": true,
+        "undoRedoClearsWithoutResurrection": true,
+        "nativeSaveFreshOpen": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 523,
+    "sourceAfterCleanupCount": 523
+  },
+  "sha256": {
+    "before-01-P1-panel-P0.png": "a7d86ebed69b5a2a84058112b074966077bc5a986c0f4a5167365d8fe78ce7f8",
+    "after-01-P1-panel-P1.png": "aa3642c4446b6109156ff0d30c70579543a8ebcb375df66015f8be22f761e437",
+    "after-02-edit.png": "633bfe0db41ae3def9505a29f97ed76e78d6adc2d1b990f94ab7a4f7746be46f",
+    "saved.bcad": "05be26d35be22b33a13cbd6352668331ece827f143a1ec3bcfc65d90145a3d29",
+    "source-oracle.json": "81083afd1f906eb0ce95cc749e674134c14efd908de0d703ac481bb07b980556",
+    "source-oracle-input.json": "124dccfca93e16d5c8b5dbdd6e02f1fa421020b37cc9b87a276db23ca69a564b",
+    "surface-02-edited.png": "c5fb26732309365965a838ea6e77fad895e3f71e6b1f857370be4a7153b85ede",
+    "surface-source-oracle.json": "3efb0db013cc7563b37e5a8ae5f93d727f2a824f1d496ae0bacacdf787320851",
+    "surface-source-oracle-input.json": "3e216a2c1ab0dbd9adc8df90c49494871802c6ff55475ecc299b0a9dd159d472"
+  },
+  "surface": {
+    "status": "PASS",
+    "qualification": "Surface 2x2 explicit pole selection, weight edit and exact Undo",
+    "observations": [
+      {
+        "label": "surface-only changed branch",
+        "selected": "1,1",
+        "position": [
+          20,
+          10,
+          0
+        ],
+        "weight": 2,
+        "sourceOracle": true,
+        "undoExactAndCleared": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 523,
+    "sourceAfterCleanupCount": 523
+  }
+}

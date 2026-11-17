@@ -1,3 +1,5 @@
+import { currentDirectPole, ownsDirectPole, type DirectPoleSelection } from './state/directPoleSelection';
+import type { PolePatch } from './ui/DirectPoleEditor';
 import { addToIsolation } from './app/addToIsolation';
 import { SavedBezierPicker } from './ui/SavedBezierPicker';
 import { coordinateMessage, currentCoordinateFeedback, type CoordinateFeedback, type CoordinateIntent } from './sketch/coordinateFeedback';
@@ -512,7 +514,9 @@ export function App() {
     discardRoute, selectRouteBundle, createRoute, previewRoute, changeRouteMove, applyRoute, detachRoute } = routeEditor;
   discardRouteRef.current = discardRoute;
   /** The picked pole of the one selected direct object, and how far its gizmo has dragged it. */
-  const [pole, setPole] = useState<{ id: string; key: string } | null>(null);
+  const [pole, setPoleState] = useState<DirectPoleSelection | null>(null);
+  const poleNow = useRef(pole);
+  const setPole = (next: DirectPoleSelection | null) => { poleNow.current = next; setPoleState(next); };
   const [poleDrag, setPoleDrag] = useState<Vec3 | null>(null);
   const [coordinateFeedback, setCoordinateFeedback] = useState<CoordinateFeedback | null>(null);
   const [sketchIssue, setSketchIssue] = useState<{ reason: string; ellipse?: { doc: StudioDoc; draft: SketchState }; conflict?: { doc: StudioDoc; source: SketchShape; ids: readonly string[] } } | null>(null);
@@ -1228,7 +1232,22 @@ export function App() {
   useEffect(() => { if (doc.direct?.objects.length && !directReady) void loadDirect().then(() => setDirectReady(true)); }, [doc.direct, directReady]);
   const D = directReady ? directNow() : null;
   const poles = useMemo(() => { if (!poleObj || !doc.direct || !D) return []; try { return D.polesOf(doc.direct, poleObj); } catch { return []; } }, [doc.direct, poleObj, D]);
-  const poleHere = pole && pole.id === poleObj ? poles.find(p => p.key === pole.key) ?? null : null;
+  const ownedPole = currentDirectPole(pole, doc.direct, docGeneration, poleObj, poles.map(p => p.key));
+  if (pole && !ownedPole) { setPole(null); if (poleDrag) setPoleDrag(null); }
+  const poleHere = ownedPole ? poles.find(p => p.key === ownedPole.key) ?? null : null;
+  const selectDirectPole = (key: string | null) => {
+    if (docNow.current !== doc || !doc.direct || !poleObj || (key !== null && !poles.some(p => p.key === key))) return;
+    setPoleDrag(null);
+    setPole(key === null ? null : { direct: doc.direct, generation: docGeneration, id: poleObj, key });
+  };
+  const editDirectPole = (key: string, patch: PolePatch) => {
+    if (!ownedPole || ownedPole.key !== key || !D || docNow.current !== doc || !ownsDirectPole(ownedPole, poleNow.current, docNow.current.direct, poleModeNow.current)) return;
+    try {
+      const [i, j] = key.split(',').map(Number);
+      const next = key.includes(',') ? D.directOps.editSurfacePole(ownedPole.direct, ownedPole.id, i, j, patch) : D.directOps.editCurvePole(ownedPole.direct, ownedPole.id, i, patch);
+      if (commitDirect(next, [ownedPole.id])) setPole({ ...ownedPole, direct: next });
+    } catch (error) { setToast({ title: 'The pole could not be changed', hint: error instanceof Error ? error.message : String(error), detail: '' }); }
+  };
   const poleMoved = (delta: readonly number[]) => poleHere!.at.map((v, k) => v + delta[k]);
   // While a pole is dragged, its object is shown re-evaluated with the pole where the gizmo has it.
   const directShown = useMemo(() => {
@@ -3036,12 +3055,15 @@ export function App() {
 
   // The picked pole's gizmo: drag it along an axis; let go, the curve or surface is edited (one undo step).
   const poleMode = !routePanelOpen && !active && !sketch && !rendering && !drawing && !measure && !assembly.draft;
+  const poleModeNow = useRef(poleMode); poleModeNow.current = poleMode;
+  if (!poleMode && (pole || poleDrag)) { setPole(null); if (poleDrag) setPoleDrag(null); }
   const poleGizmo: TransformGizmo | null = poleMode && poleHere && poleObj && doc.direct ? {
     origin: poleMoved(poleDrag ?? [0, 0, 0]) as Vec3, move: [0, 1, 2],
     onMove: (delta, done) => {
+      if (workerSessionNow.current !== workerSession || !ownedPole || docNow.current !== doc || !ownsDirectPole(ownedPole, poleNow.current, docNow.current.direct, poleModeNow.current)) return;
       if (!done) { setPoleDrag(delta); return; }
       setPoleDrag(null); if (delta.every(v => v === 0)) return;
-      try { commitDirect(D!.movePole(doc.direct!, poleObj, poleHere.key, poleMoved(delta)), [poleObj]); }
+      try { const next = D!.movePole(doc.direct!, poleObj, poleHere.key, poleMoved(delta)); if (commitDirect(next, [poleObj])) setPole({ ...ownedPole, direct: next }); }
       catch (e) { setToast({ title: 'The pole could not be moved', hint: e instanceof Error ? e.message : String(e), detail: '' }); }
     },
   } : null;
@@ -3430,7 +3452,7 @@ export function App() {
       {!rendering && !drawing && !sketch && !measure && !instanceSel.length && <GravityExperimentPanel doc={doc} joints={jointTree?.joints ?? []} />}
       {!rendering && !sketch && !measure && !!doc.instances?.length && (assembly.draft || !!singleTop(instanceSel)) && <MatePanel assembly={assembly} instances={doc.instances} instance={singleTop(instanceSel)}
         onRefused={why => setToast({ title: 'The mate was refused', hint: why, detail: '' })} />}
-      {!rendering && !active && !sketch && !measure && !instanceSel.length && directSel.length > 0 && doc.direct && <DirectInspector doc={doc} directSel={directSel} onSelect={setDirectSel}
+      {!rendering && !active && !sketch && !measure && !instanceSel.length && directSel.length > 0 && doc.direct && <DirectInspector doc={doc} directSel={directSel} onSelect={setDirectSel} poleControls={{ selected: poleHere?.key ?? null, select: selectDirectPole, edit: editDirectPole }}
         curveCurvature={directCurveVisible ? directCurvature : undefined}
         changes={{ commitDirect }} onThicken={(id, t, side) => {
           if (directSel.length === 1 && directSel[0] === id) start(commands.find(c => c.id === 'thicken')!, { t, side });
@@ -3577,7 +3599,7 @@ export function App() {
         printDisplay={printDisplay} printActive={printEnabled && !printReason} camDisplay={camDisplay} camActive={camEnabled && !camReason}
         annotations={pmiItems} annotationSelected={pmiSelected} onPickAnnotation={pickAnnotation}
         direct={viewportDirect} directSelection={directSel} poles={poleMode ? poles : undefined} cloud={benchCloud ?? workspaceCloud} underlays={viewportUnderlays}
-        pickedPole={poleHere?.key ?? null} onPickPole={key => poleObj && setPole(pole?.id === poleObj && pole.key === key ? null : { id: poleObj, key })}
+        pickedPole={poleHere?.key ?? null} onPickPole={key => selectDirectPole(poleHere?.key === key ? null : key)}
         offsets={animatedOffsets} transforms={dragTransforms} instances={viewportInstances} clearance={clearanceDisplay}
         isolatedInstances={displayScopeReason ? undefined : stepsDisp?.opaque ?? isolatedInstances}
         clip={sectionClip} sectionHatch={sectionHatchLines} scalarMaps={scalarMaps} onHoverScalar={mapHoverOwner ? setMapHover : undefined}

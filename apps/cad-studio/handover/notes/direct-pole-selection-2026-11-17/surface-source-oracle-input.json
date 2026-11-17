@@ -1,0 +1,39 @@
+{
+  "source": "@model test { version:0; length-unit:mm; @surface #panel { type:nurbs; degree-u:1; degree-v:1; knots-u:[0,0,1,1]; knots-v:[0,0,1,1]; control-points:[[[0,0,0],[0,10,0]],[[20,0,0],[20,10,0]]]; weights:[[1,1],[1,2]]; } }",
+  "points": [
+    [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        10,
+        0
+      ]
+    ],
+    [
+      [
+        20,
+        0,
+        0
+      ],
+      [
+        20,
+        10,
+        0
+      ]
+    ]
+  ],
+  "weights": [
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      2
+    ]
+  ]
+}

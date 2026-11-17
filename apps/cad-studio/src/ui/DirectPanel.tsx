@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { curveLength, curvePlaneCrossings, directOps, domainsOf, geometryOf, surfaceIntersection, type DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { SEW_TOLERANCE_LABEL } from '@barocss/cad-model/engine/sew';
 import { inspectSurfacePoint, surfaceIsoScope } from './surfaceInspection';
+import { DirectPoleEditor, type PoleControls } from './DirectPoleEditor';
 import { TwoCurveRoles } from './TwoCurveRoles';
 import { curveAnalysisError, inspectCurvePoint } from './curveAnalysisError';
 import { sewTrimBlockers } from './sewTrimBlockers';
@@ -17,8 +18,8 @@ import { NativeSelect } from '@/components/ui/native-select';
  * poles). Each tool is one undoable edit; a refusal comes back as a message. O16: the contents on shadcn (Button,
  * Input, NativeSelect, FIELD); the shell (its title and Hide) is the studio's.
  */
-export function DirectPanel({ direct, selected, onChange, onSelect, onError, onHide, onThicken, onSew, children }: {
-  direct: DirectGeometry; selected: string[];
+export function DirectPanel({ direct, selected, onChange, onSelect, onError, onHide, onThicken, onSew, poleControls, children }: {
+  direct: DirectGeometry; selected: string[]; poleControls?: PoleControls;
   children?: ReactNode;
   onChange(next: DirectGeometry, select?: string[]): void;
   onSelect?(ids: string[]): void;
@@ -55,6 +56,7 @@ export function DirectPanel({ direct, selected, onChange, onSelect, onError, onH
         onStretch={k => run(() => directOps.stretch(direct, selected, k))} onShear={(a, b, k) => run(() => directOps.shear(direct, selected, a, b, k))} />
       {one && g?.kind === 'curve' && <CurveTools id={one.id} direct={direct} run={run} added={added} />}
       {one && g?.kind === 'surface' && <SurfaceTools id={one.id} direct={direct} run={run} added={added} onThicken={onThicken} />}
+      {one && g && poleControls && <DirectPoleEditor direct={direct} id={one.id} controls={poleControls} rows={g.kind === 'curve' ? g.controlPoints.map((point, i) => ({ key: String(i), label: `P${i}`, point, weight: g.weights[i] })) : g.controlPoints.flatMap((row, i) => row.map((point, j) => ({ key: `${i},${j}`, label: `P${i},${j}`, point, weight: g.weights[i][j] })))} />}
       {objs.length >= 3 && curves && <div className="render-section [&>[data-slot=button]]:self-start">
         <div className="card-title" style={{ marginTop: 8 }}>{objs.length} CURVES</div>
         <div className="flex flex-wrap gap-1">
@@ -144,8 +146,6 @@ function CurveTools({ id, direct, run, added }: { id: string; direct: DirectGeom
     <NumberField label="Poles" value={poles} onChange={setPoles} />
     <Button variant="ghost" aria-label="Refit the curve" title="Fit the curve again with this many poles (least squares, cubic): its name says the largest gap" onClick={() => run(() => directOps.refitCurve(direct, id, poles), added)}>Refit</Button>
     <Crossings id={id} direct={direct} />
-    {g.kind === 'curve' && <Poles key={id} owner={id} revision={direct} rows={g.controlPoints.map((p, i) => ({ key: String(i), label: `P${i}`, point: p, weight: g.weights[i] }))}
-      onEdit={(k, pole) => run(() => directOps.editCurvePole(direct, id, Number(k), pole))} />}
   </div>;
 }
 
@@ -220,43 +220,7 @@ function SurfaceTools({ id, direct, run, added, onThicken }: { id: string; direc
     <div className="card-title" style={{ marginTop: 8 }}>REGION</div>
     {(['u from', 'u to', 'v from', 'v to'] as const).map((l, k) => <NumberField key={l} label={l} value={box[k]} onChange={x => setBox(b => b.map((y, j) => j === k ? x : y) as typeof b)} />)}
     <Button variant="ghost" onClick={() => run(() => directOps.surfaceRegion(direct, id, [box[0], box[1]], [box[2], box[3]]), added)}>Extract region</Button>
-    {g.kind === 'surface' && <Poles key={id} owner={id} revision={direct} rows={g.controlPoints.flatMap((row, i) => row.map((p, j) => ({ key: `${i},${j}`, label: `P${i},${j}`, point: p, weight: g.weights[i][j] })))}
-      onEdit={(k, pole) => { const [i, j] = k.split(',').map(Number); run(() => directOps.editSurfacePole(direct, id, i, j, pole)); }} />}
   </div>;
-}
-
-/** Control points: pick one, edit its position and weight. */
-function Poles({ rows, onEdit, owner, revision }: { owner: string; revision: DirectGeometry; rows: { key: string; label: string; point: readonly number[]; weight: number }[]; onEdit(key: string, pole: { xMM?: number; yMM?: number; zMM?: number; weight?: number }): void }) {
-  const [pick, setPick] = useState(rows[0]?.key ?? '');
-  const row = rows.find(r => r.key === pick) ?? rows[0];
-  if (!row) return null;
-  return <>
-    <div className="card-title" style={{ marginTop: 8 }}>CONTROL POINT</div>
-    <label className={FIELD}><span>Point</span><NativeSelect className={CONTROL} aria-label="Control point" value={row.key} onChange={e => setPick(e.target.value)}>{rows.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}</NativeSelect></label>
-    {(['xMM', 'yMM', 'zMM'] as const).map((f, k) => <NumberField key={f} lazy label={'XYZ'[k]} value={row.point[k]} onChange={x => onEdit(row.key, { [f]: x })} />)}
-    <PoleWeight key={row.key} revision={revision} errorId={`direct-weight-${encodeURIComponent(owner)}-${encodeURIComponent(row.key)}`} value={row.weight} onChange={x => { if (x > 0) onEdit(row.key, { weight: x }); }} />
-  </>;
-}
-
-/** A rejected weight remains a draft, visibly distinct from the saved pole. */
-function PoleWeight({ value, onChange, revision, errorId }: { value: number; onChange(v: number): void; revision: DirectGeometry; errorId: string }) {
-  const [text, setText] = useState(String(value)), [error, setError] = useState(false);
-  useEffect(() => { setText(String(value)); setError(false); }, [value, revision]);
-  const apply = () => {
-    const weight = Number(text);
-    if (!text.trim() || !Number.isFinite(weight) || weight <= 0) { setError(true); return; }
-    setError(false);
-    if (weight !== value) onChange(weight);
-  };
-  return <>
-    <label className={FIELD}><span>Weight</span><Input type="number" step="any" className="w-24" aria-label="Weight" value={text}
-      aria-invalid={error || undefined} aria-describedby={error ? errorId : undefined}
-      onChange={event => setText(event.target.value)} onBlur={apply} onKeyDown={event => {
-        if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); apply(); }
-        else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setText(String(value)); setError(false); }
-      }} /></label>
-    {error && <span id={errorId} role="alert" className="warn small">Enter a positive weight. Not applied; saved weight is {value}.</span>}
-  </>;
 }
 
 const fmtNum = (v: number, digits: number) => String(Math.round(v * 10 ** digits) / 10 ** digits);

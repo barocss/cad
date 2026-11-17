@@ -1,0 +1,19 @@
+{
+  "source": "@model test { version:0; length-unit:mm; @curve #line { type:nurbs; degree:1; knots:[0,0,1,1]; control-points:[[0,0,0],[14,6,0]]; weights:[1,2]; } }",
+  "points": [
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      14,
+      6,
+      0
+    ]
+  ],
+  "weights": [
+    1,
+    2
+  ]
+}
