@@ -47,7 +47,7 @@ export function DirectPanel({ direct, selected, onChange, onSelect, onError, onH
     <aside className="card props direct-panel" aria-label="Direct geometry">
       <div className="card-title">{one ? (g?.kind === 'surface' ? 'SURFACE' : 'CURVE') : `${objs.length} OBJECTS`}
         <button className="ghost tiny" onClick={() => onHide(selected)}>Hide</button></div>
-      {one ? <Rename key={one.id} name={one.name} onRename={n => run(() => directOps.rename(direct, one.id, n))} />
+      {one ? <Rename key={one.id} direct={direct} id={one.id} name={one.name} onRename={n => run(() => directOps.rename(direct, one.id, n))} />
         : objs.map(o => <div key={o.id} className="kv">Name <b>{o.name}</b></div>)}
       {one && g?.kind === 'curve' && children}
       <Transform onMove={by => run(() => directOps.move(direct, selected, by))} onRotate={(axis, deg) => run(() => directOps.rotate(direct, selected, axis, deg))}
@@ -307,10 +307,10 @@ function SurfacePoint({ id, direct, u, v }: { id: string; direct: DirectGeometry
   </>;
 }
 
-function Rename({ name, onRename }: { name: string; onRename(n: string): void }) {
-  const [text, setText] = useState(name);
+function Rename({ direct, id, name, onRename }: { direct: DirectGeometry; id: string; name: string; onRename(n: string): void }) {
+  const [text, setText] = useSurfaceDraft(direct, id, 'object-name', name);
   return <label className={FIELD}><span>Name</span><Input className={CONTROL} aria-label="Object name" value={text} onChange={e => setText(e.target.value)}
-    onBlur={() => { if (text.trim() && text !== name) onRename(text); }} onKeyDown={e => { if (e.key === 'Enter' && text.trim() && text !== name) onRename(text); }} /></label>;
+    onBlur={() => { if (text.trim() && text.trim() !== name.trim()) onRename(text); }} onKeyDown={e => { if (e.key === 'Enter' && text.trim() && text.trim() !== name.trim()) onRename(text); }} /></label>;
 }
 
 /** Move by a vector, turn about an axis through the centre, scale about the centre, or duplicate. */

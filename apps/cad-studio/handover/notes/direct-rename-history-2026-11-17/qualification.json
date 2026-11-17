@@ -1,0 +1,60 @@
+{
+  "before": {
+    "status": "PASS",
+    "qualification": "Diagnostic reproduction of same-ID Undo stale name input",
+    "observations": [
+      {
+        "label": "same-id-undo",
+        "accepted": "D341 · u-loop",
+        "input": "Renamed curve",
+        "baseline": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 521,
+    "sourceAfterCleanupCount": 521
+  },
+  "after": {
+    "status": "PASS",
+    "qualification": "Direct curve name history ownership",
+    "observations": [
+      {
+        "label": "same-id-undo",
+        "accepted": "D341 · u-loop",
+        "input": "D341 · u-loop",
+        "baseline": false
+      },
+      {
+        "label": "bounded-history",
+        "oneUndoAfterEnterBlurAndWhitespace": true,
+        "selectionSwitch": true,
+        "nativeSaveFreshOpen": true,
+        "sameIdOtherDocument": true,
+        "cancel": "No dedicated Cancel action exists; not added."
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 521,
+    "sourceAfterCleanupCount": 521
+  },
+  "hashes": {
+    "before-02-undo-name.png": "ac2ac9b50b3ac47ec4b19ed0b919a9f790f86f4dc76a51d751bc47b664af714a",
+    "after-02-undo-name.png": "7385988e707afe275849a401357b608d716c014faddee52c82049895f69d34e4",
+    "saved.bcad": "223d8cf40638764de7a39f224c7b1a8e65ba22190c88bbac2143d0a2a587d5c7"
+  }
+}
