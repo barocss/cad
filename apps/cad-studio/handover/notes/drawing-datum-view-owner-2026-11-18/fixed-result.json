@@ -1,0 +1,93 @@
+{
+  "status": "PASS",
+  "failure": "",
+  "observations": [
+    {
+      "unavailableViewDisabled": true,
+      "afterWrongSheetAttempt": [
+        {
+          "id": "datum-A",
+          "letter": "A",
+          "view": "top",
+          "place": [
+            -10,
+            70
+          ],
+          "face": {
+            "face": "n1.side0",
+            "near": [
+              0,
+              0,
+              -4
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "first": [
+        {
+          "id": "datum-A",
+          "letter": "A",
+          "view": "top",
+          "place": [
+            -10,
+            70
+          ],
+          "face": {
+            "face": "n1.side0",
+            "near": [
+              0,
+              0,
+              -4
+            ]
+          }
+        }
+      ],
+      "afterSecond": [
+        {
+          "id": "datum-A",
+          "letter": "A",
+          "view": "top",
+          "place": [
+            -10,
+            70
+          ],
+          "face": {
+            "face": "n1.side0",
+            "near": [
+              0,
+              0,
+              -4
+            ]
+          }
+        },
+        {
+          "id": "datum-B",
+          "letter": "B",
+          "view": "right",
+          "place": [
+            -5,
+            5
+          ],
+          "face": {
+            "face": "n1.side0",
+            "near": [
+              0,
+              0,
+              -4
+            ]
+          }
+        }
+      ],
+      "bodyNotice": 0
+    },
+    {
+      "undoRedo": true,
+      "clearIsSheetLocal": true,
+      "nativeSaveOpen": true,
+      "actualSvgDatumB": true
+    }
+  ],
+  "sourceFrozenThroughCleanup": true
+}

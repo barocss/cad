@@ -1,0 +1,46 @@
+{
+  "status": "FAIL",
+  "failure": "AssertionError [ERR_ASSERTION]: a datum view belonging to another sheet must not be authorable here\n",
+  "observations": [
+    {
+      "unavailableViewDisabled": false,
+      "afterWrongSheetAttempt": [
+        {
+          "id": "datum-A",
+          "letter": "A",
+          "view": "top",
+          "place": [
+            -10,
+            70
+          ],
+          "face": {
+            "face": "n1.side0",
+            "near": [
+              0,
+              0,
+              -4
+            ]
+          }
+        },
+        {
+          "id": "datum-B",
+          "letter": "B",
+          "view": "top",
+          "place": [
+            -5,
+            65
+          ],
+          "face": {
+            "face": "n1.side0",
+            "near": [
+              0,
+              0,
+              -4
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "sourceFrozenThroughCleanup": true
+}
