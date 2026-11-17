@@ -185,3 +185,18 @@ export function moveAssemblyStep(doc: StudioDoc, id: string, to: number): Edited
   steps.splice(steps.indexOf(old), 1); steps.splice(to, 0, old);
   return withSteps(doc, steps);
 }
+
+/** Move named top-level occurrences into one instruction step in a single edit. Placements never change.
+ * Unlike edit_step's add, this explicitly removes their memberships in other steps; empty source steps stay.
+ */
+export function moveAssemblyStepParts(doc: StudioDoc, id: string, parts: readonly string[]): Edited {
+  const target = find(doc, id), selected = [...new Set(parts)];
+  // Check every requested occurrence before changing any membership. Existing missing references elsewhere stay held.
+  const why = partsProblem({ ...doc, assemblySteps: undefined }, selected);
+  if (why) throw refusal('VALUE', why);
+  if (selected.every(part => target.add.includes(part))) return { doc, problems: [] };
+  const moved = new Set(selected);
+  return withSteps(doc, stepsOf(doc).map(s => s === target
+    ? { ...s, add: [...s.add, ...selected.filter(part => !s.add.includes(part))] }
+    : s.add.some(part => moved.has(part)) ? { ...s, add: s.add.filter(part => !moved.has(part)) } : s));
+}

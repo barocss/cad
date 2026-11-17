@@ -1,0 +1,39 @@
+{
+  "status": "PASS",
+  "qualification": "Explicit one-step reassignment of a placed part between assembly instructions, preserving physical assembly and native persistence.",
+  "observations": [
+    {
+      "before": [
+        [
+          "b1",
+          "b2"
+        ],
+        [
+          "post",
+          "cap"
+        ]
+      ],
+      "after": [
+        [
+          "b1"
+        ],
+        [
+          "post",
+          "cap",
+          "b2"
+        ]
+      ],
+      "implicitAddRefused": true,
+      "oneUndoRestoresBothSteps": true,
+      "sourceAndMetadataUnchanged": true,
+      "nativeSaveOpen": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "limits": [
+    "Single top-level selection UI; model batch tests separate. Presentation only, not assembly planning, motion, collision or manufacturing qualification."
+  ],
+  "visualReview": "Viewed before-transfer and reopened screenshots: explicit action visible; reopened destination has Post, Cap, Block 2 and step counts 1/3.",
+  "frozenSourceUnchanged": true
+}

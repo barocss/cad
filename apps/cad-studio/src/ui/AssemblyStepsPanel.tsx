@@ -43,7 +43,7 @@ function CommitText({ value, onCommit, required, multiline, ...rest }: { value: 
   return <Input {...rest} type="text" value={draft} onChange={e => setDraft(e.target.value)} onBlur={done} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />;
 }
 
-export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, onFaded, onNew, onRename, onNote, onExplode, onAddSelected, onTakeOut, onCaptureView, onResetView, onClearView, onMove, onDelete, onClose }: {
+export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, onFaded, onNew, onRename, onNote, onExplode, onAddSelected, onTransfer, onTakeOut, onCaptureView, onResetView, onClearView, onMove, onDelete, onClose }: {
   doc: StudioDoc; index: number;
   /** The one selected part's step (to go to) or that it is in none. */
   offer: StepOffer;
@@ -52,7 +52,7 @@ export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, o
   problems: readonly string[];
   onGo(index: number): void; onFaded(on: boolean): void;
   onNew(): void; onRename(id: string, name: string): void; onNote(id: string, note: string): void; onExplode(id: string, scale: number): void;
-  onAddSelected(id: string): void; onTakeOut(id: string, part: string): void;
+  onAddSelected(id: string): void; onTransfer(id: string, part: string): void; onTakeOut(id: string, part: string): void;
   onCaptureView(id: string): void; onResetView(): void; onClearView(id: string): void; onMove(id: string, to: number): void; onDelete(id: string): void; onClose(): void;
 }) {
   const steps = stepsOf(doc), n = steps.length, step = steps[index], instances: readonly PartInstance[] = doc.instances ?? [];
@@ -73,6 +73,7 @@ export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, o
             <span className="min-w-0 flex-1 truncate">{k + 1}. {s.name}</span><span className="muted">{s.add.length}</span></button></li>)}
         </ul>
         {offer?.kind === 'go' && <Button size="xs" variant="secondary" aria-label="Go to its step" title={`${nameOf(offer.part)} is introduced in step ${offer.index + 1}`} onClick={() => onGo(offer.index)}>Go to its step: {offer.name}</Button>}
+        {offer?.kind === 'go' && <Button size="xs" variant="ghost" aria-label="Move selected part to this step" title={`Move ${nameOf(offer.part)} from ${offer.name} to ${step.name} in one undoable edit. Only its instruction-step membership changes.`} onClick={() => onTransfer(step.id, offer.part)}>Move {nameOf(offer.part)} here</Button>}
         {offer?.kind === 'none' && <div className="text-[11px] text-muted-foreground" role="status">{nameOf(offer.part)} is in no step. {index === n - 1 ? 'Shown at this last step.' : faded ? 'Shown faded until the last step.' : 'Hidden until the last step.'} Use Add selected to include it here.</div>}
         <label className={FIELD}><span>Name</span><CommitText key={step.id} aria-label="Step name" className="w-36" maxLength={60} required value={step.name} onCommit={v => onRename(step.id, v)} /></label>
         <div className="flex flex-col gap-0.5" role="group" aria-label="Parts of this step">
