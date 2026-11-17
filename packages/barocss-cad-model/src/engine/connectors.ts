@@ -3,10 +3,11 @@
 import { connectorRowProblem, type ConnectorRow } from '@barocss/cad';
 import type { StudioDoc } from './doc';
 import { editRows } from './rowEdits';
+import { inheritedRowUsed } from './rowUsage';
 
 /** Rows added (each checked; one with an id held already replaces it) and removed by id. */
 export function editConnectorRows(doc: StudioDoc, add: readonly unknown[], remove: readonly string[] = []): { doc: StudioDoc } | { error: string } {
   const r = editRows<ConnectorRow>(doc.connectors?.rows ?? [], add, remove, { problem: connectorRowProblem, noun: 'connector row',
-    used: { by: id => doc.nodes.some(n => n.kind === 'connector-opening' && n.row === id), text: 'is used by an opening: remove it first' } });
+    used: { by: id => inheritedRowUsed(doc, id, (d, key) => d.nodes.some(n => n.kind === 'connector-opening' && n.row === key), (d, key) => !!d.connectors?.rows.some(r => r.id === key)), text: 'is used by an opening: remove it first' } });
   return 'error' in r ? r : { doc: { ...doc, connectors: { version: 1, rows: r.rows } } };
 }

@@ -4,6 +4,7 @@
 // a ring with no row stays an estimate, said so. A row a ring uses stays (remove the ring first).
 import type { StudioDoc } from './doc';
 import { editRows } from './rowEdits';
+import { inheritedRowUsed } from './rowUsage';
 import { firstProblem, problem, type Problem } from './refusal';
 
 export interface StudioRingRow { id: string; designation?: string; shaftDiameter: number; grooveDiameter: number; grooveWidth: number; source?: string; estimate?: true }
@@ -28,7 +29,7 @@ export function checkRingRow(r: unknown): Problem[] {
 /** Rows added (each checked; one with an id held already replaces it) and removed by id. */
 export function editRingRows(doc: StudioDoc, add: readonly unknown[], remove: readonly string[] = []): { doc: StudioDoc } | { error: string } {
   const r = editRows<StudioRingRow>(doc.rings?.rows ?? [], add, remove, { problem: r => firstProblem(checkRingRow(r)), noun: 'ring row',
-    used: { by: id => doc.nodes.some(n => n.kind === 'retaining-ring' && n.row === id), text: 'is used by a retaining ring: remove the ring first' } });
+    used: { by: id => inheritedRowUsed(doc, id, (d, key) => d.nodes.some(n => n.kind === 'retaining-ring' && n.row === key), (d, key) => !!d.rings?.rows.some(r => r.id === key)), text: 'is used by a retaining ring: remove the ring first' } });
   return 'error' in r ? r : { doc: { ...doc, rings: { version: 1, rows: r.rows } } };
 }
 /** The rows for a groove: those of its shaft step's and groove's sizes, first (to 1e-6 mm). */

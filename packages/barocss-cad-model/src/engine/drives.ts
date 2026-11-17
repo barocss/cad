@@ -3,10 +3,11 @@
 import { driveRowProblem, type DriveRow } from '@barocss/cad';
 import type { StudioDoc } from './doc';
 import { editRows } from './rowEdits';
+import { inheritedRowUsed } from './rowUsage';
 
 /** Rows added (each checked; one with an id held already replaces it) and removed by id. */
 export function editDriveRows(doc: StudioDoc, add: readonly unknown[], remove: readonly string[] = []): { doc: StudioDoc } | { error: string } {
   const r = editRows<DriveRow>(doc.drives?.rows ?? [], add, remove, { problem: driveRowProblem, noun: 'drive row',
-    used: { by: id => doc.nodes.some(n => (n.kind === 'sprocket' || n.kind === 'pulley' || n.kind === 'belt' || n.kind === 'coupling') && n.row === id), text: 'is used by a feature: remove it first' } });
+    used: { by: id => inheritedRowUsed(doc, id, (d, key) => d.nodes.some(n => (n.kind === 'sprocket' || n.kind === 'pulley' || n.kind === 'belt' || n.kind === 'coupling') && n.row === key), (d, key) => !!d.drives?.rows.some(r => r.id === key)), text: 'is used by a feature: remove it first' } });
   return 'error' in r ? r : { doc: { ...doc, drives: { version: 1, rows: r.rows } } };
 }

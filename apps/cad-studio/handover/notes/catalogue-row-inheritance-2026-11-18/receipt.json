@@ -1,0 +1,374 @@
+{
+  "status": "PASS",
+  "qualification": "Library protects inherited ring, drive and connector rows used by placed features.",
+  "observations": [
+    {
+      "results": [
+        {
+          "kind": "rings",
+          "unchanged": true
+        },
+        {
+          "kind": "drives",
+          "unchanged": true
+        },
+        {
+          "kind": "connectors",
+          "unchanged": true
+        }
+      ]
+    }
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "sourceFrozenCount": 1125,
+  "sourceAfterCount": 1125,
+  "sourceAfterCleanupCount": 1125,
+  "sourceUnchanged": true,
+  "visualReview": "Viewed fresh-open ring/shaft, coupling, connector/plate render",
+  "documents": [
+    {
+      "label": "rings-final",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "rings": {
+          "version": 1,
+          "rows": [
+            {
+              "id": "ring-test",
+              "shaftDiameter": 20,
+              "grooveDiameter": 19,
+              "grooveWidth": 1.3,
+              "source": "Supplied test row"
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "retaining-ring",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "shaft",
+                  "steps": [
+                    {
+                      "diameter": 20,
+                      "length": 30,
+                      "fillet": 0.5,
+                      "keyseats": [
+                        {
+                          "width": 6,
+                          "depth": 3.5,
+                          "length": 18,
+                          "offset": 6,
+                          "ends": "end-mill"
+                        }
+                      ]
+                    },
+                    {
+                      "diameter": 25,
+                      "length": 40,
+                      "fillet": 0.5
+                    },
+                    {
+                      "diameter": 20,
+                      "length": 25,
+                      "grooves": [
+                        {
+                          "diameter": 19,
+                          "width": 1.3,
+                          "at": 18
+                        }
+                      ]
+                    }
+                  ],
+                  "chamfers": [
+                    0.5,
+                    0.5
+                  ],
+                  "center": [
+                    0,
+                    0
+                  ],
+                  "generator": "shaft@0",
+                  "id": "n0"
+                },
+                {
+                  "kind": "retaining-ring",
+                  "shaft": 0,
+                  "groove": 1,
+                  "thickness": 1.2,
+                  "outerDiameter": 24,
+                  "row": "ring-test",
+                  "id": "n1"
+                }
+              ],
+              "outputs": {
+                "b0": {
+                  "node": 0,
+                  "side": "solid"
+                },
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              },
+              "nextId": 2
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "drives-final",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "drives": {
+          "version": 1,
+          "rows": [
+            {
+              "kind": "coupling",
+              "id": "coupling-test",
+              "type": "rigid sleeve",
+              "bore": [
+                12,
+                14
+              ],
+              "outside": 30,
+              "length": 40,
+              "boreStep": 18,
+              "estimate": true
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "coupling",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "coupling",
+                  "row": "coupling-test",
+                  "center": [
+                    0,
+                    0
+                  ],
+                  "generator": "coupling@0",
+                  "id": "n0"
+                }
+              ],
+              "outputs": {
+                "b0": {
+                  "node": 0,
+                  "side": "solid"
+                }
+              },
+              "nextId": 1
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "connectors-final",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "connectors": {
+          "version": 1,
+          "rows": [
+            {
+              "id": "connector-test",
+              "opening": {
+                "shape": "stadium",
+                "width": 8.34,
+                "height": 2.56,
+                "depth": 6.2
+              },
+              "body": {
+                "shape": "stadium",
+                "width": 8.25,
+                "height": 2.4,
+                "length": 6.51
+              },
+              "keepOut": {
+                "margin": 1,
+                "depth": 15
+              },
+              "source": "Supplied test row"
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "connector",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    40,
+                    20
+                  ],
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 10,
+                  "id": "n1"
+                },
+                {
+                  "kind": "connector-opening",
+                  "parent": {
+                    "node": 1,
+                    "side": "solid"
+                  },
+                  "face": "n1.top",
+                  "row": "connector-test",
+                  "center": [
+                    20.000000000000004,
+                    10.000000000000002,
+                    10
+                  ],
+                  "id": "n2"
+                },
+                {
+                  "kind": "connector-body",
+                  "opening": 2,
+                  "id": "n3"
+                }
+              ],
+              "outputs": {
+                "b2": {
+                  "node": 2,
+                  "side": "solid"
+                },
+                "b3": {
+                  "node": 3,
+                  "side": "solid"
+                }
+              },
+              "nextId": 4,
+              "references": {
+                "version": 1,
+                "references": [],
+                "datums": [],
+                "keepouts": [
+                  {
+                    "id": "connector-n2",
+                    "name": "connector-test: the plug's space",
+                    "frame": {
+                      "origin": [
+                        14.875000000000004,
+                        7.800000000000002,
+                        10.309999999999999
+                      ],
+                      "normal": [
+                        0,
+                        0,
+                        1
+                      ],
+                      "xAxis": [
+                        1,
+                        0,
+                        0
+                      ]
+                    },
+                    "shape": {
+                      "kind": "box",
+                      "size": [
+                        10.25,
+                        4.4,
+                        15
+                      ]
+                    },
+                    "clearance": 0
+                  }
+                ]
+              }
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
