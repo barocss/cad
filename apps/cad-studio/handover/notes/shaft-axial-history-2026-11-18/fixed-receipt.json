@@ -1,0 +1,131 @@
+{
+  "status": "PASS",
+  "phase": "open feature editor 0",
+  "errors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1074,
+  "observations": [
+    {
+      "label": "initial",
+      "offset": 4,
+      "at": 8,
+      "volume": 46887.1921827975,
+      "cz": 57.02874913044955,
+      "keyArea": 11.731710021298504,
+      "nativeSHA256": "b3674d0207f4e5ff41955a093fb75b20fbb3407248c18f23f1315b9a4fd4467d",
+      "authority": "original live native output; independent stock-minus-cut volume and axial first moment"
+    },
+    {
+      "label": "native-10-8",
+      "offset": 10,
+      "at": 8,
+      "volume": 46887.1921827975,
+      "cz": 57.01373644641989,
+      "keyArea": 11.731710021298504,
+      "nativeSHA256": "c086eb195aa2424736efb7bc5185605e752f7ea5afe30b31f544ed7f0c260f10",
+      "authority": "original live native output; independent stock-minus-cut volume and axial first moment"
+    },
+    {
+      "label": "native-10-15",
+      "offset": 10,
+      "at": 15,
+      "volume": 46887.1921827975,
+      "cz": 56.995913591031226,
+      "keyArea": 11.731710021298504,
+      "nativeSHA256": "905c9765ebfb088d2552e1387badc59b23b9d3385f504e2a4d870b43c9dc190d",
+      "authority": "original live native output; independent stock-minus-cut volume and axial first moment"
+    },
+    {
+      "label": "before-invalid",
+      "offset": 10,
+      "at": 15,
+      "volume": 46887.1921827975,
+      "cz": 56.995913591031226,
+      "keyArea": 11.731710021298504,
+      "nativeSHA256": "905c9765ebfb088d2552e1387badc59b23b9d3385f504e2a4d870b43c9dc190d",
+      "authority": "original live native output; independent stock-minus-cut volume and axial first moment"
+    },
+    {
+      "label": "refused-native",
+      "offset": 10,
+      "at": 15,
+      "volume": 46887.1921827975,
+      "cz": 56.995913591031226,
+      "keyArea": 11.731710021298504,
+      "nativeSHA256": "905c9765ebfb088d2552e1387badc59b23b9d3385f504e2a4d870b43c9dc190d",
+      "authority": "original live native output; independent stock-minus-cut volume and axial first moment"
+    },
+    {
+      "label": "cancel-recovered",
+      "offset": 10,
+      "at": 15,
+      "volume": 46887.1921827975,
+      "cz": 56.995913591031226,
+      "keyArea": 11.731710021298504,
+      "nativeSHA256": "905c9765ebfb088d2552e1387badc59b23b9d3385f504e2a4d870b43c9dc190d",
+      "authority": "original live native output; independent stock-minus-cut volume and axial first moment"
+    },
+    {
+      "label": "undo-y",
+      "offset": 10,
+      "at": 8,
+      "volume": 46887.1921827975,
+      "cz": 57.01373644641989,
+      "keyArea": 11.731710021298504,
+      "nativeSHA256": "c086eb195aa2424736efb7bc5185605e752f7ea5afe30b31f544ed7f0c260f10",
+      "authority": "original live native output; independent stock-minus-cut volume and axial first moment"
+    },
+    {
+      "label": "undo-x",
+      "offset": 4,
+      "at": 8,
+      "volume": 46887.1921827975,
+      "cz": 57.02874913044955,
+      "keyArea": 11.731710021298504,
+      "nativeSHA256": "b3674d0207f4e5ff41955a093fb75b20fbb3407248c18f23f1315b9a4fd4467d",
+      "authority": "original live native output; independent stock-minus-cut volume and axial first moment"
+    },
+    {
+      "label": "redo-x",
+      "offset": 10,
+      "at": 8,
+      "volume": 46887.1921827975,
+      "cz": 57.01373644641989,
+      "keyArea": 11.731710021298504,
+      "nativeSHA256": "c086eb195aa2424736efb7bc5185605e752f7ea5afe30b31f544ed7f0c260f10",
+      "authority": "original live native output; independent stock-minus-cut volume and axial first moment"
+    },
+    {
+      "label": "redo-y",
+      "offset": 10,
+      "at": 15,
+      "volume": 46887.1921827975,
+      "cz": 56.995913591031226,
+      "keyArea": 11.731710021298504,
+      "nativeSHA256": "905c9765ebfb088d2552e1387badc59b23b9d3385f504e2a4d870b43c9dc190d",
+      "authority": "original live native output; independent stock-minus-cut volume and axial first moment"
+    },
+    {
+      "label": "reopened",
+      "offset": 10,
+      "at": 15,
+      "volume": 46887.1921827975,
+      "cz": 56.995913591031226,
+      "keyArea": 11.731710021298504,
+      "nativeSHA256": "905c9765ebfb088d2552e1387badc59b23b9d3385f504e2a4d870b43c9dc190d",
+      "authority": "original live native output; independent stock-minus-cut volume and axial first moment"
+    },
+    {
+      "label": "multiple-groove-position-limitation",
+      "limitation": "Groove positions are editable only on steps with one groove. Moving multiple grooves past one another can change named references.",
+      "positionFields": 0,
+      "diameterFields": 2,
+      "widthFields": 2,
+      "documentPreserved": true
+    }
+  ]
+}

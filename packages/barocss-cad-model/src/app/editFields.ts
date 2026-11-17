@@ -208,6 +208,7 @@ export function editFields(nodes: Nodes, i: number, params?: Record<string, numb
     || (node?.kind === 'fillet' && (f.key === 'rho' || f.key === 'tension'))
     || (node?.kind === 'extrude' && f.key === 'draft')
     || (node?.kind === 'circular-pattern' && f.key === 'span')
+    || (node?.kind === 'shaft' && (f.key.startsWith('keyseatOffset') || f.key.startsWith('grooveOffset'))) // Saved shaft offsets are number-only.
     || f.key.startsWith('loftGuideControl') || f.key.endsWith('linkedInsetMM') || (nodes[i]?.kind === 'hole' && /^(step|about)[01]$/.test(f.key)) ? f : {
     ...f,
     get: n => within(params, () => f.get(n)).value,
@@ -533,11 +534,14 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
           number(`k${k + 1}.${j + 1}b`, `Keyseat (step ${k + 1}) width`, 'mm', n => g(n).steps[k].keyseats![j].width, (n, v) => seat(n, { width: v }));
           number(`k${k + 1}.${j + 1}t`, `Keyseat (step ${k + 1}) depth`, 'mm', n => g(n).steps[k].keyseats![j].depth, (n, v) => seat(n, { depth: v }));
           number(`k${k + 1}.${j + 1}l`, `Keyseat (step ${k + 1}) length`, 'mm', n => g(n).steps[k].keyseats![j].length, (n, v) => seat(n, { length: v }));
+          number(`keyseatOffset${k}.${j}`, `Keyseat ${j + 1} (step ${k + 1}) from step start`, 'mm', n => g(n).steps[k].keyseats![j].offset, (n, v) => seat(n, { offset: v }));
         });
         node.steps[k].grooves?.forEach((_, j) => {
           const groove = (n: ModelNode, patch: Record<string, number>) => step(n, { grooves: g(n).steps[k].grooves!.map((x, i) => i === j ? { ...x, ...patch } : x) });
           number(`g${k + 1}.${j + 1}d`, `Groove (step ${k + 1}) Ø`, 'mm', n => g(n).steps[k].grooves![j].diameter, (n, v) => groove(n, { diameter: v }));
           number(`g${k + 1}.${j + 1}w`, `Groove (step ${k + 1}) width`, 'mm', n => g(n).steps[k].grooves![j].width, (n, v) => groove(n, { width: v }));
+          // Native groove names follow axial order. Do not permit a multi-groove step to reorder its references.
+          if (node.steps[k].grooves!.length === 1) number(`grooveOffset${k}.${j}`, `Groove ${j + 1} (step ${k + 1}) from step start`, 'mm', n => g(n).steps[k].grooves![j].at, (n, v) => groove(n, { at: v }));
         });
       });
       number('r', 'Shoulder fillets', 'mm', n => g(n).steps.find(s => s.fillet)?.fillet ?? 0, (n, v) => ({ ...g(n), steps: g(n).steps.map((s, j) => { const x = { ...s }; if (v > 0 && j < g(n).steps.length - 1) x.fillet = v; else delete x.fillet; return x; }) }));

@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "phase": "open feature editor 0",
+  "errors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1074,
+  "observations": [
+    {
+      "label": "initial",
+      "offset": 4,
+      "at": 8,
+      "volume": 46887.1921827975,
+      "cz": 57.02874913044955,
+      "keyArea": 11.731710021298504,
+      "nativeSHA256": "b3674d0207f4e5ff41955a093fb75b20fbb3407248c18f23f1315b9a4fd4467d",
+      "authority": "original live native output; independent stock-minus-cut volume and axial first moment"
+    }
+  ]
+}

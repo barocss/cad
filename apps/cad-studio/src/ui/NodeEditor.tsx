@@ -299,6 +299,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
         </div>
       </> : <button className="ghost" type="button" disabled={pending || changed || hasInvalidNumber || !sameDraftScope} onClick={() => { retireEvaluation(); edgeReplacement.start(); }}>Replace edge</button>)}
       {readingEnd && <div className="empty" role="status">Reading exact distance…</div>}
+      {node?.kind === 'shaft' && node.steps.some(step => (step.grooves?.length ?? 0) > 1) && <p className="empty" role="status">Groove positions are editable only on steps with one groove. Moving multiple grooves past one another can change named references.</p>}
       {hasMissingNumber && <div className="hud-error" role="status">Enter a number for {missingNumbers.map(field => field.label).join(', ')}.</div>}
       {invalidCounts.map(field => <div key={field.key} className="hud-error" role="status">{field.label} must be a whole number from {field.integerRange!.min} to {field.integerRange!.max}.</div>)}
       {invalidDimensions.filter(({ rule }) => rule !== 'open-unit').map(({ field, rule }) => <div key={field.key} id={`history-invalid-${field.key}`} className="hud-error" role="status">{field.label} · {featureNumberRange(rule)}.</div>)}
