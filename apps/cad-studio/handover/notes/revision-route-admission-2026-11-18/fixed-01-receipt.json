@@ -1,0 +1,598 @@
+{
+  "status": "PASS",
+  "qualification": "Offering a root-only linked route file must not make an ordinary assembly unsaveable.",
+  "failure": "",
+  "sourceFrozenCount": 561,
+  "sourceFrozenEqualsCleanup": true,
+  "sourceCapsuleSha256": "cb9776b05ac6f49694b23e357e9eaec5ce7a2411c79921c4756b19676096dbff",
+  "states": [
+    {
+      "label": "01-route-offer",
+      "document": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              100,
+              60
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": -4,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "instances": [
+          {
+            "id": "first",
+            "name": "Mount plate",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    64,
+                    32
+                  ],
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 8,
+                  "id": "n1"
+                },
+                {
+                  "kind": "hole",
+                  "parent": {
+                    "node": 1,
+                    "side": "solid"
+                  },
+                  "center": [
+                    32,
+                    16
+                  ],
+                  "radius": 4,
+                  "id": "n2"
+                }
+              ],
+              "nextId": 3,
+              "outputs": {
+                "b2": {
+                  "node": 2,
+                  "side": "solid"
+                }
+              }
+            },
+            "part": {
+              "id": "mount",
+              "rev": "A"
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "03-open",
+      "document": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              100,
+              60
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": -4,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "instances": [
+          {
+            "id": "first",
+            "name": "Mount plate",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    64,
+                    32
+                  ],
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 8,
+                  "id": "n1"
+                },
+                {
+                  "kind": "hole",
+                  "parent": {
+                    "node": 1,
+                    "side": "solid"
+                  },
+                  "center": [
+                    32,
+                    16
+                  ],
+                  "radius": 4,
+                  "id": "n2"
+                }
+              ],
+              "nextId": 3,
+              "outputs": {
+                "b2": {
+                  "node": 2,
+                  "side": "solid"
+                }
+              }
+            },
+            "part": {
+              "id": "mount",
+              "rev": "A"
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "04-existing-pending-retained",
+      "document": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              100,
+              60
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": -4,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "instances": [
+          {
+            "id": "first",
+            "name": "Mount plate",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    64,
+                    32
+                  ],
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 8,
+                  "id": "n1"
+                },
+                {
+                  "kind": "hole",
+                  "parent": {
+                    "node": 1,
+                    "side": "solid"
+                  },
+                  "center": [
+                    32,
+                    16
+                  ],
+                  "radius": 4,
+                  "id": "n2"
+                }
+              ],
+              "nextId": 3,
+              "outputs": {
+                "b2": {
+                  "node": 2,
+                  "side": "solid"
+                }
+              }
+            },
+            "part": {
+              "id": "mount",
+              "rev": "A"
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "pendingParts": {
+          "mount": {
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    64,
+                    32
+                  ],
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 12,
+                  "id": "n1"
+                },
+                {
+                  "kind": "hole",
+                  "parent": {
+                    "node": 1,
+                    "side": "solid"
+                  },
+                  "center": [
+                    32,
+                    16
+                  ],
+                  "radius": 4,
+                  "id": "n2"
+                }
+              ],
+              "nextId": 3,
+              "outputs": {
+                "b2": {
+                  "node": 2,
+                  "side": "solid"
+                }
+              }
+            },
+            "rev": "B",
+            "name": "plate-12.bcad"
+          }
+        }
+      }
+    },
+    {
+      "label": "04-normal-reopened",
+      "document": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              100,
+              60
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": -4,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "instances": [
+          {
+            "id": "first",
+            "name": "Mount plate",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    64,
+                    32
+                  ],
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 12,
+                  "id": "n1"
+                },
+                {
+                  "kind": "hole",
+                  "parent": {
+                    "node": 1,
+                    "side": "solid"
+                  },
+                  "center": [
+                    32,
+                    16
+                  ],
+                  "radius": 4,
+                  "id": "n2"
+                }
+              ],
+              "nextId": 3,
+              "outputs": {
+                "b2": {
+                  "node": 2,
+                  "side": "solid"
+                }
+              }
+            },
+            "part": {
+              "id": "mount",
+              "rev": "B",
+              "source": "plate-12.bcad"
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "05-ordinary-revision",
+      "document": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              100,
+              60
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": -4,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "instances": [
+          {
+            "id": "first",
+            "name": "Mount plate",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    64,
+                    32
+                  ],
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 12,
+                  "id": "n1"
+                },
+                {
+                  "kind": "hole",
+                  "parent": {
+                    "node": 1,
+                    "side": "solid"
+                  },
+                  "center": [
+                    32,
+                    16
+                  ],
+                  "radius": 4,
+                  "id": "n2"
+                }
+              ],
+              "nextId": 3,
+              "outputs": {
+                "b2": {
+                  "node": 2,
+                  "side": "solid"
+                }
+              }
+            },
+            "part": {
+              "id": "mount",
+              "rev": "B",
+              "source": "plate-12.bcad"
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "observations": [],
+  "savedFiles": [
+    {
+      "name": "after-refused-revision.bcad",
+      "sha256": "7e05389a55f30df1a33495602e779cd0c2c5aa5b8a4864a41a67454bb5e775ab",
+      "semanticEquality": true
+    },
+    {
+      "name": "ordinary-revised.bcad",
+      "sha256": "5f1bc2224b1863bb625d1d0e3402f57f980309a496aa6524ffab656e6b1073bc",
+      "semanticEquality": true
+    }
+  ]
+}

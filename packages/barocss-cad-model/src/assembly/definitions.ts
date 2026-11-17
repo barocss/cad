@@ -1,3 +1,4 @@
+import { assertRouteBundleDocument } from '../engine/routeBundle';
 import { fillPatternDocumentProblem } from '../engine/fillFeaturePattern';
 // Shared part definitions: instances placing the same part (inserted once, then duplicated) share its
 // definition, so a new revision accepted for it is every one of theirs; a copy made independent gets a
@@ -11,6 +12,14 @@ import { drivenRefusal, expandPatterns } from './patterns';
 import { cutBlockedBy, cutBlockedWords } from './cuts';
 import { refusal } from '../engine/refusal';
 import { heldByRevision, heldLooks, type HeldLook } from './looks';
+
+/** Apply the existing root-only route contract to an incoming child, not the current assembly.
+ * A bad waiting candidate can still be replaced or dismissed; never silently detach its sources. */
+function definitionRouteProblem(part: StudioDoc): string | undefined {
+  try { assertRouteBundleDocument({ schema: 3, instances: [{ doc: part }] }); }
+  catch (cause) { return `${cause instanceof Error ? cause.message : String(cause)} Detach linked route bundles before using this document as a part definition.`; }
+  return undefined;
+}
 
 /** A definition id not yet used by any instance or pending revision. */
 export function freshPartId(doc: StudioDoc): string {
@@ -42,6 +51,7 @@ export function offerRevision(doc: StudioDoc, id: string, part: StudioDoc, name:
   const pathProblem = fillPatternDocumentProblem(part) ?? curvePatternDocumentProblem({ instances: [{ doc: part }] });
   if (pathProblem) return { error: pathProblem };
   const placed = sharing(doc, id)[0]; if (!placed?.part) return { error: 'That part is not placed any more.' };
+  const routeProblem = definitionRouteProblem(part); if (routeProblem) return { error: routeProblem };
   const blocked = cutBlockedBy(doc, sharing(doc, id).map(i => i.id), part); if (blocked) return { error: cutBlockedWords(blocked, 'This file') };
   const strip = (d: StudioDoc) => JSON.stringify({ ...d, render: undefined, direct: undefined, drawing: undefined });
   if (strip(part) === strip(placed.doc)) return { error: `This file is ${placed.name} as it is placed (Rev ${placed.part.rev}): nothing to update.` };
@@ -54,6 +64,7 @@ export function offerRevision(doc: StudioDoc, id: string, part: StudioDoc, name:
 /** The waiting revision taken: every instance sharing the definition places it (where it is), at its revision. Each occurrence keeps its own looks (heldLooks lists those whose body is gone). */
 export function acceptRevision(doc: StudioDoc, id: string): StudioDoc {
   const p = doc.pendingParts?.[id]; if (!p) return doc;
+  const routeProblem = definitionRouteProblem(p.doc); if (routeProblem) throw refusal('BAD_REFERENCE', routeProblem);
   const blocked = cutBlockedBy(doc, sharing(doc, id).map(i => i.id), p.doc); if (blocked) throw refusal('VALUE', cutBlockedWords(blocked, 'Accepting this revision'));
   const rest = Object.fromEntries(Object.entries(doc.pendingParts ?? {}).filter(([k]) => k !== id));
   const instances = (doc.instances ?? []).map((i): PartInstance => i.part?.id === id ? { ...i, doc: p.doc, part: { ...i.part, rev: p.rev, source: p.name } } : i);
@@ -70,6 +81,7 @@ export function editDefinition(doc: StudioDoc, owner: string, part: StudioDoc): 
   if (!inst) return { error: `No part "${owner}" is placed.` };
   const seed = inst.pattern ? (doc.instances ?? []).find(i => i.id === doc.instancePatterns?.find(p => p.id === inst.pattern!.id)?.seed) : inst;
   if (!seed) return { error: `${inst.name} has lost its pattern's seed.` };
+  const routeProblem = definitionRouteProblem(part); if (routeProblem) return { error: routeProblem };
   const pathProblem = fillPatternDocumentProblem(part) ?? curvePatternDocumentProblem({ instances: [{ doc: part }] });
   if (pathProblem) return { error: pathProblem };
   // (A definition that is the assembly itself, or places the very part it replaces, would contain itself: refused, never taken.)

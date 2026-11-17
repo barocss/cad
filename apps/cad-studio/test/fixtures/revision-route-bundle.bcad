@@ -1,0 +1,210 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 4,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [
+    {
+      "kind": "sketch",
+      "profile": "circle",
+      "center": [
+        -2,
+        0
+      ],
+      "radius": 0.5,
+      "id": "n0"
+    },
+    {
+      "kind": "sweep-curve",
+      "sketch": 0,
+      "name": "bundle · A",
+      "path": {
+        "degree": 3,
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ],
+        "controlPoints": [
+          [
+            -2,
+            0,
+            0
+          ],
+          [
+            -2,
+            0,
+            10
+          ],
+          [
+            -2,
+            0,
+            20
+          ],
+          [
+            -2,
+            0,
+            30
+          ]
+        ],
+        "weights": [
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "id": "n1",
+      "routeBundleMember": {
+        "bundleId": "bundle1",
+        "memberId": "A"
+      }
+    },
+    {
+      "kind": "sketch",
+      "profile": "circle",
+      "center": [
+        2,
+        0
+      ],
+      "radius": 0.5,
+      "id": "n2"
+    },
+    {
+      "kind": "sweep-curve",
+      "sketch": 2,
+      "name": "bundle · B",
+      "path": {
+        "degree": 3,
+        "knots": [
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1
+        ],
+        "controlPoints": [
+          [
+            2,
+            0,
+            0
+          ],
+          [
+            2,
+            0,
+            10
+          ],
+          [
+            2,
+            0,
+            20
+          ],
+          [
+            2,
+            0,
+            30
+          ]
+        ],
+        "weights": [
+          1,
+          1,
+          1,
+          1
+        ]
+      },
+      "id": "n3",
+      "routeBundleMember": {
+        "bundleId": "bundle1",
+        "memberId": "B"
+      }
+    }
+  ],
+  "outputs": {
+    "b1": {
+      "node": 1,
+      "side": "solid"
+    },
+    "b3": {
+      "node": 3,
+      "side": "solid"
+    }
+  },
+  "nextId": 4,
+  "direct": {
+    "sources": {
+      "src_1": "@model bundle {\n  version: 0;\n  length-unit: mm;\n  @curve #A { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]]; weights: [1,1,1,1]; }\n  @curve #B { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[2,0,0],[2,0,10],[2,0,20],[2,0,30]]; weights: [1,1,1,1]; }\n}"
+    },
+    "objects": [
+      {
+        "id": "obj_1",
+        "name": "bundle · A",
+        "source": "src_1",
+        "geometry": "A"
+      },
+      {
+        "id": "obj_2",
+        "name": "bundle · B",
+        "source": "src_1",
+        "geometry": "B"
+      }
+    ]
+  },
+  "routeBundles": [
+    {
+      "id": "bundle1",
+      "version": 1,
+      "kind": "two-open-curves-one-translation-tie",
+      "frame": "world-mm",
+      "tie": {
+        "id": "tie1",
+        "anchorMM": [
+          0,
+          0,
+          10
+        ]
+      },
+      "members": [
+        {
+          "id": "A",
+          "curveObjectId": "obj_1",
+          "handleKey": "1",
+          "sweepFeatureId": "n1",
+          "profileFeatureId": "n0",
+          "sourceKey": "src_1",
+          "geometryId": "A",
+          "sourceCanonical": "{\"curve\":{\"controlPoints\":[[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]],\"degree\":3,\"knots\":[0,0,0,0,1,1,1,1],\"weights\":[1,1,1,1]},\"object\":{\"geometry\":\"A\",\"id\":\"obj_1\",\"source\":\"src_1\"},\"source\":\"@model bundle {\\n  version: 0;\\n  length-unit: mm;\\n  @curve #A { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]]; weights: [1,1,1,1]; }\\n  @curve #B { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[2,0,0],[2,0,10],[2,0,20],[2,0,30]]; weights: [1,1,1,1]; }\\n}\"}",
+          "sourceRevision": "4228a50a542115fa",
+          "offsetMM": [
+            -2,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "B",
+          "curveObjectId": "obj_2",
+          "handleKey": "1",
+          "sweepFeatureId": "n3",
+          "profileFeatureId": "n2",
+          "sourceKey": "src_1",
+          "geometryId": "B",
+          "sourceCanonical": "{\"curve\":{\"controlPoints\":[[2,0,0],[2,0,10],[2,0,20],[2,0,30]],\"degree\":3,\"knots\":[0,0,0,0,1,1,1,1],\"weights\":[1,1,1,1]},\"object\":{\"geometry\":\"B\",\"id\":\"obj_2\",\"source\":\"src_1\"},\"source\":\"@model bundle {\\n  version: 0;\\n  length-unit: mm;\\n  @curve #A { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]]; weights: [1,1,1,1]; }\\n  @curve #B { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[2,0,0],[2,0,10],[2,0,20],[2,0,30]]; weights: [1,1,1,1]; }\\n}\"}",
+          "sourceRevision": "f546a922cb62ceef",
+          "offsetMM": [
+            2,
+            0,
+            0
+          ]
+        }
+      ]
+    }
+  ]
+}
