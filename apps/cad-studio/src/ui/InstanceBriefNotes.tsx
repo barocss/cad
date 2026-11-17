@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { badValue } from '@barocss/cad-model/chat/brief';
-import { createNoteEditSession, editInstanceBriefNote, instanceNoteScope } from '../state/instanceBriefNotes';
+import { clearInstanceBriefNote, createNoteEditSession, editInstanceBriefNote, instanceNoteScope } from '../state/instanceBriefNotes';
 import { Button } from '@/components/ui/button';
 export function InstanceBriefNotes({ doc, id, blocked, commit, onError }: {
     doc: StudioDoc;
@@ -23,10 +23,10 @@ export function InstanceBriefNotes({ doc, id, blocked, commit, onError }: {
     useLayoutEffect(() => { live.current.mounted = true; return () => { live.current.mounted = false; session.end(); }; }, [session]);
     const open = current && draft.open;
     const reset = () => { session.end(); setDraft({ doc, id, open: false, token: null, text: scope.ok ? scope.text : '' }); };
-    const apply = () => session.run(draft.token, () => {
+    const submit = (action: 'save' | 'clear') => session.run(draft.token, () => {
         if (!live.current.mounted || live.current.doc !== doc || live.current.id !== id || live.current.blocked || !current || !open)
             return;
-        const result = editInstanceBriefNote(doc, id, draft.text, new Date().toISOString());
+        const result = action === 'clear' ? clearInstanceBriefNote(doc, id) : editInstanceBriefNote(doc, id, draft.text, new Date().toISOString());
         if (!result.ok) {
             onError(result.error);
             return;
@@ -45,8 +45,9 @@ export function InstanceBriefNotes({ doc, id, blocked, commit, onError }: {
                 reset();
             } }}/></label>
     <p className="muted small">1–500 characters. Save records your explicit confirmation of this text; it does not approve the part for manufacture.</p>
-    {badValue('notes', draft.text) && <p role="alert">Enter 1–500 characters; blank clearing is not supported.</p>}
-    <div className="row"><Button disabled={blocked || !!badValue('notes', draft.text) || draft.text === scope.text} onClick={apply}>Save notes</Button><Button variant="ghost" onClick={reset}>Cancel notes</Button></div>
+    {badValue('notes', draft.text) && <p role="alert">Enter 1–500 characters; use Clear note to explicitly remove the saved note.</p>}
+    <p className="muted small">Clear note removes the saved note and its source/confirmation metadata, discards this draft, and leaves other brief fields unchanged.</p>
+    <div className="row"><Button disabled={blocked || !!badValue('notes', draft.text) || draft.text === scope.text} onClick={() => submit('save')}>Save notes</Button><Button variant="ghost" disabled={blocked || !scope.owner.doc.brief?.notes} onClick={() => submit('clear')}>Clear note</Button><Button variant="ghost" onClick={reset}>Cancel notes</Button></div>
    </> : <><p className="small whitespace-pre-wrap">{scope.text || 'No design-brief notes recorded.'}</p><Button disabled={blocked} variant="ghost" onClick={() => setDraft({ doc, id, open: true, token: session.begin(), text: scope.text })}>Edit notes</Button></>}
   </>}
  </section>;

@@ -1,0 +1,73 @@
+{
+  "status": "PASS",
+  "qualification": "Explicit Clear note shared and independent transactions, BOM absence, actual native Save and fresh Open",
+  "observations": [
+    {
+      "sharedClear": [
+        "p1",
+        "p2"
+      ],
+      "independentClear": "p3",
+      "draftDiscarded": true,
+      "oneUndoRedoEach": true,
+      "defaultCsvExact": true,
+      "quantityAndTotalsUnchanged": true,
+      "actualNativeDownload": true,
+      "freshOpenAbsent": true
+    }
+  ],
+  "files": [
+    {
+      "file": "cleared-notes.bcad",
+      "hash": "6bfac42fa581c0a6f60974c0f965278bfe38510216f869227c5452694286095a",
+      "semanticEquality": true
+    }
+  ],
+  "downloads": [
+    {
+      "phase": "native Save cleared-notes",
+      "suggestedFilename": "clear-notes.bcad"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Top-level ordinary definitions only. Approval currentness and linked revision remain outside this flow."
+  ],
+  "oracles": [
+    {
+      "label": "03-absence-csv",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "qty": 3,
+        "allAbsent": true
+      }
+    },
+    {
+      "label": "05-reopened-absence",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "qty": 3,
+        "allAbsent": true
+      }
+    }
+  ],
+  "sourceFrozenCount": 530,
+  "visualReview": "Root inspected actual 01/03/05 PNGs: shared revision B, no note, quantity 3, all occurrence IDs absent, fresh Open restored. Screenshots show results, not the Clear button itself.",
+  "validation": {
+    "focused": "10/10 PASS",
+    "studioTypecheck": "PASS",
+    "targetLint": "PASS",
+    "driverSyntaxLint": "PASS",
+    "productionBuild": "PASS, built in 5.26s"
+  }
+}

@@ -75,6 +75,17 @@ export function editInstanceBriefNote(doc: StudioDoc, id: string, text: string, 
     return 'error' in result ? { ok: false, error: result.error } : { ok: true, doc: result.doc, changed: result.changed };
 }
 
+/** Explicit deletion only: retain the brief container and every unrelated field. */
+export function clearInstanceBriefNote(doc: StudioDoc, id: string): ReturnType<typeof editInstanceBriefNote> {
+    const scope = instanceNoteScope(doc, id);
+    if (!scope.ok) return scope;
+    if (!scope.owner.doc.brief?.notes) return { ok: true, doc, changed: false };
+    const brief = { ...scope.owner.doc.brief };
+    delete brief.notes;
+    const result = editDefinition(doc, id, { ...scope.owner.doc, brief });
+    return 'error' in result ? { ok: false, error: result.error } : { ok: true, doc: result.doc, changed: result.changed };
+}
+
 /** A closed or replaced editor cannot submit a previously captured Save callback. */
 export function createNoteEditSession() {
   let current: object | null = null;

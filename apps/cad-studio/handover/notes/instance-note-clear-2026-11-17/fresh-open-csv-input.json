@@ -1,0 +1,3 @@
+{
+  "csv": "item no.,item,qty,note scope,design brief notes / occurrence mapping JSON\n1,Same box,3,\"Design brief notes: intent, not approval\",\"[{\"\"parts\"\":[\"\"p1\"\",\"\"p2\"\",\"\"p3\"\"],\"\"state\"\":\"\"absent\"\"}]\"\n"
+}

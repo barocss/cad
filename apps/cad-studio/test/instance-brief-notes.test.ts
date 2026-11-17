@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { StudioDoc, PartInstance } from '@barocss/cad-model/engine/doc';
-import { createNoteEditSession, editInstanceBriefNote, instanceNoteScope } from '../src/state/instanceBriefNotes';
+import { clearInstanceBriefNote, createNoteEditSession, editInstanceBriefNote, instanceNoteScope } from '../src/state/instanceBriefNotes';
 import { makeIndependent } from '@barocss/cad-model/assembly/definitions';
 import { revisionOf } from '@barocss/cad-model/util/revision';
 const at = '2026-11-17T12:00:00Z';
@@ -63,6 +63,7 @@ test('all shared members must agree and remain eligible; refusals preserve the i
         const before = structuredClone(d);
         assert.equal(instanceNoteScope(d, 'p1').ok, false);
         assert.equal(editInstanceBriefNote(d, 'p1', 'new', at).ok, false);
+        assert.equal(clearInstanceBriefNote(d, 'p1').ok, false);
         assert.deepEqual(d, before);
     }
 });
@@ -80,6 +81,7 @@ test('independent ordinary scope rejects element, catalogue, fastener and bought
         const before = structuredClone(d);
         assert.equal(instanceNoteScope(d, 'p3').ok, false);
         assert.equal(editInstanceBriefNote(d, 'p3', 'new', at).ok, false);
+        assert.equal(clearInstanceBriefNote(d, 'p3').ok, false);
         assert.deepEqual(d, before);
     }
 });
@@ -92,6 +94,7 @@ test('default-purchased elements and report-dependent couplings are excluded eve
             const before = structuredClone(d);
             assert.equal(instanceNoteScope(d, 'p3').ok, false, `${kind}/${bought}`);
             assert.equal(editInstanceBriefNote(d, 'p3', 'new', at).ok, false);
+        assert.equal(clearInstanceBriefNote(d, 'p3').ok, false);
             assert.deepEqual(d, before);
         }
     }
@@ -114,4 +117,27 @@ test('captured Save is retired by Cancel, replacement or unmount; a rejected com
  assert.equal(session.run(second, () => { calls++; }), true);
  assert.equal(session.run(second, () => { calls++; }), true);
  session.end(); assert.equal(session.run(second, () => { calls++; }), false); assert.equal(calls, 2);
+});
+
+test('explicit Clear removes only the complete note field for all shared occurrences', () => {
+    const d = fixture(), before = structuredClone(d), r = clearInstanceBriefNote(d, 'p1');
+    assert.ok(r.ok); assert.equal(r.changed, true); assert.deepEqual(d, before);
+    assert.equal(r.doc.instances![0].part?.rev, 'B');
+    assert.equal(r.doc.instances![0].doc, r.doc.instances![1].doc);
+    for (const i of [0, 1]) {
+        const expected = structuredClone(d.instances![i].doc); delete expected.brief!.notes;
+        assert.deepEqual(r.doc.instances![i].doc, expected);
+        assert.deepEqual(r.doc.instances![i].position, d.instances![i].position);
+    }
+    assert.equal(r.doc.instances![2], d.instances![2]);
+    const again = clearInstanceBriefNote(r.doc, 'p1'); assert.ok(again.ok);
+    assert.equal(again.changed, false); assert.equal(again.doc, r.doc);
+});
+test('independent Clear retains version-only brief and no-note is an exact no-op', () => {
+    const d = fixture(); delete d.instances![2].part; delete d.instances![2].doc.brief!.purpose;
+    const r = clearInstanceBriefNote(d, 'p3'); assert.ok(r.ok);
+    assert.deepEqual(r.doc.instances![2].doc.brief, { version: 1 });
+    assert.deepEqual(r.doc.instances!.slice(0, 2), d.instances!.slice(0, 2));
+    const empty = fixture(); delete empty.instances![2].doc.brief;
+    const no = clearInstanceBriefNote(empty, 'p3'); assert.ok(no.ok); assert.equal(no.doc, empty);
 });

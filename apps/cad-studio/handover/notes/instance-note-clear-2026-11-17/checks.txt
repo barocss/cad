@@ -1,0 +1,20 @@
+Base: 1227d514cd951723a789a604be205701f481d164
+Product files: src/state/instanceBriefNotes.ts; src/ui/InstanceBriefNotes.tsx
+Test files: test/instance-brief-notes.test.ts; test/instance-note-clear-browser.mjs
+Focused: 10 tests, 10 pass, 0 fail
+Studio tsc --noEmit: PASS
+Scoped eslint + driver node --check: PASS
+Actual browser: PASS; errors 0; console errors 0; source changes 0; cleanup complete
+Production Vite build: built in 5.26s
+git diff --check: PASS
+Approval/baseline currentness: NOT_RUN, not resolved by record preservation
+Artifact SHA-256:
+2824b75a0c7c459c70f6b08649e988ad6c1201ccc2941a24f063453b04b3003a  README.md
+110cec9430e9adad436e946c50b9a4216fce3ea319c17b037a2695a1c4f9031c  before-save-csv-input.json
+176b8bec1ad76c46f66436b3ba6c355d892adf87ff2fb6958918c6fe635c2b8a  before-save-csv-output.json
+2c508c34845a4fb785aaaa5eb9440294425554d3a9a8e749b785caec771bebfe  fresh-open-bom.png
+110cec9430e9adad436e946c50b9a4216fce3ea319c17b037a2695a1c4f9031c  fresh-open-csv-input.json
+176b8bec1ad76c46f66436b3ba6c355d892adf87ff2fb6958918c6fe635c2b8a  fresh-open-csv-output.json
+96574b9939e38de88565c31790664be0e55f85ae3e01963817b535198912da38  qualification.json
+6bfac42fa581c0a6f60974c0f965278bfe38510216f869227c5452694286095a  saved.bcad
+18e0d431c709f27bf9d700f673dbb92b35667ef5ccd558221ebee1f75074ce8d  shared-cleared.png
