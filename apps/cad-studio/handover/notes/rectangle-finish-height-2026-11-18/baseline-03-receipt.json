@@ -1,0 +1,40 @@
+{
+  "status": "PASS",
+  "qualification": "Record the existing safe REFERENCE_MOVED refusal of an otherwise valid height edit.",
+  "limits": [
+    "Single terminal numeric constant circular Fillet R2 or Chamfer D2 on one original rectangular prism edge."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1073,
+  "sourceAfterCount": 1073,
+  "sourceAfterCleanupCount": 1073,
+  "oracles": [
+    {
+      "label": "01-original",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 11965.663706143592,
+        "nativeVolume": 11965.663706143594,
+        "workerVolume": 11965.663706143594
+      }
+    },
+    {
+      "label": "baseline-still-height10",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 11965.663706143592,
+        "nativeVolume": 11965.663706143594,
+        "workerVolume": 11965.663706143594
+      }
+    }
+  ],
+  "files": []
+}

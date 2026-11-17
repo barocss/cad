@@ -28,8 +28,18 @@ function plain(nodes:readonly ModelNode[]):boolean {
   &&(i===0||i===last?p.atEnd===true&&p.fraction===undefined:p.atEnd===undefined&&finite(p.fraction)&&p.fraction>1e-9&&p.fraction<1-1e-9&&(i===1||p.fraction-f.radii![i-1].fraction!>1e-9)))
   &&f.radii[0].at.some((v,i)=>v!==f.radii![last].at[i]);
 }
-/** Only the Extrude inspector's Width/Depth edit of a plain three-node root rectangle part. */
+/** Height-only edit, with no endpoint law to reassign. Other size edits retain their existing admission. */
+export function isRectangleFinishHeightResize(before:StudioDoc,next:StudioDoc,index:number):boolean {
+ if(index!==1||before.direct!==undefined||next.direct!==undefined||before.instances?.length||next.instances?.length||!plain(before.nodes)||!plain(next.nodes))return false;
+ const old=before.nodes[1],now=next.nodes[1],finish=before.nodes[2];
+ return old.kind==='extrude'&&now.kind==='extrude'&&old.height!==now.height
+  &&(finish.kind==='chamfer'||finish.kind==='fillet'&&finish.radii===undefined)
+  &&same({...before,nodes:[]},{...next,nodes:[]})&&same(before.nodes[0],next.nodes[0])
+  &&same({...old,height:0},{...now,height:0})&&same(finish,next.nodes[2]);
+}
+/** Only proven Width/Depth or Height-only edits of a plain three-node root rectangle part. */
 export function isRectangleFinishResize(before:StudioDoc,next:StudioDoc,index:number):boolean {
+ if(isRectangleFinishHeightResize(before,next,index))return true;
  if(index!==1||before.direct!==undefined||next.direct!==undefined||before.instances?.length||next.instances?.length||!plain(before.nodes)||!plain(next.nodes))return false;
  const old=before.nodes[0],now=next.nodes[0];if(old.kind!=='sketch'||old.profile!=='rectangle'||now.kind!=='sketch'||now.profile!=='rectangle')return false;
  return !same(old.max,now.max)&&same({...before,nodes:[]},{...next,nodes:[]})&&same({...old,max:[]},{...now,max:[]})

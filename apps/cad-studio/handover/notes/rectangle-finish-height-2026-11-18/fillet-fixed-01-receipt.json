@@ -1,0 +1,117 @@
+{
+  "status": "PASS",
+  "qualification": "Preserve proven rectangle constant circular Fillet reference across height edit and reopen.",
+  "limits": [
+    "Single terminal numeric constant circular Fillet R2 or Chamfer D2 on one original rectangular prism edge."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1073,
+  "sourceAfterCount": 1073,
+  "sourceAfterCleanupCount": 1073,
+  "oracles": [
+    {
+      "label": "01-original",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 11965.663706143592,
+        "nativeVolume": 11965.663706143594,
+        "workerVolume": 11965.663706143594
+      }
+    },
+    {
+      "label": "02-taller-native",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 35965.66370614359,
+        "nativeVolume": 35965.66370614359,
+        "workerVolume": 35965.66370614359
+      }
+    },
+    {
+      "label": "undo-height10",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 11965.663706143592,
+        "nativeVolume": 11965.663706143594,
+        "workerVolume": 11965.663706143594
+      }
+    },
+    {
+      "label": "redo-height30",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 35965.66370614359,
+        "nativeVolume": 35965.66370614359,
+        "workerVolume": 35965.66370614359
+      }
+    },
+    {
+      "label": "reopened-height30",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 35965.66370614359,
+        "nativeVolume": 35965.66370614359,
+        "workerVolume": 35965.66370614359
+      }
+    },
+    {
+      "label": "native-height-14",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 16765.66370614359,
+        "nativeVolume": 16765.663706143605,
+        "workerVolume": 16765.663706143605
+      }
+    },
+    {
+      "label": "native-height-40",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 47965.66370614359,
+        "nativeVolume": 47965.66370614356,
+        "workerVolume": 47965.66370614356
+      }
+    },
+    {
+      "label": "invalid-preserves-height40",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 47965.66370614359,
+        "nativeVolume": 47965.66370614356,
+        "workerVolume": 47965.66370614356
+      }
+    },
+    {
+      "label": "recovery-cancel-height40",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 47965.66370614359,
+        "nativeVolume": 47965.66370614356,
+        "workerVolume": 47965.66370614356
+      }
+    }
+  ],
+  "files": [
+    {
+      "name": "height30.bcad",
+      "hash": "6851f2711ae909ae44eb96235b92471e57c84c80a132a0641f78091b90b0f943",
+      "semanticEquality": true
+    }
+  ]
+}

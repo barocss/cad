@@ -112,3 +112,31 @@ test('constant circular Fillet retains its numeric law and updates only the prov
  const corrupt=structuredClone(f.newBodies);corrupt[0].mesh.edges[0].nativeLine=undefined;
  assert.equal(proveRectangleFinishResize(before,next,f.oldBodies,corrupt),null,'constant laws still require the whole cuboid topology proof');
 });
+
+test('Height-only constant finishes retain every cuboid edge role and refresh only its signature',()=>{
+ const base=rectanglePart(30,20,10),oldBodies=bodies(base);
+ for(const edge of oldBodies[0].mesh.edges)for(const kind of ['fillet','chamfer'] as const)for(const height of [6,30]){
+  const name=edge.names[0],law=kind==='fillet'?{kind,radius:2}:{kind,distance:2};
+  const before=withNode(base,{...law,parent:{node:1,side:'solid'},edges:[name],sigs:{[name]:toSig(signaturesOf(oldBodies[0]).edges.get(name)!)}});
+  const next={...before,nodes:before.nodes.map(node=>node.kind==='extrude'?{...node,height}:node)},newBodies=bodies(next);
+  const result=proveRectangleFinishResize(before,next,oldBodies,newBodies);assert.ok(result,`${kind} ${name} height${height}`);
+  assert.equal(result.nodes[0],before.nodes[0]);assert.equal(result.nodes[1],next.nodes[1]);
+  assert.deepEqual(result.nodes[2],{...before.nodes[2],sigs:{[name]:toSig(signaturesOf(newBodies[0]).edges.get(name)!)}});
+  const evaluated=evaluateDoc(result,5);assert.ok(evaluated.ok,evaluated.ok?'':evaluated.error.hint);
+  const length=edge.a[2]!==edge.b[2]?height:Math.hypot(...edge.b.map((v,i)=>v-edge.a[i]));
+  if(evaluated.ok)assert.ok(Math.abs(evaluated.bodies[0].volume!-(30*20*height-length*(kind==='fillet'?4-Math.PI:2)))<1e-7);
+ }
+});
+
+test('Height admission does not include combined dimensions, translation, bindings, varying law or stale signatures',()=>{
+ const f=fixture(),feature=f.before.nodes[2];assert.ok(feature.kind==='fillet');if(feature.kind!=='fillet')return;
+ const constant={...feature};delete constant.radii;
+ const before={...f.before,nodes:[f.before.nodes[0],f.before.nodes[1],constant]};
+ const height={...before,nodes:before.nodes.map(node=>node.kind==='extrude'?{...node,height:30}:node)};
+ assert.ok(isRectangleFinishResize(before,height,1));
+ const patch=(index:number,value:object):StudioDoc=>({...height,nodes:height.nodes.map((node,i)=>i===index?{...node,...value} as ModelNode:node)});
+ for(const next of [patch(0,{max:[40,25]}),patch(1,{from:2}),patch(1,{draft:1}),patch(1,{height:0}),patch(1,{height:-2}),patch(1,{height:{parameter:'H'}}),patch(2,{radius:3})])assert.equal(isRectangleFinishResize(before,next,1),false);
+ assert.equal(isRectangleFinishResize(f.before,{...f.before,nodes:f.before.nodes.map(n=>n.kind==='extrude'?{...n,height:30}:n)},1),false);
+ const stale={...constant,sigs:{[f.name]:{...constant.sigs![f.name],p:[0,0,0] as [number,number,number]}}};
+ assert.equal(proveRectangleFinishResize({...before,nodes:[before.nodes[0],before.nodes[1],stale]},{...height,nodes:[height.nodes[0],height.nodes[1],stale]},f.oldBodies,bodies(height)),null);
+});

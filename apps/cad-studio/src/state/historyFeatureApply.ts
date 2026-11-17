@@ -9,7 +9,7 @@ import { prepareLinearPatternHoleEdit } from '../app/patternHoleSpacing';
 import { rectangularCutEditProblem } from '../app/rectangularCutEdit';
 import { preparePatternNodeCandidate } from '../app/directCurveCandidate';
 import { linkedInsetHistoryFailure, failedFeatureText, loftHistoryFailure, splitDependentHoleFailure, holeDepthContactFailure } from '../app/failedFeature';
-import { isRectangleFinishResize, proveRectangleFinishResize } from './rectangleFinishResize';
+import { isRectangleFinishResize, isRectangleFinishHeightResize, proveRectangleFinishResize } from './rectangleFinishResize';
 
 type Apply = ComponentProps<typeof NodeEditor>['onApply'];
 interface Options {
@@ -45,15 +45,38 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     const splitOutputChanged = previousSplit?.kind === 'split' && nextSplit?.kind === 'split'
       && previousSplit.outputSide !== nextSplit.outputSide;
     const rawNext = { ...doc, nodes: editedNodes };
-    const next = splitOutputChanged ? prefixDoc(rawNext, rawNext.nodes.length) : rawNext;
+    let next = splitOutputChanged ? prefixDoc(rawNext, rawNext.nodes.length) : rawNext;
     const candidate = preparePatternNodeCandidate(doc, next, editNode);
     if (candidate) { stageFeatureCandidate(candidate); return; }
-    const request = nextRevision();
-    const resize = isRectangleFinishResize(doc,next,editNode), worker = owner.worker(), open = owner.open();
+    let request = nextRevision();
+    const heightResize = isRectangleFinishHeightResize(doc,next,editNode);
+    const resize = !heightResize && isRectangleFinishResize(doc,next,editNode), worker = owner.worker(), open = owner.open();
     const current = () => ownsDraft() && owner.document() === doc && owner.scope() === scope
-      && owner.worker() === worker && owner.open() === open;
-    return engine.evaluate(next, request).then(async reply => {
-      if (!reply || !current()) return;
+      && owner.worker() === worker && owner.open() === open
+      && (!heightResize || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
+    return (async () => {
+      // A large height change can fail the generic nearest-edge guard before evaluation.
+      // Prove the complete parent topology first; never weaken the native guard itself.
+      if (heightResize) {
+        if (!current()) return;
+        const failure = {title:'Height not applied',hint:'The original finishing edge could not be verified. Keep the current height or explicitly replace its edge first.',detail:'No reference was renamed or refreshed.'};
+        try {
+          const beforeRevision = nextRevision();
+          const before = await engine.part(prefixDoc(doc,2),beforeRevision,'refs');
+          if (!current()) return;
+          if (!before.ok || before.revision !== beforeRevision) return failure;
+          const afterRevision = nextRevision();
+          const after = await engine.part(prefixDoc(next,2),afterRevision,'refs');
+          if (!current()) return;
+          if (!after.ok || after.revision !== afterRevision) return failure;
+          const refreshed = before.ok && after.ok ? proveRectangleFinishResize(doc,next,before.bodies,after.bodies) : null;
+          if (!refreshed) return failure;
+          next = refreshed;
+          request = nextRevision();
+        } catch { if (current()) return failure; return; }
+      }
+      const reply = await engine.evaluate(next, request);
+      if (!reply || !current() || heightResize && reply.revision !== request) return;
       if (reply.ok) {
         if (!resize) {
           const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated
@@ -79,6 +102,6 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
       return (reply.revision === request ? holeDepthContactFailure(failure, doc.nodes, next.nodes, editNode) : undefined)
         ?? (reply.revision === request ? splitDependentHoleFailure(failure, doc.nodes, next.nodes, editNode) : undefined)
         ?? loftHistoryFailure(failure, doc.nodes, next.nodes, editNode) ?? failure;
-    });
+    })();
   };
 }

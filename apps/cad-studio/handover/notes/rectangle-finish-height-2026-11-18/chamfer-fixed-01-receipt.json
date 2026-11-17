@@ -1,0 +1,117 @@
+{
+  "status": "PASS",
+  "qualification": "Preserve proven rectangle constant circular Fillet reference across height edit and reopen.",
+  "limits": [
+    "Single terminal numeric constant circular Fillet R2 or Chamfer D2 on one original rectangular prism edge."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1073,
+  "sourceAfterCount": 1073,
+  "sourceAfterCleanupCount": 1073,
+  "oracles": [
+    {
+      "label": "01-original",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 11920,
+        "nativeVolume": 11920,
+        "workerVolume": 11920
+      }
+    },
+    {
+      "label": "02-taller-native",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 35920,
+        "nativeVolume": 35920,
+        "workerVolume": 35920
+      }
+    },
+    {
+      "label": "undo-height10",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 11920,
+        "nativeVolume": 11920,
+        "workerVolume": 11920
+      }
+    },
+    {
+      "label": "redo-height30",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 35920,
+        "nativeVolume": 35920,
+        "workerVolume": 35920
+      }
+    },
+    {
+      "label": "reopened-height30",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 35920,
+        "nativeVolume": 35920,
+        "workerVolume": 35920
+      }
+    },
+    {
+      "label": "native-height-14",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 16720,
+        "nativeVolume": 16720,
+        "workerVolume": 16720
+      }
+    },
+    {
+      "label": "native-height-40",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 47920,
+        "nativeVolume": 47920,
+        "workerVolume": 47920
+      }
+    },
+    {
+      "label": "invalid-preserves-height40",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 47920,
+        "nativeVolume": 47920,
+        "workerVolume": 47920
+      }
+    },
+    {
+      "label": "recovery-cancel-height40",
+      "exit": 0,
+      "stdout": {
+        "status": "PASS",
+        "expectedVolume": 47920,
+        "nativeVolume": 47920,
+        "workerVolume": 47920
+      }
+    }
+  ],
+  "files": [
+    {
+      "name": "height30.bcad",
+      "hash": "16b3d7ae050fec691cb81b9dd594d08f10254233091a0ba8ac69f3bc8f2307d6",
+      "semanticEquality": true
+    }
+  ]
+}
