@@ -1,0 +1,195 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [],
+  "outputs": {},
+  "nextId": 0,
+  "bearings": {
+    "version": 1,
+    "rows": [
+      {
+        "id": "6204",
+        "bore": 20,
+        "outside": 47,
+        "width": 14,
+        "chamfer": 1,
+        "daMin": 25,
+        "daMax": 26.5,
+        "raMax": 1,
+        "outsideDeviation": [
+          0,
+          -0.011
+        ],
+        "source": "A9-7 supplied test row"
+      }
+    ]
+  },
+  "fits": {
+    "version": 1,
+    "tables": [
+      {
+        "id": "H7-test",
+        "rows": [
+          {
+            "class": "H7",
+            "over": 30,
+            "upTo": 50,
+            "lower": 0,
+            "upper": 0.025,
+            "estimate": true
+          }
+        ]
+      }
+    ]
+  },
+  "instances": [
+    {
+      "id": "inst1",
+      "name": "inst1",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 35,
+            "holes": [
+              [
+                {
+                  "kind": "arc",
+                  "start": [
+                    23.5,
+                    0
+                  ],
+                  "center": [
+                    0,
+                    0
+                  ],
+                  "direction": "ccw"
+                }
+              ]
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 20,
+            "from": 14,
+            "id": "n1",
+            "made": {
+              "command": "tube",
+              "values": {
+                "r": 35,
+                "ri": 23.5,
+                "h": 20,
+                "x": 0,
+                "y": 0,
+                "z": 14
+              }
+            }
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2
+      },
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "inst2",
+      "name": "inst2",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "shaft",
+            "steps": [
+              {
+                "diameter": 20,
+                "length": 30
+              },
+              {
+                "diameter": 25,
+                "length": 40
+              },
+              {
+                "diameter": 20,
+                "length": 25
+              }
+            ],
+            "chamfers": [
+              0.5,
+              0.5
+            ],
+            "center": [
+              0,
+              0
+            ],
+            "generator": "shaft@0",
+            "id": "n0"
+          },
+          {
+            "kind": "bearing",
+            "row": "6204",
+            "shaft": 0,
+            "step": 1,
+            "against": "end",
+            "housingRef": {
+              "part": "inst1",
+              "body": "b1"
+            },
+            "housingClass": "H7",
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b0": {
+            "node": 0,
+            "side": "solid"
+          },
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2
+      },
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

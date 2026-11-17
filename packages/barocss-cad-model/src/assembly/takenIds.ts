@@ -1,10 +1,10 @@
 // A new part cannot take an occurrence id still named by an assembly or drawing reference.
-import type { StudioDoc } from '../engine/doc';
+import type { ModelNode, StudioDoc } from '../engine/doc';
 import { dimensionEdgeNames } from '../drawing/dimensionReferences';
 import { hostOf } from '../engine/occurrences';
 import { nextFreeId } from '../util/ids';
 
-type Naming = Pick<StudioDoc, 'instances' | 'assemblySteps' | 'assemblyCuts' | 'mates' | 'instancePatterns' | 'drawing'>;
+type Naming = Pick<StudioDoc, 'instances' | 'assemblySteps' | 'assemblyCuts' | 'mates' | 'instancePatterns' | 'drawing'> & Partial<Pick<StudioDoc, 'nodes' | 'pendingParts'>>;
 
 /** Reserve the occurrence prefix in a drawing reference. Local edge names have no occurrence prefix. */
 function reserveDrawingIds(taken: Set<string>, drawing: NonNullable<Naming['drawing']>): void {
@@ -28,6 +28,14 @@ export function takenInstanceIds(doc: Naming): Set<string> {
   for (const m of doc.mates ?? []) { taken.add(hostOf(m.a.part)); taken.add(hostOf(m.b.part)); }
   for (const p of doc.instancePatterns ?? []) taken.add(p.seed);
   if (doc.drawing) reserveDrawingIds(taken, doc.drawing);
+  // Housing links in this assembly and its immediate part definitions use this namespace.
+  // Keep suppressed/waiting references too. Deeper child assemblies own their local ids.
+  const reserveHousing = (nodes: readonly ModelNode[]) => {
+    for (const node of nodes) if (node.kind === 'bearing' && node.housingRef) taken.add(node.housingRef.part);
+  };
+  reserveHousing(doc.nodes ?? []);
+  for (const inst of doc.instances ?? []) reserveHousing(inst.doc.nodes);
+  for (const pending of Object.values(doc.pendingParts ?? {})) reserveHousing(pending.doc.nodes);
   return taken;
 }
 /** The first `<prefix><n>` no part holds and nothing in the document names. */
