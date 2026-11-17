@@ -7,7 +7,8 @@ import { useState } from 'react';
 import type { DrawingSection, DrawingViews, SectionStep } from '@barocss/cad-model/drawing/types';
 import { SCALES, scaleLabel } from '@barocss/cad-model/drawing/views';
 import { Icon } from '../atoms';
-import { CONTROL, FIELD } from './sheetShared';
+import { CONTROL, FIELD, TICK } from './sheetShared';
+import { sectionHatchSupported, withSectionHatch } from './sectionHatch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -16,7 +17,7 @@ const round = (v: number) => Math.round(v * 100) / 100 + 0;
 /** A row of several controls: wraps inside the panel rather than widening it. */
 const WRAP = `${FIELD} flex-wrap justify-start`;
 
-export function SectionKind({ section: x, views, onSet }: { section: DrawingSection; views: DrawingViews | null; onSet(next: DrawingSection): void }) {
+export function SectionKind({ section: x, views, onSet, hatchPartScope = false, hatchDraftPending = false }: { section: DrawingSection; hatchPartScope?: boolean; hatchDraftPending?: boolean; views: DrawingViews | null; onSet(next: DrawingSection): void }) {
   const [draft, setDraft] = useState<{ key: string; text: string } | null>(null);
   const kind = x.half ? 'half' : x.steps ? 'offset' : x.removed ? 'removed' : x.revolved ? 'revolved' : 'full', pr = views?.[x.view];
   const mid = (axis: 0 | 1) => pr ? round((pr.min[axis] + pr.max[axis]) / 2) : 0;
@@ -26,8 +27,16 @@ export function SectionKind({ section: x, views, onSet }: { section: DrawingSect
     onBlur={() => { const v = Number(draft?.text); if (draft?.key === key && draft.text.trim() !== '' && Number.isFinite(v)) set(v); setDraft(null); }}
     onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />;
   const setSteps = (steps: SectionStep[]) => { const sorted = [...steps].sort((a, b) => a.past - b.past); if (sorted.some((s, k) => k && s.past === sorted[k - 1].past)) return; onSet({ ...x, steps: sorted }); };
+  const hatchPending = hatchDraftPending || draft !== null;
+  const hatchEnabled = hatchPartScope && sectionHatchSupported(x) && !hatchPending;
   return <>
-    <label className={FIELD}><span>Section {x.id} kind</span><NativeSelect className={CONTROL} aria-label={`Section ${x.id} kind`} value={kind} onChange={e => {
+    <label className={FIELD} onPointerDown={e => { if (hatchPending) e.preventDefault(); }}><span>Section {x.id} hatch</span><input type="checkbox" className={TICK} aria-label={`Section ${x.id} hatch`} checked={!x.hideHatch} disabled={!hatchEnabled}
+      title={hatchPending ? 'Finish or cancel the section input before changing hatch visibility.' : hatchEnabled ? 'This section view only. Details and the standalone 1:1 section DXF are unchanged.' : 'Hatch visibility is available only for full principal sections in a part drawing.'}
+      onChange={e => { if (!hatchEnabled) return; const next = withSectionHatch(x, e.target.checked, hatchPartScope); if (next !== x) onSet(next); }} /></label>
+    {hatchPending && <div className="muted">Finish or cancel the section input before changing hatch visibility.</div>}
+    {x.hideHatch && <div className="muted">Show this section’s hatch before changing its kind.</div>}
+    <label className={FIELD}><span>Section {x.id} kind</span><NativeSelect className={CONTROL} aria-label={`Section ${x.id} kind`} disabled={!!x.hideHatch} value={kind} onChange={e => {
+      if (x.hideHatch) return;
       const k = e.target.value;
       onSet(k === 'half' ? { ...plain(), half: { line: 'vertical', at: mid(0), cut: 'after' } } : k === 'offset' ? { ...plain(), steps: [{ past: mid(0), at: x.at }] } : k === 'removed' ? { ...plain(), removed: {} } : k === 'revolved' ? { ...plain(), revolved: true } : plain());
     }}><option value="full">Full</option>{!x.dir && <><option value="half">Half</option><option value="offset">Offset (stepped)</option></>}<option value="removed">Removed</option>{!x.dir && <option value="revolved">Revolved</option>}</NativeSelect></label>

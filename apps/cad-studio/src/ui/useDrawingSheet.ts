@@ -24,6 +24,7 @@ import { sameSection, sectionsOf, type DrawingSection, type DrawingSettings, typ
 import type { SectionCut } from '@barocss/cad-model/drawing/section';
 import type { EngineClient } from '../engine/client';
 import { Lanes } from '../engine/lanes';
+import { sectionGeometryInputs } from './drawing/sectionHatch';
 
 export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
@@ -64,7 +65,7 @@ export function useDrawingSheet(active: boolean, { engine, doc: sourceDoc, bodie
   /** The sections as last cut (O148 X1; each with why it could not be cut). */
   const [rawCutsMade, setCutsMade] = useState<SectionCut[] | null>(null);
   const cutsMade = projected?.model === model ? rawCutsMade : null;
-  const sectionList = sectionsOf(settings), sectionKey = JSON.stringify(sectionList), cutList = allSections ?? sectionList, cutKey = JSON.stringify(cutList), madeOnly = drawsMadeOnly(settings);
+  const sectionList = sectionsOf(settings), sectionKey = JSON.stringify(sectionList), cutList = sectionGeometryInputs(allSections ?? sectionList), cutKey = JSON.stringify(cutList), madeOnly = drawsMadeOnly(settings);
   const projectionKey = JSON.stringify([workerSession, settings.orientation, !!settings.tangent, madeOnly, cutKey]);
   const projectionCurrent = !!views && !scoped.error && projected?.inputKey === projectionKey && projected.engine === engine;
   const [error, setError] = useState<string | null>(null);

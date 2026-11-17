@@ -201,7 +201,7 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
     const parent = lp.of !== 'top' ? groups.find(g => g.role === 'label' && g.view === lp.of)?.marks[0] as Extract<Mark, { kind: 'text' }> | undefined : undefined;
     const shift = parent ? Math.max(0, parent.at[1] + 6 - lp.box[1]) : 0;
     const placed: SectionPlacement = { ...lp, origin: [lp.origin[0], lp.origin[1] + shift], box: [lp.box[0], lp.box[1] + shift, lp.box[2], lp.box[3] + shift] };
-    groups.push({ role: 'section', id: sec.id, marks: sectionMarks(placed, sec) });
+    groups.push({ role: 'section', id: sec.id, marks: sectionMarks(placed, sec, sectionsOf(settings).find(x => sameSection(x, sec))?.hideHatch === true) });
     const c = cutting.get(sec.id); if (c) groups.push(c);
     onSheet.push({ id: sec.id, view: sec.view, placement: placed, projection: sec.projection });
     // (O148 X2: its dimensions, drawn as a view's; its name under them.)
@@ -1137,7 +1137,7 @@ const circlePoints = (c: XY, r: number): XY[] => Array.from({ length: 12 }, (_, 
  * a top's in the front view, then the right; a right's in the front view, then the top) — a chain line, thick at its
  * ends, with arrows pointing the way the section is seen and its letter at each end.
  */
-function sectionMarks(v: SectionPlacement, section: SheetSection): Mark[] {
+function sectionMarks(v: SectionPlacement, section: SheetSection, hideHatch = false): Mark[] {
   const marks: Mark[] = [];
   // (DR-2: broken as its view is: its curves and cut faces outside the bands.)
   const pr = v.breaks ? clipProjectionOutside(section.projection, v.breaks) : section.projection, cut = v.breaks ? clipRingsOutside(section.rings, v.breaks) : null;
@@ -1151,7 +1151,7 @@ function sectionMarks(v: SectionPlacement, section: SheetSection): Mark[] {
   }
   // (Each body its own hatch — the part's body k at HATCH_ANGLES[k], so adjacent parts read apart, and a body the same in
   // every section; one body alone at 45° as always.)
-  for (const g of hatchGroups(rings, bodies)) marks.push({ kind: 'hatch', rings: g.rings.map(r => r.map(q => toSheet(v, q))), spacing: g.spacing, angle: g.angle, pen: 'thin' });
+  if (!hideHatch) for (const g of hatchGroups(rings, bodies)) marks.push({ kind: 'hatch', rings: g.rings.map(r => r.map(q => toSheet(v, q))), spacing: g.spacing, angle: g.angle, pen: 'thin' });
   return marks;
 }
 /** A section's cutting plane, in the first shown view that sees it edge-on (none shown: none). */

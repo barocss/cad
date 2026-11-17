@@ -75,7 +75,7 @@ export function SheetSettings({ sheet: { scopeRead, scope, views, layout, sectio
           onChange={e => setSectionY(e.target.value)}
           onBlur={() => { const y = Number(sectionY); if (sectionY !== null && sectionY.trim() !== '' && Number.isFinite(y)) onChange(withSections(settings, sectionList.map(x => x === sectionA ? { ...x, at: y } : x))); setSectionY(null); }}
           onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} /><em>mm</em></span></label>}
-        {sectionA && <SectionKind section={sectionA} views={views} onSet={next => onChange(withSections(settings, sectionList.map(x => x === sectionA ? next : x)))} />}
+        {sectionA && <SectionKind section={sectionA} hatchPartScope={scope.kind === 'part' && !scopeRead.error} hatchDraftPending={sectionY !== null || sectionAt !== null} views={views} onSet={next => onChange(withSections(settings, sectionList.map(x => x === sectionA ? next : x)))} />}
         {sectionA && cutA && !cutA.result.ok && <div className="empty" style={{ color: 'var(--warn)' }}>Section A–A: {cutA.result.error}</div>}
         {/* (O148 X1: more sections, each square to the front, top or right view's depth; letters in order.) */}
         {sectionList.filter(x => x !== sectionA).map(x => {
@@ -91,7 +91,7 @@ export function SheetSettings({ sheet: { scopeRead, scope, views, layout, sectio
             <Button variant="ghost" size="xs" aria-label={`Remove section ${x.id}`} title={`Remove section ${x.id}–${x.id}`} onClick={() => onChange(withSections(settings, sectionList.filter(y => y !== x)))}><Icon name="close" small /></Button>
             {made && !made.result.ok && <div className="empty" style={{ color: 'var(--warn)' }}>{made.result.error}</div>}
           </div>
-            <SectionKind section={x} views={views} onSet={next => onChange(withSections(settings, sectionList.map(y => y === x ? next : y)))} />
+            <SectionKind section={x} hatchPartScope={scope.kind === 'part' && !scopeRead.error} hatchDraftPending={sectionY !== null || sectionAt !== null} views={views} onSet={next => onChange(withSections(settings, sectionList.map(y => y === x ? next : y)))} />
           </div>;
         })}
         <Button variant="ghost" className="self-start" aria-label="Add section" disabled={!views} title="Another section, square to the top view's depth (change its view and place after)" onClick={() => {

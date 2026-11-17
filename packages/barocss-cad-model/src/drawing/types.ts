@@ -202,7 +202,9 @@ export interface DrawingSettings {
  * sees the plane edge-on (a front section's onto the top view, a top's or a right's onto the front view), centred on the
  * trace; principal only. Neither with a half or steps, nor together.
  */
-export interface DrawingSection { id: string; view: SectionViewId; at: number; dir?: [number, number, number]; half?: SectionHalf; steps?: SectionStep[]; along?: 'horizontal' | 'vertical'; removed?: SectionRemoved; revolved?: true }
+export interface DrawingSection { id: string; view: SectionViewId; at: number; dir?: [number, number, number]; half?: SectionHalf; steps?: SectionStep[]; along?: 'horizontal' | 'vertical'; removed?: SectionRemoved; revolved?: true; hideHatch?: true }
+/** Presentation only; no aligned, partial or alternate section forms in this first scope. */
+export const sectionHatchVisibilitySupported = (s: DrawingSection): boolean => ['front', 'top', 'right'].includes(s.view) && !s.dir && !s.half && !s.steps && !s.along && !s.removed && !s.revolved;
 export interface SectionHalf { line: 'vertical' | 'horizontal'; at: number; cut: 'after' | 'before' }
 export interface SectionStep { past: number; at: number }
 export interface SectionRemoved { at?: XY; scale?: number }
@@ -229,7 +231,7 @@ export const sectionsOf = (s: Pick<DrawingSettings, 'section' | 'sections'>): Dr
 export function withSections(s: DrawingSettings, list: readonly DrawingSection[]): DrawingSettings {
   const rest = { ...s }; delete rest.section; delete rest.sections;
   if (!list.length) return rest;
-  if (list.length === 1 && list[0].id === 'A' && list[0].view === 'front' && !list[0].dir && !list[0].half && !list[0].steps && !list[0].removed && !list[0].revolved) return { ...rest, section: { y: list[0].at } };
+  if (list.length === 1 && list[0].id === 'A' && list[0].view === 'front' && !list[0].dir && !list[0].half && !list[0].steps && !list[0].removed && !list[0].revolved && !list[0].hideHatch) return { ...rest, section: { y: list[0].at } };
   return { ...rest, sections: list.map(x => ({ ...x })) };
 }
 /** The next free section letter (A, B, … Z; then AA, AB, …); `also`: letters taken otherwise (DR-1: the details'). */
@@ -265,7 +267,7 @@ function readSections(raw: unknown): DrawingSection[] | null {
     // (DR-4: removed on a plain or aligned section, revolved on a plain principal one; never with a half or steps.)
     const removed = !half && !steps && removedOk(x.removed) ? { ...(x.removed.at ? { at: [x.removed.at[0], x.removed.at[1]] as XY } : {}), ...(x.removed.scale !== undefined ? { scale: x.removed.scale } : {}) } : null;
     const revolved = !half && !steps && !removed && !x.dir && x.revolved === true;
-    out.push({ id: x.id, view: x.view, at: x.at, ...(x.dir ? { dir: [x.dir[0], x.dir[1], x.dir[2]] as [number, number, number] } : {}), ...(half ? { half } : {}), ...(steps ? { steps, ...(x.along === 'vertical' ? { along: 'vertical' as const } : {}) } : {}), ...(removed ? { removed } : {}), ...(revolved ? { revolved: true as const } : {}) });
+    out.push({ id: x.id, view: x.view, at: x.at, ...(x.dir ? { dir: [x.dir[0], x.dir[1], x.dir[2]] as [number, number, number] } : {}), ...(half ? { half } : {}), ...(steps ? { steps, ...(x.along === 'vertical' ? { along: 'vertical' as const } : {}) } : {}), ...(removed ? { removed } : {}), ...(revolved ? { revolved: true as const } : {}), ...(x.hideHatch === true && sectionHatchVisibilitySupported(x) ? { hideHatch: true as const } : {}) });
   }
   return out.length ? out : null;
 }
