@@ -1,4 +1,5 @@
 // Strict source-table and section inputs for drawing.set. Saved-file readers remain permissive.
+import { assertSectionHatchScope } from './scope';
 import { problem, refusal, type Problem } from '../engine/refusal';
 import { annotatedDetailLetters, halfOk, removedOk, reservedDetailLetters, sameSection, sectionHatchVisibilitySupported, sectionDirOk, sectionsOf, stepsOk, withSections, type DrawingSection, type DrawingSettings, type DrawingTable } from './types';
 import { detailOk, type DrawingDetail } from './detail';
@@ -134,5 +135,6 @@ export function withManufacturingDrawing(s: DrawingSettings, args: Record<string
     const tables = args.tables as DrawingTable[];
     if (tables.length) next.tables = tables.map(t => ({ ...t, ...(t.at ? { at: [...t.at] as [number, number] } : {}) }));
   }
+  assertSectionHatchScope(next);
   return next;
 }

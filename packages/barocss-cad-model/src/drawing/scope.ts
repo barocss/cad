@@ -54,10 +54,17 @@ export function drawingDocument(doc: StudioDoc, settings: DrawingSettings): Stud
   });
   return { ...local, nodes, instances: undefined, mates: undefined };
 }
+/** A presentation choice must remain supported by the final effective scope. Never clear it implicitly. */
+export function assertSectionHatchScope(s: DrawingSettings): void {
+  if (s.sections?.some(section => section.hideHatch === true) && drawingScopeOf(s).kind !== 'part')
+    throw refusal('DRAWING_OPTIONS', 'Show all section hatches before changing to assembly drawing scope. The drawing is unchanged.');
+}
+
 export function changeDrawingScope(s: DrawingSettings, scope: DrawingScope): DrawingSettings {
   const [why] = checkDrawingScope(scope); if (why) throw refused(why);
   // Snapshot the supported values, including fields the existing validator accepts through a prototype.
   const nextScope: DrawingScope = scope.kind === 'part' ? { kind: 'part', ...(scope.part !== undefined ? { part: scope.part } : {}) } : { kind: 'assembly' };
+  assertSectionHatchScope({ ...s, scope: nextScope });
   const previous = drawingScopeOf(s);
   if (previous.kind === scope.kind && (previous.kind === 'assembly' || (scope.kind === 'part' && previous.part === scope.part))) return { ...s, scope: nextScope };
   if (s.dimensions.some(d => !d.auto) || s.datums?.length || s.datumTargets?.length || s.frames?.length || s.notes?.some(n => n.leader))

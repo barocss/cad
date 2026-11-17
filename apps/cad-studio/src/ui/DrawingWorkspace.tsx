@@ -70,7 +70,7 @@ import { DatumTargetsEditor, DEFAULT_TARGET_DRAFT, type DatumTargetDraft } from 
 import { checkDatumTargetOptions, datumTargetConflicts, datumTargetEndpoint, resolveDatumTarget, type DatumTargetPoint, type DrawingDatumTarget } from '@barocss/cad-model/drawing/datumTargets';
 import { FrameEditor } from './drawing/FrameEditor';
 import { referenceCandidate } from './drawing/referenceCandidate';
-import { committedSettings, committedSheetSettings } from './drawing/commitSettings';
+import { committedSheetSettings, commitDrawingSettings } from './drawing/commitSettings';
 import { StandaloneFramesEditor } from './drawing/StandaloneFramesEditor';
 import { checkDrawingFrames, readFrames, type DrawingFrame } from '@barocss/cad-model/drawing/controls';
 import { ToleranceEditor } from './drawing/ToleranceEditor';
@@ -150,7 +150,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   /** The whole drawing's next settings, as the file will have them. */
   const commitWhole = (next: DrawingSettings) => {
     if (!scopeRead.scope) { onToast({ title: 'Drawing scope unchanged', hint: scopeRead.error ?? 'Invalid drawing scope', detail: '' }); return false; }
-    return sourceOnChange(committedSettings(next, scopeRead.scope));
+    return commitDrawingSettings(next, scopeRead.scope, sourceOnChange, why => onToast({ title: 'Drawing unchanged', hint: why, detail: '' }));
   };
   /** An edit of the sheet shown. */
   const onChange = (next: DrawingSettings) => commitWhole(mergeSheet(wholeSettings, current, next));
@@ -1239,7 +1239,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
             if (currentControlDeletion.model === currentModel.current) currentControlDeletion.run();
           }}>Remove annotation and controls</Button>
         </div>}
-        <SheetTabs whole={wholeSettings} current={current} onSelect={selectSheet} onAdd={() => { commitWhole({ ...wholeSettings, sheets: [...(wholeSettings.sheets ?? []), { id: newSheetId(wholeSettings), views: [] }] }); selectSheet(sheetTotal); }} />
+        <SheetTabs whole={wholeSettings} current={current} onSelect={selectSheet} onAdd={() => { if (commitWhole({ ...wholeSettings, sheets: [...(wholeSettings.sheets ?? []), { id: newSheetId(wholeSettings), views: [] }] })) selectSheet(sheetTotal); }} />
         {(currentReattachment?.candidate || currentRimChoice || bomError || hint || selected || selectedTarget || selectedFrame) &&
         <div className={'card dw-hint' + (bomError || message ? ' warn' : '')} role="status">
           {currentReattachment?.candidate
@@ -1263,7 +1263,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         <SheetSettings sheet={{ scopeRead, scope, views, layout, sectionA, sectionList, cutA, cutsMade, hasSheet, hasFrame, kinds, hasBought, doc, title, busy }} settings={settings} sourceDoc={sourceDoc} fileName={fileName} onChange={onChange} onToast={onToast}
           onScopeChanged={() => { setPending(null); setSelected(null); setSelectedTarget(null); setSelectedFrame(null); setTargetChoices([]); setReselectTarget(null); setHover(null); setDrag(null); }} turnTo={turnTo} later={current > 0} />
 
-        <SheetsMenu whole={wholeSettings} current={current} onChange={(next, then) => { commitWhole(next); if (then !== undefined) selectSheet(then); }} />
+        <SheetsMenu whole={wholeSettings} current={current} onChange={(next, then) => { if (commitWhole(next) && then !== undefined) selectSheet(then); }} />
 
         <DetailsList crop={crop} settings={settings} sheet={sheet} layout={layout} onChange={onChange} onRemove={removeDetail} />
 

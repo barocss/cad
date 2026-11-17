@@ -20,7 +20,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 type Sheet = ReturnType<typeof useDrawingSheet>;
 export function SheetSettings({ sheet: { scopeRead, scope, views, layout, sectionA, sectionList, cutA, cutsMade, hasSheet, hasFrame, kinds, hasBought, doc, title, busy }, settings, sourceDoc, fileName, onChange, onToast, onScopeChanged, turnTo, later = false }: {
   sheet: Pick<Sheet, 'scopeRead' | 'scope' | 'views' | 'layout' | 'sectionA' | 'sectionList' | 'cutA' | 'cutsMade' | 'hasSheet' | 'hasFrame' | 'kinds' | 'hasBought' | 'doc' | 'title' | 'busy'>;
-  settings: DrawingSettings; sourceDoc: StudioDoc; fileName: string; onChange(next: DrawingSettings): void; onToast(e: FriendlyError): void;
+  settings: DrawingSettings; sourceDoc: StudioDoc; fileName: string; onChange(next: DrawingSettings): boolean; onToast(e: FriendlyError): void;
   /** The scope changed: what was picked or dragged on the sheet is let go. */ onScopeChanged(): void; turnTo(o: Orientation): Promise<void>;
   /** 11 ④: a sheet after the first: its tables, balloons, weld symbols and title block fields are the first sheet's. */ later?: boolean;
 }) {
@@ -33,7 +33,7 @@ export function SheetSettings({ sheet: { scopeRead, scope, views, layout, sectio
           const value = e.target.value;
           try {
             const next = changeDrawingScope(settings, value === 'assembly' ? { kind: 'assembly' } : value === 'part' ? { kind: 'part' } : { kind: 'part', part: value.slice(5) });
-            onChange(next); onScopeChanged();
+            if (onChange(next)) onScopeChanged();
           } catch (cause) { onToast({ title: 'Drawing scope unchanged', hint: cause instanceof Error ? cause.message : String(cause), detail: '' }); }
         }}>
           <option value="part">Part: base</option>

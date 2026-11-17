@@ -1,4 +1,5 @@
 // Current Drawing data admission only. No document-schema promotion or historical migration.
+import { checkSavedSectionHatch } from '../drawing/savedSectionHatch';
 import { checkSavedDrawingFrames } from '../drawing/controls';
 import { refused, refusal } from './refusal';
 
@@ -14,7 +15,7 @@ export function assertSavedDrawingDocument(input: unknown): void {
     const doc = record(value);
     if (seen.has(doc)) throw refusal('DRAWING_OPTIONS', 'Nested drawing documents must not be cyclic.');
     seen.add(doc);
-    const issue = checkSavedDrawingFrames(doc.drawing)[0];
+    const issue = checkSavedDrawingFrames(doc.drawing)[0] ?? checkSavedSectionHatch(doc.drawing)[0];
     if (issue) throw refused(issue);
     if (own(doc, 'instances') && doc.instances !== undefined) {
       if (!Array.isArray(doc.instances)) throw refusal('DRAWING_OPTIONS', 'Saved document instances must be an array.');
