@@ -1,0 +1,203 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [],
+  "outputs": {},
+  "nextId": 0,
+  "instances": [
+    {
+      "id": "p1",
+      "name": "Same box",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 2,
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "brief": {
+          "version": 1,
+          "notes": {
+            "value": " shared A, \"words\"\n第二行 ",
+            "basis": "stated",
+            "source": " shared A, \"words\"\n第二行 ",
+            "confirmed": {
+              "by": "user",
+              "at": "2026-11-17T06:18:43.278Z"
+            }
+          }
+        }
+      },
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "part": {
+        "id": "sharedA",
+        "rev": "B"
+      }
+    },
+    {
+      "id": "p2",
+      "name": "Same box",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 2,
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "brief": {
+          "version": 1,
+          "notes": {
+            "value": " shared A, \"words\"\n第二行 ",
+            "basis": "stated",
+            "source": " shared A, \"words\"\n第二行 ",
+            "confirmed": {
+              "by": "user",
+              "at": "2026-11-17T06:18:43.278Z"
+            }
+          }
+        }
+      },
+      "position": [
+        15,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "part": {
+        "id": "sharedA",
+        "rev": "B"
+      }
+    },
+    {
+      "id": "p3",
+      "name": "Same box",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 2,
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "brief": {
+          "version": 1,
+          "notes": {
+            "value": "=1+1 independent",
+            "basis": "stated",
+            "source": "=1+1 independent",
+            "confirmed": {
+              "by": "user",
+              "at": "2026-11-17T06:18:43.695Z"
+            }
+          }
+        }
+      },
+      "position": [
+        30,
+        0,
+        0
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "part": {
+        "id": "independentB",
+        "rev": "B"
+      }
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "csv": "item no.,item,qty,note scope,design brief notes / occurrence mapping JSON\n1,Same box,3,\"Design brief notes: intent, not approval\",\"[{\"\"parts\"\":[\"\"p1\"\",\"\"p2\"\"],\"\"state\"\":\"\"note\"\",\"\"field\"\":{\"\"value\"\":\"\" shared A, \\\"\"words\\\"\"\\n第二行 \"\",\"\"basis\"\":\"\"stated\"\",\"\"source\"\":\"\" shared A, \\\"\"words\\\"\"\\n第二行 \"\",\"\"confirmed\"\":{\"\"by\"\":\"\"user\"\",\"\"at\"\":\"\"2026-11-17T06:18:43.278Z\"\"}}},{\"\"parts\"\":[\"\"p3\"\"],\"\"state\"\":\"\"note\"\",\"\"field\"\":{\"\"value\"\":\"\"=1+1 independent\"\",\"\"basis\"\":\"\"stated\"\",\"\"source\"\":\"\"=1+1 independent\"\",\"\"confirmed\"\":{\"\"by\"\":\"\"user\"\",\"\"at\"\":\"\"2026-11-17T06:18:43.695Z\"\"}}}]\"\n",
+  "A": {
+    "value": " shared A, \"words\"\n第二行 ",
+    "basis": "stated",
+    "source": " shared A, \"words\"\n第二行 ",
+    "confirmed": {
+      "by": "user",
+      "at": "2026-11-17T06:18:43.278Z"
+    }
+  },
+  "B": {
+    "value": "=1+1 independent",
+    "basis": "stated",
+    "source": "=1+1 independent",
+    "confirmed": {
+      "by": "user",
+      "at": "2026-11-17T06:18:43.695Z"
+    }
+  }
+}

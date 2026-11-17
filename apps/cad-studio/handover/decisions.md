@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- 2026-11-17, bounded #274 decision: [explicit definition notes](notes/instance-brief-notes-2026-11-17/README.md) reuse existing Brief/editDefinition with owned Save/Cancel; no manufacturing approval or schema expansion. Whole issue remains OPEN. This dated addendum does not renumber historical decisions.
+
 - D1415: [Shell opening recovery](notes/shell-opening-recovery-mac-2026-11-15/README.md), #125; exact temporary-opening diagnosis with current-owner/source-name guards, Cancel-first recovery and bounded independent Shell volume verification.
 
 - D1414: [Fillet corner recovery](notes/fillet-corner-recovery-mac-2026-11-15/README.md), #124; current Conic/G2 corner refusal points to explicit Circular recovery, with owned UI, real desktop lifecycle and independent offset-section volume checks.

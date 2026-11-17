@@ -1,0 +1,101 @@
+{
+  "status": "PASS",
+  "qualification": "Explicit definition note editing, shared/independent ownership and unchanged BOM consumer",
+  "observations": [
+    {
+      "cancelNoChange": true,
+      "ownerSwitchDiscardsDraft": true,
+      "sharedTargets": [
+        "p1",
+        "p2"
+      ],
+      "independent": "p3",
+      "rawTextPreserved": true,
+      "defaultCsvExact": true,
+      "quantityAndTotalsUnchanged": true,
+      "undoRedo": true,
+      "nativeSaveFreshOpen": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Synthetic ordinary top-level boxes. No native mass rerun, approved baseline currentness, linked revision or external sharing qualification."
+  ],
+  "sourceBeforeCount": 6,
+  "sourceFrozenCount": 525,
+  "sourceAfterCount": 525,
+  "sourceAfterCleanupCount": 525,
+  "firstActualRun": true,
+  "sourceHashesEqual": true,
+  "initialSubsetHashes": {
+    "apps/cad-studio/src/state/instanceBriefNotes.ts": "053389a1db0de01c3241df865130176a909332eab9faf8dd75675bfacb818ab3",
+    "apps/cad-studio/src/ui/InstanceBriefNotes.tsx": "fd3bc268b88566a4b8086a96d069f83aa570761e3323a1a306a3e89d1557c491",
+    "apps/cad-studio/src/ui/InstanceInspector.tsx": "b71106d7215a0cde296d0b823dc32c19d4495959340aa4f9150d7ad6b90ed595",
+    "apps/cad-studio/src/ui/InstancePanel.tsx": "808127aedf9f6a75d7887499f14df257b1dd83f32f697575f9ac945d7b0949cf",
+    "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+    "apps/cad-studio/test/instance-brief-notes-browser.mjs": "aea4eef1ba05a83ac340d8c33289f4bc017e3a371bfb27cef2b70974d38c500b"
+  },
+  "visualReview": {
+    "runnerMetadata": "ROOT_MUST_VIEW_SCREENSHOTS",
+    "actual": "Implementer and parent reviewed PNG 02/03; readable synthetic data, no personal information."
+  },
+  "artifactsSHA256": {
+    "02-shared-saved.png": "96e2704f9b02eb8408ac39256552416cdf33211a7ff9ac518b46c952164d2665",
+    "03-bom-notes.png": "464e2849a29a2deb21abe3cc0e05cde78f3f24e394c18e2c2e671d09ed11158d",
+    "notes-edited.bcad": "3ffb0a0fbdaf092eb168a820e1327d9765bf539b589bf353520f2b8d10d44618",
+    "instance-brief-notes-oracle.py": "e84880d2cc238b5dc364beef05cdcf2b7b23cf8384850556bf83c1a3493e9749",
+    "03-notes-csv-oracle-input.json": "b135b64328b630178e34a42e4026be2ef810145fd4c4bc69443fc45a6022912b",
+    "03-notes-csv-oracle.json": "4757b1dd0b09bd6f1b7ec6bed97fde1662e05b2081b626abf2644b733d954e8a",
+    "05-reopened-csv-oracle-input.json": "b135b64328b630178e34a42e4026be2ef810145fd4c4bc69443fc45a6022912b",
+    "05-reopened-csv-oracle.json": "4757b1dd0b09bd6f1b7ec6bed97fde1662e05b2081b626abf2644b733d954e8a"
+  },
+  "oracles": [
+    {
+      "label": "03-notes-csv",
+      "exit": 0,
+      "result": {
+        "status": "PASS",
+        "qty": 3,
+        "mappings": [
+          [
+            "p1",
+            "p2"
+          ],
+          [
+            "p3"
+          ]
+        ],
+        "completeFields": true
+      },
+      "inputSHA256": "b135b64328b630178e34a42e4026be2ef810145fd4c4bc69443fc45a6022912b"
+    },
+    {
+      "label": "05-reopened-csv",
+      "exit": 0,
+      "result": {
+        "status": "PASS",
+        "qty": 3,
+        "mappings": [
+          [
+            "p1",
+            "p2"
+          ],
+          [
+            "p3"
+          ]
+        ],
+        "completeFields": true
+      },
+      "inputSHA256": "b135b64328b630178e34a42e4026be2ef810145fd4c4bc69443fc45a6022912b"
+    }
+  ],
+  "qualificationStage": "Before default-purchased element/coupling scope hardening; actual01 first PASS, not final source."
+}

@@ -1,3 +1,4 @@
+import { InstanceBriefNotes } from './InstanceBriefNotes';
 import type { Dispatch, SetStateAction } from 'react';
 import type { StudioDoc, PartInstance, ModelNode } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
@@ -56,6 +57,7 @@ export function InstanceInspector({ model, bearing, assembly, changes, onNotice:
     </aside>;
   }
   return <InstancePanel inst={inst} bodies={entry?.bodies}
+    notes={<InstanceBriefNotes doc={doc} id={inst.id} blocked={bearingBlocked || instanceEditPending} commit={commitParts} onError={hint => setToast({ title: 'Notes not changed', hint, detail: '' })} />}
     onChange={next => commitInstances(list.map(i => i.id === inst.id ? next : i))}
     onDuplicate={() => { const newId = nextInstanceId(doc, 'inst');
       // (A copy of an occurrence is a free part: not the pattern's, not fixed by it.)

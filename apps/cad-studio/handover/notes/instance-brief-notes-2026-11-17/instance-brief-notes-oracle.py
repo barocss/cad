@@ -1,0 +1,2 @@
+import json,csv,io,sys
+d=json.load(sys.stdin);r=list(csv.reader(io.StringIO(d['csv']),strict=True));assert len(r)==2 and r[1][2]=='3';g=json.loads(r[1][4]);assert len(g)==2;assert g[0]['parts']==['p1','p2'] and g[1]['parts']==['p3'];assert g[0]['field']==d['A'] and g[1]['field']==d['B'];print(json.dumps({'status':'PASS','qty':3,'mappings':[['p1','p2'],['p3']],'completeFields':True}))
