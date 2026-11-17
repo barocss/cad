@@ -1,0 +1,11 @@
+## /tmp/cad-svg-download-02-run.log
+SHA-256: 4cbbf15763974f8d2580387c8c310afcca6434a521b5d65de486d2e0706a1467
+{"status":"PASS","phase":"real SVG download after explicit repair","output":"/tmp/cad-svg-download-02"}
+
+## /tmp/cad-svg-download-02/xml-parser.stdout.txt
+SHA-256: 53fb500c8442df4eae489003b34669d6f22858b0e6041574c37b006b6f36bdc2
+{"title": "한글 Ø ± & < > \" 😀", "width": "420mm", "height": "297mm", "viewBox": "0 0 420 297", "views": {"front": {"lineCount": 4, "width": 32.0, "height": 8.0}, "top": {"lineCount": 4, "width": 32.0, "height": 24.0}}}
+
+## /tmp/cad-svg-download-02/xml-parser.stderr.txt
+SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+(empty stderr; parser exited 0)

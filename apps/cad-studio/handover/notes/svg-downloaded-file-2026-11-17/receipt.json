@@ -1,0 +1,102 @@
+{
+  "status": "PASS",
+  "qualification": "Real temporary browser SVG download, fresh independent Python XML file read and fresh browser file open after invalid title refusal.",
+  "limits": [
+    "Single current A3 sheet only; no generic SVG import, PDF/golden repair, native-folder use or multi-file delivery qualification. Existing writer tests cover additional invalid codepoints."
+  ],
+  "downloads": [
+    {
+      "phase": "real SVG download after explicit repair",
+      "suggestedFilename": "svg-download-fixture.svg"
+    }
+  ],
+  "observations": [
+    {
+      "freshBrowserFileOpen": {
+        "errors": 0,
+        "title": "한글 Ø ± & < > \" 😀",
+        "width": "420mm",
+        "height": "297mm"
+      }
+    },
+    {
+      "independentFileParser": {
+        "title": "한글 Ø ± & < > \" 😀",
+        "width": "420mm",
+        "height": "297mm",
+        "viewBox": "0 0 420 297",
+        "views": {
+          "front": {
+            "lineCount": 4,
+            "width": 32,
+            "height": 8
+          },
+          "top": {
+            "lineCount": 4,
+            "width": 32,
+            "height": 24
+          }
+        }
+      },
+      "invalidDownloadCount": 0,
+      "validDownloadCount": 1,
+      "sourceAlias": "/private/tmp/cad-robot-workspace-20261117/packages/barocss-cad-model/src/io/svg.ts",
+      "rawFileBytesReadAfterSaveAs": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "XML_FILE_CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceBeforeCount": 2,
+  "sourceFrozenCount": 530,
+  "sourceAfterCount": 530,
+  "sourceAfterCleanupCount": 530,
+  "parentCommit": "61baaa8c2a133c833ab16d4e397b3398a1afde3c",
+  "sourceUnchanged": true,
+  "originalReceipt": {
+    "path": "/tmp/cad-svg-download-02/receipt.json",
+    "sha256": "4c194ac3ba7343402f208f0af3807bae8c414e832fef0cce2e4bccee061a61e9"
+  },
+  "files": [
+    {
+      "label": "actual browser downloaded SVG",
+      "path": "/tmp/cad-svg-download-02/downloaded-unicode.svg",
+      "bytes": 4100,
+      "sha256": "af1c0145ab9264303ed55f4882835ef1307aea582817c57531a6ec020d2c35c5"
+    }
+  ],
+  "sourceCapsules": {
+    "source-frozen.json": "120d1e9d1f3e281980d46f7c1057965d8b54d5c714f753bcf645436c18012b1f",
+    "source-after.json": "120d1e9d1f3e281980d46f7c1057965d8b54d5c714f753bcf645436c18012b1f",
+    "source-after-cleanup.json": "120d1e9d1f3e281980d46f7c1057965d8b54d5c714f753bcf645436c18012b1f"
+  },
+  "ownedSources": {
+    "apps/cad-studio/test/svg-download-xml-browser.mjs": "b907d118ea5d9ae7f7c803ec7b0986cf4dc77a75f385e8cfac0711014ab0e870",
+    "packages/barocss-cad-model/src/io/svg.ts": "0b08f181e053d97c51d6cce50cd3c8c14f1b75908b97812fa47763615ba8475a",
+    "packages/barocss-cad/package.json": "e8425d07da300ed745121e33f053e40320c888b8b53c182ef347f4cbd1899252"
+  },
+  "visualReview": "Child and parent directly inspected both final Studio screenshots; synthetic fixture and no personal information. Parent independently reran Python parsing of the actual saved SVG and confirmed fresh-browser JSON.",
+  "priorAttempt": {
+    "status": "FAIL",
+    "reason": "Actual file download, independent XML parse and fresh browser DOM assertions passed before optional file-page screenshot timed out. Full attempt remains FAIL. No product change; final driver preserves DOM evidence and uses Studio UI screenshots.",
+    "originalPath": "/tmp/cad-svg-download-01",
+    "cleanup": [
+      "XML_FILE_CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sha256": {
+      "receipt.json": "f0d79e6848ea8c3ff1c16061f9ea9c7b9053b9b6f0d728ad9a08278e4799cdde",
+      "downloaded-unicode.svg": "af1c0145ab9264303ed55f4882835ef1307aea582817c57531a6ec020d2c35c5",
+      "xml-parser.stdout.txt": "53fb500c8442df4eae489003b34669d6f22858b0e6041574c37b006b6f36bdc2",
+      "failure.png": "05e5ffe6c025e541423f76a8451b82e2db848af5d12d045c2977948a31378b78"
+    }
+  }
+}
