@@ -1,0 +1,110 @@
+{
+  "sourceUnchanged": true,
+  "receipts": [
+    {
+      "name": "baseline-kernel-before",
+      "path": null,
+      "from": null,
+      "to": null,
+      "exit": 0,
+      "pass": 7,
+      "fail": 0,
+      "failedTests": []
+    },
+    {
+      "name": "one-dimensional-as-plane",
+      "path": "packages/barocss-cad/src/sketch/xy-numerical-sketch-point-directions-internal.ts",
+      "from": "return {dimension:1,direction:[x===0?0:x,y===0?0:y]};",
+      "to": "return {dimension:2};",
+      "exit": 1,
+      "pass": 4,
+      "fail": 3,
+      "failedTests": [
+        "rectangle point spans distinguish tangent axes from a plane without changing mobility",
+        "oblique length constraint gives the independent perpendicular tangent under input permutations",
+        "projected span singular-value uncertainty is point-local and invariant under basis rotation"
+      ]
+    },
+    {
+      "name": "tangent-rotated-90deg",
+      "path": "packages/barocss-cad/src/sketch/xy-numerical-sketch-point-directions-internal.ts",
+      "from": "direction:[x===0?0:x,y===0?0:y]",
+      "to": "direction:[-y,x]",
+      "exit": 1,
+      "pass": 4,
+      "fail": 3,
+      "failedTests": [
+        "rectangle point spans distinguish tangent axes from a plane without changing mobility",
+        "oblique length constraint gives the independent perpendicular tangent under input permutations",
+        "projected span singular-value uncertainty is point-local and invariant under basis rotation"
+      ]
+    },
+    {
+      "name": "ambiguous-as-plane",
+      "path": "packages/barocss-cad/src/sketch/xy-numerical-sketch-point-directions-internal.ts",
+      "from": "if(sigma2>error)return null;",
+      "to": "if(sigma2>error)return {dimension:2};",
+      "exit": 1,
+      "pass": 6,
+      "fail": 1,
+      "failedTests": [
+        "projected span singular-value uncertainty is point-local and invariant under basis rotation"
+      ]
+    },
+    {
+      "name": "sigma2-forced-zero",
+      "path": "packages/barocss-cad/src/sketch/xy-numerical-sketch-point-directions-internal.ts",
+      "from": "sigma2=scale*(minors/largest)",
+      "to": "sigma2=0",
+      "exit": 1,
+      "pass": 5,
+      "fail": 2,
+      "failedTests": [
+        "rectangle point spans distinguish tangent axes from a plane without changing mobility",
+        "projected span singular-value uncertainty is point-local and invariant under basis rotation"
+      ]
+    },
+    {
+      "name": "baseline-ui-before",
+      "path": null,
+      "from": null,
+      "to": null,
+      "exit": 0,
+      "pass": 2,
+      "fail": 0,
+      "failedTests": []
+    },
+    {
+      "name": "unavailable-label-as-plane",
+      "path": "apps/cad-studio/src/sketch/pointMotionLabel.ts",
+      "from": "if (!motion) return 'Direction unavailable';",
+      "to": "if (!motion) return 'Two independent directions';",
+      "exit": 1,
+      "pass": 1,
+      "fail": 1,
+      "failedTests": [
+        "distinguishes unresolved directions, the plane, and sign-independent local tangent"
+      ]
+    },
+    {
+      "name": "baseline-kernel-final",
+      "path": null,
+      "from": null,
+      "to": null,
+      "exit": 0,
+      "pass": 7,
+      "fail": 0,
+      "failedTests": []
+    },
+    {
+      "name": "baseline-ui-final",
+      "path": null,
+      "from": null,
+      "to": null,
+      "exit": 0,
+      "pass": 2,
+      "fail": 0,
+      "failedTests": []
+    }
+  ]
+}

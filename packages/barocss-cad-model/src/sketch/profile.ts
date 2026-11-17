@@ -200,13 +200,24 @@ function outlineSystem(points: P2[], c: OutlineConstraints, bulgesIn?: number[])
 }
 
 /** Read movement only for the points owned by this outline, excluding solver helpers. */
-export function settledOutlineMovablePoints(points: P2[], c: OutlineConstraints, bulges?: number[]): number[] | null {
+export function settledOutlinePointMobility(points: P2[], c: OutlineConstraints, bulges?: number[]) {
   const system = outlineSystem(points, c, bulges);
   if (!system) return null;
   const mobility = diagnoseXYNumericalSketchMobility(system.document);
   if (!mobility) return null;
   const movable = new Set(mobility.movablePointIds);
-  return system.authoredPoints.flatMap((point, i) => movable.has(point.id) ? [i] : []);
+  return system.authoredPoints.flatMap((point, i) => {
+    if (!movable.has(point.id)) return [];
+    const local = mobility.pointDirections.find(item => item.pointId === point.id);
+    return [{ point: i, motion: local?.dimension === 1
+      ? { dimension: 1 as const, direction: local.direction }
+      : local?.dimension === 2 ? { dimension: 2 as const } : null }];
+  });
+}
+
+/** Compatibility helper: same movable indices, independent of direction availability. */
+export function settledOutlineMovablePoints(points: P2[], c: OutlineConstraints, bulges?: number[]): number[] | null {
+  return settledOutlinePointMobility(points, c, bulges)?.map(item => item.point) ?? null;
 }
 
 /**

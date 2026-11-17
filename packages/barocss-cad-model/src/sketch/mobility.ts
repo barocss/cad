@@ -1,8 +1,13 @@
-import { signedArea, settledOutlineMovablePoints } from './profile';
+import { signedArea, settledOutlinePointMobility } from './profile';
 import { constraintsOf, type Polygon } from './rules';
 import type { SketchRule } from './terms';
 
-export interface OutlineMobility { points: readonly number[]; edges: readonly number[] }
+export type PointMotion = { dimension: 1; direction: readonly [number, number] } | { dimension: 2 } | null;
+export interface OutlineMobility {
+  points: readonly number[];
+  edges: readonly number[];
+  directions: readonly { point: number; motion: PointMotion }[];
+}
 
 const validIndex = (index: number, count: number) => Number.isInteger(index) && index >= 0 && index < count;
 
@@ -33,9 +38,10 @@ export function outlineMobility(shape: Polygon): OutlineMobility | null {
   const scale = Math.max(...relative.map(point => Math.hypot(...point)));
   if (!(Math.abs(signedArea(relative)) > 32 * Number.EPSILON * scale * scale)) return null;
 
-  const moving = settledOutlineMovablePoints(points, constraintsOf(shape), shape.bulges);
-  if (!moving) return null;
+  const directions = settledOutlinePointMobility(points, constraintsOf(shape), shape.bulges);
+  if (!directions) return null;
+  const moving = directions.map(item => item.point);
   const movable = new Set(moving);
   const edges = points.flatMap((_, i) => movable.has(i) || movable.has((i + 1) % points.length) ? [i] : []);
-  return { points: moving, edges };
+  return { points: moving, edges, directions };
 }

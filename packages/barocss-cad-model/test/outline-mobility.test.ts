@@ -21,14 +21,16 @@ test('the settled rectangle maps point and edge mobility through each width and 
     const solved = solveShape(shape);
     assert.ok(solved.ok);
     assert.equal(solved.dof, dof);
-    assert.deepEqual(outlineMobility(shape), { points, edges });
+    assert.deepEqual(outlineMobility(shape)?.points, points);
+    assert.deepEqual(outlineMobility(shape)?.edges, edges);
   }
   assert.deepEqual(outline, before);
 });
 
 test('axis-distance solver helpers are not exposed as outline points or edges', () => {
   const shape: Polygon = { ...rectangle(), rules: [{ kind: 'dx', a: 0, b: 1, value: 40 }] };
-  assert.deepEqual(outlineMobility(shape), { points: [2, 3], edges: [1, 2, 3] });
+  assert.deepEqual(outlineMobility(shape)?.points, [2, 3]);
+  assert.deepEqual(outlineMobility(shape)?.edges, [1, 2, 3]);
 });
 
 test('unsolved, malformed and unsupported outlines are unavailable', () => {
@@ -47,4 +49,25 @@ test('unsolved, malformed and unsupported outlines are unavailable', () => {
   ];
   for (const refused of failures) assert.equal(outlineMobility(refused), null, JSON.stringify(refused));
   assert.ok(solveShape(failures[0]).ok, 'ordinary solving still moves a seed into tolerance');
+});
+
+
+test('local point directions map authored points only and preserve the source exactly', () => {
+  const shape = rectangle(), before = structuredClone(shape);
+  const open = outlineMobility(shape)!;
+  assert.deepEqual(open.directions.map(item => [item.point, item.motion?.dimension]), [[1, 1], [2, 2], [3, 1]]);
+  for (const [point, expected] of [[1, [1, 0]], [3, [0, 1]]] as const) {
+    const motion = open.directions.find(item => item.point === point)!.motion;
+    assert.ok(motion?.dimension === 1);
+    assert.ok(Math.hypot(motion.direction[0] - expected[0], motion.direction[1] - expected[1]) < 1e-12);
+  }
+  const fixedWidth = { ...shape, rules: [{kind: 'dx' as const, a: 0, b: 1, value: 40}] };
+  const directions = outlineMobility(fixedWidth)!.directions;
+  assert.deepEqual(directions.map(item => item.point), [2, 3]);
+  for (const item of directions) {
+    assert.ok(item.motion?.dimension === 1);
+    assert.ok(Math.hypot(item.motion.direction[0], item.motion.direction[1] - 1) < 1e-12);
+  }
+  assert.deepEqual(outlineMobility({...shape, lengths:{0:40,1:20}})!.directions, []);
+  assert.deepEqual(shape, before);
 });

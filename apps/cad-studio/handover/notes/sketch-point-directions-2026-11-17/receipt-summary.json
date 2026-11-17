@@ -1,0 +1,56 @@
+{
+  "status": "PASS",
+  "qualification": "Inspect local first-order mobility of a straight outline without changing its geometry or history.",
+  "limits": [
+    "One 40 \u00d7 20 mm anchored H/V rectangle, a translated same-ID outline a compact circle control, and an oblique 3-4-5 length-constrained triangle. Desktop Chrome WebGPU only."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "downloads": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1055,
+  "sourceAfterCleanupCount": 1055,
+  "visualReview": "Actual rectangle and fresh-open oblique screenshots reviewed.",
+  "states": [
+    "01-two-dof-keyboard-focus",
+    "02-one-dof-fixed-length-top-edge-moves",
+    "03-refusal-keeps-the-current-mobility",
+    "04-zero-dof-redo",
+    "05-finished",
+    "06-read-only-fresh-open",
+    "07-same-index-moved-outline",
+    "08-circle-replacement-unavailable",
+    "09-oblique-tangent",
+    "10-oblique-finished",
+    "11-oblique-fresh-open"
+  ],
+  "priorAttempts": [
+    {
+      "run": 1,
+      "result": "FAIL",
+      "cause": "Initial navigation exceeded inherited 10 second timeout; no workflow reached."
+    },
+    {
+      "run": 2,
+      "result": "FAIL",
+      "cause": "Old harness waited for visible rank inside current collapsed Solver diagnostics; visible mobility was correct."
+    },
+    {
+      "run": 3,
+      "result": "FAIL",
+      "cause": "Old harness omitted current Open Discard changes confirmation; rectangle edit/history and fresh Open already passed."
+    },
+    {
+      "run": 4,
+      "result": "FAIL",
+      "cause": "Oblique disclosure toggle read raced React render; failure screenshot already shows correct tangent. Added awaited visible direction before assertion."
+    }
+  ]
+}

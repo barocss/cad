@@ -69,11 +69,11 @@ async function expectMarks(...keys) {
 }
 
 async function expectMobility(dof, points, edges) {
-  await f.sketchPanel().getByText(new RegExp(`rank \\d+ · ${dof} DOF`)).waitFor();
+  await f.sketchPanel().getByText(new RegExp(`rank \\d+ · ${dof} DOF`)).waitFor({ state: 'attached' });
   if (points.length === 0) await mobility().getByText('No locally movable points or edges.', { exact: true }).waitFor();
   else {
     await mobility().getByRole('list', { name: 'Locally movable geometry' }).waitFor();
-    const rows = await mobility().getByRole('listitem').allTextContents();
+    const rows = await mobility().getByRole('listitem').evaluateAll(items => items.map(item => [...item.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('')));
     assert.deepEqual(rows, [...points.map(i => `Point ${i}`), ...edges.map(i => `Edge ${i}`)]);
   }
 }

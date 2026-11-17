@@ -1,3 +1,4 @@
+import { projectedPointDirection } from './xy-numerical-sketch-point-directions-internal.js';
 import { compileCadModel } from '../model-compiler.js';
 import type { CadModelIR1 } from '../model-compiler.js';
 import { curveDecimal } from '../nurbs/curves/curve-source.js';
@@ -80,6 +81,8 @@ export interface XYNumericalSketchMobility {
   rankThreshold: number;
   localDegreesOfFreedom: number;
   movablePointIds: readonly string[];
+  /** Missing movable points have unresolved direction, not zero mobility. These are local first-order spans. */
+  pointDirections: readonly ({ pointId: string; dimension: 1; direction: readonly [number, number] } | { pointId: string; dimension: 2 })[];
 }
 
 /**
@@ -98,14 +101,17 @@ export function diagnoseXYNumericalSketchMobility(input: XYNumericalSketchDocume
     if (!nullspace) return null;
     const { basis, rank, threshold, uncertainty } = nullspace;
     const movablePointIds: string[] = [];
+    const pointDirections: XYNumericalSketchMobility['pointDirections'][number][] = [];
     for (const [i, point] of document.points.entries()) {
       const participation = Math.hypot(...basis.flatMap(q => [q[2 * i], q[2 * i + 1]]));
       // Below arithmetic resolution is numerical zero. Refuse an unresolved projection between the bands.
       if (participation <= uncertainty) continue;
       if (participation < 16 * uncertainty) return null;
       movablePointIds.push(point.id);
+      const direction = projectedPointDirection(basis, i, uncertainty);
+      if (direction) pointDirections.push({ pointId: point.id, ...direction });
     }
-    return { numericalRank: rank, rankThreshold: threshold, localDegreesOfFreedom: coordinates.length - rank, movablePointIds };
+    return { numericalRank: rank, rankThreshold: threshold, localDegreesOfFreedom: coordinates.length - rank, movablePointIds, pointDirections };
   } catch {
     return null;
   }

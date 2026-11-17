@@ -93,3 +93,37 @@ test('weak participation distinguishes numerical zero, an unresolved projection 
   assert.equal(diagnoseXYNumericalSketchMobility(ambiguous), null);
   assert.deepEqual(diagnoseXYNumericalSketchMobility(d(1e-6))?.movablePointIds, ['B', 'C']);
 });
+
+test('rectangle point spans distinguish tangent axes from a plane without changing mobility', () => {
+  for (const locks of [0,1,2]) {
+    const result=diagnoseXYNumericalSketchMobility(rectangle(locks));
+    const spans=new Map(result.pointDirections.map(p=>[p.pointId,p]));
+    assert.equal(spans.has('A'),false);
+    if(locks===0){assert.equal(spans.get('C').dimension,2);assert.ok(Math.abs(spans.get('B').direction[0]-1)<1e-12);assert.ok(Math.abs(spans.get('B').direction[1])<1e-12);}
+    if(locks<2) for(const id of locks===0?['D']:['C','D']) {assert.equal(spans.get(id).dimension,1);assert.ok(Math.abs(spans.get(id).direction[0])<1e-12);assert.ok(Math.abs(spans.get(id).direction[1]-1)<1e-12);}
+    if(locks===2)assert.deepEqual(result.pointDirections,[]);
+  }
+});
+test('oblique length constraint gives the independent perpendicular tangent under input permutations', () => {
+  const d=document({A:[2,3],B:[5,7]},[['ab','A','B']],[fixed('anchor','A',[2,3]),length('len','ab',5)]),before=structuredClone(d);
+  for(const input of [d,{...d,points:[...d.points].reverse(),constraints:[...d.constraints].reverse()}]){
+    const r=diagnoseXYNumericalSketchMobility(input);assert.deepEqual(r.movablePointIds,['B']);
+    const p=r.pointDirections.find(p=>p.pointId==='B');assert.equal(p.dimension,1);
+    assert.ok(Math.abs(p.direction[0]-.8)<1e-12);assert.ok(Math.abs(p.direction[1]+.6)<1e-12);
+    assert.ok(Math.abs(3*p.direction[0]+4*p.direction[1])<1e-12);
+  }
+  assert.deepEqual(d,before);
+});
+test('projected span singular-value uncertainty is point-local and invariant under basis rotation', async () => {
+  const {projectedPointDirection}=await import('../dist/sketch/xy-numerical-sketch-point-directions-internal.js');
+  const error=1e-10;
+  assert.equal(projectedPointDirection([[1,0],[0,4*error]],0,error),null);
+  assert.equal(projectedPointDirection([[1,0],[0,.1*error]],0,error).dimension,1);
+  assert.equal(projectedPointDirection([[1,0],[0,32*error]],0,error).dimension,2);
+  for(const t of [0,.3,1.7]){
+    const a=Math.cos(t),b=Math.sin(t),columns=[[.8*a,-.6*a],[.8*b,-.6*b]];
+    const r=projectedPointDirection(columns,0,error);assert.equal(r.dimension,1);
+    assert.ok(Math.abs(r.direction[0]-.8)<1e-12);assert.ok(Math.abs(r.direction[1]+.6)<1e-12);
+  }
+  assert.equal(projectedPointDirection([[0,0]],0,error),null);
+});
