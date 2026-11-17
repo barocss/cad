@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "qualification": "Tilted quad plane U/V numeric movement, fixed canonical frame and independent coordinate oracle.",
+  "files": [
+    {
+      "file": "plane-move.bcad",
+      "hash": "757766865b7d22a0483ccfa67943db84c89f626dceb357de079345d6ccf45f5e",
+      "semanticEquality": true
+    }
+  ],
+  "downloads": [
+    {
+      "phase": "native Save plane-move",
+      "suggestedFilename": "Untitled.bcad"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One box and a 15-degree tilted quad. Exact planar cyclic/winding and unsupported inputs covered by pure tests. Local rotation/drag unsupported."
+  ],
+  "visualReview": "PASS: actual pixels inspected; pending preview distinct from accepted reopened result"
+}

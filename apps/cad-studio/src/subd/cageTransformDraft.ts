@@ -1,9 +1,9 @@
-import { cageLocalDirection } from '@barocss/cad-model/subd/cageLocalDirection';
+import { cageLocalDirection, type CageLocalFrame } from '@barocss/cad-model/subd/cageLocalDirection';
 import { selectionCentre, transformCageSelection, type CageSession } from '@barocss/cad-model/subd/cageEdit';
 export interface CageTransformInput {
   kind: 'move' | 'rotate' | 'scale'; axis: 0 | 1 | 2; value: string;
   proportional?: boolean; radius?: string;
-  frame?: 'world' | 'edge' | 'face';
+  frame?: 'world' | CageLocalFrame;
   pivot: 'centre' | 'vertex'; vertex: string;
 }
 export function previewCageTransform(base: CageSession, input: CageTransformInput): { session: CageSession; error: string | null; pivot: readonly [number, number, number] | null } {

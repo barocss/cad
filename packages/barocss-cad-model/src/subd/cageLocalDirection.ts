@@ -1,5 +1,6 @@
 import { cageTopology, SubdError } from '@barocss/cad';
 import type { CageSession } from './cageEdit';
+export type CageLocalFrame = 'edge' | 'face' | 'face-u' | 'face-v';
 type Direction = [number, number, number];
 /** Scale before measuring to avoid overflow/underflow for finite nonzero vectors. */
 export function normalizedCageDirection(direction: readonly number[]): Direction {
@@ -9,11 +10,11 @@ export function normalizedCageDirection(direction: readonly number[]): Direction
   const scaled = direction.map(v => v / scale), length = Math.hypot(...scaled);
   return scaled.map(v => v / length) as Direction;
 }
-/** Baseline-only direction. Edge tangent runs from lower to higher vertex ID; face normal follows winding.
+/** Baseline-only direction. Edge tangent runs from lower to higher vertex ID; face normal follows winding. Quad U starts at the lowest vertex ID toward its winding successor; V = N × U.
  * Face support is a strictly convex planar quad. Length/planarity tolerance in mm is
  * max(1e-9, face extent * 1e-9); normalized turn tolerance is its square relative to extent.
  */
-export function cageLocalDirection(s: CageSession, frame: 'edge' | 'face'): Direction {
+export function cageLocalDirection(s: CageSession, frame: CageLocalFrame): Direction {
   const fail = (reason: string): never => { throw new SubdError('INPUT', `local direction: ${reason}`); };
   const c = s.cage, nv = c.positions.length / 3;
   const valid = (v: number) => Number.isInteger(v) && v >= 0 && v < nv;
@@ -26,7 +27,7 @@ export function cageLocalDirection(s: CageSession, frame: 'edge' | 'face'): Dire
     if (!valid(a) || !valid(b) || !cageTopology(c).edges.has(`${a}_${b}`)) fail('pick a current cage edge');
     return normalizedCageDirection(sub(point(b),point(a)));
   }
-  if (frame !== 'face' || s.mode !== 'face' || s.sel.faces.length !== 1 || s.sel.edges.length || s.sel.vertices.length) fail('pick exactly one planar convex quad face');
+  if (!(['face', 'face-u', 'face-v'] as string[]).includes(frame) || s.mode !== 'face' || s.sel.faces.length !== 1 || s.sel.edges.length || s.sel.vertices.length) fail('pick exactly one planar convex quad face');
   const face = s.sel.faces[0];
   if (!Number.isInteger(face) || face < 0 || face >= c.faces.length || c.faces[face].length !== 4) fail('pick a current quad face');
   const p = c.faces[face].map(point), local = p.map(q=>sub(q,p[0]));
@@ -44,5 +45,11 @@ export function cageLocalDirection(s: CageSession, frame: 'edge' | 'face'): Dire
     const a=sub(q[(i+1)%4],q[i]), b=sub(q[(i+2)%4],q[(i+1)%4]);
     if(Math.hypot(...a)<=epsilon || dot(cross(a,b),normal)<=epsilon*epsilon) fail('quad must be strictly convex and nondegenerate');
   }
-  return normal;
+  if (frame === 'face') return normal;
+  // Canonical corner makes U/V independent of cyclic indexing (winding still matters).
+  const ids = c.faces[face], start = ids.indexOf(Math.min(...ids));
+  const edge = normalizedCageDirection(sub(p[(start + 1) % 4], p[start]));
+  const alongNormal = dot(edge, normal);
+  const u = normalizedCageDirection(edge.map((v, k) => v - alongNormal * normal[k]));
+  return frame === 'face-u' ? u : normalizedCageDirection(cross(normal, u));
 }

@@ -52,3 +52,11 @@ test('proportional numeric preview keeps original graph distances and Off behavi
  assert.equal(previewCageTransform(seed,{...move,value:'0'}).session,seed);
  assert.ok(previewCageTransform(s,move).error);
 });
+test('quad plane U/V move independently from baseline and reject proportional combination',()=>{
+ const face=select(startSession(0,cage),{kind:'face',f:0},false);
+ const move:CageTransformInput={...input,kind:'move',frame:'face-u',value:'2'};
+ assert.deepEqual(previewCageTransform(face,move).session.cage.positions,[12,20,30,16,20,30,16,24,30,12,24,30]);
+ assert.deepEqual(previewCageTransform(face,{...move,frame:'face-v'}).session.cage.positions,[10,22,30,14,22,30,14,26,30,10,26,30]);
+ const bad=previewCageTransform(face,{...move,proportional:true,radius:'10'});assert.ok(bad.error);assert.equal(bad.session,face);
+ assert.equal(previewCageTransform(face,{...move,value:'0'}).session,face);
+});
