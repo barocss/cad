@@ -1,0 +1,133 @@
+{
+  "status": "FAIL",
+  "qualification": "G2 face-kind Shell refusal names the unsupported face without blaming Wall; original accepted source survives Cancel.",
+  "visualReview": "ROOT_MUST_VIEW_SCREENSHOTS",
+  "states": [
+    {
+      "label": "failure",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 3,
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              40,
+              30
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 20
+          },
+          {
+            "id": "n2",
+            "kind": "fillet",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.top"
+            ],
+            "radius": 4,
+            "section": {
+              "kind": "g2",
+              "tension": 0.5
+            }
+          }
+        ]
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 23936.000000000055,
+            "centroid": [
+              19.999999999999993,
+              15.038409303115264,
+              9.974959680842009
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": [
+            0
+          ]
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 20",
+        "Fillet R4 G2"
+      ]
+    }
+  ],
+  "reads": [],
+  "oracles": [],
+  "files": [],
+  "downloads": [],
+  "observations": [],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One authored 40\u00d730\u00d720 R4 G2 tension .5 source, Wall2; closed/top/bottom. Conic rho.5 closed/bottom controls use the existing independent bounded oracle. No general Shell or G2 offset admission."
+  ],
+  "oracleSource": {
+    "hash": "2c8e1229db7b1e69846c44362af8f66a2b011319eb7045646e8e9de6e33ca898",
+    "productImports": 0
+  },
+  "sourceBeforeCount": 6,
+  "virtualSources": [
+    {
+      "label": "inspector",
+      "hash": "f1a7dd57c960f7b4795ef4c2d5672832dfd1494f6ab847b5307970d3414ec7a9",
+      "virtualInputExcluded": "<checkout>/apps/cad-studio/shell-face-kind-inspector.ts"
+    }
+  ],
+  "sourceFrozenCount": 1069,
+  "failure": "locator.fill: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.palette input')\u001b[22m\n\n    at f.command (<checkout>/apps/cad-studio/test/flow-helper.mjs:175:108)\n    at async checkRefusal (<checkout>/apps/cad-studio/test/shell-face-kind-browser.mjs:73:40)\n    at async file://<checkout>/apps/cad-studio/test/shell-face-kind-browser.mjs:93:86\n    at async f.run (<checkout>/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file://<checkout>/apps/cad-studio/test/shell-face-kind-browser.mjs:91:1",
+  "sourceAfterCleanupCount": 1069,
+  "phase": "G2 closed unsupported face",
+  "sourceUnchanged": false
+}

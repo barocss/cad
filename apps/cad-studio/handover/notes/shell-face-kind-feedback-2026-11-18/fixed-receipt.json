@@ -1,0 +1,996 @@
+{
+  "status": "PASS",
+  "qualification": "G2 face-kind Shell refusal names the unsupported face without blaming Wall; original accepted source survives Cancel.",
+  "visualReview": "ROOT_MUST_VIEW_SCREENSHOTS",
+  "states": [
+    {
+      "label": "g2-closed-refused",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 3,
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              40,
+              30
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 20
+          },
+          {
+            "id": "n2",
+            "kind": "fillet",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.top"
+            ],
+            "radius": 4,
+            "section": {
+              "kind": "g2",
+              "tension": 0.5
+            }
+          }
+        ]
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 23936.000000000055,
+            "centroid": [
+              19.999999999999993,
+              15.038409303115264,
+              9.974959680842009
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": [
+            0
+          ]
+        },
+        "bodies": 1,
+        "active": "shell",
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": "ShellrefusedWallmmShell does not support this faceShell cannot offset face n2.face#1 in this configuration. This is not a Wall thickness error. Cancel Shell, then try another source or Shell before the finishing feature; check the new preview.Kernel detail[SHELL_FACE_KIND] shell: face n2.face#1 is not an untrimmed patch, a plane or a cylinder beside a sharp edge: shelling it is not supported yetCancelApply",
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 20",
+        "Fillet R4 G2"
+      ]
+    },
+    {
+      "label": "g2-closed-cancelled",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 3,
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              40,
+              30
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 20
+          },
+          {
+            "id": "n2",
+            "kind": "fillet",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.top"
+            ],
+            "radius": 4,
+            "section": {
+              "kind": "g2",
+              "tension": 0.5
+            }
+          }
+        ]
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 23936.000000000055,
+            "centroid": [
+              19.999999999999993,
+              15.038409303115264,
+              9.974959680842009
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": [
+            0
+          ]
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 20",
+        "Fillet R4 G2"
+      ]
+    },
+    {
+      "label": "g2-top-refused",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 3,
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              40,
+              30
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 20
+          },
+          {
+            "id": "n2",
+            "kind": "fillet",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.top"
+            ],
+            "radius": 4,
+            "section": {
+              "kind": "g2",
+              "tension": 0.5
+            }
+          }
+        ]
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 23936.000000000055,
+            "centroid": [
+              19.999999999999993,
+              15.038409303115264,
+              9.974959680842009
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [
+            {
+              "body": 0,
+              "face": 5
+            }
+          ],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": "shell",
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": "ShellrefusedWallmmShell does not support this faceShell cannot offset face n2.face#1 in this configuration. This is not a Wall thickness error. Cancel Shell, then try another source or Shell before the finishing feature; check the new preview.Kernel detail[SHELL_FACE_KIND] shell: face n2.face#1 is not an untrimmed patch, a plane or a cylinder beside a sharp edge: shelling it is not supported yetCancelApply",
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 20",
+        "Fillet R4 G2"
+      ]
+    },
+    {
+      "label": "g2-top-cancelled",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 3,
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              40,
+              30
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 20
+          },
+          {
+            "id": "n2",
+            "kind": "fillet",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.top"
+            ],
+            "radius": 4,
+            "section": {
+              "kind": "g2",
+              "tension": 0.5
+            }
+          }
+        ]
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 23936.000000000055,
+            "centroid": [
+              19.999999999999993,
+              15.038409303115264,
+              9.974959680842009
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [
+            {
+              "body": 0,
+              "face": 5
+            }
+          ],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 20",
+        "Fillet R4 G2"
+      ]
+    },
+    {
+      "label": "g2-bottom-refused",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 3,
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              40,
+              30
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 20
+          },
+          {
+            "id": "n2",
+            "kind": "fillet",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.top"
+            ],
+            "radius": 4,
+            "section": {
+              "kind": "g2",
+              "tension": 0.5
+            }
+          }
+        ]
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 23936.000000000055,
+            "centroid": [
+              19.999999999999993,
+              15.038409303115264,
+              9.974959680842009
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [
+            {
+              "body": 0,
+              "face": 4
+            }
+          ],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": "shell",
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": "ShellrefusedWallmmShell does not support this faceShell cannot offset face n2.face#1 in this configuration. This is not a Wall thickness error. Cancel Shell, then try another source or Shell before the finishing feature; check the new preview.Kernel detail[SHELL_FACE_KIND] shell: face n2.face#1 is not an untrimmed patch, a plane or a cylinder beside a sharp edge: shelling it is not supported yetCancelApply",
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 20",
+        "Fillet R4 G2"
+      ]
+    },
+    {
+      "label": "g2-bottom-cancelled",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 3,
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              40,
+              30
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 20
+          },
+          {
+            "id": "n2",
+            "kind": "fillet",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.top"
+            ],
+            "radius": 4,
+            "section": {
+              "kind": "g2",
+              "tension": 0.5
+            }
+          }
+        ]
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 23936.000000000055,
+            "centroid": [
+              19.999999999999993,
+              15.038409303115264,
+              9.974959680842009
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [
+            {
+              "body": 0,
+              "face": 4
+            }
+          ],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 20",
+        "Fillet R4 G2"
+      ]
+    },
+    {
+      "label": "conic-closed-accepted",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 4,
+        "outputs": {
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              40,
+              30
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 20
+          },
+          {
+            "id": "n2",
+            "kind": "fillet",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.top"
+            ],
+            "radius": 4,
+            "section": {
+              "kind": "conic",
+              "rho": 0.5
+            }
+          },
+          {
+            "kind": "shell",
+            "parent": {
+              "node": 2,
+              "side": "solid"
+            },
+            "thickness": 2,
+            "open": [],
+            "id": "n3"
+          }
+        ]
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b3",
+            "volume": 8935.724963870556,
+            "centroid": [
+              20.00000000000429,
+              15.143492456038118,
+              9.90590198855629
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 20",
+        "Fillet R4 conic \u03c10.5",
+        "Shell 2 mm"
+      ]
+    },
+    {
+      "label": "conic-bottom-accepted",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nextId": 4,
+        "outputs": {
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              40,
+              30
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 20
+          },
+          {
+            "id": "n2",
+            "kind": "fillet",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.top"
+            ],
+            "radius": 4,
+            "section": {
+              "kind": "conic",
+              "rho": 0.5
+            }
+          },
+          {
+            "kind": "shell",
+            "parent": {
+              "node": 2,
+              "side": "solid"
+            },
+            "thickness": 2,
+            "open": [
+              "n1.bottom"
+            ],
+            "id": "n3",
+            "sigs": {
+              "n1.bottom": {
+                "k": "plane",
+                "p": [
+                  20,
+                  15,
+                  0
+                ],
+                "d": [
+                  0,
+                  0,
+                  -1
+                ],
+                "s": 1200
+              }
+            }
+          }
+        ]
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b3",
+            "volume": 7063.724963867594,
+            "centroid": [
+              20.00000000000091,
+              15.181520250025871,
+              12.266108339717706
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [
+            {
+              "body": 0,
+              "face": 4
+            }
+          ],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 20",
+        "Fillet R4 conic \u03c10.5",
+        "Shell 2 mm"
+      ]
+    }
+  ],
+  "reads": [],
+  "oracles": [
+    {
+      "label": "conic-closed-oracle",
+      "expectedStatus": "PASS",
+      "inputPath": "<verification-output>/conic-closed-oracle-oracle-input.json",
+      "inputSHA256": "6b5b73867b548855e41c7ea31e398df1820a1b73fa4462c6f3d90e7ec2e0ea98",
+      "stdoutPath": "<verification-output>/conic-closed-oracle-oracle.json",
+      "stderrPath": "<verification-output>/conic-closed-oracle-oracle.stderr.txt",
+      "exitPath": "<verification-output>/conic-closed-oracle-oracle-exit.json",
+      "stdoutSHA256": "3030983e586352a4bec30e24a2b1780e2af7ee167a86c2fae73d205a3a177b80",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "signal": null,
+      "error": null,
+      "stdout": {
+        "status": "PASS",
+        "mode": "closed",
+        "wallMM": 2,
+        "sectionAreaMM2": 597.3333333333334,
+        "authoredArcLengthMM": 6.492900960560922,
+        "sectionPerimeterMM": 98.49290096056092,
+        "stockVolumeMM3": 23893.333333333336,
+        "expectedVolumeMM3": 8935.724866964489,
+        "nativeVolumeMM3": 8935.724963870556,
+        "workerVolumeMM3": 8935.724963870556,
+        "relativeVolumeTolerance": 1e-07,
+        "nativeShellCount": 2,
+        "oracle": "independent authored quadratic area/arclength and bounded inward-offset section integral"
+      },
+      "stderr": "",
+      "parseError": null
+    },
+    {
+      "label": "conic-bottom-oracle",
+      "expectedStatus": "PASS",
+      "inputPath": "<verification-output>/conic-bottom-oracle-oracle-input.json",
+      "inputSHA256": "0c60a5653f63b3d670db1fb963f3cd693d9e5aab43a153e5ca906d505e34e751",
+      "stdoutPath": "<verification-output>/conic-bottom-oracle-oracle.json",
+      "stderrPath": "<verification-output>/conic-bottom-oracle-oracle.stderr.txt",
+      "exitPath": "<verification-output>/conic-bottom-oracle-oracle-exit.json",
+      "stdoutSHA256": "334b408f73d4503ce5ef814f09b33e1b3449f9233f3979c588f4cb49ea7b5382",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "signal": null,
+      "error": null,
+      "stdout": {
+        "status": "PASS",
+        "mode": "open",
+        "wallMM": 2,
+        "sectionAreaMM2": 597.3333333333334,
+        "authoredArcLengthMM": 6.492900960560922,
+        "sectionPerimeterMM": 98.49290096056092,
+        "stockVolumeMM3": 23893.333333333336,
+        "expectedVolumeMM3": 7063.724866964487,
+        "nativeVolumeMM3": 7063.724963867594,
+        "workerVolumeMM3": 7063.724963867594,
+        "relativeVolumeTolerance": 1e-07,
+        "nativeShellCount": 1,
+        "oracle": "independent authored quadratic area/arclength and bounded inward-offset section integral"
+      },
+      "stderr": "",
+      "parseError": null
+    }
+  ],
+  "files": [],
+  "downloads": [],
+  "observations": [
+    {
+      "mode": "closed",
+      "baseline": false,
+      "defaultCopy": "Shell does not support this face Shell cannot offset face n2.face#1 in this configuration. This is not a Wall thickness error. Cancel Shell, then try another source or Shell before the finishing feature; check the new preview.",
+      "raw": {
+        "id": 4,
+        "revision": 4,
+        "feature": {
+          "kind": "shell",
+          "parent": {
+            "node": 2,
+            "side": "solid"
+          },
+          "thickness": 2,
+          "open": [],
+          "id": "n3"
+        },
+        "ok": false,
+        "error": {
+          "title": "Shell does not support this face",
+          "hint": "Shell cannot offset face n2.face#1 in this configuration. This is not a Wall thickness error. Cancel Shell, then try another source or Shell before the finishing feature; check the new preview.",
+          "detail": "[SHELL_FACE_KIND] shell: face n2.face#1 is not an untrimmed patch, a plane or a cylinder beside a sharp edge: shelling it is not supported yet",
+          "code": "SHELL_FACE_KIND",
+          "feature": "n3"
+        }
+      },
+      "unchangedNative": true,
+      "wallNotInvalid": true
+    },
+    {
+      "mode": "top",
+      "baseline": false,
+      "defaultCopy": "Shell does not support this face Shell cannot offset face n2.face#1 in this configuration. This is not a Wall thickness error. Cancel Shell, then try another source or Shell before the finishing feature; check the new preview.",
+      "raw": {
+        "id": 4,
+        "revision": 4,
+        "feature": {
+          "kind": "shell",
+          "parent": {
+            "node": 2,
+            "side": "solid"
+          },
+          "thickness": 2,
+          "open": [
+            "n1.top"
+          ],
+          "id": "n3"
+        },
+        "ok": false,
+        "error": {
+          "title": "Shell does not support this face",
+          "hint": "Shell cannot offset face n2.face#1 in this configuration. This is not a Wall thickness error. Cancel Shell, then try another source or Shell before the finishing feature; check the new preview.",
+          "detail": "[SHELL_FACE_KIND] shell: face n2.face#1 is not an untrimmed patch, a plane or a cylinder beside a sharp edge: shelling it is not supported yet",
+          "code": "SHELL_FACE_KIND",
+          "feature": "n3"
+        }
+      },
+      "unchangedNative": true,
+      "wallNotInvalid": true
+    },
+    {
+      "mode": "bottom",
+      "baseline": false,
+      "defaultCopy": "Shell does not support this face Shell cannot offset face n2.face#1 in this configuration. This is not a Wall thickness error. Cancel Shell, then try another source or Shell before the finishing feature; check the new preview.",
+      "raw": {
+        "id": 4,
+        "revision": 4,
+        "feature": {
+          "kind": "shell",
+          "parent": {
+            "node": 2,
+            "side": "solid"
+          },
+          "thickness": 2,
+          "open": [
+            "n1.bottom"
+          ],
+          "id": "n3"
+        },
+        "ok": false,
+        "error": {
+          "title": "Shell does not support this face",
+          "hint": "Shell cannot offset face n2.face#1 in this configuration. This is not a Wall thickness error. Cancel Shell, then try another source or Shell before the finishing feature; check the new preview.",
+          "detail": "[SHELL_FACE_KIND] shell: face n2.face#1 is not an untrimmed patch, a plane or a cylinder beside a sharp edge: shelling it is not supported yet",
+          "code": "SHELL_FACE_KIND",
+          "feature": "n3"
+        }
+      },
+      "unchangedNative": true,
+      "wallNotInvalid": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One authored 40\u00d730\u00d720 R4 G2 tension .5 source, Wall2; closed/top/bottom. Conic rho.5 closed/bottom controls use the existing independent bounded oracle. No general Shell or G2 offset admission."
+  ],
+  "oracleSource": {
+    "hash": "2c8e1229db7b1e69846c44362af8f66a2b011319eb7045646e8e9de6e33ca898",
+    "productImports": 0
+  },
+  "sourceBeforeCount": 6,
+  "virtualSources": [
+    {
+      "label": "inspector",
+      "hash": "f1a7dd57c960f7b4795ef4c2d5672832dfd1494f6ab847b5307970d3414ec7a9",
+      "virtualInputExcluded": "<checkout>/apps/cad-studio/shell-face-kind-inspector.ts"
+    }
+  ],
+  "sourceFrozenCount": 1070,
+  "sourceAfterCount": 1070,
+  "sourceAfterCleanupCount": 1070,
+  "phase": "Conic bottom supported control",
+  "sourceUnchanged": true
+}

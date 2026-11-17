@@ -348,6 +348,13 @@ export function friendly(message: string, kind?: string): FriendlyError {
     && Number(shellLimit[1]) >= Number(shellLimit[3])) return {
     title: 'The wall is too thick', hint: `Enter Wall less than ${shellLimit[3]} mm to keep the selected face open.`, detail, ...extra,
   };
+  // Preserve the native face identity without guessing its owning feature or generalizing its limit.
+  const shellFace = code === 'SHELL_FACE_KIND' ? /^\[SHELL_FACE_KIND\] (?:shell: )?face (\S+) is not an untrimmed patch, a plane or a cylinder beside a sharp edge: shelling it is not supported yet$/.exec(detail) : null;
+  if (shellFace?.[0] === detail) return {
+    title: 'Shell does not support this face',
+    hint: `Shell cannot offset face ${shellFace[1]} in this configuration. This is not a Wall thickness error. Cancel Shell, then try another source or Shell before the finishing feature; check the new preview.`,
+    detail, ...extra,
+  };
   const unmatched = /^the surfaces do not close: (\d+ edges?) meet no other surface \((surfaces? [\d, ]+)\)$/.exec(detail);
   if (unmatched) return { title: 'Sew leaves unmatched edges',
     hint: `${unmatched[1]} could not be matched on ${unmatched[2]} in the listed source order. Check the gap and the tolerance.`,
