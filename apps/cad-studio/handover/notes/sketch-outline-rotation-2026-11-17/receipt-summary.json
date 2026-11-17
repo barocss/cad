@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "qualification": "Explicit in-plane rotation of one independent unconstrained straight outline, existing history and native project persistence.",
+  "limits": [
+    "One asymmetric four-point profile and its constrained refusal counterpart. Chrome desktop. No constraint removal or solver widening."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1059,
+  "sourceAfterCleanupCount": 1059,
+  "files": [
+    {
+      "name": "rotated-outline.bcad",
+      "hash": "64f8e3210706903827c5a3a84b37c4888e5a61b59e44b822f42eda7f3b2b8f9e",
+      "semanticEquality": true
+    }
+  ],
+  "states": [
+    "01-first-point-rotation",
+    "02-custom-pivot-before-apply",
+    "03-finished",
+    "04-fresh-open",
+    "05-constrained-refusal",
+    "06-refusal-finished"
+  ],
+  "visualReview": "Actual screenshots reviewed"
+}

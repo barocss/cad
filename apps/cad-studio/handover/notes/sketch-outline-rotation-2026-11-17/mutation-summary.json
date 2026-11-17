@@ -1,0 +1,66 @@
+{
+  "sourceUnchanged": true,
+  "sourceSHA256": "0f6b140080b74d50fdc84d546d867ecb701f40e571429505c39d966726c836d8",
+  "receipts": [
+    {
+      "name": "baseline-before",
+      "exit": 0,
+      "pass": 4,
+      "fail": 0,
+      "failedTests": []
+    },
+    {
+      "name": "wrong-90-sign",
+      "from": "angle===90?[0,1]",
+      "to": "angle===90?[0,-1]",
+      "exit": 1,
+      "pass": 3,
+      "fail": 1,
+      "failedTests": [
+        "exact cardinal rotations about first point and explicit off-origin pivot preserve metadata/source"
+      ]
+    },
+    {
+      "name": "constraint-guard-removed",
+      "from": "  if(!shape.hv||shape.hv.h.length||shape.hv.v.length||shape.bulges?.some(v=>v!==0)||shape.fromSpline||shape.spline||shape.fromEllipse||shape.ellipse||shape.circles?.length||shape.circleIds?.length||shape.rules?.length||shape.tangents?.length||shape.equalRadii?.length||shape.concentric?.length||Object.keys(shape.lengths??{}).length||Object.keys(shape.radii??{}).length)return {error:'Rotation requires an explicitly unconstrained straight outline. Existing constraints are never removed.'};",
+      "to": "",
+      "exit": 1,
+      "pass": 3,
+      "fail": 1,
+      "failedTests": [
+        "constraints and derived/linked/multiple geometry refuse atomically instead of dropping state"
+      ]
+    },
+    {
+      "name": "wrong-pivot-origin",
+      "from": "const u=x-pivot[0],v=y-pivot[1]",
+      "to": "const u=x,v=y",
+      "exit": 1,
+      "pass": 1,
+      "fail": 3,
+      "failedTests": [
+        "exact cardinal rotations about first point and explicit off-origin pivot preserve metadata/source",
+        "45 degree independent coordinates, area/length invariants, settle and profile snapshots",
+        "invalid numeric/range/collapsed/intersecting/short inputs are refused without source mutation"
+      ]
+    },
+    {
+      "name": "whole-turn-allocates",
+      "from": "if(angle===0)return {shape};",
+      "to": "if(angle===0)return {shape:{...shape}};",
+      "exit": 1,
+      "pass": 3,
+      "fail": 1,
+      "failedTests": [
+        "exact cardinal rotations about first point and explicit off-origin pivot preserve metadata/source"
+      ]
+    },
+    {
+      "name": "baseline-final",
+      "exit": 0,
+      "pass": 4,
+      "fail": 0,
+      "failedTests": []
+    }
+  ]
+}

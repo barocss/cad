@@ -76,3 +76,7 @@
 }
 
 .sk-mobility-direction { display: block; font-size: 11px; color: var(--text-2); }
+
+.sk-outline-rotation { margin: 8px 0; padding: 8px; border: 1px solid var(--line); }
+.sk-outline-rotation label { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+.sk-outline-rotation input, .sk-outline-rotation select { min-width: 0; flex: 1; }

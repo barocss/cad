@@ -14,6 +14,7 @@ import { ellipseMatches, type EllipseDef } from '@barocss/cad-model/sketch/ellip
 import { applyEllipse, ellipseConstraintRows } from './ellipsePanel';
 import { liveBand } from '@barocss/cad-model/sketch/band';
 import { ConstraintTools } from './ConstraintTools';
+import { SketchOutlineRotation } from './SketchOutlineRotation';
 import { SketchMobility } from './SketchMobility';
 import type { ConstraintInspectionStore } from '../sketch/constraintInspection';
 import { canActivateDraftOutline, sketchCutInputs } from '../app/sketchControls';
@@ -31,7 +32,8 @@ const NONE: SketchPick[] = [];
  * tangent joints stay tangent. The app settles every edit (see sketch/settle.ts) and reports `error`. O16: the contents
  * on shadcn (Input, NativeSelect, Button, FIELD); the shell (its title) and the chip toggles are the studio's.
  */
-export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, referencePicker, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; referencePicker?: ReactNode; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
+export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, referencePicker, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand, onRotateOutline }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; referencePicker?: ReactNode; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
+  onRotateOutline?(owner: SketchState, doc: StudioDoc, candidate: SketchShape): boolean;
   onEditEllipseAxes?(): boolean;
   onDrivingLength?(source: Polygon, edge: number, value: number): boolean;
   /** Sets the picked outline entities or the dimension being edited in the viewport. */
@@ -211,6 +213,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
       </>}
       {solved?.ok && <SketchSolverDiagnostics rank={solved.rank} dof={solved.dof} />}
       {onBand && (sketch.tool === 'band' || sketch.band) && <BandSection sketch={sketch} {...onBand} />}
+      {onRotateOutline && <SketchOutlineRotation sketch={sketch} doc={constraintDocument} onApply={onRotateOutline} />}
       {outlineTools}
     </aside>
   );
