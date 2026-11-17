@@ -1,0 +1,57 @@
+{
+  "before": {
+    "status": "PASS",
+    "qualification": "Diagnostic: Duplicate has no pre-action relationship explanation",
+    "observations": [
+      {
+        "label": "baseline",
+        "relationshipGuidance": false
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 523,
+    "sourceAfterCleanupCount": 523
+  },
+  "after": {
+    "status": "PASS",
+    "qualification": "Explicit independent-copy guidance and existing nonlinked edits",
+    "observations": [
+      {
+        "label": "independent copies",
+        "samePosition": true,
+        "newCopySelected": true,
+        "copyEditOriginalPreserved": true,
+        "originalEditCopyPreserved": true,
+        "undoRedo": true,
+        "nativeSaveFreshOpen": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 523,
+    "sourceAfterCleanupCount": 523
+  },
+  "sha256": {
+    "before-01-no-guidance.png": "6e2f2ec52eb789bcf9c681651f67b88845dc04a09c1c75f7e7ae558d877b8249",
+    "after-01-guidance.png": "90f7b64a4eed663ac39336a57225e507c2b259283d59e8b253147a8508ed27f6",
+    "saved.bcad": "2bdb282524e162cd09f6f846cf615641ac83b1e7f889d1b7e8121de516b59e48",
+    "02-same-position-oracle.json": "c374f5a18343899134c71c777c6245f9ff41b826f68d1b5ba2795abd33c4cbc4",
+    "03-copy-independent-oracle.json": "19129e9d94b0e93a2f38429dfb6845d50fd09e856fb4f0bfa4f2ddaf0bc64c81",
+    "04-original-independent-oracle.json": "f2d32d9cc52e3f444e6559f3c10d571bbe264f6d0c41dd330dacc8119f7ed4bd",
+    "05-reopened-oracle.json": "f2d32d9cc52e3f444e6559f3c10d571bbe264f6d0c41dd330dacc8119f7ed4bd"
+  }
+}

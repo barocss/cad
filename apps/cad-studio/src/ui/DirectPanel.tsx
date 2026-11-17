@@ -292,7 +292,8 @@ function Transform({ onMove, onRotate, onScale, onDuplicate, onStretch, onShear 
     <NumberField label="Angle °" value={deg} onChange={setDeg} />
     <Button variant="ghost" onClick={() => onRotate(axis, deg)}>Rotate</Button>
     <NumberField label="Factor" value={k} onChange={setK} />
-    <div className="flex flex-wrap gap-1"><Button variant="ghost" onClick={() => onScale(k)}>Scale</Button><Button variant="ghost" onClick={onDuplicate}>Duplicate</Button></div>
+    <div className="flex flex-wrap gap-1"><Button variant="ghost" onClick={() => onScale(k)}>Scale</Button><Button variant="ghost" aria-describedby="direct-duplicate-relationship" onClick={onDuplicate}>Duplicate</Button></div>
+    <p id="direct-duplicate-relationship" role="note" aria-label="Duplicate relationship" className="muted small">Creates independent copies in the same position and selects them. Moving a copy or editing its control points does not update the original.</p>
     {(['× X', '× Y', '× Z'] as const).map((l, i) => <NumberField key={l} label={l} value={st[i]} onChange={x => setSt(b => b.map((y, j) => j === i ? x : y) as typeof b)} />)}
     <Button variant="ghost" onClick={() => onStretch(st)}>Stretch</Button>
     {axisPick('Shear moves', along, setAlong)}{axisPick('by', byAx, setByAx)}

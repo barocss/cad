@@ -1,0 +1,31 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [],
+  "outputs": {},
+  "nextId": 0,
+  "direct": {
+    "sources": {
+      "line": "@model test { version:0; length-unit:mm; @curve #line { type:nurbs; degree:1; knots:[0,0,1,1]; control-points:[[0,0,0],[12,6,0]]; weights:[1,1]; } }",
+      "src_1": "@model test { version:0; length-unit:mm; @curve #line { type:nurbs; degree:1; knots:[0,0,1,1]; control-points:[[0,0,0],[18,6,0]]; weights:[1,1]; } }",
+      "src_2": "@model test { version:0; length-unit:mm; @curve #line { type:nurbs; degree:1; knots:[0,0,1,1]; control-points:[[0,0,0],[12,9,0]]; weights:[1,1]; } }"
+    },
+    "objects": [
+      {
+        "id": "line1",
+        "name": "Original curve",
+        "source": "src_2",
+        "geometry": "line"
+      },
+      {
+        "id": "obj_1",
+        "name": "Original curve copy",
+        "source": "src_1",
+        "geometry": "line",
+        "hidden": false
+      }
+    ]
+  }
+}
