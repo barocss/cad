@@ -79,7 +79,7 @@ export function SheetSettings({ sheet: { bodyScope, scopeRead, scope, views, lay
         {sectionA && <label className={FIELD}><span>Cut at Y</span><span className="num flex items-center gap-1"><Input type="number" className="w-20 text-right" step="any" aria-label="Section Y" value={sectionY ?? sectionA.at}
           onChange={e => setSectionY(e.target.value)}
           onBlur={() => { const y = Number(sectionY); if (sectionY !== null && sectionY.trim() !== '' && Number.isFinite(y)) onChange(withSections(settings, sectionList.map(x => x === sectionA ? { ...x, at: y } : x))); setSectionY(null); }}
-          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} /><em>mm</em></span></label>}
+          onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setSectionY(null); } else if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} /><em>mm</em></span></label>}
         {sectionA && <SectionKind section={sectionA} hatchPartScope={scope.kind === 'part' && !scopeRead.error} hatchDraftPending={sectionY !== null || sectionAt !== null} views={views} onSet={next => onChange(withSections(settings, sectionList.map(x => x === sectionA ? next : x)))} />}
         {sectionA && cutA && !cutA.result.ok && <div className="empty" style={{ color: 'var(--warn)' }}>Section A–A: {cutA.result.error}</div>}
         {/* (O148 X1: more sections, each square to the front, top or right view's depth; letters in order.) */}
@@ -92,7 +92,7 @@ export function SheetSettings({ sheet: { bodyScope, scopeRead, scope, views, lay
             <span className="num flex items-center gap-1"><Input type="number" className="w-20 text-right" step="any" aria-label={`Section ${x.id} at`} value={sectionAt?.id === x.id ? sectionAt.text : x.at}
               onChange={e => setSectionAt({ id: x.id, text: e.target.value })}
               onBlur={() => { const v = Number(sectionAt?.text); if (sectionAt?.id === x.id && sectionAt.text.trim() !== '' && Number.isFinite(v)) onChange(withSections(settings, sectionList.map(y => y === x ? { ...y, at: v } : y))); setSectionAt(null); }}
-              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} /><em>mm</em></span>
+              onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setSectionAt(null); } else if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} /><em>mm</em></span>
             <Button variant="ghost" size="xs" aria-label={`Remove section ${x.id}`} title={`Remove section ${x.id}–${x.id}`} onClick={() => onChange(withSections(settings, sectionList.filter(y => y !== x)))}><Icon name="close" small /></Button>
             {made && !made.result.ok && <div className="empty" style={{ color: 'var(--warn)' }}>{made.result.error}</div>}
           </div>

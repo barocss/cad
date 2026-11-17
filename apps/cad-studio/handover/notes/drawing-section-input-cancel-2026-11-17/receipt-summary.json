@@ -1,0 +1,84 @@
+[
+  {
+    "status": "FAIL",
+    "qualification": "Escape cancels pending full/half/offset section coordinates before any later blur; explicit Enter and blur retain accepted cut editing.",
+    "failure": "AssertionError [ERR_ASSERTION]: Section Y: Escape restores accepted coordinate\n\n'13' !== '10'\n\n    at file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/drawing-section-input-cancel-browser.mjs:18:303\n    at async f.run (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/drawing-section-input-cancel-browser.mjs:12:1",
+    "observations": [
+      {
+        "baselineEscapeKeptDraft": "13",
+        "subsequentBlurSections": [
+          {
+            "id": "A",
+            "view": "front",
+            "at": 13
+          },
+          {
+            "id": "B",
+            "view": "top",
+            "at": 4,
+            "half": {
+              "line": "vertical",
+              "at": 32,
+              "cut": "after"
+            }
+          },
+          {
+            "id": "C",
+            "view": "front",
+            "at": 12,
+            "steps": [
+              {
+                "past": 20,
+                "at": 12
+              },
+              {
+                "past": 40,
+                "at": 16
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "limits": [
+      "Principal full/half/offset sections on one synthetic plate. No aligned sections, assembly cut references, PDF/DXF or standards certification."
+    ]
+  },
+  {
+    "status": "FAIL",
+    "qualification": "Escape cancels pending full/half/offset section coordinates before any later blur; explicit Enter and blur retain accepted cut editing.",
+    "failure": "page.waitForFunction: Timeout 30000ms exceeded.\n    at /private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/drawing-section-input-cancel-browser.mjs:23:15\n    at async f.run (/private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/drawing-section-input-cancel-browser.mjs:12:1",
+    "observations": [],
+    "errors": [],
+    "consoleErrors": [],
+    "limits": [
+      "Principal full/half/offset sections on one synthetic plate. No aligned sections, assembly cut references, PDF/DXF or standards certification."
+    ]
+  },
+  {
+    "status": "PASS",
+    "qualification": "Escape cancels pending full/half/offset section coordinates before any later blur; explicit Enter and blur retain accepted cut editing.",
+    "observations": [
+      {
+        "cancelledInputs": 9,
+        "enterSectionA": 13,
+        "blurHalfCentreline": 28,
+        "enterOffsetDepth": 14,
+        "undoRedo": true,
+        "nativeSaveOpen": true,
+        "svgSectionLabels": [
+          "A",
+          "B",
+          "C"
+        ]
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "limits": [
+      "Principal full/half/offset sections on one synthetic plate. No aligned sections, assembly cut references, PDF/DXF or standards certification."
+    ]
+  }
+]

@@ -26,7 +26,7 @@ export function SectionKind({ section: x, views, onSet, hatchPartScope = false, 
   const num = (key: string, value: number, label: string, set: (v: number) => void) => <Input key={key} type="number" className="w-16 text-right" step="any" aria-label={label} value={draft?.key === key ? draft.text : value}
     onChange={e => setDraft({ key, text: e.target.value })}
     onBlur={() => { const v = Number(draft?.text); if (draft?.key === key && draft.text.trim() !== '' && Number.isFinite(v)) set(v); setDraft(null); }}
-    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />;
+    onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setDraft(null); } else if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />;
   const setSteps = (steps: SectionStep[]) => { const sorted = [...steps].sort((a, b) => a.past - b.past); if (sorted.some((s, k) => k && s.past === sorted[k - 1].past)) return; onSet({ ...x, steps: sorted }); };
   const hatchPending = hatchDraftPending || draft !== null;
   const hatchEnabled = hatchPartScope && sectionHatchSupported(x) && !hatchPending;
