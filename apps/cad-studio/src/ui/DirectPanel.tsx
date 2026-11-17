@@ -190,8 +190,13 @@ function SurfaceTools({ id, direct, run, added, onThicken }: { id: string; direc
   const range = axis === 'u' ? u : v, mid = (range[0] + range[1]) / 2;
   const [atText, setAtText] = useSurfaceDraft(direct, id, `split-${axis}-${range.join(',')}`, String(mid));
   const at = surfaceParameter(atText), splitAllowed = at !== null && at > range[0] && at < range[1];
-  const [box, setBox] = useState<[number, number, number, number]>([u[0], u[1], v[0], v[1]]);
-  useEffect(() => { setBox([u[0], u[1], v[0], v[1]]); }, [id, u[0], u[1], v[0], v[1]]);
+  const regionScope = `region-${u.join(',')}-${v.join(',')}`;
+  const uFrom = useSurfaceDraft(direct, id, `${regionScope}-u-from`, String(u[0]));
+  const uTo = useSurfaceDraft(direct, id, `${regionScope}-u-to`, String(u[1]));
+  const vFrom = useSurfaceDraft(direct, id, `${regionScope}-v-from`, String(v[0]));
+  const vTo = useSurfaceDraft(direct, id, `${regionScope}-v-to`, String(v[1]));
+  const regionDrafts = [uFrom, uTo, vFrom, vTo], box = regionDrafts.map(([value]) => surfaceParameter(value));
+  const regionFinite = box.every(value => value !== null), regionErrorId = `direct-region-${encodeURIComponent(id)}`;
   const g = geometryOf(direct, direct.objects.find(o => o.id === id)!), trims = direct.objects.find(o => o.id === id)?.trims?.length ?? 0;
   return <div className="render-section [&>[data-slot=button]]:self-start">
     {g.kind === 'surface' && <div className="kv">Degree <b>{g.degreeU} × {g.degreeV}</b></div>}
@@ -226,8 +231,13 @@ function SurfaceTools({ id, direct, run, added, onThicken }: { id: string; direc
       <Button variant="ghost" aria-label="Thicken into a body" disabled={wall === null || thickenScope.blocked} aria-describedby={[thickenScopeId, ...(wall === null ? [wallErrorId] : [])].join(' ')} onClick={() => { if (wall !== null && !thickenScope.blocked) onThicken(id, wall, wallSide); }}>Thicken into a body</Button>
     </>}
     <div className="card-title" style={{ marginTop: 8 }}>REGION</div>
-    {(['u from', 'u to', 'v from', 'v to'] as const).map((l, k) => <NumberField key={l} label={l} value={box[k]} onChange={x => setBox(b => b.map((y, j) => j === k ? x : y) as typeof b)} />)}
-    <Button variant="ghost" onClick={() => run(() => directOps.surfaceRegion(direct, id, [box[0], box[1]], [box[2], box[3]]), added)}>Extract region</Button>
+    {(['u from', 'u to', 'v from', 'v to'] as const).map((label, k) => <label key={label} className={FIELD}><span>{label}</span><Input type="number" step="any" className="w-24" aria-label={label} value={regionDrafts[k][0]}
+      aria-invalid={box[k] === null || undefined} aria-describedby={box[k] === null ? regionErrorId : undefined} onChange={event => regionDrafts[k][1](event.target.value)} /></label>)}
+    {!regionFinite && <span id={regionErrorId} role="status" className="warn small">Enter finite values for all four region bounds.</span>}
+    <Button variant="ghost" disabled={!regionFinite} aria-describedby={!regionFinite ? regionErrorId : undefined} onClick={() => {
+      const [a, b, c, d] = box;
+      if (a !== null && b !== null && c !== null && d !== null) run(() => directOps.surfaceRegion(direct, id, [a, b], [c, d]), added);
+    }}>Extract region</Button>
   </div>;
 }
 

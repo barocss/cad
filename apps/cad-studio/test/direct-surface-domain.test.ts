@@ -206,3 +206,32 @@ test('Extend requires an owned finite-positive raw draft and refuses stale numer
     assert.equal(field().value, '5');
   } finally { h.cleanup(); }
 });
+
+test('Region owns all four raw bounds and blocks blank/nonfinite scheduling without changing interval admission', () => {
+  const direct = seed(), before = structuredClone(direct), calls: (() => DirectGeometry)[] = [];
+  const props: ToolsProps = { id: direct.objects[0].id, direct, run: op => { calls.push(op); }, added: () => [] };
+  const h = harness(SurfaceTools, props), labels = ['u from', 'u to', 'v from', 'v to'];
+  const input = (view: View, label: string) => elements(view).find(e => e.props['aria-label'] === label)!.props;
+  const change = (view: View, label: string, value: string) => (input(view, label).onChange as (event: unknown) => void)({ target: { value } });
+  try {
+    const initial = labels.map(label => input(h.render(), label).value);
+    for (const label of labels) {
+      for (const raw of ['', ' ', 'NaN', 'Infinity', '-Infinity']) {
+        change(h.render(), label, raw); const view = h.render(), field = input(view, label), start = action(view, 'Extract region');
+        assert.equal(field.value, raw); assert.equal(field['aria-invalid'], true); assert.equal(start.disabled, true);
+        assert.equal(start['aria-describedby'], field['aria-describedby']);
+        (start.onClick as () => void)(); assert.equal(calls.length, 0);
+        props.direct = structuredClone(direct);
+        assert.deepEqual(labels.map(name => input(h.render(), name).value), initial);
+      }
+    }
+    for (const raw of ['0', '-1', '99']) {
+      change(h.render(), 'u to', raw); assert.equal(action(h.render(), 'Extract region').disabled, false);
+      (action(h.render(), 'Extract region').onClick as () => void)();
+    }
+    assert.equal(calls.length, 3, 'finite interval validity remains with the producer, without clamping');
+    change(h.render(), 'v to', ''); const other = importSource(direct, source, 'Other surface'); props.direct = other; props.id = other.objects.at(-1)!.id;
+    assert.deepEqual(labels.map(name => input(h.render(), name).value), initial);
+    assert.deepEqual(direct, before);
+  } finally { h.cleanup(); }
+});
