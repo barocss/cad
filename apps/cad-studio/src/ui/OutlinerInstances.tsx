@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 import { featureLabel, type ModelNode, type PartInstance } from '@barocss/cad-model/engine/doc';
 import { Icon } from './atoms';
 import { hasNestedParts, nestedRows } from '../assembly/nestedSelection';
@@ -22,17 +22,18 @@ interface RowProps {
   registerRow?(path: string, row: HTMLButtonElement | null): void | (() => void);
   onPick(id: string): void;
   onEdit(id: string, index: number): void;
+  isolationAction?(inst: PartInstance): ReactNode;
   iconFor(node: ModelNode): string;
 }
 
-const InstanceRow = memo(function InstanceRow({ inst, selected, only, editIndex, locked, open, nestedSel, onToggle, onPick, onEdit, iconFor, registerRow }: RowProps) {
+const InstanceRow = memo(function InstanceRow({ inst, selected, only, editIndex, locked, open, nestedSel, onToggle, onPick, onEdit, iconFor, registerRow, isolationAction }: RowProps) {
   const button = <button data-browser-instance-path={inst.id} ref={row => registerRow?.(inst.id, row)} className={'ol instance' + (selected ? ' sel' : '') + (inst.hidden ? ' hidden-obj' : '')} onClick={() => onPick(inst.id)}>
     <Icon name={inst.hidden ? 'visibility_off' : 'widgets'} small />{inst.name}</button>;
   const expandable = hasNestedParts(inst), isOpen = expandable && open.has(inst.id);
   return <>
-    {expandable ? <div className={'ol-row' + (selected ? ' sel' : '')}>
-      <button className="ol-caret" aria-expanded={isOpen} aria-label={`${isOpen ? 'Hide' : 'Show'} the parts of ${inst.name}`} onClick={() => onToggle(inst.id)}><Icon name={isOpen ? 'expand_more' : 'chevron_right'} small /></button>
-      {button}</div> : button}
+    {expandable || isolationAction ? <div className={'ol-row' + (selected ? ' sel' : '')}>
+      {expandable && <button className="ol-caret" aria-expanded={isOpen} aria-label={`${isOpen ? 'Hide' : 'Show'} the parts of ${inst.name}`} onClick={() => onToggle(inst.id)}><Icon name={isOpen ? 'expand_more' : 'chevron_right'} small /></button>}
+      {button}{isolationAction?.(inst)}</div> : button}
     {isOpen && nestedRows(inst, open).map(row => <div key={row.path} className={'ol-row nested' + (nestedSel === row.path ? ' sel' : '')} data-path={row.path} style={{ marginLeft: 12 * row.depth }}>
       <button className="ol-caret" disabled={!row.expandable} aria-expanded={row.expandable ? row.open : undefined} aria-label={`${row.open ? 'Hide' : 'Show'} the parts of ${row.name}`} onClick={() => onToggle(row.path)}>
         <Icon name={row.open ? 'expand_more' : 'chevron_right'} small /></button>
@@ -44,7 +45,7 @@ const InstanceRow = memo(function InstanceRow({ inst, selected, only, editIndex,
   </>;
 });
 
-export const OutlinerInstances = memo(function OutlinerInstances({ instances, selection, edit, locked, onPick, onEdit, iconFor, open, onToggle, registerRow }: {
+export const OutlinerInstances = memo(function OutlinerInstances({ instances, selection, edit, locked, onPick, onEdit, iconFor, open, onToggle, registerRow, isolationAction }: {
   instances: readonly PartInstance[];
   open: ReadonlySet<string>;
   onToggle(path: string): void;
@@ -54,11 +55,12 @@ export const OutlinerInstances = memo(function OutlinerInstances({ instances, se
   locked: boolean;
   onPick(id: string): void;
   onEdit(id: string, index: number): void;
+  isolationAction?(inst: PartInstance): ReactNode;
   iconFor(node: ModelNode): string;
 }) {
   // (The nested part selected, as its host's row takes it: a path is only ever under its first id.)
   const nested = selection.length === 1 && selection[0].includes('/') ? selection[0] : null;
   return <>{instances.map(inst => <InstanceRow key={inst.id} inst={inst} selected={selection.includes(inst.id)} only={selection.length === 1 && selection[0] === inst.id}
     editIndex={edit?.owner === inst.id ? edit.index : null} locked={locked} open={open} nestedSel={nested && nested.startsWith(inst.id + '/') ? nested : null}
-    onToggle={onToggle} registerRow={registerRow} onPick={onPick} onEdit={onEdit} iconFor={iconFor} />)}</>;
+    isolationAction={isolationAction} onToggle={onToggle} registerRow={registerRow} onPick={onPick} onEdit={onEdit} iconFor={iconFor} />)}</>;
 });

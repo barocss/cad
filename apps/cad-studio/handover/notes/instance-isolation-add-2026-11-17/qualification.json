@@ -1,0 +1,792 @@
+{
+  "issue": 235,
+  "scope": "bounded actual explicit additive isolation",
+  "renderer": "WebGPU",
+  "final": {
+    "directory": "/tmp/cad-instance-isolation-add-02",
+    "status": "PASS",
+    "receiptSHA256": "b9e33836dd45d196618160346c0c1cd52bb4fea00fdff6129939b8b32d61822e",
+    "observations": [
+      {
+        "opaque": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "faded": [],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 1,
+          "cpuTime": 0.30000007152557373,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1"
+        ],
+        "faded": [
+          "p2",
+          "p3"
+        ],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 3,
+          "cpuTime": 0.6000000238418579,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.4186046511627907,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.27906976744186046,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.27906976744186046,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1"
+        ],
+        "faded": [
+          "p2",
+          "p3"
+        ],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 5,
+          "cpuTime": 0.2999999523162842,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1",
+          "p2"
+        ],
+        "faded": [
+          "p3"
+        ],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 8,
+          "cpuTime": 0.20000004768371582,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1",
+          "p2"
+        ],
+        "faded": [
+          "p3"
+        ],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 9,
+          "cpuTime": 0.30000007152557373,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1",
+          "p2"
+        ],
+        "faded": [
+          "p3"
+        ],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 12,
+          "cpuTime": 0.2999999523162842,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "faded": [],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 14,
+          "cpuTime": 0.20000004768371582,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.32727272727272727,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.32727272727272727,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.32727272727272727,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1",
+          "p2"
+        ],
+        "faded": [
+          "p3"
+        ],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 19,
+          "cpuTime": 0.2999999523162842,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "faded": [],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 21,
+          "cpuTime": 0.19999992847442627,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      }
+    ],
+    "errors": [],
+    "downloads": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "frozenSources": 514
+  },
+  "firstRun": {
+    "directory": "/tmp/cad-instance-isolation-add-01",
+    "status": "FAIL",
+    "classification": "fixture omitted root nextId; accepted document adds zero, exact comparison timeout",
+    "receiptSHA256": "1b181db786d094890d8affe1bfc3f38ea5c38c7b102bd73324f1b65e58649130"
+  },
+  "driverSHA256": "092d726b249881b7aec1902756d2eb5cfbd42eb28a84a38e4a9de7ea2a5de484",
+  "screenshotSHA256": "e1728ca7a9ccdbae30cb4942b3418b0f511d1e560a1e3a9eed6c8cd74e597dbb",
+  "visualReview": "Implementer viewed all three actual screenshots; synthetic fixture only, no sensitive data",
+  "historyEvidence": "Root history is empty; recursive Doc exact and Undo/Redo controls are the meaningful authored-history invariants",
+  "notRun": [
+    "WebGL",
+    "nested occurrences",
+    "deletion/Undo",
+    "linked-source replacement",
+    "delayed replies",
+    "all blocked modes beyond Measure",
+    "Save/reopen persistence",
+    "whole #235"
+  ],
+  "wholeIssue": "NOT_COMPLETE",
+  "rootVerification": {
+    "build": "PASS",
+    "seconds": 4.96,
+    "exit": 0,
+    "log": "/tmp/cad-isolation-add-build.log",
+    "visualReview": "Root independently viewed A/B isolated pixels; no sensitive data"
+  }
+}
