@@ -1,0 +1,282 @@
+{
+  "status": "PASS",
+  "qualification": "Library keeps a section inherited by a placed child; unused rows remain removable.",
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "sourceFrozenCount": 1076,
+  "sourceAfterCount": 1076,
+  "sourceAfterCleanupCount": 1076,
+  "sourceUnchanged": true,
+  "visualReview": "Viewed refusal toast and changed rectangular RHS member after fresh Open",
+  "states": [
+    {
+      "label": "after-used-remove",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "frames": {
+          "version": 1,
+          "sections": [
+            {
+              "id": "R40",
+              "section": {
+                "kind": "rect-tube",
+                "width": 40,
+                "height": 40,
+                "wall": 3,
+                "outerRadius": 0
+              },
+              "source": "Supplied test row"
+            },
+            {
+              "id": "unused",
+              "section": {
+                "kind": "rect-tube",
+                "width": 40,
+                "height": 40,
+                "wall": 3,
+                "outerRadius": 0
+              },
+              "source": "Supplied test row"
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "RHS member",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "frame-member",
+                  "section": {
+                    "kind": "library",
+                    "id": "R40"
+                  },
+                  "start": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": [
+                    0,
+                    0,
+                    300
+                  ],
+                  "up": [
+                    0,
+                    1,
+                    0
+                  ],
+                  "id": "n0"
+                }
+              ],
+              "outputs": {
+                "b0": {
+                  "node": 0,
+                  "side": "solid"
+                }
+              },
+              "nextId": 1
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "notices": [
+        "Section library[FRAME_SECTION_IN_USE] \"R40\" is used by a placed frame or member: give those another section first."
+      ]
+    },
+    {
+      "label": "section-reopened",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "frames": {
+          "version": 1,
+          "sections": [
+            {
+              "id": "R40",
+              "section": {
+                "kind": "rect-tube",
+                "width": 50,
+                "height": 30,
+                "wall": 4,
+                "outerRadius": 0
+              },
+              "source": "Supplied test row"
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "RHS member",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "frame-member",
+                  "section": {
+                    "kind": "library",
+                    "id": "R40"
+                  },
+                  "start": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": [
+                    0,
+                    0,
+                    300
+                  ],
+                  "up": [
+                    0,
+                    1,
+                    0
+                  ],
+                  "id": "n0"
+                }
+              ],
+              "outputs": {
+                "b0": {
+                  "node": 0,
+                  "side": "solid"
+                }
+              },
+              "nextId": 1
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "notices": []
+    },
+    {
+      "label": "final",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "frames": {
+          "version": 1,
+          "sections": [
+            {
+              "id": "R40",
+              "section": {
+                "kind": "rect-tube",
+                "width": 50,
+                "height": 30,
+                "wall": 4,
+                "outerRadius": 0
+              },
+              "source": "Supplied test row"
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "RHS member",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "frame-member",
+                  "section": {
+                    "kind": "library",
+                    "id": "R40"
+                  },
+                  "start": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "end": [
+                    0,
+                    0,
+                    300
+                  ],
+                  "up": [
+                    0,
+                    1,
+                    0
+                  ],
+                  "id": "n0"
+                }
+              ],
+              "outputs": {
+                "b0": {
+                  "node": 0,
+                  "side": "solid"
+                }
+              },
+              "nextId": 1
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "notices": []
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 // (`{kind: 'library', id}`), resolved before the kernel (engine/part.ts). A row edited moves every frame on it; a row a
 // frame uses is not removed.
 import { featureLabel, type FrameSectionRow, type MemberSection, type StudioDoc } from '../engine/doc';
+import { inheritedRowUsed } from '../engine/rowUsage';
 import { checkSectionRow } from '../chat/features';
 
 export type { FrameSectionRow };
@@ -33,6 +34,10 @@ export function editSections(doc: StudioDoc, rows: readonly unknown[] = [], remo
   if (new Set(good.map(r => r.id)).size !== good.length) return { error: '[FRAME_SECTION_ROW] two rows with one id.' };
   const uses = sectionUses(doc), gone = remove.filter(id => was.some(r => r.id === id)), unknown = remove.filter(id => !was.some(r => r.id === id) && !good.some(r => r.id === id));
   if (unknown.length) return { error: `[FRAME_SECTION_UNKNOWN] no row ${unknown.map(x => `"${x}"`).join(', ')} to remove (rows: ${was.map(r => r.id).join(', ') || 'none'}).` };
+  // sectionUses remains a local feature listing for the editor. Removal also
+  // protects placed descendants that inherit this row (not local overrides).
+  for (const id of gone) if (!uses.has(id) && !good.some(r => r.id === id) && inheritedRowUsed(doc, id,
+    (d, key) => sectionUses(d).has(key), (d, key) => !!d.frames?.sections?.some(r => r.id === key))) uses.set(id, ['a placed frame or member']);
   const busy = gone.filter(id => uses.has(id) && !good.some(r => r.id === id));
   if (busy.length) return { error: `[FRAME_SECTION_IN_USE] ${busy.map(id => `"${id}" is used by ${uses.get(id)!.join(', ')}`).join('; ')}: give those another section first.` };
   const replaced = good.filter(r => was.some(w => w.id === r.id)).map(r => r.id), added = good.filter(r => !was.some(w => w.id === r.id)).map(r => r.id);
