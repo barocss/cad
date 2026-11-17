@@ -1,3 +1,4 @@
+import { translateSelection } from './assembly/translateSelection';
 import { pickPlacedPart } from './assembly/groundSelection';
 import { SelectedInstancesPanel } from './ui/SelectedInstancesPanel';
 import { commitOutlineRotation } from './sketch/outlineRotationCommit';
@@ -2925,6 +2926,12 @@ export function App() {
   // (only what its mates leave free). It follows at once on screen; let go, it is placed (mates re-solve)
   // and shown as dragged until it is evaluated where it lands.
   // (Roadmap 10 ②c: a nested occurrence path has no gizmo: its sub-assembly's definition places it.)
+  const groupMoveBlocked = !fresh || busy || !renderGeometryReady || project.opening()
+    || (doc.instances ?? []).some(i => !assembly.tableFor(i.id)) || assembly.problems.length
+    ? 'Wait for the current assembly evaluation and resolve its mate errors.'
+    : shownDoc !== doc || marker !== null || inPlace || jointTree || exploded || stepsDisp || cutDraft || workingComparison
+      || section || previewMode !== 'none' || routePanelOpen || isolatedInstances
+      ? 'Return to the current master Model without a pose, section, isolation or step preview to move parts.' : null;
   const selectedTopId = singleTop(instanceSel), selectedInst = selectedTopId ? doc.instances?.find(i => i.id === selectedTopId) : undefined;
   const nestedSelected = singleNested(instanceSel);
   const canAttachFaceDiagnosis = approvalAttachmentsEnabled && shownDoc === doc && marker === null && !cutDraft && !rendering && !drawing && !sketch;
@@ -3458,7 +3465,13 @@ export function App() {
       })()}
       {!rendering && !drawing && !sketch && !measure && !active && !assembly.draft && !bomOpen && !libraryOpen && !paramsOpen && instanceSel.length > 1
         && instanceSel.every(id => !id.includes('/') && doc.instances?.some(i => i.id === id)) && <SelectedInstancesPanel
-          instances={doc.instances!.filter(i => instanceSel.includes(i.id))} onGround={on => {
+          doc={doc} moveBlocked={groupMoveBlocked} instances={doc.instances!.filter(i => instanceSel.includes(i.id))} onTranslate={delta => {
+            if (groupMoveBlocked || !canChangeDocument()) return false;
+            const next = translateSelection(doc, instanceSel, delta);
+            if (next.error !== undefined) { setToast({ title: 'Selected parts not moved', hint: next.error, detail: 'Nothing was changed.' }); return false; }
+            if (!next.instances.some((i, index) => i !== doc.instances![index])) return true;
+            return commitInstances(next.instances);
+          }} onGround={on => {
             if (!canChangeDocument()) return;
             const error = assembly.groundMany(instanceSel, on);
             if (error) setToast({ title: 'Selected parts not changed', hint: error, detail: '' });
