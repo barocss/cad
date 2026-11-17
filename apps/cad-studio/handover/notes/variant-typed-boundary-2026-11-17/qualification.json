@@ -1,0 +1,208 @@
+{
+  "status": "PASS",
+  "scope": "#256 boolean/choice public Open only; verification-only, no product changes",
+  "finalRun": "/tmp/cad-variant-typed-boundary-03",
+  "receiptSha256": "983c3a79081da9ab75241cd26e6cb756a9c2ecb7876a621fb58fd40de4e69681",
+  "driverSha256": "2ce68e709b7b9a6aaffc4e77bfe9aa6433405053aeb97e747f0924f03505d30e",
+  "priorRuns": [
+    {
+      "path": "/tmp/cad-variant-typed-boundary-01",
+      "status": "FAIL",
+      "reason": "Harness raw outputs.bExtra differed from canonical stable b3 key; no typed boundary ran.",
+      "receiptSha256": "260d2ea3e8f2008e476374d1d8057027de19a4c8f6acdee636589a163d73ce04"
+    },
+    {
+      "path": "/tmp/cad-variant-typed-boundary-02",
+      "status": "FAIL",
+      "reason": "Typed assertions passed, but final editor check used Height instead of actual Distance DOM label; entire run remains FAIL.",
+      "receiptSha256": "5be88eb4003ea0b45c89d0947727fd18acc905116c67cac5b9595dd33c9bc4ef"
+    }
+  ],
+  "firstBRoot": {
+    "type": "evaluate",
+    "id": 10,
+    "revision": 10,
+    "nativeSource": {
+      "epoch": 1,
+      "requestId": 10,
+      "revision": 10,
+      "slot": "evaluate"
+    },
+    "parameters": {
+      "OwnerB": 1
+    },
+    "nodes": [
+      {
+        "id": "n0",
+        "kind": "sketch",
+        "profile": "rectangle",
+        "min": [
+          0,
+          0
+        ],
+        "max": [
+          10,
+          5
+        ]
+      },
+      {
+        "id": "n1",
+        "kind": "extrude",
+        "sketch": 0,
+        "height": 10
+      },
+      {
+        "id": "n4",
+        "kind": "sketch",
+        "profile": "rectangle",
+        "min": [
+          20,
+          0
+        ],
+        "max": [
+          22,
+          2
+        ]
+      },
+      {
+        "id": "n5",
+        "kind": "extrude",
+        "sketch": 2,
+        "height": 4
+      }
+    ]
+  },
+  "firstBPlaced": {
+    "type": "placed",
+    "id": 11,
+    "revision": 11,
+    "nativeSource": {
+      "epoch": 1,
+      "requestId": 11,
+      "revision": 11,
+      "slot": "placed"
+    },
+    "parameters": {
+      "BSmall": 1
+    },
+    "baseParameters": {
+      "BSmall": 1
+    },
+    "nodes": [
+      {
+        "id": "n0",
+        "kind": "sketch",
+        "profile": "rectangle",
+        "min": [
+          0,
+          0
+        ],
+        "max": [
+          2,
+          3
+        ]
+      },
+      {
+        "id": "n1",
+        "kind": "extrude",
+        "sketch": 0,
+        "height": 4
+      },
+      {
+        "kind": "translate",
+        "parent": {
+          "node": 1,
+          "side": "solid"
+        },
+        "offset": [
+          30,
+          0,
+          0
+        ],
+        "id": "n2"
+      }
+    ],
+    "place": {
+      "m": [
+        1,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        1
+      ],
+      "t": [
+        30,
+        0,
+        0
+      ]
+    }
+  },
+  "rootResults": [
+    {
+      "request": {
+        "type": "evaluate",
+        "id": 10,
+        "parameters": {
+          "OwnerB": 1
+        }
+      },
+      "result": {
+        "revision": 10,
+        "bodies": [
+          {
+            "key": "b1",
+            "bounds": {
+              "min": [
+                0,
+                0,
+                0
+              ],
+              "max": [
+                10,
+                5,
+                10
+              ]
+            }
+          },
+          {
+            "key": "b5",
+            "bounds": {
+              "min": [
+                20,
+                0,
+                0
+              ],
+              "max": [
+                22,
+                2,
+                4
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "sourceFrozenCount": 515,
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "screenshots": {
+    "01-A-unsaved-boolean-choice.png": "5d50db4d294e8ae7ca295d23492188be06e1249e17dc22097bb6c8c8c920842d",
+    "02-B-own-boolean-choice-master.png": "949f11644296815daaffbb86e21c17eecbd2c92ca4290c2c809e2b2640a5f833"
+  },
+  "notRun": [
+    "STEP/3MF combined cross-document export",
+    "other accepted entry routes",
+    "OPFS saved variant fresh reopen",
+    "new late-reply permutation",
+    "whole issue closure"
+  ],
+  "privacy": "Both actual PNGs directly inspected; synthetic fixtures only."
+}
