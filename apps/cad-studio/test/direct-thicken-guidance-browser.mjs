@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { createFlow } from './flow-helper.mjs';
+const baseline=process.argv.includes('--baseline');
+const fixture='handover/notes/trimmed-surface-region-2026-10-30/studio/run-01/outside-hole.bcad';
+const original=JSON.parse(await readFile(fixture,'utf8'));
+const pins=['apps/cad-studio/src/ui/DirectPanel.tsx','apps/cad-studio/test/direct-thicken-guidance-browser.mjs','apps/cad-studio/'+fixture];
+const f=await createFlow({name:'direct-thicken-guidance',output:process.argv[2],envFrozen:'THICKEN_GUIDANCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:baseline?'Before-change diagnostic: trimmed start has no preflight guidance and Model refuses it':'Current-source trim preflight and independent snapshot guidance; explicit Untrim/Undo and command Cancel',limits:['Original outside-hole planar fixture. No new native geometry, broad Thicken support or source-move solid reevaluation proof.']});
+const panel=()=>f.page.getByRole('complementary',{name:'Direct geometry'});
+const start=()=>panel().getByRole('button',{name:'Thicken into a body',exact:true});
+const hud=()=>f.page.getByRole('dialog',{name:'Thicken',exact:true});
+async function select(){const row=f.page.locator('.outliner .ol.direct').and(f.page.getByTitle('D341 · panel · region 1',{exact:true}));if(!(await row.getAttribute('class')).split(' ').includes('sel'))await row.click();await panel().waitFor();}
+await f.run(async()=>{
+ await f.newPage();const [chooser]=await Promise.all([f.page.waitForEvent('filechooser'),f.page.getByRole('button',{name:'Open',exact:true}).click()]);await chooser.setFiles({name:'outside-hole.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(original))});await f.same(original);await select();await start().scrollIntoViewIfNeeded();
+ if(baseline){assert.equal(await start().isEnabled(),true);assert.equal(await panel().getByRole('note',{name:'Thicken source scope'}).count(),0);await f.snapshot('01-before-start');await start().click();await f.page.locator('.toast[role="alert"]').waitFor();assert.match(await f.page.locator('.toast[role="alert"]').innerText(),/untrim.*whole support surface/i);assert.equal(await hud().count(),0);await f.same(original);await f.snapshot('02-model-refusal');f.report.observations.push({baselineDiagnostic:true,enabledWithoutGuidance:true,modelRefused:true,docUnchanged:true});return;}
+ const scope=()=>panel().getByRole('note',{name:'Thicken source scope'});
+ assert.equal(await start().isDisabled(),true);assert.match(await scope().innerText(),/untrim.*whole support surface/i);const description=await start().evaluate(e=>(e.getAttribute('aria-describedby')??'').split(/\s+/).map(id=>document.getElementById(id)?.textContent??'').join(' '));assert.match(description,/later source edits do not update/i);await f.same(original);await f.snapshot('01-trim-preflight');
+ await panel().getByRole('button',{name:'Untrim',exact:true}).click();await f.changed(original);const untrimmed=await f.doc();assert.deepEqual(untrimmed.direct.sources,original.direct.sources);assert.equal(untrimmed.direct.objects.find(o=>o.id==='obj_3').trims,undefined);assert.equal(await start().isEnabled(),true);assert.doesNotMatch(await scope().innerText(),/untrim the surface first/i);assert.match(await scope().innerText(),/independent body; later source edits do not update/i);await start().scrollIntoViewIfNeeded();await f.snapshot('02-untrimmed-scope');
+ await start().click();await hud().waitFor();await f.same(untrimmed);await hud().getByRole('button',{name:'Cancel',exact:true}).click();await f.same(untrimmed);await f.undo();await f.same(original);await select();assert.equal(await start().isDisabled(),true);await start().scrollIntoViewIfNeeded();await f.snapshot('03-undo-trim-restored');await f.redo();await f.same(untrimmed);await select();assert.equal(await start().isEnabled(),true);f.report.observations.push({trimDisabled:true,descriptionLinked:true,explicitUntrim:true,sourceBytesUnchanged:true,commandEntryCancel:true,undoRedoCurrentOwner:true});
+});

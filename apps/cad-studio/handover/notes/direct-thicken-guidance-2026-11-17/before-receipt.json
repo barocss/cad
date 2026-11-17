@@ -1,0 +1,39 @@
+{
+  "status": "PASS",
+  "qualification": "Before-change diagnostic: trimmed start has no preflight guidance and Model refuses it",
+  "observations": [
+    {
+      "baselineDiagnostic": true,
+      "enabledWithoutGuidance": true,
+      "modelRefused": true,
+      "docUnchanged": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Original outside-hole planar fixture. No new native geometry, broad Thicken support or source-move solid reevaluation proof."
+  ],
+  "sourceFrozenCount": 526,
+  "sourceAfterCleanupCount": 526,
+  "sourceHashesEqual": true,
+  "initialSubsetHashes": {
+    "apps/cad-studio/handover/notes/trimmed-surface-region-2026-10-30/studio/run-01/outside-hole.bcad": "3d107731eb788f66df34db09e0919ee6d9fcbe9fde0dc6cf3ff020715f74aa5d",
+    "apps/cad-studio/src/ui/DirectPanel.tsx": "c397baca8f15e1adf54623047faec6898e24c1cc4a202c9b39f8f209be9f1619",
+    "apps/cad-studio/test/direct-thicken-guidance-browser.mjs": "b1e1692f4833339e6a700ab93b5e60f293a59d22152aa64ae4016d456df31b38",
+    "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23"
+  },
+  "visualReview": {
+    "runnerMetadata": "ROOT_MUST_VIEW_SCREENSHOTS",
+    "actual": "Implementer and parent directly reviewed these synthetic fixture PNGs; readable, no personal information."
+  },
+  "images": {
+    "before-02-model-refusal.png": "8b50f0f5eefacb0b8a411233a5b66074eef597d73d84e205a39a392242d655ea"
+  }
+}

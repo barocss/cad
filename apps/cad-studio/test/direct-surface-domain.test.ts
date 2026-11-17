@@ -161,7 +161,8 @@ test('blank and nonfinite Thickness drafts cannot silently reuse 2 or start Thic
       assert.equal(field.value, draft); assert.equal(field['aria-invalid'], true); assert.equal(start.disabled, true);
       const message = elements(view).find(element => element.props.id === field['aria-describedby']); assert.ok(message);
       assert.equal(text(message), 'Enter a finite thickness.'); assert.equal(message.props.role, 'status');
-      assert.equal(start['aria-describedby'], field['aria-describedby']);
+      assert.ok(String(start['aria-describedby']).split(/\s+/).includes(String(field['aria-describedby'])));
+      assert.ok(String(start['aria-describedby']).split(/\s+/).includes('direct-thicken-scope-obj_1'));
       (start.onClick as () => void)(); assert.deepEqual(calls, []);
       assert.equal(thickness(h.render()).value, draft, 'leaving/re-rendering does not restore a hidden default');
     }

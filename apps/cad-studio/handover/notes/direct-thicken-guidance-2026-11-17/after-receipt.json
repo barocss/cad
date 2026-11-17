@@ -1,0 +1,42 @@
+{
+  "status": "PASS",
+  "qualification": "Current-source trim preflight and independent snapshot guidance; explicit Untrim/Undo and command Cancel",
+  "observations": [
+    {
+      "trimDisabled": true,
+      "descriptionLinked": true,
+      "explicitUntrim": true,
+      "sourceBytesUnchanged": true,
+      "commandEntryCancel": true,
+      "undoRedoCurrentOwner": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Original outside-hole planar fixture. No new native geometry, broad Thicken support or source-move solid reevaluation proof."
+  ],
+  "sourceFrozenCount": 527,
+  "sourceAfterCleanupCount": 527,
+  "sourceHashesEqual": true,
+  "initialSubsetHashes": {
+    "apps/cad-studio/handover/notes/trimmed-surface-region-2026-10-30/studio/run-01/outside-hole.bcad": "3d107731eb788f66df34db09e0919ee6d9fcbe9fde0dc6cf3ff020715f74aa5d",
+    "apps/cad-studio/src/ui/DirectPanel.tsx": "f31655da340ce7ab242d46a791f73db6c20af4b4aef8d0d74255188065dcd018",
+    "apps/cad-studio/test/direct-thicken-guidance-browser.mjs": "b1e1692f4833339e6a700ab93b5e60f293a59d22152aa64ae4016d456df31b38",
+    "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23"
+  },
+  "visualReview": {
+    "runnerMetadata": "ROOT_MUST_VIEW_SCREENSHOTS",
+    "actual": "Implementer and parent directly reviewed these synthetic fixture PNGs; readable, no personal information."
+  },
+  "images": {
+    "after-01-trim-preflight.png": "5e9aba9b9e8556d0993bac69514d6fe756bc0af5baeef298080a3a53bdb924aa",
+    "after-02-untrimmed-scope.png": "26e282796554f1f4445693bf6ac7f4c5493103292883c9a650333b22035ada5e"
+  }
+}
