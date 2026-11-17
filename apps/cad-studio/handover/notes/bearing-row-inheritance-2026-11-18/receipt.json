@@ -1,0 +1,330 @@
+{
+  "status": "PASS",
+  "qualification": "Library keeps a bearing row inherited by a placed child; unused rows remain removable.",
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "sourceFrozenCount": 1122,
+  "sourceAfterCount": 1122,
+  "sourceAfterCleanupCount": 1122,
+  "sourceUnchanged": true,
+  "visualReview": "Inspected protection toast and fresh-open shaft with bearing render",
+  "states": [
+    {
+      "label": "after-used-remove",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "bearings": {
+          "version": 1,
+          "rows": [
+            {
+              "id": "6204",
+              "bore": 20,
+              "outside": 47,
+              "width": 14,
+              "chamfer": 1,
+              "daMin": 25,
+              "daMax": 26.5,
+              "raMax": 1,
+              "source": "Supplied test row"
+            },
+            {
+              "id": "unused",
+              "bore": 20,
+              "outside": 47,
+              "width": 14,
+              "chamfer": 1,
+              "daMin": 25,
+              "daMax": 26.5,
+              "raMax": 1,
+              "source": "Supplied test row"
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Shaft bearing",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "shaft",
+                  "steps": [
+                    {
+                      "diameter": 20,
+                      "length": 30
+                    },
+                    {
+                      "diameter": 25,
+                      "length": 40
+                    },
+                    {
+                      "diameter": 20,
+                      "length": 25
+                    }
+                  ],
+                  "chamfers": [
+                    0.5,
+                    0.5
+                  ],
+                  "center": [
+                    0,
+                    0
+                  ],
+                  "generator": "shaft@0",
+                  "id": "n0"
+                },
+                {
+                  "kind": "bearing",
+                  "row": "6204",
+                  "shaft": 0,
+                  "step": 1,
+                  "against": "end",
+                  "id": "n1"
+                }
+              ],
+              "outputs": {
+                "b0": {
+                  "node": 0,
+                  "side": "solid"
+                },
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              },
+              "nextId": 2
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "notices": [
+        "Bearing row refused[ROW_IN_USE] bearing row 6204 is used by a bearing: remove the bearing first"
+      ]
+    },
+    {
+      "label": "bearing-reopened",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "bearings": {
+          "version": 1,
+          "rows": [
+            {
+              "id": "6204",
+              "bore": 20,
+              "outside": 47,
+              "width": 14,
+              "chamfer": 1,
+              "daMin": 25,
+              "daMax": 26.5,
+              "raMax": 1,
+              "source": "Supplied test row"
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Shaft bearing",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "shaft",
+                  "steps": [
+                    {
+                      "diameter": 20,
+                      "length": 30
+                    },
+                    {
+                      "diameter": 25,
+                      "length": 40
+                    },
+                    {
+                      "diameter": 20,
+                      "length": 25
+                    }
+                  ],
+                  "chamfers": [
+                    0.5,
+                    0.5
+                  ],
+                  "center": [
+                    0,
+                    0
+                  ],
+                  "generator": "shaft@0",
+                  "id": "n0"
+                },
+                {
+                  "kind": "bearing",
+                  "row": "6204",
+                  "shaft": 0,
+                  "step": 1,
+                  "against": "end",
+                  "id": "n1"
+                }
+              ],
+              "outputs": {
+                "b0": {
+                  "node": 0,
+                  "side": "solid"
+                },
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              },
+              "nextId": 2
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "notices": []
+    },
+    {
+      "label": "final",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "bearings": {
+          "version": 1,
+          "rows": [
+            {
+              "id": "6204",
+              "bore": 20,
+              "outside": 47,
+              "width": 14,
+              "chamfer": 1,
+              "daMin": 25,
+              "daMax": 26.5,
+              "raMax": 1,
+              "source": "Supplied test row"
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Shaft bearing",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "shaft",
+                  "steps": [
+                    {
+                      "diameter": 20,
+                      "length": 30
+                    },
+                    {
+                      "diameter": 25,
+                      "length": 40
+                    },
+                    {
+                      "diameter": 20,
+                      "length": 25
+                    }
+                  ],
+                  "chamfers": [
+                    0.5,
+                    0.5
+                  ],
+                  "center": [
+                    0,
+                    0
+                  ],
+                  "generator": "shaft@0",
+                  "id": "n0"
+                },
+                {
+                  "kind": "bearing",
+                  "row": "6204",
+                  "shaft": 0,
+                  "step": 1,
+                  "against": "end",
+                  "id": "n1"
+                }
+              ],
+              "outputs": {
+                "b0": {
+                  "node": 0,
+                  "side": "solid"
+                },
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              },
+              "nextId": 2
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "notices": []
+    }
+  ]
+}
