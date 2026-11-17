@@ -1,0 +1,347 @@
+{
+  "status": "PASS",
+  "qualification": "Library keeps an O-ring row inherited by a placed child; unused rows remain removable.",
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "sourceFrozenCount": 1122,
+  "sourceAfterCount": 1122,
+  "sourceAfterCleanupCount": 1122,
+  "sourceUnchanged": true,
+  "visualReview": "Inspected ROW_IN_USE toast and fresh-open piston with O-ring render",
+  "states": [
+    {
+      "label": "after-used-remove",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "orings": {
+          "version": 1,
+          "rows": [
+            {
+              "id": "214",
+              "dash": "2-214",
+              "insideDiameter": 24.99,
+              "crossSection": 3.53,
+              "source": "Supplied test row"
+            },
+            {
+              "id": "unused",
+              "dash": "2-214",
+              "insideDiameter": 24.99,
+              "crossSection": 3.53,
+              "source": "Supplied test row"
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Piston gland",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "circle",
+                  "center": [
+                    0,
+                    0
+                  ],
+                  "radius": 15.5,
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 20,
+                  "id": "n1",
+                  "made": {
+                    "command": "cylinder",
+                    "values": {
+                      "r": 15.5,
+                      "h": 20,
+                      "x": 0,
+                      "y": 0,
+                      "z": 0
+                    }
+                  }
+                },
+                {
+                  "kind": "oring-gland",
+                  "parent": {
+                    "node": 1,
+                    "side": "solid"
+                  },
+                  "face": "n1.side0",
+                  "gland": "piston",
+                  "ring": "214",
+                  "diameter": 25.5,
+                  "width": 4.7,
+                  "at": 6,
+                  "seal": 31.1,
+                  "id": "n2"
+                },
+                {
+                  "kind": "oring",
+                  "gland": 2,
+                  "id": "n3"
+                }
+              ],
+              "outputs": {
+                "b2": {
+                  "node": 2,
+                  "side": "solid"
+                },
+                "b3": {
+                  "node": 3,
+                  "side": "solid"
+                }
+              },
+              "nextId": 4
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "notices": [
+        "O-ring row refused[ROW_IN_USE] O-ring row 214 is used by a gland: remove the gland first"
+      ]
+    },
+    {
+      "label": "gland-reopened",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "orings": {
+          "version": 1,
+          "rows": [
+            {
+              "id": "214",
+              "dash": "2-214",
+              "insideDiameter": 24.99,
+              "crossSection": 3.53,
+              "source": "Supplied test row"
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Piston gland",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "circle",
+                  "center": [
+                    0,
+                    0
+                  ],
+                  "radius": 15.5,
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 20,
+                  "id": "n1",
+                  "made": {
+                    "command": "cylinder",
+                    "values": {
+                      "r": 15.5,
+                      "h": 20,
+                      "x": 0,
+                      "y": 0,
+                      "z": 0
+                    }
+                  }
+                },
+                {
+                  "kind": "oring-gland",
+                  "parent": {
+                    "node": 1,
+                    "side": "solid"
+                  },
+                  "face": "n1.side0",
+                  "gland": "piston",
+                  "ring": "214",
+                  "diameter": 25.5,
+                  "width": 4.7,
+                  "at": 6,
+                  "seal": 31.1,
+                  "id": "n2"
+                },
+                {
+                  "kind": "oring",
+                  "gland": 2,
+                  "id": "n3"
+                }
+              ],
+              "outputs": {
+                "b2": {
+                  "node": 2,
+                  "side": "solid"
+                },
+                "b3": {
+                  "node": 3,
+                  "side": "solid"
+                }
+              },
+              "nextId": 4
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "notices": []
+    },
+    {
+      "label": "final",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "orings": {
+          "version": 1,
+          "rows": [
+            {
+              "id": "214",
+              "dash": "2-214",
+              "insideDiameter": 24.99,
+              "crossSection": 3.53,
+              "source": "Supplied test row"
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Piston gland",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "circle",
+                  "center": [
+                    0,
+                    0
+                  ],
+                  "radius": 15.5,
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 20,
+                  "id": "n1",
+                  "made": {
+                    "command": "cylinder",
+                    "values": {
+                      "r": 15.5,
+                      "h": 20,
+                      "x": 0,
+                      "y": 0,
+                      "z": 0
+                    }
+                  }
+                },
+                {
+                  "kind": "oring-gland",
+                  "parent": {
+                    "node": 1,
+                    "side": "solid"
+                  },
+                  "face": "n1.side0",
+                  "gland": "piston",
+                  "ring": "214",
+                  "diameter": 25.5,
+                  "width": 4.7,
+                  "at": 6,
+                  "seal": 31.1,
+                  "id": "n2"
+                },
+                {
+                  "kind": "oring",
+                  "gland": 2,
+                  "id": "n3"
+                }
+              ],
+              "outputs": {
+                "b2": {
+                  "node": 2,
+                  "side": "solid"
+                },
+                "b3": {
+                  "node": 3,
+                  "side": "solid"
+                }
+              },
+              "nextId": 4
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "notices": []
+    }
+  ]
+}
