@@ -78,5 +78,8 @@ function Field({ label, value, onCommit, text }: { label: string; value: number 
     const v = Number(draft); if (draft.trim() !== '' && Number.isFinite(v)) onCommit(v);
   };
   return <label className={FIELD}><span>{label}</span><input aria-label={`Instance ${label}`} type={text ? 'text' : 'number'} step="any" value={draft}
-    onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); }} /></label>;
+    onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setDraft(String(value)); }
+      else if (e.key === 'Enter') commit();
+    }} /></label>;
 }

@@ -1,0 +1,29 @@
+{
+  "status": "PASS",
+  "qualification": "Escape discards pending instance name/position/rotation input without changing the model, blur still commits valid edits, native persistence and history remain intact.",
+  "observations": [
+    {
+      "cancelledFields": 9,
+      "enterPositionX": 25,
+      "blurRotationZ": 30,
+      "undoRedo": true,
+      "nativeSaveOpen": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "limits": [
+    "Top-level instance scalar fields. No nested instances, mate-driven transforms, patterns or neutral exports."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "baseline": {
+    "status": "FAIL",
+    "failure": "locator.inputValue: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('complementary', { name: 'Instance', exact: true }).getByLabel('Instance X', { exact: true }).first()\u001b[22m\n\n    at /private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/instance-field-cancel-browser.mjs:13:28\n    at async f.run (/private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/instance-field-cancel-browser.mjs:8:1"
+  },
+  "visualReview": "Before/fixed Escape screenshot inspected: formerly closed inspector, now selected instance and original X=10 retained."
+}
