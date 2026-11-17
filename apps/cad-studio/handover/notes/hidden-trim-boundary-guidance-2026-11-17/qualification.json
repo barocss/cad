@@ -1,0 +1,45 @@
+{
+  "before01": {
+    "status": "PASS",
+    "errors": [],
+    "changes": [],
+    "downloads": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceAfterCleanupCount": 531,
+    "receiptSha256": "f537b9dd2c7eb2805ba33c5fafc374c1a374ddf33bcaa0c3de7e54fd9c8203d7",
+    "path": "/tmp/cad-hidden-trim-before01/receipt.json"
+  },
+  "after01": {
+    "status": "PASS",
+    "errors": [],
+    "changes": [],
+    "downloads": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceAfterCleanupCount": 532,
+    "receiptSha256": "772670565c622f3a9ed51c2062d031596e4e5ceabf82cfb1e77568fae5422e7f",
+    "path": "/tmp/cad-hidden-trim-after01/receipt.json"
+  },
+  "comparison": {
+    "snapshots": [
+      "01-hidden-boundaries",
+      "02-hidden-boundary-cut",
+      "03-shown-boundaries"
+    ],
+    "exactEqual": [
+      "doc",
+      "bodies",
+      "selection",
+      "history",
+      "dirty",
+      "historyDisabled"
+    ]
+  }
+}

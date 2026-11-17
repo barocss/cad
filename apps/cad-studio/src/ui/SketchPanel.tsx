@@ -1,3 +1,4 @@
+import { TrimBoundaryGuidance } from './TrimBoundaryGuidance';
 import type { CoordinateIntent } from '../sketch/coordinateFeedback';
 import { SketchSolverDiagnostics } from './sketchPresentation';
 import { sketchStatus } from './sketchSettledStatus';
@@ -112,6 +113,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
         </label>}
       {referencePicker}
       {toolControls}
+      <TrimBoundaryGuidance sketch={sketch} />
       {s && !finishError && <div className={'sk-status' + (status.warn ? ' open' : '')} role="status"><i />{status.text}</div>}
       {!finishError && !error && !splineError && coordinateFeedback && <div className="sk-status open" role="status" aria-label="Coordinate input result">{coordinateFeedback}</div>}
       {(finishError ?? error ?? splineError) && <div className="sk-status open" role="alert"><i />{finishError ?? error ?? splineError}
