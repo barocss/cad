@@ -1,0 +1,112 @@
+{
+  "status": "PASS",
+  "qualification": "Observe parameter-bound terminal finish Width40 to60, including Save and fresh Open without presuming held or success.",
+  "observations": [
+    {
+      "label": "width-result",
+      "accepted": true,
+      "savedSig": {
+        "n1.side0|n1.top": {
+          "k": "line",
+          "p": [
+            20,
+            0,
+            10
+          ],
+          "d": [
+            1,
+            0,
+            0
+          ],
+          "s": 40
+        }
+      },
+      "signatureRefreshed": false
+    },
+    {
+      "label": "fresh-open-result",
+      "held": true,
+      "references": 1,
+      "wholeDocumentEqual": false,
+      "finish": {
+        "id": "n2",
+        "kind": "fillet",
+        "parent": {
+          "node": 1,
+          "side": "solid"
+        },
+        "edges": [
+          "n1.side0|n1.top"
+        ],
+        "radius": {
+          "parameter": "R"
+        },
+        "sigs": {
+          "n1.side0|n1.top": {
+            "k": "line",
+            "p": [
+              20,
+              0,
+              10
+            ],
+            "d": [
+              1,
+              0,
+              0
+            ],
+            "s": 40
+          }
+        },
+        "suppressed": true,
+        "held": "\"n1.side0|n1.top\" could be n1.side0|n1.top or n1.bottom|n1.side0"
+      },
+      "bodyKeys": [
+        "b2"
+      ],
+      "volumes": [
+        18000
+      ],
+      "notices": []
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceBeforeCount": 4,
+  "sourceAfterCleanupCount": 1073,
+  "limits": [
+    "One terminal constant Fillet or Chamfer bound to R=2; explicit literal rectangle and no varying radii. No assertion of broad parameter or shape support."
+  ],
+  "oracles": {
+    "redo-native60-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 17948.49555921539,
+      "nativeVolume": 17948.49555921539,
+      "workerVolume": 17948.49555921539
+    },
+    "02-accepted-native60-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 17948.49555921539,
+      "nativeVolume": 17948.49555921539,
+      "workerVolume": 17948.49555921539
+    },
+    "01-original-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 11965.663706143592,
+      "nativeVolume": 11965.663706143594,
+      "workerVolume": 11965.663706143594
+    },
+    "undo-native40-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 11965.663706143592,
+      "nativeVolume": 11965.663706143594,
+      "workerVolume": 11965.663706143594
+    }
+  },
+  "downloadSha256": {}
+}

@@ -1,0 +1,159 @@
+{
+  "status": "PASS",
+  "qualification": "Preserve a constant parameter-bound terminal finish across rectangle width edit and reopen.",
+  "observations": [
+    {
+      "label": "width-result",
+      "accepted": true,
+      "savedSig": {
+        "n1.side0|n1.top": {
+          "k": "line",
+          "p": [
+            30,
+            0,
+            10
+          ],
+          "d": [
+            1,
+            0,
+            0
+          ],
+          "s": 60
+        }
+      },
+      "signatureRefreshed": true
+    },
+    {
+      "label": "fresh-open-result",
+      "held": false,
+      "references": 0,
+      "wholeDocumentEqual": true,
+      "finish": {
+        "id": "n2",
+        "kind": "fillet",
+        "parent": {
+          "node": 1,
+          "side": "solid"
+        },
+        "edges": [
+          "n1.side0|n1.top"
+        ],
+        "radius": {
+          "parameter": "R"
+        },
+        "sigs": {
+          "n1.side0|n1.top": {
+            "k": "line",
+            "p": [
+              30,
+              0,
+              10
+            ],
+            "d": [
+              1,
+              0,
+              0
+            ],
+            "s": 60
+          }
+        }
+      },
+      "bodyKeys": [
+        "b2"
+      ],
+      "volumes": [
+        17948.49555921539
+      ],
+      "notices": []
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceBeforeCount": 4,
+  "sourceAfterCleanupCount": 1073,
+  "limits": [
+    "One terminal constant Fillet or Chamfer bound to R=2; explicit literal rectangle and no varying radii. No assertion of broad parameter or shape support."
+  ],
+  "oracles": {
+    "R3-redo-native-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 17884.11500823462,
+      "nativeVolume": 17884.115008234636,
+      "workerVolume": 17884.115008234636
+    },
+    "redo-native60-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 17948.49555921539,
+      "nativeVolume": 17948.49555921539,
+      "workerVolume": 17948.49555921539
+    },
+    "R3-depth36-fresh-native-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 21484.11500823462,
+      "nativeVolume": 21484.115008234614,
+      "workerVolume": 21484.115008234614
+    },
+    "invalid-preserved-native-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 21484.11500823462,
+      "nativeVolume": 21484.115008234614,
+      "workerVolume": 21484.115008234614
+    },
+    "depth36-native-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 21484.11500823462,
+      "nativeVolume": 21484.115008234614,
+      "workerVolume": 21484.115008234614
+    },
+    "cancel-recovered-native-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 21484.11500823462,
+      "nativeVolume": 21484.115008234614,
+      "workerVolume": 21484.115008234614
+    },
+    "R3-native-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 17884.11500823462,
+      "nativeVolume": 17884.115008234636,
+      "workerVolume": 17884.115008234636
+    },
+    "02-accepted-native60-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 17948.49555921539,
+      "nativeVolume": 17948.49555921539,
+      "workerVolume": 17948.49555921539
+    },
+    "01-original-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 11965.663706143592,
+      "nativeVolume": 11965.663706143594,
+      "workerVolume": 11965.663706143594
+    },
+    "R3-undo-native-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 17948.49555921539,
+      "nativeVolume": 17948.49555921539,
+      "workerVolume": 17948.49555921539
+    },
+    "reopened-native60-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 17948.49555921539,
+      "nativeVolume": 17948.49555921539,
+      "workerVolume": 17948.49555921539
+    },
+    "undo-native40-oracle.json": {
+      "status": "PASS",
+      "expectedVolume": 11965.663706143592,
+      "nativeVolume": 11965.663706143594,
+      "workerVolume": 11965.663706143594
+    }
+  },
+  "downloadSha256": {}
+}

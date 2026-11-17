@@ -12,19 +12,25 @@ function same(a:unknown,b:unknown):boolean {
  return ak.length===bk.length&&ak.every(key=>Object.hasOwn(b,key)&&same((a as Record<string,unknown>)[key],(b as Record<string,unknown>)[key]));
 }
 const only=(node:object,keys:readonly string[])=>Object.keys(node).every(key=>keys.includes(key));
-function plain(nodes:readonly ModelNode[]):boolean {
+function positiveDimension(dim:unknown,parameters?:StudioDoc['parameters']):boolean {
+ if(finite(dim))return dim>0;
+ if(!parameters||!dim||typeof dim!=='object'||Array.isArray(dim)||Object.keys(dim).length!==1||!Object.hasOwn(dim,'parameter'))return false;
+ const key=(dim as {parameter:unknown}).parameter;
+ return typeof key==='string'&&Object.hasOwn(parameters,key)&&finite(parameters[key])&&parameters[key]>0;
+}
+function plain(nodes:readonly ModelNode[],parameters?:StudioDoc['parameters']):boolean {
  if(nodes.length!==3)return false;const [sk,ex,f]=nodes;
  if(sk.kind!=='sketch'||sk.profile!=='rectangle'||!only(sk,['id','kind','profile','min','max'])
   ||![...sk.min,...sk.max].every(finite)||!(Number(sk.max[0])>Number(sk.min[0])&&Number(sk.max[1])>Number(sk.min[1])))return false;
  if(ex.kind!=='extrude'||ex.sketch!==0||!only(ex,['id','kind','sketch','height','from','draft'])||!finite(ex.height)||ex.height<=0
   ||(ex.from!==undefined&&!finite(ex.from))||(ex.draft!==undefined&&ex.draft!==0))return false;
  if((f.kind!=='fillet'&&f.kind!=='chamfer')||f.parent.node!==1||f.parent.side!=='solid'||f.edges.length!==1||!f.edges[0]||f.edges[0].includes('+'))return false;
- if(f.kind==='chamfer')return only(f,['id','kind','parent','edges','distance','sigs'])&&finite(f.distance)&&f.distance>0;
- if(!only(f,['id','kind','parent','edges','radius','radii','sigs'])||!finite(f.radius)||f.radius<=0)return false;
+ if(f.kind==='chamfer')return only(f,['id','kind','parent','edges','distance','sigs'])&&positiveDimension(f.distance,parameters);
+ if(!only(f,['id','kind','parent','edges','radius','radii','sigs'])||!positiveDimension(f.radius,parameters))return false;
  if(f.radii===undefined)return true; // A constant circular law has no endpoint assignment.
  if(!Array.isArray(f.radii)||f.radii.length<2||f.radii.length>4)return false;
  const last=f.radii.length-1;
- return f.radii.every((p,i)=>p.at.length===3&&p.at.every(finite)&&finite(p.radius)&&p.radius>0
+ return f.radii.every((p,i)=>p.at.length===3&&p.at.every(finite)&&positiveDimension(p.radius,parameters)
   &&(i===0||i===last?p.atEnd===true&&p.fraction===undefined:p.atEnd===undefined&&finite(p.fraction)&&p.fraction>1e-9&&p.fraction<1-1e-9&&(i===1||p.fraction-f.radii![i-1].fraction!>1e-9)))
   &&f.radii[0].at.some((v,i)=>v!==f.radii![last].at[i]);
 }
@@ -40,7 +46,7 @@ export function isRectangleFinishHeightResize(before:StudioDoc,next:StudioDoc,in
 /** Only proven Width/Depth or Height-only edits of a plain three-node root rectangle part. */
 export function isRectangleFinishResize(before:StudioDoc,next:StudioDoc,index:number):boolean {
  if(isRectangleFinishHeightResize(before,next,index))return true;
- if(index!==1||before.direct!==undefined||next.direct!==undefined||before.instances?.length||next.instances?.length||!plain(before.nodes)||!plain(next.nodes))return false;
+ if(index!==1||before.direct!==undefined||next.direct!==undefined||before.instances?.length||next.instances?.length||!plain(before.nodes,before.parameters)||!plain(next.nodes,next.parameters))return false;
  const old=before.nodes[0],now=next.nodes[0];if(old.kind!=='sketch'||old.profile!=='rectangle'||now.kind!=='sketch'||now.profile!=='rectangle')return false;
  return !same(old.max,now.max)&&same({...before,nodes:[]},{...next,nodes:[]})&&same({...old,max:[]},{...now,max:[]})
   &&same(before.nodes[1],next.nodes[1])&&same(before.nodes[2],next.nodes[2]);
