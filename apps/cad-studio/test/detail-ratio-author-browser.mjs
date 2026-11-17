@@ -1,0 +1,24 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createFlow } from './flow-helper.mjs';
+const {input:{document:model}}=JSON.parse(await readFile(new URL('../../../packages/barocss-cad/conformance/r14/starter-plate/case.json',import.meta.url),'utf8'));
+const detail={id:'B',view:'top',center:[32,16],radius:6,scale:2,at:[310,85]};
+const frame={id:'f',view:'detail:B',characteristic:'flatness',value:.1,datums:[],place:[32,16]};
+const base={...model,drawing:{scope:{kind:'part'},sheet:'A3',projection:'third',scale:2,hidden:false,title:'Detail ratio authoring',views:['front','top'],details:[detail],frames:[frame],dimensions:[]}};
+const f=await createFlow({name:'detail-ratio-author',output:process.argv[2],envFrozen:'DETAIL_RATIO_AUTHOR_FROZEN',initialFiles:['apps/cad-studio/test/detail-ratio-author-browser.mjs','apps/cad-studio/src/ui/drawing/DetailsList.tsx','apps/cad-studio/src/ui/drawing/SheetScaleControl.tsx'],qualification:'Author a nonstandard detail scale through explicit paper:model ratio while preserving crop, paper position and annotations.',limits:['One top detail with flatness frame; 1:4 and 5:4 authoring and native/SVG flow. No PDF/DXF or general annotation layout qualification.']});
+const button=name=>f.page.getByRole('button',{name,exact:true});
+const field=name=>f.page.getByLabel(name,{exact:true});
+async function drawing(){await button('Drawing').click();await f.page.locator('svg[aria-label="Drawing sheet"] g.view').first().waitFor();}
+async function draft(p,m){await button('Set custom detail B scale').click();await field('Detail B scale paper ratio').fill(p);await field('Detail B scale model ratio').fill(m);}
+async function check(scale){assert.equal(await field('Detail B scale').inputValue(),String(scale));await f.page.waitForFunction(s=>window.__studioDrawing?.()?.details?.find(x=>x.id==='B')?.scale===s,scale);const d=await f.page.evaluate(()=>window.__studioDrawing().details.find(x=>x.id==='B'));assert.ok(Math.abs(d.box[2]-d.box[0]-12*scale)<1e-6);f.report.observations.push({scale,box:d.box});}
+await f.run(async()=>{
+ await f.newPage();await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'detail-ratio.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(base))});await f.page.waitForFunction(()=>window.__studioDoc?.drawing?.title==='Detail ratio authoring');await f.ready();await drawing();const before=await f.doc();
+ await draft('5','4');await f.same(before);await button('Cancel custom detail B scale').click();await f.same(before);
+ for(const [p,m]of [['','4'],['1','0'],['-1','4'],['1001','1'],['Infinity','1']]){await draft(p,m);await button('Apply custom detail B scale').click();await f.page.getByRole('status').getByText('Enter positive finite ratios',{exact:false}).waitFor();await f.same(before);await field('Detail B scale paper ratio').press('Escape');}
+ await draft('1','4');await field('Detail B scale model ratio').press('Enter');await f.changed(before);const quarter=await f.doc();assert.deepEqual(quarter.drawing.details,[{...detail,scale:.25}]);assert.deepEqual(quarter.drawing.frames,before.drawing.frames);await check(.25);
+ await draft('5','4');await f.snapshot('00-ratio-draft');await button('Apply custom detail B scale').click();await f.changed(quarter);const custom=await f.doc();assert.deepEqual(custom.drawing.details,[{...detail,scale:1.25}]);assert.equal(custom.drawing.scale,2);assert.deepEqual(custom.drawing.frames,before.drawing.frames);assert.deepEqual(custom.nodes,before.nodes);await check(1.25);await f.undo();await f.same(quarter);await check(.25);await f.redo();await f.same(custom);await check(1.25);await f.snapshot('01-authored-detail-ratio');
+ const [download]=await Promise.all([f.page.waitForEvent('download'),button('Export SVG').click()]);const path=join(f.output,'detail-ratio.svg');await download.saveAs(path);const svg=await readFile(path,'utf8');assert.ok(svg.includes('DETAIL B (1.25:1)'));assert.ok(svg.includes('0.1'));f.report.observations.push({actualSvgDownload:true,detailLabel:'DETAIL B (1.25:1)',frameRetained:true});
+ await button('Model').click();const saved=await f.save('detail-ratio');await f.freshOpen(saved.file,saved.doc,'02-native-open');await drawing();await check(1.25);await f.snapshot('03-reopened');
+ await draft('7','4');await button('Model').click();await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'other.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({...base,drawing:{...base.drawing,title:'Other detail ratio'}}))});await f.page.waitForFunction(()=>window.__studioDoc?.drawing?.title==='Other detail ratio');await f.ready();await drawing();assert.equal(await field('Custom detail B scale').count(),0);await check(2);await field('Detail B scale').selectOption('auto');assert.equal((await f.doc()).drawing.details[0].scale,undefined);
+});

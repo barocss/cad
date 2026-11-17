@@ -1,0 +1,110 @@
+{
+  "detail": {
+    "status": "PASS",
+    "qualification": "Author a nonstandard detail scale through explicit paper:model ratio while preserving crop, paper position and annotations.",
+    "observations": [
+      {
+        "scale": 0.25,
+        "box": [
+          308.5,
+          83.5,
+          311.5,
+          86.5
+        ]
+      },
+      {
+        "scale": 1.25,
+        "box": [
+          302.5,
+          77.5,
+          317.5,
+          92.5
+        ]
+      },
+      {
+        "scale": 0.25,
+        "box": [
+          308.5,
+          83.5,
+          311.5,
+          86.5
+        ]
+      },
+      {
+        "scale": 1.25,
+        "box": [
+          302.5,
+          77.5,
+          317.5,
+          92.5
+        ]
+      },
+      {
+        "actualSvgDownload": true,
+        "detailLabel": "DETAIL B (1.25:1)",
+        "frameRetained": true
+      },
+      {
+        "scale": 1.25,
+        "box": [
+          302.5,
+          77.5,
+          317.5,
+          92.5
+        ]
+      },
+      {
+        "scale": 2,
+        "box": [
+          298,
+          73,
+          322,
+          97
+        ]
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "limits": [
+      "One top detail with flatness frame; 1:4 and 5:4 authoring and native/SVG flow. No PDF/DXF or general annotation layout qualification."
+    ],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  "sheetRegression": {
+    "status": "PASS",
+    "qualification": "Explicit paper:model drawing sheet scale with independent sheet ownership, refusal, history and native persistence.",
+    "observations": [
+      {
+        "export": "01-quarter-front",
+        "view": "front",
+        "width": 16,
+        "height": 2,
+        "actualDownload": true
+      },
+      {
+        "export": "02-enlarged-top",
+        "view": "top",
+        "width": 80,
+        "height": 40,
+        "actualDownload": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "limits": [
+      "Two sheets of one plate, 1:4 and 5:4; SVG actual downloads. PDF, DXF and general precision certification not run."
+    ],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  "visualReview": "Detail ratio form and reopened product screenshots visually inspected."
+}

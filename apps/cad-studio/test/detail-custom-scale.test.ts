@@ -11,6 +11,7 @@ function render(scale?: number) {
   const before = structuredClone(settings), forbidden = () => assert.fail('readback must not edit the document');
   const html = renderToStaticMarkup(createElement(DetailsList, { settings, sheet: null, layout: null, onChange: forbidden, onRemove: forbidden, crop: { owner: {}, ready: true, annotated: new Set<string>(), apply: forbidden } }));
   assert.deepEqual(settings, before);
+  assert.ok(html.includes('aria-label="Set custom detail B scale"'));
   return html.match(/<select[^>]*aria-label="Detail B scale"[^>]*>([\s\S]*?)<\/select>/)![1];
 }
 test('custom native scales have one exact selected option without rounding or mutation', () => {

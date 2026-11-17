@@ -13,7 +13,7 @@ export function sheetRatioScale(paper: string, model: string): number | null {
 }
 
 /** A draft is owned by the actual document/sheet settings, never its displayed numeric value. */
-export function SheetScaleControl({ owner, value, automatic, onChange }: { owner: object; value?: number; automatic?: number; onChange(scale: number | undefined): boolean }) {
+export function SheetScaleControl({ owner, value, automatic, onChange, label = 'Scale', target = 'sheet' }: { label?: string; target?: string; owner: object; value?: number; automatic?: number; onChange(scale: number | undefined): boolean }) {
   const [draft, setDraft] = useState<{ owner: object; paper: string; model: string; error: boolean } | null>(null);
   const current = draft?.owner === owner ? draft : null;
   const apply = () => {
@@ -23,22 +23,22 @@ export function SheetScaleControl({ owner, value, automatic, onChange }: { owner
     if (scale === value || onChange(scale)) setDraft(null);
   };
   return <>
-    <label className={FIELD}><span>Scale</span><NativeSelect className={CONTROL} aria-label="Scale" value={value ?? 'auto'} onChange={e => { if (onChange(e.target.value === 'auto' ? undefined : Number(e.target.value))) setDraft(null); }}>
+    <label className={FIELD}><span>{label}</span><NativeSelect className={CONTROL} aria-label={label} value={value ?? 'auto'} onChange={e => { if (onChange(e.target.value === 'auto' ? undefined : Number(e.target.value))) setDraft(null); }}>
       <option value="auto">Auto{automatic !== undefined && value === undefined ? ` (${scaleLabel(automatic)})` : ''}</option>
       {value !== undefined && !SCALES.includes(value) && <option value={value}>{value}:1 (custom)</option>}
       {SCALES.map(s => <option key={s} value={s}>{scaleLabel(s)}</option>)}
     </NativeSelect></label>
-    {!current ? <Button size="xs" variant="ghost" aria-label="Set custom sheet scale" onClick={() => { const s = value ?? automatic ?? 1; setDraft({ owner, paper: String(s), model: '1', error: false }); }}>Custom scale…</Button>
-      : <div aria-label="Custom sheet scale" className="flex flex-col gap-1" onKeyDown={e => {
+    {!current ? <Button size="xs" variant="ghost" aria-label={`Set custom ${target} scale`} onClick={() => { const s = value ?? automatic ?? 1; setDraft({ owner, paper: String(s), model: '1', error: false }); }}>Custom scale…</Button>
+      : <div aria-label={`Custom ${target} scale`} className="flex flex-col gap-1" onKeyDown={e => {
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setDraft(null); }
         if (e.key === 'Enter') { e.preventDefault(); apply(); }
       }}>
         <div className="text-[11px]">Paper : model (1 : 4 makes the drawing one quarter size)</div>
         <div className="flex items-center gap-1">
-          <Input className="min-w-0 w-20" type="text" inputMode="decimal" aria-label="Scale paper ratio" value={current.paper} aria-invalid={current.error} onChange={e => setDraft({ ...current, paper: e.target.value, error: false })} />
-          <span>:</span><Input className="min-w-0 w-20" type="text" inputMode="decimal" aria-label="Scale model ratio" value={current.model} aria-invalid={current.error} onChange={e => setDraft({ ...current, model: e.target.value, error: false })} />
+          <Input className="min-w-0 w-20" type="text" inputMode="decimal" aria-label={`${label} paper ratio`} value={current.paper} aria-invalid={current.error} onChange={e => setDraft({ ...current, paper: e.target.value, error: false })} />
+          <span>:</span><Input className="min-w-0 w-20" type="text" inputMode="decimal" aria-label={`${label} model ratio`} value={current.model} aria-invalid={current.error} onChange={e => setDraft({ ...current, model: e.target.value, error: false })} />
         </div>
-        <div className="flex gap-1"><Button size="xs" aria-label="Apply custom sheet scale" onClick={apply}>Apply</Button><Button size="xs" variant="ghost" aria-label="Cancel custom sheet scale" onClick={() => setDraft(null)}>Cancel</Button></div>
+        <div className="flex gap-1"><Button size="xs" aria-label={`Apply custom ${target} scale`} onClick={apply}>Apply</Button><Button size="xs" variant="ghost" aria-label={`Cancel custom ${target} scale`} onClick={() => setDraft(null)}>Cancel</Button></div>
         {current.error && <div role="status">Enter positive finite ratios with a paper/model scale above 0 and at most 1000.</div>}
       </div>}
   </>;
