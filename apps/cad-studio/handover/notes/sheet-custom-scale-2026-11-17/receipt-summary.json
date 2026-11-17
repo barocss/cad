@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "qualification": "Explicit paper:model drawing sheet scale with independent sheet ownership, refusal, history and native persistence.",
+  "observations": [
+    {
+      "export": "01-quarter-front",
+      "view": "front",
+      "width": 16,
+      "height": 2,
+      "actualDownload": true
+    },
+    {
+      "export": "02-enlarged-top",
+      "view": "top",
+      "width": 80,
+      "height": 40,
+      "actualDownload": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Two sheets of one plate, 1:4 and 5:4; SVG actual downloads. PDF, DXF and general precision certification not run."
+  ],
+  "sourceFrozenCount": 542,
+  "chromeProcessesLaunched": 1
+}

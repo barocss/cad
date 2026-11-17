@@ -5,13 +5,14 @@ import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import { changeDrawingScope } from '@barocss/cad-model/drawing/scope';
 import { sectionMiddle } from '@barocss/cad-model/drawing/sheet';
-import { ORIENTATIONS, SCALES, VIEWS, scaleLabel, type Orientation } from '@barocss/cad-model/drawing/views';
+import { ORIENTATIONS, VIEWS, scaleLabel, type Orientation } from '@barocss/cad-model/drawing/views';
 import { SECTION_VIEWS, VIEW_IDS, nextRevision, nextSectionId, sameSection, withSections, type DrawingSettings, type SectionViewId } from '@barocss/cad-model/drawing/types';
 import type { useDrawingSheet } from '../useDrawingSheet';
 import { Icon } from '../atoms';
 import { CONTROL, FIELD, SIDE_NAMES, TICK, withTable } from './sheetShared';
 import { DrawingMetadata } from './DrawingMetadata';
 import { drawingRevisionPrint } from './revisionPrint';
+import { SheetScaleControl } from './SheetScaleControl';
 import { SectionKind } from './SectionKind';
 import { DrawingBodyScopeControls } from './DrawingBodyScopeControls';
 import { FitListControls } from './FitListControls';
@@ -47,9 +48,10 @@ export function SheetSettings({ sheet: { bodyScope, scopeRead, scope, views, lay
         <DrawingBodyScopeControls state={bodyScope} sourceDoc={sourceDoc} settings={settings} onChange={onChange} onRefused={hint => onToast({ title: 'Drawing scope unchanged', hint, detail: '' })} onChanged={onScopeChanged} />
         <label className={FIELD}><span>Size</span><NativeSelect className={CONTROL} aria-label="Sheet size" value={settings.sheet} onChange={e => onChange({ ...settings, sheet: e.target.value as 'A4' })}>
           <option value="A4">A4 landscape</option><option value="A3">A3 landscape</option></NativeSelect></label>
-        <label className={FIELD}><span>Scale</span><NativeSelect className={CONTROL} aria-label="Scale" value={settings.scale ?? 'auto'} onChange={e => { const v = e.target.value; const rest = { ...settings }; delete rest.scale; onChange(v === 'auto' ? rest : { ...rest, scale: Number(v) }); }}>
-          <option value="auto">Auto{layout && settings.scale === undefined ? ` (${scaleLabel(layout.scale)})` : ''}</option>
-          {SCALES.map(s => <option key={s} value={s}>{scaleLabel(s)}</option>)}</NativeSelect></label>
+        <SheetScaleControl owner={settings} value={settings.scale} automatic={layout?.scale} onChange={scale => {
+          const { scale: _old, ...rest } = settings; void _old;
+          return onChange(scale === undefined ? rest : { ...rest, scale });
+        }} />
         <label className={FIELD}><span>Front from</span><NativeSelect className={CONTROL} aria-label="Front view side" value={settings.orientation ?? 'y-'} onChange={e => void turnTo(e.target.value as Orientation)}>
           {ORIENTATIONS.map(o => <option key={o} value={o}>{SIDE_NAMES[o]}</option>)}</NativeSelect></label>
         <label className={FIELD}><span>Projection</span><NativeSelect className={CONTROL} aria-label="Projection" value={settings.projection} onChange={e => onChange({ ...settings, projection: e.target.value as 'third' })}>
