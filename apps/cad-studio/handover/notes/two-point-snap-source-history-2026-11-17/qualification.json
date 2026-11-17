@@ -1,0 +1,155 @@
+{
+  "status": "NOT_QUALIFIED",
+  "runs": [
+    {
+      "run": "01",
+      "rawStatus": "FAIL",
+      "classification": "NOT_QUALIFIED_SOURCE_EDIT",
+      "failure": "Timeout waiting for construction DOM count 0 after one public Undo requests.",
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "frozenCount": 530,
+      "sourceAfterCleanupMatches": true,
+      "states": [
+        {
+          "label": "01-pending-source",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [],
+            "outputs": {},
+            "nextId": 0
+          },
+          "snapForm": "Point 7.75, 3.25 mmMeasureRatioDistance (mm)ValueUse pointCancel snap",
+          "construction": [
+            "337.7718767361666,641.1146884042063 556.4998800489989,549.3893247444661"
+          ],
+          "rectangle": [],
+          "undoRedoDisabled": [
+            true,
+            true
+          ]
+        },
+        {
+          "label": "failure",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [],
+            "outputs": {},
+            "nextId": 0
+          },
+          "snapForm": null,
+          "construction": [
+            "337.7718767361666,641.1146884042063 556.4998800489989,549.3893247444661"
+          ],
+          "rectangle": [],
+          "undoRedoDisabled": [
+            true,
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "run": "02",
+      "rawStatus": "FAIL",
+      "classification": "NOT_QUALIFIED_SOURCE_EDIT",
+      "failure": "Timeout waiting for construction DOM count 0 after two public Undo requests.",
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "frozenCount": 530,
+      "sourceAfterCleanupMatches": true,
+      "states": [
+        {
+          "label": "01-pending-source",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [],
+            "outputs": {},
+            "nextId": 0
+          },
+          "snapForm": "Point 7.75, 3.25 mmMeasureRatioDistance (mm)ValueUse pointCancel snap",
+          "construction": [
+            "337.7718767361666,641.1146884042063 556.4998800489989,549.3893247444661"
+          ],
+          "rectangle": [],
+          "undoRedoDisabled": [
+            true,
+            true
+          ]
+        },
+        {
+          "label": "02a-calculation-retired",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [],
+            "outputs": {},
+            "nextId": 0
+          },
+          "snapForm": null,
+          "construction": [
+            "337.7718767361666,641.1146884042063 556.4998800489989,549.3893247444661"
+          ],
+          "rectangle": [],
+          "undoRedoDisabled": [
+            true,
+            true
+          ]
+        },
+        {
+          "label": "failure",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [],
+            "outputs": {},
+            "nextId": 0
+          },
+          "snapForm": null,
+          "construction": [
+            "337.7718767361666,641.1146884042063 556.4998800489989,549.3893247444661"
+          ],
+          "rectangle": [],
+          "undoRedoDisabled": [
+            true,
+            true
+          ]
+        }
+      ]
+    }
+  ],
+  "passedBoundary": "Public Undo keyboard request retires pending calculation form and marker; accepted document stays unchanged.",
+  "notReached": [
+    "Actual source mutation",
+    "Redo recovery",
+    "Explicit reselection after mutation",
+    "Coordinate oracle",
+    "Save/fresh Open"
+  ],
+  "productChanges": false
+}

@@ -1,0 +1,38 @@
+{
+  "status": "PASS",
+  "qualification": "Actual native download while a face measurement is pinned; independent JSON file read and fresh-context Open.",
+  "limits": [
+    "Default-XY rectangular Extrude opposite caps only. No geometry accuracy, broader topology, native-folder or Worker race requalification."
+  ],
+  "observations": [
+    {
+      "pinPreservesDocumentDirtyAndHistoryControls": true,
+      "actualDownloadedFiles": 1,
+      "independentFileJsonExact": true,
+      "freshContextNoPin": true,
+      "geometryRequalification": false
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceAfterCount": 531,
+  "sourceAfterCleanupCount": 531,
+  "parent": "62a98187f642797a4caf362df0d68c90a7d325ad",
+  "originalReceiptSHA256": "89778d82383991cb4fc088e0259f72534cf9bd0bbb62f7764535e231a2d2b3ab",
+  "sourceCapsuleUnchanged": true,
+  "oracle": {
+    "status": "PASS",
+    "bytes": 465,
+    "sha256": "d5aed626652f09d755a65e2fae23b0df8102e13dc6c76f9d839ff3813136c0e3",
+    "exactAcceptedDocument": true,
+    "extraSessionMetadata": false
+  },
+  "visualReview": "Executing agent and parent both directly inspected both actual PNGs: 8 mm pin and fresh Open without pin, synthetic fixture, no personal information."
+}

@@ -1,0 +1,4 @@
+Driver node --check: exit 0
+Target eslint: exit 0
+Actual shared heavy gate cad-pinned-face-file01: exit 0
+{"status":"PASS","phase":"fresh Open 02-fresh-open-no-pin","output":"/tmp/cad-pinned-face-file-01"}
