@@ -9,6 +9,7 @@ import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { EvalResult } from '@barocss/cad-model/engine/evaluate';
 import { bomPanelData, purchaseCsv, setBought, type BomPanelData } from '@barocss/cad-model/bom/bom';
 import { downloadBytes } from './files';
+import { BomBriefNotes } from './BomBriefNotes';
 import { Icon } from './atoms';
 import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -98,6 +99,7 @@ export function BomPanel({ doc, name, evaluate, onCommit, onError, onClose }: {
             <TableCell>{toggle(m.parts, m.override ? 'made' : 'default', m.item)}</TableCell></TableRow>)}</TableBody>
         </Table>
       </>}
+      <BomBriefNotes doc={doc} data={data} name={name} isCurrent={() => current.current === key} onError={onError} />
       <div className="muted small" aria-label="BOM totals">{data.bom.totalQty} part{data.bom.totalQty === 1 ? '' : 's'} · {data.bom.elementQty ?? 0} bought element{data.bom.elementQty === 1 ? '' : 's'} · {fmt(data.bom.totalMass)} g (the parts')</div>
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
         <label className="flex items-center gap-1.5 whitespace-nowrap"><input type="checkbox" className="size-3.5 accent-[var(--accent)]" aria-label="Purchase list with made parts" checked={withMade} onChange={e => setWithMade(e.currentTarget.checked)} /><span>With made parts</span></label>

@@ -1,3 +1,5 @@
+import { purchaseCell } from './csvCell';
+import { rememberBomNoteSource } from './designBriefNotes';
 import { resolveShopTree, provenanceOfTree, type ShopRowProvenance } from '../engine/shopRows';
 // The BOM made visible (O147, B1): what the studio's BOM panel and its purchase list show — S1's BOM (team/assembly.ts:
 // the placed parts' lines and the bought elements' lines, merged by kind, size and row over copies), a part with no
@@ -23,12 +25,16 @@ export interface BomPanelData { view: BomView; bom: Bom; made: MadeLine[]; /** A
 
 /** The panel's data: the BOM, and the made elements by line (each document evaluated once, then `bomPanelDataOf`). */
 export async function bomPanelData(doc: StudioDoc, evaluate: Evaluate, name = 'this part'): Promise<BomPanelData> {
+  const source = doc;
   doc = resolveShopTree(doc);
   const results = await evaluateTree(doc, evaluate);
-  return bomPanelDataOf(doc, d => results.get(d) ?? null, name);
+  const data = bomPanelDataOf(doc, d => results.get(d) ?? null, name);
+  rememberBomNoteSource(data, source);
+  return data;
 }
 /** The panel's data from evaluations given at once (the chat's drawings: synchronous). */
 export function bomPanelDataOf(doc: StudioDoc, evaluate: (doc: StudioDoc) => EvalResult | null, name = 'this part'): BomPanelData {
+  const source = doc;
   const read = cacheBomEvaluation(evaluate);
   const check = (d: StudioDoc): void => {
     if (d.nodes.some(n => !n.suppressed && bearingHousingRef(n))) { const result = read(d); if (!result?.ok) throw refusal('BEARING_HOUSING_EVALUATION', `${result ? JSON.stringify(result.error) : 'no evaluation result'}`); }
@@ -63,7 +69,9 @@ export function bomPanelDataOf(doc: StudioDoc, evaluate: (doc: StudioDoc) => Eva
   }
   // (A part with no placed parts: itself, one, as a line.)
   if (single) view.parts.unshift({ id: 'base', name, material: baseMaterial, mass: r6(baseMass), ...baseBound, ...baseLumps, library: null, shape: '' });
-  return { view, bom: deriveBom(view), made, single, ...(shopRows.some(p => p.rows.length) ? { shopRows } : {}) };
+  const data = { view, bom: deriveBom(view), made, single, ...(shopRows.some(p => p.rows.length) ? { shopRows } : {}) };
+  rememberBomNoteSource(data, source);
+  return data;
 }
 
 /** The document with the bought override set on each `part:feature` (null: cleared, the default for its kind): one change. A part nested in a sub-assembly is named by its occurrence path (`sub1/p2:n3`). */
@@ -87,16 +95,6 @@ export function setBought(doc: StudioDoc, parts: readonly string[], value: boole
   };
 }
 
-function purchaseCell(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'number') return String(value);
-
-  const leading = value.match(/^[\s\p{Cc}\p{Cf}']*/u)![0];
-  const formula = /^[=+@＝＋－＠-]/u.test(value.slice(leading.length));
-  const protect = formula || /[\p{Cc}\p{Cf}]/u.test(leading);
-  const text = protect ? "'" + value : value;
-  return protect || /[",;\t\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
 /** Whether a BOM line is bought: an element marked so, or a library part (a catalogue part). */
 export const isBoughtLine = (l: BomLine) => l.kind !== undefined || l.source !== null;
 /** A line's size cell: its size, and (O8) the solids it comes as when several — the column as before when one. */
