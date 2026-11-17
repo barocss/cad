@@ -1,0 +1,623 @@
+{
+  "request": {
+    "id": 11,
+    "revision": 11,
+    "nativeSource": {
+      "epoch": 1,
+      "requestId": 11,
+      "revision": 11,
+      "slot": "part:read"
+    },
+    "wire": {
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "shared",
+              "rev": "A"
+            }
+          },
+          {
+            "id": "p2",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              15,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "shared",
+              "rev": "A"
+            }
+          },
+          {
+            "id": "p3",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              30,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "independent",
+              "rev": "A"
+            }
+          }
+        ]
+      },
+      "ids": [],
+      "added": [],
+      "shopRows": [
+        {
+          "part": "base",
+          "rows": []
+        },
+        {
+          "part": "p1",
+          "rows": []
+        },
+        {
+          "part": "p2",
+          "rows": []
+        },
+        {
+          "part": "p3",
+          "rows": []
+        }
+      ]
+    },
+    "doc": {
+      "format": "barocss-cad-model",
+      "schema": 3,
+      "units": "mm",
+      "parameters": {},
+      "nodes": [],
+      "outputs": {},
+      "instances": [
+        {
+          "id": "p1",
+          "name": "Same box",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "id": "n0",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  10,
+                  5
+                ]
+              },
+              {
+                "kind": "extrude",
+                "id": "n1",
+                "sketch": 0,
+                "height": 2
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            }
+          },
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "part": {
+            "id": "shared",
+            "rev": "A"
+          }
+        },
+        {
+          "id": "p2",
+          "name": "Same box",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "id": "n0",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  10,
+                  5
+                ]
+              },
+              {
+                "kind": "extrude",
+                "id": "n1",
+                "sketch": 0,
+                "height": 2
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            }
+          },
+          "position": [
+            15,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "part": {
+            "id": "shared",
+            "rev": "A"
+          }
+        },
+        {
+          "id": "p3",
+          "name": "Same box",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "id": "n0",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  10,
+                  5
+                ]
+              },
+              {
+                "kind": "extrude",
+                "id": "n1",
+                "sketch": 0,
+                "height": 2
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            }
+          },
+          "position": [
+            30,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "part": {
+            "id": "independent",
+            "rev": "A"
+          }
+        }
+      ]
+    },
+    "acceptedDocAtPost": {
+      "format": "barocss-cad-model",
+      "schema": 3,
+      "units": "mm",
+      "parameters": {},
+      "nodes": [],
+      "outputs": {},
+      "nextId": 0,
+      "instances": [
+        {
+          "id": "p1",
+          "name": "Same box",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nextId": 2,
+            "nodes": [
+              {
+                "kind": "sketch",
+                "id": "n0",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  10,
+                  5
+                ]
+              },
+              {
+                "kind": "extrude",
+                "id": "n1",
+                "sketch": 0,
+                "height": 2
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            "brief": {
+              "version": 1,
+              "notes": {
+                "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+                "basis": "stated",
+                "source": "SOURCE_A_shared",
+                "why": "REASON_A_shared"
+              }
+            }
+          },
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "part": {
+            "id": "shared",
+            "rev": "A"
+          }
+        },
+        {
+          "id": "p2",
+          "name": "Same box",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nextId": 2,
+            "nodes": [
+              {
+                "kind": "sketch",
+                "id": "n0",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  10,
+                  5
+                ]
+              },
+              {
+                "kind": "extrude",
+                "id": "n1",
+                "sketch": 0,
+                "height": 2
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            "brief": {
+              "version": 1,
+              "notes": {
+                "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+                "basis": "stated",
+                "source": "SOURCE_A_shared",
+                "why": "REASON_A_shared"
+              }
+            }
+          },
+          "position": [
+            15,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "part": {
+            "id": "shared",
+            "rev": "A"
+          }
+        },
+        {
+          "id": "p3",
+          "name": "Same box",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nextId": 2,
+            "nodes": [
+              {
+                "kind": "sketch",
+                "id": "n0",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  10,
+                  5
+                ]
+              },
+              {
+                "kind": "extrude",
+                "id": "n1",
+                "sketch": 0,
+                "height": 2
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            "brief": {
+              "version": 1,
+              "notes": {
+                "value": "NOTE_A_independent, \"quoted\"\nsecond line",
+                "basis": "stated",
+                "source": "SOURCE_A_independent",
+                "why": "REASON_A_independent"
+              }
+            }
+          },
+          "position": [
+            30,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "part": {
+            "id": "independent",
+            "rev": "A"
+          }
+        }
+      ]
+    }
+  },
+  "response": {
+    "id": 11,
+    "result": {
+      "ok": true,
+      "revision": 11,
+      "bodies": [],
+      "wallTime": 0.00020000004768371582,
+      "faceTable": {
+        "origin:xy": {
+          "kind": "plane",
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "normal": [
+            0,
+            0,
+            1
+          ]
+        },
+        "origin:xz": {
+          "kind": "plane",
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "normal": [
+            0,
+            1,
+            0
+          ]
+        },
+        "origin:yz": {
+          "kind": "plane",
+          "point": [
+            0,
+            0,
+            0
+          ],
+          "normal": [
+            1,
+            0,
+            0
+          ]
+        }
+      },
+      "shopRows": [
+        {
+          "part": "base",
+          "rows": []
+        },
+        {
+          "part": "p1",
+          "rows": []
+        },
+        {
+          "part": "p2",
+          "rows": []
+        },
+        {
+          "part": "p3",
+          "rows": []
+        }
+      ]
+    },
+    "nativeMass": []
+  }
+}

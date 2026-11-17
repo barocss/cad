@@ -1,0 +1,17 @@
+Original: /tmp/cad-bom-note-currentness-driver-lint.log
+SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+
+Original: /tmp/cad-bom-note-currentness-after01.log
+SHA256: 899caf1201a98c80bd4de4cd3248996624a96b1b64c557bc4f983af2ff5918f4
+{"status":"FAIL","phase":"A loaded and initial notes explicitly included","failure":"page.waitForFunction: Timeout 30000ms exceeded.\n    at /private/tmp/cad-robot-workspace-20261117/apps/cad-studio/test/bom-note-currentness-browser.mjs:172:16\n    at async f.run (/private/tmp/cad-robot-workspace-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-robot-workspace-20261117/apps/cad-studio/test/bom-note-currentness-browser.mjs:160:1","output":"/tmp/cad-bom-note-currentness-after-01"}
+
+
+Original: /tmp/cad-bom-note-currentness-after02.log
+SHA256: 87a672780aefd5e6b93ca4b6e359d695ef1f84a3f6dc3175c6509d61ce99fedf
+{"status":"FAIL","phase":"A loaded and initial notes explicitly included","failure":"AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ []\n- [\n-   {\n-     id: 'n0',\n-     kind: 'sketch',\n-     max: [\n-       10,\n-       5\n-     ],\n-     min: [\n-       0,\n-       0\n-     ],\n-     profile: 'rectangle'\n-   },\n-   {\n-     height: 2,\n-     id: 'n1',\n-     kind: 'extrude',\n-     sketch: 0\n-   }\n- ]\n\n    at file:///private/tmp/cad-robot-workspace-20261117/apps/cad-studio/test/bom-note-currentness-browser.mjs:192:12\n    at async f.run (file:///private/tmp/cad-robot-workspace-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-robot-workspace-20261117/apps/cad-studio/test/bom-note-currentness-browser.mjs:174:1","output":"/tmp/cad-bom-note-currentness-after-02"}
+
+
+Original: /tmp/cad-bom-note-currentness-after03.log
+SHA256: 5efedbf1dd576961965b4dc8572e10a86434a692d61f57454871f9231d0c3276
+{"status":"PASS","phase":"B recovery requires new opt-in and exports identical current notes","output":"/tmp/cad-bom-note-currentness-after-03"}

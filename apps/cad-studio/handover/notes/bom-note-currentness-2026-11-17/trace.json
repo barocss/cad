@@ -1,0 +1,2562 @@
+{
+  "rawFile": "/tmp/cad-bom-note-currentness-after-03/observer-final.json",
+  "rawSHA256": "b4ebf87e99a3b9d0e5441d899d883da85c48bf919aa1bcd52d03a9fcd5620e98",
+  "authority": "Wire strips brief; acceptedDocAtPost is separate observer metadata, not Worker note provenance.",
+  "held": {
+    "id": 11,
+    "revision": 11,
+    "nativeSource": {
+      "epoch": 1,
+      "requestId": 11,
+      "revision": 11,
+      "slot": "part:read"
+    },
+    "wireSHA256CanonicalJSON": "ee598cc932301adc2a5afbb08a8ff22a362ac90a32f866c2a853f2b48d91ebbe",
+    "resolvedEvaluationDoc": {
+      "format": "barocss-cad-model",
+      "schema": 3,
+      "units": "mm",
+      "parameters": {},
+      "nodes": [],
+      "outputs": {},
+      "instances": [
+        {
+          "id": "p1",
+          "name": "Same box",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "id": "n0",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  10,
+                  5
+                ]
+              },
+              {
+                "kind": "extrude",
+                "id": "n1",
+                "sketch": 0,
+                "height": 2
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            }
+          },
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "part": {
+            "id": "shared",
+            "rev": "A"
+          }
+        },
+        {
+          "id": "p2",
+          "name": "Same box",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "id": "n0",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  10,
+                  5
+                ]
+              },
+              {
+                "kind": "extrude",
+                "id": "n1",
+                "sketch": 0,
+                "height": 2
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            }
+          },
+          "position": [
+            15,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "part": {
+            "id": "shared",
+            "rev": "A"
+          }
+        },
+        {
+          "id": "p3",
+          "name": "Same box",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "id": "n0",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  10,
+                  5
+                ]
+              },
+              {
+                "kind": "extrude",
+                "id": "n1",
+                "sketch": 0,
+                "height": 2
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            }
+          },
+          "position": [
+            30,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "part": {
+            "id": "independent",
+            "rev": "A"
+          }
+        }
+      ]
+    },
+    "acceptedDocSHA256CanonicalJSON": "9edfceb7d9b478362befbaa649a2d729adcf6b7a99e16bea61014c00108cc83b",
+    "acceptedNotes": [
+      {
+        "id": "p1",
+        "field": {
+          "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+          "basis": "stated",
+          "source": "SOURCE_A_shared",
+          "why": "REASON_A_shared"
+        }
+      },
+      {
+        "id": "p2",
+        "field": {
+          "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+          "basis": "stated",
+          "source": "SOURCE_A_shared",
+          "why": "REASON_A_shared"
+        }
+      },
+      {
+        "id": "p3",
+        "field": {
+          "value": "NOTE_A_independent, \"quoted\"\nsecond line",
+          "basis": "stated",
+          "source": "SOURCE_A_independent",
+          "why": "REASON_A_independent"
+        }
+      }
+    ]
+  },
+  "heldResponseSHA256CanonicalJSON": "986dd8984f9a8b982e5e1c6d2b7289225cb8a1884af81323a10a147a445e0ddf",
+  "requests": [
+    {
+      "id": 7,
+      "revision": 7,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 7,
+        "revision": 7,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "ee598cc932301adc2a5afbb08a8ff22a362ac90a32f866c2a853f2b48d91ebbe",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "shared",
+              "rev": "A"
+            }
+          },
+          {
+            "id": "p2",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              15,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "shared",
+              "rev": "A"
+            }
+          },
+          {
+            "id": "p3",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              30,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "independent",
+              "rev": "A"
+            }
+          }
+        ]
+      },
+      "acceptedDocSHA256CanonicalJSON": "9edfceb7d9b478362befbaa649a2d729adcf6b7a99e16bea61014c00108cc83b",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_shared",
+            "why": "REASON_A_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_shared",
+            "why": "REASON_A_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_A_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_independent",
+            "why": "REASON_A_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "revision": 8,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 8,
+        "revision": 8,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "ed84e5fdfa23fbbad869792e2f91ec6728b0ad8771c56217bd69ff562b961553",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "9edfceb7d9b478362befbaa649a2d729adcf6b7a99e16bea61014c00108cc83b",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_shared",
+            "why": "REASON_A_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_shared",
+            "why": "REASON_A_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_A_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_independent",
+            "why": "REASON_A_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "revision": 9,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 9,
+        "revision": 9,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "3dc919adffdd67c7b6e6e02b72238b3cdf9e232a17baf8c764b86170ecb1b3a7",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "9edfceb7d9b478362befbaa649a2d729adcf6b7a99e16bea61014c00108cc83b",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_shared",
+            "why": "REASON_A_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_shared",
+            "why": "REASON_A_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_A_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_independent",
+            "why": "REASON_A_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "revision": 10,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 10,
+        "revision": 10,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "805f47a22ffed789212a61a6033a6f94e51b411270ef69cffe166aa1433c6c6c",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "9edfceb7d9b478362befbaa649a2d729adcf6b7a99e16bea61014c00108cc83b",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_shared",
+            "why": "REASON_A_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_shared",
+            "why": "REASON_A_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_A_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_independent",
+            "why": "REASON_A_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "revision": 11,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 11,
+        "revision": 11,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "ee598cc932301adc2a5afbb08a8ff22a362ac90a32f866c2a853f2b48d91ebbe",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "shared",
+              "rev": "A"
+            }
+          },
+          {
+            "id": "p2",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              15,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "shared",
+              "rev": "A"
+            }
+          },
+          {
+            "id": "p3",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              30,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "independent",
+              "rev": "A"
+            }
+          }
+        ]
+      },
+      "acceptedDocSHA256CanonicalJSON": "9edfceb7d9b478362befbaa649a2d729adcf6b7a99e16bea61014c00108cc83b",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_shared",
+            "why": "REASON_A_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_shared",
+            "why": "REASON_A_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_A_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_A_independent",
+            "why": "REASON_A_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "revision": 15,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 15,
+        "revision": 15,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "ed84e5fdfa23fbbad869792e2f91ec6728b0ad8771c56217bd69ff562b961553",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "revision": 17,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 17,
+        "revision": 17,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "3dc919adffdd67c7b6e6e02b72238b3cdf9e232a17baf8c764b86170ecb1b3a7",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "revision": 19,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 19,
+        "revision": 19,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "805f47a22ffed789212a61a6033a6f94e51b411270ef69cffe166aa1433c6c6c",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "revision": 20,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 20,
+        "revision": 20,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "ee598cc932301adc2a5afbb08a8ff22a362ac90a32f866c2a853f2b48d91ebbe",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "shared",
+              "rev": "A"
+            }
+          },
+          {
+            "id": "p2",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              15,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "shared",
+              "rev": "A"
+            }
+          },
+          {
+            "id": "p3",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              30,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "independent",
+              "rev": "A"
+            }
+          }
+        ]
+      },
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "revision": 21,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 21,
+        "revision": 21,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "b248bf66f86f60ec30ee723cf685411e9f2a2af4966fe3766563237bdb77a274",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "revision": 22,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 22,
+        "revision": 22,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "b43e33942b6ed24636491c6e484243a53558786d3b20aa28eada20f6c3b552fc",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "revision": 23,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 23,
+        "revision": 23,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "b54b61cbefb065423f81c709bc0104a3fe0854900e60699b279691bd9fc06766",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "revision": 27,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 27,
+        "revision": 27,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "18573bfeacbccca27cdae3396b279185a2a09805d3036ef1c27c48b8f511070c",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "shared",
+              "rev": "A"
+            }
+          },
+          {
+            "id": "p2",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              15,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "shared",
+              "rev": "A"
+            }
+          },
+          {
+            "id": "p3",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 0
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              30,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "independent",
+              "rev": "A"
+            }
+          }
+        ]
+      },
+      "acceptedDocSHA256CanonicalJSON": "f7883b7cff3e341a5f9b8e5e0190910bb6bf8b6281fb049272e5eb02fda238e3",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "revision": 28,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 28,
+        "revision": 28,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "065783b887e762e87ac48f362098b5b528a59ef24eb958a6e633e26045eb4ea8",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "f7883b7cff3e341a5f9b8e5e0190910bb6bf8b6281fb049272e5eb02fda238e3",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "revision": 29,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 29,
+        "revision": 29,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "5450993f166814f5f540de49fdc668e4824ac93d2299673998914fd327b0280f",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "f7883b7cff3e341a5f9b8e5e0190910bb6bf8b6281fb049272e5eb02fda238e3",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "revision": 30,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 30,
+        "revision": 30,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "9a6201f2ecdc8db13403e3dea2bbdeeeb19730864612c315fa150a1720946f71",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 0
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "f7883b7cff3e341a5f9b8e5e0190910bb6bf8b6281fb049272e5eb02fda238e3",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "revision": 34,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 34,
+        "revision": 34,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "ee598cc932301adc2a5afbb08a8ff22a362ac90a32f866c2a853f2b48d91ebbe",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "shared",
+              "rev": "A"
+            }
+          },
+          {
+            "id": "p2",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              15,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "shared",
+              "rev": "A"
+            }
+          },
+          {
+            "id": "p3",
+            "name": "Same box",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "id": "n0",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    10,
+                    5
+                  ]
+                },
+                {
+                  "kind": "extrude",
+                  "id": "n1",
+                  "sketch": 0,
+                  "height": 2
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              }
+            },
+            "position": [
+              30,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "part": {
+              "id": "independent",
+              "rev": "A"
+            }
+          }
+        ]
+      },
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "revision": 35,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 35,
+        "revision": 35,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "327a0f2427c59724e5a197b1a8bc633d9b9c6f889de4f88d5d0bbdb80d160469",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "revision": 36,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 36,
+        "revision": 36,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "e40d29a09307b8742b65be9993f4f1018e81b2e210e5f1f0139dcf71c62c750f",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "revision": 37,
+      "nativeSource": {
+        "epoch": 1,
+        "requestId": 37,
+        "revision": 37,
+        "slot": "part:read"
+      },
+      "wireSHA256CanonicalJSON": "8cc766e255bbdf377689b19ed6b80ee231dc8a9c81a2881055978a5112959a79",
+      "resolvedEvaluationDoc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "id": "n0",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "kind": "extrude",
+            "id": "n1",
+            "sketch": 0,
+            "height": 2
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        }
+      },
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "acceptedNotes": [
+        {
+          "id": "p1",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p2",
+          "field": {
+            "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_shared",
+            "why": "REASON_B_shared"
+          }
+        },
+        {
+          "id": "p3",
+          "field": {
+            "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+            "basis": "stated",
+            "source": "SOURCE_B_independent",
+            "why": "REASON_B_independent"
+          }
+        }
+      ]
+    }
+  ],
+  "responses": [
+    {
+      "id": 7,
+      "revision": 7,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "b0ac54ddd99d99f87e2a65ab4358065f6ab9d0eca4e7defba45cebc9188ca13c"
+    },
+    {
+      "id": 8,
+      "revision": 8,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "b768518e774c77900b571cbc3179a62cfa7b84a3352bd82f0bc18ec6c6feec43"
+    },
+    {
+      "id": 9,
+      "revision": 9,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "12ccf81c497f987081de55a51db4b47b98a876910b8136a054c59d32d4a22084"
+    },
+    {
+      "id": 10,
+      "revision": 10,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "7489bf6f2f2fdcbab70080df7465d9ce68a4fe827a1b35ea03de63f71c654f93"
+    },
+    {
+      "id": 11,
+      "revision": 11,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "986dd8984f9a8b982e5e1c6d2b7289225cb8a1884af81323a10a147a445e0ddf"
+    },
+    {
+      "id": 15,
+      "revision": 15,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "360dd361b5fa12fa903306e6ed115647e968b26bee33af995ad98a0f02ee29c5"
+    },
+    {
+      "id": 17,
+      "revision": 17,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "3abce93fa3c8b194b3ef6fecd6d6f74a9ee59e2bb4080727ae075c6ddbe9b2d7"
+    },
+    {
+      "id": 19,
+      "revision": 19,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "75ebc5a5deb0dc42bf96aac11a986e2eeba0716fbd76e9311a224b2ec8039dbd"
+    },
+    {
+      "id": 20,
+      "revision": 20,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "c84bed25899acf517666c01d6226dadc8d0bbfc99a96bc103e32d18dcee4a8ab"
+    },
+    {
+      "id": 21,
+      "revision": 21,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "82d29a3edab8891e4497eeadb603233a32cdca2be8c3772253a797c939717111"
+    },
+    {
+      "id": 22,
+      "revision": 22,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "fc1007d7cd881e26da0a9f517bda1c43cb30617d37552b0657d79386be0bcf64"
+    },
+    {
+      "id": 23,
+      "revision": 23,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "c41f4637c1dc081a33b732fc4f9cd43426b13186242bb01d01ebd96aa1aa63b0"
+    },
+    {
+      "id": 27,
+      "revision": 27,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "31377ee5d5647ffd30baeaf42a8e56628efb8cd3f96b7de93cecd45ec7df9280"
+    },
+    {
+      "id": 28,
+      "revision": 28,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "1b59dba2e23f8dd109cc3bc00c1ed67840f93b0479a394916f358e69229b2e36"
+    },
+    {
+      "id": 29,
+      "revision": 29,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "9c190c3089db2a565e39a4e3c43ca5d9f4c8465863d482f5498a1b4f5967086a"
+    },
+    {
+      "id": 30,
+      "revision": 30,
+      "ok": false,
+      "error": {
+        "title": "Sizes must be greater than zero",
+        "hint": "Every width, depth, height and radius needs a positive value.",
+        "detail": "height must not be zero",
+        "code": "PARAMETER",
+        "feature": "n1"
+      },
+      "rawResponseSHA256CanonicalJSON": "c254c0e5897aff4a25bdf55cb07dfbaac954918f4b02f2d28698b8a06ff98fa9"
+    },
+    {
+      "id": 34,
+      "revision": 34,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "76a6c10a2277190f614ed9404c3880e29775d33e0f228733eee4f99d25954095"
+    },
+    {
+      "id": 35,
+      "revision": 35,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "2d2f84511c381a8a6adf2cbed17336debc798edba24a8ecb82c2ad310074e119"
+    },
+    {
+      "id": 36,
+      "revision": 36,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "1643748293f7b6c96b10007836bd9060df988f1c504e96e9f7afec47b9716864"
+    },
+    {
+      "id": 37,
+      "revision": 37,
+      "ok": true,
+      "error": null,
+      "rawResponseSHA256CanonicalJSON": "12d019a5e376577abdb3ab51effe1ed26720e829f30fb41b7cecb73c37e706e2"
+    }
+  ],
+  "deliverySamples": [
+    {
+      "phase": "B accepted before release",
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "noteText": "",
+      "exports": 0,
+      "exportPresent": false
+    },
+    {
+      "phase": "callback",
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "noteText": "",
+      "exports": 0,
+      "exportPresent": false
+    },
+    {
+      "phase": "tick",
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "noteText": "",
+      "exports": 0,
+      "exportPresent": false
+    },
+    {
+      "phase": "callback",
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "noteText": "",
+      "exports": 0,
+      "exportPresent": false
+    },
+    {
+      "phase": "tick",
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "noteText": "",
+      "exports": 0,
+      "exportPresent": false
+    },
+    {
+      "phase": "callback",
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "noteText": "",
+      "exports": 0,
+      "exportPresent": false
+    },
+    {
+      "phase": "tick",
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "noteText": "",
+      "exports": 0,
+      "exportPresent": false
+    },
+    {
+      "phase": "callback",
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "noteText": "",
+      "exports": 0,
+      "exportPresent": false
+    },
+    {
+      "phase": "tick",
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "noteText": "",
+      "exports": 0,
+      "exportPresent": false
+    },
+    {
+      "phase": "released",
+      "acceptedDocSHA256CanonicalJSON": "e64f6495ea4680df2ee95ed2365a303cfc030266ab67d6373c16a79af4451553",
+      "noteText": "",
+      "exports": 0,
+      "exportPresent": false
+    }
+  ]
+}

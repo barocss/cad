@@ -1,0 +1,132 @@
+{
+  "parent": "7fae390bdf58e9cb284246353481ff67fc158bbe",
+  "status": "PASS",
+  "attempts": [
+    {
+      "attempt": "01",
+      "status": "FAIL",
+      "classification": "Driver precondition: looked for brief in evaluation wire, which intentionally strips brief. Hold and B boundary not reached.",
+      "phase": "A loaded and initial notes explicitly included",
+      "rawReceipt": "/tmp/cad-bom-note-currentness-after-01/receipt.json",
+      "rawReceiptSHA256": "2581199f792a4812f0124e9b7dedcef2505499f899dd4dd7eaccc2abe8465357",
+      "failure": "page.waitForFunction: Timeout 30000ms exceeded.\n    at <CHECKOUT>/apps/cad-studio/test/bom-note-currentness-browser.mjs:172:16\n    at async f.run (<CHECKOUT>/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file://<CHECKOUT>/apps/cad-studio/test/bom-note-currentness-browser.mjs:160:1",
+      "sourceAfterCleanupCount": 536,
+      "changes": [],
+      "errors": [],
+      "consoleErrors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    {
+      "attempt": "02",
+      "status": "FAIL",
+      "classification": "Driver expectation: held real root assembly read but compared its empty nodes with child nodes. B boundary not reached.",
+      "phase": "A loaded and initial notes explicitly included",
+      "rawReceipt": "/tmp/cad-bom-note-currentness-after-02/receipt.json",
+      "rawReceiptSHA256": "80a6fb5fe1fa4bcf36b44acfd145c3a959a8398f9df22331c6d684ae67d1e3e4",
+      "failure": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ []\n- [\n-   {\n-     id: 'n0',\n-     kind: 'sketch',\n-     max: [\n-       10,\n-       5\n-     ],\n-     min: [\n-       0,\n-       0\n-     ],\n-     profile: 'rectangle'\n-   },\n-   {\n-     height: 2,\n-     id: 'n1',\n-     kind: 'extrude',\n-     sketch: 0\n-   }\n- ]\n\n    at file://<CHECKOUT>/apps/cad-studio/test/bom-note-currentness-browser.mjs:192:12\n    at async f.run (file://<CHECKOUT>/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file://<CHECKOUT>/apps/cad-studio/test/bom-note-currentness-browser.mjs:174:1",
+      "sourceAfterCleanupCount": 536,
+      "changes": [],
+      "errors": [],
+      "consoleErrors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    {
+      "attempt": "03",
+      "status": "PASS",
+      "classification": "PASS: actual root read FIFO/Open/current notes/failure/recovery boundary.",
+      "phase": "B recovery requires new opt-in and exports identical current notes",
+      "rawReceipt": "/tmp/cad-bom-note-currentness-after-03/receipt.json",
+      "rawReceiptSHA256": "480f7baa61387dab0b95fa91304618785eba78c113d90f18366edebbf32005d0",
+      "failure": "",
+      "sourceAfterCleanupCount": 536,
+      "changes": [],
+      "errors": [],
+      "consoleErrors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    }
+  ],
+  "visualReview": "Actual 02/03/04 screenshots independently inspected; synthetic fixtures, no personal information.",
+  "rawRunnerVisualReview": "ROOT_MUST_VIEW_SCREENSHOTS",
+  "sourceInitialSubsetCount": 8,
+  "sourceFrozenCount": 536,
+  "sourceAfterCount": 536,
+  "sourceAfterCleanupCount": 536,
+  "sourceCapsules": {
+    "source-initial-subset.json": "78b16707bad38230950f3f88b06b0c83de33289f95ac0aa3db030eb331002f65",
+    "source-frozen.json": "1e4443901219eb9a4e5945e0bf5d37936f50bc8471b8beea6f65310b515c4d57",
+    "source-after.json": "1e4443901219eb9a4e5945e0bf5d37936f50bc8471b8beea6f65310b515c4d57",
+    "source-after-cleanup.json": "1e4443901219eb9a4e5945e0bf5d37936f50bc8471b8beea6f65310b515c4d57"
+  },
+  "heldRequestId": 11,
+  "deliverySampleCount": 10,
+  "oracleResults": [
+    {
+      "status": "PASS",
+      "rows": 1,
+      "qty": 3,
+      "occurrences": [
+        "p1",
+        "p2",
+        "p3"
+      ],
+      "fullFieldEquality": true,
+      "AFieldsAbsent": true,
+      "bytes": 530,
+      "sha256": "e2b9912273b81dec24e9af170e3bdfe7ebad6eab24f092f4ffd2a962d7b1377b"
+    },
+    {
+      "status": "PASS",
+      "rows": 1,
+      "qty": 3,
+      "occurrences": [
+        "p1",
+        "p2",
+        "p3"
+      ],
+      "fullFieldEquality": true,
+      "AFieldsAbsent": true,
+      "bytes": 530,
+      "sha256": "e2b9912273b81dec24e9af170e3bdfe7ebad6eab24f092f4ffd2a962d7b1377b"
+    }
+  ],
+  "artifacts": {
+    "02-B-pending-no-notes.png": {
+      "bytes": 203890,
+      "sha256": "abff5a1c2835d55a3bd6cbbf6c301615e2dac8826812c9268a6c316f63d88556"
+    },
+    "03-current-B-notes.png": {
+      "bytes": 260904,
+      "sha256": "f762e26c01d830f120e87fb9b5b86b44c78ab39f282f8870969d21a8d6e6900e"
+    },
+    "04-failed-child-no-notes.png": {
+      "bytes": 215779,
+      "sha256": "0fc3e153c11f050d180166436c664dc8fda0b57c1c24b751a63f4f1b2c767b24"
+    },
+    "03-current-B-notes.csv": {
+      "bytes": 530,
+      "sha256": "e2b9912273b81dec24e9af170e3bdfe7ebad6eab24f092f4ffd2a962d7b1377b"
+    },
+    "05-recovered-B-notes.csv": {
+      "bytes": 530,
+      "sha256": "e2b9912273b81dec24e9af170e3bdfe7ebad6eab24f092f4ffd2a962d7b1377b"
+    },
+    "held-A-original.json": {
+      "bytes": 13553,
+      "sha256": "1d3bd6fb21ce8611e6380faa2a9876e6f787afcdc38c00d8384ed388e6b95e70"
+    }
+  },
+  "noProductChanges": true,
+  "buildTypecheck": "NOT_RUN: no product changes; test-only driver syntax/lint and actual target qualification."
+}

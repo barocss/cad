@@ -1,0 +1,32 @@
+{
+  "file": "03-current-B-notes.csv",
+  "sha256": "e2b9912273b81dec24e9af170e3bdfe7ebad6eab24f092f4ffd2a962d7b1377b",
+  "fields": [
+    {
+      "value": "NOTE_B_shared, \"quoted\"\nsecond line",
+      "basis": "stated",
+      "source": "SOURCE_B_shared",
+      "why": "REASON_B_shared"
+    },
+    {
+      "value": "NOTE_B_independent, \"quoted\"\nsecond line",
+      "basis": "stated",
+      "source": "SOURCE_B_independent",
+      "why": "REASON_B_independent"
+    }
+  ],
+  "oldFields": [
+    {
+      "value": "NOTE_A_shared, \"quoted\"\nsecond line",
+      "basis": "stated",
+      "source": "SOURCE_A_shared",
+      "why": "REASON_A_shared"
+    },
+    {
+      "value": "NOTE_A_independent, \"quoted\"\nsecond line",
+      "basis": "stated",
+      "source": "SOURCE_A_independent",
+      "why": "REASON_A_independent"
+    }
+  ]
+}
