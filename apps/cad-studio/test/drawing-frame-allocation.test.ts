@@ -17,3 +17,14 @@ test('attached and standalone frames reserve IDs independently of frame count',(
 test('200 global frames refuse new allocation, while holes are reused below the bound',()=>{
  const all=Array.from({length:200},(_,i)=>frame(`frame-${i+1}`));assert.equal(nextStandaloneFrameId(all),null);assert.equal(nextStandaloneFrameId(all.filter(f=>f.id!=='frame-50')),'frame-50');
 });
+test('attached controls reserve global standalone/attached IDs and retain other-sheet frames on edit', async () => {
+ const { nextAttachedFrameId } = await import('../src/ui/drawing/frameIdentity');
+ const original = { ...frame('control-d1'), view: 'right' as const }, whole = { ...defaultDrawing(), frames: [original], dimensions: [{ id: 'd1', view: 'top' as const, kind: 'linear' as const, orient: 'vertical' as const, a: { edge: 'a', at: 'end' as const, near: [0, 0, 0] as [number, number, number] }, b: { edge: 'b', at: 'end' as const, near: [0, 1, 0] as [number, number, number] }, place: [0, 0] as [number, number] }], sheets: [{ id: 'S2', views: ['right'] }] };
+ const local = forSheet(whole, 0), id = nextAttachedFrameId('d1', whole.frames); assert.equal(id, 'control-d1-2');
+ const attached: DrawingFrame = { id: id!, dim: 'd1', characteristic: 'position', value: .1, datums: [] };
+ const next = mergeSheet(whole, 0, { ...local, frames: [attached] }); assert.deepEqual(checkDrawingFrames({ frames: next.frames }, whole.frames), []); assert.equal(next.frames?.length, 2); assert.deepEqual(next.frames?.find(f => f.id === original.id), original);
+ const edited = mergeSheet(next, 0, { ...forSheet(next, 0), frames: [{ ...attached, value: .3 }] }); assert.deepEqual(checkDrawingFrames({ frames: edited.frames }, next.frames), []); assert.deepEqual(edited.frames?.find(f => f.id === original.id), original);
+ const collision = mergeSheet(whole, 0, { ...local, frames: [{ ...attached, id: original.id }] }); assert.ok(checkDrawingFrames({ frames: collision.frames }, whole.frames).length);
+ assert.equal(nextAttachedFrameId('d1', [original, attached]), 'control-d1-3');
+ assert.equal(nextAttachedFrameId('d1', Array.from({length:200},(_,i)=>frame(`f${i}`))), null);
+});

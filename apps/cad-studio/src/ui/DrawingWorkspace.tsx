@@ -1203,6 +1203,9 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       setMessage('Dimension ' + selDim.id + ' has a duplicate ID. Remove the duplicate dimension before changing its geometric control.');
       return false;
     }
+    const mergedFrames = mergeSheet(wholeSettings, current, next).frames ?? [];
+    const why = checkDrawingFrames({ frames: mergedFrames }, wholeSettings.frames ?? [])[0];
+    if (why) { setMessage(why.message); return false; }
     if (!onChange(next)) return false;
     setMessage(null);
     return true;
@@ -1315,7 +1318,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         <ToleranceStack key={JSON.stringify([current > 0 ? wholeSettings.sheets?.[current - 1]?.id ?? current : null, scopeKey])}
           dimensions={sourceCurrent && projectionCurrent && !busy ? sheet?.dimensions ?? null : null} settings={settings} />
 
-        <FrameEditor key={selectedFrame ? `frame:${selectedFrame}` : selDim?.id ?? 'none'} dim={selectedFrame ? undefined : selDim?.id} frameId={selectedFrame ?? undefined} settings={settings} onChange={changeFrame} onRefused={setMessage} />
+        <FrameEditor key={selectedFrame ? `frame:${selectedFrame}` : selDim?.id ?? 'none'} dim={selectedFrame ? undefined : selDim?.id} frameId={selectedFrame ?? undefined} settings={settings} allFrames={wholeSettings.frames ?? []} onChange={changeFrame} onRefused={setMessage} />
 
         <NotesList settings={settings} selected={selNote?.id ?? null} selNote={selNote} noteDraft={noteDraft} setNoteDraft={setNoteDraft} noteBox={noteBox} onSelect={n => { selectAnnotationRow('note', n.id); setNoteDraft(n.text); }} remove={id => removeAnnotation({ kind: 'note', id })} onRemoveLeader={removeNoteLeader} onDuplicate={duplicateNote} onChange={onChange} />
 

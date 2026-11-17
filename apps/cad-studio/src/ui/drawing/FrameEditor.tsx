@@ -1,4 +1,5 @@
 // Edit one dimension-attached or explicitly selected standalone geometric control.
+import { nextAttachedFrameId } from './frameIdentity';
 import { useState } from 'react';
 import { CHARACTERISTICS, checkDrawingFrames, frameProblem, frameRules, readFrames, type AroundModifier, type DrawingFrame, type MaterialModifier } from '@barocss/cad-model/drawing/controls';
 import type { DrawingSettings } from '@barocss/cad-model/drawing/types';
@@ -8,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 
 const SECOND_ROW: readonly string[] = ['position', 'profile-line', 'profile-surface'];
-export function FrameEditor({ dim, frameId, settings, onChange, onRefused }: { dim?: string; frameId?: string; settings: DrawingSettings; onChange(next: DrawingSettings): boolean; onRefused(message: string): void }) {
+export function FrameEditor({ dim, frameId, settings, allFrames = settings.frames ?? [], onChange, onRefused }: { dim?: string; frameId?: string; settings: DrawingSettings; allFrames?: readonly DrawingFrame[]; onChange(next: DrawingSettings): boolean; onRefused(message: string): void }) {
   const [draft, setDraft] = useState<Record<string, string>>({});
   if (!dim && !frameId) return null;
   const frames = settings.frames ?? [], frame = frames.find(f => frameId ? f.dim === undefined && f.id === frameId : f.dim !== undefined && f.dim === dim);
@@ -30,8 +31,9 @@ export function FrameEditor({ dim, frameId, settings, onChange, onRefused }: { d
   </NativeSelect></label>;
   return <section aria-label="Geometric control editor" style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}>
     <div className="card-title" style={{ marginTop: 8 }}>GEOMETRIC CONTROL</div>
-    {!frame && dim ? <Button variant="ghost" aria-label="Add geometric control" disabled={frames.length >= 200} onClick={() => {
-      let id = `control-${dim}`, n = 2; while (frames.some(f => f.id === id)) id = `control-${dim}-${n++}`;
+    {!frame && dim ? <Button variant="ghost" aria-label="Add geometric control" disabled={allFrames.length >= 200} onClick={() => {
+      const id = nextAttachedFrameId(dim, allFrames);
+      if (!id) { onRefused('The drawing already has 200 geometric controls.'); return; }
       set({ id, dim, characteristic: 'position', value: 0.1, datums: [] });
     }}>Add geometric control</Button> : frame && <>
       <label className={FIELD}><span>Characteristic</span><NativeSelect className={CONTROL} aria-label="Geometric characteristic" value={frame.characteristic} onChange={e => {
