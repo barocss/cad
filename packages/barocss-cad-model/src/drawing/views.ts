@@ -59,8 +59,12 @@ export function sectionFrame(s: Pick<DrawingSection, 'view' | 'dir'>, o: Orienta
 export const SHEETS = { A4: [297, 210], A3: [420, 297] } as const;
 /** Standard scales, largest first (2 = 2:1, 0.5 = 1:2). */
 export const SCALES = [10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
-export const scaleLabel = (s: number) => s >= 1 ? `${round(s)}:1` : `1:${round(1 / s)}`;
-const round = (v: number) => Math.round(v * 1000) / 1000;
+/** Never round a scale label into a different drawing ratio. Keep conventional integer reductions
+ * only when their reciprocal round-trips exactly; otherwise print the stored paper:model value. */
+export const scaleLabel = (s: number): string => {
+  const denominator = 1 / s;
+  return s < 1 && Number.isSafeInteger(denominator) && 1 / denominator === s ? `1:${denominator}` : `${s}:1`;
+};
 
 export const MARGIN = 10;
 /** The title block, at the frame's lower right. */

@@ -1,0 +1,81 @@
+{
+  "status": "PASS",
+  "qualification": "Exact sheet and removed-section scale labels in the rendered drawing and downloaded SVG, unchanged geometry and native persistence.",
+  "observations": [
+    {
+      "scale": 0.75,
+      "box": [
+        256,
+        82,
+        304,
+        88
+      ]
+    },
+    {
+      "actualSvg": "initial",
+      "scaleLabels": [
+        "1.23456789:1",
+        "0.75:1"
+      ]
+    },
+    {
+      "scale": 2,
+      "box": [
+        216,
+        77,
+        344,
+        93
+      ]
+    },
+    {
+      "scale": 0.75,
+      "box": [
+        256,
+        82,
+        304,
+        88
+      ]
+    },
+    {
+      "scale": 2,
+      "box": [
+        216,
+        77,
+        344,
+        93
+      ]
+    },
+    {
+      "scale": 0.75,
+      "box": [
+        256,
+        82,
+        304,
+        88
+      ]
+    },
+    {
+      "actualSvg": "reopened",
+      "scaleLabels": [
+        "1.23456789:1",
+        "0.75:1"
+      ]
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "limits": [
+    "One sheet at 1.23456789 and removed section at 0.75, actual SVG, native save/open. No PDF/DXF or physical-print qualification."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "baseline": {
+    "status": "FAIL",
+    "failure": "AssertionError [ERR_ASSERTION]: \nTITLEExact scale labelsbarocss cad-studioSRC d195196b18ee0a9dSCALE1.235:1UNITSmmDATE2026-11-18REV-SHEETA3THIRD ANGLE\n\n\nFRONT\nTOP\n\nAA\nSECTION A\u2013A (1:1.333)\n    at labels (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/drawing-scale-label-browser.mjs:15:9)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/drawing-scale-label-browser.mjs:20:423\n    at async f.run (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/drawing-scale-label-browser.mjs:19:1"
+  },
+  "visualReview": "Before/reopened screenshots inspected, exact ratio title and removed-section labels visible."
+}
