@@ -3,6 +3,7 @@ import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { badValue } from '@barocss/cad-model/chat/brief';
 import { clearInstanceBriefNote, createNoteEditSession, editInstanceBriefNote, instanceNoteScope } from '../state/instanceBriefNotes';
 import { Button } from '@/components/ui/button';
+import { NoteBaselineStatus } from './NoteBaselineStatus';
 export function InstanceBriefNotes({ doc, id, blocked, commit, onError }: {
     doc: StudioDoc;
     id: string;
@@ -37,6 +38,7 @@ export function InstanceBriefNotes({ doc, id, blocked, commit, onError }: {
     return <section aria-label="Definition design-brief notes" className="render-section">
   <div className="card-title">DESIGN-BRIEF NOTES</div>
   <p className="muted small">Design intent only, not manufacturing approval. Saved on the part definition.</p>
+  <NoteBaselineStatus doc={doc} />
   {!scope.ok ? <p role="status" className="muted small">{scope.error}</p> : <>
    <p className="muted small">Applies to {scope.owner.part ? `definition ${scope.owner.part.id} (Rev ${scope.owner.part.rev}; saving changes its revision)` : 'this independent definition'}: {scope.members.map(i => `${i.name} (${i.id})`).join(', ')}.</p>
    {open ? <>

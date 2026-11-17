@@ -1,0 +1,40 @@
+{
+  "status": "PASS",
+  "qualification": "Synthetic approved-record currentness during explicit shared note Save/Clear, Undo/Redo and actual Save/fresh Open",
+  "limits": [
+    "Synthetic test-only approval API token, not an owner decision or manufacturing approval.",
+    "No new geometry/mass certification, cited-analysis freshness, parent-chain tamper or malformed-record actual flow."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceBeforeCount": 3,
+  "sourceFrozenCount": 1265,
+  "sourceAfterCleanupCount": 1265,
+  "observations": [
+    {
+      "syntheticApprovalOnly": true,
+      "initialAcceptedExact": true,
+      "noJoints": true,
+      "baselineBytesUnchanged": true,
+      "saveClearSharedMembers": [
+        "p1",
+        "p2"
+      ],
+      "undoRedoCurrentness": true,
+      "actualSaveFreshOpen": true
+    }
+  ],
+  "originalReceiptSHA256": "c74252bf367a3d52a2a31bbd754276da2eeab453a17426bf95166d8fde6f62f8",
+  "manifestSHA256": "3538e79673ae234df84012cc21d4e10cd0229fb37f1c7a9fc1ed09411b3adeb2",
+  "sourceUnchanged": true,
+  "savedSHA256": "c3111534eca0e1cf610a3cf9e8e03a48d527fea40ac1369a71e3de4908d34820",
+  "savedBytes": 5421,
+  "visualReview": "Three actual screenshots directly inspected, synthetic data and no personal information."
+}

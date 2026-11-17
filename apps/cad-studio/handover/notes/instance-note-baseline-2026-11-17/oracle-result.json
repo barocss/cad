@@ -1,0 +1,1 @@
+{"status": "PASS", "baselineJSONSHA256": "faa3e400dd5686d349501ee55bf3d951400badef486ba5cd4cfbf795208f746a", "shared": ["p1", "p2"], "independentUnchanged": "p3", "otherDefinitionDataExact": true}
