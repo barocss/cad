@@ -21,6 +21,7 @@
 import { frameFace, type FaceTable, type MateFace } from '../assembly/mates';
 import { tablesFor } from '../assembly/faces';
 import type { DimPoint } from '../drawing/types';
+import { checkDrawingBodyOwner } from '../drawing/scope';
 import { bodyKeyFor, featureId } from './ids';
 import { prefixDoc, type ModelNode, type StudioDoc } from './doc';
 import { rememberedEvaluate } from './evalMemo';
@@ -50,6 +51,8 @@ type Tables = (part: string) => FaceTable | undefined;
 export interface Ref {
   where: string; edge: boolean; name: string; sig?: Sig; rematched: boolean;
   nativeFace?: true | 'plane';
+  /** Selected-body drawing references never search excluded outputs; null means the owner is invalid. */
+  drawingBodyKey?: string | null;
   /** Datum targets keep their exact edge name and require an explicitly selected endpoint. */
   datumTarget?: true; targetEndpoint?: 'min' | 'max';
   /** `node`: that feature's parent body; `part`: that part's face table (a mate); neither: the part's bodies. */
@@ -128,6 +131,7 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
     if (!side.face || frameFace(side.face)) continue;
     refs.push({ ...pointed(`mate ${mate.id}`, false, side, () => side.face, f => { side.face = f; }), part: side.part });
   }
+  const drawingStart = refs.length;
   for (const d of doc.drawing?.dimensions ?? []) {
     if (d.kind === 'diameter' || d.kind === 'radius') { const x: Pointed & { edge: string } = d; refs.push(pointed(`dimension ${d.id}`, true, x, () => x.edge, e => { x.edge = e; })); }
     // (A pitch circle, or a point at its centre: each member hole's edge, R14.5.)
@@ -141,6 +145,11 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
     const point = target.point;
     if (!point) continue; // a line or area target is placed by view points, not by a reference
     refs.push({ ...pointed(`datum target ${target.id}`, true, point, () => point.edge, edge => { point.edge = edge; }), datumTarget: true, targetEndpoint: point.endpoint });
+  }
+  const scope = doc.drawing?.scope;
+  if (scope?.kind === 'part' && scope.body) {
+    const key = checkDrawingBodyOwner(doc, scope.body).length ? null : scope.body.key;
+    for (const ref of refs.slice(drawingStart)) ref.drawingBodyKey = key;
   }
   for (const [key, look] of Object.entries(doc.bodies ?? {})) {
     if (!look.faces) continue;
@@ -205,8 +214,8 @@ function candidatesOf(ref: Ref, finals: readonly BodyResult[], parents: Readonly
     for (const [name, f] of Object.entries(t)) if (!frameFace(name)) out.set(name, mateSignature(f));
     return out;
   }
-  const bodies = ref.node === null ? finals : [ref.parent ? parents.get(parentKey(ref.node, ref.parent)) : undefined].filter((b): b is BodyResult => !!b);
-  if (!bodies.length) return null;
+  const bodies = ref.drawingBodyKey !== undefined ? finals.filter(b => b.key === ref.drawingBodyKey) : ref.node === null ? finals : [ref.parent ? parents.get(parentKey(ref.node, ref.parent)) : undefined].filter((b): b is BodyResult => !!b);
+  if (!bodies.length) return ref.drawingBodyKey !== undefined ? new Map() : null;
   const out = new Map<string, Signature>();
   for (const b of bodies) { const s = signaturesOf(b, ref.nativeFace); for (const [n, sig] of ref.edge ? s.edges : s.faces) out.set(n, sig); }
   return out;
@@ -366,9 +375,11 @@ export function markedReferences(doc: StudioDoc): Marked[] {
 export async function confirmReference(doc: StudioDoc, index: number, finals: readonly BodyResult[], evaluate: Evaluate, to?: string, tables: Tables = tablesFor(doc), pending?: Problem): Promise<StudioDoc> {
   const { doc: out, refs } = referencesOf(doc), ref = refs[index];
   if (!ref || ref.datumTarget) return doc;
+  const parents = await parentBodies(out, [ref], evaluate), sig = candidatesOf(ref, finals, parents, tables)?.get(to ?? ref.name);
+  // Stale or caller-supplied choices cannot cross the selected drawing body boundary.
+  if (ref.drawingBodyKey !== undefined && !sig) return doc;
   if (to !== undefined && to !== ref.name) { ref.rename(to, false); ref.name = to; }
   ref.clear();
-  const parents = await parentBodies(out, [ref], evaluate), sig = candidatesOf(ref, finals, parents, tables)?.get(ref.name);
   if (sig) ref.setSig(toSig(sig));
   // The reference setter owns the current node object. Capture the signature before releasing a held copy.
   if (ref.node !== null && out.nodes[ref.node].held) {

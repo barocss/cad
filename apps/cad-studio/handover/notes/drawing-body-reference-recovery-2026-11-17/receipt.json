@@ -1,0 +1,57 @@
+{
+  "status": "PASS",
+  "qualification": "#270 explicit reference recovery after selected-body width change; no silent retargeting.",
+  "phase": "fresh Open 08-repaired-open",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Synthetic extrude outputs only; no revolve/import/split/assembly subset claim.",
+    "Late delivery, suppression/deletion and same-key different document lifecycle are not exercised in this first run.",
+    "Independent native mass and actual Worker/SVG/DXF rectangle oracles; not PDF/ASME approval."
+  ],
+  "sourceFrozenCount": 1046,
+  "sourceAfterCount": 1046,
+  "sourceAfterCleanupCount": 1046,
+  "observations": [
+    {
+      "explicitChoices": 6,
+      "originalNamesOnly": true,
+      "confirmedSaveOpen": true
+    },
+    {
+      "scope": {
+        "kind": "part",
+        "body": {
+          "key": "b1",
+          "feature": "n1",
+          "kind": "extrude"
+        }
+      },
+      "explicitWholeReturnAndUndo": true,
+      "sourceEdit": "A width30\u219240, all other nodes unchanged",
+      "actualRemaining": [
+        "revolve",
+        "samekey different document",
+        "late reply",
+        "suppression/delete/split",
+        "manual-reference refusal"
+      ],
+      "nativeVolumes": [
+        2160,
+        2880
+      ],
+      "originalOtherBodyRetained": true
+    }
+  ],
+  "visualReview": "Directly reviewed before/after pixels; synthetic two-box document only.",
+  "rawReceiptSHA256": "4f6b486779855f75ac3731136307b41d16f7e4069a297cd85837457e6df189f5",
+  "scope": "Explicit selected-body reference recovery only; broader #270 acceptance remains open."
+}
