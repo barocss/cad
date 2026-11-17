@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "qualification": "Connected graph-distance proportional vertex translation with independent Manhattan-distance oracle.",
+  "files": [
+    {
+      "file": "proportional-move.bcad",
+      "hash": "ba1adde614b0e8f14bedb630e57dfa4d9140f20fa5d44a6bdca4292392081e24",
+      "semanticEquality": true
+    }
+  ],
+  "downloads": [
+    {
+      "phase": "native Save proportional-move",
+      "suggestedFilename": "Untitled.bcad"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One box top-centre seed, numeric Z displacement and radius. Disconnected/mirror/irregular graph tested purely. Drag/weight-colour overlay unsupported."
+  ],
+  "visualReview": "PASS: actual pixels inspected, cage preview distinct from accepted fresh-open"
+}

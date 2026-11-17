@@ -1,3 +1,4 @@
+import { cageProportionalWeights } from './cageProportional';
 import { normalizedCageDirection } from './cageLocalDirection';
 // SD3 (R8.2, D81): the studio's cage-editing session on a subd node — what is edited (the node's cage, or its half
 // when mirrored), what is picked, the session's own undo, and the operations of R8.1 (`@barocss/cad` subd-cage)
@@ -304,6 +305,7 @@ export function insetCageSelection(s: CageSession, distance: number): CageSessio
 }
 
 export type CageSelectionTransform =
+  | { kind: 'move-proportional'; axis: 0 | 1 | 2; distance: number; radius: number }
   | { kind: 'move-along'; direction: readonly [number, number, number]; distance: number }
   | { kind: 'move'; axis: 0 | 1 | 2; distance: number }
   | { kind: 'rotate'; axis: 0 | 1 | 2; degrees: number; pivot: readonly [number, number, number] }
@@ -319,16 +321,18 @@ export function transformCageSelection(s: CageSession, transform: CageSelectionT
   if (s.sel.edges.some(([a, b]) => !topology.edges.has(ek(a, b)))) throw new SubdError('INPUT', 'transform: selected edge is not in this cage');
   const vertices = selectedVertices(s);
   if (!vertices.length) throw new SubdError('INPUT', 'transform: pick vertices, edges or faces first');
-  if (transform.kind !== 'move' && transform.kind !== 'move-along' && (transform.pivot.length !== 3 || transform.pivot.some(v => !Number.isFinite(v)))) throw new SubdError('INPUT', 'transform: pivot must be finite');
+  if (transform.kind !== 'move' && transform.kind !== 'move-along' && transform.kind !== 'move-proportional' && (transform.pivot.length !== 3 || transform.pivot.some(v => !Number.isFinite(v)))) throw new SubdError('INPUT', 'transform: pivot must be finite');
   if (transform.kind === 'rotate' && (![0, 1, 2].includes(transform.axis) || !Number.isFinite(transform.degrees))) throw new SubdError('INPUT', 'rotate: use a world axis and finite degrees');
   if (transform.kind === 'scale' && (!Number.isFinite(transform.factor) || transform.factor <= 0)) throw new SubdError('INPUT', 'scale: factor must be finite and greater than zero');
-  if (transform.kind === 'move' && (![0, 1, 2].includes(transform.axis) || !Number.isFinite(transform.distance))) throw new SubdError('INPUT', 'move: use a world axis and finite distance in mm');
+  if ((transform.kind === 'move' || transform.kind === 'move-proportional') && (![0, 1, 2].includes(transform.axis) || !Number.isFinite(transform.distance))) throw new SubdError('INPUT', 'move: use a world axis and finite distance in mm');
+  const weights = transform.kind === 'move-proportional' ? cageProportionalWeights(s, transform.radius) : null;
   const direction = transform.kind === 'move-along' ? normalizedCageDirection(transform.direction) : null;
   if (transform.kind === 'move-along' && !Number.isFinite(transform.distance)) throw new SubdError('INPUT', 'move: use finite distance in mm');
   const angle = transform.kind === 'rotate' ? transform.degrees % 360 : 0;
-  if (transform.kind === 'move' || transform.kind === 'move-along' ? transform.distance === 0 : transform.kind === 'rotate' ? angle === 0 : transform.factor === 1) return s;
+  if (transform.kind === 'move' || transform.kind === 'move-along' || transform.kind === 'move-proportional' ? transform.distance === 0 : transform.kind === 'rotate' ? angle === 0 : transform.factor === 1) return s;
   const positions = [...c.positions], radians = angle * Math.PI / 180, cosine = Math.cos(radians), sine = Math.sin(radians);
-  for (const v of vertices) {
+  for (const v of weights ? weights.flatMap((w, i) => w > 0 ? [i] : []) : vertices) {
+    if (transform.kind === 'move-proportional') { positions[3*v+transform.axis] += weights![v]*transform.distance; continue; }
     if (transform.kind === 'move-along') { for (let k = 0; k < 3; k++) positions[3*v+k] += direction![k]*transform.distance; continue; }
     if (transform.kind === 'move') { positions[3 * v + transform.axis] += transform.distance; continue; }
     const p = at(c, v).map((x, k) => x - transform.pivot[k]);

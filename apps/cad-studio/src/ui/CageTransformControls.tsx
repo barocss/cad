@@ -1,3 +1,4 @@
+import { CageProportionalControls } from './CageProportionalControls';
 import { cageLocalDirection } from '@barocss/cad-model/subd/cageLocalDirection';
 import type { CageEditor } from '../subd/useCageEditor';
 import { selectedVertices } from '@barocss/cad-model/subd/cageEdit';
@@ -13,8 +14,9 @@ export function CageTransformControls({ editor }: { editor: CageEditor }) {
   let direction: readonly number[] | null = null;
   if (move && frame !== 'world') { try { direction = cageLocalDirection(draft.base, frame); } catch { /* The draft error below explains the refusal. */ } }
   return <div className="space-y-2" role="group" aria-label="Selection transform preview">
-    <div className="muted small">{move ? 'Baseline direction translation (mm)' : rotate ? 'World-axis rotation (degrees)' : 'Uniform scale (ratio)'} of picked cage elements only. Every preview starts from the same original coordinates.</div>
-    {move && <label className={FIELD}><span>Move frame</span><NativeSelect className={CONTROL} aria-label="Translation frame" value={frame} onChange={e => editor.previewTransform({ ...input, frame: e.target.value as 'world' | 'edge' | 'face' })}><option value="world">World axis</option><option value="edge">Single edge tangent</option><option value="face">Single quad normal</option></NativeSelect></label>}
+    <div className="muted small">{move ? 'Baseline direction translation (mm)' : rotate ? 'World-axis rotation (degrees)' : 'Uniform scale (ratio)'} {input.proportional ? 'of vertex seeds and their connected weighted neighbourhood.' : 'of picked cage elements only.'} Every preview starts from the same original coordinates.</div>
+    {move && <label className={FIELD}><span>Move frame</span><NativeSelect className={CONTROL} aria-label="Translation frame" disabled={!!input.proportional} value={frame} onChange={e => editor.previewTransform({ ...input, frame: e.target.value as 'world' | 'edge' | 'face' })}><option value="world">World axis</option><option value="edge">Single edge tangent</option><option value="face">Single quad normal</option></NativeSelect></label>}
+    {move && <CageProportionalControls editor={editor} />}
     {move && frame !== 'world' && <div className="muted small">{frame === 'edge' ? 'One edge only: positive follows lower to higher vertex ID.' : 'One planar convex quad only: positive follows face winding.'} Direction is fixed from the original cage, not the smooth surface.</div>}
     {direction && <div className="muted small" aria-label="Translation unit direction">Unit direction: ({direction.map(v => Number(v.toFixed(4))).join(', ')})</div>}
     {(rotate || (move && frame === 'world')) && <label className={FIELD}><span>World axis</span><NativeSelect className={CONTROL} aria-label={move ? "Translation world axis" : "Rotation world axis"} value={input.axis} onChange={e => editor.previewTransform({ ...input, axis: Number(e.target.value) as 0 | 1 | 2 })}><option value="0">X</option><option value="1">Y</option><option value="2">Z</option></NativeSelect></label>}

@@ -42,3 +42,13 @@ test('local move frames use immutable edge direction and quad normal; invalid fr
  const invalid=previewCageTransform(s,{...move,frame:'face'});assert.ok(invalid.error);assert.equal(invalid.session,s);
  assert.equal(previewCageTransform(s,{...move,frame:'world',value:'0'}).session,s);
 });
+test('proportional numeric preview keeps original graph distances and Off behaviour',()=>{
+ const seed=select(startSession(0,cage),{kind:'vertex',v:0},false);
+ const move:CageTransformInput={...input,kind:'move',axis:2,value:'2',frame:'world',proportional:true,radius:'8'};
+ const r=previewCageTransform(seed,move);assert.equal(r.error,null);assert.deepEqual(r.session.cage.positions,[10,20,32,14,20,31,14,24,30,10,24,31]);
+ const small=previewCageTransform(seed,{...move,radius:'4'});assert.equal(small.error,null);assert.deepEqual(small.session.cage.positions,[10,20,32,14,20,30,14,24,30,10,24,30]);
+ assert.deepEqual(previewCageTransform(seed,{...move,proportional:false}).session.cage,small.session.cage);
+ for(const patch of [{radius:''},{radius:'0'},{radius:'-1'},{radius:'Infinity'},{frame:'face' as const}]){const bad=previewCageTransform(seed,{...move,...patch});assert.ok(bad.error);assert.equal(bad.session,seed);}
+ assert.equal(previewCageTransform(seed,{...move,value:'0'}).session,seed);
+ assert.ok(previewCageTransform(s,move).error);
+});
