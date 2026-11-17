@@ -1,0 +1,50 @@
+[
+  {
+    "status": "FAIL",
+    "qualification": "Uncommitted invalid instance fields never leak into a different selected instance with the same saved scalar.",
+    "failure": "AssertionError [ERR_ASSERTION]: Y/0: new owner must show its saved value, not the old empty draft\n\n'' !== '10'\n\n    at file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/instance-field-owner-browser.mjs:14:10\n    at async f.run (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/instance-field-owner-browser.mjs:8:1",
+    "observations": [],
+    "errors": [],
+    "consoleErrors": [],
+    "limits": [
+      "Top-level instances only; nested assemblies, patterns and neutral exports not tested."
+    ]
+  },
+  {
+    "status": "PASS",
+    "qualification": "Uncommitted invalid instance fields never leak into a different selected instance with the same saved scalar.",
+    "observations": [
+      {
+        "isolatedEmptyFields": 5,
+        "firstInstanceY": 23,
+        "secondInstanceY": 31,
+        "validBlurStillCommitsOldOwner": true,
+        "undoRedo": true,
+        "nativeSaveOpen": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "limits": [
+      "Top-level instances only; nested assemblies, patterns and neutral exports not tested."
+    ]
+  },
+  {
+    "status": "PASS",
+    "qualification": "Escape discards pending instance name/position/rotation input without changing the model, blur still commits valid edits, native persistence and history remain intact.",
+    "observations": [
+      {
+        "cancelledFields": 9,
+        "enterPositionX": 25,
+        "blurRotationZ": 30,
+        "undoRedo": true,
+        "nativeSaveOpen": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "limits": [
+      "Top-level instance scalar fields. No nested instances, mate-driven transforms, patterns or neutral exports."
+    ]
+  }
+]

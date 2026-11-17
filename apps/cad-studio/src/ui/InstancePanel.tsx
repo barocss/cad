@@ -29,7 +29,7 @@ export function InstancePanel({ inst, bodies, onChange, onDuplicate, onRemove, o
   return (
     <aside className="card props" aria-label="Instance">
       <div className="card-title">PART INSTANCE</div>
-      <Field label="Name" value={inst.name} text onCommit={v => onChange({ ...inst, name: String(v) })} />
+      <Field owner={inst} label="Name" value={inst.name} text onCommit={v => onChange({ ...inst, name: String(v) })} />
       <div className="kv">Bodies <b>{bodies ? bodies.length : '…'}</b></div>
       {/* (O18: while a body's mass is still being worked out, "…", not a partial sum.) */}
       {volume !== undefined && <div className="kv">Volume <b>{bodies!.some(b => b.massRef !== undefined) ? '…' : `${fmt(Math.round(volume))} mm³`}</b></div>}
@@ -54,9 +54,9 @@ export function InstancePanel({ inst, bodies, onChange, onDuplicate, onRemove, o
       {notes}
       {driven ? <div className="kv muted small">Placed by its pattern: move or hide the seed, or edit the pattern (Skip leaves this one out).</div> : <>
       <div className="card-title" style={{ marginTop: 8 }}>POSITION · MM</div>
-      {(['X', 'Y', 'Z'] as const).map((a, k) => <Field key={a} label={a} value={inst.position[k]} onCommit={v => onChange({ ...inst, position: inst.position.map((x, j) => j === k ? Number(v) : x) as [number, number, number] })} />)}
+      {(['X', 'Y', 'Z'] as const).map((a, k) => <Field key={a} owner={inst} label={a} value={inst.position[k]} onCommit={v => onChange({ ...inst, position: inst.position.map((x, j) => j === k ? Number(v) : x) as [number, number, number] })} />)}
       <div className="card-title" style={{ marginTop: 8 }}>ROTATION · ° (X, THEN Y, THEN Z)</div>
-      {(['X', 'Y', 'Z'] as const).map((a, k) => <Field key={a} label={a} value={inst.rotation[k]} onCommit={v => onChange({ ...inst, rotation: inst.rotation.map((x, j) => j === k ? Number(v) : x) as [number, number, number] })} />)}
+      {(['X', 'Y', 'Z'] as const).map((a, k) => <Field key={a} owner={inst} label={a} value={inst.rotation[k]} onCommit={v => onChange({ ...inst, rotation: inst.rotation.map((x, j) => j === k ? Number(v) : x) as [number, number, number] })} />)}
       </>}
       <div className="row-actions" style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
         {onEditPart && <Button variant="secondary" title="Change the part itself with the other parts shown around it; Finish takes it into every instance sharing it" onClick={onEditPart}>Edit part</Button>}
@@ -69,9 +69,10 @@ export function InstancePanel({ inst, bodies, onChange, onDuplicate, onRemove, o
   );
 }
 
-function Field({ label, value, onCommit, text }: { label: string; value: number | string; onCommit(v: number | string): void; text?: boolean }) {
+function Field({ owner, label, value, onCommit, text }: { owner: PartInstance; label: string; value: number | string; onCommit(v: number | string): void; text?: boolean }) {
   const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
+  // A different instance can have the same scalar; its input must not inherit a stale draft.
+  useEffect(() => setDraft(String(value)), [owner, value]);
   const commit = () => {
     if (draft === String(value)) return;
     if (text) { if (draft.trim()) onCommit(draft.trim()); return; }
