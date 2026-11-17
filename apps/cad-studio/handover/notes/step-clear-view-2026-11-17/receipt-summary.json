@@ -1,0 +1,73 @@
+{
+  "status": "PASS",
+  "qualification": "Clear a saved assembly-step camera without moving the current camera or changing geometry; history and native persistence.",
+  "observations": [
+    {
+      "recommended": {
+        "target": [
+          50,
+          30,
+          0
+        ],
+        "distance": 171.46428199482244,
+        "yaw": -1.2036224929766774,
+        "pitch": 0.622677018342038,
+        "fovY": 0.5585053606381855,
+        "ortho": false
+      },
+      "userView": {
+        "target": [
+          37.91542872795591,
+          34.21554791012596,
+          3.001324353478101
+        ],
+        "distance": 245.0227232659969,
+        "yaw": -1.5707963267948966,
+        "pitch": 1.5704821675295375,
+        "fovY": 0.5585053606381855,
+        "ortho": false
+      },
+      "afterClear": {
+        "target": [
+          37.91542872795591,
+          34.21554791012596,
+          3.001324353478101
+        ],
+        "distance": 245.0227232659969,
+        "yaw": -1.5707963267948966,
+        "pitch": 1.5704821675295375,
+        "fovY": 0.5585053606381855,
+        "ortho": false
+      },
+      "afterFreshOpen": {
+        "target": [
+          37.98875581951175,
+          25.434333726378675,
+          18.05247881591439
+        ],
+        "distance": 255.22673442376174,
+        "yaw": -1.0053096491487339,
+        "pitch": 0.6283185307179586,
+        "fovY": 0.5585053606381855,
+        "ortho": false
+      },
+      "clearOnlyStepView": true,
+      "undoRedo": true,
+      "saveFreshOpen": true,
+      "recapture": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Two top-level steps, stored camera and explicit clear/recapture. Not playback, nested steps or general camera precision certification."
+  ],
+  "visualReview": "Screenshot directly reviewed: cleared saved camera, Reset/Clear disabled, Capture available."
+}

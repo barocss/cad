@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rectanglePart, type PartInstance, type StudioDoc } from '@barocss/cad-model/engine/doc';
-import { addAssemblyStep } from '@barocss/cad-model/assembly/steps';
+import { addAssemblyStep, editAssemblyStep } from '@barocss/cad-model/assembly/steps';
 import { OrbitCamera } from '../src/viewport/camera';
 import { STEPS_COMMAND, cameraOfView, clampStep, stepAfter, shownSelection, stepOffer, stepsDisplay, viewOfCamera } from '../src/app/assemblySteps';
 import { PALETTE_EXTRA } from '../src/app/studioConstants';
@@ -106,4 +106,19 @@ test('a waiting (hidden) part has no outline or gizmo: the lit selection leaves 
   assert.deepEqual(shownSelection(['p1', 'p3', 'p4/x', 'p2/y'], hidden), ['p1', 'p2/y']);
   assert.deepEqual(shownSelection(['p3'], stepsDisplay(stepped, 2, false)!.hidden), ['p3']);
   assert.deepEqual(shownSelection(['p3'], stepsDisplay(stepped, 0, true)!.hidden), ['p3'], 'faded parts are shown, so they stay lit');
+});
+
+
+test('clearing a recommended view removes only that step camera and retains presentation and source', () => {
+  const step = stepped.assemblySteps![1];
+  assert.ok(step.view);
+  const next = editAssemblyStep(stepped, { id: step.id, view: null }).doc;
+  const { view: _view, ...withoutView } = step; void _view;
+  assert.deepEqual(next.assemblySteps![1], withoutView);
+  assert.deepEqual(next.assemblySteps![0], stepped.assemblySteps![0]);
+  assert.deepEqual(next.assemblySteps![2], stepped.assemblySteps![2]);
+  assert.deepEqual(next.instances, stepped.instances);
+  assert.deepEqual(next.nodes, stepped.nodes);
+  assert.deepEqual(next.mates, stepped.mates);
+  assert.ok(stepped.assemblySteps![1].view);
 });

@@ -43,7 +43,7 @@ function CommitText({ value, onCommit, required, multiline, ...rest }: { value: 
   return <Input {...rest} type="text" value={draft} onChange={e => setDraft(e.target.value)} onBlur={done} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />;
 }
 
-export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, onFaded, onNew, onRename, onNote, onExplode, onAddSelected, onTakeOut, onCaptureView, onResetView, onMove, onDelete, onClose }: {
+export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, onFaded, onNew, onRename, onNote, onExplode, onAddSelected, onTakeOut, onCaptureView, onResetView, onClearView, onMove, onDelete, onClose }: {
   doc: StudioDoc; index: number;
   /** The one selected part's step (to go to) or that it is in none. */
   offer: StepOffer;
@@ -53,7 +53,7 @@ export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, o
   onGo(index: number): void; onFaded(on: boolean): void;
   onNew(): void; onRename(id: string, name: string): void; onNote(id: string, note: string): void; onExplode(id: string, scale: number): void;
   onAddSelected(id: string): void; onTakeOut(id: string, part: string): void;
-  onCaptureView(id: string): void; onResetView(): void; onMove(id: string, to: number): void; onDelete(id: string): void; onClose(): void;
+  onCaptureView(id: string): void; onResetView(): void; onClearView(id: string): void; onMove(id: string, to: number): void; onDelete(id: string): void; onClose(): void;
 }) {
   const steps = stepsOf(doc), n = steps.length, step = steps[index], instances: readonly PartInstance[] = doc.instances ?? [];
   const nameOf = (id: string) => instances.find(i => i.id === id)?.name ?? id, placed = (id: string) => instances.some(i => i.id === id);
@@ -92,6 +92,7 @@ export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, o
         <div className="flex flex-wrap gap-1">
           <Button size="xs" aria-label="Capture view" title={step.view ? 'Record the camera as this step\'s recommended view (replacing the last one)' : 'Record the camera as this step\'s recommended view'} onClick={() => onCaptureView(step.id)}>Capture view{step.view ? ' ·' : ''}</Button>
           <Button size="xs" aria-label="Reset view" disabled={!step.view} title={step.view ? 'Back to the recommended view' : 'No view recorded for this step'} onClick={onResetView}>Reset view</Button>
+          <Button size="xs" variant="ghost" aria-label="Clear saved step view" disabled={!step.view} title="Remove the recommended camera from this step. Keep the current camera; entering this step no longer resets it." onClick={() => onClearView(step.id)}>Clear saved view</Button>
         </div>
         <div className="flex gap-1">
           <Button size="xs" variant="ghost" aria-label="Move step up" title="Earlier in the order" disabled={index <= 0} onClick={() => onMove(step.id, index - 1)}><Icon name="expand_less" small /></Button>
