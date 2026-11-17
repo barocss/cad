@@ -1,0 +1,2 @@
+item no.,item,qty,note scope,design brief notes / occurrence mapping JSON
+1,Same box,3,"Design brief notes: intent, not approval","[{""parts"":[""p1"",""p2""],""state"":""note"",""field"":{""value"":""NOTE_B_shared, \""quoted\""\nsecond line"",""basis"":""stated"",""source"":""SOURCE_B_shared"",""why"":""REASON_B_shared""}},{""parts"":[""p3""],""state"":""note"",""field"":{""value"":""NOTE_B_independent, \""quoted\""\nsecond line"",""basis"":""stated"",""source"":""SOURCE_B_independent"",""why"":""REASON_B_independent""}}]"

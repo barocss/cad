@@ -1,0 +1,35 @@
+{
+  "status": "PASS",
+  "phase": "close and reopen require fresh session consent",
+  "changes": [],
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 536,
+  "observations": [
+    {
+      "label": "open-consent-boundary",
+      "sameFilename": "same-notes.bcad",
+      "sameOccurrenceIDs": [
+        "p1",
+        "p2",
+        "p3"
+      ],
+      "AConsentOpenAtDocumentSwitch": true,
+      "BRequiredFreshConsent": true,
+      "optOutAndReconsent": true,
+      "panelReopenRequiredConsent": true,
+      "documentUnchanged": true,
+      "actualExports": 3,
+      "retainedReactCallbackInvocation": "NOT_RUN; this driver exercises actual current public controls only",
+      "workerDelayedReply": "NOT_RUN; covered separately by bom-note-currentness-browser.mjs"
+    }
+  ],
+  "baseCommit": "ccb1565d96a54bde1af3545f8b751c71e40b12e6",
+  "rawReceiptSHA256": "6f64b77257e010cb0f9f5f8896bd1db89cac2cab8bb8e09aa05eddb39c2fc5ac",
+  "actualOutput": "/tmp/cad-quality-open-consent-actual01"
+}

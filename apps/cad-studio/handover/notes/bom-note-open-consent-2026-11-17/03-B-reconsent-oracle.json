@@ -1,0 +1,1 @@
+{"status": "PASS", "rows": 1, "qty": 3, "occurrences": ["p1", "p2", "p3"], "fullFieldEquality": true, "AFieldsAbsent": true, "bytes": 530, "sha256": "e2b9912273b81dec24e9af170e3bdfe7ebad6eab24f092f4ffd2a962d7b1377b"}
