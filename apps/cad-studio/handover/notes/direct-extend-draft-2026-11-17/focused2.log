@@ -1,0 +1,58 @@
+TAP version 13
+# Subtest: surface inspector invalid drafts identify their own inclusive range and remove all old measurements
+ok 1 - surface inspector invalid drafts identify their own inclusive range and remove all old measurements
+  ---
+  duration_ms: 8.314334
+  type: 'test'
+  ...
+# Subtest: inclusive surface endpoints still evaluate; id/domain/history changes immediately discard drafts
+ok 2 - inclusive surface endpoints still evaluate; id/domain/history changes immediately discard drafts
+  ---
+  duration_ms: 2.017209
+  type: 'test'
+  ...
+# Subtest: Split uses strict original-axis interior without restricting endpoint Iso/knot native semantics
+ok 3 - Split uses strict original-axis interior without restricting endpoint Iso/knot native semantics
+  ---
+  duration_ms: 18.943584
+  type: 'test'
+  ...
+# Subtest: blank and nonfinite Thickness drafts cannot silently reuse 2 or start Thicken
+ok 4 - blank and nonfinite Thickness drafts cannot silently reuse 2 or start Thicken
+  ---
+  duration_ms: 12.539834
+  type: 'test'
+  ...
+# Subtest: Extend requires an owned finite-positive raw draft and refuses stale numeric fallback
+ok 5 - Extend requires an owned finite-positive raw draft and refuses stale numeric fallback
+  ---
+  duration_ms: 50.205584
+  type: 'test'
+  ...
+# Subtest: whole surfaces retain the existing independent snapshot hint without promising native support
+ok 6 - whole surfaces retain the existing independent snapshot hint without promising native support
+  ---
+  duration_ms: 4.391792
+  type: 'test'
+  ...
+# Subtest: nonempty or malformed trim metadata blocks start without dropping data
+ok 7 - nonempty or malformed trim metadata blocks start without dropping data
+  ---
+  duration_ms: 1.717917
+  type: 'test'
+  ...
+# Subtest: current source trim state is recomputed after explicit Untrim and Undo
+ok 8 - current source trim state is recomputed after explicit Untrim and Undo
+  ---
+  duration_ms: 0.632333
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 909.021333
