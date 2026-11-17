@@ -1,0 +1,105 @@
+{
+  "issue": 256,
+  "parent": "1081cbb522ea",
+  "scope": "test/evidence only",
+  "final": {
+    "directory": "/tmp/cad-variant-late-boundary-02",
+    "status": "PASS",
+    "receiptSHA256": "e3cb4a0e7ade3a49ce2e963dc4d0da270f84fc8c2b82b09e963efb0e504671d2",
+    "observations": [
+      {
+        "label": "late-A-response-to-B-master",
+        "held": {
+          "held": {
+            "id": 4,
+            "revision": 4,
+            "ok": true,
+            "parameters": {
+              "HeightA": 40
+            }
+          },
+          "queued": 1
+        },
+        "incoming": [
+          {
+            "id": 6,
+            "revision": 6,
+            "parameters": {
+              "HeightB": 10
+            }
+          }
+        ],
+        "deliverySamples": [
+          {
+            "phase": "callback",
+            "fresh": false,
+            "volumes": [
+              1000.0000000000001
+            ]
+          },
+          {
+            "phase": "tick",
+            "fresh": false,
+            "volumes": [
+              1000.0000000000001
+            ]
+          },
+          {
+            "phase": "callback",
+            "fresh": false,
+            "volumes": [
+              1000.0000000000001
+            ]
+          },
+          {
+            "phase": "tick",
+            "fresh": false,
+            "volumes": [
+              1000.0000000000001
+            ]
+          },
+          {
+            "phase": "callback",
+            "fresh": false,
+            "volumes": [
+              1000.0000000000001
+            ]
+          },
+          {
+            "phase": "tick",
+            "fresh": false,
+            "volumes": [
+              1000.0000000000001
+            ]
+          }
+        ],
+        "FIFO": true,
+        "acceptedStatePreserved": true
+      }
+    ],
+    "errors": [],
+    "downloads": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "frozenSources": 513
+  },
+  "firstRun": {
+    "directory": "/tmp/cad-variant-late-boundary-01",
+    "status": "PASS",
+    "limitation": "Before held HeightA40 assertion and callback/tick observations",
+    "receiptSHA256": "be66e03c05a91936435fd0dec96bc2f71e34dd5919f664e7ef03d238e561882d"
+  },
+  "driverSHA256": "7d97c2ce55bc050032b263c6bedffef545e117bf2645a1618d025e40be07ab91",
+  "screenshotSHA256": "0702c0db1616b1820d8609dd27ad90862c840a4b0ffba2b22315463d4ed99f70",
+  "visualReview": "PASS: implementer and root viewed actual pixels; own fixture, no sensitive data",
+  "notRun": [
+    "boolean/choice cross-document",
+    "template/project/version/recovery/in-place combinations",
+    "cross-document STEP/3MF",
+    "product type/build (no product edits)"
+  ],
+  "issueClosure": "OPEN; bounded acceptance only"
+}
