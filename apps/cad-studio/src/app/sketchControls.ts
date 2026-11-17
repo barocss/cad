@@ -6,7 +6,7 @@ import { reopenedOrder } from '@barocss/cad-model/sketch/reopen';
 import { joinOpen } from '@barocss/cad-model/sketch/trim';
 import { rectangleOutline, startPicking } from '@barocss/cad-model/sketch/select';
 import { isSettled } from '@barocss/cad-model/sketch/rules';
-import { bezierError } from '@barocss/cad-model/sketch/bezier';
+import { bezierError, wellFormedBezier } from '@barocss/cad-model/sketch/bezier';
 import type { SketchShape } from '@barocss/cad-model/sketch/types';
 
 export function draftShapeOrder(sketch: SketchState): SketchShape[] {
@@ -28,6 +28,17 @@ export function activateDraftOutline(sketch: SketchState, index: number): Sketch
   if (!shape) return null;
   ordered.splice(index, 1);
   return { ...sketch, shape, done: ordered, activeOutlineIndex: index, picked: [], editDim: null };
+}
+
+/** Explicit saved-reference selection only. No coordinate/side-ID matching or geometry conversion. */
+export function activateDraftBezier(sketch: SketchState, source: SketchShape): SketchState | null {
+  if (sketch.editNode === undefined || (sketch.tool !== 'select' && sketch.tool !== 'dimension')
+    || sketch.band || source.construction || !wellFormedBezier(source) || bezierError(source.poles)) return null;
+  const ordered = draftShapeOrder(sketch), index = ordered.indexOf(source);
+  if (index < 0 || ordered.lastIndexOf(source) !== index) return null;
+  if (source === sketch.shape) return sketch;
+  ordered.splice(index, 1);
+  return { ...sketch, shape: source, done: ordered, activeOutlineIndex: index, picked: [], editDim: null };
 }
 
 /** Use the same ordered inputs for sketch hover and click. Hidden construction remains a boundary. */

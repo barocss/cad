@@ -29,7 +29,7 @@ const NONE: SketchPick[] = [];
  * tangent joints stay tangent. The app settles every edit (see sketch/settle.ts) and reports `error`. O16: the contents
  * on shadcn (Input, NativeSelect, Button, FIELD); the shell (its title) and the chip toggles are the studio's.
  */
-export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
+export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, referencePicker, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; referencePicker?: ReactNode; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
   onEditEllipseAxes?(): boolean;
   onDrivingLength?(source: Polygon, edge: number, value: number): boolean;
   /** Sets the picked outline entities or the dimension being edited in the viewport. */
@@ -110,6 +110,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
             {outlines.map(({ index }) => <option key={index} value={index}>Outline {index + 1}</option>)}
           </NativeSelect>
         </label>}
+      {referencePicker}
       {toolControls}
       {s && !finishError && <div className={'sk-status' + (status.warn ? ' open' : '')} role="status"><i />{status.text}</div>}
       {!finishError && !error && !splineError && coordinateFeedback && <div className="sk-status open" role="status" aria-label="Coordinate input result">{coordinateFeedback}</div>}
@@ -175,7 +176,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
           ];
         })}
       </div>}
-      {s?.kind === 'bezier' && wellFormedBezier(s) && <BezierSection s={s} onShape={onShape} onError={setSplineError} />}
+      {s?.kind === 'bezier' && wellFormedBezier(s) && <BezierSection key={`${sketch.editNode ?? 'new'}:${sketch.activeOutlineIndex ?? 'active'}`} s={s} onShape={onShape} onError={setSplineError} />}
       {s?.kind === 'polygon' && s.ellipse && ell && <EllipseSection s={s} def={s.ellipse} onShape={onShape} onError={setSplineError} />}
       {s?.kind === 'polygon' && s.spline && sketch.tool !== 'spline' && !s.pending && splineMatches(s) && <SplineSection s={s} def={s.spline} onShape={onShape} onError={setSplineError} />}
       {s?.kind === 'polygon' && !ell && s.closed && !s.pending && s.points.some((_, j) => canBeTangent(s.points as P2[], s.bulges, j)) && <>

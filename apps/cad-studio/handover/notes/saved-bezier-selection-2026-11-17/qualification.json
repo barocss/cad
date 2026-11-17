@@ -1,0 +1,54 @@
+[
+  {
+    "artifact": "cad-bezier-reselect-01",
+    "receiptSha256": "ed2b62a1a0e00645e82a056f81c24f592ff9598b22ed75f56ef85b7617247f97",
+    "status": "FAIL",
+    "phase": "cancel exact draft",
+    "oracles": [
+      {
+        "label": "02-original",
+        "exit": 0,
+        "signal": null,
+        "stdout": "{\"status\": \"PASS\", \"reader\": \"ezdxf\", \"version\": \"1.4.5\", \"sha256\": \"3f82a88a0266246abd78b89ac52737e1785e37aaebd2b6634cd6dd57ecfbda4e\", \"splines\": [{\"degree\": 2, \"poles\": [[0, 40], [10, 60], [20, 40]], \"samples\": [{\"t\": 0, \"bernstein\": [0, 40, 0], \"reader\": [0.0, 40.0, 0.0]}, {\"t\": 0.25, \"bernstein\": [5.0, 47.5, 0], \"reader\": [5.0, 47.5, 0.0]}, {\"t\": 0.5, \"bernstein\": [10.0, 50.0, 0], \"reader\": [10.0, 50.0, 0.0]}, {\"t\": 0.75, \"bernstein\": [15.0, 47.5, 0], \"reader\": [15.0, 47.5, 0.0]}, {\"t\": 1, \"bernstein\": [20, 40, 0], \"reader\": [20.0, 40.0, 0.0]}], \"endTangents\": [{\"t\": 0, \"literal\": [20, 40, 0], \"reader\": [20.0, 40.0, 0.0]}, {\"t\": 1, \"literal\": [20, -40, 0], \"reader\": [20.0, -40.0, 0.0]}]}, {\"degree\": 3, \"poles\": [[30, 40], [35, 55], [45, 55], [50, 40]], \"samples\": [{\"t\": 0, \"bernstein\": [30, 40, 0], \"reader\": [30.0, 40.0, 0.0]}, {\"t\": 0.25, \"bernstein\": [34.53125, 48.4375, 0], \"reader\": [34.53125, 48.4375, 0.0]}, {\"t\": 0.5, \"bernstein\": [40.0, 51.25, 0], \"reader\": [40.0, 51.25, 0.0]}, {\"t\": 0.75, \"bernstein\": [45.46875, 48.4375, 0], \"reader\": [45.46875, 48.4375, 0.0]}, {\"t\": 1, \"bernstein\": [50, 40, 0], \"reader\": [50.0, 40.0, 0.0]}], \"endTangents\": [{\"t\": 0, \"literal\": [15, 45, 0], \"reader\": [15.0, 45.0, 0.0]}, {\"t\": 1, \"literal\": [15, -45, 0], \"reader\": [15.0, -45.0, 0.0]}]}]}\n",
+        "stderr": ""
+      }
+    ],
+    "errors": [],
+    "sourceChanges": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  {
+    "artifact": "cad-bezier-reselect-02",
+    "receiptSha256": "d88d4791abeddf7601614cd819159cee4895d54b911ad9462bac37da594d5bee",
+    "status": "PASS",
+    "phase": "DXF 10-reopened",
+    "oracles": [
+      {
+        "label": "08-edited",
+        "exit": 0,
+        "signal": null,
+        "stdout": "{\"status\": \"PASS\", \"reader\": \"ezdxf\", \"version\": \"1.4.5\", \"sha256\": \"72e620fca8175470d7aa460be68bb09d87972bca577cd5462f1ed31ff9ddc41d\", \"splines\": [{\"degree\": 2, \"poles\": [[0, 40], [10, 60], [20, 40]], \"samples\": [{\"t\": 0, \"bernstein\": [0, 40, 0], \"reader\": [0.0, 40.0, 0.0]}, {\"t\": 0.25, \"bernstein\": [5.0, 47.5, 0], \"reader\": [5.0, 47.5, 0.0]}, {\"t\": 0.5, \"bernstein\": [10.0, 50.0, 0], \"reader\": [10.0, 50.0, 0.0]}, {\"t\": 0.75, \"bernstein\": [15.0, 47.5, 0], \"reader\": [15.0, 47.5, 0.0]}, {\"t\": 1, \"bernstein\": [20, 40, 0], \"reader\": [20.0, 40.0, 0.0]}], \"endTangents\": [{\"t\": 0, \"literal\": [20, 40, 0], \"reader\": [20.0, 40.0, 0.0]}, {\"t\": 1, \"literal\": [20, -40, 0], \"reader\": [20.0, -40.0, 0.0]}]}, {\"degree\": 3, \"poles\": [[30, 40], [35, 62], [45, 55], [50, 40]], \"samples\": [{\"t\": 0, \"bernstein\": [30, 40, 0], \"reader\": [30.0, 40.0, 0.0]}, {\"t\": 0.25, \"bernstein\": [34.53125, 51.390625, 0], \"reader\": [34.53125, 51.390625, 0.0]}, {\"t\": 0.5, \"bernstein\": [40.0, 53.875, 0], \"reader\": [40.0, 53.875, 0.0]}, {\"t\": 0.75, \"bernstein\": [45.46875, 49.421875, 0], \"reader\": [45.46875, 49.421875, 0.0]}, {\"t\": 1, \"bernstein\": [50, 40, 0], \"reader\": [50.0, 40.0, 0.0]}], \"endTangents\": [{\"t\": 0, \"literal\": [15, 66, 0], \"reader\": [15.0, 66.0, 0.0]}, {\"t\": 1, \"literal\": [15, -45, 0], \"reader\": [15.0, -45.0, 0.0]}]}]}\n",
+        "stderr": ""
+      },
+      {
+        "label": "10-reopened",
+        "exit": 0,
+        "signal": null,
+        "stdout": "{\"status\": \"PASS\", \"reader\": \"ezdxf\", \"version\": \"1.4.5\", \"sha256\": \"72e620fca8175470d7aa460be68bb09d87972bca577cd5462f1ed31ff9ddc41d\", \"splines\": [{\"degree\": 2, \"poles\": [[0, 40], [10, 60], [20, 40]], \"samples\": [{\"t\": 0, \"bernstein\": [0, 40, 0], \"reader\": [0.0, 40.0, 0.0]}, {\"t\": 0.25, \"bernstein\": [5.0, 47.5, 0], \"reader\": [5.0, 47.5, 0.0]}, {\"t\": 0.5, \"bernstein\": [10.0, 50.0, 0], \"reader\": [10.0, 50.0, 0.0]}, {\"t\": 0.75, \"bernstein\": [15.0, 47.5, 0], \"reader\": [15.0, 47.5, 0.0]}, {\"t\": 1, \"bernstein\": [20, 40, 0], \"reader\": [20.0, 40.0, 0.0]}], \"endTangents\": [{\"t\": 0, \"literal\": [20, 40, 0], \"reader\": [20.0, 40.0, 0.0]}, {\"t\": 1, \"literal\": [20, -40, 0], \"reader\": [20.0, -40.0, 0.0]}]}, {\"degree\": 3, \"poles\": [[30, 40], [35, 62], [45, 55], [50, 40]], \"samples\": [{\"t\": 0, \"bernstein\": [30, 40, 0], \"reader\": [30.0, 40.0, 0.0]}, {\"t\": 0.25, \"bernstein\": [34.53125, 51.390625, 0], \"reader\": [34.53125, 51.390625, 0.0]}, {\"t\": 0.5, \"bernstein\": [40.0, 53.875, 0], \"reader\": [40.0, 53.875, 0.0]}, {\"t\": 0.75, \"bernstein\": [45.46875, 49.421875, 0], \"reader\": [45.46875, 49.421875, 0.0]}, {\"t\": 1, \"bernstein\": [50, 40, 0], \"reader\": [50.0, 40.0, 0.0]}], \"endTangents\": [{\"t\": 0, \"literal\": [15, 66, 0], \"reader\": [15.0, 66.0, 0.0]}, {\"t\": 1, \"literal\": [15, -45, 0], \"reader\": [15.0, -45.0, 0.0]}]}]}\n",
+        "stderr": ""
+      }
+    ],
+    "errors": [],
+    "sourceChanges": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  }
+]

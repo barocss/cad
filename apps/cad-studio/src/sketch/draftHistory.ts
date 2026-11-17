@@ -1,3 +1,4 @@
+import { bezierError, wellFormedBezier } from '@barocss/cad-model/sketch/bezier';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { reopenedOrder } from '@barocss/cad-model/sketch/reopen';
 import { rectangleOutline } from '@barocss/cad-model/sketch/select';
@@ -44,6 +45,13 @@ function sameMainOutline(a: SketchShape, b: SketchShape): boolean {
 }
 
 function parkedOutlineIndex(step: Omit<DraftStep, 'kind' | 'doc'>, shape: SketchShape): number {
+  // A saved Bézier has no outline side-ID identity. Only the exact unique parked object owns its edit.
+  if (shape.kind === 'bezier') {
+    if (step.editNode === undefined || (step.tool !== 'select' && step.tool !== 'dimension') || step.shape === shape
+      || !wellFormedBezier(shape) || bezierError(shape.poles)) return -1;
+    const done = step.done ?? [], index = done.indexOf(shape);
+    return index >= 0 && done.lastIndexOf(shape) === index ? index : -1;
+  }
   const ids = shape.ids;
   if (step.editNode === undefined || (step.tool !== 'select' && step.tool !== 'dimension')
     || !isSettled(shape) || !ids?.length || ids.length !== shape.points.length || new Set(ids).size !== ids.length) return -1;
@@ -90,6 +98,8 @@ function sameSelectionPartition(expected: DraftStep, current: DraftStep): boolea
 
 function matches(expected: SketchStep, current: SketchStep): boolean {
   if (expected.kind === 'outline') {
+    if (expected.shape.kind === 'bezier' && current.kind === 'draft'
+      && [current.shape, ...(current.done ?? [])].filter(shape => shape === expected.shape).length !== 1) return false;
     if (expected.shape === current.shape) return true;
     if (current.kind === 'draft' && current.done?.[parkedOutlineIndex(current, expected.shape)] === expected.shape) return true;
     const main = current.kind === 'draft' ? orderedMainDraft(current)?.[0] : undefined;

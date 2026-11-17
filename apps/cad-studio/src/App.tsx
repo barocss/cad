@@ -1,3 +1,4 @@
+import { SavedBezierPicker } from './ui/SavedBezierPicker';
 import { coordinateMessage, currentCoordinateFeedback, type CoordinateFeedback, type CoordinateIntent } from './sketch/coordinateFeedback';
 import { freeSketchProfile } from './app/freeSketchProfile';
 import { modelWheelZoomAvailable, useWheelZoomPreference } from './viewport/wheelZoomPreference';
@@ -112,7 +113,7 @@ import { StepExportPanel } from './files/StepExportPanel';
 import { changesBeyondVariability } from './app/documentChanges';
 import { sameMeshes, withMasses, samePlacement, meshVolume } from './app/bodyResults';
 import { activeBandHighlight } from './app/bandHighlight';
-import { activateDraftOutline, draftShapeOrder, sketchCutInputs, TOOLS, sketchRegion, switchTool, detachSketchLink, bezierEdit } from './app/sketchControls';
+import { activateDraftBezier, activateDraftOutline, draftShapeOrder, sketchCutInputs, TOOLS, sketchRegion, switchTool, detachSketchLink, bezierEdit } from './app/sketchControls';
 import { ellipseError } from '@barocss/cad-model/sketch/ellipse';
 import { detachRoundedInsetRecipe, resizeRoundedInsetSource, roundedInsetSourceWidth, validateRoundedInsetDocument } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
 import { roundedInsetMinimumSpan } from '@barocss/cad-model/sketch/internal/roundedRectangleInset';
@@ -1917,6 +1918,7 @@ export function App() {
     setSketch(after);
     recordSketchDraft(before, after);
   });
+  const bezierPickerOwner = renderedSketch.current;
   const setActiveOutline = (next: SketchState) => {
     liveShape.current = next.shape;
     setSketchError(null);
@@ -3293,6 +3295,15 @@ export function App() {
         onToggleObjectKind={kind => setObjectSnapKinds(kinds => toggleObjectSnapKind(kinds, kind))}
         onExitObjectKinds={sketch.editDim ? () => sketchViewportActions.onDimEdit?.(null) : undefined} /><PathGapControls gap={pathGap} /><CircleChordControls circle={circleChord} /><OverlaidLinesControls scan={overlaidLines} /></>} toolLabel={TOOLS.find(t => t.tool === sketch.tool)!.label} finishError={sketchFinishError} error={sketchIssue?.ellipse && !ownsEllipseAxesRecovery(sketchIssue.ellipse, doc, sketch) ? null : sketchIssue?.reason ?? null}
         onEditEllipseAxes={ownsEllipseAxesRecovery(sketchIssue?.ellipse, doc, sketch) ? () => ownsEllipseAxesRecovery(sketchIssue?.ellipse, docNow.current, renderedSketch.current.draft) && renderedSketch.current.generation === sketchGeneration.current : undefined}
+        referencePicker={<SavedBezierPicker sketch={sketch} onActivate={source => {
+          if (docNow.current !== doc || renderedSketch.current.draft !== sketch
+            || renderedSketch.current.generation !== bezierPickerOwner.generation
+            || sketchGeneration.current !== bezierPickerOwner.generation || liveShape.current !== sketch.shape) return;
+          const ordered = draftShapeOrder(sketch), index = ordered.indexOf(source);
+          if (index < 0 || ordered.lastIndexOf(source) !== index) return;
+          const next = source.kind === 'bezier' ? activateDraftBezier(sketch, source) : activateDraftOutline(sketch, index);
+          if (next && next !== sketch) setActiveOutline(next);
+        }} />}
         onActivateOutline={sketch.editNode !== undefined && (sketch.tool === 'select' || sketch.tool === 'dimension') ? index => {
           const source = sketchCutInputs(sketch).shapes[index];
           const next = activateDraftOutline(sketch, draftShapeOrder(sketch).indexOf(source));
