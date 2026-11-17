@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { InstancePattern } from '@barocss/cad-model/engine/doc';
-import { axisOf, draftOf, patternEdit, patternOrigin, patternVector, restorePatternOccurrence } from '../src/ui/InstancePattern';
+import { axisOf, draftOf, fullCircleAngle, patternEdit, patternOrigin, patternVector, restorePatternOccurrence } from '../src/ui/InstancePattern';
 
 // Row 10 ③ audit 1 (#9): the pattern panel's Apply sends a direction or an axis only when the choice changed; one a chat
 // or a file made (-X, a diagonal) shows as Custom and stays as it is.
@@ -61,4 +61,17 @@ test('custom vector authoring and editing sends exact direction while cardinal c
   assert.equal(Number.isNaN(patternVector({ ...d, vectorX: '' })[0]), true);
   const c: InstancePattern = { id: 'pat2', seed: 'p1', kind: 'circular', count: 3, angle: 90, axis: [0, 3, 4], origin: [10, 20, 30] };
   assert.deepEqual(patternEdit(c, { ...draftOf(c), vectorZ: '-4' }), { id: c.id, count: 3, angle: 90, axis: [0, 3, -4] });
+});
+
+
+test('full circle is explicit draft spacing including the seed, preserves sign, and rejects invalid counts', () => {
+  const d = { ...draftOf(undefined), kind: 'circular' as const, count: '6', angle: '-90' };
+  assert.equal(fullCircleAngle(d), '-60');
+  assert.equal(d.angle, '-90');
+  for (const count of ['2', '3', '7', '64']) {
+    assert.equal(Number(fullCircleAngle({ ...d, count, angle: '90' })), 360 / Number(count));
+  }
+  for (const count of ['', ' ', '1', '65', '3.5', 'Infinity', 'NaN']) assert.equal(fullCircleAngle({ ...d, count }), undefined);
+  assert.equal(fullCircleAngle({ ...d, angle: '' }), '60');
+  assert.equal(fullCircleAngle({ ...d, angle: '0' }), '60');
 });

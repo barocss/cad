@@ -1,0 +1,170 @@
+{
+  "status": "PASS",
+  "qualification": "Explicit equal full-circle spacing of assembly occurrences, including the seed and preserving clockwise direction.",
+  "observations": [
+    {
+      "label": "four-counterclockwise",
+      "pattern": {
+        "seed": "cube",
+        "kind": "circular",
+        "count": 4,
+        "angle": 90,
+        "axis": [
+          0,
+          0,
+          1
+        ],
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "id": "pat1"
+      },
+      "positions": [
+        [
+          0,
+          30,
+          0
+        ],
+        [
+          -30,
+          0,
+          0
+        ],
+        [
+          0,
+          -30,
+          0
+        ]
+      ]
+    },
+    {
+      "label": "six-clockwise",
+      "pattern": {
+        "seed": "cube",
+        "kind": "circular",
+        "count": 6,
+        "angle": -60,
+        "axis": [
+          0,
+          0,
+          1
+        ],
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "id": "pat1"
+      },
+      "positions": [
+        [
+          15,
+          -25.980762113533157,
+          0
+        ],
+        [
+          -15,
+          -25.98076211353316,
+          0
+        ],
+        [
+          -30,
+          0,
+          0
+        ],
+        [
+          -15,
+          25.980762113533153,
+          0
+        ],
+        [
+          15,
+          25.980762113533157,
+          0
+        ]
+      ]
+    },
+    {
+      "label": "reopened",
+      "pattern": {
+        "seed": "cube",
+        "kind": "circular",
+        "count": 6,
+        "angle": -60,
+        "axis": [
+          0,
+          0,
+          1
+        ],
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "id": "pat1"
+      },
+      "positions": [
+        [
+          15,
+          -25.980762113533157,
+          0
+        ],
+        [
+          -15,
+          -25.98076211353316,
+          0
+        ],
+        [
+          -30,
+          0,
+          0
+        ],
+        [
+          -15,
+          25.980762113533153,
+          0
+        ],
+        [
+          15,
+          25.980762113533157,
+          0
+        ]
+      ]
+    },
+    {
+      "label": "explicit-partial-angle-remains-editable",
+      "pattern": {
+        "seed": "cube",
+        "kind": "circular",
+        "count": 6,
+        "angle": -30,
+        "axis": [
+          0,
+          0,
+          1
+        ],
+        "origin": [
+          0,
+          0,
+          0
+        ],
+        "id": "pat1"
+      }
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One cube seed; four and six occurrences about world Z. Native save/reopen and literal position oracle; no mates, nested assembly or neutral export certification."
+  ],
+  "visualReview": "PASS: screenshot directly reviewed; six placed cubes and count 6 / angle -60 controls visible."
+}

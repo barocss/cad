@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import type { InstancePattern, PartInstance } from '@barocss/cad-model/engine/doc';
-import type { AddPatternOptions, EditPatternOptions } from '@barocss/cad-model/assembly/patterns';
+import { PATTERN_MIN, PATTERN_MAX, type AddPatternOptions, type EditPatternOptions } from '@barocss/cad-model/assembly/patterns';
 import { Button } from '@/components/ui/button';
 import { FIELD } from './panelStyles';
 
@@ -41,6 +41,13 @@ export function patternEdit(pattern: InstancePattern, draft: Draft): EditPattern
   const vector = patternVector(draft), previous = pattern.kind === 'linear' ? pattern.dir : pattern.axis;
   const count = Number(draft.count), turned = vector.some((v, i) => v !== previous[i]) ? vector : undefined;
   return pattern.kind === 'linear' ? { id: pattern.id, count, spacing: Number(draft.spacing), ...(turned ? { dir: turned } : {}) } : { id: pattern.id, count, angle: Number(draft.angle), ...(turned ? { axis: turned } : {}), ...(moved ? { origin } : {}) };
+}
+
+/** Explicit full-circle drafting: count includes the seed; preserve a clockwise step's sign. */
+export function fullCircleAngle(draft: Draft): string | undefined {
+  const count = Number(draft.count);
+  if (!Number.isInteger(count) || count < PATTERN_MIN || count > PATTERN_MAX) return undefined;
+  return String((Number(draft.angle) < 0 ? -360 : 360) / count);
 }
 
 /** Restore only the chosen occurrence; the Model transaction validates identity and all remaining exclusions. */
@@ -86,6 +93,7 @@ export function InstancePatternControls({ inst, pattern, occurrenceOf, onAdd, on
       {kind === 'linear'
         ? <label className={FIELD}><span>Spacing mm</span><input aria-label="Pattern spacing" type="number" step="any" value={draft.spacing} onChange={e => set('spacing', e.target.value)} /></label>
         : <label className={FIELD}><span>Angle °</span><input aria-label="Pattern angle" type="number" step="any" value={draft.angle} onChange={e => set('angle', e.target.value)} /></label>}
+      {kind === 'circular' && <Button variant="ghost" disabled={fullCircleAngle(draft) === undefined} title="Set the angle to 360° divided by count, including the seed; keep the turn direction. Apply to commit." onClick={() => { const angle = fullCircleAngle(draft); if (angle !== undefined) set('angle', angle); }}>Space full circle</Button>}
       <label className={FIELD}><span>{kind === 'linear' ? 'Along' : 'About'}</span>
         <select aria-label="Pattern axis" value={draft.axis} onChange={e => set('axis', e.target.value)}>{([...Object.keys(AXES), 'Custom'] as Axis[]).map(a => <option key={a} value={a}>{a}</option>)}</select></label>
       {draft.axis === 'Custom' && <fieldset className="flex flex-col gap-1"><legend>{kind === 'linear' ? 'Direction vector' : 'Axis direction'}</legend>
