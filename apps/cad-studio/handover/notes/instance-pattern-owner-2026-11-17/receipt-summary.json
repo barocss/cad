@@ -1,0 +1,35 @@
+{
+  "status": "PASS",
+  "qualification": "A pending new pattern belongs to the selected seed; switching to another unpatterned instance must not reuse its controls or draft.",
+  "observations": [
+    {
+      "seed": "b2",
+      "count": 2,
+      "spacing": 17,
+      "position": [
+        87,
+        10,
+        0
+      ],
+      "originalInstancesPreserved": true,
+      "sameSeedCancelRetainsDraft": true,
+      "selectionDiscardsDraft": true,
+      "undoRedo": true,
+      "nativeSaveOpen": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Four top-level instances; new pattern selection ownership and current pattern editing. No nested assembly, mates or neutral exports."
+  ],
+  "sourceFrozenCount": 543,
+  "chromeProcessesLaunched": 1
+}

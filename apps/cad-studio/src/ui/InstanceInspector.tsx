@@ -66,7 +66,7 @@ export function InstanceInspector({ model, bearing, assembly, changes, onNotice:
     onGround={on => { const why = assembly.ground(inst.id, on); if (why) setToast({ title: 'Can’t fix this part in place', hint: why, detail: '' }); }}
     shared={inst.part ? sharing(doc, inst.part.id).length : 0} pending={inst.part ? doc.pendingParts?.[inst.part.id] : undefined}
     onEditPart={() => startInPlace(inst.id)} onIndependent={() => commitParts(makeIndependent(doc, inst.id))}
-    pattern={<InstancePatternControls inst={inst} pattern={doc.instancePatterns?.find(p => p.seed === inst.id)} occurrenceOf={inst.pattern ? doc.instancePatterns?.find(p => p.id === inst.pattern!.id) : undefined}
+    pattern={<InstancePatternControls key={inst.id} inst={inst} pattern={doc.instancePatterns?.find(p => p.seed === inst.id)} occurrenceOf={inst.pattern ? doc.instancePatterns?.find(p => p.id === inst.pattern!.id) : undefined}
       onAdd={o => patternEdit(() => addInstancePattern(doc, o), 'Pattern not changed', true)} onEdit={o => patternEdit(() => editInstancePattern(doc, o), 'Pattern not changed', true)}
       onDelete={id => patternEdit(() => deleteInstancePattern(doc, id))} onSkip={() => { patternEdit(() => skipOccurrence(doc, inst.id)); clearSelection(); }} />}
     looks={<InstanceLooksControls rows={instanceLookRows(inst, entry, doc)} readOnly={!!inst.pattern}
