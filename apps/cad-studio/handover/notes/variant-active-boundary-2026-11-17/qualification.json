@@ -1,0 +1,117 @@
+[
+  {
+    "artifact": "cad-variant-active-boundary-01",
+    "receiptSha256": "19be9a56f27c12eab64c11a8e6ae39d0b642d35c9f6233dbaf08785c0749f13c",
+    "status": "PASS",
+    "phase": "Explicit Show Master uses B default10",
+    "oracles": [
+      {
+        "label": "A-valid40",
+        "expectedStatus": "PASS",
+        "inputPath": "/tmp/cad-variant-active-boundary-01/A-valid40-oracle-input.json",
+        "inputSHA256": "bd96990181f27e1336a65e5e86fe4d40a25214ce206d8a7506f63f490c69ca0a",
+        "stdoutPath": "/tmp/cad-variant-active-boundary-01/A-valid40-oracle.json",
+        "stderrPath": "/tmp/cad-variant-active-boundary-01/A-valid40-oracle.stderr.txt",
+        "exitPath": "/tmp/cad-variant-active-boundary-01/A-valid40-oracle-exit.json",
+        "stdoutSHA256": "2103dd3d6af6ec0bcdf59a4a3204316acb8d6108e461fd84f3289e8de284a75f",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "exit": 0,
+        "signal": null,
+        "error": null,
+        "stdout": {
+          "status": "PASS",
+          "expectedVolume": 2000,
+          "expectedCentroid": [
+            5,
+            2.5,
+            20
+          ]
+        },
+        "stderr": "",
+        "parseError": null
+      },
+      {
+        "label": "A-invalid101-retains40",
+        "expectedStatus": "PASS",
+        "inputPath": "/tmp/cad-variant-active-boundary-01/A-invalid101-retains40-oracle-input.json",
+        "inputSHA256": "bd96990181f27e1336a65e5e86fe4d40a25214ce206d8a7506f63f490c69ca0a",
+        "stdoutPath": "/tmp/cad-variant-active-boundary-01/A-invalid101-retains40-oracle.json",
+        "stderrPath": "/tmp/cad-variant-active-boundary-01/A-invalid101-retains40-oracle.stderr.txt",
+        "exitPath": "/tmp/cad-variant-active-boundary-01/A-invalid101-retains40-oracle-exit.json",
+        "stdoutSHA256": "2103dd3d6af6ec0bcdf59a4a3204316acb8d6108e461fd84f3289e8de284a75f",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "exit": 0,
+        "signal": null,
+        "error": null,
+        "stdout": {
+          "status": "PASS",
+          "expectedVolume": 2000,
+          "expectedCentroid": [
+            5,
+            2.5,
+            20
+          ]
+        },
+        "stderr": "",
+        "parseError": null
+      },
+      {
+        "label": "B-saved-active22",
+        "expectedStatus": "PASS",
+        "inputPath": "/tmp/cad-variant-active-boundary-01/B-saved-active22-oracle-input.json",
+        "inputSHA256": "65b077dca74657b3058245dd2c1944a8bf9ad4c5f372eb82088c7436659f03b0",
+        "stdoutPath": "/tmp/cad-variant-active-boundary-01/B-saved-active22-oracle.json",
+        "stderrPath": "/tmp/cad-variant-active-boundary-01/B-saved-active22-oracle.stderr.txt",
+        "exitPath": "/tmp/cad-variant-active-boundary-01/B-saved-active22-oracle-exit.json",
+        "stdoutSHA256": "a5fec9e5f2bf649cf03872263c1e7c0b32b596600848b7cabb6a1aad4c05c27a",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "exit": 0,
+        "signal": null,
+        "error": null,
+        "stdout": {
+          "status": "PASS",
+          "expectedVolume": 1100,
+          "expectedCentroid": [
+            5,
+            2.5,
+            11
+          ]
+        },
+        "stderr": "",
+        "parseError": null
+      },
+      {
+        "label": "B-master10",
+        "expectedStatus": "PASS",
+        "inputPath": "/tmp/cad-variant-active-boundary-01/B-master10-oracle-input.json",
+        "inputSHA256": "d4924799f89ee5c21152219a953ea38559ca9579ca429aef63607fed45924323",
+        "stdoutPath": "/tmp/cad-variant-active-boundary-01/B-master10-oracle.json",
+        "stderrPath": "/tmp/cad-variant-active-boundary-01/B-master10-oracle.stderr.txt",
+        "exitPath": "/tmp/cad-variant-active-boundary-01/B-master10-oracle-exit.json",
+        "stdoutSHA256": "5fceac7fb35e605ad0a66e36239f6eca82eace3aa354ac8baf22c72d0e97f1a1",
+        "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "exit": 0,
+        "signal": null,
+        "error": null,
+        "stdout": {
+          "status": "PASS",
+          "expectedVolume": 500,
+          "expectedCentroid": [
+            5,
+            2.5,
+            5
+          ]
+        },
+        "stderr": "",
+        "parseError": null
+      }
+    ],
+    "errors": [],
+    "sourceChanges": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  }
+]
