@@ -10,7 +10,8 @@ import { nextFreeId } from '../util/ids';
 import { curvePatternDocumentProblem } from '../engine/curveFeaturePattern';
 import { drivenRefusal, expandPatterns } from './patterns';
 import { cutBlockedBy, cutBlockedWords } from './cuts';
-import { refusal } from '../engine/refusal';
+import { refusal, refused } from '../engine/refusal';
+import { checkPartEdit } from '../frames/skeleton';
 import { heldByRevision, heldLooks, type HeldLook } from './looks';
 
 /** Apply the existing root-only route contract to an incoming child, not the current assembly.
@@ -18,6 +19,18 @@ import { heldByRevision, heldLooks, type HeldLook } from './looks';
 function definitionRouteProblem(part: StudioDoc): string | undefined {
   try { assertRouteBundleDocument({ schema: 3, instances: [{ doc: part }] }); }
   catch (cause) { return `${cause instanceof Error ? cause.message : String(cause)} Detach linked route bundles before using this document as a part definition.`; }
+  return undefined;
+}
+
+/** Check the expanded result, including copies whose seed has no shared definition. Compare
+ * against the original so reducing a followed sketch's edge count cannot lose frame members. */
+function followedDefinitionProblem(before: StudioDoc, after: StudioDoc) {
+  for (const instance of after.instances ?? []) {
+    const previous = before.instances?.find(i => i.id === instance.id);
+    if (!previous || previous.doc === instance.doc) continue;
+    const problem = checkPartEdit(before, instance.id, instance.doc)[0];
+    if (problem) return problem;
+  }
   return undefined;
 }
 
@@ -68,7 +81,10 @@ export function acceptRevision(doc: StudioDoc, id: string): StudioDoc {
   const blocked = cutBlockedBy(doc, sharing(doc, id).map(i => i.id), p.doc); if (blocked) throw refusal('VALUE', cutBlockedWords(blocked, 'Accepting this revision'));
   const rest = Object.fromEntries(Object.entries(doc.pendingParts ?? {}).filter(([k]) => k !== id));
   const instances = (doc.instances ?? []).map((i): PartInstance => i.part?.id === id ? { ...i, doc: p.doc, part: { ...i.part, rev: p.rev, source: p.name } } : i);
-  return expandPatterns({ ...doc, instances, pendingParts: Object.keys(rest).length ? rest : undefined });
+  const next = expandPatterns({ ...doc, instances, pendingParts: Object.keys(rest).length ? rest : undefined });
+  const followed = followedDefinitionProblem(doc, next);
+  if (followed) throw refused(followed);
+  return next;
 }
 /**
  * A part edited in place inside its assembly (roadmap 10 ⑧), committed once. `owner` is a placed instance (a pattern's occurrence stands for its seed);
@@ -97,6 +113,8 @@ export function editDefinition(doc: StudioDoc, owner: string, part: StudioDoc): 
   // (A revision waiting for this definition is superseded by the edit: Accept could only silently undo it.)
   const pending = id && doc.pendingParts?.[id] ? Object.fromEntries(Object.entries(doc.pendingParts).filter(([k]) => k !== id)) : doc.pendingParts;
   const next = expandPatterns({ ...doc, instances, pendingParts: pending && Object.keys(pending).length ? pending : undefined });
+  const followed = followedDefinitionProblem(doc, next);
+  if (followed) return { error: followed.message };
   const taken = new Set((next.instances ?? []).filter(i => i.doc === part).map(i => i.id));
   return { doc: next, held: heldLooks(next).filter(h => taken.has(h.part)), changed: true };
 }

@@ -1,0 +1,26 @@
+{
+  "status": "PASS",
+  "qualification": "Revision acceptance preserves the sketch followed by an existing base frame.",
+  "limits": [
+    "Existing FRf2 base frames only."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1298,
+  "chromeProcessesLaunched": 1,
+  "sourceUnchanged": true,
+  "checks": [
+    "Invalid circle candidate remains pending after refused Accept",
+    "Held candidate Save and fresh Open preserve original and pending",
+    "Keep Rev A dismisses pending without changing parts",
+    "Valid 300 to 400 width revision accepted",
+    "Undo restores waiting candidate and old definition; Redo restores accepted definition",
+    "Accepted revision Save and fresh Open equality"
+  ],
+  "fixtureCorrection": "First fixed run reached held Save/Open then timed out on incorrect Dismiss label. Final frozen run uses Keep Rev A."
+}
