@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { PartInstance, StudioDoc } from '@barocss/cad-model/engine/doc';
-import { stepsOf } from '@barocss/cad-model/assembly/steps';
+import { MAX_STEP_EXPLODE, stepsOf } from '@barocss/cad-model/assembly/steps';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
@@ -9,13 +9,30 @@ import { DockSection } from '../layout/DockSection';
 import { Icon } from './atoms';
 import { FIELD, TICK } from './panelStyles';
 import type { StepOffer } from '../app/assemblySteps';
+import { stepExplodeOptions, stepExplodeValue } from '../app/stepExplodeDraft';
 
 // Roadmap 10 ⑥: the Steps panel — an ordered explanation of the assembly, part by part. The primary controls are the step list, Prev and
 // Next, the shown step's parts and its explode scale, the view; the note, the faded-waiting-parts toggle and the notes about missing
 // parts are under Details, closed. Presentation only: the parts are never moved (the viewer hides, highlights and explodes them for display).
 // Every edit is one undo step (the App's); the position (which step is shown) is the session's.
 
-const EXPLODES = [0, 0.5, 1, 2] as const;
+function StepExplodeInput({ value, onCommit }: { value: number; onCommit(value: number): void }) {
+  const [draft, setDraft] = useState(String(value)), [error, setError] = useState(false);
+  useEffect(() => { setDraft(String(value)); setError(false); }, [value]);
+  const apply = () => {
+    const next = stepExplodeValue(draft);
+    if (next === undefined) { setError(true); return; }
+    setError(false);
+    if (next !== value) onCommit(next);
+  };
+  return <div className="flex flex-col gap-1">
+    <div className="flex items-center gap-1"><label className={FIELD}><span>Scale</span><Input aria-label="Step explode scale" type="number" min="0" max={MAX_STEP_EXPLODE} step="any" className="w-24" value={draft} aria-invalid={error} onChange={e => { setDraft(e.target.value); setError(false); }} onKeyDown={e => {
+      if (e.key === 'Enter') { e.preventDefault(); apply(); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setDraft(String(value)); setError(false); }
+    }} /></label><Button size="xs" variant="ghost" aria-label="Set step explode scale" onClick={apply}>Set scale</Button></div>
+    {error && <span role="status" aria-label="Step explode refused" className="hud-error">Enter a scale from 0 to {MAX_STEP_EXPLODE}. 0 turns explode off.</span>}
+  </div>;
+}
 
 /** A text box that keeps what is typed and commits it (one undo step) when it is left or Enter is pressed; an empty value is not committed when `required`. */
 function CommitText({ value, onCommit, required, multiline, ...rest }: { value: string; onCommit(v: string): void; required?: boolean; multiline?: boolean; 'aria-label': string; className?: string; maxLength?: number }) {
@@ -70,7 +87,8 @@ export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, o
         </div>
         <label className={FIELD}><span>Explode</span>
           <NativeSelect aria-label="Step explode" className="w-24" value={String(step.explode ?? 0)} onChange={e => onExplode(step.id, Number(e.target.value))}>
-            {EXPLODES.map(k => <option key={k} value={k}>{k ? `×${k}` : 'Off'}</option>)}</NativeSelect></label>
+            {stepExplodeOptions(step.explode ?? 0).map(k => <option key={k} value={k}>{k ? `×${k}` : 'Off'}</option>)}</NativeSelect></label>
+        <StepExplodeInput key={step.id} value={step.explode ?? 0} onCommit={v => onExplode(step.id, v)} />
         <div className="flex flex-wrap gap-1">
           <Button size="xs" aria-label="Capture view" title={step.view ? 'Record the camera as this step\'s recommended view (replacing the last one)' : 'Record the camera as this step\'s recommended view'} onClick={() => onCaptureView(step.id)}>Capture view{step.view ? ' ·' : ''}</Button>
           <Button size="xs" aria-label="Reset view" disabled={!step.view} title={step.view ? 'Back to the recommended view' : 'No view recorded for this step'} onClick={onResetView}>Reset view</Button>

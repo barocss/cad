@@ -1,0 +1,29 @@
+{
+  "status": "PASS",
+  "qualification": "Exact fractional assembly-step explode scale display and explicit editing, presentation only.",
+  "observations": [
+    {
+      "importedScale": 0.75,
+      "editedScale": 1.125,
+      "otherStepScale": 1.25,
+      "preset": 0.5,
+      "off": 0,
+      "sourceUnchanged": true,
+      "undoRedo": true,
+      "actualNativeSaveFreshOpen": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Top-level assembly steps and display-only explode; no playback, nested steps or geometry/placement edits."
+  ],
+  "visualReview": "PASS: current scale 1.125 shown in Steps select/input and viewport Explode label. Active blocks highlighted; lower block partly clipped by viewport, no fit-all claim."
+}
