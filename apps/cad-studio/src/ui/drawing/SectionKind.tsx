@@ -5,7 +5,7 @@
 // (the cut face turned onto the view that sees its plane edge-on); an aligned section may be Full or Removed.
 import { useState } from 'react';
 import type { DrawingSection, DrawingViews, SectionStep } from '@barocss/cad-model/drawing/types';
-import { SCALES, scaleLabel } from '@barocss/cad-model/drawing/views';
+import { SheetScaleControl } from './SheetScaleControl';
 import { resetRemovedSectionPaperPosition } from './sectionPaperPosition';
 import { Icon } from '../atoms';
 import { CONTROL, FIELD, TICK } from './sheetShared';
@@ -41,8 +41,11 @@ export function SectionKind({ section: x, views, onSet, hatchPartScope = false, 
       const k = e.target.value;
       onSet(k === 'half' ? { ...plain(), half: { line: 'vertical', at: mid(0), cut: 'after' } } : k === 'offset' ? { ...plain(), steps: [{ past: mid(0), at: x.at }] } : k === 'removed' ? { ...plain(), removed: {} } : k === 'revolved' ? { ...plain(), revolved: true } : plain());
     }}><option value="full">Full</option>{!x.dir && <><option value="half">Half</option><option value="offset">Offset (stepped)</option></>}<option value="removed">Removed</option>{!x.dir && <option value="revolved">Revolved</option>}</NativeSelect></label>
-    {x.removed && <label className={FIELD}><span>Section {x.id} scale</span><NativeSelect className={CONTROL} aria-label={`Section ${x.id} scale`} value={x.removed.scale === undefined ? 'sheet' : String(x.removed.scale)} onChange={e => { const rest = { ...x.removed! }; delete rest.scale; onSet({ ...x, removed: e.target.value === 'sheet' ? rest : { ...rest, scale: Number(e.target.value) } }); }}>
-      <option value="sheet">The sheet’s</option>{x.removed.scale !== undefined && !SCALES.includes(x.removed.scale) && <option value={String(x.removed.scale)}>{x.removed.scale}:1 (custom)</option>}{SCALES.map(k => <option key={k} value={String(k)}>{scaleLabel(k)}</option>)}</NativeSelect></label>}
+    {x.removed && <SheetScaleControl owner={x} label={`Section ${x.id} scale`} target={`section ${x.id}`}
+      value={x.removed.scale} automaticValue="sheet" automaticLabel="The sheet’s" onChange={scale => {
+        const removed = { ...x.removed! }; delete removed.scale;
+        onSet({ ...x, removed: scale === undefined ? removed : { ...removed, scale } }); return true;
+      }} />}
     {x.removed && <Button variant="ghost" size="xs" aria-label={`Reset section ${x.id} paper position`} disabled={!x.removed.at || hatchPending}
       title={hatchPending ? 'Finish or cancel the section input before moving it.' : 'Automatically place this removed section on its assigned sheet. Keeps its cut, scale and annotations; does not shrink it if there is no room.'}
       onClick={() => onSet(resetRemovedSectionPaperPosition(x))}>Auto-place section</Button>}

@@ -10,6 +10,7 @@ function render(scale?: number) {
   const before = structuredClone(section), forbidden = () => assert.fail('readback must not edit the document');
   const html = renderToStaticMarkup(createElement(SectionKind, { section, views: null, onSet: forbidden }));
   assert.deepEqual(section, before);
+  assert.ok(html.includes('aria-label="Set custom section A scale"'));
   return html.match(/<select[^>]*aria-label="Section A scale"[^>]*>([\s\S]*?)<\/select>/)![1];
 }
 test('custom native scales have one exact selected option without rounding or mutation', () => {

@@ -13,7 +13,7 @@ export function sheetRatioScale(paper: string, model: string): number | null {
 }
 
 /** A draft is owned by the actual document/sheet settings, never its displayed numeric value. */
-export function SheetScaleControl({ owner, value, automatic, onChange, label = 'Scale', target = 'sheet' }: { label?: string; target?: string; owner: object; value?: number; automatic?: number; onChange(scale: number | undefined): boolean }) {
+export function SheetScaleControl({ owner, value, automatic, onChange, label = 'Scale', target = 'sheet', automaticValue = 'auto', automaticLabel = 'Auto' }: { automaticValue?: string; automaticLabel?: string; label?: string; target?: string; owner: object; value?: number; automatic?: number; onChange(scale: number | undefined): boolean }) {
   const [draft, setDraft] = useState<{ owner: object; paper: string; model: string; error: boolean } | null>(null);
   const current = draft?.owner === owner ? draft : null;
   const apply = () => {
@@ -23,8 +23,8 @@ export function SheetScaleControl({ owner, value, automatic, onChange, label = '
     if (scale === value || onChange(scale)) setDraft(null);
   };
   return <>
-    <label className={FIELD}><span>{label}</span><NativeSelect className={CONTROL} aria-label={label} value={value ?? 'auto'} onChange={e => { if (onChange(e.target.value === 'auto' ? undefined : Number(e.target.value))) setDraft(null); }}>
-      <option value="auto">Auto{automatic !== undefined && value === undefined ? ` (${scaleLabel(automatic)})` : ''}</option>
+    <label className={FIELD}><span>{label}</span><NativeSelect className={CONTROL} aria-label={label} value={value ?? automaticValue} onChange={e => { if (onChange(e.target.value === automaticValue ? undefined : Number(e.target.value))) setDraft(null); }}>
+      <option value={automaticValue}>{automaticLabel}{automatic !== undefined && value === undefined ? ` (${scaleLabel(automatic)})` : ''}</option>
       {value !== undefined && !SCALES.includes(value) && <option value={value}>{value}:1 (custom)</option>}
       {SCALES.map(s => <option key={s} value={s}>{scaleLabel(s)}</option>)}
     </NativeSelect></label>
