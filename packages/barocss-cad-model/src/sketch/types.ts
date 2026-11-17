@@ -59,6 +59,8 @@ export interface SketchState { plane: SketchPlane; anchor?: SketchAnchor; /** Cl
   editNode?: number;
   /** A reopened sketch: the side ids of its stored main profile, so Finish keeps that shape first even when Select edits another one. */
   mainIds?: string[];
+  /** Transient Clear-profile reservation; never serialized into the model. Undo restores it with the draft. */
+  clearedSideIds?: string[];
   /** Explicit linked profile; manual geometry or plane edits detach it. */
   association?: PlanarFaceOutlineInsetAssociation;
   associationDetached?: boolean;

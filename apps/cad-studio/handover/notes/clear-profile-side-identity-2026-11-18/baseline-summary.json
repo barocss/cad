@@ -1,0 +1,116 @@
+{
+  "status": "PASS",
+  "phase": "open feature editor 1",
+  "sourceFrozenCount": 1074,
+  "sourceAfterCount": 1074,
+  "sourceAfterCleanupCount": 1074,
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": [],
+  "observations": [
+    {
+      "label": "clear-and-redraw-side-identity",
+      "accepted": true,
+      "originalTags": {
+        "outer": [
+          "e1",
+          "e2",
+          "e3"
+        ]
+      },
+      "newTags": {
+        "outer": [
+          "e1",
+          "e2",
+          "e3"
+        ]
+      },
+      "originalReference": {
+        "id": "n2",
+        "kind": "fillet",
+        "parent": {
+          "node": 1,
+          "side": "solid"
+        },
+        "edges": [
+          "n1.side[e1]|n1.top"
+        ],
+        "radius": 1,
+        "sigs": {
+          "n1.side[e1]|n1.top": {
+            "k": "line",
+            "p": [
+              20,
+              0,
+              10
+            ],
+            "d": [
+              1,
+              0,
+              0
+            ],
+            "s": 40
+          }
+        }
+      },
+      "newReference": {
+        "id": "n2",
+        "kind": "fillet",
+        "parent": {
+          "node": 1,
+          "side": "solid"
+        },
+        "edges": [
+          "n1.side[e1]|n1.top"
+        ],
+        "radius": 1,
+        "sigs": {
+          "n1.side[e1]|n1.top": {
+            "k": "line",
+            "p": [
+              20,
+              0,
+              10
+            ],
+            "d": [
+              1,
+              0,
+              0
+            ],
+            "s": 40
+          }
+        }
+      },
+      "reusedDeletedTags": [
+        "e1",
+        "e2",
+        "e3"
+      ],
+      "points": [
+        [
+          0,
+          8
+        ],
+        [
+          40,
+          8
+        ],
+        [
+          8,
+          38
+        ]
+      ],
+      "originalNativeVolumes": [
+        5991.479840096534
+      ],
+      "newNativeVolumes": [
+        5991.47984009648
+      ]
+    }
+  ]
+}

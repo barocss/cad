@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "phase": "Finish sketch 04-finished",
+  "sourceFrozenCount": 561,
+  "sourceAfterCount": 561,
+  "sourceAfterCleanupCount": 561,
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": [],
+  "observations": [
+    {
+      "initialShapes": 2,
+      "restoredShapes": 2
+    }
+  ]
+}

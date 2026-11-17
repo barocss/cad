@@ -1,3 +1,4 @@
+import { clearProfileIdentity, prepareClearedProfile } from './clearedProfileIdentity';
 import { manualSketchRegion } from './manualSketchRegion';
 import { readOwnedNativeEdges, ownsNativeEdgeCopy } from '../app/ownedNativeEdgeCopy';
 import { nativeEdgeCurveSource } from '../app/nativeEdgeCurveSource';
@@ -189,7 +190,7 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
   };
   const clearSketchProfile = () => {
     if (!sketch || !ownsSketch() || (!sketch.shape && !sketch.done?.length)) return;
-    replaceDraftShapes(sketch, []);
+    commitDraft(sketch, clearProfileIdentity(detachSketchLink(sketch)));
   };
   const dragTrim = (source: DragTrimOwner, plan: DragTrimPlan) => {
     if (source.sketch !== sketch || source.doc !== doc || source.scope !== acceptanceScope || !ownsSketch()) return;
@@ -339,7 +340,16 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
     // A reopened sketch keeps its main profile first (the first outer shape is the main one).
     // (Open lines and arcs meeting end to end are one outline.)
     // Allocate current shape IDs here; unchanged legacy construction records are reconciled below.
-    const { authored, protectedShapes, joined } = sketchFinishInputs(sketch);
+    let finishing = sketch;
+    if (sketch.clearedSideIds !== undefined) {
+      if (sketch.band || stored?.kind === 'sketch' && stored.profile === 'band') {
+        setFinishRefusal({ generation: requestedGeneration, message: 'A band cannot be replaced after Clear profile. Press Escape to cancel sketch editing, then reopen the original band; or create a separate sketch.' });
+        return;
+      }
+      try { finishing = prepareClearedProfile(sketch); }
+      catch (error) { setFinishRefusal({ generation: requestedGeneration, message: String(error instanceof Error ? error.message : error) }); return; }
+    }
+    const { authored, protectedShapes, joined } = sketchFinishInputs(finishing);
     const openChain = sketch.band ? undefined : unfinishedChain(joined);
     if (openChain) {
       setFinishRefusal({ generation: requestedGeneration, message: openChainFinishGuidance(joined) });

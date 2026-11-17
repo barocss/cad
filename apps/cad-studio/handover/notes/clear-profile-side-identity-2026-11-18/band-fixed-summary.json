@@ -1,0 +1,26 @@
+{
+  "status": "PASS",
+  "phase": "Finish sketch 02-band-undo-edit-recovered",
+  "sourceFrozenCount": 561,
+  "sourceAfterCount": 561,
+  "sourceAfterCleanupCount": 561,
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": [],
+  "observations": [
+    {
+      "refused": true,
+      "clearUndoRedo": true,
+      "rectangleUndoUnchanged": true,
+      "escapeReopen": true,
+      "width": 4,
+      "expectedVolume": 1343.7167544041135,
+      "actualVolume": 1343.7167544041145
+    }
+  ]
+}

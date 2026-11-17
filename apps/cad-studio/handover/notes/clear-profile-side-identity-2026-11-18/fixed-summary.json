@@ -1,0 +1,116 @@
+{
+  "status": "PASS",
+  "phase": "fresh Open 12-reopened",
+  "sourceFrozenCount": 1076,
+  "sourceAfterCount": 1076,
+  "sourceAfterCleanupCount": 1076,
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": [],
+  "observations": [
+    {
+      "label": "clear-and-redraw-side-identity",
+      "accepted": false,
+      "originalTags": {
+        "outer": [
+          "e1",
+          "e2",
+          "e3"
+        ]
+      },
+      "newTags": {
+        "outer": [
+          "e1",
+          "e2",
+          "e3"
+        ]
+      },
+      "originalReference": {
+        "id": "n2",
+        "kind": "fillet",
+        "parent": {
+          "node": 1,
+          "side": "solid"
+        },
+        "edges": [
+          "n1.side[e1]|n1.top"
+        ],
+        "radius": 1,
+        "sigs": {
+          "n1.side[e1]|n1.top": {
+            "k": "line",
+            "p": [
+              20,
+              0,
+              10
+            ],
+            "d": [
+              1,
+              0,
+              0
+            ],
+            "s": 40
+          }
+        }
+      },
+      "newReference": {
+        "id": "n2",
+        "kind": "fillet",
+        "parent": {
+          "node": 1,
+          "side": "solid"
+        },
+        "edges": [
+          "n1.side[e1]|n1.top"
+        ],
+        "radius": 1,
+        "sigs": {
+          "n1.side[e1]|n1.top": {
+            "k": "line",
+            "p": [
+              20,
+              0,
+              10
+            ],
+            "d": [
+              1,
+              0,
+              0
+            ],
+            "s": 40
+          }
+        }
+      },
+      "toasts": [
+        "The selected edge no longer existsAn earlier edit changed the shape around it. Select the edge again and re-apply the feature.Detailsno edge named n1.side[e1]|n1.top; edges: n1.bottom|n1.side[e4], n1.side[e4]|n1.side[e5], n1.side[e4]|n1.top, n1.side[e4]|n1.side[e6], n1.bottom|n1.side[e5], n1.side[e5]|n1.side[e6], n1.side[e5]|n1.top, n1.bottom|n1.side[e6], n1.side[e6]|n1.top"
+      ],
+      "originalNativeVolumes": [
+        5991.479840096534
+      ],
+      "refusalPreservedNativeVolumes": [
+        5991.479840096534
+      ]
+    },
+    {
+      "label": "plain-replacement-fresh-identities",
+      "oldTags": [
+        "e1",
+        "e2",
+        "e3"
+      ],
+      "newTags": [
+        "e4",
+        "e5",
+        "e6"
+      ],
+      "undoRedo": true,
+      "reopened": true
+    }
+  ]
+}
