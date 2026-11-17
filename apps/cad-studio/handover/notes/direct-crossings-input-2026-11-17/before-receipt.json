@@ -1,0 +1,33 @@
+{
+  "status": "PASS",
+  "qualification": "Observe blank crossing-plane input retaining the previous result and enabled Find",
+  "visualReview": "Before01 and after01/02 directly and independently pixel-inspected; synthetic fixture, no personal information.",
+  "reads": [],
+  "oracles": [],
+  "files": [],
+  "downloads": [],
+  "observations": [
+    {
+      "baseline": true,
+      "blank": true,
+      "findEnabled": true,
+      "crossingRows": 1,
+      "docAndSelectionExact": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One authored degree1 line and literal affine crossing; no new curve-kind or native geometry qualification."
+  ],
+  "chromeProcessesLaunched": 1,
+  "phase": "actual Studio start",
+  "rawReceiptSHA256": "fe7bb64b4d8baeff2a331c7a1674764a2c59bd5209306f72b748aded0038646d",
+  "sourceCount": 533
+}

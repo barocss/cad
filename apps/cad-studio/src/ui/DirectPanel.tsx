@@ -152,12 +152,13 @@ function CurveTools({ id, direct, run, added }: { id: string; direct: DirectGeom
 
 /** Where the curve crosses a plane square to X, Y or Z, at a value. */
 function Crossings({ id, direct }: { id: string; direct: DirectGeometry }) {
-  const [axis, setAxis] = useState<'x' | 'y' | 'z'>('z'), [at, setAt] = useState(0);
+  const [axis, setAxis] = useState<'x' | 'y' | 'z'>('z'), [atText, setAtText] = useState('0');
+  const at = surfaceParameter(atText);
   const [read, setRead] = useState<{
     direct: DirectGeometry; id: string; axis: typeof axis; at: number;
     found: ReturnType<typeof curvePlaneCrossings> | null; note: string | null;
   } | null>(null);
-  const current = read && read.direct === direct && read.id === id && read.axis === axis && read.at === at ? read : null;
+  const current = at !== null && read && read.direct === direct && read.id === id && read.axis === axis && read.at === at ? read : null;
   // Hide old answers on this render, then discard them so Undo cannot revive them.
   // Plane inputs stay independent of the immutable geometry snapshot.
   if (read && !current) setRead(null);
@@ -165,8 +166,10 @@ function Crossings({ id, direct }: { id: string; direct: DirectGeometry }) {
   return <>
     <div className="card-title" style={{ marginTop: 8 }}>CROSSINGS</div>
     <label className={FIELD}><span>Plane</span><NativeSelect className={CONTROL} aria-label="Crossing plane" value={axis} onChange={e => setAxis(e.target.value as 'x' | 'y' | 'z')}><option value="x">X =</option><option value="y">Y =</option><option value="z">Z =</option></NativeSelect></label>
-    <NumberField label="At" value={at} onChange={setAt} />
-    <Button variant="ghost" aria-label="Find crossings" onClick={() => {
+    <label className={FIELD}><span>At</span><Input type="number" step="any" className="w-24" aria-label="At" value={atText} aria-invalid={at === null}
+      onChange={e => setAtText(e.target.value)} /></label>
+    <Button variant="ghost" aria-label="Find crossings" disabled={at === null} onClick={() => {
+      if (at === null) return;
       const owner = { direct, id, axis, at };
       try { setRead({ ...owner, found: curvePlaneCrossings(direct, id, axis, at), note: null }); }
       catch (e) { setRead({ ...owner, found: null, note: e instanceof Error ? e.message : String(e) }); }

@@ -75,9 +75,9 @@ function harness(direct: DirectGeometry) {
   return {
     render, setDirect(next: DirectGeometry) { direct = next; }, setId(next: string) { id = next; },
     axis(axis: 'x' | 'y' | 'z') { (field(render(), 'Crossing plane').onChange as (event: { target: { value: string } }) => void)({ target: { value: axis } }); },
-    at(at: number) { (field(render(), 'At').onChange as (value: number) => void)(at); },
+    at(at: number | string) { (field(render(), 'At').onChange as (event: { target: { value: string } }) => void)({ target: { value: String(at) } }); },
     find() { (field(render(), 'Find crossings').onClick as () => void)(); return render(); },
-    retained(axis: string, at: number) { const view = render(); assert.equal(field(view, 'Crossing plane').value, axis); assert.equal(field(view, 'At').value, at); },
+    retained(axis: string, at: number) { const view = render(); assert.equal(field(view, 'Crossing plane').value, axis); assert.equal(field(view, 'At').value, String(at)); },
     cleanup() { shared.__crossingsHooks = before; },
   };
 }
@@ -135,5 +135,41 @@ test('immutable snapshot or selected ID change invalidates answers even when sou
     h.setDirect(original); cleared(h.render()); assert.equal(crossings(h.find()).length, 1);
     h.setId('other'); cleared(h.render()); h.setId('line1'); cleared(h.render());
     assert.equal(crossings(h.find()).length, 1); assert.deepEqual(original, before);
+  } finally { h.cleanup(); }
+});
+
+
+test('blank and nonfinite raw input discards answers and guarded Find cannot reuse the previous plane', () => {
+  const original = source(), before = structuredClone(original), h = harness(original);
+  try {
+    h.axis('x');
+    for (const invalid of ['', ' ', 'Infinity', '-Infinity', 'NaN', '1e309']) {
+      h.at(7); assert.deepEqual(crossings(h.find()), ['t 0.5 7, -7, 0']);
+      h.at(invalid); cleared(h.render());
+      assert.equal(field(h.render(), 'At').value, invalid);
+      assert.equal(field(h.render(), 'At')['aria-invalid'], true);
+      assert.equal(field(h.render(), 'Find crossings').disabled, true);
+      cleared(h.find()); // Invoke even the disabled control's handler: admission still refuses.
+      h.at(7); cleared(h.render()); // Re-entering the old number does not revive its answer.
+      assert.equal(field(h.render(), 'Find crossings').disabled, false);
+      h.at(8); cleared(h.render());
+      assert.deepEqual(crossings(h.find()), ['t 0.57143 8, -7, 0']);
+    }
+    assert.deepEqual(original, before);
+  } finally { h.cleanup(); }
+});
+
+test('invalid raw input survives source and plane changes without reviving a previous answer or error', () => {
+  const original = source(), moved = directOps.move(original, ['line1'], [0, 0, 10]), h = harness(original);
+  try {
+    assert.match(content(h.find()), /lies in the plane Z = 0/);
+    h.at(''); cleared(h.render());
+    h.setDirect(moved); cleared(h.render());
+    h.axis('x'); cleared(h.render());
+    h.setDirect(original); cleared(h.render());
+    assert.equal(field(h.render(), 'At').value, '');
+    cleared(h.find());
+    h.at(7); cleared(h.render());
+    assert.deepEqual(crossings(h.find()), ['t 0.5 7, -7, 0']);
   } finally { h.cleanup(); }
 });

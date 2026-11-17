@@ -1,0 +1,33 @@
+{
+  "status": "PASS",
+  "qualification": "Blank crossing input admission and current-source query ownership",
+  "visualReview": "Before01 and after01/02 directly and independently pixel-inspected; synthetic fixture, no personal information.",
+  "reads": [],
+  "oracles": [],
+  "files": [],
+  "downloads": [],
+  "observations": [
+    {
+      "baseline": false,
+      "blank": true,
+      "findEnabled": false,
+      "crossingRows": 0,
+      "docAndSelectionExact": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One authored degree1 line and literal affine crossing; no new curve-kind or native geometry qualification."
+  ],
+  "chromeProcessesLaunched": 1,
+  "phase": "actual Studio start",
+  "rawReceiptSHA256": "1bb36ebf80df067654c173445e14428f7b6f4691173545840174fa9b876881f8",
+  "sourceCount": 533
+}
