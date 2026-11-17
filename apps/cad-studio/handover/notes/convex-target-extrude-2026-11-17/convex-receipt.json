@@ -1,0 +1,771 @@
+{
+  "status": "PASS",
+  "qualification": "Qualify a literal rectangle in the Front XZ rectangle to convex quadrilateral frame and its original opposing native end face.",
+  "visualReview": "ROOT_MUST_VIEW_SCREENSHOTS",
+  "states": [
+    {
+      "label": "01-translated-preview",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "polygon",
+            "points": [
+              [
+                -5,
+                -3
+              ],
+              [
+                15,
+                -3
+              ],
+              [
+                15,
+                9
+              ],
+              [
+                -5,
+                7
+              ]
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "from": 20,
+            "height": 5
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              6
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 3
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1099.9999999999998,
+            "centroid": [
+              17.303030303030308,
+              77.5,
+              -4.484848484848484
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": [
+          "b3"
+        ]
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": [],
+          "sketches": [
+            2
+          ]
+        },
+        "bodies": 1,
+        "active": "extrude",
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": "ExtrudepreviewProfileSketch 3End facen1.bottomDepthDistanceTo faceCancelApply",
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 5",
+        "Sketch \u00b7 rectangle"
+      ],
+      "dirty": false,
+      "historyControls": [
+        false,
+        true
+      ]
+    },
+    {
+      "label": "02-translated-accepted",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "polygon",
+            "points": [
+              [
+                -5,
+                -3
+              ],
+              [
+                15,
+                -3
+              ],
+              [
+                15,
+                9
+              ],
+              [
+                -5,
+                7
+              ]
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "from": 20,
+            "height": 5
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              6
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "kind": "face-end-extrude",
+            "sketch": 2,
+            "target": {
+              "body": {
+                "node": 1,
+                "side": "solid"
+              },
+              "feature": "n1",
+              "face": "n1.bottom"
+            },
+            "id": "n3"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1099.9999999999998,
+            "centroid": [
+              17.303030303030308,
+              77.5,
+              -4.484848484848484
+            ],
+            "massRef": null
+          },
+          {
+            "key": "b3",
+            "volume": 1200.0000000000005,
+            "centroid": [
+              17,
+              90,
+              -4.000000000000001
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": [],
+          "sketches": [
+            2
+          ]
+        },
+        "bodies": 2,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 5",
+        "Extrude to face"
+      ],
+      "dirty": true,
+      "historyControls": [
+        false,
+        true
+      ]
+    },
+    {
+      "label": "03-travel-refused",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "polygon",
+            "points": [
+              [
+                -5,
+                -3
+              ],
+              [
+                15,
+                -3
+              ],
+              [
+                15,
+                9
+              ],
+              [
+                -5,
+                7
+              ]
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "from": 20,
+            "height": 5
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              6
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "kind": "face-end-extrude",
+            "sketch": 2,
+            "target": {
+              "body": {
+                "node": 1,
+                "side": "solid"
+              },
+              "feature": "n1",
+              "face": "n1.bottom"
+            },
+            "id": "n3"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1099.9999999999998,
+            "centroid": [
+              17.303030303030308,
+              77.5,
+              -4.484848484848484
+            ],
+            "massRef": null
+          },
+          {
+            "key": "b3",
+            "volume": 1200.0000000000005,
+            "centroid": [
+              17,
+              90,
+              -4.000000000000001
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": [],
+          "sketches": [
+            2
+          ]
+        },
+        "bodies": 2,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 5",
+        "Extrude to face"
+      ],
+      "dirty": true,
+      "historyControls": [
+        false,
+        true
+      ]
+    },
+    {
+      "label": "04-translated-post-open",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "polygon",
+            "points": [
+              [
+                -5,
+                -3
+              ],
+              [
+                15,
+                -3
+              ],
+              [
+                15,
+                9
+              ],
+              [
+                -5,
+                7
+              ]
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "from": 40,
+            "height": 5
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              6
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "kind": "face-end-extrude",
+            "sketch": 2,
+            "target": {
+              "body": {
+                "node": 1,
+                "side": "solid"
+              },
+              "feature": "n1",
+              "face": "n1.bottom"
+            },
+            "id": "n3"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1099.9999999999998,
+            "centroid": [
+              17.303030303030308,
+              57.5,
+              -4.484848484848484
+            ],
+            "massRef": null
+          },
+          {
+            "key": "b3",
+            "volume": 2400.000000000001,
+            "centroid": [
+              17,
+              80,
+              -4.000000000000001
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 2,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 5",
+        "Extrude to face"
+      ],
+      "dirty": true,
+      "historyControls": [
+        false,
+        true
+      ]
+    }
+  ],
+  "reads": [],
+  "oracles": [],
+  "files": [
+    {
+      "name": "CONVEX_TARGET-face-end.bcad",
+      "bytes": 1549,
+      "sha256": "c0b02007ced58d4a6535b8cebb81fedc460897a0f7b595f8212e246b80a5b414"
+    }
+  ],
+  "downloads": [],
+  "observations": [
+    {
+      "label": "translated-applied",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 80,
+      "travel": 20,
+      "extrusionVolumeMm3": 1200,
+      "nativeCorners": 16
+    },
+    {
+      "label": "negative-world-target-moved",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 70,
+      "travel": 30,
+      "extrusionVolumeMm3": 1800,
+      "nativeCorners": 16
+    },
+    {
+      "label": "translated-first-undo",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 80,
+      "travel": 20,
+      "extrusionVolumeMm3": 1200,
+      "nativeCorners": 16
+    },
+    {
+      "label": "translated-first-redo",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 70,
+      "travel": 30,
+      "extrusionVolumeMm3": 1800,
+      "nativeCorners": 16
+    },
+    {
+      "label": "translated-reopened",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 70,
+      "travel": 30,
+      "extrusionVolumeMm3": 1800,
+      "nativeCorners": 16
+    },
+    {
+      "label": "translated-post-open-target-moved",
+      "offset": [
+        12,
+        100,
+        -7
+      ],
+      "normalAxis": 1,
+      "sourceExtent": 100,
+      "targetAndEndExtent": 60,
+      "travel": 40,
+      "extrusionVolumeMm3": 2400,
+      "nativeCorners": 16
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One Front XZ rectangle to convex quadrilateral rectangle, positive travel, one current opposed native convex quadrilateral cap, desktop WebGPU."
+  ],
+  "sourceBeforeCount": 5,
+  "virtualSources": [
+    {
+      "label": "inspector",
+      "hash": "d59d19d5746403fea1664792b7bfe4f12c50cf79b4661a53c27d2412c7710bcc",
+      "virtualInputExcluded": "<checkout>/apps/cad-studio/translated-extrude-end-face-inspector.ts"
+    }
+  ],
+  "sourceFrozenCount": 1070,
+  "sourceAfterCount": 1070,
+  "sourceAfterCleanupCount": 1070,
+  "phase": "open feature editor target start Z",
+  "sourceUnchanged": true
+}

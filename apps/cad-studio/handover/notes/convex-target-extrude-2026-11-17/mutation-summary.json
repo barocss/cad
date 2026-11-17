@@ -1,0 +1,59 @@
+{
+  "source": "packages/barocss-cad-model/src/engine/faceEndExtrude.ts",
+  "sourceHashBefore": "1739798298786999f0be16d4d6420226965cf340a4cf681f2e99e03b6808d226",
+  "sourceHashAfter": "1739798298786999f0be16d4d6420226965cf340a4cf681f2e99e03b6808d226",
+  "runs": [
+    {
+      "name": "baseline-before",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 41,
+      "fail": 0
+    },
+    {
+      "name": "omit-projected-containment",
+      "substitution": [
+        "if (!projected.every(box.contains)) throw invalid('the target face must contain the entire projected profile.');",
+        ""
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 39,
+      "fail": 2,
+      "killed": true
+    },
+    {
+      "name": "omit-strict-convexity",
+      "substitution": [
+        "winding*turn(polygon[i],polygon[(i+1)%polygon.length],polygon[j]) <= 0n",
+        "false"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 40,
+      "fail": 1,
+      "killed": true
+    },
+    {
+      "name": "omit-maximum-edge-count",
+      "substitution": [
+        "loop.coedges.length > 16",
+        "false"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 40,
+      "fail": 1,
+      "killed": true
+    },
+    {
+      "name": "baseline-final",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 41,
+      "fail": 0
+    }
+  ]
+}

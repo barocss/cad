@@ -1,6 +1,7 @@
 import { CadNumericPolicy, CadPartLimits, ExtrudedProfileLimits, checkOutput, coedgeVertices, evaluateCadPart, faceGeometry, type Brep, type BrepFace, type CadPartFeature, type Point } from '@barocss/cad';
 import { NODE_EXTRA_FIELDS, type DocPlane, type FaceEndExtrudeNode, type ModelNode, type NodeExtras, type SketchNode, type StudioDoc } from './doc';
 import { refusal } from './refusal';
+import { finiteBinary64Integer as exact } from './binary64';
 
 const recipeFields = new Set(['kind', 'sketch', 'target']);
 const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -70,8 +71,10 @@ type EndFrame = { axes: AxisOrder; sign: 1 | -1 };
 const XY: EndFrame = { axes: [0, 1, 2], sign: 1 }, YZ: EndFrame = { axes: [1, 2, 0], sign: 1 };
 const FRONT: EndFrame = { axes: [0, 2, 1], sign: -1 };
 
-/** A complete native rectangular trim whose outward normal opposes the extrusion. */
-function targetRectangle(brep: Brep, face: BrepFace, { axes: [u, v, w], sign }: EndFrame) {
+type ExactPoint = readonly [bigint, bigint];
+const turn = (a: ExactPoint, b: ExactPoint, c: ExactPoint) => (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+/** A complete native convex straight trim whose outward normal opposes the extrusion. */
+function targetPolygon(brep: Brep, face: BrepFace, { axes: [u, v, w], sign }: EndFrame) {
   const surface = face.surface;
   if (surface.kind !== 'surface' || surface.degreeU !== 1 || surface.degreeV !== 1
     || surface.controlPoints.length !== 2 || surface.controlPoints.some(row => row.length !== 2)) throw invalid('the target needs a native plane parallel to the sketch.');
@@ -83,7 +86,7 @@ function targetRectangle(brep: Brep, face: BrepFace, { axes: [u, v, w], sign }: 
     throw invalid('the target face normal must oppose the extrusion direction.');
   }
   const loop = face.loops.length === 1 ? brep.loops.find(loop => loop.id === face.loops[0]) : undefined;
-  if (loop?.kind !== 'outer' || loop.coedges.length !== 4) throw invalid('the target face needs one straight rectangular trim without holes.');
+  if (loop?.kind !== 'outer' || (loop.coedges.length < 3 || loop.coedges.length > 16)) throw invalid('the target face needs one convex straight trim of 3 to 16 edges without holes.');
   const vertices = new Map(brep.vertices.map(vertex => [vertex.id, vertex.point]));
   const edges = new Map(brep.edges.map(edge => [edge.id, edge]));
   const coedges = new Map(brep.coedges.map(coedge => [coedge.id, coedge]));
@@ -98,8 +101,8 @@ function targetRectangle(brep: Brep, face: BrepFace, { axes: [u, v, w], sign }: 
       || !curve.controlPoints[0].every((value, axis) => value === start[axis])
       || !curve.controlPoints[1].every((value, axis) => value === end[axis])
       || !start.every(finiteCoordinate) || !end.every(finiteCoordinate)
-      || start[w] !== level || end[w] !== level || (start[u] === end[u]) === (start[v] === end[v])) {
-      throw invalid('the target face trim must be a native axis-aligned rectangle.');
+      || start[w] !== level || end[w] !== level) {
+      throw invalid('the target face trim must have native straight edges.');
     }
     const [a, b] = coedgeVertices(brep, use, edges);
     if (previousEnd !== undefined && a !== previousEnd) throw invalid('the target face trim is incomplete.');
@@ -110,11 +113,20 @@ function targetRectangle(brep: Brep, face: BrepFace, { axes: [u, v, w], sign }: 
   if (previousEnd !== first) throw invalid('the target face trim is incomplete.');
   const min = [Math.min(...points.map(p => p[u])), Math.min(...points.map(p => p[v]))];
   const max = [Math.max(...points.map(p => p[u])), Math.max(...points.map(p => p[v]))];
-  if (min[0] >= max[0] || min[1] >= max[1]
-    || ![min[0], max[0]].every(x => [min[1], max[1]].every(y => points.some(point => point[u] === x && point[v] === y)))) {
-    throw invalid('the target face trim must be a native axis-aligned rectangle.');
+  const polygon: ExactPoint[] = points.map(p => [exact(p[u]), exact(p[v])]);
+  const winding = turn(polygon[0], polygon[1], polygon[2]) > 0n ? 1n : -1n;
+  // Every other vertex must lie strictly inward of every oriented edge. This rejects
+  // collinear, repeated, concave and self-crossing rings without rounded determinants.
+  for (let i=0;i<polygon.length;i++) for (let j=0;j<polygon.length;j++) {
+    if (j === i || j === (i+1)%polygon.length) continue;
+    if (winding*turn(polygon[i],polygon[(i+1)%polygon.length],polygon[j]) <= 0n)
+      throw invalid('the target face trim must be strictly convex without collinear corners.');
   }
-  return { min, max, level };
+  const rectangle = points.length === 4 && [min[0],max[0]].every(x => [min[1],max[1]].every(y => points.some(p => p[u] === x && p[v] === y)));
+  return { min, max, level, rectangle, contains: (point: readonly number[]) => {
+    const p:ExactPoint=[exact(point[0]),exact(point[1])];
+    return polygon.every((a,i)=>winding*turn(a,polygon[(i+1)%polygon.length],p)>=0n);
+  } };
 }
 
 type LiteralRectangle = Extract<SketchNode, { profile: 'rectangle' }> & { min: [number, number]; max: [number, number] };
@@ -204,8 +216,16 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const brep = outputs[0].brep;
   const faces = brep.faces.filter(face => face.name === node.target.face);
   if (faces.length !== 1) throw missing('the named target face is missing or ambiguous.');
-  const box = targetRectangle(brep, faces[0], axes);
+  const box = targetPolygon(brep, faces[0], axes);
   if (u0 < box.min[0] || v0 < box.min[1] || u1 > box.max[0] || v1 > box.max[1]) throw invalid('the target face must contain the entire projected profile.');
+  if (!box.rectangle) {
+    // Native circles reconstruct their radius from rounded arc endpoints. Do not
+    // claim a disk proof from the authored radius; retain only the previous target scope.
+    if (sketch.profile === 'circle') throw invalid('a circle source currently needs an axis-aligned rectangle target.');
+    const projected = sketch.profile === 'rectangle' ? [[u0,v0],[u1,v0],[u1,v1],[u0,v1]]
+      : sketch.points.map(p => [origin[u]+p[0],origin[v]+p[1]]);
+    if (!projected.every(box.contains)) throw invalid('the target face must contain the entire projected profile.');
+  }
   const height = sign * (box.level - origin[w]);
   if (height <= CadNumericPolicy.linearTolerance || height > CadPartLimits.length) throw invalid('the target must be ahead of the source in the positive extrusion direction.');
   if (!withinTolerance(origin[w] + sign * height, box.level)) throw invalid('the reconstructed end is outside the native linear tolerance.');

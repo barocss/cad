@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
-const baseline = process.argv.includes('--baseline'), rotated = process.argv.includes('--rotated'), front = process.argv.includes('--front'), triangle = process.argv.includes('--triangle'), circle = process.argv.includes('--circle');
+const baseline = process.argv.includes('--baseline'), rotated = process.argv.includes('--rotated'), front = process.argv.includes('--front'), triangle = process.argv.includes('--triangle'), circle = process.argv.includes('--circle'), convexTarget = process.argv.includes('--convex-target');
 assert.ok(!(triangle && circle) && (!(triangle || circle) || front), 'Profile variants require --front and are mutually exclusive');
+assert.ok(!convexTarget || (front && !circle && !triangle && !rotated), '--convex-target requires --front with a rectangle source');
 const profileName = circle ? 'circle' : triangle ? 'triangle' : 'rectangle';
-const decision = circle ? 'CIRCLE_END_FACE' : triangle ? 'TRIANGLE_END_FACE' : front ? 'FRONT_END_FACE' : rotated ? 'D844' : 'D843';
-const frameName = circle ? 'Front XZ circular standoff' : triangle ? 'Front XZ triangular rib' : front ? 'standard Front XZ' : rotated ? 'cardinal YZ' : 'translated XY';
+const decision = convexTarget ? 'CONVEX_TARGET' : circle ? 'CIRCLE_END_FACE' : triangle ? 'TRIANGLE_END_FACE' : front ? 'FRONT_END_FACE' : rotated ? 'D844' : 'D843';
+const frameName = convexTarget ? 'Front XZ rectangle to convex quadrilateral' : circle ? 'Front XZ circular standoff' : triangle ? 'Front XZ triangular rib' : front ? 'standard Front XZ' : rotated ? 'cardinal YZ' : 'translated XY';
 const pins = [
   'apps/cad-studio/test/translated-extrude-end-face-browser.mjs',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
@@ -18,7 +19,7 @@ const f = await createFlow({
   initialFiles: pins, requiredFrozen: pins,
   qualification: baseline ? `Measure the pre-extension command and Open behavior on a ${frameName} source.`
     : `Qualify a literal ${profileName} in the ${frameName} frame and its original opposing native end face.`,
-  limits: [`One ${frameName} ${profileName}, positive travel, one current opposed native rectangular cap, desktop WebGPU.`],
+  limits: [`One ${frameName} ${profileName}, positive travel, one current opposed native ${convexTarget ? 'convex quadrilateral' : 'rectangular'} cap, desktop WebGPU.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { toPartDocument } from '@barocss/cad-model/engine/part';
@@ -51,7 +52,8 @@ const normal = front ? [0, -1, 0] : rotated ? [1, 0, 0] : [0, 0, 1], xAxis = rot
 const plane = { origin: offset, normal, xAxis };
 const world = ([x, y, z]) => front ? [x + offset[0], offset[1] - z, y + offset[2]] : rotated ? [z + offset[0], x + offset[1], y + offset[2]] : [x + offset[0], y + offset[1], z + offset[2]];
 const targetStart = travel => rotated || front ? travel : world([0, 0, travel])[2];
-const targetProfile = rotated || front
+const targetPoints = [[-5,-3],[15,-3],[15,9],[-5,7]];
+const targetProfile = convexTarget ? { id:'n0',kind:'sketch',profile:'polygon',points:targetPoints,plane } : rotated || front
   ? { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [-5, front ? -3 : -5], max: [15, front ? 9 : 15], plane }
   : { id: 'n0', kind: 'sketch', profile: 'rectangle', min: world([-5, -5, 0]).slice(0, 2), max: world([15, 15, 0]).slice(0, 2) };
 const recipe = {
@@ -91,13 +93,14 @@ async function geometry(label, travel, radius=3) {
   assert.equal(native.outputs.length, 2);
   const targetExtent = world([0, 0, travel])[normalAxis];
   for (const [id, us, vs, lo, hi, volume, centroid] of [
-    ['n1', [-5, 15], front ? [-3, 9] : [-5, 15], travel, travel + 5, front ? 1200 : 2000, world([5, front ? 3 : 5, travel + 2.5])],
+    ['n1', [-5, 15], front ? [-3, 9] : [-5, 15], travel, travel + 5, convexTarget ? 1100 : front ? 1200 : 2000, world([convexTarget ? 175/33 : 5, convexTarget ? 83/33 : front ? 3 : 5, travel + 2.5])],
     ['n3', [0, 10], front ? [0, 6] : [0, 10], 0, travel, (circle ? Math.PI*radius**2 : triangle ? 30 : front ? 60 : 100) * travel, world([triangle ? 10/3 : 5, triangle ? 2 : front ? 3 : 5, travel / 2])],
   ]) {
     const exact = native.outputs.find(output => output.id === id);
     assert.ok(exact?.valid && exact.count === 1);
     if (!(circle && id === 'n3')) assert.equal(exact.corners.length, triangle && id === 'n3' ? 6 : 8);
-    const corners = triangle && id === 'n3' ? [[0,0],[10,0],[0,6]].flatMap(([x,y]) => [lo,hi].map(z => world([x,y,z]))) : us.flatMap(x => vs.flatMap(y => [lo, hi].map(z => world([x, y, z]))));
+    // Independent shoelace oracle: target area 220, centroid (175/33,83/33).
+    const corners = convexTarget && id === 'n1' ? targetPoints.flatMap(([x,y])=>[lo,hi].map(z=>world([x,y,z]))) : triangle && id === 'n3' ? [[0,0],[10,0],[0,6]].flatMap(([x,y]) => [lo,hi].map(z => world([x,y,z]))) : us.flatMap(x => vs.flatMap(y => [lo, hi].map(z => world([x, y, z]))));
     if (!(circle && id === 'n3')) assert.ok(corners.every(point => exact.corners.some(corner => corner.every((value, i) => near(value, point[i])))));
     if (circle && id === 'n3') {
       const start=world([5,3,0]),heightAt=p=>p.reduce((s,n,i)=>s+(n-start[i])*normal[i],0);
@@ -172,6 +175,21 @@ await f.run(async () => {
   await f.openExtrudeHud();
   const hud = f.hud(), depth = field(hud, 'Depth');
   assert.equal(await field(hud, 'Distance').inputValue(), '8');
+  if (baseline && convexTarget) {
+    f.phase = 'existing source supports To face but convex target is refused';
+    assert.equal(await depth.count(), 1);
+    await depth.selectOption('to-face');
+    await pickLowerCap();
+    await hud.getByText('n1.bottom', { exact: true }).waitFor();
+    await f.page.waitForFunction(() => document.querySelector('.hud .status')?.textContent === 'refused');
+    assert.equal(await button(hud,'Apply').isEnabled(),false);
+    assert.deepEqual(await f.doc(),seed);
+    const failed=await f.snapshot('00-convex-target-pre-extension-refusal');
+    assert.match(failed.hud,/rectangle|rectangular/i);
+    f.report.observations.push({label:'convex-target-baseline',depthPresent:true,target:'n1.bottom',refused:true,unchanged:true});
+    await button(hud,'Cancel').click();await f.same(seed);
+    return;
+  }
   if (baseline) {
     assert.equal(await depth.count(), 0);
     await button(hud, 'Cancel').click();

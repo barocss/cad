@@ -467,7 +467,7 @@ test('the bound end refuses a holed cap even when its bounds and the four source
   assert.ok(cap && checkOutput(outputs[0]).valid);
   assert.equal(cap.loops.length, 2);
   assert.ok(Math.abs(massPropertiesOf(outputs[0]).volume - (2000 - 45 * Math.PI)) < 1e-8);
-  assert.throws(() => toPartDocument(withHole), /one straight rectangular trim without holes/i);
+  assert.throws(() => toPartDocument(withHole), /one convex straight trim .* without holes/i);
 });
 
 test('nonfinite profile input and a deleted target cannot use a fallback height or another face', () => {

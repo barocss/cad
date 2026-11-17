@@ -1,0 +1,185 @@
+{
+  "status": "PASS",
+  "qualification": "Measure the pre-extension command and Open behavior on a Front XZ rectangle to convex quadrilateral source.",
+  "visualReview": "ROOT_MUST_VIEW_SCREENSHOTS",
+  "states": [
+    {
+      "label": "00-convex-target-pre-extension-refusal",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "polygon",
+            "points": [
+              [
+                -5,
+                -3
+              ],
+              [
+                15,
+                -3
+              ],
+              [
+                15,
+                9
+              ],
+              [
+                -5,
+                7
+              ]
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "from": 20,
+            "height": 5
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              6
+            ],
+            "plane": {
+              "origin": [
+                12,
+                100,
+                -7
+              ],
+              "normal": [
+                0,
+                -1,
+                0
+              ],
+              "xAxis": [
+                1,
+                0,
+                0
+              ]
+            }
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 3
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1099.9999999999998,
+            "centroid": [
+              17.303030303030308,
+              77.5,
+              -4.484848484848484
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": [],
+          "sketches": [
+            2
+          ]
+        },
+        "bodies": 1,
+        "active": "extrude",
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": "ExtruderefusedProfileSketch 3End facen1.bottomDepthDistanceTo faceThe kernel could not build thisUndo the last change, or adjust the values and try again.Kernel detail[VALUE] Extrude to face: the target face trim must be a native axis-aligned rectangle.CancelApply",
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 5",
+        "Sketch \u00b7 rectangle"
+      ],
+      "dirty": false,
+      "historyControls": [
+        false,
+        true
+      ]
+    }
+  ],
+  "reads": [],
+  "oracles": [],
+  "files": [],
+  "downloads": [],
+  "observations": [
+    {
+      "label": "convex-target-baseline",
+      "depthPresent": true,
+      "target": "n1.bottom",
+      "refused": true,
+      "unchanged": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One Front XZ rectangle to convex quadrilateral rectangle, positive travel, one current opposed native convex quadrilateral cap, desktop WebGPU."
+  ],
+  "sourceBeforeCount": 5,
+  "virtualSources": [
+    {
+      "label": "inspector",
+      "hash": "d59d19d5746403fea1664792b7bfe4f12c50cf79b4661a53c27d2412c7710bcc",
+      "virtualInputExcluded": "<checkout>/apps/cad-studio/translated-extrude-end-face-inspector.ts"
+    }
+  ],
+  "sourceFrozenCount": 1068,
+  "sourceAfterCount": 1068,
+  "sourceAfterCleanupCount": 1068,
+  "phase": "existing source supports To face but convex target is refused",
+  "sourceUnchanged": true
+}
