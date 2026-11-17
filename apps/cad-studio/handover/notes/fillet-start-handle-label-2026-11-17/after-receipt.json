@@ -1,0 +1,41 @@
+{
+  "status": "PASS",
+  "qualification": "Varying Fillet start handle label and value ownership",
+  "visualReview": "Baseline and after03 independently pixel-inspected; synthetic fixture, no personal information.",
+  "reads": [],
+  "oracles": [],
+  "files": [],
+  "downloads": [],
+  "observations": [
+    {
+      "baseline": false,
+      "hudLabel": "Start radius",
+      "handleLabel": "Start radius",
+      "start": "1.5",
+      "end": "3",
+      "sourceExact": true
+    },
+    {
+      "handleTypedStart": 2,
+      "endPreserved": 3,
+      "constantLabel": "Radius",
+      "cancelExact": true,
+      "applyUndoRedo": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Single straight front-top edge only; no new geometry/topology qualification."
+  ],
+  "chromeProcessesLaunched": 1,
+  "phase": "actual Studio start",
+  "rawReceiptSHA256": "6fbbb2e7318496d71dcce12c4636f94c0fa831f95e2b7e034f387666dd2009bc",
+  "sourceCount": 533
+}

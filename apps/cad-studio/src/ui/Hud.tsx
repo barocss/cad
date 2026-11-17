@@ -1,3 +1,4 @@
+import { commandFieldLabel } from '../app/commandFieldLabel';
 import type { FilletEndpoints } from '../app/filletEndpoints';
 import { FilletEndpointNotice } from './FilletEndpointNotice';
 import { extrudeDraftFeedback } from '../app/extrudeDraftFailure';
@@ -99,7 +100,7 @@ export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFil
     if (file && key) onFile?.(key, file);
   };
   const renderField = (input: Field, index: number) => {
-    const field = active.fillet?.radiusMode === 'varying' && input.key === 'radius' ? {...input,label:'Start radius'} : input;
+    const field = { ...input, label: commandFieldLabel(active.cmd.id, active.fillet, input.key, input.label) };
     const value = active.values[field.key], ref = index === 0 ? captureFirst : undefined;
     const showCountRange = field.kind === 'count' && ((active.cmd.id === 'circular-pattern' && field.key === 'count') || (active.cmd.id === 'hole' && field.key === 'pn'));
     const invalidCount = showCountRange && (!Number.isInteger(Number(value)) || Number(value) < (field.min ?? -Infinity) || Number(value) > (field.max ?? Infinity));

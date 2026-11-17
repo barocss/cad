@@ -1,3 +1,4 @@
+import { commandFieldLabel } from '../app/commandFieldLabel';
 import { draggedScaleFactor } from './draggedScaleFactor';
 import { useMemo, useRef, type Dispatch, type SetStateAction, type RefObject } from 'react';
 import { fmt, type StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -84,8 +85,9 @@ export function useCommandGizmos({ model, command, context, drag, splitSource }:
     // (Lengths follow the grid step: half of it for half-step arrows; angles and counts keep their own.)
     const step = h.arc || h.unit !== undefined ? h.step ?? 1 : Math.max(0.001, (h.step ?? 1) * (snapStep || 0.01)), snap = (start: number, mm: number) => Math.min(h.max ?? Infinity, Math.max(h.min ?? -Infinity, Math.round((start + mm * (h.scale ?? 1)) / step) * step));
     const pair = h.pair, value2 = pair ? Number(handleValues[pair.key]) : NaN;
+    const label = commandFieldLabel(handleCmd.id, active?.fillet, field.key, field.label);
     if (pair && !Number.isFinite(value2)) return [];
-    return [{ id: pair ? `${h.key}+${pair.key}` : h.key, at: h.at, dir: h.dir, label: pair ? field.label.replace(/ \w$/, '') : field.label, value, screenOffset: h.screenOffset, ...(h.arc ? { arc: h.arc } : {}),
+    return [{ id: pair ? `${h.key}+${pair.key}` : h.key, at: h.at, dir: h.dir, label: pair ? label.replace(/ \w$/, '') : label, value, screenOffset: h.screenOffset, ...(h.arc ? { arc: h.arc } : {}),
       ...(pair ? { plane: { dir2: pair.dir, value2, toValue2: snap } } : {}),
       toValue: snap,
       format: (v: number) => h.arc ? `${fmt(v)}°` : h.unit !== undefined ? `${fmt(v)}${h.unit ? ' ' + h.unit : ''}` : `${fmt(v)} mm`,

@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "qualification": "Observe varying Fillet HUD/handle label mismatch through actual pointer drag",
+  "visualReview": "Baseline and after03 independently pixel-inspected; synthetic fixture, no personal information.",
+  "reads": [],
+  "oracles": [],
+  "files": [],
+  "downloads": [],
+  "observations": [
+    {
+      "baseline": true,
+      "hudLabel": "Start radius",
+      "handleLabel": "Radius",
+      "start": "1.5",
+      "end": "3",
+      "sourceExact": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Single straight front-top edge only; no new geometry/topology qualification."
+  ],
+  "chromeProcessesLaunched": 1,
+  "phase": "actual Studio start",
+  "rawReceiptSHA256": "e5c9e1159f0b2501e7405fb7ff5f07dda13d4c5d012bcf1d60783f97908d3be1",
+  "sourceCount": 532
+}
