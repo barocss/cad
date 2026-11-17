@@ -1,0 +1,321 @@
+{
+  "status": "PASS",
+  "qualification": "Single accepted cube COM survives public parameter geometry refusal and follows a valid accepted dimension with Undo/Redo.",
+  "limits": [
+    "Passive original Worker observation only; no delayed/synthetic reply or mass patch. Pending intervals with no observed frame remain NOT_OBSERVED. No project/worker reset or broad topology acceptance."
+  ],
+  "observations": [
+    {
+      "initial": {
+        "xyz": [
+          4.999999999999999,
+          4.999999999999999,
+          5
+        ],
+        "mass": 2.7000000000000006,
+        "volume": 1000.0000000000001
+      },
+      "current": {
+        "xyz": [
+          9.999999999999998,
+          4.999999999999999,
+          5
+        ],
+        "mass": 5.400000000000001,
+        "volume": 2000.0000000000002
+      },
+      "refused": {
+        "requests": [
+          {
+            "id": 4,
+            "type": "evaluate",
+            "revision": 4,
+            "nativeSource": {
+              "epoch": 1,
+              "requestId": 4,
+              "revision": 4,
+              "slot": "evaluate"
+            }
+          }
+        ],
+        "replies": [
+          {
+            "id": 4,
+            "ok": false,
+            "revision": 4,
+            "error": {
+              "title": "Sizes must be greater than zero",
+              "hint": "Every width, depth, height and radius needs a positive value.",
+              "detail": "rectangle min must be below max on both axes",
+              "code": "PARAMETER",
+              "feature": "n0"
+            }
+          }
+        ],
+        "samples": [
+          {
+            "kind": "animation-frame",
+            "pending": [
+              4
+            ],
+            "width": 10,
+            "marker": "4.999999999999999,4.999999999999999,5",
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [
+              4
+            ],
+            "width": 10,
+            "marker": "4.999999999999999,4.999999999999999,5",
+            "fresh": true
+          },
+          {
+            "kind": "before-original-reply",
+            "pending": [
+              4
+            ],
+            "width": 10,
+            "marker": "4.999999999999999,4.999999999999999,5",
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 10,
+            "marker": "4.999999999999999,4.999999999999999,5",
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 10,
+            "marker": "4.999999999999999,4.999999999999999,5",
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 10,
+            "marker": "4.999999999999999,4.999999999999999,5",
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 10,
+            "marker": "4.999999999999999,4.999999999999999,5",
+            "fresh": true
+          }
+        ]
+      },
+      "valid": {
+        "requests": [
+          {
+            "id": 5,
+            "type": "evaluate",
+            "revision": 5,
+            "nativeSource": {
+              "epoch": 1,
+              "requestId": 5,
+              "revision": 5,
+              "slot": "evaluate"
+            }
+          }
+        ],
+        "replies": [
+          {
+            "id": 5,
+            "ok": true,
+            "revision": 5,
+            "error": null
+          }
+        ],
+        "samples": [
+          {
+            "kind": "animation-frame",
+            "pending": [
+              5
+            ],
+            "width": 10,
+            "marker": "4.999999999999999,4.999999999999999,5",
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [
+              5
+            ],
+            "width": 10,
+            "marker": "4.999999999999999,4.999999999999999,5",
+            "fresh": true
+          },
+          {
+            "kind": "before-original-reply",
+            "pending": [
+              5
+            ],
+            "width": 10,
+            "marker": "4.999999999999999,4.999999999999999,5",
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": null,
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": null,
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": null,
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": null,
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": null,
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": null,
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": null,
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": null,
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": null,
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": null,
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": null,
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": "9.999999999999998,4.999999999999999,5",
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": "9.999999999999998,4.999999999999999,5",
+            "fresh": true
+          },
+          {
+            "kind": "animation-frame",
+            "pending": [],
+            "width": 20,
+            "marker": "9.999999999999998,4.999999999999999,5",
+            "fresh": true
+          }
+        ]
+      },
+      "pendingRefusalFrames": 2,
+      "naturalPending": "OBSERVED bounded animation frames",
+      "independentLiteral": {
+        "initial": {
+          "dimensions": [
+            10,
+            10,
+            10
+          ],
+          "mass": 2.7,
+          "centroid": [
+            5,
+            5,
+            5
+          ]
+        },
+        "accepted": {
+          "dimensions": [
+            20,
+            10,
+            10
+          ],
+          "mass": 5.4,
+          "centroid": [
+            10,
+            5,
+            5
+          ]
+        }
+      },
+      "ownership": "No delivery timing/payload modification; observed frames are not proof of all event interleavings."
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceBeforeCount": 2,
+  "sourceFrozenCount": 530,
+  "sourceAfterCount": 530,
+  "sourceAfterCleanupCount": 530,
+  "parentCommit": "4f70315482cfbbade83f2d85d8f503322cc2e6b2",
+  "originalReceipt": {
+    "path": "/tmp/cad-com-candidate-01/receipt.json",
+    "sha256": "315abe3c8d4e39e2be5fdc7e6424fc31ee938a6870f644b7007b48f7d3c65825"
+  },
+  "sourceUnchanged": true,
+  "sourceCapsuleSha256": {
+    "source-frozen.json": "f23c82d3e6e408f10c6ff23f603d2c2185df0e6522078430682d7c758939f5f3",
+    "source-after.json": "f23c82d3e6e408f10c6ff23f603d2c2185df0e6522078430682d7c758939f5f3",
+    "source-after-cleanup.json": "f23c82d3e6e408f10c6ff23f603d2c2185df0e6522078430682d7c758939f5f3"
+  },
+  "driverSha256": "ef83805995cf1cc553963bf3dccfce34bcbecf718cd47443df8ec6be2db83179",
+  "visualReview": "Child and parent directly inspected both curated screenshots. Synthetic data; no personal information. Expanded body partly clipped in accepted screenshot, not a full-shape framing qualification."
+}
