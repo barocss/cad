@@ -181,3 +181,28 @@ test('blank and nonfinite Thickness drafts cannot silently reuse 2 or start Thic
     assert.equal(thickness(h.render()).value, '2', 'a different surface owns a fresh visible initial value');
   } finally { h.cleanup(); }
 });
+
+test('Extend requires an owned finite-positive raw draft and refuses stale numeric fallback', () => {
+  const direct = seed(), before = structuredClone(direct), calls: (() => DirectGeometry)[] = [];
+  const props: ToolsProps = { id: direct.objects[0].id, direct, run: op => { calls.push(op); }, added: () => [] };
+  const h = harness(SurfaceTools, props);
+  const field = () => elements(h.render()).find(e => e.props['aria-label'] === 'Extend by')!.props;
+  const enter = (value: string) => (field().onChange as (event: unknown) => void)({ target: { value } });
+  try {
+    assert.equal(field().value, '5');
+    for (const value of ['', ' ', '0', '-1', 'Infinity', 'NaN']) {
+      enter(value);
+      const view = h.render(), start = action(view, 'Extend');
+      assert.equal(field().value, value); assert.equal(field()['aria-invalid'], true); assert.equal(start.disabled, true);
+      assert.equal(start['aria-describedby'], field()['aria-describedby']);
+      assert.equal(text(elements(view).find(e => e.props.id === field()['aria-describedby'])), 'Enter a finite positive extension distance.');
+      (start.onClick as () => void)(); assert.equal(calls.length, 0);
+    }
+    enter('2.5'); assert.equal(action(h.render(), 'Extend').disabled, false);
+    (action(h.render(), 'Extend').onClick as () => void)(); assert.equal(calls.length, 1);
+    assert.deepEqual(direct, before);
+    enter(''); props.direct = structuredClone(direct); assert.equal(field().value, '5');
+    enter('9'); const other = importSource(direct, source, 'Other surface'); props.direct = other; props.id = other.objects.at(-1)!.id;
+    assert.equal(field().value, '5');
+  } finally { h.cleanup(); }
+});

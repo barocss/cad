@@ -181,7 +181,10 @@ function SurfaceTools({ id, direct, run, added, onThicken }: { id: string; direc
   const wall = surfaceParameter(wallText), wallErrorId = `direct-thickness-${encodeURIComponent(id)}`;
   const thickenScope = directThickenGuidance(direct.objects.find(o => o.id === id)!), thickenScopeId = `direct-thicken-scope-${encodeURIComponent(id)}`;
   const [wallSide, setWallSide] = useState<'normal' | 'reverse' | 'both'>('normal');
-  const [edge, setEdge] = useState<'u-min' | 'u-max' | 'v-min' | 'v-max'>('u-max'), [reach, setReach] = useState(5);
+  const [edge, setEdge] = useState<'u-min' | 'u-max' | 'v-min' | 'v-max'>('u-max');
+  const [reachText, setReachText] = useSurfaceDraft(direct, id, 'extend-distance', '5');
+  const reachValue = surfaceParameter(reachText), reach = reachValue !== null && reachValue > 0 ? reachValue : null;
+  const reachErrorId = `direct-extend-distance-${encodeURIComponent(id)}`;
   const dom = domainsOf(direct, id), u = dom.kind === 'surface' ? dom.u : [0, 1] as [number, number], v = dom.kind === 'surface' ? dom.v : [0, 1] as [number, number];
   const [axis, setAxis] = useState<'u' | 'v'>('u');
   const range = axis === 'u' ? u : v, mid = (range[0] + range[1]) / 2;
@@ -208,8 +211,10 @@ function SurfaceTools({ id, direct, run, added, onThicken }: { id: string; direc
     <div className="card-title" style={{ marginTop: 8 }}>EXTEND</div>
     <label className={FIELD}><span>Edge</span><NativeSelect className={CONTROL} aria-label="Extend edge" value={edge} onChange={e => setEdge(e.target.value as typeof edge)}>
       <option value="u-max">u end</option><option value="u-min">u start</option><option value="v-max">v end</option><option value="v-min">v start</option></NativeSelect></label>
-    <NumberField label="Extend by" value={reach} onChange={setReach} />
-    <Button variant="ghost" aria-label="Extend the surface" title="Run the surface on past the edge, straight along its tangent there" onClick={() => run(() => directOps.extendSurface(direct, id, edge, reach), added)}>Extend</Button>
+    <label className={FIELD}><span>Extend by</span><Input type="number" step="any" className="w-24" aria-label="Extend by" value={reachText}
+      aria-invalid={reach === null || undefined} aria-describedby={reach === null ? reachErrorId : undefined} onChange={event => setReachText(event.target.value)} /></label>
+    {reach === null && <span id={reachErrorId} role="status" className="warn small">Enter a finite positive extension distance.</span>}
+    <Button variant="ghost" aria-label="Extend the surface" title="Run the surface on past the edge, straight along its tangent there" disabled={reach === null} aria-describedby={reach === null ? reachErrorId : undefined} onClick={() => { if (reach !== null) run(() => directOps.extendSurface(direct, id, edge, reach), added); }}>Extend</Button>
     {onThicken && <>
       <div className="card-title" style={{ marginTop: 8 }}>THICKEN</div>
       <p role="note" aria-label="Thicken source scope" id={thickenScopeId} className="muted small">{thickenScope.text}</p>
