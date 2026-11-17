@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "qualification": "Reset one ordinary instance position and rotation atomically, preserving shared source and all other instances through history and native persistence.",
+  "observations": [
+    {
+      "positionAndRotation": [
+        0,
+        0,
+        0
+      ],
+      "bounds": {
+        "min": [
+          0,
+          0,
+          0
+        ],
+        "max": [
+          20,
+          20,
+          10
+        ]
+      },
+      "oneUndoRestoresOriginalNotPending99": true,
+      "keyboardReset": true,
+      "otherInstancesAndSourcePreserved": true,
+      "nativeSaveOpen": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "limits": [
+    "Top-level unmated assembly placement; no nested instances, solver constraints, pattern seed propagation or neutral exports."
+  ]
+}

@@ -3,6 +3,7 @@ import type { PartInstance } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { fmt } from '@barocss/cad-model/engine/doc';
 import { FIELD } from './panelStyles';
+import { resetInstancePlacement } from './instancePlacement';
 import { Button } from '@/components/ui/button';
 
 /** A placed part: its name, position and rotation (applied on Enter or when a box is left), duplicate, hide, remove. */
@@ -57,6 +58,9 @@ export function InstancePanel({ inst, bodies, onChange, onDuplicate, onRemove, o
       {(['X', 'Y', 'Z'] as const).map((a, k) => <Field key={a} owner={inst} label={a} value={inst.position[k]} onCommit={v => onChange({ ...inst, position: inst.position.map((x, j) => j === k ? Number(v) : x) as [number, number, number] })} />)}
       <div className="card-title" style={{ marginTop: 8 }}>ROTATION · ° (X, THEN Y, THEN Z)</div>
       {(['X', 'Y', 'Z'] as const).map((a, k) => <Field key={a} owner={inst} label={a} value={inst.rotation[k]} onCommit={v => onChange({ ...inst, rotation: inst.rotation.map((x, j) => j === k ? Number(v) : x) as [number, number, number] })} />)}
+      <Button variant="ghost" aria-label="Reset instance placement" disabled={[...inst.position, ...inst.rotation].every(v => v === 0)}
+        title="Set this instance’s position and rotation to zero in the assembly. Keeps its part definition; discards pending instance input. Undo restores the previous placement."
+        onPointerDown={e => e.preventDefault()} onClick={() => { const next = resetInstancePlacement(inst); if (next !== inst) onChange(next); }}>Reset placement</Button>
       </>}
       <div className="row-actions" style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
         {onEditPart && <Button variant="secondary" title="Change the part itself with the other parts shown around it; Finish takes it into every instance sharing it" onClick={onEditPart}>Edit part</Button>}
