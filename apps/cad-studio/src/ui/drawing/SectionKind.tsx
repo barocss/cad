@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import type { DrawingSection, DrawingViews, SectionStep } from '@barocss/cad-model/drawing/types';
 import { SCALES, scaleLabel } from '@barocss/cad-model/drawing/views';
+import { resetRemovedSectionPaperPosition } from './sectionPaperPosition';
 import { Icon } from '../atoms';
 import { CONTROL, FIELD, TICK } from './sheetShared';
 import { sectionHatchSupported, withSectionHatch } from './sectionHatch';
@@ -42,6 +43,9 @@ export function SectionKind({ section: x, views, onSet, hatchPartScope = false, 
     }}><option value="full">Full</option>{!x.dir && <><option value="half">Half</option><option value="offset">Offset (stepped)</option></>}<option value="removed">Removed</option>{!x.dir && <option value="revolved">Revolved</option>}</NativeSelect></label>
     {x.removed && <label className={FIELD}><span>Section {x.id} scale</span><NativeSelect className={CONTROL} aria-label={`Section ${x.id} scale`} value={x.removed.scale === undefined ? 'sheet' : String(x.removed.scale)} onChange={e => { const rest = { ...x.removed! }; delete rest.scale; onSet({ ...x, removed: e.target.value === 'sheet' ? rest : { ...rest, scale: Number(e.target.value) } }); }}>
       <option value="sheet">The sheet’s</option>{SCALES.map(k => <option key={k} value={String(k)}>{scaleLabel(k)}</option>)}</NativeSelect></label>}
+    {x.removed && <Button variant="ghost" size="xs" aria-label={`Reset section ${x.id} paper position`} disabled={!x.removed.at || hatchPending}
+      title={hatchPending ? 'Finish or cancel the section input before moving it.' : 'Automatically place this removed section on its assigned sheet. Keeps its cut, scale and annotations; does not shrink it if there is no room.'}
+      onClick={() => onSet(resetRemovedSectionPaperPosition(x))}>Auto-place section</Button>}
     {x.half && <div className={WRAP} aria-label={`Section ${x.id} centreline`}>
       <NativeSelect className={CONTROL} aria-label={`Section ${x.id} centreline direction`} value={x.half.line} onChange={e => { const line = e.target.value as 'vertical'; onSet({ ...x, half: { ...x.half!, line, at: mid(line === 'vertical' ? 0 : 1) } }); }}>
         <option value="vertical">Vertical at</option><option value="horizontal">Horizontal at</option></NativeSelect>

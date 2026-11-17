@@ -1,0 +1,105 @@
+{
+  "status": "PASS",
+  "qualification": "Recover a removed section outside a smaller destination sheet without changing the cut, scale, annotations or source.",
+  "observations": [
+    {
+      "label": "01-outside-A4",
+      "section": {
+        "id": "A",
+        "form": "removed",
+        "scale": 2,
+        "box": [
+          286,
+          77,
+          414,
+          93
+        ],
+        "edges": 4
+      }
+    },
+    {
+      "label": "02-recovered",
+      "section": {
+        "id": "A",
+        "form": "removed",
+        "scale": 2,
+        "box": [
+          155,
+          14,
+          283,
+          30
+        ],
+        "edges": 4
+      }
+    },
+    {
+      "label": "03-undo",
+      "section": {
+        "id": "A",
+        "form": "removed",
+        "scale": 2,
+        "box": [
+          286,
+          77,
+          414,
+          93
+        ],
+        "edges": 4
+      }
+    },
+    {
+      "label": "04-redo",
+      "section": {
+        "id": "A",
+        "form": "removed",
+        "scale": 2,
+        "box": [
+          155,
+          14,
+          283,
+          30
+        ],
+        "edges": 4
+      }
+    },
+    {
+      "svgActualDownload": true,
+      "bounds": [
+        155,
+        14,
+        283,
+        30
+      ]
+    },
+    {
+      "label": "06-reopened",
+      "section": {
+        "id": "A",
+        "form": "removed",
+        "scale": 2,
+        "box": [
+          155,
+          14,
+          283,
+          30
+        ],
+        "edges": 4
+      }
+    }
+  ],
+  "consoleErrors": [],
+  "errors": [],
+  "limits": [
+    "One removed front section, A3 to A4; native Save/Open and actual SVG. No PDF/DXF, physical print or automatic annotation collision certification."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 544,
+  "sourceAfterCount": 544,
+  "sourceAfterCleanupCount": 544,
+  "visualReview": "before.png and reopened.png visually inspected: off-page section recovered on sheet 2, section label and flatness frame retained."
+}
