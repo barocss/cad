@@ -182,7 +182,7 @@ test('shell: an open box from its top face, exact and still upright; a too-thick
   assert.equal(r.bodies[0].family, 'upright');
   assert.ok(Math.abs(r.bodies[0].volume! - (24000 - 36 * 26 * 18)) < 1e-6, String(r.bodies[0].volume));
   assert.ok(r.bodies[0].mesh.faces.some(f => /n2\.in\./.test(f.name)), 'inner walls are named');
-  assert.equal(featureLabel(withNode(box, { kind: 'shell', parent: { node: 1, side: 'solid' }, thickness: 2, open: [] }).nodes[2], 2, []), 'Shell 2');
+  assert.equal(featureLabel(withNode(box, { kind: 'shell', parent: { node: 1, side: 'solid' }, thickness: 2, open: [] }).nodes[2], 2, []), 'Shell 2 mm');
   const thick = evaluateDoc(withNode(box, { kind: 'shell', parent: { node: 1, side: 'solid' }, thickness: 20, open: ['n1.top'] }), 2);
   assert.equal(thick.ok, false);
   if (!thick.ok) assert.match(thick.error.title, /too thick/);

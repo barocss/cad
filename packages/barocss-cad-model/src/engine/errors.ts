@@ -342,6 +342,12 @@ export function friendly(message: string, kind?: string): FriendlyError {
       detail, ...extra };
   if (code === 'INPUT' && detail === 'angle must be a number of degrees, not 0, below 45 in size')
     return { ...DRAFT_ANGLE_HELP, detail, ...extra };
+  // Preserve the measured strict limit; rounded guidance can recommend a refused wall.
+  const shellLimit = code === 'PARAMETER' ? /^a wall of (\d+(?:\.\d+)?(?:e[+-]?\d+)?) mm leaves no hollow at ([^\r\n;]+); use a wall less than (\d+(?:\.\d+)?(?:e[+-]?\d+)?) mm$/i.exec(detail) : null;
+  if (shellLimit && [shellLimit[1], shellLimit[3]].every(value => Number.isFinite(Number(value)) && Number(value) > 0)
+    && Number(shellLimit[1]) >= Number(shellLimit[3])) return {
+    title: 'The wall is too thick', hint: `Enter Wall less than ${shellLimit[3]} mm to keep the selected face open.`, detail, ...extra,
+  };
   const unmatched = /^the surfaces do not close: (\d+ edges?) meet no other surface \((surfaces? [\d, ]+)\)$/.exec(detail);
   if (unmatched) return { title: 'Sew leaves unmatched edges',
     hint: `${unmatched[1]} could not be matched on ${unmatched[2]} in the listed source order. Check the gap and the tolerance.`,

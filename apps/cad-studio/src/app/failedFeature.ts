@@ -40,6 +40,10 @@ export function failedFeatureText(id: string | undefined, evaluated: readonly Mo
   const node = history[historyIndex];
   // An exact newly previewed Hole is not a missing History step. Keep unknown/generated IDs visible.
   if (historyIndex < 0 && evaluated[evaluatedIndex]?.kind === 'hole' && featureId(evaluated, evaluatedIndex) === id) return;
+  // Only this exact appended Shell is a command preview, not a missing accepted step.
+  if (historyIndex < 0 && evaluatedIndex === history.length && evaluated.length === history.length + 1
+    && evaluated[evaluatedIndex]?.kind === 'shell' && featureId(evaluated, evaluatedIndex) === id
+    && history.every((node, i) => node === evaluated[i])) return;
   // A newly previewed Sew has copied source surfaces, but no accepted History step yet.
   if (historyIndex < 0 && evaluated[evaluatedIndex]?.kind === 'sew') return;
   if (node && evaluated[evaluatedIndex]?.kind === node.kind && featureId(evaluated, evaluatedIndex) === featureId(history, historyIndex)) {

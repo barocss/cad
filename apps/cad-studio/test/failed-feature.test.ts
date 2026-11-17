@@ -90,3 +90,15 @@ test('new Hole preview omits missing-history attribution only for its exact nati
   assert.equal(failedFeatureText('n41', candidate, accepted), 'Fillet R8 (n41)');
   assert.equal(failedFeatureText('n41', accepted, accepted.slice(0, 2)), 'n41 · no matching history step');
 });
+
+test('a new exact Shell has no missing History step, while accepted and unknown failures retain attribution',()=>{
+  const shell:ModelNode={kind:'shell',id:'n50',parent:{node:1,side:'solid'},open:['n23.side0'],thickness:2.499};
+  const next=[...accepted,shell];
+  assert.equal(failedFeatureText('n50',next,accepted),undefined);
+  assert.equal(failedFeatureText('n50',next,next),'Shell 2.499 mm (n50)');
+  assert.equal(failedFeatureText('n50_unknown',next,accepted),'n50_unknown · no matching history step');
+  assert.equal(failedFeatureText('n50_p0',next,accepted),'n50_p0 · no matching history step');
+  assert.equal(failedFeatureText('n50',[...accepted,shell,{...shell}],accepted),'n50 · no matching history step');
+  assert.equal(failedFeatureText('n50',[{...sketch},...accepted.slice(1),shell],accepted),'n50 · no matching history step');
+  assert.equal(failedFeatureText('n41',next,accepted),'Fillet R8 (n41)');
+});

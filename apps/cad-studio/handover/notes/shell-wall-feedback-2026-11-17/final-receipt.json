@@ -1,0 +1,103 @@
+{
+  "status": "PASS",
+  "qualification": "Imported X0 opening states the strict 2.5 mm Shell limit, rejects it atomically, and retains an accepted 2.499 mm edit.",
+  "limits": [
+    "One imported two-box fixture; Left orthographic X0 opening; no general shell or kernel scope expansion."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1066,
+  "sourceAfterCleanupCount": 1066,
+  "observations": [
+    {
+      "label": "stock-native",
+      "wall": 0,
+      "expected": 500,
+      "volume": 499.99999999999994,
+      "opening": [
+        "outer"
+      ]
+    },
+    {
+      "baseline": false,
+      "defaultHint": "The wall is too thick Enter Wall less than 2.5 mm to keep the selected face open.",
+      "history": [
+        "Import two-boxes"
+      ]
+    },
+    {
+      "label": "wall-2-native",
+      "wall": 2,
+      "expected": 452,
+      "volume": 451.99999999999994,
+      "opening": [
+        "inner",
+        "outer"
+      ]
+    },
+    {
+      "label": "wall-2_499-native",
+      "wall": 2.499,
+      "expected": 499.924959996,
+      "volume": 499.9249599959999,
+      "opening": [
+        "inner",
+        "outer"
+      ]
+    },
+    {
+      "label": "undo-native",
+      "wall": 2,
+      "expected": 452,
+      "volume": 451.99999999999994,
+      "opening": [
+        "inner",
+        "outer"
+      ]
+    },
+    {
+      "label": "redo-native",
+      "wall": 2.499,
+      "expected": 499.924959996,
+      "volume": 499.9249599959999,
+      "opening": [
+        "inner",
+        "outer"
+      ]
+    },
+    {
+      "label": "reopened-native",
+      "wall": 2.499,
+      "expected": 499.924959996,
+      "volume": 499.9249599959999,
+      "opening": [
+        "inner",
+        "outer"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "name": "two-boxes.step",
+      "sha256": "b425a5a94604bd94d4f0b55192368480c217792862552f8cd3a38eedd33c28b7"
+    },
+    {
+      "name": "two-boxes.bcad",
+      "bytes": 11503,
+      "sha256": "5ec5baf7e9bdd0627ece120d9f6c3558b6f75cecb1d4830f800082821133ef78"
+    }
+  ],
+  "states": [
+    "creation-2_5-refused",
+    "wall-2-applied",
+    "history-2_5-refused",
+    "wall-2_499-applied",
+    "opfs-reopened"
+  ]
+}

@@ -1412,7 +1412,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'split': return node.normal ? `Split ${planeText(node.normal)} = ${n(node.at)}` : `Split ${node.axis.toUpperCase()}=${n(node.at)}`;
     case 'separate': return 'Separate pieces';
     case 'decimate': return `Simplify mesh ${node.triangles !== undefined ? `to ${node.triangles.toLocaleString('en-US')} triangles` : node.ratio !== undefined ? `to ${+(100 * node.ratio).toPrecision(3)}%` : `within ${fmt(node.maxError ?? 0)} mm`}`;
-    case 'shell': return `Shell ${n(node.thickness)}`;
+    case 'shell': return typeof node.thickness === 'number' ? `Shell ${node.thickness} mm` : `Shell ${node.thickness.parameter}`;
     case 'import': return `Import ${node.name}`;
     case 'mesh': return `Mesh ${node.name}`;
     case 'subd': return `SubD ${node.name} (${node.cage.faces.length} ${node.cage.faces.every(f => f.length === 4) ? 'quads' : 'faces'})`;
