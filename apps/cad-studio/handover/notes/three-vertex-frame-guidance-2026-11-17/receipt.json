@@ -1,0 +1,238 @@
+{
+  "status": "PASS",
+  "qualification": "Ordered native-vertex frame guidance",
+  "visualReview": "Actual 02/03/05 pixels inspected: synthetic box, no personal information.",
+  "reads": [],
+  "oracles": [],
+  "files": [],
+  "downloads": [],
+  "observations": [
+    {
+      "label": "02-original-frame",
+      "ordered": [
+        [
+          0,
+          0,
+          10
+        ],
+        [
+          60,
+          30,
+          10
+        ],
+        [
+          60,
+          0,
+          0
+        ]
+      ],
+      "offset": 0,
+      "angle": 0,
+      "expected": {
+        "Origin (mm)": [
+          0,
+          0,
+          10
+        ],
+        "+X": [
+          0.8944271909999157,
+          0.44721359549995787,
+          0
+        ],
+        "+Y": [
+          0.4190581774617468,
+          -0.8381163549234936,
+          -0.349215147884789
+        ],
+        "Normal": [
+          -0.15617376188860604,
+          0.3123475237772121,
+          -0.9370425713316363
+        ]
+      },
+      "displayed": {
+        "Origin (mm)": [
+          0,
+          0,
+          10
+        ],
+        "+X": [
+          0.894427,
+          0.447214,
+          0
+        ],
+        "+Y": [
+          0.419058,
+          -0.838116,
+          -0.349215
+        ],
+        "Normal": [
+          -0.156174,
+          0.312348,
+          -0.937043
+        ]
+      },
+      "displayPrecision": 6,
+      "inspectionNoMutation": true
+    },
+    {
+      "label": "03-offset-angle",
+      "ordered": [
+        [
+          0,
+          0,
+          10
+        ],
+        [
+          60,
+          30,
+          10
+        ],
+        [
+          60,
+          0,
+          0
+        ]
+      ],
+      "offset": 2,
+      "angle": 30,
+      "expected": {
+        "Origin (mm)": [
+          0.14855728706151705,
+          -0.2971145741230341,
+          8.027779509713833
+        ],
+        "+X": [
+          0.8944271909999157,
+          0.44721359549995787,
+          0
+        ],
+        "+Y": [
+          0.4410019082897832,
+          -0.8820038165795664,
+          0.16609209621125104
+        ],
+        "Normal": [
+          0.07427864353075853,
+          -0.14855728706151705,
+          -0.9861102451430834
+        ]
+      },
+      "displayed": {
+        "Origin (mm)": [
+          0.148557,
+          -0.297115,
+          8.02778
+        ],
+        "+X": [
+          0.894427,
+          0.447214,
+          0
+        ],
+        "+Y": [
+          0.441002,
+          -0.882004,
+          0.166092
+        ],
+        "Normal": [
+          0.0742786,
+          -0.148557,
+          -0.98611
+        ]
+      },
+      "displayPrecision": 6,
+      "inspectionNoMutation": true
+    },
+    {
+      "label": "05-swapped-frame",
+      "ordered": [
+        [
+          0,
+          0,
+          10
+        ],
+        [
+          60,
+          0,
+          0
+        ],
+        [
+          60,
+          30,
+          10
+        ]
+      ],
+      "offset": 0,
+      "angle": 0,
+      "expected": {
+        "Origin (mm)": [
+          0,
+          0,
+          10
+        ],
+        "+X": [
+          0.9863939238321439,
+          0,
+          -0.1643989873053573
+        ],
+        "+Y": [
+          0.051349616596309676,
+          0.9499679070317291,
+          0.3080976995778581
+        ],
+        "Normal": [
+          0.15617376188860604,
+          -0.3123475237772121,
+          0.9370425713316363
+        ]
+      },
+      "displayed": {
+        "Origin (mm)": [
+          0,
+          0,
+          10
+        ],
+        "+X": [
+          0.986394,
+          0,
+          -0.164399
+        ],
+        "+Y": [
+          0.0513496,
+          0.949968,
+          0.308098
+        ],
+        "Normal": [
+          0.156174,
+          -0.312348,
+          0.937043
+        ]
+      },
+      "displayPrecision": 6,
+      "inspectionNoMutation": true
+    },
+    {
+      "xyHasNoVertexClaim": true,
+      "existingSketchReopenHasNoVertexClaim": true,
+      "faceActual": "NOT_RUN",
+      "baselineActual": "NOT_RUN: heavy gate exit75 after129s, no browser started"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Single native box and ordered non-axis plane; no new topology or geometry algorithm qualification."
+  ],
+  "chromeProcessesLaunched": 1,
+  "phase": "open feature editor 1",
+  "sourceCount": 534,
+  "rawReceiptSHA256": "9553faecd8784bf2e0c82dd83b771475a0eef47844e7303a78fa246bd072dd8a"
+}

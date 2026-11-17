@@ -1,3 +1,4 @@
+import { VertexPlaneSummary } from './VertexPlaneSummary';
 import { TrimBoundaryGuidance } from './TrimBoundaryGuidance';
 import type { CoordinateIntent } from '../sketch/coordinateFeedback';
 import { SketchSolverDiagnostics } from './sketchPresentation';
@@ -102,6 +103,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
               onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v) && Math.abs(v) < 90) onPlace(anchor.kind, anchor.offset, v); }} /><em>°</em></span></label>
         </div>;
       })()}
+      <VertexPlaneSummary anchor={sketch.anchor} plane={sketch.plane} />
       {outlines.length > 1 &&
         <label className={FIELD}><span>Active outline</span>
           <NativeSelect className={CONTROL} aria-label="Active outline" value={activeOutline}

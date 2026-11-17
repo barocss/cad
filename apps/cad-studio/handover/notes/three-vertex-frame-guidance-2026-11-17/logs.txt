@@ -1,0 +1,353 @@
+## /tmp/cad-vertex-plane-summary-gate.log
+Original SHA256: e4a3a720e5346a042a1feadc14e07957639c6f3126ca6a37458033001fee25c4
+GATE: waiting — running: ; load 48.26; 1 queued
+GATE: go after 22 s (load 38.49, slot 1 of 1)
+
+## /tmp/cad-vertex-plane-summary-tests.log
+Original SHA256: a71217ea8ff728925bfd6a779810f8219f55e97d4de3e4f1495f505a364e55f4
+TAP version 13
+# Subtest: vertex capture shows ordered roles and a readonly approximate current frame
+ok 1 - vertex capture shows ordered roles and a readonly approximate current frame
+  ---
+  duration_ms: 6.414041
+  type: 'test'
+  ...
+# Subtest: offset and tilted current frame is displayed rather than the stored capture frame
+ok 2 - offset and tilted current frame is displayed rather than the stored capture frame
+  ---
+  duration_ms: 0.620875
+  type: 'test'
+  ...
+# Subtest: XY, face, missing capture and reopened anchors make no vertex provenance claim
+ok 3 - XY, face, missing capture and reopened anchors make no vertex provenance claim
+  ---
+  duration_ms: 1.411917
+  type: 'test'
+  ...
+# Subtest: small nonzero components are not rounded to zero in the display or changed in the source
+ok 4 - small nonzero components are not rounded to zero in the display or changed in the source
+  ---
+  duration_ms: 0.335625
+  type: 'test'
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 367.745875
+
+## /tmp/cad-vertex-plane-summary-tsc.log
+Original SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+
+## /tmp/cad-vertex-plane-summary-lint.log
+Original SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+
+## /tmp/cad-vertex-plane-summary-build.log
+Original SHA256: 8e28570de265dada1f5ff49f3825e23fef1a508a6ab81d6066110f4f67aca4c3
+vite v8.3.1 building client environment for production...
+transforming...
+[INEFFECTIVE_DYNAMIC_IMPORT] ../../packages/barocss-cad-model/src/engine/direct.ts is dynamically imported by ../../packages/barocss-cad-model/src/engine/directModule.ts but also statically imported by ../../packages/barocss-cad-model/src/engine/curveFeaturePattern.ts, ../../packages/barocss-cad-model/src/engine/routeBundle.ts, dynamic import will not move module into another chunk.
+
+[INEFFECTIVE_DYNAMIC_IMPORT] ../../packages/barocss-cad-model/src/engine/direct.ts is dynamically imported by ../../packages/barocss-cad-model/src/engine/directModule.ts but also statically imported by ../../packages/barocss-cad-model/src/engine/curveFeaturePattern.ts, ../../packages/barocss-cad-model/src/engine/routeBundle.ts, dynamic import will not move module into another chunk.
+
+[INEFFECTIVE_DYNAMIC_IMPORT] ../../packages/barocss-cad-model/src/chat/requirementEvidence.ts is dynamically imported by ../../packages/barocss-cad-model/src/chat/nestedParameterProposal.ts but also statically imported by ../../packages/barocss-cad-model/src/chat/nestedFaceRepair.ts, ../../packages/barocss-cad-model/src/chat/outputs.ts, ../../packages/barocss-cad-model/src/versions/approvedRequirements.ts, ../../packages/barocss-cad-model/src/versions/requirementFollowUp.ts, dynamic import will not move module into another chunk.
+
+✓ 3558 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                          1.45 kB │ gzip:   0.58 kB
+dist/assets/requirementFollowUp-C_MHe1n1.js              1.84 kB
+dist/assets/approvedRequirements-Ce-D2gqj.js             4.25 kB
+dist/assets/outputs-9EsoSghP.js                         28.40 kB
+dist/assets/print.worker-DGGImq0f.js                   366.23 kB
+dist/assets/faces.worker-qlduPfFS.js                 1,856.00 kB
+dist/assets/clearance.worker-CHOy9Ib9.js             2,142.79 kB
+dist/assets/cam.worker-D_N12g0w.js                   2,772.41 kB
+dist/assets/engine.worker-DwafwrJ9.js                4,130.10 kB
+dist/assets/ChatPanel-K7a0PETf.css                       2.51 kB │ gzip:   0.95 kB
+dist/assets/DrawingWorkspace-DGFmOJGL.css                3.92 kB │ gzip:   1.30 kB
+dist/assets/index-DMl1JBGJ.css                          78.40 kB │ gzip:  16.09 kB
+dist/assets/preload-helper-B2SsaV8q.js                   1.37 kB │ gzip:   0.76 kB
+dist/assets/stl-BjZuqtr2.js                              1.51 kB │ gzip:   0.87 kB
+dist/assets/gripper-83cuFXbh.js                          1.72 kB │ gzip:   0.60 kB
+dist/assets/gear-joint-3TiXXxRK.js                       1.81 kB │ gzip:   0.60 kB
+dist/assets/pan-tilt-CnF2o7-B.js                         2.09 kB │ gzip:   0.66 kB
+dist/assets/gantry-ppp-DtmHEV3c.js                       2.21 kB │ gzip:   0.58 kB
+dist/assets/arm-2r-DZlmFL9a.js                           2.26 kB │ gzip:   0.59 kB
+dist/assets/scara-BEzOCPEP.js                            3.42 kB │ gzip:   0.76 kB
+dist/assets/four-bar-DsDNgl1V.js                         3.61 kB │ gzip:   0.83 kB
+dist/assets/triangle-bvh-CWEzQwGa.js                     4.87 kB │ gzip:   2.32 kB
+dist/assets/approvedRequirements-uSS6L68r.js             5.01 kB │ gzip:   2.09 kB
+dist/assets/arm-6r-D-nRNLgU.js                           7.35 kB │ gzip:   0.92 kB
+dist/assets/RenderPanel-DqzIp4dX.js                     28.68 kB │ gzip:   8.05 kB
+dist/assets/path-trace-Ci2dAKdr.js                      30.50 kB │ gzip:  10.82 kB
+dist/assets/DirectPanel-A0fHARS4.js                     32.06 kB │ gzip:   8.86 kB
+dist/assets/exact-affine-plane-internal-C1ywh6Sc.js     78.58 kB │ gzip:  23.56 kB
+dist/assets/DrawingWorkspace-DlbJhDKp.js               141.13 kB │ gzip:  39.71 kB
+dist/assets/ChatPanel-Be5kdgCN.js                      245.43 kB │ gzip:  69.60 kB
+dist/assets/localHeightPlan-IzNSrJ54.js                402.46 kB │ gzip: 129.11 kB
+dist/assets/direct-DbtyeLgJ.js                         431.54 kB │ gzip: 120.11 kB
+dist/assets/baseline-Di2C62S4.js                       482.48 kB │ gzip: 166.25 kB
+dist/assets/savedSectionHatch-DGTNTnPy.js              565.96 kB │ gzip: 186.68 kB
+dist/assets/thickenCommand-BULwPb9u.js               2,222.65 kB │ gzip: 750.15 kB
+dist/assets/index-DMUPdpMA.js                        2,283.10 kB │ gzip: 724.83 kB
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-collapsible/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-collapsible/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-toggle-group/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-toggle-group/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dialog/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dialog/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/cmdk/dist/index.mjs" may not be preserved when bundling.
+ - module level directive may not be preserved in ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/cmdk/dist/index.mjs at 0..13
+  │
+  │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-tooltip/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-tooltip/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-primitive/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-primitive/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-presence/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-presence/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-direction/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-direction/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-toggle/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-toggle/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-menu/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-menu/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-focus-scope/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-portal/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-portal/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-focus-guards/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-focus-guards/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-roving-focus/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-roving-focus/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-visually-hidden/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-visually-hidden/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-collection/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-collection/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-popper/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-popper/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/swr/dist/config-context-ext53wcz.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/swr/dist/config-context-ext53wcz.mjs:1:1 ]
+   │
+ 1 │ 'use client';
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-arrow/dist/index.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/@radix-ui/react-arrow/dist/index.mjs:1:1 ]
+   │
+ 1 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/lucide-react/dist/esm/context.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/lucide-react/dist/esm/context.mjs:2:1 ]
+   │
+ 2 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[MODULE_LEVEL_DIRECTIVE] The semantics of the module level directive "use client" in "../../../../..<HOME>/github/barocss/cad-d1274/node_modules/lucide-react/dist/esm/Icon.mjs" may not be preserved when bundling.
+   ╭─[ ../../../../..<HOME>/github/barocss/cad-d1274/node_modules/lucide-react/dist/esm/Icon.mjs:2:1 ]
+   │
+ 2 │ "use client";
+   │ ──────┬──────
+   │       ╰──────── module level directive may not be preserved
+   │
+   │ Help: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+───╯
+
+[INEFFECTIVE_DYNAMIC_IMPORT] src/files/taskRunHandoff.ts is dynamically imported by src/files/useStudioDocumentFiles.ts but also statically imported by src/files/useStudioDocumentFiles.ts, dynamic import will not move module into another chunk.
+
+[INEFFECTIVE_DYNAMIC_IMPORT] ../../packages/barocss-cad-model/src/chat/requirementEvidence.ts is dynamically imported by ../../packages/barocss-cad-model/src/chat/nestedParameterProposal.ts but also statically imported by src/files/taskCheckpoint.ts, src/files/workingApprovalChecks.ts, src/storage/ApprovedRequirementChecks.tsx, src/storage/checkSavedFaceRepair.ts, src/storage/faceRepairEvidence.ts, ..., dynamic import will not move module into another chunk.
+
+✓ built in 7.95s
+[PLUGIN_TIMINGS] JavaScript callbacks ran for 6.0s of this 7.9s build (75%).
+The slowest callbacks, timed inside each callback (the wait before a callback starts is excluded, the time it awaits is included):
+  - plugin @tailwindcss/vite:generate:build transform (46%, 3.7s, 3558 calls)
+Additional callback time came from the callbacks below and from callbacks under 1s.
+3 callbacks are listed without a time. Their calls overlapped, so the time inside one call includes work from other calls. To find their cost, profile the build with `node --cpu-prof`:
+  - plugin vite:asset load (8 calls)
+  - plugin vite:worker-import-meta-url transform (5 calls)
+  - plugin vite:css-post renderChunk (24 calls)
+See https://rolldown.rs/reference/InputOptions.checks#bundlertimings for more details.
+
+
+## /tmp/cad-three-vertex-guidance-driver-final-lint.log
+Original SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+
+## /tmp/cad-three-vertex-guidance-after01.log
+Original SHA256: 6c71d4c4251c975f3fbf34deec42f074e8836e336456b16b5735befa56a95ac4
+{"status":"PASS","phase":"open feature editor 1","output":"/tmp/cad-three-vertex-guidance-after-01"}
