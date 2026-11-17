@@ -1,0 +1,17 @@
+{
+  "status": "FAIL",
+  "phase": "Project Open Keep editing",
+  "failure": "locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('complementary', { name: 'Versions panel', exact: true }).getByRole('button', { name: 'Open B.bcad', exact: true })\u001b[22m\n\n    at /private/tmp/cad-robot-workspace-20261117/apps/cad-studio/test/two-point-snap-project-open-browser.mjs:21:98\n    at async f.run (/private/tmp/cad-robot-workspace-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-robot-workspace-20261117/apps/cad-studio/test/two-point-snap-project-open-browser.mjs:17:1",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 526,
+  "sourceAfterCleanupCount": 526,
+  "classification": "NOT_QUALIFIED: Project Open inaccessible during Sketch, not product lifecycle failure",
+  "frozenEqualsAfterCleanup": true
+}
