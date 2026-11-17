@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "qualification": "Current-mode Grow/Shrink/Linked change only selection; subsequent crease owns one cage undo step and native persistence.",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One 4-quads-per-side box at 1440x1000; disconnected/invalid topology checked separately in pure tests. Shortest path and crease barriers not implemented."
+  ],
+  "nativeFileSha256": "a3f290c528a269c4a3fa62aec9f87268d8daf7b4a7985dc6bb0455b4000ea105"
+}

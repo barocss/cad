@@ -170,6 +170,45 @@ export function select(s: CageSession, hit: CageHit | null, additive: boolean, g
   const edges = toggled ? base.edges.filter(([a, b]) => ek(a, b) !== ek(hit.a, hit.b)) : [...base.edges, ...add.filter(([a, b]) => !keys.has(ek(a, b)))];
   return selected({ ...emptyCageSel, edges });
 }
+/** Selection adjacency is topological: vertices share an edge, edges a vertex, faces an edge.
+ * Shrink removes picked elements touching an unpicked neighbour; open borders are not imaginary neighbours.
+ * Linked floods through creases too. No geometry, document history or cage Undo entry is changed.
+ */
+export function connectedSelection(s: CageSession, action: 'grow' | 'shrink' | 'linked'): CageSession {
+  const c = s.cage, nv = c.positions.length / 3;
+  if (!Number.isInteger(nv) || c.faces.some(f => f.length < 3 || f.some(v => !Number.isInteger(v) || v < 0 || v >= nv))) {
+    throw new SubdError('INPUT', 'selection: invalid cage topology');
+  }
+  const topology = cageTopology(c), edges = [...topology.edges.values()];
+  const edgeIndex = new Map(edges.map((e, i) => [ek(e.a, e.b), i]));
+  const count = s.mode === 'vertex' ? nv : s.mode === 'edge' ? edges.length : c.faces.length;
+  const neighbours = Array.from({ length: count }, () => new Set<number>());
+  const connect = (a: number, b: number) => { if (a !== b) { neighbours[a].add(b); neighbours[b].add(a); } };
+  if (s.mode === 'vertex') edges.forEach(e => connect(e.a, e.b));
+  else if (s.mode === 'edge') {
+    const incident = Array.from({ length: nv }, () => [] as number[]);
+    edges.forEach((e, i) => { incident[e.a].push(i); incident[e.b].push(i); });
+    incident.forEach(list => list.forEach((a, i) => list.slice(i + 1).forEach(b => connect(a, b))));
+  } else edges.forEach(e => e.faces.forEach((a, i) => e.faces.slice(i + 1).forEach(b => connect(a, b))));
+  const picked = s.mode === 'vertex' ? s.sel.vertices : s.mode === 'face' ? s.sel.faces : s.sel.edges.map(([a, b]) => edgeIndex.get(ek(a, b)) ?? -1);
+  if (picked.some(i => !Number.isInteger(i) || i < 0 || i >= count)) throw new SubdError('INPUT', 'selection: pick current cage elements again');
+  const selected = new Set(picked);
+  if (!selected.size) return s;
+  const next = new Set(selected);
+  if (action === 'shrink') {
+    selected.forEach(i => { if ([...neighbours[i]].some(j => !selected.has(j))) next.delete(i); });
+  } else {
+    const queue = [...selected];
+    for (let at = 0; at < queue.length; at++) {
+      for (const j of neighbours[queue[at]]) if (!next.has(j)) { next.add(j); if (action === 'linked') queue.push(j); }
+    }
+  }
+  if (next.size === selected.size && [...next].every(i => selected.has(i))) return s;
+  const ids = [...next].sort((a, b) => a - b);
+  const sel = s.mode === 'vertex' ? { ...emptyCageSel, vertices: ids } : s.mode === 'face' ? { ...emptyCageSel, faces: ids } : { ...emptyCageSel, edges: ids.map(i => [edges[i].a, edges[i].b] as [number, number]) };
+  return { ...s, sel };
+}
+
 export const selectedVertices = (s: CageSession) => selectionVertices(s.cage, s.sel);
 /** The selection's centre (where the gizmo sits), or null. */
 export function selectionCentre(s: CageSession): [number, number, number] | null {
@@ -218,7 +257,7 @@ export function commitDrag(s: CageSession, delta: readonly number[], extrude: bo
   return step(s, d.cage, d.sel);
 }
 
-export type CageOp = 'extrude' | 'insert-loop' | 'bridge' | 'fill' | 'weld' | 'weld-near' | 'crease' | 'uncrease' | 'delete' | 'select-loop' | 'select-ring' | 'mirror-x' | 'mirror-y' | 'mirror-z' | 'mirror-off';
+export type CageOp = 'extrude' | 'insert-loop' | 'bridge' | 'fill' | 'weld' | 'weld-near' | 'crease' | 'uncrease' | 'delete' | 'select-loop' | 'select-ring' | 'select-grow' | 'select-shrink' | 'select-linked' | 'mirror-x' | 'mirror-y' | 'mirror-z' | 'mirror-off';
 /** Two boundary edge sets from one selection: its edges split into connected chains. */
 function twoBoundaries(c: StudioCage, edges: readonly (readonly [number, number])[]): [(readonly [number, number])[], (readonly [number, number])[]] {
   const groups: (readonly [number, number])[][] = [];
@@ -265,6 +304,9 @@ export function cageBoundaryReadiness(s: CageSession, op: 'fill' | 'bridge'): { 
 export function runOp(s: CageSession, op: CageOp, tolerance = 0.01, t = 0.5): CageSession {
   const c = s.cage, sel = s.sel;
   switch (op) {
+    case 'select-grow': return connectedSelection(s, 'grow');
+    case 'select-shrink': return connectedSelection(s, 'shrink');
+    case 'select-linked': return connectedSelection(s, 'linked');
     case 'select-loop': case 'select-ring': {
       const e = sel.edges[0]; if (!e) throw new SubdError('INPUT', 'pick an edge first');
       return select(s, { kind: 'edge', a: e[0], b: e[1] }, false, op === 'select-loop' ? 'loop' : 'ring');
