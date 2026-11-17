@@ -1,0 +1,46 @@
+{
+  "status": "PASS",
+  "qualification": "A changed older-revision mounting plate creates the next placed revision, updates both sharers only after acceptance, and preserves the independent spare and occurrence transforms.",
+  "observations": [
+    {
+      "placedRevision": "D",
+      "fileRevision": "B",
+      "pendingRevision": "E"
+    },
+    {
+      "acceptedRevisions": [
+        "E",
+        "E",
+        "D"
+      ],
+      "sharedHeight": 12,
+      "spareHeight": 8,
+      "sourceFileRevisionRetained": "B",
+      "futureRevision": "G",
+      "keepUndoRedoNativeOpen": true
+    }
+  ],
+  "limits": [
+    "Three synthetic drilled plate instances, no mates/nested assembly or project-linked external-file watcher. No release approval or original file revision rewriting."
+  ],
+  "sourceUnchangedDuringRun": true,
+  "baseline": {
+    "modelTests": {
+      "pass": 6,
+      "fail": 2
+    },
+    "browser": "FAIL: D placed + B file offered B, expected E"
+  },
+  "savedFileReadback": {
+    "holeCenter": [
+      32,
+      16
+    ],
+    "holeRadius": 4,
+    "sourceFileRevisions": [
+      "B",
+      "B",
+      "D"
+    ]
+  }
+}

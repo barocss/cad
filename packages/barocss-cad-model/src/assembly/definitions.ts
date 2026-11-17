@@ -19,7 +19,7 @@ export function freshPartId(doc: StudioDoc): string {
 }
 const revisionRank = (r: string): number => /^\d+$/.test(r) ? Number(r) : /^[A-Z]+$/.test(r) ? [...r].reduce((t, c) => t * 26 + c.charCodeAt(0) - 64, 0) : -1;
 /** The later of two revisions (of one kind: letters or numbers); the first when they cannot be compared. */
-export const newerRevision = (a: string, b: string): string => revisionRank(b) > revisionRank(a) && revisionRank(a) >= 0 ? b : a;
+export const newerRevision = (a: string, b: string): string => (/^\d+$/.test(a) && /^\d+$/.test(b) || /^[A-Z]+$/.test(a) && /^[A-Z]+$/.test(b)) && revisionRank(b) > revisionRank(a) ? b : a;
 /** A part file's revision: its drawing's, or A. */
 export const revisionOf = (part: StudioDoc) => { const r = part.drawing?.revision?.trim(); return r && r !== '-' ? r : 'A'; };
 
@@ -45,7 +45,7 @@ export function offerRevision(doc: StudioDoc, id: string, part: StudioDoc, name:
   const blocked = cutBlockedBy(doc, sharing(doc, id).map(i => i.id), part); if (blocked) return { error: cutBlockedWords(blocked, 'This file') };
   const strip = (d: StudioDoc) => JSON.stringify({ ...d, render: undefined, direct: undefined, drawing: undefined });
   if (strip(part) === strip(placed.doc)) return { error: `This file is ${placed.name} as it is placed (Rev ${placed.part.rev}): nothing to update.` };
-  const own = revisionOf(part), rev = own !== 'A' && own !== placed.part.rev ? own : nextRevision(placed.part.rev);
+  const latest = newerRevision(placed.part.rev, revisionOf(part)), rev = latest !== placed.part.rev ? latest : nextRevision(placed.part.rev);
   const next = { ...doc, pendingParts: { ...doc.pendingParts, [id]: { doc: { ...part, render: undefined, direct: undefined }, rev, name } } };
   // (Roadmap 10 ①: the occurrences' own looks stay through the revision; those whose body it no longer has are listed now, held when it is accepted.)
   return { doc: next, held: heldByRevision(next, id) };

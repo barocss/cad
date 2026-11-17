@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { rectanglePart, type PartInstance, type StudioDoc } from '../src/engine/doc';
 import { lookKeysOf } from '../src/assembly/looks';
 import { addInstancePattern } from '../src/assembly/patterns';
-import { acceptRevision, dismissRevision, editDefinition, freshPartId, makeIndependent, offerRevision, revisionOf, sharing } from '../src/assembly/definitions';
+import { acceptRevision, dismissRevision, editDefinition, freshPartId, makeIndependent, newerRevision, offerRevision, revisionOf, sharing } from '../src/assembly/definitions';
 
 const pin = rectanglePart(10, 10, 20), taller = rectanglePart(10, 10, 30);
 const placed = (id: string, part: string, x: number): PartInstance => ({ id, name: 'pin', doc: pin, position: [x, 0, 0], rotation: [0, 0, 0], part: { id: part, rev: 'A', source: 'pin.bcad' } });
@@ -93,4 +93,29 @@ test('roadmap 10 ⑧ audit: revisions never go backwards, a waiting revision is 
   assert.ok('error' in editDefinition(asm, 'inst1', asm));
   const inner: StudioDoc = { ...taller, instances: [{ ...placed('x', 'part9', 0), doc: asm.instances![0].doc }] };
   assert.ok('error' in editDefinition(asm, 'inst1', inner));
+});
+
+
+test('revision files never downgrade the placed definition, and different numbering systems are not comparable', () => {
+  for (const [current, incoming, expected] of [['D', 'B', 'E'], ['D', 'D', 'E'], ['D', 'F', 'F'], ['09', '02', '10'], ['09', '12', '12'], ['D', '12', 'E'], ['09', 'Z', '10'], ['release', 'B', 'release.1']]) {
+    const source: StudioDoc = { ...asm, instances: asm.instances!.map(i => i.part!.id === 'part1' ? { ...i, part: { ...i.part!, rev: current } } : i) };
+    const file = { ...taller, drawing: { revision: incoming } } as unknown as StudioDoc;
+    const before = JSON.stringify(source);
+    const offered = offerRevision(source, 'part1', file, 'incoming.bcad'); assert.ok('doc' in offered);
+    assert.equal(offered.doc.pendingParts!.part1.rev, expected, `${current} + ${incoming}`);
+    assert.deepEqual(offered.doc.instances, source.instances);
+    const accepted = acceptRevision(offered.doc, 'part1');
+    assert.deepEqual(accepted.instances!.slice(0, 2).map(i => i.part!.rev), [expected, expected]);
+    assert.deepEqual(accepted.instances!.map(i => [i.id, i.position, i.rotation]), source.instances!.map(i => [i.id, i.position, i.rotation]));
+    assert.deepEqual(accepted.instances![2], source.instances![2]);
+    assert.equal(accepted.instances![0].doc.drawing!.revision, incoming, 'source file metadata is retained separately');
+    assert.equal(JSON.stringify(source), before);
+  }
+});
+
+test('revision ordering preserves the current scheme for in-place edits', () => {
+  for (const [current, incoming, expected] of [['D', '12', 'D'], ['09', 'Z', '09'], ['Z', 'AA', 'AA'], ['09', '10', '10'], ['release', 'B', 'release']]) assert.equal(newerRevision(current, incoming), expected);
+  const source: StudioDoc = { ...asm, instances: [{ ...placed('inst1', 'part1', 0), part: { id: 'part1', rev: '09' } }] };
+  const result = editDefinition(source, 'inst1', { ...taller, drawing: { revision: 'Z' } } as unknown as StudioDoc);
+  assert.ok('doc' in result); assert.equal(result.doc.instances![0].part!.rev, '10');
 });
