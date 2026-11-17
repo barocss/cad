@@ -12,17 +12,26 @@ type Axis = keyof typeof AXES | 'Custom';
 /** The axis a direction is exactly (+X, +Y, +Z), else 'Custom': a direction a chat or a file made is shown as it is and kept unless the choice changes. */
 export const axisOf = (v: readonly number[]): Axis => (Object.keys(AXES) as (keyof typeof AXES)[]).find(a => AXES[a].every((x, k) => x === v[k])) ?? 'Custom';
 
-export interface Draft { kind: 'linear' | 'circular'; count: string; spacing: string; angle: string; axis: Axis }
+export interface Draft { kind: 'linear' | 'circular'; count: string; spacing: string; angle: string; axis: Axis; originX: string; originY: string; originZ: string }
 export function draftOf(p: InstancePattern | undefined): Draft {
-  if (!p) return { kind: 'linear', count: '3', spacing: '20', angle: '120', axis: 'X' };
-  return p.kind === 'linear' ? { kind: 'linear', count: String(p.count), spacing: String(p.spacing), angle: '120', axis: axisOf(p.dir) }
-    : { kind: 'circular', count: String(p.count), spacing: '20', angle: String(p.angle), axis: axisOf(p.axis) };
+  const origin = p?.kind === 'circular' ? p.origin : [0, 0, 0];
+  const coordinates = { originX: String(origin[0]), originY: String(origin[1]), originZ: String(origin[2]) };
+  if (!p) return { kind: 'linear', count: '3', spacing: '20', angle: '120', axis: 'X', ...coordinates };
+  return p.kind === 'linear' ? { kind: 'linear', count: String(p.count), spacing: String(p.spacing), angle: '120', axis: axisOf(p.dir), ...coordinates }
+    : { kind: 'circular', count: String(p.count), spacing: '20', angle: String(p.angle), axis: axisOf(p.axis), ...coordinates };
 }
 
-/** What Apply sends for an existing pattern: its numbers, and the direction or axis only when the choice changed (a custom one stays as it is). */
+// An unfinished coordinate is invalid, never an implicit move to world zero.
+export function patternOrigin(draft: Draft): [number, number, number] {
+  return [draft.originX, draft.originY, draft.originZ].map(x => x.trim() === '' ? NaN : Number(x)) as [number, number, number];
+}
+
+/** What Apply sends for an existing pattern: its numbers, and the direction/axis/origin only when changed (a custom one stays as it is). */
 export function patternEdit(pattern: InstancePattern, draft: Draft): EditPatternOptions {
+  const origin = patternOrigin(draft);
+  const moved = pattern.kind === 'circular' && origin.some((v, i) => v !== pattern.origin[i]);
   const count = Number(draft.count), turned = draft.axis !== draftOf(pattern).axis && draft.axis !== 'Custom' ? [...AXES[draft.axis]] as [number, number, number] : undefined;
-  return pattern.kind === 'linear' ? { id: pattern.id, count, spacing: Number(draft.spacing), ...(turned ? { dir: turned } : {}) } : { id: pattern.id, count, angle: Number(draft.angle), ...(turned ? { axis: turned } : {}) };
+  return pattern.kind === 'linear' ? { id: pattern.id, count, spacing: Number(draft.spacing), ...(turned ? { dir: turned } : {}) } : { id: pattern.id, count, angle: Number(draft.angle), ...(turned ? { axis: turned } : {}), ...(moved ? { origin } : {}) };
 }
 
 /** The seed's pattern (to make, edit or delete) or an occurrence's pattern (to skip it). */
@@ -49,7 +58,7 @@ export function InstancePatternControls({ inst, pattern, occurrenceOf, onAdd, on
     if (pattern) why = onEdit(patternEdit(pattern, draft));
     else {
       const count = Number(draft.count), dir = [...AXES[draft.axis === 'Custom' ? 'X' : draft.axis]] as [number, number, number];
-      why = onAdd(draft.kind === 'linear' ? { seed: inst.id, kind: 'linear', count, spacing: Number(draft.spacing), dir } : { seed: inst.id, kind: 'circular', count, angle: Number(draft.angle), axis: dir, origin: [0, 0, 0] });
+      why = onAdd(draft.kind === 'linear' ? { seed: inst.id, kind: 'linear', count, spacing: Number(draft.spacing), dir } : { seed: inst.id, kind: 'circular', count, angle: Number(draft.angle), axis: dir, origin: patternOrigin(draft) });
     }
     setError(why);
     if (!why) setOpen(false);
@@ -66,7 +75,13 @@ export function InstancePatternControls({ inst, pattern, occurrenceOf, onAdd, on
         ? <label className={FIELD}><span>Spacing mm</span><input aria-label="Pattern spacing" type="number" step="any" value={draft.spacing} onChange={e => set('spacing', e.target.value)} /></label>
         : <label className={FIELD}><span>Angle °</span><input aria-label="Pattern angle" type="number" step="any" value={draft.angle} onChange={e => set('angle', e.target.value)} /></label>}
       <label className={FIELD}><span>{kind === 'linear' ? 'Along' : 'About'}</span>
-        <select aria-label="Pattern axis" value={draft.axis} onChange={e => set('axis', e.target.value)}>{(pattern && draftOf(pattern).axis === 'Custom' ? ['Custom', ...Object.keys(AXES)] as Axis[] : Object.keys(AXES) as Axis[]).map(a => <option key={a} value={a}>{a === 'Custom' ? 'Custom (as made)' : a}{kind === 'circular' ? ' (through the origin)' : ''}</option>)}</select></label>
+        <select aria-label="Pattern axis" value={draft.axis} onChange={e => set('axis', e.target.value)}>{(pattern && draftOf(pattern).axis === 'Custom' ? ['Custom', ...Object.keys(AXES)] as Axis[] : Object.keys(AXES) as Axis[]).map(a => <option key={a} value={a}>{a === 'Custom' ? 'Custom (as made)' : a}</option>)}</select></label>
+      {kind === 'circular' && <fieldset className="flex flex-col gap-1"><legend>Axis origin · mm</legend>
+        {(['X', 'Y', 'Z'] as const).map(a => {
+          const key = `origin${a}` as 'originX' | 'originY' | 'originZ';
+          return <label key={a} className={FIELD}><span>{a}</span><input aria-label={`Pattern origin ${a}`} type="number" step="any" value={draft[key]} onChange={e => set(key, e.target.value)} /></label>;
+        })}
+      </fieldset>}
       {!!pattern?.skip?.length && <div className="kv">Skipped <b>{pattern.skip.map(k => k + 1).join(', ')}</b>
         <Button variant="ghost" onClick={() => setError(onEdit({ id: pattern.id, skip: [] }))}>Restore</Button></div>}
       {error && <div id={errorId} className="hud-error" role="status" aria-label="Pattern refused">{error}</div>}

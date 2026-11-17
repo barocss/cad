@@ -1,0 +1,130 @@
+{
+  "status": "PASS",
+  "receiptSha256": "138d1db9f705e749bf971c2fdc83ddabfa5941a6048c06af91f580791d0de18e",
+  "observations": [
+    {
+      "label": "created",
+      "origin": [
+        10,
+        20,
+        30
+      ],
+      "positions": [
+        [
+          30,
+          60,
+          0
+        ],
+        [
+          -30,
+          40,
+          0
+        ],
+        [
+          -10,
+          -20,
+          0
+        ]
+      ],
+      "stableIds": [
+        "pat1-1",
+        "pat1-2",
+        "pat1-3"
+      ]
+    },
+    {
+      "label": "edited",
+      "origin": [
+        20,
+        20,
+        30
+      ],
+      "positions": [
+        [
+          40,
+          50,
+          0
+        ],
+        [
+          -10,
+          40,
+          0
+        ],
+        [
+          0,
+          -10,
+          0
+        ]
+      ],
+      "stableIds": [
+        "pat1-1",
+        "pat1-2",
+        "pat1-3"
+      ]
+    },
+    {
+      "label": "fresh-open",
+      "origin": [
+        20,
+        20,
+        30
+      ],
+      "positions": [
+        [
+          40,
+          50,
+          0
+        ],
+        [
+          -10,
+          40,
+          0
+        ],
+        [
+          0,
+          -10,
+          0
+        ]
+      ],
+      "stableIds": [
+        "pat1-1",
+        "pat1-2",
+        "pat1-3"
+      ]
+    },
+    {
+      "label": "post-open-edit",
+      "origin": [
+        10,
+        20,
+        30
+      ],
+      "positions": [
+        [
+          30,
+          60,
+          0
+        ],
+        [
+          -30,
+          40,
+          0
+        ],
+        [
+          -10,
+          -20,
+          0
+        ]
+      ],
+      "stableIds": [
+        "pat1-1",
+        "pat1-2",
+        "pat1-3"
+      ]
+    }
+  ],
+  "limits": [
+    "Z-axis quarter turns, one cube seed and three occurrences. No non-rotate mode, schema change, nested patterns, mates or exchange exports. Placement oracle uses literal coordinates, not product rotation functions."
+  ],
+  "downloadCount": 1
+}
