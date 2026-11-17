@@ -1,0 +1,44 @@
+[
+  {
+    "status": "PASS",
+    "qualification": "Author optional engineering change order references on existing native revision records and read the same values in the actual SVG table and reopened file.",
+    "observations": [
+      {
+        "existingECO": "EC-100",
+        "authoredECO": "EC-204",
+        "thirdRevisionHasNoECO": true,
+        "draftOnlyUntilRecord": true,
+        "maxInputLength": 20,
+        "undoRedo": true,
+        "nativeSaveOpen": true,
+        "actualSvgValues": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "limits": [
+      "A reference identifier only, not approval, release, change-order-system integration or manufacturing certification. PDF/DXF not tested."
+    ]
+  },
+  {
+    "status": "PASS",
+    "qualification": "Author optional engineering change order references on existing native revision records and read the same values in the actual SVG table and reopened file.",
+    "observations": [
+      {
+        "existingECO": "EC-100",
+        "authoredECO": "EC-204",
+        "thirdRevisionHasNoECO": true,
+        "draftOnlyUntilRecord": true,
+        "maxInputLength": 20,
+        "undoRedo": true,
+        "nativeSaveOpen": true,
+        "actualSvgValues": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "limits": [
+      "A reference identifier only, not approval, release, change-order-system integration or manufacturing certification. PDF/DXF not tested."
+    ]
+  }
+]

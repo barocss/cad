@@ -17,17 +17,17 @@ function MetadataField({ label, value, set }: { label: string; value: string; se
 
 export function DrawingMetadata({ settings, onChange, onRefused }: { settings: DrawingSettings; onChange(next: DrawingSettings): void; onRefused(message: string): void }) {
   const block = settings.titleBlock ?? { template: 'basic' }, rows = settings.revisions ?? [];
-  const [date, setDate] = useState(today), [description, setDescription] = useState(''), [by, setBy] = useState('');
+  const [date, setDate] = useState(today), [description, setDescription] = useState(''), [by, setBy] = useState(''), [eco, setEco] = useState('');
   const setBlock = (titleBlock: DrawingTitleBlock) => {
     const why = checkDrawingMetadata({ titleBlock })[0];
     if (why) onRefused(why.message); else onChange({ ...settings, titleBlock });
   };
   const record = () => {
-    const revisions = [...rows, { revision: settings.revision ?? '', date, description: description.trim(), ...(by.trim() ? { by: by.trim() } : {}) }];
+    const revisions = [...rows, { revision: settings.revision ?? '', date, description: description.trim(), ...(by.trim() ? { by: by.trim() } : {}), ...(eco.trim() ? { eco: eco.trim() } : {}) }];
     const why = checkDrawingMetadata({ revisions })[0];
     if (why) { onRefused(why.message); return; }
     const next = { ...settings, revisions };
-    onChange(settings.tables?.some(t => t.from === 'revisions') ? next : withTable(next, 'revisions', true)); setDescription('');
+    onChange(settings.tables?.some(t => t.from === 'revisions') ? next : withTable(next, 'revisions', true)); setDescription(''); setEco('');
   };
   return <>
     <label className={FIELD}><span>Title block</span><NativeSelect className={CONTROL} aria-label="Title block template" value={block.template} onChange={e => setBlock({ ...block, template: e.target.value as DrawingTitleBlock['template'] })}>
@@ -39,13 +39,14 @@ export function DrawingMetadata({ settings, onChange, onRefused }: { settings: D
     <details aria-label="Revision history"><summary>Revision history ({rows.length})</summary>
       <label className={FIELD}><span>Revision table</span><input className={TICK} type="checkbox" aria-label="Revision table" checked={!!settings.tables?.some(t => t.from === 'revisions')} onChange={e => onChange(withTable(settings, 'revisions', e.target.checked))} /></label>
       {rows.map(r => <div className={FIELD} key={r.revision} aria-label={`Revision record ${r.revision}`}>
-        <span className="min-w-0 break-words">{r.revision} · {r.date} · {r.description}{r.by ? ` · ${r.by}` : ''}</span>
+        <span className="min-w-0 break-words" style={{ flex: '1 1 0%' }}>{r.revision}{r.eco ? ` · ECO ${r.eco}` : ''} · {r.date} · {r.description}{r.by ? ` · ${r.by}` : ''}</span>
         <Button variant="ghost" size="xs" aria-label={`Remove revision record ${r.revision}`} onClick={() => { const { revisions: _r, ...rest } = settings; void _r; const keep = rows.filter(x => x !== r); onChange(keep.length ? { ...rest, revisions: keep } : rest); }}>Remove</Button>
       </div>)}
       <div className="empty">Record the current revision: {settings.revision || 'set Revision first'}.</div>
       <label className={FIELD}><span>Date</span><Input className={CONTROL} type="date" aria-label="Revision date" value={date} onChange={e => setDate(e.target.value)} /></label>
       <label className={FIELD}><span>Change</span><Input className={CONTROL} aria-label="Revision description" maxLength={120} value={description} onChange={e => setDescription(e.target.value)} /></label>
       <label className={FIELD}><span>By</span><Input className={CONTROL} aria-label="Revision by" maxLength={60} value={by} onChange={e => setBy(e.target.value)} /></label>
+      <label className={FIELD}><span>ECO</span><Input className={CONTROL} aria-label="Revision ECO" title="Optional engineering change order identifier, up to 20 characters. This records a reference, not approval." maxLength={20} value={eco} onChange={e => setEco(e.target.value)} /></label>
       <Button variant="ghost" aria-label="Record revision" disabled={!settings.revision || !description.trim() || !date || rows.some(r => r.revision === settings.revision) || rows.length >= 50} onClick={record}>Record revision</Button>
     </details>
   </>;
