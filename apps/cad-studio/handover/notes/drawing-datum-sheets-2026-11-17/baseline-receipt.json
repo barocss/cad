@@ -1,0 +1,72 @@
+{
+  "status": "FAIL",
+  "qualification": "Author face datums on two drawing sheets without reusing another sheet\u2019s datum identity; preserve original anchors and native/SVG output.",
+  "observations": [
+    {
+      "first": [
+        {
+          "id": "datum-A",
+          "letter": "A",
+          "view": "top",
+          "place": [
+            -10,
+            70
+          ],
+          "face": {
+            "face": "n1.side0",
+            "near": [
+              0,
+              0,
+              -4
+            ]
+          }
+        }
+      ],
+      "afterSecond": [
+        {
+          "id": "datum-A",
+          "letter": "A",
+          "view": "top",
+          "place": [
+            -10,
+            70
+          ],
+          "face": {
+            "face": "n1.side0",
+            "near": [
+              0,
+              0,
+              -4
+            ]
+          }
+        },
+        {
+          "id": "datum-A",
+          "letter": "A",
+          "view": "right",
+          "place": [
+            -5,
+            5
+          ],
+          "face": {
+            "face": "n1.side0",
+            "near": [
+              0,
+              0,
+              -4
+            ]
+          }
+        }
+      ],
+      "bodyNotice": 0
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "limits": [
+    "Synthetic rectangular plate and top/right datum annotations only; no new GD&T solver, standards certification or PDF qualification."
+  ],
+  "sourceFrozenUnchangedThroughCleanup": true,
+  "visualReview": "Viewed actual second-sheet datum A before and B after native reopen.",
+  "failure": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n'A' !== 'B'"
+}

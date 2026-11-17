@@ -1273,7 +1273,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
         <BreaksList settings={settings} views={views} onChange={onChange} onRefused={why => onToast({ title: 'Break unchanged', hint: why, detail: '' })} />
 
-        <DatumsEditor settings={settings} views={views} scale={layout?.scale ?? 1} onChange={onChange} onRefused={setMessage} />
+        <DatumsEditor settings={settings} allDatums={wholeSettings.datums ?? []} views={views} scale={layout?.scale ?? 1} onChange={onChange} onRefused={setMessage} />
 
         <DatumTargetsEditor draft={targetDraft} onDraft={next => {
           if (next.kind !== targetDraft.kind && (pending?.kind === 'datum-line' || (pending?.kind === 'datum-target' && !pending.moving))) cancel();
