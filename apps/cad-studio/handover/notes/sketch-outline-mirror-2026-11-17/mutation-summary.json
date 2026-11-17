@@ -1,0 +1,71 @@
+{
+  "source": "apps/cad-studio/src/sketch/mirrorOutline.ts",
+  "sourceHashBefore": "632ae586a43843e37e715dcf481aae000beb1c8b57c1029c7016948215793127",
+  "sourceHashAfter": "632ae586a43843e37e715dcf481aae000beb1c8b57c1029c7016948215793127",
+  "runs": [
+    {
+      "name": "baseline-before",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 9,
+      "fail": 0
+    },
+    {
+      "name": "factor-two-to-one",
+      "substitution": [
+        "q[k]=2*value-p[k]",
+        "q[k]=value-p[k]"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 7,
+      "fail": 2,
+      "killed": true
+    },
+    {
+      "name": "swap-axis",
+      "substitution": [
+        "k=axis==='x'?0:1",
+        "k=axis==='x'?1:0"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 7,
+      "fail": 2,
+      "killed": true
+    },
+    {
+      "name": "reverse-side-ids",
+      "substitution": [
+        "const shape={...source,points};",
+        "const shape={...source,points,ids:source.ids?.slice().reverse()};"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 7,
+      "fail": 2,
+      "killed": true
+    },
+    {
+      "name": "bypass-admission",
+      "substitution": [
+        "const admitted=rotateOutline(sketch,0,[0,0]);if('error' in admitted)return refusal(admitted.error);",
+        "const admitted={shape:sketch.shape as Polygon};"
+      ],
+      "additional": "Remove post-reflection admission as well, to simulate omitting admission entirely",
+      "status": 1,
+      "pass": 7,
+      "fail": 2,
+      "killed": true
+    },
+    {
+      "name": "baseline-final",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 9,
+      "fail": 0
+    }
+  ]
+}
