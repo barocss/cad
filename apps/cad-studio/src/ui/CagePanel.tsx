@@ -12,7 +12,7 @@ const focusClass = 'focus-visible:outline focus-visible:outline-2 focus-visible:
 
 const OPS: { op: CageOp; label: string; key?: string; tip: string }[] = [
   { op: 'extrude', label: 'Extrude', key: 'E', tip: 'The picked faces (or boundary edges) out as a new region. Move it with the gizmo before Done, or use Cage Undo. Shift-drag also extrudes' },
-  { op: 'insert-loop', label: 'Insert loop', key: 'L', tip: 'An edge loop across the ring through the picked edge, at its middle' },
+  { op: 'insert-loop', label: 'Insert loop', key: 'L', tip: 'An edge loop across the ring through the picked edge, with a ratio preview before applying' },
   { op: 'select-loop', label: 'Loop', tip: 'The picked edge’s whole loop (double-click an edge)' },
   { op: 'select-grow', label: 'Grow', tip: 'Add one topological neighbour step in the current pick mode' },
   { op: 'select-shrink', label: 'Shrink', tip: 'Remove picked elements touching unpicked neighbours. Open borders do not count as unpicked neighbours; fully selected components stay selected' },
@@ -35,6 +35,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
   const what = s.sel.faces.length ? `${s.sel.faces.length} face${s.sel.faces.length === 1 ? '' : 's'}` : s.sel.edges.length ? `${s.sel.edges.length} edge${s.sel.edges.length === 1 ? '' : 's'}` : s.sel.vertices.length ? `${s.sel.vertices.length} vertex${s.sel.vertices.length === 1 ? '' : 'es'}` : 'nothing';
   return <aside className="card props cage-panel" aria-label="Cage editor">
     <div className="card-title">CAGE · {name}</div>
+    <fieldset disabled={!!editor.loopDraft} className="contents">
     <div className="seg" role="group" aria-label="Pick">{(['vertex', 'edge', 'face'] as CageMode[]).map((m, i) =>
       <button key={m} className={focusClass} style={s.mode === m ? activeStyle : undefined} aria-pressed={s.mode === m} data-tip={`${m[0].toUpperCase()}${m.slice(1)}s`} data-tip-desc={`Key ${i + 1}`} onClick={() => editor.setMode(m)}>{m[0].toUpperCase() + m.slice(1)}</button>)}</div>
     <div className="seg" role="group" aria-label="Next overlapping pick">{(['front', 'back'] as const).map(depth =>
@@ -61,10 +62,19 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
     <label className={FIELD}><span>Mirror</span><NativeSelect className={CONTROL} aria-label="Mirror" value={s.mirror ?? ''} onChange={e => editor.op(e.target.value ? `mirror-${e.target.value}` as CageOp : 'mirror-off')}>
       <option value="">None</option><option value="x">Across X</option><option value="y">Across Y</option><option value="z">Across Z</option></NativeSelect></label>
     <div className="muted small" aria-label="Mirror source and replacement">Mirror keeps the positive side of the chosen axis and replaces the negative side with its reflection. Vertices on the mirror plane stay on it. Cage Undo restores the previous shape; Cancel discards this edit.</div>
+    </fieldset>
+    {editor.loopDraft && <div className="space-y-2" role="group" aria-label="Insert loop preview">
+      <div className="muted small">Seed edge {editor.loopDraft.base.sel.edges[0]?.join(' → ')}. Ratio 0 is the first vertex; 1 is the second. Ratios are not millimetres.</div>
+      <label className={FIELD}><span>Loop ratio</span><input className={CONTROL} aria-label="Loop ratio" type="number" step="0.05" min="0" max="1" value={editor.loopDraft.value} onChange={e => editor.previewLoop(e.target.value)} /></label>
+      <div className="muted small">Preview replaces the previous preview. Apply inserts one loop; Cancel restores the cage and selection.</div>
+      {!editor.loopDraft.error && !editor.loopReady && <div role="status" className="muted small">{editor.loopStatus}</div>}
+      {editor.loopDraft.error && <div role="status" className="warn">{editor.loopDraft.error}</div>}
+      <div className="flex gap-1"><Button variant="ghost" onClick={editor.cancelLoop}>Cancel loop preview</Button><Button disabled={!editor.loopReady} onClick={editor.applyLoop}>Apply loop</Button></div>
+    </div>}
     <CageChecks validation={v} faces={s.cage.faces.length} previewMs={editor.previewMs} />
     <div className="flex items-center gap-1 pt-1">
-      <Button variant="ghost" aria-label="Undo cage step" disabled={!s.undo.length} onClick={editor.undo}>Undo</Button>
-      <Button variant="ghost" aria-label="Redo cage step" disabled={!s.redo.length} onClick={editor.redo}>Redo</Button>
+      <Button variant="ghost" aria-label="Undo cage step" disabled={!!editor.loopDraft || !s.undo.length} onClick={editor.undo}>Undo</Button>
+      <Button variant="ghost" aria-label="Redo cage step" disabled={!!editor.loopDraft || !s.redo.length} onClick={editor.redo}>Redo</Button>
       <span className="flex-1" />
       <Button variant="ghost" aria-label="Cancel cage edit" onClick={editor.cancel}>Cancel</Button>
       <Button variant="default" aria-label="Done editing cage" data-tip="Done" data-tip-desc="Apply this cage only after its current evaluation succeeds" data-tip-off={!editor.doneReadiness.ok ? editor.doneReadiness.reason : undefined} data-tip-focus aria-description={editor.doneReadiness.reason} aria-disabled={!editor.doneReadiness.ok} className={!editor.doneReadiness.ok ? 'opacity-50' : undefined} onClick={editor.done}>Done</Button>
