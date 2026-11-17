@@ -1,0 +1,309 @@
+{
+  "status": "FAIL",
+  "qualification": "Deleting a section must not let Add section reconnect its retained detail to a different cut.",
+  "failure": "page.waitForFunction: Timeout 30000ms exceeded.\n",
+  "sourceFrozenCount": 559,
+  "sourceFrozenEqualsCleanup": true,
+  "sourceCapsuleSha256": "f6832055da98576da3858a1dacb3ecf7d8dfdfcde41a44c50c915040afc8bdde",
+  "states": [
+    {
+      "label": "01-original",
+      "drawing": {
+        "sheet": "A3",
+        "projection": "third",
+        "hidden": false,
+        "sections": [
+          {
+            "id": "B",
+            "view": "front",
+            "at": 16,
+            "removed": {}
+          }
+        ],
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "02-deleted",
+      "drawing": {
+        "sheet": "A3",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": false,
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "03-new-section",
+      "drawing": {
+        "sheet": "A3",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": false,
+        "sections": [
+          {
+            "id": "D",
+            "view": "top",
+            "at": -4
+          }
+        ],
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "failure",
+      "drawing": {
+        "sheet": "A3",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": false,
+        "sections": [
+          {
+            "id": "D",
+            "view": "top",
+            "at": 5
+          }
+        ],
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "observations": [
+    {
+      "original": {
+        "sheet": "A3",
+        "projection": "third",
+        "hidden": false,
+        "sections": [
+          {
+            "id": "B",
+            "view": "front",
+            "at": 16,
+            "removed": {}
+          }
+        ],
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      },
+      "deleted": {
+        "sheet": "A3",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": false,
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      },
+      "added": {
+        "sheet": "A3",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": false,
+        "sections": [
+          {
+            "id": "D",
+            "view": "top",
+            "at": -4
+          }
+        ],
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

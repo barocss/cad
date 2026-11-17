@@ -251,6 +251,12 @@ export function reservedDetailLetters(s: Pick<DrawingSettings, 'dimensions' | 'f
   for (const sheet of s.sheets ?? []) for (const view of sheet.views) if (isDetailRef(view)) letters.add(detailLetter(view));
   return letters;
 }
+/** Retained references reserve an absent section's identity; creating a new cut is not a repair. */
+export function reservedSectionLetters(s: Pick<DrawingSettings, 'dimensions' | 'frames' | 'details' | 'sheets'>): Set<string> {
+  const views = [...s.dimensions.map(d => d.view), ...(s.frames ?? []).map(f => f.view), ...(s.details ?? []).map(d => d.view), ...(s.sheets ?? []).flatMap(sheet => sheet.views)];
+  return new Set(views.filter((v): v is SectionRef => v !== undefined && isSectionRef(v)).map(sectionLetter));
+}
+
 export type RoomSide = 'above' | 'below' | 'left' | 'right';
 export type ViewRoom = Partial<Record<ViewId, Partial<Record<RoomSide, number>>>>;
 export const ROOM_SIDES: readonly RoomSide[] = ['above', 'below', 'left', 'right'];

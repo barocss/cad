@@ -1271,7 +1271,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
       <aside className="card dw-panel" aria-label="Drawing settings">
         {referenceInspection && <div role="status" aria-label="Reference preview" style={{ marginBottom: 8 }}>{referenceInspection.message}</div>}
-        <SheetSettings sheet={{ bodyScope, scopeRead, scope, views, layout, sectionA, sectionList, cutA, cutsMade, hasSheet, hasFrame, kinds, hasBought, doc, title, busy }} settings={settings} sourceDoc={sourceDoc} fileName={fileName} onChange={onChange} onToast={onToast}
+        <SheetSettings sheet={{ bodyScope, scopeRead, scope, views, layout, sectionA, sectionList, cutA, cutsMade, hasSheet, hasFrame, kinds, hasBought, doc, title, busy }} settings={settings} wholeSettings={wholeSettings} sourceDoc={sourceDoc} fileName={fileName} onChange={onChange} onToast={onToast}
           onScopeChanged={() => { setPending(null); setSelected(null); setSelectedTarget(null); setSelectedFrame(null); setTargetChoices([]); setReselectTarget(null); setHover(null); setDrag(null); }} turnTo={turnTo} later={current > 0} />
 
         <SheetsMenu whole={wholeSettings} current={current} onChange={(next, then) => { if (commitWhole(next) && then !== undefined) selectSheet(then); }} />

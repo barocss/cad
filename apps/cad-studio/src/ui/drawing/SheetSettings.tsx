@@ -6,7 +6,7 @@ import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import { changeDrawingScope } from '@barocss/cad-model/drawing/scope';
 import { sectionMiddle } from '@barocss/cad-model/drawing/sheet';
 import { ORIENTATIONS, VIEWS, scaleLabel, type Orientation } from '@barocss/cad-model/drawing/views';
-import { SECTION_VIEWS, VIEW_IDS, nextRevision, nextSectionId, sameSection, withSections, type DrawingSettings, type SectionViewId } from '@barocss/cad-model/drawing/types';
+import { SECTION_VIEWS, VIEW_IDS, nextRevision, nextSectionId, reservedSectionLetters, sameSection, withSections, type DrawingSettings, type SectionViewId } from '@barocss/cad-model/drawing/types';
 import type { useDrawingSheet } from '../useDrawingSheet';
 import { Icon } from '../atoms';
 import { CONTROL, FIELD, SIDE_NAMES, TICK, withTable } from './sheetShared';
@@ -21,15 +21,17 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 
 type Sheet = ReturnType<typeof useDrawingSheet>;
-export function SheetSettings({ sheet: { bodyScope, scopeRead, scope, views, layout, sectionA, sectionList, cutA, cutsMade, hasSheet, hasFrame, kinds, hasBought, doc, title, busy }, settings, sourceDoc, fileName, onChange, onToast, onScopeChanged, turnTo, later = false }: {
+export function SheetSettings({ sheet: { bodyScope, scopeRead, scope, views, layout, sectionA, sectionList, cutA, cutsMade, hasSheet, hasFrame, kinds, hasBought, doc, title, busy }, settings, wholeSettings = settings, sourceDoc, fileName, onChange, onToast, onScopeChanged, turnTo, later = false }: {
   sheet: Pick<Sheet, 'bodyScope' | 'scopeRead' | 'scope' | 'views' | 'layout' | 'sectionA' | 'sectionList' | 'cutA' | 'cutsMade' | 'hasSheet' | 'hasFrame' | 'kinds' | 'hasBought' | 'doc' | 'title' | 'busy'>;
-  settings: DrawingSettings; sourceDoc: StudioDoc; fileName: string; onChange(next: DrawingSettings): boolean; onToast(e: FriendlyError): void;
+  settings: DrawingSettings; wholeSettings?: DrawingSettings; sourceDoc: StudioDoc; fileName: string; onChange(next: DrawingSettings): boolean; onToast(e: FriendlyError): void;
   /** The scope changed: what was picked or dragged on the sheet is let go. */ onScopeChanged(): void; turnTo(o: Orientation): Promise<void>;
   /** 11 ④: a sheet after the first: its tables, balloons, weld symbols and title block fields are the first sheet's. */ later?: boolean;
 }) {
   const [sectionY, setSectionY] = useState<string | null>(null);
   const [sectionAt, setSectionAt] = useState<{ id: string; text: string } | null>(null);
   const [titleDraft, setTitleDraft] = useState<string | null>(null);
+  const reserved = reservedSectionLetters(wholeSettings);
+  const heldA = !sectionA && reserved.has('A');
   return <>
         <div className="card-title">SHEET {busy && views && <span className="muted">updating…</span>}</div>
         <label className={FIELD}><span>Scope</span><NativeSelect className={CONTROL} aria-label="Drawing scope" disabled={!!scopeRead.error} value={scopeRead.error ? 'invalid' : scope.kind === 'assembly' ? 'assembly' : scope.part ? `part:${scope.part}` : 'part'} onChange={e => {
@@ -70,11 +72,11 @@ export function SheetSettings({ sheet: { bodyScope, scopeRead, scope, views, lay
             }} /></label>)}
         </details>
         <label className={FIELD}><span>Hidden lines</span><input type="checkbox" className={TICK} aria-label="Hidden lines" checked={settings.hidden} onChange={e => onChange({ ...settings, hidden: e.target.checked })} /></label>
-        <label className={FIELD}><span>Section A–A</span><input type="checkbox" className={TICK} aria-label="Section A–A" checked={!!sectionA} onChange={e => {
+        <label className={FIELD}><span>Section A–A</span><input type="checkbox" className={TICK} aria-label="Section A–A" disabled={heldA} title={heldA ? 'Section A is still named by a saved annotation, detail or sheet. Undo its removal or remove the old references first.' : undefined} checked={!!sectionA} onChange={e => {
           const rest = sectionList.filter(x => !(x.id === 'A' && x.view === 'front'));
           // By default through the middle of the part, front to back.
           const at = views ? sectionMiddle(views, 'front', settings.orientation) : null;
-          onChange(withSections(settings, e.target.checked && at !== null && !rest.some(x => x.id === 'A') && !settings.details?.some(d => d.id === 'A') ? [{ id: 'A', view: 'front', at }, ...rest] : rest));
+          onChange(withSections(settings, e.target.checked && !heldA && at !== null && !rest.some(x => x.id === 'A') && !settings.details?.some(d => d.id === 'A') ? [{ id: 'A', view: 'front', at }, ...rest] : rest));
         }} /></label>
         {sectionA && <label className={FIELD}><span>Cut at Y</span><span className="num flex items-center gap-1"><Input type="number" className="w-20 text-right" step="any" aria-label="Section Y" value={sectionY ?? sectionA.at}
           onChange={e => setSectionY(e.target.value)}
@@ -102,7 +104,7 @@ export function SheetSettings({ sheet: { bodyScope, scopeRead, scope, views, lay
         <Button variant="ghost" className="self-start" aria-label="Add section" disabled={!views} title="Another section, square to the top view's depth (change its view and place after)" onClick={() => {
           const view: SectionViewId = sectionList.some(x => x.view === 'top') ? 'right' : 'top', at = views ? sectionMiddle(views, view, settings.orientation) : null;
           // (A is the front's, by its checkbox above: added sections take B on.)
-          if (at !== null) onChange(withSections(settings, [...sectionList, { id: nextSectionId([{ id: 'A', view: 'front', at: 0 }, ...sectionList], (settings.details ?? []).map(d => d.id)), view, at }]));
+          if (at !== null) onChange(withSections(settings, [...sectionList, { id: nextSectionId([{ id: 'A', view: 'front', at: 0 }, ...sectionList], [...(wholeSettings.details ?? []).map(d => d.id), ...reserved]), view, at }]));
         }}>Add section</Button>
         {(['right', 'iso'] as const).map(v => <label key={v} className={FIELD}><span>{v === 'right' ? 'Right view' : 'Isometric view'}</span><input type="checkbox" className={TICK} aria-label={v === 'right' ? 'Right view' : 'Isometric view'} checked={!settings.views || settings.views.includes(v)} onChange={e => {
           const on = new Set(settings.views ?? VIEW_IDS); if (e.target.checked) on.add(v); else on.delete(v);

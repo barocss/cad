@@ -10,7 +10,7 @@
 // for what only a drawing set shows (SHEET n OF N, the sheet index, the cross-references). `mergeSheet` writes an edit made
 // on those settings back into the whole drawing's.
 import { problem, type Problem } from '../engine/refusal';
-import { VIEW_IDS, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sectionLetter, sectionsOf, withSections, type DrawingDimension, type DrawingNote, type DrawingSection, type DrawingSettings, type DrawingTable, type ViewId } from './types';
+import { VIEW_IDS, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, reservedSectionLetters, sectionLetter, sectionsOf, withSections, type DrawingDimension, type DrawingNote, type DrawingSection, type DrawingSettings, type DrawingTable, type ViewId } from './types';
 import type { DrawingDetail } from './detail';
 
 /** A sheet after the first: its id (kept when it is renamed), an optional name, size and scale (absent: the drawing's `sheet`; the largest that fits), and the view ids drawn on it. */
@@ -235,19 +235,19 @@ export function mergeSheet(whole: DrawingSettings, k: number, next: DrawingSetti
   // and what was made in this edit on it — its dimensions and frames, a detail of it — follows the new letter.)
   const wholeIds = new Set([...sectionsOf(whole).map(x => x.id), ...(whole.details ?? []).map(d => d.id)]);
   const mine = new Set([...sectionsOf(whole).filter(inSheet).map(x => `section:${x.id}`), ...(whole.details ?? []).filter(detailHere).map(d => `detail:${d.id}`)]);
-  const reserved = reservedDetailLetters(whole);
-  const used = new Set([...wholeIds, ...reserved, ...sectionsOf(next).map(x => x.id), ...(next.details ?? []).map(d => d.id)]);
+  const reserved = reservedDetailLetters(whole), sectionReserved = reservedSectionLetters(whole);
+  const used = new Set([...wholeIds, ...reserved, ...sectionReserved, ...sectionsOf(next).map(x => x.id), ...(next.details ?? []).map(d => d.id)]);
   const renamed = new Map<string, string>();
   const fresh = (kind: 'section' | 'detail', id: string) => {
     const ref = `${kind}:${id}`;
-    if (mine.has(ref) || (!wholeIds.has(id) && !(kind === 'detail' && reserved.has(id)))) return id;
+    if (mine.has(ref) || (!wholeIds.has(id) && !(kind === 'detail' ? reserved.has(id) : sectionReserved.has(id)))) return id;
     const to = nextSectionId([], used);
     used.add(to);
     renamed.set(ref, to);
     return to;
   };
   const nextSections = sectionsOf(next).map(x => { const id = fresh('section', x.id); return id === x.id ? x : { ...x, id }; });
-  const nextDetails = (next.details ?? []).map(d => { const id = fresh('detail', d.id), view = renamed.has(d.view) ? `section:${renamed.get(d.view)}` as DrawingDetail['view'] : d.view; return id === d.id && view === d.view ? d : { ...d, id, view }; });
+  const nextDetails = (next.details ?? []).map(d => { const id = fresh('detail', d.id), view = !mine.has(`detail:${d.id}`) && renamed.has(d.view) ? `section:${renamed.get(d.view)}` as DrawingDetail['view'] : d.view; return id === d.id && view === d.view ? d : { ...d, id, view }; });
   const follow = <T extends { view: string }>(x: T, isNew: boolean): T => isNew && renamed.has(x.view) ? { ...x, view: `${x.view.slice(0, x.view.indexOf(':') + 1)}${renamed.get(x.view)}` } : x;
   const dimIds = new Set(whole.dimensions.map(d => d.id)), frameIds = new Set((whole.frames ?? []).map(f => f.id));
   const nextDims = next.dimensions.map(d => follow(d, !dimIds.has(d.id)));

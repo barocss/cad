@@ -1,0 +1,388 @@
+{
+  "status": "PASS",
+  "qualification": "Deleting a section must not let Add section reconnect its retained detail to a different cut.",
+  "failure": "",
+  "sourceFrozenCount": 559,
+  "sourceFrozenEqualsCleanup": true,
+  "sourceCapsuleSha256": "5be409214f31613e1503714954404d2256796a2ee31fe480a087ad9393ec6468",
+  "states": [
+    {
+      "label": "01-original",
+      "drawing": {
+        "sheet": "A3",
+        "projection": "third",
+        "hidden": false,
+        "sections": [
+          {
+            "id": "B",
+            "view": "front",
+            "at": 16,
+            "removed": {}
+          }
+        ],
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "02-deleted",
+      "drawing": {
+        "sheet": "A3",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": false,
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "03-new-section",
+      "drawing": {
+        "sheet": "A3",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": false,
+        "sections": [
+          {
+            "id": "D",
+            "view": "top",
+            "at": -4
+          }
+        ],
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "04-open",
+      "drawing": {
+        "sheet": "A3",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": false,
+        "sections": [
+          {
+            "id": "D",
+            "view": "top",
+            "at": -5
+          }
+        ],
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "05-reopened",
+      "drawing": {
+        "sheet": "A3",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": false,
+        "sections": [
+          {
+            "id": "D",
+            "view": "top",
+            "at": -5
+          }
+        ],
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "06-A-undo",
+      "drawing": {
+        "sheet": "A3",
+        "projection": "third",
+        "hidden": false,
+        "sections": [
+          {
+            "id": "A",
+            "view": "front",
+            "at": 16
+          }
+        ],
+        "details": [
+          {
+            "id": "C",
+            "view": "section:A",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ]
+      }
+    }
+  ],
+  "observations": [
+    {
+      "original": {
+        "sheet": "A3",
+        "projection": "third",
+        "hidden": false,
+        "sections": [
+          {
+            "id": "B",
+            "view": "front",
+            "at": 16,
+            "removed": {}
+          }
+        ],
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      },
+      "deleted": {
+        "sheet": "A3",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": false,
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      },
+      "added": {
+        "sheet": "A3",
+        "scope": {
+          "kind": "part"
+        },
+        "projection": "third",
+        "hidden": false,
+        "sections": [
+          {
+            "id": "D",
+            "view": "top",
+            "at": -4
+          }
+        ],
+        "details": [
+          {
+            "id": "C",
+            "view": "section:B",
+            "center": [
+              32,
+              4
+            ],
+            "radius": 3,
+            "scale": 3
+          }
+        ],
+        "title": "Section reference ownership",
+        "dimensions": [],
+        "views": [
+          "front",
+          "top",
+          "right"
+        ],
+        "sheets": [
+          {
+            "id": "S2",
+            "name": "Section controls",
+            "views": [
+              "section:B"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

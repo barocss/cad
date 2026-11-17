@@ -1,7 +1,7 @@
 // Strict source-table and section inputs for drawing.set. Saved-file readers remain permissive.
 import { assertDrawingBodySettings, assertSectionHatchScope } from './scope';
 import { problem, refusal, type Problem } from '../engine/refusal';
-import { annotatedDetailLetters, halfOk, removedOk, reservedDetailLetters, sameSection, sectionHatchVisibilitySupported, sectionDirOk, sectionsOf, stepsOk, withSections, type DrawingSection, type DrawingSettings, type DrawingTable } from './types';
+import { annotatedDetailLetters, halfOk, removedOk, reservedDetailLetters, reservedSectionLetters, sameSection, sectionHatchVisibilitySupported, sectionDirOk, sectionsOf, stepsOk, withSections, type DrawingSection, type DrawingSettings, type DrawingTable } from './types';
 import { detailOk, type DrawingDetail } from './detail';
 import { datumsProperty, checkDatumOptions, readDatums } from './datums';
 import { datumTargetsProperty, checkDatumTargetOptions, readDatumTargets } from './datumTargets';
@@ -93,6 +93,8 @@ export function withManufacturingDrawing(s: DrawingSettings, args: Record<string
   }
   if ('sections' in args) {
     const list = args.sections as DrawingSection[];
+    const previous = sectionsOf(s), reserved = reservedSectionLetters(s);
+    if (list.some(section => reserved.has(section.id) && !previous.some(old => old.id === section.id))) throw refusal('DRAWING_SECTION_REFERENCES', 'A new section cannot use a letter still named by an annotation, detail or sheet. Choose another letter or remove the old reference first.');
     const changed = sectionsOf(s).filter(old => !list.some(n => sameSection(n, old)));
     if (s.dimensions.some(d => changed.some(c => d.view === `section:${c.id}`))) throw refusal('DRAWING_SECTION_REFERENCES', 'A changed or removed section has dimensions. Keep its definition or remove those dimensions explicitly first.');
     // Snapshot nested section inputs; revolved false stays dropped as in saved files.
