@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { InstancePattern } from '@barocss/cad-model/engine/doc';
-import { axisOf, draftOf, patternEdit, patternOrigin } from '../src/ui/InstancePattern';
+import { axisOf, draftOf, patternEdit, patternOrigin, restorePatternOccurrence } from '../src/ui/InstancePattern';
 
 // Row 10 ③ audit 1 (#9): the pattern panel's Apply sends a direction or an axis only when the choice changed; one a chat
 // or a file made (-X, a diagonal) shows as Custom and stays as it is.
@@ -41,4 +41,13 @@ test('blank and nonfinite origin drafts do not coerce to world zero', () => {
   const p = linear([0, 3, 4]);
   assert.equal(p.kind, 'linear');
   assert.deepEqual(patternEdit(p, { ...draftOf(p), originX: '' }), { id: p.id, count: p.count, spacing: p.spacing });
+});
+
+test('restoring one occurrence preserves every other skip and the authored source', () => {
+  const p: InstancePattern = { ...linear([0, 3, 4]), count: 6, skip: [1, 3, 5] };
+  assert.deepEqual(restorePatternOccurrence(p, 3), { id: p.id, skip: [1, 5] });
+  assert.deepEqual(restorePatternOccurrence(p, 2), { id: p.id, skip: [1, 3, 5] });
+  assert.deepEqual(p.skip, [1, 3, 5]);
+  assert.notStrictEqual(restorePatternOccurrence(p, 2).skip, p.skip);
+  assert.deepEqual(restorePatternOccurrence({ ...p, skip: [3] }, 3), { id: p.id, skip: [] });
 });

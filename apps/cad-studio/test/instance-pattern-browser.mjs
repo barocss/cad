@@ -126,7 +126,7 @@ await f.run(async () => {
   const skipped = await check('04-skipped', 1, 2); assert.deepEqual(skipped.instancePatterns[0].skip, [2]);
 
   f.phase = 'restore and count 5'; await pick('Cube');
-  await form().getByRole('button', { name: 'Restore', exact: true }).click(); await changedTo(skipped, '05-restored'); await check('05-restored', 1, 3);
+  await form().getByRole('button', { name: 'Restore all', exact: true }).click(); await changedTo(skipped, '05-restored'); await check('05-restored', 1, 3);
   const restored = await f.doc();
   await form().getByLabel('Pattern count').fill('5'); await form().getByRole('button', { name: 'Apply', exact: true }).click(); await changedTo(restored, '06-count-5');
   const five = await check('06-count-5', 1, 4);

@@ -34,6 +34,9 @@ export function patternEdit(pattern: InstancePattern, draft: Draft): EditPattern
   return pattern.kind === 'linear' ? { id: pattern.id, count, spacing: Number(draft.spacing), ...(turned ? { dir: turned } : {}) } : { id: pattern.id, count, angle: Number(draft.angle), ...(turned ? { axis: turned } : {}), ...(moved ? { origin } : {}) };
 }
 
+/** Restore only the chosen occurrence; the Model transaction validates identity and all remaining exclusions. */
+export const restorePatternOccurrence = (pattern: InstancePattern, k: number): EditPatternOptions => ({ id: pattern.id, skip: (pattern.skip ?? []).filter(skipped => skipped !== k) });
+
 /** The seed's pattern (to make, edit or delete) or an occurrence's pattern (to skip it). */
 export function InstancePatternControls({ inst, pattern, occurrenceOf, onAdd, onEdit, onDelete, onSkip }: {
   inst: PartInstance;
@@ -82,8 +85,13 @@ export function InstancePatternControls({ inst, pattern, occurrenceOf, onAdd, on
           return <label key={a} className={FIELD}><span>{a}</span><input aria-label={`Pattern origin ${a}`} type="number" step="any" value={draft[key]} onChange={e => set(key, e.target.value)} /></label>;
         })}
       </fieldset>}
-      {!!pattern?.skip?.length && <div className="kv">Skipped <b>{pattern.skip.map(k => k + 1).join(', ')}</b>
-        <Button variant="ghost" onClick={() => setError(onEdit({ id: pattern.id, skip: [] }))}>Restore</Button></div>}
+      {!!pattern?.skip?.length && <div className="flex flex-col gap-1" role="group" aria-label="Skipped pattern occurrences">
+        <span>Skipped <b>{pattern.skip.map(k => k + 1).join(', ')}</b></span>
+        <div className="flex flex-wrap gap-1">
+          {pattern.skip.map(k => <Button key={k} variant="ghost" size="xs" aria-label={`Restore occurrence ${k + 1}`} onClick={() => setError(onEdit(restorePatternOccurrence(pattern, k)))}>Restore {k + 1}</Button>)}
+          <Button variant="ghost" size="xs" onClick={() => setError(onEdit({ id: pattern.id, skip: [] }))}>Restore all</Button>
+        </div>
+      </div>}
       {error && <div id={errorId} className="hud-error" role="status" aria-label="Pattern refused">{error}</div>}
       <div className="row-actions" style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
         <Button variant="default" onClick={apply}>{pattern ? 'Apply' : 'Make pattern'}</Button>

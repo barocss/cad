@@ -1,0 +1,175 @@
+{
+  "status": "PASS",
+  "receiptSha256": "7556f45eabf030d9e7580d7cf27bc527c3c5b9732ee963adcc7adf4338cfc10a",
+  "observations": [
+    {
+      "label": "created",
+      "skip": [],
+      "live": [
+        {
+          "id": "pat1-1",
+          "position": [
+            25,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "pat1-2",
+          "position": [
+            50,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "pat1-3",
+          "position": [
+            75,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "pat1-4",
+          "position": [
+            100,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "label": "two-skipped",
+      "skip": [
+        2,
+        4
+      ],
+      "live": [
+        {
+          "id": "pat1-1",
+          "position": [
+            25,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "pat1-3",
+          "position": [
+            75,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "label": "only-three-restored",
+      "skip": [
+        4
+      ],
+      "live": [
+        {
+          "id": "pat1-1",
+          "position": [
+            25,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "pat1-2",
+          "position": [
+            50,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "pat1-3",
+          "position": [
+            75,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "label": "fresh-open",
+      "skip": [
+        4
+      ],
+      "live": [
+        {
+          "id": "pat1-1",
+          "position": [
+            25,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "pat1-2",
+          "position": [
+            50,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "pat1-3",
+          "position": [
+            75,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "label": "restore-all",
+      "skip": [],
+      "live": [
+        {
+          "id": "pat1-1",
+          "position": [
+            25,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "pat1-2",
+          "position": [
+            50,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "pat1-3",
+          "position": [
+            75,
+            0,
+            0
+          ]
+        },
+        {
+          "id": "pat1-4",
+          "position": [
+            100,
+            0,
+            0
+          ]
+        }
+      ]
+    }
+  ],
+  "limits": [
+    "Five-instance linear X pattern, synthetic cube/plate fixture. No new Model/schema behavior, nested assembly, mate or exchange-export qualification."
+  ],
+  "downloadCount": 1
+}
