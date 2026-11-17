@@ -1056,7 +1056,7 @@ export function dimensionMarks(v: ViewPlacement, r: Extract<Resolved, { ok: true
     }
     // Text over the line (the side away from the measured points' middle when the line is beside them).
     if (text) marks.push(...text.marks);
-    else marks.push(...clearOfLine(valueMarks(add(mid, textUp(e), 1.2), readAngle(e), 'middle', r.text, r.dim.tol, '', p, r.alt, r.value), mid, e, inside ? [-len / 2 + p.arrowLength, len / 2 - p.arrowLength] : [-len / 2, len / 2], true));
+    else marks.push(...clearOfLine(valueMarks(add(mid, textUp(e), 1.2), readAngle(e), 'middle', r.text, r.dim.tol, '', p, r.alt, r.value), mid, e, inside ? [-len / 2 + p.arrowLength, len / 2 - p.arrowLength] : [-len / 2, len / 2], true, !!r.dim.basic));
     return marks;
   }
   const C = toSheet(v, r.center), R = r.radius * v.scale, toPlace = sub(place, C), dist = Math.hypot(toPlace[0], toPlace[1]);
@@ -1095,14 +1095,23 @@ export function dimensionMarks(v: ViewPlacement, r: Extract<Resolved, { ok: true
  * from `mid` along `e`), lift its bounds clear of the line and arrowheads. Inside-circle labels retain their existing
  * dual-only policy. ASME text is placed separately by `unidirectional`.
  */
-function clearOfLine(marks: Mark[], mid: XY, e: XY, free: [number, number], enabled: boolean): Mark[] {
+function clearOfLine(marks: Mark[], mid: XY, e: XY, free: [number, number], enabled: boolean, basic = false): Mark[] {
   // Linear text always uses this bound clearance. Inside-circle single-unit text retains its existing policy.
   if (!enabled) return marks;
   const quads = marks.flatMap(m => m.kind === 'text' ? [textCorners(m.at, m.text, m.size, m.anchor, m.angle ?? 0, !!m.bold)] : []).flat();
   if (!quads.length) return marks;
   const along = quads.map(q => (q[0] - mid[0]) * e[0] + (q[1] - mid[1]) * e[1]);
-  if (Math.min(...along) >= free[0] && Math.max(...along) <= free[1]) return marks;
-  const side = textUp(e), lift = 1.2 - Math.min(...quads.map(q => (q[0] - mid[0]) * side[0] + (q[1] - mid[1]) * side[1]));
+  const side = textUp(e);
+  // Aligned basic linear labels acquire their box after this call. Account for that
+  // exact border (including its pen), even when the undecorated text fits the ruler.
+  const frame = basic ? basicBox(marks)[0] : undefined;
+  const half = frame?.kind === 'polyline' ? PENS[frame.pen].width / 2 : 0;
+  const bounds = frame?.kind === 'polyline' ? [...quads, ...frame.points] : quads;
+  const nearest = Math.min(...bounds.map(q => (q[0] - mid[0]) * side[0] + (q[1] - mid[1]) * side[1])) - half;
+  const payloadAlong = basic ? bounds.map(q => (q[0] - mid[0]) * e[0] + (q[1] - mid[1]) * e[1]) : along;
+  const fits = Math.min(...payloadAlong) - half >= free[0] && Math.max(...payloadAlong) + half <= free[1];
+  if (fits && (!basic || nearest >= PENS.thin.width / 2)) return marks;
+  const lift = 1.2 - nearest;
   return lift <= 0 ? marks : marks.map(m => m.kind === 'text' ? { ...m, at: add(m.at, side, lift) } : m);
 }
 

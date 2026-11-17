@@ -191,11 +191,17 @@ test('oriented safe basic bounds do not create an own-line issue after atomic pl
   assertOwnClear(s.group.marks);
   assert.equal(drawingIssues({ views: smallViews, settings, layout: s.layout, sheet: s.sheet, callout: () => null }).some(i => i.code === 'TEXT_OVER_LINES' && i.dims?.includes(d.id)), false);
 });
-test('a fitting long basic box touching its own line is eligible and moves with its text', () => {
+test('a fitting long basic box clears its own line in the primitive without another placement move', () => {
   const d: DrawingDimension = { id: 'basic-long', kind: 'linear', view: 'front', orient: 'horizontal', a: at(0, 0), b: at(64, 0), place: [32, 12], basic: true };
   const settings: DrawingSettings = { ...defaultDrawing(), dimensions: [d], scale: 1 }, s = scene(views, settings);
   const a = textMarks(s.raw)[0], b = textMarks(s.group.marks)[0], delta = [b.at[0] - a.at[0], b.at[1] - a.at[1]];
-  assert.ok(Math.hypot(...delta) > 1); assertTranslated(s.raw.filter(m => m.kind === 'text' || m.kind === 'polyline'), s.group.marks.filter(m => m.kind === 'text' || m.kind === 'polyline'), delta);
+  // The primitive now includes its basic frame in clearance, rather than handing
+  // a self-collision to the later payload-placement pass. No authored move is needed.
+  assert.deepEqual(delta, [0, 0]);
+  assertTranslated(s.raw.filter(m => m.kind === 'text' || m.kind === 'polyline'), s.group.marks.filter(m => m.kind === 'text' || m.kind === 'polyline'), delta);
+  assert.deepEqual(s.r.dim, d);
+  const border = basicBox(s.raw)[0]; assert.ok(border.kind === 'polyline');
+  for (const m of s.raw) if (m.kind === 'line' && m.role === 'dimension') assert.equal(segmentHitsQuad(m.a, m.b, [border.points[0], border.points[1], border.points[2], border.points[3]], 0), false);
   assert.deepEqual(fixedMarks(s.group.marks), fixedMarks(s.raw)); assertOwnClear(s.group.marks);
 });
 for (const units of ['mm', 'inch'] as const) test(`ASME dual ${units}: blocked outward-only candidate uses an endpoint corridor`, () => {

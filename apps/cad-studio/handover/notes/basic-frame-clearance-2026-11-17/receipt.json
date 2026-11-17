@@ -1,0 +1,64 @@
+{
+  "status": "PASS",
+  "qualification": "#613 pinned +X A4 scale .5: actual acceptance, d1-d5 basic frames versus own line/arrow ink, original SVG/DXF, Undo/Redo and Save/fresh Open.",
+  "observations": [
+    {
+      "label": "observed-whole-sheet-diagnostics",
+      "issues": [],
+      "unresolvedTextOverLines": [],
+      "ownFrameProof": "independent SVG/DXF oracle, not inferred from diagnostics"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Synthetic existing tolerance fixture. Previous partial evidence remains untouched.",
+    "Independent narrow SVG/DXF coordinate and polygon oracle, not a font rasterizer or general DXF reader. No PDF/ASME claim.",
+    "Whole-sheet diagnostics are observed separately, not inferred from own-frame clearance. Unboxed same-settings comparison establishes unchanged own strokes, not historical old-renderer pixel identity."
+  ],
+  "sourceBeforeCount": 2,
+  "sourceFrozenCount": 1245,
+  "sourceAfterCount": 1245,
+  "sourceAfterCleanupCount": 1245,
+  "downloads": [
+    {
+      "phase": "native Save basic-clearance",
+      "suggestedFilename": "basic-clearance.bcad"
+    }
+  ],
+  "phase": "fresh Open 04-fresh-open",
+  "provenance": {
+    "kind": "privacy-minimized receipt excerpt",
+    "rawReceiptSHA256": "8f0bd120754c89398a621c8ec467c67e4d1b530345cf799f046ab6bee9b2689a",
+    "omitted": "Full synthetic document snapshots, local absolute paths, launch-process metadata and source manifests; raw receipt retained locally. No result rewritten."
+  },
+  "visualReview": {
+    "agent": "02 and 05 actual PNG pixels inspected; synthetic drawing only, no personal data",
+    "root": "Parent independently confirmed both PNGs"
+  },
+  "artifacts": [
+    {
+      "file": "02-basic-frames-clear.png",
+      "sha256": "c3af1dabb914379bbe1503c7b271f8b21e7609e643e70e4449e1571f98b786ee"
+    },
+    {
+      "file": "05-fresh-open-drawing.png",
+      "sha256": "86bd98e5e0e31ad603cb6d9f793da9e93aeb0c9b05f39c8148198a2875ffdd1f"
+    },
+    {
+      "file": "accepted-clearance-oracle.json",
+      "sha256": "69a31fd0a6de71de52ed45e04851c42eddeac05930921402aefceb77cb79a1f2"
+    },
+    {
+      "file": "fresh-clearance-oracle.json",
+      "sha256": "69a31fd0a6de71de52ed45e04851c42eddeac05930921402aefceb77cb79a1f2"
+    }
+  ]
+}
