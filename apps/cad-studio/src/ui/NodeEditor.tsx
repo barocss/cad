@@ -312,6 +312,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
           }} /> : <div className="field"><span>Target face</span><span>{node.target.face}</span></div>}
       </>}
       {cutSource && <div className="field"><span>Cut source</span><span>{cutSource}</span></div>}
+      {node?.kind === 'circular-pattern' && fields.some(f => f.key === 'span') && <p className="small" role="note" aria-label="Spread over behavior">360° or more uses one full turn. Negative values reverse direction. Spread over cannot be bound to a parameter.</p>}
       {fields.length ? fields.map(f => {
         const rule = f.kind === 'number' ? historyNumberRule(draft, index, f.key) : undefined;
         const numberBounds = featureNumberBounds(rule);

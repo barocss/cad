@@ -1,0 +1,39 @@
+{
+  "status": "PASS",
+  "qualification": "Authored Z spread History: signed intent, atomic step updates, refusal recovery and Save/fresh Open.",
+  "limits": [
+    "No legacy intent inference, arbitrary-angle topology certification or parameter binding for span."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceBeforeCount": 3,
+  "sourceFrozenCount": 1043,
+  "sourceAfterCleanupCount": 1043,
+  "originalReceiptSHA256": "caf62e0324923386599cdb504aa04e6539d7c8261ebc8486e493a75af751c3ac",
+  "sourceUnchanged": true,
+  "manifestSHA256": "d4b239aec6aca9f8d28b0a52b51f0fa3a106d4763f662e7c056ebef58ea0f8a0",
+  "savedSHA256": "80b57c583f0066ae6304f9fd1677df23dc77938e08cd309a1ff947bdad638147",
+  "savedBytes": 705,
+  "oracles": [
+    {
+      "status": "PASS",
+      "uniqueCorners": 16,
+      "quarter": 3,
+      "maxCoordinateResidualMM": 0
+    },
+    {
+      "status": "PASS",
+      "uniqueCorners": 16,
+      "quarter": -3,
+      "maxCoordinateResidualMM": 0
+    }
+  ],
+  "visualReview": "Two actual result screenshots inspected; synthetic data, no personal information."
+}

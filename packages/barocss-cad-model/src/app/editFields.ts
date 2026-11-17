@@ -207,6 +207,7 @@ export function editFields(nodes: Nodes, i: number, params?: Record<string, numb
     || (node?.kind === 'fillet' && (f.key === 'stationAt' || f.key === 'station2At'))
     || (node?.kind === 'fillet' && (f.key === 'rho' || f.key === 'tension'))
     || (node?.kind === 'extrude' && f.key === 'draft')
+    || (node?.kind === 'circular-pattern' && f.key === 'span')
     || f.key.startsWith('loftGuideControl') || f.key.endsWith('linkedInsetMM') || (nodes[i]?.kind === 'hole' && /^(step|about)[01]$/.test(f.key)) ? f : {
     ...f,
     get: n => within(params, () => f.get(n)).value,
@@ -950,6 +951,14 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       number('count', 'Count', undefined, n => (n as typeof node).count, (n, v) => ({ ...(n as typeof node), count: v }));
       break;
     case 'circular-pattern':
+      if (node.axis === 'z' && typeof node.span === 'number' && Number.isFinite(node.span)) {
+        number('span', 'Spread over', '°',
+          n => n.kind === 'circular-pattern' && n.axis === 'z' && typeof n.span === 'number' ? n.span : NaN,
+          (n, span) => {
+            if (n.kind !== 'circular-pattern' || n.axis !== 'z' || typeof n.span !== 'number' || !Number.isFinite(n.span) || !Number.isFinite(span) || n.span === span) return n;
+            return { ...n, span, angle: circularPatternStep(span, n.count) };
+          });
+      }
       // A Z axis is a line through XY; preserve its authored Z and all distribution metadata.
       if (node.axis === 'z') [0, 1].forEach(k => number('axisAt' + k, 'Axis at ' + 'XY'[k], 'mm',
         n => n.kind === 'circular-pattern' && n.axis === 'z' ? num(n.pivot?.[k] ?? 0) : NaN,

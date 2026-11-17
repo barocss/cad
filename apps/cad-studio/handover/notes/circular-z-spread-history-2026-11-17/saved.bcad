@@ -1,0 +1,48 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {
+    "NamedSpread": 180
+  },
+  "nodes": [
+    {
+      "kind": "sketch",
+      "id": "n0",
+      "profile": "rectangle",
+      "min": [
+        10,
+        20
+      ],
+      "max": [
+        14,
+        26
+      ]
+    },
+    {
+      "kind": "extrude",
+      "id": "n1",
+      "sketch": 0,
+      "height": 8
+    },
+    {
+      "kind": "circular-pattern",
+      "id": "n2",
+      "parent": {
+        "node": 1,
+        "side": "solid"
+      },
+      "axis": "z",
+      "angle": -270,
+      "count": 2,
+      "span": -270
+    }
+  ],
+  "outputs": {
+    "b2": {
+      "node": 2,
+      "side": "solid"
+    }
+  },
+  "nextId": 3
+}
