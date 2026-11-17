@@ -1,3 +1,4 @@
+import { checkDrawingBodyOwner, type DrawingBodySelector } from '../drawing/scope';
 import { sewGapLocation } from './sewGapLocation';
 import { holeMissLocation } from './holeMissLocation';
 import { requireStepGeometry } from './stepOutputAdmission';
@@ -762,9 +763,19 @@ export function baseBodyFaces(doc: StudioDoc): Record<string, string[]> {
  * DFM, print and CAM leave them (O160), so no line, hole or hidden edge of a bearing or a key is the part's; all of
  * them when nothing else is left. An assembly's drawing keeps its bought parts.
  */
-export function brepsFor(doc: StudioDoc, options: { made?: boolean } = {}): { breps: Brep[]; prefixes: string[] } | { error: string } {
+export function brepsFor(doc: StudioDoc, options: { made?: boolean; body?: DrawingBodySelector } = {}): { breps: Brep[]; prefixes: string[] } | { error: string } {
   try {
     const all = snapshotOf(doc).outputs, bought = options.made ? boughtOutputIds(doc) : null, own = bought && all.some(x => !bought.has(x.id)) ? all.filter(x => !bought.has(x.id)) : all;
+    if (options.body !== undefined) {
+      const [why] = checkDrawingBodyOwner(doc, options.body);
+      if (why) throw refusal('DRAWING_SCOPE', why.message);
+      const selected = own.filter(o => bodyKeyOf(o.id, doc.nodes) === options.body!.key);
+      if (selected.length !== 1 || selected[0].id !== options.body.feature
+        || selected[0].brep.bodies.length !== 1 || selected[0].brep.bodies[0].kind !== 'solid'
+        || selected[0].brep.source.family === 'mesh' || nativeBodyTopology(selected[0].brep).kind !== 'solid')
+        throw refusal('DRAWING_SCOPE', 'The selected body is not a unique current native solid output; explicitly select a supported body.');
+      return { breps: [selected[0].brep], prefixes: [''] };
+    }
     const breps = own.map(x => x.brep), prefixes = breps.map(() => '');
     for (const inst of doc.instances ?? []) if (!inst.hidden) for (const o of placedOutputs(inst, placedDoc(inst, doc), doc)) { breps.push(inst.doc.instances?.length ? stableNames(o.brep, inst.doc) : o.brep); prefixes.push(`${inst.id}/`); }
     return { breps, prefixes };

@@ -1,3 +1,4 @@
+import type { DrawingBodySelector } from '@barocss/cad-model/drawing/scope';
 import type { NativeEdgeCurveReply } from '@barocss/cad-model/engine/nativeEdgeCurve';
 import type { ContinuityReply, ContinuityRequest } from '@barocss/cad-model/engine/edgeContinuity';
 import { rememberFaceTable } from '@barocss/cad-model/assembly/faces';
@@ -391,7 +392,7 @@ export class EngineClient {
 
   /** The part's drawing views (hidden-line projections), never dropped as stale. */
   /** `made` (O174): a part's drawing — its bought elements left out of the views and the sections; an assembly's keeps them. */
-  drawing(doc: StudioDoc, options: { tangentEdges?: boolean; sections?: DrawingSection[]; orientation?: 'x+' | 'y+' | 'x-'; made?: boolean } = {}): Promise<DrawingResult> {
+  drawing(doc: StudioDoc, options: { tangentEdges?: boolean; sections?: DrawingSection[]; orientation?: 'x+' | 'y+' | 'x-'; made?: boolean; body?: DrawingBodySelector } = {}): Promise<DrawingResult> {
     const id = this.next++;
     return new Promise(resolve => {
       this.pending.set(id, data => resolve((data as { drawing: DrawingResult }).drawing));

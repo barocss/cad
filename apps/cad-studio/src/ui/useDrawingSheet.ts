@@ -3,7 +3,7 @@
 // tables and weld joints, and the sheet built from them — and, when asked, the sheet's annotations lifted onto the
 // model (model-annotations-v1). `active` false: nothing is asked of the engine and nothing is built.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { drawingDocument, drawingModelKey, drawingSource, drawingSourceRevision, drawingScopeOf, drawsMadeOnly, type DrawingScope } from '@barocss/cad-model/drawing/scope';
+import { assertDrawingBodySettings, drawingDocument, drawingModelKey, drawingSource, drawingSourceRevision, drawingScopeOf, drawsMadeOnly, type DrawingScope } from '@barocss/cad-model/drawing/scope';
 import { followedStale, staleText } from '@barocss/cad-model/frames/skeleton';
 import { elementsOfBodies, withElements } from '@barocss/cad-model/drawing/elementCallouts';
 import { fitMiss, withFit } from '@barocss/cad-model/drawing/fits';
@@ -25,14 +25,15 @@ import { readDrawing, sameSection, sectionsOf, type DrawingSection, type Drawing
 import type { SectionCut } from '@barocss/cad-model/drawing/section';
 import type { EngineClient } from '../engine/client';
 import { Lanes } from '../engine/lanes';
+import { drawingBodyChoices } from './drawing/bodyScopeChoices';
 import { sectionGeometryInputs } from './drawing/sectionHatch';
 
 export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
-export function useDrawingSheet(active: boolean, { engine, doc: sourceDoc, bodies: sourceBodies, settings, fileName, modelInput, workerSession, annotations: wantAnnotations = false, allSections, drawingSetWantsBom = false }: {
+export function useDrawingSheet(active: boolean, { engine, doc: sourceDoc, bodies: sourceBodies, settings, fileName, modelInput, workerSession, annotations: wantAnnotations = false, allSections, drawingSetWantsBom = false, sourceCurrent = true }: {
   engine: EngineClient; doc: StudioDoc; bodies?: readonly BodyResult[]; settings: DrawingSettings; fileName: string; modelInput?: StudioDoc; workerSession?: number; annotations?: boolean;
   /** 11 ④: the whole drawing's sections, cut whichever sheet is shown (a detail on this sheet may enlarge a section on another). Absent: this settings' own. */ allSections?: readonly DrawingSection[];
-  drawingSetWantsBom?: boolean;
+  drawingSetWantsBom?: boolean; sourceCurrent?: boolean;
 }) {
   const scopeRead = (() => {
     try { return { scope: drawingScopeOf(settings), error: null }; }
@@ -42,32 +43,49 @@ export function useDrawingSheet(active: boolean, { engine, doc: sourceDoc, bodie
   const scope: DrawingScope = scopeRead.scope ?? { kind: 'part' };
   // (Inactive, the document is not canonicalised on every render: nothing is built from it then.)
   const scopeKey = JSON.stringify([scopeRead.scope, scopeRead.error]), sourceKey = active ? drawingModelKey(sourceDoc) : '';
+  let bodySettingsError: string | null = null;
+  try { assertDrawingBodySettings(readDrawing(sourceDoc.drawing)); assertDrawingBodySettings(settings); }
+  catch (cause) { bodySettingsError = cause instanceof Error ? cause.message : String(cause); }
   const scoped = useMemo(() => {
-    try { return { doc: drawingDocument(sourceDoc, settings), authored: drawingSource(sourceDoc, settings), error: null }; }
+    try { if (bodySettingsError) throw new Error(bodySettingsError); return { doc: drawingDocument(sourceDoc, settings), authored: drawingSource(sourceDoc, settings), error: null }; }
     catch (cause) { return { doc: { ...sourceDoc, nodes: [], instances: [] } as StudioDoc, authored: null, error: cause instanceof Error ? cause.message : String(cause) }; }
-  }, [sourceKey, scopeKey, modelInput]);
+  }, [sourceKey, scopeKey, modelInput, bodySettingsError]);
   const doc = scoped.doc, model = doc;
   const currentModel = useRef(model); currentModel.current = model;
   /** The sheet's reads on O9 lanes (R4b): its bodies, its views, its BOM — each a reply overtaken comes back stale. */
   const lanes = useMemo(() => new Lanes(), []);
-  const [bodyRead, setBodyRead] = useState<{ doc: StudioDoc; bodies: readonly BodyResult[] } | null>(null);
+  // A missing selected output must not disable explicit reselection of another current base output.
+  // This separate read is never used as a projection fallback.
+  const choiceModel = useMemo(() => {
+    if (!scoped.error) return doc;
+    if (scope.kind !== 'part' || scope.part !== undefined) return null;
+    try { return drawingDocument(sourceDoc, { ...settings, scope: { kind: 'part' } }); }
+    catch { return null; }
+  }, [doc, scoped.error, sourceKey, scopeKey, modelInput]);
+  const [bodyRead, setBodyRead] = useState<{ doc: StudioDoc; engine: EngineClient; workerSession: number | undefined; bodies: readonly BodyResult[] } | null>(null);
   const bodyRevision = useRef(1);
-  const bodies = scope.kind === 'assembly' ? sourceBodies : bodyRead && bodyRead.doc === doc ? bodyRead.bodies : undefined;
+  const bodies = scope.kind === 'assembly' ? sourceBodies : bodyRead && bodyRead.doc === doc && bodyRead.engine === engine && bodyRead.workerSession === workerSession ? bodyRead.bodies : undefined;
+  const choiceBodies = bodyRead?.doc === choiceModel && bodyRead.engine === engine && bodyRead.workerSession === workerSession ? bodyRead.bodies : undefined;
   useEffect(() => {
-    if (!active || scope.kind !== 'part' || scoped.error) return;
+    if (!active || scope.kind !== 'part' || !choiceModel) return;
     // (R4b: the drawing's reads on their O9 lanes — a reply for a document since replaced comes back stale.)
     const at = bodyRevision.current++;
-    void lanes.run('drawing-bodies', { revision: at, source: '' }, () => engine.part(doc, at, 'read').then(r => r, () => null)).then(reply => { if (!reply.stale) setBodyRead(reply.result?.ok ? { doc, bodies: reply.result.bodies } : null); });
+    void lanes.run('drawing-bodies', { revision: at, source: '' }, () => engine.part(choiceModel, at, 'read').then(r => r, () => null)).then(reply => { if (!reply.stale) setBodyRead(reply.result?.ok ? { doc: choiceModel, engine, workerSession, bodies: reply.result.bodies } : null); });
     return () => lanes.cancel('drawing-bodies');
-  }, [active, engine, doc, scoped.error, scope.kind]);
+  }, [active, engine, workerSession, choiceModel, scope.kind]);
+  const bodyScope = useMemo(() => {
+    const ready = active && sourceCurrent && scope.kind === 'part' && scope.part === undefined && !!choiceBodies;
+    return { owner: {}, doc: sourceDoc, ready, choices: ready ? drawingBodyChoices(sourceDoc, choiceBodies!) : [] };
+  }, [active, sourceCurrent, scopeKey, choiceBodies, sourceDoc, engine, workerSession, modelInput]);
+  const selectedBody = scope.kind === 'part' ? scope.body : undefined;
+  const sectionList = sectionsOf(settings), sectionKey = JSON.stringify(sectionList), cutList = sectionGeometryInputs(allSections ?? sectionList), cutKey = JSON.stringify(cutList), madeOnly = drawsMadeOnly(settings);
+  const projectionKey = JSON.stringify([workerSession, settings.orientation, !!settings.tangent, madeOnly, cutKey, selectedBody]);
   // The views as projected, with the front side they were projected for (R14.3b): only those of the drawing's side are used.
   const [projected, setProjected] = useState<{ views: DrawingViews; side: string; model: StudioDoc; inputKey: string; engine: EngineClient } | null>(null);
-  const views = projected && projected.model === model && projected.side === (settings.orientation ?? 'y-') ? projected.views : null;
+  const views = projected && projected.model === model && projected.engine === engine && projected.inputKey === projectionKey && projected.side === (settings.orientation ?? 'y-') ? projected.views : null;
   /** The sections as last cut (O148 X1; each with why it could not be cut). */
   const [rawCutsMade, setCutsMade] = useState<SectionCut[] | null>(null);
   const cutsMade = projected?.model === model ? rawCutsMade : null;
-  const sectionList = sectionsOf(settings), sectionKey = JSON.stringify(sectionList), cutList = sectionGeometryInputs(allSections ?? sectionList), cutKey = JSON.stringify(cutList), madeOnly = drawsMadeOnly(settings);
-  const projectionKey = JSON.stringify([workerSession, settings.orientation, !!settings.tangent, madeOnly, cutKey]);
   const projectionCurrent = !!views && !scoped.error && projected?.inputKey === projectionKey && projected.engine === engine;
   const [error, setError] = useState<string | null>(null);
   /** The part has no body yet: the panel says so, and nothing is raised as an error. */
@@ -80,7 +98,7 @@ export function useDrawingSheet(active: boolean, { engine, doc: sourceDoc, bodie
     setBusy(true);
     const side = settings.orientation ?? 'y-';
     // (O174: a part's drawing documents what the part makes — its bought elements left out of the views and sections.)
-    void lanes.run('drawing', { revision: 0, source: side }, () => engine.drawing(model, { tangentEdges: !!settings.tangent, ...(cutList.length ? { sections: [...cutList] } : {}), ...(settings.orientation ? { orientation: settings.orientation } : {}), made: madeOnly })).then(reply => {
+    void lanes.run('drawing', { revision: 0, source: side }, () => engine.drawing(model, { tangentEdges: !!settings.tangent, ...(cutList.length ? { sections: [...cutList] } : {}), ...(settings.orientation ? { orientation: settings.orientation } : {}), made: madeOnly, ...(selectedBody ? { body: selectedBody } : {}) })).then(reply => {
       if (reply.stale) return;
       const r = reply.result;
       setBusy(false);
@@ -151,5 +169,5 @@ export function useDrawingSheet(active: boolean, { engine, doc: sourceDoc, bodie
   const sheet = useMemo(() => views && layout && buildSheet(views, layout, settings, { title, date: today(), source, callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), [views, layout, settings, title, cuts, callout, threads, tableContentOf, weldJoints, bodyFaces, bom]);
   const annotations = useMemo<ModelAnnotations | null>(() => active && wantAnnotations && sheet && layout && views ? modelAnnotations({ views, layout, settings, sheet, ...(weldJoints ? { welds: weldJoints } : {}) }) : null,
     [active, wantAnnotations, sheet, layout, views, settings, weldJoints]);
-  return { source, scopeRead, scope, scopeKey, scoped, doc, model, currentModel, bodies, projected, projectionCurrent, views, cutsMade, sectionList, sectionKey, error, empty, busy, title, cuts, sectionA, cutA, layout, elements, callout, locationOwner, calloutsFor, fitMissOf, followedChanged, threads, wantsBom, bom, bomError, sourced, tableContentOf, hasSheet, hasFrame, kinds, hasBought, weldJoints, bodyFaces, sheet, annotations };
+  return { source, bodyScope, scopeRead, scope, scopeKey, scoped, doc, model, currentModel, bodies, projected, projectionCurrent, views, cutsMade, sectionList, sectionKey, error, empty, busy, title, cuts, sectionA, cutA, layout, elements, callout, locationOwner, calloutsFor, fitMissOf, followedChanged, threads, wantsBom, bom, bomError, sourced, tableContentOf, hasSheet, hasFrame, kinds, hasBought, weldJoints, bodyFaces, sheet, annotations };
 }

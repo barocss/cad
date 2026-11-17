@@ -1,3 +1,4 @@
+import type { DrawingBodySelector } from '@barocss/cad-model/drawing/scope';
 import { readNativeEdgeCurve } from '@barocss/cad-model/engine/nativeEdgeCurve';
 /// <reference lib="webworker" />
 import { brepsFor, deferMasses, evaluateDoc, evaluatePart, evaluatePlaced, evaluatePreview, evaluateVolumes, massOfRef, shareMeshes, exportStudioStep, stlFor, type BodyResult, type EvalResult, type PartSlot } from '@barocss/cad-model/engine/evaluate';
@@ -49,7 +50,7 @@ export type WorkerRequest =
   | { type: 'step'; id: number; doc: WireDoc; metadata: StepMetadata; name: string; meshes?: 'auto' | 'tessellated' | 'planar' }
   /** A STEP file's meshes when it holds nothing else (R3.5), for the repair gate. */
   | { type: 'stepMeshes'; id: number; step: string }
-  | { type: 'drawing'; id: number; doc: WireDoc; options?: { tangentEdges?: boolean; sections?: DrawingSection[]; orientation?: 'x+' | 'y+' | 'x-'; made?: boolean } }
+  | { type: 'drawing'; id: number; doc: WireDoc; options?: { tangentEdges?: boolean; sections?: DrawingSection[]; orientation?: 'x+' | 'y+' | 'x-'; made?: boolean; body?: DrawingBodySelector } }
   /** A mesh checked and repaired (M3, D47), off the main thread; a repair posts its stages as it goes. */
   | { type: 'diagnose'; id: number; positions: ArrayLike<number>; indices: ArrayLike<number> }
   | { type: 'repair'; id: number; positions: ArrayLike<number>; indices: ArrayLike<number>; steps: MeshRepairSteps };
@@ -229,7 +230,8 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
     (self as unknown as Worker).postMessage({ id: request.id, volumes: evaluateVolumes(request.doc, 'probe', request.intersection) });
   } else if (request.type === 'drawing') {
     // (O174: a part's drawing without its bought elements, the chat's drawingInputs alike.)
-    const made = !!request.options?.made, r = brepsFor(request.doc, { made });
+    const made = !!request.options?.made, body = request.options?.body;
+    const r = body && request.options?.sections?.length ? { error: 'Selected-body drawings do not support sections.' } : brepsFor(request.doc, { made, ...(body ? { body } : {}) });
     const drawing = 'error' in r ? { ok: false as const, error: r.error } : projectViews(r.breps, r.prefixes, request.options);
     if (drawing.ok && request.options?.sections?.length) drawing.sections = sectionsCut(request.doc, request.options.sections, request.options.orientation, made);
     (self as unknown as Worker).postMessage({ id: request.id, drawing });

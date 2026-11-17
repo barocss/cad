@@ -24,7 +24,7 @@ export function fitDimensionTable(doc: StudioDoc, context?: FitListContext): Tab
   try {
     for (const s of [wholeSettings, settings]) {
       const scope = drawingScopeOf(s);
-      if (scope.kind !== 'part' || scope.part !== undefined) return fail('only the base part is supported, not assembly or instance-part scope');
+      if (scope.kind !== 'part' || scope.part !== undefined || scope.body !== undefined) return fail('only the base part is supported, not assembly, instance-part or selected-body scope');
       if (s.sheets?.length || (s.sheetContext?.of ?? 1) !== 1) return fail('only a single sheet is supported');
     }
     if (doc.instances?.length) return fail('documents with placed instances are not supported');

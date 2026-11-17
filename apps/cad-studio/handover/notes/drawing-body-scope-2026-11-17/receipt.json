@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "qualification": "#270 explicit single native base output, original worker projection, literal two-box occlusion fixture and saved scope.",
+  "phase": "fresh Open 05-fresh-open",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Synthetic extrude outputs only; no revolve/import/split/assembly subset claim.",
+    "Late delivery, suppression/deletion and same-key different document lifecycle are not exercised in this first run.",
+    "Independent native mass and actual Worker/SVG/DXF rectangle oracles; not PDF/ASME approval."
+  ],
+  "sourceFrozenCount": 1031,
+  "sourceAfterCount": 1031,
+  "sourceAfterCleanupCount": 1031,
+  "scope": "Bounded selector/projection/output/persistence acceptance only; not complete reference recovery or whole issue closure.",
+  "visualReview": "Agent and root directly reviewed 02/06 pixels; synthetic fixture, no personal data.",
+  "referenceQualification": "Fresh Open retains six reference decisions. All six saved endpoint signatures still have length 30 after Width 40; current geometry is 40. Existing-versus-new behavior not established by this run.",
+  "rawReceiptSha256": "6294a459a0edd6a3275892d3a24bbb7ed5720a8b1b06cad94f33dbaa36d15df3",
+  "artifacts": {
+    "02-A-only.png": "54f5340685f75f6c97bf178d08240df7208c0fe706531bb5d42d8b9c51c2f911",
+    "06-fresh-drawing.png": "1924bbb22f3bd2114eef6e5c722f06437643a1f8670bc99b567b2e65c1920f7f",
+    "02-A-only-oracle.json": "88ae90a41e5ba549154a5a051687996697d08989399ae9b6c536c5a31f67e8a1",
+    "03-auto-selected-oracle.json": "3e586982b14fe556ac0acaeaa725a2c3d416f7ff6bd81a22603f9290f1a6873c",
+    "04-width40-drawing-oracle.json": "68d3aeb043c2bba1819a7fdc5359d7a27fd01362534f02c37d87d21451ca209d",
+    "06-fresh-drawing-oracle.json": "68d3aeb043c2bba1819a7fdc5359d7a27fd01362534f02c37d87d21451ca209d"
+  }
+}

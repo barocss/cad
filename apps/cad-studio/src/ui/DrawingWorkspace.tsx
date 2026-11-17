@@ -146,7 +146,9 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       : local;
   }, [wholeSettings, current, drawingSetWantsBom]);
   // (The sheet's pipeline, shared with the viewport's 3D annotations, G24: views, layout, sheet and what they are built from.)
-  const { source, scopeRead, scope, scopeKey, doc, model, currentModel, bodies, views, projectionCurrent, cutsMade, sectionList, error, empty, busy, title, cuts, sectionA, cutA, layout, elements, callout, locationOwner, calloutsFor, fitMissOf, followedChanged, threads, wantsBom, bom, bomError, tableContentOf, hasSheet, hasFrame, kinds, hasBought, weldJoints, bodyFaces, sheet } = useDrawingSheet(true, { engine, doc: sourceDoc, bodies: sourceBodies, settings, fileName, modelInput, workerSession, drawingSetWantsBom, ...(wholeSettings.sheets?.length ? { allSections: sectionsOf(wholeSettings) } : {}) });
+  const { source, bodyScope, scopeRead, scope, scopeKey, doc, model, currentModel, bodies, views, projectionCurrent, cutsMade, sectionList, error, empty, busy, title, cuts, sectionA, cutA, layout, elements, callout, locationOwner, calloutsFor, fitMissOf, followedChanged, threads, wantsBom, bom, bomError, tableContentOf, hasSheet, hasFrame, kinds, hasBought, weldJoints, bodyFaces, sheet } = useDrawingSheet(true, { engine, doc: sourceDoc, bodies: sourceBodies, settings, fileName, modelInput, workerSession, sourceCurrent, drawingSetWantsBom, ...(wholeSettings.sheets?.length ? { allSections: sectionsOf(wholeSettings) } : {}) });
+  const projectionActionOwner = useMemo(() => ({}), [sourceDoc, wholeSettings, model, workerSession, engine, current, sourceCurrent]);
+  const liveProjectionAction = useRef(projectionActionOwner); liveProjectionAction.current = projectionActionOwner;
   /** The whole drawing's next settings, as the file will have them. */
   const commitWhole = (next: DrawingSettings) => {
     if (!scopeRead.scope) { onToast({ title: 'Drawing scope unchanged', hint: scopeRead.error ?? 'Invalid drawing scope', detail: '' }); return false; }
@@ -1036,15 +1038,16 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
    * give a clean drawing, then Auto-dimension; keeps manual dimensions and those with authored controls.
    */
   const autoDimension = async () => {
-    if (!views || scope.kind === 'assembly') return;
+    if (!views || !sourceCurrent || scope.kind === 'assembly') return;
+    const owner = projectionActionOwner;
     // The front's side by information (R14.3b), when nothing placed by hand ties it: the part projected for it first.
     let base = { views, settings, sections: cuts };
     const pick = frontByInformation(views, settings);
     // (O174: the turned part projected as the sheet is, its bought elements out.)
     if (pick) {
       const ts = turnSections(settings, pick.orientation), list = Array.isArray(ts) ? ts : [];
-      const r = await engine.drawing(model, { tangentEdges: !!settings.tangent, ...(list.length ? { sections: list } : {}), ...(pick.orientation !== 'y-' ? { orientation: pick.orientation as 'x+' } : {}), made: drawsMadeOnly(settings) });
-      if (currentModel.current !== model) return;
+      const r = await engine.drawing(model, { tangentEdges: !!settings.tangent, ...(list.length ? { sections: list } : {}), ...(pick.orientation !== 'y-' ? { orientation: pick.orientation as 'x+' } : {}), made: drawsMadeOnly(settings), ...(scope.kind === 'part' && scope.body ? { body: scope.body } : {}) });
+      if (currentModel.current !== model || liveProjectionAction.current !== owner) return;
       const turned = r.ok ? reorient(views, r.views, settings, pick.orientation) : null;
       if (r.ok && turned?.ok) base = { views: r.views, settings: turned.settings, sections: sheetSections(r.sections ?? []) };
     }
@@ -1066,10 +1069,11 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   };
   /** Another front side (R14.3b, O7): the annotations re-mapped to the views showing their axes, or refused, typed. */
   const turnTo = async (o: Orientation) => {
-    if (!views || o === (settings.orientation ?? 'y-')) return;
+    if (!views || !sourceCurrent || o === (settings.orientation ?? 'y-')) return;
+    const owner = projectionActionOwner;
     // (O174: projected as the sheet is — a part's without its bought elements.)
-    const r = await engine.drawing(model, { tangentEdges: !!settings.tangent, ...(o !== 'y-' ? { orientation: o as 'x+' } : {}), made: drawsMadeOnly(settings) });
-    if (currentModel.current !== model) return;
+    const r = await engine.drawing(model, { tangentEdges: !!settings.tangent, ...(o !== 'y-' ? { orientation: o as 'x+' } : {}), made: drawsMadeOnly(settings), ...(scope.kind === 'part' && scope.body ? { body: scope.body } : {}) });
+    if (currentModel.current !== model || liveProjectionAction.current !== owner) return;
     if (!r.ok) { onToast({ title: 'Could not turn the drawing', hint: r.error, detail: '' }); return; }
     const t = reorient(views, r.views, wholeSettings, o);
     if (!t.ok) { onToast({ title: 'The drawing was not turned', hint: t.message, detail: t.code === 'ORIENTATION_REMAP_FAILED' ? t.failed.map(f => `${f.dim}: ${f.was} → ${f.now}`).join('\n') : '' }); return; }
@@ -1260,7 +1264,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
       <aside className="card dw-panel" aria-label="Drawing settings">
         {referenceInspection && <div role="status" aria-label="Reference preview" style={{ marginBottom: 8 }}>{referenceInspection.message}</div>}
-        <SheetSettings sheet={{ scopeRead, scope, views, layout, sectionA, sectionList, cutA, cutsMade, hasSheet, hasFrame, kinds, hasBought, doc, title, busy }} settings={settings} sourceDoc={sourceDoc} fileName={fileName} onChange={onChange} onToast={onToast}
+        <SheetSettings sheet={{ bodyScope, scopeRead, scope, views, layout, sectionA, sectionList, cutA, cutsMade, hasSheet, hasFrame, kinds, hasBought, doc, title, busy }} settings={settings} sourceDoc={sourceDoc} fileName={fileName} onChange={onChange} onToast={onToast}
           onScopeChanged={() => { setPending(null); setSelected(null); setSelectedTarget(null); setSelectedFrame(null); setTargetChoices([]); setReselectTarget(null); setHover(null); setDrag(null); }} turnTo={turnTo} later={current > 0} />
 
         <SheetsMenu whole={wholeSettings} current={current} onChange={(next, then) => { if (commitWhole(next) && then !== undefined) selectSheet(then); }} />

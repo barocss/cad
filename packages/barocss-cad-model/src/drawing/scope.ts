@@ -3,17 +3,47 @@ import { canonical, canonicalOf, fnv64, revisionOf } from '../util/revision';
 import { frameGeometry, type StudioDoc } from '../engine/doc';
 import type { DrawingSettings } from './types';
 import { problem, refusal, refused, type Problem } from '../engine/refusal';
-export type DrawingScope = { kind: 'part'; part?: string } | { kind: 'assembly' };
+export interface DrawingBodySelector { key: string; feature: string; kind: 'extrude' | 'revolve' }
+export type DrawingScope = { kind: 'part'; part?: string; body?: DrawingBodySelector } | { kind: 'assembly' };
 
 /** What is wrong with a drawing's scope: none, or its one problem. */
 export function checkDrawingScope(value: unknown): Problem[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [problem('DRAWING_SCOPE', 'scope is {kind: part, part?: id} or {kind: assembly}')];
   const s = value as Record<string, unknown>;
   if (s.kind !== 'part' && s.kind !== 'assembly') return [problem('DRAWING_SCOPE', 'kind is part or assembly')];
-  if (Object.keys(s).some(k => k !== 'kind' && !(s.kind === 'part' && k === 'part'))) return [problem('DRAWING_SCOPE', 'unknown scope field')];
+  if (Object.keys(s).some(k => k !== 'kind' && !(s.kind === 'part' && (k === 'part' || k === 'body')))) return [problem('DRAWING_SCOPE', 'unknown scope field')];
   if (s.part !== undefined && (typeof s.part !== 'string' || !s.part.trim())) return [problem('DRAWING_SCOPE', 'part is a nonempty instance id')];
+  if (s.body !== undefined) {
+    const b = s.body as Record<string, unknown>;
+    if (s.part !== undefined || !b || typeof b !== 'object' || Array.isArray(b)
+      || Object.keys(b).some(k => !['key', 'feature', 'kind'].includes(k))
+      || typeof b.feature !== 'string' || !/^n(0|[1-9]\d*)$/.test(b.feature)
+      || b.key !== `b${b.feature.slice(1)}` || !['extrude', 'revolve'].includes(String(b.kind)))
+      return [problem('DRAWING_SCOPE', 'body requires an exact base-part key, stable feature id and supported extrude/revolve owner')];
+  }
   return [];
 }
+/** Restrict the new body subset only; existing whole-part and assembly sheets keep their contracts. */
+export function assertDrawingBodySettings(s: DrawingSettings): void {
+  const scope = drawingScopeOf(s);
+  if (scope.kind !== 'part' || !scope.body) return;
+  if (s.sheets?.length || (s.sheetContext && s.sheetContext.of !== 1)
+    || s.section || s.sections?.length || s.details?.length || s.breaks?.length
+    || s.tables?.some(t => t.from !== undefined) || s.balloons || s.weldSymbols
+    || s.dimensions.some(d => !['front', 'top', 'right', 'iso'].includes(d.view)))
+    throw refusal('DRAWING_SCOPE', 'Selected-body drawings support one ordinary sheet only: no sections, details, breaks, sourced tables, BOM, balloons or weld symbols.');
+}
+/** No positional fallback: saved identity must still name the same supported source feature. */
+export function checkDrawingBodyOwner(doc: StudioDoc, body: DrawingBodySelector): Problem[] {
+  const invalid = checkDrawingScope({ kind: 'part', body });
+  if (invalid.length) return invalid;
+  const matches = doc.nodes.filter(n => n.id === body.feature);
+  const node = matches[0];
+  if (matches.length !== 1 || !node || node.kind !== body.kind || node.held || node.suppressed)
+    return [problem('DRAWING_SCOPE', 'The selected body source is missing, replaced, held or suppressed; explicitly select a current supported body.')];
+  return [];
+}
+
 /** Old BOM/balloon sheets retain their assembly meaning. Ordinary drawings default to the base part. */
 export function drawingScopeOf(s: DrawingSettings): DrawingScope {
   if (s.scope !== undefined) { const [why] = checkDrawingScope(s.scope); if (why) throw refused(why); return s.scope; }
@@ -33,7 +63,9 @@ export function drawingSourceRevision(doc: StudioDoc, scope: DrawingScope): stri
 }
 /** Authored source of a sheet, before drawing-only evaluation changes. */
 export function drawingSource(doc: StudioDoc, settings: DrawingSettings): StudioDoc {
+  assertDrawingBodySettings(settings);
   const scope = drawingScopeOf(settings);
+  if (scope.kind === 'part' && scope.body) { const [why] = checkDrawingBodyOwner(doc, scope.body); if (why) throw refused(why); }
   if (scope.kind === 'assembly') return doc;
   const local = scope.part === undefined ? doc : doc.instances?.find(i => i.id === scope.part)?.doc;
   if (!local) throw refusal('DRAWING_SCOPE', `no part ${scope.part}; select an existing part`);
@@ -63,10 +95,11 @@ export function assertSectionHatchScope(s: DrawingSettings): void {
 export function changeDrawingScope(s: DrawingSettings, scope: DrawingScope): DrawingSettings {
   const [why] = checkDrawingScope(scope); if (why) throw refused(why);
   // Snapshot the supported values, including fields the existing validator accepts through a prototype.
-  const nextScope: DrawingScope = scope.kind === 'part' ? { kind: 'part', ...(scope.part !== undefined ? { part: scope.part } : {}) } : { kind: 'assembly' };
+  const nextScope: DrawingScope = scope.kind === 'part' ? { kind: 'part', ...(scope.part !== undefined ? { part: scope.part } : {}), ...(scope.body ? { body: { ...scope.body } } : {}) } : { kind: 'assembly' };
   assertSectionHatchScope({ ...s, scope: nextScope });
+  assertDrawingBodySettings({ ...s, scope: nextScope });
   const previous = drawingScopeOf(s);
-  if (previous.kind === scope.kind && (previous.kind === 'assembly' || (scope.kind === 'part' && previous.part === scope.part))) return { ...s, scope: nextScope };
+  if (previous.kind === scope.kind && (previous.kind === 'assembly' || (scope.kind === 'part' && previous.part === scope.part && canonical(previous.body) === canonical(scope.body)))) return { ...s, scope: nextScope };
   if (s.dimensions.some(d => !d.auto) || s.datums?.length || s.datumTargets?.length || s.frames?.length || s.notes?.some(n => n.leader))
     throw refusal('DRAWING_SCOPE_REFERENCES', 'this sheet has manual model references; keep its scope or remove those references explicitly before changing scope');
   return { ...s, scope: nextScope, dimensions: [] };

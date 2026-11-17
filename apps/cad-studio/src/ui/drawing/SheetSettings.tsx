@@ -13,14 +13,15 @@ import { CONTROL, FIELD, SIDE_NAMES, TICK, withTable } from './sheetShared';
 import { DrawingMetadata } from './DrawingMetadata';
 import { drawingRevisionPrint } from './revisionPrint';
 import { SectionKind } from './SectionKind';
+import { DrawingBodyScopeControls } from './DrawingBodyScopeControls';
 import { FitListControls } from './FitListControls';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 
 type Sheet = ReturnType<typeof useDrawingSheet>;
-export function SheetSettings({ sheet: { scopeRead, scope, views, layout, sectionA, sectionList, cutA, cutsMade, hasSheet, hasFrame, kinds, hasBought, doc, title, busy }, settings, sourceDoc, fileName, onChange, onToast, onScopeChanged, turnTo, later = false }: {
-  sheet: Pick<Sheet, 'scopeRead' | 'scope' | 'views' | 'layout' | 'sectionA' | 'sectionList' | 'cutA' | 'cutsMade' | 'hasSheet' | 'hasFrame' | 'kinds' | 'hasBought' | 'doc' | 'title' | 'busy'>;
+export function SheetSettings({ sheet: { bodyScope, scopeRead, scope, views, layout, sectionA, sectionList, cutA, cutsMade, hasSheet, hasFrame, kinds, hasBought, doc, title, busy }, settings, sourceDoc, fileName, onChange, onToast, onScopeChanged, turnTo, later = false }: {
+  sheet: Pick<Sheet, 'bodyScope' | 'scopeRead' | 'scope' | 'views' | 'layout' | 'sectionA' | 'sectionList' | 'cutA' | 'cutsMade' | 'hasSheet' | 'hasFrame' | 'kinds' | 'hasBought' | 'doc' | 'title' | 'busy'>;
   settings: DrawingSettings; sourceDoc: StudioDoc; fileName: string; onChange(next: DrawingSettings): boolean; onToast(e: FriendlyError): void;
   /** The scope changed: what was picked or dragged on the sheet is let go. */ onScopeChanged(): void; turnTo(o: Orientation): Promise<void>;
   /** 11 ④: a sheet after the first: its tables, balloons, weld symbols and title block fields are the first sheet's. */ later?: boolean;
@@ -43,6 +44,7 @@ export function SheetSettings({ sheet: { scopeRead, scope, views, layout, sectio
           {(sourceDoc.instances ?? []).map(i => <option key={i.id} value={`part:${i.id}`}>Part: {i.id}</option>)}
           <option value="assembly">Assembly</option>
         </NativeSelect></label>
+        <DrawingBodyScopeControls state={bodyScope} sourceDoc={sourceDoc} settings={settings} onChange={onChange} onRefused={hint => onToast({ title: 'Drawing scope unchanged', hint, detail: '' })} onChanged={onScopeChanged} />
         <label className={FIELD}><span>Size</span><NativeSelect className={CONTROL} aria-label="Sheet size" value={settings.sheet} onChange={e => onChange({ ...settings, sheet: e.target.value as 'A4' })}>
           <option value="A4">A4 landscape</option><option value="A3">A3 landscape</option></NativeSelect></label>
         <label className={FIELD}><span>Scale</span><NativeSelect className={CONTROL} aria-label="Scale" value={settings.scale ?? 'auto'} onChange={e => { const v = e.target.value; const rest = { ...settings }; delete rest.scale; onChange(v === 'auto' ? rest : { ...rest, scale: Number(v) }); }}>
