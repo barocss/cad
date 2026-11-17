@@ -4,8 +4,9 @@
 // licensed, confirmed if an agent wrote it, and passes its check (run again by the server).
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { createLibraryFileReader } from '../state/libraryFileReader';
+import { insertDisplayedLibraryPart } from '../state/librarySelection';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
-import { confirmDocLibrary, insertLibraryPart, libraries, libraryEntry, libraryInstance, registerDocLibraries, registerLibrary, shareRefusal, type LibraryEntry, type LibrarySource } from '@barocss/cad-model/library/libraries';
+import { confirmDocLibrary, libraries, libraryEntry, registerDocLibraries, registerLibrary, shareRefusal, type LibraryEntry, type LibrarySource } from '@barocss/cad-model/library/libraries';
 import { UNLICENSED } from '@barocss/cad-model/library/sharing';
 import { CASTING_PROCESSES, type CastingProcess } from '@barocss/cad-model/casting/report';
 import { MATERIALS_DATA, processProfile } from '@barocss/cad-model/library/materials';
@@ -53,19 +54,14 @@ export function LibraryPanel({ doc, documentSession, onCommit, onFitTableCommit,
     return () => { live = false; };
   }, []);
   const insert = (entry: LibraryEntry, part: string, selectedVariant: string | undefined, asInstance: boolean) => {
-    const id = entry.library.manifest.id;
-    if (libraryEntry(id) !== entry) {
-      refresh();
-      onError('Could not insert the part', 'This library changed. Select the part again.');
-      return;
-    }
     try {
-      // The ID-based helpers register embedded libraries before lookup. Use the panel's current entry
-      // and restore the embedded libraries before committing.
-      const { libraries: embedded, ...target } = doc;
-      const options = selectedVariant ? { variant: selectedVariant } : {};
-      const next = asInstance ? libraryInstance(target, id, part, options).doc : insertLibraryPart(target, id, part, options);
-      onCommit(embedded ? { ...next, libraries: embedded } : next);
+      const result = insertDisplayedLibraryPart(doc, entry, part, selectedVariant, asInstance);
+      if (!result.ok) {
+        refresh();
+        onError('Could not insert the part', 'This library changed. Select the part again.');
+        return;
+      }
+      onCommit(result.doc);
     } catch (cause) { onError('Could not insert the part', cause instanceof Error ? cause.message.replace(/^library: /, '') : String(cause)); }
   };
   const addFile = (file: File) => fileReader.read(file, parsed => {
