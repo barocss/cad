@@ -1,0 +1,1 @@
+{"status": "PASS", "controlPoints": [[20, -4, 3], [20, 20.000000000000004, 3]], "expectedStart": [20, -4, 3], "expectedEnd": [20, 20, 3], "scope": "Independent affine/literal source poles; not a native rerun"}

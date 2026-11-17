@@ -1,0 +1,55 @@
+{
+  "status": "PASS",
+  "qualification": "#1 original outside-hole point classification and explicit whole-support Iso scope; unchanged affine numerical result and original trims.",
+  "limits": [
+    "Original D341 affine planar support only plus derived inside-loop variant. No generic curved trim accuracy or new clipping implementation. No native evaluator rerun."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "sourceFrozenCount": 522,
+  "sourceAfterCleanupCount": 522,
+  "observations": [
+    {
+      "originalFixtureSha256": "3d107731eb788f66df34db09e0919ee6d9fcbe9fde0dc6cf3ff020715f74aa5d",
+      "originalPointSamples": [
+        [
+          0,
+          2.5,
+          20,
+          1.5,
+          3
+        ],
+        [
+          4,
+          2.5,
+          40,
+          1.5,
+          3
+        ]
+      ],
+      "normal": [
+        0,
+        0,
+        1
+      ],
+      "wholeSupportIso": true,
+      "originalTrimsUnchanged": true,
+      "freshOpenReset": true,
+      "insideVariant": "Synthetic keep-inside variant of original hole loop, same support"
+    }
+  ],
+  "parent": "28e14fec1ce3235fad8a5a4b245fb91ec5a2b88f",
+  "receiptSHA256": "e94f2ce7ccfdc832f908d98a830d0a4a6a7ce1a5cc9886e85867497f979993be",
+  "sourceUnchanged": true,
+  "focused": "9/9 PASS",
+  "studioTypes": "PASS",
+  "targetedLint": "PASS",
+  "productionBuild": "PASS 5.29s"
+}

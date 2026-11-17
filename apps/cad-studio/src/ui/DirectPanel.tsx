@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { analyzeSurface, curveLength, curvePlaneCrossings, directOps, domainsOf, geometryOf, surfaceIntersection, type DirectGeometry } from '@barocss/cad-model/engine/direct';
+import { curveLength, curvePlaneCrossings, directOps, domainsOf, geometryOf, surfaceIntersection, type DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { SEW_TOLERANCE_LABEL } from '@barocss/cad-model/engine/sew';
+import { inspectSurfacePoint, surfaceIsoScope } from './surfaceInspection';
 import { TwoCurveRoles } from './TwoCurveRoles';
 import { curveAnalysisError, inspectCurvePoint } from './curveAnalysisError';
 import { sewTrimBlockers } from './sewTrimBlockers';
@@ -192,10 +193,11 @@ function SurfaceTools({ id, direct, run, added, onThicken }: { id: string; direc
     {!!trims && <div className="kv">Trimmed <b>{trims} loop{trims > 1 ? 's' : ''}</b> <Button variant="ghost" size="xs" aria-label="Untrim" title="Take the trims off: the whole surface again" onClick={() => run(() => directOps.untrim(direct, id))}>Untrim</Button></div>}
     <div className="kv">Domain <b>u {u.map(x => Math.round(x * 1e4) / 1e4).join('…')} · v {v.map(x => Math.round(x * 1e4) / 1e4).join('…')}</b></div>
     <label className={FIELD}><span>Direction</span><NativeSelect className={CONTROL} aria-label="Surface direction" value={axis} onChange={e => setAxis(e.target.value as 'u' | 'v')}><option value="u">U</option><option value="v">V</option></NativeSelect></label>
+    <p role="note" aria-label="Iso-curve scope" id={`direct-iso-scope-${encodeURIComponent(id)}`} className="muted small">{surfaceIsoScope(trims > 0)}</p>
     <SurfaceParameter label={`At ${axis}`} axis={axis} range={range} value={atText} onChange={setAtText} split descriptionId={`direct-split-${encodeURIComponent(id)}-${axis}`} />
     <div className="flex flex-wrap gap-1">
       <Button variant="ghost" disabled={!splitAllowed} onClick={() => { if (splitAllowed && at !== null) run(() => directOps.splitSurface(direct, id, axis, at), added); }}>Split</Button>
-      <Button variant="ghost" disabled={at === null} onClick={() => { if (at !== null) run(() => directOps.isoCurve(direct, id, axis, at), added); }}>Iso-curve</Button>
+      <Button variant="ghost" aria-describedby={`direct-iso-scope-${encodeURIComponent(id)}`} disabled={at === null} onClick={() => { if (at !== null) run(() => directOps.isoCurve(direct, id, axis, at), added); }}>Iso-curve</Button>
       <Button variant="ghost" disabled={at === null} onClick={() => { if (at !== null) run(() => directOps.insertSurfaceKnot(direct, id, axis, at)); }}>Insert knot</Button>
       <Button variant="ghost" onClick={() => run(() => directOps.elevateDegree(direct, id, axis))}>Raise degree</Button>
       <Button variant="ghost" onClick={() => run(() => directOps.reverseSurface(direct, id, axis), added)}>Reverse</Button>
@@ -301,7 +303,7 @@ function SurfacePoint({ id, direct, u, v }: { id: string; direct: DirectGeometry
     <div className="card-title" style={{ marginTop: 8 }}>AT (U, V)</div>
     <SurfaceParameter label="u" axis="u" range={u} value={uText} onChange={setUText} descriptionId={`direct-inspect-${encodeURIComponent(id)}-u`} />
     <SurfaceParameter label="v" axis="v" range={v} value={vText} onChange={setVText} descriptionId={`direct-inspect-${encodeURIComponent(id)}-v`} />
-    {valid && <Analysis run={() => { const a = analyzeSurface(direct, id, atU, atV); return [['Point', a.point.map(x => fmtNum(x, 3)).join(', ')], ['Normal', a.normal.map(x => fmtNum(x, 4)).join(', ')], ['Mean curvature', `${fmtNum(a.mean, 6)} /mm`], ['Gaussian', `${fmtNum(a.gaussian, 8)} /mm²`]]; }} />}
+    {valid && <Analysis run={() => { const a = inspectSurfacePoint(direct, id, atU, atV); return [['Region', a.region], ['Point', a.point.map(x => fmtNum(x, 3)).join(', ')], ['Normal', a.normal.map(x => fmtNum(x, 4)).join(', ')], ['Mean curvature', `${fmtNum(a.mean, 6)} /mm`], ['Gaussian', `${fmtNum(a.gaussian, 8)} /mm²`]]; }} />}
   </>;
 }
 
