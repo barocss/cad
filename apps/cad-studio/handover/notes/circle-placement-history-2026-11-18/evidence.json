@@ -1,0 +1,74 @@
+{
+  "baseline": {
+    "status": "PASS",
+    "qualification": "Observe completed Circle draft Undo without assuming the result.",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "sourceAfterCleanupCount": 1075,
+    "sourceUnchanged": true
+  },
+  "pendingBaseline": {
+    "status": "PASS",
+    "qualification": "Two-click Circle placement is one atomic draft step, including a final click equal to the last preview.",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "sourceAfterCleanupCount": 1075,
+    "sourceUnchanged": true
+  },
+  "fixed": {
+    "status": "PASS",
+    "qualification": "Two-click Circle placement is one atomic draft step, including a final click equal to the last preview.",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "sourceAfterCleanupCount": 1075,
+    "sourceUnchanged": true
+  },
+  "rectangleRegression": {
+    "status": "PASS",
+    "qualification": "Actual two-click Rectangle placement is one reversible sketch draft operation.",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "sourceAfterCleanupCount": 1075,
+    "sourceUnchanged": true
+  },
+  "nativeExpectedVolume": 235.61944901923448,
+  "nativeMeasuredVolume": 235.61944901923417,
+  "retainedFailures": [
+    "Focused source baseline: 6/9 pass, 3 failures (Circle clone and mixed tool partition).",
+    "First fixed browser: initial Circle Undo/Redo passed; SVG point-string equality failed after active/parked tessellation changed 72 to 48 points. Corrected fixture compares bounds at 0.001px and exact authored centre/diameter; final native oracle unchanged."
+  ],
+  "ownedSourceHashes": {
+    "apps/cad-studio/src/App.tsx": "718fe336253161f88b96b91c166ed071811e4b1b7b8f904d4620d51e24d77a52",
+    "apps/cad-studio/src/app/sketchControls.ts": "c181477a0ec24aa075d4373e1964bfd2db3f6c89ea398b25368a8c1126325447",
+    "apps/cad-studio/src/sketch/draftHistory.ts": "53a21b8cecb5fab749e5259e08e21c4eafed57e6d5b4309d60379544569cb150",
+    "apps/cad-studio/src/viewport/viewportPointerInput.ts": "122329970a1fca76a180f24c306ebb434817afd3a1c5182634db43eb61d5988c",
+    "apps/cad-studio/test/circle-placement-history.test.ts": "34b2e801a7290ca95738db56c3e3e826ee056cf1b9caec62742155953271c80d",
+    "apps/cad-studio/test/sketch-circle-placement-history-browser.mjs": "29aa99d8f9eeae011c5b89b339e63951dcb8f80d736b9531c1d4213db677b360"
+  }
+}

@@ -104,7 +104,7 @@ export const switchTool = (s: SketchState, tool: SketchTool): SketchState => {
   if (!keep) return { ...s, tool, shape: null, activeOutlineIndex: undefined };
   const protectedShapes = s.hideConstruction && (tool === 'trim' || tool === 'extend' || tool === 'split')
     ? new Set((s.done ?? []).filter(shape => shape.construction)) : undefined;
-  const active = s.shape!.kind === 'rectangle' ? s.shape! : { ...s.shape!, ...(s.shape!.kind === 'polygon' ? { pending: false } : {}) };
+  const active = (s.shape!.kind === 'rectangle' || s.shape!.kind === 'circle') ? s.shape! : { ...s.shape!, ...(s.shape!.kind === 'polygon' ? { pending: false } : {}) };
   const done = joinOpen(draftShapeOrder({ ...s, shape: active }), undefined, protectedShapes);
   return { ...s, tool, shape: null, done, activeOutlineIndex: undefined };
 };

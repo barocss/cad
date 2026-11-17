@@ -75,12 +75,13 @@ function activateNewRectangle(step: DraftStep, tool: SketchState['tool']) {
 /** Selection may repartition the same authored outlines between shape and done. Never compare
  * order-insensitively or accept a new geometry owner merely because its numbers happen to match. */
 function sameSelectionPartition(expected: DraftStep, current: DraftStep): boolean {
-  // Reselecting Rectangle parks the same authored objects before the next placement.
-  if (current.tool !== 'select' && current.tool !== 'dimension' && current.tool !== 'rectangle') return false;
+  // Rectangle/Circle selection parks the same authored objects before the next placement.
+  if (current.tool !== 'select' && current.tool !== 'dimension' && current.tool !== 'rectangle' && current.tool !== 'circle') return false;
   if (expected.shape === current.shape && expected.activeOutlineIndex === current.activeOutlineIndex) return false;
   const a = sketchCutInputs(expected).shapes, b = sketchCutInputs(current).shapes;
   if (a.length !== b.length) return false;
-  if (current.tool === 'rectangle') return expected.tool === 'rectangle'
+  if (current.tool === 'rectangle' || current.tool === 'circle') return (expected.tool === 'rectangle' || expected.tool === 'circle')
+    && [expected.shape, current.shape].every(shape => !shape || shape.kind === 'rectangle' || shape.kind === 'circle')
     && a.every((shape, index) => shape === b[index]);
   return a.every((shape, index) => {
     const other = b[index];
