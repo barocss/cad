@@ -52,7 +52,7 @@ export function DirectPanel({ direct, selected, onChange, onSelect, onError, onH
       {one ? <Rename key={one.id} direct={direct} id={one.id} name={one.name} onRename={n => run(() => directOps.rename(direct, one.id, n))} />
         : objs.map(o => <div key={o.id} className="kv">Name <b>{o.name}</b></div>)}
       {one && g?.kind === 'curve' && children}
-      <Transform moveControls={<DirectMoveControls direct={direct} selected={selected} onMove={by => run(() => directOps.move(direct, selected, by))} />} onRotate={(axis, deg) => run(() => directOps.rotate(direct, selected, axis, deg))}
+      <Transform direct={direct} selected={selected} moveControls={<DirectMoveControls direct={direct} selected={selected} onMove={by => run(() => directOps.move(direct, selected, by))} />} onRotate={(axis, deg) => run(() => directOps.rotate(direct, selected, axis, deg))}
         onScale={k => run(() => directOps.scale(direct, selected, k))} onDuplicate={() => run(() => directOps.duplicate(direct, selected), added)}
         onStretch={k => run(() => directOps.stretch(direct, selected, k))} onShear={(a, b, k) => run(() => directOps.shear(direct, selected, a, b, k))} />
       {one && g?.kind === 'curve' && <CurveTools id={one.id} direct={direct} run={run} added={added} />}
@@ -316,23 +316,45 @@ function DirectMoveControls({ direct, selected, onMove }: { direct: DirectGeomet
 
 /** Move by a vector, turn about an axis through the centre, scale about the centre, or duplicate. */
 type Ax = 'x' | 'y' | 'z';
-function Transform({ moveControls, onRotate, onScale, onDuplicate, onStretch, onShear }: { moveControls: ReactNode; onRotate(axis: Ax, deg: number): void; onScale(k: number): void; onDuplicate(): void; onStretch(k: [number, number, number]): void; onShear(along: Ax, by: Ax, k: number): void }) {
-  const [st, setSt] = useState<[number, number, number]>([1, 1, 2]), [along, setAlong] = useState<Ax>('x'), [byAx, setByAx] = useState<Ax>('z'), [sk, setSk] = useState(0.5);
+function Transform({ direct, selected, moveControls, onRotate, onScale, onDuplicate, onStretch, onShear }: { direct: DirectGeometry; selected: readonly string[]; moveControls: ReactNode; onRotate(axis: Ax, deg: number): void; onScale(k: number): void; onDuplicate(): void; onStretch(k: [number, number, number]): void; onShear(along: Ax, by: Ax, k: number): void }) {
+  const [along, setAlong] = useState<Ax>('x'), [byAx, setByAx] = useState<Ax>('z');
+  const owner = JSON.stringify([...selected].sort());
+  const angle = useSurfaceDraft(direct, owner, 'rotate-angle', '90');
+  const factor = useSurfaceDraft(direct, owner, 'scale-factor', '2');
+  const sx = useSurfaceDraft(direct, owner, 'stretch-x', '1');
+  const sy = useSurfaceDraft(direct, owner, 'stretch-y', '1');
+  const sz = useSurfaceDraft(direct, owner, 'stretch-z', '2');
+  const shear = useSurfaceDraft(direct, owner, 'shear-factor', '0.5');
+  const deg = surfaceParameter(angle[0]), k = surfaceParameter(factor[0]), sk = surfaceParameter(shear[0]);
+  const stretch = [sx, sy, sz], st = stretch.map(([raw]) => surfaceParameter(raw));
+  const stretchFinite = st.every(value => value !== null);
   const axisPick = (label: string, v: Ax, set: (a: Ax) => void) => <label className={FIELD}><span>{label}</span><NativeSelect className={CONTROL} aria-label={label} value={v} onChange={e => set(e.target.value as Ax)}><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></NativeSelect></label>;
-  const [axis, setAxis] = useState<'x' | 'y' | 'z'>('z'), [deg, setDeg] = useState(90), [k, setK] = useState(2);
+  const [axis, setAxis] = useState<'x' | 'y' | 'z'>('z');
   return <div className="render-section [&>[data-slot=button]]:self-start">
     <div className="card-title" style={{ marginTop: 8 }}>TRANSFORM</div>
     {moveControls}
     <label className={FIELD}><span>Axis</span><NativeSelect className={CONTROL} aria-label="Rotation axis" value={axis} onChange={e => setAxis(e.target.value as 'x' | 'y' | 'z')}><option value="x">X</option><option value="y">Y</option><option value="z">Z</option></NativeSelect></label>
-    <NumberField label="Angle °" value={deg} onChange={setDeg} />
-    <Button variant="ghost" onClick={() => onRotate(axis, deg)}>Rotate</Button>
-    <NumberField label="Factor" value={k} onChange={setK} />
-    <div className="flex flex-wrap gap-1"><Button variant="ghost" onClick={() => onScale(k)}>Scale</Button><Button variant="ghost" aria-describedby="direct-duplicate-relationship" onClick={onDuplicate}>Duplicate</Button></div>
+    <TransformDraft label="Angle °" draft={angle} errorId="direct-rotate-error" />
+    <Button variant="ghost" disabled={deg === null} aria-describedby={deg === null ? "direct-rotate-error" : undefined} onClick={() => { if (deg !== null) onRotate(axis, deg); }}>Rotate</Button>
+    <TransformDraft label="Factor" draft={factor} errorId="direct-scale-error" />
+    <div className="flex flex-wrap gap-1"><Button variant="ghost" disabled={k === null} aria-describedby={k === null ? "direct-scale-error" : undefined} onClick={() => { if (k !== null) onScale(k); }}>Scale</Button><Button variant="ghost" aria-describedby="direct-duplicate-relationship" onClick={onDuplicate}>Duplicate</Button></div>
     <p id="direct-duplicate-relationship" role="note" aria-label="Duplicate relationship" className="muted small">Creates independent copies in the same position and selects them. Moving a copy or editing its control points does not update the original.</p>
-    {(['× X', '× Y', '× Z'] as const).map((l, i) => <NumberField key={l} label={l} value={st[i]} onChange={x => setSt(b => b.map((y, j) => j === i ? x : y) as typeof b)} />)}
-    <Button variant="ghost" onClick={() => onStretch(st)}>Stretch</Button>
+    {(['× X', '× Y', '× Z'] as const).map((label, i) => <TransformDraft key={label} label={label} draft={stretch[i]} errorId={`direct-stretch-${i}-error`} />)}
+    <Button variant="ghost" disabled={!stretchFinite} aria-describedby={!stretchFinite ? st.flatMap((value, i) => value === null ? [`direct-stretch-${i}-error`] : []).join(' ') : undefined} onClick={() => {
+      const [a, b, c] = st;
+      if (a !== null && b !== null && c !== null) onStretch([a, b, c]);
+    }}>Stretch</Button>
     {axisPick('Shear moves', along, setAlong)}{axisPick('by', byAx, setByAx)}
-    <NumberField label="Shear factor" value={sk} onChange={setSk} />
-    <Button variant="ghost" onClick={() => onShear(along, byAx, sk)}>Shear</Button>
+    <TransformDraft label="Shear factor" draft={shear} errorId="direct-shear-error" />
+    <Button variant="ghost" disabled={sk === null} aria-describedby={sk === null ? "direct-shear-error" : undefined} onClick={() => { if (sk !== null) onShear(along, byAx, sk); }}>Shear</Button>
   </div>;
+}
+
+/** Local raw numeric display; operation-specific Model admission remains unchanged. */
+function TransformDraft({ label, draft, errorId }: { label: string; draft: [string, (text: string) => void]; errorId: string }) {
+  const invalid = surfaceParameter(draft[0]) === null;
+  return <>
+    <label className={FIELD}><span>{label}</span><Input type="number" step="any" className="w-24" aria-label={label} value={draft[0]} aria-invalid={invalid || undefined} aria-describedby={invalid ? errorId : undefined} onChange={event => draft[1](event.target.value)} /></label>
+    {invalid && <span id={errorId} role="status" className="warn small">Enter a finite value for {label}.</span>}
+  </>;
 }

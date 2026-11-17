@@ -1,0 +1,58 @@
+TAP version 13
+# Subtest: surface inspector invalid drafts identify their own inclusive range and remove all old measurements
+ok 1 - surface inspector invalid drafts identify their own inclusive range and remove all old measurements
+  ---
+  duration_ms: 8.168208
+  type: 'test'
+  ...
+# Subtest: inclusive surface endpoints still evaluate; id/domain/history changes immediately discard drafts
+ok 2 - inclusive surface endpoints still evaluate; id/domain/history changes immediately discard drafts
+  ---
+  duration_ms: 1.924958
+  type: 'test'
+  ...
+# Subtest: Split uses strict original-axis interior without restricting endpoint Iso/knot native semantics
+ok 3 - Split uses strict original-axis interior without restricting endpoint Iso/knot native semantics
+  ---
+  duration_ms: 20.57125
+  type: 'test'
+  ...
+# Subtest: blank and nonfinite Thickness drafts cannot silently reuse 2 or start Thicken
+ok 4 - blank and nonfinite Thickness drafts cannot silently reuse 2 or start Thicken
+  ---
+  duration_ms: 15.484833
+  type: 'test'
+  ...
+# Subtest: Extend requires an owned finite-positive raw draft and refuses stale numeric fallback
+ok 5 - Extend requires an owned finite-positive raw draft and refuses stale numeric fallback
+  ---
+  duration_ms: 51.023959
+  type: 'test'
+  ...
+# Subtest: Region owns all four raw bounds and blocks blank/nonfinite scheduling without changing interval admission
+ok 6 - Region owns all four raw bounds and blocks blank/nonfinite scheduling without changing interval admission
+  ---
+  duration_ms: 8.758334
+  type: 'test'
+  ...
+# Subtest: Move owns finite raw vector drafts by exact direct and stable selected IDs
+ok 7 - Move owns finite raw vector drafts by exact direct and stable selected IDs
+  ---
+  duration_ms: 2.192125
+  type: 'test'
+  ...
+# Subtest: remaining Transform drafts guard only their own operations and retain stable selection ownership
+ok 8 - remaining Transform drafts guard only their own operations and retain stable selection ownership
+  ---
+  duration_ms: 9.183458
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 547.828791

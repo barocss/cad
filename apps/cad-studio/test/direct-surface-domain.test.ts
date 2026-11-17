@@ -19,6 +19,8 @@ const studio = existsSync(resolve('src/ui/DirectPanel.tsx')) ? process.cwd() : r
 const { build } = createRequire(join(studio, 'package.json'))('esbuild') as typeof import('esbuild');
 const temporary = await mkdtemp(join(tmpdir(), 'cad-surface-domain-'));
 let SurfacePoint: (props: PointProps) => View, SurfaceTools: (props: ToolsProps) => View;
+type TransformProps = { direct: DirectGeometry; selected: string[]; moveControls: null; onRotate(axis: string, n: number): void; onScale(n: number): void; onStretch(n: number[]): void; onShear(a: string, b: string, n: number): void; onDuplicate(): void };
+let Transform: (props: TransformProps) => View, TransformDraft: (props: Props) => View;
 let DirectMoveControls: (props: MoveProps) => View;
 type MoveProps = { direct: DirectGeometry; selected: string[]; onMove(by: [number, number, number]): void };
 let SurfaceParameter: (props: Props) => View, Analysis: (props: Props) => View;
@@ -26,12 +28,12 @@ try {
   const outfile = join(temporary, 'panel.mjs');
   await build({ entryPoints: [join(studio, 'src/ui/DirectPanel.tsx')], outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
     plugins: [{ name: 'surface-domain-hooks', setup(builder) {
-      builder.onLoad({ filter: /DirectPanel\.tsx$/ }, args => ({ contents: readFileSync(args.path, 'utf8') + '\nexport { SurfacePoint, SurfaceTools, SurfaceParameter, Analysis, DirectMoveControls };', loader: 'tsx', resolveDir: dirname(args.path) }));
+      builder.onLoad({ filter: /DirectPanel\.tsx$/ }, args => ({ contents: readFileSync(args.path, 'utf8') + '\nexport { SurfacePoint, SurfaceTools, SurfaceParameter, Analysis, DirectMoveControls, Transform, TransformDraft };', loader: 'tsx', resolveDir: dirname(args.path) }));
       builder.onResolve({ filter: /^react$/ }, args => args.importer.endsWith('/DirectPanel.tsx') ? { path: 'react', namespace: 'surface-domain-hooks' } : undefined);
       builder.onLoad({ filter: /.*/, namespace: 'surface-domain-hooks' }, () => ({ contents: 'export const useState=(...a)=>globalThis.__surfaceDomainHooks.useState(...a),useEffect=(...a)=>globalThis.__surfaceDomainHooks.useEffect(...a);' }));
     } }],
   });
-  ({ SurfacePoint, SurfaceTools, SurfaceParameter, Analysis, DirectMoveControls } = await import(pathToFileURL(outfile).href));
+  ({ SurfacePoint, SurfaceTools, SurfaceParameter, Analysis, DirectMoveControls, Transform, TransformDraft } = await import(pathToFileURL(outfile).href));
 } finally { await rm(temporary, { recursive: true, force: true }); }
 
 function elements(node: unknown): View[] {
@@ -258,5 +260,35 @@ test('Move owns finite raw vector drafts by exact direct and stable selected IDs
     (action(h.render(), 'Move').onClick as () => void)(); assert.deepEqual(calls, [[-2.5, 0, 2.5]]);
     props.selected = ['other']; assert.deepEqual(labels.map(l => field(l).value), ['0', '0', '10']);
     assert.deepEqual(direct, before);
+  } finally { h.cleanup(); }
+});
+
+
+test('remaining Transform drafts guard only their own operations and retain stable selection ownership', () => {
+  const direct = seed(), calls: unknown[][] = [];
+  const props: TransformProps = { direct, selected: ['a', 'b'], moveControls: null, onRotate: (...args) => calls.push(['Rotate', ...args]), onScale: n => calls.push(['Scale', n]), onStretch: n => calls.push(['Stretch', ...n]), onShear: (...args) => calls.push(['Shear', ...args]), onDuplicate: () => calls.push(['Duplicate']) };
+  const h = harness(Transform, props);
+  const labels = ['Angle °', 'Factor', '× X', '× Y', '× Z', 'Shear factor'], operations = ['Rotate', 'Scale', 'Stretch', 'Stretch', 'Stretch', 'Shear'];
+  const field = (label: string) => {
+    const child = elements(h.render()).find(e => e.type === TransformDraft && e.props.label === label)!;
+    return elements(TransformDraft(child.props)).find(e => e.props['aria-label'] === label)!.props;
+  };
+  const enter = (label: string, value: string) => (field(label).onChange as (e: unknown) => void)({ target: { value } });
+  try {
+    for (let i = 0; i < labels.length; i++) for (const raw of ['', ' ', 'NaN', 'Infinity', '-Infinity']) {
+      enter(labels[i], raw); const view = h.render();
+      assert.equal(field(labels[i]).value, raw); assert.equal(field(labels[i])['aria-invalid'], true);
+      for (const op of ['Rotate', 'Scale', 'Stretch', 'Shear']) assert.equal(Boolean(action(view, op).disabled), op === operations[i]);
+      (action(view, operations[i]).onClick as () => void)(); assert.deepEqual(calls, []);
+      assert.equal(Boolean(action(view, 'Duplicate').disabled), false);
+      props.direct = structuredClone(direct); h.render();
+    }
+    enter('Angle °', '-45'); enter('Factor', '0'); enter('× X', '-1'); enter('× Y', '0'); enter('× Z', '1.25'); enter('Shear factor', '-0.5');
+    props.selected = ['b', 'a']; assert.equal(field('Angle °').value, '-45');
+    props.selected = [...props.selected]; assert.equal(field('Factor').value, '0');
+    for (const op of ['Rotate', 'Scale', 'Stretch', 'Shear', 'Duplicate']) (action(h.render(), op).onClick as () => void)();
+    assert.deepEqual(calls, [['Rotate', 'z', -45], ['Scale', 0], ['Stretch', -1, 0, 1.25], ['Shear', 'x', 'z', -0.5], ['Duplicate']]);
+    props.selected = ['a']; assert.deepEqual(labels.map(l => field(l).value), ['90', '2', '1', '1', '2', '0.5']);
+    enter('Factor', ''); props.direct = structuredClone(direct); assert.equal(field('Factor').value, '2');
   } finally { h.cleanup(); }
 });
