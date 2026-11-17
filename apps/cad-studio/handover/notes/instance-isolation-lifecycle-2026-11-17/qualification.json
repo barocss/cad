@@ -1,0 +1,1007 @@
+{
+  "issue": 235,
+  "scope": "Actual isolation snapshot deletion/Undo and linked revision source freshness; test/evidence only",
+  "renderer": "WebGPU",
+  "final": {
+    "status": "PASS",
+    "directory": "/tmp/cad-instance-isolation-lifecycle-02",
+    "receiptSHA256": "9d3a2c88ad5542a0e7f8fcf201d6755cd5f712f88f0d61da2b1d71e61d72c09e",
+    "observations": [
+      {
+        "opaque": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "faded": [],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 1,
+          "cpuTime": 0.19999992847442627,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1",
+          "p2"
+        ],
+        "faded": [
+          "p3"
+        ],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 4,
+          "cpuTime": 0.2999999523162842,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.3673469387755102,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.3673469387755102,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.24489795918367346,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1"
+        ],
+        "faded": [
+          "p3"
+        ],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 7,
+          "cpuTime": 0.30000007152557373,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.5806451612903226,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.3870967741935484,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1",
+          "p2"
+        ],
+        "faded": [
+          "p3"
+        ],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 11,
+          "cpuTime": 0.10000002384185791,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.32432432432432434,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "faded": [],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 12,
+          "cpuTime": 0.10000002384185791,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.32727272727272727,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.32727272727272727,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.32727272727272727,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1"
+        ],
+        "faded": [
+          "p2",
+          "p3"
+        ],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 17,
+          "cpuTime": 0.30000007152557373,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.4186046511627907,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.27906976744186046,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.27906976744186046,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "heldPlacedSource": {
+          "held": {
+            "request": {
+              "type": "placed",
+              "id": 11,
+              "doc": {
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [],
+                  "outputs": {
+                    "b1": {
+                      "node": 1,
+                      "side": "solid"
+                    }
+                  }
+                },
+                "ids": [
+                  16,
+                  17
+                ],
+                "added": [
+                  [
+                    16,
+                    {
+                      "id": "n0",
+                      "kind": "sketch",
+                      "profile": "rectangle",
+                      "min": [
+                        0,
+                        0
+                      ],
+                      "max": [
+                        10,
+                        10
+                      ]
+                    }
+                  ],
+                  [
+                    17,
+                    {
+                      "id": "n1",
+                      "kind": "extrude",
+                      "sketch": 0,
+                      "height": 20
+                    }
+                  ]
+                ],
+                "shopRows": [
+                  {
+                    "part": "base",
+                    "rows": []
+                  }
+                ]
+              },
+              "base": {
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [],
+                  "outputs": {
+                    "b1": {
+                      "node": 1,
+                      "side": "solid"
+                    }
+                  }
+                },
+                "ids": [
+                  16,
+                  17
+                ],
+                "added": [],
+                "shopRows": [
+                  {
+                    "part": "base",
+                    "rows": []
+                  }
+                ]
+              },
+              "place": {
+                "m": [
+                  1,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "t": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "revision": 11,
+              "nativeSource": {
+                "epoch": 1,
+                "requestId": 11,
+                "revision": 11,
+                "slot": "placed"
+              }
+            },
+            "resolvedNodes": [
+              {
+                "id": "n0",
+                "kind": "sketch",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  10,
+                  10
+                ]
+              },
+              {
+                "id": "n1",
+                "kind": "extrude",
+                "sketch": 0,
+                "height": 20
+              }
+            ],
+            "ok": true
+          },
+          "queued": 1
+        }
+      },
+      {
+        "opaque": [
+          "p1"
+        ],
+        "faded": [
+          "p2",
+          "p3"
+        ],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 21,
+          "cpuTime": 0.2999999523162842,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.4186046511627907,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.27906976744186046,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.27906976744186046,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "opaque": [
+          "p1",
+          "p3"
+        ],
+        "faded": [
+          "p2"
+        ],
+        "cost": {
+          "renderer": "webgpu",
+          "mode": "shaded-with-edges",
+          "frame": 22,
+          "cpuTime": 0.20000004768371582,
+          "bodies": [
+            {
+              "key": "p1/b1",
+              "share": 0.3673469387755102,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p2/b1",
+              "share": 0.24489795918367346,
+              "draws": 2,
+              "triangles": 12,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 0,
+                "surface": 0,
+                "transparent": 1,
+                "oit": 1,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            },
+            {
+              "key": "p3/b1",
+              "share": 0.3673469387755102,
+              "draws": 3,
+              "triangles": 24,
+              "lines": 12,
+              "points": 0,
+              "passes": {
+                "shadow": 1,
+                "surface": 2,
+                "transparent": 0,
+                "oit": 0,
+                "hiddenLines": 0,
+                "caps": 0,
+                "outlineMask": 0
+              }
+            }
+          ],
+          "scene": {
+            "draws": 1,
+            "triangles": 2,
+            "lines": 0,
+            "points": 0,
+            "passes": {
+              "shadow": 0,
+              "surface": 0,
+              "transparent": 1,
+              "oit": 0,
+              "hiddenLines": 0,
+              "caps": 0,
+              "outlineMask": 0
+            }
+          }
+        }
+      },
+      {
+        "lifecycle": true,
+        "deletionRefusedWithoutPruning": true,
+        "UndoRestoredSnapshot": true,
+        "held": {
+          "held": {
+            "request": {
+              "type": "placed",
+              "id": 11,
+              "doc": {
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [],
+                  "outputs": {
+                    "b1": {
+                      "node": 1,
+                      "side": "solid"
+                    }
+                  }
+                },
+                "ids": [
+                  16,
+                  17
+                ],
+                "added": [
+                  [
+                    16,
+                    {
+                      "id": "n0",
+                      "kind": "sketch",
+                      "profile": "rectangle",
+                      "min": [
+                        0,
+                        0
+                      ],
+                      "max": [
+                        10,
+                        10
+                      ]
+                    }
+                  ],
+                  [
+                    17,
+                    {
+                      "id": "n1",
+                      "kind": "extrude",
+                      "sketch": 0,
+                      "height": 20
+                    }
+                  ]
+                ],
+                "shopRows": [
+                  {
+                    "part": "base",
+                    "rows": []
+                  }
+                ]
+              },
+              "base": {
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [],
+                  "outputs": {
+                    "b1": {
+                      "node": 1,
+                      "side": "solid"
+                    }
+                  }
+                },
+                "ids": [
+                  16,
+                  17
+                ],
+                "added": [],
+                "shopRows": [
+                  {
+                    "part": "base",
+                    "rows": []
+                  }
+                ]
+              },
+              "place": {
+                "m": [
+                  1,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
+                  0,
+                  0,
+                  1
+                ],
+                "t": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "revision": 11,
+              "nativeSource": {
+                "epoch": 1,
+                "requestId": 11,
+                "revision": 11,
+                "slot": "placed"
+              }
+            },
+            "resolvedNodes": [
+              {
+                "id": "n0",
+                "kind": "sketch",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  10,
+                  10
+                ]
+              },
+              {
+                "id": "n1",
+                "kind": "extrude",
+                "sketch": 0,
+                "height": 20
+              }
+            ],
+            "ok": true
+          },
+          "queued": 1
+        },
+        "bounds": [
+          {
+            "id": "p1",
+            "min": [
+              0,
+              0,
+              0
+            ],
+            "max": [
+              10,
+              10,
+              20
+            ]
+          },
+          {
+            "id": "p2",
+            "min": [
+              20,
+              0,
+              0
+            ],
+            "max": [
+              30,
+              10,
+              10
+            ]
+          },
+          {
+            "id": "p3",
+            "min": [
+              40,
+              0,
+              0
+            ],
+            "max": [
+              50,
+              10,
+              10
+            ]
+          }
+        ],
+        "literalVolumes": {
+          "A": 1000,
+          "B": 2000
+        },
+        "FIFO": true,
+        "projectSaveFreshOpen": "NOT_RUN"
+      }
+    ],
+    "errors": [],
+    "downloads": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "frozenSources": 514
+  },
+  "firstRun": {
+    "directory": "/tmp/cad-instance-isolation-lifecycle-01",
+    "status": "FAIL",
+    "classification": "Harness incorrectly read WireDoc.doc.nodes instead of outgoing ids/added table. Deletion/Undo assertions passed; no product failure established.",
+    "receiptSHA256": "14be6c829c26755bb06eb7cd287f780d80626b32eb30da29ba7c577919f4204c"
+  },
+  "driverSHA256": "44c48c0584d677e762ef4e39396fb848bac542afcfab66618313e7a4d0f14575",
+  "screenshotSHA256": "41e15e880a776a274d91679884f01d6bfed8b07549e0429753b9472cc716f2f4",
+  "visualReview": "Actual final screenshot reviewed by implementer and parent; synthetic fixture only, no sensitive data. Parent also reviewed deleted-member screenshot.",
+  "volumeQualification": "1000/2000 mm\u00b3 are rounded UI Volume readouts, not full-precision native mass assertions. Exact evaluated bounds are independently compared to literal 10\u00d710\u00d710 / 10\u00d710\u00d720 geometry.",
+  "historyEvidence": "Root history is legitimately empty; recursive Doc equality and Undo/Redo controls, not an empty history selector alone, support authored-state invariance.",
+  "notRun": [
+    "Save/fresh project Open persistence",
+    "representative downstream consumers",
+    "WebGL",
+    "nested occurrences",
+    "all blocked modes",
+    "whole #235"
+  ],
+  "wholeIssue": "NOT_COMPLETE",
+  "productChanges": false
+}
