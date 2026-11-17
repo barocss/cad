@@ -1,0 +1,54 @@
+{
+  "status": "PASS",
+  "qualification": "Numeric translation preserving H/V and indexed driving lengths, native history and file persistence.",
+  "limits": [
+    "One H/V rectangle with a driving edge and explicit-fix counterpart. Fixed points and other rules remain unsupported."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1065,
+  "sourceAfterCleanupCount": 1065,
+  "visualReview": "PASS: inspected offset UI and reopened driving-length edit pixels",
+  "files": [
+    {
+      "file": "translated-outline.bcad",
+      "hash": "c5a210fa80fc3cbbc7592b6402306bc1291482e92965dd790fbc24f70a04827f",
+      "semanticEquality": true
+    },
+    {
+      "file": "translated-outline-width24.bcad",
+      "hash": "260be68e298e39211d8005c175ce773ec00d585fe1416482df8b7d815ff05bd7",
+      "semanticEquality": true
+    }
+  ],
+  "states": [
+    "01-x-offset-move",
+    "02-offset-before-apply",
+    "03-finished",
+    "04-fresh-open",
+    "05-driving-length-before-finish",
+    "06-length-reedited",
+    "07-resized-fresh-open",
+    "07-fixed-refusal",
+    "08-refusal-finished"
+  ],
+  "sourceHashes": {
+    "apps/cad-studio/src/App.tsx": "78140186898aa4550981782e8a3d2ebf36038254b8b1fbf1921e64914dff605f",
+    "apps/cad-studio/src/sketch/orthogonalOutlineConstraints.ts": "ea944922753a3f3b50bc5bc6362835122dc968552a1a2923e5f50123206032dd",
+    "apps/cad-studio/src/sketch/outlineRotationCommit.ts": "26eddebc264b5934225d04fa0072177b93c9cef4254bf9ae0bdf771a93da8eda",
+    "apps/cad-studio/src/sketch/rotateOutline.ts": "07eadad67045ab44d45bcda907e055d1fc7ced1c2f600dc9ce19486916c83353",
+    "apps/cad-studio/src/sketch/translateOutline.ts": "127198996a8354749a6ad2a46af65f64d238e6874c3d370fff44deb19bdf9746",
+    "apps/cad-studio/src/ui/SketchOutlineTranslation.tsx": "38ec51a9ed3ce3de4e0c7129e8384bd2e34efbad3e7a44da2428c983144d1747",
+    "apps/cad-studio/src/ui/SketchPanel.tsx": "22c0e4deefeb824a6ebe4e3fb9cc8e209f844b8b3d8fe380cb7dd32994a59520",
+    "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+    "packages/barocss-cad-model/src/sketch/settle.ts": "7e414f363527ca4d0c96979b32f76628c8a70b97e8de608b6d913842bc7c142f"
+  }
+}

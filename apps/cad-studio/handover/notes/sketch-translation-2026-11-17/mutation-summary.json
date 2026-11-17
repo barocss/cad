@@ -1,0 +1,71 @@
+{
+  "source": "apps/cad-studio/src/sketch/translateOutline.ts",
+  "sourceHashBefore": "127198996a8354749a6ad2a46af65f64d238e6874c3d370fff44deb19bdf9746",
+  "sourceHashAfter": "127198996a8354749a6ad2a46af65f64d238e6874c3d370fff44deb19bdf9746",
+  "runs": [
+    {
+      "name": "baseline-before",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 25,
+      "fail": 0
+    },
+    {
+      "name": "omit-y-movement",
+      "substitution": [
+        "[x+dx,y+dy]",
+        "[x+dx,y]"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 21,
+      "fail": 4,
+      "killed": true
+    },
+    {
+      "name": "lose-lengths",
+      "substitution": [
+        "const shape={...source,points};",
+        "const shape={...source,points,lengths:undefined};"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 23,
+      "fail": 2,
+      "killed": true
+    },
+    {
+      "name": "remove-exact-settle",
+      "substitution": [
+        "if(hasOrthogonalConstraints(source)&&!settlesExactly(shape,source))return {error:'Translation would require repairing or rounding the constrained outline.'};",
+        ""
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 24,
+      "fail": 1,
+      "killed": true
+    },
+    {
+      "name": "remove-result-admission",
+      "substitution": [
+        "const checked=rotateOutline({...sketch,shape},0,[0,0]);if('error'in checked)return refusal(checked.error);",
+        ""
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 24,
+      "fail": 1,
+      "killed": true
+    },
+    {
+      "name": "baseline-final",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 25,
+      "fail": 0
+    }
+  ]
+}

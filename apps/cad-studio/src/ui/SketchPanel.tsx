@@ -14,6 +14,7 @@ import { ellipseMatches, type EllipseDef } from '@barocss/cad-model/sketch/ellip
 import { applyEllipse, ellipseConstraintRows } from './ellipsePanel';
 import { liveBand } from '@barocss/cad-model/sketch/band';
 import { ConstraintTools } from './ConstraintTools';
+import { SketchOutlineTranslation } from './SketchOutlineTranslation';
 import { SketchOutlineMirror } from './SketchOutlineMirror';
 import { SketchOutlineRotation } from './SketchOutlineRotation';
 import { SketchMobility } from './SketchMobility';
@@ -214,6 +215,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
       </>}
       {solved?.ok && <SketchSolverDiagnostics rank={solved.rank} dof={solved.dof} />}
       {onBand && (sketch.tool === 'band' || sketch.band) && <BandSection sketch={sketch} {...onBand} />}
+      {onTransformOutline && <SketchOutlineTranslation sketch={sketch} doc={constraintDocument} onApply={onTransformOutline} />}
       {onTransformOutline && <SketchOutlineRotation sketch={sketch} doc={constraintDocument} onApply={onTransformOutline} />}
       {onTransformOutline && <SketchOutlineMirror sketch={sketch} doc={constraintDocument} onApply={onTransformOutline} />}
       {outlineTools}
