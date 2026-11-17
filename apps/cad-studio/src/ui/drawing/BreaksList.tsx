@@ -28,7 +28,7 @@ export function BreaksList({ settings, views, onChange, onRefused }: { settings:
       {(['from', 'to'] as const).map(end => <span key={end} className="num flex items-center gap-1"><Input type="number" className="w-16 text-right" step="any" aria-label={`Break ${k + 1} ${end}`} value={draft?.k === k && draft.end === end ? draft.text : b[end]}
         onChange={e => setDraft({ k, end, text: e.target.value })}
         onBlur={() => { const v = Number(draft?.text); if (draft?.k === k && draft.end === end && draft.text.trim() !== '' && Number.isFinite(v)) edit(k, { ...b, [end]: v }); setDraft(null); }}
-        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} /></span>)}
+        onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setDraft(null); } else if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} /></span>)}
       <em>mm</em>
       <Button variant="ghost" size="xs" aria-label={`Remove break ${k + 1}`} title="Remove this break" onClick={() => set(list.filter((_, i) => i !== k))}><Icon name="close" small /></Button>
     </div>)}

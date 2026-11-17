@@ -1,0 +1,71 @@
+{
+  "status": "PASS",
+  "qualification": "Escape discards pending drawing break coordinates, with explicit Enter/blur, rejection, history, native reopen and SVG checked.",
+  "observations": [
+    {
+      "paperWidth": 52,
+      "oracle": "64 - (32 - 18) - (54 - 44) + 2 * 6",
+      "breaks": {
+        "front": [
+          {
+            "axis": 0,
+            "from": 18,
+            "to": 32,
+            "gap": 6
+          },
+          {
+            "axis": 0,
+            "from": 44,
+            "to": 54,
+            "gap": 6
+          }
+        ],
+        "top": [
+          {
+            "axis": 0,
+            "from": 18,
+            "to": 32,
+            "gap": 6
+          },
+          {
+            "axis": 0,
+            "from": 44,
+            "to": 54,
+            "gap": 6
+          }
+        ]
+      }
+    },
+    {
+      "cancelledInputs": 6,
+      "enterFrom": 18,
+      "blurTo": 54,
+      "rejectedReversedAndOverlapping": true,
+      "undoRedo": true,
+      "nativeSaveOpen": true,
+      "svgDownloaded": true
+    }
+  ],
+  "limits": [
+    "Synthetic plate and two X-axis breaks only. No PDF/DXF, dimension precision or standards certification."
+  ],
+  "baseline": {
+    "status": "FAIL",
+    "acceptedFrom": 16,
+    "afterEscapeDraft": 18,
+    "afterTabCommittedFrom": 18
+  },
+  "sourceUnchangedDuringRun": true,
+  "svgReadback": {
+    "front": {
+      "minX": 173.0,
+      "maxX": 225.0,
+      "width": 52.0
+    },
+    "top": {
+      "minX": 173.0,
+      "maxX": 225.0,
+      "width": 52.0
+    }
+  }
+}
