@@ -26,7 +26,7 @@ test('45 degree independent coordinates, area/length invariants, settle and prof
  const direct=profileOf([r,...s.done!]),downstream=profileOf([settled.shape!,...s.done!]);assert.deepEqual(downstream,direct);assert.ok('node' in direct);if('node' in direct){assert.equal(direct.node.profile,'polygon');assert.deepEqual(direct.node.sideTags?.outer,r.ids);if(direct.node.profile==='polygon')assert.deepEqual(direct.node.points,r.points);}
 });
 test('constraints and derived/linked/multiple geometry refuse atomically instead of dropping state',()=>{
- const changes:Partial<typeof source>[]=[{hv:undefined},{hv:{h:[0],v:[]}},{lengths:{0:6}},{radii:{0:2}},{rules:[{kind:'fix',point:0,at:[2,3]}]},{tangents:[0]},{equalRadii:[[0,1]]},{concentric:[[0,1]]},{bulges:[.1,0,0,0]},{fromSpline:true},{fromEllipse:true},{circles:[{c:[4,4],r:1}]},{circleIds:['e4']},{pending:true},{closed:false},{construction:true}];
+ const changes:Partial<typeof source>[]=[{hv:undefined},{radii:{0:2}},{rules:[{kind:'fix',point:0,at:[2,3]}]},{tangents:[0]},{equalRadii:[[0,1]]},{concentric:[[0,1]]},{bulges:[.1,0,0,0]},{fromSpline:true},{fromEllipse:true},{circles:[{c:[4,4],r:1}]},{circleIds:['e4']},{pending:true},{closed:false},{construction:true}];
  for(const change of changes){const s=state();s.shape={...source,...change};const before=structuredClone(s);assert.ok('error' in rotateOutline(s,90,[0,0]));assert.deepEqual(s,before);}
  const s=state();s.done!.push({kind:'circle',c:[20,20],r:1});assert.ok('error' in rotateOutline(s,90,[0,0]));
  for(const change of [{association:{}},{band:{}},{bandPicks:['e4']}])assert.ok('error' in rotateOutline({...state(),...change} as SketchState,90,[0,0]));

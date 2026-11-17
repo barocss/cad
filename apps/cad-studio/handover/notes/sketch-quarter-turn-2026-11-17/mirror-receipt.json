@@ -1,0 +1,35 @@
+{
+  "status": "PASS",
+  "qualification": "Axis-aligned sketch reflection preserves existing H/V and length constraints through native history and persistence.",
+  "limits": [
+    "One Rectangle-tool-equivalent profile with H/V and driving width, an H/V-only rectangle, and explicit-fix refusal. Chrome desktop; no general solver widening."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1063,
+  "sourceAfterCleanupCount": 1063,
+  "files": [
+    {
+      "file": "mirrored-outline.bcad",
+      "hash": "553074792977bcc29e2025b38681a1802fcb7b47905e531fe533ea94a7816f5e",
+      "semanticEquality": true
+    }
+  ],
+  "states": [
+    "00-hv-only-finished",
+    "01-x-zero-mirror",
+    "02-custom-line-before-apply",
+    "03-finished",
+    "04-fresh-open",
+    "05-width-reedited",
+    "06-fixed-refusal",
+    "07-refusal-finished"
+  ]
+}

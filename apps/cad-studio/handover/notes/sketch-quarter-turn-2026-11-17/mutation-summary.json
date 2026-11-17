@@ -1,0 +1,83 @@
+{
+  "source": "apps/cad-studio/src/sketch/rotateOutline.ts",
+  "sourceHashBefore": "07eadad67045ab44d45bcda907e055d1fc7ced1c2f600dc9ce19486916c83353",
+  "sourceHashAfter": "07eadad67045ab44d45bcda907e055d1fc7ced1c2f600dc9ce19486916c83353",
+  "runs": [
+    {
+      "name": "baseline-before",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 19,
+      "fail": 0
+    },
+    {
+      "name": "normalized-angle-guard",
+      "substitution": [
+        "if(constrained&&remainder%90!==0)",
+        "if(constrained&&angle%90!==0)"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 18,
+      "fail": 1,
+      "killed": true
+    },
+    {
+      "name": "omit-hv-swap",
+      "substitution": [
+        "{hv:{h:shape.hv!.v,v:shape.hv!.h}}",
+        "{hv:shape.hv}"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 18,
+      "fail": 1,
+      "killed": true
+    },
+    {
+      "name": "lose-lengths",
+      "substitution": [
+        "const candidate={...shape,points,",
+        "const candidate={...shape,points,lengths:undefined,"
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 17,
+      "fail": 2,
+      "killed": true
+    },
+    {
+      "name": "remove-quarter-guard",
+      "substitution": [
+        "if(constrained&&remainder%90!==0)return {error:'Constrained outlines support only exact multiples of 90 degrees.'};",
+        ""
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 17,
+      "fail": 2,
+      "killed": true
+    },
+    {
+      "name": "remove-exact-settle",
+      "substitution": [
+        "if(constrained&&!settlesExactly(candidate,shape))return {error:'Rotation would require repairing or rounding the constrained outline.'};",
+        ""
+      ],
+      "additional": null,
+      "status": 1,
+      "pass": 18,
+      "fail": 1,
+      "killed": true
+    },
+    {
+      "name": "baseline-final",
+      "substitution": null,
+      "additional": null,
+      "status": 0,
+      "pass": 19,
+      "fail": 0
+    }
+  ]
+}

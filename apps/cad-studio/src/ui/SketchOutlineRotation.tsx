@@ -34,7 +34,7 @@ export function SketchOutlineRotation({ sketch, doc, onApply }: {
       }
     }}>
     <legend>Rotate outline</legend>
-    <p className="muted small">One independent, unconstrained straight outline. Rotation is in sketch X/Y, not world axes. Geometry changes only on Apply.</p>
+    <p className="muted small">One independent straight outline. With horizontal/vertical or edge-length constraints, use multiples of 90°; other constraints are not supported. Rotation is in sketch X/Y, not world axes. Geometry changes only on Apply.</p>
     <label>Angle <Input type="number" step="any" aria-label="Outline rotation angle" value={draft.angle}
       onChange={event => update({ angle: event.target.value })} /> °</label>
     <label>Pivot <NativeSelect aria-label="Outline rotation pivot" value={draft.pivot}

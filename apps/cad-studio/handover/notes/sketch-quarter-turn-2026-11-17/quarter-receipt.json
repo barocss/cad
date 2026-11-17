@@ -1,0 +1,35 @@
+{
+  "status": "PASS",
+  "qualification": "Quarter-turn rotation preserving H/V and indexed driving lengths, native history and file persistence.",
+  "limits": [
+    "One H/V rectangle with a driving edge and explicit-fix counterpart. Arbitrary constrained angles remain unsupported."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1063,
+  "sourceAfterCleanupCount": 1063,
+  "files": [
+    {
+      "file": "rotated-outline.bcad",
+      "hash": "d51be8987bc0fd7725b49618eef614ad449d3089146a30de221cbd31cf21532f",
+      "semanticEquality": true
+    }
+  ],
+  "states": [
+    "01-first-point-rotation",
+    "02-custom-pivot-before-apply",
+    "03-finished",
+    "04-fresh-open",
+    "05-driving-length-before-finish",
+    "06-length-reedited",
+    "07-fixed-refusal",
+    "08-refusal-finished"
+  ]
+}

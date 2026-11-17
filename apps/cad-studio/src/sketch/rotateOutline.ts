@@ -1,3 +1,4 @@
+import { orthogonalConstraintError, hasOrthogonalConstraints, settlesExactly } from './orthogonalOutlineConstraints';
 import { CadNumericPolicy } from '@barocss/cad';
 import { segmentDistance, signedArea } from '@barocss/cad-model/engine/geom2';
 import type { SketchState, SketchShape } from '@barocss/cad-model/sketch/types';
@@ -27,15 +28,19 @@ export function rotateOutline(sketch:SketchState,degrees:number,pivot:readonly [
   const shape=sketch.shape;
   if(sketch.association||sketch.band||sketch.bandPicks?.length||(sketch.done??[]).some(s=>!s.construction))return {error:'Rotate one independent active outline; linked, band and multiple material outlines are not supported.'};
   if(shape?.kind!=='polygon'||!shape.closed||shape.pending||shape.construction||shape.points.length<3||shape.points.length>16)return {error:'Pick one settled closed straight polygon with 3 to 16 points.'};
-  if(!shape.hv||shape.hv.h.length||shape.hv.v.length||shape.bulges?.some(v=>v!==0)||shape.fromSpline||shape.spline||shape.fromEllipse||shape.ellipse||shape.circles?.length||shape.circleIds?.length||shape.rules?.length||shape.tangents?.length||shape.equalRadii?.length||shape.concentric?.length||Object.keys(shape.lengths??{}).length||Object.keys(shape.radii??{}).length)return {error:'Rotation requires an explicitly unconstrained straight outline. Existing constraints are never removed.'};
+  if(!shape.hv||shape.bulges?.some(v=>v!==0)||shape.fromSpline||shape.spline||shape.fromEllipse||shape.ellipse||shape.circles?.length||shape.circleIds?.length||shape.rules?.length||shape.tangents?.length||shape.equalRadii?.length||shape.concentric?.length||Object.keys(shape.radii??{}).length)return {error:'Rotation supports only horizontal/vertical and edge-length constraints on a straight outline. Other constraints are never removed.'};
   if(shape.ids&&(shape.ids.length!==shape.points.length||new Set(shape.ids).size!==shape.ids.length))return {error:'Outline side IDs are invalid.'};
   if(!Number.isFinite(degrees)||!inRange(pivot))return {error:'Enter finite degrees and a pivot within the modeling range.'};
   const before=geometryError(shape.points);if(before)return {error:before};
-  const remainder=degrees%360,angle=remainder<0?remainder+360:remainder;if(angle===0)return {shape};
+  const constraints=orthogonalConstraintError(shape);if(constraints)return {error:constraints};
+  const constrained=hasOrthogonalConstraints(shape);
+  const remainder=degrees%360,angle=remainder<0?remainder+360:remainder;if(constrained&&remainder%90!==0)return {error:'Constrained outlines support only exact multiples of 90 degrees.'};if(angle===0)return {shape};
   const cardinal=angle===90?[0,1]:angle===180?[-1,0]:angle===270?[0,-1]:null;
   const [c,s]=cardinal??[Math.cos(angle*Math.PI/180),Math.sin(angle*Math.PI/180)];
   const points=shape.points.map(([x,y])=>{const u=x-pivot[0],v=y-pivot[1];return [pivot[0]+c*u-s*v,pivot[1]+s*u+c*v] as P;});
   const after=geometryError(points);if(after)return {error:after};
   if(points.every((p,i)=>p.every((v,k)=>v===shape.points[i][k])))return {shape};
-  return {shape:{...shape,points}};
+  const candidate={...shape,points,...(constrained&&(angle===90||angle===270)?{hv:{h:shape.hv!.v,v:shape.hv!.h}}:{})};
+  if(constrained&&!settlesExactly(candidate,shape))return {error:'Rotation would require repairing or rounding the constrained outline.'};
+  return {shape:candidate};
 }

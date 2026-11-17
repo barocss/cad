@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 const points = [[10,10],[30,12],[24,25],[8,22]];
 const pins = ['apps/cad-studio/src/App.tsx','apps/cad-studio/src/sketch/outlineRotationCommit.ts','apps/cad-studio/src/ui/SketchOutlineRotation.tsx','apps/cad-studio/src/ui/SketchPanel.tsx',
-  'apps/cad-studio/src/sketch/rotateOutline.ts','packages/barocss-cad-model/src/sketch/settle.ts'];
+  'apps/cad-studio/src/sketch/rotateOutline.ts','apps/cad-studio/src/sketch/orthogonalOutlineConstraints.ts','packages/barocss-cad-model/src/sketch/settle.ts'];
 const f = await createFlow({name:'sketch-outline-rotation',output:process.argv[2],envFrozen:'OUTLINE_ROTATION_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,
   qualification:'Explicit in-plane rotation of one independent unconstrained straight outline, existing history and native project persistence.',
   limits:['One asymmetric four-point profile and its constrained refusal counterpart. Chrome desktop. No constraint removal or solver widening.'],
@@ -16,7 +16,7 @@ const input=JSON.parse(readFileSync(process.argv[2],'utf8'));
 if(input.points){
  const shape={kind:'polygon',closed:true,points:input.points,hv:{h:[],v:[]}};
  const make=s=>withNode(withNode(emptyDoc(),profileOf([s]).node),{kind:'extrude',sketch:0,height:5});
- console.log(JSON.stringify({free:make(shape),locked:make({...shape,lengths:{0:Math.hypot(20,2)}})}));
+ console.log(JSON.stringify({free:make(shape),locked:make({...shape,rules:[{kind:'fix',point:1,at:input.points[1]}]})}));
 }else{
  const output=evaluateCadPart(toPartDocument(input)).outputs[0];
  console.log(JSON.stringify({valid:checkOutput(output).valid,volume:massPropertiesOf(output).volume,vertices:output.brep.vertices.map(v=>v.point)}));
@@ -24,7 +24,6 @@ if(input.points){
 const button=(scope,name)=>scope.getByRole('button',{name,exact:true});
 const panel=()=>f.sketchPanel();
 const form=()=>panel().getByRole('group',{name:'Rotate outline',exact:true});
-const coord=(i,axis)=>panel().getByRole('spinbutton',{name:`Point ${i} ${axis}`,exact:true});
 const angle=()=>form().getByRole('spinbutton',{name:'Outline rotation angle',exact:true});
 async function open(name,doc){const editing=await panel().isVisible();const [fc]=await Promise.all([f.page.waitForEvent('filechooser'),button(f.page,'Open').click()]);await fc.setFiles({name,mimeType:'application/json',buffer:Buffer.from(JSON.stringify(doc))});if(editing)await button(f.page,'Discard changes').click();await f.same(doc);}
 async function edit(){await f.openFeatureEditor(1);await button(f.editor(),'Edit sketch').click();await panel().waitFor();await f.tool('Select','s');}
