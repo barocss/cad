@@ -1,0 +1,1247 @@
+{
+  "status": "PASS",
+  "qualification": "Core and dispatcher reject root-only linked route copies; ordinary and explicitly detached output remains usable in Studio.",
+  "limits": [
+    "The bad core candidate is already blocked by Studio merge admission. This does not claim prior UI document corruption.",
+    "Synthetic route and rectangular part; existing route support only, no implicit detachment."
+  ],
+  "observations": [
+    {
+      "label": "dispatcher",
+      "results": [
+        {
+          "name": "linked",
+          "changed": false,
+          "isError": true,
+          "content": "{\"ok\":false,\"error\":\"[VALUE] [BAD_REFERENCE] Route bundle: nested route bundles are not supported. Detach linked route bundles before using this document as a placed part.\"}",
+          "inputUnchanged": true,
+          "saveError": null,
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 4,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "profile": "circle",
+                "center": [
+                  -2,
+                  0
+                ],
+                "radius": 0.5,
+                "id": "n0"
+              },
+              {
+                "kind": "sweep-curve",
+                "sketch": 0,
+                "name": "bundle \u00b7 A",
+                "path": {
+                  "degree": 3,
+                  "knots": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    1,
+                    1,
+                    1
+                  ],
+                  "controlPoints": [
+                    [
+                      -2,
+                      0,
+                      0
+                    ],
+                    [
+                      -2,
+                      0,
+                      10
+                    ],
+                    [
+                      -2,
+                      0,
+                      20
+                    ],
+                    [
+                      -2,
+                      0,
+                      30
+                    ]
+                  ],
+                  "weights": [
+                    1,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                "id": "n1",
+                "routeBundleMember": {
+                  "bundleId": "bundle1",
+                  "memberId": "A"
+                }
+              },
+              {
+                "kind": "sketch",
+                "profile": "circle",
+                "center": [
+                  2,
+                  0
+                ],
+                "radius": 0.5,
+                "id": "n2"
+              },
+              {
+                "kind": "sweep-curve",
+                "sketch": 2,
+                "name": "bundle \u00b7 B",
+                "path": {
+                  "degree": 3,
+                  "knots": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    1,
+                    1,
+                    1
+                  ],
+                  "controlPoints": [
+                    [
+                      2,
+                      0,
+                      0
+                    ],
+                    [
+                      2,
+                      0,
+                      10
+                    ],
+                    [
+                      2,
+                      0,
+                      20
+                    ],
+                    [
+                      2,
+                      0,
+                      30
+                    ]
+                  ],
+                  "weights": [
+                    1,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                "id": "n3",
+                "routeBundleMember": {
+                  "bundleId": "bundle1",
+                  "memberId": "B"
+                }
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              },
+              "b3": {
+                "node": 3,
+                "side": "solid"
+              }
+            },
+            "nextId": 4,
+            "direct": {
+              "sources": {
+                "src_1": "@model bundle {\n  version: 0;\n  length-unit: mm;\n  @curve #A { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]]; weights: [1,1,1,1]; }\n  @curve #B { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[2,0,0],[2,0,10],[2,0,20],[2,0,30]]; weights: [1,1,1,1]; }\n}"
+              },
+              "objects": [
+                {
+                  "id": "obj_1",
+                  "name": "bundle \u00b7 A",
+                  "source": "src_1",
+                  "geometry": "A"
+                },
+                {
+                  "id": "obj_2",
+                  "name": "bundle \u00b7 B",
+                  "source": "src_1",
+                  "geometry": "B"
+                }
+              ]
+            },
+            "routeBundles": [
+              {
+                "id": "bundle1",
+                "version": 1,
+                "kind": "two-open-curves-one-translation-tie",
+                "frame": "world-mm",
+                "tie": {
+                  "id": "tie1",
+                  "anchorMM": [
+                    0,
+                    0,
+                    10
+                  ]
+                },
+                "members": [
+                  {
+                    "id": "A",
+                    "curveObjectId": "obj_1",
+                    "handleKey": "1",
+                    "sweepFeatureId": "n1",
+                    "profileFeatureId": "n0",
+                    "sourceKey": "src_1",
+                    "geometryId": "A",
+                    "sourceCanonical": "{\"curve\":{\"controlPoints\":[[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]],\"degree\":3,\"knots\":[0,0,0,0,1,1,1,1],\"weights\":[1,1,1,1]},\"object\":{\"geometry\":\"A\",\"id\":\"obj_1\",\"source\":\"src_1\"},\"source\":\"@model bundle {\\n  version: 0;\\n  length-unit: mm;\\n  @curve #A { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]]; weights: [1,1,1,1]; }\\n  @curve #B { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[2,0,0],[2,0,10],[2,0,20],[2,0,30]]; weights: [1,1,1,1]; }\\n}\"}",
+                    "sourceRevision": "4228a50a542115fa",
+                    "offsetMM": [
+                      -2,
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "id": "B",
+                    "curveObjectId": "obj_2",
+                    "handleKey": "1",
+                    "sweepFeatureId": "n3",
+                    "profileFeatureId": "n2",
+                    "sourceKey": "src_1",
+                    "geometryId": "B",
+                    "sourceCanonical": "{\"curve\":{\"controlPoints\":[[2,0,0],[2,0,10],[2,0,20],[2,0,30]],\"degree\":3,\"knots\":[0,0,0,0,1,1,1,1],\"weights\":[1,1,1,1]},\"object\":{\"geometry\":\"B\",\"id\":\"obj_2\",\"source\":\"src_1\"},\"source\":\"@model bundle {\\n  version: 0;\\n  length-unit: mm;\\n  @curve #A { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]]; weights: [1,1,1,1]; }\\n  @curve #B { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[2,0,0],[2,0,10],[2,0,20],[2,0,30]]; weights: [1,1,1,1]; }\\n}\"}",
+                    "sourceRevision": "f546a922cb62ceef",
+                    "offsetMM": [
+                      2,
+                      0,
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "ordinary",
+          "changed": true,
+          "isError": false,
+          "content": "{\"ok\":true,\"did\":\"added part p1 \\\"Copy\\\" (a copy of base)\",\"part\":\"p1\",\"note\":\"build or edit it with the part tools and \\\"part\\\": id\",\"parts\":[{\"id\":\"p1\",\"name\":\"Copy\",\"position\":[40,0,0],\"rotation\":[0,0,0]}]}",
+          "inputUnchanged": true,
+          "saveError": null,
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  12,
+                  10
+                ],
+                "id": "n0"
+              },
+              {
+                "kind": "extrude",
+                "sketch": 0,
+                "height": 8,
+                "id": "n1"
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            "nextId": 2,
+            "instances": [
+              {
+                "id": "p1",
+                "name": "Copy",
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [
+                    {
+                      "kind": "sketch",
+                      "profile": "rectangle",
+                      "min": [
+                        0,
+                        0
+                      ],
+                      "max": [
+                        12,
+                        10
+                      ],
+                      "id": "n0"
+                    },
+                    {
+                      "kind": "extrude",
+                      "sketch": 0,
+                      "height": 8,
+                      "id": "n1"
+                    }
+                  ],
+                  "outputs": {
+                    "b1": {
+                      "node": 1,
+                      "side": "solid"
+                    }
+                  },
+                  "nextId": 2
+                },
+                "position": [
+                  40,
+                  0,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "detached",
+          "changed": true,
+          "isError": false,
+          "content": "{\"ok\":true,\"did\":\"added part p1 \\\"Copy\\\" (a copy of base)\",\"part\":\"p1\",\"note\":\"build or edit it with the part tools and \\\"part\\\": id\",\"parts\":[{\"id\":\"p1\",\"name\":\"Copy\",\"position\":[40,0,0],\"rotation\":[0,0,0]}]}",
+          "inputUnchanged": true,
+          "saveError": null,
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "profile": "circle",
+                "center": [
+                  -2,
+                  0
+                ],
+                "radius": 0.5,
+                "id": "n0"
+              },
+              {
+                "kind": "sweep-curve",
+                "sketch": 0,
+                "name": "bundle \u00b7 A",
+                "path": {
+                  "degree": 3,
+                  "knots": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    1,
+                    1,
+                    1
+                  ],
+                  "controlPoints": [
+                    [
+                      -2,
+                      0,
+                      0
+                    ],
+                    [
+                      -2,
+                      0,
+                      10
+                    ],
+                    [
+                      -2,
+                      0,
+                      20
+                    ],
+                    [
+                      -2,
+                      0,
+                      30
+                    ]
+                  ],
+                  "weights": [
+                    1,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                "id": "n1"
+              },
+              {
+                "kind": "sketch",
+                "profile": "circle",
+                "center": [
+                  2,
+                  0
+                ],
+                "radius": 0.5,
+                "id": "n2"
+              },
+              {
+                "kind": "sweep-curve",
+                "sketch": 2,
+                "name": "bundle \u00b7 B",
+                "path": {
+                  "degree": 3,
+                  "knots": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    1,
+                    1,
+                    1
+                  ],
+                  "controlPoints": [
+                    [
+                      2,
+                      0,
+                      0
+                    ],
+                    [
+                      2,
+                      0,
+                      10
+                    ],
+                    [
+                      2,
+                      0,
+                      20
+                    ],
+                    [
+                      2,
+                      0,
+                      30
+                    ]
+                  ],
+                  "weights": [
+                    1,
+                    1,
+                    1,
+                    1
+                  ]
+                },
+                "id": "n3"
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              },
+              "b3": {
+                "node": 3,
+                "side": "solid"
+              }
+            },
+            "nextId": 4,
+            "direct": {
+              "sources": {
+                "src_1": "@model bundle {\n  version: 0;\n  length-unit: mm;\n  @curve #A { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]]; weights: [1,1,1,1]; }\n  @curve #B { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[2,0,0],[2,0,10],[2,0,20],[2,0,30]]; weights: [1,1,1,1]; }\n}"
+              },
+              "objects": [
+                {
+                  "id": "obj_1",
+                  "name": "bundle \u00b7 A",
+                  "source": "src_1",
+                  "geometry": "A"
+                },
+                {
+                  "id": "obj_2",
+                  "name": "bundle \u00b7 B",
+                  "source": "src_1",
+                  "geometry": "B"
+                }
+              ]
+            },
+            "instances": [
+              {
+                "id": "p1",
+                "name": "Copy",
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [
+                    {
+                      "kind": "sketch",
+                      "profile": "circle",
+                      "center": [
+                        -2,
+                        0
+                      ],
+                      "radius": 0.5,
+                      "id": "n0"
+                    },
+                    {
+                      "kind": "sweep-curve",
+                      "sketch": 0,
+                      "name": "bundle \u00b7 A",
+                      "path": {
+                        "degree": 3,
+                        "knots": [
+                          0,
+                          0,
+                          0,
+                          0,
+                          1,
+                          1,
+                          1,
+                          1
+                        ],
+                        "controlPoints": [
+                          [
+                            -2,
+                            0,
+                            0
+                          ],
+                          [
+                            -2,
+                            0,
+                            10
+                          ],
+                          [
+                            -2,
+                            0,
+                            20
+                          ],
+                          [
+                            -2,
+                            0,
+                            30
+                          ]
+                        ],
+                        "weights": [
+                          1,
+                          1,
+                          1,
+                          1
+                        ]
+                      },
+                      "id": "n1"
+                    },
+                    {
+                      "kind": "sketch",
+                      "profile": "circle",
+                      "center": [
+                        2,
+                        0
+                      ],
+                      "radius": 0.5,
+                      "id": "n2"
+                    },
+                    {
+                      "kind": "sweep-curve",
+                      "sketch": 2,
+                      "name": "bundle \u00b7 B",
+                      "path": {
+                        "degree": 3,
+                        "knots": [
+                          0,
+                          0,
+                          0,
+                          0,
+                          1,
+                          1,
+                          1,
+                          1
+                        ],
+                        "controlPoints": [
+                          [
+                            2,
+                            0,
+                            0
+                          ],
+                          [
+                            2,
+                            0,
+                            10
+                          ],
+                          [
+                            2,
+                            0,
+                            20
+                          ],
+                          [
+                            2,
+                            0,
+                            30
+                          ]
+                        ],
+                        "weights": [
+                          1,
+                          1,
+                          1,
+                          1
+                        ]
+                      },
+                      "id": "n3"
+                    }
+                  ],
+                  "outputs": {
+                    "b1": {
+                      "node": 1,
+                      "side": "solid"
+                    },
+                    "b3": {
+                      "node": 3,
+                      "side": "solid"
+                    }
+                  },
+                  "nextId": 4
+                },
+                "position": [
+                  40,
+                  0,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "sourceFrozenCount": 1297,
+  "phase": "fresh Open detached-reopened",
+  "sourceFrozenEqualsCleanup": true,
+  "capsuleHash": "c55d613347523761374523b8135d3c86ffbe5154a73bc631311705bc4b58249f",
+  "saved": [
+    {
+      "name": "detached-saved.bcad",
+      "sha256": "f73ad8696f8d98af90de3cc8d7291f9531a423118aaacc819a58657c053081bf",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              -2,
+              0
+            ],
+            "radius": 0.5,
+            "id": "n0"
+          },
+          {
+            "kind": "sweep-curve",
+            "sketch": 0,
+            "name": "bundle \u00b7 A",
+            "path": {
+              "degree": 3,
+              "knots": [
+                0,
+                0,
+                0,
+                0,
+                1,
+                1,
+                1,
+                1
+              ],
+              "controlPoints": [
+                [
+                  -2,
+                  0,
+                  0
+                ],
+                [
+                  -2,
+                  0,
+                  10
+                ],
+                [
+                  -2,
+                  0,
+                  20
+                ],
+                [
+                  -2,
+                  0,
+                  30
+                ]
+              ],
+              "weights": [
+                1,
+                1,
+                1,
+                1
+              ]
+            },
+            "id": "n1"
+          },
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              2,
+              0
+            ],
+            "radius": 0.5,
+            "id": "n2"
+          },
+          {
+            "kind": "sweep-curve",
+            "sketch": 2,
+            "name": "bundle \u00b7 B",
+            "path": {
+              "degree": 3,
+              "knots": [
+                0,
+                0,
+                0,
+                0,
+                1,
+                1,
+                1,
+                1
+              ],
+              "controlPoints": [
+                [
+                  2,
+                  0,
+                  0
+                ],
+                [
+                  2,
+                  0,
+                  10
+                ],
+                [
+                  2,
+                  0,
+                  20
+                ],
+                [
+                  2,
+                  0,
+                  30
+                ]
+              ],
+              "weights": [
+                1,
+                1,
+                1,
+                1
+              ]
+            },
+            "id": "n3"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4,
+        "direct": {
+          "sources": {
+            "src_1": "@model bundle {\n  version: 0;\n  length-unit: mm;\n  @curve #A { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]]; weights: [1,1,1,1]; }\n  @curve #B { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[2,0,0],[2,0,10],[2,0,20],[2,0,30]]; weights: [1,1,1,1]; }\n}"
+          },
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "bundle \u00b7 A",
+              "source": "src_1",
+              "geometry": "A"
+            },
+            {
+              "id": "obj_2",
+              "name": "bundle \u00b7 B",
+              "source": "src_1",
+              "geometry": "B"
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Copy",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "circle",
+                  "center": [
+                    -2,
+                    0
+                  ],
+                  "radius": 0.5,
+                  "id": "n0"
+                },
+                {
+                  "kind": "sweep-curve",
+                  "sketch": 0,
+                  "name": "bundle \u00b7 A",
+                  "path": {
+                    "degree": 3,
+                    "knots": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      1,
+                      1,
+                      1,
+                      1
+                    ],
+                    "controlPoints": [
+                      [
+                        -2,
+                        0,
+                        0
+                      ],
+                      [
+                        -2,
+                        0,
+                        10
+                      ],
+                      [
+                        -2,
+                        0,
+                        20
+                      ],
+                      [
+                        -2,
+                        0,
+                        30
+                      ]
+                    ],
+                    "weights": [
+                      1,
+                      1,
+                      1,
+                      1
+                    ]
+                  },
+                  "id": "n1"
+                },
+                {
+                  "kind": "sketch",
+                  "profile": "circle",
+                  "center": [
+                    2,
+                    0
+                  ],
+                  "radius": 0.5,
+                  "id": "n2"
+                },
+                {
+                  "kind": "sweep-curve",
+                  "sketch": 2,
+                  "name": "bundle \u00b7 B",
+                  "path": {
+                    "degree": 3,
+                    "knots": [
+                      0,
+                      0,
+                      0,
+                      0,
+                      1,
+                      1,
+                      1,
+                      1
+                    ],
+                    "controlPoints": [
+                      [
+                        2,
+                        0,
+                        0
+                      ],
+                      [
+                        2,
+                        0,
+                        10
+                      ],
+                      [
+                        2,
+                        0,
+                        20
+                      ],
+                      [
+                        2,
+                        0,
+                        30
+                      ]
+                    ],
+                    "weights": [
+                      1,
+                      1,
+                      1,
+                      1
+                    ]
+                  },
+                  "id": "n3"
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                },
+                "b3": {
+                  "node": 3,
+                  "side": "solid"
+                }
+              },
+              "nextId": 4
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "linked-saved.bcad",
+      "sha256": "1056d559ba808282f2a025f047811971a16ae292e6c3bd0b1a132f2edede39cf",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 4,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              -2,
+              0
+            ],
+            "radius": 0.5,
+            "id": "n0"
+          },
+          {
+            "kind": "sweep-curve",
+            "sketch": 0,
+            "name": "bundle \u00b7 A",
+            "path": {
+              "degree": 3,
+              "knots": [
+                0,
+                0,
+                0,
+                0,
+                1,
+                1,
+                1,
+                1
+              ],
+              "controlPoints": [
+                [
+                  -2,
+                  0,
+                  0
+                ],
+                [
+                  -2,
+                  0,
+                  10
+                ],
+                [
+                  -2,
+                  0,
+                  20
+                ],
+                [
+                  -2,
+                  0,
+                  30
+                ]
+              ],
+              "weights": [
+                1,
+                1,
+                1,
+                1
+              ]
+            },
+            "id": "n1",
+            "routeBundleMember": {
+              "bundleId": "bundle1",
+              "memberId": "A"
+            }
+          },
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              2,
+              0
+            ],
+            "radius": 0.5,
+            "id": "n2"
+          },
+          {
+            "kind": "sweep-curve",
+            "sketch": 2,
+            "name": "bundle \u00b7 B",
+            "path": {
+              "degree": 3,
+              "knots": [
+                0,
+                0,
+                0,
+                0,
+                1,
+                1,
+                1,
+                1
+              ],
+              "controlPoints": [
+                [
+                  2,
+                  0,
+                  0
+                ],
+                [
+                  2,
+                  0,
+                  10
+                ],
+                [
+                  2,
+                  0,
+                  20
+                ],
+                [
+                  2,
+                  0,
+                  30
+                ]
+              ],
+              "weights": [
+                1,
+                1,
+                1,
+                1
+              ]
+            },
+            "id": "n3",
+            "routeBundleMember": {
+              "bundleId": "bundle1",
+              "memberId": "B"
+            }
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4,
+        "direct": {
+          "sources": {
+            "src_1": "@model bundle {\n  version: 0;\n  length-unit: mm;\n  @curve #A { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]]; weights: [1,1,1,1]; }\n  @curve #B { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[2,0,0],[2,0,10],[2,0,20],[2,0,30]]; weights: [1,1,1,1]; }\n}"
+          },
+          "objects": [
+            {
+              "id": "obj_1",
+              "name": "bundle \u00b7 A",
+              "source": "src_1",
+              "geometry": "A"
+            },
+            {
+              "id": "obj_2",
+              "name": "bundle \u00b7 B",
+              "source": "src_1",
+              "geometry": "B"
+            }
+          ]
+        },
+        "routeBundles": [
+          {
+            "id": "bundle1",
+            "version": 1,
+            "kind": "two-open-curves-one-translation-tie",
+            "frame": "world-mm",
+            "tie": {
+              "id": "tie1",
+              "anchorMM": [
+                0,
+                0,
+                10
+              ]
+            },
+            "members": [
+              {
+                "id": "A",
+                "curveObjectId": "obj_1",
+                "handleKey": "1",
+                "sweepFeatureId": "n1",
+                "profileFeatureId": "n0",
+                "sourceKey": "src_1",
+                "geometryId": "A",
+                "sourceCanonical": "{\"curve\":{\"controlPoints\":[[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]],\"degree\":3,\"knots\":[0,0,0,0,1,1,1,1],\"weights\":[1,1,1,1]},\"object\":{\"geometry\":\"A\",\"id\":\"obj_1\",\"source\":\"src_1\"},\"source\":\"@model bundle {\\n  version: 0;\\n  length-unit: mm;\\n  @curve #A { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]]; weights: [1,1,1,1]; }\\n  @curve #B { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[2,0,0],[2,0,10],[2,0,20],[2,0,30]]; weights: [1,1,1,1]; }\\n}\"}",
+                "sourceRevision": "4228a50a542115fa",
+                "offsetMM": [
+                  -2,
+                  0,
+                  0
+                ]
+              },
+              {
+                "id": "B",
+                "curveObjectId": "obj_2",
+                "handleKey": "1",
+                "sweepFeatureId": "n3",
+                "profileFeatureId": "n2",
+                "sourceKey": "src_1",
+                "geometryId": "B",
+                "sourceCanonical": "{\"curve\":{\"controlPoints\":[[2,0,0],[2,0,10],[2,0,20],[2,0,30]],\"degree\":3,\"knots\":[0,0,0,0,1,1,1,1],\"weights\":[1,1,1,1]},\"object\":{\"geometry\":\"B\",\"id\":\"obj_2\",\"source\":\"src_1\"},\"source\":\"@model bundle {\\n  version: 0;\\n  length-unit: mm;\\n  @curve #A { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[-2,0,0],[-2,0,10],[-2,0,20],[-2,0,30]]; weights: [1,1,1,1]; }\\n  @curve #B { type: nurbs; degree: 3; knots: [0,0,0,0,1,1,1,1]; control-points: [[2,0,0],[2,0,10],[2,0,20],[2,0,30]]; weights: [1,1,1,1]; }\\n}\"}",
+                "sourceRevision": "f546a922cb62ceef",
+                "offsetMM": [
+                  2,
+                  0,
+                  0
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ordinary-saved.bcad",
+      "sha256": "62ca0f6df07f7e419b8dd028d9351bf6ddde8597c91fab954c9346472d5e5780",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              12,
+              10
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Copy",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    12,
+                    10
+                  ],
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 8,
+                  "id": "n1"
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              },
+              "nextId": 2
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

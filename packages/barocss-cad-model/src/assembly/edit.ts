@@ -1,3 +1,4 @@
+import { assertRouteBundleDocument } from '../engine/routeBundle';
 import { fillPatternDocumentProblem } from '../engine/fillFeaturePattern';
 import { readConnector, validateBallOptions, validateFastenedOptions, validateUniversalOptions, validateCylindricalOptions, withConnector, type Connector } from './connectors';
 // R7.3c (api-conventions §3): the assembly's edits as core functions, verb(doc, options) → result — what the agent's
@@ -98,8 +99,18 @@ export interface AddPartOptions {
 /** An edit's result: the document, solved again, and the mates it cannot meet (each `{ mate, reason }`). */
 export interface Edited { doc: StudioDoc; problems: SolveProblem[] }
 
+/** A root-only linked route cannot become a placed part or a part copy. Never detach it implicitly. */
+function assertPartRouteAdmission(part: StudioDoc): void {
+  try { assertRouteBundleDocument({ schema: 3, instances: [{ doc: part }] }); }
+  catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    throw refusal('VALUE', `${message} Detach linked route bundles before using this document as a placed part.`);
+  }
+}
+
 /** add_part: a part placed by a rotation and a move, the assembly solved again; its id. */
 export function addPart(doc: StudioDoc, o: AddPartOptions): Edited & { id: string } {
+  if (o.doc) assertPartRouteAdmission(o.doc);
   const pathProblem = o.doc && (fillPatternDocumentProblem(o.doc) ?? curvePatternDocumentProblem({ instances: [{ doc: o.doc }] }));
   if (pathProblem) throw refusal('VALUE', pathProblem);
   const instances = doc.instances ?? [], id = nextInstanceId(doc, 'p');
@@ -111,6 +122,7 @@ export function addPart(doc: StudioDoc, o: AddPartOptions): Edited & { id: strin
 export function partCopy(doc: StudioDoc, part: string): StudioDoc {
   const src = partDocOf(doc, part);
   if (!src) throw refusal('NO_PART', `No part "${part}" to copy; parts: ${partList(doc)}.`);
+  assertPartRouteAdmission(src);
   const pathProblem = fillPatternDocumentProblem(src) ?? curvePatternDocumentProblem({ instances: [{ doc: src }] });
   if (pathProblem) throw refusal('VALUE', pathProblem);
   return { ...src, instances: undefined, mates: undefined, render: undefined, drawing: undefined, direct: undefined };

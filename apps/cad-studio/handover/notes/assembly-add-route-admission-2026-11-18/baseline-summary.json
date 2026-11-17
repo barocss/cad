@@ -1,0 +1,11 @@
+{
+  "base": "5c66cdd3f",
+  "tests": 2,
+  "pass": 0,
+  "fail": 2,
+  "observations": [
+    "BASELINE core returned child; native encode rejects",
+    "DISPATCH {\"changed\":true,\"isError\":false,\"content\":\"{\\\\\"ok\\\\\":true,\\\\\"did\\\\\":\\\\\"added part p1 \\\\\\\\\\\\\"Copy\\\\\\\\\\\\\" (a copy of base)\\\\\",\\\\\"part\\\\\":\\\\\"p1\\\\\",\\\\\"note\\\\\":\\\\\"build or edit it with the part tools and \\\\\\\\\\\\\"part\\\\\\\\\\\\\": id\\\\\",\\\\\"parts\\\\\":[{\\\\\"id\\\\\":\\\\\"p1\\\\\",\\\\\"name\\\\\":\\\\\"Copy\\\\\",\\\\\"position\\\\\":[0,0,0],\\\\\"rotation\\\\\":[0,0,0]}]}\",\"instances\":1}"
+  ],
+  "scope": "Core/dispatcher failure; Studio final merge already refuses the candidate."
+}
