@@ -1,5 +1,6 @@
 // The sheet as a display list in sheet millimetres (y down): frame, title block, the projected views
 // and the dimensions. The SVG and PDF writers and the workspace all draw from it.
+import type { DrawingTableContext } from './fitList';
 import { datumAnchor } from './datums';
 import { datumTargetConflicts, datumTargetSizeText, resolveDatumTarget, type DrawingDatumTarget } from './datumTargets';
 import { ambiguousFrameDimensions, characteristicMarks, modifierMarks, zonePrefix, type DrawingFrameComposite } from './controls';
@@ -111,7 +112,7 @@ const GAP = 1, OVER = 2;
 /** `sections` (O148 X1): each section's projection and cut-face rings (view coordinates), drawn where the layout places it. */
 /** `meta.callout`: a diameter dimension's text from the feature it measures (a hole callout), or null for Ø. */
 /** `meta.tableContent`: a table's content from its source (O49; absent: a sourced table says it was not filled). */
-export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: DrawingSettings, meta: { title: string; date: string; /** O9: the source revision drawn in the title block. */ source?: string; callout?: DrawingCallout; threads?: ReadonlyMap<string, FaceThread>; tableContent?: (t: DrawingTable) => TableContent | { error: string }; /** FRd2 (O119): the frame's weld joints, for its symbols. */ welds?: readonly WeldJoint[]; /** O147 B2: the BOM (worked out by the caller), for the item balloons. */ bom?: Bom; /** The base part's face names by body key (O177): a balloon of a `base:<body>` line finds its body's edges. */ bodyFaces?: BodyFaces }, sections?: readonly SheetSection[]): Sheet {
+export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: DrawingSettings, meta: { title: string; date: string; /** O9: the source revision drawn in the title block. */ source?: string; callout?: DrawingCallout; threads?: ReadonlyMap<string, FaceThread>; tableContent?: (t: DrawingTable, context?: DrawingTableContext) => TableContent | { error: string }; /** FRd2 (O119): the frame's weld joints, for its symbols. */ welds?: readonly WeldJoint[]; /** O147 B2: the BOM (worked out by the caller), for the item balloons. */ bom?: Bom; /** The base part's face names by body key (O177): a balloon of a `base:<body>` line finds its body's edges. */ bodyFaces?: BodyFaces }, sections?: readonly SheetSection[]): Sheet {
   const p = presetFor(settings);
   const groups: MarkGroup[] = [];
   const ambiguous = ambiguousFrameDimensions(settings);
@@ -240,18 +241,19 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
     groups.push({ role: 'control', standaloneFrame: true, id: f.id, view: f.view, marks: frameMarksAt(toSheet(placement, f.place), f, p) });
   }
   const dimensions: Resolved[] = settings.dimensions.map(d => inSections.get(d.id) ?? inViews.find(r => r.dim === d)!);
+  const currentTableContent = meta.tableContent ? (t: DrawingTable) => meta.tableContent!(t, { resolved: dimensions, settings }) : undefined;
   // (FRd2, O119: the weld symbols, before the tables so an auto-placed one keeps clear of their texts.)
   const sc = settings.sheetContext;
   const welds = settings.weldSymbols && meta.welds?.length ? weldSymbols(layout, views, meta.welds, p.units === 'mm' && p.precision.mm === undefined ? undefined : lengthFormats(p).primary, sc ? { shown: sc.allViews, mine: v => sc.where[v] === sc.n, reportUnshown: sc.n === 1 } : undefined, ordinaryTextHeight(p)) : null;
   if (welds) groups.push(...welds.groups);
   // (O147 B2: the item balloons, after the weld symbols and before the tables: clear of the texts so far and of the pinned tables.)
   // (Clear of the tables pinned by `at` too: they are placed after, where they were set.)
-  const pinned = (settings.tables ?? []).filter(t => t.at).map(t => tableLayout(tableContentOf(t, meta.tableContent, settings).content, t.at!, t.corner ?? 'top-left', ordinaryTextHeight(p)).box as Rect);
+  const pinned = (settings.tables ?? []).filter(t => t.at).map(t => tableLayout(tableContentOf(t, currentTableContent, settings).content, t.at!, t.corner ?? 'top-left', ordinaryTextHeight(p)).box as Rect);
   const detailBoxes = [...drawn.details.map(x => x.box), ...apart.boxes];
   const balloons = settings.balloons && settings.sheetContext?.balloonsHere !== false && meta.bom?.lines.length ? balloonMarks(layout, views, meta.bom, [...takenOf(layout, groups, detailBoxes), ...pinned], meta.bodyFaces) : null;
   if (balloons) groups.push(...balloons.groups);
   // (Tables last: an auto-placed one finds room clear of everything else on the sheet, O49.)
-  const tables = tableGroups(layout, settings, groups, meta.tableContent, detailBoxes);
+  const tables = tableGroups(layout, settings, groups, currentTableContent, detailBoxes);
   groups.push(...tables.groups);
   placeShortLinearText(groups, dimensions, settings, layout, placedViews, p);
   return { size: [W, H], groups, dimensions, ...(settings.standard ? { standard: settings.standard } : {}), ...(hasUnitSettings(p) ? { units: { units: p.units, dual: p.dual, precision: p.precision } } : {}), ...(tables.placed.length ? { tables: tables.placed } : {}), ...(welds ? { welds: { placed: welds.placed, unshown: welds.unshown } } : {}), ...(balloons ? { balloons: { placed: balloons.placed, unclear: balloons.unclear, noEdge: balloons.noEdge } } : {}), ...(onSheet.length ? { sections: onSheet } : {}), ...(drawn.details.length ? { details: drawn.details.map(x => x.detail) } : {}), ...(drawn.missing.length ? { detailsMissing: drawn.missing } : {}), ...(apart.missing.length ? { sectionsMissing: apart.missing } : {}) };

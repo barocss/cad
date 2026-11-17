@@ -1,0 +1,1 @@
+{"status": "PASS", "dimensionIDs": ["fit-a", "fit-b"], "rowCount": 2, "notPhysicalQuantity": true, "nominal": 12, "limits": [12, 12.018], "source": "synthetic-A", "formats": ["SVG", "DXF"]}

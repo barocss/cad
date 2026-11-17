@@ -9,6 +9,7 @@ import { elementsOfBodies, withElements } from '@barocss/cad-model/drawing/eleme
 import { fitMiss, withFit } from '@barocss/cad-model/drawing/fits';
 import { weldList } from '@barocss/cad-model/frames/welds';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
+import type { Resolved } from '@barocss/cad-model/drawing/dimensions';
 import { tableContent } from '@barocss/cad-model/drawing/tables';
 import { modelAnnotations, type ModelAnnotations } from '@barocss/cad-model/drawing/annotations3d';
 import { bomPanelData } from '@barocss/cad-model/bom/bom';
@@ -20,7 +21,7 @@ import { drawingHoleCallouts } from '@barocss/cad-model/drawing/callout';
 import { threadsOf } from '@barocss/cad-model/app/threads';
 import { fastenerSizesOf } from '@barocss/cad-model/engine/fastenerSizeRows';
 import { layoutSheet } from '@barocss/cad-model/drawing/views';
-import { sameSection, sectionsOf, type DrawingSection, type DrawingSettings, type DrawingTable, type DrawingViews } from '@barocss/cad-model/drawing/types';
+import { readDrawing, sameSection, sectionsOf, type DrawingSection, type DrawingSettings, type DrawingTable, type DrawingViews } from '@barocss/cad-model/drawing/types';
 import type { SectionCut } from '@barocss/cad-model/drawing/section';
 import type { EngineClient } from '../engine/client';
 import { Lanes } from '../engine/lanes';
@@ -130,9 +131,15 @@ export function useDrawingSheet(active: boolean, { engine, doc: sourceDoc, bodie
     return () => { lanes.cancel('drawing-bom'); clearTimeout(t); };
   }, [active, readBom, doc, title, scoped.error]);
   // (Each sourced table's content once a document (O49): the bend table from the bodies' flat patterns.)
-  const sourced = useMemo(() => new Map((settings.tables ?? []).filter(x => x.from).map(x => [x.id, tableContent(x, { doc, ...(bodies ? { bodies } : {}), ...(bom ? { bom } : {}) })])), [settings.tables, doc, bodies, bom]);
-  const tableContentOf = useCallback((x: DrawingTable) => sourced.get(x.id) ?? (x.from === 'bom' && bom
-    ? tableContent(x, { doc, bom }) : { error: 'its source was not run for this sheet' }), [sourced, doc, bom]);
+  const sourced = useMemo(() => new Map((settings.tables ?? []).filter(x => x.from && x.from !== 'fits').map(x => [x.id, tableContent(x, { doc, ...(bodies ? { bodies } : {}), ...(bom ? { bom } : {}) })])), [settings.tables, doc, bodies, bom]);
+  const tableContentOf = useCallback((x: DrawingTable, context?: { resolved: readonly Resolved[]; settings: DrawingSettings }) => {
+    if (x.from === 'fits') {
+      if (!projectionCurrent || !context) return { error: 'Fit dimension list is waiting for the current drawing projection.' };
+      return tableContent(x, { doc: sourceDoc, drawing: { ...context, wholeSettings: readDrawing(sourceDoc.drawing) } });
+    }
+    return sourced.get(x.id) ?? (x.from === 'bom' && bom
+      ? tableContent(x, { doc, bom }) : { error: 'its source was not run for this sheet' });
+  }, [sourced, doc, bom, sourceDoc, projectionCurrent]);
   const hasSheet = (bodies ?? []).some(b => b.flat && b.flat.bends.length);
   const hasFrame = (bodies ?? []).some(b => b.cutPiece);
   // (O144: machine elements' tables, offered when the part has such an element.)

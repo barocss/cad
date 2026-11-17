@@ -13,6 +13,7 @@ import { CONTROL, FIELD, SIDE_NAMES, TICK, withTable } from './sheetShared';
 import { DrawingMetadata } from './DrawingMetadata';
 import { drawingRevisionPrint } from './revisionPrint';
 import { SectionKind } from './SectionKind';
+import { FitListControls } from './FitListControls';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -126,6 +127,7 @@ export function SheetSettings({ sheet: { scopeRead, scope, views, layout, sectio
               <Button variant="ghost" aria-label="Next revision" data-tip="Next revision" data-tip-desc="A → B, 01 → 02: the drawing’s new issue" onClick={() => set(nextRevision(settings.revision))}>Next</Button></label>
             {stale && <div className="empty" style={{ color: 'var(--warn)' }} aria-label="Revision out of date">The model changed since revision {settings.revision}: give the drawing its next revision when you issue it.</div>}
           </>; })()}
+        {!later && <FitListControls settings={settings} sourceDoc={sourceDoc} onChange={onChange} />}
         {later ? <div className="empty" aria-label="First sheet items">Tables, the revision table and the title block fields are on sheet 1.</div> : <DrawingMetadata settings={settings} onChange={onChange} onRefused={hint => onToast({ title: 'Drawing metadata unchanged', hint, detail: '' })} />}
         {layout && !layout.fits && <div className="empty" style={{ color: 'var(--warn)' }}>The views do not fit the sheet at {scaleLabel(layout.scale)}. Pick a smaller scale or a larger sheet.</div>}
   </>;

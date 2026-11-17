@@ -75,6 +75,7 @@ export function drawingInputs(doc: StudioDoc, settings: DrawingSettings = readDr
 }
 
 function readDrawingInputs(doc: StudioDoc, settings: DrawingSettings, includeBom = true): SheetInputs | string {
+  const sourceDoc = doc;
   let authored = doc;
   try { authored = drawingSource(doc, settings); doc = drawingDocument(doc, settings); } catch (cause) { return String(cause instanceof Error ? cause.message : cause); }
   // (O174: a part's drawing is what the part makes — its bought elements out of its views and sections; an assembly's keeps
@@ -93,7 +94,7 @@ function readDrawingInputs(doc: StudioDoc, settings: DrawingSettings, includeBom
   }
   const scope = drawingScopeOf(settings), source = drawingSourceRevision(scope.kind === 'assembly' ? doc : authored, scope);
   const holes = drawingHoleCallouts(doc, r.views);
-  return { views: r.views, settings, locationOwner: holes.owner, fastenerSizes: fastenerSizesOf(doc), elements, callout: Object.assign(withElements(doc, withFit(doc, holes.callout), elements), { holeKind: holes.holeKind, patternQuantity: holes.patternQuantity, stalePatternSpacing: holes.stalePatternSpacing }), fitMiss: fitMiss(doc), followedChanged: followedStale(authored).map(staleText), meta: { title: settings.title ?? 'part', date: new Date().toISOString().slice(0, 10), source, threads: threadsOf(doc.nodes, fastenerSizesOf(doc)), tableContent: tb => tableContent(tb, { doc, ...(bom ? { bom } : {}) }), ...(settings.weldSymbols ? { welds: weldJointsOf(doc) } : {}), ...(bom ? { bom } : {}), ...(bom && settings.balloons ? { bodyFaces: baseBodyFaces(doc) } : {}) }, ...(sections.length ? { sections } : {}) };
+  return { views: r.views, settings, locationOwner: holes.owner, fastenerSizes: fastenerSizesOf(doc), elements, callout: Object.assign(withElements(doc, withFit(doc, holes.callout), elements), { holeKind: holes.holeKind, patternQuantity: holes.patternQuantity, stalePatternSpacing: holes.stalePatternSpacing }), fitMiss: fitMiss(doc), followedChanged: followedStale(authored).map(staleText), meta: { title: settings.title ?? 'part', date: new Date().toISOString().slice(0, 10), source, threads: threadsOf(doc.nodes, fastenerSizesOf(doc)), tableContent: (tb, context) => tableContent(tb, { doc: tb.from === 'fits' ? sourceDoc : doc, ...(bom ? { bom } : {}), ...(context ? { drawing: { ...context, wholeSettings: readDrawing(sourceDoc.drawing) } } : {}) }), ...(settings.weldSymbols ? { welds: weldJointsOf(doc) } : {}), ...(bom ? { bom } : {}), ...(bom && settings.balloons ? { bodyFaces: baseBodyFaces(doc) } : {}) }, ...(sections.length ? { sections } : {}) };
 }
 
 /** O147 B2: the BOM, when a table or the balloons read it (each document evaluated on its own, synchronously). */

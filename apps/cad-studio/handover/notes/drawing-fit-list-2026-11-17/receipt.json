@@ -1,0 +1,77 @@
+{
+  "status": "PASS",
+  "qualification": "#269 single base-part sheet, two authored diameter dimensions of one Ø12 bore, explicit fit list and source-table replacement.",
+  "observations": [
+    {
+      "scope": "two dimensions on one face, no physical quantity inference",
+      "explicitAddRemoveMove": true,
+      "sourceReplacement": true,
+      "undoRedoSaveFreshOpen": true,
+      "remainingNotRun": [
+        "nominal edit",
+        "pair",
+        "inch/dual",
+        "late reply",
+        "Open/New interruption",
+        "all unsupported inputs"
+      ]
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Synthetic H7 rows with explicitly named test-source IDs, not certified standard values or manufacturing approval.",
+    "This run does not cover pair, dual/inch, nominal geometry edits, late responses, other Open/New routes or all unsupported inputs.",
+    "Original SVG/DXF Blob capture; independent text/entity reader, not a general DXF visual reader."
+  ],
+  "sourceBeforeCount": 2,
+  "sourceFrozenCount": 1247,
+  "sourceAfterCount": 1247,
+  "sourceAfterCleanupCount": 1247,
+  "downloads": [
+    {
+      "phase": "native Save fit-list",
+      "suggestedFilename": "fit-list.bcad"
+    }
+  ],
+  "phase": "fresh Open 03-fresh-open",
+  "provenance": {
+    "kind": "privacy-minimized receipt excerpt",
+    "rawReceiptSHA256": "3200082f6583bd2a6e9accb335296be6095820b484870b4ff8eee68ee6aa4ac6",
+    "omitted": "Full synthetic document states, local paths, process metadata and source manifests. Original receipt retained locally; outcomes unchanged."
+  },
+  "visualReview": {
+    "agent": "Actual 02/04 PNG pixels inspected; synthetic content, no personal data",
+    "root": "Parent independently inspected 02/04 PNGs and confirmed no personal data",
+    "originalRunnerMarker": "ROOT_MUST_VIEW_SCREENSHOTS is historical handoff metadata, not current review status"
+  },
+  "artifacts": [
+    {
+      "file": "02-source-replaced.png",
+      "sha256": "25c9daa2aabded4e040f74c162750b14347cb6d96e14f42458cad72c569b0097"
+    },
+    {
+      "file": "04-fresh-open.png",
+      "sha256": "30186ed853605140f9ff3e1784171494a0adf8a8a33635c1e3b86b398c7807fd"
+    },
+    {
+      "file": "01-added-oracle.json",
+      "sha256": "ee18e6c63fd2410986f842373702d07a25b4dae4179e2ad8b43c248417460bd8"
+    },
+    {
+      "file": "02-source-replaced-oracle.json",
+      "sha256": "fd190d71fb265cd7400778bb94b7bac197351ec954060224895c80698f92d3b5"
+    },
+    {
+      "file": "04-fresh-open-oracle.json",
+      "sha256": "fd190d71fb265cd7400778bb94b7bac197351ec954060224895c80698f92d3b5"
+    }
+  ]
+}

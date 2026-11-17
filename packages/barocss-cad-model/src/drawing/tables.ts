@@ -11,9 +11,10 @@ import { cutListSource } from '../app/cutList';
 import { weldListSource } from '../frames/welds';
 import { elementsSource, glandsSource, springsSource } from './elementTables';
 import type { Bom } from '../bom/core';
+import { fitDimensionTable, type FitListContext } from './fitList';
 
 /** `bom` (O147 B2): the BOM, worked out by the caller (the studio through its engine worker), for the 'bom' source. */
-export interface TableSourceContext { doc: StudioDoc; bodies?: readonly BodyResult[]; bom?: Bom }
+export interface TableSourceContext { doc: StudioDoc; bodies?: readonly BodyResult[]; bom?: Bom; /** Unscoped doc and the same build's resolved sheet, with whole settings. */ drawing?: FitListContext }
 export type TableSource = (ctx: TableSourceContext) => TableContent | { error: string };
 
 const label = (name: string, short: boolean) => (short ? name.slice(name.lastIndexOf('.') + 1) : name);
@@ -58,7 +59,7 @@ export function bomSource(ctx: TableSourceContext): TableContent | { error: stri
 }
 
 /** The sources by name. A cut list (FR4b, the kernel lane's) is registered here as 'cut-list'; the weld list (FRd1) as 'weld-list'. */
-export const TABLE_SOURCES: Record<string, TableSource> = { bends: bendTable, 'cut-list': cutListSource, 'weld-list': weldListSource, elements: elementsSource, springs: springsSource, glands: glandsSource, bom: bomSource };
+export const TABLE_SOURCES: Record<string, TableSource> = { bends: bendTable, 'cut-list': cutListSource, 'weld-list': weldListSource, elements: elementsSource, springs: springsSource, glands: glandsSource, bom: bomSource, fits: ctx => fitDimensionTable(ctx.doc, ctx.drawing) };
 
 /** A table's content: given, or its source's; an unknown or refusing source as its error. */
 export function tableContent(t: DrawingTable, ctx: TableSourceContext): TableContent | { error: string } {
