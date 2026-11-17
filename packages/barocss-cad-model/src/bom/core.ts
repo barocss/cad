@@ -7,7 +7,7 @@ import { toPartDocument } from '../engine/part';
 import type { PartInstance, StudioDoc } from '../engine/doc';
 import type { BodyResult, EvalResult } from '../engine/evaluate';
 import { massBoundOf, massProperties } from '../analysis/analysis';
-import { materialIdOf } from '../app/bodies';
+import { materialIdOf, partMaterial } from '../app/bodies';
 import { elementLines, madeBodies } from '../engine/elements';
 import { partCutList } from '../app/cutList';
 import { MATERIALS } from '../library/materials';
@@ -148,7 +148,11 @@ export function bomViewOf(doc: StudioDoc, evaluate: (doc: StudioDoc) => EvalResu
     // (D387: its rows are the containing sub-assembly's, as when that is opened alone.)
     const fastener = fastenerOfPart(container, inst.doc);
     const nested = inst.doc.instances?.length ? inst.doc.instances.filter(i => !i.hidden) : null;
-    const entry: BomView['parts'][number] = { id, name: inst.name, material: bodies.length ? materialIdOf(looked, bodies[0]) ?? null : null, mass: own, ...massBoundField(looked, bodies), ...lumpsField(bodies), library: o ? `${o.library}@${o.version}/${o.part}${o.variant ? `:${o.variant}` : ''}` : null, shape: shapeOf(inst.doc) + (cut ? `|cut:${cutShapeOf(inst, container)}` : ''), ...(fastener ? { fastener } : {}) };
+    // A multi-body part is identical only when the same bodies have the same effective
+    // materials. Colour and visibility are display choices, not BOM identity.
+    const geometry = shapeOf(inst.doc) + (cut ? `|cut:${cutShapeOf(inst, container)}` : '');
+    const shape = bodies.length > 1 ? JSON.stringify({ geometry, materials: bodies.map(b => [b.key, materialIdOf(looked, b) ?? null]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))) }) : geometry;
+    const entry: BomView['parts'][number] = { id, name: inst.name, material: partMaterial(looked, bodies).id, mass: own, ...massBoundField(looked, bodies), ...lumpsField(bodies), library: o ? `${o.library}@${o.version}/${o.part}${o.variant ? `:${o.variant}` : ''}` : null, shape, ...(fastener ? { fastener } : {}) };
     all.push({ id, doc: part, looks: looked, bodies, uncut });
     if (!inst.doc.instances?.length) { if (parent !== undefined) { entry.path = id; entry.parent = parent; } return entry; }
     const kids = (nested ?? []).map(n => ({ n, part: place(n, `${id}/${n.id}`, id, inst.doc, host, [...path, n.id]) }));

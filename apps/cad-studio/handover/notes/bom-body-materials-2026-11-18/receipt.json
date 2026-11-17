@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "qualification": "The BOM distinguishes otherwise identical multi-body occurrences with different body materials.",
+  "limits": [
+    "Ordinary two-solid placed parts; no new BOM column or material schema."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceFrozenCount": 1135,
+  "chromeProcessesLaunched": 1,
+  "sourceUnchanged": true,
+  "checks": [
+    "BOM separates p1 and p2 as quantity 1 each",
+    "Total quantity 2 and mass 16.075 g",
+    "Actual purchase CSV with made parts matches product CSV",
+    "Native Save/fresh Open preserves document and two BOM rows"
+  ]
+}
