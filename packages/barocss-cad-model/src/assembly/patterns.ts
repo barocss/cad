@@ -39,8 +39,12 @@ function occurrencesOf(seed: PartInstance, p: InstancePattern): PartInstance[] {
       position = [clean(seed.position[0] + k * p.spacing * u[0]), clean(seed.position[1] + k * p.spacing * u[1]), clean(seed.position[2] + k * p.spacing * u[2])];
       rotation = [...seed.rotation];
     } else {
-      const R = axisAngle(u, k * p.angle * DEG), d = [t[0] - p.origin[0], t[1] - p.origin[1], t[2] - p.origin[2]];
-      position = [0, 1, 2].map(i => clean(R[i * 3] * d[0] + R[i * 3 + 1] * d[1] + R[i * 3 + 2] * d[2] + p.origin[i])) as Tuple3;
+      const R = axisAngle(u, k * p.angle * DEG);
+      // A cardinal rotation never changes the axial coordinate. Its axis origin's axial
+      // component is irrelevant: do not subtract/add it (large values can erase small t).
+      const axial = u.findIndex((v, i) => Math.abs(v) === 1 && u.every((x, j) => i === j || x === 0));
+      const d = t.map((v, i) => i === axial ? 0 : v - p.origin[i]);
+      position = [0, 1, 2].map(i => i === axial ? t[i] : clean(R[i * 3] * d[0] + R[i * 3 + 1] * d[1] + R[i * 3 + 2] * d[2] + p.origin[i])) as Tuple3;
       rotation = [...eulerOf(matMul(R, m as Mat3))] as Tuple3;
     }
     out.push({ id: `${p.id}-${k}`, name: `${seed.name} ${k + 1}`, doc: seed.doc, position, rotation, grounded: true, ...(seed.joints ? { joints: seed.joints } : {}), ...(seed.looks ? { looks: seed.looks } : {}), ...(seed.hidden ? { hidden: true } : {}), ...(seed.part ? { part: seed.part } : {}), pattern: { id: p.id, k } });
