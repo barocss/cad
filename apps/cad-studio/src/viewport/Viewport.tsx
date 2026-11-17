@@ -133,6 +133,8 @@ interface Props extends ViewportPointerProps, MarkHandlers {
   bodyColors?: Map<number, [number, number, number]>;
   faceColors?: Map<number, Map<number, [number, number, number]>>;
   hoverBody?: number | null;
+  /** Read-only accepted base-part COM; SVG display only, not a pick/snap target. */
+  centreOfMass?: Vec3 | null;
   /** A measured distance: a dimension line between the closest points. */
   measureLine?: { a: Vec3; b: Vec3; label: string } | null;
   /** The robot's tool and sensor frames at the pose shown (G13): a triad each — X red, Y green, Z blue — and its name.
@@ -961,6 +963,15 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     const c = canvas.current; if (!c) return null;
     const w = c.clientWidth, h = c.clientHeight; const cam = camera.current;
     const items: React.ReactNode[] = [];
+    if (props.centreOfMass) {
+      const p = projectOverlaySegment(cam, props.centreOfMass, props.centreOfMass, w, h)?.[0];
+      if (p) items.push(<g key="centre-of-mass" aria-label="Pinned centre of mass marker" data-position={props.centreOfMass.join(',')} pointerEvents="none">
+        <circle cx={p[0]} cy={p[1]} r={7} fill="none" stroke="#ffc247" strokeWidth={2}/>
+        <path d={`M${p[0]-10},${p[1]}h20M${p[0]},${p[1]-10}v20`} stroke="#ffc247" strokeWidth={2}/>
+        <text x={p[0]+12} y={p[1]-10} fill="white" stroke="#191919" strokeWidth={3} paintOrder="stroke" fontSize={12}>COM · accepted</text>
+      </g>);
+    }
+
     if (props.curvatureComb && !props.modelUnavailable)
       items.push(<CurvatureComb key="curvature-comb" overlay={props.curvatureComb} projectSegment={(a, b) => projectOverlaySegment(cam, a, b, w, h)} />);
     if (props.filletEndpoints && 'start' in props.filletEndpoints && !props.modelUnavailable) {

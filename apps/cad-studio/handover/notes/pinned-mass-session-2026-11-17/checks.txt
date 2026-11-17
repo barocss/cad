@@ -1,0 +1,457 @@
+## /tmp/cad-com-guard-focused.log
+Original SHA-256: e98e3fbeebce3942bb2466395de4710afc964f5fc0af568911635a3c10848990
+TAP version 13
+# Subtest: session pin survives selection/candidate gates, becomes unavailable on pending, and clears across owner resets
+ok 1 - session pin survives selection/candidate gates, becomes unavailable on pending, and clears across owner resets
+  ---
+  duration_ms: 188.775875
+  type: 'test'
+  ...
+# Subtest: all-member accepted mass uses material-weighted literal cube arithmetic and retains hidden members
+ok 2 - all-member accepted mass uses material-weighted literal cube arithmetic and retains hidden members
+  ---
+  duration_ms: 2.206209
+  type: 'test'
+  ...
+# Subtest: missing, pending, invalid and changed identities refuse the entire set rather than a partial COM
+ok 3 - missing, pending, invalid and changed identities refuse the entire set rather than a partial COM
+  ---
+  duration_ms: 0.434916
+  type: 'test'
+  ...
+# Subtest: provenance and assumed density remain explicit; input order does not redefine membership
+ok 4 - provenance and assumed density remain explicit; input order does not redefine membership
+  ---
+  duration_ms: 0.189708
+  type: 'test'
+  ...
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 484.069292
+
+## /tmp/cad-com-guard-tsc.log
+Original SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+(empty output; successful exit 0 in recorded execution)
+
+## /tmp/cad-com-guard-lint.log
+Original SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+(empty output; successful exit 0 in recorded execution)
+
+## /tmp/cad-com-lint3.log
+Original SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+(empty output; successful exit 0 in recorded execution)
+
+## /tmp/cad-com-driver-lint.log
+Original SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+(empty output; successful exit 0 in recorded execution)
+
+## /tmp/cad-com-model-regression.log
+Original SHA-256: f981a0d75ed1a6d0f2882d54f97c71d5b947714bc89f596ab4c14ede36a82ad0
+TAP version 13
+# Subtest: mass: a block's inertia about its centre and about a corner, in steel; two bodies' centre of mass
+ok 1 - mass: a block's inertia about its centre and about a corner, in steel; two bodies' centre of mass
+  ---
+  duration_ms: 20.442625
+  type: 'test'
+  ...
+# Subtest: a body that looks like steel by every display field has no material: no consumer infers one from a colour, an appearance or a name
+ok 2 - a body that looks like steel by every display field has no material: no consumer infers one from a colour, an appearance or a name
+  ---
+  duration_ms: 32.867375
+  type: 'test'
+  ...
+# Subtest: a material set on the body is the only thing that makes it steel; the looks are untouched by it
+ok 3 - a material set on the body is the only thing that makes it steel; the looks are untouched by it
+  ---
+  duration_ms: 1.795542
+  type: 'test'
+  ...
+# Subtest: O75: the appearance presets and the materials never share an id — every look id is prefixed look-, none is a material id
+ok 4 - O75: the appearance presets and the materials never share an id — every look id is prefixed look-, none is a material id
+  ---
+  duration_ms: 0.142208
+  type: 'test'
+  ...
+# Subtest: D580: schema 3 preserves unresolved body material IDs, including placed and pending definitions
+ok 5 - D580: schema 3 preserves unresolved body material IDs, including placed and pending definitions
+  ---
+  duration_ms: 2.569125
+  type: 'test'
+  ...
+# Subtest: D580: Open rejects malformed body material values and still rejects unknown occurrence overrides
+ok 6 - D580: Open rejects malformed body material values and still rejects unknown occurrence overrides
+  ---
+  duration_ms: 1.073708
+  type: 'test'
+  ...
+# Subtest: D580: unresolved IDs retain estimated mass and make hard and soft mass checks unknown
+ok 7 - D580: unresolved IDs retain estimated mass and make hard and soft mass checks unknown
+  ---
+  duration_ms: 7.126584
+  type: 'test'
+  ...
+# Subtest: D580: only a missing or empty body material inherits the brief, and volume and known mass scopes still pass
+ok 8 - D580: only a missing or empty body material inherits the brief, and volume and known mass scopes still pass
+  ---
+  duration_ms: 6.602583
+  type: 'test'
+  ...
+# Subtest: D580: an empty authored ID and a stated brief use one density across mass and BOM
+ok 9 - D580: an empty authored ID and a stated brief use one density across mass and BOM
+  ---
+  duration_ms: 1.830208
+  type: 'test'
+  ...
+# Subtest: eager structuredClone binds only the exact source/body/fields; public MMGS and default JSON inertia stay identical
+ok 10 - eager structuredClone binds only the exact source/body/fields; public MMGS and default JSON inertia stay identical
+  ---
+  duration_ms: 21.65575
+  type: 'test'
+  ...
+# Subtest: placed tensors retain raw SI in the exact legacy R I R-transpose order, across repeated placements and clones
+ok 11 - placed tensors retain raw SI in the exact legacy R I R-transpose order, across repeated placements and clones
+  ---
+  duration_ms: 2.494708
+  type: 'test'
+  ...
+# Subtest: deferred placed patches require body identity, current epoch/request/revision/ref and unchanged public signatures
+ok 12 - deferred placed patches require body identity, current epoch/request/revision/ref and unchanged public signatures
+  ---
+  duration_ms: 25.219542
+  type: 'test'
+  ...
+# Subtest: malformed, missing and non-JSON provenance never binds; explicit Kernel unavailable remains unavailable
+ok 13 - malformed, missing and non-JSON provenance never binds; explicit Kernel unavailable remains unavailable
+  ---
+  duration_ms: 3.330834
+  type: 'test'
+  ...
+# Subtest: O18: a deferred body's mass on request equals the eager evaluation's, a placed copy's placed
+ok 14 - O18: a deferred body's mass on request equals the eager evaluation's, a placed copy's placed
+  ---
+  duration_ms: 69.504375
+  type: 'test'
+  ...
+# Subtest: O18: a B-rep whose mass is known keeps it inline; deferMasses off changes nothing
+ok 15 - O18: a B-rep whose mass is known keeps it inline; deferMasses off changes nothing
+  ---
+  duration_ms: 6.080291
+  type: 'test'
+  ...
+# Subtest: D168 frozen refresh changes only mass/inertia scalars: all geometry, mesh, units, joint and pose bytes stay equal
+ok 16 - D168 frozen refresh changes only mass/inertia scalars: all geometry, mesh, units, joint and pose bytes stay equal
+  ---
+  duration_ms: 6.549
+  type: 'test'
+  ...
+# Subtest: D168 arm base and six links agree with independent disjoint-cylinder mass/centroid/inertia at 1e-12 scale
+ok 17 - D168 arm base and six links agree with independent disjoint-cylinder mass/centroid/inertia at 1e-12 scale
+  ---
+  duration_ms: 104.791
+  type: 'test'
+  ...
+1..17
+# tests 17
+# suites 0
+# pass 17
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1171.007792
+
+## /tmp/cad-com-guard-build.log
+Original SHA-256: 2efc55e80717715004737a9421ba1127bc7e9b9285fa15139024dcb349739c6d
+vite v8.3.1 building client environment for production...
+transforming...
+[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0m../../packages/barocss-cad-model/src/engine/direct.ts is dynamically imported by ../../packages/barocss-cad-model/src/engine/directModule.ts but also statically imported by ../../packages/barocss-cad-model/src/engine/curveFeaturePattern.ts, ../../packages/barocss-cad-model/src/engine/routeBundle.ts, dynamic import will not move module into another chunk.
+
+[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0m../../packages/barocss-cad-model/src/engine/direct.ts is dynamically imported by ../../packages/barocss-cad-model/src/engine/directModule.ts but also statically imported by ../../packages/barocss-cad-model/src/engine/curveFeaturePattern.ts, ../../packages/barocss-cad-model/src/engine/routeBundle.ts, dynamic import will not move module into another chunk.
+
+[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0m../../packages/barocss-cad-model/src/chat/requirementEvidence.ts is dynamically imported by ../../packages/barocss-cad-model/src/chat/nestedParameterProposal.ts but also statically imported by ../../packages/barocss-cad-model/src/chat/nestedFaceRepair.ts, ../../packages/barocss-cad-model/src/chat/outputs.ts, ../../packages/barocss-cad-model/src/versions/approvedRequirements.ts, ../../packages/barocss-cad-model/src/versions/requirementFollowUp.ts, dynamic import will not move module into another chunk.
+
+✓ 3553 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                          1.45 kB │ gzip:   0.58 kB
+dist/assets/requirementFollowUp-C2Vrw8qo.js              1.84 kB
+dist/assets/approvedRequirements-BCFaVp0d.js             4.25 kB
+dist/assets/outputs-B9Wq4SyY.js                         28.40 kB
+dist/assets/print.worker-DGGImq0f.js                   366.23 kB
+dist/assets/faces.worker-qlduPfFS.js                 1,856.00 kB
+dist/assets/clearance.worker-CHOy9Ib9.js             2,142.79 kB
+dist/assets/cam.worker-D_N12g0w.js                   2,772.41 kB
+dist/assets/engine.worker-C1AzOESs.js                4,129.40 kB
+dist/assets/ChatPanel-K7a0PETf.css                       2.51 kB │ gzip:   0.95 kB
+dist/assets/DrawingWorkspace-DGFmOJGL.css                3.92 kB │ gzip:   1.30 kB
+dist/assets/index-DMl1JBGJ.css                          78.40 kB │ gzip:  16.09 kB
+dist/assets/preload-helper-B2SsaV8q.js                   1.37 kB │ gzip:   0.76 kB
+dist/assets/stl-BjZuqtr2.js                              1.51 kB │ gzip:   0.87 kB
+dist/assets/gripper-83cuFXbh.js                          1.72 kB │ gzip:   0.60 kB
+dist/assets/gear-joint-3TiXXxRK.js                       1.81 kB │ gzip:   0.60 kB
+dist/assets/pan-tilt-CnF2o7-B.js                         2.09 kB │ gzip:   0.66 kB
+dist/assets/gantry-ppp-DtmHEV3c.js                       2.21 kB │ gzip:   0.58 kB
+dist/assets/arm-2r-DZlmFL9a.js                           2.26 kB │ gzip:   0.59 kB
+dist/assets/scara-BEzOCPEP.js                            3.42 kB │ gzip:   0.76 kB
+dist/assets/four-bar-DsDNgl1V.js                         3.61 kB │ gzip:   0.83 kB
+dist/assets/triangle-bvh-CWEzQwGa.js                     4.87 kB │ gzip:   2.32 kB
+dist/assets/approvedRequirements-DSIBfJA5.js             5.04 kB │ gzip:   2.09 kB
+dist/assets/arm-6r-D-nRNLgU.js                           7.35 kB │ gzip:   0.92 kB
+dist/assets/RenderPanel-D2ZYl-Uv.js                     28.68 kB │ gzip:   8.05 kB
+dist/assets/path-trace-DLcuPlza.js                      30.50 kB │ gzip:  10.82 kB
+dist/assets/DirectPanel-BvonmssE.js                     31.83 kB │ gzip:   8.84 kB
+dist/assets/exact-affine-plane-internal-C1ywh6Sc.js     78.58 kB │ gzip:  23.56 kB
+dist/assets/DrawingWorkspace-BFSpRvAm.js               141.12 kB │ gzip:  39.71 kB
+dist/assets/ChatPanel-Csovy4Oe.js                      245.44 kB │ gzip:  69.60 kB
+dist/assets/localHeightPlan-BivJNRu0.js                401.75 kB │ gzip: 129.65 kB
+dist/assets/direct-DbtyeLgJ.js                         431.54 kB │ gzip: 120.11 kB
+dist/assets/requirementEvidence-CM8IvdnL.js            482.45 kB │ gzip: 166.32 kB
+dist/assets/toleranceStack-2uXsH3pi.js                 565.96 kB │ gzip: 186.91 kB
+dist/assets/thickenCommand-BULwPb9u.js               2,222.65 kB │ gzip: 750.15 kB
+dist/assets/index-wr3gr9-l.js                        2,277.33 kB │ gzip: 722.89 kB
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dropdown-menu/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-collapsible/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-collapsible/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/cmdk/dist/index.mjs" may not be preserved when bundling.
+ - module level directive may not be preserved in ../../../../..<home>/github/barocss/cad-d1274/node_modules/cmdk/dist/index.mjs at 0..13
+ [38;5;240m │[0m 
+ [38;5;240m │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-toggle-group/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-toggle-group/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-tooltip/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-tooltip/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dialog/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dialog/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-primitive/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-primitive/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-presence/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-presence/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-direction/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-direction/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-menu/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-menu/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-toggle/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-toggle/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-visually-hidden/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-visually-hidden/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-portal/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-portal/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-dismissable-layer/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-roving-focus/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-roving-focus/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-focus-guards/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-focus-guards/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-focus-scope/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-focus-scope/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-popper/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-popper/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-collection/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-collection/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-arrow/dist/index.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/@radix-ui/react-arrow/dist/index.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/swr/dist/config-context-ext53wcz.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/swr/dist/config-context-ext53wcz.mjs:1:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m 'use client';
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/lucide-react/dist/esm/Icon.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/lucide-react/dist/esm/Icon.mjs:2:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m2 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[MODULE_LEVEL_DIRECTIVE] [0mThe semantics of the module level directive "use client" in "../../../../..<home>/github/barocss/cad-d1274/node_modules/lucide-react/dist/esm/context.mjs" may not be preserved when bundling.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m ../../../../..<home>/github/barocss/cad-d1274/node_modules/lucide-react/dist/esm/context.mjs:2:1 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m2 │[0m "use client";
+ [38;5;240m  │[0m ──────┬──────  
+ [38;5;240m  │[0m       ╰──────── module level directive may not be preserved
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: For more information, see https://rolldown.rs/in-depth/directives#other-directives
+[38;5;246m───╯[0m
+
+[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0msrc/files/taskRunHandoff.ts is dynamically imported by src/files/useStudioDocumentFiles.ts but also statically imported by src/files/useStudioDocumentFiles.ts, dynamic import will not move module into another chunk.
+
+[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0m../../packages/barocss-cad-model/src/chat/requirementEvidence.ts is dynamically imported by ../../packages/barocss-cad-model/src/chat/nestedParameterProposal.ts but also statically imported by src/files/taskCheckpoint.ts, src/files/workingApprovalChecks.ts, src/storage/ApprovedRequirementChecks.tsx, src/storage/checkSavedFaceRepair.ts, src/storage/faceRepairEvidence.ts, ..., dynamic import will not move module into another chunk.
+
+✓ built in 4.34s
+
+## /tmp/cad-pinned-mass-04-run.log
+Original SHA-256: 210f6a3bdec4edf22fe30e742dc2e521f539d523cfc04dcb196d26c767dcf662
+{"status":"PASS","phase":"actual Studio start","output":"/tmp/cad-pinned-mass-04"}

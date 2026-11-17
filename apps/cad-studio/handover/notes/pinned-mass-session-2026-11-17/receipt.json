@@ -1,0 +1,138 @@
+{
+  "status": "PASS",
+  "qualification": "Two native ordinary cubes: explicit session COM, all-member hidden retention and accepted material updates.",
+  "limits": [
+    "Candidate failure, delayed mass delivery, project/worker reset and manufacturing previews are not exercised here. No dynamics or safety approval."
+  ],
+  "observations": [
+    {
+      "native": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1000.0000000000001,
+            "centroid": [
+              4.999999999999999,
+              4.999999999999999,
+              5
+            ],
+            "massRef": null
+          },
+          {
+            "key": "b3",
+            "volume": 1000.0000000000007,
+            "centroid": [
+              34.99999999999997,
+              4.9999999999999964,
+              5
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "analytic": {
+        "volumes": [
+          1000,
+          1000
+        ],
+        "densities": [
+          2.7,
+          7.85
+        ],
+        "masses": [
+          2.7,
+          7.85
+        ],
+        "total": 10.55,
+        "centroid": [
+          27.322274881516588,
+          5,
+          5
+        ],
+        "equalDensity": {
+          "mass": 5.4,
+          "centroid": [
+            20,
+            5,
+            5
+          ]
+        }
+      },
+      "scope": "Actual public Pin/Escape/Hide/Material/Undo/Redo/Clear/Open/New; no injected product state or new native evaluator."
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceBeforeCount": 7,
+  "sourceFrozenCount": 529,
+  "sourceAfterCount": 529,
+  "sourceAfterCleanupCount": 529,
+  "chromeProcessesLaunched": 1,
+  "parentCommit": "1ff0b00ddfa152297d8cd716bfcb832fcac9fc31",
+  "sourceUnchanged": true,
+  "originalReceipt": {
+    "path": "/tmp/cad-pinned-mass-04/receipt.json",
+    "sha256": "4c283d8e579db588950c4f9ff3d2dc3650d9c1f1ceb8b188e91f32726d4539ae"
+  },
+  "sourceCapsules": {
+    "source-frozen.json": "d078f3f6263cea802bee58ddb9c09aaa250deb31908f0abefa1d2eaa90abb3b5",
+    "source-after.json": "d078f3f6263cea802bee58ddb9c09aaa250deb31908f0abefa1d2eaa90abb3b5",
+    "source-after-cleanup.json": "d078f3f6263cea802bee58ddb9c09aaa250deb31908f0abefa1d2eaa90abb3b5"
+  },
+  "visualReview": "Child and parent directly inspected the three final PNGs; synthetic fixture, no personal information.",
+  "attempts": [
+    {
+      "attempt": 1,
+      "status": "FAIL",
+      "classification": "Product: enabled Pin click left state unpinned; whole input-wrapper identity guard was replaced by semantic authority checks. Compiler causation not established.",
+      "originalDirectory": "/tmp/cad-pinned-mass-01",
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "sha256": {
+        "receipt.json": "50f4009ead18a04c2f37b878a436da159c6e211fbfe6f45697a0fc99fe893543",
+        "failure.json": "9fbf7ab13ae760612eb84e6bac1f70452ad580cf123484c63a40b92e399af2a3",
+        "failure.png": "13f828882eb1f796b24558a4f326c87c26a137d19e179c72de9e8622240ab484"
+      }
+    },
+    {
+      "attempt": 2,
+      "status": "FAIL",
+      "classification": "Harness: exact mass string expected 10.55 g, actual finite value 10.550000000000006 g. Pin and centroid succeeded before assertion.",
+      "originalDirectory": "/tmp/cad-pinned-mass-02",
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "sha256": {
+        "receipt.json": "9a1ccb199b4d855b8eabf7eecc1602088fbdcfa9a88680835016e743285c5888",
+        "failure.json": "fa14f357eac38fb71ba630733ceec93f6e584ed6fbc2e23dba2d17370baff1cb",
+        "failure.png": "2ad477536b9e24a1cc5338d3945f1b60f6eb73e40927c377f51b1c8bc6229cd9"
+      }
+    },
+    {
+      "attempt": 3,
+      "status": "FAIL",
+      "classification": "Operator/harness: patch used wrong cwd-relative path and shell continued with unchanged assertion. Interrupted; receipt cleanup array is empty, not qualified cleanup. Process listing found no remaining owned driver/Vite/Playwright Chrome.",
+      "originalDirectory": "/tmp/cad-pinned-mass-03",
+      "cleanup": [],
+      "sha256": {
+        "receipt.json": "7859bcd00a30af7558aa47c53460c7565fb1af4774aacc7f600bf0c18c464d2b",
+        "failure.json": "fa14f357eac38fb71ba630733ceec93f6e584ed6fbc2e23dba2d17370baff1cb",
+        "failure.png": "2ad477536b9e24a1cc5338d3945f1b60f6eb73e40927c377f51b1c8bc6229cd9"
+      }
+    }
+  ]
+}

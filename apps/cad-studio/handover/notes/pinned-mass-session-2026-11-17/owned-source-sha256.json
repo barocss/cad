@@ -1,0 +1,10 @@
+{
+  "apps/cad-studio/src/App.tsx": "8943cfedf138587f458d73978762502935e4857a0eda4c25783b1524a7f902b0",
+  "apps/cad-studio/src/viewport/Viewport.tsx": "c257d144c716fe948ee051a5d0ae6eff9c6c16583ffeb1e17f79e1b6c150b591",
+  "apps/cad-studio/src/app/pinnedMass.ts": "21da577588613ec4621afd3d0c927d0d83cb737a0da1f7e95e00f634e8a05f09",
+  "apps/cad-studio/src/state/usePinnedMass.ts": "08aeac28ba63a8730220ac34b3f686d38b9613534f0ef18188d356772199591c",
+  "apps/cad-studio/src/ui/PinnedMassControls.tsx": "2efd2cc3c4a99e52c8dd45b051c68000cf9bf786c41eb32aac53616d1c96506f",
+  "apps/cad-studio/test/pinned-mass.test.ts": "88b93259053e505ed0364961d0881b014c9cc392dcb45d08e74f8333d5b11463",
+  "apps/cad-studio/test/pinned-mass-lifecycle.test.ts": "b87e26a4b9ac0f5aa25c824d8d8837db72e7a0c6a44bd3e64b512604799b6fa4",
+  "apps/cad-studio/test/pinned-mass-browser.mjs": "98eeb0f5010efb8a9753193fb3c6eab1b5172cebb5765f45eb46b48793c15d5d"
+}

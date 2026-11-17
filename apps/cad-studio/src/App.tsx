@@ -1,3 +1,5 @@
+import { usePinnedMass } from './state/usePinnedMass';
+import { PinnedMassControls } from './ui/PinnedMassControls';
 import { currentDirectPole, ownsDirectPole, type DirectPoleSelection } from './state/directPoleSelection';
 import type { PolePatch } from './ui/DirectPoleEditor';
 import { addToIsolation } from './app/addToIsolation';
@@ -2855,6 +2857,14 @@ export function App() {
     return matches.length === 1 ? { ...none, face: { body, face: matches[0].index } } : none;
   };
   const pinView = !rendering && !drawing && !sketch;
+  const massPinView = pinView && previewMode === 'none';
+  const massPinSession = useMemo(() => ({}), [docGeneration, workerSession, project.view.store]);
+  const massPinCurrent = fresh && shownDoc === doc && marker === null && !inPlace && !doc.instances?.length && !workerFailure;
+  const massPin = usePinnedMass({ session: massPinSession, doc, bodies, current: massPinCurrent,
+    canPin: massPinView && !busy && !active && !measure && !directSel.length && !instanceSel.length
+      && !selection.faces.length && !selection.edges.length && !selection.vertices?.length,
+    selected: selection.bodies, material });
+
   const pinReady = pinView && nativeVertexReady && shownDoc === doc && !workerFailure
     && !bodyDrag && !ghost && !workingComparison && !cageEd.session && !skel.session
     && !routePanelOpen && !previewBodies && !routePreviewBodies && !halvesShownRef.current
@@ -3426,6 +3436,7 @@ export function App() {
         onSaveCamera={() => { const c = viewport.current?.getCamera(); if (c) commitRender({ ...render, camera: c }); }}
         onUseCamera={() => { if (render.camera) { viewport.current?.setCamera(render.camera); setFov(Math.round(render.camera.fovY * 180 / Math.PI)); } }} /></Suspense>}
       {fresh && !rendering && !sketch && measure && <MeasurementInspector pickFilter={pickFilter} targets={measure} items={measurementItems ?? []} measured={measured} approximateDistance={approximateMeasure} onClose={() => setMeasure(null)} onPin={pinOffer ? pinMeasurement : undefined} />}
+      {massPinView && (massPin.pinned || (!active && !measure && !directSel.length && !instanceSel.length)) && <PinnedMassControls pinned={massPin.pinned} result={massPin.result} canPin={massPin.canPin} onPin={massPin.pin} onClear={massPin.clear} />}
       {pinView && pinOwned && !measure && <PinnedMeasurement distance={pinResult?.normalDistance ?? null} onClear={() => setPinnedMeasure(null)} />}
       {cutDraft && !rendering && !sketch && !measure && <AssemblyCutHud draft={cutDraft} instances={doc.instances ?? NO_INSTANCES} problem={draftProblem(doc, cutDraft) ?? (cutTrial?.key === cutKey ? cutTrial.problem : undefined)}
         onChange={patch => setCutDraft(d => d && { ...d, ...patch })} onAddSelected={() => setCutDraft(d => d && { ...d, targets: withAddedTargets(d.targets, cuttableOf(doc, instanceSel)) })}
@@ -3613,6 +3624,7 @@ export function App() {
           const shown = selBodies.length ? selBodies : bodies, box = shown.length ? boundsOf(shown) : null;
           return box ? { ...box, label: [0, 1, 2].map(k => fmt(Math.round((box.max[k] - box.min[k]) * 100) / 100)).join(' × ') } : null;
         })() : null}
+        centreOfMass={massPinView && massPin.result?.ok ? massPin.result.centroid : null}
         measureLine={visibleMeasurement && visibleMeasurement.distance > 1e-9 ? { a: visibleMeasurement.a, b: visibleMeasurement.b, label: (measure && approximateMeasure ? '≈' : '') + measureQuantityText(visibleMeasurement.distance, 2) + ' mm' } : null} />
 
       <TooltipLayer />
