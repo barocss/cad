@@ -35,3 +35,15 @@ Initial unit fixture failures are preserved in `/tmp/cad-library-selection-tests
 D572 (`library-source-selection-2026-11-10/README.md` and `qualification.json`) retains the actual annular-spacer independent geometry, first Undo/Redo, 3,526-byte native Save and fresh Open without B, including exact source/placement. Its fixed receipt remains available at `/Users/user/.cache/barocss-cad-evidence/d572-2026-11-10/fixed01/receipt.json`. These are historical PASS, not rerun today. The new consumer extraction and local read guards do not change saved feature data, Model regeneration or file readers.
 
 All six minimum contracts now have bounded evidence, sufficient to close #255 after this commit's CI succeeds. This is not general library-family or whole-CAD certification. Team network/sharing races, other catalogue readers, actual storage-quota UI, all New/template/recovery permutations and forced stale React click handling are not newly tested. Exact stale-entry behavior is tested at the same production adapter instead. No downloads, exports, native inspector subprocess, GPU shared-code edits, dependencies, schema/migration, original #126 WIP or HOLD changes. #257 SIGKILL and units golden remain unresolved and were not repeated.
+
+## Actual verification screenshots
+
+These original screenshots are from the same frozen acceptance run above, not illustrations. Both were visually checked for personal/authentication information before publication; they show only owned fixtures. The images do not independently prove registry/store bytes; those are asserted by the companion receipt and tests.
+
+**Place succeeds with selected B.** The panel shows Local selected B 2.0.0 and the placed cylinder. The run additionally asserts B's version/recipe height 12 and unchanged embedded A agent metadata, then first Undo/Redo.
+
+![Place uses selected library B](place-accepted.png)
+
+**Built-in ID replacement is refused.** The actual LIBRARY_ID notice asks for another ID while the existing built-in and local B rows remain. The run additionally asserts unchanged document/history/selection and user-store bytes. No sharing or download occurred.
+
+![Built-in library ID replacement is refused](builtin-id-refused.png)
