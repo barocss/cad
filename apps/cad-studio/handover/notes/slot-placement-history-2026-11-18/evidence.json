@@ -1,0 +1,109 @@
+{
+  "baseline": {
+    "status": "PASS",
+    "qualification": "Observe completed three-click Slot Undo without assuming the result.",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "sourceAfterCleanupCount": 1075,
+    "sourceUnchanged": true
+  },
+  "pendingBaseline": {
+    "status": "PASS",
+    "qualification": "Three-click Slot placement is one atomic draft step, including a final click equal to preview.",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "sourceAfterCleanupCount": 1075,
+    "sourceUnchanged": true
+  },
+  "fixed": {
+    "status": "PASS",
+    "qualification": "Three-click Slot placement is one atomic draft step, including a final click equal to preview.",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "sourceAfterCleanupCount": 1075,
+    "sourceUnchanged": true
+  },
+  "slotPanelReopen": {
+    "status": "PASS",
+    "qualification": "Replay Slot panel dimensions in draft history and verify native extrusion.",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1076,
+    "sourceAfterCleanupCount": 1076,
+    "sourceUnchanged": true
+  },
+  "circleRegression": {
+    "status": "PASS",
+    "qualification": "Two-click Circle placement is one atomic draft step, including a final click equal to the last preview.",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "sourceAfterCleanupCount": 1075,
+    "sourceUnchanged": true
+  },
+  "rectangleRegression": {
+    "status": "PASS",
+    "qualification": "Actual two-click Rectangle placement is one reversible sketch draft operation.",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFrozenCount": 1075,
+    "sourceAfterCleanupCount": 1075,
+    "sourceUnchanged": true
+  },
+  "analytic": {
+    "plateExpected": 3322.3008881569226,
+    "plateNative": 3322.3008881568967,
+    "slotExpected": 593.0973355292325,
+    "slotNative": 593.0973355292323
+  },
+  "retainedFailures": [
+    "Focused baseline7/12 PASS, 5 expected failures for Slot clone/mixed parking.",
+    "First browser baseline stopped before Undo observation: requested width6 but field4 and Length input focused. Corrected width click to first-centre perpendicular point outside midpoint label; canvas hit before/after preview and exact authored fields verified. No product/snapping changes."
+  ],
+  "ownedSourceHashes": {
+    "apps/cad-studio/src/App.tsx": "1af2fa9d1d3a26c7ddd576b57d35709f79e169cc1b88983e194396320a438ced",
+    "apps/cad-studio/src/app/sketchControls.ts": "4f624cffc487f6380d70f6768cca5e66457e845716f31c344e5eca0492164723",
+    "apps/cad-studio/src/sketch/draftHistory.ts": "188df821266e616cde1e8aee02b40bd7888fa5dc7d560d74e02cfdea5c5903a2",
+    "apps/cad-studio/src/viewport/viewportPointerInput.ts": "1d086b47dab915e52bf061efcfc432dc71d86fb0eda0bf1b1da728891d41f9b0",
+    "apps/cad-studio/test/slot-placement-history.test.ts": "61741313953be5252fad02d24a1adf91d00d72a897729edc753b3fdafd7dcc07",
+    "apps/cad-studio/test/sketch-slot-placement-history-browser.mjs": "2e8e38c5ca53b8a6c7ec7e9f44bbd61ae2fe63667972f39d1f4fb33182afeae1"
+  }
+}

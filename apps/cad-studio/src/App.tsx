@@ -533,16 +533,17 @@ export function App() {
   /** Every profile edit (viewport or panel) is settled against its constraints before it is shown. */
   // A new shape keeps the current one beside it when that one is closed (one profile of several loops).
   const [sketchHistory] = useState(createDraftHistory);
-  const twoClickPlacement = useRef<{ doc: StudioDoc; generation: number; kind: 'rectangle' | 'circle'; before: ReturnType<typeof draftHistoryState> } | null>(null);
+  const shapePlacement = useRef<{ doc: StudioDoc; generation: number; kind: 'rectangle' | 'circle' | 'slot'; before: ReturnType<typeof draftHistoryState> } | null>(null);
   const queuedSketchHistory = useRef<{ doc: StudioDoc; generation: number; draft: SketchState } | null>(null);
   const renderedSketch = useRef({ draft: sketch, generation: sketchGeneration.current });
   renderedSketch.current = { draft: sketch, generation: sketchGeneration.current };
   const constructRef = useRef(false); constructRef.current = !!sketch?.construct;
-  const updateShape = useCallback((shape: SketchShape | null, fresh = false, origin?: 'panel' | 'line-point' | 'chord-circle' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish', coordinate?: CoordinateIntent) => {
+  const updateShape = useCallback((shape: SketchShape | null, fresh = false, origin?: 'panel' | 'line-point' | 'chord-circle' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish', coordinate?: CoordinateIntent) => {
     const placementEvent = origin === 'rectangle-start' || origin === 'rectangle-preview' || origin === 'rectangle-finish'
-      || origin === 'circle-start' || origin === 'circle-preview' || origin === 'circle-finish';
-    const placementFinished = origin === 'rectangle-finish' || origin === 'circle-finish';
-    if (!placementEvent) twoClickPlacement.current = null;
+      || origin === 'circle-start' || origin === 'circle-preview' || origin === 'circle-finish'
+      || origin === 'slot-start' || origin === 'slot-preview' || origin === 'slot-finish';
+    const placementFinished = origin === 'rectangle-finish' || origin === 'circle-finish' || origin === 'slot-finish';
+    if (!placementEvent) shapePlacement.current = null;
     const fromPanel = origin === 'panel';
     // (An open line or arc stays too: pieces meeting end to end join, and close into an outline.)
     const prev = liveShape.current, keep = fresh && prev && (shapeNode(prev) || prev.construction || prev.kind === 'bezier' || (prev.kind === 'polygon' && !prev.closed && !prev.pending && prev.points.length >= 2)) ? prev : null;
@@ -573,12 +574,12 @@ export function App() {
     const queued = queuedSketchHistory.current, rendered = renderedSketch.current;
     const draft = queued?.doc === draftDoc && queued.generation === generation ? queued.draft
       : rendered.generation === generation ? rendered.draft : null;
-    // A two-click rectangle/circle and its pointer previews are one placement, not outline edits.
-    // Capture the complete draft before parking its previous outline; only the second click
+    // A rectangle/circle or three-click Slot and its previews form one placement, not outline edits.
+    // Capture the complete draft before parking its previous outline; only the final click
     // commits history, even when its coordinates equal the last pointer preview.
-    if (origin === 'rectangle-start' || origin === 'circle-start') twoClickPlacement.current = draft
-      ? { doc: draftDoc, generation, kind: origin === 'circle-start' ? 'circle' : 'rectangle', before: draftHistoryState(draftDoc, draft, prev) } : null;
-    const placement = twoClickPlacement.current;
+    if (origin === 'rectangle-start' || origin === 'circle-start' || origin === 'slot-start') shapePlacement.current = draft
+      ? { doc: draftDoc, generation, kind: origin === 'slot-start' ? 'slot' : origin === 'circle-start' ? 'circle' : 'rectangle', before: draftHistoryState(draftDoc, draft, prev) } : null;
+    const placement = shapePlacement.current;
     if (placementEvent && draft && placement?.doc === draftDoc && placement.generation === generation && placement.kind === r.shape?.kind) {
       const next = { ...detachSketchLink(draft), editDim: null, shape: r.shape,
         ...(keep ? { done: joinOpen(draftShapeOrder({ ...draft, shape: keep })), activeOutlineIndex: undefined } : {}) };
@@ -589,11 +590,11 @@ export function App() {
       }
       setSketch(next);
       queuedSketchHistory.current = { doc: draftDoc, generation: sketchGeneration.current, draft: next };
-      twoClickPlacement.current = placementFinished ? null : { ...placement, generation: sketchGeneration.current };
+      shapePlacement.current = placementFinished ? null : { ...placement, generation: sketchGeneration.current };
       setSketchError(r.error);
       return;
     }
-    twoClickPlacement.current = null;
+    shapePlacement.current = null;
     const recordEdit = !keep && ((isSettled(prev) && isSettled(r.shape)) || resizedRectangle || changedCircle || changedSlot || changedBezier);
     const geometryChanged = prev !== r.shape && JSON.stringify(prev) !== JSON.stringify(r.shape);
     const confirmedPlacement = origin === 'line-point' || origin === 'chord-circle';
@@ -620,7 +621,7 @@ export function App() {
       };
     });
   }, [setSketchError, setSketch, sketchHistory]);
-  useEffect(() => { if (!sketch) { setSketchError(null); sketchHistory.clear(); queuedSketchHistory.current = null; twoClickPlacement.current = null; } }, [sketch, sketchHistory, setSketchError]);
+  useEffect(() => { if (!sketch) { setSketchError(null); sketchHistory.clear(); queuedSketchHistory.current = null; shapePlacement.current = null; } }, [sketch, sketchHistory, setSketchError]);
   const [palette, setPalette] = useState(false);
   // (G12a: the chat column's open state and width, kept per viewer; collapsed when the window narrows past what fits.)
   const layout = useLayout(), chat = layout.chatOpen, setChat = layout.setChatOpen;
@@ -2609,9 +2610,9 @@ export function App() {
     const pending = queued?.doc === doc && queued.generation === generation ? queued.draft : null;
     const draft = pending ?? (generation === sketchHistoryGeneration ? sketch : null);
     if (!draft) return;
-    // A first corner/centre is still a preview: keyboard Undo/Redo, like the disabled buttons,
+    // A corner/centre or Slot width stage is still a preview: keyboard Undo/Redo, like the disabled buttons,
     // must not clear earlier completed history against this uncommitted shape.
-    if (twoClickPlacement.current?.doc === doc && twoClickPlacement.current.generation === generation) return;
+    if (shapePlacement.current?.doc === doc && shapePlacement.current.generation === generation) return;
     clearConstraintInspection(constraintInspection, sketch);
     twoPointSnap.cancel();
     arcExtensionSnap.cancel();

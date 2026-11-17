@@ -80,7 +80,7 @@ export interface ViewportPointerProps {
   onPickChain?(body: number, edge: number): void;
   onPick(hit: { face: FaceRef | null; edge: EdgeRef | null; edgeMesh?: BodyResult['mesh']; point: Vec3 | null; direct?: string; instance?: string; instanceFace?: FaceRef; instanceCap?: { body: number }; vertex?: { body: number; at: Vec3 } }, additive: boolean): void;
   /** `fresh`: a new shape starts (the current one, if closed, is kept beside it). */
-  onSketchShape(shape: SketchShape | null, fresh?: boolean, origin?: 'line-point' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish'): void;
+  onSketchShape(shape: SketchShape | null, fresh?: boolean, origin?: 'line-point' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish'): void;
   onSplineDragChange?(active: boolean): void;
   onCursor(p: Vec3 | null): void;
   /** Use projected triangle overlap for crossing boxes in the idle native Model view. */
@@ -277,7 +277,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     liveShape.current = sketch?.shape ?? null;
     if (!sketch?.shape) { drafting.current = false; slotStage.current = 0; }
   }
-  const emit = (shape: SketchShape | null, fresh = false, origin?: 'line-point' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish') => { liveShape.current = shape; propsRef.current.onSketchShape(shape, fresh, origin); };
+  const emit = (shape: SketchShape | null, fresh = false, origin?: 'line-point' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish') => { liveShape.current = shape; propsRef.current.onSketchShape(shape, fresh, origin); };
   /** The grid step (mm) points snap to: the studio's setting (0: off, to a micrometre). */
   const snap = (v: number) => { const st = propsRef.current.snapStep ?? 1; return st > 0 ? Math.round(Math.round(v / st) * st * 1000) / 1000 : Math.round(v * 1000) / 1000; };
   const sketchDraft = useRef<SketchOverlayDraft>({ cursor: null });
@@ -931,8 +931,8 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
         if (s.kind === 'rectangle' && drafting.current) emit({ ...s, b: c }, false, 'rectangle-preview');
         if (s.kind === 'circle' && drafting.current) emit({ ...s, r: circleRadiusAt(s.c, c, !!at?.snap) }, false, 'circle-preview');
         if (s.kind === 'slot' && drafting.current) {
-          if (slotStage.current === 1) emit({ ...s, b: c });
-          else emit({ ...s, r: slotRadiusAt(s.a, s.b, c, !!at?.snap) });
+          if (slotStage.current === 1) emit({ ...s, b: c }, false, 'slot-preview');
+          else emit({ ...s, r: slotRadiusAt(s.a, s.b, c, !!at?.snap) }, false, 'slot-preview');
         }
         if (s.kind === 'polygon' && s.pending && p) {
           const n = s.points.length, i = s.closed ? n - 1 : n - 2;
@@ -1134,19 +1134,19 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
           }
         }
       } else if (sk.tool === 'slot') {
-        if (!drafting.current) { drafting.current = true; slotStage.current = 1; emit({ kind: 'slot', a: c, b: c, r: 0 }, true); }
+        if (!drafting.current) { drafting.current = true; slotStage.current = 1; emit({ kind: 'slot', a: c, b: c, r: 0 }, true, 'slot-start'); }
         else if (slotStage.current === 1) {
           if (s?.kind === 'slot' && (c[0] !== s.a[0] || c[1] !== s.a[1])) {
             slotStage.current = 2;
             clearSketchSnap();
-            emit({ ...s, b: c, r: 1 });
+            emit({ ...s, b: c, r: 1 }, false, 'slot-preview');
           }
         } else {
           drafting.current = false;
           slotStage.current = 0;
           if (s?.kind === 'slot') {
             const r = slotRadiusAt(s.a, s.b, c, !!target?.snap);
-            if (r !== s.r) emit({ ...s, r });
+            emit({ ...s, r }, false, 'slot-finish');
           }
         }
       } else {
