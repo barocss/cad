@@ -1,0 +1,173 @@
+{
+  "status": "PASS",
+  "qualification": "#279 actual Chrome STL download files, independent disk readback",
+  "fixtureHashes": {
+    "ordinary": "f96bbe8c989e13520c30c364b421eb91d5fc48b5599f1d539fa1f68a4f7b6401",
+    "witness": "cb97ace1f59ce395904ae77709852f38c04726f8bc2018554a7fe6316327718b"
+  },
+  "observations": [
+    {
+      "label": "01-ordinary-automatic",
+      "readback": {
+        "status": "PASS",
+        "meshes": [
+          {
+            "name": "stl-readback-ordinary-b1.stl",
+            "bytes": 684,
+            "triangles": 12,
+            "vertices": 8,
+            "volume": 4,
+            "sha256": "465499566f8d564a286625adc44b98870a0f369d40e852a3ad3e00984db5b2ae"
+          },
+          {
+            "name": "stl-readback-ordinary-b3.stl",
+            "bytes": 684,
+            "triangles": 12,
+            "vertices": 8,
+            "volume": 0.0009765624999999999,
+            "sha256": "722d366ac0b6db149bd302a110cda1bd4d4b694633044b3614011ec2b09bbd0b"
+          }
+        ],
+        "sidecarFiles": [
+          "stl-readback-ordinary-b1.stl",
+          "stl-readback-ordinary-b3.stl"
+        ]
+      }
+    },
+    {
+      "label": "01-ordinary-automatic",
+      "quality": "automatic",
+      "toast": "STL written: 2 files2 root bodies, including 0 hidden. Hidden root bodies are included. Triangles only. Coordinates use millimetres. STL leaves out the unit setting, colours, body names and editable CAD data.",
+      "newDownloadEvents": 3,
+      "preservedFiles": 3,
+      "documentAndHistoryUnchanged": true
+    },
+    {
+      "label": "02-refused-automatic",
+      "quality": "automatic",
+      "toast": "Could not write STLSTL export stopped for Extrude 0.Details[STL_FLOAT32_COLLAPSE] STL triangle 1 collapses when its vertices are written as Float32.",
+      "newDownloadEvents": 0,
+      "preservedFiles": 3,
+      "documentAndHistoryUnchanged": true
+    },
+    {
+      "label": "03-refused-fine",
+      "quality": "32",
+      "toast": "Could not write STLSTL export stopped for Extrude 0.Details[STL_FLOAT32_COLLAPSE] STL triangle 1 collapses when its vertices are written as Float32.",
+      "newDownloadEvents": 0,
+      "preservedFiles": 3,
+      "documentAndHistoryUnchanged": true
+    },
+    {
+      "label": "04-recovery-fine",
+      "readback": {
+        "status": "PASS",
+        "meshes": [
+          {
+            "name": "stl-readback-ordinary-b1.stl",
+            "bytes": 684,
+            "triangles": 12,
+            "vertices": 8,
+            "volume": 4,
+            "sha256": "465499566f8d564a286625adc44b98870a0f369d40e852a3ad3e00984db5b2ae"
+          },
+          {
+            "name": "stl-readback-ordinary-b3.stl",
+            "bytes": 684,
+            "triangles": 12,
+            "vertices": 8,
+            "volume": 0.0009765624999999999,
+            "sha256": "722d366ac0b6db149bd302a110cda1bd4d4b694633044b3614011ec2b09bbd0b"
+          }
+        ],
+        "sidecarFiles": [
+          "stl-readback-ordinary-b1.stl",
+          "stl-readback-ordinary-b3.stl"
+        ]
+      }
+    },
+    {
+      "label": "04-recovery-fine",
+      "quality": "32",
+      "toast": "STL written: 2 files2 root bodies, including 0 hidden. Hidden root bodies are included. Triangles only. Coordinates use millimetres. STL leaves out the unit setting, colours, body names and editable CAD data.",
+      "newDownloadEvents": 3,
+      "preservedFiles": 6,
+      "documentAndHistoryUnchanged": true
+    }
+  ],
+  "downloads": [
+    {
+      "phase": "01-ordinary-automatic",
+      "suggestedFilename": "stl-readback-ordinary-b1.stl"
+    },
+    {
+      "phase": "01-ordinary-automatic",
+      "suggestedFilename": "stl-readback-ordinary-b3.stl"
+    },
+    {
+      "phase": "01-ordinary-automatic",
+      "suggestedFilename": "stl-readback-ordinary.source.json"
+    },
+    {
+      "phase": "04-recovery-fine",
+      "suggestedFilename": "stl-readback-ordinary-b1.stl"
+    },
+    {
+      "phase": "04-recovery-fine",
+      "suggestedFilename": "stl-readback-ordinary-b3.stl"
+    },
+    {
+      "phase": "04-recovery-fine",
+      "suggestedFilename": "stl-readback-ordinary.source.json"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Synthetic native two-box fixtures, not a manufacturing certificate.",
+    "Real browser download events and saveAs files. No Blob/anchor interception or Worker substitution.",
+    "Refusal checks cover completed operation plus 1000 ms; genuine unavailable Worker fallback is not tested."
+  ],
+  "sourceFrozenCount": 536,
+  "parent": "762394f2124b409c48dd5dbe4dce43341f98a8ec",
+  "visualReview": "PASS: actual normal and refusal screenshots reviewed; synthetic fixtures, not generated images",
+  "files": [
+    {
+      "name": "stl-readback-ordinary-b1.stl",
+      "bytes": 684,
+      "sha256": "465499566f8d564a286625adc44b98870a0f369d40e852a3ad3e00984db5b2ae"
+    },
+    {
+      "name": "stl-readback-ordinary-b3.stl",
+      "bytes": 684,
+      "sha256": "722d366ac0b6db149bd302a110cda1bd4d4b694633044b3614011ec2b09bbd0b"
+    },
+    {
+      "name": "stl-readback-ordinary.source.json",
+      "bytes": 242,
+      "sha256": "d0d61dfada73e2ab2fb1d942c1ec123179e7a6a65cf4979e773f593bf5cb416f"
+    },
+    {
+      "name": "stl-readback-ordinary-b1.stl",
+      "bytes": 684,
+      "sha256": "465499566f8d564a286625adc44b98870a0f369d40e852a3ad3e00984db5b2ae"
+    },
+    {
+      "name": "stl-readback-ordinary-b3.stl",
+      "bytes": 684,
+      "sha256": "722d366ac0b6db149bd302a110cda1bd4d4b694633044b3614011ec2b09bbd0b"
+    },
+    {
+      "name": "stl-readback-ordinary.source.json",
+      "bytes": 242,
+      "sha256": "d0d61dfada73e2ab2fb1d942c1ec123179e7a6a65cf4979e773f593bf5cb416f"
+    }
+  ],
+  "sourceCapsuleUnchanged": true
+}

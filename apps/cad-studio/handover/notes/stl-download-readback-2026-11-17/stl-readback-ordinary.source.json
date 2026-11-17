@@ -1,0 +1,10 @@
+{
+ "format": "barocss-source",
+ "version": 1,
+ "revision": "4340ecccb21cc537",
+ "digest": "4c36d02a5e5127bedd36645f39032b5ca7725e7ed81ebf3a8bf02d39b8b00aa3",
+ "files": [
+  "stl-readback-ordinary-b1.stl",
+  "stl-readback-ordinary-b3.stl"
+ ]
+}
