@@ -321,7 +321,7 @@ export function editFields(nodes: Nodes, i: number, params?: Record<string, numb
     || (node?.kind === 'fillet' && (f.key === 'stationAt' || f.key === 'station2At'))
     || (node?.kind === 'fillet' && (f.key === 'rho' || f.key === 'tension'))
     || (node?.kind === 'extrude' && f.key === 'draft')
-    || ((node?.kind === 'revolve' || node?.kind === 'rotate') && f.key === 'deg') // Saved angles are number-only.
+    || ((node?.kind === 'revolve' || node?.kind === 'rotate' || node?.kind === 'draft') && f.key === 'deg') // Saved angles are number-only; Draft neutral coordinates still support Dim.
     || (node?.kind === 'revolve' && f.key === 'fixedAxisPosition') // This bounded editor accepts numeric coordinates only.
     || (node?.kind === 'scale' && f.key === 'k') // Scale factor is number-only; pivot coordinates support Dim.
     || (node?.kind === 'sweep' && /^bendAngle\d+$/.test(f.key)) // Path angles are number-only; lengths/radii support Dim references.

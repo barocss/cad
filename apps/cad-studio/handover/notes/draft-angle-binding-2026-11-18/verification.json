@@ -1,0 +1,83 @@
+{
+  "qualificationBase": "7568ddd5937373a38e6e29db701c7b179feee2fb",
+  "integratedDependency": "b8bc69790",
+  "runs": {
+    "baseline": {
+      "status": "PASS",
+      "phase": "open feature editor 2",
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    "fixed": {
+      "status": "PASS",
+      "phase": "open feature editor 2",
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    "neutral-regression": {
+      "status": "PASS",
+      "phase": "open feature editor Draft after Open",
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    "angle-regression": {
+      "status": "PASS",
+      "phase": "open feature editor selected Draft",
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    }
+  },
+  "focusedTests": {
+    "pass": 15,
+    "total": 15
+  },
+  "ModelTypes": "PASS",
+  "StudioTypes": "PASS",
+  "build": {
+    "status": "PASS",
+    "seconds": 6.21
+  },
+  "diskGiB": {
+    "start": 42.5,
+    "end": 42.4,
+    "reserve": 2
+  },
+  "limits": [
+    "Saved synthetic single-face Draft, not a new pointer-created feature claim.",
+    "Negative angles are Model-tested; new actual UI sequence uses positive angles.",
+    "No new angle parameter support, schema/kernel change or general Draft qualification.",
+    "Full suites, other browsers/mobile/assistive technology NOT_RUN."
+  ]
+}
