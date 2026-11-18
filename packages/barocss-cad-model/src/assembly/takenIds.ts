@@ -4,7 +4,7 @@ import { dimensionEdgeNames } from '../drawing/dimensionReferences';
 import { hostOf } from '../engine/occurrences';
 import { nextFreeId } from '../util/ids';
 
-type Naming = Pick<StudioDoc, 'instances' | 'assemblySteps' | 'assemblyCuts' | 'mates' | 'instancePatterns' | 'drawing'> & Partial<Pick<StudioDoc, 'nodes' | 'pendingParts'>>;
+type Naming = Pick<StudioDoc, 'instances' | 'assemblySteps' | 'assemblyCuts' | 'mates' | 'instancePatterns' | 'drawing'> & Partial<Pick<StudioDoc, 'nodes' | 'pendingParts' | 'variability'>>;
 
 /** Reserve the occurrence prefix in a drawing reference. Local edge names have no occurrence prefix. */
 function reserveDrawingIds(taken: Set<string>, drawing: NonNullable<Naming['drawing']>): void {
@@ -27,6 +27,15 @@ export function takenInstanceIds(doc: Naming): Set<string> {
   for (const c of doc.assemblyCuts ?? []) for (const id of c.targets) taken.add(hostOf(id));
   for (const m of doc.mates ?? []) { taken.add(hostOf(m.a.part)); taken.add(hostOf(m.b.part)); }
   for (const p of doc.instancePatterns ?? []) taken.add(p.seed);
+  // Inputs retain their missing targets after deletion. Component choices also read
+  // local source occurrences; neither may silently capture a newly allocated part.
+  for (const input of doc.variability?.inputs ?? []) for (const binding of input.bindings) {
+    if (binding.to === 'parameter' || binding.to === 'suppress') taken.add(binding.part);
+    else if (binding.to === 'component') {
+      taken.add(binding.instance);
+      for (const option of Object.values(binding.options)) if ('like' in option) taken.add(option.like);
+    }
+  }
   if (doc.drawing) reserveDrawingIds(taken, doc.drawing);
   // Housing links in this assembly and its immediate part definitions use this namespace.
   // Keep suppressed/waiting references too. Deeper child assemblies own their local ids.

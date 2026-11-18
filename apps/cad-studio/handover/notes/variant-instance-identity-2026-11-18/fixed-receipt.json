@@ -1,0 +1,25 @@
+{
+  "status": "PASS",
+  "qualification": "Actual Remove and Duplicate cannot capture a retained Variant part input.",
+  "limits": [
+    "Current assembly instance namespace only; saved missing bindings are preserved."
+  ],
+  "observations": [
+    {
+      "problems": [
+        {
+          "code": "INPUT_TARGET",
+          "message": "[INPUT_TARGET] Height: no part inst1"
+        }
+      ],
+      "variant": null
+    }
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": []
+}

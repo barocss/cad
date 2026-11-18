@@ -1,0 +1,32 @@
+{
+  "status": "FAIL",
+  "qualification": "Actual Remove and Duplicate cannot capture a retained Variant part input.",
+  "limits": [
+    "Current assembly instance namespace only; saved missing bindings are preserved."
+  ],
+  "observations": [
+    {
+      "problems": [],
+      "variant": [
+        {
+          "id": "inst2",
+          "name": "Spare pin",
+          "h": 20,
+          "volume": 2000.0000000000002
+        },
+        {
+          "id": "inst1",
+          "name": "Spare pin copy",
+          "h": 35,
+          "volume": 3500.0000000000005
+        }
+      ]
+    }
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": []
+}
