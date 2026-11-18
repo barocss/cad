@@ -1,4 +1,4 @@
-import { flangeRadiusEdit } from '@barocss/cad-model/app/flangeRadiusEdit';
+import { flangeRadiusSourceEdit } from '@barocss/cad-model/app/flangeRadiusSourceEdit';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { bodyKeyFor } from '@barocss/cad-model/engine/ids';
@@ -33,7 +33,7 @@ export function isFlangeSourceThicknessChange(before: StudioDoc, next: StudioDoc
 export function admitFlangeSourceThicknessChange(before: StudioDoc, next: StudioDoc, index: number): boolean {
   if(index!==1 || !isFlangeSourceThicknessChange(before,next,index))return false;
   // These factories only inspect metadata. Their synchronous native prove methods are NOT called.
-  if(!flangeRadiusEdit(before,before.nodes,2)||!flangeRadiusEdit(next,next.nodes,2))return false;
+  if(!flangeRadiusSourceEdit(before,before.nodes,2)||!flangeRadiusSourceEdit(next,next.nodes,2))return false;
   const a=before.nodes[1],b=next.nodes[1];
   if(a.kind!=='sheet-base'||b.kind!=='sheet-base')return false;
   return canonical({...before,nodes:before.nodes.map((n,i)=>i===1?{...a,thickness:b.thickness}:n)})===canonical(next);
