@@ -17,8 +17,9 @@ const source = withNode(base, { kind: 'fillet', parent: { node: 1, side: 'solid'
   sigs: { [name]: toSig(signaturesOf(parent.bodies[0]).edges.get(name)!) } });
 type Call = { doc: StudioDoc; revision: number; resolve(value: EvalResult): void; reject(error: Error): void };
 const tick = () => new Promise<void>(resolve => queueMicrotask(resolve));
-function fixture() {
-  const doc = structuredClone(source), nodes = doc.nodes.map(n => n.kind === 'extrude' ? { ...n, height: 30 } : n);
+function fixture(varying = false) {
+  const sourceLaw = varying ? { ...source, nodes: source.nodes.map(n => n.kind === 'fillet' ? { ...n, radii: [{ at: [...edge.a] as [number,number,number], radius: 1, atEnd: true as const }, { at: [...edge.b] as [number,number,number], radius: 3, atEnd: true as const }] } : n) } : source;
+  const doc = structuredClone(sourceLaw), nodes = doc.nodes.map(n => n.kind === 'extrude' ? { ...n, height: 30 } : n);
   let document = doc, evaluated = doc, scope = {}, worker = 1, open = {}, draft = true, marker: number | null = null, variant: string | null = null;
   let revision = 0;
   const parts: Call[] = [], full: Call[] = [], commits: StudioDoc[] = [];
@@ -38,8 +39,8 @@ async function advance(f: ReturnType<typeof fixture>, stage: number) {
 }
 const failure = (revision: number): EvalResult => ({ ok: false, revision, error: { title: 'Geometry refused', hint: 'Keep the accepted geometry', detail: 'test failure', code: 'VALUE', feature: 'n2' }, wallTime: 0 });
 
-test('Height evaluates the signature-refreshed candidate only after both native parent proofs and commits once', async () => {
-  const f = fixture(), snapshot = structuredClone(f.doc), pending = f.apply();
+for (const varying of [false,true]) test(`Height ${varying ? 'varying' : 'constant'} evaluates the signature-refreshed candidate only after both native parent proofs and commits once`, async () => {
+  const f = fixture(varying), snapshot = structuredClone(f.doc), pending = f.apply();
   assert.equal(f.full.length, 0); assert.deepEqual(f.parts[0].doc, prefixDoc(f.doc, 2));
   await advance(f, 2); assert.equal(f.full.length, 1); assert.equal(f.commits.length, 0);
   const candidate = f.full[0].doc, finish = candidate.nodes[2]; assert.ok(finish.kind === 'fillet');

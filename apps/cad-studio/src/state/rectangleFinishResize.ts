@@ -34,12 +34,23 @@ function plain(nodes:readonly ModelNode[],parameters?:StudioDoc['parameters']):b
   &&(i===0||i===last?p.atEnd===true&&p.fraction===undefined:p.atEnd===undefined&&finite(p.fraction)&&p.fraction>1e-9&&p.fraction<1-1e-9&&(i===1||p.fraction-f.radii![i-1].fraction!>1e-9)))
   &&f.radii[0].at.some((v,i)=>v!==f.radii![last].at[i]);
 }
-/** Numeric Height-only edit, with an unchanged valid finish binding and no endpoint law to reassign. */
+/** Height may retain two numeric end radii on a top edge; native topology and pairing are proved later. */
+function heightFinishLaw(finish:ModelNode,extrude:Extract<ModelNode,{kind:'extrude'}>):boolean {
+ if(finish.kind==='chamfer')return true;
+ if(finish.kind!=='fillet')return false;
+ if(finish.radii===undefined)return true;
+ if(!finite(finish.radius)||finish.radii.length!==2||!finish.radii.every(p=>finite(p.radius)&&p.atEnd===true&&p.fraction===undefined))return false;
+ const sig=finish.sigs?.[finish.edges[0]],top=Number(extrude.from??0)+Number(extrude.height);
+ // Admission only: no edge name is trusted, and the complete native proof below remains mandatory.
+ const storedTop=toSig({kind:'line',at:[0,0,top],dir:null,size:1}).p[2];
+ return sig?.k==='line'&&sig.p[2]===storedTop&&sig.d?.[2]===0;
+}
+/** Numeric Height-only edit, retaining the unchanged finish and its historical radius anchors. */
 export function isRectangleFinishHeightResize(before:StudioDoc,next:StudioDoc,index:number):boolean {
  if(index!==1||before.direct!==undefined||next.direct!==undefined||before.instances?.length||next.instances?.length||!plain(before.nodes,before.parameters)||!plain(next.nodes,next.parameters))return false;
  const old=before.nodes[1],now=next.nodes[1],finish=before.nodes[2];
  return old.kind==='extrude'&&now.kind==='extrude'&&old.height!==now.height
-  &&(finish.kind==='chamfer'||finish.kind==='fillet'&&finish.radii===undefined)
+  &&heightFinishLaw(finish,old)
   &&same({...before,nodes:[]},{...next,nodes:[]})&&same(before.nodes[0],next.nodes[0])
   &&same({...old,height:0},{...now,height:0})&&same(finish,next.nodes[2]);
 }
@@ -130,6 +141,12 @@ export function proveRectangleFinishResize(before:StudioDoc,next:StudioDoc,oldBo
  if(!a||!b||!c||!d||!same(a,c)||!same(b,d)||a.filter((v,i)=>v!==b[i]).length!==1)return null;
  // Equal-distance Chamfer and constant circular Fillet have no endpoint radius law.
  if(feature.kind==='fillet'&&feature.radii!==undefined){
+  if(isRectangleFinishHeightResize(before,next,1)){
+   const oldExtrude=before.nodes[1],newExtrude=next.nodes[1];
+   if(oldExtrude.kind!=='extrude'||newExtrude.kind!=='extrude')return null;
+   const oldTop=Number(oldExtrude.from??0)+Number(oldExtrude.height),newTop=Number(newExtrude.from??0)+Number(newExtrude.height);
+   if(oldEdge.a[2]!==oldTop||oldEdge.b[2]!==oldTop||newEdge.a[2]!==newTop||newEdge.b[2]!==newTop)return null;
+  }
   const oldAssignment=endpointAssignment(feature,oldEdge),newAssignment=endpointAssignment(feature,newEdge);
   if(oldAssignment===null||newAssignment===null||oldAssignment!==newAssignment)return null;
  }

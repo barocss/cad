@@ -128,7 +128,7 @@ test('Height-only constant finishes retain every cuboid edge role and refresh on
  }
 });
 
-test('Height admission does not include combined dimensions, translation, bindings, varying law or stale signatures',()=>{
+test('Height admission does not include combined dimensions, translation, bindings or stale signatures',()=>{
  const f=fixture(),feature=f.before.nodes[2];assert.ok(feature.kind==='fillet');if(feature.kind!=='fillet')return;
  const constant={...feature};delete constant.radii;
  const before={...f.before,nodes:[f.before.nodes[0],f.before.nodes[1],constant]};
@@ -136,7 +136,7 @@ test('Height admission does not include combined dimensions, translation, bindin
  assert.ok(isRectangleFinishResize(before,height,1));
  const patch=(index:number,value:object):StudioDoc=>({...height,nodes:height.nodes.map((node,i)=>i===index?{...node,...value} as ModelNode:node)});
  for(const next of [patch(0,{max:[40,25]}),patch(1,{from:2}),patch(1,{draft:1}),patch(1,{height:0}),patch(1,{height:-2}),patch(1,{height:{parameter:'H'}}),patch(2,{radius:3})])assert.equal(isRectangleFinishResize(before,next,1),false);
- assert.equal(isRectangleFinishResize(f.before,{...f.before,nodes:f.before.nodes.map(n=>n.kind==='extrude'?{...n,height:30}:n)},1),false);
+ assert.equal(isRectangleFinishResize(f.before,{...f.before,nodes:f.before.nodes.map(n=>n.kind==='extrude'?{...n,height:30}:n)},1),true,'numeric top-edge two-endpoint law is admitted for native proof');
  const stale={...constant,sigs:{[f.name]:{...constant.sigs![f.name],p:[0,0,0] as [number,number,number]}}};
  assert.equal(proveRectangleFinishResize({...before,nodes:[before.nodes[0],before.nodes[1],stale]},{...height,nodes:[height.nodes[0],height.nodes[1],stale]},f.oldBodies,bodies(height)),null);
 });
