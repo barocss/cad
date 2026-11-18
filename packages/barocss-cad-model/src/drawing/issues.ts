@@ -1,3 +1,4 @@
+import { resolveNoteLeader, type NoteTargetFailureCode } from './noteTargets';
 import { drawingFixControlLoss } from './fixProtection';
 // The drawing's issue list (R14.2, O3): what is wrong on the sheet and what is missing from it, each with where it
 // is and, where one is safe, a fix. It is R14's "the drawing is right" check: a sheet with no errors reads cleanly,
@@ -46,7 +47,7 @@ import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewI
 
 export const DRAWING_ISSUES_VERSION = 'cad-studio-drawing-issues-v1';
 
-export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'DIM_ON_HIDDEN' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode;
+export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'DIM_ON_HIDDEN' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
 export type DrawingFix =
   | { kind: 'remove'; dim: string }
   | { kind: 'move'; dim: string; place: XY }
@@ -400,6 +401,11 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
     const first = settings.sheetContext?.datumFirst[d.letter];
     if (settings.sheetContext ? first !== undefined && first !== d.id : letters.has(d.letter)) out.push({ code: 'DATUM_TWICE', severity: 'error', message: `Datum ${d.letter} is defined twice.`, view: d.view, fix: { kind: 'remove-datum', datum: d.id } });
     else letters.set(d.letter, d.id);
+  }
+  for (const note of settings.notes ?? []) if (note.leader && Object.hasOwn(note.leader, 'target')) {
+    const result = resolveNoteLeader(ctx.views, note, settings);
+    if (!result.ok) out.push({ code: result.code, severity: 'error', message: `Note ${note.id}: ${result.reason}`, notes: [note.id], view: note.leader.view });
+    else if (layout.views[note.leader.view].hidden) out.push({ code: 'VIEW_NEEDED', severity: 'warning', message: `Note ${note.id}: its view is not shown.`, notes: [note.id], view: note.leader.view });
   }
   const targetConflicts = datumTargetConflicts(settings.datumTargets ?? []);
   for (const d of settings.datumTargets ?? []) {

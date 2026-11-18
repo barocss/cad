@@ -1,3 +1,5 @@
+import { readNoteTarget, type NoteTarget } from './noteTargets';
+export type { NoteTarget } from './noteTargets';
 // A 2D drawing of the part: settings kept in the document (doc.drawing), the views projected from the
 // part's B-rep by the kernel's hidden-line projection, and dimensions that refer to model edges by
 // their persistent names (so they keep measuring the part as it changes).
@@ -81,7 +83,7 @@ export type DrawingDimension = ({ tol?: Tolerance; count?: number; auto?: true; 
  * on a straight edge of the view (the face seen edge-on).
  */
 export type DrawingDatum = { id: string; letter: string; view: ViewId; place: XY } & ({ edge: EdgeRef; face?: never } | { face: DrawingFaceRef; edge?: never });
-export interface DrawingNote { id: string; text: string; at: XY; leader?: { view: ViewId; at: XY }; /** 11 ④: a note without a leader, on this sheet (its id) of a drawing with sheets; absent: the first sheet. */ sheet?: string }
+export interface DrawingNote { id: string; text: string; at: XY; leader?: { view: ViewId; at: XY; target?: NoteTarget }; /** 11 ④: a note without a leader, on this sheet (its id) of a drawing with sheets; absent: the first sheet. */ sheet?: string }
 /** A table's column (O49): its header `label [unit]`, numbers shown to `digits` places (absent: up to 2) and aligned right by default. */
 export interface TableColumn { key: string; label: string; unit?: string; align?: 'start' | 'middle' | 'end'; digits?: number }
 /** A cell: text, a number (formatted by its column), or null (shown as '—'). */
@@ -324,7 +326,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(readDatums(r.datums).length ? { datums: readDatums(r.datums) } : {}),
     ...(readDatumTargets(r.datumTargets).length ? { datumTargets: readDatumTargets(r.datumTargets) } : {}),
     ...(readFrames(r.frames).length ? { frames: readFrames(r.frames) } : {}),
-    ...(Array.isArray(r.notes) && r.notes.some(isNote) ? { notes: r.notes.filter(isNote).map(n => ({ id: n.id, text: n.text, at: [n.at[0], n.at[1]] as XY, ...(n.leader && VIEW_IDS.includes(n.leader.view) && isXY(n.leader.at) ? { leader: { view: n.leader.view, at: [n.leader.at[0], n.leader.at[1]] as XY } } : {}), ...(typeof n.sheet === 'string' && /^[A-Za-z0-9_-]{1,16}$/.test(n.sheet) ? { sheet: n.sheet } : {}) })) } : {}),
+    ...(Array.isArray(r.notes) && r.notes.some(isNote) ? { notes: r.notes.filter(isNote).map(n => ({ id: n.id, text: n.text, at: [n.at[0], n.at[1]] as XY, ...(n.leader && VIEW_IDS.includes(n.leader.view) && isXY(n.leader.at) ? { leader: { view: n.leader.view, at: [n.leader.at[0], n.leader.at[1]] as XY, ...(Object.hasOwn(n.leader, 'target') ? { target: readNoteTarget(n.leader.target) } : {}) } } : {}), ...(typeof n.sheet === 'string' && /^[A-Za-z0-9_-]{1,16}$/.test(n.sheet) ? { sheet: n.sheet } : {}) })) } : {}),
     ...(readTables(r.tables).length ? { tables: readTables(r.tables) } : {}),
   };
 }

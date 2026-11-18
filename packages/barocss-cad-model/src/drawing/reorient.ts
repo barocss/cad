@@ -107,7 +107,7 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
     if (d.kind === 'linear' && d.orient !== 'aligned' && map.get(d.view as ViewId)?.swaps) return { ...d, view, place, orient: d.orient === 'horizontal' ? 'vertical' : 'horizontal' };
     return { ...d, view, place };
   });
-  if (settings.notes) turned.notes = settings.notes.map(n => n.leader ? { ...n, leader: (([view, at]) => ({ view, at }))(mapPlace(n.leader.view, n.leader.at)) } : n);
+  if (settings.notes) turned.notes = settings.notes.map(n => n.leader ? { ...n, leader: (([view, at]) => ({ ...n.leader!, view, at }))(mapPlace(n.leader.view, n.leader.at)) } : n);
   if (settings.datums) turned.datums = settings.datums.map(d => { const [view, place] = mapPlace(d.view, d.place); return { ...d, view, place }; });
   if (settings.datumTargets) turned.datumTargets = settings.datumTargets.map((d): typeof d => {
     const [view, place] = mapPlace(d.view, d.place), m = map.get(d.view);

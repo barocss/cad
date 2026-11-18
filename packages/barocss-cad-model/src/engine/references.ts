@@ -20,7 +20,7 @@
 //   the feature holding it is held (suppressed, with the reason) so the rest builds, and the user picks.
 import { frameFace, type FaceTable, type MateFace } from '../assembly/mates';
 import { tablesFor } from '../assembly/faces';
-import type { DimPoint } from '../drawing/types';
+import type { DimPoint, DrawingNote } from '../drawing/types';
 import { checkDrawingBodyOwner } from '../drawing/scope';
 import { bodyKeyFor, featureId } from './ids';
 import { prefixDoc, type ModelNode, type StudioDoc } from './doc';
@@ -54,7 +54,7 @@ export interface Ref {
   /** Selected-body drawing references never search excluded outputs; null means the owner is invalid. */
   drawingBodyKey?: string | null;
   /** Datum targets keep their exact edge name and require an explicitly selected endpoint. */
-  datumTarget?: true; targetEndpoint?: 'min' | 'max';
+  datumTarget?: true; noteTarget?: true; targetEndpoint?: 'min' | 'max';
   /** `node`: that feature's parent body; `part`: that part's face table (a mate); neither: the part's bodies. */
   node: number | null; parent?: { node: number; side: string }; part?: string;
   /** The name it had before a re-match (while marked). */
@@ -101,6 +101,10 @@ function writable(d: StudioDoc): StudioDoc {
     }),
   };
   if (d.drawing?.datumTargets) out.drawing = { ...(out.drawing ?? d.drawing), datumTargets: d.drawing.datumTargets.map(t => !t.point ? { ...t } : ({ ...t, point: { ...t.point, near: [...t.point.near] as Vec3, ...(t.point.sig ? { sig: { ...t.point.sig, p: [...t.point.sig.p] as Vec3, ...(t.point.sig.d ? { d: [...t.point.sig.d] as Vec3 } : {}) } } : {}) } }) as typeof t) };
+  if (d.drawing?.notes) out.drawing = { ...(out.drawing ?? d.drawing), notes: d.drawing.notes.map((n): DrawingNote => {
+    const t = n.leader?.target;
+    return !t ? n : { ...n, leader: { ...n.leader!, at: [...n.leader!.at], target: { ...t, near: [...t.near], sig: t.sig ? { ...t.sig, p: [...t.sig.p], ...(t.sig.d ? { d: [...t.sig.d] as Vec3 } : {}) } : t.sig } } };
+  }) };
   if (d.bodies) { const bodies: NonNullable<StudioDoc['bodies']> = {}; for (const [k, look] of Object.entries(d.bodies)) bodies[k] = { ...look }; out.bodies = bodies; }
   return out;
 }
@@ -145,6 +149,10 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
     const point = target.point;
     if (!point) continue; // a line or area target is placed by view points, not by a reference
     refs.push({ ...pointed(`datum target ${target.id}`, true, point, () => point.edge, edge => { point.edge = edge; }), datumTarget: true, targetEndpoint: point.endpoint });
+  }
+  for (const note of doc.drawing?.notes ?? []) {
+    const target = note.leader?.target;
+    if (target) refs.push({ ...pointed(`note ${note.id}`, true, target, () => target.edge, edge => { target.edge = edge; }), noteTarget: true, targetEndpoint: target.endpoint });
   }
   const scope = doc.drawing?.scope;
   if (scope?.kind === 'part' && scope.body) {
@@ -232,7 +240,7 @@ export function captureSignatures(doc: StudioDoc, bodies: readonly BodyResult[],
   const { doc: out, refs } = referencesOf(doc);
   let changed = false;
   for (const ref of refs) {
-    if (ref.sig) continue;
+    if (ref.sig || ref.noteTarget) continue;
     // A legacy near-only target must remain unresolved, even when another reference needs capture.
     if (ref.datumTarget && (!ref.targetEndpoint || ref.rematched)) continue;
     const body = ref.parent ? bodies.find(b => b.key === bodyKeyFor(out.nodes, ref.parent!.node, ref.parent!.side)) : undefined;
@@ -258,7 +266,7 @@ async function parentBodies(doc: StudioDoc, refs: readonly Ref[], evaluate: Eval
  * against the document before it), except a reference still marked re-matched.
  */
 export async function refreshSignatures(doc: StudioDoc, finals: readonly BodyResult[], evaluate: Evaluate, tables: Tables = tablesFor(doc)): Promise<StudioDoc> {
-  const { doc: out, refs } = referencesOf(doc), live = refs.filter(r => !r.rematched && !r.datumTarget);
+  const { doc: out, refs } = referencesOf(doc), live = refs.filter(r => !r.rematched && !r.datumTarget && !r.noteTarget);
   if (!live.length) return doc;
   const parents = await parentBodies(out, live, evaluate);
   for (const ref of live) { const sig = candidatesOf(ref, finals, parents, tables)?.get(ref.name); if (sig) ref.setSig(toSig(sig)); }
@@ -289,10 +297,10 @@ export interface Problem { index: number; where: string; node: number | null; na
 export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResult[], evaluate: Evaluate, tables: Tables = tablesFor(doc),
   options?: { preserveAgentRematch?: boolean }): Promise<{ doc: StudioDoc; changes: Verified[]; problems: Problem[] }> {
   const { doc: out, refs } = referencesOf(doc);
-  if (!refs.some(r => r.sig || r.datumTarget)) return { doc, changes: [], problems: [] };
+  if (!refs.some(r => r.sig || r.datumTarget || r.noteTarget)) return { doc, changes: [], problems: [] };
   const parents = await parentBodies(out, refs.filter(r => r.sig), evaluate), changes: Verified[] = [], problems: Problem[] = [];
   refs.forEach((ref, index) => {
-    if (ref.datumTarget) {
+    if (ref.datumTarget || ref.noteTarget) {
       const live = candidatesOf(ref, finals, parents, tables)?.get(ref.name);
       if (!ref.targetEndpoint || !ref.sig || ref.rematched || !live || !sameDatumTargetSourceSig(ref.sig, toSig(live)))
         problems.push({ index, where: ref.where, node: ref.node, name: ref.name, candidates: [] });
@@ -374,7 +382,7 @@ export function markedReferences(doc: StudioDoc): Marked[] {
  */
 export async function confirmReference(doc: StudioDoc, index: number, finals: readonly BodyResult[], evaluate: Evaluate, to?: string, tables: Tables = tablesFor(doc), pending?: Problem): Promise<StudioDoc> {
   const { doc: out, refs } = referencesOf(doc), ref = refs[index];
-  if (!ref || ref.datumTarget) return doc;
+  if (!ref || ref.datumTarget || ref.noteTarget) return doc;
   const parents = await parentBodies(out, [ref], evaluate), sig = candidatesOf(ref, finals, parents, tables)?.get(to ?? ref.name);
   // Stale or caller-supplied choices cannot cross the selected drawing body boundary.
   if (ref.drawingBodyKey !== undefined && !sig) return doc;
@@ -397,7 +405,7 @@ export async function confirmReference(doc: StudioDoc, index: number, finals: re
 /** The faces (edges) reference `index` could be: those alike its stored signature, nearest first (at most `n`). */
 export async function candidatesFor(doc: StudioDoc, index: number, finals: readonly BodyResult[], evaluate: Evaluate, n = 4, tables: Tables = tablesFor(doc)): Promise<string[]> {
   const { doc: out, refs } = referencesOf(doc), ref = refs[index];
-  if (!ref?.sig || ref.datumTarget) return [];
+  if (!ref?.sig || ref.datumTarget || ref.noteTarget) return [];
   const cands = candidatesOf(ref, finals, await parentBodies(out, [ref], evaluate), tables);
   return cands ? rankAlike(fromSig(ref.sig), cands, ref.edge).slice(0, n) : [];
 }

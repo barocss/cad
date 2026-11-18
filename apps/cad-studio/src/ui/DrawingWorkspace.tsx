@@ -1,3 +1,4 @@
+import { captureNoteTarget, resolveNoteLeader } from '@barocss/cad-model/drawing/noteTargets';
 import { nextStandaloneFrameId } from './drawing/frameIdentity';
 import { commitDetailPaperDrag, detailPaperDragAt } from './drawing/detailPaperDrag';
 import { pickVisibleDetailRim, reconnectDetailDiameter, visibleDetailRim } from './drawing/detailDiameterReattachment';
@@ -247,6 +248,11 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   const [drag, setDrag] = useState<{ id: string; place: XY } | { target: string; original: DrawingDatumTarget; place: XY } | { note: string; at: XY; grab: XY } | { detail: string; original: DrawingDetail; owner: object; initialAt: XY; initialPointer: XY; at: XY; grab: XY } | { removed: string; at: XY; grab: XY } | { pan: XY; box: [number, number, number, number] } | null>(null);
   /** The selected note's text while it is typed, and the selected dimension's tolerance fields. */
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
+  const [noteAttach, setNoteAttach] = useState<{ note: DrawingNote; owner: object; choices?: { view: ViewId; points: DatumTargetPoint[] } } | null>(null);
+  const noteAttachReady = sourceCurrent && projectionCurrent && !busy && scope.kind === 'part' && !scope.part && !scope.body && !!views && !!bodies;
+  useEffect(() => {
+    if (noteAttach && (noteAttach.owner !== projectionActionOwner || !noteAttachReady || tool !== 'select' || selected?.kind !== 'note' || selected.id !== noteAttach.note.id)) { setNoteAttach(null); setMessage('Endpoint selection cancelled because the drawing or selection changed.'); }
+  }, [noteAttach, projectionActionOwner, noteAttachReady, tool, selected]);
   const [tolDraft, setTolDraft] = useState<Record<string, string>>({});
   /** A note just added: its text box takes the keyboard, its placeholder text selected. */
   const noteBox = useRef<HTMLTextAreaElement>(null), [typeNote, setTypeNote] = useState<string | null>(null);
@@ -259,7 +265,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   }, [typeNote, shownNote]);
   const svg = useRef<SVGSVGElement>(null);
   useEffect(() => {
-    setPending(pending => pending?.kind === 'detail-center' && pending.moving.parentSheet === current ? pending : null); setSelected(null); setSelectedTarget(null); setSelectedFrame(null); setTargetChoices([]); setRimChoice(null); if (reattach) setTool('select'); setReattach(null); setReselectTarget(null); setHover(null); setDrag(null); setNoteDraft(null); setTolDraft({});
+    setNoteAttach(null); setPending(pending => pending?.kind === 'detail-center' && pending.moving.parentSheet === current ? pending : null); setSelected(null); setSelectedTarget(null); setSelectedFrame(null); setTargetChoices([]); setRimChoice(null); if (reattach) setTool('select'); setReattach(null); setReselectTarget(null); setHover(null); setDrag(null); setNoteDraft(null); setTolDraft({});
   }, [scopeKey, current]);
 
   const lostOccurrences = useMemo(() => scope.kind === 'assembly' && sheet ? occurrenceLosses(sheet.dimensions, model.instances) : [], [scope.kind, sheet, model.instances]);
@@ -473,7 +479,31 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (why) { setMessage(why.message); return false; }
     onChange({ ...settings, datumTargets }); setPending(null); setTargetChoices([]); return true;
   };
-  const cancel = () => { setReattach(null); setRimChoice(null); setPending(null); setTargetChoices([]); setReselectTarget(null); setMessage(null); };
+  const cancel = () => { setNoteAttach(null); setReattach(null); setRimChoice(null); setPending(null); setTargetChoices([]); setReselectTarget(null); setMessage(null); };
+  const startNoteAttach = (note: DrawingNote) => {
+    cancel();
+    if (noteDraft !== null && noteDraft.trimEnd() !== note.text) { setMessage('Finish the note text edit, then select Attach to endpoint again.'); return; }
+    if (!noteAttachReady || settings.notes?.filter(n => n.id === note.id).length !== 1 || !settings.notes.includes(note)) { setMessage('The note or drawing changed. Select the note again when its drawing is ready.'); return; }
+    setTool('select'); setDrag(null); setNoteAttach({ note, owner: projectionActionOwner });
+    setMessage('Select a visible straight edge endpoint in a front, top or right view on this sheet. Esc cancels.');
+    svg.current?.focus();
+  };
+  const chooseNoteEndpoint = (view: ViewId, point: DatumTargetPoint) => {
+    const session = noteAttach, placement = layout?.views[view];
+    if (!session || tool !== 'select' || selected?.kind !== 'note' || selected.id !== session.note.id || session.owner !== liveProjectionAction.current || !noteAttachReady || !views || !placement || placement.hidden || placement.breaks || !['front', 'top', 'right'].includes(view)
+      || settings.notes?.filter(n => n.id === session.note.id).length !== 1 || !settings.notes.includes(session.note)) {
+      setNoteAttach(null); setMessage('The note or drawing changed. Select Attach to endpoint again.'); return;
+    }
+    const target = captureNoteTarget(views[view], point.edge, point.near);
+    if (!target) { setMessage('The current endpoint could not be verified. Select a current straight edge endpoint.'); return; }
+    const { sheet: _sheet, ...kept } = session.note; void _sheet;
+    const next: DrawingNote = { ...kept, leader: { view, at: inView(views[view], point.near), target } };
+    const resolved = resolveNoteLeader(views, next, settings);
+    if (!resolved.ok) { setMessage(resolved.reason); return; }
+    if (onChange({ ...settings, notes: settings.notes!.map(n => n === session.note ? next : n) })) {
+      setNoteAttach(null); setMessage(null); setSelected({ kind: 'note', id: next.id });
+    }
+  };
   const chooseTarget = (target: DrawingDatumTarget, moving = false) => {
     setSelectedFrame(null);
     if (reselectTarget && !moving) {
@@ -770,6 +800,19 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    if (noteAttach) {
+      e.preventDefault();
+      if (tool !== 'select' || selected?.kind !== 'note' || selected.id !== noteAttach.note.id || noteAttach.owner !== liveProjectionAction.current || !noteAttachReady) { setNoteAttach(null); setMessage('The drawing changed. Select Attach to endpoint again.'); return; }
+      const h = hoverAt(e.clientX, e.clientY);
+      if (!h || !isViewId(h.view) || !['front', 'top', 'right'].includes(h.view) || !views || !bodies) { setMessage('Select a front, top or right endpoint on this sheet.'); return; }
+      const placement = layout?.views[h.view];
+      if (!placement || placement.hidden || placement.breaks) { setMessage('Show an unbroken view on this sheet before connecting the note.'); return; }
+      const picked = endpointSnap(views[h.view], h.at, 9 * mmPerPx() / placement.scale, bodies);
+      if (picked.error || !picked.points.length) { setMessage(picked.error ?? 'Select a visible straight edge endpoint.'); return; }
+      if (picked.points.length > 1) { setNoteAttach({ ...noteAttach, choices: { view: h.view, points: picked.points } }); setMessage('Endpoints overlap. Choose the exact edge and endpoint below Notes.'); return; }
+      chooseNoteEndpoint(h.view, picked.points[0]); return;
+    }
+
     if (pending?.kind === 'standalone-frame') {
       const q = sheetPoint(e.clientX, e.clientY), placement = placementAt(pending.view);
       const before = pending.sourceDoc;
@@ -929,7 +972,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (selected?.kind === kind && selected.id === id) setSelected(null);
     if (kind === 'note') setNoteDraft(null);
   };
-  const canDeleteSelection = drawingCanDeleteSelection({ tool, pending: !!pending, drag: !!drag, reattach: !!reattach, rimChoice: !!currentRimChoice, targetChoices: targetChoices.length, reselectTarget: !!reselectTarget, hasSelection: !!(selected || selectedTarget || selectedFrame) });
+  const canDeleteSelection = drawingCanDeleteSelection({ tool, pending: !!pending || !!noteAttach, drag: !!drag, reattach: !!reattach, rimChoice: !!currentRimChoice, targetChoices: targetChoices.length, reselectTarget: !!reselectTarget, hasSelection: !!(selected || selectedTarget || selectedFrame) });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (shortcutHelp || e.defaultPrevented || e.isComposing || e.target instanceof HTMLInputElement
@@ -941,7 +984,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         setDrag(null);
         onClearReferencePreview();
         if (reattach) cancelReattachment();
-        else if (pending || currentRimChoice || targetChoices.length || reselectTarget) cancel();
+        else if (noteAttach || pending || currentRimChoice || targetChoices.length || reselectTarget) cancel();
         else { setSelected(null); setSelectedTarget(null); setSelectedFrame(null); setTool('select'); setMessage(null); }
         return;
       }
@@ -1346,7 +1389,11 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
         <FrameEditor key={selectedFrame ? `frame:${selectedFrame}` : selDim?.id ?? 'none'} dim={selectedFrame ? undefined : selDim?.id} frameId={selectedFrame ?? undefined} settings={settings} allFrames={wholeSettings.frames ?? []} onChange={changeFrame} onRefused={setMessage} />
 
-        <NotesList settings={settings} selected={selNote?.id ?? null} selNote={selNote} noteDraft={noteDraft} setNoteDraft={setNoteDraft} noteBox={noteBox} onSelect={n => { selectAnnotationRow('note', n.id); setNoteDraft(n.text); }} remove={id => removeAnnotation({ kind: 'note', id })} onRemoveLeader={removeNoteLeader} onDuplicate={duplicateNote} onChange={onChange} />
+        <NotesList onAttach={startNoteAttach} attachReady={noteAttachReady} attachmentStatus={note => { if (!note.leader?.target) return note.leader ? 'Free-coordinate leader' : 'Paper note'; if (!noteAttachReady || !views) return 'Needs confirmation: current drawing not ready'; const r = resolveNoteLeader(views, note, settings); return r.ok ? 'Connected endpoint' : `Needs confirmation: ${r.reason}`; }} settings={settings} selected={selNote?.id ?? null} selNote={selNote} noteDraft={noteDraft} setNoteDraft={setNoteDraft} noteBox={noteBox} onSelect={n => { cancel(); selectAnnotationRow('note', n.id); setNoteDraft(n.text); }} remove={id => removeAnnotation({ kind: 'note', id })} onRemoveLeader={removeNoteLeader} onDuplicate={duplicateNote} onChange={onChange} />
+        {noteAttach && <div role="group" aria-label="Note endpoint selection">
+          <Button variant="ghost" onClick={cancel}>Cancel note endpoint selection</Button>
+          {noteAttach.choices?.points.map((point, i) => <Button key={i} variant="ghost" onClick={() => chooseNoteEndpoint(noteAttach.choices!.view, point)}>{point.edge} · {point.endpoint} · {point.near.join(', ')}</Button>)}
+        </div>}
 
         <ExportActions sheets={sheetTotal} sheet={exportableSheet} canExportPdf={canExportPdf} layout={layout} views={views} cuts={cuts} settings={settings} dxfVersion={dxfVersion} setDxfVersion={version => { setExportLoss(null); setDxfVersion(version); }} dxfCut={dxfCut} setDxfSection={setDxfSection} exportSvg={exportSvg} exportPdf={exportPdf} exportDxf={exportDxf} exportSectionDxf={exportSectionDxf}
           confirmation={exportConfirmation && { format: exportConfirmation.format, messages: exportConfirmation.messages,

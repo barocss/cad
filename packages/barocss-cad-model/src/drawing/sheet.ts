@@ -1,3 +1,4 @@
+import { resolveNoteLeader } from './noteTargets';
 // The sheet as a display list in sheet millimetres (y down): frame, title block, the projected views
 // and the dimensions. The SVG and PDF writers and the workspace all draw from it.
 import type { DrawingTableContext } from './fitList';
@@ -175,7 +176,7 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
     const g = groups.find(x => x.role === 'dimension' && x.id === f.dim), main = g?.marks.find((m): m is Extract<Mark, { kind: 'text' }> => m.kind === 'text');
     if (g && main) groups.push({ role: 'control', id: f.id, view: g.view, marks: frameMarks(main, f, p) });
   }
-  for (const n of settings.notes ?? []) groups.push({ role: 'note', id: n.id, marks: noteMarks(layout, n, p) });
+  for (const n of settings.notes ?? []) groups.push({ role: 'note', id: n.id, marks: noteMarks(layout, n, p, views, settings) });
   // (O148 X1: each section's cutting plane in the view that sees it edge-on, before the views' names: a name goes below its view's cutting-plane ends.)
   // (Pushed after each section's drawing, as A–A's always was: the DXF's entities keep their order.)
   const cutting = new Map<string, MarkGroup>();
@@ -1282,10 +1283,12 @@ export function hatch(rings: readonly (readonly XY[])[], spacing: number, angle 
 
 export const NOTE_LINE = 5;
 /** A note's lines (top left at `at`) and its leader: from the nearer end of the first line, a short shoulder, then out to an arrow on the view point. */
-export function noteMarks(layout: SheetLayout, n: DrawingNote, p: StandardPreset = PLAIN): Mark[] {
+export function noteMarks(layout: SheetLayout, n: DrawingNote, p: StandardPreset = PLAIN, views?: DrawingViews, settings?: DrawingSettings): Mark[] {
   const lines = n.text.split('\n'), marks: Mark[] = lines.map((t, k) => ({ kind: 'text', at: [n.at[0], n.at[1] + p.text * 0.85 + k * NOTE_LINE] as XY, text: t, size: p.text, anchor: 'start' }));
-  if (n.leader && !layout.views[n.leader.view].hidden) {
-    const tip = toSheet(layout.views[n.leader.view], n.leader.at), w = Math.max(0, ...lines.map(t => textWidth(t, p.text, false)));
+  const target = n.leader && Object.hasOwn(n.leader, 'target');
+  const resolved = n.leader && views ? resolveNoteLeader(views, n, settings) : null;
+  if (n.leader && !layout.views[n.leader.view]?.hidden && (!target || resolved?.ok)) {
+    const tip = toSheet(layout.views[n.leader.view], resolved?.ok ? resolved.at : n.leader.at), w = Math.max(0, ...lines.map(t => textWidth(t, p.text, false)));
     const y = n.at[1] + p.text * 0.45, left = tip[0] < n.at[0] + w / 2, start: XY = left ? [n.at[0] - 1, y] : [n.at[0] + w + 1, y], knee: XY = [start[0] + (left ? -3 : 3), y];
     marks.push({ kind: 'line', a: start, b: knee, pen: 'thin' }, { kind: 'line', a: knee, b: tip, pen: 'thin' }, arrow(tip, sub(tip, knee), p));
   }

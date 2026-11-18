@@ -4,10 +4,11 @@ import type { DrawingNote, DrawingSettings } from '@barocss/cad-model/drawing/ty
 import { Icon } from '../atoms';
 import { Button } from '@/components/ui/button';
 
-export function NotesList({ settings, selected, selNote, noteDraft, setNoteDraft, noteBox, onSelect, remove, onRemoveLeader, onDuplicate, onChange }: {
+export function NotesList({ settings, selected, selNote, noteDraft, setNoteDraft, noteBox, onSelect, remove, onRemoveLeader, onDuplicate, onChange, onAttach, attachReady, attachmentStatus }: {
   settings: DrawingSettings; selected: string | null; selNote: DrawingNote | undefined; noteDraft: string | null; setNoteDraft: Dispatch<SetStateAction<string | null>>;
   noteBox: RefObject<HTMLTextAreaElement | null>; onSelect(note: DrawingNote): void; remove(id: string): void; onRemoveLeader(note: DrawingNote): void; onDuplicate(note: DrawingNote): void;
   onChange(next: DrawingSettings): void;
+  onAttach(note: DrawingNote): void; attachReady: boolean; attachmentStatus(note: DrawingNote): string;
 }) {
   const selectedRow = useRef<HTMLButtonElement>(null);
   const cancelBlur = useRef(false);
@@ -16,7 +17,7 @@ export function NotesList({ settings, selected, selNote, noteDraft, setNoteDraft
         <div className="dw-dims">
           {(settings.notes ?? []).map(n => <div key={n.id} className={'dw-dim' + (selected === n.id ? ' sel' : '')}>
             <button type="button" className="dw-annotation-select" ref={selected === n.id ? selectedRow : undefined} aria-pressed={selected === n.id} onClick={() => onSelect(n)}>
-              <b className="dw-note-text">{n.text.split('\n')[0]}</b><span>{n.leader ? `→ ${n.leader.view}` : ''}</span>
+              <b className="dw-note-text">{n.text.split('\n')[0]}</b><span>{n.leader ? `→ ${n.leader.view} · ` : ''}{attachmentStatus(n)}</span>
             </button>
             <Button variant="ghost" size="xs" aria-label={`Remove note ${n.id}`} onClick={e => { e.stopPropagation(); remove(n.id); }}><Icon name="close" small /></Button>
           </div>)}
@@ -46,6 +47,7 @@ export function NotesList({ settings, selected, selNote, noteDraft, setNoteDraft
                 }
               }} />
             <div className="dw-actions">
+              <Button variant="ghost" disabled={!attachReady} onClick={() => onAttach(selNote)}>{selNote.leader?.target ? 'Reselect endpoint' : 'Attach to endpoint'}</Button>
               <Button variant="ghost" onClick={() => onDuplicate(selNote)}>Duplicate note</Button>
               {selNote.leader && <Button variant="ghost" onClick={() => onRemoveLeader(selNote)}>Remove leader</Button>}
             </div>
