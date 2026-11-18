@@ -1,0 +1,71 @@
+{
+  "status": "PASS",
+  "phase": "fresh Open reopened",
+  "observations": [
+    {
+      "lookup": {
+        "code": "PART_AMBIGUOUS",
+        "message": "[PART_AMBIGUOUS] more than one part is named Pin 2 (pat1-1, p2); give the parts distinct names before using name-based assembly operations"
+      },
+      "parts": [
+        {
+          "id": "base",
+          "name": "base"
+        },
+        {
+          "id": "p1",
+          "name": "Pin"
+        },
+        {
+          "id": "pat1-1",
+          "name": "Pin 2"
+        },
+        {
+          "id": "p2",
+          "name": "Pin 2"
+        }
+      ],
+      "restored": {
+        "id": "p2",
+        "volume": 3000
+      },
+      "unchanged": true
+    },
+    {
+      "lookup": {
+        "code": "PART_AMBIGUOUS",
+        "message": "[PART_AMBIGUOUS] more than one part is named Pin 2 (pat1-1, p2); give the parts distinct names before using name-based assembly operations"
+      },
+      "parts": [
+        {
+          "id": "base",
+          "name": "base"
+        },
+        {
+          "id": "p1",
+          "name": "Pin"
+        },
+        {
+          "id": "pat1-1",
+          "name": "Pin 2"
+        },
+        {
+          "id": "p2",
+          "name": "Pin 2"
+        }
+      ],
+      "restored": {
+        "id": "p2",
+        "volume": 3000
+      },
+      "unchanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ]
+}

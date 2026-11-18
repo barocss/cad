@@ -66,7 +66,9 @@ export class Assembly {
   /** A part's id by the name it was added with (`base` is the base part). */
   idOf(name: string): string {
     if (name === BASE) return BASE;
-    const found = (this.#doc.instances ?? []).find(i => i.name === name);
+    const matches = (this.#doc.instances ?? []).filter(i => i.name === name);
+    if (matches.length > 1) throw refuse('PART_AMBIGUOUS', `more than one part is named ${name} (${matches.map(i => i.id).join(', ')}); give the parts distinct names before using name-based assembly operations`);
+    const found = matches[0];
     if (!found) throw refuse('PART_UNKNOWN', `no part ${name} in the assembly; its parts are ${this.parts().map(p => p.name).join(', ')}`);
     return found.id;
   }

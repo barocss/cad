@@ -1,0 +1,71 @@
+{
+  "status": "FAIL",
+  "phase": "fresh Open reopened",
+  "observations": [
+    {
+      "lookup": {
+        "id": "pat1-1",
+        "volume": 1000.0000000000001
+      },
+      "parts": [
+        {
+          "id": "base",
+          "name": "base"
+        },
+        {
+          "id": "p1",
+          "name": "Pin"
+        },
+        {
+          "id": "pat1-1",
+          "name": "Pin 2"
+        },
+        {
+          "id": "p2",
+          "name": "Pin 2"
+        }
+      ],
+      "restored": {
+        "id": "p2",
+        "volume": 3000
+      },
+      "unchanged": true
+    },
+    {
+      "lookup": {
+        "id": "pat1-1",
+        "volume": 1000.0000000000001
+      },
+      "parts": [
+        {
+          "id": "base",
+          "name": "base"
+        },
+        {
+          "id": "p1",
+          "name": "Pin"
+        },
+        {
+          "id": "pat1-1",
+          "name": "Pin 2"
+        },
+        {
+          "id": "p2",
+          "name": "Pin 2"
+        }
+      ],
+      "restored": {
+        "id": "p2",
+        "volume": 3000
+      },
+      "unchanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ]
+}
