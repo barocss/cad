@@ -80,7 +80,7 @@ export interface ViewportPointerProps {
   onPickChain?(body: number, edge: number): void;
   onPick(hit: { face: FaceRef | null; edge: EdgeRef | null; edgeMesh?: BodyResult['mesh']; point: Vec3 | null; direct?: string; instance?: string; instanceFace?: FaceRef; instanceCap?: { body: number }; vertex?: { body: number; at: Vec3 } }, additive: boolean): void;
   /** `fresh`: a new shape starts (the current one, if closed, is kept beside it). */
-  onSketchShape(shape: SketchShape | null, fresh?: boolean, origin?: 'line-point' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish' | 'ellipse-finish' | 'centre-arc-finish'): void;
+  onSketchShape(shape: SketchShape | null, fresh?: boolean, origin?: 'line-point' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish' | 'ellipse-finish' | 'centre-arc-finish' | 'arc-start' | 'arc-preview' | 'arc-finish'): void;
   onSplineDragChange?(active: boolean): void;
   onCursor(p: Vec3 | null): void;
   /** Use projected triangle overlap for crossing boxes in the idle native Model view. */
@@ -277,7 +277,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     liveShape.current = sketch?.shape ?? null;
     if (!sketch?.shape) { drafting.current = false; slotStage.current = 0; }
   }
-  const emit = (shape: SketchShape | null, fresh = false, origin?: 'line-point' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish' | 'ellipse-finish' | 'centre-arc-finish') => { liveShape.current = shape; propsRef.current.onSketchShape(shape, fresh, origin); };
+  const emit = (shape: SketchShape | null, fresh = false, origin?: 'line-point' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish' | 'ellipse-finish' | 'centre-arc-finish' | 'arc-start' | 'arc-preview' | 'arc-finish') => { liveShape.current = shape; propsRef.current.onSketchShape(shape, fresh, origin); };
   /** The grid step (mm) points snap to: the studio's setting (0: off, to a micrometre). */
   const snap = (v: number) => { const st = propsRef.current.snapStep ?? 1; return st > 0 ? Math.round(Math.round(v / st) * st * 1000) / 1000 : Math.round(v * 1000) / 1000; };
   const sketchDraft = useRef<SketchOverlayDraft>({ cursor: null });
@@ -936,7 +936,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
         }
         if (s.kind === 'polygon' && s.pending && p) {
           const n = s.points.length, i = s.closed ? n - 1 : n - 2;
-          if (i >= 0) { const bulges = [...(s.bulges ?? s.points.map(() => 0))]; bulges[i] = bulgeThrough(s.points[i], s.points[(i + 1) % n], [p[0], p[1]]); emit({ ...s, bulges }); }
+          if (i >= 0) { const bulges = [...(s.bulges ?? s.points.map(() => 0))]; bulges[i] = bulgeThrough(s.points[i], s.points[(i + 1) % n], [p[0], p[1]]); emit({ ...s, bulges }, false, 'arc-preview'); }
         }
       }
       request(); return;
@@ -1152,11 +1152,11 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
       } else {
         // Line (polygon) and arc tools share one open chain; an arc's bulge follows the cursor until the next click.
         const open = s && s.kind === 'polygon' && !s.closed ? s : null;
-        if (s?.kind === 'polygon' && s.pending) { emit({ ...s, pending: false }); return; }
+        if (s?.kind === 'polygon' && s.pending) { emit({ ...s, pending: false }, false, 'arc-finish'); return; }
         const pts = open ? open.points : [], bulges = open?.bulges ?? pts.map(() => 0);
         const arc = sk.tool === 'arc' && pts.length > 0;
         const closing = pts.length >= 2 && pts[0][0] === c[0] && pts[0][1] === c[1];
-        const origin = sk.tool === 'polygon' ? 'line-point' : undefined;
+        const origin = arc ? 'arc-start' : 'line-point';
         if (arc && sketchDraft.current.snap?.kind === 'crossing') clearSketchSnap();
         if (closing && (pts.length >= 3 || arc || bulges.some(Boolean))) emit({ kind: 'polygon', points: pts, closed: true, bulges, pending: arc }, false, origin);
         else if (!closing) emit({ kind: 'polygon', points: [...pts, c], closed: false, bulges: [...bulges, 0], pending: arc }, !open, origin);

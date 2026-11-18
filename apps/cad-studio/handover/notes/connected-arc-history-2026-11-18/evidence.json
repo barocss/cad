@@ -1,0 +1,3200 @@
+{
+  "baselineCommit": "3a28c7a6c",
+  "runs": [
+    {
+      "case": "original",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Line",
+          "buttons": 1
+        },
+        {
+          "label": "line-first",
+          "point": [
+            10,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "01-first-point",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "line-end",
+          "point": [
+            30,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "02-completed-line",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "tool-Arc",
+          "buttons": 1
+        },
+        {
+          "label": "02b-line-to-arc-tool-switch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "arc-end",
+          "point": [
+            30,
+            30
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "03-end-pending",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "arc-bend",
+          "point": [
+            40,
+            20
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "04-completed-arc",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Arc 2 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        }
+      ]
+    },
+    {
+      "case": "original-pending",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Line",
+          "buttons": 1
+        },
+        {
+          "label": "tool-switch-line-first",
+          "point": [
+            10,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "tool-switch-line-end",
+          "point": [
+            30,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "tool-switch-original-line",
+          "sketchVisible": true,
+          "panel": "SKETCH · LinePlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · add the next pointXYEdge12CONSTRAINTS · 1Horizontaledge 1CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "tool-Arc",
+          "buttons": 1
+        },
+        {
+          "label": "tool-switch-arc-end",
+          "point": [
+            30,
+            30
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "tool-switch-endpoint-pending",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingMove to bend the arc, click to place itXYEdge123CONSTRAINTS · 2Horizontaledge 1Verticaledge 2CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "tool-switch-bend-preview-before-click",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingMove to bend the arc, click to place itXYEdge12R3CONSTRAINTS · 2Horizontaledge 1Arcedge 2 ccwCURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Arc 2 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "tool-Line",
+          "buttons": 1
+        },
+        {
+          "label": "tool-switch-result",
+          "sketchVisible": true,
+          "panel": "SKETCH · LinePlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · click the first point to closeXYEdge12R3CONSTRAINTS · 2Horizontaledge 1Arcedge 2 ccwCURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Arc 2 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "tool-switch-document-preserved",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [],
+            "outputs": {},
+            "nextId": 0
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Line",
+          "buttons": 1
+        },
+        {
+          "label": "escape-line-first",
+          "point": [
+            10,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "escape-line-end",
+          "point": [
+            30,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "escape-original-line",
+          "sketchVisible": true,
+          "panel": "SKETCH · LinePlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · add the next pointXYEdge12CONSTRAINTS · 1Horizontaledge 1CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "tool-Arc",
+          "buttons": 1
+        },
+        {
+          "label": "escape-arc-end",
+          "point": [
+            30,
+            30
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "escape-endpoint-pending",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingMove to bend the arc, click to place itXYEdge123CONSTRAINTS · 2Horizontaledge 1Verticaledge 2CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "escape-bend-preview-before-click",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingMove to bend the arc, click to place itXYEdge12R3CONSTRAINTS · 2Horizontaledge 1Arcedge 2 ccwCURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Arc 2 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "escape-result",
+          "sketchVisible": false,
+          "panel": "",
+          "fields": [],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "escape-document-preserved",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [],
+            "outputs": {},
+            "nextId": 0
+          }
+        }
+      ]
+    },
+    {
+      "case": "fixed",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Line",
+          "buttons": 1
+        },
+        {
+          "label": "line-first",
+          "point": [
+            10,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "01-first-point",
+          "sketchVisible": true,
+          "panel": "SKETCH · LinePlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · add the next pointXYEdge1CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "line-end",
+          "point": [
+            30,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "02-completed-line",
+          "sketchVisible": true,
+          "panel": "SKETCH · LinePlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · add the next pointXYEdge12CONSTRAINTS · 1Horizontaledge 1CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "tool-Arc",
+          "buttons": 1
+        },
+        {
+          "label": "02b-line-to-arc-tool-switch",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · click the first point to closeXYEdge12CONSTRAINTS · 1Horizontaledge 1CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "02c-switch-undo-first-point",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · add the next pointXYEdge1CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": true
+        },
+        {
+          "label": "02d-switch-redo-line",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · click the first point to closeXYEdge12CONSTRAINTS · 1Horizontaledge 1CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "arc-end",
+          "point": [
+            30,
+            30
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "03-end-pending",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingMove to bend the arc, click to place itXYEdge123CONSTRAINTS · 2Horizontaledge 1Verticaledge 2CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "03b-pending-undo-noop",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingMove to bend the arc, click to place itXYEdge123CONSTRAINTS · 2Horizontaledge 1Verticaledge 2CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "arc-bend",
+          "point": [
+            40,
+            20
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "04-completed-arc",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · click the first point to closeXYEdge12R3CONSTRAINTS · 2Horizontaledge 1Arcedge 2 ccwCURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Arc 2 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "05-undo-restored-line",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · click the first point to closeXYEdge12CONSTRAINTS · 1Horizontaledge 1CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": true
+        },
+        {
+          "label": "05b-undo-first-point",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · add the next pointXYEdge1CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": true
+        },
+        {
+          "label": "05c-undo-empty",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingCURVESMake curves of the sketch",
+          "fields": [],
+          "undo": false,
+          "redo": true
+        },
+        {
+          "label": "06-redo-arc",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · click the first point to closeXYEdge12R3CONSTRAINTS · 2Horizontaledge 1Arcedge 2 ccwCURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Arc 2 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "second-arc-end",
+          "point": [
+            10,
+            30
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "second-arc-bend",
+          "point": [
+            20,
+            40
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "06b-second-arc-completed",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · click the first point to closeXYEdge12R3R4CONSTRAINTS · 3Horizontaledge 1Arcedge 2 ccwArcedge 3 ccwCURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Arc 2 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            },
+            {
+              "label": "Arc 3 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 4 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 4 Y",
+              "value": "30"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "06c-second-arc-redo",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · click the first point to closeXYEdge12R3R4CONSTRAINTS · 3Horizontaledge 1Arcedge 2 ccwArcedge 3 ccwCURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Arc 2 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            },
+            {
+              "label": "Arc 3 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 4 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 4 Y",
+              "value": "30"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "tool-Line",
+          "buttons": 1
+        },
+        {
+          "label": "close-top",
+          "point": [
+            10,
+            30
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "close-left",
+          "point": [
+            10,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "08-extruded-extrude-hud",
+          "operation": null,
+          "depthSelect": 0,
+          "hudText": "ExtrudepreviewProfileSketch 1DistancemmAny number except 0 mmDraft°CancelApply"
+        }
+      ]
+    },
+    {
+      "case": "fixed-pending",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Line",
+          "buttons": 1
+        },
+        {
+          "label": "tool-switch-line-first",
+          "point": [
+            10,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "tool-switch-line-end",
+          "point": [
+            30,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "tool-switch-original-line",
+          "sketchVisible": true,
+          "panel": "SKETCH · LinePlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · add the next pointXYEdge12CONSTRAINTS · 1Horizontaledge 1CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "tool-Arc",
+          "buttons": 1
+        },
+        {
+          "label": "tool-switch-arc-end",
+          "point": [
+            30,
+            30
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "tool-switch-endpoint-pending",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingMove to bend the arc, click to place itXYEdge123CONSTRAINTS · 2Horizontaledge 1Verticaledge 2CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "tool-switch-bend-preview-before-click",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingMove to bend the arc, click to place itXYEdge12R3CONSTRAINTS · 2Horizontaledge 1Arcedge 2 ccwCURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Arc 2 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "tool-Line",
+          "buttons": 1
+        },
+        {
+          "label": "tool-switch-result",
+          "sketchVisible": true,
+          "panel": "SKETCH · LinePlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · click the first point to closeXYEdge12R3CONSTRAINTS · 2Horizontaledge 1Arcedge 2 ccwCURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Arc 2 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "tool-switch-document-preserved",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [],
+            "outputs": {},
+            "nextId": 0
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Line",
+          "buttons": 1
+        },
+        {
+          "label": "escape-line-first",
+          "point": [
+            10,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "escape-line-end",
+          "point": [
+            30,
+            10
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "escape-original-line",
+          "sketchVisible": true,
+          "panel": "SKETCH · LinePlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · add the next pointXYEdge12CONSTRAINTS · 1Horizontaledge 1CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            }
+          ],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "tool-Arc",
+          "buttons": 1
+        },
+        {
+          "label": "escape-arc-end",
+          "point": [
+            30,
+            30
+          ],
+          "hit": {
+            "canvas": true,
+            "tag": "CANVAS",
+            "classes": "vp-canvas"
+          }
+        },
+        {
+          "label": "escape-endpoint-pending",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingMove to bend the arc, click to place itXYEdge123CONSTRAINTS · 2Horizontaledge 1Verticaledge 2CURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "escape-bend-preview-before-click",
+          "sketchVisible": true,
+          "panel": "SKETCH · ArcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingMove to bend the arc, click to place itXYEdge12R3CONSTRAINTS · 2Horizontaledge 1Arcedge 2 ccwCURVESMake curves of the sketch",
+          "fields": [
+            {
+              "label": "Point 1 X",
+              "value": "10"
+            },
+            {
+              "label": "Point 1 Y",
+              "value": "10"
+            },
+            {
+              "label": "Point 2 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 2 Y",
+              "value": "10"
+            },
+            {
+              "label": "Arc 2 radius",
+              "value": "10"
+            },
+            {
+              "label": "Point 3 X",
+              "value": "30"
+            },
+            {
+              "label": "Point 3 Y",
+              "value": "30"
+            }
+          ],
+          "undo": false,
+          "redo": false
+        },
+        {
+          "label": "escape-result",
+          "sketchVisible": false,
+          "panel": "",
+          "fields": [],
+          "undo": true,
+          "redo": false
+        },
+        {
+          "label": "escape-document-preserved",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [],
+            "outputs": {},
+            "nextId": 0
+          }
+        }
+      ]
+    },
+    {
+      "case": "centre-arc-regression",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "arc-end-click",
+          "c": [
+            20,
+            15
+          ],
+          "r": 10,
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "arc-end-click",
+          "c": [
+            45,
+            15
+          ],
+          "r": 5,
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "arc-end-click",
+          "c": [
+            40,
+            20
+          ],
+          "r": 7,
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "arc-end-click",
+          "c": [
+            40,
+            20
+          ],
+          "r": 7,
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "arc-end-click",
+          "c": [
+            20,
+            15
+          ],
+          "r": 10,
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "dirty-keep-preview-separated",
+          "stage": 1,
+          "completed": [
+            {
+              "x": 408.332,
+              "y": 464.722,
+              "width": 141.112,
+              "height": 70.556,
+              "construction": false
+            }
+          ],
+          "allIncludingPreview": [
+            {
+              "x": 408.332,
+              "y": 464.722,
+              "width": 141.112,
+              "height": 70.556,
+              "construction": false
+            }
+          ]
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "arc-end-click",
+          "c": [
+            20,
+            15
+          ],
+          "r": 10,
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "dirty-keep-preview-separated",
+          "stage": 2,
+          "completed": [
+            {
+              "x": 408.332,
+              "y": 464.722,
+              "width": 141.112,
+              "height": 70.556,
+              "construction": false
+            }
+          ],
+          "allIncludingPreview": [
+            {
+              "x": 408.332,
+              "y": 464.722,
+              "width": 141.112,
+              "height": 70.556,
+              "construction": false
+            },
+            {
+              "x": 690.556,
+              "y": 535.278,
+              "width": 0,
+              "height": 0,
+              "construction": false
+            }
+          ]
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "arc-end-click",
+          "c": [
+            20,
+            15
+          ],
+          "r": 10,
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "arc-end-click",
+          "c": [
+            20,
+            15
+          ],
+          "r": 10,
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Centre arc",
+          "buttons": 1
+        },
+        {
+          "label": "arc-end-click",
+          "c": [
+            20,
+            15
+          ],
+          "r": 10,
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "tool-Line",
+          "buttons": 1
+        },
+        {
+          "label": "joined-arc-line-history-boundary",
+          "joinUndoEnabled": true,
+          "joined": [
+            {
+              "x": 408.332,
+              "y": 464.722,
+              "width": 141.112,
+              "height": 70.556,
+              "construction": false
+            },
+            {
+              "x": 408.332,
+              "y": 535.278,
+              "width": 141.112,
+              "height": 0,
+              "construction": false
+            }
+          ],
+          "policy": "No inferred identity match for a newly joined shape; connected-outline reselection is not qualified."
+        },
+        {
+          "label": "04-semicircle-extrude-extrude-hud",
+          "operation": null,
+          "depthSelect": 0,
+          "hudText": "ExtrudepreviewProfileSketch 1DistancemmAny number except 0 mmDraft°CancelApply"
+        },
+        {
+          "label": "completed-centre-arc",
+          "enabled": true,
+          "first": [
+            {
+              "x": 408.332,
+              "y": 464.722,
+              "width": 141.112,
+              "height": 70.556,
+              "construction": false
+            }
+          ],
+          "panel": "SKETCH · Centre arcPlaneXY (top)XZ (front)YZ (right)OffsetmmAngle°Object snaps · 6/6EndpointMidpointCentreQuadrantOriginEdge crossingOpen profile · click the first point to closeXYEdge1R2CONSTRAINTS · 1Arcedge 1 ccwCURVESMake curves of the sketch",
+          "atomic": true,
+          "reopened": true
+        }
+      ]
+    },
+    {
+      "case": "ellipse-regression",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Ellipse",
+          "buttons": 1
+        },
+        {
+          "label": "05-extruded-extrude-hud",
+          "operation": null,
+          "depthSelect": 0,
+          "hudText": "ExtrudepreviewProfileSketch 1DistancemmAny number except 0 mmDraft°CancelApply"
+        },
+        {
+          "label": "completed-ellipse",
+          "enabled": true,
+          "first": [
+            {
+              "x": 408.332,
+              "y": 500,
+              "width": 141.112,
+              "height": 70.556,
+              "construction": false
+            }
+          ],
+          "atomic": true,
+          "refusalPreserves": true,
+          "panelRegression": true,
+          "reopened": true
+        }
+      ]
+    },
+    {
+      "case": "slot-regression",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "pixel": [
+            408.331896883073,
+            549.3893247444661
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "actual": {
+            "x": 10,
+            "y": 10,
+            "length": 20,
+            "width": 6
+          }
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              35,
+              20
+            ],
+            "b": [
+              50,
+              20
+            ],
+            "r": 2
+          },
+          "pixel": [
+            584.7221846003865,
+            485.8889257997706
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              35,
+              20
+            ],
+            "b": [
+              50,
+              20
+            ],
+            "r": 2
+          },
+          "actual": {
+            "x": 35,
+            "y": 20,
+            "length": 15,
+            "width": 4
+          }
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              35,
+              20
+            ],
+            "b": [
+              50,
+              20
+            ],
+            "r": 2
+          },
+          "pixel": [
+            584.7221846003865,
+            485.8889257997706
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              35,
+              20
+            ],
+            "b": [
+              50,
+              20
+            ],
+            "r": 2
+          },
+          "actual": {
+            "x": 35,
+            "y": 20,
+            "length": 15,
+            "width": 4
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "pixel": [
+            408.331896883073,
+            549.3893247444661
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "actual": {
+            "x": 10,
+            "y": 10,
+            "length": 20,
+            "width": 6
+          }
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              35,
+              20
+            ],
+            "b": [
+              50,
+              20
+            ],
+            "r": 2
+          },
+          "pixel": [
+            584.7221846003865,
+            485.8889257997706
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              35,
+              20
+            ],
+            "b": [
+              50,
+              20
+            ],
+            "r": 2
+          },
+          "actual": {
+            "x": 35,
+            "y": 20,
+            "length": 15,
+            "width": 4
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "pixel": [
+            408.331896883073,
+            549.3893247444661
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "actual": {
+            "x": 10,
+            "y": 10,
+            "length": 20,
+            "width": 6
+          }
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              35,
+              20
+            ],
+            "b": [
+              50,
+              20
+            ],
+            "r": 2
+          },
+          "pixel": [
+            584.7221846003865,
+            485.8889257997706
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              35,
+              20
+            ],
+            "b": [
+              50,
+              20
+            ],
+            "r": 2
+          },
+          "actual": {
+            "x": 35,
+            "y": 20,
+            "length": 15,
+            "width": 4
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              30,
+              20
+            ],
+            "b": [
+              45,
+              20
+            ],
+            "r": 2
+          },
+          "pixel": [
+            549.4444969730451,
+            485.8889257997706
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              30,
+              20
+            ],
+            "b": [
+              45,
+              20
+            ],
+            "r": 2
+          },
+          "actual": {
+            "x": 30,
+            "y": 20,
+            "length": 15,
+            "width": 4
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              30,
+              20
+            ],
+            "b": [
+              45,
+              20
+            ],
+            "r": 2
+          },
+          "pixel": [
+            549.4444969730451,
+            485.8889257997706
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              30,
+              20
+            ],
+            "b": [
+              45,
+              20
+            ],
+            "r": 2
+          },
+          "actual": {
+            "x": 30,
+            "y": 20,
+            "length": 15,
+            "width": 4
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "pixel": [
+            408.331896883073,
+            549.3893247444661
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "actual": {
+            "x": 10,
+            "y": 10,
+            "length": 20,
+            "width": 6
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "pixel": [
+            408.331896883073,
+            549.3893247444661
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "actual": {
+            "x": 10,
+            "y": 10,
+            "length": 20,
+            "width": 6
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "pixel": [
+            408.331896883073,
+            549.3893247444661
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "actual": {
+            "x": 10,
+            "y": 10,
+            "length": 20,
+            "width": 6
+          }
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "pixel": [
+            408.331896883073,
+            549.3893247444661
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              10,
+              10
+            ],
+            "b": [
+              30,
+              10
+            ],
+            "r": 3
+          },
+          "actual": {
+            "x": 10,
+            "y": 10,
+            "length": 20,
+            "width": 6
+          }
+        },
+        {
+          "label": "06-slot-extruded-extrude-hud",
+          "operation": null,
+          "depthSelect": 0,
+          "hudText": "ExtrudepreviewProfileSketch 1DistancemmAny number except 0 mmDraft°CancelApply"
+        },
+        {
+          "label": "completed-slot-undo",
+          "enabled": true,
+          "completed": [
+            {
+              "x": 387.164,
+              "y": 549.389,
+              "width": 183.447,
+              "height": 42.334,
+              "construction": false
+            }
+          ],
+          "atomic": true,
+          "mixed": true,
+          "keepDiscard": true,
+          "reopened": true
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              10,
+              8
+            ],
+            "b": [
+              30,
+              8
+            ],
+            "r": 2
+          },
+          "pixel": [
+            408.3312803467993,
+            570.5564472788958
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              10,
+              8
+            ],
+            "b": [
+              30,
+              8
+            ],
+            "r": 2
+          },
+          "actual": {
+            "x": 10,
+            "y": 8,
+            "length": 20,
+            "width": 4
+          }
+        },
+        {
+          "label": "tool-Slot",
+          "buttons": 1
+        },
+        {
+          "label": "slot-width-target",
+          "desired": {
+            "a": [
+              10,
+              22
+            ],
+            "b": [
+              30,
+              22
+            ],
+            "r": 2
+          },
+          "pixel": [
+            408.33415747584525,
+            471.77792335011424
+          ],
+          "hit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-post-preview-hit",
+          "finalHit": {
+            "tag": "CANVAS",
+            "classes": "vp-canvas",
+            "canvas": true
+          }
+        },
+        {
+          "label": "slot-width-authored-result",
+          "desired": {
+            "a": [
+              10,
+              22
+            ],
+            "b": [
+              30,
+              22
+            ],
+            "r": 2
+          },
+          "actual": {
+            "x": 10,
+            "y": 22,
+            "length": 20,
+            "width": 4
+          }
+        },
+        {
+          "label": "13-plate-extruded-extrude-hud",
+          "operation": null,
+          "depthSelect": 0,
+          "hudText": "ExtrudepreviewProfileSketch 1DistancemmAny number except 0 mmDraft°CancelApply"
+        }
+      ]
+    },
+    {
+      "case": "circle-regression",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "06-cylinder-extrude-hud",
+          "operation": null,
+          "depthSelect": 0,
+          "hudText": "ExtrudepreviewProfileSketch 1DistancemmAny number except 0 mmDraft°CancelApply"
+        },
+        {
+          "label": "completed-circle-undo",
+          "enabled": true,
+          "preview": [
+            {
+              "x": 373.053,
+              "y": 535.278,
+              "width": 70.556,
+              "height": 70.557,
+              "construction": false
+            }
+          ],
+          "completed": [
+            {
+              "x": 373.053,
+              "y": 535.278,
+              "width": 70.556,
+              "height": 70.557,
+              "construction": false
+            }
+          ],
+          "atomicUndoRedo": true,
+          "repeated": true,
+          "existingRectanglePreserved": true,
+          "reopened": true
+        }
+      ]
+    },
+    {
+      "case": "rectangle-regression",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "clear-rectangle-undo",
+          "undoEnabled": true
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Circle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "degenerate-same-point",
+          "undoRedo": true,
+          "documentUnchanged": true
+        },
+        {
+          "label": "degenerate-zero-width",
+          "undoRedo": true,
+          "documentUnchanged": true
+        },
+        {
+          "label": "degenerate-zero-height",
+          "undoRedo": true,
+          "documentUnchanged": true
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "tool-Select",
+          "buttons": 1
+        },
+        {
+          "label": "framing"
+        },
+        {
+          "label": "tool-Rectangle",
+          "buttons": 1
+        },
+        {
+          "label": "06-extruded-extrude-hud",
+          "operation": null,
+          "depthSelect": 0,
+          "hudText": "ExtrudepreviewProfileSketch 1DistancemmAny number except 0 mmDraft°CancelApply"
+        }
+      ]
+    }
+  ],
+  "pendingSemanticsExactEquality": true,
+  "checks": {
+    "focusedTests": 72,
+    "lint": "PASS",
+    "studioTypes": "PASS",
+    "studioBuild": "PASS",
+    "buildSeconds": 6.29
+  }
+}

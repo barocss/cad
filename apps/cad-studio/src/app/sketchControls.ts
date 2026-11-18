@@ -97,7 +97,9 @@ export const switchTool = (s: SketchState, tool: SketchTool): SketchState => {
   s = { ...s, picked: [], editDim: null };
   if (tool !== 'band' && s.bandPicks) { s = { ...s }; delete s.bandPicks; } // (Picks belong to the Band tool.)
   const chain = s.shape?.kind === 'polygon' && !s.shape.closed && (tool === 'polygon' || tool === 'arc') && (s.tool === 'polygon' || s.tool === 'arc');
-  if (chain && s.shape?.kind === 'polygon') return { ...s, tool, shape: { ...s.shape, pending: false } };
+  // A completed Line/Arc chain keeps its exact history owner across tool changes.
+  // An unfinished bend still follows the existing implicit-settle policy.
+  if (chain && s.shape?.kind === 'polygon') return { ...s, tool, shape: s.shape.pending ? { ...s.shape, pending: false } : s.shape };
   // A closed shape stays in the sketch beside the next one; so does a construction line (open or not).
   // (So do open lines and arcs: pieces meeting end to end join into an outline, and Trim works on them.)
   const keep = s.shape && (shapeNode(s.shape) || ((s.shape.construction || s.shape.kind === 'bezier' || s.shape.kind === 'polygon') && (s.shape.kind !== 'polygon' || s.shape.points.length > 1)));
