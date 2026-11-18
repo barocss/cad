@@ -1,0 +1,650 @@
+{
+  "baseline": {
+    "runStatus": "PASS",
+    "observations": [
+      {
+        "label": "x-07-native",
+        "authoredCentres": [
+          [
+            10.123456789,
+            15
+          ],
+          [
+            45.1235,
+            15
+          ]
+        ],
+        "intendedCentres": [
+          [
+            10.123456789,
+            15
+          ],
+          [
+            45.123456789,
+            15
+          ]
+        ],
+        "nativeCentres": [
+          [
+            45.1235,
+            15,
+            0
+          ],
+          [
+            10.123456789000002,
+            15,
+            0
+          ]
+        ],
+        "centreDistance": 35.000043211,
+        "intendedDistance": 35,
+        "distanceError": 4.32109999977115e-05,
+        "directionErrorY": 0,
+        "volume": 990.7974844363105,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": 0.0010370640004566667,
+        "requestedPrecision": "FAIL",
+        "lifecycleNative": "PASS"
+      },
+      {
+        "label": "x-09-reopened-native",
+        "authoredCentres": [
+          [
+            10.123456789,
+            15
+          ],
+          [
+            45.1235,
+            15
+          ]
+        ],
+        "intendedCentres": [
+          [
+            10.123456789,
+            15
+          ],
+          [
+            45.123456789,
+            15
+          ]
+        ],
+        "nativeCentres": [
+          [
+            45.1235,
+            15,
+            0
+          ],
+          [
+            10.123456789000002,
+            15,
+            0
+          ]
+        ],
+        "centreDistance": 35.000043211,
+        "intendedDistance": 35,
+        "distanceError": 4.32109999977115e-05,
+        "directionErrorY": 0,
+        "volume": 990.7974844363105,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": 0.0010370640004566667,
+        "requestedPrecision": "FAIL",
+        "lifecycleNative": "PASS"
+      },
+      {
+        "label": "y-07-native",
+        "authoredCentres": [
+          [
+            10,
+            15.234567891
+          ],
+          [
+            45,
+            15.2346
+          ]
+        ],
+        "intendedCentres": [
+          [
+            10,
+            15.234567891
+          ],
+          [
+            45,
+            15.234567891
+          ]
+        ],
+        "nativeCentres": [
+          [
+            45,
+            15.2346,
+            0
+          ],
+          [
+            9.999999999999996,
+            15.234567891,
+            0
+          ]
+        ],
+        "centreDistance": 35.00000000001473,
+        "intendedDistance": 35,
+        "distanceError": 1.4729550912306877e-11,
+        "directionErrorY": 3.21090000010571e-05,
+        "volume": 990.7964473726634,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": 3.533386916387826e-10,
+        "requestedPrecision": "FAIL",
+        "lifecycleNative": "PASS"
+      },
+      {
+        "label": "y-09-reopened-native",
+        "authoredCentres": [
+          [
+            10,
+            15.234567891
+          ],
+          [
+            45,
+            15.2346
+          ]
+        ],
+        "intendedCentres": [
+          [
+            10,
+            15.234567891
+          ],
+          [
+            45,
+            15.234567891
+          ]
+        ],
+        "nativeCentres": [
+          [
+            45,
+            15.2346,
+            0
+          ],
+          [
+            9.999999999999996,
+            15.234567891,
+            0
+          ]
+        ],
+        "centreDistance": 35.00000000001473,
+        "intendedDistance": 35,
+        "distanceError": 1.4729550912306877e-11,
+        "directionErrorY": 3.21090000010571e-05,
+        "volume": 990.7964473726634,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": 3.533386916387826e-10,
+        "requestedPrecision": "FAIL",
+        "lifecycleNative": "PASS"
+      }
+    ],
+    "changes": [],
+    "errors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  "fixed": {
+    "runStatus": "PASS",
+    "observations": [
+      {
+        "label": "x-07-native",
+        "authoredCentres": [
+          [
+            10.123456789,
+            15
+          ],
+          [
+            45.123456789,
+            15
+          ]
+        ],
+        "intendedCentres": [
+          [
+            10.123456789,
+            15
+          ],
+          [
+            45.123456789,
+            15
+          ]
+        ],
+        "nativeCentres": [
+          [
+            45.123456789,
+            15,
+            0
+          ],
+          [
+            10.123456789000002,
+            15,
+            0
+          ]
+        ],
+        "centreDistance": 35,
+        "intendedDistance": 35,
+        "distanceError": 0,
+        "directionErrorY": 0,
+        "volume": 990.79644737231,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": 0,
+        "requestedPrecision": "PASS",
+        "lifecycleNative": "PASS"
+      },
+      {
+        "label": "x-09-reopened-native",
+        "authoredCentres": [
+          [
+            10.123456789,
+            15
+          ],
+          [
+            45.123456789,
+            15
+          ]
+        ],
+        "intendedCentres": [
+          [
+            10.123456789,
+            15
+          ],
+          [
+            45.123456789,
+            15
+          ]
+        ],
+        "nativeCentres": [
+          [
+            45.123456789,
+            15,
+            0
+          ],
+          [
+            10.123456789000002,
+            15,
+            0
+          ]
+        ],
+        "centreDistance": 35,
+        "intendedDistance": 35,
+        "distanceError": 0,
+        "directionErrorY": 0,
+        "volume": 990.79644737231,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": 0,
+        "requestedPrecision": "PASS",
+        "lifecycleNative": "PASS"
+      },
+      {
+        "label": "x-repeat-1-native",
+        "authoredCentres": [
+          [
+            10.123456789,
+            16.345678912
+          ],
+          [
+            45.123456789,
+            16.345678912
+          ]
+        ],
+        "intendedCentres": [
+          [
+            9.456789123,
+            16.345678912
+          ],
+          [
+            45.123456789,
+            16.345678912
+          ]
+        ],
+        "nativeCentres": [
+          [
+            45.123456789,
+            16.345678912,
+            0
+          ],
+          [
+            10.123456789000002,
+            16.345678912,
+            0
+          ]
+        ],
+        "centreDistance": 35,
+        "intendedDistance": 35,
+        "distanceError": 0,
+        "directionErrorY": 0,
+        "volume": 990.7964473723106,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": 5.684341886080801e-13,
+        "requestedPrecision": "PASS",
+        "lifecycleNative": "PASS"
+      },
+      {
+        "label": "x-repeat-0-native",
+        "authoredCentres": [
+          [
+            9.456789123,
+            16.345678912
+          ],
+          [
+            44.456789123,
+            16.345678912
+          ]
+        ],
+        "intendedCentres": [
+          [
+            9.456789123,
+            16.345678912
+          ],
+          [
+            44.456789123,
+            16.345678912
+          ]
+        ],
+        "nativeCentres": [
+          [
+            44.456789123,
+            16.345678912,
+            0
+          ],
+          [
+            9.456789123,
+            16.345678912,
+            0
+          ]
+        ],
+        "centreDistance": 35,
+        "intendedDistance": 35,
+        "distanceError": 0,
+        "directionErrorY": 0,
+        "volume": 990.7964473723105,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": 4.547473508864641e-13,
+        "requestedPrecision": "PASS",
+        "lifecycleNative": "PASS"
+      },
+      {
+        "label": "x-repeat-final-native",
+        "authoredCentres": [
+          [
+            9.456789123,
+            16.345678912
+          ],
+          [
+            44.456789123,
+            16.345678912
+          ]
+        ],
+        "intendedCentres": [
+          [
+            9.456789123,
+            16.345678912
+          ],
+          [
+            44.456789123,
+            16.345678912
+          ]
+        ],
+        "nativeCentres": [
+          [
+            44.456789123,
+            16.345678912,
+            0
+          ],
+          [
+            9.456789123,
+            16.345678912,
+            0
+          ]
+        ],
+        "centreDistance": 35,
+        "intendedDistance": 35,
+        "distanceError": 0,
+        "directionErrorY": 0,
+        "volume": 990.7964473723105,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": 4.547473508864641e-13,
+        "requestedPrecision": "PASS",
+        "lifecycleNative": "PASS"
+      },
+      {
+        "label": "y-07-native",
+        "authoredCentres": [
+          [
+            10,
+            15.234567891
+          ],
+          [
+            45,
+            15.234567891
+          ]
+        ],
+        "intendedCentres": [
+          [
+            10,
+            15.234567891
+          ],
+          [
+            45,
+            15.234567891
+          ]
+        ],
+        "nativeCentres": [
+          [
+            45,
+            15.234567891,
+            0
+          ],
+          [
+            10.000000000000004,
+            15.234567891000001,
+            0
+          ]
+        ],
+        "centreDistance": 35,
+        "intendedDistance": 35,
+        "distanceError": 0,
+        "directionErrorY": 0,
+        "volume": 990.7964473723107,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": 6.821210263296962e-13,
+        "requestedPrecision": "PASS",
+        "lifecycleNative": "PASS"
+      },
+      {
+        "label": "y-09-reopened-native",
+        "authoredCentres": [
+          [
+            10,
+            15.234567891
+          ],
+          [
+            45,
+            15.234567891
+          ]
+        ],
+        "intendedCentres": [
+          [
+            10,
+            15.234567891
+          ],
+          [
+            45,
+            15.234567891
+          ]
+        ],
+        "nativeCentres": [
+          [
+            45,
+            15.234567891,
+            0
+          ],
+          [
+            10.000000000000004,
+            15.234567891000001,
+            0
+          ]
+        ],
+        "centreDistance": 35,
+        "intendedDistance": 35,
+        "distanceError": 0,
+        "directionErrorY": 0,
+        "volume": 990.7964473723107,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": 6.821210263296962e-13,
+        "requestedPrecision": "PASS",
+        "lifecycleNative": "PASS"
+      },
+      {
+        "label": "y-repeat-0-native",
+        "authoredCentres": [
+          [
+            11.345678912,
+            15.234567891
+          ],
+          [
+            46.345678912,
+            15.234567891
+          ]
+        ],
+        "intendedCentres": [
+          [
+            11.345678912,
+            14.456789123
+          ],
+          [
+            46.345678912,
+            15.234567891
+          ]
+        ],
+        "nativeCentres": [
+          [
+            46.345678912,
+            15.234567891,
+            0
+          ],
+          [
+            11.345678912000004,
+            15.234567891000001,
+            0
+          ]
+        ],
+        "centreDistance": 35,
+        "intendedDistance": 35,
+        "distanceError": 0,
+        "directionErrorY": 0,
+        "volume": 990.7964473723105,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": 4.547473508864641e-13,
+        "requestedPrecision": "PASS",
+        "lifecycleNative": "PASS"
+      },
+      {
+        "label": "y-repeat-1-native",
+        "authoredCentres": [
+          [
+            11.345678912,
+            14.456789123
+          ],
+          [
+            46.345678912,
+            14.456789123
+          ]
+        ],
+        "intendedCentres": [
+          [
+            11.345678912,
+            14.456789123
+          ],
+          [
+            46.345678912,
+            14.456789123
+          ]
+        ],
+        "nativeCentres": [
+          [
+            46.345678912,
+            14.456789123,
+            0
+          ],
+          [
+            11.345678912,
+            14.456789123,
+            0
+          ]
+        ],
+        "centreDistance": 35,
+        "intendedDistance": 35,
+        "distanceError": 0,
+        "directionErrorY": 0,
+        "volume": 990.7964473723098,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": -2.2737367544323206e-13,
+        "requestedPrecision": "PASS",
+        "lifecycleNative": "PASS"
+      },
+      {
+        "label": "y-repeat-final-native",
+        "authoredCentres": [
+          [
+            11.345678912,
+            14.456789123
+          ],
+          [
+            46.345678912,
+            14.456789123
+          ]
+        ],
+        "intendedCentres": [
+          [
+            11.345678912,
+            14.456789123
+          ],
+          [
+            46.345678912,
+            14.456789123
+          ]
+        ],
+        "nativeCentres": [
+          [
+            46.345678912,
+            14.456789123,
+            0
+          ],
+          [
+            11.345678912,
+            14.456789123,
+            0
+          ]
+        ],
+        "centreDistance": 35,
+        "intendedDistance": 35,
+        "distanceError": 0,
+        "directionErrorY": 0,
+        "volume": 990.7964473723098,
+        "intendedVolume": 990.79644737231,
+        "intendedVolumeError": -2.2737367544323206e-13,
+        "requestedPrecision": "PASS",
+        "lifecycleNative": "PASS"
+      }
+    ],
+    "changes": [],
+    "errors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  }
+}
