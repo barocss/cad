@@ -1,0 +1,110 @@
+{
+  "baselineCommit": "2bdf45d78",
+  "runs": {
+    "baseline": {
+      "status": "PASS",
+      "phase": "open feature editor 2",
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    "fixed-first": {
+      "status": "FAIL",
+      "phase": "Apply feature editor fixed-axis-x",
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": "Fixture compared internal B-rep face IDs across axis-dependent representations. Geometry and document changes passed first; later stages were not run in this attempt."
+    },
+    "fixed": {
+      "status": "PASS",
+      "phase": "open feature editor 2",
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    "x-count": {
+      "status": "PASS",
+      "phase": "Apply feature editor 1440-count-four",
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    "z-position": {
+      "status": "PASS",
+      "phase": "open feature editor 2",
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    "z-spread": {
+      "status": "PASS",
+      "phase": "open feature editor 2",
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    }
+  },
+  "focusedTests": {
+    "passed": 30,
+    "total": 30
+  },
+  "types": {
+    "Model": "PASS",
+    "Studio": "PASS",
+    "originalInterruptedAttempt": "SIGTERM during resource handoff; not a product type error"
+  },
+  "build": {
+    "status": "PASS",
+    "viteSeconds": 7.68
+  },
+  "limits": [
+    "Only terminal plain XY box, four quarter-turn copies at world-origin with no custom pivot.",
+    "Native internal IDs/order may change; semantic names and independently rotated named boundaries were checked.",
+    "No downstream reference, arbitrary seed, other count, partial span, custom pivot, sheet, assembly or general topology guarantee.",
+    "Full suites, mobile, other browsers, assistive technology: NOT_RUN."
+  ],
+  "integratedDependency": "d47c4985f",
+  "diskGiB": {
+    "finalTypesStart": 10.75,
+    "finalTypesEnd": 8.68,
+    "reserve": 2
+  }
+}

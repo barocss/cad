@@ -34,7 +34,7 @@ function edited(nodes: readonly ModelNode[], index: number, v: Values, params?: 
   let out = [...nodes];
   for (const f of editFields(nodes, index, params)) {
     // End/axis changes belong to History's explicit draft controls, not a frozen drag HUD.
-    if (!(f.key in v) || f.kind === 'toggle' || ((nodes[index]?.kind === 'hole' && f.key === 'end') || (nodes[index]?.kind === 'extrude' && f.key === 'cutDepthMode') || (nodes[index]?.kind === 'revolve' && (f.key === 'sketchAxis' || f.key === 'fixedAxisPosition')) || (nodes[index]?.kind === 'shell' && f.key === 'shellOpening') || (nodes[index]?.kind === 'fillet' && (f.key === 'filletSection' || f.key === 'filletRadiusMode')))) continue;
+    if (!(f.key in v) || f.kind === 'toggle' || ((nodes[index]?.kind === 'hole' && f.key === 'end') || (nodes[index]?.kind === 'extrude' && f.key === 'cutDepthMode') || (nodes[index]?.kind === 'revolve' && (f.key === 'sketchAxis' || f.key === 'fixedAxisPosition')) || (nodes[index]?.kind === 'circular-pattern' && f.key === 'patternAxis') || (nodes[index]?.kind === 'shell' && f.key === 'shellOpening') || (nodes[index]?.kind === 'fillet' && (f.key === 'filletSection' || f.key === 'filletRadiusMode')))) continue;
     if (f.kind === 'number') {
       const x = Number(v[f.key]);
       const unchangedStart = f.key === 'from' && isSketchAnchoredCut(nodes, index) && x === f.get(nodes);
@@ -275,7 +275,7 @@ export function editCommand(index: number, nodes: readonly ModelNode[], rows: Pi
   if (node.kind === 'band-surface') return bandSurfaceEditCommand(index, node);
   if (node.kind === 'text-relief') return textReliefEditCommand(index, node);
   const shape = shapeEdit(index, nodes, rows); if (shape) return shape;
-  const fields = editFields(nodes, index, rows.parameters).filter(f => f.kind !== 'toggle' && !(node.kind === 'hole' && f.key === 'end') && !(node.kind === 'extrude' && f.key === 'cutDepthMode') && !(node.kind === 'revolve' && (f.key === 'sketchAxis' || f.key === 'fixedAxisPosition')) && !(node.kind === 'shell' && f.key === 'shellOpening') && !(node.kind === 'fillet' && (f.key === 'filletSection' || f.key === 'filletRadiusMode')) && !(f.kind === 'number' && Number.isNaN(f.get(nodes))));
+  const fields = editFields(nodes, index, rows.parameters).filter(f => f.kind !== 'toggle' && !(node.kind === 'hole' && f.key === 'end') && !(node.kind === 'extrude' && f.key === 'cutDepthMode') && !(node.kind === 'revolve' && (f.key === 'sketchAxis' || f.key === 'fixedAxisPosition')) && !(node.kind === 'circular-pattern' && f.key === 'patternAxis') && !(node.kind === 'shell' && f.key === 'shellOpening') && !(node.kind === 'fillet' && (f.key === 'filletSection' || f.key === 'filletRadiusMode')) && !(f.kind === 'number' && Number.isNaN(f.get(nodes))));
   if (!fields.length) return null;
   return {
     id: 'edit', label: node.kind === 'split' ? 'Edit Split' : `Edit ${featureLabel(node, index, nodes)}`, icon: 'edit', group: 'modify', hint: 'Change this feature',

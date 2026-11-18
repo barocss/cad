@@ -1,3 +1,4 @@
+import { circularPatternDirection, setCircularPatternDirection } from './circularPatternDirection';
 import { fixedRevolveAxisPosition, setFixedRevolveAxisPosition } from './fixedRevolveAxisPosition';
 import { filletRadiusMode, setFilletRadiusMode } from './filletRadiusMode';
 import { featureId } from '../engine/ids';
@@ -1128,6 +1129,11 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       number('count', 'Count', undefined, n => (n as typeof node).count, (n, v) => ({ ...(n as typeof node), count: v }));
       break;
     case 'circular-pattern':
+      if (scope?.doc?.direct === undefined && !scope?.doc?.instances?.length && circularPatternDirection(nodes, i)) out.push({
+        kind: 'choice', key: 'patternAxis', label: 'Axis', options: axes(['x', 'y', 'z']),
+        get: current => circularPatternDirection(current, i)?.axis ?? '',
+        set: (current, value) => setCircularPatternDirection(current, i, value),
+      });
       if (node.axis === 'z' && typeof node.span === 'number' && Number.isFinite(node.span)) {
         number('span', 'Spread over', '°',
           n => n.kind === 'circular-pattern' && n.axis === 'z' && typeof n.span === 'number' ? n.span : NaN,

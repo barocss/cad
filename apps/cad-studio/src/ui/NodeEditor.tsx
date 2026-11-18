@@ -371,6 +371,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
                 retireEvaluation();
                 try {
                   const next = f.set(draft, e.target.value);
+                  if (f.key === 'patternAxis' && next[index] !== draft[index]) setTyped(values => Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'span' && key !== 'axisAt0' && key !== 'axisAt1')));
                   if (f.key === 'filletRadiusMode' && next[index] !== draft[index]) setTyped(values => Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'r' && key !== 'r1')));
                   if (f.key === 'filletSection' && next[index] !== draft[index]) setTyped(values => Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'rho' && key !== 'tension')));
                   if (f.key === 'end' && node?.kind === 'hole' && next[index] !== draft[index]) {
@@ -402,6 +403,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
           {range && <span id={rangeId} role={(rule === 'scale-factor' || rule === 'open-unit' || node?.kind === 'chamfer' && rule === 'positive') && invalidDimension ? 'status' : undefined} className={(rule === 'scale-factor' || rule === 'open-unit' || node?.kind === 'chamfer' && rule === 'positive') && invalidDimension ? 'hud-error small col-span-2' : 'muted small col-span-2'}>{range}</span>}
         </div>
       ); }) : node?.kind !== 'face-end-extrude' && <div className="empty">{node?.kind === 'sweep-curve' && onEditSketch ? 'Edit the profile dimensions with Edit sketch.' : savedFeatureEdit ? `Use ${savedFeatureEdit.label} to edit the saved group.` : 'This feature has no editable dimensions.'}</div>}
+      {node?.kind === 'circular-pattern' && <div className="muted small">Axis direction editing is limited to a final plain-box pattern: four copies at 90° through the world origin, with no custom pivot or later features.</div>}
       {node?.kind === 'linear-span-pattern' && <LinearSpanSpacing span={node.span} count={node.count} />}
       {draft[index]?.kind === 'fill-feature-pattern' && <FillPatternHints />}
       {onDelete && <button className="ghost danger" disabled={ordinaryLocked} aria-label="Delete feature" title="Delete this feature (and the sketch only it uses) · Undo restores it" onClick={event => remove(event.currentTarget)}><Icon name="delete" small /> Delete feature</button>}
