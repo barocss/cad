@@ -1,3 +1,4 @@
+import { isFlangeSourceSizeChange, admitFlangeSourceSizeChange, proveFlangeSourceSizeChange } from './flangeSourceSizeHistory';
 import { isFlangeRadiusSourceChange } from '@barocss/cad-model/app/flangeRadiusSourceEdit';
 import { proveFlangeRadiusSourceChange } from './flangeRadiusSourceHistory';
 import { isFlangeSourceThicknessChange, admitFlangeSourceThicknessChange, proveFlangeSourceThicknessChange } from './flangeSourceThicknessHistory';
@@ -78,6 +79,10 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     const flangeSourceThicknessFailure = {title: 'Flange source thickness not applied', hint: 'Apply only numeric Thickness on the unchanged plain sheet with one full-width inside Flange. Its original top edge must be verified.', detail: 'The original sheet, flange and references are unchanged.'};
     if (flangeSourceThicknessChanged && !admitFlangeSourceThicknessChange(doc, { ...doc, nodes }, editNode)) return Promise.resolve(flangeSourceThicknessFailure);
     const flangeSourceThicknessSource = flangeSourceThicknessChanged ? canonical(doc) : '', flangeSourceThicknessDraft = flangeSourceThicknessChanged ? canonical(nodes) : '';
+    const flangeSourceSizeChanged = isFlangeSourceSizeChange(doc, { ...doc, nodes }, editNode);
+    const flangeSourceSizeFailure = {title: 'Flange source size not applied', hint: 'Apply only one numeric Width or Depth change on the unchanged plain sheet with one full-width inside Flange using the sheet radius. Its original top edge must be verified.', detail: 'The original sheet, flange and references are unchanged.'};
+    if (flangeSourceSizeChanged && !admitFlangeSourceSizeChange(doc, { ...doc, nodes }, editNode)) return Promise.resolve(flangeSourceSizeFailure);
+    const flangeSourceSizeSource = flangeSourceSizeChanged ? canonical(doc) : '', flangeSourceSizeDraft = flangeSourceSizeChanged ? canonical(nodes) : '';
     const scope = owner.scope();
     const patternEdit = prepareLinearPatternHoleEdit(doc, nodes, editNode);
     if ('error' in patternEdit) return Promise.resolve(patternEdit.error);
@@ -112,12 +117,13 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     const resize = !heightResize && isRectangleFinishResize(doc,next,editNode), worker = owner.worker(), open = owner.open();
     const current = () => ownsDraft() && owner.document() === doc && owner.scope() === scope
       && owner.worker() === worker && owner.open() === open
+      && (!flangeSourceSizeChanged || canonical(doc) === flangeSourceSizeSource && canonical(nodes) === flangeSourceSizeDraft)
       && (!flangeSourceThicknessChanged || canonical(doc) === flangeSourceThicknessSource && canonical(nodes) === flangeSourceThicknessDraft)
       && (!reliefThicknessChanged || canChangeDocument() && canonical(doc) === reliefThicknessSource && canonical(nodes) === reliefThicknessDraft)
       && (!flangeMeasureChanged || canonical(doc) === flangeMeasureSource && canonical(nodes) === flangeMeasureDraft)
       && (!flangeRadiusSourceChanged || canonical(doc) === flangeRadiusSourceSource && canonical(nodes) === flangeRadiusSourceDraft)
       && (!flangePositionChanged || canonical(doc) === flangePositionSource && canonical(nodes) === flangePositionDraft)
-      && (!(heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeRadiusSourceChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
+      && (!(heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeRadiusSourceChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged || flangeSourceSizeChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
     return (async () => {
       if (reliefThicknessChanged) {
         if (!current()) return;
@@ -151,6 +157,23 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
           if (!repaired) return flangeSourceThicknessFailure;
           next = repaired; request = nextRevision();
         } catch { if (current()) return flangeSourceThicknessFailure; return; }
+      }
+
+      if (flangeSourceSizeChanged) {
+        if (!current()) return;
+        try {
+          const oldRevision = nextRevision();
+          const oldParent = await engine.part(prefixDoc(doc,2), oldRevision, 'refs');
+          if (!current()) return;
+          if (!oldParent.ok || oldParent.revision !== oldRevision) return flangeSourceSizeFailure;
+          const newRevision = nextRevision();
+          const newParent = await engine.part(prefixDoc(next,2), newRevision, 'refs');
+          if (!current()) return;
+          if (!newParent.ok || newParent.revision !== newRevision) return flangeSourceSizeFailure;
+          const repaired = proveFlangeSourceSizeChange(doc,next,oldParent.bodies,newParent.bodies);
+          if (!repaired) return flangeSourceSizeFailure;
+          next = repaired; request = nextRevision();
+        } catch { if (current()) return flangeSourceSizeFailure; return; }
       }
 
       if (flangePositionChanged) {
@@ -236,7 +259,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
         } catch { if (current()) return failure; return; }
       }
       const reply = await engine.evaluate(next, request);
-      if (!reply || !current() || (heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeRadiusSourceChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged) && reply.revision !== request) return;
+      if (!reply || !current() || (heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeRadiusSourceChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged || flangeSourceSizeChanged) && reply.revision !== request) return;
       if (reply.ok) {
         if (!resize) {
           const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated
