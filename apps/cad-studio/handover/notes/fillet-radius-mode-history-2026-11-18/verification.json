@@ -1,0 +1,103 @@
+{
+  "baseline-01": {
+    "status": "FAIL",
+    "phase": "open feature editor 2",
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "sourceFrozenCount": 1079,
+    "sourceAfterCleanupCount": 1079
+  },
+  "baseline-02": {
+    "status": "PASS",
+    "phase": "open feature editor 2",
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "sourceFrozenCount": 1079,
+    "sourceAfterCount": 1079,
+    "sourceAfterCleanupCount": 1079
+  },
+  "fixed-01": {
+    "status": "FAIL",
+    "phase": "source preparation",
+    "cleanup": [],
+    "errors": [],
+    "consoleErrors": [],
+    "sourceAfterCleanupCount": 0
+  },
+  "fixed-02": {
+    "status": "PASS",
+    "phase": "open feature editor 2",
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "sourceFrozenCount": 1081,
+    "sourceAfterCount": 1081,
+    "sourceAfterCleanupCount": 1081
+  },
+  "section-regression-02": {
+    "status": "PASS",
+    "phase": "open feature editor 2",
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "sourceFrozenCount": 1080,
+    "sourceAfterCount": 1080,
+    "sourceAfterCleanupCount": 1080
+  },
+  "identity-regression-02": {
+    "status": "PASS",
+    "phase": "open feature editor 1440-g2-varying reopened identity",
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "sourceFrozenCount": 1079,
+    "sourceAfterCount": 1079,
+    "sourceAfterCleanupCount": 1079
+  }
+}

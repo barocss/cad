@@ -1,3 +1,4 @@
+import { filletRadiusMode, setFilletRadiusMode } from './filletRadiusMode';
 import { featureId } from '../engine/ids';
 import { throughCutPlane, throughCutProblem } from '../engine/throughCut';
 import { checkFastenerSizeRow } from '../engine/fastenerSizeRows';
@@ -554,6 +555,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       }
       break;
     case 'fillet':
+      if (scope?.doc?.direct === undefined && !scope?.doc?.instances?.length && filletRadiusMode(nodes,i)) out.push({kind:'choice',key:'filletRadiusMode',label:'Radius mode',options:[{value:'constant',label:'Constant'},{value:'varying',label:'Varying'}],get: ns => filletRadiusMode(ns,i)?.mode ?? '',set:(ns,value)=>setFilletRadiusMode(ns,i,value)});
       if (scope?.doc?.direct === undefined && !scope?.doc?.instances?.length && filletSection(nodes,i)) out.push(filletSectionField(i));
       // (A varying radius: its two ends' radii, D100.)
       if (node.radii) {

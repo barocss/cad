@@ -1,3 +1,4 @@
+import { isFilletRadiusModeChange, proveFilletRadiusModeChange } from './filletRadiusModeHistory';
 import { isFilletSectionChange, proveFilletSectionChange } from './filletSectionHistory';
 import { isShellOpeningChange, proveShellOpeningChange } from './shellOpeningHistory';
 import { holeResultPieces } from '../app/holeResultPieces';
@@ -60,13 +61,27 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
       && (oldFillet.section?.kind ?? 'circular') !== (newFillet.section?.kind ?? 'circular');
     const sectionFailure = {title:'Section not applied',hint:'Apply only the section change on an unchanged plain box first. Keep the current section if its original edge cannot be verified.',detail:'The original document, edge and signature are unchanged.'};
     if (sectionChanged && !isFilletSectionChange(doc,next,editNode)) return Promise.resolve(sectionFailure);
+    const radiusModeChanged = oldFillet?.kind === 'fillet' && newFillet?.kind === 'fillet'
+      && (oldFillet.radii !== undefined) !== (newFillet.radii !== undefined);
+    const radiusModeFailure = {title:'Radius mode not applied',hint:'Apply only the mode change on an unchanged single box edge with two equal positive numeric end radii. Apply radius edits separately first.',detail:'The original document, edge, signature and radius controls are unchanged.'};
+    if (radiusModeChanged && !isFilletRadiusModeChange(doc,next,editNode)) return Promise.resolve(radiusModeFailure);
     let request = nextRevision();
     const heightResize = isRectangleFinishHeightResize(doc,next,editNode);
     const resize = !heightResize && isRectangleFinishResize(doc,next,editNode), worker = owner.worker(), open = owner.open();
     const current = () => ownsDraft() && owner.document() === doc && owner.scope() === scope
       && owner.worker() === worker && owner.open() === open
-      && (!(heightResize || openingChanged || sectionChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
+      && (!(heightResize || openingChanged || sectionChanged || radiusModeChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
     return (async () => {
+      if (radiusModeChanged) {
+        if (!current()) return;
+        try {
+          const parentRevision = nextRevision();
+          const parent = await engine.part(prefixDoc(doc,editNode),parentRevision,'refs');
+          if (!current()) return;
+          if (!parent.ok || parent.revision !== parentRevision || !proveFilletRadiusModeChange(doc,next,parent.bodies)) return radiusModeFailure;
+          request = nextRevision();
+        } catch { if (current()) return radiusModeFailure; return; }
+      }
       if (sectionChanged) {
         if (!current()) return;
         try {
@@ -110,7 +125,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
         } catch { if (current()) return failure; return; }
       }
       const reply = await engine.evaluate(next, request);
-      if (!reply || !current() || (heightResize || openingChanged || sectionChanged) && reply.revision !== request) return;
+      if (!reply || !current() || (heightResize || openingChanged || sectionChanged || radiusModeChanged) && reply.revision !== request) return;
       if (reply.ok) {
         if (!resize) {
           const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated

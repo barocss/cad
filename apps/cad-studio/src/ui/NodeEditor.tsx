@@ -242,8 +242,10 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
       {node?.kind === 'extrude' && fields.some(field => field.key === 'cutDepthMode') && <p className="small muted">Cut depth changes only this terminal cut. Distance starts at 8 mm from the attached sketch; edit it before Apply. Through all follows the current target.</p>}
       {node?.kind === 'extrude' && node.cutDepth === 'through' && !fields.some(field => field.key === 'cutDepthMode') && <div className="field"><span>Depth</span><span>Through all</span></div>}
       {node?.kind === 'fillet' && node.radii && <FilletEndpointNotice locations={filletEndpoints ?? {reason:'Endpoint locations are unavailable in this editing context.'}} />}
+      {fields.some(field => field.key === 'filletRadiusMode') && <p className="small muted">Radius mode changes preserve the same positive radius at both ends. Apply radius edits separately before changing mode.</p>}
+      {node?.kind === 'fillet' && node.radii && !fields.some(field => field.key === 'filletRadiusMode') && <p className="small muted">Constant conversion requires exactly two equal positive numeric end radii on a verified single box edge. Unequal radii and interior stations are kept unchanged. Apply equal end radii first if you intend to convert.</p>}
       {fields.some(field => field.key === 'filletSection') && <p className="small muted">Section changes keep the same original edge and radius. Conic starts at Rho 0.5. Apply section changes separately from Radius.</p>}
-      {filletType && <FilletTypeFields type={filletType} mode={draft[index]?.kind === 'fillet' && draft[index].radii ? 'varying' : 'constant'} section={node?.kind === 'fillet' ? node.section : undefined} hideSection={fields.some(field => field.key === 'filletSection')} fixed />}
+      {filletType && <FilletTypeFields type={filletType} mode={draft[index]?.kind === 'fillet' && draft[index].radii ? 'varying' : 'constant'} section={node?.kind === 'fillet' ? node.section : undefined} hideSection={fields.some(field => field.key === 'filletSection')} hideMode={fields.some(field => field.key === 'filletRadiusMode')} fixed />}
       {onEditSketch && <button className="ghost" aria-label="Edit sketch" title="Reopen the sketch this feature is made from, with its constraints" onClick={() => { retireEvaluation(); onEditSketch(); }}><Icon name="draw" small /> Edit sketch</button>}
       {insetBinding && insetTarget !== undefined && insetTargetNode && <div role="group" aria-label="Linked inset">
         <div className="field"><span>Inset source face</span><span className="break-all">{insetBinding.face}</span></div>
@@ -368,6 +370,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
                 retireEvaluation();
                 try {
                   const next = f.set(draft, e.target.value);
+                  if (f.key === 'filletRadiusMode' && next[index] !== draft[index]) setTyped(values => Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'r' && key !== 'r1')));
                   if (f.key === 'filletSection' && next[index] !== draft[index]) setTyped(values => Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'rho' && key !== 'tension')));
                   if (f.key === 'end' && node?.kind === 'hole' && next[index] !== draft[index]) {
                     setTyped(values => Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'depth')));
