@@ -113,6 +113,19 @@ export function drawingRevisionPrint(doc: StudioDoc): string {
     });
     stamp = modelPrint({ source: stamp, timingPulleys: canonical(timingPulleys) });
   }
+  // V pulley sections consume spacing only when more than one groove is made.
+  const vUses = new Map<string, boolean>();
+  for (const n of doc.nodes) if (n.kind === 'pulley' && !n.suppressed && driveRows.get(n.row)?.kind === 'v-belt')
+    vUses.set(n.row, (vUses.get(n.row) ?? false) || (n.grooves ?? 1) > 1);
+  if (vUses.size) {
+    const vPulleys = [...vUses.keys()].sort().map(id => {
+      const row = driveRows.get(id)!;
+      return [id, row.kind === 'v-belt' ? { angle: row.angle, datumWidth: row.datumWidth,
+        aboveDatum: row.aboveDatum, belowDatum: row.belowDatum, edge: row.edge,
+        ...(vUses.get(id) ? { spacing: row.spacing } : {}) } : null];
+    });
+    stamp = modelPrint({ source: stamp, vPulleys: canonical(vPulleys) });
+  }
   if (!doc.frames?.welds?.length) return stamp;
   const gone = new Set(doc.nodes.flatMap((n, i) => n.suppressed ? [i] : []));
   // Requested bead geometry, independent of kernel refusal caches. Symbol annotations
