@@ -71,7 +71,7 @@ await f.run(async () => {
         angles: committed.nodes.filter(node => node.kind === 'rotate').map(node => node.angle) });
       assert.fail('Invalid Count ' + value + ' enabled Apply and committed ' + Object.keys(committed.outputs).length + ' outputs.');
     }
-    await hud().getByText(/Z circular patterns with separate bodies use a whole-number Count from 2 to 36/i).waitFor();
+    await hud().getByText(/Z circular patterns use a whole-number Count from 2 to 36/i).waitFor();
     await count.press('Enter');
     assert.ok(await hud().isVisible());
     assert.ok(await apply.isDisabled());

@@ -1039,10 +1039,11 @@ const allCommands: Command[] = [
       }
       const span = Number(v.span ?? 360), pivot: [number, number, number] = [Number(v.px ?? 0), Number(v.py ?? 0), 0];
       if (v.result === 'separate') {
-        // Each copy a body of its own, turned about the axis by its share of the spread.
+        // Each copy stores an independent Rotate angle: preserve the authored share without display rounding.
+        // One-body span metadata keeps its separate, legacy rounded-step reader contract.
         const body = refOf(oneBody(ctx)!), step = z ? (span >= 360 ? 360 / n : span / (n - 1)) : 90;
         let doc = ctx.doc;
-        for (let c = 1; c < n; c++) doc = duplicateBody(doc, body, copy => ({ kind: 'rotate', parent: copy, axis: v.axis as Axis, angle: Math.round(step * c * 1e6) / 1e6, ...(z && (pivot[0] || pivot[1]) ? { pivot } : {}) })).doc;
+        for (let c = 1; c < n; c++) doc = duplicateBody(doc, body, copy => ({ kind: 'rotate', parent: copy, axis: v.axis as Axis, angle: step * c, ...(z && (pivot[0] || pivot[1]) ? { pivot } : {}) })).doc;
         return doc;
       }
       return withNode(ctx.doc, z

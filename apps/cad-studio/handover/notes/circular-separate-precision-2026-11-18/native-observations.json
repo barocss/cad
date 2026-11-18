@@ -1,0 +1,524 @@
+{
+  "baseline": {
+    "status": "PASS",
+    "observations": [
+      {
+        "label": "02-separate-native",
+        "baseline": true,
+        "span": 120.123456789,
+        "count": 4,
+        "pivot": [
+          12,
+          4,
+          0
+        ],
+        "step": 40.041152263,
+        "copies": [
+          {
+            "copy": 0,
+            "key": "b1",
+            "requestedAngle": 0,
+            "storedAngle": 0,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 0
+          },
+          {
+            "copy": 1,
+            "key": "b4",
+            "requestedAngle": 40.041152263,
+            "storedAngle": 40.041152,
+            "angleError": -2.630000039971492e-07,
+            "maxTargetCornerErrorMM": 2.005036602101887e-07
+          },
+          {
+            "copy": 2,
+            "key": "b7",
+            "requestedAngle": 80.082304526,
+            "storedAngle": 80.082305,
+            "angleError": 4.7400000369179907e-07,
+            "maxTargetCornerErrorMM": 3.6136401884437413e-07
+          },
+          {
+            "copy": 3,
+            "key": "b10",
+            "requestedAngle": 120.123456789,
+            "storedAngle": 120.123457,
+            "angleError": 2.109999996946499e-07,
+            "maxTargetCornerErrorMM": 1.608603426908208e-07
+          }
+        ]
+      },
+      {
+        "label": "04-redo-native",
+        "baseline": true,
+        "span": 120.123456789,
+        "count": 4,
+        "pivot": [
+          12,
+          4,
+          0
+        ],
+        "step": 40.041152263,
+        "copies": [
+          {
+            "copy": 0,
+            "key": "b1",
+            "requestedAngle": 0,
+            "storedAngle": 0,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 0
+          },
+          {
+            "copy": 1,
+            "key": "b4",
+            "requestedAngle": 40.041152263,
+            "storedAngle": 40.041152,
+            "angleError": -2.630000039971492e-07,
+            "maxTargetCornerErrorMM": 2.005036602101887e-07
+          },
+          {
+            "copy": 2,
+            "key": "b7",
+            "requestedAngle": 80.082304526,
+            "storedAngle": 80.082305,
+            "angleError": 4.7400000369179907e-07,
+            "maxTargetCornerErrorMM": 3.6136401884437413e-07
+          },
+          {
+            "copy": 3,
+            "key": "b10",
+            "requestedAngle": 120.123456789,
+            "storedAngle": 120.123457,
+            "angleError": 2.109999996946499e-07,
+            "maxTargetCornerErrorMM": 1.608603426908208e-07
+          }
+        ]
+      },
+      {
+        "label": "06-reopened-native",
+        "baseline": true,
+        "span": 120.123456789,
+        "count": 4,
+        "pivot": [
+          12,
+          4,
+          0
+        ],
+        "step": 40.041152263,
+        "copies": [
+          {
+            "copy": 0,
+            "key": "b1",
+            "requestedAngle": 0,
+            "storedAngle": 0,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 0
+          },
+          {
+            "copy": 1,
+            "key": "b4",
+            "requestedAngle": 40.041152263,
+            "storedAngle": 40.041152,
+            "angleError": -2.630000039971492e-07,
+            "maxTargetCornerErrorMM": 2.005036602101887e-07
+          },
+          {
+            "copy": 2,
+            "key": "b7",
+            "requestedAngle": 80.082304526,
+            "storedAngle": 80.082305,
+            "angleError": 4.7400000369179907e-07,
+            "maxTargetCornerErrorMM": 3.6136401884437413e-07
+          },
+          {
+            "copy": 3,
+            "key": "b10",
+            "requestedAngle": 120.123456789,
+            "storedAngle": 120.123457,
+            "angleError": 2.109999996946499e-07,
+            "maxTargetCornerErrorMM": 1.608603426908208e-07
+          }
+        ]
+      }
+    ],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "consoleErrors": []
+  },
+  "partial": {
+    "status": "PASS",
+    "observations": [
+      {
+        "label": "02-separate-native",
+        "baseline": false,
+        "span": 120.123456789,
+        "count": 4,
+        "pivot": [
+          12,
+          4,
+          0
+        ],
+        "step": 40.041152263,
+        "copies": [
+          {
+            "copy": 0,
+            "key": "b1",
+            "requestedAngle": 0,
+            "storedAngle": 0,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 0
+          },
+          {
+            "copy": 1,
+            "key": "b4",
+            "requestedAngle": 40.041152263,
+            "storedAngle": 40.041152263,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 1.0048591735576161e-14
+          },
+          {
+            "copy": 2,
+            "key": "b7",
+            "requestedAngle": 80.082304526,
+            "storedAngle": 80.082304526,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 7.105427357601002e-15
+          },
+          {
+            "copy": 3,
+            "key": "b10",
+            "requestedAngle": 120.123456789,
+            "storedAngle": 120.123456789,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 1.0048591735576161e-14
+          }
+        ]
+      },
+      {
+        "label": "04-redo-native",
+        "baseline": false,
+        "span": 120.123456789,
+        "count": 4,
+        "pivot": [
+          12,
+          4,
+          0
+        ],
+        "step": 40.041152263,
+        "copies": [
+          {
+            "copy": 0,
+            "key": "b1",
+            "requestedAngle": 0,
+            "storedAngle": 0,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 0
+          },
+          {
+            "copy": 1,
+            "key": "b4",
+            "requestedAngle": 40.041152263,
+            "storedAngle": 40.041152263,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 1.0048591735576161e-14
+          },
+          {
+            "copy": 2,
+            "key": "b7",
+            "requestedAngle": 80.082304526,
+            "storedAngle": 80.082304526,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 7.105427357601002e-15
+          },
+          {
+            "copy": 3,
+            "key": "b10",
+            "requestedAngle": 120.123456789,
+            "storedAngle": 120.123456789,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 1.0048591735576161e-14
+          }
+        ]
+      },
+      {
+        "label": "06-reopened-native",
+        "baseline": false,
+        "span": 120.123456789,
+        "count": 4,
+        "pivot": [
+          12,
+          4,
+          0
+        ],
+        "step": 40.041152263,
+        "copies": [
+          {
+            "copy": 0,
+            "key": "b1",
+            "requestedAngle": 0,
+            "storedAngle": 0,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 0
+          },
+          {
+            "copy": 1,
+            "key": "b4",
+            "requestedAngle": 40.041152263,
+            "storedAngle": 40.041152263,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 1.0048591735576161e-14
+          },
+          {
+            "copy": 2,
+            "key": "b7",
+            "requestedAngle": 80.082304526,
+            "storedAngle": 80.082304526,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 7.105427357601002e-15
+          },
+          {
+            "copy": 3,
+            "key": "b10",
+            "requestedAngle": 120.123456789,
+            "storedAngle": 120.123456789,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 1.0048591735576161e-14
+          }
+        ]
+      }
+    ],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "consoleErrors": []
+  },
+  "full": {
+    "status": "PASS",
+    "observations": [
+      {
+        "label": "02-separate-native",
+        "baseline": false,
+        "span": 360,
+        "count": 7,
+        "pivot": [
+          12,
+          4,
+          0
+        ],
+        "step": 51.42857142857143,
+        "copies": [
+          {
+            "copy": 0,
+            "key": "b1",
+            "requestedAngle": 0,
+            "storedAngle": 0,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 0
+          },
+          {
+            "copy": 1,
+            "key": "b4",
+            "requestedAngle": 51.42857142857143,
+            "storedAngle": 51.42857142857143,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 1.4210854715202004e-14
+          },
+          {
+            "copy": 2,
+            "key": "b7",
+            "requestedAngle": 102.85714285714286,
+            "storedAngle": 102.85714285714286,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 1.7763568394002505e-15
+          },
+          {
+            "copy": 3,
+            "key": "b10",
+            "requestedAngle": 154.28571428571428,
+            "storedAngle": 154.28571428571428,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 7.944109290391274e-15
+          },
+          {
+            "copy": 4,
+            "key": "b13",
+            "requestedAngle": 205.71428571428572,
+            "storedAngle": 205.71428571428572,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 0
+          },
+          {
+            "copy": 5,
+            "key": "b16",
+            "requestedAngle": 257.14285714285717,
+            "storedAngle": 257.14285714285717,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 7.32410687763558e-15
+          },
+          {
+            "copy": 6,
+            "key": "b19",
+            "requestedAngle": 308.57142857142856,
+            "storedAngle": 308.57142857142856,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 7.944109290391274e-15
+          }
+        ]
+      },
+      {
+        "label": "04-redo-native",
+        "baseline": false,
+        "span": 360,
+        "count": 7,
+        "pivot": [
+          12,
+          4,
+          0
+        ],
+        "step": 51.42857142857143,
+        "copies": [
+          {
+            "copy": 0,
+            "key": "b1",
+            "requestedAngle": 0,
+            "storedAngle": 0,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 0
+          },
+          {
+            "copy": 1,
+            "key": "b4",
+            "requestedAngle": 51.42857142857143,
+            "storedAngle": 51.42857142857143,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 1.4210854715202004e-14
+          },
+          {
+            "copy": 2,
+            "key": "b7",
+            "requestedAngle": 102.85714285714286,
+            "storedAngle": 102.85714285714286,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 1.7763568394002505e-15
+          },
+          {
+            "copy": 3,
+            "key": "b10",
+            "requestedAngle": 154.28571428571428,
+            "storedAngle": 154.28571428571428,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 7.944109290391274e-15
+          },
+          {
+            "copy": 4,
+            "key": "b13",
+            "requestedAngle": 205.71428571428572,
+            "storedAngle": 205.71428571428572,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 0
+          },
+          {
+            "copy": 5,
+            "key": "b16",
+            "requestedAngle": 257.14285714285717,
+            "storedAngle": 257.14285714285717,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 7.32410687763558e-15
+          },
+          {
+            "copy": 6,
+            "key": "b19",
+            "requestedAngle": 308.57142857142856,
+            "storedAngle": 308.57142857142856,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 7.944109290391274e-15
+          }
+        ]
+      },
+      {
+        "label": "06-reopened-native",
+        "baseline": false,
+        "span": 360,
+        "count": 7,
+        "pivot": [
+          12,
+          4,
+          0
+        ],
+        "step": 51.42857142857143,
+        "copies": [
+          {
+            "copy": 0,
+            "key": "b1",
+            "requestedAngle": 0,
+            "storedAngle": 0,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 0
+          },
+          {
+            "copy": 1,
+            "key": "b4",
+            "requestedAngle": 51.42857142857143,
+            "storedAngle": 51.42857142857143,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 1.4210854715202004e-14
+          },
+          {
+            "copy": 2,
+            "key": "b7",
+            "requestedAngle": 102.85714285714286,
+            "storedAngle": 102.85714285714286,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 1.7763568394002505e-15
+          },
+          {
+            "copy": 3,
+            "key": "b10",
+            "requestedAngle": 154.28571428571428,
+            "storedAngle": 154.28571428571428,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 7.944109290391274e-15
+          },
+          {
+            "copy": 4,
+            "key": "b13",
+            "requestedAngle": 205.71428571428572,
+            "storedAngle": 205.71428571428572,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 0
+          },
+          {
+            "copy": 5,
+            "key": "b16",
+            "requestedAngle": 257.14285714285717,
+            "storedAngle": 257.14285714285717,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 7.32410687763558e-15
+          },
+          {
+            "copy": 6,
+            "key": "b19",
+            "requestedAngle": 308.57142857142856,
+            "storedAngle": 308.57142857142856,
+            "angleError": 0,
+            "maxTargetCornerErrorMM": 7.944109290391274e-15
+          }
+        ]
+      }
+    ],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "consoleErrors": []
+  }
+}
