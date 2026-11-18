@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {createFlow} from './flow-helper.mjs';
+assert.ok(process.argv.includes('--baseline'),'Baseline observation only');
+const chamfer=process.argv.includes('--chamfer');
+const f=await createFlow({name:'rectangle-two-vertical-finish-height',output:process.argv[2],envFrozen:'RECTANGLE_TWO_VERTICAL_FINISH_HEIGHT_SOURCE_FROZEN',initialFiles:['apps/cad-studio/test/rectangle-two-vertical-finish-height-browser.mjs','apps/cad-studio/src/state/rectangleFinishResize.ts','apps/cad-studio/src/state/historyFeatureApply.ts'],qualification:'Observe Height10 to30 on a saved rectangle with two opposite vertical constant finishing edges.',limits:['Fixture is built as a supported model document and opened through actual UI; two-edge creation picking is NOT_RUN. No claim of new native support.'],inspectorSource:`
+import {readFileSync} from 'node:fs';
+import {partBreps,evaluatePart} from '@barocss/cad-model/engine/evaluate';
+import {signaturesOf} from '@barocss/cad-model/engine/rematch';
+import {toSig} from '@barocss/cad-model/engine/references';
+import {brepMassProperties,checkBrep} from '@barocss/cad';
+const doc=JSON.parse(readFileSync(process.argv[2],'utf8'));
+if(doc.nodes.length===2){const result=evaluatePart(doc,1);if(!result.ok)throw Error(JSON.stringify(result.error));const body=result.bodies[0];
+const captured=[[0,0],[40,30]].map(([x,y])=>{const matches=body.mesh.edges.filter(e=>e.straight&&e.a[0]===x&&e.b[0]===x&&e.a[1]===y&&e.b[1]===y&&Math.abs(e.a[2]-e.b[2])===10);if(matches.length!==1||matches[0].names.length!==1)throw Error('Vertical edge not unique');const edge=matches[0],name=edge.names[0];return {name,a:edge.a,b:edge.b,sig:toSig(signaturesOf(body).edges.get(name))};});console.log(JSON.stringify(captured));process.exit(0);}
+console.log(JSON.stringify(partBreps(doc).map(({key,brep})=>({key,check:checkBrep(brep,{strict:true}),volume:brepMassProperties(brep,1).volume,vertices:brep.vertices.map(v=>v.point)}))));
+`});
+const seed={format:'barocss-cad-model',schema:3,units:'mm',parameters:{},nodes:[{id:'n0',kind:'sketch',profile:'rectangle',min:[0,0],max:[40,30]},{id:'n1',kind:'extrude',sketch:0,height:10}],outputs:{b1:{node:1,side:'solid'}},nextId:2};
+async function native(doc,label,h){const result=await f.inspect(label,doc);assert.equal(result.length,1);const n=result[0];assert.equal(n.check.valid,true);const expected=1200*h-(chamfer?4*h:2*h*(4-Math.PI));assert.ok(Math.abs(n.volume-expected)<1e-7);const bodies=(await f.bodies()).bodies;assert.equal(bodies.length,1);assert.equal(bodies[0].key,n.key);assert.ok(Math.abs(bodies[0].volume-expected)<1e-7);for(const [x,y] of [[0,2],[2,0],[40,28],[38,30],[40,0],[0,30]])for(const z of [0,h])assert.ok(n.vertices.some(p=>Math.hypot(p[0]-x,p[1]-y,p[2]-z)<1e-9),JSON.stringify([x,y,z]));for(const [x,y] of [[0,0],[40,30]])assert.equal(n.vertices.some(p=>Math.hypot(p[0]-x,p[1]-y)<1e-9),false);return n;}
+await f.run(async()=>{
+ await f.newPage();const edges=await f.inspect('00-captured-native-vertical-edges',seed);assert.equal(edges.length,2);
+ const source={...seed,nodes:[...seed.nodes,{id:'n2',kind:chamfer?'chamfer':'fillet',parent:{node:1,side:'solid'},edges:edges.map(e=>e.name),sigs:Object.fromEntries(edges.map(e=>[e.name,e.sig])),...(chamfer?{distance:2}:{radius:2})}],outputs:{b2:{node:2,side:'solid'}},nextId:3};
+ await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'two-vertical-finishes.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(source))});await f.same(source);await native(source,'01-original-native',10);
+ const before=await f.snapshot('02-before-height');const undoBefore=await f.page.getByRole('button',{name:'Undo',exact:true}).isEnabled();await f.dismissToasts();await f.openFeatureEditor(1);
+ const distance=f.editor().getByLabel('Distance',{exact:true});assert.equal(Number(await distance.inputValue()),10);await distance.fill('30');await f.snapshot('03-height30-draft');const apply=f.editor().getByRole('button',{name:'Apply',exact:true});const enabled=await apply.isEnabled();
+ if(enabled){await apply.click();await f.page.waitForFunction(d=>JSON.stringify(window.__studioDoc)!==d||!!document.querySelector('.hud-error')||document.querySelectorAll('.toast').length>0,JSON.stringify(source),{timeout:60000});}
+ await f.ready();const result=await f.snapshot('04-height-outcome'),current=await f.doc(),accepted=JSON.stringify(current)!==JSON.stringify(source);
+ f.report.observations.push({label:'baseline-height-outcome',accepted,enabled,attemptedHeight:30,editor:result.editor,notices:result.notices,sourceEdges:edges,resultSigs:current.nodes[2]?.sigs,creation:'native-signature fixture via actual Model file Open; creation picking NOT_RUN'});
+ if(!accepted){assert.deepEqual(current,source);assert.deepEqual(result.history,before.history);assert.equal(await f.page.getByRole('button',{name:'Undo',exact:true}).isEnabled(),undoBefore);await native(source,'05-refused-native',10);await f.closeEditor();await f.same(source);}
+ else{const clean=d=>({...d,nodes:d.nodes.map((n,i)=>{if(i!==2)return n;const copy={...n};delete copy.sigs;return copy;})});assert.deepEqual(clean(current),clean({...source,nodes:source.nodes.map((n,i)=>i===1?{...n,height:30}:n)}));await f.closeEditor();await native(current,'05-accepted-native',30);await f.undo();await f.same(source);await native(source,'06-undo-native',10);await f.redo();await f.same(current);await native(current,'07-redo-native',30);}
+ const stable=await f.doc(),h=accepted?30:10;const saved=await f.save('two-vertical-height-'+(accepted?'accepted':'refused'));await f.freshOpen(saved.file,saved.doc,'08-reopened');await f.same(stable);await native(stable,'09-reopened-native',h);await f.openFeatureEditor(1);assert.equal(Number(await f.editor().getByLabel('Distance',{exact:true}).inputValue()),h);await f.snapshot('10-reopened-height');await f.closeEditor();await f.page.getByRole('button',{name:'Iso',exact:true}).click();await f.page.getByTitle('Frame all (F)',{exact:true}).click();await f.snapshot('11-final');
+});
