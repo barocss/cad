@@ -33,7 +33,7 @@ export function autonomy(state?: Pick<ChatState, 'approvalRequired'>): 1 | 2 | 3
   return n === 1 || n === 3 || n === 4 ? n : 2;
 }
 // (add_library changes no model: it adds data to the document, marked as the agent's until a person confirms it.)
-export const ASSEMBLY_CHANGES = new Set(['set_joints', 'add_part', 'place_part', 'delete_part', 'add_mate', 'edit_mate', 'delete_mate', 'insert_part', 'snap_part', 'set_inputs', 'set_variants', 'set_frames', 'set_waypoint', 'lock_part', 'pattern_part', 'edit_pattern', 'delete_pattern', 'cut_parts']);
+export const ASSEMBLY_CHANGES = new Set(['add_assembly_step', 'set_joints', 'add_part', 'place_part', 'delete_part', 'add_mate', 'edit_mate', 'delete_mate', 'insert_part', 'snap_part', 'set_inputs', 'set_variants', 'set_frames', 'set_waypoint', 'lock_part', 'pattern_part', 'edit_pattern', 'delete_pattern', 'cut_parts']);
 /** Whether a call changes the part (requirements are the brief, not the part; a dry run changes nothing). */
 export function changesPart(name: string, input: unknown): boolean {
   if (name === 'set_requirements' || name === 'accept_proposal') return false;
@@ -128,9 +128,12 @@ export async function proposalOfWith(dispatch: PartRun, state: ChatState, ops: u
   const risk = riskOf(state.doc, cur.doc, diff, broken.length, [...hardChanged, ...(local?.hardChanged ?? [])]);
   if (local?.needsReview || faceRepair) risk.level = 'high';
   const changes = nested !== undefined || faceRepair ? String(run.results[0]?.did ?? nested) : diffLine(diff) || (risk.approval.length ? `${risk.approval.join(', ')} change` : '');
+  // run.results also contains skipped opIds; run.ops retains only executed operations.
+  const executedResults = run.results.filter(result => result.skipped === undefined);
+  const stepChanges = run.ops.flatMap((op, index) => op.tool === 'add_assembly_step' && typeof executedResults[index]?.did === 'string' ? [executedResults[index].did as string] : []);
   const checkLabel = nested !== undefined ? 'root checks' : 'checks';
   const rootChecks = checks && `${checkLabel} ${checks.before.pass}/${checks.before.fail}/${checks.before.unknown} → ${checks.after.pass}/${checks.after.fail}/${checks.after.unknown}`;
-  const summary = [changes, rootChecks, local?.summary].filter(Boolean).join(', ') || 'no change';
+  const summary = [changes, ...stepChanges, rootChecks, local?.summary].filter(Boolean).join(', ') || 'no change';
   return { ...run, checks, risk, summary };
 }
 export const countsOf = (s: { pass: number; fail: number; unknown: number }) => ({ pass: s.pass, fail: s.fail, unknown: s.unknown });

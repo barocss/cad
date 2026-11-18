@@ -14,6 +14,7 @@
     "properties": {
      "action": {
       "enum": [
+       "add_step",
        "bundle",
        "get",
        "add_part",

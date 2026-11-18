@@ -1,0 +1,89 @@
+{
+  "issue": 207,
+  "stage": "PRE_PUSH_VALIDATION",
+  "issue_status": "OPEN",
+  "ci": "NOT_RECORDED_HERE",
+  "baseline": {
+    "status": "PASS",
+    "scope": "Existing advertised assembly actions and UI/core/API support, not an invented tool refusal alone.",
+    "unknown_tool_probe_alone_is_not_bug": true
+  },
+  "actual": {
+    "status": "PASS",
+    "observations": [
+      {
+        "scenario": "normal",
+        "directWriteRefused": true,
+        "localRuntimeProposalFileOpened": true,
+        "explicitPreviewAccept": true,
+        "exactP2NotSameNameP1": true,
+        "existingStepMetadataPreserved": true,
+        "staleStepOnlyEditRequiresRebase": false,
+        "undoRedoRestoresWholeDocument": true,
+        "nativeSaveFreshOpen": true,
+        "externalMcp": "NOT_RUN"
+      },
+      {
+        "scenario": "stale",
+        "directWriteRefused": true,
+        "localRuntimeProposalFileOpened": true,
+        "explicitPreviewAccept": true,
+        "exactP2NotSameNameP1": true,
+        "existingStepMetadataPreserved": true,
+        "staleStepOnlyEditRequiresRebase": true,
+        "undoRedoRestoresWholeDocument": true,
+        "nativeSaveFreshOpen": true,
+        "externalMcp": "NOT_RUN"
+      }
+    ],
+    "page_errors": 0,
+    "console_errors": 0,
+    "source_changes": 0,
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  "checks": {
+    "tests02": {
+      "pass": 62,
+      "fail": 0
+    },
+    "model_type02": "PASS; coordinator verified process exit",
+    "studio_type01": "PASS; product unchanged afterward",
+    "scoped_lint01": "FAIL: six unused variables in new test",
+    "correction": "Shallow-copy-delete helper replaced unused destructuring bindings",
+    "scoped_lint02": "PASS; coordinator verified process exit",
+    "snapshot_change": "Only assembly action enum add_step addition",
+    "full_suite": "NOT_RUN"
+  },
+  "available_space_gib": {
+    "value": 44,
+    "source": "coordinator cleanup report",
+    "approximate": true
+  },
+  "limits": [
+    "Local public runtime proposal generated on accepted-document copy, transported through native file Open; external MCP NOT_RUN.",
+    "Explicit Preview and Accept only; no automatic authoring or approval.",
+    "No camera authoring, edit-step or delete-step chat operation coverage.",
+    "Geometry inputs, occurrence placement, definitions and mates are structurally unchanged; no independent geometry oracle.",
+    "Proposal creation adds proposal/history metadata, not an applied assembly step.",
+    "Broader issue remains OPEN; no future CI claim.",
+    "Stale protection is Studio Preview disabled plus Accept gate; generic preview helper replay remains permitted."
+  ],
+  "png_sha256": {
+    "normal-02-explicit-preview.png": "c9ba0066a66033bcff65703396d6bd2506168f23282153aeb6b17b616ef184a6",
+    "stale-01-stale-refusal.png": "cdcf4258d1e241bd20adfb7d94b1d2438c6481af3fdea3f2ea9124eee5050177",
+    "stale-03-exact-member.png": "ac7b6cd38f4f44a1f407cdac0f1ce761ad490b68688b63f4f17da2e8a2c30ab1"
+  },
+  "integration": {
+    "validated_preintegration_sha": "cda583b39",
+    "integrated_main_sha": "8edbd7d15",
+    "postintegration_rerun": "PENDING"
+  }
+}

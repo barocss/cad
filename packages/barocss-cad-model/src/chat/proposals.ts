@@ -70,6 +70,7 @@ export function stripHistory(doc: StudioDoc): StudioDoc {
 export function approvalOf(a: StudioDoc, b: StudioDoc): string[] {
   const out: string[] = [], same = (x: unknown, y: unknown) => x === y || JSON.stringify(x ?? null) === JSON.stringify(y ?? null);
   if (!same(a.instances, b.instances)) out.push('assembly');
+  if (!same(a.assemblySteps, b.assemblySteps)) out.push('assembly steps');
   if (!same(a.mates, b.mates)) out.push('mates');
   if (!same(a.drawing, b.drawing)) out.push('drawing');
   if (!same(a.robot, b.robot)) out.push('robot');

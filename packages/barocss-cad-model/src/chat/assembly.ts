@@ -1,4 +1,4 @@
-import { stepsOf, stepStateOf, assemblyStepProblems } from '../assembly/steps';
+import { MAX_STEP_NAME, addAssemblyStep, stepsOf, stepStateOf, assemblyStepProblems } from '../assembly/steps';
 import { resolveShopTree } from '../engine/shopRows';
 import { readConnector, validateBallOptions, validateFastenedOptions, validateUniversalOptions, validateCylindricalOptions, type Connector } from '../assembly/connectors';
 // Chat tools for assemblies: parts as instances (each its own feature tree, built with the part tools
@@ -34,7 +34,7 @@ import { addAssemblyCut, cutsOf, assemblyCutProblems, deleteAssemblyCut, editAss
 import { addInstancePattern, deleteInstancePattern, editInstancePattern, patternDeleteRefusal, type AddPatternOptions } from '../assembly/patterns';
 
 type Evaluate = (doc: StudioDoc) => Promise<EvalResult | null>;
-interface State { doc: StudioDoc; bodies: BodyResult[] }
+interface State { doc: StudioDoc; bodies: BodyResult[]; partOf?: string }
 export interface AssemblyOutcome { doc: StudioDoc; content: string; isError: boolean; changed: boolean; summary: string }
 
 const json = (v: unknown) => JSON.stringify(v);
@@ -171,13 +171,24 @@ function reported(doc: StudioDoc, r: Edited, what: string, extra: Record<string,
   };
 }
 
-export const ASSEMBLY_TOOL_NAMES = new Set(['get_assembly', 'add_part', 'place_part', 'delete_part', 'add_mate', 'edit_mate', 'lock_part', 'delete_mate', 'pattern_part', 'edit_pattern', 'delete_pattern', 'cut_parts', 'list_library', 'insert_part', 'snap_part', 'add_library', 'add_library_part', 'check_printability', 'orient_for_print', 'set_inputs', 'set_variants']);
+export const ASSEMBLY_TOOL_NAMES = new Set(['get_assembly', 'add_assembly_step', 'add_part', 'place_part', 'delete_part', 'add_mate', 'edit_mate', 'lock_part', 'delete_mate', 'pattern_part', 'edit_pattern', 'delete_pattern', 'cut_parts', 'list_library', 'insert_part', 'snap_part', 'add_library', 'add_library_part', 'check_printability', 'orient_for_print', 'set_inputs', 'set_variants']);
 
 export async function runAssemblyTool(state: State, name: string, args: Record<string, unknown>, evaluate: Evaluate): Promise<AssemblyOutcome> {
   const doc = state.doc, instances = doc.instances ?? [], mates = doc.mates ?? [];
   const byId = (id: unknown) => instances.find(i => i.id === id);
   const partList = () => [BASE, ...instances.map(i => i.id)].join(', ');
   switch (name) {
+    case 'add_assembly_step': {
+      if (state.partOf !== undefined) return fail(doc, 'Add assembly steps from the root assembly, not a placed part.');
+      if (Object.keys(args).some(key => key !== 'name' && key !== 'parts')) return fail(doc, 'add_assembly_step accepts only name and parts.');
+      if (!Object.hasOwn(args, 'name') || typeof args.name !== 'string' || !args.name.trim() || args.name.length > MAX_STEP_NAME) return fail(doc, `name must be a nonempty string of at most ${MAX_STEP_NAME} characters.`);
+      if (!Object.hasOwn(args, 'parts') || !Array.isArray(args.parts) || Array.from(args.parts).some(id => typeof id !== 'string' || !id.length)) return fail(doc, 'parts must be an array of exact top-level occurrence IDs.');
+      try {
+        const result = addAssemblyStep(doc, { name: args.name, add: [...args.parts] as string[] });
+        const step = stepsOf(result.doc).find(item => item.id === result.id)!;
+        return reported(doc, result, `added assembly step ${step.id} ${JSON.stringify(step.name)} with occurrence IDs ${JSON.stringify(step.add)}`, { step: result.id });
+      } catch (error) { if (isRefusal(error, 'VALUE')) return fail(doc, error.message); throw error; }
+    }
     case 'get_assembly': {
       const hasSteps = Object.hasOwn(args, 'include_steps'), hasIndex = Object.hasOwn(args, 'step_index');
       if (hasSteps && typeof args.include_steps !== 'boolean') return fail(doc, 'include_steps must be a boolean.');
@@ -412,6 +423,11 @@ const xyz = { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 3
 
 export const ASSEMBLY_TOOLS: ToolDefinition[] = [
   ...VARIABILITY_TOOLS,
+  {
+    name: 'add_assembly_step',
+    description: 'Appends one explicitly named saved assembly instruction step. parts are exact top-level occurrence IDs, not display names; [] makes an empty step and repeated IDs are deduplicated. Existing membership is not transferred. Hidden instances, generated pattern copies and whole sub-assemblies follow the existing step contract; nested paths and base are refused. Changes only saved instruction membership, not placement, geometry, camera or current UI step. Always propose this change for the user to accept; no automatic ordering or approval.',
+    input_schema: { type: 'object', properties: { name: { type: 'string', minLength: 1, maxLength: MAX_STEP_NAME }, parts: { type: 'array', items: { type: 'string', minLength: 1 } } }, required: ['name', 'parts'], additionalProperties: false },
+  },
   {
     name: 'get_assembly',
     description: 'The assembly: the base part (the document\'s own part, fixed at the origin) and every placed part (instance id, name, placement, grounded, volume, bounds in the assembly), the mates and any that cannot be met. With faces_of, also that part\'s mateable faces and edges (flat: normal; round: axis, radius, inner hole or outer shaft; sphere: centre, radius; cone: apex, axis, half-angle; straight or circular edge: direction or normal, length or radius) in its own coordinates. include_steps explicitly adds saved top-level instruction membership and problems, not current UI visibility or motion. Optional step_index classifies that saved step (zero-based; requires include_steps true); note text, camera and explode settings are not returned.',
