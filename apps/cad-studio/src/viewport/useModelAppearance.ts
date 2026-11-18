@@ -28,6 +28,7 @@ export interface AppearancePreview {
 
 export interface AppearanceDisplay {
   bodyDrag: boolean;
+  inspectionVisibleKeys?: readonly string[] | null;
   section: boolean;
   sketch: boolean;
   sectionBodies: BodyResult[] | null;
@@ -73,7 +74,11 @@ export function useModelAppearance({ model, preview, display }: ModelAppearanceO
     const fresh = (b: BodyResult) => { if (had) return !had.has(`${b.key}:${meshSig(b.mesh)}`); const at = previewNodes && bodyNodeOf(previewNodes, b.key); return !!previewNodes && !!at && rootOf(previewNodes, at.node) >= evaluated.nodes.length; };
     return new Map(shownBodies.flatMap((b, i) => { const c = shownBodies === routePreviewBodies ? PREVIEW_TINT : lookOf(doc, b).color ?? (shownBodies === previewBodies && fresh(b) && !overlaid ? PREVIEW_TINT : undefined); return c ? [[i, rgbOf(c)] as [number, [number, number, number]]] : []; }));
   }, [shownBodies, doc, previewBodies, routePreviewBodies, previewNodes, evaluated.nodes.length, ghost, bodies, proposalOverlay]);
-  const hiddenBodies = useMemo(() => new Set(shownBodies.flatMap((b, i) => lookOf(doc, b).hidden ? [i] : [])), [shownBodies, doc]);
+  const inspectionVisible = display.inspectionVisibleKeys;
+  const hiddenBodies = useMemo(() => {
+    const keep = inspectionVisible ? new Set(inspectionVisible) : null;
+    return new Set(shownBodies.flatMap((b, i) => lookOf(doc, b).hidden || keep && !keep.has(b.key) ? [i] : []));
+  }, [shownBodies, doc, inspectionVisible]);
   // Faces coloured on their own, by body index and face index (their names kept with the body's look).
   // (G12: a shown proposal's faces tinted — where the Boolean refused (WebGL2 draws the overlay too, G16) — those it adds or changes
   // green on the after view, those it removes or changes red on the before view.)

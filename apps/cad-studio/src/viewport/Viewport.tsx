@@ -22,6 +22,7 @@ import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { composeArcSweepExterior } from '@barocss/cad-model/engine/arcSweepExteriorDetail';
 import type { BoundedDisplayMesh, CylinderDisplayTier, Vec3 } from '@barocss/cad-model/engine/mesh';
 import { OrbitCamera } from './camera';
+import { copyInspectionCamera } from '../app/namedInspection';
 import { orthographicSketchScale } from './sketchOutlinePick';
 import { sweepCylinderScale } from './cylinderProjection';
 import { modelFitArea } from './modelFitArea';
@@ -103,6 +104,9 @@ const NO_CONSTRAINT_INSPECTION = createConstraintInspection();
 
 interface Props extends ViewportPointerProps, MarkHandlers {
   modelUnavailable?: boolean;
+  /** One session-owned camera/mask commit. Visibility is composed by App, never here. */
+  inspectionTransaction?: { token: object; camera: RenderCamera } | null;
+  onInspectionCamera?(camera: RenderCamera): void;
   curvatureComb?: CurvatureOverlay | null;
   filletEndpoints?: FilletEndpoints | null;
   continuityLocation?: EdgeCurvatureMeasurement | null;
@@ -516,10 +520,36 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       syncDirect(r, p);
       if (p.annotations?.length && r.setOverlayLabels && pmiFacingKey(p.annotations, camera.current.basis().forward) !== pmiFacing.current) applyPmiLabels();
       r.render(camera.current, viewState());
+      if (p.onInspectionCamera) {
+        const c = camera.current;
+        p.onInspectionCamera({ target: [...c.target] as Vec3, distance: c.distance, yaw: c.yaw, pitch: c.pitch, fovY: c.fovY, ortho: c.ortho });
+      }
       bumpTicker(ticker);
     });
   };
   requestRef.current = request;
+
+  const inspectionApplied = useRef<object | null>(null);
+  useLayoutEffect(() => {
+    const transaction = props.inspectionTransaction, r = renderer.current;
+    if (!transaction) {
+      if (inspectionApplied.current && r) { r.setState(viewState()); request(); }
+      inspectionApplied.current = null; return;
+    }
+    if (!r || inspectionApplied.current === transaction.token) return;
+    const next = copyInspectionCamera(transaction.camera);
+    if (!next) return; // App admits only validated camera transactions.
+    ++turning.current; // A pending ViewCube animation must not overwrite this explicit action.
+    const c = camera.current;
+    c.target = [...next.target] as Vec3; c.distance = next.distance;
+    c.yaw = next.yaw; c.pitch = next.pitch; c.fovY = next.fovY;
+    setOrthographic(next.ortho);
+    // Fit and pointer consumers see the same committed mask before the next event/frame.
+    r.setState(viewState());
+    inspectionApplied.current = transaction.token;
+    request();
+  }, [props.inspectionTransaction, backend]);
+
 
   const pmiSvgCommit = useRef<PmiSvgCommit | null>(null);
   const input = useViewportPointerInput({

@@ -1,0 +1,274 @@
+{
+  "status": "PASS",
+  "qualification": "Two native base boxes: real session camera/subset capture, Apply/Fit/Restore, picking, document/session invalidation and native Save/fresh Open.",
+  "limits": [
+    "WebGPU only; no assembly, independent renderer, project/worker restart or forced renderer failure.",
+    "Visibility evidence is real pointer picking at separated face interiors plus screenshots, not original body bounds. Save absence is verified by exact public fresh-Open document equality, not a new codec or raw JSON assumption.",
+    "No action injection, Worker interception, camera setter or hidden-mask read hook."
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "observations": [
+    {
+      "probe": [
+        35,
+        5,
+        10
+      ],
+      "pixel": [
+        951.5281229854164,
+        406.4690543926487
+      ],
+      "selectedKeys": [
+        "b3"
+      ]
+    },
+    {
+      "probe": [
+        5,
+        5,
+        10
+      ],
+      "pixel": [
+        360.47188077276314,
+        406.4690543926487
+      ],
+      "selectedKeys": [
+        "b1"
+      ]
+    },
+    {
+      "probe": [
+        35,
+        5,
+        10
+      ],
+      "pixel": [
+        951.5281229854164,
+        406.4690543926487
+      ],
+      "selectedKeys": []
+    },
+    {
+      "probe": [
+        5,
+        5,
+        10
+      ],
+      "pixel": [
+        656.0000014246389,
+        393.42478055244857
+      ],
+      "selectedKeys": [
+        "b1"
+      ]
+    },
+    {
+      "probe": [
+        5,
+        5,
+        10
+      ],
+      "pixel": [
+        360.47188077276314,
+        406.4690543926487
+      ],
+      "selectedKeys": [
+        "b1"
+      ]
+    },
+    {
+      "probe": [
+        35,
+        5,
+        10
+      ],
+      "pixel": [
+        951.5281229854164,
+        406.4690543926487
+      ],
+      "selectedKeys": [
+        "b3"
+      ]
+    },
+    {
+      "probe": [
+        35,
+        5,
+        10
+      ],
+      "pixel": [
+        951.5281229854164,
+        393.46905467395857
+      ],
+      "selectedKeys": [
+        "b3"
+      ]
+    },
+    {
+      "probe": [
+        35,
+        5,
+        10
+      ],
+      "pixel": [
+        951.5281229854164,
+        406.4690543926487
+      ],
+      "selectedKeys": []
+    },
+    {
+      "probe": [
+        5,
+        5,
+        10
+      ],
+      "pixel": [
+        360.47188077276314,
+        406.4690543926487
+      ],
+      "selectedKeys": [
+        "b1"
+      ]
+    },
+    {
+      "boundary": "four real consecutive Apply clicks, last subset wins",
+      "elapsedMs": 138.09999990463257
+    },
+    {
+      "probe": [
+        35,
+        5,
+        10
+      ],
+      "pixel": [
+        951.5281229854164,
+        406.4690543926487
+      ],
+      "selectedKeys": []
+    },
+    {
+      "probe": [
+        5,
+        5,
+        10
+      ],
+      "pixel": [
+        360.47188077276314,
+        406.4690543926487
+      ],
+      "selectedKeys": [
+        "b1"
+      ]
+    },
+    {
+      "boundary": "Apply interrupts live ViewCube easing; no late overwrite after 400ms",
+      "takeoverMs": 109.89999997615814,
+      "intermediate": {
+        "target": [
+          17.54434687994801,
+          0.5296095546773429,
+          1.6159300313284124
+        ],
+        "distance": 90.60650430918886,
+        "yaw": -1.1829010443226804,
+        "pitch": 0.4309947583024624,
+        "fovY": 0.5585053606381855,
+        "ortho": false
+      }
+    },
+    {
+      "probe": [
+        5,
+        5,
+        10
+      ],
+      "pixel": [
+        360.47188077276314,
+        419.46905411133883
+      ],
+      "selectedKeys": [
+        "b1"
+      ]
+    },
+    {
+      "probe": [
+        35,
+        5,
+        10
+      ],
+      "pixel": [
+        951.5281229854164,
+        419.46905411133883
+      ],
+      "selectedKeys": [
+        "b3"
+      ]
+    },
+    {
+      "allCamera": {
+        "target": [
+          17.54434687994801,
+          0.5296095546773429,
+          1.6159300313284124
+        ],
+        "distance": 90.60650430918886,
+        "yaw": -1.0053096491487339,
+        "pitch": 0.6283185307179586,
+        "fovY": 0.5585053606381855,
+        "ortho": false
+      },
+      "subsetCamera": {
+        "target": [
+          15.63493307047344,
+          0.2542588631379088,
+          4.99850908140181
+        ],
+        "distance": 88.50463638583264,
+        "yaw": -1.5707963267948966,
+        "pitch": 1.5704821675295375,
+        "fovY": 0.5585053606381855,
+        "ortho": true
+      },
+      "restoreCamera": {
+        "target": [
+          15.63493307047344,
+          0.2542588631379088,
+          4.99850908140181
+        ],
+        "distance": 88.50463638583264,
+        "yaw": -1.5707963267948966,
+        "pitch": 1.5704821675295375,
+        "fovY": 0.5585053606381855,
+        "ortho": true
+      },
+      "sourceUnchanged": true,
+      "sessionOnly": true,
+      "actualDownloads": 1
+    }
+  ],
+  "scope": "actual03; includes real rapid Apply and ViewCube easing takeover",
+  "download": {
+    "name": "inspection-pair.bcad",
+    "bytes": 895,
+    "sha256": "cb2f9b10cfe021e726c5e7ff00a991f61d0ca5293be77ee4fb2e04e6833187ea",
+    "verification": "actual Save download followed by fresh Open semantic equality; not a raw codec absence proof"
+  },
+  "sourceHashes": {
+    "apps/cad-studio/test/named-inspection-browser.mjs": "933efa1bfa90a9d8011b4c37c444c14985037eccce9ab41809e5d8d380a6af3a",
+    "apps/cad-studio/src/app/namedInspection.ts": "097555b4faf45c116b56946ce44f3dede7f000508c36d4436305f65e537b6dbe",
+    "apps/cad-studio/src/state/useNamedInspection.ts": "5ffae423c96acb4f90b3b2f3f5f44934b0498375398a5820b63d1909282e38ab",
+    "apps/cad-studio/src/ui/NamedInspectionViews.tsx": "363e61902c7f869e9baadc285a422709775f5edfa5aba74066ffb3a1da73182f",
+    "apps/cad-studio/src/App.tsx": "c0a19abb803b23f1ae035f1e79bda3764b8b49907e83e33874428019d87c4ba7",
+    "apps/cad-studio/src/viewport/Viewport.tsx": "41eba8f46c6f23d5db0f5d82e3817ff7c3c665399740942335aea14f4d09e562",
+    "apps/cad-studio/src/viewport/useModelAppearance.ts": "ce69881628a9b88abf5e3dd9fa1130128fa0851d7d2fb7aef9c9a154ee75c76a",
+    "apps/cad-studio/src/ui/ViewDisplayControls.tsx": "077c06d4d295c987617e21a282bb396cf2fc7671ffe415e352af070397091a7a"
+  }
+}
