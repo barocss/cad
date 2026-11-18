@@ -1,3 +1,5 @@
+import { flangeRadiusEdit } from '@barocss/cad-model/app/flangeRadiusEdit';
+import { canonical } from '@barocss/cad-model/util/revision';
 import { isFilletRadiusModeChange, proveFilletRadiusModeChange } from './filletRadiusModeHistory';
 import { isFilletSectionChange, proveFilletSectionChange } from './filletSectionHistory';
 import { isShellOpeningChange, proveShellOpeningChange } from './shellOpeningHistory';
@@ -36,6 +38,15 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
       && (owner.marker() !== null || owner.variant() || owner.evaluated() !== evaluated || !fresh || busy)) {
       return Promise.resolve({ title: 'Distance not applied', hint: 'Show the master at the latest History and wait for the model before detaching.', detail: '' });
     }
+    // A later ordinary Length/Angle edit can hide the radius field without undoing
+    // its earlier draft change. Recheck the complete candidate at the Apply boundary.
+    const oldFlange = doc.nodes[editNode], newFlange = nodes[editNode];
+    const flangeRadiusChanged = oldFlange?.kind === 'sheet-flange' && newFlange?.kind === 'sheet-flange'
+      && canonical(oldFlange.bendRadius) !== canonical(newFlange.bendRadius);
+    if (flangeRadiusChanged && !flangeRadiusEdit(doc, nodes, editNode)) return Promise.resolve({
+      title: 'Bend radius not applied', hint: 'Apply only the bend radius change on the unchanged Flange first. Apply Length or Angle changes separately.',
+      detail: 'The original document and sheet geometry are unchanged.',
+    });
     const scope = owner.scope();
     const patternEdit = prepareLinearPatternHoleEdit(doc, nodes, editNode);
     if ('error' in patternEdit) return Promise.resolve(patternEdit.error);

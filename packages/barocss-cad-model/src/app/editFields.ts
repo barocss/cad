@@ -1,3 +1,4 @@
+import { flangeRadiusEdit } from './flangeRadiusEdit';
 import { splitNormalComponentsField } from './splitNormalComponents';
 import { circularPatternDirection, setCircularPatternDirection } from './circularPatternDirection';
 import { fixedRevolveAxisPosition, setFixedRevolveAxisPosition } from './fixedRevolveAxisPosition';
@@ -323,6 +324,7 @@ export function editFields(nodes: Nodes, i: number, params?: Record<string, numb
     || (node?.kind === 'fillet' && (f.key === 'rho' || f.key === 'tension'))
     || (node?.kind === 'extrude' && f.key === 'draft')
     || ((node?.kind === 'revolve' || node?.kind === 'rotate' || node?.kind === 'draft') && f.key === 'deg') // Saved angles are number-only; Draft neutral coordinates still support Dim.
+    || (node?.kind === 'sheet-flange' && f.key === 'ownBendRadius') // This bounded History override stays numeric-only.
     || (node?.kind === 'revolve' && f.key === 'fixedAxisPosition') // This bounded editor accepts numeric coordinates only.
     || (node?.kind === 'keyway' && f.key === 'angle') // Keyway angles are numeric; width and depth support Dim.
     || (node?.kind === 'scale' && f.key === 'k') // Scale factor is number-only; pivot coordinates support Dim.
@@ -1002,6 +1004,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
     case 'sheet-flange': {
       // (R12.3, D118: its length, angle, own radius and offsets.)
       type F = Extract<ModelNode, { kind: 'sheet-flange' }>;
+      const radius = flangeRadiusEdit(scope?.doc, nodes, i); if (radius) out.push(radius);
       number('length', 'Length', 'mm', n => num((n as F).length), (n, v) => ({ ...(n as F), length: v }));
       number('angle', 'Angle', '°', n => (n as F).angle ?? 90, (n, v) => ({ ...(n as F), angle: v }));
       if (node.offsets) [0, 1].forEach(k => number('o' + k, k ? 'Offset at end' : 'Offset at start', 'mm', n => num((n as F).offsets![k]), (n, v) => { const o = [...(n as F).offsets!] as [Dim, Dim]; o[k] = v; return { ...(n as F), offsets: o }; }));

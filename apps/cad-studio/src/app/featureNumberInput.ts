@@ -28,6 +28,7 @@ export function commandNumberRule(command: string, key: string, operation?: unkn
 
 export function historyNumberRule(nodes: readonly ModelNode[], index: number, key: string): FeatureNumberRule | undefined {
   const node = nodes[index];
+  if (node?.kind === 'sheet-flange' && key === 'ownBendRadius') return 'positive';
   if (node?.kind === 'keyway') return commandNumberRule('keyway', key);
   if (node?.kind === 'face-thread') return commandNumberRule('face-thread', key);
   if (node?.kind === 'scale' && key === 'k') return 'scale-factor';
