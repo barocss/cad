@@ -189,7 +189,7 @@ import { OutlinerCuts } from './ui/OutlinerCuts';
 import { AssemblyCutHud } from './ui/AssemblyCutHud';
 import { nextInstanceId } from '@barocss/cad-model/assembly/takenIds';
 import { AssemblyStepsPanel } from './ui/AssemblyStepsPanel';
-import { STEPS_COMMAND, cameraOfView, shownSelection as litSelection, stepAfter, stepOffer, stepBatchTransferOffer, canSelectStepPart, stepsDisplay, viewOfCamera } from './app/assemblySteps';
+import { STEPS_COMMAND, cameraOfView, shownSelection as litSelection, stepAfter, stepOffer, stepBatchTransferOffer, stepBatchTakeOutOffer, canSelectStepPart, stepsDisplay, viewOfCamera } from './app/assemblySteps';
 import { addAssemblyStep, assemblyStepProblems, deleteAssemblyStep, editAssemblyStep, moveAssemblyStep, moveAssemblyStepParts, stepsOf, type EditAssemblyStepOptions } from '@barocss/cad-model/assembly/steps';
 import { cutOfDraft, cuttableOf, defaultCutAt, draftOfCut, draftProblem, draftTrialProblem, newCutDraft, withAddedTargets, withDraftCut, type CutDraft } from './app/assemblyCutDraft';
 import { addAssemblyCut, deleteAssemblyCut, editAssemblyCut } from '@barocss/cad-model/assembly/cuts';
@@ -1556,6 +1556,7 @@ export function App() {
   const stepsProblems = useMemo(() => assemblyStepProblems(doc).map(p => p.message), [doc.assemblySteps, doc.instances]);
   const stepsOffer = stepsShown ? stepOffer(doc, instanceSel, stepAt) : null;
   const stepsBatchOffer = stepsShown ? stepBatchTransferOffer(doc, instanceSel, stepAt) : null;
+  const stepsTakeOutOffer = stepsShown ? stepBatchTakeOutOffer(doc, instanceSel, stepAt) : null;
   // A delayed handler must never transfer a previous document's or selection's parts.
   const stepTransferOpen = openIntent.current;
   const stepTransferScope = useRef({ doc, docGeneration, instanceSel, stepAt, stepsShown, open: stepTransferOpen, worker: workerSession });
@@ -1996,6 +1997,23 @@ export function App() {
     stepPickScope.current = { doc, docGeneration, instanceSel, stepAt, stepsShown, instanceEdit, instanceEditPending, open: stepPickOpen, worker: workerSession };
   }
   const ownedStepPick = stepPickScope.current;
+  // Draft lifetime follows the document session and step, not unrelated immutable document edits or selection changes.
+  const stepTextId = stepsOf(doc)[stepAt]?.id;
+  const stepTextDraft = useRef({ docGeneration, stepAt, stepId: stepTextId, stepsShown, open: stepPickOpen, worker: workerSession, pending: false });
+  if (stepTextDraft.current.docGeneration !== docGeneration || stepTextDraft.current.stepAt !== stepAt || stepTextDraft.current.stepId !== stepTextId || stepTextDraft.current.stepsShown !== stepsShown || stepTextDraft.current.open !== stepPickOpen || stepTextDraft.current.worker !== workerSession) {
+    stepTextDraft.current = { docGeneration, stepAt, stepId: stepTextId, stepsShown, open: stepPickOpen, worker: workerSession, pending: false };
+  }
+  const ownedStepTextDraft = stepTextDraft.current;
+  const changeStepTextDraft = (pending: boolean) => { if (stepTextDraft.current === ownedStepTextDraft) ownedStepTextDraft.pending = pending; };
+  const takeOutSelectedStepParts = (stepId: string) => {
+    if (stepPickScope.current !== ownedStepPick || docNow.current !== doc || !stepsShown || instanceEdit || instanceEditPending || openIntent.current !== ownedStepPick.open || workerSessionNow.current !== ownedStepPick.worker || project.opening()) return;
+    if (stepTextDraft.current !== ownedStepTextDraft || ownedStepTextDraft.pending) return;
+    const offer = stepBatchTakeOutOffer(doc, instanceSel, stepAt);
+    if (!offer || offer.target !== stepId) return;
+    const remove = new Set(offer.parts), step = stepsOf(doc)[stepAt];
+    stepEdit(() => editAssemblyStep(doc, { id: stepId, add: step.add.filter(id => !remove.has(id)) }));
+  };
+
   const selectStepPart = (stepId: string, partId: string) => {
     if (stepPickScope.current !== ownedStepPick || docNow.current !== doc || !stepsShown || instanceEdit || instanceEditPending || openIntent.current !== ownedStepPick.open || workerSessionNow.current !== ownedStepPick.worker || project.opening()) return;
     if (!canSelectStepPart(doc, stepAt, stepId, partId)) return;
@@ -3538,7 +3556,7 @@ export function App() {
         onInsert={path => void project.fileOf(path).then(f => { if (f) void insertPart(f, linkSource(path)); })}
         onOpen={d => { replaceDoc(d, 'project'); if (docNow.current !== d) return;
           setCompareBase(null); setDirty(true); setTimeout(() => viewport.current?.fit(), 300); }} />}
-      {stepsShown && <AssemblyStepsPanel doc={doc} index={stepAt} offer={stepsOffer} batchOffer={stepsBatchOffer} faded={stepsFaded} problems={stepsProblems}
+      {stepsShown && <AssemblyStepsPanel doc={doc} index={stepAt} offer={stepsOffer} batchOffer={stepsBatchOffer} takeOutOffer={stepsTakeOutOffer} textDraftScope={ownedStepTextDraft} onTextDraftChange={changeStepTextDraft} onTakeOutSelected={takeOutSelectedStepParts} faded={stepsFaded} problems={stepsProblems}
         selectedParts={instanceSel} selectionDisabled={!!instanceEdit || instanceEditPending} onSelectPart={selectStepPart}
         onGo={k => setStepIndex(stepAfter(k, 0, stepCount))} onFaded={setStepsFaded} onNew={newStep}
         onRename={(id, name) => stepChange({ id, name })} onNote={(id, note) => stepChange({ id, note: note.trim() ? note : null })} onExplode={(id, explode) => stepChange({ id, explode: explode || null })}

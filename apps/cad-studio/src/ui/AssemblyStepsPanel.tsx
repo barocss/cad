@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PartInstance, StudioDoc } from '@barocss/cad-model/engine/doc';
 import { MAX_STEP_EXPLODE, stepsOf } from '@barocss/cad-model/assembly/steps';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { DockSection } from '../layout/DockSection';
 import { Icon } from './atoms';
 import { FIELD, TICK } from './panelStyles';
-import { canSelectStepPart, type StepOffer, type StepBatchTransferOffer } from '../app/assemblySteps';
+import { canSelectStepPart, type StepOffer, type StepBatchTransferOffer, type StepBatchTakeOutOffer } from '../app/assemblySteps';
 import { stepExplodeOptions, stepExplodeValue } from '../app/stepExplodeDraft';
 
 // Roadmap 10 ⑥: the Steps panel — an ordered explanation of the assembly, part by part. The primary controls are the step list, Prev and
@@ -35,19 +35,36 @@ function StepExplodeInput({ value, onCommit }: { value: number; onCommit(value: 
 }
 
 /** A text box that keeps what is typed and commits it (one undo step) when it is left or Enter is pressed; an empty value is not committed when `required`. */
-function CommitText({ value, onCommit, required, multiline, ...rest }: { value: string; onCommit(v: string): void; required?: boolean; multiline?: boolean; 'aria-label': string; className?: string; maxLength?: number }) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  const done = () => { if (draft === value) return; if (required && !draft.trim()) { setDraft(value); return; } onCommit(draft); };
-  if (multiline) return <textarea {...rest} className={'rounded-md border border-input bg-transparent px-1 text-[11px] ' + (rest.className ?? '')} value={draft} onChange={e => setDraft(e.target.value)} onBlur={done} />;
-  return <Input {...rest} type="text" value={draft} onChange={e => setDraft(e.target.value)} onBlur={done} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />;
+function CommitText({ value, onCommit, required, multiline, owner, onDraftChange, ...rest }: { owner?: object; onDraftChange?(pending: boolean): void; value: string; onCommit(v: string): void; required?: boolean; multiline?: boolean; 'aria-label': string; className?: string; maxLength?: number }) {
+  const [stored, setStored] = useState({ owner, value, draft: value });
+  const currentText = useRef({ owner, value }); currentText.current = { owner, value };
+  const draft = stored.owner === owner && stored.value === value ? stored.draft : value;
+  if (stored.owner !== owner || stored.value !== value) setStored({ owner, value, draft: value });
+  const setDraft = (next: string) => setStored({ owner, value, draft: next });
+  const current = () => currentText.current.owner === owner && currentText.current.value === value;
+  const draftChanged = useRef(onDraftChange); draftChanged.current = onDraftChange;
+  useEffect(() => {
+    // Capture this owner's field callback: unmounting a collapsed Note discards
+    // its draft, and must not leave the batch action blocked or clear a new owner.
+    const changed = draftChanged.current;
+    changed?.(false);
+    return () => { changed?.(false); };
+  }, [value, owner]);
+  const change = (next: string) => { if (!current()) return; draftChanged.current?.(next !== value); setDraft(next); };
+  const done = () => { if (!current() || draft === value) return; if (required && !draft.trim()) { setDraft(value); draftChanged.current?.(false); return; } onCommit(draft); };
+  if (multiline) return <textarea {...rest} className={'rounded-md border border-input bg-transparent px-1 text-[11px] ' + (rest.className ?? '')} value={draft} onChange={e => change(e.target.value)} onBlur={done} />;
+  return <Input {...rest} type="text" value={draft} onChange={e => change(e.target.value)} onBlur={done} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />;
 }
 
-export function AssemblyStepsPanel({ doc, index, offer, batchOffer, faded, problems, onSelectPart, selectedParts = [], selectionDisabled = false, onGo, onFaded, onNew, onRename, onNote, onExplode, onAddSelected, onTransfer, onTransferSelected, onTakeOut, onCaptureView, onResetView, onClearView, onMove, onDelete, onClose }: {
+export function AssemblyStepsPanel({ doc, index, offer, batchOffer, takeOutOffer, textDraftScope, onTextDraftChange, faded, problems, onSelectPart, selectedParts = [], selectionDisabled = false, onGo, onFaded, onNew, onRename, onNote, onExplode, onAddSelected, onTransfer, onTransferSelected, onTakeOut, onTakeOutSelected, onCaptureView, onResetView, onClearView, onMove, onDelete, onClose }: {
   doc: StudioDoc; index: number;
   /** The one selected part's step (to go to) or that it is in none. */
   offer: StepOffer;
   batchOffer?: StepBatchTransferOffer | null;
+  takeOutOffer?: StepBatchTakeOutOffer | null;
+  textDraftScope?: object;
+  onTextDraftChange?(pending: boolean): void;
+  onTakeOutSelected?(id: string): void;
   /** Non-additive session selection, never a Show/Fit or document edit. */
   onSelectPart?(stepId: string, partId: string): void;
   selectedParts?: readonly string[];
@@ -62,6 +79,18 @@ export function AssemblyStepsPanel({ doc, index, offer, batchOffer, faded, probl
 }) {
   const steps = stepsOf(doc), n = steps.length, step = steps[index], instances: readonly PartInstance[] = doc.instances ?? [];
   const nameOf = (id: string) => instances.find(i => i.id === id)?.name ?? id, placed = (id: string) => instances.some(i => i.id === id);
+  // Name/Note retain their existing value/step lifetime; unrelated document edits do not discard drafts.
+  const drafts = useRef({ owner: textDraftScope, step: step?.id, name: false, note: false });
+  const [, refreshDrafts] = useState(0);
+  if (drafts.current.owner !== textDraftScope || drafts.current.step !== step?.id) drafts.current = { owner: textDraftScope, step: step?.id, name: false, note: false };
+  const ownedDrafts = drafts.current;
+  const draftChange = (field: 'name' | 'note', pending: boolean) => {
+    if (drafts.current !== ownedDrafts) return;
+    if (ownedDrafts[field] !== pending) { ownedDrafts[field] = pending; refreshDrafts(n => n + 1); }
+    onTextDraftChange?.(ownedDrafts.name || ownedDrafts.note);
+  };
+  const textPending = ownedDrafts.name || ownedDrafts.note;
+
   return <aside className="card props" aria-label="Assembly steps panel"><DockSection id="steps" title="Steps" summaryCollapsedOnly summary={n ? `${index + 1}/${n}` : '0'}
     actions={<Button size="xs" variant="ghost" aria-label="Close steps" title="Close the steps: all parts are shown again" onClick={onClose}><Icon name="close" small /></Button>}>
     <div className="flex flex-col gap-1.5">
@@ -81,7 +110,17 @@ export function AssemblyStepsPanel({ doc, index, offer, batchOffer, faded, probl
         {offer?.kind === 'go' && <Button size="xs" variant="ghost" aria-label="Move selected part to this step" title={`Move ${nameOf(offer.part)} from ${offer.name} to ${step.name} in one undoable edit. Only its instruction-step membership changes.`} onClick={() => onTransfer(step.id, offer.part)}>Move {nameOf(offer.part)} here</Button>}
         {batchOffer?.target === step.id && onTransferSelected && <Button size="xs" variant="ghost" aria-label="Move selected parts to this step" title={`Move all ${batchOffer.parts.length} selected parts to ${step.name} in one undoable edit. Only instruction-step membership changes.`} onClick={() => onTransferSelected(step.id)}>Move {batchOffer.parts.length} selected parts here</Button>}
         {offer?.kind === 'none' && <div className="text-[11px] text-muted-foreground" role="status">{nameOf(offer.part)} is in no step. {index === n - 1 ? 'Shown at this last step.' : faded ? 'Shown faded until the last step.' : 'Hidden until the last step.'} Use Add selected to include it here.</div>}
-        <label className={FIELD}><span>Name</span><CommitText key={step.id} aria-label="Step name" className="w-36" maxLength={60} required value={step.name} onCommit={v => onRename(step.id, v)} /></label>
+        <label className={FIELD}><span>Name</span><CommitText key={step.id} owner={textDraftScope} onDraftChange={pending => draftChange('name', pending)} aria-label="Step name" className="w-36" maxLength={60} required value={step.name} onCommit={v => onRename(step.id, v)} /></label>
+        {onTakeOutSelected && <div onPointerDownCapture={event => {
+          // Do not blur/commit a dirty text field and activate the newly enabled action in the same gesture.
+          if (drafts.current.name || drafts.current.note) event.preventDefault();
+        }}>
+          <Button size="xs" variant="ghost" aria-label="Take selected parts out of this step"
+            title="Select at least two exact members of this step. Take them out in one undoable edit; parts and placements stay unchanged"
+            disabled={selectionDisabled || textPending || takeOutOffer?.target !== step.id} aria-describedby={textPending ? 'step-takeout-pending-text' : undefined}
+            onClick={() => { if (drafts.current === ownedDrafts && !ownedDrafts.name && !ownedDrafts.note && !selectionDisabled && takeOutOffer?.target === step.id) onTakeOutSelected(step.id); }}>Take selected out</Button>
+          {textPending && <span id="step-takeout-pending-text" role="status" className="muted small">Finish or revert the step name and note edits before taking selected parts out.</span>}
+        </div>}
         <div className="flex flex-col gap-0.5" role="group" aria-label="Parts of this step">
           <div className="flex items-center justify-between text-[11px]"><span className="text-muted-foreground">Parts</span>
             <Button size="xs" variant="ghost" aria-label="Add selected parts to this step" title="Add the parts selected in the Browser or the view to this step" onClick={() => onAddSelected(step.id)}>Add selected</Button></div>
@@ -113,7 +152,7 @@ export function AssemblyStepsPanel({ doc, index, offer, batchOffer, faded, probl
         <Collapsible>
           <CollapsibleTrigger className="flex w-full cursor-pointer items-center gap-1 bg-transparent p-0 text-left text-[11px] text-foreground hover:text-[var(--accent)] [&[data-state=open]_.ui-icon]:rotate-90" aria-label={problems.length ? `Details: ${problems.length} notice${problems.length === 1 ? '' : 's'}` : 'Details'}><Icon name="chevron_right" small />Details{problems.length ? ` · ${problems.length} notice${problems.length === 1 ? '' : 's'}` : ''}</CollapsibleTrigger>
           <CollapsibleContent className="flex flex-col gap-1 pt-1">
-            <label className={FIELD}><span>Note</span><CommitText key={step.id} multiline aria-label="Step note" className="h-12 w-40 min-w-0" maxLength={500} value={step.note ?? ''} onCommit={v => onNote(step.id, v)} /></label>
+            <label className={FIELD}><span>Note</span><CommitText key={step.id} owner={textDraftScope} onDraftChange={pending => draftChange('note', pending)} multiline aria-label="Step note" className="h-12 w-40 min-w-0" maxLength={500} value={step.note ?? ''} onCommit={v => onNote(step.id, v)} /></label>
             <label className={FIELD}><span>Show waiting parts faded</span><input type="checkbox" className={TICK} aria-label="Show waiting parts faded" checked={faded} onChange={e => onFaded(e.target.checked)} /></label>
             {problems.map(p => <div key={p} className="text-[10px] text-muted-foreground" role="status">{p}</div>)}
             <div className="text-[10px] text-muted-foreground">Display only: parts, mates, BOM and exports stay unchanged. Current-step parts are highlighted; explode and camera apply while Steps is open. Waiting parts are {faded ? 'faded, including the base part' : 'hidden'}.</div>

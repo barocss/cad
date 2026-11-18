@@ -87,3 +87,14 @@ export function canSelectStepPart(doc: Pick<StudioDoc, 'assemblySteps' | 'instan
   return steps[index].add.filter(id => id === partId).length === 1
     && steps.reduce((count, step) => count + step.add.filter(id => id === partId).length, 0) === 1;
 }
+
+/** Remove only an explicit selection wholly owned by the current instruction step. Never promote paths or filter mixed selections. */
+export interface StepBatchTakeOutOffer { target: string; parts: readonly string[] }
+export function stepBatchTakeOutOffer(doc: Pick<StudioDoc, 'assemblySteps' | 'instances'>, selection: readonly string[], shown: number): StepBatchTakeOutOffer | null {
+  const steps = stepsOf(doc);
+  if (!Number.isSafeInteger(shown) || shown < 0 || shown >= steps.length || selection.length < 2 || new Set(selection).size !== selection.length) return null;
+  const target = steps[shown];
+  // The core replacement normalizes duplicates; do not let this action clean unrelated retained members.
+  if (new Set(target.add).size !== target.add.length || !selection.every(id => typeof id === 'string' && canSelectStepPart(doc, shown, target.id, id))) return null;
+  return { target: target.id, parts: [...selection] };
+}

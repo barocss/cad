@@ -1,0 +1,88 @@
+{
+  "issue": 207,
+  "issue_status": "OPEN",
+  "scope": "PARTIAL: explicit selected-member takeout from the current assembly instruction step",
+  "date": "2026-11-18",
+  "input": "Synthetic same-name shared-definition top-level occurrences only",
+  "changes": {
+    "schema_changed": false,
+    "core_changed": false,
+    "membership_only": true,
+    "batch_offer": "At least two exact current-step member IDs, all-or-nothing; no selection filtering or name/path remapping"
+  },
+  "baseline01": {
+    "status": "PASS",
+    "batch_control_absent": true,
+    "two_single_member_edits": true,
+    "one_undo_restores_only_last_removal": true,
+    "native_save_open": "NOT_RUN"
+  },
+  "check01": {
+    "status": "FAIL",
+    "reason": "Unit test unused _old and _next bindings failed lint",
+    "actual": "NOT_RUN"
+  },
+  "check02": {
+    "studio_tests": {
+      "passed": 32,
+      "total": 32
+    },
+    "model_tests": {
+      "passed": 35,
+      "total": 35
+    },
+    "studio_types": "PASS",
+    "lint": "PASS"
+  },
+  "actual01": {
+    "status": "FAIL",
+    "reason": "Fixture hit-test incorrectly expected the disabled button itself; shared Button uses pointer-events:none",
+    "later_pending_pointer_note_and_save_open": "NOT_RUN",
+    "product_errors": 0
+  },
+  "actual02": {
+    "status": "FAIL",
+    "passed_before_failure": [
+      "Pending Name and Note disabled-pointer attempts preserved draft, focus, document and history",
+      "Dirty Note blur accepted exactly the intended note edit"
+    ],
+    "failure": "One pointer gesture from the dirty Note accepted the note but left Details open",
+    "later_keyboard_batch_and_save_open": "NOT_RUN",
+    "product_errors": 0
+  },
+  "actual03": {
+    "status": "PASS",
+    "fixture_sha256": "4750d2d206aa36251818956c713d7bc4679f3eb81b955eaa2361b3f3d7975c80",
+    "qualified": [
+      "Public Outliner exact-ID selection of same-name p2 and p3",
+      "One batch membership edit; Undo restores both; Redo exact",
+      "Mixed selection disabled without filtering; existing single-member control retained",
+      "Pending Name and Note block batch without implicit commit; real disabled-pointer attempts preserve draft focus, document and history",
+      "Reverted name draft re-enables batch; blank required name Enter resets without edit",
+      "Separate name Enter and note blur commits are accepted exactly",
+      "Shift+Tab from dirty Note reaches Details, accepts note blur, then separate Enter closes; reopen retains accepted note",
+      "Explicit keyboard batch activation after separate text commits; one Undo preserves those accepted commits",
+      "Only instruction membership changed by the batch; accepted source metadata preserved",
+      "Native Save and fresh Open preserve the full accepted final document"
+    ],
+    "product_errors": 0,
+    "console_errors": 0
+  },
+  "limits": {
+    "same_pointer_dirty_note_close": "NOT_QUALIFIED: actual02 left Details open after accepting the note; actual03 uses separate Shift+Tab and Enter",
+    "possible_layout_movement": "INFERENCE_ONLY; no confirmed cause for actual02 pointer-close failure",
+    "stale_callback_actual": "NOT_RUN",
+    "pending_draft_unrelated_document_commit": "NOT_RUN",
+    "nested_pattern_actual": "NOT_RUN",
+    "independent_geometry_mass_oracle": "NOT_RUN",
+    "whole_issue_complete": false,
+    "refused_note_commit_followed_by_unmount": "NOT_RUN",
+    "captured_stale_callback_race": "NOT_RUN: source guard review only"
+  },
+  "images": {
+    "baseline.png": "Baseline: two selected same-name occurrences with individual Take out controls only",
+    "selected.png": "Actual03: exact p2/p3 selection, both current-step members, batch action available",
+    "removed.png": "Actual03: both current-step memberships removed after separate text commits; accepted parts remain in the assembly"
+  },
+  "publication": "Curated summary and synthetic screenshots only; no raw receipts, source maps, local paths or credentials"
+}
