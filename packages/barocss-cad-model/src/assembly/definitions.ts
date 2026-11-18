@@ -34,6 +34,12 @@ function followedDefinitionProblem(before: StudioDoc, after: StudioDoc) {
   return undefined;
 }
 
+/** Shared metadata is optional in native files; expansion can change additional driven copies. */
+function expandedDefinitionCut(before: StudioDoc, after: StudioDoc, part: StudioDoc) {
+  const changedIds = (after.instances ?? []).filter(i => i.doc === part && before.instances?.some(was => was.id === i.id && was.doc !== i.doc)).map(i => i.id);
+  return cutBlockedBy(before, changedIds, part);
+}
+
 /** A definition id not yet used by any instance or pending revision. */
 export function freshPartId(doc: StudioDoc): string {
   const used = new Set([...(doc.instances ?? []).flatMap(i => i.part ? [i.part.id] : []), ...Object.keys(doc.pendingParts ?? {})]);
@@ -82,6 +88,8 @@ export function acceptRevision(doc: StudioDoc, id: string): StudioDoc {
   const rest = Object.fromEntries(Object.entries(doc.pendingParts ?? {}).filter(([k]) => k !== id));
   const instances = (doc.instances ?? []).map((i): PartInstance => i.part?.id === id ? { ...i, doc: p.doc, part: { ...i.part, rev: p.rev, source: p.name } } : i);
   const next = expandPatterns({ ...doc, instances, pendingParts: Object.keys(rest).length ? rest : undefined });
+  const expandedCut = expandedDefinitionCut(doc, next, p.doc);
+  if (expandedCut) throw refusal('VALUE', cutBlockedWords(expandedCut, 'Accepting this revision'));
   const followed = followedDefinitionProblem(doc, next);
   if (followed) throw refused(followed);
   return next;
@@ -115,8 +123,7 @@ export function editDefinition(doc: StudioDoc, owner: string, part: StudioDoc): 
   const next = expandPatterns({ ...doc, instances, pendingParts: pending && Object.keys(pending).length ? pending : undefined });
   // Native documents may omit shared part metadata. Expansion still changes every
   // driven copy, so protect cuts on those actual recipients, not only named sharers.
-  const changedIds = (next.instances ?? []).filter(i => i.doc === part && doc.instances?.some(was => was.id === i.id && was.doc !== i.doc)).map(i => i.id);
-  const expandedCut = cutBlockedBy(doc, changedIds, part);
+  const expandedCut = expandedDefinitionCut(doc, next, part);
   if (expandedCut) return { error: cutBlockedWords(expandedCut, 'This edit') };
   const followed = followedDefinitionProblem(doc, next);
   if (followed) return { error: followed.message };

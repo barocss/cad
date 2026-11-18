@@ -1,0 +1,11 @@
+{
+  "status": "FAIL",
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "failure": "page.waitForFunction: Timeout 60000ms exceeded.\n    at f.same (/private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:124:45)\n    at /private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/pattern-revision-cut-browser.mjs:4:702\n    at async f.run (/private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/pattern-revision-cut-browser.mjs:4:1",
+  "observations": []
+}
