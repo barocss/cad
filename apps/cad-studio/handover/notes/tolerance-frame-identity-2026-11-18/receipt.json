@@ -1,0 +1,100 @@
+{
+  "baseline": {
+    "status": "FAIL",
+    "failure": "AssertionError [ERR_ASSERTION]: Accept must retain both standalone and proposed controls\n\n1 !== 2\n\n    at file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/tolerance-frame-identity-browser.mjs:29:9\n    at async f.run (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/tolerance-frame-identity-browser.mjs:18:1",
+    "observations": [
+      {
+        "beforeFrames": [
+          {
+            "id": "frame-d4",
+            "view": "right",
+            "place": [
+              10,
+              10
+            ],
+            "characteristic": "flatness",
+            "value": 0.07,
+            "datums": []
+          }
+        ],
+        "acceptedFrames": [
+          {
+            "id": "frame-d4",
+            "view": "right",
+            "place": [
+              10,
+              10
+            ],
+            "characteristic": "flatness",
+            "value": 0.07,
+            "datums": []
+          }
+        ]
+      }
+    ],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceBeforeCount": 4,
+    "sourceAfterCount": null,
+    "sourceAfterCleanupCount": 1167
+  },
+  "fixed": {
+    "status": "PASS",
+    "failure": null,
+    "observations": [
+      {
+        "beforeFrames": [
+          {
+            "id": "frame-d4",
+            "view": "right",
+            "place": [
+              10,
+              10
+            ],
+            "characteristic": "flatness",
+            "value": 0.07,
+            "datums": []
+          }
+        ],
+        "acceptedFrames": [
+          {
+            "id": "frame-d4",
+            "view": "right",
+            "place": [
+              10,
+              10
+            ],
+            "characteristic": "flatness",
+            "value": 0.07,
+            "datums": []
+          },
+          {
+            "id": "frame-d4-2",
+            "dim": "d4",
+            "characteristic": "position",
+            "value": 0.2,
+            "datums": [
+              "A",
+              "B",
+              "C"
+            ]
+          }
+        ]
+      }
+    ],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceBeforeCount": 4,
+    "sourceAfterCount": 1167,
+    "sourceAfterCleanupCount": 1167
+  }
+}

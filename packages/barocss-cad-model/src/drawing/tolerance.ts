@@ -202,7 +202,7 @@ export function toleranceSuggestions(ctx: IssueContext): ToleranceSuggestion[] {
   });
   // (A frame names the datums the drawing has or is offered: none it could not place.)
   const datums = letters.filter(l => named.includes(l) || have.has(l));
-  const frameIds = new Set((s.frames ?? []).map(f => f.id));
+  const frameIds = new Set([...(s.sheetContext?.frameIds ?? []), ...(s.frames ?? []).map(f => f.id)]);
   for (const k of kinds) {
     if ((s.frames ?? []).some(f => f.dim === k.dim.dim.id)) continue;
     const p = holePosition(k.callout, k.diameter, ctx.fastenerSizes ?? NO_SIZES), basic = locating(ctx, k.centres);
