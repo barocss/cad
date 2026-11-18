@@ -67,10 +67,10 @@ test('arc admission refuses silently ignored or malformed constraint metadata', 
  ];
  for (const candidate of failures) assert.equal(outlineMobility(candidate), null);
 });
-test('the extension does not admit multiple arcs, composite circles or spline/ellipse ownership', () => {
+test('the extension does not admit adjacent arcs, composite circles or spline/ellipse ownership', () => {
  const shape = fixedArc();
  const failures: Polygon[] = [
-  { ...shape, bulges: [0.5, 0, 0.5, 0] }, { ...shape, circles: [{ c: [10, 10], r: 2 }] },
+  { ...shape, bulges: [0.5, 0.5, 0, 0] }, { ...shape, circles: [{ c: [10, 10], r: 2 }] },
   { ...shape, circleIds: ['c1'] }, { ...shape, equalRadii: [[0, 2]] }, { ...shape, concentric: [[0, 2]] },
   { ...shape, fromSpline: true }, { ...shape, fromEllipse: true },
   { ...shape, closed: false }, { ...shape, pending: true }, { ...shape, construction: true },
