@@ -82,7 +82,7 @@ await f.run(async () => {
   if (!baseline) {
     assert.equal(first.doc.nodes[3].cutDepth, 'through');
     await f.openFeatureEditor(3, 'saved Through all');
-    await f.editor().getByText('Through all', { exact: true }).waitFor();
+    assert.equal(await f.editor().getByRole('combobox', { name: 'Cut depth', exact: true }).inputValue(), 'through');
     assert.equal(await field(f.editor(), 'Distance').count(), 0);
     assert.equal(await field(f.editor(), 'Start Z').count(), 0);
     await f.closeEditor();

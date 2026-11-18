@@ -237,7 +237,8 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
       </div>}
       {node?.kind === 'hole' && <HoleHistoryInputs hole={node} doc={doc} index={index} editableEnds={fields.some(field => field.key === 'end')}
         drillDiameter={typed.dia ?? (diameterField?.kind === 'number' ? diameterField.get(draft) : undefined)} />}
-      {node?.kind === 'extrude' && node.cutDepth === 'through' && <div className="field"><span>Depth</span><span>Through all</span></div>}
+      {node?.kind === 'extrude' && fields.some(field => field.key === 'cutDepthMode') && <p className="small muted">Cut depth changes only this terminal cut. Distance starts at 8 mm from the attached sketch; edit it before Apply. Through all follows the current target.</p>}
+      {node?.kind === 'extrude' && node.cutDepth === 'through' && !fields.some(field => field.key === 'cutDepthMode') && <div className="field"><span>Depth</span><span>Through all</span></div>}
       {node?.kind === 'fillet' && node.radii && <FilletEndpointNotice locations={filletEndpoints ?? {reason:'Endpoint locations are unavailable in this editing context.'}} />}
       {filletType && <FilletTypeFields type={filletType} mode={draft[index]?.kind === 'fillet' && draft[index].radii ? 'varying' : 'constant'} section={node?.kind === 'fillet' ? node.section : undefined} fixed />}
       {onEditSketch && <button className="ghost" aria-label="Edit sketch" title="Reopen the sketch this feature is made from, with its constraints" onClick={() => { retireEvaluation(); onEditSketch(); }}><Icon name="draw" small /> Edit sketch</button>}
@@ -366,6 +367,9 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
                   const next = f.set(draft, e.target.value);
                   if (f.key === 'end' && node?.kind === 'hole' && next[index] !== draft[index]) {
                     setTyped(values => Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'depth')));
+                  }
+                  if (f.key === 'cutDepthMode' && node?.kind === 'extrude' && next[index] !== draft[index]) {
+                    setTyped(values => Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'h' && key !== 'from' && key !== 'draft')));
                   }
                   if (f.key === 'thread') {
                     if (next[index] === draft[index]) return;

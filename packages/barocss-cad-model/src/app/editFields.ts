@@ -1,3 +1,4 @@
+import { throughCutPlane, throughCutProblem } from '../engine/throughCut';
 import { checkFastenerSizeRow } from '../engine/fastenerSizeRows';
 import { ANCHORS } from './frameCommands';
 import { setSplitOutputSide } from '../engine/splitOutput';
@@ -19,7 +20,7 @@ import type { BearingAssemblyContext, BearingAssemblyInput } from '../engine/bea
 import type { StudioFits } from '../engine/fits';
 import { bearingHousingOptions, bearingHousingPatch, bearingHousingValue } from './shaftCommands';
 import { helixOf } from '../engine/part';
-import { spurGearCenterDistance, internalGearCenterDistance, bevelGearDimensions } from '@barocss/cad';
+import { CadPartLimits, spurGearCenterDistance, internalGearCenterDistance, bevelGearDimensions } from '@barocss/cad';
 
 type Nodes = readonly ModelNode[];
 export type EditField =
@@ -285,6 +286,39 @@ export function isSketchAnchoredCut(nodes: Nodes, index: number): boolean {
   return sketch?.kind === 'sketch' && !!sketch.on && cut.parent.node === sketch.on.node && cut.parent.side === sketch.on.side;
 }
 
+/** History-only end changes: one terminal Difference, preserving the attached sketch and target. */
+function editableCutDepth(nodes: Nodes, index: number) {
+  const tool = nodes[index], cut = nodes[index + 1];
+  if (tool?.kind !== 'extrude' || index !== nodes.length - 2 || tool.held || tool.suppressed || tool.made !== undefined
+    || typeof tool.height !== 'number' || !Number.isFinite(tool.height) || tool.height <= 0 || tool.height > CadPartLimits.length || tool.from !== -tool.height
+    || (tool.draft !== undefined && tool.draft !== 0) || (tool.cutDepth !== undefined && tool.cutDepth !== 'through')
+    || !Number.isInteger(tool.sketch) || tool.sketch < 0 || tool.sketch >= index
+    || cut?.kind !== 'difference' || cut.held || cut.suppressed || cut.made !== undefined || cut.tool.node !== index || cut.tool.side !== 'solid') return;
+  const sketch = nodes[tool.sketch];
+  if (sketch?.kind !== 'sketch' || sketch.held || sketch.suppressed || sketch.association !== undefined || sketch.pocketFloor !== undefined
+    || !throughCutPlane(sketch.plane) || !sketch.on || sketch.on.side !== 'solid'
+    || !Number.isInteger(sketch.on.node) || sketch.on.node < 0 || sketch.on.node >= tool.sketch
+    || cut.parent.node !== sketch.on.node || cut.parent.side !== sketch.on.side) return;
+  const target = nodes[sketch.on.node];
+  if (!target || target.held || target.suppressed || throughCutProblem({ nodes })) return;
+  return tool;
+}
+function cutDepthModeField(index: number): EditField {
+  return { kind: 'choice', key: 'cutDepthMode', label: 'Cut depth',
+    options: [{ value: 'through', label: 'Through all' }, { value: 'distance', label: 'Distance' }],
+    get: nodes => nodes[index]?.kind === 'extrude' && nodes[index].cutDepth === 'through' ? 'through' : 'distance',
+    set: (nodes, value) => {
+      const tool = editableCutDepth(nodes, index);
+      if (!tool || (value !== 'through' && value !== 'distance') || (tool.cutDepth === 'through' ? 'through' : 'distance') === value) return [...nodes];
+      const next = { ...tool };
+      // Through snapshots are not pocket depths. Match creation's explicit 8 mm draft default.
+      if (value === 'distance') { delete next.cutDepth; next.height = 8; next.from = -8; }
+      else next.cutDepth = 'through';
+      return replace(nodes, index, next);
+    },
+  };
+}
+
 function anchoredCut(tool: Extract<ModelNode, { kind: 'extrude' }>, depth: number, draft: number): typeof tool {
   const next = { ...tool, height: depth };
   if (draft === 0) {
@@ -313,6 +347,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       number('h', 'Distance', 'mm', n => num((n as typeof node).height), (n, height) => ({ ...(n as typeof node), height }));
       break;
     case 'extrude':
+      if (editableCutDepth(nodes, i)) out.push(cutDepthModeField(i));
       out.push(...sketchFields(nodes, node.sketch, '', parameters));
       if (node.cutDepth === 'through') break;
       out.push({ kind: 'number', key: 'h', label: 'Distance', unit: 'mm', get: n => {

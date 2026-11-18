@@ -1,0 +1,140 @@
+{
+  "issue": 685,
+  "originalCommit": "6f0cdb062",
+  "runs": [
+    {
+      "run": "cad-685-baseline-01",
+      "status": "PASS",
+      "qualification": "Switch the same rectangular Cut between Through all and numeric Distance in History.",
+      "sourceCount": 1077,
+      "sourceUnchanged": true,
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": null
+    },
+    {
+      "run": "cad-685-fixed-01",
+      "status": "PASS",
+      "qualification": "Switch the same rectangular Cut between Through all and numeric Distance in History.",
+      "sourceCount": 1078,
+      "sourceUnchanged": true,
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": null
+    },
+    {
+      "run": "cad-685-through-regression-01",
+      "status": "FAIL",
+      "qualification": "A Through all cut follows the stock down while its sketch stays at Z=10.",
+      "sourceCount": 1078,
+      "sourceUnchanged": false,
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": "Old visible text locator resolved to hidden option; semantic choice-value assertion used in final run."
+    },
+    {
+      "run": "cad-685-fixed-02",
+      "status": "PASS",
+      "qualification": "Switch the same rectangular Cut between Through all and numeric Distance in History.",
+      "sourceCount": 1078,
+      "sourceUnchanged": true,
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": null
+    },
+    {
+      "run": "cad-685-through-regression-02",
+      "status": "PASS",
+      "qualification": "A Through all cut follows the stock down while its sketch stays at Z=10.",
+      "sourceCount": 1078,
+      "sourceUnchanged": true,
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": null
+    },
+    {
+      "run": "cad-685-distance-regression-02",
+      "status": "PASS",
+      "qualification": "Change the saved cut depth in Studio and read the native pocket floor and material.",
+      "sourceCount": 1077,
+      "sourceUnchanged": true,
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": null
+    },
+    {
+      "run": "cad-685-draft-regression-02",
+      "status": "PASS",
+      "qualification": "A drafted Cut uses positive depth in creation and History, with its opening on the sketch plane.",
+      "sourceCount": 1078,
+      "sourceUnchanged": true,
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": null
+    }
+  ],
+  "focusedTests": {
+    "original": "0 PASS / 3 RED: missing mode",
+    "final": "18/18 PASS",
+    "fixtureFailure": "Underside plane normal -Z reverses local Y; original fixture lay outside stock. Shifted plane origin Y to 30. Product unchanged."
+  },
+  "checks": {
+    "scopedLint": "PASS",
+    "modelType": "PASS",
+    "studioType": "PASS",
+    "studioBuild": "PASS 8.00s"
+  },
+  "visualReview": "Baseline, reopened Distance 4 and native refusal inspected."
+}

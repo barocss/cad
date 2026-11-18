@@ -1,0 +1,107 @@
+{
+  "01-through-created": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 11360.000000000004,
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 2
+        },
+        {
+          "z": 10,
+          "normal": 1,
+          "loops": 2
+        }
+      ]
+    }
+  ],
+  "03-pocket-floor-six": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 11744.000000000002,
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 6,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 10,
+          "normal": 1,
+          "loops": 2
+        }
+      ]
+    }
+  ],
+  "07b-refusal-retains-pocket": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 11744.000000000002,
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 6,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 10,
+          "normal": 1,
+          "loops": 2
+        }
+      ]
+    }
+  ],
+  "11-through-native": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 11360.000000000004,
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 2
+        },
+        {
+          "z": 10,
+          "normal": 1,
+          "loops": 2
+        }
+      ]
+    }
+  ],
+  "13-reopened-through-native": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 11360.000000000004,
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 2
+        },
+        {
+          "z": 10,
+          "normal": 1,
+          "loops": 2
+        }
+      ]
+    }
+  ]
+}
