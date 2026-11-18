@@ -45,12 +45,23 @@ function heightFinishLaw(finish:ModelNode,extrude:Extract<ModelNode,{kind:'extru
  const storedTop=toSig({kind:'line',at:[0,0,top],dir:null,size:1}).p[2];
  return sig?.k==='line'&&sig.p[2]===storedTop&&sig.d?.[2]===0;
 }
-/** Numeric Height-only edit, retaining the unchanged finish and its historical radius anchors. */
+/** Resolve only a Height proof copy. Authored bindings must never be committed as numbers. */
+function heightProofDoc(doc:StudioDoc):StudioDoc|null {
+ const ex=doc.nodes[1];if(ex?.kind!=='extrude')return null;
+ if(finite(ex.height))return doc;
+ const finish=doc.nodes[2];
+ if(finish?.kind!=='chamfer'&&(finish?.kind!=='fillet'||finish.radii!==undefined))return null;
+ if(!positiveDimension(ex.height,doc.parameters))return null;
+ const height=doc.parameters[(ex.height as {parameter:string}).parameter];
+ return {...doc,nodes:doc.nodes.map((node,i)=>i===1?{...ex,height}:node)};
+}
+/** Height-only edit with unchanged parameters; bindings are limited to constant finishing laws. */
 export function isRectangleFinishHeightResize(before:StudioDoc,next:StudioDoc,index:number):boolean {
- if(index!==1||before.direct!==undefined||next.direct!==undefined||before.instances?.length||next.instances?.length||!plain(before.nodes,before.parameters)||!plain(next.nodes,next.parameters))return false;
- const old=before.nodes[1],now=next.nodes[1],finish=before.nodes[2];
- return old.kind==='extrude'&&now.kind==='extrude'&&old.height!==now.height
-  &&heightFinishLaw(finish,old)
+ const oldProof=heightProofDoc(before),newProof=heightProofDoc(next);
+ if(index!==1||before.direct!==undefined||next.direct!==undefined||before.instances?.length||next.instances?.length||!oldProof||!newProof||!plain(oldProof.nodes,before.parameters)||!plain(newProof.nodes,next.parameters))return false;
+ const old=before.nodes[1],now=next.nodes[1],finish=before.nodes[2],provedExtrude=oldProof.nodes[1];
+ return old.kind==='extrude'&&now.kind==='extrude'&&!same(old.height,now.height)
+  &&provedExtrude.kind==='extrude'&&heightFinishLaw(finish,provedExtrude)
   &&same({...before,nodes:[]},{...next,nodes:[]})&&same(before.nodes[0],next.nodes[0])
   &&same({...old,height:0},{...now,height:0})&&same(finish,next.nodes[2]);
 }
@@ -131,7 +142,10 @@ function endpointAssignment(feature:Extract<ModelNode,{kind:'fillet'}>,edge:Disp
 }
 /** Proof, not geometric rematching: whole native topology bijection AND the same semantic rectangle corners. */
 export function proveRectangleFinishResize(before:StudioDoc,next:StudioDoc,oldBodies:readonly BodyResult[],newBodies:readonly BodyResult[]):StudioDoc|null {
- if(!isRectangleFinishResize(before,next,1))return null;const feature=next.nodes[2];if(feature.kind!=='fillet'&&feature.kind!=='chamfer')return null;
+ if(!isRectangleFinishResize(before,next,1))return null;
+ const authoredNext=next;
+ if(isRectangleFinishHeightResize(before,next,1)){before=heightProofDoc(before)!;next=heightProofDoc(next)!;}
+ const feature=next.nodes[2];if(feature.kind!=='fillet'&&feature.kind!=='chamfer')return null;
  const name=feature.edges[0],oldBody=parent(before,oldBodies),newBody=parent(next,newBodies);if(!oldBody||!newBody)return null;
  const oldTopology=rectangleTopology(before,oldBody),newTopology=rectangleTopology(next,newBody);
  if(!oldTopology||!newTopology||!equalRoles(oldTopology.edgeRoles,newTopology.edgeRoles)||!equalRoles(oldTopology.faceNames,newTopology.faceNames)
@@ -152,5 +166,5 @@ export function proveRectangleFinishResize(before:StudioDoc,next:StudioDoc,oldBo
  }
  const oldSig=signaturesOf(oldBody).edges.get(name),newSig=signaturesOf(newBody).edges.get(name);
  if(!oldSig||!newSig||oldSig.shared!==undefined||newSig.shared!==undefined||!same(feature.sigs?.[name],toSig(oldSig)))return null;
- return {...next,nodes:next.nodes.map((node,i)=>i===2?{...feature,sigs:{...feature.sigs,[name]:toSig(newSig)}}:node)};
+ return {...authoredNext,nodes:authoredNext.nodes.map((node,i)=>i===2?{...feature,sigs:{...feature.sigs,[name]:toSig(newSig)}}:node)};
 }
