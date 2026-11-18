@@ -1,5 +1,6 @@
 import { planCurveFeaturePatternPath, type CurveFeaturePatternPath, type RawNurbsPath } from '@barocss/cad/api';
 import { modelOf } from './direct';
+import { finiteBinary64Integer } from './binary64';
 import { leafBodies, NODE_EXTRA_FIELDS, type ModelNode, type StudioDoc } from './doc';
 import { BarocssError, refusal } from './refusal';
 
@@ -18,6 +19,18 @@ function axisSegment(a: readonly number[], middle: readonly number[], b: readonl
   return axis !== -1 && a.every((value, k) => k === axis
     ? middle[k] >= Math.min(value, b[k]) && middle[k] <= Math.max(value, b[k])
     : value === middle[k] && value === b[k]);
+}
+
+/** Exact represented coordinates only: never flatten a nearly straight authored curve. */
+function orderedStraightSegment(a: readonly number[], middle: readonly number[], b: readonly number[]): boolean {
+  if (axisSegment(a, middle, b)) return true;
+  if (a.every((value, k) => value === b[k]) || !a.every((value, k) =>
+    middle[k] >= Math.min(value, b[k]) && middle[k] <= Math.max(value, b[k]))) return false;
+  // Called only after the finite ±10000 mm / 64-pole budget checks below.
+  const start = a.map(finiteBinary64Integer);
+  const u = middle.map((value, k) => finiteBinary64Integer(value) - start[k]);
+  const v = b.map((value, k) => finiteBinary64Integer(value) - start[k]);
+  return u[0] * v[1] === u[1] * v[0] && u[0] * v[2] === u[2] * v[0] && u[1] * v[2] === u[2] * v[1];
 }
 
 /** Admit bounded straight spans. Only a linked curve can need a different parameterization for CUT. */
@@ -48,7 +61,7 @@ function legacyCurvePatternPath(value: RawNurbsPath, linked = false): { path: Ra
     if (degree === 2) {
       const middle = points[i - 1];
       if (!a.every((value, k) => exactMidpoint(value, middle[k], b[k]))) {
-        if (!linked || !axisSegment(a, middle, b)) return fail('each quadratic middle point must be the exact endpoint midpoint.');
+        if (!linked || !orderedStraightSegment(a, middle, b)) return fail('each quadratic middle point must be the exact endpoint midpoint.');
         useEndpoints = true;
       }
     }
