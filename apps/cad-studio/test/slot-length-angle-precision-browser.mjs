@@ -1,0 +1,55 @@
+import assert from 'node:assert/strict';
+import {createFlow} from './flow-helper.mjs';
+const baseline=process.argv.includes('--baseline');
+const angleMode=process.argv.includes('--angle'),fieldName=angleMode?'angle':'length',requested=angleMode?30.123456789:40.123456789;
+// Baseline observes authored endpoint quantization separately from display rounding.
+const pins=['apps/cad-studio/test/slot-length-angle-precision-browser.mjs','apps/cad-studio/test/flow-helper.mjs','apps/cad-studio/src/sketch/slotWidth.ts','apps/cad-studio/src/ui/SketchPanel.tsx','apps/cad-studio/src/sketch/slotCentre.ts','apps/cad-studio/src/App.tsx','apps/cad-studio/src/sketch/draftHistory.ts','packages/barocss-cad-model/src/sketch/profile.ts','packages/barocss-cad-model/src/sketch/reopen.ts'];
+if(!baseline)pins.push('apps/cad-studio/src/sketch/slotEndpoint.ts');
+const f=await createFlow({name:'slot-length-angle-precision',output:process.argv[2],envFrozen:'SLOT_LENGTH_ANGLE_PRECISION_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:'Observe Length-only or Angle-only Slot editing after a precise centre translation and physical Save/Open. Intended precision is separate from valid native lifecycle.',limits:['One XY Slot, original centre distance35, radius4, extrusion3. Existing Length/Angle controls only; no solver capability change. Lifecycle PASS does not imply requested precision PASS.'],inspectorSource:`
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {checkBrep,faceGeometry,massPropertiesOf} from '@barocss/cad';
+import {partSnapshot} from '@barocss/cad-model/engine/part';
+const doc=JSON.parse(readFileSync(process.argv[2],'utf8')),outputs=partSnapshot(doc).outputs;
+assert.equal(outputs.length,1);const o=outputs[0];assert.equal(o.bodyCount,1);assert.ok(checkBrep(o.brep,{strict:true}).valid);
+console.log(JSON.stringify({mass:massPropertiesOf(o),vertices:o.brep.vertices.map(v=>v.point),cylinders:o.brep.faces.flatMap(face=>{const g=faceGeometry(face);return g.kind==='cylinder'?[{name:face.name,...g}]:[];})}));
+`,snapshotExtra:()=>({slotFields:Object.fromEntries(['x','y','length','width','angle'].map(k=>[k,document.getElementById('sk-slot-'+k)?.value??null])),outline:document.querySelector('.vp-overlay .sk-shape')?.getAttribute('points')??null})});
+const button=(name,scope=f.page)=>scope.getByRole('button',{name,exact:true});
+const near=(a,b,t=1e-9)=>assert.ok(Number.isFinite(a)&&Math.abs(a-b)<=t,`${a} != ${b}`);
+const A=[10.123456789,15],B=[45.123456789,15],H=3;
+function centres(doc){const n=doc.nodes[0];assert.deepEqual(n.segments.map(s=>s.kind),['line','arc','line','arc']);return[n.segments[3].center,n.segments[1].center];}
+async function native(label,doc,r,expectedCentres,intendedCentres=expectedCentres,requestValue=requested){
+ const [a,b]=centres(doc);[a,b].forEach((p,j)=>p.forEach((v,i)=>near(v,expectedCentres[j][i])));
+ const profile=doc.nodes[0];assert.deepEqual(profile.slot,{a,b,r});
+ const length=Math.hypot(b[0]-a[0],b[1]-a[1]),normal=[-(b[1]-a[1])/length,(b[0]-a[0])/length];const at=(p,sign)=>p.map((v,i)=>v+sign*r*normal[i]||0);
+ const expectedLoop=[{kind:'line',start:at(a,-1)},{kind:'arc',start:at(b,-1),center:b,direction:'ccw'},{kind:'line',start:at(b,1)},{kind:'arc',start:at(a,1),center:a,direction:'ccw'}];assert.deepEqual(profile.segments,expectedLoop);
+ const n=await f.inspect(label,doc);assert.equal(n.cylinders.length,2);const remaining=[...n.cylinders];
+ for(const p of[a,b]){const i=remaining.findIndex(c=>Math.hypot(c.c[0]-p[0],c.c[1]-p[1])<=1e-9);assert.ok(i>=0,JSON.stringify({p,cylinders:n.cylinders}));const[c]=remaining.splice(i,1);near(c.r,r);near(Math.abs(c.a[2]),1);}
+ near(Math.min(...n.vertices.map(p=>p[2])),0);near(Math.max(...n.vertices.map(p=>p[2])),H);
+ const distance=Math.hypot(b[0]-a[0],b[1]-a[1]),actualVolume=H*(2*r*distance+Math.PI*r*r),intendedDistance=Math.hypot(intendedCentres[1][0]-intendedCentres[0][0],intendedCentres[1][1]-intendedCentres[0][1]),intendedVolume=H*(2*r*intendedDistance+Math.PI*r*r);
+ near(n.mass.volume,actualVolume,1e-7);const bodies=(await f.bodies()).bodies;assert.equal(bodies.length,1);near(bodies[0].volume,actualVolume,1e-7);[(a[0]+b[0])/2,(a[1]+b[1])/2,H/2].forEach((v,i)=>near(n.mass.centroid[i],v,1e-8));
+ if(!baseline){[a,b].forEach((p,j)=>p.forEach((v,i)=>near(v,intendedCentres[j][i])));near(n.mass.volume,intendedVolume,1e-7);}
+ const intendedAngle=Math.atan2(intendedCentres[1][1]-intendedCentres[0][1],intendedCentres[1][0]-intendedCentres[0][0]),actualAngle=Math.atan2(b[1]-a[1],b[0]-a[0]);
+ f.report.observations.push({label,field:fieldName,requested:requestValue,radius:r,authoredCentres:[a,b],expectedAuthoredCentres:expectedCentres,intendedCentres,distance,intendedDistance,distanceError:distance-intendedDistance,angleErrorRadians:actualAngle-intendedAngle,volume:n.mass.volume,intendedVolume,intendedVolumeError:n.mass.volume-intendedVolume,endpointError:Math.hypot(b[0]-intendedCentres[1][0],b[1]-intendedCentres[1][1]),requestedPrecision:Math.hypot(b[0]-intendedCentres[1][0],b[1]-intendedCentres[1][1])<=1e-9?'PASS':'FAIL',lifecycleNative:'PASS'});
+
+}
+await f.run(async()=>{
+ await f.newPage();await button('New part').click();await f.ready();const empty=await f.doc();assert.equal(empty.nodes.length,0);await button('Sketch',f.page.getByLabel('Mode',{exact:true})).click();await f.sketchPanel().getByLabel('Sketch plane',{exact:true}).selectOption('xy');await f.tool('Slot','o');await f.frame([[10,15],[45,15],[10,19]]);for(const p of[[10,15],[45,15],[10,19]])await f.worldClick(p);
+ assert.equal(Number(await f.page.locator('#sk-slot-length').inputValue()),35);assert.equal(Number(await f.page.locator('#sk-slot-width').inputValue()),8);await f.page.locator('#sk-slot-x').fill(String(A[0]));await f.page.evaluate(()=>document.activeElement?.blur());
+ const sketch=(await f.finishSketch('01-precise-slot')).doc;centres(sketch).forEach((p,j)=>p.forEach((v,i)=>near(v,[A,B][j][i])));await f.openExtrudeHud();const original=(await f.applyExtrude({distance:H,previous:sketch,label:'02-original-solid'})).doc;await native('03-original-native',original,4,[A,B]);
+ const firstSave=await f.save('slot-length-angle-original');await f.freshOpen(firstSave.file,firstSave.doc,'04-original-reopened');await f.same(original);await native('05-original-reopened-native',original,4,[A,B]);
+ await f.openFeatureEditor(1);await button('Edit sketch',f.editor()).click();await f.sketchPanel().waitFor();assert.equal(Number(await f.page.locator('#sk-slot-width').inputValue()),8);const before=await f.snapshot('06-parameter-before');
+ await f.page.locator('#sk-slot-'+fieldName).fill(String(requested));await f.page.evaluate(()=>document.activeElement?.blur());const edited=await f.snapshot('07-parameter-input');assert.equal(Number(edited.slotFields.width),8);f.report.observations.push({label:'requested-and-displayed',field:fieldName,requested,displayed:edited.slotFields[fieldName],displayRoundingIsNotAuthoredPrecision:true});await f.same(original);await button('Undo').click();const undone=await f.snapshot('08-draft-undo');assert.deepEqual(undone.slotFields,before.slotFields);assert.equal(undone.outline,before.outline);await button('Redo').click();const redone=await f.snapshot('09-draft-redo');assert.deepEqual(redone.slotFields,edited.slotFields);assert.equal(redone.outline,edited.outline);
+ const changed=(await f.finishSketch('10-parameter-finished')).doc;assert.deepEqual(changed.nodes[1],original.nodes[1]);assert.deepEqual(changed.nodes[0].sideTags,original.nodes[0].sideTags);assert.deepEqual(changed.outputs,original.outputs);assert.equal(changed.nextId,original.nextId);
+ const L=angleMode?35:requested,theta=(angleMode?requested:0)*Math.PI/180,intended=[A,[A[0]+L*Math.cos(theta),A[1]+L*Math.sin(theta)]],expected=baseline?[A,intended[1].map(v=>Math.round(v*1e4)/1e4)]:intended;await native('11-parameter-native',changed,4,expected,intended);await f.undo();await f.same(original);await native('12-document-undo-native',original,4,[A,B]);await f.redo();await f.same(changed);await native('13-document-redo-native',changed,4,expected,intended);
+ const saved=await f.save('slot-length-angle-edited');await f.freshOpen(saved.file,saved.doc,'14-parameter-reopened');await f.same(changed);await native('15-parameter-reopened-native',changed,4,expected,intended);await f.openFeatureEditor(1);await button('Edit sketch',f.editor()).click();await f.sketchPanel().waitFor();assert.equal(Number(await f.page.locator('#sk-slot-width').inputValue()),8);const actual=centres(changed),actualL=Math.hypot(actual[1][0]-actual[0][0],actual[1][1]-actual[0][1]),actualDeg=Math.atan2(actual[1][1]-actual[0][1],actual[1][0]-actual[0][0])*180/Math.PI;assert.equal(Number(await f.page.locator('#sk-slot-length').inputValue()),Math.round(actualL*1e4)/1e4);assert.equal(Number(await f.page.locator('#sk-slot-angle').inputValue()),Math.round(actualDeg*1e4)/1e4);await f.snapshot('16-reopened-controls');await f.page.keyboard.press('Escape');await f.sketchPanel().waitFor({state:'hidden'});await f.same(changed);
+ if(!baseline){
+  const secondRequest=angleMode?-20.987654321:42.987654321;
+  await f.openFeatureEditor(1);await button('Edit sketch',f.editor()).click();await f.sketchPanel().waitFor();const prior=await f.snapshot('17-repeat-before');
+  await f.page.locator('#sk-slot-'+fieldName).fill(String(secondRequest));await f.page.evaluate(()=>document.activeElement?.blur());const second=await f.snapshot('18-repeat-input');await f.same(changed);await button('Undo').click();const undo=await f.snapshot('19-repeat-undo');assert.deepEqual(undo.slotFields,prior.slotFields);assert.equal(undo.outline,prior.outline);await button('Redo').click();const redo=await f.snapshot('20-repeat-redo');assert.deepEqual(redo.slotFields,second.slotFields);assert.equal(redo.outline,second.outline);
+  const again=(await f.finishSketch('21-repeat-finished')).doc;assert.deepEqual(again.nodes[1],changed.nodes[1]);assert.deepEqual(again.nodes[0].sideTags,changed.nodes[0].sideTags);assert.deepEqual(again.outputs,changed.outputs);assert.equal(again.nextId,changed.nextId);
+  const current=centres(changed),oldL=Math.hypot(current[1][0]-A[0],current[1][1]-A[1]);const newL=angleMode?oldL:secondRequest,newTheta=angleMode?secondRequest*Math.PI/180:Math.atan2(current[1][1]-A[1],current[1][0]-A[0]);const target=[A,[A[0]+newL*Math.cos(newTheta),A[1]+newL*Math.sin(newTheta)]];
+  f.report.observations.push({label:'repeat-request',field:fieldName,requested:secondRequest,target});await native('22-repeat-native',again,4,target,target,secondRequest);await f.undo();await f.same(changed);await native('23-repeat-document-undo',changed,4,expected,intended);await f.redo();await f.same(again);await native('24-repeat-document-redo',again,4,target,target,secondRequest);
+  const save=await f.save('slot-length-angle-repeat');await f.freshOpen(save.file,save.doc,'25-repeat-reopened');await f.same(again);await native('26-repeat-reopened-native',again,4,target,target,secondRequest);
+ }
+});

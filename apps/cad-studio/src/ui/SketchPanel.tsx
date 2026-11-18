@@ -1,3 +1,4 @@
+import { slotEndpoint } from '../sketch/slotEndpoint';
 import { canEditOpenPolylineTerminalDraft, openPolylineTerminalLength } from '../sketch/openPolylineTerminalLength';
 import { canEditOpenLineLength, openLineLength } from '../sketch/openLineLength';
 import { slotWidth } from '../sketch/slotWidth';
@@ -150,12 +151,11 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
         {num('diameter', 'Diameter', s.r * 2, v => onShape({ ...s, r: Math.max(0.25, v / 2) }), 0.5)}</>}
       {s?.kind === 'slot' && (() => {
         const l = Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]), angle = Math.atan2(s.b[1] - s.a[1], s.b[0] - s.a[0]) * 180 / Math.PI;
-        const put = (a: [number, number], len: number, deg: number, r: number) => onShape({ ...s, a, r,
-          b: [round(a[0] + len * Math.cos(deg * Math.PI / 180)), round(a[1] + len * Math.sin(deg * Math.PI / 180))] });
+        const put = (len: number, deg: number) => onShape(slotEndpoint(s, len, deg));
         return <>{num('slot-x', 'Centre X', s.a[0], v => onShape(slotCentre(s, 0, v)))}{num('slot-y', 'Centre Y', s.a[1], v => onShape(slotCentre(s, 1, v)))}
-          {num('slot-length', 'Length', l, v => put(s.a, Math.max(0.5, v), angle, s.r), 0.5)}
+          {num('slot-length', 'Length', l, v => put(Math.max(0.5, v), angle), 0.5)}
           <label className={FIELD}><span>Angle</span><span className={NUM}><Input id="sk-slot-angle" type="number" step="any" value={round(angle)}
-            onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v)) put(s.a, l, v, s.r); }} /><em>°</em></span></label>
+            onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v)) put(l, v); }} /><em>°</em></span></label>
           {num('slot-width', 'Width', s.r * 2, v => onShape(slotWidth(s, v)), 0.5)}</>;
       })()}
       {s?.kind === 'polygon' && !ell && <div className="pts pts-4" role="group" aria-label="Outline points" style={{ gridTemplateColumns: '18px minmax(0, 1fr) minmax(0, 1fr) minmax(112px, 1.1fr)' }}>
