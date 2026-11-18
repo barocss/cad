@@ -120,7 +120,9 @@ export function addPart(doc: StudioDoc, o: AddPartOptions): Edited & { id: strin
 
 /** A part's document as a new part starts from it (add_part's copy_of): its own features, none of the assembly's. */
 export function partCopy(doc: StudioDoc, part: string): StudioDoc {
-  const src = partDocOf(doc, part);
+  // Copy accepts an exact top-level part id, not a mate occurrence path.
+  // Resolving only its host would silently copy a different part.
+  const src = part === BASE ? doc : doc.instances?.find(i => i.id === part)?.doc;
   if (!src) throw refusal('NO_PART', `No part "${part}" to copy; parts: ${partList(doc)}.`);
   assertPartRouteAdmission(src);
   const pathProblem = fillPatternDocumentProblem(src) ?? curvePatternDocumentProblem({ instances: [{ doc: src }] });

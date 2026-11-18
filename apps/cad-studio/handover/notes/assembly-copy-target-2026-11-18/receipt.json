@@ -1,0 +1,393 @@
+{
+  "status": "PASS",
+  "qualification": "Actual dispatcher target identity and Studio consumption; not a direct UI copy command qualification.",
+  "limits": [
+    "Only base and top-level copy contract. No nested copy feature added."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": [],
+  "observations": [
+    {
+      "label": "dispatcher",
+      "out": [
+        {
+          "target": "p1/missing",
+          "changed": false,
+          "isError": true,
+          "content": "{\"ok\":false,\"error\":\"[NO_PART] No part \\\"p1/missing\\\" to copy; parts: base, p1.\"}",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  40,
+                  30
+                ],
+                "id": "n0"
+              },
+              {
+                "kind": "extrude",
+                "sketch": 0,
+                "height": 5,
+                "id": "n1"
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            "nextId": 2,
+            "instances": [
+              {
+                "id": "p1",
+                "name": "Pin",
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [
+                    {
+                      "kind": "sketch",
+                      "profile": "rectangle",
+                      "min": [
+                        0,
+                        0
+                      ],
+                      "max": [
+                        12,
+                        10
+                      ],
+                      "id": "n0"
+                    },
+                    {
+                      "kind": "extrude",
+                      "sketch": 0,
+                      "height": 8,
+                      "id": "n1"
+                    }
+                  ],
+                  "outputs": {
+                    "b1": {
+                      "node": 1,
+                      "side": "solid"
+                    }
+                  },
+                  "nextId": 2
+                },
+                "position": [
+                  0,
+                  0,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ]
+              }
+            ]
+          },
+          "unchanged": true
+        },
+        {
+          "target": "p1",
+          "changed": true,
+          "isError": false,
+          "content": "{\"ok\":true,\"did\":\"added part p2 \\\"Copy\\\" (a copy of p1)\",\"part\":\"p2\",\"note\":\"build or edit it with the part tools and \\\"part\\\": id\",\"parts\":[{\"id\":\"p1\",\"name\":\"Pin\",\"position\":[0,0,0],\"rotation\":[0,0,0]},{\"id\":\"p2\",\"name\":\"Copy\",\"position\":[60,0,0],\"rotation\":[0,0,0]}]}",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  40,
+                  30
+                ],
+                "id": "n0"
+              },
+              {
+                "kind": "extrude",
+                "sketch": 0,
+                "height": 5,
+                "id": "n1"
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            "nextId": 2,
+            "instances": [
+              {
+                "id": "p1",
+                "name": "Pin",
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [
+                    {
+                      "kind": "sketch",
+                      "profile": "rectangle",
+                      "min": [
+                        0,
+                        0
+                      ],
+                      "max": [
+                        12,
+                        10
+                      ],
+                      "id": "n0"
+                    },
+                    {
+                      "kind": "extrude",
+                      "sketch": 0,
+                      "height": 8,
+                      "id": "n1"
+                    }
+                  ],
+                  "outputs": {
+                    "b1": {
+                      "node": 1,
+                      "side": "solid"
+                    }
+                  },
+                  "nextId": 2
+                },
+                "position": [
+                  0,
+                  0,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "id": "p2",
+                "name": "Copy",
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [
+                    {
+                      "kind": "sketch",
+                      "profile": "rectangle",
+                      "min": [
+                        0,
+                        0
+                      ],
+                      "max": [
+                        12,
+                        10
+                      ],
+                      "id": "n0"
+                    },
+                    {
+                      "kind": "extrude",
+                      "sketch": 0,
+                      "height": 8,
+                      "id": "n1"
+                    }
+                  ],
+                  "outputs": {
+                    "b1": {
+                      "node": 1,
+                      "side": "solid"
+                    }
+                  },
+                  "nextId": 2
+                },
+                "position": [
+                  60,
+                  0,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ]
+              }
+            ]
+          },
+          "unchanged": true
+        },
+        {
+          "target": "base",
+          "changed": true,
+          "isError": false,
+          "content": "{\"ok\":true,\"did\":\"added part p2 \\\"Copy\\\" (a copy of base)\",\"part\":\"p2\",\"note\":\"build or edit it with the part tools and \\\"part\\\": id\",\"parts\":[{\"id\":\"p1\",\"name\":\"Pin\",\"position\":[0,0,0],\"rotation\":[0,0,0]},{\"id\":\"p2\",\"name\":\"Copy\",\"position\":[60,0,0],\"rotation\":[0,0,0]}]}",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {},
+            "nodes": [
+              {
+                "kind": "sketch",
+                "profile": "rectangle",
+                "min": [
+                  0,
+                  0
+                ],
+                "max": [
+                  40,
+                  30
+                ],
+                "id": "n0"
+              },
+              {
+                "kind": "extrude",
+                "sketch": 0,
+                "height": 5,
+                "id": "n1"
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            "nextId": 2,
+            "instances": [
+              {
+                "id": "p1",
+                "name": "Pin",
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [
+                    {
+                      "kind": "sketch",
+                      "profile": "rectangle",
+                      "min": [
+                        0,
+                        0
+                      ],
+                      "max": [
+                        12,
+                        10
+                      ],
+                      "id": "n0"
+                    },
+                    {
+                      "kind": "extrude",
+                      "sketch": 0,
+                      "height": 8,
+                      "id": "n1"
+                    }
+                  ],
+                  "outputs": {
+                    "b1": {
+                      "node": 1,
+                      "side": "solid"
+                    }
+                  },
+                  "nextId": 2
+                },
+                "position": [
+                  0,
+                  0,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "id": "p2",
+                "name": "Copy",
+                "doc": {
+                  "format": "barocss-cad-model",
+                  "schema": 3,
+                  "units": "mm",
+                  "parameters": {},
+                  "nodes": [
+                    {
+                      "kind": "sketch",
+                      "profile": "rectangle",
+                      "min": [
+                        0,
+                        0
+                      ],
+                      "max": [
+                        40,
+                        30
+                      ],
+                      "id": "n0"
+                    },
+                    {
+                      "kind": "extrude",
+                      "sketch": 0,
+                      "height": 5,
+                      "id": "n1"
+                    }
+                  ],
+                  "outputs": {
+                    "b1": {
+                      "node": 1,
+                      "side": "solid"
+                    }
+                  },
+                  "nextId": 2
+                },
+                "position": [
+                  60,
+                  0,
+                  0
+                ],
+                "rotation": [
+                  0,
+                  0,
+                  0
+                ]
+              }
+            ]
+          },
+          "unchanged": true
+        }
+      ]
+    }
+  ]
+}
