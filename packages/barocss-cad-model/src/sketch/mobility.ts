@@ -1,5 +1,5 @@
 import { arcOf, signedArea, settledOutlineMobility } from './profile';
-import { constraintsOf, type Polygon } from './rules';
+import { constraintsOf, hvOf, type Polygon } from './rules';
 import type { SketchRule } from './terms';
 
 export type PointMotion = { dimension: 1; direction: readonly [number, number] } | { dimension: 2 } | null;
@@ -12,7 +12,7 @@ export interface OutlineMobility {
 
 const validIndex = (index: number, count: number) => Number.isInteger(index) && index >= 0 && index < count;
 
-function supportedRule(rule: SketchRule, count: number, arcs: readonly number[] = [], circleCount = 0): boolean {
+function supportedRule(rule: SketchRule, count: number, arcs: readonly number[] = [], circleCount = 0, shape?: Polygon): boolean {
   const valid = (index: number) => validIndex(index, count);
   const line = (index: number) => valid(index) && !arcs.includes(index);
   switch (rule.kind) {
@@ -23,6 +23,17 @@ function supportedRule(rule: SketchRule, count: number, arcs: readonly number[] 
       return valid(rule.a) && valid(rule.b) && rule.a !== rule.b;
     case 'cdist': case 'cdx': case 'cdy':
       return circleCount === 1 && rule.circle === 0 && valid(rule.a) && Number.isFinite(rule.value) && rule.value >= 0;
+    case 'cedge': {
+      if (!shape || circleCount !== 1 || rule.circle !== 0 || !line(rule.edge)
+        || (rule.axis !== 0 && rule.axis !== 1) || !Number.isFinite(rule.value) || rule.value < 0.001) return false;
+      const a = shape.points[rule.edge], b = shape.points[(rule.edge + 1) % count];
+      if (!Array.isArray(a) || a.length !== 2 || !Array.isArray(b) || b.length !== 2
+        || ![...a, ...b].every(Number.isFinite) || a[0] === b[0] && a[1] === b[1]) return false;
+      // Diagnose the same axis distance as the existing solver, only when its
+      // effective HV constraints keep that axis perpendicular to the edge.
+      const hv = hvOf(shape), horizontal = hv.h.includes(rule.edge), vertical = hv.v.includes(rule.edge);
+      return rule.axis === 1 ? horizontal && !vertical : vertical && !horizontal;
+    }
     case 'symmetric': return valid(rule.a) && valid(rule.b) && rule.a !== rule.b && line(rule.line);
     default: return false;
   }
@@ -66,7 +77,7 @@ export function outlineMobility(shape: Polygon): OutlineMobility | null {
     !Array.isArray(circle.c) || circle.c.length !== 2 || !Number.isFinite(circle.c[0]) || !Number.isFinite(circle.c[1]) || !Number.isFinite(circle.r) || circle.r <= 0)
     || shape.circleIds && (shape.circleIds.length !== circleCount || circleCount === 1 && (typeof shape.circleIds[0] !== 'string' || !shape.circleIds[0]))) return null;
   if (arcs.length>2 || (arcs.length ? !supportedArcs(shape,arcs) : !!shape.equalRadii?.length || !!shape.tangents?.length || !!Object.keys(shape.radii ?? {}).length)
-    || shape.rules?.some(rule=>!supportedRule(rule,shape.points.length,arcs,circleCount))) return null;
+    || shape.rules?.some(rule=>!supportedRule(rule,shape.points.length,arcs,circleCount,shape))) return null;
 
   const { points, hv } = shape;
   if (hv && [...hv.h, ...hv.v].some(index => !validIndex(index, points.length))) return null;
