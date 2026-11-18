@@ -1,3 +1,4 @@
+import { slotWidth } from '../sketch/slotWidth';
 import { slotCentre } from '../sketch/slotCentre';
 import { VertexPlaneSummary } from './VertexPlaneSummary';
 import { TrimBoundaryGuidance } from './TrimBoundaryGuidance';
@@ -151,7 +152,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
           {num('slot-length', 'Length', l, v => put(s.a, Math.max(0.5, v), angle, s.r), 0.5)}
           <label className={FIELD}><span>Angle</span><span className={NUM}><Input id="sk-slot-angle" type="number" step="any" value={round(angle)}
             onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v)) put(s.a, l, v, s.r); }} /><em>°</em></span></label>
-          {num('slot-width', 'Width', s.r * 2, v => put(s.a, l, angle, Math.max(0.25, v / 2)), 0.5)}</>;
+          {num('slot-width', 'Width', s.r * 2, v => onShape(slotWidth(s, v)), 0.5)}</>;
       })()}
       {s?.kind === 'polygon' && !ell && <div className="pts pts-4" role="group" aria-label="Outline points" style={{ gridTemplateColumns: '18px minmax(0, 1fr) minmax(0, 1fr) minmax(112px, 1.1fr)' }}>
         <span /><span>X</span><span>Y</span><span>Edge</span>

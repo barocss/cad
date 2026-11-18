@@ -1,0 +1,390 @@
+{
+  "baseline": [
+    {
+      "label": "03-original-native",
+      "radius": 4,
+      "authoredCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "intendedCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "distance": 35,
+      "distanceError": 0,
+      "directionErrorY": 0,
+      "volume": 990.79644737231,
+      "intendedVolume": 990.79644737231,
+      "intendedVolumeError": 0,
+      "requestedPrecision": "PASS",
+      "lifecycleNative": "PASS"
+    },
+    {
+      "label": "05-original-reopened-native",
+      "radius": 4,
+      "authoredCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "intendedCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "distance": 35,
+      "distanceError": 0,
+      "directionErrorY": 0,
+      "volume": 990.79644737231,
+      "intendedVolume": 990.79644737231,
+      "intendedVolumeError": 0,
+      "requestedPrecision": "PASS",
+      "lifecycleNative": "PASS"
+    },
+    {
+      "label": "11-width-native",
+      "radius": 5,
+      "authoredCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.1235,
+          15
+        ]
+      ],
+      "intendedCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "distance": 35.000043211,
+      "distanceError": 4.32109999977115e-05,
+      "directionErrorY": 0,
+      "volume": 1285.620745349234,
+      "intendedVolume": 1285.6194490192345,
+      "intendedVolumeError": 0.0012963299996044952,
+      "requestedPrecision": "FAIL",
+      "lifecycleNative": "PASS"
+    },
+    {
+      "label": "12-document-undo-native",
+      "radius": 4,
+      "authoredCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "intendedCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "distance": 35,
+      "distanceError": 0,
+      "directionErrorY": 0,
+      "volume": 990.79644737231,
+      "intendedVolume": 990.79644737231,
+      "intendedVolumeError": 0,
+      "requestedPrecision": "PASS",
+      "lifecycleNative": "PASS"
+    },
+    {
+      "label": "13-document-redo-native",
+      "radius": 5,
+      "authoredCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.1235,
+          15
+        ]
+      ],
+      "intendedCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "distance": 35.000043211,
+      "distanceError": 4.32109999977115e-05,
+      "directionErrorY": 0,
+      "volume": 1285.620745349234,
+      "intendedVolume": 1285.6194490192345,
+      "intendedVolumeError": 0.0012963299996044952,
+      "requestedPrecision": "FAIL",
+      "lifecycleNative": "PASS"
+    },
+    {
+      "label": "15-width-reopened-native",
+      "radius": 5,
+      "authoredCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.1235,
+          15
+        ]
+      ],
+      "intendedCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "distance": 35.000043211,
+      "distanceError": 4.32109999977115e-05,
+      "directionErrorY": 0,
+      "volume": 1285.620745349234,
+      "intendedVolume": 1285.6194490192345,
+      "intendedVolumeError": 0.0012963299996044952,
+      "requestedPrecision": "FAIL",
+      "lifecycleNative": "PASS"
+    }
+  ],
+  "fixed": [
+    {
+      "label": "03-original-native",
+      "radius": 4,
+      "authoredCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "intendedCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "distance": 35,
+      "distanceError": 0,
+      "directionErrorY": 0,
+      "volume": 990.79644737231,
+      "intendedVolume": 990.79644737231,
+      "intendedVolumeError": 0,
+      "requestedPrecision": "PASS",
+      "lifecycleNative": "PASS"
+    },
+    {
+      "label": "05-original-reopened-native",
+      "radius": 4,
+      "authoredCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "intendedCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "distance": 35,
+      "distanceError": 0,
+      "directionErrorY": 0,
+      "volume": 990.79644737231,
+      "intendedVolume": 990.79644737231,
+      "intendedVolumeError": 0,
+      "requestedPrecision": "PASS",
+      "lifecycleNative": "PASS"
+    },
+    {
+      "label": "11-width-native",
+      "radius": 5,
+      "authoredCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "intendedCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "distance": 35,
+      "distanceError": 0,
+      "directionErrorY": 0,
+      "volume": 1285.6194490192343,
+      "intendedVolume": 1285.6194490192345,
+      "intendedVolumeError": -2.2737367544323206e-13,
+      "requestedPrecision": "PASS",
+      "lifecycleNative": "PASS"
+    },
+    {
+      "label": "12-document-undo-native",
+      "radius": 4,
+      "authoredCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "intendedCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "distance": 35,
+      "distanceError": 0,
+      "directionErrorY": 0,
+      "volume": 990.79644737231,
+      "intendedVolume": 990.79644737231,
+      "intendedVolumeError": 0,
+      "requestedPrecision": "PASS",
+      "lifecycleNative": "PASS"
+    },
+    {
+      "label": "13-document-redo-native",
+      "radius": 5,
+      "authoredCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "intendedCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "distance": 35,
+      "distanceError": 0,
+      "directionErrorY": 0,
+      "volume": 1285.6194490192343,
+      "intendedVolume": 1285.6194490192345,
+      "intendedVolumeError": -2.2737367544323206e-13,
+      "requestedPrecision": "PASS",
+      "lifecycleNative": "PASS"
+    },
+    {
+      "label": "15-width-reopened-native",
+      "radius": 5,
+      "authoredCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "intendedCentres": [
+        [
+          10.123456789,
+          15
+        ],
+        [
+          45.123456789,
+          15
+        ]
+      ],
+      "distance": 35,
+      "distanceError": 0,
+      "directionErrorY": 0,
+      "volume": 1285.6194490192343,
+      "intendedVolume": 1285.6194490192345,
+      "intendedVolumeError": -2.2737367544323206e-13,
+      "requestedPrecision": "PASS",
+      "lifecycleNative": "PASS"
+    }
+  ]
+}
