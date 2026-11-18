@@ -109,14 +109,15 @@ await f.run(async () => {
   await status('preview').waitFor();
   await representation().selectOption('exact');
   await status('refused').waitFor();
-  await hud().getByText('Choose one circular arc from 30° to 90°.', { exact: true }).waitFor();
+  await hud().getByText('Choose one circular arc from 30° to 120°.', { exact: true }).waitFor();
   assert.ok(await button('Apply', hud()).isDisabled());
   await f.same(seed);
   await f.snapshot('noncircular-exact-refusal');
 
   await button('Quarter arc').click();
   assert.equal(await representation().inputValue(), 'exact', 'Replacing the path retains exact Sweep');
-  await hud().getByText('Quarter arc · Exact circular arc', { exact: true }).waitFor();
+  await hud().locator('.hud-step').getByText('Exact circular arc', { exact: true }).waitFor();
+  await hud().locator('.hud-step').getByText('Quarter arc · Degree 2 NURBS', { exact: true }).waitFor();
   await status('preview').waitFor();
   await visibleSolid(2);
   await f.snapshot('native-arc-preview');
@@ -155,7 +156,7 @@ await f.run(async () => {
   await verify(reopened.doc, 3, 'reopened-native-solid');
   await f.openFeatureEditor(1, 'inspect reopened Sweep');
   await f.editor().getByText('Exact circular arc', { exact: true }).waitFor();
-  await f.editor().getByText('Quarter arc · Copied', { exact: true }).waitFor();
+  await f.editor().getByText('Quarter arc · Degree 2 NURBS · Copied', { exact: true }).waitFor();
   await f.editor().getByText('Sketch 1 · Ø6 mm', { exact: true }).waitFor();
   await f.snapshot('native-sweep-history');
 });

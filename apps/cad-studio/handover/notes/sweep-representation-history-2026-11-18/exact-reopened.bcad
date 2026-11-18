@@ -1,0 +1,78 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nextId": 2,
+  "nodes": [
+    {
+      "id": "n0",
+      "kind": "sketch",
+      "profile": "circle",
+      "center": [
+        7,
+        8
+      ],
+      "radius": 2
+    },
+    {
+      "kind": "sweep-curve",
+      "sketch": 0,
+      "name": "Sketch curve 1 · c1",
+      "path": {
+        "degree": 2,
+        "knots": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "controlPoints": [
+          [
+            20,
+            20,
+            0
+          ],
+          [
+            32,
+            29,
+            0
+          ],
+          [
+            44,
+            38,
+            0
+          ]
+        ],
+        "weights": [
+          1,
+          1,
+          1
+        ]
+      },
+      "id": "n1",
+      "mode": "exact-straight"
+    }
+  ],
+  "outputs": {
+    "b1": {
+      "node": 1,
+      "side": "solid"
+    }
+  },
+  "direct": {
+    "sources": {
+      "src_1": "@model sketch {\n  version: 0;\n  length-unit: mm;\n  @curve #c1 { type: nurbs; degree: 2; knots: [0,0,0,1,1,1]; control-points: [[20,20,0],[32,29,0],[44,38,0]]; weights: [1,1,1]; }\n}"
+    },
+    "objects": [
+      {
+        "id": "obj_1",
+        "name": "Sketch curve 1 · c1",
+        "source": "src_1",
+        "geometry": "c1"
+      }
+    ]
+  }
+}

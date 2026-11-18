@@ -1,3 +1,4 @@
+import { sweepHistoryEdit } from '@barocss/cad-model/app/sweepHistoryEdit';
 import { mirrorHistoryEdit } from '@barocss/cad-model/app/mirrorEdit';
 import { subdPrimitiveHistoryEdit } from '@barocss/cad-model/app/subdPrimitiveEdit';
 import { connectorHistoryEdit } from '@barocss/cad-model/app/connectorEdit';
@@ -37,7 +38,7 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
   const { doc, evaluated, commandDoc, editNode, fresh, busy, workerSession } = model;
   const { ctx, discardFeatureDraft, closeForCommand, setActive, editSketch, replaceAxis } = commands;
   const { ownsEvaluatedSource } = owner;
-  const savedCommand = () => fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc)?.command ?? mountHistoryEdit(commandDoc, editNode) ?? connectorHistoryEdit(commandDoc, editNode) ?? subdPrimitiveHistoryEdit(commandDoc, editNode) ?? mirrorHistoryEdit(commandDoc, editNode);
+  const savedCommand = () => fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc)?.command ?? mountHistoryEdit(commandDoc, editNode) ?? connectorHistoryEdit(commandDoc, editNode) ?? subdPrimitiveHistoryEdit(commandDoc, editNode) ?? mirrorHistoryEdit(commandDoc, editNode) ?? sweepHistoryEdit(commandDoc, editNode);
   const savedFeature = savedCommand();
   return <NodeEditor {...editor} nodes={doc.nodes} parameters={doc.parameters} doc={doc} index={editNode}
     bearingAssembly={{ root: doc, owner: 'base' }}

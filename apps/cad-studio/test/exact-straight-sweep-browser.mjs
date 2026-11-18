@@ -98,7 +98,8 @@ async function sweep(mode) {
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Sweep');
   await hud().getByLabel('Representation', { exact: true }).selectOption('exact-straight');
-  await hud().getByText(path.name + ' · Exact straight path', { exact: true }).waitFor();
+  await hud().locator('.hud-step').getByText('Exact straight path', { exact: true }).waitFor();
+  await hud().locator('.hud-step').getByText(path.name + (mode === 'sketch' ? ' · Degree 2 NURBS' : ' · Line'), { exact: true }).waitFor();
   await hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor();
   await button('Apply', hud()).click();
   await f.changed(source);

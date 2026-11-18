@@ -1,0 +1,133 @@
+{
+  "baseline": {
+    "status": "PASS",
+    "phase": "open feature editor 1",
+    "failure": null,
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "limits": [
+      "Baseline only; native Faceted mass is recorded and compared across lifecycle, not asserted equal to analytic cylinder mass. One independent circle and one Make curves line. No curved-path Exact admission expansion."
+    ]
+  },
+  "actual": {
+    "status": "PASS",
+    "phase": "open feature editor 1",
+    "failure": null,
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "limits": [
+      "Native Faceted mass is recorded and compared across lifecycle, not asserted equal to analytic cylinder mass. One independent circle and one Make curves line. No curved-path Exact admission expansion."
+    ]
+  },
+  "first_straight_regression": {
+    "status": "FAIL",
+    "phase": "make a curve from a sketched line",
+    "failure": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Sweep', exact: true }).getByText('Sketch curve 1 \u00b7 c1 \u00b7 Exact straight path', { exact: true }) to be visible\u001b[22m\n\n    at sweep (/private/tmp/cad-connected-selection-20261117/apps/cad-studio/test/exact-straight-sweep-browser.mjs:101:80)\n    at async file:///private/tmp/cad-connected-selection-20261117/apps/cad-studio/test/exact-straight-sweep-browser.mjs:151:3\n    at async f.run (/private/tmp/cad-connected-selection-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-connected-selection-20261117/apps/cad-studio/test/exact-straight-sweep-browser.mjs:127:1",
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "limits": [
+      "Desktop Chrome WebGPU. One sketched line, one picked box edge, and a circular disk."
+    ]
+  },
+  "actual_final": {
+    "status": "PASS",
+    "phase": "open feature editor 1",
+    "failure": null,
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "limits": [
+      "Native Faceted mass is recorded and compared across lifecycle, not asserted equal to analytic cylinder mass. One independent circle and one Make curves line. No curved-path Exact admission expansion."
+    ]
+  },
+  "straight_regression": {
+    "status": "PASS",
+    "phase": "open feature editor reopened edge Sweep",
+    "failure": null,
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "limits": [
+      "Desktop Chrome WebGPU. One sketched line, one picked box edge, and a circular disk."
+    ]
+  },
+  "arc_first_failure": {
+    "status": "FAIL",
+    "phase": "actual Studio start",
+    "failure": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Sweep', exact: true }).getByText('Choose one circular arc from 30\u00b0 to 90\u00b0.', { exact: true }) to be visible\u001b[22m\n\n    at /private/tmp/cad-connected-selection-20261117/apps/cad-studio/test/exact-arc-sweep-browser.mjs:112:86\n    at async f.run (/private/tmp/cad-connected-selection-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-connected-selection-20261117/apps/cad-studio/test/exact-arc-sweep-browser.mjs:89:1",
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "limits": [
+      "Desktop Chrome WebGPU, one circular disk along one tilted quarter arc, New body."
+    ]
+  },
+  "arc_regression": {
+    "status": "PASS",
+    "phase": "open feature editor inspect reopened Sweep",
+    "failure": null,
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "limits": [
+      "Desktop Chrome WebGPU, one circular disk along one tilted quarter arc, New body."
+    ]
+  },
+  "focused": {
+    "tests": 8,
+    "status": "PASS"
+  },
+  "model_types": "PASS",
+  "studio_types_build": "PASS",
+  "first_types": "FAIL: unregistered refusal code and test assertion narrowing; corrected, eight focused tests and all types/build plus actual rerun PASS.",
+  "ci": "PENDING_EXACT_COMMIT"
+}
