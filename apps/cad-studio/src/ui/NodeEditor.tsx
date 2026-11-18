@@ -235,7 +235,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
         <button type="button" className="ghost" disabled={ordinaryLocked || changed || hasInvalidNumber || Object.keys(typed).length > 0 || !sameDraftScope}
           onClick={onEditSharedHoleLayout}>Edit shared layout…</button>
       </div>}
-      {node?.kind === 'hole' && <HoleHistoryInputs hole={node} doc={doc} index={index}
+      {node?.kind === 'hole' && <HoleHistoryInputs hole={node} doc={doc} index={index} editableEnds={fields.some(field => field.key === 'end')}
         drillDiameter={typed.dia ?? (diameterField?.kind === 'number' ? diameterField.get(draft) : undefined)} />}
       {node?.kind === 'extrude' && node.cutDepth === 'through' && <div className="field"><span>Depth</span><span>Through all</span></div>}
       {node?.kind === 'fillet' && node.radii && <FilletEndpointNotice locations={filletEndpoints ?? {reason:'Endpoint locations are unavailable in this editing context.'}} />}
@@ -364,6 +364,9 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
                 retireEvaluation();
                 try {
                   const next = f.set(draft, e.target.value);
+                  if (f.key === 'end' && node?.kind === 'hole' && next[index] !== draft[index]) {
+                    setTyped(values => Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'depth')));
+                  }
                   if (f.key === 'thread') {
                     if (next[index] === draft[index]) return;
                     setTyped(values => Object.fromEntries(Object.entries(values).filter(([key]) => key !== 'dia')));

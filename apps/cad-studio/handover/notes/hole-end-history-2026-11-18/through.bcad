@@ -1,0 +1,48 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [
+    {
+      "id": "n0",
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        0,
+        0
+      ],
+      "max": [
+        40,
+        30
+      ]
+    },
+    {
+      "id": "n1",
+      "kind": "extrude",
+      "sketch": 0,
+      "height": 12
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 1,
+        "side": "solid"
+      },
+      "radius": 2,
+      "center": [
+        20,
+        15
+      ],
+      "face": "n1.top",
+      "id": "n2"
+    }
+  ],
+  "outputs": {
+    "b2": {
+      "node": 2,
+      "side": "solid"
+    }
+  },
+  "nextId": 3
+}

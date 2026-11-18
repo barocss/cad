@@ -27,6 +27,33 @@ export type EditField =
   | { kind: 'choice'; key: string; label: string; options: { value: string; label: string }[]; get(nodes: Nodes): string; set(nodes: Nodes, value: string): ModelNode[] }
   | { kind: 'toggle'; key: string; label: string; get(nodes: Nodes): boolean; set(nodes: Nodes, value: boolean): ModelNode[] };
 
+/** End changes add/remove native faces: initially limit them to an ordinary terminal hole. */
+function editableHoleEnd(nodes: Nodes, index: number) {
+  const hole = nodes[index];
+  if (hole?.kind !== 'hole' || index !== nodes.length - 1 || hole.held || hole.suppressed
+    || hole.made !== undefined || hole.thread !== undefined || hole.pattern !== undefined
+    || hole.countersink !== undefined || hole.csk !== undefined || 'routeBundleMember' in hole
+    || !Number.isInteger(hole.parent.node) || hole.parent.node < 0 || hole.parent.node >= index
+    || hole.parent.side !== 'solid' || !nodes[hole.parent.node] || nodes[hole.parent.node].kind === 'hole'
+    || typeof hole.radius !== 'number' || !Number.isFinite(hole.radius) || hole.radius <= 0
+    || hole.center.length !== 2 || !hole.center.every(value => typeof value === 'number' && Number.isFinite(value))
+    || (hole.depth !== undefined && (typeof hole.depth !== 'number' || !Number.isFinite(hole.depth) || hole.depth <= 0))) return;
+  return hole;
+}
+function holeEndField(index: number): EditField {
+  return { kind: 'choice', key: 'end', label: 'Ends', options: [{ value: 'through', label: 'Through' }, { value: 'blind', label: 'To a depth' }],
+    get: nodes => nodes[index]?.kind === 'hole' && nodes[index].depth !== undefined ? 'blind' : 'through',
+    set: (nodes, value) => {
+      const hole = editableHoleEnd(nodes, index);
+      if (!hole || (value !== 'through' && value !== 'blind') || (hole.depth === undefined ? 'through' : 'blind') === value) return [...nodes];
+      const next = { ...hole };
+      // Same explicit initial depth as Hole creation; it remains a draft until Apply.
+      if (value === 'blind') next.depth = 6; else delete next.depth;
+      return nodes.map((node, i) => i === index ? next : node);
+    },
+  };
+}
+
 /** Explicit replacement of an existing cosmetic thread and its drill; never infer a catalogue row. */
 function holeThreadField(nodes: Nodes, index: number, scope?: EditScope): EditField {
   const original = nodes[index] as Extract<ModelNode, { kind: 'hole' }>;
@@ -379,6 +406,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       break;
     }
     case 'hole':
+      if (editableHoleEnd(nodes, i)) out.push(holeEndField(i));
       if (node.thread) out.push(holeThreadField(nodes, i, scope));
       number('dia', 'Diameter', 'mm', n => num((n as typeof node).radius) * 2, (n, v) => ({ ...(n as typeof node), radius: v / 2 }));
       HOLE_PLANE[node.axis ?? 'z'].forEach((axis, k) => number('c' + k, 'Centre ' + axis.toUpperCase(), 'mm', n => num((n as typeof node).center[k]), (n, v) => { const c = [...(n as typeof node).center] as [Dim, Dim]; c[k] = v; return { ...(n as typeof node), center: c }; }));

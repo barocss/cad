@@ -73,7 +73,10 @@ await f.run(async () => {
   await f.snapshot('legacy-hole-history');
   const entry = f.editor().getByRole('group', { name: 'Hole placement', exact: true });
   assert.equal(await entry.count(), 1, 'History does not identify the saved entry face or cosmetic thread');
-  assert.match(await entry.innerText(), /Entry face\s+n1\.top\s+Drill direction\s+−Z\s+Ends\s+To a depth\s+Thread\s+M6×1 · Cosmetic/);
+  const placement = await entry.innerText();
+  assert.match(placement, /Entry face\s+n1\.top\s+Drill direction\s+−Z\s+Ends\s+To a depth/);
+  assert.match(placement, /Thread\s+M6×1 · Cosmetic/);
+  assert.equal(await f.editor().getByRole("combobox", { name: "Ends", exact: true }).count(), 0, "Tapped holes must not offer ordinary-hole end conversion");
   await verify('original-hole', doc, 15, 20, 12);
   const centre = f.editor().getByRole('spinbutton', { name: 'Centre X', exact: true });
   const depth = f.editor().getByRole('spinbutton', { name: 'Depth', exact: true });
@@ -95,8 +98,10 @@ await f.run(async () => {
   await verify('legacy-hole-reopened', reopened.doc, 17, 20, 9);
   await f.openFeatureEditor(3, 'saved through hole');
   await f.snapshot('legacy-through-hole-history');
-  assert.match(await f.editor().getByRole('group', { name: 'Hole placement', exact: true }).innerText(),
-    /Entry face\s+n1\.top\s+Drill direction\s+−Z\s+Ends\s+Through\s+Thread\s+M3×0\.5 · Cosmetic/);
+  const throughPlacement = await f.editor().getByRole('group', { name: 'Hole placement', exact: true }).innerText();
+  assert.match(throughPlacement, /Entry face\s+n1\.top\s+Drill direction\s+−Z\s+Ends\s+Through/);
+  assert.match(throughPlacement, /Thread\s+M3×0\.5 · Cosmetic/);
+  assert.equal(await f.editor().getByRole('combobox', { name: 'Ends', exact: true }).count(), 0);
 
   const underside = {
     ...doc, nextId: 3,
