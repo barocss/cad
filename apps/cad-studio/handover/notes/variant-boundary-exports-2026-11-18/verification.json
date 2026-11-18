@@ -1,0 +1,315 @@
+{
+  "status": "PASS",
+  "qualification": "#256 same-filename A numeric draft to independent saved-active B: actual STEP/3MF downloads then explicit B Master recovery.",
+  "limits": [
+    "Synthetic 10 by 5 mm prismatic base parts; no delayed Worker replies, other entry routes, assemblies or external viewer/slicer.",
+    "STEP independent graph reader validates connected BREP/prism vertices and units, not surface evaluation or independently integrated solid volume. 3MF XML checks build identity, bounds and signed triangle volume.",
+    "Four real public downloads, no backend import substitute or Blob interception."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "downloads": [
+    {
+      "phase": "Independent same-filename B saved active Tall22",
+      "suggestedFilename": "same-name.step"
+    },
+    {
+      "phase": "Independent same-filename B saved active Tall22",
+      "suggestedFilename": "same-name.3mf"
+    },
+    {
+      "phase": "Explicit B Show Master10 and exports",
+      "suggestedFilename": "same-name.step"
+    },
+    {
+      "phase": "Explicit B Show Master10 and exports",
+      "suggestedFilename": "same-name.3mf"
+    }
+  ],
+  "testedCommit": "0c586b19acb3809d943da4a126c91ceab7aaef6d",
+  "fixtureSHA256": "067f446d1a44377f6d295fcbbf299e13b068174432bb9f0804a4c5e289310a8a",
+  "oracles": [
+    {
+      "label": "02-B-tall22-step",
+      "exit": 0,
+      "result": {
+        "status": "PASS",
+        "graph": {
+          "status": "PASS",
+          "scope": "INDEPENDENT_GRAPH_AND_PRISM_VERTEX_BOUNDS_ONLY",
+          "schema": [
+            "AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }"
+          ],
+          "units": "mm",
+          "entities": 152,
+          "counts": {
+            "ADVANCED_BREP_SHAPE_REPRESENTATION": 1,
+            "ADVANCED_FACE": 6,
+            "APPLICATION_CONTEXT": 1,
+            "APPLICATION_PROTOCOL_DEFINITION": 1,
+            "AXIS2_PLACEMENT_3D": 7,
+            "CARTESIAN_POINT": 11,
+            "CLOSED_SHELL": 1,
+            "COMPLEX": 4,
+            "DERIVED_UNIT": 2,
+            "DERIVED_UNIT_ELEMENT": 2,
+            "DIRECTION": 6,
+            "EDGE_CURVE": 12,
+            "EDGE_LOOP": 6,
+            "FACE_OUTER_BOUND": 6,
+            "LINE": 12,
+            "MANIFOLD_SOLID_BREP": 1,
+            "MEASURE_REPRESENTATION_ITEM": 2,
+            "ORIENTED_EDGE": 24,
+            "PLANE": 6,
+            "PRODUCT": 1,
+            "PRODUCT_CONTEXT": 1,
+            "PRODUCT_DEFINITION": 1,
+            "PRODUCT_DEFINITION_CONTEXT": 1,
+            "PRODUCT_DEFINITION_FORMATION": 1,
+            "PRODUCT_DEFINITION_SHAPE": 1,
+            "PRODUCT_RELATED_PRODUCT_CATEGORY": 1,
+            "PROPERTY_DEFINITION": 4,
+            "PROPERTY_DEFINITION_REPRESENTATION": 4,
+            "REPRESENTATION": 4,
+            "SHAPE_DEFINITION_REPRESENTATION": 1,
+            "UNCERTAINTY_MEASURE_WITH_UNIT": 1,
+            "VECTOR": 12,
+            "VERTEX_POINT": 8
+          },
+          "vertexCount": 8,
+          "bounds": {
+            "min": [
+              0,
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5,
+              22
+            ]
+          },
+          "solidBounds": [
+            {
+              "min": [
+                0,
+                0,
+                0
+              ],
+              "max": [
+                10,
+                5,
+                22
+              ]
+            }
+          ],
+          "absentEntities": {
+            "NEXT_ASSEMBLY_USAGE_OCCURRENCE": 0,
+            "MAPPED_ITEM": 0,
+            "REPRESENTATION_MAP": 0,
+            "STYLED_ITEM": 0,
+            "COLOUR_RGB": 0,
+            "DATUM": 0,
+            "GEOMETRIC_TOLERANCE": 0
+          },
+          "volume": "NOT_CALCULATED"
+        },
+        "controls": {
+          "status": "PASS",
+          "positiveControls": 2,
+          "negativeControlsDetected": 5,
+          "negativeResults": {
+            "dangling-reference": "dangling reference #999999999 from #16",
+            "duplicate-id": "duplicate id #1",
+            "altered-coordinate": "aggregate vertex bounds mismatch",
+            "wrong-unit": "expected one declared millimetre length unit",
+            "wrong-schema": "unexpected schema ['UNSUPPORTED_SCHEMA { 1 0 10303 214 1 1 1 1 }']"
+          },
+          "productImports": 0
+        },
+        "analyticPrismVolume": 1100,
+        "solidVolumeComputed": false
+      }
+    },
+    {
+      "label": "02-B-tall22-3mf",
+      "exit": 0,
+      "result": {
+        "status": "PASS",
+        "unit": "millimeter",
+        "buildItems": 1,
+        "bounds": {
+          "min": [
+            0,
+            0,
+            0
+          ],
+          "max": [
+            10,
+            5,
+            22
+          ]
+        },
+        "triangles": 12,
+        "signedVolume": 1100,
+        "expectedVolume": 1100
+      }
+    },
+    {
+      "label": "03-B-master10-step",
+      "exit": 0,
+      "result": {
+        "status": "PASS",
+        "graph": {
+          "status": "PASS",
+          "scope": "INDEPENDENT_GRAPH_AND_PRISM_VERTEX_BOUNDS_ONLY",
+          "schema": [
+            "AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }"
+          ],
+          "units": "mm",
+          "entities": 152,
+          "counts": {
+            "ADVANCED_BREP_SHAPE_REPRESENTATION": 1,
+            "ADVANCED_FACE": 6,
+            "APPLICATION_CONTEXT": 1,
+            "APPLICATION_PROTOCOL_DEFINITION": 1,
+            "AXIS2_PLACEMENT_3D": 7,
+            "CARTESIAN_POINT": 11,
+            "CLOSED_SHELL": 1,
+            "COMPLEX": 4,
+            "DERIVED_UNIT": 2,
+            "DERIVED_UNIT_ELEMENT": 2,
+            "DIRECTION": 6,
+            "EDGE_CURVE": 12,
+            "EDGE_LOOP": 6,
+            "FACE_OUTER_BOUND": 6,
+            "LINE": 12,
+            "MANIFOLD_SOLID_BREP": 1,
+            "MEASURE_REPRESENTATION_ITEM": 2,
+            "ORIENTED_EDGE": 24,
+            "PLANE": 6,
+            "PRODUCT": 1,
+            "PRODUCT_CONTEXT": 1,
+            "PRODUCT_DEFINITION": 1,
+            "PRODUCT_DEFINITION_CONTEXT": 1,
+            "PRODUCT_DEFINITION_FORMATION": 1,
+            "PRODUCT_DEFINITION_SHAPE": 1,
+            "PRODUCT_RELATED_PRODUCT_CATEGORY": 1,
+            "PROPERTY_DEFINITION": 4,
+            "PROPERTY_DEFINITION_REPRESENTATION": 4,
+            "REPRESENTATION": 4,
+            "SHAPE_DEFINITION_REPRESENTATION": 1,
+            "UNCERTAINTY_MEASURE_WITH_UNIT": 1,
+            "VECTOR": 12,
+            "VERTEX_POINT": 8
+          },
+          "vertexCount": 8,
+          "bounds": {
+            "min": [
+              0,
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5,
+              10
+            ]
+          },
+          "solidBounds": [
+            {
+              "min": [
+                0,
+                0,
+                0
+              ],
+              "max": [
+                10,
+                5,
+                10
+              ]
+            }
+          ],
+          "absentEntities": {
+            "NEXT_ASSEMBLY_USAGE_OCCURRENCE": 0,
+            "MAPPED_ITEM": 0,
+            "REPRESENTATION_MAP": 0,
+            "STYLED_ITEM": 0,
+            "COLOUR_RGB": 0,
+            "DATUM": 0,
+            "GEOMETRIC_TOLERANCE": 0
+          },
+          "volume": "NOT_CALCULATED"
+        },
+        "controls": {
+          "status": "PASS",
+          "positiveControls": 2,
+          "negativeControlsDetected": 5,
+          "negativeResults": {
+            "dangling-reference": "dangling reference #999999999 from #16",
+            "duplicate-id": "duplicate id #1",
+            "altered-coordinate": "aggregate vertex bounds mismatch",
+            "wrong-unit": "expected one declared millimetre length unit",
+            "wrong-schema": "unexpected schema ['UNSUPPORTED_SCHEMA { 1 0 10303 214 1 1 1 1 }']"
+          },
+          "productImports": 0
+        },
+        "analyticPrismVolume": 500,
+        "solidVolumeComputed": false
+      }
+    },
+    {
+      "label": "03-B-master10-3mf",
+      "exit": 0,
+      "result": {
+        "status": "PASS",
+        "unit": "millimeter",
+        "buildItems": 1,
+        "bounds": {
+          "min": [
+            0,
+            0,
+            0
+          ],
+          "max": [
+            10,
+            5,
+            10
+          ]
+        },
+        "triangles": 12,
+        "signedVolume": 499.99999999999994,
+        "expectedVolume": 500
+      }
+    }
+  ],
+  "files": [
+    {
+      "name": "02-B-tall22.step",
+      "sha256": "f6f50db8f924f91b333a793d540ad303734bac556b3954b7a2ca0331fb934312",
+      "bytes": 6519
+    },
+    {
+      "name": "02-B-tall22.3mf",
+      "sha256": "cfdd4b344d6fb0fee54e085c4d1323520629f5d5848e2d2201970b1645a1a69d",
+      "bytes": 1541
+    },
+    {
+      "name": "03-B-master10.step",
+      "sha256": "2e33bccfa8cdec36b0584e2d487f5a1cd746e6a6bcbc5a8951704af3b70dcd98",
+      "bytes": 6531
+    },
+    {
+      "name": "03-B-master10.3mf",
+      "sha256": "7559210a1236c86e7e861d50e0abbf0670e699404acea86e43d3a53975f7370b",
+      "bytes": 1541
+    }
+  ]
+}
