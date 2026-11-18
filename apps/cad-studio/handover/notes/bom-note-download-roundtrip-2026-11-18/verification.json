@@ -1,0 +1,317 @@
+{
+  "issue": 274,
+  "date": "2026-11-18",
+  "status": "PASS",
+  "scope": "Synthetic schema3 three-occurrence full-Field notes actual download and native roundtrip",
+  "fixture": "apps/cad-studio/test/bom-note-download-roundtrip-browser.mjs",
+  "fixtureSHA256": "dfd36daa1f009e36ec2e85fb0f961f2b5221ed08623cd67e84e6bbcc5caeaddf",
+  "sourceChanges": [],
+  "errors": [],
+  "consoleErrors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "downloads": [
+    {
+      "name": "same-notes purchase list.csv",
+      "bytes": 81,
+      "sha256": "b9fa08c05405ea1e2a909093dff1e08dcbfb6bf98e15eded0787a3a7c6f9518c",
+      "boundary": "actual browser download.saveAs",
+      "file": "01-purchase-before.csv"
+    },
+    {
+      "name": "same-notes design-brief notes.csv",
+      "bytes": 752,
+      "sha256": "c2e7da78c9af738a71df840d9fdf1029291a4cd1588c804af46db10adf29e350",
+      "boundary": "actual browser download.saveAs",
+      "file": "02-notes-A.csv"
+    },
+    {
+      "name": "same-notes purchase list.csv",
+      "bytes": 81,
+      "sha256": "b9fa08c05405ea1e2a909093dff1e08dcbfb6bf98e15eded0787a3a7c6f9518c",
+      "boundary": "actual browser download.saveAs",
+      "file": "03-purchase-after.csv"
+    },
+    {
+      "name": "same-notes.bcad",
+      "bytes": 4233,
+      "sha256": "ff63f906b32908b2c3cfe5a5c49e8f22a882e8d15e5e250f74113df70c85a214",
+      "boundary": "actual browser download.saveAs",
+      "file": "05-native-save.bcad"
+    },
+    {
+      "name": "05-native-save design-brief notes.csv",
+      "bytes": 752,
+      "sha256": "c2e7da78c9af738a71df840d9fdf1029291a4cd1588c804af46db10adf29e350",
+      "boundary": "actual browser download.saveAs",
+      "file": "08-notes-B.csv"
+    },
+    {
+      "name": "05-native-save purchase list.csv",
+      "bytes": 81,
+      "sha256": "b9fa08c05405ea1e2a909093dff1e08dcbfb6bf98e15eded0787a3a7c6f9518c",
+      "boundary": "actual browser download.saveAs",
+      "file": "09-purchase-reopened.csv"
+    }
+  ],
+  "oracles": [
+    {
+      "label": "02-notes-A",
+      "exit": 0,
+      "result": {
+        "status": "PASS",
+        "rows": 1,
+        "qty": 3,
+        "occurrences": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "fullFieldEquality": true,
+        "bytes": 752,
+        "sha256": "c2e7da78c9af738a71df840d9fdf1029291a4cd1588c804af46db10adf29e350"
+      }
+    },
+    {
+      "label": "08-notes-B",
+      "exit": 0,
+      "result": {
+        "status": "PASS",
+        "rows": 1,
+        "qty": 3,
+        "occurrences": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "fullFieldEquality": true,
+        "bytes": 752,
+        "sha256": "c2e7da78c9af738a71df840d9fdf1029291a4cd1588c804af46db10adf29e350"
+      }
+    }
+  ],
+  "checks": {
+    "actualDownloads": 6,
+    "notesCSVByteEqual": true,
+    "purchaseCSVByteEqual": true,
+    "fullFieldKeys": [
+      "value",
+      "basis",
+      "source",
+      "why",
+      "confirmed",
+      "said"
+    ],
+    "occurrenceGroups": [
+      [
+        "p1",
+        "p2"
+      ],
+      [
+        "p3"
+      ]
+    ],
+    "quantity": 3,
+    "freshOpenRequiredExplicitConsent": true,
+    "acceptedDocumentPreserved": true,
+    "historyAndDirtyPreservedWithinEachSession": true,
+    "sceneEvidence": "renderer identity hits at three known top-face interiors; not independent geometry computation"
+  },
+  "screenshots": [
+    {
+      "file": "04-opted-in-source-preserved.png",
+      "bytes": 151804,
+      "sha256": "6354456103415242097b00ed99a76c1b29110b217f2cdb84edd446ccf13fe73d",
+      "visualReview": "synthetic CAD UI; no visible private paths, personal data or credentials"
+    },
+    {
+      "file": "07-fresh-consent-absent.png",
+      "bytes": 99429,
+      "sha256": "9ba54fc50348180efc602c16ba3f58d68c1fdd38936e4625af9f451e554417a9",
+      "visualReview": "synthetic CAD UI; no visible private paths, personal data or credentials"
+    },
+    {
+      "file": "10-roundtrip-complete.png",
+      "bytes": 152038,
+      "sha256": "3291cf9d838cfcaa6fdd9b4a606661b767f17ae7f51b3a0344ecc88ec449b757",
+      "visualReview": "synthetic CAD UI; no visible private paths, personal data or credentials"
+    }
+  ],
+  "notRun": [
+    "schema4 or absent-note browser/download fixtures",
+    "schema4 route geometry/BOM evaluation",
+    "all historical reader versions",
+    "delayed/source-revision concurrency in this increment",
+    "CI",
+    "commit/push"
+  ],
+  "privacy": "All notes and confirmation metadata synthetic; no raw receipt, HTML, source capsules or absolute paths included",
+  "pinnedReader": {
+    "status": "PASS",
+    "casesPassed": 6,
+    "oldCommit": "0bf3aa254ae2857d2affc42da15295ba1af501ed",
+    "currentCommit": "8d0fc676a6a8a9566da99174f0c34cdf64e750ab",
+    "driverSha256": "611407a59024fafadc2c38419af03fd8c5b666af48d2bef86b70d4627f7228a7",
+    "typeParserVersion": "5.9.3",
+    "builds": [
+      {
+        "label": "old",
+        "commit": "0bf3aa254ae2857d2affc42da15295ba1af501ed",
+        "archivePaths": [
+          "packages/barocss-cad/src",
+          "packages/barocss-cad/package.json",
+          "packages/barocss-cad-model/src",
+          "packages/barocss-cad-model/package.json"
+        ],
+        "sourceScope": "Full transitive product source pin, not whole repository",
+        "archiveSha256": "fb73fb28851c6cfbe9464c72e55beb9d697d2b785e9902bc0349f25500dda894",
+        "bundleSha256": "e017958c501a22722ed6ee498bb023e781f4d0d32f16f4749c9b9ee6f6f80633",
+        "sourceCount": 520,
+        "metafileSha256": "b2b3375bd04eb0c1e753aae976d78f66c42f6f917e4c163f71b69de5ec1d7497",
+        "explicitTypeOnlyImports": 20,
+        "outputImports": [],
+        "sourceValidation": "Every bundled product input and explicit erased type target checked against the same commit git blob and realpath; emitted runtime non-builtin external imports forbidden"
+      },
+      {
+        "label": "current",
+        "commit": "8d0fc676a6a8a9566da99174f0c34cdf64e750ab",
+        "archivePaths": [
+          "packages/barocss-cad/src",
+          "packages/barocss-cad/package.json",
+          "packages/barocss-cad-model/src",
+          "packages/barocss-cad-model/package.json"
+        ],
+        "sourceScope": "Full transitive product source pin, not whole repository",
+        "archiveSha256": "18f570ced1aa1cdac18e320ac3220fe1b24e8469f2da5cd0d4617f7be9c06a95",
+        "bundleSha256": "c6c1317291031a4344228b32168f82e6c2d53ed7a2cda7a267ca1132733554d0",
+        "sourceCount": 526,
+        "metafileSha256": "6c9c6685627544e5e6e6f3f263757c4f0eebe3767e143ed6749c24317f490f5b",
+        "explicitTypeOnlyImports": 20,
+        "outputImports": [],
+        "sourceValidation": "Every bundled product input and explicit erased type target checked against the same commit git blob and realpath; emitted runtime non-builtin external imports forbidden"
+      }
+    ],
+    "cases": [
+      {
+        "label": "schema3-absentBrief",
+        "schema": 3,
+        "kind": "absentBrief",
+        "status": "PASS",
+        "currentBytesSha256": "a6f8968181e74f12b21d6441d264320bb3ca994841956905efbe06986c00e1e8",
+        "oldResavedSha256": "a6f8968181e74f12b21d6441d264320bb3ca994841956905efbe06986c00e1e8",
+        "exactDocument": true,
+        "oldBriefConsumer": true,
+        "sourceUnchanged": true
+      },
+      {
+        "label": "schema3-absentNotes",
+        "schema": 3,
+        "kind": "absentNotes",
+        "status": "PASS",
+        "currentBytesSha256": "8cb6cb4aadcd6f49d014888280fe7f40ed7712ea5925dfa3317a31132df73bf2",
+        "oldResavedSha256": "8cb6cb4aadcd6f49d014888280fe7f40ed7712ea5925dfa3317a31132df73bf2",
+        "exactDocument": true,
+        "oldBriefConsumer": true,
+        "sourceUnchanged": true
+      },
+      {
+        "label": "schema3-fullFields",
+        "schema": 3,
+        "kind": "fullFields",
+        "status": "PASS",
+        "currentBytesSha256": "be035074f50f1767773cdfcb3a91ef2cf76dea960d9d25edb9a2013267611fc0",
+        "oldResavedSha256": "be035074f50f1767773cdfcb3a91ef2cf76dea960d9d25edb9a2013267611fc0",
+        "exactDocument": true,
+        "oldBriefConsumer": true,
+        "sourceUnchanged": true
+      },
+      {
+        "label": "schema4-absentBrief",
+        "schema": 4,
+        "kind": "absentBrief",
+        "status": "PASS",
+        "currentBytesSha256": "94edef8274657397ca3c275d1abc2a83aaa12e7061134d0be10795d1d5970d04",
+        "oldResavedSha256": "94edef8274657397ca3c275d1abc2a83aaa12e7061134d0be10795d1d5970d04",
+        "exactDocument": true,
+        "oldBriefConsumer": true,
+        "sourceUnchanged": true
+      },
+      {
+        "label": "schema4-absentNotes",
+        "schema": 4,
+        "kind": "absentNotes",
+        "status": "PASS",
+        "currentBytesSha256": "0b8031a2753795eaf9960cc8580040f7c0d6881ecb86fac5740a9b4d84bab682",
+        "oldResavedSha256": "0b8031a2753795eaf9960cc8580040f7c0d6881ecb86fac5740a9b4d84bab682",
+        "exactDocument": true,
+        "oldBriefConsumer": true,
+        "sourceUnchanged": true
+      },
+      {
+        "label": "schema4-fullFields",
+        "schema": 4,
+        "kind": "fullFields",
+        "status": "PASS",
+        "currentBytesSha256": "d7368e1edef024034574a14c2436ac06849539f8b98d838290e08c866d437365",
+        "oldResavedSha256": "d7368e1edef024034574a14c2436ac06849539f8b98d838290e08c866d437365",
+        "exactDocument": true,
+        "oldBriefConsumer": true,
+        "sourceUnchanged": true
+      }
+    ],
+    "limits": [
+      "Synthetic schema3 ordinary shared/independent parts and schema4 root-only route bundle generated through existing APIs. No mesh blobs, route evaluation, browser or manufacturing qualification.",
+      "Old Brief semantic consumer is readBrief; old BOM notes UI/export does not exist and is not claimed compatible.",
+      "A single pinned pre-feature reader is not all historical versions. Invalid Field coercion/unknown metadata are outside the valid-Field matrix."
+    ],
+    "separateFromActualDownloadFixture": true,
+    "attempts": [
+      {
+        "run": "reader01",
+        "status": "NOT_RUN",
+        "reason": "Driver guard assert argument typo; no compatibility cases executed"
+      },
+      {
+        "run": "reader02",
+        "status": "HARNESS_REFUSAL",
+        "casesPassed": 0,
+        "reason": "Explicit erased type imports misclassified as runtime external imports"
+      },
+      {
+        "run": "reader03",
+        "status": "HARNESS_REFUSAL",
+        "casesPassed": 0,
+        "reason": "Same type-only metadata boundary; diagnostics preserved"
+      },
+      {
+        "run": "reader04",
+        "status": "PARTIAL_FIXTURE_FAILURE",
+        "schema3Passed": 3,
+        "schema4Passed": 0,
+        "reason": "Invalid schema4 tag on ordinary/nested box fixture; no schema4 compatibility conclusion"
+      },
+      {
+        "run": "reader05",
+        "status": "PASS",
+        "casesPassed": 6,
+        "reason": "Schema3 ordinary shared/independent matrix and valid API-created root-only schema4 route bundle matrix"
+      }
+    ]
+  },
+  "regressions": {
+    "model": {
+      "passed": 15,
+      "failed": 0,
+      "logSha256": "3389348bd8b17899845f6ca92d47b48f82625d1ad119de92b31cc5c5fbcd835e"
+    },
+    "studio": {
+      "passed": 13,
+      "failed": 0,
+      "logSha256": "81a07fcc990aeb27a02086750af5b489a588c4eab7eace4e58f7adc001c466d7"
+    }
+  }
+}
