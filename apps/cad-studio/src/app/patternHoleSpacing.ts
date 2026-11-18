@@ -5,15 +5,69 @@ import { linearSpanPatternInput } from '@barocss/cad-model/engine/linearSpanPatt
 import { featureId } from '@barocss/cad-model/engine/ids';
 import { isDefaultPlane } from '@barocss/cad-model/sketch/plane';
 
-type Hole = Extract<ModelNode, { kind: 'hole' }>;
 type Result = { nodes: ModelNode[] } | { error: FriendlyError };
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const numericPair = (value: readonly [unknown, unknown]): value is readonly [number, number] =>
   finite(value[0]) && finite(value[1]);
 
+const only = (value: object, keys: readonly string[]) => Object.keys(value).every(key => keys.includes(key));
+const same = (a: unknown, b: unknown): boolean => {
+  if (Object.is(a, b)) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  const ak = Object.keys(a), bk = Object.keys(b);
+  return ak.length === bk.length && ak.every(key => Object.hasOwn(b, key)
+    && same((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]));
+};
+const pair = (v: unknown): v is [number, number] => Array.isArray(v) && v.length === 2 && finite(v[0]) && finite(v[1]);
+
+/** Span edits move the existing last-copy bore; Count-only retargeting stays separate. */
+function prepareSpanHoleEdit(doc: StudioDoc, draft: ModelNode[], index: number): Result {
+  const active = (nodes: ModelNode[]) => nodes.some(n => n.kind === "hole" && !n.held && !n.suppressed
+    && n.parent.node === index);
+  if (!active(doc.nodes) && !active(draft)) return { nodes: draft };
+  const refuse = (): Result => ({ error: { title: "Pattern span not changed",
+    hint: "This numbered Hole cannot safely follow Total span. Keep the current span or edit the Hole and pattern separately.", detail: "" } });
+  const [sk, ex, old, hole] = doc.nodes, next = draft[index];
+  if (index !== 2 || doc.nodes.length !== 4 || draft.length !== 4
+    || Object.entries(doc).some(([k,v]) => v !== undefined && !["format","schema","units","nextId","parameters","nodes","outputs"].includes(k))
+    || doc.schema !== 3 || doc.units !== "mm" || doc.format !== "barocss-cad-model"
+    || !same(doc.outputs, { [Object.keys(doc.outputs)[0]]: { node: 3, side: "solid" } })
+    || sk.kind !== "sketch" || sk.profile !== "rectangle" || !only(sk,["id","kind","profile","min","max"])
+    || !pair(sk.min) || !pair(sk.max)
+    || ex.kind !== "extrude" || !only(ex,["id","kind","sketch","height","from","draft"])
+    || ex.sketch !== 0 || !finite(ex.height) || ex.height <= 0 || (ex.from !== undefined && !finite(ex.from)) || (ex.draft ?? 0) !== 0
+    || old.kind !== "linear-span-pattern" || next?.kind !== "linear-span-pattern"
+    || !only(old,["id","kind","parent","axis","span","count"])
+    || !same(old.parent,{node:1,side:"solid"}) || (old.axis !== "x" && old.axis !== "y")
+    || !Number.isInteger(old.count) || old.count < 2 || old.count > 64 || !finite(old.span) || !finite(next.span) || old.span <= 0 || next.span <= 0
+    || !same({...old,span:next.span},next)
+    || hole.kind !== "hole" || !only(hole,["id","kind","parent","center","radius","face","axis","side"])
+    || !same(hole.parent,{node:2,side:"solid"}) || !pair(hole.center) || !finite(hole.radius) || hole.radius <= 0
+    || (hole.axis !== undefined && hole.axis !== "z") || (hole.side !== undefined && hole.side !== "max")
+    || hole.face !== `${featureId(doc.nodes,1)}.top@${old.count-1}`
+    || doc.nodes.some((n,i) => i !== index && !same(n,draft[i]))) return refuse();
+  const ids = doc.nodes.map(n => n.id);
+  if (ids.some(id => typeof id !== "string" || !id) || new Set(ids).size !== 4) return refuse();
+  const oldInput = linearSpanPatternInput(old,index), newInput = linearSpanPatternInput(next,index);
+  if (!("spacing" in oldInput) || !("spacing" in newInput)) return refuse();
+  const spacingNode = (node: typeof old, spacing: number): ModelNode => {
+    return {id:node.id,kind:"linear-pattern",parent:node.parent,axis:node.axis,count:node.count,spacing};
+  };
+  const before = doc.nodes.map((n,i) => i === index ? spacingNode(old,oldInput.spacing) : n);
+  const after = draft.map((n,i) => i === index ? spacingNode(next,newInput.spacing) : n);
+  const proof = prepareLinearPatternHoleEdit({...doc,nodes:before},after,index);
+  if ("error" in proof) return proof;
+  const moved = proof.nodes[3];
+  if (moved.kind !== "hole" || moved === hole) return refuse();
+  return {nodes:draft.map((n,i) => i === 3 ? {...hole,center:moved.center} : n)};
+}
+
 /** Check numbered Hole dependencies and preserve a proven complete bore across the pattern edit. */
 export function prepareLinearPatternHoleEdit(doc: StudioDoc, draft: ModelNode[], index: number): Result {
   const pattern = doc.nodes[index], next = draft[index];
+  if (pattern?.kind === "linear-span-pattern" && next?.kind === "linear-span-pattern" && !Object.is(pattern.span,next.span)) {
+    return prepareSpanHoleEdit(doc,draft,index);
+  }
   if ((pattern?.kind !== 'linear-pattern' && pattern?.kind !== 'linear-span-pattern')
     || (next?.kind !== 'linear-pattern' && next?.kind !== 'linear-span-pattern')) return { nodes: draft };
   const fixedSpan = pattern.kind === 'linear-span-pattern' && next.kind === 'linear-span-pattern';
