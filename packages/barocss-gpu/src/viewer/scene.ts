@@ -201,7 +201,7 @@ export function packInstances(input: InstancesInput): { count: number; data: Arr
 export class Geometry {
   /** @internal Triangles: positions, normals, colours, indices. Lines: positions holds the segment instances. */
   /** `ownUVs` false: `uvs` is the viewer's shared zero buffer (the geometry has none; G13). */
-  gpu: { positions: Buffer; normals: Buffer | null; colors: Buffer | null; uvs: Buffer | null; ownUVs?: boolean; indices: Buffer | null; device: Device; labels?: { count: number; atlas: number } } | null = null;
+  gpu: { positions: Buffer; normals: Buffer | null; colors: Buffer | null; uvs: Buffer | null; ownUVs?: boolean; indices: Buffer | null; device: Device; labels?: { count: number; atlas: number; data: Float32Array; glyphs: readonly { labelIndex: number; instance: number }[] } } | null = null;
   disposed = false;
   constructor(readonly data: PreparedGeometry, private readonly owner: Viewer) {}
   get topology(): 'triangles' | 'lines' | 'points' | 'labels' { return this.data.topology; }

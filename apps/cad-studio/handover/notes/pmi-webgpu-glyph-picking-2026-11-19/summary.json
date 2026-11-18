@@ -1,0 +1,307 @@
+{
+  "issue": 268,
+  "issueStatus": "OPEN",
+  "scope": "Bounded WebGPU PMI label-quad picking for the synthetic authored bracket annotation. Not full issue completion.",
+  "baseCommit": "255e888fc189cd1cebe22167388ebbb62d06039a",
+  "releaseEvidence": "PRE_PUSH; exact commit CI and integration confirmation recorded separately in the existing issue.",
+  "runs": {
+    "baseline01": {
+      "driverStatus": "PASS",
+      "probes": [
+        {
+          "label": "top-zoom-0",
+          "dpr": 1,
+          "view": "Top",
+          "probes": 5,
+          "hits": 4
+        },
+        {
+          "label": "top-zoom-1",
+          "dpr": 1,
+          "view": "Top",
+          "probes": 5,
+          "hits": 5
+        },
+        {
+          "label": "top-zoom-2",
+          "dpr": 1,
+          "view": "Top",
+          "probes": 5,
+          "hits": 2
+        }
+      ],
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "downloads": 0,
+      "closedContexts": 1,
+      "browserClosed": true,
+      "serverClosed": true
+    },
+    "actual01": {
+      "driverStatus": "FAIL",
+      "probes": [
+        {
+          "label": "dpr-1-front",
+          "dpr": 1,
+          "view": "Front",
+          "probes": 3,
+          "hits": 3,
+          "backgroundNoHit": true,
+          "hiddenAtOldGlyphNoHit": true
+        },
+        {
+          "label": "dpr-1-top-0",
+          "dpr": 1,
+          "view": "Top",
+          "probes": 1,
+          "hits": 0
+        }
+      ],
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "downloads": 0,
+      "closedContexts": 1,
+      "browserClosed": true,
+      "serverClosed": true
+    },
+    "diagnostic01": {
+      "driverStatus": "FAIL",
+      "probes": [
+        {
+          "label": "diagnostic-front",
+          "dpr": 1,
+          "view": "Front",
+          "probes": 3,
+          "hits": 3,
+          "backgroundNoHit": true,
+          "hiddenAtOldGlyphNoHit": true
+        }
+      ],
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "downloads": 0,
+      "closedContexts": 1,
+      "browserClosed": true,
+      "serverClosed": true
+    },
+    "diagnostic02": {
+      "driverStatus": "PASS",
+      "probes": [
+        {
+          "label": "diagnostic-front",
+          "dpr": 1,
+          "view": "Front",
+          "probes": 3,
+          "hits": 3,
+          "backgroundNoHit": true,
+          "hiddenAtOldGlyphNoHit": true
+        },
+        {
+          "label": "diagnostic-top",
+          "dpr": 1,
+          "view": "Top",
+          "probes": 1,
+          "hits": 0
+        }
+      ],
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "downloads": 0,
+      "closedContexts": 1,
+      "browserClosed": true,
+      "serverClosed": true
+    },
+    "actual02": {
+      "driverStatus": "PASS",
+      "probes": [
+        {
+          "label": "dpr-1-front",
+          "dpr": 1,
+          "view": "Front",
+          "probes": 3,
+          "hits": 3,
+          "backgroundNoHit": true,
+          "hiddenAtOldGlyphNoHit": true
+        },
+        {
+          "label": "dpr-1-top-0",
+          "dpr": 1,
+          "view": "Top",
+          "probes": 8,
+          "hits": 8,
+          "backgroundNoHit": true,
+          "hiddenAtOldGlyphNoHit": true
+        },
+        {
+          "label": "dpr-1-top-1",
+          "dpr": 1,
+          "view": "Top",
+          "probes": 8,
+          "hits": 8,
+          "backgroundNoHit": true,
+          "hiddenAtOldGlyphNoHit": true
+        },
+        {
+          "label": "dpr-1-top-2",
+          "dpr": 1,
+          "view": "Top",
+          "probes": 8,
+          "hits": 8,
+          "backgroundNoHit": true,
+          "hiddenAtOldGlyphNoHit": true
+        },
+        {
+          "label": "dpr-2-front",
+          "dpr": 2,
+          "view": "Front",
+          "probes": 3,
+          "hits": 3,
+          "backgroundNoHit": true,
+          "hiddenAtOldGlyphNoHit": true
+        },
+        {
+          "label": "dpr-2-top-0",
+          "dpr": 2,
+          "view": "Top",
+          "probes": 3,
+          "hits": 3,
+          "backgroundNoHit": true,
+          "hiddenAtOldGlyphNoHit": true
+        },
+        {
+          "label": "dpr-2-top-1",
+          "dpr": 2,
+          "view": "Top",
+          "probes": 3,
+          "hits": 3,
+          "backgroundNoHit": true,
+          "hiddenAtOldGlyphNoHit": true
+        },
+        {
+          "label": "dpr-2-top-2",
+          "dpr": 2,
+          "view": "Top",
+          "probes": 3,
+          "hits": 3,
+          "backgroundNoHit": true,
+          "hiddenAtOldGlyphNoHit": true
+        }
+      ],
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "downloads": 0,
+      "closedContexts": 4,
+      "browserClosed": true,
+      "serverClosed": true
+    }
+  },
+  "history": [
+    {
+      "step": "baseline01",
+      "meaning": "Exploratory driver PASS means observations completed, not correct picking: Top zoom 0/1/2 hit 4/5, 5/5 and 2/5. Glyph-region images independently reviewed."
+    },
+    {
+      "step": "initial-types",
+      "meaning": "GPU optional material opacity produced two TypeScript TS18048 errors; corrected and both package type checks later passed. Not classified as a pre-existing failure."
+    },
+    {
+      "step": "actual01",
+      "meaning": "Front 3/3 passed; first Top glyph missed. Remaining actual stages were NOT_RUN."
+    },
+    {
+      "step": "diagnostic01",
+      "meaning": "Observer installation did not complete; 0 recorded calls. Final qualification error masked original setup exception. Diagnostic NOT_RUN, not a product qualification result."
+    },
+    {
+      "step": "diagnostic02",
+      "meaning": "Exact live Viewer observers recorded 58 requestRender calls and one labelGlyphBounds null return. Pointer-hover state/material refresh preceded null; original method descriptors restored. Diagnostic observations only, not timing-equivalent success."
+    },
+    {
+      "step": "actual02",
+      "meaning": "Uninstrumented regression passed all 39 glyph probes, eight background/hide checks, empty-label boundaries and fresh-context Open at DPR 1/2. No native Save tested."
+    },
+    {
+      "step": "lint03",
+      "meaning": "Command used renderer.tsx instead of renderer.ts, so lint did not run. Corrected lint04 completed with zero errors and one existing no-console warning."
+    },
+    {
+      "step": "runner04",
+      "meaning": "New test registration omission in explicit GPU package runner corrected; regular cad-dist loader targeted rerun 8/8 PASS, not whole-suite rerun."
+    }
+  ],
+  "checks": {
+    "gpuFocusedTests": {
+      "pass": 8,
+      "fail": 0
+    },
+    "studioFocusedTests": {
+      "pass": 12,
+      "fail": 0
+    },
+    "relatedGpuTests": {
+      "pass": 107,
+      "fail": 0
+    },
+    "gpuTypes": "PASS",
+    "studioTypes": "PASS",
+    "gpuBuild": "PASS",
+    "scopedLint": {
+      "errors": 0,
+      "warnings": 1,
+      "warning": "Existing no-console warning in gpuRenderer.ts",
+      "baseCommitWarningLine": 212
+    },
+    "registeredRunnerTargetedTests": {
+      "pass": 8,
+      "fail": 0,
+      "loader": "cad-dist",
+      "wholeSuiteRerun": false
+    }
+  },
+  "preservation": {
+    "actual02AcceptedDocument": "unchanged",
+    "actual02DirtyState": "unchanged",
+    "actual02CameraAcrossClicks": "unchanged",
+    "nativeSave": "NOT_RUN",
+    "freshContextOpen": "PASS"
+  },
+  "limits": [
+    "Bounds are padded uploaded glyph quads, not exact ink coverage or depth/occlusion-exact picking.",
+    "Conservative refusal for unqualified camera-relative raster, clip and instance contexts; not broad support certification.",
+    "Actual scene is one origin-near synthetic bracket label, Front planar/Top facing, DPR 1/2 and two zoom-out steps.",
+    "General fonts, overlapping labels, arbitrary devices/cameras/large coordinates and actual multiline labels remain unverified.",
+    "Line/head selection, SVG/CPU behavior and stored documents are not redesigned by this bounded change."
+  ],
+  "privacy": "Only allowlisted counts, synthetic scene screenshots and repository-relative provenance are published. Raw receipts, stacks, local filesystem paths and local URLs are excluded.",
+  "diagnostic02": {
+    "calls": {
+      "bounds": 1,
+      "request": 58
+    },
+    "overflow": 0,
+    "restored": {
+      "bounds": true,
+      "request": true
+    },
+    "nullBoundsReturns": 1
+  },
+  "images": [
+    {
+      "file": "dpr1-top-zoom2-selected.png",
+      "sha256": "b9c484fed8b21ab72122e6738e800081049cc70ef455692256ca54c732415493",
+      "source": "actual02 dpr-1-top-2-click-7.png"
+    },
+    {
+      "file": "dpr2-top-zoom2-visible.png",
+      "sha256": "b5f5f89cbbbd63f0d6bfc3c901e77bf780f101ba30a0f698c76b1396a3918ce6",
+      "source": "actual02 dpr-2-top-2-on.png"
+    }
+  ],
+  "verificationDateUTC": "2026-11-18",
+  "directoryDateNote": "Preassigned directory label retained; not the verification date."
+}

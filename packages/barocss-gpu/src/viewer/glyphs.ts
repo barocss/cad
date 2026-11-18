@@ -56,7 +56,7 @@ export function distanceField(coverage: ArrayLike<number>, out: Uint8Array = new
 }
 
 /** A glyph in the atlas: its cell, its advance (em-pixels). */
-export interface Glyph { cell: number; advance: number }
+export interface Glyph { cell: number; advance: number; covered: boolean }
 /** Draws one character into a GLYPH_CELL² coverage (0–255) and measures its advance; null when the page has no 2D canvas. */
 export type GlyphRaster = (ch: string, font: string) => { coverage: Uint8Array; advance: number } | null;
 
@@ -102,7 +102,7 @@ export class GlyphAtlas {
     if (this.fields.length >= ATLAS_CELLS * ATLAS_CELLS) { this.full = true; this.glyphs.set(ch, null); return null; }
     const r = this.raster(ch, this.font);
     if (!r) { this.glyphs.set(ch, null); return null; }
-    const g: Glyph = { cell: this.fields.length, advance: r.advance };
+    const g: Glyph = { cell: this.fields.length, advance: r.advance, covered: r.coverage.some(v => v >= 128) };
     this.fields.push(distanceField(r.coverage)); this.added.push(g.cell); this.glyphs.set(ch, g);
     return g;
   }
@@ -131,12 +131,13 @@ export const LABEL_GLYPH = 0, LABEL_BOX = 1, LABEL_PLANE = 2;
  * label in CSS pixels (y down), a plane label in world units along its plane's right and up (y up). Colours are linear
  * RGBA8, packed by `pack` (sRGB to linear is the caller's). Returns the instances and their count.
  */
-export function layoutLabels(labels: readonly LabelInput[], atlas: GlyphAtlas, pack: (c: readonly number[] | undefined, a: number) => number): { data: Float32Array; count: number } {
+export function layoutLabels(labels: readonly LabelInput[], atlas: GlyphAtlas, pack: (c: readonly number[] | undefined, a: number) => number): { data: Float32Array; count: number; glyphs: readonly { labelIndex: number; instance: number }[] } {
   let n = 0;
   for (const l of labels) n += l.text.length + (l.background ? 2 : 0);
   const data = new Float32Array(n * LABEL_FLOATS), u = new Uint32Array(data.buffer);
   let k = 0;
-  for (const l of labels) {
+  const glyphs: { labelIndex: number; instance: number }[] = [];
+  for (const [labelIndex, l] of labels.entries()) {
     const size = l.size ?? 12, s = size / GLYPH_EM, lines = l.text.split('\n');
     let wide = 0;
     const widths = lines.map(line => { let w = 0; for (const ch of line) w += atlas.glyph(ch)?.advance ?? GLYPH_EM * 0.5; wide = Math.max(wide, w); return w; });
@@ -169,12 +170,13 @@ export function layoutLabels(labels: readonly LabelInput[], atlas: GlyphAtlas, p
         if (g) {
           const cx = g.cell % ATLAS_CELLS, cy = Math.floor(g.cell / ATLAS_CELLS), q = 1 / ATLAS_CELLS;
           const gx = pen - GLYPH_SPREAD * s, gy = baseline - (GLYPH_SPREAD + ASCENT) * s;
+          if (g.covered) glyphs.push({ labelIndex, instance: k });
           put(LABEL_GLYPH, gx, gy, gx + GLYPH_CELL * s, gy + GLYPH_CELL * s, [cx * q, cy * q, (cx + 1) * q, (cy + 1) * q], pack(l.color, 1), 0);
         } else { put(LABEL_GLYPH, 0, 0, 0, 0, NO_UV, 0, 0); }
         pen += (g?.advance ?? GLYPH_EM * 0.5) * s;
       }
     });
   }
-  return { data, count: k };
+  return { data, count: k, glyphs };
 }
 const ZERO = [0, 0, 0], NO_UV = [0, 0, 0, 0], BORDER_UV = [-1, -1, -1, -1];

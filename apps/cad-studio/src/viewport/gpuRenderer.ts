@@ -1,3 +1,4 @@
+import { pmiSvgCameraKey } from './pmiSvgBounds';
 import { createViewportRecovery, type ViewportRecoveryNotice } from './viewportRecovery';
 // The studio viewport on the @barocss/gpu viewer (WebGPU): the same interface as the WebGL2 Renderer, so
 // the viewport keeps its own camera, pointer handling and overlays. Bodies are lit meshes with their edges
@@ -489,6 +490,12 @@ export class GpuRenderer implements ViewRenderer {
     }
     this.viewer.requestRender();
   }
+  private submittedLabelCamera: string | null = null;
+  overlayLabelBounds(key: string, camera: OrbitCamera): import('./pmiGpuBounds').PmiGlyphSnapshot | null {
+    if (this.submittedLabelCamera !== pmiSvgCameraKey(camera, this.canvas)) return null;
+    const mesh = this.overlays.get(key);
+    return mesh ? this.viewer.labelGlyphBounds(mesh) : null;
+  }
   overlayTexts(): Record<string, string[]> { return Object.fromEntries(this.overlayText); }
   private overlayText = new Map<string, string[]>();
   overlayLines(): Record<string, number> { return Object.fromEntries([...this.overlays].map(([k, m]) => [k, m.geometry.topology === 'points' ? m.geometry.data.elementCount : m.geometry.data.elementCount / 2])); }
@@ -757,6 +764,7 @@ export class GpuRenderer implements ViewRenderer {
     this.updateSilhouettes();
     v.resize(pixelRatio());
     v.render();
+    this.submittedLabelCamera = pmiSvgCameraKey(camera, this.canvas);
     if (this.tally.tracking) this.countFrame();
   }
 

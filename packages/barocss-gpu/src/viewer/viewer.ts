@@ -1,3 +1,4 @@
+import { projectedGlyphBounds, type LabelBoundsSnapshot } from './label-bounds.js';
 // One WebGPU renderer for a canvas: it owns the device and the canvas context, keeps geometry in long-
 // lived buffers and every pipeline it needs, renders on demand (one frame per animation frame at most),
 // follows the canvas size and pixel ratio, and recreates its device and re-uploads the scene when the
@@ -1293,12 +1294,46 @@ export class Viewer {
   private uploadLabels(g: Geometry): boolean {
     if (g.gpu && g.gpu.device === this.device && g.gpu.labels?.atlas === this.atlasVersion) return true;
     if (g.gpu) { g.gpu.positions.destroy(); g.gpu = null; }
-    const { data, count } = layoutLabels(g.data.labels ?? [], this.atlas, packLabelColor);
+    const { data, count, glyphs } = layoutLabels(g.data.labels ?? [], this.atlas, packLabelColor);
     if (!count) return false;
     const b = this.device.createBuffer({ size: Math.max(16, data.byteLength), usage: BufferUsage.VERTEX | BufferUsage.COPY_DST, label: 'labels' });
     this.device.queue.writeBuffer(b, 0, data);
-    g.gpu = { device: this.device, positions: b, normals: null, colors: null, uvs: null, indices: null, labels: { count, atlas: this.atlasVersion } };
+    g.gpu = { device: this.device, positions: b, normals: null, colors: null, uvs: null, indices: null, labels: { count, atlas: this.atlasVersion, data, glyphs } };
     return true;
+  }
+  private labelBoundsFrame: { epoch: object; device: Device; atlas: number; width: number; height: number; cssWidth: number; cssHeight: number; ratio: number; camera: number[]; vp: Float32Array; meshes: Map<Mesh, { model: Float32Array; sourceModel: number[]; material: Mesh['material']; upload: NonNullable<Geometry['gpu']>; bounds: LabelBoundsSnapshot['bounds'] }> } | null = null;
+
+  /** Last submitted canvas frame's conservative glyph-quad bounds in canvas-local CSS pixels.
+   * Null means unverified/stale. Excludes backgrounds and empty glyphs; does not certify ink or occlusion.
+   * Camera-relative raster frames are initially unsupported. Returned arrays cannot mutate the cache.
+   */
+  labelGlyphBounds(mesh: Mesh): LabelBoundsSnapshot | null {
+    const f = this.labelBoundsFrame;
+    if (!f || this.disposed || this.recovering || this.recoveryFailure || this.device !== f.device || this.atlasVersion !== f.atlas
+      || this.canvas.width !== f.width || this.canvas.height !== f.height || this.pixelRatio !== f.ratio
+      || (this.canvas.clientWidth || this.canvas.width) !== f.cssWidth || (this.canvas.clientHeight || this.canvas.height) !== f.cssHeight
+      || !this.meshes.includes(mesh) || !mesh.visible || mesh.geometry.disposed || mesh.dirty || mesh.instances || (mesh.material.opacity ?? 1) <= 0
+      || mesh.material.colorWrite === false || (mesh.clipped && !!this.clip)) return null;
+    const entry = f.meshes.get(mesh), camera = this.camera.viewProjection(f.width / f.height);
+    if (!entry || mesh.material !== entry.material || camera.length !== 16 || mesh.transform.length !== 16 || mesh.geometry.gpu !== entry.upload || !Array.from(camera).every((v,i)=>Number.isFinite(v)&&v===f.camera[i])
+      || !Array.from(mesh.transform).every((v,i)=>Number.isFinite(v)&&v===entry.sourceModel[i])) return null;
+    return { epoch: f.epoch, bounds: entry.bounds.map(b=>({labelIndex:b.labelIndex,rects:b.rects.map(r=>({...r}))})) };
+  }
+
+  private captureLabelBoundsFrame(vp: Mat4, drawn: readonly Mesh[], width: number, height: number): void {
+    this.labelBoundsFrame = null;
+    if (this.raster) return;
+    const cssWidth=this.canvas.clientWidth||this.canvas.width, cssHeight=this.canvas.clientHeight||this.canvas.height;
+    const meshes = new Map<Mesh, {model:Float32Array;sourceModel:number[];material:Mesh['material'];upload:NonNullable<Geometry['gpu']>;bounds:LabelBoundsSnapshot['bounds']}>();
+    const packedVP = new Float32Array(frameBlock.subarray(0,16));
+    for (const mesh of drawn) {
+      const upload=mesh.geometry.gpu, layout=upload?.labels;
+      if (!upload || !layout || mesh.instances || (mesh.material.opacity ?? 1)<=0 || mesh.material.colorWrite===false || (mesh.clipped && !!this.clip)) continue;
+      const offset=mesh.slot*OBJECT_STRIDE/4, model=new Float32Array(this.objectData.subarray(offset,offset+16));
+      const bounds=projectedGlyphBounds(layout,model,packedVP,width,height,this.pixelRatio,cssWidth,cssHeight);
+      if (bounds) meshes.set(mesh,{model,sourceModel:Array.from(mesh.transform),material:mesh.material,upload,bounds});
+    }
+    this.labelBoundsFrame={epoch:{},device:this.device,atlas:this.atlasVersion,width,height,cssWidth,cssHeight,ratio:this.pixelRatio,camera:Array.from(vp),vp:packedVP,meshes};
   }
   /** The labels' font (G15): a new one draws every glyph again, and lays every label out again. */
   get labelFont(): string { return this.atlas.font; }
@@ -1701,6 +1736,7 @@ export class Viewer {
     return [r[0] - reach, r[1] - reach, r[2] + reach, r[3] + reach];
   }
   private draw(capture: Buffer | null, output?: Texture): void {
+    this.labelBoundsFrame = null;
     this.frameBox = null; this.frameBox = { box: this.sceneBounds() };
     // (O10: the records kept, zeroed as a counted frame begins.)
     this.counting = this.costs;
@@ -1878,6 +1914,7 @@ export class Viewer {
     show.end();
     if (capture) enc.copyTextureToBuffer({ texture: out }, { buffer: capture, bytesPerRow: Math.ceil((out.width * 4) / 256) * 256 }, [out.width, out.height]);
     this.device.queue.submit([enc.finish()]);
+    if (!output && !capture) this.captureLabelBoundsFrame(vp, [...opaque, ...transparent], width, height);
     Object.assign(this.stats, { frames: this.stats.frames + 1, drawCalls: opaque.length + transparent.length + caps, culled, triangles: tris, lines, points });
   }
 

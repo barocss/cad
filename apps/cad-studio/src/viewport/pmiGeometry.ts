@@ -79,15 +79,19 @@ const hex = (c: readonly number[]) => '#' + c.map(v => Math.round(v * 255).toStr
  * The texts as labels: in their planes (world mm, their own direction and up), or facing the eye at 12 px when the plane
  * is seen nearly edge-on from `forward`. The selected annotation's texts in the accent colour, a set apart.
  */
-export function pmiLabels(items: readonly ModelAnnotation[], forward: readonly number[], selected: string | null = null): { plain: OverlayLabels; selected: OverlayLabels | null } {
+export function pmiLabels(items: readonly ModelAnnotation[], forward: readonly number[], selected: string | null = null): { plain: OverlayLabels; selected: OverlayLabels | null; owners: { plain: string[]; selected: string[] } } {
   const plain: OverlayLabels['labels'] = [], sel: OverlayLabels['labels'] = [];
+  const owners = { plain: [] as string[], selected: [] as string[] };
   for (const a of items) {
     const facing = pmiEdgeOn(a.plane.normal, forward), into = a.id === selected ? sel : plain;
-    for (const t of a.texts) into.push(facing
+    for (const t of a.texts) {
+      (a.id === selected ? owners.selected : owners.plain).push(a.id);
+      into.push(facing
       ? { text: t.text, at: t.at, size: 12, align: [ALIGN[t.align], 1] }
       : { text: t.text, at: t.at, size: t.height, align: [ALIGN[t.align], 0.74], plane: { right: t.dir, up: t.up } });
+    }
   }
-  return { plain: { labels: plain, color: hex(PMI_COLOR) }, selected: sel.length ? { labels: sel, color: hex(PMI_SELECTED) } : null };
+  return { owners, plain: { labels: plain, color: hex(PMI_COLOR) }, selected: sel.length ? { labels: sel, color: hex(PMI_SELECTED) } : null };
 }
 
 /** What a pick needs: a world point on screen (CSS px), or null behind the eye. */
@@ -97,7 +101,7 @@ function segmentDistance(px: number, py: number, a: [number, number], b: [number
   return Math.hypot(a[0] + t * dx - px, a[1] + t * dy - py);
 }
 export type PmiTextBounds = Map<string, { left: number; top: number; right: number; bottom: number }[]>;
-/** Existing GPU spans, or exact current SVG text boxes when supplied; line distance and array-first ties are unchanged. */
+/** Committed renderer boxes when supplied; legacy callers retain estimated spans. Line distance and array-first ties are unchanged. */
 export function pmiPick(items: readonly ModelAnnotation[], project: Project, x: number, y: number, radius = 8, textBounds?: PmiTextBounds): string | null {
   let best: string | null = null, bestD = radius;
   for (const a of items) {

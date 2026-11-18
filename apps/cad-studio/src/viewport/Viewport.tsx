@@ -1,3 +1,4 @@
+import { pmiGpuTextBounds, type PmiGpuCommit } from './pmiGpuBounds';
 import type { FilletEndpoints } from '../app/filletEndpoints';
 import { applySketchCameraFrame, ownsSketchCameraFrame, type SketchCameraFrame } from './sketchCameraFrame';
 import { ContinuityLocation } from './ContinuityLocation';
@@ -552,12 +553,18 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
 
 
   const pmiSvgCommit = useRef<PmiSvgCommit | null>(null);
+  const pmiGpuCommit = useRef<PmiGpuCommit | null>(null);
   const input = useViewportPointerInput({
     canvas, camera, propsRef,
     rendering: { renderer, rendererBodies, rendererInstances, syncDisplayedBodies, syncDirect, isBandRail: hit => !!bandRail(hit), selectBandRail, request, requestRef, moving, viewState, hover,
       pmiTextBounds: () => {
         const r = renderer.current, c = canvas.current, items = propsRef.current.annotations;
-        if (r?.setOverlayLabels) return undefined; // GPU rendering and picking remain unchanged.
+        if (r?.setOverlayLabels) {
+          if (!c || !items) return new Map();
+          return pmiGpuTextBounds(pmiGpuCommit.current, { items, selected: propsRef.current.annotationSelected ?? null,
+            renderer: r, canvas: c, facingKey: pmiFacingKey(items, camera.current.basis().forward) },
+          key => r.overlayLabelBounds?.(key, camera.current) ?? null);
+        }
         if (!r || !c || !items) return new Map();
         return pmiSvgTextBounds(pmiSvgCommit.current, { items, renderer: r, canvas: c, cameraKey: pmiSvgCameraKey(camera.current, c) }, camera.current);
       },
@@ -702,6 +709,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     pmiFacing.current = p.annotations?.length ? pmiFacingKey(p.annotations, forward) : '';
     const l = p.annotations?.length ? pmiLabels(p.annotations, forward, p.annotationSelected ?? null) : null;
     r.setOverlayLabels('pmi:text', l?.plain.labels.length ? l.plain : null); r.setOverlayLabels('pmi:text:selected', l?.selected ?? null);
+    pmiGpuCommit.current = l && p.annotations && canvas.current ? { items: p.annotations, selected: p.annotationSelected ?? null, renderer: r, canvas: canvas.current, facingKey: pmiFacing.current, owners: l.owners } : null;
   };
   useEffect(() => { applyPmiLabels(); request(); }, [props.annotations, props.annotationSelected, backend]);
   useEffect(() => {

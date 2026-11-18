@@ -236,6 +236,8 @@ export interface ViewRenderer {
   setProposalOverlay?(view: import('../engine/client').ProposalOverlay | null): void;
   /** Overlay labels drawn by the engine (WebGPU only, G15) under a key — readouts, chips and drawings' texts. */
   setOverlayLabels?(key: string, labels: OverlayLabels | null): void;
+  /** Current submitted padded glyph quads; canvas-local CSS pixels, not occlusion proof. */
+  overlayLabelBounds?(key: string, camera: OrbitCamera): import('./pmiGpuBounds').PmiGlyphSnapshot | null;
   /** The overlay lines and points shown, segments or points a key (G7, G8; for the flow). */
   overlayLines?(): Record<string, number>;
   /** The overlay labels' texts, a key (G15; for the flow). */

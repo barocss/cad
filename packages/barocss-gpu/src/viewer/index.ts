@@ -22,3 +22,5 @@ export { materializeGlbTextures } from './glb-textures.js';
 export type { PreparedGlbTexture } from './glb-texture-data.js';
 export type { MaterializedGlbTextures } from './glb-textures.js';
 export type { PreparedGlbPrimitive, PreparedTexturedGlb, PreparedTexturedGlbPrimitive } from './glb-scene.js';
+
+export type { LabelGlyphBounds, LabelBoundsSnapshot } from './label-bounds.js';
