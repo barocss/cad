@@ -1,0 +1,158 @@
+{
+  "issue": 207,
+  "issueState": "OPEN",
+  "scope": "Opt-in saved top-level instruction query",
+  "runs": {
+    "baseline01": {
+      "status": "PASS",
+      "browserErrors": 0,
+      "consoleErrors": 0,
+      "trackedSourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "publicRunToolV2DefaultQuery": true,
+          "dispatcherMatches": true,
+          "unsupportedOptInRefused": true,
+          "policyCallCountSeparateFromDocument": true,
+          "schemaOnlyFacesOf": true,
+          "savedStepsMissingFromSummary": true,
+          "actualUIPresentsSavedSteps": true,
+          "retainedMissingPreserved": true,
+          "unassignedOccurrenceObserved": true,
+          "queryDoesNotTrackCurrentUIStep": true,
+          "sourceAndHistoryAvailabilityUnchanged": true,
+          "nativeSaveFreshOpen": true
+        }
+      ],
+      "sourceBefore": {
+        "apps/cad-studio/src/app/assemblySteps.ts": "0590052b682877031e53491174969c5f0dacbefbcb328f3fd3a8fdbe47449cff",
+        "apps/cad-studio/src/ui/AssemblyStepsPanel.tsx": "a4606cf733f097b8a2213cf5a8da30a0619e46286dc4a5de97720a234ab17f5c",
+        "apps/cad-studio/test/assembly-step-query-baseline-browser.mjs": "8dc5193408224d5c643e3d0338e3c090683f93c8e2ef87a78ed1e0dfa8b09dec",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "packages/barocss-cad-model/src/assembly/steps.ts": "4c092498c04f3c361fdd1ef03fa7315322dc171a106b8ba6abec32447737f22d",
+        "packages/barocss-cad-model/src/chat/assembly.ts": "d8dad9c9e33a709e90f53dd654bd091927086ead051fa4d3ed9c50d4b905e837",
+        "packages/barocss-cad-model/src/chat/tools.ts": "e7a2618556c1a0fcae186aa9a0d31567063a38c6e8185d1756fb65b009bf037e"
+      }
+    },
+    "actual01": {
+      "status": "PASS",
+      "browserErrors": 0,
+      "consoleErrors": 0,
+      "trackedSourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "publicRunToolOnAcceptedCopy": true,
+          "dispatcherSeparateComparison": true,
+          "defaultAndFalseByteEqual": true,
+          "explicitIndicesIndependentOfDisplayedStep": true,
+          "listOnlyOmitsState": true,
+          "missingAndUnassignedPreserved": true,
+          "notesNotDisclosed": true,
+          "malformedRefusals": 5,
+          "sourceAndHistoryAvailabilityUnchanged": true,
+          "nativeSaveFreshOpen": true
+        }
+      ],
+      "sourceBefore": {
+        "apps/cad-studio/src/app/assemblySteps.ts": "0590052b682877031e53491174969c5f0dacbefbcb328f3fd3a8fdbe47449cff",
+        "apps/cad-studio/src/ui/AssemblyStepsPanel.tsx": "a4606cf733f097b8a2213cf5a8da30a0619e46286dc4a5de97720a234ab17f5c",
+        "apps/cad-studio/test/assembly-step-query-browser.mjs": "1dea882fa3e20ff28b51812c3a1478d649bf73464b75f655ae69b9c53813e60d",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "packages/barocss-cad-model/src/assembly/steps.ts": "4c092498c04f3c361fdd1ef03fa7315322dc171a106b8ba6abec32447737f22d",
+        "packages/barocss-cad-model/src/chat/assembly.ts": "305066fda6dd7a08fea21e1c20db4d7da7e1f8c53d8003369084c8ed327c927a",
+        "packages/barocss-cad-model/src/chat/contract.ts": "8e0e71a08c0b380068375e6e0fcf9b63c93c2a0d61fcd72cfda3690ee1cc8a18",
+        "packages/barocss-cad-model/src/chat/groups.ts": "a101ce655ffb3f9424315a25510b9e8311ee291c0a04947d2110898516ac3b5a",
+        "packages/barocss-cad-model/src/chat/tools.ts": "e7a2618556c1a0fcae186aa9a0d31567063a38c6e8185d1756fb65b009bf037e"
+      }
+    }
+  },
+  "tests": {
+    "focused": {
+      "pass": 31,
+      "fail": 0
+    },
+    "regression": {
+      "pass": 15,
+      "fail": 0
+    },
+    "final": {
+      "pass": 17,
+      "fail": 0
+    },
+    "dedicatedTestCount": 7,
+    "overlappingSuites": true
+  },
+  "typeHistory": [
+    {
+      "run": "model-type01",
+      "status": "FAIL",
+      "reason": "TS2339 in test after shape narrowing; corrected to Object.hasOwn absence assertion"
+    },
+    {
+      "run": "model-type02",
+      "status": "PASS",
+      "exitCode": 0
+    },
+    {
+      "run": "studio-type02",
+      "status": "PASS",
+      "exitCode": 0
+    }
+  ],
+  "lint02": {
+    "status": "PASS",
+    "exitCode": 0
+  },
+  "snapshotCompatibility": {
+    "status": "PASS",
+    "snapshotDiffCount": 0,
+    "source": "Coordinating executor report"
+  },
+  "baselineDefaultVersusActualOrdinary": {
+    "status": "PASS",
+    "comparison": "dictionary equality",
+    "source": "Coordinating executor report"
+  },
+  "delivery": {
+    "commit": "PENDING",
+    "push": "PENDING",
+    "exactCommitCI": "PENDING"
+  },
+  "images": [
+    {
+      "file": "before.png",
+      "run": "baseline01",
+      "sha256": "64912c1934ae5adf383b0a14493bb000f83942e8f189d5b6cc50006b62d2bc82",
+      "bytePreservingCopy": true,
+      "scope": "Existing Studio Steps UI, not an API widget"
+    },
+    {
+      "file": "after.png",
+      "run": "actual01",
+      "sha256": "e85edbcf80ba40f8a183272482bd1cc9f6b03ee54fa9476eeed54be50a05fe10",
+      "bytePreservingCopy": true,
+      "scope": "Existing Studio Steps UI, not an API widget"
+    }
+  ],
+  "limits": [
+    "Synthetic data only",
+    "Public runTool on accepted copies, not external MCP or chat UI",
+    "Saved classification is not current UI state or physical motion",
+    "Hidden/pattern/nested unit examples are not native actual qualification",
+    "Notes/view/explode excluded by whitelist; actual fixture has no camera",
+    "Stored document/history availability, not geometry accuracy or internal stack certification",
+    "Existing HOLDs unchanged; documentation sync remains paused"
+  ]
+}

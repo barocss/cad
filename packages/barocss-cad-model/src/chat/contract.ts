@@ -24,6 +24,9 @@ const num: JsonSchema = { type: 'number' }, str: JsonSchema = { type: 'string' }
 const clearanceSchema = (coordinate: 'fraction' | 'time'): JsonSchema => ({ type: ['object', 'null'], properties: { value: num, [coordinate]: num, links: { type: 'array', items: str } }, required: ['value', coordinate, 'links'], additionalProperties: false });
 const versionPin = o({ id: str, snapshot: str, revision: str, evidenceRevision: str }, ['id', 'snapshot', 'revision', 'evidenceRevision']);
 const footprint = o({ widthMm: num, depthMm: num }, ['widthMm', 'depthMm']);
+const stepIds: JsonSchema = { type: 'array', items: str };
+const savedStepState = o({ index: { type: 'integer', minimum: 0 }, step_id: str, installed: stepIds, active: stepIds, waiting: stepIds, unresolved: stepIds, unassigned: stepIds }, ['index', 'step_id', 'installed', 'active', 'waiting', 'unresolved', 'unassigned']);
+const savedInstructions = o({ scope: { type: 'string', const: 'saved-top-level-instructions' }, steps: { type: 'array', items: o({ index: { type: 'integer', minimum: 0 }, id: str, name: str, parts: stepIds }, ['index', 'id', 'name', 'parts']) }, unassigned: stepIds, problems: { type: 'array', items: o({ step: str, part: str, kind: { type: 'string', enum: ['missing-part', 'unlistable-part', 'unassigned'] }, message: str }, ['kind', 'message']) }, state: savedStepState }, ['scope', 'steps', 'unassigned', 'problems']);
 const drawingRead = { revision: str, sheet: num, sheetName: str, scope: obj, unit: { type: 'string', const: 'mm' }, printUnit: { type: 'string', enum: ['mm', 'inch'] } };
 const drawingReadRequired = Object.keys(drawingRead);
 const nativeJointRead = { body: str, revision: str };
@@ -112,7 +115,7 @@ const READ: Record<string, JsonSchema | null> = {
   subd_select: o({ ok: bool, faces: arr, vertices: arr, edges: arr, count: num }, ['ok']),
   drawing_issues: o({ sheet: obj, issues: arr }, ['sheet', 'issues']),
   tolerance_suggestions: o({ mode: str, suggestions: arr }, ['mode', 'suggestions']),
-  get_assembly: o({ base: obj, instances: arr, mates: arr, note: str }, ['base']),
+  get_assembly: o({ base: obj, instances: arr, mates: arr, note: str, assembly_steps: savedInstructions }, ['base']),
   list_library: o({ libraries: arr, note: str }, ['libraries']),
   check_printability: o({ direction: { type: ['object', 'null'] }, rules: arr }, ['rules']),
   link_inertia: o({ links: arr }, ['links']),
