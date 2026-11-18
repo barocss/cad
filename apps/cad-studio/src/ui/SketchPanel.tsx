@@ -1,3 +1,4 @@
+import { canRecordOpenArcRadiusDraft, isOpenArcRadiusChange } from '../sketch/openArcRadiusHistory';
 import { slotEndpoint } from '../sketch/slotEndpoint';
 import { canEditOpenPolylineTerminalDraft, openPolylineTerminalLength } from '../sketch/openPolylineTerminalLength';
 import { canEditOpenLineLength, openLineLength } from '../sketch/openLineLength';
@@ -39,7 +40,7 @@ const NONE: SketchPick[] = [];
  * tangent joints stay tangent. The app settles every edit (see sketch/settle.ts) and reports `error`. O16: the contents
  * on shadcn (Input, NativeSelect, Button, FIELD); the shell (its title) and the chip toggles are the studio's.
  */
-export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, referencePicker, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand, onTransformOutline }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; referencePicker?: ReactNode; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent, origin?: { kind: 'open-line-length'; source: SketchShape; doc: StudioDoc }): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
+export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, referencePicker, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand, onTransformOutline }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; referencePicker?: ReactNode; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent, origin?: { kind: 'open-line-length' | 'open-arc-radius'; source: SketchShape; doc: StudioDoc }): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
   onTransformOutline?(owner: SketchState, doc: StudioDoc, candidate: SketchShape): boolean;
   onEditEllipseAxes?(): boolean;
   onDrivingLength?(source: Polygon, edge: number, value: number): boolean;
@@ -81,7 +82,15 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
     const b = radiusToBulge(poly.points[i] as P2, poly.points[(i + 1) % n] as P2, r, Math.sign(bulges[i]));
     if (b === null) return;
     bulges[i] = Math.abs(bulges[i]) > 1 ? 1 / b : b; // keep a major arc major
-    onShape({ ...poly, bulges });
+    const next = { ...poly, bulges };
+    if (sketch.shape === poly && canRecordOpenArcRadiusDraft(sketch)) {
+      if (poly.bulges?.[i] === bulges[i]) return;
+      if (isOpenArcRadiusChange(poly, next)) {
+        onShape(next, undefined, { kind: 'open-arc-radius', source: poly, doc: constraintDocument });
+        return;
+      }
+    }
+    onShape(next);
   };
   const togglePair = (poly: Polygon, key: 'equalRadii' | 'concentric', pair: ArcPair) => {
     const list = poly[key] ?? [];
