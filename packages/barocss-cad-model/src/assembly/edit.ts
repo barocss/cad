@@ -176,7 +176,8 @@ export function addMate(doc: StudioDoc, o: AddMateOptions): Mated {
  */
 export function lockPart(doc: StudioDoc, o: { part: string; to: string }): Mated {
   const instances = doc.instances ?? [], mates = doc.mates ?? [];
-  for (const p of [o.part, o.to]) if (!partDocOf(doc, p)) throw refusal('NO_PART', `No part "${p}"; parts: ${partList(doc)}.`);
+  // Locks use whole top-level placements, unlike face mates with occurrence paths.
+  for (const p of [o.part, o.to]) if (p !== BASE && !instances.some(i => i.id === p)) throw refusal('NO_PART', `No part "${p}"; parts: ${partList(doc)}.`);
   if (o.part === o.to) throw refusal('MATE_SAME_PART', 'A part is locked to another part, not to itself.');
   const driven = drivenRefusal(doc, o.part, 'it never moves for a lock; lock another part to it.') ?? seedMateRefusal(doc, o.part, o.to);
   if (driven) throw driven;
