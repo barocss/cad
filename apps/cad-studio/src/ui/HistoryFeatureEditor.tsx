@@ -1,3 +1,4 @@
+import { flangeWidthHistoryEdit } from '@barocss/cad-model/app/flangeWidthHistoryEdit';
 import { sheetReliefShapeHistoryEdit } from '@barocss/cad-model/app/sheetReliefShapeHistoryEdit';
 import { sheetReliefCornerHistoryEdit } from '@barocss/cad-model/app/sheetReliefCornerHistoryEdit';
 import { sweepPathHistoryEdit } from '@barocss/cad-model/app/sweepPathHistoryEdit';
@@ -45,7 +46,8 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
   const { ctx, discardFeatureDraft, closeForCommand, setActive, editSketch, replaceAxis } = commands;
   const { ownsEvaluatedSource } = owner;
   const savedCommand = () => fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc)?.command ?? mountHistoryEdit(commandDoc, editNode) ?? connectorHistoryEdit(commandDoc, editNode) ?? subdPrimitiveHistoryEdit(commandDoc, editNode) ?? mirrorHistoryEdit(commandDoc, editNode) ?? sweepHistoryEdit(commandDoc, editNode) ?? loftSectionHistoryEdit(commandDoc, editNode) ?? subtractHistoryEdit(commandDoc, editNode) ?? booleanHistoryEdit(commandDoc, editNode) ?? sheetReliefCornerHistoryEdit(commandDoc, editNode);
-  const savedFeature = savedCommand();
+  const savedWidth = flangeWidthHistoryEdit(commandDoc, editNode);
+  const savedFeature = savedWidth ?? savedCommand();
   const savedPath = sweepPathHistoryEdit(commandDoc, editNode);
   const savedReliefShape = sheetReliefShapeHistoryEdit(commandDoc, editNode);
   const startSavedFeature = (make: () => Command | null) => {
@@ -76,7 +78,7 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
         editSketch(s);
       };
     })()} onReplaceAxis={replaceAxis}
-    savedFeatureEdit={savedFeature ? { label: savedFeature.label, start: () => startSavedFeature(savedCommand) } : undefined}
+    savedFeatureEdit={savedFeature ? { label: savedFeature.label, start: () => startSavedFeature(savedWidth ? () => savedWidth : savedCommand) } : undefined}
     savedPathEdit={savedPath ? { label: savedPath.label, start: () => startSavedFeature(() => sweepPathHistoryEdit(commandDoc, editNode)) } : undefined}
     savedReliefShapeEdit={savedReliefShape ? { label: savedReliefShape.label, start: () => startSavedFeature(() => savedReliefShape) } : undefined}
     onEditDraft={editSavedDraftCommand(commandDoc, editNode) ? () => {
