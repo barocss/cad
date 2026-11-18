@@ -1,0 +1,488 @@
+{
+  "delay-prefix-cancel-native.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 9023.999999999996,
+      "shells": [
+        {
+          "closed": true
+        },
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 2,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 18,
+          "normal": -1,
+          "loops": 1
+        }
+      ]
+    }
+  ],
+  "reopened-native-Closed.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 9023.999999999996,
+      "shells": [
+        {
+          "closed": true
+        },
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 2,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 18,
+          "normal": -1,
+          "loops": 1
+        }
+      ]
+    }
+  ],
+  "12-cancel-preserved.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 7151.9999999999945,
+      "shells": [
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 2,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 2
+        }
+      ]
+    }
+  ],
+  "delay-full-cancel-native.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 9023.999999999996,
+      "shells": [
+        {
+          "closed": true
+        },
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 2,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 18,
+          "normal": -1,
+          "loops": 1
+        }
+      ]
+    }
+  ],
+  "reopened-native-Bottom.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 7151.9999999999945,
+      "shells": [
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 2
+        },
+        {
+          "z": 18,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 1
+        }
+      ]
+    }
+  ],
+  "11-recovered-top-native.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 7151.9999999999945,
+      "shells": [
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 2,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 2
+        }
+      ]
+    }
+  ],
+  "reopened-native-Top.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 7151.9999999999945,
+      "shells": [
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 2,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 2
+        }
+      ]
+    }
+  ],
+  "09-wall-refusal-preserved.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 9023.999999999996,
+      "shells": [
+        {
+          "closed": true
+        },
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 2,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 18,
+          "normal": -1,
+          "loops": 1
+        }
+      ]
+    }
+  ],
+  "native-Closed.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 9023.999999999996,
+      "shells": [
+        {
+          "closed": true
+        },
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 2,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 18,
+          "normal": -1,
+          "loops": 1
+        }
+      ]
+    }
+  ],
+  "01-created-closed.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 9023.999999999996,
+      "shells": [
+        {
+          "closed": true
+        },
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 2,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 18,
+          "normal": -1,
+          "loops": 1
+        }
+      ]
+    }
+  ],
+  "delay-full-open-stock-native.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 24000,
+      "shells": [
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 1
+        }
+      ]
+    }
+  ],
+  "14-recovered-top-native.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 7151.9999999999945,
+      "shells": [
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 2,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 2
+        }
+      ]
+    }
+  ],
+  "native-Top.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 7151.9999999999945,
+      "shells": [
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 2,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 2
+        }
+      ]
+    }
+  ],
+  "07-combined-preserved.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 9023.999999999996,
+      "shells": [
+        {
+          "closed": true
+        },
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 2,
+          "normal": 1,
+          "loops": 1
+        },
+        {
+          "z": 18,
+          "normal": -1,
+          "loops": 1
+        }
+      ]
+    }
+  ],
+  "native-Bottom.stdout": [
+    {
+      "valid": true,
+      "count": 1,
+      "volume": 7151.9999999999945,
+      "shells": [
+        {
+          "closed": true
+        }
+      ],
+      "planes": [
+        {
+          "z": 0,
+          "normal": -1,
+          "loops": 2
+        },
+        {
+          "z": 18,
+          "normal": -1,
+          "loops": 1
+        },
+        {
+          "z": 20,
+          "normal": 1,
+          "loops": 1
+        }
+      ]
+    }
+  ]
+}

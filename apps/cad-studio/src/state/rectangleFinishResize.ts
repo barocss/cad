@@ -69,7 +69,7 @@ function corner(doc:StudioDoc,p:Vec3):number[]|null {
 }
 type Topology = {vertices:Map<string,string>;edges:Map<string,string>;faces:Map<string,string>;edgeRoles:Map<string,string>;faceNames:Map<string,string>};
 /** Validate the whole unmerged cuboid, not an ID prefix or a nearest-looking selected edge. */
-function rectangleTopology(doc:StudioDoc,body:BodyResult):Topology|null {
+export function rectangleTopology(doc:StudioDoc,body:BodyResult):Topology|null {
  const {mesh}=body,sk=doc.nodes[0],ex=doc.nodes[1];
  if(mesh.edges.length!==12||mesh.faces.length!==6||sk.kind!=='sketch'||sk.profile!=='rectangle'||ex.kind!=='extrude')return null;
  const low=[sk.min[0],sk.min[1],ex.from??0],high=[sk.max[0],sk.max[1],Number(ex.from??0)+Number(ex.height)];

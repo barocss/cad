@@ -1,0 +1,402 @@
+{
+  "baseline-01": {
+    "status": "FAIL",
+    "phase": "actual Studio start",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "observations": [],
+    "sourceFrozenCount": 1078,
+    "sourceAfterCount": null,
+    "sourceUnchanged": null,
+    "failure": "locator.fill: Timeout 30000ms exceeded."
+  },
+  "baseline-02": {
+    "status": "PASS",
+    "phase": "fresh Open 03-baseline-reopened",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "observations": [],
+    "sourceFrozenCount": 1078,
+    "sourceAfterCount": 1078,
+    "sourceUnchanged": true
+  },
+  "fixed-01": {
+    "status": "PASS",
+    "phase": "open feature editor 2",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "observations": [
+      {
+        "label": "actual-reply-owner-invalidation",
+        "stage": "prefix",
+        "exit": "cancel",
+        "held": {
+          "type": "part",
+          "slot": "refs",
+          "id": 7,
+          "revision": 8,
+          "ok": true
+        },
+        "docPreserved": true,
+        "historyPreserved": true
+      },
+      {
+        "label": "actual-reply-owner-invalidation",
+        "stage": "prefix",
+        "exit": "document",
+        "held": {
+          "type": "part",
+          "slot": "refs",
+          "id": 10,
+          "revision": 12,
+          "ok": true
+        },
+        "docPreserved": true,
+        "historyPreserved": true
+      },
+      {
+        "label": "actual-reply-owner-invalidation",
+        "stage": "full",
+        "exit": "cancel",
+        "held": {
+          "type": "evaluate",
+          "id": 15,
+          "revision": 18,
+          "ok": true
+        },
+        "docPreserved": true,
+        "historyPreserved": true
+      },
+      {
+        "label": "actual-reply-owner-invalidation",
+        "stage": "full",
+        "exit": "document",
+        "held": {
+          "type": "evaluate",
+          "id": 19,
+          "revision": 23,
+          "ok": true
+        },
+        "docPreserved": true,
+        "historyPreserved": true
+      }
+    ],
+    "sourceFrozenCount": 1078,
+    "sourceAfterCount": 1078,
+    "sourceUnchanged": true
+  },
+  "wall-regression-01": {
+    "status": "FAIL",
+    "phase": "actual Studio start",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "observations": [],
+    "sourceFrozenCount": 1076,
+    "sourceAfterCount": null,
+    "sourceUnchanged": null,
+    "failure": "Error: ENOENT: no such file or directory, open '<repo>/handover/notes/import-open-stage-ownership-2026-10-29/normal-first/two-boxes.step'"
+  },
+  "wall-regression-02": {
+    "status": "PASS",
+    "phase": "open feature editor reopened exact wall",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "observations": [
+      {
+        "label": "stock-native",
+        "wall": 0,
+        "expected": 500,
+        "volume": 499.99999999999994,
+        "opening": [
+          "outer"
+        ]
+      },
+      {
+        "baseline": false,
+        "defaultHint": "The wall is too thick Enter Wall less than 2.5 mm to keep the selected face open.",
+        "history": [
+          "Import two-boxes"
+        ]
+      },
+      {
+        "label": "wall-2-native",
+        "wall": 2,
+        "expected": 452,
+        "volume": 451.99999999999994,
+        "opening": [
+          "inner",
+          "outer"
+        ]
+      },
+      {
+        "label": "wall-2_499-native",
+        "wall": 2.499,
+        "expected": 499.924959996,
+        "volume": 499.9249599959999,
+        "opening": [
+          "inner",
+          "outer"
+        ]
+      },
+      {
+        "label": "undo-native",
+        "wall": 2,
+        "expected": 452,
+        "volume": 451.99999999999994,
+        "opening": [
+          "inner",
+          "outer"
+        ]
+      },
+      {
+        "label": "redo-native",
+        "wall": 2.499,
+        "expected": 499.924959996,
+        "volume": 499.9249599959999,
+        "opening": [
+          "inner",
+          "outer"
+        ]
+      },
+      {
+        "label": "reopened-native",
+        "wall": 2.499,
+        "expected": 499.924959996,
+        "volume": 499.9249599959999,
+        "opening": [
+          "inner",
+          "outer"
+        ]
+      }
+    ],
+    "sourceFrozenCount": 1076,
+    "sourceAfterCount": 1076,
+    "sourceUnchanged": true
+  },
+  "shaped-regression-02": {
+    "status": "PASS",
+    "phase": "native Save 1440-closed",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "observations": [
+      {
+        "label": "1024-source",
+        "sha": "c173e97964d4c84084d30f2ab73956e2bb4d0574c176726faa08eb6b9e6e6b97",
+        "volume": 23893.333333333318
+      },
+      {
+        "label": "1024-top-opening-refused",
+        "actualWorkerRefusal": {
+          "id": 4,
+          "revision": 4,
+          "feature": {
+            "kind": "shell",
+            "parent": {
+              "node": 2,
+              "side": "solid"
+            },
+            "thickness": 2,
+            "open": [
+              "n1.top"
+            ],
+            "id": "n3"
+          },
+          "ok": false,
+          "error": {
+            "title": "Shell cannot cross this sharp edge",
+            "hint": "Two smooth regions meet at a sharp edge near 6.4516, 4, 20 mm. Shell does not support this junction.",
+            "detail": "[SHELL_REGIONS_SHARP] shell: faces n2.face#1 and n1.top.ext.side3 of two smooth regions meet at a sharp edge (at 6.4516, 4, 20): shelling there is not supported yet",
+            "code": "SHELL_REGIONS_SHARP",
+            "feature": "n3"
+          }
+        },
+        "originalDetailPreserved": true,
+        "cancelFirstGuidance": true,
+        "wallNotInvalid": true
+      },
+      {
+        "label": "1024-bottom-applied",
+        "sha": "e44c9989ead3728950fff8acb0f20506526561b0da0c5b02cbcc4cb36f2db8d1",
+        "volume": 7063.724963867594
+      },
+      {
+        "label": "1024-bottom-redo",
+        "sha": "e44c9989ead3728950fff8acb0f20506526561b0da0c5b02cbcc4cb36f2db8d1",
+        "volume": 7063.724963867594
+      },
+      {
+        "label": "1024-bottom-wall15",
+        "sha": "ff120fd590938977f888bbe7747ee0efd15c3a607564b56a80a09241fdd3dbbd",
+        "volume": 5444.72158722086
+      },
+      {
+        "label": "1024-bottom-fresh-2",
+        "sha": "e44c9989ead3728950fff8acb0f20506526561b0da0c5b02cbcc4cb36f2db8d1",
+        "volume": 7063.724963867594
+      },
+      {
+        "label": "1024-bottom-fresh-1.5",
+        "sha": "ff120fd590938977f888bbe7747ee0efd15c3a607564b56a80a09241fdd3dbbd",
+        "volume": 5444.72158722086
+      },
+      {
+        "label": "1024-closed-applied",
+        "sha": "f4f1c8c3e0441c3638f48af5cefbef16059eb536f2d17c1d7a61f7d389b3b331",
+        "volume": 8935.724963870556
+      },
+      {
+        "label": "1024-closed-redo",
+        "sha": "f4f1c8c3e0441c3638f48af5cefbef16059eb536f2d17c1d7a61f7d389b3b331",
+        "volume": 8935.724963870556
+      },
+      {
+        "label": "1024-closed-fresh-open",
+        "sha": "f4f1c8c3e0441c3638f48af5cefbef16059eb536f2d17c1d7a61f7d389b3b331",
+        "volume": 8935.724963870556
+      },
+      {
+        "width": 1024,
+        "height": 800,
+        "actualTemporaryOpeningRefusal": true,
+        "cancelFirstVerified": true,
+        "activeBottomClickKeepsTop": true,
+        "lateTopReplyCannotAffectNewBottomOwner": true,
+        "bottomWall2AndHistory15": true,
+        "closedShellSeparateControl": true,
+        "undoRedoSaveFreshOpen": true
+      },
+      {
+        "label": "1440-source",
+        "sha": "c173e97964d4c84084d30f2ab73956e2bb4d0574c176726faa08eb6b9e6e6b97",
+        "volume": 23893.333333333318
+      },
+      {
+        "label": "1440-top-opening-refused",
+        "actualWorkerRefusal": {
+          "id": 4,
+          "revision": 4,
+          "feature": {
+            "kind": "shell",
+            "parent": {
+              "node": 2,
+              "side": "solid"
+            },
+            "thickness": 2,
+            "open": [
+              "n1.top"
+            ],
+            "id": "n3"
+          },
+          "ok": false,
+          "error": {
+            "title": "Shell cannot cross this sharp edge",
+            "hint": "Two smooth regions meet at a sharp edge near 6.4516, 4, 20 mm. Shell does not support this junction.",
+            "detail": "[SHELL_REGIONS_SHARP] shell: faces n2.face#1 and n1.top.ext.side3 of two smooth regions meet at a sharp edge (at 6.4516, 4, 20): shelling there is not supported yet",
+            "code": "SHELL_REGIONS_SHARP",
+            "feature": "n3"
+          }
+        },
+        "originalDetailPreserved": true,
+        "cancelFirstGuidance": true,
+        "wallNotInvalid": true
+      },
+      {
+        "label": "1440-bottom-applied",
+        "sha": "e44c9989ead3728950fff8acb0f20506526561b0da0c5b02cbcc4cb36f2db8d1",
+        "volume": 7063.724963867594
+      },
+      {
+        "label": "1440-bottom-redo",
+        "sha": "e44c9989ead3728950fff8acb0f20506526561b0da0c5b02cbcc4cb36f2db8d1",
+        "volume": 7063.724963867594
+      },
+      {
+        "label": "1440-bottom-wall15",
+        "sha": "ff120fd590938977f888bbe7747ee0efd15c3a607564b56a80a09241fdd3dbbd",
+        "volume": 5444.72158722086
+      },
+      {
+        "label": "1440-bottom-fresh-2",
+        "sha": "e44c9989ead3728950fff8acb0f20506526561b0da0c5b02cbcc4cb36f2db8d1",
+        "volume": 7063.724963867594
+      },
+      {
+        "label": "1440-bottom-fresh-1.5",
+        "sha": "ff120fd590938977f888bbe7747ee0efd15c3a607564b56a80a09241fdd3dbbd",
+        "volume": 5444.72158722086
+      },
+      {
+        "label": "1440-closed-applied",
+        "sha": "f4f1c8c3e0441c3638f48af5cefbef16059eb536f2d17c1d7a61f7d389b3b331",
+        "volume": 8935.724963870556
+      },
+      {
+        "label": "1440-closed-redo",
+        "sha": "f4f1c8c3e0441c3638f48af5cefbef16059eb536f2d17c1d7a61f7d389b3b331",
+        "volume": 8935.724963870556
+      },
+      {
+        "label": "1440-closed-fresh-open",
+        "sha": "f4f1c8c3e0441c3638f48af5cefbef16059eb536f2d17c1d7a61f7d389b3b331",
+        "volume": 8935.724963870556
+      },
+      {
+        "width": 1440,
+        "height": 900,
+        "actualTemporaryOpeningRefusal": true,
+        "cancelFirstVerified": true,
+        "activeBottomClickKeepsTop": true,
+        "lateTopReplyCannotAffectNewBottomOwner": true,
+        "bottomWall2AndHistory15": true,
+        "closedShellSeparateControl": true,
+        "undoRedoSaveFreshOpen": true
+      }
+    ],
+    "sourceFrozenCount": 1077,
+    "sourceAfterCount": 1077,
+    "sourceUnchanged": true
+  }
+}

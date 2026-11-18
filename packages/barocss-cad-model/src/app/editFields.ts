@@ -1,3 +1,4 @@
+import { featureId } from '../engine/ids';
 import { throughCutPlane, throughCutProblem } from '../engine/throughCut';
 import { checkFastenerSizeRow } from '../engine/fastenerSizeRows';
 import { ANCHORS } from './frameCommands';
@@ -27,6 +28,37 @@ export type EditField =
   | { kind: 'number'; key: string; label: string; unit?: 'mm' | '°' | '%'; integerRange?: { min: number; max: number }; get(nodes: Nodes): number; set(nodes: Nodes, value: number): ModelNode[] }
   | { kind: 'choice'; key: string; label: string; options: { value: string; label: string }[]; get(nodes: Nodes): string; set(nodes: Nodes, value: string): ModelNode[] }
   | { kind: 'toggle'; key: string; label: string; get(nodes: Nodes): boolean; set(nodes: Nodes, value: boolean): ModelNode[] };
+
+/** Opening changes require a native parent proof in History admission, never the drag HUD. */
+function shellOpening(nodes: Nodes, index: number): 'closed' | 'top' | 'bottom' | undefined {
+  if (index !== 2 || nodes.length !== 3) return;
+  const [sk, ex, sh] = nodes;
+  const only = (node: object, keys: string[]) => Object.keys(node).every(key => keys.includes(key));
+  const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  if (sk.kind !== 'sketch' || sk.profile !== 'rectangle' || !only(sk, ['id','kind','profile','min','max'])
+    || ![...sk.min,...sk.max].every(finite) || !(Number(sk.max[0]) > Number(sk.min[0]) && Number(sk.max[1]) > Number(sk.min[1]))) return;
+  if (ex.kind !== 'extrude' || ex.sketch !== 0 || !only(ex, ['id','kind','sketch','height','from','draft'])
+    || !finite(ex.height) || ex.height <= 0 || ex.height > CadPartLimits.length
+    || (ex.from !== undefined && !finite(ex.from)) || (ex.draft !== undefined && ex.draft !== 0)) return;
+  if (sh.kind !== 'shell' || !only(sh, ['id','kind','parent','thickness','open','sigs'])
+    || !only(sh.parent, ['node','side']) || sh.parent.node !== 1 || sh.parent.side !== 'solid' || !finite(sh.thickness) || sh.thickness <= 0 || sh.thickness > CadPartLimits.length) return;
+  if (sh.open.length === 0) return 'closed';
+  if (sh.open.length !== 1) return;
+  const id = featureId(nodes, 1);
+  return sh.open[0] === `${id}.top` ? 'top' : sh.open[0] === `${id}.bottom` ? 'bottom' : undefined;
+}
+function shellOpeningField(index: number): EditField {
+  return { kind: 'choice', key: 'shellOpening', label: 'Opening',
+    options: [{value:'closed',label:'Closed'},{value:'top',label:'Top'},{value:'bottom',label:'Bottom'}],
+    get: nodes => shellOpening(nodes,index) ?? '',
+    set: (nodes,value) => {
+      const mode = shellOpening(nodes,index), node = nodes[index];
+      if (!mode || node?.kind !== 'shell' || !['closed','top','bottom'].includes(value) || mode === value) return [...nodes];
+      // Keep old signatures until the unchanged native parent is proved at Apply.
+      return nodes.map((n,i) => i === index ? {...node,open:value === 'closed' ? [] : [`${featureId(nodes,1)}.${value}`]} : n);
+    },
+  };
+}
 
 /** End changes add/remove native faces: initially limit them to an ordinary terminal hole. */
 function editableHoleEnd(nodes: Nodes, index: number) {
@@ -242,7 +274,7 @@ export type BindableField = Extract<EditField, { kind: 'number' }> & { param(nod
  * Where a part-scoped edit stands (O167, F6), when no assembly input is given: the part draft's bearing context (its
  * occurrence and the other parts, as the bearing command reads it) and the fit tables the draft sees.
  */
-export interface EditScope { readonly originalLoft?: Extract<ModelNode, { kind: 'loft' }>; readonly context?: BearingAssemblyContext; readonly fits?: StudioFits; readonly doc?: Pick<StudioDoc, 'direct'> & Partial<Pick<StudioDoc, 'parameters' | 'drives' | 'frames' | 'fastenerSizes'>> }
+export interface EditScope { readonly originalLoft?: Extract<ModelNode, { kind: 'loft' }>; readonly context?: BearingAssemblyContext; readonly fits?: StudioFits; readonly doc?: Pick<StudioDoc, 'direct'> & Partial<Pick<StudioDoc, 'parameters' | 'drives' | 'frames' | 'fastenerSizes' | 'instances'>> }
 export function editFields(nodes: Nodes, i: number, params?: Record<string, number>, bearingAssembly?: BearingAssemblyInput, scope?: EditScope): EditField[] {
   const node = nodes[i], recipe = nodes[1];
   if (recipe?.kind === 'rounded-rectangle-inset') {
@@ -989,7 +1021,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       number('crease', 'Crease angle', '°', n => (n as D).featureAngle ?? 0, (n, v) => v > 0 ? { ...(n as D), featureAngle: v } : without(n as D, 'featureAngle'));
       break;
     }
-    case 'shell': number('t', 'Wall', 'mm', n => num((n as typeof node).thickness), (n, v) => ({ ...(n as typeof node), thickness: v })); break;
+    case 'shell': if (scope?.doc?.direct === undefined && !scope?.doc?.instances?.length && shellOpening(nodes,i)) out.push(shellOpeningField(i)); number('t', 'Wall', 'mm', n => num((n as typeof node).thickness), (n, v) => ({ ...(n as typeof node), thickness: v })); break;
     case 'translate': [0, 1, 2].forEach(k => number('o' + k, 'Δ' + 'XYZ'[k], 'mm', n => num((n as typeof node).offset[k]), (n, v) => { const o = [...(n as typeof node).offset] as [Dim, Dim, Dim]; o[k] = v; return { ...(n as typeof node), offset: o }; })); break;
     case 'rotate':
       out.push({ kind: 'choice', key: 'axis', label: 'Axis', options: axes(['x', 'y', 'z']), get: n => self<typeof node>(n).axis, set: (n, v) => replace(n, i, { ...self<typeof node>(n), axis: v as Axis }) });

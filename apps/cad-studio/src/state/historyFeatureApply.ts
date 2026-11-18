@@ -1,3 +1,4 @@
+import { isShellOpeningChange, proveShellOpeningChange } from './shellOpeningHistory';
 import { holeResultPieces } from '../app/holeResultPieces';
 import type { StudioNotice } from '../app/studioNotice';
 import type { ComponentProps } from 'react';
@@ -48,13 +49,30 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     let next = splitOutputChanged ? prefixDoc(rawNext, rawNext.nodes.length) : rawNext;
     const candidate = preparePatternNodeCandidate(doc, next, editNode);
     if (candidate) { stageFeatureCandidate(candidate); return; }
+    const oldShell = doc.nodes[editNode], newShell = next.nodes[editNode];
+    const openingChanged = oldShell?.kind === 'shell' && newShell?.kind === 'shell'
+      && JSON.stringify(oldShell.open) !== JSON.stringify(newShell.open);
+    const openingFailure = {title:'Opening not applied',hint:'Apply only the opening change on an unchanged plain box first. Keep the current opening if its original face cannot be verified.',detail:'The original document and face references are unchanged.'};
+    if (openingChanged && !isShellOpeningChange(doc,next,editNode)) return Promise.resolve(openingFailure);
     let request = nextRevision();
     const heightResize = isRectangleFinishHeightResize(doc,next,editNode);
     const resize = !heightResize && isRectangleFinishResize(doc,next,editNode), worker = owner.worker(), open = owner.open();
     const current = () => ownsDraft() && owner.document() === doc && owner.scope() === scope
       && owner.worker() === worker && owner.open() === open
-      && (!heightResize || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
+      && (!(heightResize || openingChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
     return (async () => {
+      if (openingChanged) {
+        if (!current()) return;
+        try {
+          const parentRevision = nextRevision();
+          const parent = await engine.part(prefixDoc(doc,editNode),parentRevision,'refs');
+          if (!current()) return;
+          if (!parent.ok || parent.revision !== parentRevision) return openingFailure;
+          const proved = proveShellOpeningChange(doc,next,parent.bodies);
+          if (!proved) return openingFailure;
+          next = proved; request = nextRevision();
+        } catch { if (current()) return openingFailure; return; }
+      }
       // A large height change can fail the generic nearest-edge guard before evaluation.
       // Prove the complete parent topology first; never weaken the native guard itself.
       if (heightResize) {
@@ -76,7 +94,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
         } catch { if (current()) return failure; return; }
       }
       const reply = await engine.evaluate(next, request);
-      if (!reply || !current() || heightResize && reply.revision !== request) return;
+      if (!reply || !current() || (heightResize || openingChanged) && reply.revision !== request) return;
       if (reply.ok) {
         if (!resize) {
           const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated
