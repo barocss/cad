@@ -1,3 +1,4 @@
+import { isFlangeSourceThicknessChange, admitFlangeSourceThicknessChange, proveFlangeSourceThicknessChange } from './flangeSourceThicknessHistory';
 import { isFlangeMeasureChange } from '@barocss/cad-model/app/flangeMeasureEdit';
 import { proveFlangeMeasureChange } from './flangeMeasureHistory';
 import { isSheetReliefThicknessChange, admitSheetReliefThicknessChange, proveSheetReliefThicknessChange } from './sheetReliefThicknessHistory';
@@ -66,6 +67,10 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     const reliefThicknessFailure = {title: 'Thickness not applied', hint: 'Apply only numeric Thickness on the unchanged plain sheet with one Corner relief. Its original corner must be verified.', detail: 'The original sheet, relief and references are unchanged.'};
     if (reliefThicknessChanged && !admitSheetReliefThicknessChange(doc, { ...doc, nodes }, editNode)) return Promise.resolve(reliefThicknessFailure);
     const reliefThicknessSource = reliefThicknessChanged ? canonical(doc) : '', reliefThicknessDraft = reliefThicknessChanged ? canonical(nodes) : '';
+    const flangeSourceThicknessChanged = isFlangeSourceThicknessChange(doc, { ...doc, nodes }, editNode);
+    const flangeSourceThicknessFailure = {title: 'Flange source thickness not applied', hint: 'Apply only numeric Thickness on the unchanged plain sheet with one full-width inside Flange. Its original top edge must be verified.', detail: 'The original sheet, flange and references are unchanged.'};
+    if (flangeSourceThicknessChanged && !admitFlangeSourceThicknessChange(doc, { ...doc, nodes }, editNode)) return Promise.resolve(flangeSourceThicknessFailure);
+    const flangeSourceThicknessSource = flangeSourceThicknessChanged ? canonical(doc) : '', flangeSourceThicknessDraft = flangeSourceThicknessChanged ? canonical(nodes) : '';
     const scope = owner.scope();
     const patternEdit = prepareLinearPatternHoleEdit(doc, nodes, editNode);
     if ('error' in patternEdit) return Promise.resolve(patternEdit.error);
@@ -100,10 +105,11 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     const resize = !heightResize && isRectangleFinishResize(doc,next,editNode), worker = owner.worker(), open = owner.open();
     const current = () => ownsDraft() && owner.document() === doc && owner.scope() === scope
       && owner.worker() === worker && owner.open() === open
+      && (!flangeSourceThicknessChanged || canonical(doc) === flangeSourceThicknessSource && canonical(nodes) === flangeSourceThicknessDraft)
       && (!reliefThicknessChanged || canChangeDocument() && canonical(doc) === reliefThicknessSource && canonical(nodes) === reliefThicknessDraft)
       && (!flangeMeasureChanged || canonical(doc) === flangeMeasureSource && canonical(nodes) === flangeMeasureDraft)
       && (!flangePositionChanged || canonical(doc) === flangePositionSource && canonical(nodes) === flangePositionDraft)
-      && (!(heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeMeasureChanged || reliefThicknessChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
+      && (!(heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
     return (async () => {
       if (reliefThicknessChanged) {
         if (!current()) return;
@@ -120,6 +126,23 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
           if (!repaired) return reliefThicknessFailure;
           next = repaired; request = nextRevision();
         } catch { if (current()) return reliefThicknessFailure; return; }
+      }
+
+      if (flangeSourceThicknessChanged) {
+        if (!current()) return;
+        try {
+          const oldRevision = nextRevision();
+          const oldParent = await engine.part(prefixDoc(doc,2), oldRevision, 'refs');
+          if (!current()) return;
+          if (!oldParent.ok || oldParent.revision !== oldRevision) return flangeSourceThicknessFailure;
+          const newRevision = nextRevision();
+          const newParent = await engine.part(prefixDoc(next,2), newRevision, 'refs');
+          if (!current()) return;
+          if (!newParent.ok || newParent.revision !== newRevision) return flangeSourceThicknessFailure;
+          const repaired = proveFlangeSourceThicknessChange(doc,next,oldParent.bodies,newParent.bodies);
+          if (!repaired) return flangeSourceThicknessFailure;
+          next = repaired; request = nextRevision();
+        } catch { if (current()) return flangeSourceThicknessFailure; return; }
       }
 
       if (flangePositionChanged) {
@@ -195,7 +218,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
         } catch { if (current()) return failure; return; }
       }
       const reply = await engine.evaluate(next, request);
-      if (!reply || !current() || (heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeMeasureChanged || reliefThicknessChanged) && reply.revision !== request) return;
+      if (!reply || !current() || (heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged) && reply.revision !== request) return;
       if (reply.ok) {
         if (!resize) {
           const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated
