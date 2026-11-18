@@ -1,0 +1,183 @@
+{
+  "status": "PASS",
+  "reader": "1.4.5",
+  "semantics": "flattened TEXT/LINE/SOLID only; no editable associativity",
+  "files": [
+    {
+      "file": "01-connected-R12.dxf",
+      "sha256": "0a3f144a17975cc48089f9d4599767ef1c43ebcf716fd97c8701283061539aee",
+      "version": "AC1009",
+      "svg": "01-connected.svg",
+      "notes": [
+        {
+          "id": "bound",
+          "lost": false,
+          "text": "CONNECTED NOTE",
+          "leaderLines": 2,
+          "arrowheads": 1
+        },
+        {
+          "id": "free",
+          "lost": false,
+          "text": "FREE CONTROL",
+          "leaderLines": 2,
+          "arrowheads": 1
+        }
+      ]
+    },
+    {
+      "file": "01-connected-R2000.dxf",
+      "sha256": "ea1dac07e04ec46096b74979a44dca9c33a8220f4758e8b777b1e73a5044c42c",
+      "version": "AC1015",
+      "svg": "01-connected.svg",
+      "notes": [
+        {
+          "id": "bound",
+          "lost": false,
+          "text": "CONNECTED NOTE",
+          "leaderLines": 2,
+          "arrowheads": 1
+        },
+        {
+          "id": "free",
+          "lost": false,
+          "text": "FREE CONTROL",
+          "leaderLines": 2,
+          "arrowheads": 1
+        }
+      ]
+    },
+    {
+      "file": "03-unresolved-R12.dxf",
+      "sha256": "fed68d7fc158e30125286e2430742b06c034e5585b243b67d4f430771a6cc2f8",
+      "version": "AC1009",
+      "svg": "03-unresolved.svg",
+      "notes": [
+        {
+          "id": "bound",
+          "lost": true,
+          "text": "CONNECTED NOTE",
+          "leaderLines": 0,
+          "arrowheads": 0
+        },
+        {
+          "id": "free",
+          "lost": false,
+          "text": "FREE CONTROL",
+          "leaderLines": 2,
+          "arrowheads": 1
+        }
+      ]
+    },
+    {
+      "file": "03-unresolved-R2000.dxf",
+      "sha256": "16ff04ed8616c3daec7a7c932a4d2a9a7ba43aeb70f3c5417b1075ac99bb4080",
+      "version": "AC1015",
+      "svg": "03-unresolved.svg",
+      "notes": [
+        {
+          "id": "bound",
+          "lost": true,
+          "text": "CONNECTED NOTE",
+          "leaderLines": 0,
+          "arrowheads": 0
+        },
+        {
+          "id": "free",
+          "lost": false,
+          "text": "FREE CONTROL",
+          "leaderLines": 2,
+          "arrowheads": 1
+        }
+      ]
+    },
+    {
+      "file": "04-reselected-R12.dxf",
+      "sha256": "a86e99afa72cbaf52a7323e638758a1b062db3492b8a36846b449bfe4894a574",
+      "version": "AC1009",
+      "svg": "04-reselected.svg",
+      "notes": [
+        {
+          "id": "bound",
+          "lost": false,
+          "text": "CONNECTED NOTE",
+          "leaderLines": 2,
+          "arrowheads": 1
+        },
+        {
+          "id": "free",
+          "lost": false,
+          "text": "FREE CONTROL",
+          "leaderLines": 2,
+          "arrowheads": 1
+        }
+      ]
+    },
+    {
+      "file": "04-reselected-R2000.dxf",
+      "sha256": "46cf7a26729f4192f40c4c851669b7b5e1c3aa80b4c87b3628669c258f803cc3",
+      "version": "AC1015",
+      "svg": "04-reselected.svg",
+      "notes": [
+        {
+          "id": "bound",
+          "lost": false,
+          "text": "CONNECTED NOTE",
+          "leaderLines": 2,
+          "arrowheads": 1
+        },
+        {
+          "id": "free",
+          "lost": false,
+          "text": "FREE CONTROL",
+          "leaderLines": 2,
+          "arrowheads": 1
+        }
+      ]
+    },
+    {
+      "file": "06-persisted-R12.dxf",
+      "sha256": "62b2b17077e7923901dcff6f2d5ff9d8651c6f1a2e4461293ea0121ff1faea18",
+      "version": "AC1009",
+      "svg": "06-persisted.svg",
+      "notes": [
+        {
+          "id": "bound",
+          "lost": false,
+          "text": "CONNECTED NOTE",
+          "leaderLines": 2,
+          "arrowheads": 1
+        },
+        {
+          "id": "free",
+          "lost": false,
+          "text": "FREE CONTROL",
+          "leaderLines": 2,
+          "arrowheads": 1
+        }
+      ]
+    },
+    {
+      "file": "06-persisted-R2000.dxf",
+      "sha256": "8b664013173b3a475024ac68667bde0af5497019e252b4fb3091cb52ef44cbbd",
+      "version": "AC1015",
+      "svg": "06-persisted.svg",
+      "notes": [
+        {
+          "id": "bound",
+          "lost": false,
+          "text": "CONNECTED NOTE",
+          "leaderLines": 2,
+          "arrowheads": 1
+        },
+        {
+          "id": "free",
+          "lost": false,
+          "text": "FREE CONTROL",
+          "leaderLines": 2,
+          "arrowheads": 1
+        }
+      ]
+    }
+  ]
+}
