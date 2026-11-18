@@ -1,0 +1,164 @@
+{
+  "issue": 207,
+  "issueState": "OPEN",
+  "date": "2026-11-18",
+  "scope": "Explicit top-level batch instruction-step membership transfer; existing schema and physical assembly unchanged.",
+  "runs": [
+    {
+      "run": "baseline01",
+      "status": "PASS",
+      "observations": [
+        {
+          "mode": "BASELINE_ONLY",
+          "selectedInstanceIds": [
+            "b1",
+            "b2"
+          ],
+          "targetStep": "finish",
+          "sourceMembership": [
+            [
+              "b1",
+              "b2"
+            ],
+            [
+              "post",
+              "cap"
+            ]
+          ],
+          "noSingleOrBatchTransferOffer": true,
+          "addSelectedRefused": true,
+          "fullAcceptedDocumentUnchanged": true,
+          "visibleHistoryAndUndoRedoAvailabilityUnchanged": true
+        }
+      ],
+      "pageErrors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "receiptSHA256": "7bfaff022d47922250ad7d6ae3ea4d081d2c5faaebdfe11489077213ed124f5c"
+    },
+    {
+      "run": "actual01",
+      "status": "PASS",
+      "observations": [
+        {
+          "mode": "ACTUAL",
+          "selectedInstanceIds": [
+            "b2",
+            "cap",
+            "post"
+          ],
+          "sourceMembership": [
+            [
+              "b1",
+              "b2"
+            ],
+            [
+              "post"
+            ]
+          ],
+          "targetMembership": [
+            [
+              "b1"
+            ],
+            [
+              "post",
+              "b2",
+              "cap"
+            ]
+          ],
+          "addSelectedRefusedAtomically": true,
+          "oneUndoRestoresWholeBatch": true,
+          "redoExact": true,
+          "onlyMembershipChanged": true,
+          "singleTransferAndGoControl": true,
+          "sameContextOpenClearsSelection": true,
+          "nativeSaveFreshOpen": true
+        }
+      ],
+      "pageErrors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "receiptSHA256": "71cd14bffa79591806cb96ccbbf64022fe7b90a1e6dd9767c0b4e78e601d3510"
+    }
+  ],
+  "checks": {
+    "model": {
+      "status": "PASS",
+      "passed": 18,
+      "failed": 0
+    },
+    "studio": {
+      "status": "PASS",
+      "passed": 16,
+      "failed": 0
+    },
+    "lint": {
+      "status": "PASS",
+      "source": "coordinator report; empty lint log"
+    },
+    "studioType": {
+      "initial": "FAIL",
+      "diagnostic": "TS2322: StepBatchTransferOffer | null not assignable to StepBatchTransferOffer | undefined",
+      "correction": "Panel optional batchOffer prop includes null; type-only correction",
+      "rerun": "PASS (exit 0; coordinator confirmed)"
+    },
+    "CI": "PENDING"
+  },
+  "images": [
+    {
+      "file": "01-mixed-batch-selected.png",
+      "sha256": "e5da25932bffc072427f4d6c799c461e8219e340fa70490864f9fc8648aaa694"
+    },
+    {
+      "file": "03-batch-transferred.png",
+      "sha256": "f039342cef4b2ffd3cb49833033673b21e1c6e9e2708fb361f88b839478abb1f"
+    },
+    {
+      "file": "07-persisted-membership.png",
+      "sha256": "102aa979f52f1d60e38436023cf3d1e3d37a79f34980c01e1cfbc7eb9c38071f"
+    }
+  ],
+  "limits": [
+    "Stored nodes/instances/mates and other document fields were compared; no independent geometric re-evaluation or image-derived geometry claim.",
+    "Pattern occurrences and whole subassemblies have helper-level admission coverage only; no actual browser pattern transfer run.",
+    "No deliberately delayed pending-callback/document-switch race was injected. Same-context Open selection clearing was observed.",
+    "No nested occurrence transfer, playback, motion, collision, manufacturing or schema expansion.",
+    "Private undo-stack internals were not read; whole-document Undo/Redo and public history controls were tested."
+  ],
+  "commands": [
+    {
+      "cwd": "packages/barocss-cad-model",
+      "command": "TEST_CONCURRENCY=1 node scripts/test.mjs assembly-steps assembly-step-transfer",
+      "result": "18/18 PASS"
+    },
+    {
+      "cwd": "apps/cad-studio",
+      "command": "TEST_CONCURRENCY=1 node scripts/test.mjs assembly-steps step-explode",
+      "result": "16/16 PASS"
+    },
+    {
+      "cwd": "apps/cad-studio",
+      "command": "../../node_modules/.bin/tsc --noEmit",
+      "runs": [
+        "Initial FAIL: one TS2322 null mismatch",
+        "After type-only correction PASS exit 0"
+      ]
+    },
+    {
+      "cwd": "repository root",
+      "command": "node_modules/.bin/eslint apps/cad-studio/src/app/assemblySteps.ts apps/cad-studio/src/ui/AssemblyStepsPanel.tsx apps/cad-studio/src/App.tsx apps/cad-studio/test/assembly-steps.test.ts",
+      "result": "PASS"
+    }
+  ]
+}

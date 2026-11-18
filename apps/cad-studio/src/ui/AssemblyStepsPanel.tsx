@@ -8,7 +8,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { DockSection } from '../layout/DockSection';
 import { Icon } from './atoms';
 import { FIELD, TICK } from './panelStyles';
-import type { StepOffer } from '../app/assemblySteps';
+import type { StepOffer, StepBatchTransferOffer } from '../app/assemblySteps';
 import { stepExplodeOptions, stepExplodeValue } from '../app/stepExplodeDraft';
 
 // Roadmap 10 ⑥: the Steps panel — an ordered explanation of the assembly, part by part. The primary controls are the step list, Prev and
@@ -43,16 +43,17 @@ function CommitText({ value, onCommit, required, multiline, ...rest }: { value: 
   return <Input {...rest} type="text" value={draft} onChange={e => setDraft(e.target.value)} onBlur={done} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />;
 }
 
-export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, onFaded, onNew, onRename, onNote, onExplode, onAddSelected, onTransfer, onTakeOut, onCaptureView, onResetView, onClearView, onMove, onDelete, onClose }: {
+export function AssemblyStepsPanel({ doc, index, offer, batchOffer, faded, problems, onGo, onFaded, onNew, onRename, onNote, onExplode, onAddSelected, onTransfer, onTransferSelected, onTakeOut, onCaptureView, onResetView, onClearView, onMove, onDelete, onClose }: {
   doc: StudioDoc; index: number;
   /** The one selected part's step (to go to) or that it is in none. */
   offer: StepOffer;
+  batchOffer?: StepBatchTransferOffer | null;
   faded: boolean;
   /** The steps' notes about parts that are gone or in no step, in words. */
   problems: readonly string[];
   onGo(index: number): void; onFaded(on: boolean): void;
   onNew(): void; onRename(id: string, name: string): void; onNote(id: string, note: string): void; onExplode(id: string, scale: number): void;
-  onAddSelected(id: string): void; onTransfer(id: string, part: string): void; onTakeOut(id: string, part: string): void;
+  onAddSelected(id: string): void; onTransfer(id: string, part: string): void; onTransferSelected?(id: string): void; onTakeOut(id: string, part: string): void;
   onCaptureView(id: string): void; onResetView(): void; onClearView(id: string): void; onMove(id: string, to: number): void; onDelete(id: string): void; onClose(): void;
 }) {
   const steps = stepsOf(doc), n = steps.length, step = steps[index], instances: readonly PartInstance[] = doc.instances ?? [];
@@ -74,6 +75,7 @@ export function AssemblyStepsPanel({ doc, index, offer, faded, problems, onGo, o
         </ul>
         {offer?.kind === 'go' && <Button size="xs" variant="secondary" aria-label="Go to its step" title={`${nameOf(offer.part)} is introduced in step ${offer.index + 1}`} onClick={() => onGo(offer.index)}>Go to its step: {offer.name}</Button>}
         {offer?.kind === 'go' && <Button size="xs" variant="ghost" aria-label="Move selected part to this step" title={`Move ${nameOf(offer.part)} from ${offer.name} to ${step.name} in one undoable edit. Only its instruction-step membership changes.`} onClick={() => onTransfer(step.id, offer.part)}>Move {nameOf(offer.part)} here</Button>}
+        {batchOffer?.target === step.id && onTransferSelected && <Button size="xs" variant="ghost" aria-label="Move selected parts to this step" title={`Move all ${batchOffer.parts.length} selected parts to ${step.name} in one undoable edit. Only instruction-step membership changes.`} onClick={() => onTransferSelected(step.id)}>Move {batchOffer.parts.length} selected parts here</Button>}
         {offer?.kind === 'none' && <div className="text-[11px] text-muted-foreground" role="status">{nameOf(offer.part)} is in no step. {index === n - 1 ? 'Shown at this last step.' : faded ? 'Shown faded until the last step.' : 'Hidden until the last step.'} Use Add selected to include it here.</div>}
         <label className={FIELD}><span>Name</span><CommitText key={step.id} aria-label="Step name" className="w-36" maxLength={60} required value={step.name} onCommit={v => onRename(step.id, v)} /></label>
         <div className="flex flex-col gap-0.5" role="group" aria-label="Parts of this step">

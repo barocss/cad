@@ -61,6 +61,19 @@ export function stepOffer(doc: Pick<StudioDoc, 'assemblySteps' | 'instances'>, s
   return at.index === shown ? null : { kind: 'go', index: at.index, name: at.step.name, part: id };
 }
 
+/** An explicit, atomic transfer offer for several exact top-level occurrences. */
+export interface StepBatchTransferOffer { target: string; parts: readonly string[] }
+export function stepBatchTransferOffer(doc: Pick<StudioDoc, 'assemblySteps' | 'instances'>, selection: readonly string[], shown: number): StepBatchTransferOffer | null {
+  const steps = stepsOf(doc);
+  if (!Number.isInteger(shown) || shown < 0 || shown >= steps.length) return null;
+  const target = steps[shown], parts = [...new Set(selection)];
+  if (parts.length < 2 || parts.some(id => !id || id === 'base' || id.includes('/') || !doc.instances?.some(i => i.id === id))) return null;
+  // Add selected remains the non-transferring action. Offer this separate action
+  // only when at least one member must leave another instruction step.
+  if (!parts.some(id => { const at = stepOfOccurrence(doc, id); return at !== undefined && at.index !== shown; })) return null;
+  return { target: target.id, parts };
+}
+
 /** The selection the viewport lights (outline and gizmo) while a step is shown: entries on a hidden (waiting) part are left out, host or nested path alike. */
 export const shownSelection = (selection: readonly string[], hidden: ReadonlySet<string>): readonly string[] =>
   hidden.size ? selection.filter(id => !hidden.has(id.split('/')[0])) : selection;

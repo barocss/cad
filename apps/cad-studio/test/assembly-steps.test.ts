@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { rectanglePart, type PartInstance, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { addAssemblyStep, editAssemblyStep } from '@barocss/cad-model/assembly/steps';
 import { OrbitCamera } from '../src/viewport/camera';
-import { STEPS_COMMAND, cameraOfView, clampStep, stepAfter, shownSelection, stepOffer, stepsDisplay, viewOfCamera } from '../src/app/assemblySteps';
+import { STEPS_COMMAND, cameraOfView, clampStep, stepAfter, shownSelection, stepOffer, stepBatchTransferOffer, stepsDisplay, viewOfCamera } from '../src/app/assemblySteps';
 import { PALETTE_EXTRA } from '../src/app/studioConstants';
 
 // Roadmap 10 ⑥: the Steps panel's pure rules — what a step hides, highlights and fades, its explode scale, its view, what a selection offers.
@@ -121,4 +121,57 @@ test('clearing a recommended view removes only that step camera and retains pres
   assert.deepEqual(next.nodes, stepped.nodes);
   assert.deepEqual(next.mates, stepped.mates);
   assert.ok(stepped.assemblySteps![1].view);
+});
+
+
+test('batch step transfer offers every selected member in stable order, deduplicated without mutating inputs', () => {
+  const selection = Object.freeze(['p2', 'p1', 'p2']);
+  const before = JSON.stringify(stepped);
+  const offer = stepBatchTransferOffer(stepped, selection, 2);
+  assert.deepEqual(offer, { target: stepped.assemblySteps![2].id, parts: ['p2', 'p1'] });
+  assert.notEqual(offer!.parts, selection);
+  assert.equal(JSON.stringify(stepped), before);
+  assert.deepEqual(selection, ['p2', 'p1', 'p2']);
+  assert.equal(stepOffer(stepped, ['p1', 'p2'], 2), null, 'single-part offer remains unchanged');
+});
+
+test('batch transfer includes target members and unassigned members alongside the members from another step', () => {
+  const partial = { ...base, assemblySteps: [
+    { id: 'source', name: 'Source', add: ['p1'] },
+    { id: 'target', name: 'Target', add: ['p2'] },
+  ] };
+  assert.deepEqual(stepBatchTransferOffer(partial, ['p2', 'p3', 'p1'], 1), { target: 'target', parts: ['p2', 'p3', 'p1'] });
+  assert.equal(stepBatchTransferOffer(partial, ['p2', 'p3'], 1), null, 'target plus unassigned does not need transfer');
+  assert.equal(stepBatchTransferOffer(partial, ['p3', 'p4'], 1), null, 'all unassigned uses Add selected');
+  assert.equal(stepBatchTransferOffer(stepped, ['p1', 'p2'], 0), null, 'all already at target');
+});
+
+test('batch transfer refuses the entire selection for base, nested or missing members and fewer than two distinct ids', () => {
+  for (const selection of [[], ['p1'], ['p1', 'p1'], ['p1', 'base'], ['p1', 'p2/child'], ['p1', 'missing'], ['p1', '']]) {
+    assert.equal(stepBatchTransferOffer(stepped, selection, 2), null, JSON.stringify(selection));
+  }
+  const fakeBase = { ...stepped, instances: [...stepped.instances!, inst('base', 0)] };
+  assert.equal(stepBatchTransferOffer(fakeBase, ['p1', 'base'], 2), null, 'reserved base is never a placed occurrence');
+  assert.equal(JSON.stringify(stepped), snapshot);
+});
+
+test('batch transfer requires an exact valid shown index rather than clamping it', () => {
+  for (const shown of [-1, 3, 0.5, NaN, Infinity, -Infinity]) {
+    assert.equal(stepBatchTransferOffer(stepped, ['p1', 'p2'], shown), null, String(shown));
+  }
+  assert.equal(stepBatchTransferOffer(base, ['p1', 'p2'], 0), null, 'no steps');
+  assert.equal(stepBatchTransferOffer({ ...stepped, instances: undefined }, ['p1', 'p2'], 2), null);
+});
+
+test('whole subassemblies and exact pattern occurrence ids may transfer as display-only step members', () => {
+  const nested = { ...inst('sub', 0), doc: { ...plate, instances: [inst('child', 0)] } };
+  const patterned = inst('pat1-1', 10);
+  const source: StudioDoc = { ...base, instances: [nested, patterned], assemblySteps: [
+    { id: 'source', name: 'Source', add: ['sub', 'pat1-1'] },
+    { id: 'target', name: 'Target', add: [] },
+  ] };
+  const before = JSON.stringify(source);
+  assert.deepEqual(stepBatchTransferOffer(source, ['sub', 'pat1-1'], 1), { target: 'target', parts: ['sub', 'pat1-1'] });
+  assert.equal(stepBatchTransferOffer(source, ['sub/child', 'pat1-1'], 1), null);
+  assert.equal(JSON.stringify(source), before);
 });
