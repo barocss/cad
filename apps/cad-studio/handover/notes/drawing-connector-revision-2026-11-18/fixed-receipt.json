@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "qualification": "Issued default-part drawings notice actual connector opening edits.",
+  "observations": [
+    {
+      "a": {
+        "volume": 7997.198236669204
+      },
+      "b": {
+        "volume": 7965.454236669274
+      },
+      "stale": 1,
+      "viewPathsChanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Default part scope: the manufactured panel opening, not its bought envelope; one synthetic connector row; not manufacturing approval or a universal revision certificate."
+  ],
+  "phase": "fresh Open reopened"
+}

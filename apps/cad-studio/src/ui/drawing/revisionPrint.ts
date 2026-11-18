@@ -65,6 +65,28 @@ export function drawingRevisionPrint(doc: StudioDoc): string {
     });
     stamp = modelPrint({ source: stamp, orings: canonical(orings) });
   }
+  // The panel consumes the opening profile/depth. A bought envelope consumes body
+  // dimensions only when an active body node names that opening; keep-out is a report.
+  const connectorBodies = new Set(doc.nodes.flatMap((n, i) => n.kind === 'connector-body' && !n.suppressed
+    && Number.isInteger(n.opening) && n.opening >= 0 && n.opening < i ? [n.opening] : []));
+  const connectorUses = new Map<string, boolean>();
+  doc.nodes.forEach((n, i) => {
+    if (n.kind === 'connector-opening' && !n.suppressed)
+      connectorUses.set(n.row, (connectorUses.get(n.row) ?? false) || connectorBodies.has(i));
+  });
+  if (connectorUses.size) {
+    const rows = new Map((doc.connectors?.rows ?? []).map(row => [row.id, row]));
+    const section = (s: { shape: string; width: number; height: number; cornerRadius?: number }) => ({
+      shape: s.shape, width: s.width, height: s.height, ...(s.shape === 'rect' ? { cornerRadius: s.cornerRadius ?? 0 } : {}),
+    });
+    const connectors = [...connectorUses.keys()].sort().map(id => {
+      const usesBody = connectorUses.get(id);
+      const row = rows.get(id);
+      return [id, row ? { opening: { ...section(row.opening), depth: row.opening.depth },
+        ...(usesBody ? { body: row.body ? { ...section(row.body), length: row.body.length } : null } : {}) } : null];
+    });
+    stamp = modelPrint({ source: stamp, connectors: canonical(connectors) });
+  }
   if (!doc.frames?.welds?.length) return stamp;
   const gone = new Set(doc.nodes.flatMap((n, i) => n.suppressed ? [i] : []));
   // Requested bead geometry, independent of kernel refusal caches. Symbol annotations
