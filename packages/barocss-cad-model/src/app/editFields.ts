@@ -1,3 +1,4 @@
+import { flangeRadiusSourceEdit } from './flangeRadiusSourceEdit';
 import { flangeMeasureEdit } from './flangeMeasureEdit';
 import { flangePositionEdit } from './flangePositionEdit';
 import { flangeRadiusEdit } from './flangeRadiusEdit';
@@ -1007,6 +1008,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
     case 'sheet-flange': {
       // (R12.3, D118: its length, angle, own radius and offsets.)
       type F = Extract<ModelNode, { kind: 'sheet-flange' }>;
+      const radiusSource = flangeRadiusSourceEdit(scope?.doc, nodes, i); if (radiusSource) out.push(radiusSource);
       const radius = flangeRadiusEdit(scope?.doc, nodes, i); if (radius) out.push(radius);
       const position = flangePositionEdit(scope?.doc, nodes, i); if (position) out.push(position);
       const measure = flangeMeasureEdit(scope?.doc, nodes, i); if (measure) out.push(measure);

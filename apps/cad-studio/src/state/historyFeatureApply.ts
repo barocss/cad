@@ -1,3 +1,5 @@
+import { isFlangeRadiusSourceChange } from '@barocss/cad-model/app/flangeRadiusSourceEdit';
+import { proveFlangeRadiusSourceChange } from './flangeRadiusSourceHistory';
 import { isFlangeSourceThicknessChange, admitFlangeSourceThicknessChange, proveFlangeSourceThicknessChange } from './flangeSourceThicknessHistory';
 import { isFlangeMeasureChange } from '@barocss/cad-model/app/flangeMeasureEdit';
 import { proveFlangeMeasureChange } from './flangeMeasureHistory';
@@ -47,9 +49,14 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     // A later ordinary Length/Angle edit can hide the radius field without undoing
     // its earlier draft change. Recheck the complete candidate at the Apply boundary.
     const oldFlange = doc.nodes[editNode], newFlange = nodes[editNode];
+    const flangeRadiusSourceChanged = oldFlange?.kind === 'sheet-flange' && newFlange?.kind === 'sheet-flange'
+      && (oldFlange.bendRadius === undefined) !== (newFlange.bendRadius === undefined);
+    const flangeRadiusSourceFailure = { title: 'Flange radius source not applied', hint: 'Apply only Radius source on the unchanged full-width rectangular-sheet Flange. Its original top edge must be verified. Apply Length, Angle or the numeric own radius separately.', detail: 'The original document and sheet geometry are unchanged.' };
+    if (flangeRadiusSourceChanged && !isFlangeRadiusSourceChange(doc, { ...doc, nodes }, editNode)) return Promise.resolve(flangeRadiusSourceFailure);
+    const flangeRadiusSourceSource = flangeRadiusSourceChanged ? canonical(doc) : '', flangeRadiusSourceDraft = flangeRadiusSourceChanged ? canonical(nodes) : '';
     const flangeRadiusChanged = oldFlange?.kind === 'sheet-flange' && newFlange?.kind === 'sheet-flange'
       && canonical(oldFlange.bendRadius) !== canonical(newFlange.bendRadius);
-    if (flangeRadiusChanged && !flangeRadiusEdit(doc, nodes, editNode)) return Promise.resolve({
+    if (flangeRadiusChanged && !flangeRadiusSourceChanged && !flangeRadiusEdit(doc, nodes, editNode)) return Promise.resolve({
       title: 'Bend radius not applied', hint: 'Apply only the bend radius change on the unchanged Flange first. Apply Length or Angle changes separately.',
       detail: 'The original document and sheet geometry are unchanged.',
     });
@@ -108,8 +115,9 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
       && (!flangeSourceThicknessChanged || canonical(doc) === flangeSourceThicknessSource && canonical(nodes) === flangeSourceThicknessDraft)
       && (!reliefThicknessChanged || canChangeDocument() && canonical(doc) === reliefThicknessSource && canonical(nodes) === reliefThicknessDraft)
       && (!flangeMeasureChanged || canonical(doc) === flangeMeasureSource && canonical(nodes) === flangeMeasureDraft)
+      && (!flangeRadiusSourceChanged || canonical(doc) === flangeRadiusSourceSource && canonical(nodes) === flangeRadiusSourceDraft)
       && (!flangePositionChanged || canonical(doc) === flangePositionSource && canonical(nodes) === flangePositionDraft)
-      && (!(heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
+      && (!(heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeRadiusSourceChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
     return (async () => {
       if (reliefThicknessChanged) {
         if (!current()) return;
@@ -154,6 +162,16 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
           if (!parent.ok || parent.revision !== parentRevision || !proveFlangePositionChange(doc, next, parent.bodies)) return flangePositionFailure;
           request = nextRevision();
         } catch { if (current()) return flangePositionFailure; return; }
+      }
+      if (flangeRadiusSourceChanged) {
+        if (!current()) return;
+        try {
+          const parentRevision = nextRevision();
+          const parent = await engine.part(prefixDoc(doc, editNode), parentRevision, 'refs');
+          if (!current()) return;
+          if (!parent.ok || parent.revision !== parentRevision || !proveFlangeRadiusSourceChange(doc, next, parent.bodies)) return flangeRadiusSourceFailure;
+          request = nextRevision();
+        } catch { if (current()) return flangeRadiusSourceFailure; return; }
       }
       if (flangeMeasureChanged) {
         if (!current()) return;
@@ -218,7 +236,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
         } catch { if (current()) return failure; return; }
       }
       const reply = await engine.evaluate(next, request);
-      if (!reply || !current() || (heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged) && reply.revision !== request) return;
+      if (!reply || !current() || (heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeRadiusSourceChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged) && reply.revision !== request) return;
       if (reply.ok) {
         if (!resize) {
           const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated
