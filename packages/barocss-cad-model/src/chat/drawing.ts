@@ -40,8 +40,8 @@ export const DRAWING_TOOLS = [
   ...STACK_READ_TOOLS,
   {
     name: 'drawing_issues',
-    description: 'The drawing’s issue list, as the Drawing workspace shows it: what is wrong on the sheet (errors: lost dimensions, overlapping text, text over lines, off the sheet, views that do not fit, datums or frames lost) and what is missing or repeated (warnings: holes without size or position, steps not located, overall sizes missing, a size given twice, re-matched references, a view needed). Each with its code, message and the fix it offers (if any). Also the sheet, scale and views shown. Changes nothing.',
-    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+    description: 'The drawing’s issue list, as the Drawing workspace shows it: what is wrong on the sheet (errors: lost dimensions, overlapping text, text over lines, off the sheet, views that do not fit, datums or frames lost) and what is missing or repeated (warnings: holes without size or position, steps not located, overall sizes missing, a size given twice, re-matched references, a view needed). Each with its code, message and the fix it offers (if any). Also the sheet, scale and views shown. include_targets adds dimension_ids and view when supplied by the issue engine. These opaque IDs describe this tool document snapshot only: they are not persistent identities, do not track current UI selection, and are not guaranteed unique. Changes nothing.',
+    input_schema: { type: 'object', properties: { include_targets: { type: 'boolean' } }, additionalProperties: false },
   },
   {
     name: 'tolerance_suggestions',
@@ -120,17 +120,18 @@ function sheetOf(i: SheetInputs) {
   const ctx = issueContext(i);
   return { ctx, sheet: { sheet: i.settings.sheet, scale: scaleLabel(ctx.layout.scale), fits: ctx.layout.fits, views: VIEW_IDS.filter(v => !ctx.layout.views[v].hidden), dimensions: ctx.sheet.dimensions.map(d => d.ok ? d.text : `lost: ${d.reason}`), tolerancing: i.settings.tolerancing ?? 'plus-minus' } };
 }
-const issueList = (i: SheetInputs) => {
+const issueList = (i: SheetInputs, includeTargets = false) => {
   // (11 ④: a drawing with sheets: each sheet's views, and every issue naming its sheet — what is missing judged on the whole drawing.)
   if (i.settings.sheets?.length) {
     const first = sheetOf({ ...i, settings: forSheet(i.settings, 0) }).sheet;
     return { sheet: first, sheets: Array.from({ length: sheetCount(i.settings) }, (_, k) => ({ sheet: k + 1, name: sheetName(i.settings, k), size: sheetSize(i.settings, k), views: forSheet(i.settings, k).views })),
-      issues: sheetsIssues(i).map(x => ({ sheet: x.sheet, code: x.issue.code, severity: x.issue.severity, message: x.issue.message, ...(x.issue.fix ? { fix: x.issue.fix.kind } : {}) })) };
+      issues: sheetsIssues(i).map(x => ({ sheet: x.sheet, code: x.issue.code, severity: x.issue.severity, message: x.issue.message, ...(x.issue.fix ? { fix: x.issue.fix.kind } : {}), ...(includeTargets && x.issue.dims ? { dimension_ids: [...x.issue.dims] } : {}), ...(includeTargets && x.issue.view !== undefined ? { view: x.issue.view } : {}) })) };
   }
-  const { ctx, sheet } = sheetOf(i); return { sheet, issues: drawingIssues(ctx).map(x => ({ code: x.code, severity: x.severity, message: x.message, ...(x.fix ? { fix: x.fix.kind } : {}) })) }; };
+  const { ctx, sheet } = sheetOf(i); return { sheet, issues: drawingIssues(ctx).map(x => ({ code: x.code, severity: x.severity, message: x.message, ...(x.fix ? { fix: x.fix.kind } : {}), ...(includeTargets && x.dims ? { dimension_ids: [...x.dims] } : {}), ...(includeTargets && x.view !== undefined ? { view: x.view } : {}) })) }; };
 
 /** Runs a drawing tool on the document. */
 export function runDrawingTool(doc: StudioDoc, name: string, args: Record<string, unknown>): Outcome {
+  if (name === 'drawing_issues' && Object.hasOwn(args, 'include_targets') && typeof args.include_targets !== 'boolean') return { error: 'include_targets must be a boolean.' };
   if (name === 'set_drawing') { const why = setDrawingProblem(args, readDrawing(doc.drawing).frames); if (why) return { error: why }; }
   const original = readDrawing(doc.drawing);
   if (isStackRead(name)) {
@@ -152,7 +153,7 @@ export function runDrawingTool(doc: StudioDoc, name: string, args: Record<string
     return { doc: { ...doc, drawing: settings }, content: { ...extra, ...issueList(next) }, changed: JSON.stringify(settings) !== JSON.stringify(original), summary };
   };
   switch (name) {
-    case 'drawing_issues': { const out = issueList(i); return { doc, content: out, changed: false, summary: `${out.issues.length} drawing issue${out.issues.length === 1 ? '' : 's'}` }; }
+    case 'drawing_issues': { const out = issueList(i, args.include_targets === true); return { doc, content: out, changed: false, summary: `${out.issues.length} drawing issue${out.issues.length === 1 ? '' : 's'}` }; }
     case 'tolerance_suggestions': {
       const mode = args.mode === 'geometric' || args.mode === 'plus-minus' ? args.mode : undefined;
       const settings = mode ? withMode(i.settings, mode) : i.settings, list = toleranceSuggestions(issueContext({ ...i, settings }));

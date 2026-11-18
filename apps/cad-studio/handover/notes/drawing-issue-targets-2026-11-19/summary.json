@@ -1,0 +1,143 @@
+{
+  "issue": 202,
+  "verification_date_utc": "2026-11-18",
+  "directory_date": "2026-11-19",
+  "directory_date_basis": "local reporting label; verification date is UTC above",
+  "base_commit": "6479c86e24a6fd99888de794c2ebf220b29a8b15",
+  "publication_stage": "PRE_PUSH",
+  "ci": "NOT_RECORDED_HERE",
+  "issue_completion": "OPEN; limited implementation unit only",
+  "baseline": {
+    "driver_status": "PASS",
+    "wrapper_exit": 1,
+    "wrapper_failure": "zsh reserved variable status assignment after completed driver",
+    "observations": [
+      {
+        "localPublicRunToolOnly": true,
+        "engineTargets": {
+          "code": "DIMENSION_LOST",
+          "dims": [
+            "retained-lost-dimension"
+          ],
+          "view": "front"
+        },
+        "publicIssueKeys": [
+          "code",
+          "fix",
+          "message",
+          "severity"
+        ],
+        "uiIssueSelectsRetainedDimension": true,
+        "queryAndSelectionDocumentDirtyHistoryUnchanged": true,
+        "nativeSaveFreshOpenPreservesReference": true,
+        "externalMcp": "NOT_RUN"
+      }
+    ],
+    "page_errors": 0,
+    "console_errors": 0,
+    "source_changes": 0,
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  "actual": {
+    "driver_status": "PASS",
+    "observations": [
+      {
+        "evidence": "single-01-first-sheet",
+        "issueAndSelectedRowVisible": true
+      },
+      {
+        "evidence": "single-04-reopened",
+        "issueAndSelectedRowVisible": true
+      },
+      {
+        "profile": "single",
+        "localPublicRunToolOnly": true,
+        "defaultFalseByteEqual": true,
+        "optInOnlyAddsTargets": true,
+        "facadeEqualsDirect": true,
+        "malformedRefusals": 3,
+        "privateNoteOmitted": true,
+        "activeSheetDoesNotFilterPublicResponse": false,
+        "uiIssueSelectsExactRetainedDimension": true,
+        "queryAndSelectionDocumentDirtyHistoryUnchanged": true,
+        "nativeSaveFreshOpenPreservesReferences": true,
+        "externalMcp": "NOT_RUN"
+      },
+      {
+        "evidence": "multi-01-first-sheet",
+        "issueAndSelectedRowVisible": true
+      },
+      {
+        "evidence": "multi-02-second-sheet",
+        "issueAndSelectedRowVisible": true
+      },
+      {
+        "evidence": "multi-04-reopened",
+        "issueAndSelectedRowVisible": true
+      },
+      {
+        "profile": "multi",
+        "localPublicRunToolOnly": true,
+        "defaultFalseByteEqual": true,
+        "optInOnlyAddsTargets": true,
+        "facadeEqualsDirect": true,
+        "malformedRefusals": 3,
+        "privateNoteOmitted": true,
+        "activeSheetDoesNotFilterPublicResponse": true,
+        "uiIssueSelectsExactRetainedDimension": true,
+        "queryAndSelectionDocumentDirtyHistoryUnchanged": true,
+        "nativeSaveFreshOpenPreservesReferences": true,
+        "externalMcp": "NOT_RUN"
+      }
+    ],
+    "page_errors": 0,
+    "console_errors": 0,
+    "source_changes": 0,
+    "native_save_downloads": 2,
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  "checks": {
+    "initial_related_tests": {
+      "passed": 24,
+      "failed": 0
+    },
+    "initial_model_type": "FAIL: TS2339 in new test sheet property access; guarded before retry",
+    "focused_after_guard": {
+      "passed": 5,
+      "failed": 0
+    },
+    "model_type02": "PASS (coordinator verified process exit)",
+    "studio_type02": "PASS (coordinator verified process exit)",
+    "scoped_lint02": "PASS (coordinator verified process exit)",
+    "full_suite": "NOT_RUN"
+  },
+  "limits": [
+    "Public facade and dispatcher called in local inspector runtime, not external MCP.",
+    "No automatic Fix or issue repair exercised.",
+    "Engine projection/issue result is a contract comparison, not an independent geometry oracle.",
+    "Duplicate dimension IDs covered by unit test, not actual UI.",
+    "Empty dimension array preservation reviewed in source only, not runtime fixture.",
+    "History checks cover visible rows and Undo/Redo availability, not every internal history field.",
+    "Synthetic one-sheet and two-sheet base-part profiles only.",
+    "No future CI or full issue completion claim."
+  ],
+  "png_sha256": "6edff6ea18c0f3a170668273df7f7520c40005b191b4144ffba0767add1be044",
+  "integration": {
+    "main_short_sha": "6ef910eac",
+    "focused_regression": "PENDING",
+    "exact_pushed_sha_ci": "PENDING",
+    "actual_source": "pre-integration 6479c86e24a6fd99888de794c2ebf220b29a8b15"
+  }
+}
