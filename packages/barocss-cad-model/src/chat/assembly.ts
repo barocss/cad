@@ -112,7 +112,7 @@ async function describe(doc: StudioDoc, base: BodyResult[], evaluate: Evaluate, 
     const nested = !!inst.doc.instances?.length;
     const own = !nested || inst.doc.nodes.length || inst.doc.direct ? await evaluate(resolveShopTree(bodyDocOf(inst), doc, inst.id)) : null;
     const bodies = own?.ok ? own.bodies : [];
-    const { min, max } = boundsOf(bodies), flex = nested && inst.doc.mates?.length ? instanceJointsOf(doc, inst.id) : null;
+    const { min, max } = boundsOf(bodies), flex = inst.joints || nested && inst.doc.mates?.length ? instanceJointsOf(doc, inst.id) : null;
     // Occurrence cuts change reported geometry, not authored feature/face/look identities.
     const made = !nested && cutsOf(inst, doc).length ? await evaluate(placedBase(inst, doc)) : own;
     const madeBodies = made?.ok ? made.bodies : [];

@@ -1,0 +1,157 @@
+{
+  "baseline": {
+    "status": "FAIL",
+    "failure": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ undefined\n- 'Door (door) is not a sub-assembly: it holds no parts, so it has no joints'\n\n    at file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/assembly-stale-joint-summary-browser.mjs:10:215\n    at async f.run (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/assembly-stale-joint-summary-browser.mjs:7:1",
+    "observations": [
+      {
+        "summary": {
+          "base": {
+            "id": "base",
+            "feature_count": 0,
+            "bodies": 0,
+            "volume": 0,
+            "note": "the document's own part, fixed at the origin"
+          },
+          "instances": [
+            {
+              "id": "door",
+              "name": "Door",
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "grounded": true,
+              "feature_count": 2,
+              "bodies": 1,
+              "volume": 19200,
+              "world_bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  80,
+                  30,
+                  8
+                ]
+              },
+              "body_keys": [
+                "b1"
+              ]
+            }
+          ],
+          "mates": [],
+          "note": "mateable faces of one part: get_assembly {\"faces_of\": part id or \"base\"}"
+        },
+        "expected": {
+          "part": "door",
+          "joints": [],
+          "problem": "Door (door) is not a sub-assembly: it holds no parts, so it has no joints"
+        },
+        "unchanged": true,
+        "changed": false,
+        "isError": false
+      }
+    ],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceBeforeCount": 6,
+    "sourceAfterCount": null,
+    "sourceAfterCleanupCount": 1300
+  },
+  "fixed": {
+    "status": "PASS",
+    "failure": null,
+    "observations": [
+      {
+        "summary": {
+          "base": {
+            "id": "base",
+            "feature_count": 0,
+            "bodies": 0,
+            "volume": 0,
+            "note": "the document's own part, fixed at the origin"
+          },
+          "instances": [
+            {
+              "id": "door",
+              "name": "Door",
+              "position": [
+                0,
+                0,
+                0
+              ],
+              "rotation": [
+                0,
+                0,
+                0
+              ],
+              "grounded": true,
+              "feature_count": 2,
+              "bodies": 1,
+              "volume": 19200,
+              "world_bounds": {
+                "min": [
+                  0,
+                  0,
+                  0
+                ],
+                "max": [
+                  80,
+                  30,
+                  8
+                ]
+              },
+              "joint_problem": "Door (door) is not a sub-assembly: it holds no parts, so it has no joints",
+              "body_keys": [
+                "b1"
+              ]
+            }
+          ],
+          "mates": [],
+          "note": "mateable faces of one part: get_assembly {\"faces_of\": part id or \"base\"}"
+        },
+        "expected": {
+          "part": "door",
+          "joints": [],
+          "problem": "Door (door) is not a sub-assembly: it holds no parts, so it has no joints"
+        },
+        "unchanged": true,
+        "changed": false,
+        "isError": false
+      },
+      {
+        "retained": {
+          "base~lid": 0.523598775598
+        },
+        "resetGroup": 1
+      },
+      {
+        "explicitResetOnly": true,
+        "undoRedo": true,
+        "nativeExact": true
+      }
+    ],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceBeforeCount": 6,
+    "sourceAfterCount": 1300,
+    "sourceAfterCleanupCount": 1300
+  }
+}
