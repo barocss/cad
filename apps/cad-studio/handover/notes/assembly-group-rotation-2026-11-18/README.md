@@ -1,0 +1,11 @@
+# Rotate a selected free group around a world pivot (#732)
+
+New bounded feature for roadmap row 10 / ASM-06, extending existing common Move. Two or more selected free visible ordinary top-level parts can rotate together about an explicit world X/Y/Z axis and XYZ-mm pivot. Degrees compose with existing orientation using world rotation times effective placement; positions retain the common pivot. One commit gives one Undo. This is not a baseline defect claim.
+
+Reuse Move admission for fixed, hidden, mated, patterned, posed, nested, jointed, cut and linked-housing restrictions. No shared definition, unselected placement, solver, Gizmo or motion changes. Blank/nonfinite drafts cannot apply; selection/document/context change and Escape reset drafts. Successful apply resets to zero. Numerical overflow or unrepresentable Euler precision refuses the entire change; existing Euler normalization is not broadened.
+
+Independent read-only review: no blocker. Focused Rotate and existing Move/Fix tests **16/16 PASS**. Model and Studio TypeScript noEmit and affected-file lint **PASS**. Frozen actual Chrome rotation and existing Move Chrome **PASS**. Rotation checks an independent world-position and eight-corner bounds oracle, existing orientation composition, Undo/Redo, Save/fresh Open, selection/Escape reset, invalid drafts and fixed-part atomic refusal. Shared definitions, base, steps and nonselected instances remain unchanged. Screenshots locally reviewed. Both capsules changes=[], contexts/browser/server closed; no owned processes remain. Disk 40 GiB, above 2 GiB reserve.
+
+Commands: `node apps/cad-studio/scripts/test.mjs assembly-rotate-selection assembly-translate-selection assembly-ground-selection`; TypeScript noEmit for both projects; affected-file ESLint; `ASSEMBLY_ROTATE_SELECTION_FROZEN=1 node apps/cad-studio/test/assembly-rotate-selection-browser.mjs <output>` and existing `ASSEMBLY_TRANSLATE_SELECTION_FROZEN=1` browser fixture with Chrome/PW_DIR environment.
+
+Validation baseline aabeb2760. An early unit assertion exposed a zero-angle returned-array identity discrepancy; corrected before frozen validation. Implementation writer overlap was stopped and the final helper reviewed and retested before all final results. No full professional CAD/manufacturing qualification claimed.
