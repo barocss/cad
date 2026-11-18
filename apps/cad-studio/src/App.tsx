@@ -1,3 +1,4 @@
+import { prepareParameterPatternHoleSpacing } from './state/parameterPatternHoleSpacing';
 import { isOpenLineLengthChange } from './sketch/openLineLength';
 import { useNamedInspection } from './state/useNamedInspection';
 import { useMeshCircleMeasurement, type MeshCircleHit } from './app/useMeshCircleMeasurement';
@@ -1035,14 +1036,16 @@ export function App() {
           return;
         }
       }
-      // Only a narrowly proved Height parameter edit may refresh its finish evidence before evaluation.
-      const candidate = edit && !edit.kind && !edit.roundedInset
+      // Only bounded parameter adapters may adjust dependent geometry/evidence before evaluation.
+      const heightCandidate = edit && !edit.kind && !edit.roundedInset
         ? await prepareParameterHeightFinish({ before: edit.base, next: edit.next,
           evaluateParent: (part, request) => engine.part(part, request, 'refs'),
           nextRevision: () => revision.current++, isCurrent: current }) : edit?.next;
       if (!current()) return;
-      const repairedHeight = !!edit && candidate !== edit.next;
-      const candidateInput = repairedHeight ? prefixDoc(candidate!, candidate!.nodes.length) : input;
+      const candidate = edit && !edit.kind && !edit.roundedInset
+        ? prepareParameterPatternHoleSpacing(edit.base, heightCandidate!) : heightCandidate;
+      const preparedParameter = !!edit && candidate !== edit.next;
+      const candidateInput = preparedParameter ? prefixDoc(candidate!, candidate!.nodes.length) : input;
       const key = evaluationKey(candidateInput), handoff = !edit ? evaluationEvidence.takeHandoff() : null;
       const routeHandoff = !edit ? routeAcceptedHandoff.current : null;
       if (!edit) routeAcceptedHandoff.current = null;
@@ -1053,11 +1056,11 @@ export function App() {
       // A configuration-only parameter edit can keep the already fresh accepted result too.
       const accepted = evaluationEvidence.accepted();
       let evaluationRevision: number | undefined;
-      const result = edit && !repairedHeight && accepted?.key === key ? accepted.result
+      const result = edit && !preparedParameter && accepted?.key === key ? accepted.result
         : handoff?.target === docNow.current && handoff.key === key ? handoff.result : routeResult ?? await engine.evaluate(candidateInput, evaluationRevision = revision.current++);
       if (!current()) return;
-      if (repairedHeight && (evaluationRevision === undefined || result?.revision !== evaluationRevision)) {
-        refuse('The Height parameter evaluation could not be verified.'); return;
+      if (preparedParameter && (evaluationRevision === undefined || result?.revision !== evaluationRevision)) {
+        refuse('The dependent parameter evaluation could not be verified.'); return;
       }
       if (!result) { if (edit) refuse('The evaluation was superseded.'); else setBusy(false); return; }
       if (edit) {
