@@ -99,3 +99,48 @@ test('a proved H1 candidate still undergoes full native refusal without modifyin
   if (accepted.ok && repeated.ok) assert.deepEqual(repeated.bodies, accepted.bodies);
  }
 });
+
+function boundFinish(doc: StudioDoc, value: unknown = { parameter: 'R' }): StudioDoc {
+ return { ...doc, nodes: doc.nodes.map(n => n.kind === 'fillet' ? { ...n, radius: value } as typeof n : n.kind === 'chamfer' ? { ...n, distance: value } as typeof n : n) };
+}
+for (const kind of ['fillet', 'chamfer'] as const) test(`${kind} independent finish binding survives H changes and native/file consumers`, async () => {
+ const f = fixture(kind), before = boundFinish(f.before), snapshot = structuredClone(before);
+ let current = before;
+ for (const height of [30, 14]) {
+  const next = { ...current, parameters: { ...current.parameters, H: height } }, task = run(current, next), out = await task.result;
+  assert.equal(task.calls.length, 2); assert.notEqual(out, next);
+  assert.equal(out.parameters, next.parameters); assert.equal(out.nodes[1], next.nodes[1]);
+  const finish = out.nodes[2]; assert.ok(finish.kind === 'fillet' || finish.kind === 'chamfer');
+  assert.deepEqual(finish.kind === 'fillet' ? finish.radius : finish.distance, { parameter: 'R' });
+  assert.deepEqual({ ...finish, sigs: undefined }, { ...next.nodes[2], sigs: undefined });
+  const full = evaluateDoc(out, 20); assert.ok(full.ok, full.ok ? '' : full.error.hint);
+  if (full.ok) assert.ok(Math.abs(full.bodies[0].volume! - height * (1200 - (kind === 'fillet' ? 4 - Math.PI : 2))) < 1e-7);
+  const opened = await readStudioFile(encodeStudioFile(out)); assert.ok('doc' in opened);
+  if ('doc' in opened) { assert.deepEqual(opened.doc, out); assert.ok(evaluateDoc(opened.doc, 21).ok); }
+  current = out;
+ }
+ assert.deepEqual(before, snapshot);
+});
+for (const kind of ['fillet', 'chamfer'] as const) test(`${kind} shared or malformed finish bindings never refresh signatures`, async () => {
+ const f = fixture(kind), pairs: [StudioDoc, StudioDoc][] = [];
+ for (const binding of [{ parameter: 'H' }, { parameter: 'missing' }, { parameter: 'R', extra: 1 }, Object.create({ parameter: 'R' }), { parameter: 2 }, null, []]) pairs.push([boundFinish(f.before, binding), boundFinish(f.next, binding)]);
+ const before = boundFinish(f.before), next = boundFinish(f.next);
+ pairs.push([before, { ...next, parameters: { H: 30, R: 3 } }]);
+ for (const value of [0, -1, NaN, Infinity, -Infinity]) pairs.push([{ ...before, parameters: { H: 10, R: value } }, { ...next, parameters: { H: 30, R: value } }]);
+ pairs.push([{ ...before, parameters: Object.assign(Object.create({ R: 2 }), { H: 10 }) }, { ...next, parameters: Object.assign(Object.create({ R: 2 }), { H: 30 }) }]);
+ for (const [a, b] of pairs) { const task = run(a, b); assert.equal(await task.result, b); assert.equal(task.calls.length, 0); }
+});
+for (const stage of [0, 1]) for (const failure of ['stale', 'revision', 'topology', 'native'] as const) test(`bound finish prefix ${stage} ${failure} cannot install evidence`, async () => {
+ const f = fixture(), before = boundFinish(f.before), next = boundFinish(f.next), snapshot = structuredClone({ before, next });
+ let current = true, revision = 0; const calls: Call[] = [];
+ const pending = prepareParameterHeightFinish({ before, next, nextRevision: () => ++revision, isCurrent: () => current,
+  evaluateParent: (doc, rev) => new Promise(resolve => calls.push({ doc, revision: rev, resolve })) });
+ const rejected = assert.rejects(pending);
+ if (stage === 1) { calls[0].resolve(evaluateDoc(calls[0].doc, calls[0].revision)); await tick(); }
+ const call = calls[stage]; if (failure === 'stale') current = false;
+ const result = evaluateDoc(call.doc, call.revision + (failure === 'revision' ? 1 : 0)); assert.ok(result.ok);
+ if (failure === 'native') call.resolve({ ok: false, revision: call.revision, wallTime: 0, error: { title: 'failure', hint: 'failure', detail: 'failure', code: 'VALUE' } });
+ else call.resolve(failure === 'topology' && result.ok ? { ...result, bodies: [] } : result);
+ if (stage === 0 && failure === 'topology') { await tick(); calls[1].resolve(evaluateDoc(calls[1].doc, calls[1].revision)); }
+ await rejected; assert.deepEqual({ before, next }, snapshot); assert.equal(calls.length, stage === 0 && failure === 'topology' ? 2 : stage + 1);
+});

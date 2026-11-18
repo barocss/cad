@@ -10,6 +10,14 @@ function same(a: unknown, b: unknown): boolean {
  return ak.length === bk.length && ak.every(k => Object.hasOwn(b, k) && same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
 }
 const positive = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
+function positiveFinish(dim: unknown, doc: StudioDoc): boolean {
+ if (positive(dim)) return true;
+ if (!dim || typeof dim !== 'object' || Array.isArray(dim) || Object.keys(dim).length !== 1 || !Object.hasOwn(dim, 'parameter')) return false;
+ const key = (dim as { parameter: unknown }).parameter, ex = doc.nodes[1];
+ // The changed Height parameter must have no second dimensional consumer.
+ return typeof key === 'string' && Object.hasOwn(doc.parameters, key) && positive(doc.parameters[key])
+  && ex?.kind === 'extrude' && typeof ex.height === 'object' && ex.height !== null && key !== ex.height.parameter;
+}
 const allowed = new Set(['format', 'schema', 'units', 'nextId', 'parameters', 'nodes', 'outputs']);
 function supported(doc: StudioDoc): boolean {
  if (Object.entries(doc).some(([key, value]) => value !== undefined && !allowed.has(key)) || doc.nodes.length !== 3) return false;
@@ -19,7 +27,7 @@ function supported(doc: StudioDoc): boolean {
  const entries = Object.entries(doc.outputs), key = bodyKeyFor(doc.nodes, 2, 'solid');
  if (entries.length !== 1 || entries[0][0] !== key || !same(entries[0][1], { node: 2, side: 'solid' })) return false;
  const finish = doc.nodes[2];
- return finish.kind === 'fillet' ? positive(finish.radius) && finish.radii === undefined : finish.kind === 'chamfer' && positive(finish.distance);
+ return finish.kind === 'fillet' ? positiveFinish(finish.radius, doc) && finish.radii === undefined : finish.kind === 'chamfer' && positiveFinish(finish.distance, doc);
 }
 function proofCopies(before: StudioDoc, next: StudioDoc): [StudioDoc, StudioDoc] | null {
  if (!supported(before) || !supported(next)) return null;
@@ -36,7 +44,7 @@ function proofCopies(before: StudioDoc, next: StudioDoc): [StudioDoc, StudioDoc]
  if (!positive(oldHeight) || !positive(newHeight) || oldHeight === newHeight) return null;
  const copy = (doc: StudioDoc, height: number): StudioDoc => ({ ...before, nodes: doc.nodes.map((node, i) => i === 1 ? { ...ex, height } : node), parameters: before.parameters });
  const oldProof = copy(before, oldHeight), newProof = copy(next, newHeight);
- // This also proves every remaining dimension is numeric and every node field is in the bounded box contract.
+ // This also proves remaining dimensions are numeric or independent constant finish bindings and every node field is in the bounded box contract.
  return isRectangleFinishHeightResize(oldProof, newProof, 1) ? [oldProof, newProof] : null;
 }
 export interface ParameterHeightFinishOptions {
