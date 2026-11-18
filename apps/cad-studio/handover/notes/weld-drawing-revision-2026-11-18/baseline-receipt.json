@@ -1,0 +1,25 @@
+{
+  "status": "FAIL",
+  "qualification": "Studio issued drawing consumes a public weld edit and preserves its revision warning.",
+  "observations": [
+    {
+      "volumes": [
+        330.6666666666663,
+        756
+      ],
+      "stale": 0
+    }
+  ],
+  "errors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Weld edit through dispatcher, not a dedicated weld editor UI."
+  ],
+  "visualReview": "Images directly inspected"
+}
