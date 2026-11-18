@@ -1,0 +1,39 @@
+{
+  "status": "FAIL",
+  "qualification": "Public occurrence input admission and actual Studio named variant geometry, with seed recovery.",
+  "limits": [
+    "No independent pattern-copy editing is added."
+  ],
+  "observations": [
+    {
+      "isError": false,
+      "content": "{\"ok\":true,\"did\":\"inputs: added Height\",\"variability\":{\"inputs\":[{\"name\":\"Height\",\"type\":\"number\",\"default\":20,\"drives\":[\"pat1-1.h\"]}],\"variants\":[],\"active\":null}}",
+      "unchanged": true,
+      "same": false
+    },
+    [
+      {
+        "id": "p1",
+        "h": 20,
+        "volume": 2000.0000000000002
+      },
+      {
+        "id": "pat1-1",
+        "h": 20,
+        "volume": 2000.0000000000002
+      },
+      {
+        "id": "pat1-2",
+        "h": 20,
+        "volume": 2000.0000000000002
+      }
+    ]
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": []
+}

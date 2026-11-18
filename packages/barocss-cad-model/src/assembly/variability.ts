@@ -46,6 +46,16 @@ function checkBinding(doc: StudioDoc, input: Input, b: Binding): Refusal[] {
   if (b.to === 'parameter' || b.to === 'mate') { if (input.type !== 'number') return wrong(b.to === 'parameter' ? 'a parameter' : 'a mate value'); }
   else if (b.to === 'suppress') { if (typeof b.when === 'boolean' ? input.type !== 'boolean' : input.type !== 'choice') return wrong('a suppression with this "when"'); }
   else if (input.type !== 'choice') return wrong('a component');
+  // Pattern copies are regenerated from the seed after variant application. A
+  // write to a copy would otherwise be accepted here and silently discarded.
+  if (b.to !== 'mate') {
+    const target = b.to === 'component' ? b.instance : b.part;
+    const copy = target === 'base' ? undefined : doc.instances?.find(i => i.id === target);
+    if (copy?.pattern) {
+      const seed = doc.instancePatterns?.find(p => p.id === copy.pattern!.id)?.seed;
+      return [problem('INPUT_TARGET', `${input.name}: ${target} is driven by pattern ${copy.pattern.id}; bind ${seed ? `its seed ${seed}` : 'the pattern seed'} instead of an occurrence`)];
+    }
+  }
   if (b.to === 'parameter') { const d = partDoc(doc, b.part); if (!d) return [problem('INPUT_TARGET', `${input.name}: no part ${b.part}`)]; if (!(b.parameter in d.parameters)) return [problem('INPUT_TARGET', `${input.name}: ${b.part} has no parameter ${b.parameter}`)]; }
   if (b.to === 'suppress') {
     const d = partDoc(doc, b.part); if (!d) return [problem('INPUT_TARGET', `${input.name}: no part ${b.part}`)];

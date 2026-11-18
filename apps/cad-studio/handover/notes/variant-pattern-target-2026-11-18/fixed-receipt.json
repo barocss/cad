@@ -1,0 +1,40 @@
+{
+  "status": "PASS",
+  "qualification": "Public occurrence input admission and actual Studio named variant geometry, with seed recovery.",
+  "limits": [
+    "No independent pattern-copy editing is added."
+  ],
+  "observations": [
+    {
+      "isError": true,
+      "content": "{\"ok\":false,\"error\":\"[INPUT_TARGET] Height: pat1-1 is driven by pattern pat1; bind its seed p1 instead of an occurrence\",\"kept\":\"the assembly is unchanged\"}",
+      "unchanged": true,
+      "same": true
+    },
+    [
+      {
+        "id": "p1",
+        "h": 35,
+        "volume": 3500.0000000000005
+      },
+      {
+        "id": "pat1-1",
+        "h": 35,
+        "volume": 3500.0000000000005
+      },
+      {
+        "id": "pat1-2",
+        "h": 35,
+        "volume": 3500.0000000000005
+      }
+    ]
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": []
+}
