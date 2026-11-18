@@ -152,12 +152,26 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
   const exportQuote = async () => {
     if (!fresh) { onNotice({ title: 'Not written yet', hint: busy ? 'The part is still evaluating: export once it is up to date.' : 'The part did not evaluate: fix it first.', detail: '' }); return; }
     if (!massReady) { onNotice({ title: 'Not written yet', hint: 'The part\'s masses are still being worked out: export in a moment.', detail: '' }); return; }
+    const owner = { doc, shown: model.shown, evaluated, name: fileName };
+    const owns = () => {
+      const next = stepLatest.current, refs = next.current;
+      return next.model.fresh && !next.model.busy && next.model.massReady
+        && refs.doc.current === owner.doc && refs.shown.current === owner.shown && refs.evaluated.current === owner.evaluated
+        && next.model.doc === owner.doc && next.model.shown === owner.shown && next.model.evaluated === owner.evaluated
+        && (refs.name?.current ?? next.fileName) === owner.name;
+    };
+    if (!owns()) return;
     // Match the shown decoration and evaluated feature prefix that own these bodies.
     const captured = { ...model.shown, nodes: evaluated.nodes, outputs: evaluated.outputs };
-    const q = await quotePackage(captured, bodies, async d => evaluateDoc(d, 0), { name: fileName });
-    if ('error' in q) { onNotice({ title: 'No quote package', hint: q.error, detail: '' }); return; }
-    downloadBytes(q.zip, `${fileName}-quote.zip`, 'application/zip');
-    onNotice({ title: q.manifest.complete ? 'Quote package written' : `Quote package written: ${q.manifest.open.length} open`, hint: q.manifest.complete ? 'STEP, the moulding report and the request — no price: the moulder quotes it.' : q.manifest.open.join(' · '), detail: '' });
+    try {
+      const q = await quotePackage(captured, bodies, async d => evaluateDoc(d, 0), { name: owner.name });
+      if (!owns()) return;
+      if ('error' in q) { onNotice({ title: 'No quote package', hint: q.error, detail: '' }); return; }
+      downloadBytes(q.zip, `${owner.name}-quote.zip`, 'application/zip');
+      onNotice({ title: q.manifest.complete ? 'Quote package written' : `Quote package written: ${q.manifest.open.length} open`, hint: q.manifest.complete ? 'STEP, the moulding report and the request — no price: the moulder quotes it.' : q.manifest.open.join(' · '), detail: '' });
+    } catch (error) {
+      if (owns()) onNotice({ title: 'No quote package', hint: error instanceof Error ? error.message : String(error), detail: '' });
+    }
   };
 
   /** 3MF (AM5, D76): every shown body and instance, its material and colours, turned the way it prints when chosen. */

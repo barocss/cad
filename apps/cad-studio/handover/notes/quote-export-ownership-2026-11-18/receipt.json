@@ -1,0 +1,72 @@
+{
+  "baseline": {
+    "status": "FAIL",
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "observations": [
+      {
+        "downloads": [
+          "same-part-quote.zip"
+        ],
+        "compression": {
+          "runs": [
+            {
+              "held": 2057,
+              "consumed": 2057,
+              "error": null,
+              "injectedFailure": false,
+              "drained": true
+            }
+          ],
+          "notices": [
+            "Quote package written: 3 openthe material is not set (set_material, or the brief's stated material) \u00b7 the quantity is not stated (the brief's quantity, or \"quantity\") \u00b7 wall-material unknown: b1: its material is not set"
+          ]
+        }
+      }
+    ],
+    "sourceFrozenCount": 1075
+  },
+  "fixed": {
+    "status": "PASS",
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "observations": [
+      {
+        "downloads": [],
+        "compression": {
+          "runs": [
+            {
+              "held": 2057,
+              "consumed": 2057,
+              "error": null,
+              "injectedFailure": false,
+              "drained": true
+            }
+          ],
+          "notices": []
+        }
+      }
+    ],
+    "sourceFrozenCount": 1075
+  },
+  "currentOracle": {
+    "status": "PASS",
+    "stepHeight": 30.0,
+    "request": {
+      "size": [
+        60,
+        40,
+        30
+      ],
+      "volume": 72000,
+      "mass": null,
+      "bodies": 1
+    }
+  }
+}
