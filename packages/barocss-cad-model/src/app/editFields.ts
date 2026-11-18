@@ -1,3 +1,4 @@
+import { flangeMeasureEdit } from './flangeMeasureEdit';
 import { flangePositionEdit } from './flangePositionEdit';
 import { flangeRadiusEdit } from './flangeRadiusEdit';
 import { splitNormalComponentsField } from './splitNormalComponents';
@@ -1008,6 +1009,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       type F = Extract<ModelNode, { kind: 'sheet-flange' }>;
       const radius = flangeRadiusEdit(scope?.doc, nodes, i); if (radius) out.push(radius);
       const position = flangePositionEdit(scope?.doc, nodes, i); if (position) out.push(position);
+      const measure = flangeMeasureEdit(scope?.doc, nodes, i); if (measure) out.push(measure);
       number('length', 'Length', 'mm', n => num((n as F).length), (n, v) => ({ ...(n as F), length: v }));
       number('angle', 'Angle', '°', n => (n as F).angle ?? 90, (n, v) => ({ ...(n as F), angle: v }));
       if (node.offsets) [0, 1].forEach(k => number('o' + k, k ? 'Offset at end' : 'Offset at start', 'mm', n => num((n as F).offsets![k]), (n, v) => { const o = [...(n as F).offsets!] as [Dim, Dim]; o[k] = v; return { ...(n as F), offsets: o }; }));

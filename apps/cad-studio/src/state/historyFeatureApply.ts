@@ -1,3 +1,5 @@
+import { isFlangeMeasureChange } from '@barocss/cad-model/app/flangeMeasureEdit';
+import { proveFlangeMeasureChange } from './flangeMeasureHistory';
 import { isSheetReliefThicknessChange, admitSheetReliefThicknessChange, proveSheetReliefThicknessChange } from './sheetReliefThicknessHistory';
 import { isFlangePositionChange } from '@barocss/cad-model/app/flangePositionEdit';
 import { proveFlangePositionChange } from './flangePositionHistory';
@@ -55,6 +57,11 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     const flangePositionFailure = { title: 'Flange position not applied', hint: 'Apply only Position on the unchanged full-width rectangular-sheet Flange. Its original top edge must be verified. Apply Length, Angle or Bend radius separately.', detail: 'The original document and sheet geometry are unchanged.' };
     if (flangePositionChanged && !isFlangePositionChange(doc, { ...doc, nodes }, editNode)) return Promise.resolve(flangePositionFailure);
     const flangePositionSource = flangePositionChanged ? canonical(doc) : '', flangePositionDraft = flangePositionChanged ? canonical(nodes) : '';
+    const flangeMeasureChanged = oldFlange?.kind === 'sheet-flange' && newFlange?.kind === 'sheet-flange'
+      && (oldFlange.measure ?? 'outer') !== (newFlange.measure ?? 'outer');
+    const flangeMeasureFailure = { title: 'Flange length measurement not applied', hint: 'Apply only Length to on the unchanged full-width rectangular-sheet Flange. Its original top edge must be verified. Apply Length, Angle, Position or Bend radius separately.', detail: 'The original document and sheet geometry are unchanged.' };
+    if (flangeMeasureChanged && !isFlangeMeasureChange(doc, { ...doc, nodes }, editNode)) return Promise.resolve(flangeMeasureFailure);
+    const flangeMeasureSource = flangeMeasureChanged ? canonical(doc) : '', flangeMeasureDraft = flangeMeasureChanged ? canonical(nodes) : '';
     const reliefThicknessChanged = isSheetReliefThicknessChange(doc, { ...doc, nodes }, editNode);
     const reliefThicknessFailure = {title: 'Thickness not applied', hint: 'Apply only numeric Thickness on the unchanged plain sheet with one Corner relief. Its original corner must be verified.', detail: 'The original sheet, relief and references are unchanged.'};
     if (reliefThicknessChanged && !admitSheetReliefThicknessChange(doc, { ...doc, nodes }, editNode)) return Promise.resolve(reliefThicknessFailure);
@@ -94,8 +101,9 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     const current = () => ownsDraft() && owner.document() === doc && owner.scope() === scope
       && owner.worker() === worker && owner.open() === open
       && (!reliefThicknessChanged || canChangeDocument() && canonical(doc) === reliefThicknessSource && canonical(nodes) === reliefThicknessDraft)
+      && (!flangeMeasureChanged || canonical(doc) === flangeMeasureSource && canonical(nodes) === flangeMeasureDraft)
       && (!flangePositionChanged || canonical(doc) === flangePositionSource && canonical(nodes) === flangePositionDraft)
-      && (!(heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || reliefThicknessChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
+      && (!(heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeMeasureChanged || reliefThicknessChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
     return (async () => {
       if (reliefThicknessChanged) {
         if (!current()) return;
@@ -123,6 +131,16 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
           if (!parent.ok || parent.revision !== parentRevision || !proveFlangePositionChange(doc, next, parent.bodies)) return flangePositionFailure;
           request = nextRevision();
         } catch { if (current()) return flangePositionFailure; return; }
+      }
+      if (flangeMeasureChanged) {
+        if (!current()) return;
+        try {
+          const parentRevision = nextRevision();
+          const parent = await engine.part(prefixDoc(doc, editNode), parentRevision, 'refs');
+          if (!current()) return;
+          if (!parent.ok || parent.revision !== parentRevision || !proveFlangeMeasureChange(doc, next, parent.bodies)) return flangeMeasureFailure;
+          request = nextRevision();
+        } catch { if (current()) return flangeMeasureFailure; return; }
       }
       if (radiusModeChanged) {
         if (!current()) return;
@@ -177,7 +195,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
         } catch { if (current()) return failure; return; }
       }
       const reply = await engine.evaluate(next, request);
-      if (!reply || !current() || (heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || reliefThicknessChanged) && reply.revision !== request) return;
+      if (!reply || !current() || (heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeMeasureChanged || reliefThicknessChanged) && reply.revision !== request) return;
       if (reply.ok) {
         if (!resize) {
           const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated
