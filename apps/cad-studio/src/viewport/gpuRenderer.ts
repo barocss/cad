@@ -534,6 +534,9 @@ export class GpuRenderer implements ViewRenderer {
    * and the placed parts' surfaces, edges and rings, their surfaces capped; nothing else (the ground, direct objects,
    * regions, rings, props).
    */
+  private sectionExcludes(id: string): boolean {
+    return this.clip?.planes.length === 1 && !!this.clip.excludedInstances?.includes(id);
+  }
   private applyClip(): void {
     if (!this.clip) return;
     const bodies = this.clip.bodies, cut = new Set<Mesh>(), spacing = this.clip.hatch ?? 0;
@@ -542,8 +545,9 @@ export class GpuRenderer implements ViewRenderer {
     let turn = 0;
     for (const b of this.bodies) { b.surface.cap = true; b.surface.capHatch = spacing > 0 && bodies ? { angle: hatchAngle(turn), spacing } : null; turn++; }
     for (const it of this.instances) {
-      for (const m of [...it.surfaces, ...it.edges, ...(it.threads ? [it.threads] : [])]) { m.clipped = true; cut.add(m); }
-      for (const m of it.surfaces) { m.cap = true; m.capHatch = spacing > 0 ? { angle: hatchAngle(turn), spacing } : null; turn++; }
+      const clipped = !this.sectionExcludes(it.id);
+      for (const m of [...it.surfaces, ...it.edges, ...(it.threads ? [it.threads] : [])]) { m.clipped = clipped; cut.add(m); }
+      for (const m of it.surfaces) { m.cap = clipped; m.capHatch = spacing > 0 && clipped ? { angle: hatchAngle(turn), spacing } : null; turn++; }
     }
     // (A curved face's silhouette cut as its surface is — G8: left out here, it was set false and back each frame.)
     if (this.silhouettes) for (const [surface, entry] of this.silhouettes) if (entry.line) { entry.line.clipped = surface.clipped; cut.add(entry.line); }
@@ -897,7 +901,7 @@ export class GpuRenderer implements ViewRenderer {
     for (const d of this.direct) { const b = d.mesh.bounds; if (b) grow(min, max, b); }
     for (const it of this.instances) for (const [index, mesh] of it.surfaces.entries()) {
       if (visibleOnly && it.looks[index]?.hidden) continue;
-      const box = c ? clipBox(mesh.bounds, c) : mesh.bounds;
+      const box = c && !this.sectionExcludes(it.id) ? clipBox(mesh.bounds, c) : mesh.bounds;
       if (box) grow(min, max, box);
     }
     return min[0] <= max[0] ? { min, max } : null;

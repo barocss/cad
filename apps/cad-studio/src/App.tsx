@@ -43,6 +43,7 @@ import { type SectionPick, useViewportPicking, type ViewportMenu } from './viewp
 import { isOutlinePickIssue, studioSketchViewportActions } from './viewport/studioSketchViewportActions';
 import { sewPreviewDirect } from './viewport/sewPreviewDirect';
 import { useSectionState } from './viewport/useSectionState';
+import { useSectionExclusion, sectionExclusionReason } from './viewport/useSectionExclusion';
 import { useSectionEvaluation } from './viewport/useSectionEvaluation';
 import { useSectionDisplay } from './viewport/useSectionDisplay';
 import { useOwnedScalarHover } from './viewport/useOwnedScalarHover';
@@ -844,6 +845,9 @@ export function App() {
   const [fov, setFov] = useState(32);
   const { sectionDragFrom, sectionDebug, setSectionDebug, sectionLive, section, setSection, dragSection, sectionFacePick, setSectionFacePick,
     sectionFacePickRef, cancelSectionFacePick, sectionExact, setSectionExact, sectionRef } = useSectionState(viewBackend);
+  const sectionExclusion = useSectionExclusion(doc, section);
+  const excludedSectionInstances = sectionExclusion.ids;
+
   const resetDocumentSection = useCallback(() => {
     lanes.cancel('section');
     setSection(null);
@@ -1082,6 +1086,20 @@ export function App() {
   useEffect(() => { if (claimBodies.current) { claimBodies.current = false; setBodiesFor(evaluated); } }, [evaluated]);
   const fresh = bodiesFor === evaluated;
   const modelUnavailable = !fresh && !busy;
+  const sectionExclusionControls = {
+    ids: excludedSectionInstances,
+    labels: excludedSectionInstances.map(id => ({ id, name: doc.instances?.find(i => i.id === id)?.name ?? id })),
+    selectionReason: (!fresh || busy) ? 'Wait for a current model before excluding instances.' : sectionExclusionReason(doc, instanceSel),
+    excludeSelected: () => {
+      if (docNow.current !== doc || sectionRef.current !== section || section?.mode !== 'plane' || !fresh || busy) return;
+      const reason = sectionExclusionReason(doc, instanceSel);
+      if (reason) { setToast({ title: 'Cannot exclude this selection', hint: reason, detail: '' }); return; }
+      sectionExclusion.set([...excludedSectionInstances, ...instanceSel]);
+    },
+    restore: (id: string) => { if (docNow.current === doc && sectionRef.current === section) sectionExclusion.set(excludedSectionInstances.filter(x => x !== id)); },
+    clear: () => { if (docNow.current === doc && sectionRef.current === section) sectionExclusion.set([]); },
+  };
+
   useEffect(() => {
     evaluationEvidence.settle(doc, evaluated, bodiesFor, bodies);
   }, [doc, evaluated, bodiesFor, bodies]);
@@ -1472,7 +1490,7 @@ export function App() {
   useEffect(() => { if (import.meta.env.DEV) (window as unknown as { __studioSetExplode: (k: number) => void }).__studioSetExplode = setExplode; }, []);
   const [instDrag, setInstDrag] = useState<{ id: string; drag: InstanceDrag; settling: boolean; key: string } | null>(null);
   // (R1c (3a): the placed parts as they are shown — placed, posed, exploded, dragged and sectioned.)
-  const { instancesPlaced, instancePoseMap, cpuInstanceSection, instancesShown } = useScenePoses(doc, sceneInstanceBodies, bodies, jointFk, explode, section, sketch, gpuSection, instDrag);
+  const { instancesPlaced, instancePoseMap, cpuInstanceSection, instancesShown } = useScenePoses(doc, sceneInstanceBodies, bodies, jointFk, explode, section, sketch, gpuSection, instDrag, excludedSectionInstances);
   // Roadmap 10 ⑥: the Steps panel. While it is shown the viewport leaves the waiting parts out (or draws them faded), highlights the step's own
   // parts and takes the step's explode scale and view; closing it puts the display back (all parts, the explode it had, the camera as it is).
   const stepsShown = stepsOpen && !bomOpen && !libraryOpen && !paramsOpen && !variantsOpen && !rebuildOpen && !rendering && !drawing && !sketch && !active;
@@ -2245,6 +2263,7 @@ export function App() {
   const { deleteNode, separate, reorder, toggleSuppress, cascade, setCascade, deleteCascade, deleteSelection } = featureHistory;
   /** A sketch on the section plane holding the exact section's cut outlines (its cut faces' outlines), the section closed. */
   const sketchSection = () => {
+    if (excludedSectionInstances.length) { setToast({ title: 'Restore section instances first', hint: 'Selective clipping is display-only; restore excluded instances before creating a section sketch.', detail: '' }); return; }
     // (One plane only: a sketch lies on one.)
     if (!section || section.planes.length !== 1) return;
     const exact = sectionExactShown ? sectionExact!.bodies : null;
@@ -2784,12 +2803,12 @@ export function App() {
     previewBodies, viewport, engine, revision, lanes, mouldResult, setMouldResult, mouldSpread, halvesShownRef, viewBackend });
   const mapScope = mapSourceScope({ shownBodies, sectionBodies, sectionExactShown, gpuSection });
   const { sectionBox, sectionHatchOn, setSectionHatchOn, hatchStep, sectionClip, sectionLiveView, sectionHatchLines } = useSectionDisplay({
-    bodies, instancesPlaced, section, sketch, gpuSection, shownBodies, sectionBodies, sectionExactShown, sectionLive, active, dragSection });
+    bodies, instancesPlaced, section, sketch, gpuSection, shownBodies, sectionBodies, sectionExactShown, sectionLive, active, dragSection, excludedInstances: excludedSectionInstances });
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     const w = window as unknown as { __studioSection: () => unknown; __studioSectionDebug: (d: { hold: boolean; cpu: boolean }) => void };
     // (G19: the mode and planes, and the exact section's kept volume once it is shown.)
-    w.__studioSection = () => ({ gpu: gpuSection, exact: sectionExactShown, clip: sectionClip, hatch: sectionHatchOn ? { spacing: hatchStep, lines: sectionHatchLines?.map(h => ({ body: h.body, segments: h.segments.length / 6 })) ?? null } : null, bodies: shownBodies.length, mode: section?.mode ?? null, planes: section?.planes ?? null, volume: sectionExactShown ? sectionExact!.bodies.reduce((v, b) => v + meshVolume(b.mesh), 0) : null, shownVolume: shownBodies.reduce((v, b) => v + meshVolume(b.mesh), 0),
+    w.__studioSection = () => ({ gpu: gpuSection, excludedInstances: excludedSectionInstances, exact: sectionExactShown, clip: sectionClip, hatch: sectionHatchOn ? { spacing: hatchStep, lines: sectionHatchLines?.map(h => ({ body: h.body, segments: h.segments.length / 6 })) ?? null } : null, bodies: shownBodies.length, mode: section?.mode ?? null, planes: section?.planes ?? null, volume: sectionExactShown ? sectionExact!.bodies.reduce((v, b) => v + meshVolume(b.mesh), 0) : null, shownVolume: shownBodies.reduce((v, b) => v + meshVolume(b.mesh), 0),
       // (G19.5: each shown body's own body, and the Render workspace's offsets on them, by shown body's key.)
       shownKeys: shownBodies.map(b => b.key), sources: shownBodies.map(b => (shownBodies === sectionBodies && sectionExactShown ? sectionExact!.from.get(b.key) : null) ?? b.key), offsets: animatedOffsets ? [...animatedOffsets].map(([i, o]) => [shownBodies[i]?.key, o]) : null,
       historyAlignBounds: alignPreviewBodies === shownBodies && editNode !== null
@@ -3013,7 +3032,7 @@ export function App() {
   // Roadmap 10 ①: each placed part's bodies in the definition's colours (or this occurrence's own), face colours and hidden bodies.
   const instancesDrawn = useMemo(() => {
     if (section) return cpuInstanceSection && sectionHatchOn
-      ? instancesShown.map(it => ({ ...it, hatch: sectionHatch(it.bodies, sectionPlanes(section), hatchStep) }))
+      ? instancesShown.map(it => ({ ...it, hatch: excludedSectionInstances.includes(it.id) ? [] : sectionHatch(it.bodies, sectionPlanes(section), hatchStep) }))
       : instancesShown;
     if (rendering || previewBodies) return instancesShown;
     return instancesShown.map(it => {
@@ -3021,7 +3040,7 @@ export function App() {
       if (t) for (const b of it.bodies) if (!instanceLooks.get(it.id)?.get(b.key)?.hidden) out.push(...threadLines(t, b.mesh));
       return out.length ? { ...it, threads: new Float32Array(out) } : it;
     });
-  }, [instancesShown, doc.instances, rendering, section, previewBodies, cpuInstanceSection, sectionHatchOn, hatchStep, instanceLooks]);
+  }, [instancesShown, doc.instances, rendering, section, previewBodies, cpuInstanceSection, sectionHatchOn, hatchStep, instanceLooks, excludedSectionInstances]);
 
   const instancesLooked = useMemo(() => instancesDrawn.map(it => { const looks = instanceLooks.get(it.id); return looks ? { ...it, looks } : it; }), [instancesDrawn, instanceLooks]);
   // (Roadmap 10 ⑥: the parts the shown step has not introduced yet are left out of the view — display only, the document is untouched.)
@@ -3747,7 +3766,7 @@ export function App() {
         display={{ displayOpen, setDisplayOpen, displayMode, setDisplayMode, effectiveDisplayMode, displayScopeReason, displayModeReason, displayModeNotice,
           clearDisplayModeFailure: () => setDisplayModeFailure(null), isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection }}
         view={{ ortho, sketching: !!sketch, wheelZoom: modelWheelZoom, sketchReopenCamera, fitActiveSketch: sketchActions.fitActiveSketch, ao, setAo, theme, setTheme, rendering, printing: !!printing, viewBackend }}
-        section={{ section, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye }}
+        section={{ section, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye, sectionExclusion: sectionExclusionControls }}
         analysis={{ analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread }}
         picking={{ pickFilter, setPickFilter, snapStep, setSnapStep, setSelection }} explodeStore={explodeStore} />
 

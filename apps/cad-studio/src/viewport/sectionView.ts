@@ -220,24 +220,38 @@ export function sectionedBodies(bodies: readonly BodyResult[], s: Section, gpu: 
  * The placed instances in the section: on the GPU the list itself, as placed (their pose matrices on their meshes, the
  * planes in world space cutting them where they are shown); on the CPU moved copies, clipped and capped.
  */
-export function sectionedInstances<T extends Placed>(instances: T[], poses: ReadonlyMap<string, Float64Array>, s: Section, gpu: boolean): T[] | Placed[] {
+export function sectionedInstances<T extends Placed>(instances: T[], poses: ReadonlyMap<string, Float64Array>, s: Section, gpu: boolean, excludedInstances?: readonly string[]): T[] | Placed[] {
   // (The same list: nothing is made again while the planes move.)
   if (gpu) return instances;
   return instances.map(i => {
     const M = poses.get(i.id), m = M && motionOf(M);
+    const excluded = s.planes.length === 1 && !!excludedInstances?.includes(i.id);
     const bodies: BodyResult[] = [], sourceBodies: number[] = [], sourceFaces: number[][] = [], sourceEdges: number[][] = [];
     i.bodies.forEach((b, bi) => {
-      const mesh = clipMeshSection(m ? posedBody(b, m).mesh : b.mesh, s, 'section');
+      const world = m ? posedBody(b, m).mesh : b.mesh;
+      const mesh = excluded ? world : clipMeshSection(world, s, 'section');
       if (!mesh) return;
       const priorFaces = i.sourceFaces ? i.sourceFaces[bi] ?? [] : undefined, priorEdges = i.sourceEdges ? i.sourceEdges[bi] ?? [] : undefined;
-      const faces = sectionFaceSources(b.mesh, mesh, priorFaces);
+      // An uncut copy retains ordinals even if native names are ambiguous. Existing missing authority stays missing.
+      const faces = excluded
+        ? uncutSources(mesh.faces, priorFaces, f => f.id !== 'section-cap')
+        : sectionFaceSources(b.mesh, mesh, priorFaces);
       bodies.push({ ...b, mesh });
       sourceBodies.push(sourceIndex(i.sourceBodies, bi));
       sourceFaces.push(faces);
-      sourceEdges.push(sectionEdgeSources(b.mesh, mesh, faces, priorFaces, priorEdges));
+      sourceEdges.push(excluded
+        ? uncutSources(mesh.edges, priorEdges)
+        : sectionEdgeSources(b.mesh, mesh, faces, priorFaces, priorEdges));
     });
     return { id: i.id, bodies, sourceBodies, sourceFaces, sourceEdges };
   });
+}
+
+/** Pose does not renumber uncut topology; preserve sparse and pre-existing provenance without name lookup. */
+function uncutSources<T extends { index: number }>(items: readonly T[], prior?: readonly number[], native: (item: T) => boolean = () => true): number[] {
+  const out = Array.from({ length: items.reduce((max, item) => Math.max(max, item.index), -1) + 1 }, () => -1);
+  for (const item of items) if (native(item)) out[item.index] = sourceIndex(prior, item.index);
+  return out;
 }
 
 /** A missing optional map is identity; a missing/invalid entry in an existing map has no native authority. */

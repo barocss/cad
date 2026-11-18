@@ -15,7 +15,7 @@ import type { SketchState } from '@barocss/cad-model/sketch/types';
  */
 export function useScenePoses(doc: StudioDoc, instanceBodies: ReadonlyMap<string, { key: string; sourceKey: string; inst: PartInstance; bodies: BodyResult[] }>, bodies: BodyResult[],
   jointFk: Parameters<typeof instancePoses>[2], explode: number, section: Section | null, sketch: SketchState | null, gpuSection: boolean,
-  instDrag: { id: string; drag: InstanceDrag; settling: boolean; key: string } | null) {
+  instDrag: { id: string; drag: InstanceDrag; settling: boolean; key: string } | null, excludedInstances?: readonly string[]) {
   const instancesPlaced = useMemo(() => (doc.instances ?? []).filter(i => !i.hidden && instanceBodies.has(i.id)).map(i => { const b = instanceBodies.get(i.id)!, p = placementOf(b.inst); return { id: i.id, bodies: b.bodies, placement: poseMatrix({ R: Float64Array.from(p.m), t: Float64Array.from(p.t) }, undefined) }; }), [doc.instances, instanceBodies]);
   // (G1: posed and exploded by a matrix per instance on its meshes, not by moved copies of them: the meshes are made once.)
   const instancePoseMap = useMemo(() => instancePoses(bodies, instancesPlaced, jointFk, explode), [instancesPlaced, explode, bodies, jointFk]);
@@ -31,7 +31,7 @@ export function useScenePoses(doc: StudioDoc, instanceBodies: ReadonlyMap<string
   // (The flow's bounds hook, __studioInstanceBounds, is SceneViewport's: it follows the pose in each frame, R1c (3b).)
   // The section view cuts the placed parts too: on WebGPU by the clip plane where their matrices put them (G2), on WebGL2
   // as moved copies clipped and capped.
-  const instancesShown = useMemo(() => !section || sketch ? instancesPlaced : sectionedInstances(instancesPlaced, instanceSectionPoses, section, gpuSection), [instancesPlaced, instanceSectionPoses, section, sketch, gpuSection]);
+  const instancesShown = useMemo(() => !section || sketch ? instancesPlaced : sectionedInstances(instancesPlaced, instanceSectionPoses, section, gpuSection, excludedInstances), [instancesPlaced, instanceSectionPoses, section, sketch, gpuSection, excludedInstances]);
   // (The CPU's clipped copies are already moved; otherwise the meshes take the matrices.)
   const instanceTransforms = cpuInstanceSection ? undefined : instancePoseMap;
   return { instancesPlaced, instancePoseMap, cpuInstanceSection, instanceSectionPoses, instancesShown, instanceTransforms };

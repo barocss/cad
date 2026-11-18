@@ -11,6 +11,15 @@ import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Icon } from './atoms';
 
+export interface SectionExclusionControls {
+  ids: readonly string[];
+  labels: readonly { id: string; name: string }[];
+  selectionReason: string | null;
+  excludeSelected(): void;
+  restore(id: string): void;
+  clear(): void;
+}
+
 type Box = { min: Vec3; max: Vec3 };
 const AXES = ['x', 'y', 'z'] as const;
 const dot = (a: readonly number[], b: readonly number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -68,9 +77,12 @@ export function sectionHandles(section: Section, box: Box, set: (f: (s: Section 
  * The bar. `box`: the part's and its placed parts' box; `facePick`: the plane a face click sets (its index) or null;
  * `onSketch`: Sketch the section (one plane only); `eye`: where the camera is (a cut-out's default corner faces it).
  */
-export function SectionBar({ section, setSection, hatch, setHatch, box, facePick, setFacePick, onSketch, eye, onProblem }: {
+export function SectionBar({ section, setSection, hatch, setHatch, box, facePick, setFacePick, onSketch, eye, onProblem, sectionExclusion }: {
+  sectionExclusion?: SectionExclusionControls;
   section: Section; setSection(f: (s: Section | null) => Section | null): void; hatch: boolean; setHatch(on: boolean): void; box: Box; facePick: number | null; setFacePick(i: number | null): void; onSketch(): void; eye(): Vec3 | null; onProblem(reason: string | null): void;
 }) {
+  const excluded = !!sectionExclusion?.ids.length;
+  const exclusionReason = 'Restore all section instances before changing section mode or sketching the section.';
   const set = (planes: (SectionPlane | null)[], mode = section.mode) => {
     const valid = planes.filter(p => p !== null);
     if (!valid.length || valid.length !== planes.length || valid.some(p => {
@@ -86,6 +98,7 @@ export function SectionBar({ section, setSection, hatch, setHatch, box, facePick
   };
   const mode = (m: Section['mode']) => {
     if (m === section.mode) return;
+    if (excluded) { onProblem(exclusionReason); return; }
     if (m === 'box') return set(boxSection(box.min, box.max).planes, 'box');
     // (G20: the corner facing the camera taken out through the box's middle, along X and Y.)
     if (m === 'cutout') return set(cutoutCorner(box, eye()), 'cutout');
@@ -105,11 +118,21 @@ export function SectionBar({ section, setSection, hatch, setHatch, box, facePick
   return <div className="card section-bar" role="group" aria-label="Section">
     <span className="muted">Section</span>
     <ToggleGroup type="single" className="seg" aria-label="Section mode" value={section.mode} onValueChange={v => { if (v) mode(v as Section['mode']); }}>{(['plane', 'box', 'planes', 'cutout'] as const).map(m =>
-      <ToggleGroupItem key={m} value={m} className={section.mode === m ? 'on' : ''}
+      <ToggleGroupItem key={m} value={m} disabled={excluded && m !== section.mode} className={section.mode === m ? 'on' : ''}
         {...(m === 'box' ? { 'data-tip': 'Section box', 'data-tip-desc': "Drag a face's arrow to move that side of the section box.", 'data-tip-focus': '' } : m === 'cutout' ? { 'data-tip': 'Cut-out', 'data-tip-desc': 'Take a corner out: a quarter (two planes) or an eighth (three), the rest kept' } : {})}>{m === 'plane' ? 'Plane' : m === 'box' ? 'Box' : m === 'planes' ? 'Planes' : 'Cut-out'}</ToggleGroupItem>)}</ToggleGroup>
     {section.mode === 'plane' && <>{axisButtons(0)}{faceButton(0)}{flip(0)}
       {section.planes[0].face && <span className="mono muted" aria-label="Face-derived section position">{label(section.planes[0])}</span>}
-      <Button size="sm" variant="ghost" aria-label="Sketch the section" data-tip="Sketch the section" data-tip-desc="Copy the visible cut outlines into an independent sketch" onClick={onSketch}><Icon name="cad-sketch" small /></Button></>}
+      <Button size="sm" variant="ghost" aria-label="Sketch the section" data-tip="Sketch the section" data-tip-desc="Copy the visible cut outlines into an independent sketch" disabled={excluded} onClick={() => { if (!excluded) onSketch(); }}><Icon name="cad-sketch" small /></Button></>}
+    {section.mode === 'plane' && sectionExclusion && <div role="group" aria-label="Section instance exclusions">
+      <Button size="sm" variant="ghost" disabled={sectionExclusion.selectionReason !== null} onClick={() => { if (sectionExclusion.selectionReason === null) sectionExclusion.excludeSelected(); }}>Exclude selected instances</Button>
+      {sectionExclusion.selectionReason && <p className="small muted" role="status">{sectionExclusion.selectionReason}</p>}
+      {sectionExclusion.ids.map(id => <div key={id} className="small">
+        <span>{sectionExclusion.labels.find(item => item.id === id)?.name ?? id} ({id})</span>{' '}
+        <Button size="sm" variant="ghost" aria-label={`Restore section for ${id}`} onClick={() => sectionExclusion.restore(id)}>Restore section</Button>
+      </div>)}
+      {excluded && <><Button size="sm" variant="ghost" onClick={sectionExclusion.clear}>Restore all section instances</Button><p className="small muted" role="status">{exclusionReason}</p></>}
+      <p className="small muted">Display only; cleared on model edits or document changes.</p>
+    </div>}
     {section.mode === 'box' && <>
       <Button size="sm" variant="ghost" aria-label="Reset the section box" data-tip="Reset the box" data-tip-desc="The box round the part, a tenth in from each face" onClick={() => set(boxSection(box.min, box.max).planes, 'box')}><Icon name="restart_alt" small /></Button></>}
     {(section.mode === 'planes' || section.mode === 'cutout') && <>{section.planes.map((p, i) => <span key={i} className="section-plane" aria-label={`Section plane ${i + 1}`}>

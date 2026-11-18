@@ -7,11 +7,11 @@ import type { useSectionState } from './useSectionState';
 import type { SketchState } from './Viewport';
 import { hatchSpacing, sectionPlanes, sectionHatch, type Section } from './sectionView';
 import { sectionHandles } from '../ui/SectionBar';
-export function useSectionDisplay({ bodies, instancesPlaced, section, sketch, gpuSection, shownBodies, sectionBodies, sectionExactShown, sectionLive, active, dragSection }: {
+export function useSectionDisplay({ bodies, instancesPlaced, section, sketch, gpuSection, shownBodies, sectionBodies, sectionExactShown, sectionLive, active, dragSection, excludedInstances }: {
   bodies: BodyResult[]; instancesPlaced: ReturnType<typeof useScenePoses>['instancesPlaced']; section: Section | null;
   sketch: SketchState | null; gpuSection: boolean; shownBodies: BodyResult[]; sectionBodies: BodyResult[] | null;
   sectionExactShown: boolean; sectionLive: ReturnType<typeof useSectionState>['sectionLive']; active: Active | null;
-  dragSection: ReturnType<typeof useSectionState>['dragSection'];
+  dragSection: ReturnType<typeof useSectionState>['dragSection']; excludedInstances?: readonly string[];
 }) {
   // The part's and its placed parts' box: the section's handles and planes in it (G19), its hatch's spacing (G19.3).
   const sectionBox = useMemo(() => {
@@ -23,12 +23,12 @@ export function useSectionDisplay({ bodies, instancesPlaced, section, sketch, gp
   // WebGL2's clipped caps and on the exact section's cut faces (either renderer).
   const [sectionHatchOn, setSectionHatchOn] = useState(true);
   const hatchStep = useMemo(() => hatchSpacing(sectionBox), [sectionBox]);
-  const sectionClip = useMemo(() => section && !sketch && gpuSection ? { planes: sectionPlanes(section), bodies: shownBodies === sectionBodies && !sectionExactShown, hatch: sectionHatchOn ? hatchStep : null, cutout: section.mode === 'cutout' } : null, [section, sketch, gpuSection, shownBodies, sectionBodies, sectionExactShown, sectionHatchOn, hatchStep]);
+  const sectionClip = useMemo(() => section && !sketch && gpuSection ? { planes: sectionPlanes(section), excludedInstances: section.planes.length === 1 ? excludedInstances : undefined, bodies: shownBodies === sectionBodies && !sectionExactShown, hatch: sectionHatchOn ? hatchStep : null, cutout: section.mode === 'cutout' } : null, [section, sketch, gpuSection, shownBodies, sectionBodies, sectionExactShown, sectionHatchOn, hatchStep, excludedInstances]);
   // (R1c (3c): a dragged plane's clip and handles, made as the App's are — SceneViewport draws them in each frame of the
   // drag on WebGPU, the App not rendering. On WebGL2 the App does, so there is none.)
   const sectionLiveView = gpuSection && !sketch ? {
     store: sectionLive,
-    clip: (s: Section) => ({ planes: sectionPlanes(s), bodies: shownBodies === sectionBodies && !sectionExactShown, hatch: sectionHatchOn ? hatchStep : null, cutout: s.mode === 'cutout' }),
+    clip: (s: Section) => ({ planes: sectionPlanes(s), excludedInstances: s.planes.length === 1 ? excludedInstances : undefined, bodies: shownBodies === sectionBodies && !sectionExactShown, hatch: sectionHatchOn ? hatchStep : null, cutout: s.mode === 'cutout' }),
     handles: (s: Section) => !active && bodies.length ? sectionHandles(s, sectionBox, dragSection) : [],
   } : null;
   const sectionHatchLines = useMemo(() => section && !sketch && sectionHatchOn && shownBodies === sectionBodies && (!gpuSection || sectionExactShown) ? sectionHatch(shownBodies, sectionPlanes(section), hatchStep) : null,

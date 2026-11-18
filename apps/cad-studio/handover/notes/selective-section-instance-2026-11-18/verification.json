@@ -1,0 +1,76 @@
+{
+  "status": "PASS",
+  "qualification": "Session-only exclusion of one rotated top-level occurrence from a single world section plane; public exclusion/restore controls and actual picking.",
+  "observations": [
+    {
+      "initialUndoEnabled": true
+    },
+    {
+      "label": "webgpu-frame-all",
+      "camera": {
+        "target": [
+          -6.931236974553803,
+          27.06903605181128,
+          7.000650006867423
+        ],
+        "distance": 120.2597761331523,
+        "yaw": -1.5707963267948966,
+        "pitch": 1.5704821675295375,
+        "fovY": 0.5585053606381855,
+        "ortho": false
+      },
+      "limit": "Camera target is observed, not asserted to equal bounds midpoint."
+    },
+    {
+      "label": "cpu-forced-frame-all",
+      "camera": {
+        "target": [
+          -6.931236974553803,
+          27.06903605181128,
+          7.000650006867423
+        ],
+        "distance": 120.2597761331523,
+        "yaw": -1.5707963267948966,
+        "pitch": 1.5704821675295375,
+        "fovY": 0.5585053606381855,
+        "ortho": false
+      },
+      "limit": "Camera target is observed, not asserted to equal bounds midpoint."
+    },
+    {
+      "geometry": "world full bounds p1[-7,0,3]..[5,20,11], p2[-7,30,3]..[5,50,11] by analytic Rz90; not runtime clipped-bound proof",
+      "probePoints": [
+        [
+          -4,
+          10,
+          11
+        ],
+        [
+          -4,
+          40,
+          11
+        ]
+      ],
+      "paths": [
+        "actual WebGPU section",
+        "forced CPU section on same viewport"
+      ],
+      "sessionClearedOnFreshOpen": true
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Synthetic shared 20\u00d712\u00d78 boxes, Rz90; no nested occurrence or multi-plane support.",
+    "Plane placement, live drag and CPU forcing use existing test hooks; exclusion, restore, selection and Save/Open use public UI.",
+    "World-point picking probes test hit results, not clipped bounds. __studioInstanceBounds is not used as clipping evidence.",
+    "Forced CPU section path on a WebGPU viewport is not a native WebGL2 backend qualification."
+  ]
+}
