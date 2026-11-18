@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "observations": [
+    {
+      "a": {
+        "volume": 11185.429047468406
+      },
+      "b": {
+        "volume": 12277.91480810971
+      },
+      "stale": 1,
+      "viewPathsChanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "failure": null
+}

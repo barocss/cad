@@ -1,0 +1,22 @@
+{
+  "status": "FAIL",
+  "observations": [
+    {
+      "a": {
+        "volume": 11185.429047468406
+      },
+      "b": {
+        "volume": 12277.91480810971
+      },
+      "stale": 0,
+      "viewPathsChanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "failure": "AssertionError [ERR_ASSERTION]: changed Library pulley must invalidate issued drawing\n\n0 !== 1\n\n    at file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/drawing-pulley-revision-browser.mjs:8:1168\n    at async f.run (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/drawing-pulley-revision-browser.mjs:6:1"
+}

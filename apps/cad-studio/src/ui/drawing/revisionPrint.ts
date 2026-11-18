@@ -101,6 +101,18 @@ export function drawingRevisionPrint(doc: StudioDoc): string {
     });
     stamp = modelPrint({ source: stamp, sprockets: canonical(sprockets) });
   }
+  // Timing pulley geometry consumes pitch, offset and groove, not belt thickness.
+  // Keep ordinary legacy stamps unchanged; older timing issues need explicit reissue.
+  const driveRows = new Map((doc.drives?.rows ?? []).map(row => [row.id, row]));
+  const timingIds = [...new Set(doc.nodes.flatMap(n => n.kind === 'pulley' && !n.suppressed
+    && driveRows.get(n.row)?.kind === 'timing-belt' ? [n.row] : []))].sort();
+  if (timingIds.length) {
+    const timingPulleys = timingIds.map(id => {
+      const row = driveRows.get(id)!;
+      return [id, row.kind === 'timing-belt' ? { pitch: row.pitch, pitchLineOffset: row.pitchLineOffset, groove: row.groove } : null];
+    });
+    stamp = modelPrint({ source: stamp, timingPulleys: canonical(timingPulleys) });
+  }
   if (!doc.frames?.welds?.length) return stamp;
   const gone = new Set(doc.nodes.flatMap((n, i) => n.suppressed ? [i] : []));
   // Requested bead geometry, independent of kernel refusal caches. Symbol annotations
