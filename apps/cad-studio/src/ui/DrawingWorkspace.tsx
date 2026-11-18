@@ -1,3 +1,4 @@
+import { currentSheetDimensionsCsv } from '@barocss/cad-model/drawing/currentSheetDimensionsCsv';
 import { captureNoteTarget, resolveNoteLeader } from '@barocss/cad-model/drawing/noteTargets';
 import { nextStandaloneFrameId } from './drawing/frameIdentity';
 import { commitDetailPaperDrag, detailPaperDragAt } from './drawing/detailPaperDrag';
@@ -1038,6 +1039,34 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   const sheetSuffix = sheetTotal > 1 ? `-sheet-${current + 1}` : '';
   const exportableSheet = !wantsBom || bom ? sheet : null;
   const canExportPdf = !!sheet && (!drawingSetWantsBom || !!bom);
+  // Read-only current-sheet delivery, not an issued inspection register. Keep this
+  // authority separate from the existing drawing-file exporters and confirmations.
+  const dimensionCsvReady = !!sheet && !!layout && !busy && projectionCurrent && sourceCurrent
+    && !!scopeRead.scope && scope.kind === 'part' && scope.part === undefined && scope.body === undefined;
+  const dimensionCsvOwner = useMemo(() => ({}), [projectionActionOwner, sheet, layout, dimensionCsvReady, fileName]);
+  const liveDimensionCsvOwner = useRef(dimensionCsvOwner); liveDimensionCsvOwner.current = dimensionCsvOwner;
+  const exportDimensionCsv = () => {
+    const currentCsv = () => dimensionCsvReady && liveDimensionCsvOwner.current === dimensionCsvOwner
+      && liveProjectionAction.current === projectionActionOwner && currentModel.current === model;
+    if (!currentCsv() || !sheet) {
+      onToast({ title: 'Dimension CSV not written', hint: 'Wait for the current base-part sheet to finish updating. Nothing was downloaded.', detail: '' });
+      return;
+    }
+    try {
+      const result = currentSheetDimensionsCsv({ resolved: sheet.dimensions, settings, wholeSettings, sheetNumber: current + 1 });
+      if (!result.ok) {
+        onToast({ title: 'Dimension CSV not written', hint: result.error, detail: 'Nothing was downloaded. Unsupported dimensions are not silently omitted.' });
+        return;
+      }
+      // Finish serialization before delivery, then recheck the same source/sheet owner.
+      const bytes = new TextEncoder().encode(result.csv);
+      if (!currentCsv()) return;
+      downloadBytes(bytes, `${fileName}-sheet-${current + 1}-dimensions.csv`, 'text/csv;charset=utf-8');
+    } catch (error) {
+      onToast({ title: 'Dimension CSV not written', hint: 'The current sheet could not be serialized. Nothing was downloaded.', detail: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
   const [dxfVersion, setDxfVersion] = useState<DxfVersion>('AC1015');
   type ExportFormat = 'SVG' | 'PDF' | 'DXF';
   const [exportLoss, setExportLoss] = useState<{ format: ExportFormat; sheet: NonNullable<typeof sheet>; name: string; settings: DrawingSettings; version?: DxfVersion; messages: string[]; write: () => void } | null>(null);
@@ -1395,7 +1424,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
           {noteAttach.choices?.points.map((point, i) => <Button key={i} variant="ghost" onClick={() => chooseNoteEndpoint(noteAttach.choices!.view, point)}>{point.edge} · {point.endpoint} · {point.near.join(', ')}</Button>)}
         </div>}
 
-        <ExportActions sheets={sheetTotal} sheet={exportableSheet} canExportPdf={canExportPdf} layout={layout} views={views} cuts={cuts} settings={settings} dxfVersion={dxfVersion} setDxfVersion={version => { setExportLoss(null); setDxfVersion(version); }} dxfCut={dxfCut} setDxfSection={setDxfSection} exportSvg={exportSvg} exportPdf={exportPdf} exportDxf={exportDxf} exportSectionDxf={exportSectionDxf}
+        <ExportActions canExportDimensionCsv={!!dimensionCsvReady} exportDimensionCsv={exportDimensionCsv} sheets={sheetTotal} sheet={exportableSheet} canExportPdf={canExportPdf} layout={layout} views={views} cuts={cuts} settings={settings} dxfVersion={dxfVersion} setDxfVersion={version => { setExportLoss(null); setDxfVersion(version); }} dxfCut={dxfCut} setDxfSection={setDxfSection} exportSvg={exportSvg} exportPdf={exportPdf} exportDxf={exportDxf} exportSectionDxf={exportSectionDxf}
           confirmation={exportConfirmation && { format: exportConfirmation.format, messages: exportConfirmation.messages,
             onCancel: () => setExportLoss(null), onConfirm: () => { setExportLoss(null); exportConfirmation.write(); } }} />
       </aside>

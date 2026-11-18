@@ -1,0 +1,196 @@
+{
+  "issue": 225,
+  "issueState": "OPEN",
+  "scope": "Current-sheet non-issued dimension CSV, not an inspection register.",
+  "parent": "e15e76261efb2bea5539e54a80e7db05f338f72e",
+  "integration": {
+    "commit": "PENDING",
+    "push": "PENDING",
+    "exactShaCI": "PENDING"
+  },
+  "runs": {
+    "baseline01": {
+      "status": "FAIL",
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "csvOracles": []
+    },
+    "baseline02": {
+      "status": "PASS",
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "csvOracles": []
+    },
+    "actual01": {
+      "status": "FAIL",
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "csvOracles": [
+        {
+          "label": "single-sheet",
+          "exit": 0,
+          "result": {
+            "status": "PASS",
+            "rows": 4,
+            "sheet": 1,
+            "parser": "Python stdlib csv",
+            "raw_mm_independent_expected": 25.4,
+            "printed_oracle": "product formatter equality, not independent rounding certification"
+          }
+        },
+        {
+          "label": "reopened",
+          "exit": 0,
+          "result": {
+            "status": "PASS",
+            "rows": 4,
+            "sheet": 1,
+            "parser": "Python stdlib csv",
+            "raw_mm_independent_expected": 25.4,
+            "printed_oracle": "product formatter equality, not independent rounding certification"
+          }
+        }
+      ]
+    },
+    "actual02": {
+      "status": "PASS",
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "csvOracles": [
+        {
+          "label": "single-sheet",
+          "exit": 0,
+          "result": {
+            "status": "PASS",
+            "rows": 4,
+            "sheet": 1,
+            "parser": "Python stdlib csv",
+            "raw_mm_independent_expected": 25.4,
+            "printed_oracle": "product formatter equality, not independent rounding certification"
+          }
+        },
+        {
+          "label": "reopened",
+          "exit": 0,
+          "result": {
+            "status": "PASS",
+            "rows": 4,
+            "sheet": 1,
+            "parser": "Python stdlib csv",
+            "raw_mm_independent_expected": 25.4,
+            "printed_oracle": "product formatter equality, not independent rounding certification"
+          }
+        },
+        {
+          "label": "sheet-1",
+          "exit": 0,
+          "result": {
+            "status": "PASS",
+            "rows": 3,
+            "sheet": 1,
+            "parser": "Python stdlib csv",
+            "raw_mm_independent_expected": 25.4,
+            "printed_oracle": "product formatter equality, not independent rounding certification"
+          }
+        },
+        {
+          "label": "sheet-2",
+          "exit": 0,
+          "result": {
+            "status": "PASS",
+            "rows": 1,
+            "sheet": 2,
+            "parser": "Python stdlib csv",
+            "raw_mm_independent_expected": 25.4,
+            "printed_oracle": "product formatter equality, not independent rounding certification"
+          }
+        }
+      ]
+    }
+  },
+  "verification": {
+    "modelFocused": {
+      "passed": 7,
+      "failed": 0
+    },
+    "modelType": "PASS",
+    "studioType": "PASS",
+    "relatedModel": {
+      "passed": 43,
+      "failed": 1,
+      "failure": "Existing drawing-sheets PDF golden mismatch"
+    },
+    "headDrawingSheets": {
+      "passed": 26,
+      "failed": 1,
+      "samePDFMismatch": true,
+      "pinnedRepositoryInputs": 754
+    },
+    "pdfActualHash": "533e64765f48aeac1d244bc20b3aad7551feb08349b8d06ab1a69b619d5e4b66",
+    "pdfExpectedHash": "d280596ee08f569553b20d08e72673421cb58fed919f1e0917128369a1dcd081",
+    "scopedLint": "Three existing DrawingWorkspace unused bindings: DrawingFix, _leader, _sheet; identical HEAD stdin comparison.",
+    "newThreeFilesLint": "PASS"
+  },
+  "history": [
+    "baseline01 fixture strict locator matched two dw-dims containers; baseline02 corrected locator PASS.",
+    "actual01 single-sheet and reopened CSV Python parsing PASS, then two-sheet f.same string/key-order timeout; semantic document comparison was equal. Not an overall PASS.",
+    "actual02 normalized fixture PASS, four actual CSV downloads; two-sheet row counts 3/1, unsupported iso refused; original document/dirty/Undo availability retained; reopened CSV byte-identical."
+  ],
+  "sourceSha256": {
+    "packages/barocss-cad-model/src/drawing/currentSheetDimensionsCsv.ts": "888c3f2a6396a0ae9ac4ed161656d7cc6e8319f81db1994633167fce946214de",
+    "packages/barocss-cad-model/test/current-sheet-dimensions-csv.test.ts": "b73f72baa32bdb29a8f918db3211eb7d9eab78f2b83db2b73f2b96df9bdfe90a",
+    "apps/cad-studio/src/ui/DrawingWorkspace.tsx": "a4a4fa6331167c2b23068e0bf376fe12bb8884e91fe7a3e8fc25916b45e49c6a",
+    "apps/cad-studio/src/ui/drawing/ExportActions.tsx": "ffba27bd838dfd29d2ec094391ce38627dcd82a69f887c6cb61ec5e6b5609cf0",
+    "apps/cad-studio/test/drawing-dimension-csv-baseline-browser.mjs": "132be5b252f2e34724c07421944cbd841bb590759b53e770a1f6bd33ed04d185",
+    "apps/cad-studio/test/drawing-dimension-csv-browser.mjs": "513131de3f2ac1abfdcab40c59b02f83fb4de4313a3e80441e72c26336847a2b"
+  },
+  "images": {
+    "before.png": "ce4ee2b1214be6648913259f1762987540431e40c2b241251d58145a38634b16",
+    "after.png": "1ed09e33511304f76ec11065206c07fec2b22c3acb54ec0eb422b35271e9c9f6",
+    "second-sheet.png": "ef226ef5ab9ace6b524d4e89e80c9da7a1f9b5bd8c0a014f8965c59a9fbb9dd2"
+  },
+  "csvArtifactSha256": {
+    "single-sheet.csv": "67ddb9b22a4adfaeaeef2d6d730a36288fb03abd9ca66ff944ca348f503f4725",
+    "reopened.csv": "67ddb9b22a4adfaeaeef2d6d730a36288fb03abd9ca66ff944ca348f503f4725",
+    "sheet-1.csv": "88b55a9fbacf2996aec4c5169d65caf278907d1d69a771c2719db0ad488c132e",
+    "sheet-2.csv": "067b15a82b566fb1e4a493519830e8461e94cfaa6478564411817444ec50dd77"
+  },
+  "limits": [
+    "Whole base part; unbroken front/top/right linear and diameter only. Unsupported current-sheet dimension refuses all rows.",
+    "No inspection item identity/numbering, issued snapshot, schema change, measurement or acceptance record.",
+    "Raw mm independently checked against synthetic 25.4; printed text compared with existing product formatter, not independent rounding certification or fit-limit inference.",
+    "Hidden-view pre-resolved input is unit-only, not actual resolver qualification.",
+    "Stale callback injection and pending-worker export races NOT_RUN.",
+    "Visible history/dirty/Undo button observations, not internal history-stack identity.",
+    "Existing HOLDs and doc-sync pause remain. No entire-suite green claim."
+  ],
+  "privacy": "Synthetic images and selected typed summaries only. No full receipts, source capsules, raw documents, local absolute paths or account/authentication data.",
+  "integrationBase": "610a11895b43243f4778960f647f0e0dcb5b0479",
+  "integrationStatusContext": "Historical pre-push snapshot; parent is the validation baseline, not the final integrated commit."
+}
