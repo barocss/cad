@@ -1,3 +1,4 @@
+import { resolveShopTree } from '../engine/shopRows';
 import { readConnector, validateBallOptions, validateFastenedOptions, validateUniversalOptions, validateCylindricalOptions, type Connector } from '../assembly/connectors';
 // Chat tools for assemblies: parts as instances (each its own feature tree, built with the part tools
 // by passing `part`), their placement and grounding, and mates solved by the studio's own solver
@@ -109,7 +110,7 @@ async function nestedGeometry(inst: PartInstance, parent: StudioDoc, evaluate: E
 async function describe(doc: StudioDoc, base: BodyResult[], evaluate: Evaluate, detail: string | null) {
   const instances = await Promise.all((doc.instances ?? []).map(async inst => {
     const nested = !!inst.doc.instances?.length;
-    const own = !nested || inst.doc.nodes.length || inst.doc.direct ? await evaluate(bodyDocOf(inst)) : null;
+    const own = !nested || inst.doc.nodes.length || inst.doc.direct ? await evaluate(resolveShopTree(bodyDocOf(inst), doc, inst.id)) : null;
     const bodies = own?.ok ? own.bodies : [];
     const { min, max } = boundsOf(bodies), flex = nested && inst.doc.mates?.length ? instanceJointsOf(doc, inst.id) : null;
     // Occurrence cuts change reported geometry, not authored feature/face/look identities.

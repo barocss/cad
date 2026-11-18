@@ -1,0 +1,276 @@
+{
+  "status": "PASS",
+  "qualification": "Public assembly summary agrees with inherited catalogue geometry consumed by Studio.",
+  "limits": [
+    "Coupling row inheritance and local override; not a new catalogue feature."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": [],
+  "observations": [
+    {
+      "label": "inherited",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "drives": {
+          "version": 1,
+          "rows": [
+            {
+              "kind": "coupling",
+              "id": "coupling-test",
+              "type": "rigid sleeve",
+              "bore": [
+                12,
+                14
+              ],
+              "outside": 30,
+              "length": 40,
+              "boreStep": 18,
+              "estimate": true
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "coupling",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "coupling",
+                  "row": "coupling-test",
+                  "center": [
+                    0,
+                    0
+                  ],
+                  "generator": "coupling@0",
+                  "id": "n0"
+                }
+              ],
+              "outputs": {
+                "b0": {
+                  "node": 0,
+                  "side": "solid"
+                }
+              },
+              "nextId": 1
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "actual": 22851.944962212325,
+      "report": {
+        "base": {
+          "id": "base",
+          "feature_count": 0,
+          "bodies": 0,
+          "volume": 0,
+          "note": "the document's own part, fixed at the origin"
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "coupling",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "feature_count": 1,
+            "bodies": 1,
+            "volume": 22851.945,
+            "world_bounds": {
+              "min": [
+                -15,
+                -15,
+                0
+              ],
+              "max": [
+                15,
+                15,
+                40
+              ]
+            },
+            "body_keys": [
+              "b0"
+            ]
+          }
+        ],
+        "mates": [],
+        "note": "mateable faces of one part: get_assembly {\"faces_of\": part id or \"base\"}"
+      },
+      "unchanged": true,
+      "changed": false,
+      "isError": false
+    },
+    {
+      "label": "local",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "drives": {
+          "version": 1,
+          "rows": [
+            {
+              "kind": "coupling",
+              "id": "coupling-test",
+              "type": "rigid sleeve",
+              "bore": [
+                12,
+                14
+              ],
+              "outside": 30,
+              "length": 40,
+              "boreStep": 18,
+              "estimate": true
+            }
+          ]
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "coupling",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "coupling",
+                  "row": "coupling-test",
+                  "center": [
+                    0,
+                    0
+                  ],
+                  "generator": "coupling@0",
+                  "id": "n0"
+                }
+              ],
+              "outputs": {
+                "b0": {
+                  "node": 0,
+                  "side": "solid"
+                }
+              },
+              "nextId": 1,
+              "drives": {
+                "version": 1,
+                "rows": [
+                  {
+                    "kind": "coupling",
+                    "id": "coupling-test",
+                    "type": "rigid sleeve",
+                    "bore": [
+                      12,
+                      14
+                    ],
+                    "outside": 40,
+                    "length": 40,
+                    "boreStep": 18,
+                    "estimate": true
+                  }
+                ]
+              }
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "actual": 44843.09353734024,
+      "report": {
+        "base": {
+          "id": "base",
+          "feature_count": 0,
+          "bodies": 0,
+          "volume": 0,
+          "note": "the document's own part, fixed at the origin"
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "coupling",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "feature_count": 1,
+            "bodies": 1,
+            "volume": 44843.094,
+            "world_bounds": {
+              "min": [
+                -20,
+                -20,
+                0
+              ],
+              "max": [
+                20,
+                20,
+                40
+              ]
+            },
+            "body_keys": [
+              "b0"
+            ]
+          }
+        ],
+        "mates": [],
+        "note": "mateable faces of one part: get_assembly {\"faces_of\": part id or \"base\"}"
+      },
+      "unchanged": true,
+      "changed": false,
+      "isError": false
+    }
+  ]
+}
