@@ -142,7 +142,7 @@ async function describe(doc: StudioDoc, base: BodyResult[], evaluate: Evaluate, 
     base: { id: BASE, feature_count: doc.nodes.length, bodies: base.length, volume: r3(base.reduce((s, b) => s + (b.volume ?? 0), 0)), note: 'the document\'s own part, fixed at the origin', ...memberInterfaceList(base), ...(detail === BASE ? mateFaces(withDatums(tableOf(doc), doc)) : {}) },
     instances,
     ...(doc.instancePatterns?.length ? { patterns: doc.instancePatterns.map(p => ({ ...p, ...(p.skip?.length ? {} : { skip: undefined }) })) } : {}),
-    mates: mates.map((m, i) => ({ id: m.id, label: mateLabel(m, i), kind: m.kind, a: m.a, b: m.b, ...(m.distance !== undefined ? { distance: m.distance } : {}), ...(m.angle !== undefined ? { angle: m.angle } : {}), ...(m.flip ? { flip: true } : {}) })),
+    mates: mates.map((m, i) => ({ id: m.id, label: mateLabel(m, i), kind: m.kind, a: m.a, b: m.b, ...(m.distance !== undefined ? { distance: m.distance } : {}), ...(m.angle !== undefined ? { angle: m.angle } : {}), ...(m.flip || (m.kind === 'concentric' && m.flip === false) ? { flip: m.flip } : {}) })),
     ...(solved.length ? { problems: solved } : {}),
     ...(detail ? {} : { note: 'mateable faces of one part: get_assembly {"faces_of": part id or "base"}' }),
   };
