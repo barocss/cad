@@ -1,3 +1,4 @@
+import { splitNormalComponentsField } from './splitNormalComponents';
 import { circularPatternDirection, setCircularPatternDirection } from './circularPatternDirection';
 import { fixedRevolveAxisPosition, setFixedRevolveAxisPosition } from './fixedRevolveAxisPosition';
 import { filletRadiusMode, setFilletRadiusMode } from './filletRadiusMode';
@@ -1169,7 +1170,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
         { value: 'both', label: 'Both' }, { value: 'negative', label: 'Negative' }, { value: 'positive', label: 'Positive' },
       ], get: n => n[i]?.kind === 'split' ? n[i].outputSide ?? 'both' : 'both', set: (n, value) => setSplitOutputSide(n, i, value) });
       if (node.normal) (['x', 'y', 'z'] as const).forEach((a, k) => number('n' + a, `Normal ${a.toUpperCase()}`, undefined, n => (n as typeof node).normal?.[k] ?? 0, (n, v) => { const was = (n as typeof node).normal ?? [0, 0, 0], next = was.map((c, j) => j === k ? v : c) as [number, number, number]; return { ...(n as typeof node), normal: next }; }));
-      else out.push({ kind: 'choice', key: 'axis', label: 'Normal', options: axes(['x', 'y', 'z']), get: n => self<typeof node>(n).axis, set: (n, v) => replace(n, i, { ...self<typeof node>(n), axis: v as Axis }) });
+      else out.push(splitNormalComponentsField(scope?.doc, nodes, i) ?? { kind: 'choice', key: 'axis', label: 'Normal', options: axes(['x', 'y', 'z']), get: n => self<typeof node>(n).axis, set: (n, v) => replace(n, i, { ...self<typeof node>(n), axis: v as Axis }) });
       number('at', 'At', 'mm', n => num((n as typeof node).at), (n, v) => ({ ...(n as typeof node), at: v }));
       break;
   }

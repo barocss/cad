@@ -1,0 +1,38 @@
+{
+  "qualificationBase": "251139442",
+  "focused": "13/13 PASS",
+  "baseline": "PASS after fixture correction",
+  "actual": "PASS",
+  "actualErrors": [],
+  "actualConsoleErrors": [],
+  "actualSourceChanges": [],
+  "actualCleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "existingSplitSideRegression": "PASS",
+  "regressionCleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "modelTypes": "PASS",
+  "studioTypesAndBuild": "PASS",
+  "scopedLint": "PASS",
+  "diffCheck": "PASS",
+  "exactCI": "PENDING after publication; see issue #723",
+  "publicImageRender": "PENDING after publication; see issue #723",
+  "initialFailures": [
+    "Baseline01 wrongly expected oblique cap names top/bottom on a cardinal Split. Original kernel boxSolid XY ring contract uses side1/side3 for X caps. Corrected fixture only; coordinate/direction/volume oracle unchanged.",
+    "Unused destructuring lint failed; replaced with equivalent property filtering and reran lint/focused tests PASS."
+  ],
+  "limits": [
+    "No arbitrary source, downstream/reference consumer or metadata support",
+    "No whole-repository suite claim; desktop Chrome only",
+    "Metadata/downstream actual UI controls NOT_RUN; focused admission tests cover exclusion",
+    "Existing nonunit/negative/oblique normal editing semantics remain unchanged"
+  ]
+}
