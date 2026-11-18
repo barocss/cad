@@ -1,0 +1,29 @@
+{
+  "status": "PASS",
+  "phase": "fresh Open reopened",
+  "observations": [
+    {
+      "byName": {
+        "code": "PART_AMBIGUOUS",
+        "message": "[PART_AMBIGUOUS] Pin 2 in p1 names multiple parts (pat1-1, p2); use an unambiguous part ID in the nested path"
+      },
+      "byId": {
+        "target": "p1/p2",
+        "position": [
+          0,
+          0,
+          -15
+        ],
+        "problems": []
+      },
+      "unchanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ]
+}

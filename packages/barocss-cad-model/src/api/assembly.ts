@@ -301,8 +301,9 @@ export class Assembly {
       const ids: string[] = [];
       let level = this.#doc.instances ?? [], scope = 'the assembly';
       for (const seg of end.part.split('/')) {
-        const byId = level.find(i => i.id === seg), byName = level.find(i => i.name === seg);
+        const byId = level.find(i => i.id === seg), names = level.filter(i => i.name === seg), byName = names[0];
         if (byId && byName && byId !== byName) throw refuse('VALUE', `${seg} in ${scope} names two parts: ${byId.id} (by id) and ${byName.id} (by name ${seg}); use the other one's id`);
+        if (names.length > 1) throw refuse('PART_AMBIGUOUS', `${seg} in ${scope} names multiple parts (${names.map(i => i.id).join(', ')}); use an unambiguous part ID in the nested path`);
         const at = byId ?? byName;
         if (!at) throw refuse('PART_UNKNOWN', `no part ${seg} in ${scope}; its parts are ${level.map(i => i.name).join(', ') || 'none'}`);
         ids.push(at.id); level = at.doc.instances ?? []; scope = ids.join('/');

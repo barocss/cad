@@ -1,0 +1,34 @@
+{
+  "status": "FAIL",
+  "phase": "fresh Open reopened",
+  "observations": [
+    {
+      "byName": {
+        "target": "p1/pat1-1",
+        "position": [
+          0,
+          0,
+          15
+        ],
+        "problems": []
+      },
+      "byId": {
+        "target": "p1/p2",
+        "position": [
+          0,
+          0,
+          -15
+        ],
+        "problems": []
+      },
+      "unchanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ]
+}
