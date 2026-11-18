@@ -126,7 +126,8 @@ export const problemsOf = (doc: StudioDoc) => solveDoc(doc).problems;
  */
 export function assemblyMeshes(doc: StudioDoc, explode = 0): MeshData[] {
   const base = doc.nodes.length ? meshesOf(doc).map(m => ({ ...m, key: `${BASE}/${m.key}` })) : [];
-  const placed = (doc.instances ?? []).filter(i => !i.hidden && i.doc.nodes.length).map(i => ({ id: i.id, doc: placedDoc(i, doc) }));
+  // A subassembly may have no features of its own; placedDoc folds its children in.
+  const placed = (doc.instances ?? []).filter(i => !i.hidden).map(i => ({ id: i.id, doc: placedDoc(i, doc) }));
   const offsets = explode > 0 ? explodeOffsets(doc.nodes.length ? bodiesOf(doc) : [], placed.map(p => ({ id: p.id, bodies: bodiesOf(p.doc) })), explode) : null;
   return [...base, ...placed.flatMap(p => meshesOf(p.doc).map(m => moved({ ...m, key: `${p.id}/${m.key}` }, offsets?.get(p.id))))];
 }

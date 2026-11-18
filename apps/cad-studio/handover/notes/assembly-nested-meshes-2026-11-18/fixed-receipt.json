@@ -1,0 +1,45 @@
+{
+  "status": "PASS",
+  "qualification": "Public Assembly.meshes must include a node-less subassembly visible in Studio and preserved by native Save/Open.",
+  "limits": [
+    "The defect is in the public mesh facade, not Studio rendering. No change to geometry, keys, or saved documents."
+  ],
+  "observations": [
+    {
+      "meshes": [
+        {
+          "key": "p1/b2",
+          "vertices": 24,
+          "minX": 30
+        }
+      ],
+      "bodies": [
+        {
+          "key": "b2",
+          "volume": 2000.0000000000002,
+          "bounds": {
+            "min": [
+              30,
+              0,
+              0
+            ],
+            "max": [
+              40,
+              10,
+              20
+            ]
+          }
+        }
+      ],
+      "unchanged": true
+    }
+  ],
+  "errors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": []
+}
