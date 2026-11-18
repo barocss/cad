@@ -1,0 +1,72 @@
+{
+  "issue": 220,
+  "status": "PARTIAL_IMPLEMENTATION",
+  "issueState": "OPEN",
+  "parentCommit": "0c8f96c7908c7c7745e821e3997a45d8fd3cd6a4",
+  "integration": {
+    "commit": "PENDING",
+    "push": "PENDING",
+    "exactShaCI": "PENDING"
+  },
+  "scope": "Explicit Update of an existing session-only camera and current-visible-body snapshot; Apply remains separate.",
+  "runs": {
+    "baseline01": {
+      "status": "PASS",
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "downloads": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    "actual01": {
+      "status": "PASS",
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "downloads": 1,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    }
+  },
+  "tests": {
+    "studio": {
+      "passed": 69,
+      "failed": 0
+    },
+    "studioType": "PASS (exit 0 reported by coordinator; empty log)",
+    "changedFileLint": "PASS (exit 0 reported by coordinator; empty log)"
+  },
+  "sourceSha256": {
+    "apps/cad-studio/src/state/useNamedInspection.ts": "23f47c1139a5d846351c3118824b97a301b28fe76c2706cec30c1ffac75734ef",
+    "apps/cad-studio/src/ui/NamedInspectionViews.tsx": "e0d5355b36668a24bfd7a5ae88f8641eac2bdec74f7e6ab4a7aefcf471cf43ff",
+    "apps/cad-studio/test/named-inspection-update.test.ts": "4fe11acb01aed8cac240322ceec1892b505e82304f290d2882e9f44f8cc9e073",
+    "apps/cad-studio/test/named-inspection-update-baseline-browser.mjs": "c481e7c208421d16ce93cbac7ffbc3c21b3e207a5efb3f3965d8709bd23b60ef",
+    "apps/cad-studio/test/named-inspection-update-browser.mjs": "02baad7209603440373f86b60e8c5b2085a3aea62deabc7b1a8493aab255af78"
+  },
+  "images": {
+    "before.png": "95d140abd3f1c91620f5199bf1cdcc81b32b7524b72dcecfbcd6f439fece505e",
+    "after.png": "167112b13b5f448edd6788ce7f49103d51482fac4bc69ff9553de31e2ce0bf20"
+  },
+  "visualReview": "Coordinator inspected actual screenshots. Images are synthetic UI evidence, not independent geometry certification.",
+  "failureHistory": [
+    "First baseline01 and actual01 executions both PASS.",
+    "Before actual01, static review identified Front subset auto-fit could place the negative B probe outside the canvas. Fixture was corrected to use public wheel zoom-out and assert both probe pixels reach uncovered canvas. This was a pre-execution fixture correction, not a runtime product failure."
+  ],
+  "limits": [
+    "Session-only ordinary base solids; maximum two snapshots unchanged. No persistent schema, sidecar or migration. Issue #220 remains OPEN.",
+    "Stable IDs, serial, names/order, transaction and Restore object identity, invalid/stale callback rejection are hook unit scope, not hidden-state browser observations.",
+    "Actual browser checks camera values, real pointer picking, document equality, visible history rows, toolbar availability and dirty indicator, not full history-stack identity or geometry accuracy.",
+    "Native Save/fresh Open checks original document and session reset, not persistence of named views.",
+    "Forced CPU rendering, device failure/recovery, worker/project restart, asynchronous races, assembly/direct/section/animation snapshots are NOT_RUN or unsupported. Existing HOLDs remain."
+  ],
+  "privacy": "Only synthetic fixtures and selected summary fields published; full receipts, raw documents, local absolute paths and account/authentication data excluded.",
+  "docSync": "PAUSED; this directory is task verification evidence only."
+}

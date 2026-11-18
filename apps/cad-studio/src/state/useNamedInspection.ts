@@ -35,6 +35,18 @@ export function useNamedInspection(input: { owner: object; bodies: Bodies; reaso
       if (!camera || !signature || !trimmed || !captureNamedInspection({ id, name: trimmed, camera, visibleKeys }, signature, input.owner, input.owner, input.bodies)) return false;
       publish({ ...state, signature, serial: state.serial + 1, rows: [...state.rows, { id, name: trimmed, camera, visibleKeys, signature }] }); return true;
     },
+    update(id: string): boolean {
+      if (!current() || input.reason) return false;
+      const row = state.rows.find(row => row.id === id);
+      if (!row || !currentInspectionSignature(row.signature, input.owner, input.owner, input.bodies)) return false;
+      const camera = copyInspectionCamera(input.getCamera());
+      const visibleKeys = input.bodies.filter(body => !body.hidden && (!state.transaction?.visibleKeys || state.transaction.visibleKeys.includes(body.key))).map(body => body.key);
+      if (!camera || !captureNamedInspection({ id: row.id, name: row.name, camera, visibleKeys }, row.signature, input.owner, input.owner, input.bodies)) return false;
+      // Updating a bookmark never publishes a display transaction or replaces the first Restore camera.
+      publish({ ...state, rows: state.rows.map(saved => saved.id === id ? { ...saved, camera, visibleKeys } : saved),
+        applied: state.applied === id ? null : state.applied, active: state.applied === id ? null : state.active });
+      return true;
+    },
     apply(id: string): boolean {
       if (!current() || input.reason) return false;
       const row = state.rows.find(row => row.id === id), before = copyInspectionCamera(input.getCamera());
