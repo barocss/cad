@@ -66,7 +66,7 @@ export type Tolerance = { kind: 'symmetric'; value: number } | { kind: 'deviatio
  * `basic` (R14.4, O5): a theoretically exact dimension, its text boxed (a position tolerance's frame holds the tolerance).
  */
 export type DrawingDimension = ({ tol?: Tolerance; count?: number; auto?: true; basic?: true }) & (
-  | { id: string; view: DimView; kind: 'linear'; a: DimPoint; b: DimPoint; orient: 'horizontal' | 'vertical' | 'aligned'; place: XY }
+  | { id: string; view: DimView; kind: 'linear'; a: DimPoint; b: DimPoint; orient: 'horizontal' | 'vertical' | 'aligned'; place: XY; /** Hide only this reference role’s extension line; omitted means both visible. */ hideExtension?: 'a' | 'b' }
   | { id: string; view: DimView; kind: 'diameter' | 'radius'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string }
   /** A pitch circle (R14.5, O6): the circle through the centres of three or more holes, its diameter as `Ø40 PCD`. */
   | { id: string; view: DimView; kind: 'pcd'; ring: CentreRef[]; place: XY }

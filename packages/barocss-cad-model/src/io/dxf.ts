@@ -125,7 +125,7 @@ function dimensionEntity(r: Extract<Resolved, { ok: true }>, v: ViewPlacement, g
     const opposite = detailRim ? up(H, [2 * C[0] - tip[0], 2 * C[1] - tip[1]]) : up(H, [C[0] - e[0] * R, C[1] - e[1] * R]);
     geometry = r.kind === 'diameter' ? { kind: 'diameter', rim, opposite } : { kind: 'radius', center: up(H, C), rim };
   }
-  return { type: 'dimension', geometry, block, text, textAt, measurement: r.value, layer: 'DIMENSIONS' };
+  return { type: 'dimension', geometry, block, text, textAt, measurement: r.value, layer: 'DIMENSIONS', ...(r.kind === 'linear' && r.dim.hideExtension ? { suppressExtension: r.dim.hideExtension === 'a' ? 'p1' as const : 'p2' as const } : {}) };
 }
 
 /** The sheet as a DXF document (sheet millimetres, y up from the bottom edge). */

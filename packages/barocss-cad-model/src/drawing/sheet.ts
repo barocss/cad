@@ -1040,7 +1040,8 @@ export function dimensionMarks(v: ViewPlacement, r: Extract<Resolved, { ok: true
     const A = toSheet(v, r.a), B = toSheet(v, r.b), orient = r.dim.orient;
     const d: XY = orient === 'horizontal' ? [1, 0] : orient === 'vertical' ? [0, 1] : unit(sub(B, A)), n: XY = [-d[1], d[0]];
     const A2 = add(A, n, dot2(sub(place, A), n)), B2 = add(B, n, dot2(sub(place, B), n));
-    for (const [P, Q] of [[A, A2], [B, B2]] as const) {
+    for (const [role, P, Q] of [['a', A, A2], ['b', B, B2]] as const) {
+      if (r.dim.hideExtension === role) continue;
       const out = sub(Q, P), l = Math.hypot(out[0], out[1]);
       if (l > GAP) { const e = unit(out); marks.push({ kind: 'line', a: add(P, e, GAP), b: add(Q, e, OVER), pen: 'thin', role: 'extension' }); }
     }

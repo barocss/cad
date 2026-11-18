@@ -1197,6 +1197,26 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
   const hint = message ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'angle' ? (pending.b ? 'Choose the side of the corner to measure, then click to place the angle · Esc cancels' : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
   const selDim = selected?.kind === 'dimension' ? settings.dimensions.find(d => d.id === selected.id) : undefined;
+  const extensionReady = !busy && projectionCurrent && sourceCurrent !== false;
+  const extensionOwner = useMemo(() => ({}), [projectionActionOwner, selected, sheet, extensionReady]);
+  const liveExtensionOwner = useRef(extensionOwner); liveExtensionOwner.current = extensionOwner;
+  const [extensionPreview, setExtensionPreview] = useState<{ owner: object; side: 'a' | 'b' } | null>(null);
+  const extensionResolved = sheet?.dimensions.find(r => r.dim === selDim);
+  const supportedExtension = selDim?.kind === 'linear' && !selDim.auto && ['front', 'top', 'right'].includes(selDim.view) && scope.kind === 'part';
+  const extensionMarkers = supportedExtension && extensionReady && layout && extensionResolved?.ok && extensionResolved.kind === 'linear'
+    ? (['a', 'b'] as const).map(side => ({ side, point: toSheet(layout.views[selDim.view as 'front' | 'top' | 'right'], extensionResolved[side]) })) : [];
+  const changeExtension = (id: string, side: 'a' | 'b' | undefined) => {
+    if (liveExtensionOwner.current !== extensionOwner || !extensionReady || !supportedExtension || selDim?.id !== id || !extensionResolved?.ok) return;
+    if (selDim.hideExtension === side) return;
+    const { hideExtension: _old, ...rest } = selDim; void _old;
+    const next = side ? { ...rest, hideExtension: side } : rest;
+    commitDims(settings.dimensions.map(d => d === selDim ? next : d));
+  };
+  const previewExtension = (side: 'a' | 'b' | null) => {
+    if (liveExtensionOwner.current !== extensionOwner) return;
+    setExtensionPreview(side && extensionReady ? { owner: extensionOwner, side } : null);
+  };
+
   const selNote = selected?.kind === 'note' ? settings.notes?.find(n => n.id === selected.id) : undefined;
   const changeFrame = (next: DrawingSettings) => {
     if (!selectedFrame && selDim && wholeSettings.dimensions.filter(dim => dim.id === selDim.id).length !== 1) {
@@ -1231,6 +1251,12 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
             <rect className="dw-sheet" x={0} y={0} width={W} height={H} fill="#fff" />
             <g fill="none" stroke="#000" strokeLinecap="round" strokeLinejoin="round" fontFamily="Helvetica, Arial, sans-serif" dangerouslySetInnerHTML={{ __html: shownMarkup }} />
             <g dangerouslySetInnerHTML={{ __html: overlay }} />
+            {!!extensionMarkers.length && <g pointerEvents="none" aria-label="Dimension endpoint roles" fill="#075985" stroke="#fff" strokeWidth="0.25">
+              {extensionMarkers.map(({ side, point }) => <g key={side} aria-label={`Extension endpoint ${side.toUpperCase()}`}>
+                <circle cx={point[0]} cy={point[1]} r={extensionPreview?.owner === extensionOwner && extensionPreview.side === side ? 1.8 : 1.1} />
+                <text x={point[0] + 2} y={point[1] - 2} fontSize="3" stroke="none">{side.toUpperCase()}</text>
+              </g>)}
+            </g>}
             {selectedTarget && !(drag && 'target' in drag) && sheet?.groups.filter(g => g.datumTarget && g.id === selectedTarget).length === 1 && <g className="dw-hover" pointerEvents="none" aria-label="Selected datum target" dangerouslySetInnerHTML={{ __html: marksSvg(sheet.groups.find(g => g.datumTarget && g.id === selectedTarget)!.marks) }} />}
             {selectedFrame && sheet?.groups.filter(g => g.standaloneFrame && g.id === selectedFrame).length === 1 && <g className="dw-hover" pointerEvents="none" aria-label="Selected standalone frame" dangerouslySetInnerHTML={{ __html: marksSvg(sheet.groups.find(g => g.standaloneFrame && g.id === selectedFrame)!.marks) }} />}
             {referenceInspection?.markup && <g className="dw-hover" pointerEvents="none" aria-label="Reference candidate preview" dangerouslySetInnerHTML={{ __html: referenceInspection.markup }} />}
@@ -1311,7 +1337,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
         <TolerancingList suggestions={suggestions} settings={settings} views={views} onChange={onChange} acceptEvery={acceptEvery} />
 
-        <DimensionsList sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />
+        <DimensionsList extensionReady={extensionReady} onExtension={changeExtension} onExtensionPreview={previewExtension} sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />
 
         <ToleranceEditor selDim={selDim} settings={settings} tolDraft={tolDraft} setTolDraft={setTolDraft} commitDims={commitDims} setMessage={setMessage} />
 

@@ -64,7 +64,7 @@ export type DxfEntity = DxfEntityBase & (
   | { type: 'hatch'; loops: readonly DxfHatchLoop[]; fill: DxfHatchFill }
   | { type: 'insert'; block: string; at: DxfXY; scale?: number; rotation?: number }
   /** `block`: what the dimension shows (lines, solids, text) in drawing coordinates; `text`: its text as shown; `measurement`: the measured value. */
-  | { type: 'dimension'; geometry: DxfDimensionGeometry; block: readonly DxfEntity[]; text: string; textAt: DxfXY; measurement?: number });
+  | { type: 'dimension'; geometry: DxfDimensionGeometry; /** Suppress only the named definition point's extension line (linear/aligned); absent keeps both. Display block must agree. */ suppressExtension?: 'p1' | 'p2'; block: readonly DxfEntity[]; text: string; textAt: DxfXY; measurement?: number });
 export interface DxfBlock { name: string; base?: DxfXY; entities: readonly DxfEntity[] }
 export interface DxfDocument {
   units: DxfUnits;
@@ -258,6 +258,7 @@ function checkEntity(e: DxfEntity, ctx: Context, inBlock: boolean): void {
     case 'dimension': {
       if (inBlock) throw dxfWriteError('BAD_ENTITY', 'a dimension inside a block');
       const g = e.geometry;
+      if (e.suppressExtension !== undefined && ((e.suppressExtension !== 'p1' && e.suppressExtension !== 'p2') || (g.kind !== 'linear' && g.kind !== 'aligned'))) throw dxfWriteError('BAD_ENTITY', 'suppressExtension needs p1 or p2 on a linear or aligned dimension');
       if (g.kind === 'linear' || g.kind === 'aligned') { finite(g.p1, 'dimension point'); finite(g.p2, 'dimension point'); finite(g.line, 'dimension line point'); if (g.kind === 'linear') num(g.angle, 'dimension angle'); }
       else if (g.kind === 'angular') { for (const p of [...g.line1, ...g.line2, g.arc]) finite(p, 'angular dimension point'); }
       else if (g.kind === 'diameter') { finite(g.rim, 'diameter point'); finite(g.opposite, 'diameter point'); }
@@ -588,6 +589,12 @@ function writeEntity(w: Writer, e: DxfEntity): void {
       } else {
         if (!r12) o.g(100, g.kind === 'diameter' ? 'AcDbDiametricDimension' : 'AcDbRadialDimension');
         o.xyz(15, g.rim); o.g(40, 0);
+      }
+      // ACAD per-entity dimension-style override: DIMSE1 (75) or DIMSE2 (76).
+      // Keep the semantic suppression when a reader regenerates the supplied display block.
+      if (e.suppressExtension !== undefined) {
+        o.g(1001, 'ACAD'); o.g(1000, 'DSTYLE'); o.g(1002, '{');
+        o.g(1070, e.suppressExtension === 'p1' ? 75 : 76); o.g(1070, 1); o.g(1002, '}');
       }
       return;
     }
