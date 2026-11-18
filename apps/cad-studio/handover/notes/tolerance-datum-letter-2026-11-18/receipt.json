@@ -1,0 +1,77 @@
+{
+  "baseline": {
+    "status": "FAIL",
+    "failure": "AssertionError [ERR_ASSERTION]: do not offer a second definition of datum A\n\n1 !== 0\n\n    at file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/tolerance-datum-letter-browser.mjs:13:9\n    at async f.run (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/tolerance-datum-letter-browser.mjs:8:1",
+    "observations": [
+      {
+        "duplicateCount": 1
+      },
+      {
+        "after": [
+          {
+            "id": "user-top-A",
+            "letter": "A",
+            "view": "top",
+            "place": [
+              16,
+              -9
+            ],
+            "edge": {
+              "edge": "n1.side0|n1.top",
+              "near": [
+                32,
+                0,
+                8
+              ]
+            }
+          },
+          {
+            "id": "datum-A",
+            "letter": "A",
+            "view": "front",
+            "place": [
+              16,
+              -9
+            ],
+            "edge": {
+              "edge": "n1.bottom|n1.side0",
+              "near": [
+                32,
+                0,
+                0
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceBeforeCount": 3,
+    "sourceAfterCount": null,
+    "sourceAfterCleanupCount": 1167
+  },
+  "fixed": {
+    "status": "PASS",
+    "failure": null,
+    "observations": [
+      {
+        "duplicateCount": 0
+      }
+    ],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceBeforeCount": 3,
+    "sourceAfterCount": 1167,
+    "sourceAfterCleanupCount": 1167
+  }
+}

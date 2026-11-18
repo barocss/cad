@@ -188,7 +188,7 @@ export function toleranceSuggestions(ctx: IssueContext): ToleranceSuggestion[] {
     { name: 'front side', area: (front.max[0] - front.min[0]) * (front.max[1] - front.min[1]), at: edgeAlong(ctx, 'top', 1, false), view: 'top' as const },
     { name: 'left side', area: (right.max[0] - right.min[0]) * (right.max[1] - right.min[1]), at: edgeAlong(ctx, 'front', 0, false), view: 'front' as const },
   ].filter(x => x.at).sort((a, b) => b.area - a.area);
-  const have = new Set((s.datums ?? []).map(d => d.letter)), letters = ['A', 'B', 'C'], named: string[] = [];
+  const have = new Set([...Object.keys(s.sheetContext?.datumFirst ?? {}), ...(s.datums ?? []).map(d => d.letter)]), letters = ['A', 'B', 'C'], named: string[] = [];
   const datumIds = new Set([...(s.sheetContext?.datumIds ?? []), ...(s.datums ?? []).map(d => d.id)]);
   sides.forEach((side, i) => {
     const letter = letters[i];
