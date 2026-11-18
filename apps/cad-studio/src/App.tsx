@@ -538,7 +538,7 @@ export function App() {
   const renderedSketch = useRef({ draft: sketch, generation: sketchGeneration.current });
   renderedSketch.current = { draft: sketch, generation: sketchGeneration.current };
   const constructRef = useRef(false); constructRef.current = !!sketch?.construct;
-  const updateShape = useCallback((shape: SketchShape | null, fresh = false, origin?: 'panel' | 'line-point' | 'chord-circle' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish' | 'ellipse-finish', coordinate?: CoordinateIntent) => {
+  const updateShape = useCallback((shape: SketchShape | null, fresh = false, origin?: 'panel' | 'line-point' | 'chord-circle' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish' | 'ellipse-finish' | 'centre-arc-finish', coordinate?: CoordinateIntent) => {
     const placementEvent = origin === 'rectangle-start' || origin === 'rectangle-preview' || origin === 'rectangle-finish'
       || origin === 'circle-start' || origin === 'circle-preview' || origin === 'circle-finish'
       || origin === 'slot-start' || origin === 'slot-preview' || origin === 'slot-finish';
@@ -597,7 +597,7 @@ export function App() {
     shapePlacement.current = null;
     const recordEdit = !keep && ((isSettled(prev) && isSettled(r.shape)) || resizedRectangle || changedCircle || changedSlot || changedBezier);
     const geometryChanged = prev !== r.shape && JSON.stringify(prev) !== JSON.stringify(r.shape);
-    const confirmedPlacement = origin === 'line-point' || origin === 'chord-circle' || origin === 'ellipse-finish';
+    const confirmedPlacement = origin === 'line-point' || origin === 'chord-circle' || origin === 'ellipse-finish' || origin === 'centre-arc-finish';
     if (draft && (confirmedPlacement || (recordEdit && (draft.association || draft.associationDetached))) && (geometryChanged || keep)) {
       const next = { ...detachSketchLink(draft), editDim: null, shape: r.shape,
         ...(keep ? { done: joinOpen(draftShapeOrder({ ...draft, shape: keep })), activeOutlineIndex: undefined } : {}) };

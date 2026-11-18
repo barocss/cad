@@ -1,0 +1,53 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [
+    {
+      "kind": "sketch",
+      "profile": "loop",
+      "segments": [
+        {
+          "kind": "arc",
+          "start": [
+            30,
+            15
+          ],
+          "center": [
+            20,
+            15
+          ],
+          "direction": "ccw"
+        },
+        {
+          "kind": "line",
+          "start": [
+            10,
+            15
+          ]
+        }
+      ],
+      "sideTags": {
+        "outer": [
+          "e1",
+          "e2"
+        ]
+      },
+      "id": "n0"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 0,
+      "height": 3,
+      "id": "n1"
+    }
+  ],
+  "outputs": {
+    "b1": {
+      "node": 1,
+      "side": "solid"
+    }
+  },
+  "nextId": 2
+}

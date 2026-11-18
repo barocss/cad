@@ -1,0 +1,116 @@
+{
+  "baselineCommit": "a94676902967777ddeea556bd3110f272d19611a",
+  "integratedMain": "9ba47b32d",
+  "runs": [
+    {
+      "case": "baseline",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    {
+      "case": "pending baseline",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    {
+      "case": "centre-arc",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    {
+      "case": "ellipse",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    {
+      "case": "slot",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    {
+      "case": "circle",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    {
+      "case": "rectangle",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    }
+  ],
+  "retainedFailures": [
+    "fixed01: live cursor expanded bounding box, not authored geometry",
+    "fixed02: interrupted disconnect before actual result; NOT_RUN",
+    "fixed03: parked shape has no active Point inputs",
+    "fixed04: unconditional cursor-tail removal removed real endpoint on replay",
+    "fixed05: SVGPointList float32 vs serialized marker precision removed real endpoint"
+  ],
+  "finalFixture": "Compare serialized polyline points to authored endpoint markers, excluding centre marker and viewport-local preview. No tolerance widening.",
+  "geometry": {
+    "nativeVolume": 471.2388980384685,
+    "analyticVolume": "150*pi",
+    "absoluteError": 4.547473508864641e-13,
+    "strictBrep": true,
+    "radius": 10,
+    "centreXY": [
+      20,
+      15
+    ],
+    "height": 3
+  }
+}

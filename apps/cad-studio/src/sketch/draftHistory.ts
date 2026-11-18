@@ -77,15 +77,24 @@ function completedEllipse(shape: SketchShape): boolean {
   return shape.kind === 'polygon' && shape.closed === true && !shape.pending
     && shape.fromEllipse === true && !!shape.ellipse;
 }
+/** An unchanged open single-arc owner, not proof of which tool created it. */
+function completedSingleArc(shape: SketchShape): boolean {
+  if (shape.kind !== 'polygon' || shape.closed !== false || shape.pending || shape.points.length !== 2
+    || shape.spline || shape.fromSpline || shape.ellipse || shape.fromEllipse
+    || shape.bulges?.length !== 2 || !Number.isFinite(shape.bulges[0]) || shape.bulges[0] === 0 || shape.bulges[1] !== 0) return false;
+  const [a, b] = shape.points;
+  return a.length === 2 && b.length === 2 && [...a, ...b].every(Number.isFinite)
+    && (a[0] !== b[0] || a[1] !== b[1]);
+}
 function placementPartition(step: DraftStep): boolean {
   // Undo/Redo retains the current tool, so an earlier placement's shape can be active
   // under another placement tool. Identity comes from the ordered owners, not the tool label.
-  return (step.tool === 'ellipse' || step.tool === 'rectangle' || step.tool === 'circle' || step.tool === 'slot')
-    && (!step.shape || completedEllipse(step.shape) || step.shape.kind === 'rectangle' || step.shape.kind === 'circle' || step.shape.kind === 'slot');
+  return (step.tool === 'ellipse' || step.tool === 'rectangle' || step.tool === 'circle' || step.tool === 'slot' || step.tool === 'carc' || step.tool === 'polygon')
+    && (!step.shape || completedEllipse(step.shape) || completedSingleArc(step.shape) || step.shape.kind === 'rectangle' || step.shape.kind === 'circle' || step.shape.kind === 'slot');
 }
 function samePlacementOwner(a: SketchShape, b: SketchShape): boolean {
   if (a === b) return true;
-  if (!completedEllipse(a) || !completedEllipse(b)) return false;
+  if (!(completedEllipse(a) && completedEllipse(b)) && !(completedSingleArc(a) && completedSingleArc(b))) return false;
   // switchTool only adds pending:false. Every geometry/source member retains exact identity.
   const keys = Object.keys(a).filter(key => key !== 'pending');
   return keys.length === Object.keys(b).filter(key => key !== 'pending').length
@@ -97,11 +106,11 @@ function samePlacementOwner(a: SketchShape, b: SketchShape): boolean {
  * order-insensitively or accept a new geometry owner merely because its numbers happen to match. */
 function sameSelectionPartition(expected: DraftStep, current: DraftStep): boolean {
   // Placement selection parks the same authored owners before the next placement.
-  if (current.tool !== 'select' && current.tool !== 'dimension' && current.tool !== 'rectangle' && current.tool !== 'circle' && current.tool !== 'slot' && current.tool !== 'ellipse') return false;
+  if (current.tool !== 'select' && current.tool !== 'dimension' && current.tool !== 'rectangle' && current.tool !== 'circle' && current.tool !== 'slot' && current.tool !== 'ellipse' && current.tool !== 'carc' && current.tool !== 'polygon') return false;
   if (expected.shape === current.shape && expected.activeOutlineIndex === current.activeOutlineIndex) return false;
   const a = sketchCutInputs(expected).shapes, b = sketchCutInputs(current).shapes;
   if (a.length !== b.length) return false;
-  if (current.tool === 'rectangle' || current.tool === 'circle' || current.tool === 'slot' || current.tool === 'ellipse')
+  if (current.tool === 'rectangle' || current.tool === 'circle' || current.tool === 'slot' || current.tool === 'ellipse' || current.tool === 'carc' || current.tool === 'polygon')
     return placementPartition(expected) && placementPartition(current)
       && a.every((shape, index) => samePlacementOwner(shape, b[index]));
   return a.every((shape, index) => {
