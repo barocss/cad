@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "qualification": "Explicit reset remains reachable after a posed sub-assembly is revised to a plain part.",
+  "limits": [
+    "Static occurrence pose recovery only; no dynamics change or automatic joint deletion."
+  ],
+  "observations": [
+    {
+      "retained": {
+        "base~lid": 0.523598775598
+      },
+      "resetGroup": 1
+    },
+    {
+      "explicitResetOnly": true,
+      "undoRedo": true,
+      "nativeExact": true
+    }
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": []
+}

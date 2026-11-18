@@ -81,7 +81,7 @@ export function InstanceInspector({ model, bearing, assembly, changes, onNotice:
       held={heldLooksForInstance(doc, inst.id)}
       onSet={(key, patch) => patternEdit(() => setInstanceLook(doc, { part: inst.id, body: key, patch }), 'Look not changed')}
       onReset={(key, field) => patternEdit(() => resetInstanceLook(doc, { part: inst.id, body: key, field }), 'Look not changed')} />}
-    joints={inst.doc.instances?.length ? <InstanceJointsControls inst={inst}
+    joints={inst.doc.instances?.length || inst.joints ? <InstanceJointsControls inst={inst}
       onSet={values => patternEdit(() => setInstanceJoints(doc, { part: inst.id, joints: values }), 'Joints not changed')}
       onReset={() => patternEdit(() => setInstanceJoints(doc, { part: inst.id, joints: {}, replace: true }), 'Joints not changed')} /> : undefined}
     onRevision={async file => {
