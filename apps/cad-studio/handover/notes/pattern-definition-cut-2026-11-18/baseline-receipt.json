@@ -1,0 +1,274 @@
+{
+  "status": "FAIL",
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "failure": "AssertionError [ERR_ASSERTION]: unsafe Finish must preserve the in-place session\n\n0 !== 1\n\n    at file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/pattern-definition-cut-browser.mjs:5:1124\n    at async f.run (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/pattern-definition-cut-browser.mjs:5:1",
+  "observations": [
+    {
+      "editing": 0,
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Plate",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    40,
+                    40
+                  ],
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 10,
+                  "id": "n1"
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              },
+              "nextId": 2,
+              "instances": [
+                {
+                  "id": "inst1",
+                  "name": "Child",
+                  "doc": {
+                    "format": "barocss-cad-model",
+                    "schema": 3,
+                    "units": "mm",
+                    "parameters": {},
+                    "nodes": [
+                      {
+                        "kind": "sketch",
+                        "profile": "rectangle",
+                        "min": [
+                          0,
+                          0
+                        ],
+                        "max": [
+                          10,
+                          10
+                        ],
+                        "id": "n0"
+                      },
+                      {
+                        "kind": "extrude",
+                        "sketch": 0,
+                        "height": 10,
+                        "id": "n1"
+                      }
+                    ],
+                    "outputs": {
+                      "b1": {
+                        "node": 1,
+                        "side": "solid"
+                      }
+                    },
+                    "nextId": 2
+                  },
+                  "position": [
+                    60,
+                    0,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "part": {
+                    "id": "part1",
+                    "rev": "A",
+                    "source": "Child.bcad"
+                  }
+                }
+              ]
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "id": "pat1-1",
+            "name": "Plate 2",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    40,
+                    40
+                  ],
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 10,
+                  "id": "n1"
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              },
+              "nextId": 2,
+              "instances": [
+                {
+                  "id": "inst1",
+                  "name": "Child",
+                  "doc": {
+                    "format": "barocss-cad-model",
+                    "schema": 3,
+                    "units": "mm",
+                    "parameters": {},
+                    "nodes": [
+                      {
+                        "kind": "sketch",
+                        "profile": "rectangle",
+                        "min": [
+                          0,
+                          0
+                        ],
+                        "max": [
+                          10,
+                          10
+                        ],
+                        "id": "n0"
+                      },
+                      {
+                        "kind": "extrude",
+                        "sketch": 0,
+                        "height": 10,
+                        "id": "n1"
+                      }
+                    ],
+                    "outputs": {
+                      "b1": {
+                        "node": 1,
+                        "side": "solid"
+                      }
+                    },
+                    "nextId": 2
+                  },
+                  "position": [
+                    60,
+                    0,
+                    0
+                  ],
+                  "rotation": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "part": {
+                    "id": "part1",
+                    "rev": "A",
+                    "source": "Child.bcad"
+                  }
+                }
+              ]
+            },
+            "position": [
+              60,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "grounded": true,
+            "pattern": {
+              "id": "pat1",
+              "k": 1
+            }
+          }
+        ],
+        "instancePatterns": [
+          {
+            "seed": "p1",
+            "kind": "linear",
+            "count": 2,
+            "dir": [
+              1,
+              0,
+              0
+            ],
+            "spacing": 60,
+            "id": "pat1"
+          }
+        ],
+        "assemblyCuts": [
+          {
+            "id": "cut1",
+            "profile": {
+              "kind": "circle",
+              "radius": 5
+            },
+            "at": [
+              80,
+              20,
+              20
+            ],
+            "dir": [
+              0,
+              0,
+              -1
+            ],
+            "depth": "through",
+            "targets": [
+              "pat1-1"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

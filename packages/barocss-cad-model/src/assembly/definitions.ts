@@ -113,6 +113,11 @@ export function editDefinition(doc: StudioDoc, owner: string, part: StudioDoc): 
   // (A revision waiting for this definition is superseded by the edit: Accept could only silently undo it.)
   const pending = id && doc.pendingParts?.[id] ? Object.fromEntries(Object.entries(doc.pendingParts).filter(([k]) => k !== id)) : doc.pendingParts;
   const next = expandPatterns({ ...doc, instances, pendingParts: pending && Object.keys(pending).length ? pending : undefined });
+  // Native documents may omit shared part metadata. Expansion still changes every
+  // driven copy, so protect cuts on those actual recipients, not only named sharers.
+  const changedIds = (next.instances ?? []).filter(i => i.doc === part && doc.instances?.some(was => was.id === i.id && was.doc !== i.doc)).map(i => i.id);
+  const expandedCut = cutBlockedBy(doc, changedIds, part);
+  if (expandedCut) return { error: cutBlockedWords(expandedCut, 'This edit') };
   const followed = followedDefinitionProblem(doc, next);
   if (followed) return { error: followed.message };
   const taken = new Set((next.instances ?? []).filter(i => i.doc === part).map(i => i.id));
