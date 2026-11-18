@@ -1,3 +1,4 @@
+import { booleanHistoryEdit } from '@barocss/cad-model/app/booleanHistoryEdit';
 import { subtractHistoryEdit } from '@barocss/cad-model/app/subtractHistoryEdit';
 import { loftSectionHistoryEdit } from '@barocss/cad-model/app/loftSectionHistoryEdit';
 import { sweepHistoryEdit } from '@barocss/cad-model/app/sweepHistoryEdit';
@@ -40,7 +41,7 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
   const { doc, evaluated, commandDoc, editNode, fresh, busy, workerSession } = model;
   const { ctx, discardFeatureDraft, closeForCommand, setActive, editSketch, replaceAxis } = commands;
   const { ownsEvaluatedSource } = owner;
-  const savedCommand = () => fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc)?.command ?? mountHistoryEdit(commandDoc, editNode) ?? connectorHistoryEdit(commandDoc, editNode) ?? subdPrimitiveHistoryEdit(commandDoc, editNode) ?? mirrorHistoryEdit(commandDoc, editNode) ?? sweepHistoryEdit(commandDoc, editNode) ?? loftSectionHistoryEdit(commandDoc, editNode) ?? subtractHistoryEdit(commandDoc, editNode);
+  const savedCommand = () => fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc)?.command ?? mountHistoryEdit(commandDoc, editNode) ?? connectorHistoryEdit(commandDoc, editNode) ?? subdPrimitiveHistoryEdit(commandDoc, editNode) ?? mirrorHistoryEdit(commandDoc, editNode) ?? sweepHistoryEdit(commandDoc, editNode) ?? loftSectionHistoryEdit(commandDoc, editNode) ?? subtractHistoryEdit(commandDoc, editNode) ?? booleanHistoryEdit(commandDoc, editNode);
   const savedFeature = savedCommand();
   return <NodeEditor {...editor} nodes={doc.nodes} parameters={doc.parameters} doc={doc} index={editNode}
     bearingAssembly={{ root: doc, owner: 'base' }}

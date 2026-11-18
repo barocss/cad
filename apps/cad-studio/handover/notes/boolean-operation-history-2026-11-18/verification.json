@@ -1,0 +1,21 @@
+{
+  "issue": 730,
+  "baseline": "PASS",
+  "fixedActual": "PASS",
+  "existingSubtractActual": "PASS",
+  "focusedTests": "12/12 PASS",
+  "modelTypes": "PASS",
+  "studioTypesAndVite": "PASS",
+  "scopedLint": "PASS",
+  "sourceFrozen": "PASS",
+  "cleanup": "PASS",
+  "exactCommitCI": "PENDING at commit; final issue comment records result",
+  "failures": [
+    "Initial baseline expected 8 vertices, but native preserves 12 including collinear seam; corrected exact boundary oracle, no tolerance widening.",
+    "First Model type check failed on widened kind inference; explicit StudioDoc/ModelNode annotations added, focused tests and actual browser rerun; final type checks pass. Studio was NOT_RUN in that failed attempt."
+  ],
+  "notRun": [
+    "Delayed worker/document-switch actual race injection; focused identity/revision and existing UI guard were reviewed.",
+    "General Boolean shapes, downstream references, topology continuity and HOLD scopes."
+  ]
+}
