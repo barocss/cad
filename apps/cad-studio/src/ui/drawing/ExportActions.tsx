@@ -34,6 +34,7 @@ export function ExportActions({ sheets = 1, sheet, canExportPdf, layout, views, 
           {cuts.length > 1 && <NativeSelect className={CONTROL} aria-label="Section for DXF" value={dxfCut?.id} onChange={e => setDxfSection(e.target.value)} title="The section to export alone">{cuts.map(c => <option key={c.id} value={c.id}>{c.id}–{c.id}</option>)}</NativeSelect>}
           {dxfCut && <Button variant="ghost" onClick={exportSectionDxf} aria-label="Export section DXF" title={`Section ${dxfCut.id}–${dxfCut.id} alone, 1:1 in model mm`}>{dxfCut.id}–{dxfCut.id} DXF</Button>}
         </div>
+        {sheet?.groups.some(group => group.marks.some(mark => mark.kind === 'hatch' && !!mark.svgTextExclusions?.length)) && <div className="empty" role="note">Screen/SVG only: dimension-text hatch clearance. PDF and DXF retain the original hatching; section DXF retains the original cut geometry.</div>}
         {confirmation && <div ref={confirmPanel} tabIndex={-1} className="dw-export-confirm" role="group" aria-label="Confirm drawing export">
           <ul>{confirmation.messages.map((message, i) => <li key={i}>{message}</li>)}</ul>
           <div className="dw-actions">

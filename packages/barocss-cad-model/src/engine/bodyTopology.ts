@@ -3,6 +3,8 @@ import type { Brep } from '@barocss/cad';
 /** Native BRep metadata only, not a mesh closure or manufacturing certification. */
 export interface NativeBodyTopology {
   readonly kind: 'solid' | 'sheet' | 'mixed' | 'unknown';
+  /** Validated native body count; absent on legacy/custom or unknown results. */
+  readonly bodyCount?: number;
   readonly openShells: number | null;
   /** Unique native edges with an unpaired coedge. Not STL tessellation edge counts. */
   readonly boundaryEdges: number | null;
@@ -38,5 +40,5 @@ export function nativeBodyTopology(brep: Brep | null | undefined): NativeBodyTop
   }
   // A claimed closed shell with unpaired edges is not evidence of a solid.
   if (!openShells && boundary.size) return unknown;
-  return { kind: solids && sheets ? 'mixed' : solids ? 'solid' : 'sheet', openShells, boundaryEdges: boundary.size };
+  return { kind: solids && sheets ? 'mixed' : solids ? 'solid' : 'sheet', bodyCount: solids + sheets, openShells, boundaryEdges: boundary.size };
 }

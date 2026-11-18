@@ -18,6 +18,7 @@ import type { Bom } from '../bom/core';
 import { drawingHoleCallouts } from '../drawing/callout';
 import { sectionsCut } from '../drawing/section';
 import { sheetSections } from '../drawing/sheet';
+import { sectionTextClearanceSource, sectionTextClearanceScope } from '../drawing/sectionTextClearanceScope';
 import { threadsOf } from '../app/threads';
 import { fastenerSizesOf } from '../engine/fastenerSizeRows';
 import { autoDimensions } from '../drawing/auto';
@@ -94,8 +95,15 @@ function readDrawingInputs(doc: StudioDoc, settings: DrawingSettings, includeBom
     return cause.message;
   }
   const scope = drawingScopeOf(settings), source = drawingSourceRevision(scope.kind === 'assembly' ? doc : authored, scope);
+  // The projected BRep and the unfiltered part evaluation must agree on one made native body.
+  let svgSectionTextClearance = false;
+  if (sections.length && sectionTextClearanceSource(sourceDoc, settings) && b.breps.length === 1
+    && b.breps[0].bodies.length === 1 && b.breps[0].bodies[0].kind === 'solid') {
+    const evaluated = evaluatePart(doc, 0, 8, 'read');
+    svgSectionTextClearance = evaluated.ok && sectionTextClearanceScope(sourceDoc, doc, settings, evaluated.bodies);
+  }
   const holes = drawingHoleCallouts(doc, r.views);
-  return { views: r.views, settings, locationOwner: holes.owner, fastenerSizes: fastenerSizesOf(doc), elements, callout: Object.assign(withElements(doc, withFit(doc, holes.callout), elements), { holeKind: holes.holeKind, patternQuantity: holes.patternQuantity, stalePatternSpacing: holes.stalePatternSpacing }), fitMiss: fitMiss(doc), followedChanged: followedStale(authored).map(staleText), meta: { title: settings.title ?? 'part', date: new Date().toISOString().slice(0, 10), source, threads: threadsOf(doc.nodes, fastenerSizesOf(doc)), tableContent: (tb, context) => tableContent(tb, { doc: tb.from === 'fits' ? sourceDoc : doc, ...(bom ? { bom } : {}), ...(context ? { drawing: { ...context, wholeSettings: readDrawing(sourceDoc.drawing) } } : {}) }), ...(settings.weldSymbols ? { welds: weldJointsOf(doc) } : {}), ...(bom ? { bom } : {}), ...(bom && settings.balloons ? { bodyFaces: baseBodyFaces(doc) } : {}) }, ...(sections.length ? { sections } : {}) };
+  return { views: r.views, settings, locationOwner: holes.owner, fastenerSizes: fastenerSizesOf(doc), elements, callout: Object.assign(withElements(doc, withFit(doc, holes.callout), elements), { holeKind: holes.holeKind, patternQuantity: holes.patternQuantity, stalePatternSpacing: holes.stalePatternSpacing }), fitMiss: fitMiss(doc), followedChanged: followedStale(authored).map(staleText), meta: { svgSectionTextClearance, title: settings.title ?? 'part', date: new Date().toISOString().slice(0, 10), source, threads: threadsOf(doc.nodes, fastenerSizesOf(doc)), tableContent: (tb, context) => tableContent(tb, { doc: tb.from === 'fits' ? sourceDoc : doc, ...(bom ? { bom } : {}), ...(context ? { drawing: { ...context, wholeSettings: readDrawing(sourceDoc.drawing) } } : {}) }), ...(settings.weldSymbols ? { welds: weldJointsOf(doc) } : {}), ...(bom ? { bom } : {}), ...(bom && settings.balloons ? { bodyFaces: baseBodyFaces(doc) } : {}) }, ...(sections.length ? { sections } : {}) };
 }
 
 /** O147 B2: the BOM, when a table or the balloons read it (each document evaluated on its own, synchronously). */

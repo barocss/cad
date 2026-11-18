@@ -27,6 +27,7 @@ import type { EngineClient } from '../engine/client';
 import { Lanes } from '../engine/lanes';
 import { drawingBodyChoices } from './drawing/bodyScopeChoices';
 import { sectionGeometryInputs } from './drawing/sectionHatch';
+import { sectionTextClearanceScope } from '@barocss/cad-model/drawing/sectionTextClearanceScope';
 
 export const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 
@@ -168,8 +169,10 @@ export function useDrawingSheet(active: boolean, { engine, doc: sourceDoc, bodie
   const weldJoints = useMemo(() => settings.weldSymbols && bodies ? weldList(doc, bodies).joints : undefined, [settings.weldSymbols, doc, bodies]);
   // (O177: the base part's bodies' face names, for the balloons of its own BOM lines — members, made bodies.)
   const bodyFaces = useMemo(() => settings.balloons && bodies ? bodyFacesOf(bodies) : undefined, [settings.balloons, bodies]);
-  const sheet = useMemo(() => views && layout && buildSheet(views, layout, settings, { title, date: today(), source, callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), [views, layout, settings, title, cuts, callout, threads, tableContentOf, weldJoints, bodyFaces, bom]);
+  const svgSectionTextClearance = active && sourceCurrent && projectionCurrent && !scoped.error
+    && sectionTextClearanceScope(sourceDoc, doc, settings, bodies);
+  const sheet = useMemo(() => views && layout && buildSheet(views, layout, settings, { svgSectionTextClearance, title, date: today(), source, callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), [views, layout, settings, title, cuts, callout, threads, tableContentOf, weldJoints, bodyFaces, bom, svgSectionTextClearance]);
   const annotations = useMemo<ModelAnnotations | null>(() => active && wantAnnotations && sheet && layout && views ? modelAnnotations({ views, layout, settings, sheet, ...(weldJoints ? { welds: weldJoints } : {}) }) : null,
     [active, wantAnnotations, sheet, layout, views, settings, weldJoints]);
-  return { source, bodyScope, scopeRead, scope, scopeKey, scoped, doc, model, currentModel, bodies, projected, projectionCurrent, views, cutsMade, sectionList, sectionKey, error, empty, busy, title, cuts, sectionA, cutA, layout, elements, callout, locationOwner, calloutsFor, fitMissOf, followedChanged, threads, wantsBom, bom, bomError, sourced, tableContentOf, hasSheet, hasFrame, kinds, hasBought, weldJoints, bodyFaces, sheet, annotations };
+  return { source, bodyScope, scopeRead, scope, scopeKey, scoped, doc, model, currentModel, bodies, projected, projectionCurrent, views, cutsMade, sectionList, sectionKey, error, empty, busy, title, cuts, sectionA, cutA, layout, elements, callout, locationOwner, calloutsFor, fitMissOf, followedChanged, threads, wantsBom, bom, bomError, sourced, tableContentOf, hasSheet, hasFrame, kinds, hasBought, weldJoints, bodyFaces, svgSectionTextClearance, sheet, annotations };
 }

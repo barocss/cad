@@ -12,7 +12,7 @@ const doc = (open: boolean): StudioDoc => ({ ...emptyDoc(), nodes: [{ kind: 'sub
 test('native closed and open SubD classifications preserve input and count native boundary edges', () => {
   const closed = subdBrep(box()), open = subdBrep(hole());
   const before = JSON.stringify(open);
-  assert.deepEqual(nativeBodyTopology(closed), { kind: 'solid', openShells: 0, boundaryEdges: 0 });
+  assert.deepEqual(nativeBodyTopology(closed), { kind: 'solid', bodyCount: 1, openShells: 0, boundaryEdges: 0 });
   const result = nativeBodyTopology(open);
   assert.equal(result.kind, 'sheet'); assert.equal(result.openShells, 1);
   const expected = new Set(open.coedges.filter(c => c.twin === null).map(c => c.edge)).size;
@@ -31,9 +31,9 @@ test('missing or contradictory native topology is unknown; mixed native body kin
   const mixed = { ...closed, bodies: [...closed.bodies, ...open.bodies], shells: [...closed.shells, ...open.shells],
     faces: [...closed.faces, ...open.faces], loops: [...closed.loops, ...open.loops],
     coedges: [...closed.coedges, ...open.coedges], edges: [...closed.edges, ...open.edges], vertices: [...closed.vertices, ...open.vertices] };
-  assert.deepEqual(nativeBodyTopology(mixed), { kind: 'mixed', openShells: 1, boundaryEdges: nativeBodyTopology(open).boundaryEdges });
+  assert.deepEqual(nativeBodyTopology(mixed), { kind: 'mixed', bodyCount: 2, openShells: 1, boundaryEdges: nativeBodyTopology(open).boundaryEdges });
   const closedSheet = { ...closed, bodies: closed.bodies.map(b => ({ ...b, kind: 'sheet' as const })) };
-  assert.deepEqual(nativeBodyTopology(closedSheet), { kind: 'sheet', openShells: 0, boundaryEdges: 0 });
+  assert.deepEqual(nativeBodyTopology(closedSheet), { kind: 'sheet', bodyCount: 1, openShells: 0, boundaryEdges: 0 });
 });
 
 test('main, part and preview evaluations carry topology without using volume or deferred mass', () => {
@@ -43,7 +43,7 @@ test('main, part and preview evaluations carry topology without using volume or 
     assert.ok(main.ok); assert.ok(part.ok); assert.ok(preview.ok);
     assert.equal(main.bodies.length, 1);
     const expected = main.bodies[0].topology;
-    assert.equal(expected?.kind, open ? 'sheet' : 'solid');
+    assert.equal(expected?.kind, open ? 'sheet' : 'solid'); assert.equal(expected?.bodyCount, 1);
     assert.deepEqual(part.bodies[0].topology, expected); assert.deepEqual(preview.bodies[0].topology, expected);
     assert.equal(preview.bodies[0].volume, null);
     forgetSnapshots(); deferMasses(true);
@@ -51,4 +51,13 @@ test('main, part and preview evaluations carry topology without using volume or 
     finally { deferMasses(false); forgetSnapshots(); }
     assert.equal(JSON.stringify(input), before);
   }
+});
+
+
+test('validated count distinguishes one output containing two native solids', () => {
+  const a = subdBrep(box()), b = subdBrep(box(), { id: 'second-solid' });
+  const joined = { ...a, bodies: [...a.bodies, ...b.bodies], shells: [...a.shells, ...b.shells],
+    faces: [...a.faces, ...b.faces], loops: [...a.loops, ...b.loops],
+    coedges: [...a.coedges, ...b.coedges], edges: [...a.edges, ...b.edges], vertices: [...a.vertices, ...b.vertices] };
+  assert.deepEqual(nativeBodyTopology(joined), { kind: 'solid', bodyCount: 2, openShells: 0, boundaryEdges: 0 });
 });

@@ -1,3 +1,5 @@
+import { drawingScopeOf } from './scope';
+import { hatchTextExclusion } from './hatchClearance';
 import { resolveNoteLeader } from './noteTargets';
 // The sheet as a display list in sheet millimetres (y down): frame, title block, the projected views
 // and the dimensions. The SVG and PDF writers and the workspace all draw from it.
@@ -43,7 +45,7 @@ export type Mark =
   | { kind: 'fill'; points: XY[]; head?: Head }
   /** Parallel lines `spacing` apart at `angle` degrees (counter-clockwise as read) over rings, even–odd (R11b, O1: kept as one mark so a DXF gets a HATCH; SVG and PDF draw its lines). */
   /** `angle`: the lines' direction on the sheet (degrees, y down the paper): 45 for one body, a body's own in a section of several. */
-  | { kind: 'hatch'; rings: XY[][]; spacing: number; angle: number; pen: Pen }
+  | { kind: 'hatch'; rings: XY[][]; spacing: number; angle: number; pen: Pen; /** Transient SVG-only clearance, not section geometry or saved settings. */ svgTextExclusions?: XY[][] }
   /** `angle`: degrees, counter-clockwise as read on the sheet. */
   | { kind: 'text'; at: XY; text: string; size: number; anchor: 'start' | 'middle' | 'end'; angle?: number; bold?: boolean };
 /** `datum`, `control` (R14.4, O5): a datum feature symbol, a feature control frame. */
@@ -113,7 +115,7 @@ const GAP = 1, OVER = 2;
 /** `sections` (O148 X1): each section's projection and cut-face rings (view coordinates), drawn where the layout places it. */
 /** `meta.callout`: a diameter dimension's text from the feature it measures (a hole callout), or null for Ø. */
 /** `meta.tableContent`: a table's content from its source (O49; absent: a sourced table says it was not filled). */
-export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: DrawingSettings, meta: { title: string; date: string; /** O9: the source revision drawn in the title block. */ source?: string; callout?: DrawingCallout; threads?: ReadonlyMap<string, FaceThread>; tableContent?: (t: DrawingTable, context?: DrawingTableContext) => TableContent | { error: string }; /** FRd2 (O119): the frame's weld joints, for its symbols. */ welds?: readonly WeldJoint[]; /** O147 B2: the BOM (worked out by the caller), for the item balloons. */ bom?: Bom; /** The base part's face names by body key (O177): a balloon of a `base:<body>` line finds its body's edges. */ bodyFaces?: BodyFaces }, sections?: readonly SheetSection[]): Sheet {
+export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: DrawingSettings, meta: { title: string; date: string; /** Caller verified one made base-part body; SVG/display only. */ svgSectionTextClearance?: boolean; /** O9: the source revision drawn in the title block. */ source?: string; callout?: DrawingCallout; threads?: ReadonlyMap<string, FaceThread>; tableContent?: (t: DrawingTable, context?: DrawingTableContext) => TableContent | { error: string }; /** FRd2 (O119): the frame's weld joints, for its symbols. */ welds?: readonly WeldJoint[]; /** O147 B2: the BOM (worked out by the caller), for the item balloons. */ bom?: Bom; /** The base part's face names by body key (O177): a balloon of a `base:<body>` line finds its body's edges. */ bodyFaces?: BodyFaces }, sections?: readonly SheetSection[]): Sheet {
   const p = presetFor(settings);
   const groups: MarkGroup[] = [];
   const ambiguous = ambiguousFrameDimensions(settings);
@@ -257,6 +259,34 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
   const tables = tableGroups(layout, settings, groups, currentTableContent, detailBoxes);
   groups.push(...tables.groups);
   placeShortLinearText(groups, dimensions, settings, layout, placedViews, p);
+  // Derived after final text placement. PDF/DXF retain their original material rings.
+  const clearanceScope = () => {
+    try { const scope = drawingScopeOf(settings); return scope.kind === 'part' && scope.part === undefined && scope.body === undefined && !settings.balloons; }
+    catch { return false; }
+  };
+  if (meta.svgSectionTextClearance === true && clearanceScope()) {
+    for (const sec of sections ?? []) {
+      const authored = sectionsOf(settings).filter(s => s.id === sec.id), placed = onSheet.filter(s => s.id === sec.id);
+      const sectionGroups = groups.filter(g => g.role === 'section' && g.id === sec.id && g.view === undefined);
+      if ((sections ?? []).filter(s => s.id === sec.id).length !== 1 || authored.length !== 1 || !sameSection(authored[0], sec) || placed.length !== 1 || sectionGroups.length !== 1) continue;
+      const unsupported = (s: DrawingSection) => !!(s.dir || s.half || s.steps || s.along || s.removed || s.revolved || s.hideHatch);
+      if (unsupported(sec) || unsupported(authored[0]) || placed[0].placement.breaks || layout.views[sec.view].breaks) continue;
+      if (sec.ringBodies && (sec.ringBodies.length !== sec.rings.length || sec.ringBodies.some(b => !Number.isInteger(b) || b < 0) || new Set(sec.ringBodies).size !== 1)) continue;
+      const group = sectionGroups[0], hatches = group.marks.filter((m): m is Extract<Mark, { kind: 'hatch' }> => m.kind === 'hatch');
+      if (hatches.length !== 1) continue;
+      const hatchMark = hatches[0], boxes: XY[][] = [], ref = `section:${sec.id}`;
+      for (const resolved of dimensions) {
+        if (!resolved?.ok || resolved.dim.view !== ref || resolved.kind !== 'linear' || resolved.dim.basic) continue;
+        if (settings.dimensions.filter(d => d.id === resolved.dim.id).length !== 1) continue;
+        const labels = groups.filter(g => g.role === 'dimension' && g.id === resolved.dim.id && g.view === ref);
+        if (labels.length !== 1) continue;
+        const texts = labels[0].marks.filter((m): m is Extract<Mark, { kind: 'text' }> => m.kind === 'text');
+        const quads = texts.map(text => hatchTextExclusion(text, PENS[hatchMark.pen].width));
+        if (quads.length && quads.every((q): q is XY[] => q !== null)) boxes.push(...quads);
+      }
+      if (boxes.length) group.marks = group.marks.map(m => m === hatchMark ? { ...hatchMark, svgTextExclusions: boxes } : m);
+    }
+  }
   return { size: [W, H], groups, dimensions, ...(settings.standard ? { standard: settings.standard } : {}), ...(hasUnitSettings(p) ? { units: { units: p.units, dual: p.dual, precision: p.precision } } : {}), ...(tables.placed.length ? { tables: tables.placed } : {}), ...(welds ? { welds: { placed: welds.placed, unshown: welds.unshown } } : {}), ...(balloons ? { balloons: { placed: balloons.placed, unclear: balloons.unclear, noEdge: balloons.noEdge } } : {}), ...(onSheet.length ? { sections: onSheet } : {}), ...(drawn.details.length ? { details: drawn.details.map(x => x.detail) } : {}), ...(drawn.missing.length ? { detailsMissing: drawn.missing } : {}), ...(apart.missing.length ? { sectionsMissing: apart.missing } : {}) };
 }
 

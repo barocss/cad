@@ -1,0 +1,346 @@
+{
+  "issue": 247,
+  "date": "2026-11-19",
+  "status": "EVIDENCE_PREPARATION_ONLY",
+  "baseline01": {
+    "status": "FIXTURE_FAILURE",
+    "stage": "after real Open/Drawing/SVG download",
+    "reason": "section A body and cutting-plane groups shared ID; selector expected one but found two",
+    "correction": "full-section body group requires absent data-view",
+    "productFailureClaim": false
+  },
+  "baseline02": {
+    "run": "baseline02",
+    "status": "PASS",
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFilesBefore": {
+      "apps/cad-studio/src/ui/DrawingWorkspace.tsx": "ec7f44855fae583b58972b6a0306acd3162b052df45c8f74e18af4e85a8ebf30",
+      "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+      "apps/cad-studio/test/section-hatch-text-clearance-browser.mjs": "19dfcdfd0f9121b92d4f9a05d5b6a04c97dc8587f470abb8b3336d22d9bdbedf",
+      "packages/barocss-cad-model/src/drawing/sheet.ts": "7511a11398a33b9578b71af8ef3710c701d1d114d6963c583fcb0db0d7bca92b",
+      "packages/barocss-cad-model/src/drawing/text.ts": "2d2ae3e0142a71b8940052399168736df5da6ed6fb7bfe96f2937b964c389af0",
+      "packages/barocss-cad-model/src/io/svg.ts": "0b08f181e053d97c51d6cce50cd3c8c14f1b75908b97812fa47763615ba8475a"
+    },
+    "sourceFrozenCount": 1184,
+    "oracles": [
+      {
+        "label": "01-baseline",
+        "exit": 0,
+        "inputSHA256": "c3d39f483abfb4a75fb79a7d18b1dbefedef0caf044c2770e10e4bf4204f7dd1",
+        "outputSHA256": "0e29ba045a857c8875f0fd6516affe3fd19efd491137eabd5e2b8162dcb7d45a",
+        "result": {
+          "status": "PASS",
+          "mode": "BASELINE_ONLY",
+          "actualSVGSegments": 29,
+          "intersectingSegments": 2,
+          "lengthInsideTextBoundsMM": 5.552768131301716,
+          "value": 60,
+          "textQuadInsideMaterial": true,
+          "productGeometryRecreated": false
+        }
+      }
+    ],
+    "downloads": [
+      {
+        "file": "01-baseline.svg",
+        "sha256": "7253120fb0cde7306aa073589e6a70f2f7c0990469eefc18e6546b09f1558f72",
+        "bytes": 9503,
+        "semanticEquality": null
+      }
+    ]
+  },
+  "actual01": {
+    "run": "actual01",
+    "status": "PASS",
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "sourceFilesBefore": {
+      "apps/cad-studio/src/ui/DrawingWorkspace.tsx": "db2c871fdac5042139f51f81b7c748ad9423c1369539dde469f5ae453fc38692",
+      "apps/cad-studio/src/ui/drawing/ExportActions.tsx": "7bf2a6db7d94d9a13c8d3d1feb964cc097406b0540894b5713d2c1bcc584770f",
+      "apps/cad-studio/src/ui/useDrawingSheet.ts": "30462e1ff9817ee9ad2a33b6b8e39a909b887c695643f874c743ef1ca106438b",
+      "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+      "apps/cad-studio/test/section-hatch-text-clearance-actual-browser.mjs": "41a1329c9f33b9502e2199b23af591fe6c244525e9834e2d57f776bb3260c404",
+      "packages/barocss-cad-model/src/chat/drawing.ts": "cc6192f4422545ebb86cfd2bade837bfd42524caeb053d2de4b0639996028938",
+      "packages/barocss-cad-model/src/drawing/hatchClearance.ts": "e6b80b164bb8318a4bf33ad5512ad5410fff95f69346284556ed1b18eb75d78f",
+      "packages/barocss-cad-model/src/drawing/sectionTextClearanceScope.ts": "2a0f73bc3412519dd5db051be13b08d9c6883adb9b02ed04fc7b9e9a35a5e4bc",
+      "packages/barocss-cad-model/src/drawing/sheet.ts": "f31fdd83e9e33a67788d03144ebc4fa2b651a61ffb6dbcf537d6b50dc8a571c8",
+      "packages/barocss-cad-model/src/drawing/text.ts": "2d2ae3e0142a71b8940052399168736df5da6ed6fb7bfe96f2937b964c389af0",
+      "packages/barocss-cad-model/src/engine/bodyTopology.ts": "7dbcd6adbcea64a7824d2aa6ef8b5c463b02e9f6b8f0f811e3dbffbb0b59a394",
+      "packages/barocss-cad-model/src/io/svg.ts": "33b04591b1fd68c58f905029c889b147707be83b92afbd957c049fe905834f09"
+    },
+    "sourceFrozenCount": 1186,
+    "oracles": [
+      {
+        "label": "01-protected",
+        "exit": 0,
+        "inputSHA256": "bc6b5d296e30bd8a48fc3d8e193f07fd0a67568da2ae39cafc5100bd97941e67",
+        "outputSHA256": "6826fb4938b9e819068d59f36b727964faba310275ed45e3638dadcc910b1887",
+        "result": {
+          "status": "PASS",
+          "mode": "ACTUAL_SVG",
+          "actualSVGSegments": 32,
+          "intersectingSegments": 0,
+          "lengthInsideTextBoundsMM": 0,
+          "value": 60,
+          "textQuadInsideMaterial": true,
+          "productGeometryRecreated": false
+        }
+      },
+      {
+        "label": "02-moved",
+        "exit": 0,
+        "inputSHA256": "9196e2715177288716527983655c9b9d15f468da3810d59862b0d79f8b4d1c22",
+        "outputSHA256": "6826fb4938b9e819068d59f36b727964faba310275ed45e3638dadcc910b1887",
+        "result": {
+          "status": "PASS",
+          "mode": "ACTUAL_SVG",
+          "actualSVGSegments": 32,
+          "intersectingSegments": 0,
+          "lengthInsideTextBoundsMM": 0,
+          "value": 60,
+          "textQuadInsideMaterial": true,
+          "productGeometryRecreated": false
+        }
+      },
+      {
+        "label": "03-undo",
+        "exit": 0,
+        "inputSHA256": "bc6b5d296e30bd8a48fc3d8e193f07fd0a67568da2ae39cafc5100bd97941e67",
+        "outputSHA256": "6826fb4938b9e819068d59f36b727964faba310275ed45e3638dadcc910b1887",
+        "result": {
+          "status": "PASS",
+          "mode": "ACTUAL_SVG",
+          "actualSVGSegments": 32,
+          "intersectingSegments": 0,
+          "lengthInsideTextBoundsMM": 0,
+          "value": 60,
+          "textQuadInsideMaterial": true,
+          "productGeometryRecreated": false
+        }
+      },
+      {
+        "label": "04-redo",
+        "exit": 0,
+        "inputSHA256": "9196e2715177288716527983655c9b9d15f468da3810d59862b0d79f8b4d1c22",
+        "outputSHA256": "6826fb4938b9e819068d59f36b727964faba310275ed45e3638dadcc910b1887",
+        "result": {
+          "status": "PASS",
+          "mode": "ACTUAL_SVG",
+          "actualSVGSegments": 32,
+          "intersectingSegments": 0,
+          "lengthInsideTextBoundsMM": 0,
+          "value": 60,
+          "textQuadInsideMaterial": true,
+          "productGeometryRecreated": false
+        }
+      },
+      {
+        "label": "06-reopened",
+        "exit": 0,
+        "inputSHA256": "17793d0d9584a8c5f951e5236c588964eef17c1a64d474423b7e1c7552384ba8",
+        "outputSHA256": "6826fb4938b9e819068d59f36b727964faba310275ed45e3638dadcc910b1887",
+        "result": {
+          "status": "PASS",
+          "mode": "ACTUAL_SVG",
+          "actualSVGSegments": 32,
+          "intersectingSegments": 0,
+          "lengthInsideTextBoundsMM": 0,
+          "value": 60,
+          "textQuadInsideMaterial": true,
+          "productGeometryRecreated": false
+        }
+      }
+    ],
+    "downloads": [
+      {
+        "file": "01-protected.svg",
+        "sha256": "11be82e768e72feefa2fe22cc7a384bd02fab80698fe7064ccb26db441e6c08e",
+        "bytes": 9744,
+        "semanticEquality": null
+      },
+      {
+        "file": "02-moved.svg",
+        "sha256": "4704c33f4c83f40cf4cec37280a468505e42cc74ab634a5e8f866e751304b08f",
+        "bytes": 9789,
+        "semanticEquality": null
+      },
+      {
+        "file": "03-undo.svg",
+        "sha256": "11be82e768e72feefa2fe22cc7a384bd02fab80698fe7064ccb26db441e6c08e",
+        "bytes": 9744,
+        "semanticEquality": null
+      },
+      {
+        "file": "04-redo.svg",
+        "sha256": "4704c33f4c83f40cf4cec37280a468505e42cc74ab634a5e8f866e751304b08f",
+        "bytes": 9789,
+        "semanticEquality": null
+      },
+      {
+        "file": "protected-native.bcad",
+        "sha256": "a3da44eb3fcce625fff7746dffba8033d3acc723074e6e070c3de3058430e5b6",
+        "bytes": 1288,
+        "semanticEquality": true
+      },
+      {
+        "file": "06-reopened.svg",
+        "sha256": "c8ab14bcc4e076c5dbf3c345e1d755d9200ac0e892aef137cbf66974d5b8b484",
+        "bytes": 9774,
+        "semanticEquality": null
+      }
+    ],
+    "postRunProductChanges": "None; later corrections limited to test fixtures and test lint."
+  },
+  "checks": {
+    "unit02": {
+      "status": "PASS",
+      "passed": 14,
+      "failed": 0,
+      "logSHA256": "53eda3ce3e72dfa436830e49316d9aa3e709bd573ede390b50e5013acf11cf62"
+    },
+    "modelType01": {
+      "status": "PASS",
+      "exit": 0,
+      "exitEvidence": "coordinator report; log empty",
+      "logSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "studioType01": {
+      "status": "PASS",
+      "exit": 0,
+      "exitEvidence": "coordinator report; log empty",
+      "logSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "regression": {
+      "status": "FAIL_WITH_BASELINE_COMPARISON",
+      "run": "regression-model01",
+      "tests": 246,
+      "passed": 242,
+      "failed": 4,
+      "logSHA256": "5eef2a3b1ef1de0084c5fa8b963ad80322ef3e17505ea8ee954764273c2f5c00",
+      "failures": {
+        "newFixture": {
+          "name": "production sheet protects every dual/deviation text mark at its final position",
+          "resolution": "Corrected fixture to existing dual display contract; unit04 PASS, full 246 rerun NOT_RUN"
+        },
+        "baselineExisting": [
+          "fixed line/arrow geometry, numeric payloads and circle controls retain exact output; collided linear positions are not byte controls",
+          "no units setting: original dimension data stays byte-identical; plain, ISO and ASME SVG/DXF use the exact-limit and D416 placement baseline",
+          "the plate drawing as DXF: every mark of the sheet, dimensions as DIMENSION entities, the section as a HATCH"
+        ]
+      },
+      "headComparison": {
+        "run": "head-compare01",
+        "tests": 68,
+        "passed": 65,
+        "failed": 3,
+        "logSHA256": "5d666b56d1704ae20f0bf9a4052dc6aacb669ced653feedfc98b7fba8d3787f5",
+        "errorPayloadComparison": "Exact equality confirmed by coordinator; same failure names verified in logs"
+      },
+      "full246PostCorrectionRerun": "NOT_RUN"
+    },
+    "lint": {
+      "status": "FAIL_EXISTING_BASELINE",
+      "run": "lint02",
+      "errors": 3,
+      "logSHA256": "eef5d6e582ba25f72fe7b1c6e13f304439eddca55ed11e2a292864677760234a",
+      "issues": [
+        {
+          "file": "apps/cad-studio/src/ui/DrawingWorkspace.tsx",
+          "line": 44,
+          "unused": "DrawingFix"
+        },
+        {
+          "file": "apps/cad-studio/src/ui/DrawingWorkspace.tsx",
+          "line": 788,
+          "unused": "_leader"
+        },
+        {
+          "file": "apps/cad-studio/src/ui/DrawingWorkspace.tsx",
+          "line": 788,
+          "unused": "_sheet"
+        }
+      ],
+      "headComparison": {
+        "run": "head-lint01",
+        "logSHA256": "eef5d6e582ba25f72fe7b1c6e13f304439eddca55ed11e2a292864677760234a",
+        "sameThreeErrors": true
+      },
+      "newTestUnusedVariable": "corrected before lint02"
+    },
+    "commit": "NOT_RUN",
+    "push": "NOT_RUN",
+    "CI": "NOT_RUN",
+    "threeAdditionalUnitCases": {
+      "status": "PASS_IN_UNIT04",
+      "includedIn": 17,
+      "earlierStatus": "NOT_RUN at initial evidence preparation; no retroactive change to unit02 14/14"
+    },
+    "unit04": {
+      "status": "PASS",
+      "passed": 17,
+      "failed": 0,
+      "logSHA256": "8156f9f6a3d466a87a3d858d2c00afdccf8feb8fd90ef1f0c52d751ebfc7704a",
+      "after": "Corrected dual display-contract fixture and unused test lint variable; product files unchanged from actual01"
+    },
+    "studioRegression01": {
+      "status": "PASS",
+      "tests": 24,
+      "passed": 24,
+      "failed": 0,
+      "logSHA256": "c4e0d20ddc6122a5b3e79a573abe66c63a6a73538a1dc248ad8a62243e05c2e9"
+    },
+    "modelType02": {
+      "status": "PASS",
+      "exit": 0,
+      "exitEvidence": "coordinator report; empty log",
+      "logSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "images": [
+    {
+      "file": "01-baseline.png",
+      "bytes": 133892,
+      "sha256": "62c140af62f27902ffaef6caa9752c5a46786d1f1c14474158c94f43bfe025b0",
+      "unalteredCopy": true,
+      "visualPrivacyReview": "synthetic CAD only; no visible credentials or personal paths"
+    },
+    {
+      "file": "02-protected.png",
+      "bytes": 134135,
+      "sha256": "28796af674381b7252746e15ecacf89fe24aa0385925d4f28a300de495da27cc",
+      "unalteredCopy": true,
+      "visualPrivacyReview": "synthetic CAD only; no visible credentials or personal paths"
+    },
+    {
+      "file": "03-reopened.png",
+      "bytes": 133104,
+      "sha256": "52ac620d827a5df834476241b738a0b03263621e7bf6f2d3db3fe26ce6529024",
+      "unalteredCopy": true,
+      "visualPrivacyReview": "synthetic CAD only; no visible credentials or personal paths"
+    }
+  ],
+  "limits": [
+    "Strict single made native base body, ordinary full section, resolved non-basic linear text; no schema changes.",
+    "Screen/SVG only. PDF and sheet DXF byte equality checked in unit tests, not actual downloaded files. Native section DXF actual readback NOT_RUN.",
+    "Text bounds use product conservative text metrics, not independent glyph ink. Python independently parses real SVG and intersects line segments.",
+    "Actual fixture is synthetic 60x40x20 body with manual horizontal 60 mm dimension. Initial mouse authoring NOT_RUN.",
+    "Five real SVG downloads, one native Save and fresh Open; label drag only changes place, Undo/Redo exact accepted documents.",
+    "Geometry/source preservation is document/unit evidence, not independent volume measurement.",
+    "No actual source edit, late result, mixed-body, half/broken/detail/assembly, dual/tolerance qualification.",
+    "Broader issue #247 remains incomplete; existing PDF golden HOLD unchanged."
+  ]
+}
