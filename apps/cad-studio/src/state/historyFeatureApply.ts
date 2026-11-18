@@ -1,3 +1,5 @@
+import { isFlangePositionChange } from '@barocss/cad-model/app/flangePositionEdit';
+import { proveFlangePositionChange } from './flangePositionHistory';
 import { flangeRadiusEdit } from '@barocss/cad-model/app/flangeRadiusEdit';
 import { canonical } from '@barocss/cad-model/util/revision';
 import { isFilletRadiusModeChange, proveFilletRadiusModeChange } from './filletRadiusModeHistory';
@@ -47,6 +49,11 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
       title: 'Bend radius not applied', hint: 'Apply only the bend radius change on the unchanged Flange first. Apply Length or Angle changes separately.',
       detail: 'The original document and sheet geometry are unchanged.',
     });
+    const flangePositionChanged = oldFlange?.kind === 'sheet-flange' && newFlange?.kind === 'sheet-flange'
+      && (oldFlange.position ?? 'material-inside') !== (newFlange.position ?? 'material-inside');
+    const flangePositionFailure = { title: 'Flange position not applied', hint: 'Apply only Position on the unchanged full-width rectangular-sheet Flange. Its original top edge must be verified. Apply Length, Angle or Bend radius separately.', detail: 'The original document and sheet geometry are unchanged.' };
+    if (flangePositionChanged && !isFlangePositionChange(doc, { ...doc, nodes }, editNode)) return Promise.resolve(flangePositionFailure);
+    const flangePositionSource = flangePositionChanged ? canonical(doc) : '', flangePositionDraft = flangePositionChanged ? canonical(nodes) : '';
     const scope = owner.scope();
     const patternEdit = prepareLinearPatternHoleEdit(doc, nodes, editNode);
     if ('error' in patternEdit) return Promise.resolve(patternEdit.error);
@@ -81,8 +88,19 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     const resize = !heightResize && isRectangleFinishResize(doc,next,editNode), worker = owner.worker(), open = owner.open();
     const current = () => ownsDraft() && owner.document() === doc && owner.scope() === scope
       && owner.worker() === worker && owner.open() === open
-      && (!(heightResize || openingChanged || sectionChanged || radiusModeChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
+      && (!flangePositionChanged || canonical(doc) === flangePositionSource && canonical(nodes) === flangePositionDraft)
+      && (!(heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
     return (async () => {
+      if (flangePositionChanged) {
+        if (!current()) return;
+        try {
+          const parentRevision = nextRevision();
+          const parent = await engine.part(prefixDoc(doc, editNode), parentRevision, 'refs');
+          if (!current()) return;
+          if (!parent.ok || parent.revision !== parentRevision || !proveFlangePositionChange(doc, next, parent.bodies)) return flangePositionFailure;
+          request = nextRevision();
+        } catch { if (current()) return flangePositionFailure; return; }
+      }
       if (radiusModeChanged) {
         if (!current()) return;
         try {
@@ -136,7 +154,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
         } catch { if (current()) return failure; return; }
       }
       const reply = await engine.evaluate(next, request);
-      if (!reply || !current() || (heightResize || openingChanged || sectionChanged || radiusModeChanged) && reply.revision !== request) return;
+      if (!reply || !current() || (heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged) && reply.revision !== request) return;
       if (reply.ok) {
         if (!resize) {
           const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated
