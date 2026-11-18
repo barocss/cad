@@ -1,0 +1,34 @@
+{
+  "status": "FAIL",
+  "qualification": "Actual shared copy strips design history and proposal inputs from embedded CAD documents.",
+  "observations": [
+    {
+      "markers": [
+        "SYNTHETIC_PRIVATE_sub",
+        "SYNTHETIC_PRIVATE_sub_prompt",
+        "SYNTHETIC_PRIVATE_sub_plan",
+        "SYNTHETIC_PRIVATE_leaf",
+        "SYNTHETIC_PRIVATE_leaf_prompt",
+        "SYNTHETIC_PRIVATE_leaf_plan",
+        "SYNTHETIC_PRIVATE_leaf",
+        "SYNTHETIC_PRIVATE_leaf_prompt",
+        "SYNTHETIC_PRIVATE_leaf_plan",
+        "SYNTHETIC_PRIVATE_pending",
+        "SYNTHETIC_PRIVATE_pending_prompt",
+        "SYNTHETIC_PRIVATE_pending_plan"
+      ],
+      "suggestedFilename": "synthetic-assembly-shared.bcad",
+      "sourceUnchanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Only synthetic marker text; no claim of removing all personal metadata."
+  ],
+  "visualReview": "Screenshots directly inspected"
+}

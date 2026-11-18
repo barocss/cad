@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "qualification": "Actual shared copy strips design history and proposal inputs from embedded CAD documents.",
+  "observations": [
+    {
+      "markers": [],
+      "suggestedFilename": "synthetic-assembly-shared.bcad",
+      "sourceUnchanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Only synthetic marker text; no claim of removing all personal metadata."
+  ],
+  "visualReview": "Screenshots directly inspected"
+}

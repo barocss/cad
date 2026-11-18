@@ -44,10 +44,21 @@ export function compactHistory(list: HistoryEntry[], budget = HISTORY_BYTES): Hi
 }
 /** The document without its design history, and its proposals without the prompts and plans (to share it). */
 export function stripHistory(doc: StudioDoc): StudioDoc {
-  const out: StudioDoc = { ...doc };
-  delete out.history;
-  if (doc.proposals) out.proposals = doc.proposals.map(({ plan: _, prompt: __, ...p }) => p);
-  return out;
+  // Embedded parts and pending revisions are saved in the same shared file. Keep
+  // document aliases (and defensive cycles) without mutating the working model.
+  const seen = new WeakMap<StudioDoc, StudioDoc>();
+  const clean = (source: StudioDoc): StudioDoc => {
+    const prior = seen.get(source);
+    if (prior) return prior;
+    const out: StudioDoc = { ...source };
+    seen.set(source, out);
+    delete out.history;
+    if (source.proposals) out.proposals = source.proposals.map(({ plan: _, prompt: __, ...p }) => p);
+    if (source.instances) out.instances = source.instances.map(instance => ({ ...instance, doc: clean(instance.doc) }));
+    if (source.pendingParts) out.pendingParts = Object.fromEntries(Object.entries(source.pendingParts).map(([id, pending]) => [id, { ...pending, doc: clean(pending.doc) }]));
+    return out;
+  };
+  return clean(doc);
 }
 
 /**
