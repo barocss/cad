@@ -16,6 +16,7 @@ import { modelWheelZoomAvailable, useWheelZoomPreference } from './viewport/whee
 import { filletPickFailure } from './app/filletPickFailure';
 import { createEvaluationEvidence } from './state/evaluationEvidence';
 import { candidateReferenceProblem, refreshCandidateReferences } from './state/candidateReferences';
+import { prepareParameterHeightFinish } from './state/parameterHeightFinish';
 import { HistoryFeatureEditor } from './ui/HistoryFeatureEditor';
 import { createCommandHudActions } from './app/commandHudActions';
 import { InstanceInspector } from './ui/InstanceInspector';
@@ -1023,7 +1024,15 @@ export function App() {
           return;
         }
       }
-      const key = evaluationKey(input), handoff = !edit ? evaluationEvidence.takeHandoff() : null;
+      // Only a narrowly proved Height parameter edit may refresh its finish evidence before evaluation.
+      const candidate = edit && !edit.kind && !edit.roundedInset
+        ? await prepareParameterHeightFinish({ before: edit.base, next: edit.next,
+          evaluateParent: (part, request) => engine.part(part, request, 'refs'),
+          nextRevision: () => revision.current++, isCurrent: current }) : edit?.next;
+      if (!current()) return;
+      const repairedHeight = !!edit && candidate !== edit.next;
+      const candidateInput = repairedHeight ? prefixDoc(candidate!, candidate!.nodes.length) : input;
+      const key = evaluationKey(candidateInput), handoff = !edit ? evaluationEvidence.takeHandoff() : null;
       const routeHandoff = !edit ? routeAcceptedHandoff.current : null;
       if (!edit) routeAcceptedHandoff.current = null;
       // Only the exact accepted route document can consume its final result, once.
@@ -1032,16 +1041,20 @@ export function App() {
         && routeHandoff.result.revision === routeHandoff.revision ? routeHandoff.result : null;
       // A configuration-only parameter edit can keep the already fresh accepted result too.
       const accepted = evaluationEvidence.accepted();
-      const result = edit && accepted?.key === key ? accepted.result
-        : handoff?.target === docNow.current && handoff.key === key ? handoff.result : routeResult ?? await engine.evaluate(input, revision.current++);
+      let evaluationRevision: number | undefined;
+      const result = edit && !repairedHeight && accepted?.key === key ? accepted.result
+        : handoff?.target === docNow.current && handoff.key === key ? handoff.result : routeResult ?? await engine.evaluate(candidateInput, evaluationRevision = revision.current++);
       if (!current()) return;
+      if (repairedHeight && (evaluationRevision === undefined || result?.revision !== evaluationRevision)) {
+        refuse('The Height parameter evaluation could not be verified.'); return;
+      }
       if (!result) { if (edit) refuse('The evaluation was superseded.'); else setBusy(false); return; }
       if (edit) {
         if (!result.ok) { refuse(result.error.detail || result.error.hint); return; }
         evaluationEvidence.stage(edit.request, result);
-        const referenceProblem = candidateReferenceProblem(edit.next, bodiesRef.current, result.bodies);
+        const referenceProblem = candidateReferenceProblem(candidate!, bodiesRef.current, result.bodies);
         if (referenceProblem) { refuse(referenceProblem); return; }
-        const next = await refreshCandidateReferences({ candidate: edit.next, key, result,
+        const next = await refreshCandidateReferences({ candidate: candidate!, key, result,
           accepted: evaluationEvidence.accepted,
           evaluateParent: part => engine.part(part, revision.current++, 'refs'), isCurrent: current });
         if (!current()) return;
