@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { convexHull } from '@barocss/cad';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { JointTree } from '@barocss/cad-model/robot/joints';
@@ -23,6 +23,9 @@ export function mapRobotWorkspace(tree: JointTree, readBodies: ReadBodies, n: nu
   if (hull) for (let i = 0; i < hull.length; i += 3) { const d = Math.hypot(hull[i] - own[0], hull[i + 1] - own[1], hull[i + 2] - own[2]); if (d > far) { far = d; tool = [hull[i], hull[i + 1], hull[i + 2]]; } }
   return workspaceMap(tree, { link: end, samples: n, h, ...(tool ? { tool } : {}), ...(free ? { links } : {}) });
 }
+export function workspaceSampleProblem(n: number): string | null {
+  return Number.isInteger(n) && n >= 100 && n <= 200000 ? null : 'Enter a whole number from 100 to 200000.';
+}
 interface Props {
   tree: JointTree;
   readBodies: ReadBodies;
@@ -35,7 +38,10 @@ interface Props {
 /** Workspace controls and evidence, composed into the live joints card without subscribing to the pose. */
 export function RobotWorkspacePanel({ tree, readBodies, ready, workspace, onChange, fileName, onNotice }: Props) {
   const [wsN, setWsN] = useState(20000), [wsH, setWsH] = useState(10), [wsFree, setWsFree] = useState(false);
+  const sampleHelp = useId(), sampleProblem = workspaceSampleProblem(wsN);
   const map = () => {
+    // Repeat admission at the action boundary; invalid edits retain the previous map.
+    if (workspaceSampleProblem(wsN) || !Number.isFinite(wsH) || wsH <= 0) return;
     const end = workspaceEndLink(tree); // Keep tree selection outside the existing mapping refusal boundary.
     try { onChange(mapRobotWorkspace(tree, readBodies, wsN, wsH, wsFree, end)); }
     catch (e) { onNotice({ title: 'Workspace not mapped', hint: e instanceof Error ? e.message.replace(/^\[[A-Z_]+\] /, '') : String(e), detail: '' }); }
@@ -44,10 +50,11 @@ export function RobotWorkspacePanel({ tree, readBodies, ready, workspace, onChan
   const download = () => workspace && downloadBytes(new TextEncoder().encode(JSON.stringify(workspace)), `${fileName}-workspace.json`, 'application/json');
   return <>
       {tree.joints.some(j => j.type !== 'fixed') && <div className="flex flex-wrap items-center gap-x-2 gap-y-1 py-0.5 text-[11px] [&>label]:inline-flex [&>label]:items-center [&>label]:gap-1 [&>label]:whitespace-nowrap" aria-label="Workspace">
-        <label>N <Input type="number" aria-label="Workspace samples" min={100} max={200000} step={1000} value={wsN} onChange={e => setWsN(Number(e.target.value))} style={{ width: 70 }} /></label>
+        <label>N <Input type="number" aria-label="Workspace samples" min={100} max={200000} step={1} aria-invalid={!!sampleProblem} aria-describedby={sampleProblem ? sampleHelp : undefined} value={wsN} onChange={e => setWsN(Number(e.target.value))} style={{ width: 70 }} /></label>
         <label> h <Input type="number" aria-label="Workspace voxel" min={0.5} step={1} value={wsH} onChange={e => setWsH(Number(e.target.value))} style={{ width: 48 }} /> mm</label>
         <label title="Leave out poses where two links interpenetrate (RM6's exact test): slower"> <input type="checkbox" className={TICK} aria-label="Workspace contact-free" checked={wsFree} onChange={e => setWsFree(e.target.checked)} /> contact-free</label>
-        <Button variant="ghost" aria-label="Map workspace" disabled={!ready || !(wsN >= 1 && wsH > 0)} title="The positions the end link's joint point reaches over the joints' ranges, coloured by manipulability" onClick={() => map()}>Workspace</Button></div>}
+        <Button variant="ghost" aria-label="Map workspace" disabled={!ready || !!sampleProblem || !Number.isFinite(wsH) || wsH <= 0} title="The positions the end link's joint point reaches over the joints' ranges, coloured by manipulability" onClick={() => map()}>Workspace</Button></div>}
+      {sampleProblem && <div id={sampleHelp} role="status" className="text-[11px] text-destructive">{sampleProblem}</div>}
       {workspace && <div className="kv muted" role="status" aria-label="Workspace summary">{summary} <Button variant="ghost" aria-label="Download workspace" onClick={download}>JSON</Button><Button variant="ghost" aria-label="Hide workspace" onClick={() => onChange(null)}>Hide</Button></div>}
   </>;
 }

@@ -50,7 +50,7 @@ function inContact(tree: JointTree, links: readonly SweepLink[], q: Readonly<Rec
 
 /** The workspace map of a tool point. */
 export function workspaceMap(tree: JointTree, o: WorkspaceOptions): WorkspaceMap {
-  if (!(o.samples >= 1 && o.h > 0)) throw refusal('BAD_VALUES', `samples ≥ 1 and h > 0 (samples ${o.samples}, h ${o.h})`);
+  if (!(Number.isSafeInteger(o.samples) && o.samples >= 1 && Number.isFinite(o.h) && o.h > 0)) throw refusal('BAD_VALUES', `samples must be a positive safe integer and h must be finite and > 0 (samples ${o.samples}, h ${o.h})`);
   const at = o.frame !== undefined ? frameTool(tree, o.frame) : o.link !== undefined ? { link: o.link, tool: o.tool } : null;
   if (!at) throw refusal('BAD_VALUES', 'a link or a frame');
   const path = pathTo(tree, at.link), keys = unknownsOf(path), ranges: Record<string, [number, number]> = {};

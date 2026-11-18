@@ -1,0 +1,189 @@
+{
+  "sourceBase": "091366fefdf9c8e4c56b1b96f36e90c1035683fa",
+  "runs": [
+    {
+      "name": "baseline",
+      "status": "PASS",
+      "observations": [
+        {
+          "label": "before-browser",
+          "availableBytes": 36248674304
+        },
+        {
+          "label": "existing UI attributes",
+          "constraints": {
+            "min": "100",
+            "max": "200000",
+            "step": "1000"
+          }
+        },
+        {
+          "label": "before-N6",
+          "availableBytes": 36248805376
+        },
+        {
+          "requested": 6,
+          "reported": 6,
+          "voxelCountSum": 6,
+          "excluded": 0,
+          "accounted": 6,
+          "reportMatchesAccounting": true
+        },
+        {
+          "label": "after-N6",
+          "availableBytes": 36247109632
+        },
+        {
+          "label": "before-N100.5",
+          "availableBytes": 36247109632
+        },
+        {
+          "requested": 100.5,
+          "reported": 100.5,
+          "voxelCountSum": 100,
+          "excluded": 0,
+          "accounted": 100,
+          "reportMatchesAccounting": false
+        },
+        {
+          "label": "after-N100.5",
+          "availableBytes": 36246413312
+        },
+        {
+          "label": "before-N100",
+          "availableBytes": 36246413312
+        },
+        {
+          "requested": 100,
+          "reported": 100,
+          "voxelCountSum": 100,
+          "excluded": 0,
+          "accounted": 100,
+          "reportMatchesAccounting": true
+        },
+        {
+          "label": "after-N100",
+          "availableBytes": 36245692416
+        },
+        {
+          "label": "finished",
+          "availableBytes": 36245012480
+        }
+      ],
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    {
+      "name": "fixed",
+      "status": "PASS",
+      "observations": [
+        {
+          "label": "before-browser",
+          "availableBytes": 36218392576
+        },
+        {
+          "label": "invalid-below",
+          "availableBytes": 36211318784
+        },
+        {
+          "label": "invalid-fractional",
+          "availableBytes": 36199374848
+        },
+        {
+          "label": "invalid-blank",
+          "availableBytes": 36205682688
+        },
+        {
+          "label": "invalid-above",
+          "availableBytes": 36196724736
+        },
+        {
+          "label": "before-valid128",
+          "availableBytes": 36208529408
+        },
+        {
+          "requested": 128,
+          "contactFree": false,
+          "excluded": 0,
+          "voxelCountSum": 128,
+          "contactPositiveClaim": false
+        },
+        {
+          "label": "before-valid200",
+          "availableBytes": 36207833088
+        },
+        {
+          "requested": 200,
+          "contactFree": true,
+          "excluded": 0,
+          "voxelCountSum": 200,
+          "contactPositiveClaim": false
+        },
+        {
+          "label": "finished",
+          "availableBytes": 36195856384
+        }
+      ],
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    },
+    {
+      "name": "composition",
+      "status": "PASS",
+      "observations": [],
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "file": "baseline-fractional.png",
+      "sha256": "66123d9cd9b072ada64c9a079b017bfc0937567a97100cec51caf451b4064304"
+    },
+    {
+      "file": "invalid-retains-map.png",
+      "sha256": "2cea7e5d7df1229fda908a882933613288fa199e9319af562bb743cf82249ed2"
+    },
+    {
+      "file": "valid-contact-free.png",
+      "sha256": "c001dd22eebf34d762ced3eb105ee95ab2550c6a39f34439d16a17334dd2bf84"
+    },
+    {
+      "file": "baseline-workspace.json",
+      "sha256": "d941619f38a504864e634e1a891cfb007ffc44f4ea3c08e2880b7b927f86d170"
+    },
+    {
+      "file": "valid100-workspace.json",
+      "sha256": "87235fe7b98a3b4c5145df86614bdf2ff92e362cc6450a0842187ae0aee1a9e8"
+    },
+    {
+      "file": "valid200-workspace.json",
+      "sha256": "f5cff05d9dbbb31ef6db8877a7312378c6681b064b75af9dbeb88a1f17d21ea0"
+    }
+  ],
+  "checks": {
+    "model": "8/8",
+    "studio": "4/4",
+    "modelTsc": "PASS",
+    "studioTsc": "PASS",
+    "scopedLint": "PASS"
+  }
+}

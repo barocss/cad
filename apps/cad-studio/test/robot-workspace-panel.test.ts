@@ -12,7 +12,7 @@ import { BASE } from '@barocss/cad-model/assembly/mates';
 import { jointTreeOf } from '@barocss/cad-model/robot/joints';
 import { sweepLinks } from '@barocss/cad-model/robot/sweep';
 import { workspaceMap } from '@barocss/cad-model/robot/workspace';
-import { mapRobotWorkspace } from '../src/robot/RobotWorkspacePanel';
+import { mapRobotWorkspace, workspaceSampleProblem } from '../src/robot/RobotWorkspacePanel';
 
 function fixture(name: string) {
   const doc = JSON.parse(readFileSync(resolve(process.cwd(), `../../packages/barocss-cad/conformance/rm/${name}/case.json`), 'utf8')).input.document as StudioDoc;
@@ -70,4 +70,11 @@ test('an unlimited slide refuses without changing the tree or document', () => {
   assert.throws(() => mapRobotWorkspace(tree, f.readBodies, 32, 10, false), /\[NO_RANGE\].*slide .*has no limits/);
   assert.deepEqual(tree, before);
   assert.deepEqual(f.doc, f.original);
+});
+
+
+test('workspace UI accepts every integer in its displayed range, not only step-1000 multiples', () => {
+  for (const n of [100, 128, 200, 1001, 200000]) assert.equal(workspaceSampleProblem(n), null);
+  for (const n of [0, 6, 99, 100.5, 200001, NaN, Infinity, -Infinity])
+    assert.equal(workspaceSampleProblem(n), 'Enter a whole number from 100 to 200000.');
 });
