@@ -1,0 +1,36 @@
+{
+  "status": "FAIL",
+  "qualification": "Actual occurrence Material edit reaches the public assembly mesh material field.",
+  "limits": [
+    "Mesh material ID only; no new color or hidden-body filtering policy."
+  ],
+  "observations": [
+    {
+      "looks": [
+        {
+          "body": "b1",
+          "look": {
+            "material": "steel"
+          }
+        }
+      ],
+      "materials": [
+        {
+          "key": "p1/b1",
+          "material": "al6061"
+        },
+        {
+          "key": "p2/b2",
+          "material": "al6061"
+        }
+      ],
+      "unchanged": true
+    }
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": []
+}

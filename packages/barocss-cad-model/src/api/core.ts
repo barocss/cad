@@ -34,10 +34,13 @@ export function massOf(body: BodyResult, density: number): MassResult {
 
 /** Each body's display triangles and lines, as the core's evaluation made them, with the material id the body names. */
 export function meshesOf(doc: StudioDoc): MeshData[] {
-  return bodiesOf(doc).map(b => {
-    const material = materialIdOf(doc, b);
-    return { key: b.key, positions: b.mesh.positions.slice(), normals: b.mesh.normals.slice(), indices: b.mesh.indices.slice(), lines: b.mesh.edgeLines.slice(), ...(material !== undefined ? { material } : {}) };
-  });
+  return bodiesOf(doc).map(b => meshOfBody(doc, b));
+}
+
+/** Internal mesh conversion shared by part and assembly readers; copies every mutable array. */
+export function meshOfBody(doc: StudioDoc, body: BodyResult): MeshData {
+  const material = materialIdOf(doc, body);
+  return { key: body.key, positions: body.mesh.positions.slice(), normals: body.mesh.normals.slice(), indices: body.mesh.indices.slice(), lines: body.mesh.edgeLines.slice(), ...(material !== undefined ? { material } : {}) };
 }
 
 /** The document's exact solids as one STEP AP214 file. */

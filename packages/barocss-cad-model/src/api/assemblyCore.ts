@@ -13,10 +13,10 @@ import { treeOf } from './robotCore';
 import type { FrameSettings } from '../robot/frames';
 import { eulerOf } from '../engine/placement';
 import { addMate, addPart, checkFramesOn, placePart, solveDoc, withFrames } from '../assembly/edit';
-import { bodiesOf, meshesOf, type MeshData } from './core';
+import { bodiesOf, meshesOf, meshOfBody, type MeshData } from './core';
 import { explodeOffsets } from '../assembly/explode';
 import { instanceJointsOf, setInstanceJoints } from '../assembly/flexible';
-import { instanceLooksListing, setInstanceLooks, type InstanceLookPatch } from '../assembly/looks';
+import { instanceLooksListing, setInstanceLooks, lookTargetsOf, looksOf, type InstanceLookPatch } from '../assembly/looks';
 import { addAssemblyStep, deleteAssemblyStep, editAssemblyStep, moveAssemblyStep, type AddAssemblyStepOptions, type EditAssemblyStepOptions } from '../assembly/steps';
 import { addAssemblyCut, deleteAssemblyCut, editAssemblyCut, type AddAssemblyCutOptions, type EditAssemblyCutOptions } from '../assembly/cuts';
 import { addInstancePattern, drivenRefusal, seedMateRefusal, deleteInstancePattern, editInstancePattern, skipOccurrence, type AddPatternOptions, type EditPatternOptions } from '../assembly/patterns';
@@ -127,9 +127,15 @@ export const problemsOf = (doc: StudioDoc) => solveDoc(doc).problems;
 export function assemblyMeshes(doc: StudioDoc, explode = 0): MeshData[] {
   const base = doc.nodes.length ? meshesOf(doc).map(m => ({ ...m, key: `${BASE}/${m.key}` })) : [];
   // A subassembly may have no features of its own; placedDoc folds its children in.
-  const placed = (doc.instances ?? []).filter(i => !i.hidden).map(i => ({ id: i.id, doc: placedDoc(i, doc) }));
-  const offsets = explode > 0 ? explodeOffsets(doc.nodes.length ? bodiesOf(doc) : [], placed.map(p => ({ id: p.id, bodies: bodiesOf(p.doc) })), explode) : null;
-  return [...base, ...placed.flatMap(p => meshesOf(p.doc).map(m => moved({ ...m, key: `${p.id}/${m.key}` }, offsets?.get(p.id))))];
+  const placed = (doc.instances ?? []).filter(i => !i.hidden).map(i => {
+    const placed = placedDoc(i, doc), bodies = bodiesOf(placed);
+    return { id: i.id, doc: placed, bodies, looks: looksOf(i, lookTargetsOf(i, placed.nodes, bodies)) };
+  });
+  const offsets = explode > 0 ? explodeOffsets(doc.nodes.length ? bodiesOf(doc) : [], placed, explode) : null;
+  return [...base, ...placed.flatMap(p => p.bodies.map((body, k) => {
+    const mesh = meshOfBody(p.doc, body), material = p.looks[k].material;
+    return moved({ ...mesh, key: `${p.id}/${mesh.key}`, ...(material !== undefined && material !== '' ? { material } : {}) }, offsets?.get(p.id));
+  }))];
 }
 
 // (A mesh's positions and lines moved by d — copies; none when there is no offset.)
