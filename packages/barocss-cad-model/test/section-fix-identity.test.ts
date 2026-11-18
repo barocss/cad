@@ -37,7 +37,8 @@ test('automatic section fix must not reconnect retained dimension to a newly gen
  const doc=scene(), original=autoLayout(inputs(doc,{sections:[{id:'B',view:'top',at:-14}]})).settings;
  const held=original.dimensions.find(d=>d.view==='section:B')!;assert.ok(held);
  const normal=autoLayout(inputs(doc)).settings;
- const settings={...normal,dimensions:[...normal.dimensions,{...held,id:'held-old-cut',auto:false}]};
+ const manual={...held,id:'held-old-cut'};delete manual.auto;
+ const settings:DrawingSettings={...normal,dimensions:[...normal.dimensions,manual]};
  const ctx=issueContext(inputs(doc,settings));
  const before=ctx.sheet.dimensions.find(d=>d.dim.id==='held-old-cut');assert.ok(before&&!before.ok);
  const candidate=drawingIssues(ctx).find(x=>x.code==='DIM_ON_HIDDEN'&&x.fix?.kind==='add-section');assert.ok(candidate?.fix);
