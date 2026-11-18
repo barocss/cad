@@ -1,0 +1,90 @@
+{
+  "status": "PASS",
+  "qualification": "#231 synthetic native two-member session COM: missing member refusal, public History recovery, explicit Clear and same-filename Open reset.",
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "limits": [
+    "No Worker patch or delayed delivery, saved-file provenance, independent native evaluator, dynamics or safety approval.",
+    "Only synthetic ordinary cubes; no export, project switching, manufacturing preview or assembly coverage. Same-filename Open is an existing regression, strengthened here with different geometry and unchanged body keys."
+  ],
+  "observations": [
+    {
+      "label": "before-browser",
+      "availableBytes": 35909918720
+    },
+    {
+      "label": "before-suppress",
+      "availableBytes": 35914121216
+    },
+    {
+      "label": "before-same-name-open",
+      "availableBytes": 35899518976
+    },
+    {
+      "analytic": {
+        "volumes": [
+          1000,
+          1000
+        ],
+        "densities": [
+          2.7,
+          7.85
+        ],
+        "masses": [
+          2.7,
+          7.85
+        ],
+        "mass": 10.55,
+        "centroid": [
+          27.322274881516584,
+          5,
+          5
+        ]
+      },
+      "native": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1000.0000000000001,
+            "centroid": [
+              4.999999999999999,
+              4.999999999999999,
+              5
+            ],
+            "massRef": null
+          },
+          {
+            "key": "b3",
+            "volume": 1000.0000000000007,
+            "centroid": [
+              34.99999999999997,
+              4.9999999999999964,
+              5
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "sourceFilename": "two-cube-com.bcad",
+      "replacementFilename": "two-cube-com.bcad",
+      "replacementDifference": "Cube B translated +30 mm in source sketch; unchanged IDs/materials",
+      "scope": "Actual public Pin/History Suppress/Undo/Redo/Clear/Open; no injected state or asynchronous delivery claim."
+    },
+    {
+      "label": "finished",
+      "availableBytes": 35902255104
+    }
+  ],
+  "testedCommit": "dd40abe23a824c9d5263983291218ff7234af95b",
+  "fixtureSHA256": "79ed7eadc885878ba8c377c3753bb171976a75dab4cfd498308ed5d2c59f165c",
+  "regression": "Studio pinned-mass/lifecycle, mass-provenance, native-mass-client: 10/10 PASS"
+}
