@@ -87,6 +87,20 @@ export function drawingRevisionPrint(doc: StudioDoc): string {
     });
     stamp = modelPrint({ source: stamp, connectors: canonical(connectors) });
   }
+  // Sprocket teeth consume chain pitch; roller diameter supplies the seat only
+  // when the node leaves it implicit. With an explicit seat it is a clearance report.
+  const sprocketUses = new Map<string, boolean>();
+  for (const n of doc.nodes) if (n.kind === 'sprocket' && !n.suppressed)
+    sprocketUses.set(n.row, (sprocketUses.get(n.row) ?? false) || !n.seat);
+  if (sprocketUses.size) {
+    const rows = new Map((doc.drives?.rows ?? []).map(row => [row.id, row]));
+    const sprockets = [...sprocketUses.keys()].sort().map(id => {
+      const row = rows.get(id);
+      return [id, row?.kind === 'chain' ? { pitch: row.pitch,
+        ...(sprocketUses.get(id) ? { rollerDiameter: row.rollerDiameter } : {}) } : null];
+    });
+    stamp = modelPrint({ source: stamp, sprockets: canonical(sprockets) });
+  }
   if (!doc.frames?.welds?.length) return stamp;
   const gone = new Set(doc.nodes.flatMap((n, i) => n.suppressed ? [i] : []));
   // Requested bead geometry, independent of kernel refusal caches. Symbol annotations

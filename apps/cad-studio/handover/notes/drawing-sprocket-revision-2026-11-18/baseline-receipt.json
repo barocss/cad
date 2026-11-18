@@ -1,0 +1,22 @@
+{
+  "status": "FAIL",
+  "phase": "actual Studio start",
+  "observations": [
+    {
+      "a": {
+        "volume": 21697.229985369377
+      },
+      "b": {
+        "volume": 22065.282702881625
+      },
+      "stale": 0,
+      "viewPathsChanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ]
+}
