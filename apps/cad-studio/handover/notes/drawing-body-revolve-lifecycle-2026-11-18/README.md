@@ -1,0 +1,15 @@
+# Existing #270: selected Revolve lifecycle qualification
+
+No new issue and no product change. This closes a previously NOT_RUN subset of #270 on c53484eb3: existing stable-ID native full Revolve, explicit body selection, export/download, suppression and restoration. It does not assert a newly reproduced defect or complete all #270 acceptance.
+
+Synthetic torus: major radius20 mm, minor radius5 mm, y-axis full turn. Independent volume1000π² = 9869.60440108937 mm³; separate excluded box20×8×12 =1920 mm³. Both native bodies strict-valid. Actual Worker selected b1/n1/revolve projection has front50×50 and top50×10, front/top projected edge owners n1. Source nodes/outputs and excluded body remain unchanged by scope selection.
+
+Frozen actual Chrome first run PASS: explicitly choose b1, apply, native Save/fresh Open retains selector. UI Suppress preserves selector and drawing settings, shows DRAWING_SCOPE, leaves no usable sheet and disables SVG/DXF rather than falling back to the other box. Undo restores the accepted document and usable sheet; its Worker observer may reuse the prior same-page success, so a newly delivered Undo projection is not independently claimed. Redo blocks again. Suppressed document saves and fresh-opens retaining the refusal; explicit Unsuppress restores the selected torus. Native saves use actual downloads. SVG and DXF before/after recovery also use actual browser downloads, not anchor suppression.
+
+Independent Python XML/DXF reader checks downloaded selected/restored files: front50×50/top50×10, front inner/outer radii15/25, each front/top SVG polyline has a corresponding DXF VISIBLE/HIDDEN polyline after page-Y conversion. Right/iso file geometry and absence of additional DXF entities are not independently qualified. Output saved in export-oracle.json. This is sampled exported polyline agreement, not exact analytic DXF circles or manufacturing certification. Title/source text may differ after file naming/history; full-byte equality is not claimed.
+
+Source capsule changes=[]; three contexts/browser/server closed, no owned process remains, disk32 GiB. Local selected/refusal screenshots reviewed. Independent read-only review found no product blocker and narrowed the export claim to the actually checked front/top direction. No source edit occurred during browser execution. Browser driver syntax and affected lint PASS. Existing Model scope/body/reference-recovery/P2 regression 28/28 PASS (`node packages/barocss-cad-model/scripts/test.mjs drawing-body-scope drawing-body-reference-recovery drawing-scope p2-drawing-scope-contract`). No TypeScript source changed; new type-check not claimed. Final free disk30 GiB.
+
+Reproduce: `DRAWING_BODY_REVOLVE_FROZEN=1 node apps/cad-studio/test/drawing-body-revolve-lifecycle-browser.mjs <output>` with Chrome/PW_DIR environment, then `python3 apps/cad-studio/test/drawing-body-revolve-export-oracle.py <output>`.
+
+Remaining #270: consumed/replaced-output full actual matrix, reference-lifecycle beyond this undimensioned torus, Open/New/late Worker races, imported/split families, PDF/ASME and other stated HOLDs. Issue remains OPEN.

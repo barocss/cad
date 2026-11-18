@@ -1,0 +1,77 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [
+    {
+      "kind": "sketch",
+      "profile": "circle",
+      "center": [
+        20,
+        0
+      ],
+      "radius": 5,
+      "id": "n0"
+    },
+    {
+      "kind": "revolve",
+      "sketch": 0,
+      "axis": "y",
+      "angle": 360,
+      "id": "n1",
+      "suppressed": true
+    },
+    {
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        40,
+        -4
+      ],
+      "max": [
+        60,
+        4
+      ],
+      "id": "n2"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 2,
+      "height": 12,
+      "id": "n3"
+    }
+  ],
+  "outputs": {
+    "b1": {
+      "node": 1,
+      "side": "solid"
+    },
+    "b3": {
+      "node": 3,
+      "side": "solid"
+    }
+  },
+  "nextId": 4,
+  "drawing": {
+    "sheet": "A4",
+    "scope": {
+      "kind": "part",
+      "body": {
+        "key": "b1",
+        "feature": "n1",
+        "kind": "revolve"
+      }
+    },
+    "scale": 1,
+    "projection": "third",
+    "hidden": true,
+    "dimensions": [],
+    "views": [
+      "front",
+      "top",
+      "right",
+      "iso"
+    ]
+  }
+}
