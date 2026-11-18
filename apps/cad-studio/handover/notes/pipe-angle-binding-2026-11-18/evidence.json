@@ -1,0 +1,136 @@
+{
+  "baselineCommit": "d32689007",
+  "runs": [
+    {
+      "case": "original",
+      "status": "PASS",
+      "sourceCount": 1076,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "bound-angle-draft-controls",
+          "angleValue": "",
+          "parameterValue": "",
+          "angleDisabled": false,
+          "applyEnabled": true
+        },
+        {
+          "label": "binding-result",
+          "applyEnabled": true,
+          "safeUiRefusal": false,
+          "accepted": false,
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {
+              "Angle": 90,
+              "Run": 12,
+              "Radius": 25
+            },
+            "nextId": 2,
+            "nodes": [
+              {
+                "id": "n0",
+                "kind": "sketch",
+                "profile": "circle",
+                "center": [
+                  0,
+                  0
+                ],
+                "radius": 5
+              },
+              {
+                "kind": "sweep",
+                "sketch": 0,
+                "path": [
+                  {
+                    "kind": "straight",
+                    "length": 8
+                  },
+                  {
+                    "kind": "bend",
+                    "radius": 20,
+                    "angle": 90,
+                    "toward": "x"
+                  },
+                  {
+                    "kind": "straight",
+                    "length": 8
+                  }
+                ],
+                "id": "n1"
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            }
+          },
+          "editor": "EDIT FEATURE  Edit sketchDiametermmƒAngleRunRadiusCentre XmmƒAngleRunRadiusCentre YmmƒAngleRunRadiusRun 1mmƒAngleRunRadiusBend 2 radiusmmƒAngleRunRadiusBend 2 angle°ƒAngleRunRadiusBend 2 toward+X−X+Y−YRun 3mmƒAngleRunRadius Delete featureThe kernel could not build thisUndo the last change, or adjust the values and try again.Failed feature · Pipe 3 steps (n1)Kernel detailpath[1].angle must be in (0, 180]ApplyReset"
+        }
+      ]
+    },
+    {
+      "case": "fixed",
+      "status": "PASS",
+      "sourceCount": 1076,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": []
+    },
+    {
+      "case": "angle-regression",
+      "status": "PASS",
+      "sourceCount": 562,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": []
+    },
+    {
+      "case": "radius-regression",
+      "status": "PASS",
+      "sourceCount": 563,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": []
+    }
+  ],
+  "checks": {
+    "focusedTests": 9,
+    "lint": "PASS",
+    "studioTypecheck": "PASS",
+    "studioBuild": "PASS",
+    "buildSeconds": 11.13
+  }
+}

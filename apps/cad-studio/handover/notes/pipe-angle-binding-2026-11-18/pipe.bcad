@@ -1,0 +1,54 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {
+    "Angle": 90,
+    "Run": 12,
+    "Radius": 25
+  },
+  "nextId": 2,
+  "nodes": [
+    {
+      "id": "n0",
+      "kind": "sketch",
+      "profile": "circle",
+      "center": [
+        0,
+        0
+      ],
+      "radius": 5
+    },
+    {
+      "kind": "sweep",
+      "sketch": 0,
+      "path": [
+        {
+          "kind": "straight",
+          "length": {
+            "parameter": "Run"
+          }
+        },
+        {
+          "kind": "bend",
+          "radius": {
+            "parameter": "Radius"
+          },
+          "angle": 60,
+          "toward": "x"
+        },
+        {
+          "kind": "straight",
+          "length": 8
+        }
+      ],
+      "id": "n1"
+    }
+  ],
+  "outputs": {
+    "b1": {
+      "node": 1,
+      "side": "solid"
+    }
+  }
+}
