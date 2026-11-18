@@ -196,7 +196,10 @@ export function bomViewOf(doc: StudioDoc, evaluate: (doc: StudioDoc) => EvalResu
       const node = d.nodes[b.element ? b.ref.node : rootOf(d.nodes, b.ref.node)]; if (!node || node.bought === true) continue;
       plates.push({ part, item: node.id ?? `n${b.ref.node}`, kind: e.kind, thickness: r6(e.report.thickness), area: r6(e.report.area), volume: r6(b.element || b.volume === null ? e.report.volume : b.volume), material: materialIdOf(looked, b) ?? null, mass: b.mass === null ? null : exactMass(looked, b) });
     }
-    for (const l of elementLines(d, bodies)) if (l.bought) elements.push({ part, item: l.item, kind: l.kind, size: l.size, row: l.row?.id ?? null, source: l.row?.source ?? null, estimate: l.estimate, why: l.why, by: l.boughtBy, mass: l.mass === null ? null : r6(l.mass), ...(l.catalogue ? { catalogue: l.catalogue } : {}) });
+    // Bought detail masses use the same effective material as their containing part.
+    // Preserve unmeasured nulls and element identity/grouping; never mutate evaluation bodies.
+    const weighed = bodies.map(b => ({ ...b, mass: b.mass === null ? null : exactMass(looked, b) }));
+    for (const l of elementLines(d, weighed)) if (l.bought) elements.push({ part, item: l.item, kind: l.kind, size: l.size, row: l.row?.id ?? null, source: l.row?.source ?? null, estimate: l.estimate, why: l.why, by: l.boughtBy, mass: l.mass === null ? null : r6(l.mass), ...(l.catalogue ? { catalogue: l.catalogue } : {}) });
   };
   take('base', doc, baseBodies);
   for (const a of all) take(a.id, a.doc, a.bodies, a.looks, a.uncut);

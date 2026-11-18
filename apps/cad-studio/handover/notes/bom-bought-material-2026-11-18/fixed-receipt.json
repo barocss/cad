@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "observations": [
+    {
+      "total": 7.85,
+      "detail": 7.85,
+      "unchanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "failure": null
+}

@@ -1,0 +1,17 @@
+{
+  "status": "FAIL",
+  "observations": [
+    {
+      "total": 7.85,
+      "detail": 2.7,
+      "unchanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "failure": "AssertionError [ERR_ASSERTION]: public bought detail must match selected occurrence density\n\n2.7 !== 7.85\n\n    at file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/bom-bought-material-browser.mjs:5:889\n    at async f.run (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/bom-bought-material-browser.mjs:5:1"
+}
