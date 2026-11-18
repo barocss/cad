@@ -1,0 +1,186 @@
+{
+  "initial": {
+    "expected": [
+      {
+        "id": "manual-width",
+        "kind": "linear",
+        "text": "25.4",
+        "value": 25.4,
+        "printed": "25.4 \u00b10.1"
+      },
+      {
+        "id": "manual-diameter",
+        "kind": "diameter",
+        "text": "\u00d825.4",
+        "value": 25.400000000000002,
+        "printed": "\u00d825.4 H7"
+      },
+      {
+        "id": "retained-lost-diameter",
+        "kind": "diameter",
+        "lost": "The circle it measured is no longer in the part."
+      }
+    ],
+    "publicResponse": {
+      "revision": "7d9ed49877e2e77c5f106679bf8a0a8bfa39694befc83caa5d8e1da019a964eb",
+      "sheet": 1,
+      "sheetName": "Sheet 1",
+      "scope": {
+        "kind": "part"
+      },
+      "unit": "mm",
+      "printUnit": "mm",
+      "dimensions": [
+        {
+          "id": "manual-width",
+          "view": "front",
+          "orientation": "horizontal",
+          "authoredTolerance": {
+            "kind": "symmetric",
+            "value": 0.1
+          },
+          "resolved": true,
+          "value": 25.4,
+          "printed": "25.4 \u00b10.1"
+        }
+      ]
+    },
+    "optInResponse": {
+      "revision": "7d9ed49877e2e77c5f106679bf8a0a8bfa39694befc83caa5d8e1da019a964eb",
+      "sheet": 1,
+      "sheetName": "Sheet 1",
+      "scope": {
+        "kind": "part"
+      },
+      "unit": "mm",
+      "printUnit": "mm",
+      "dimensions": [
+        {
+          "id": "manual-width",
+          "view": "front",
+          "orientation": "horizontal",
+          "authoredTolerance": {
+            "kind": "symmetric",
+            "value": 0.1
+          },
+          "resolved": true,
+          "value": 25.4,
+          "printed": "25.4 \u00b10.1",
+          "kind": "linear"
+        },
+        {
+          "id": "manual-diameter",
+          "view": "top",
+          "kind": "diameter",
+          "resolved": true,
+          "value": 25.400000000000002
+        },
+        {
+          "id": "retained-lost-diameter",
+          "view": "top",
+          "kind": "diameter",
+          "resolved": false,
+          "reason": "The circle it measured is no longer in the part."
+        }
+      ]
+    },
+    "defaultFalseByteEqual": true,
+    "strictMalformedRefusals": 8,
+    "diameterStackRefused": true,
+    "documentUnchanged": true,
+    "facadeMatchesDispatcher": true,
+    "linearOnlyMatchesExistingContract": true
+  },
+  "reopened": {
+    "expected": [
+      {
+        "id": "manual-width",
+        "kind": "linear",
+        "text": "25.4",
+        "value": 25.4,
+        "printed": "25.4 \u00b10.1"
+      },
+      {
+        "id": "manual-diameter",
+        "kind": "diameter",
+        "text": "\u00d825.4",
+        "value": 25.400000000000002,
+        "printed": "\u00d825.4 H7"
+      },
+      {
+        "id": "retained-lost-diameter",
+        "kind": "diameter",
+        "lost": "The circle it measured is no longer in the part."
+      }
+    ],
+    "publicResponse": {
+      "revision": "7d9ed49877e2e77c5f106679bf8a0a8bfa39694befc83caa5d8e1da019a964eb",
+      "sheet": 1,
+      "sheetName": "Sheet 1",
+      "scope": {
+        "kind": "part"
+      },
+      "unit": "mm",
+      "printUnit": "mm",
+      "dimensions": [
+        {
+          "id": "manual-width",
+          "view": "front",
+          "orientation": "horizontal",
+          "authoredTolerance": {
+            "kind": "symmetric",
+            "value": 0.1
+          },
+          "resolved": true,
+          "value": 25.4,
+          "printed": "25.4 \u00b10.1"
+        }
+      ]
+    },
+    "optInResponse": {
+      "revision": "7d9ed49877e2e77c5f106679bf8a0a8bfa39694befc83caa5d8e1da019a964eb",
+      "sheet": 1,
+      "sheetName": "Sheet 1",
+      "scope": {
+        "kind": "part"
+      },
+      "unit": "mm",
+      "printUnit": "mm",
+      "dimensions": [
+        {
+          "id": "manual-width",
+          "view": "front",
+          "orientation": "horizontal",
+          "authoredTolerance": {
+            "kind": "symmetric",
+            "value": 0.1
+          },
+          "resolved": true,
+          "value": 25.4,
+          "printed": "25.4 \u00b10.1",
+          "kind": "linear"
+        },
+        {
+          "id": "manual-diameter",
+          "view": "top",
+          "kind": "diameter",
+          "resolved": true,
+          "value": 25.400000000000002
+        },
+        {
+          "id": "retained-lost-diameter",
+          "view": "top",
+          "kind": "diameter",
+          "resolved": false,
+          "reason": "The circle it measured is no longer in the part."
+        }
+      ]
+    },
+    "defaultFalseByteEqual": true,
+    "strictMalformedRefusals": 8,
+    "diameterStackRefused": true,
+    "documentUnchanged": true,
+    "facadeMatchesDispatcher": true,
+    "linearOnlyMatchesExistingContract": true
+  }
+}

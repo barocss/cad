@@ -1,0 +1,87 @@
+{
+  "issue": 202,
+  "issueState": "OPEN; partial implementation",
+  "baseline01": "PASS: existing documented linear-only response, not a defect",
+  "check01": {
+    "tests": "27/31",
+    "failures": "Three floating-point fixture expectations and schema budget 25098",
+    "notRunAfterTestFailure": [
+      "Model typing",
+      "Studio typing",
+      "lint",
+      "actual browser"
+    ]
+  },
+  "check02": {
+    "tests": "31/31",
+    "modelType": "FAIL: three errors",
+    "notRunAfterModelTypeFailure": [
+      "Studio typing",
+      "lint",
+      "actual browser"
+    ]
+  },
+  "check03": {
+    "tests": "31/31",
+    "modelType": "FAIL: one downstream error",
+    "notRunAfterModelTypeFailure": [
+      "Studio typing",
+      "lint",
+      "actual browser"
+    ]
+  },
+  "check04": {
+    "tests": "51/51",
+    "modelType": "PASS",
+    "studioType": "PASS",
+    "scopedLint": "PASS",
+    "schemaBudget": 24981
+  },
+  "actual01": {
+    "status": "FAIL: fixture counted note row as a dimension (4 vs 3)",
+    "initialInspector": "PASS",
+    "saveFreshOpen": "NOT_RUN"
+  },
+  "actual02": {
+    "status": "PASS",
+    "observations": [
+      {
+        "nativeAndUiDimensions": 3,
+        "defaultLinearDimensions": 1,
+        "optInDimensions": 3,
+        "diameterAndUnresolvedDiameterRetained": true,
+        "defaultFalseByteEqual": true,
+        "geometryOnlyDiameterKeys": true,
+        "freeNoteOmitted": true,
+        "newDiameterRowsOmitSyntheticMetadata": true,
+        "existingProvenancePreserved": true,
+        "malformedRefusals": 8,
+        "diameterNotStackEligible": true,
+        "sourceDirtyHistoryUnchanged": true,
+        "nativeSaveFreshOpen": true,
+        "externalMcp": "NOT_RUN"
+      }
+    ],
+    "errors": 0,
+    "consoleErrors": 0,
+    "sourceChanges": 0,
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "downloads": 1
+  },
+  "fixtureSha256": "917e3812b5ad2b7b25459720c03d22c2d27338b4422a24ea9c20e8db7a9497c6",
+  "integrationAndExactShaCI": "PENDING; recorded separately by coordinator",
+  "notRun": [
+    "external MCP transport",
+    "independent geometry oracle",
+    "H7 certification",
+    "full suite"
+  ],
+  "privacy": "Synthetic provider coverage only, not real catalogue integration. Existing provenance envelope is preserved, not globally sanitized.",
+  "testedBaselineHead": "f5b572e3",
+  "localValidationLogDate": "2026-11-19"
+}

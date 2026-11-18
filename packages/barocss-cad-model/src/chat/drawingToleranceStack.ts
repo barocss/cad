@@ -1,3 +1,4 @@
+import type { JsonSchema } from './contract';
 import type { Resolved } from '../drawing/dimensions';
 import { issueContext, type SheetInputs } from '../drawing/issues';
 import { drawingScopeOf } from '../drawing/scope';
@@ -11,11 +12,14 @@ import { digestOf, requirementEvidenceRevision } from '../util/digest';
 const sheetArg = { type: 'integer', minimum: 1, description: 'Drawing sheet number, starting at 1. Defaults to sheet 1.' };
 export const DRAWING_DIMENSIONS = 'get_drawing_dimensions';
 export const DRAWING_TOLERANCE_STACK = 'calculate_drawing_tolerance_stack';
-export const STACK_READ_TOOLS = [
+export const STACK_READ_TOOLS: { name: string; description: string; input_schema: JsonSchema }[] = [
   {
     name: DRAWING_DIMENSIONS,
-    description: 'Lists linear dimensions on one sheet of the tool session’s drawing snapshot, with their IDs, views, model lengths in mm, authored tolerances and any unresolved references. Printed annotations are separate. Use this revision and these IDs to calculate a tolerance stack. Read only.',
-    input_schema: { type: 'object', properties: { sheet: sheetArg }, additionalProperties: false },
+    description: 'Lists linear dimensions by default on one sheet of the tool session’s drawing snapshot, with their IDs, views, model lengths in mm, authored tolerances and any unresolved references. Printed annotations are separate. With include_diameters true, also lists geometric diameters in model mm, without diameter annotations or manufacturing meaning. Tolerance stacks remain linear-only. Use this revision and linear IDs to calculate a tolerance stack. Read only.',
+    input_schema: { type: 'object', properties: {
+      sheet: sheetArg,
+      include_diameters: { type: 'boolean', description: 'Include geometric diameters, without annotations or manufacturing meaning. Defaults to false; tolerance stacks remain linear-only.' },
+    }, additionalProperties: false },
   },
   {
     name: DRAWING_TOLERANCE_STACK,
@@ -43,6 +47,14 @@ export function readDrawingStack(
   doc: StudioDoc, name: string, args: Record<string, unknown>,
   settings: SheetInputs['settings'], project: () => SheetInputs | string,
 ): { content: Record<string, unknown>; summary: string } | { error: string } {
+  const hasIncludeDiameters = Object.prototype.hasOwnProperty.call(args, 'include_diameters');
+  if (hasIncludeDiameters && name === DRAWING_TOLERANCE_STACK) {
+    return { error: 'include_diameters is only supported by drawing.dimensions. Tolerance stacks are linear-only.' };
+  }
+  if (hasIncludeDiameters && typeof args.include_diameters !== 'boolean') {
+    return { error: 'include_diameters must be a boolean.' };
+  }
+  const includeDiameters = hasIncludeDiameters && args.include_diameters === true;
   const sheet = args.sheet === undefined ? 1 : args.sheet;
   const count = sheetCount(settings);
   if (typeof sheet !== 'number' || !Number.isInteger(sheet) || sheet < 1 || sheet > count) {
@@ -77,6 +89,14 @@ export function readDrawingStack(
     ...(r.ok ? { resolved: true, value: r.value, printed: dimensionLine(r, preset) } : { resolved: false, reason: r.reason }),
   });
   if (!terms) {
+    if (includeDiameters) {
+      const selected = dimensions.filter(r => r.dim.kind === 'linear' || r.dim.kind === 'diameter').map(r =>
+        r.dim.kind === 'linear' ? { ...describe(r), kind: 'linear' } : {
+          id: r.dim.id, view: r.dim.view, kind: 'diameter',
+          ...(r.ok ? { resolved: true, value: r.value } : { resolved: false, reason: r.reason }),
+        });
+      return { content: { ...provenance, dimensions: selected }, summary: `${selected.length} linear and diameter drawing dimensions` };
+    }
     const linear = dimensions.filter(r => r.dim.kind === 'linear').map(describe);
     return { content: { ...provenance, dimensions: linear }, summary: `${linear.length} linear drawing dimensions` };
   }
