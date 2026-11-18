@@ -8,7 +8,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { DockSection } from '../layout/DockSection';
 import { Icon } from './atoms';
 import { FIELD, TICK } from './panelStyles';
-import type { StepOffer, StepBatchTransferOffer } from '../app/assemblySteps';
+import { canSelectStepPart, type StepOffer, type StepBatchTransferOffer } from '../app/assemblySteps';
 import { stepExplodeOptions, stepExplodeValue } from '../app/stepExplodeDraft';
 
 // Roadmap 10 ⑥: the Steps panel — an ordered explanation of the assembly, part by part. The primary controls are the step list, Prev and
@@ -43,11 +43,15 @@ function CommitText({ value, onCommit, required, multiline, ...rest }: { value: 
   return <Input {...rest} type="text" value={draft} onChange={e => setDraft(e.target.value)} onBlur={done} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />;
 }
 
-export function AssemblyStepsPanel({ doc, index, offer, batchOffer, faded, problems, onGo, onFaded, onNew, onRename, onNote, onExplode, onAddSelected, onTransfer, onTransferSelected, onTakeOut, onCaptureView, onResetView, onClearView, onMove, onDelete, onClose }: {
+export function AssemblyStepsPanel({ doc, index, offer, batchOffer, faded, problems, onSelectPart, selectedParts = [], selectionDisabled = false, onGo, onFaded, onNew, onRename, onNote, onExplode, onAddSelected, onTransfer, onTransferSelected, onTakeOut, onCaptureView, onResetView, onClearView, onMove, onDelete, onClose }: {
   doc: StudioDoc; index: number;
   /** The one selected part's step (to go to) or that it is in none. */
   offer: StepOffer;
   batchOffer?: StepBatchTransferOffer | null;
+  /** Non-additive session selection, never a Show/Fit or document edit. */
+  onSelectPart?(stepId: string, partId: string): void;
+  selectedParts?: readonly string[];
+  selectionDisabled?: boolean;
   faded: boolean;
   /** The steps' notes about parts that are gone or in no step, in words. */
   problems: readonly string[];
@@ -83,7 +87,11 @@ export function AssemblyStepsPanel({ doc, index, offer, batchOffer, faded, probl
             <Button size="xs" variant="ghost" aria-label="Add selected parts to this step" title="Add the parts selected in the Browser or the view to this step" onClick={() => onAddSelected(step.id)}>Add selected</Button></div>
           <div className="flex flex-wrap gap-1">
             {step.add.length ? step.add.map(id => <span key={id} data-part={id} className={'inline-flex items-center gap-0.5 rounded-full border px-1.5 py-px text-[11px]' + (placed(id) ? ' border-border' : ' border-[var(--warn,#d19a3b)]')}
-              title={placed(id) ? undefined : `${id} is not placed now: the step keeps it`}>{nameOf(id)}{!placed(id) && ' (missing)'}
+              title={placed(id) ? undefined : `${id} is not placed now: the step keeps it`}>{nameOf(id)}{onSelectPart && <span className="muted"> ({id})</span>}{!placed(id) && ' (missing)'}
+              {onSelectPart && <Button type="button" size="xs" variant="ghost" aria-label={`Select step part ${nameOf(id)} (${id})`}
+                aria-pressed={selectedParts.includes(id)} disabled={selectionDisabled || !canSelectStepPart(doc, index, step.id, id)}
+                title="Select this exact occurrence without changing its visibility or camera"
+                onClick={() => { if (!selectionDisabled && canSelectStepPart(doc, index, step.id, id)) onSelectPart(step.id, id); }}>Select</Button>}
               <button className="tool tiny" aria-label={`Take ${nameOf(id)} out of this step`} onClick={() => onTakeOut(step.id, id)}><Icon name="close" small /></button></span>)
               : <span className="text-[11px] text-muted-foreground">None: select a part, then Add selected.</span>}
           </div>

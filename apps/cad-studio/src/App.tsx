@@ -188,7 +188,7 @@ import { OutlinerCuts } from './ui/OutlinerCuts';
 import { AssemblyCutHud } from './ui/AssemblyCutHud';
 import { nextInstanceId } from '@barocss/cad-model/assembly/takenIds';
 import { AssemblyStepsPanel } from './ui/AssemblyStepsPanel';
-import { STEPS_COMMAND, cameraOfView, shownSelection as litSelection, stepAfter, stepOffer, stepBatchTransferOffer, stepsDisplay, viewOfCamera } from './app/assemblySteps';
+import { STEPS_COMMAND, cameraOfView, shownSelection as litSelection, stepAfter, stepOffer, stepBatchTransferOffer, canSelectStepPart, stepsDisplay, viewOfCamera } from './app/assemblySteps';
 import { addAssemblyStep, assemblyStepProblems, deleteAssemblyStep, editAssemblyStep, moveAssemblyStep, moveAssemblyStepParts, stepsOf, type EditAssemblyStepOptions } from '@barocss/cad-model/assembly/steps';
 import { cutOfDraft, cuttableOf, defaultCutAt, draftOfCut, draftProblem, draftTrialProblem, newCutDraft, withAddedTargets, withDraftCut, type CutDraft } from './app/assemblyCutDraft';
 import { addAssemblyCut, deleteAssemblyCut, editAssemblyCut } from '@barocss/cad-model/assembly/cuts';
@@ -1983,6 +1983,18 @@ export function App() {
   const dragCmd = useRef<string | null>(null);
   // Outliner picks clear the edit owner; additive selection retains only current top-level occurrences.
   const pickInstanceRow = useCallback((id: string, additive = false) => { setSelection(emptySel); setDirectSel([]); setInstanceSel(previous => pickPlacedPart(previous.filter(value => doc.instances?.some(i => i.id === value)), id, additive)); setInstanceEdit(null); }, [doc.instances]);
+  // A step-member pick is session-only and must not discard an in-progress part edit.
+  const stepPickOpen = openIntent.current;
+  const stepPickScope = useRef({ doc, docGeneration, instanceSel, stepAt, stepsShown, instanceEdit, instanceEditPending, open: stepPickOpen, worker: workerSession });
+  if (stepPickScope.current.doc !== doc || stepPickScope.current.docGeneration !== docGeneration || stepPickScope.current.instanceSel !== instanceSel || stepPickScope.current.stepAt !== stepAt || stepPickScope.current.stepsShown !== stepsShown || stepPickScope.current.instanceEdit !== instanceEdit || stepPickScope.current.instanceEditPending !== instanceEditPending || stepPickScope.current.open !== stepPickOpen || stepPickScope.current.worker !== workerSession) {
+    stepPickScope.current = { doc, docGeneration, instanceSel, stepAt, stepsShown, instanceEdit, instanceEditPending, open: stepPickOpen, worker: workerSession };
+  }
+  const ownedStepPick = stepPickScope.current;
+  const selectStepPart = (stepId: string, partId: string) => {
+    if (stepPickScope.current !== ownedStepPick || docNow.current !== doc || !stepsShown || instanceEdit || instanceEditPending || openIntent.current !== ownedStepPick.open || workerSessionNow.current !== ownedStepPick.worker || project.opening()) return;
+    if (!canSelectStepPart(doc, stepAt, stepId, partId)) return;
+    pickInstanceRow(partId);
+  };
   const editInstanceRow = useCallback((id: string, index: number) => {
     setBomOpen(false); setLibraryOpen(false); setParamsOpen(false); setSelection(emptySel); setDirectSel([]); setEditNode(null); setInstanceSel([id]); setInstanceEdit({ owner: id, index });
   }, []);
@@ -3521,6 +3533,7 @@ export function App() {
         onOpen={d => { replaceDoc(d, 'project'); if (docNow.current !== d) return;
           setCompareBase(null); setDirty(true); setTimeout(() => viewport.current?.fit(), 300); }} />}
       {stepsShown && <AssemblyStepsPanel doc={doc} index={stepAt} offer={stepsOffer} batchOffer={stepsBatchOffer} faded={stepsFaded} problems={stepsProblems}
+        selectedParts={instanceSel} selectionDisabled={!!instanceEdit || instanceEditPending} onSelectPart={selectStepPart}
         onGo={k => setStepIndex(stepAfter(k, 0, stepCount))} onFaded={setStepsFaded} onNew={newStep}
         onRename={(id, name) => stepChange({ id, name })} onNote={(id, note) => stepChange({ id, note: note.trim() ? note : null })} onExplode={(id, explode) => stepChange({ id, explode: explode || null })}
         onAddSelected={id => { const add = stepParts(), step = stepsOf(doc).find(s => s.id === id); if (!step) return; if (!add.length) { setToast({ title: 'Step not changed', hint: 'Select the parts to add first, in the Browser or the view.', detail: '' }); return; } stepChange({ id, add: [...step.add, ...add.filter(a => !step.add.includes(a))] }); }}

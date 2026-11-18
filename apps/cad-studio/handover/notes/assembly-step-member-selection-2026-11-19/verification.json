@@ -1,0 +1,221 @@
+{
+  "issue": 207,
+  "issueState": "OPEN",
+  "scope": "Current-step exact top-level occurrence session selection",
+  "runs": {
+    "baseline01": {
+      "status": "FAIL",
+      "browserErrors": 0,
+      "consoleErrors": 0,
+      "trackedSourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [],
+      "sourceBefore": {
+        "apps/cad-studio/src/App.tsx": "38cfa9d762a43b89b6d9f32b305eab720e985020f3a95af691c2c0b534cd58b1",
+        "apps/cad-studio/src/app/assemblySteps.ts": "e3d4ede35e5413c516b54f6039f1aa3d129a756a2415662e03aaf2d73bafa017",
+        "apps/cad-studio/src/ui/AssemblyStepsPanel.tsx": "d22e2f1a41f0f2759551ad3cae2637c833a15c8ae091231b75c3f1f83180abb9",
+        "apps/cad-studio/src/ui/OutlinerInstances.tsx": "8d97c0bbb8bea46c9fdc0d769d6ea8c9320cced078ad36c39611154422f9eb0b",
+        "apps/cad-studio/test/assembly-step-member-selection-baseline-browser.mjs": "205bdd2a0bca883cabebb551bb93a4da11a82ee8eb5117aaf5d30bcdba611f7e",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "apps/cad-studio/test/model-rail-helper.mjs": "7fad7ce4d132ab588b9b095123004a4fc4ed0000f554887ea51421323b84f1ba",
+        "packages/barocss-cad-model/src/assembly/steps.ts": "4c092498c04f3c361fdd1ef03fa7315322dc171a106b8ba6abec32447737f22d"
+      },
+      "failure": "Unsupported Inspect rail fixture locator; product qualification NOT_RUN."
+    },
+    "baseline02": {
+      "status": "FAIL",
+      "browserErrors": 0,
+      "consoleErrors": 0,
+      "trackedSourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [],
+      "sourceBefore": {
+        "apps/cad-studio/src/App.tsx": "38cfa9d762a43b89b6d9f32b305eab720e985020f3a95af691c2c0b534cd58b1",
+        "apps/cad-studio/src/app/assemblySteps.ts": "e3d4ede35e5413c516b54f6039f1aa3d129a756a2415662e03aaf2d73bafa017",
+        "apps/cad-studio/src/ui/AssemblyStepsPanel.tsx": "d22e2f1a41f0f2759551ad3cae2637c833a15c8ae091231b75c3f1f83180abb9",
+        "apps/cad-studio/src/ui/OutlinerInstances.tsx": "8d97c0bbb8bea46c9fdc0d769d6ea8c9320cced078ad36c39611154422f9eb0b",
+        "apps/cad-studio/test/assembly-step-member-selection-baseline-browser.mjs": "3d571b0882fbc1d3380a7d225e2f6927ad559ee0889b4905c56a34b256ee3ae0",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "packages/barocss-cad-model/src/assembly/steps.ts": "4c092498c04f3c361fdd1ef03fa7315322dc171a106b8ba6abec32447737f22d"
+      },
+      "failure": "Strict Instance X locator matched position and rotation; corrected to check both."
+    },
+    "baseline03": {
+      "status": "PASS",
+      "browserErrors": 0,
+      "consoleErrors": 0,
+      "trackedSourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "sameNameAndDefinition": true,
+          "listMembers": [
+            "p1",
+            "p2"
+          ],
+          "listHasOnlyTakeOutButtons": true,
+          "labelClicksDoNotChangeSelection": true,
+          "outlinerExactIDPositiveControl": true,
+          "inspectorXPositiveControl": [
+            15,
+            0
+          ],
+          "acceptedDocumentExact": true,
+          "undoRedoAvailabilityUnchanged": true
+        }
+      ],
+      "sourceBefore": {
+        "apps/cad-studio/src/App.tsx": "38cfa9d762a43b89b6d9f32b305eab720e985020f3a95af691c2c0b534cd58b1",
+        "apps/cad-studio/src/app/assemblySteps.ts": "e3d4ede35e5413c516b54f6039f1aa3d129a756a2415662e03aaf2d73bafa017",
+        "apps/cad-studio/src/ui/AssemblyStepsPanel.tsx": "d22e2f1a41f0f2759551ad3cae2637c833a15c8ae091231b75c3f1f83180abb9",
+        "apps/cad-studio/src/ui/OutlinerInstances.tsx": "8d97c0bbb8bea46c9fdc0d769d6ea8c9320cced078ad36c39611154422f9eb0b",
+        "apps/cad-studio/test/assembly-step-member-selection-baseline-browser.mjs": "215bbb109fe5583139663ed2bcbd4272cbe089f40bf382960e975671c5c0b990",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "packages/barocss-cad-model/src/assembly/steps.ts": "4c092498c04f3c361fdd1ef03fa7315322dc171a106b8ba6abec32447737f22d"
+      }
+    },
+    "actual01": {
+      "status": "PASS",
+      "browserErrors": 0,
+      "consoleErrors": 0,
+      "trackedSourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "sameNameExactID": true,
+          "inspectorPositionRotationX": true,
+          "selectedPressedState": true,
+          "selectionDoesNotEditDocumentOrHistoryAvailability": true,
+          "ordinaryNameDraftBlurCommitAndUndo": true,
+          "separateTakeOutUndoRedo": true,
+          "nativeSaveFreshOpen": true,
+          "selectionSessionNotRestored": true,
+          "hiddenSelectedNotUnhidden": true,
+          "missingDisabled": true,
+          "generatedPatternExactID": true,
+          "patternAuthoredThroughUI": false
+        }
+      ],
+      "sourceBefore": {
+        "apps/cad-studio/src/App.tsx": "1b8de15883c2fc0823130b0673c88eda1afe26e0a928b5dabe6ead51234dfccd",
+        "apps/cad-studio/src/app/assemblySteps.ts": "0590052b682877031e53491174969c5f0dacbefbcb328f3fd3a8fdbe47449cff",
+        "apps/cad-studio/src/ui/AssemblyStepsPanel.tsx": "1b48a02f76704c8fb69543ba7d2080ea01d8fe10ef4d60ac59e4d4b796568349",
+        "apps/cad-studio/src/ui/OutlinerInstances.tsx": "8d97c0bbb8bea46c9fdc0d769d6ea8c9320cced078ad36c39611154422f9eb0b",
+        "apps/cad-studio/test/assembly-step-member-selection-browser.mjs": "5037ee8fa96995aab5e8b4c9de8f949a9eb2c41e1a6563af852a78aeed5956e7",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "packages/barocss-cad-model/src/assembly/steps.ts": "4c092498c04f3c361fdd1ef03fa7315322dc171a106b8ba6abec32447737f22d"
+      },
+      "visualLimitation": "Functional PASS; fixed-width icon class squeezed Select label. Replaced Select styling only."
+    },
+    "actual02": {
+      "status": "PASS",
+      "browserErrors": 0,
+      "consoleErrors": 0,
+      "trackedSourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "sameNameExactID": true,
+          "inspectorPositionRotationX": true,
+          "selectedPressedState": true,
+          "selectionDoesNotEditDocumentOrHistoryAvailability": true,
+          "ordinaryNameDraftBlurCommitAndUndo": true,
+          "separateTakeOutUndoRedo": true,
+          "nativeSaveFreshOpen": true,
+          "selectionSessionNotRestored": true,
+          "hiddenSelectedNotUnhidden": true,
+          "missingDisabled": true,
+          "generatedPatternExactID": true,
+          "patternAuthoredThroughUI": false
+        }
+      ],
+      "sourceBefore": {
+        "apps/cad-studio/src/App.tsx": "1b8de15883c2fc0823130b0673c88eda1afe26e0a928b5dabe6ead51234dfccd",
+        "apps/cad-studio/src/app/assemblySteps.ts": "0590052b682877031e53491174969c5f0dacbefbcb328f3fd3a8fdbe47449cff",
+        "apps/cad-studio/src/ui/AssemblyStepsPanel.tsx": "a4606cf733f097b8a2213cf5a8da30a0619e46286dc4a5de97720a234ab17f5c",
+        "apps/cad-studio/src/ui/OutlinerInstances.tsx": "8d97c0bbb8bea46c9fdc0d769d6ea8c9320cced078ad36c39611154422f9eb0b",
+        "apps/cad-studio/test/assembly-step-member-selection-browser.mjs": "5037ee8fa96995aab5e8b4c9de8f949a9eb2c41e1a6563af852a78aeed5956e7",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "packages/barocss-cad-model/src/assembly/steps.ts": "4c092498c04f3c361fdd1ef03fa7315322dc171a106b8ba6abec32447737f22d"
+      }
+    }
+  },
+  "checks": {
+    "studioTests02": {
+      "pass": 23,
+      "fail": 1,
+      "cause": "SSR test matched disabled CSS class rather than HTML attribute"
+    },
+    "studioTests03": {
+      "pass": 24,
+      "fail": 0,
+      "skipped": 0,
+      "source": "TAP log inspected"
+    },
+    "studioType03": {
+      "status": "PASS",
+      "exitCode": 0,
+      "source": "Empty log inspected; exit reported by coordinating executor"
+    },
+    "targetedLint03": {
+      "status": "PASS",
+      "exitCode": 0,
+      "source": "Empty log inspected; exit reported by coordinating executor"
+    }
+  },
+  "delivery": {
+    "commit": "PENDING",
+    "push": "PENDING",
+    "exactCommitCI": "PENDING"
+  },
+  "images": [
+    {
+      "file": "before.png",
+      "run": "baseline03",
+      "sha256": "644b37a1e5bb6a1a0173dae262536fcbb2cf7284b3a7c37040f9afecbe2ce4c1",
+      "bytePreservingCopy": true
+    },
+    {
+      "file": "after.png",
+      "run": "actual02",
+      "sha256": "cb0e60fb9490a1fe6acb2ac134ebc7d45fb575ec1f85ad08be9160c4591b6ea5",
+      "bytePreservingCopy": true
+    }
+  ],
+  "limits": [
+    "Synthetic fixtures only",
+    "No stale callback injection or bearing-specific edit interaction",
+    "Ordinary Name blur commit and Undo were exercised",
+    "No numeric camera, pixel highlight or geometry accuracy claim",
+    "Pattern setup uses model helper, not public pattern authoring",
+    "No nested occurrence selection or asynchronous race qualification",
+    "Stored data and history availability, not private history stack/dirty-state certification",
+    "Autoplay and existing HOLDs unchanged"
+  ]
+}

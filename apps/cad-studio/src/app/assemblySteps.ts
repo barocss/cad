@@ -77,3 +77,13 @@ export function stepBatchTransferOffer(doc: Pick<StudioDoc, 'assemblySteps' | 'i
 /** The selection the viewport lights (outline and gizmo) while a step is shown: entries on a hidden (waiting) part are left out, host or nested path alike. */
 export const shownSelection = (selection: readonly string[], hidden: ReadonlySet<string>): readonly string[] =>
   hidden.size ? selection.filter(id => !hidden.has(id.split('/')[0])) : selection;
+
+/** Exact current-step navigation only. No name/path remapping or document edits. */
+export function canSelectStepPart(doc: Pick<StudioDoc, 'assemblySteps' | 'instances'>, index: number, stepId: string, partId: string): boolean {
+  const steps = stepsOf(doc), instances = doc.instances ?? [];
+  if (!Number.isSafeInteger(index) || index < 0 || index >= steps.length || steps[index].id !== stepId) return false;
+  if (!partId || partId === 'base' || partId.includes('/') || steps.filter(s => s.id === stepId).length !== 1) return false;
+  if (new Set(instances.map(i => i.id)).size !== instances.length || instances.filter(i => i.id === partId).length !== 1) return false;
+  return steps[index].add.filter(id => id === partId).length === 1
+    && steps.reduce((count, step) => count + step.add.filter(id => id === partId).length, 0) === 1;
+}
