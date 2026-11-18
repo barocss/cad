@@ -323,6 +323,7 @@ export function editFields(nodes: Nodes, i: number, params?: Record<string, numb
     || (node?.kind === 'extrude' && f.key === 'draft')
     || ((node?.kind === 'revolve' || node?.kind === 'rotate' || node?.kind === 'draft') && f.key === 'deg') // Saved angles are number-only; Draft neutral coordinates still support Dim.
     || (node?.kind === 'revolve' && f.key === 'fixedAxisPosition') // This bounded editor accepts numeric coordinates only.
+    || (node?.kind === 'keyway' && f.key === 'angle') // Keyway angles are numeric; width and depth support Dim.
     || (node?.kind === 'scale' && f.key === 'k') // Scale factor is number-only; pivot coordinates support Dim.
     || (node?.kind === 'sweep' && /^bendAngle\d+$/.test(f.key)) // Path angles are number-only; lengths/radii support Dim references.
     || (node?.kind === 'circular-pattern' && f.key === 'span')
@@ -590,8 +591,8 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       break;
     case 'keyway': {
       const k = (n: ModelNode) => n as typeof node;
-      number('b', 'Width', 'mm', n => k(n).width, (n, v) => ({ ...k(n), width: v }));
-      number('t2', 'Depth', 'mm', n => k(n).depth, (n, v) => ({ ...k(n), depth: v }));
+      number('b', 'Width', 'mm', n => num(k(n).width), (n, v) => ({ ...k(n), width: v }));
+      number('t2', 'Depth', 'mm', n => num(k(n).depth), (n, v) => ({ ...k(n), depth: v }));
       number('angle', 'Angle', '°', n => k(n).angle ?? 0, (n, v) => {
         const next = { ...k(n) }; if (v === 0) delete next.angle; else next.angle = v; return next;
       });

@@ -1,0 +1,95 @@
+{
+  "base": "170b83744",
+  "issues": [
+    711,
+    712
+  ],
+  "runs": {
+    "width-baseline": {
+      "status": "FAIL",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 1,
+      "consoleErrorCount": 0
+    },
+    "angle-baseline": {
+      "status": "PASS",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 0,
+      "consoleErrorCount": 0
+    },
+    "fixed": {
+      "status": "PASS",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 0,
+      "consoleErrorCount": 0
+    },
+    "history-regression": {
+      "status": "PASS",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 0,
+      "consoleErrorCount": 0
+    },
+    "open-slot-regression": {
+      "status": "PASS",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 0,
+      "consoleErrorCount": 0
+    }
+  },
+  "focused": {
+    "model": "11/11 PASS",
+    "studio": "1/1 PASS"
+  },
+  "limits": [
+    "Synthetic saved tube fixture, not pointer-created new feature",
+    "Width baseline React crash; accepted document unchanged, history DOM unmounted; no data loss claim",
+    "Depth original UI and whole-suite NOT_RUN",
+    "Native/reader Width/Depth support existed before this patch"
+  ],
+  "typeChecks": {
+    "model": "PASS",
+    "studio": "PASS"
+  },
+  "studioBuild": "PASS",
+  "diskKiB": {
+    "start": 44198468,
+    "end": 45162052,
+    "reserve": 2097152
+  }
+}

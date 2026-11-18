@@ -790,7 +790,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   | { kind: 'end-cap'; frame: number; member: number; end: 'start' | 'end'; fit: 'over' | 'inset'; thickness: number }
   | { kind: 'bearing'; row: string; shaft: number; step: number; against: 'start' | 'end'; housing?: number; housingRef?: BearingHousingRef; shaftClass?: string; housingClass?: string }
   | { kind: 'key'; shaft: number; keyseat: number; height: number; width?: number; length?: number; ends?: 'round' | 'square'; hub?: number }
-  | { kind: 'keyway'; parent: BodyRef; face: string; width: number; depth: number; angle?: number }
+  | { kind: 'keyway'; parent: BodyRef; face: string; width: Dim; depth: Dim; angle?: number }
   | { kind: 'retaining-ring'; shaft: number; groove: number; thickness: number; outerDiameter: number; /** The user's ring row it is checked against (O139); none: an estimate. */ row?: string }
   | { kind: 'pin'; shaft: number; hole: number; diameter?: number; length?: number; fit?: boolean }
   | { kind: 'worm'; starts: number; form: 'ZI' | 'ZA'; length: Dim; bore?: Dim; thicknessReduction?: Dim; mesh: BevelMesh; generator: 'worm@0' }
@@ -1431,7 +1431,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'gusset': return `Gusset ${fmt(node.legs[0])} × ${fmt(node.legs[1])} × ${fmt(node.thickness)} at point ${node.point} of n${node.frame}`;
     case 'end-cap': return `End cap ${node.fit === 'over' ? 'over' : 'in'} member ${node.member + 1}'s ${node.end}, ${fmt(node.thickness)} thick`;
     case 'key': return `Key ${node.width !== undefined ? `${fmt(node.width)} wide, ` : ''}${fmt(node.height)} high${node.length !== undefined ? `, ${fmt(node.length)} long` : ''} in keyseat ${node.keyseat}`;
-    case 'keyway': return `Keyway ${fmt(node.width)} × ${fmt(node.depth)}`;
+    case 'keyway': return `Keyway ${n(node.width)} × ${n(node.depth)}`;
     case 'retaining-ring': return `Retaining ring ${fmt(node.thickness)} to Ø${fmt(node.outerDiameter)} in groove ${node.groove}`;
     case 'pin': return `Pin${node.diameter !== undefined ? ` Ø${fmt(node.diameter)}` : ''} in hole ${node.hole}`;
     case 'shaft': { const L = node.steps.reduce((s, x) => s + (typeof x.length === 'number' ? x.length : NaN), 0), d = node.steps.map(x => typeof x.diameter === 'number' ? x.diameter : NaN); return `Shaft ${node.steps.length} step${node.steps.length === 1 ? '' : 's'} Ø${fmt(Math.min(...d))}–Ø${fmt(Math.max(...d))} × ${fmt(L)}${node.steps.some(x => x.keyseats?.length) ? ', keyed' : ''}`; }
