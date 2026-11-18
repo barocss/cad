@@ -7,11 +7,12 @@ export interface OutlineMobility {
   points: readonly number[];
   edges: readonly number[];
   directions: readonly { point: number; motion: PointMotion }[];
+  circleDirections?: readonly { circle: number; motion: PointMotion }[];
 }
 
 const validIndex = (index: number, count: number) => Number.isInteger(index) && index >= 0 && index < count;
 
-function supportedRule(rule: SketchRule, count: number, arc = -1): boolean {
+function supportedRule(rule: SketchRule, count: number, arc = -1, circleCount = 0): boolean {
   const valid = (index: number) => validIndex(index, count);
   const line = (index: number) => valid(index) && index !== arc;
   switch (rule.kind) {
@@ -20,6 +21,8 @@ function supportedRule(rule: SketchRule, count: number, arc = -1): boolean {
       return line(rule.a) && line(rule.b) && rule.a !== rule.b;
     case 'distance': case 'dx': case 'dy':
       return valid(rule.a) && valid(rule.b) && rule.a !== rule.b;
+    case 'cdist': case 'cdx': case 'cdy':
+      return circleCount === 1 && rule.circle === 0 && valid(rule.a) && Number.isFinite(rule.value) && rule.value >= 0;
     case 'symmetric': return valid(rule.a) && valid(rule.b) && rule.a !== rule.b && line(rule.line);
     default: return false;
   }
@@ -40,15 +43,19 @@ function supportedArc(shape: Polygon, arc: number): boolean {
     && !(shape.tangents?.some(i=>!validIndex(i,n)||(i!==arc&&(i-1+n)%n!==arc)));
 }
 
-/** Local first-order mobility of a straight outline or one line+arc outline; never finite-motion certification. */
+/** Local first-order mobility of a straight outline (optionally one circle centre) or one line+arc outline; never finite-motion certification. */
 export function outlineMobility(shape: Polygon): OutlineMobility | null {
   if (shape.kind !== 'polygon' || !shape.closed || shape.pending || shape.construction || shape.points.length < 3 || shape.points.length > 16
     || shape.fromSpline || shape.spline || shape.fromEllipse || shape.ellipse
-    || shape.circles?.length || shape.circleIds?.length || shape.equalRadii?.length || shape.concentric?.length
+    || shape.equalRadii?.length || shape.concentric?.length
     ) return null;
   const arcs = (shape.bulges ?? []).flatMap((value,i)=>value!==0?[i]:[]);
+  const circleCount = shape.circles?.length ?? 0, circle = shape.circles?.[0];
+  if (circleCount > 1 || circleCount && (arcs.length > 0 || !circle ||
+    !Array.isArray(circle.c) || circle.c.length !== 2 || !Number.isFinite(circle.c[0]) || !Number.isFinite(circle.c[1]) || !Number.isFinite(circle.r) || circle.r <= 0)
+    || shape.circleIds && (shape.circleIds.length !== circleCount || circleCount === 1 && (typeof shape.circleIds[0] !== 'string' || !shape.circleIds[0]))) return null;
   if (arcs.length>1 || (arcs.length===1 ? !supportedArc(shape,arcs[0]) : !!shape.tangents?.length || !!Object.keys(shape.radii ?? {}).length)
-    || shape.rules?.some(rule=>!supportedRule(rule,shape.points.length,arcs[0]??-1))) return null;
+    || shape.rules?.some(rule=>!supportedRule(rule,shape.points.length,arcs[0]??-1,circleCount))) return null;
 
   const { points, hv } = shape;
   if (hv && [...hv.h, ...hv.v].some(index => !validIndex(index, points.length))) return null;
@@ -64,5 +71,5 @@ export function outlineMobility(shape: Polygon): OutlineMobility | null {
   const moving = directions.map(item => item.point);
   const movable = new Set(moving);
   const edges = points.flatMap((_, i) => movable.has(i) || movable.has((i + 1) % points.length) || movingArcEdges.includes(i) ? [i] : []);
-  return { points: moving, edges, directions };
+  return { points: moving, edges, directions, ...(circleCount ? { circleDirections: diagnosis.circleDirections } : {}) };
 }

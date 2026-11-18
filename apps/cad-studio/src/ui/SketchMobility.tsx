@@ -30,17 +30,18 @@ export function SketchMobility({ owner, inspection, onDimEdit }: {
     if (current?.owner === owner && current.target === 'mobility' && current.input === input
       && samePick(current.entity, entity)) inspection.set(null);
   };
-  const row = (kind: 'point' | 'edge', i: number) => {
+  const row = (kind: 'point' | 'edge' | 'circle', i: number) => {
     const entity = { kind, i };
-    const direction = kind === 'point' ? pointMotionLabel(result?.directions.find(item => item.point === i)?.motion ?? null) : undefined;
-    return <li key={kind + i} tabIndex={0} aria-label={`Locally movable ${kind} ${i + 1}`} aria-description={direction}
+    const direction = kind === 'point' ? pointMotionLabel(result?.directions.find(item => item.point === i)?.motion ?? null)
+      : kind === 'circle' ? pointMotionLabel(result?.circleDirections?.find(item => item.circle === i)?.motion ?? null) : undefined;
+    return <li key={kind + i} tabIndex={0} aria-label={`Locally movable ${kind === 'circle' ? 'circle centre' : kind} ${i + 1}`} aria-description={direction}
       onPointerMove={() => enter(entity, 'pointer')} onPointerLeave={() => leave(entity, 'pointer')}
       onFocus={() => enter(entity, 'focus')} onBlur={() => leave(entity, 'focus')}
       onKeyDown={event => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
         event.stopPropagation();
-      }}>{kind === 'point' ? 'Point' : 'Edge'} {i + 1}{kind === 'point' && <span className="sk-mobility-direction">{direction}</span>}</li>;
+      }}>{kind === 'point' ? 'Point' : kind === 'circle' ? 'Circle centre' : 'Edge'} {i + 1}{kind !== 'edge' && <span className="sk-mobility-direction">{direction}</span>}</li>;
   };
 
   // Unsupported outlines have no empty disclosure; a supported fully locked result remains inspectable.
@@ -51,8 +52,9 @@ export function SketchMobility({ owner, inspection, onDimEdit }: {
     <summary>Active outline mobility</summary>
     {open && <p>Local first-order directions in sketch X/Y, not world axes. Other points may move together. This is not a finite-motion guarantee.</p>}
     {open && eligible?.bulges?.some(Boolean) && <p>An arc can have first-order motion through its centre even when its endpoints are fixed. This does not prove a finite motion.</p>}
-    {open && (result.points.length === 0 && result.edges.length === 0 ? <p role="status">No locally movable points or edges.</p>
+    {open && result.circleDirections && <p>Circle-centre directions hold the current radius fixed. Radius freedom is not diagnosed.</p>}
+    {open && (result.points.length === 0 && result.edges.length === 0 && !result.circleDirections?.length ? <p role="status">{result.circleDirections ? 'No locally movable points, edges or circle centres.' : 'No locally movable points or edges.'}</p>
         : <ul aria-label="Locally movable geometry">{result.points.map(i => row('point', i))}
-          {result.edges.map(i => row('edge', i))}</ul>)}
+          {result.edges.map(i => row('edge', i))}{result.circleDirections?.map(item => row('circle', item.circle))}</ul>)}
   </details>;
 }

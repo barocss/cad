@@ -38,7 +38,7 @@ test('unsolved, malformed and unsupported outlines are unavailable', () => {
   const failures: Polygon[] = [
     { ...shape, lengths: { 0: 39 } }, { ...shape, lengths: { 0: 39, 2: 40 } },
     { ...shape, closed: false }, { ...shape, pending: true }, { ...shape, construction: true },
-    { ...shape, bulges: [0, 0.1, 0, 0] }, { ...shape, circles: [{ c: [5, 5], r: 2 }] },
+    { ...shape, bulges: [0, 0.1, 0, 0] }, { ...shape, circles: [{ c: [5, 5], r: 2 }, { c: [15, 5], r: 2 }] },
     { ...shape, fromSpline: true }, { ...shape, fromEllipse: true },
     { ...shape, hv: { h: [0, -1], v: [1, 3] } }, { ...shape, hv: { h: [0, 2], v: [1, 3.5] } },
     { ...shape, hv: { h: [0, 2, 4], v: [1, 3] } },

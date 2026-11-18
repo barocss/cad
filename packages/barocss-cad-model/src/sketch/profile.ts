@@ -214,7 +214,14 @@ export function settledOutlineMobility(points: P2[], c: OutlineConstraints, bulg
       : local?.dimension === 2 ? { dimension: 2 as const } : null }];
   });
   const movingArcEdges = system.bulges.flatMap((bulge, i) => bulge && movable.has('c' + i) ? [i] : []);
-  return { directions, movingArcEdges };
+  const circleDirections = (c.circles ?? []).flatMap((_, circle) => {
+    if (!movable.has('k' + circle)) return [];
+    const local = mobility.pointDirections.find(item => item.pointId === 'k' + circle);
+    return [{ circle, motion: local?.dimension === 1
+      ? { dimension: 1 as const, direction: local.direction }
+      : local?.dimension === 2 ? { dimension: 2 as const } : null }];
+  });
+  return { directions, movingArcEdges, circleDirections };
 }
 
 /** Read movement only for authored points, excluding solver helper centers. */
