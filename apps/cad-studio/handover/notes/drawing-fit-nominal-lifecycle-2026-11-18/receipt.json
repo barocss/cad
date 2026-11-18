@@ -1,0 +1,3541 @@
+{
+  "status": "PASS",
+  "qualification": "#269 actual nominal Hole edit, fit-row boundary and primary/dual unit consumer baseline.",
+  "visualReview": "ROOT_MUST_VIEW_SCREENSHOTS",
+  "states": [
+    {
+      "label": "nominal12",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 6,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scale": 1,
+          "projection": "third",
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ]
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 18295.22131576613,
+            "centroid": [
+              30.00000000000002,
+              19.999999999999996,
+              4
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 8",
+        "Hole \u00d812"
+      ],
+      "drawing": {
+        "scale": 1,
+        "dimensions": [
+          {
+            "id": "bore-fit",
+            "text": "\u00d812 THRU H7 (+0.018/+0.001)",
+            "value": 12.000000000000002
+          }
+        ],
+        "hidden": {
+          "front": 4,
+          "top": 0,
+          "right": 2,
+          "iso": 8
+        },
+        "section": null,
+        "sections": [],
+        "placedSections": [],
+        "apartSections": [],
+        "details": [],
+        "boxes": {
+          "front": [
+            169,
+            159.5,
+            229,
+            167.5
+          ],
+          "top": [
+            169,
+            97.5,
+            229,
+            137.5
+          ],
+          "right": [
+            251,
+            159.5,
+            251,
+            159.5
+          ],
+          "iso": [
+            251,
+            97.5,
+            251,
+            97.5
+          ]
+        },
+        "breaks": {},
+        "issues": [
+          {
+            "code": "TEXT_OVERLAP",
+            "severity": "error",
+            "fix": "move-table",
+            "tables": [
+              "fits"
+            ]
+          },
+          {
+            "code": "HOLE_NOT_LOCATED",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          },
+          {
+            "code": "OVERALL_MISSING",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          }
+        ],
+        "tables": [
+          {
+            "id": "fits",
+            "box": [
+              15,
+              170,
+              210.445,
+              205
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "id": "general-note",
+            "kind": "general-note",
+            "estimate": true
+          }
+        ]
+      }
+    },
+    {
+      "label": "nominal14-model",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 7,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scale": 1,
+          "projection": "third",
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ],
+              "sig": {
+                "k": "curve",
+                "p": [
+                  24,
+                  20,
+                  0
+                ],
+                "s": 0,
+                "n": 2
+              }
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 17968.49567979279,
+            "centroid": [
+              30.000000000000014,
+              20.000000000000014,
+              4
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 8",
+        "Hole \u00d814"
+      ],
+      "drawing": null
+    },
+    {
+      "label": "nominal14",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 7,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scale": 1,
+          "projection": "third",
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ],
+              "sig": {
+                "k": "curve",
+                "p": [
+                  24,
+                  20,
+                  0
+                ],
+                "s": 0,
+                "n": 2
+              }
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 17968.49567979279,
+            "centroid": [
+              30.000000000000014,
+              20.000000000000014,
+              4
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 8",
+        "Hole \u00d814"
+      ],
+      "drawing": {
+        "scale": 1,
+        "dimensions": [
+          {
+            "id": "bore-fit",
+            "text": "\u00d814 THRU H7 (+0.018/+0.001)",
+            "value": 14.000000000000002
+          }
+        ],
+        "hidden": {
+          "front": 4,
+          "top": 0,
+          "right": 2,
+          "iso": 8
+        },
+        "section": null,
+        "sections": [],
+        "placedSections": [],
+        "apartSections": [],
+        "details": [],
+        "boxes": {
+          "front": [
+            169,
+            159.5,
+            229,
+            167.5
+          ],
+          "top": [
+            169,
+            97.5,
+            229,
+            137.5
+          ],
+          "right": [
+            251,
+            159.5,
+            251,
+            159.5
+          ],
+          "iso": [
+            251,
+            97.5,
+            251,
+            97.5
+          ]
+        },
+        "breaks": {},
+        "issues": [
+          {
+            "code": "TEXT_OVERLAP",
+            "severity": "error",
+            "fix": "move-table",
+            "tables": [
+              "fits"
+            ]
+          },
+          {
+            "code": "HOLE_NOT_LOCATED",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          },
+          {
+            "code": "OVERALL_MISSING",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          }
+        ],
+        "tables": [
+          {
+            "id": "fits",
+            "box": [
+              15,
+              170,
+              210.445,
+              205
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "id": "general-note",
+            "kind": "general-note",
+            "estimate": true
+          }
+        ]
+      }
+    },
+    {
+      "label": "undo-nominal12",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 6,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scale": 1,
+          "projection": "third",
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ]
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 18295.22131576613,
+            "centroid": [
+              30.00000000000002,
+              19.999999999999996,
+              4
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 8",
+        "Hole \u00d812"
+      ],
+      "drawing": {
+        "scale": 1,
+        "dimensions": [
+          {
+            "id": "bore-fit",
+            "text": "\u00d812 THRU H7 (+0.018/+0.001)",
+            "value": 12.000000000000002
+          }
+        ],
+        "hidden": {
+          "front": 4,
+          "top": 0,
+          "right": 2,
+          "iso": 8
+        },
+        "section": null,
+        "sections": [],
+        "placedSections": [],
+        "apartSections": [],
+        "details": [],
+        "boxes": {
+          "front": [
+            169,
+            159.5,
+            229,
+            167.5
+          ],
+          "top": [
+            169,
+            97.5,
+            229,
+            137.5
+          ],
+          "right": [
+            251,
+            159.5,
+            251,
+            159.5
+          ],
+          "iso": [
+            251,
+            97.5,
+            251,
+            97.5
+          ]
+        },
+        "breaks": {},
+        "issues": [
+          {
+            "code": "TEXT_OVERLAP",
+            "severity": "error",
+            "fix": "move-table",
+            "tables": [
+              "fits"
+            ]
+          },
+          {
+            "code": "HOLE_NOT_LOCATED",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          },
+          {
+            "code": "OVERALL_MISSING",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          }
+        ],
+        "tables": [
+          {
+            "id": "fits",
+            "box": [
+              15,
+              170,
+              210.445,
+              205
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "id": "general-note",
+            "kind": "general-note",
+            "estimate": true
+          }
+        ]
+      }
+    },
+    {
+      "label": "redo-nominal14",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 7,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scale": 1,
+          "projection": "third",
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ],
+              "sig": {
+                "k": "curve",
+                "p": [
+                  24,
+                  20,
+                  0
+                ],
+                "s": 0,
+                "n": 2
+              }
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": null,
+            "centroid": null,
+            "massRef": 5
+          }
+        ],
+        "massReady": false,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 8",
+        "Hole \u00d814"
+      ],
+      "drawing": {
+        "scale": 1,
+        "dimensions": [
+          {
+            "id": "bore-fit",
+            "text": "\u00d814 THRU H7 (+0.018/+0.001)",
+            "value": 14.000000000000002
+          }
+        ],
+        "hidden": {
+          "front": 4,
+          "top": 0,
+          "right": 2,
+          "iso": 8
+        },
+        "section": null,
+        "sections": [],
+        "placedSections": [],
+        "apartSections": [],
+        "details": [],
+        "boxes": {
+          "front": [
+            169,
+            159.5,
+            229,
+            167.5
+          ],
+          "top": [
+            169,
+            97.5,
+            229,
+            137.5
+          ],
+          "right": [
+            251,
+            159.5,
+            251,
+            159.5
+          ],
+          "iso": [
+            251,
+            97.5,
+            251,
+            97.5
+          ]
+        },
+        "breaks": {},
+        "issues": [
+          {
+            "code": "TEXT_OVERLAP",
+            "severity": "error",
+            "fix": "move-table",
+            "tables": [
+              "fits"
+            ]
+          },
+          {
+            "code": "HOLE_NOT_LOCATED",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          },
+          {
+            "code": "OVERALL_MISSING",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          }
+        ],
+        "tables": [
+          {
+            "id": "fits",
+            "box": [
+              15,
+              170,
+              210.445,
+              205
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "id": "general-note",
+            "kind": "general-note",
+            "estimate": true
+          }
+        ]
+      }
+    },
+    {
+      "label": "nominal14-inch-dual",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 7,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scope": {
+            "kind": "part"
+          },
+          "scale": 1,
+          "projection": "third",
+          "units": "inch",
+          "dual": true,
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ],
+              "sig": {
+                "k": "curve",
+                "p": [
+                  24,
+                  20,
+                  0
+                ],
+                "s": 0,
+                "n": 2
+              }
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 17968.49567979279,
+            "centroid": [
+              30.000000000000014,
+              20.000000000000014,
+              4
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 8",
+        "Hole \u00d814"
+      ],
+      "drawing": {
+        "scale": 1,
+        "dimensions": [
+          {
+            "id": "bore-fit",
+            "text": "\u00d8.5512 THRU H7 (+.0006/0)",
+            "value": 14.000000000000002
+          }
+        ],
+        "hidden": {
+          "front": 4,
+          "top": 0,
+          "right": 2,
+          "iso": 8
+        },
+        "section": null,
+        "sections": [],
+        "placedSections": [],
+        "apartSections": [],
+        "details": [],
+        "boxes": {
+          "front": [
+            169,
+            159.5,
+            229,
+            167.5
+          ],
+          "top": [
+            169,
+            97.5,
+            229,
+            137.5
+          ],
+          "right": [
+            251,
+            159.5,
+            251,
+            159.5
+          ],
+          "iso": [
+            251,
+            97.5,
+            251,
+            97.5
+          ]
+        },
+        "breaks": {},
+        "issues": [
+          {
+            "code": "TEXT_OVERLAP",
+            "severity": "error",
+            "fix": "move-table",
+            "tables": [
+              "fits"
+            ]
+          },
+          {
+            "code": "HOLE_NOT_LOCATED",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          },
+          {
+            "code": "OVERALL_MISSING",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          }
+        ],
+        "tables": [
+          {
+            "id": "fits",
+            "box": [
+              15,
+              170,
+              210.445,
+              205
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "id": "general-note",
+            "kind": "general-note",
+            "estimate": true
+          }
+        ]
+      }
+    },
+    {
+      "label": "nominal19-admission-refused",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 7,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scope": {
+            "kind": "part"
+          },
+          "scale": 1,
+          "projection": "third",
+          "units": "inch",
+          "dual": true,
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ],
+              "sig": {
+                "k": "curve",
+                "p": [
+                  24,
+                  20,
+                  0
+                ],
+                "s": 0,
+                "n": 2
+              }
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 17968.49567979279,
+            "centroid": [
+              30.000000000000014,
+              20.000000000000014,
+              4
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": "EDIT FEATURE Entry faceBody end +ZDrill direction\u2212ZEnd changes are available for this final ordinary hole with numeric dimensions. Switching to a depth starts at 6 mm; check Depth before Apply.EndsThroughTo a depthDiametermmCentre XmmCentre Ymm Delete featureA fit class has no row in your fit tablesLoad a fit table (Library panel, FITS) with a row for that class whose range holds the face's size. None is built in, and limits are never computed.Kernel detail[FIT_TABLE_MISS] no row for H7 at \u00d819 mm in synthetic-shop: load a row for H7 whose range holds 19 mm (H7 has over 10 up to 18). Limits are never computed: ISO 286's formula does not reproduce its own table.ApplyReset",
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 8",
+        "Hole \u00d814"
+      ],
+      "drawing": null
+    },
+    {
+      "label": "fresh-open14",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 7,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scope": {
+            "kind": "part"
+          },
+          "scale": 1,
+          "projection": "third",
+          "units": "inch",
+          "dual": true,
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ],
+              "sig": {
+                "k": "curve",
+                "p": [
+                  24,
+                  20,
+                  0
+                ],
+                "s": 0,
+                "n": 2
+              }
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 17968.49567979279,
+            "centroid": [
+              30.000000000000014,
+              20.000000000000014,
+              4
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 8",
+        "Hole \u00d814"
+      ],
+      "drawing": null
+    },
+    {
+      "label": "fresh-open14-drawing",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 7,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scope": {
+            "kind": "part"
+          },
+          "scale": 1,
+          "projection": "third",
+          "units": "inch",
+          "dual": true,
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ],
+              "sig": {
+                "k": "curve",
+                "p": [
+                  24,
+                  20,
+                  0
+                ],
+                "s": 0,
+                "n": 2
+              }
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b2",
+            "volume": 17968.49567979279,
+            "centroid": [
+              30.000000000000014,
+              20.000000000000014,
+              4
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 8",
+        "Hole \u00d814"
+      ],
+      "drawing": {
+        "scale": 1,
+        "dimensions": [
+          {
+            "id": "bore-fit",
+            "text": "\u00d8.5512 THRU H7 (+.0006/0)",
+            "value": 14.000000000000002
+          }
+        ],
+        "hidden": {
+          "front": 4,
+          "top": 0,
+          "right": 2,
+          "iso": 8
+        },
+        "section": null,
+        "sections": [],
+        "placedSections": [],
+        "apartSections": [],
+        "details": [],
+        "boxes": {
+          "front": [
+            169,
+            159.5,
+            229,
+            167.5
+          ],
+          "top": [
+            169,
+            97.5,
+            229,
+            137.5
+          ],
+          "right": [
+            251,
+            159.5,
+            251,
+            159.5
+          ],
+          "iso": [
+            251,
+            97.5,
+            251,
+            97.5
+          ]
+        },
+        "breaks": {},
+        "issues": [
+          {
+            "code": "TEXT_OVERLAP",
+            "severity": "error",
+            "fix": "move-table",
+            "tables": [
+              "fits"
+            ]
+          },
+          {
+            "code": "HOLE_NOT_LOCATED",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          },
+          {
+            "code": "OVERALL_MISSING",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          }
+        ],
+        "tables": [
+          {
+            "id": "fits",
+            "box": [
+              15,
+              170,
+              210.445,
+              205
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "id": "general-note",
+            "kind": "general-note",
+            "estimate": true
+          }
+        ]
+      }
+    }
+  ],
+  "reads": [],
+  "oracles": [],
+  "files": [
+    {
+      "file": "<output>/nominal14-inch-dual.bcad",
+      "hash": "5c7bfb693b7bf0774a8442da2b521d44a990dc113903e986a769f9faca8f29f5",
+      "semanticEquality": true
+    },
+    {
+      "kind": "SVG",
+      "sha256": "5a85497de1b39188e5134f1cdcd03d6fab319129d94690fb02b153b5679467d4",
+      "bytes": 7560,
+      "boundary": "actual browser download"
+    },
+    {
+      "kind": "DXF",
+      "sha256": "7fda3cc49e5c0e6b1e976a3bfff45a47ebe7477abeef3651e78dc747b2f2c4a3",
+      "bytes": 18528,
+      "boundary": "actual browser download"
+    }
+  ],
+  "downloads": [
+    {
+      "phase": "native Save nominal14-inch-dual",
+      "suggestedFilename": "fit-hole.bcad"
+    },
+    {
+      "phase": "fresh Open fresh-open14",
+      "suggestedFilename": "nominal14-inch-dual.svg"
+    },
+    {
+      "phase": "fresh Open fresh-open14",
+      "suggestedFilename": "nominal14-inch-dual.dxf"
+    }
+  ],
+  "observations": [
+    {
+      "label": "nominal12",
+      "sheet": {
+        "scale": 1,
+        "dimensions": [
+          {
+            "id": "bore-fit",
+            "text": "\u00d812 THRU H7 (+0.018/+0.001)",
+            "value": 12.000000000000002
+          }
+        ],
+        "hidden": {
+          "front": 4,
+          "top": 0,
+          "right": 2,
+          "iso": 8
+        },
+        "section": null,
+        "sections": [],
+        "placedSections": [],
+        "apartSections": [],
+        "details": [],
+        "boxes": {
+          "front": [
+            169,
+            159.5,
+            229,
+            167.5
+          ],
+          "top": [
+            169,
+            97.5,
+            229,
+            137.5
+          ],
+          "right": [
+            251,
+            159.5,
+            251,
+            159.5
+          ],
+          "iso": [
+            251,
+            97.5,
+            251,
+            97.5
+          ]
+        },
+        "breaks": {},
+        "issues": [
+          {
+            "code": "TEXT_OVERLAP",
+            "severity": "error",
+            "fix": "move-table",
+            "tables": [
+              "fits"
+            ]
+          },
+          {
+            "code": "HOLE_NOT_LOCATED",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          },
+          {
+            "code": "OVERALL_MISSING",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          }
+        ],
+        "tables": [
+          {
+            "id": "fits",
+            "box": [
+              15,
+              170,
+              210.445,
+              205
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "id": "general-note",
+            "kind": "general-note",
+            "estimate": true
+          }
+        ]
+      },
+      "text": [
+        "TITLE",
+        "fit-hole",
+        "barocss cad-studio",
+        "SRC 4d4b0678e82a0f4a",
+        "SCALE",
+        "1:1",
+        "UNITS",
+        "mm",
+        "DATE",
+        "2026-11-18",
+        "REV",
+        "-",
+        "SHEET",
+        "A3",
+        "THIRD ANGLE",
+        "\u00d812 THRU H7 (+0.018/+0.001)",
+        "FRONT",
+        "TOP",
+        "FIT DIMENSIONS",
+        "DIMENSION / VIEW",
+        "MULTIPLIER",
+        "DIAMETER (mm)",
+        "CLASS / UPPER / LOWER (mm)",
+        "TABLE / ROW",
+        "bore-fit (top)",
+        "\u2014",
+        "12",
+        "H7 (+0.018/+0.001)",
+        "H7: synthetic-shop row 1",
+        "Base part, single sheet, ordinary-view diameter dimensions. Rows are dimensions, not part or hole quantities. Table rows are 1-based; user data is not certified.",
+        "Primary units only (including dual-unit drawings); dimension callouts retain their dual display.",
+        "bore-fit: edge n1.bottom|n2.side0#2; face n2.side0#2",
+        "synthetic-shop row 1: trial-only"
+      ],
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 6,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scale": 1,
+          "projection": "third",
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ]
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "nominal14",
+      "sheet": {
+        "scale": 1,
+        "dimensions": [
+          {
+            "id": "bore-fit",
+            "text": "\u00d814 THRU H7 (+0.018/+0.001)",
+            "value": 14.000000000000002
+          }
+        ],
+        "hidden": {
+          "front": 4,
+          "top": 0,
+          "right": 2,
+          "iso": 8
+        },
+        "section": null,
+        "sections": [],
+        "placedSections": [],
+        "apartSections": [],
+        "details": [],
+        "boxes": {
+          "front": [
+            169,
+            159.5,
+            229,
+            167.5
+          ],
+          "top": [
+            169,
+            97.5,
+            229,
+            137.5
+          ],
+          "right": [
+            251,
+            159.5,
+            251,
+            159.5
+          ],
+          "iso": [
+            251,
+            97.5,
+            251,
+            97.5
+          ]
+        },
+        "breaks": {},
+        "issues": [
+          {
+            "code": "TEXT_OVERLAP",
+            "severity": "error",
+            "fix": "move-table",
+            "tables": [
+              "fits"
+            ]
+          },
+          {
+            "code": "HOLE_NOT_LOCATED",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          },
+          {
+            "code": "OVERALL_MISSING",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          }
+        ],
+        "tables": [
+          {
+            "id": "fits",
+            "box": [
+              15,
+              170,
+              210.445,
+              205
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "id": "general-note",
+            "kind": "general-note",
+            "estimate": true
+          }
+        ]
+      },
+      "text": [
+        "TITLE",
+        "fit-hole",
+        "barocss cad-studio",
+        "SRC 1637924f764639c3",
+        "SCALE",
+        "1:1",
+        "UNITS",
+        "mm",
+        "DATE",
+        "2026-11-18",
+        "REV",
+        "-",
+        "SHEET",
+        "A3",
+        "THIRD ANGLE",
+        "\u00d814 THRU H7 (+0.018/+0.001)",
+        "FRONT",
+        "TOP",
+        "FIT DIMENSIONS",
+        "DIMENSION / VIEW",
+        "MULTIPLIER",
+        "DIAMETER (mm)",
+        "CLASS / UPPER / LOWER (mm)",
+        "TABLE / ROW",
+        "bore-fit (top)",
+        "\u2014",
+        "14",
+        "H7 (+0.018/+0.001)",
+        "H7: synthetic-shop row 1",
+        "Base part, single sheet, ordinary-view diameter dimensions. Rows are dimensions, not part or hole quantities. Table rows are 1-based; user data is not certified.",
+        "Primary units only (including dual-unit drawings); dimension callouts retain their dual display.",
+        "bore-fit: edge n1.bottom|n2.side0#2; face n2.side0#2",
+        "synthetic-shop row 1: trial-only"
+      ],
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 7,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scale": 1,
+          "projection": "third",
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ],
+              "sig": {
+                "k": "curve",
+                "p": [
+                  24,
+                  20,
+                  0
+                ],
+                "s": 0,
+                "n": 2
+              }
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "undo-nominal12",
+      "sheet": {
+        "scale": 1,
+        "dimensions": [
+          {
+            "id": "bore-fit",
+            "text": "\u00d812 THRU H7 (+0.018/+0.001)",
+            "value": 12.000000000000002
+          }
+        ],
+        "hidden": {
+          "front": 4,
+          "top": 0,
+          "right": 2,
+          "iso": 8
+        },
+        "section": null,
+        "sections": [],
+        "placedSections": [],
+        "apartSections": [],
+        "details": [],
+        "boxes": {
+          "front": [
+            169,
+            159.5,
+            229,
+            167.5
+          ],
+          "top": [
+            169,
+            97.5,
+            229,
+            137.5
+          ],
+          "right": [
+            251,
+            159.5,
+            251,
+            159.5
+          ],
+          "iso": [
+            251,
+            97.5,
+            251,
+            97.5
+          ]
+        },
+        "breaks": {},
+        "issues": [
+          {
+            "code": "TEXT_OVERLAP",
+            "severity": "error",
+            "fix": "move-table",
+            "tables": [
+              "fits"
+            ]
+          },
+          {
+            "code": "HOLE_NOT_LOCATED",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          },
+          {
+            "code": "OVERALL_MISSING",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          }
+        ],
+        "tables": [
+          {
+            "id": "fits",
+            "box": [
+              15,
+              170,
+              210.445,
+              205
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "id": "general-note",
+            "kind": "general-note",
+            "estimate": true
+          }
+        ]
+      },
+      "text": [
+        "TITLE",
+        "fit-hole",
+        "barocss cad-studio",
+        "SRC 4d4b0678e82a0f4a",
+        "SCALE",
+        "1:1",
+        "UNITS",
+        "mm",
+        "DATE",
+        "2026-11-18",
+        "REV",
+        "-",
+        "SHEET",
+        "A3",
+        "THIRD ANGLE",
+        "\u00d812 THRU H7 (+0.018/+0.001)",
+        "FRONT",
+        "TOP",
+        "FIT DIMENSIONS",
+        "DIMENSION / VIEW",
+        "MULTIPLIER",
+        "DIAMETER (mm)",
+        "CLASS / UPPER / LOWER (mm)",
+        "TABLE / ROW",
+        "bore-fit (top)",
+        "\u2014",
+        "12",
+        "H7 (+0.018/+0.001)",
+        "H7: synthetic-shop row 1",
+        "Base part, single sheet, ordinary-view diameter dimensions. Rows are dimensions, not part or hole quantities. Table rows are 1-based; user data is not certified.",
+        "Primary units only (including dual-unit drawings); dimension callouts retain their dual display.",
+        "bore-fit: edge n1.bottom|n2.side0#2; face n2.side0#2",
+        "synthetic-shop row 1: trial-only"
+      ],
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 6,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scale": 1,
+          "projection": "third",
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ]
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "redo-nominal14",
+      "sheet": {
+        "scale": 1,
+        "dimensions": [
+          {
+            "id": "bore-fit",
+            "text": "\u00d814 THRU H7 (+0.018/+0.001)",
+            "value": 14.000000000000002
+          }
+        ],
+        "hidden": {
+          "front": 4,
+          "top": 0,
+          "right": 2,
+          "iso": 8
+        },
+        "section": null,
+        "sections": [],
+        "placedSections": [],
+        "apartSections": [],
+        "details": [],
+        "boxes": {
+          "front": [
+            169,
+            159.5,
+            229,
+            167.5
+          ],
+          "top": [
+            169,
+            97.5,
+            229,
+            137.5
+          ],
+          "right": [
+            251,
+            159.5,
+            251,
+            159.5
+          ],
+          "iso": [
+            251,
+            97.5,
+            251,
+            97.5
+          ]
+        },
+        "breaks": {},
+        "issues": [
+          {
+            "code": "TEXT_OVERLAP",
+            "severity": "error",
+            "fix": "move-table",
+            "tables": [
+              "fits"
+            ]
+          },
+          {
+            "code": "HOLE_NOT_LOCATED",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          },
+          {
+            "code": "OVERALL_MISSING",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          }
+        ],
+        "tables": [
+          {
+            "id": "fits",
+            "box": [
+              15,
+              170,
+              210.445,
+              205
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "id": "general-note",
+            "kind": "general-note",
+            "estimate": true
+          }
+        ]
+      },
+      "text": [
+        "TITLE",
+        "fit-hole",
+        "barocss cad-studio",
+        "SRC 1637924f764639c3",
+        "SCALE",
+        "1:1",
+        "UNITS",
+        "mm",
+        "DATE",
+        "2026-11-18",
+        "REV",
+        "-",
+        "SHEET",
+        "A3",
+        "THIRD ANGLE",
+        "\u00d814 THRU H7 (+0.018/+0.001)",
+        "FRONT",
+        "TOP",
+        "FIT DIMENSIONS",
+        "DIMENSION / VIEW",
+        "MULTIPLIER",
+        "DIAMETER (mm)",
+        "CLASS / UPPER / LOWER (mm)",
+        "TABLE / ROW",
+        "bore-fit (top)",
+        "\u2014",
+        "14",
+        "H7 (+0.018/+0.001)",
+        "H7: synthetic-shop row 1",
+        "Base part, single sheet, ordinary-view diameter dimensions. Rows are dimensions, not part or hole quantities. Table rows are 1-based; user data is not certified.",
+        "Primary units only (including dual-unit drawings); dimension callouts retain their dual display.",
+        "bore-fit: edge n1.bottom|n2.side0#2; face n2.side0#2",
+        "synthetic-shop row 1: trial-only"
+      ],
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 7,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scale": 1,
+          "projection": "third",
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ],
+              "sig": {
+                "k": "curve",
+                "p": [
+                  24,
+                  20,
+                  0
+                ],
+                "s": 0,
+                "n": 2
+              }
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "nominal14-inch-dual",
+      "sheet": {
+        "scale": 1,
+        "dimensions": [
+          {
+            "id": "bore-fit",
+            "text": "\u00d8.5512 THRU H7 (+.0006/0)",
+            "value": 14.000000000000002
+          }
+        ],
+        "hidden": {
+          "front": 4,
+          "top": 0,
+          "right": 2,
+          "iso": 8
+        },
+        "section": null,
+        "sections": [],
+        "placedSections": [],
+        "apartSections": [],
+        "details": [],
+        "boxes": {
+          "front": [
+            169,
+            159.5,
+            229,
+            167.5
+          ],
+          "top": [
+            169,
+            97.5,
+            229,
+            137.5
+          ],
+          "right": [
+            251,
+            159.5,
+            251,
+            159.5
+          ],
+          "iso": [
+            251,
+            97.5,
+            251,
+            97.5
+          ]
+        },
+        "breaks": {},
+        "issues": [
+          {
+            "code": "TEXT_OVERLAP",
+            "severity": "error",
+            "fix": "move-table",
+            "tables": [
+              "fits"
+            ]
+          },
+          {
+            "code": "HOLE_NOT_LOCATED",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          },
+          {
+            "code": "OVERALL_MISSING",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          }
+        ],
+        "tables": [
+          {
+            "id": "fits",
+            "box": [
+              15,
+              170,
+              210.445,
+              205
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "id": "general-note",
+            "kind": "general-note",
+            "estimate": true
+          }
+        ]
+      },
+      "text": [
+        "TITLE",
+        "fit-hole",
+        "barocss cad-studio",
+        "SRC 1637924f764639c3",
+        "SCALE",
+        "1:1",
+        "UNITS",
+        "inch [mm]",
+        "DATE",
+        "2026-11-18",
+        "REV",
+        "-",
+        "SHEET",
+        "A3",
+        "THIRD ANGLE",
+        "\u00d8.5512 THRU H7 (+.0006/0) [\u00d814 THRU H7 (+0.018/+0.001)]",
+        "FRONT",
+        "TOP",
+        "FIT DIMENSIONS",
+        "DIMENSION / VIEW",
+        "MULTIPLIER",
+        "DIAMETER (inch)",
+        "CLASS / UPPER / LOWER (inch)",
+        "TABLE / ROW",
+        "bore-fit (top)",
+        "\u2014",
+        ".5512",
+        "H7 (+.0006/0)",
+        "H7: synthetic-shop row 1",
+        "Base part, single sheet, ordinary-view diameter dimensions. Rows are dimensions, not part or hole quantities. Table rows are 1-based; user data is not certified.",
+        "Primary units only (including dual-unit drawings); dimension callouts retain their dual display.",
+        "bore-fit: edge n1.bottom|n2.side0#2; face n2.side0#2",
+        "synthetic-shop row 1: trial-only"
+      ],
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 7,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scope": {
+            "kind": "part"
+          },
+          "scale": 1,
+          "projection": "third",
+          "units": "inch",
+          "dual": true,
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ],
+              "sig": {
+                "k": "curve",
+                "p": [
+                  24,
+                  20,
+                  0
+                ],
+                "s": 0,
+                "n": 2
+              }
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "boundary-admission",
+      "docUnchanged": true,
+      "editor": "EDIT FEATURE\nEntry face\nBody end +Z\nDrill direction\n\u2212Z\n\nEnd changes are available for this final ordinary hole with numeric dimensions. Switching to a depth starts at 6 mm; check Depth before Apply.\n\nEnds\nThrough\nTo a depth\nDiameter\nmm\nCentre X\nmm\nCentre Y\nmm\n Delete feature\nA fit class has no row in your fit tables\nLoad a fit table (Library panel, FITS) with a row for that class whose range holds the face's size. None is built in, and limits are never computed.\nKernel detail\nApply\nReset"
+    },
+    {
+      "label": "fresh-open14-drawing",
+      "sheet": {
+        "scale": 1,
+        "dimensions": [
+          {
+            "id": "bore-fit",
+            "text": "\u00d8.5512 THRU H7 (+.0006/0)",
+            "value": 14.000000000000002
+          }
+        ],
+        "hidden": {
+          "front": 4,
+          "top": 0,
+          "right": 2,
+          "iso": 8
+        },
+        "section": null,
+        "sections": [],
+        "placedSections": [],
+        "apartSections": [],
+        "details": [],
+        "boxes": {
+          "front": [
+            169,
+            159.5,
+            229,
+            167.5
+          ],
+          "top": [
+            169,
+            97.5,
+            229,
+            137.5
+          ],
+          "right": [
+            251,
+            159.5,
+            251,
+            159.5
+          ],
+          "iso": [
+            251,
+            97.5,
+            251,
+            97.5
+          ]
+        },
+        "breaks": {},
+        "issues": [
+          {
+            "code": "TEXT_OVERLAP",
+            "severity": "error",
+            "fix": "move-table",
+            "tables": [
+              "fits"
+            ]
+          },
+          {
+            "code": "HOLE_NOT_LOCATED",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          },
+          {
+            "code": "OVERALL_MISSING",
+            "severity": "warning",
+            "fix": "auto-dimension"
+          }
+        ],
+        "tables": [
+          {
+            "id": "fits",
+            "box": [
+              15,
+              170,
+              210.445,
+              205
+            ]
+          }
+        ],
+        "suggestions": [
+          {
+            "id": "general-note",
+            "kind": "general-note",
+            "estimate": true
+          }
+        ]
+      },
+      "text": [
+        "TITLE",
+        "nominal14-inch-dual",
+        "barocss cad-studio",
+        "SRC 1637924f764639c3",
+        "SCALE",
+        "1:1",
+        "UNITS",
+        "inch [mm]",
+        "DATE",
+        "2026-11-18",
+        "REV",
+        "-",
+        "SHEET",
+        "A3",
+        "THIRD ANGLE",
+        "\u00d8.5512 THRU H7 (+.0006/0) [\u00d814 THRU H7 (+0.018/+0.001)]",
+        "FRONT",
+        "TOP",
+        "FIT DIMENSIONS",
+        "DIMENSION / VIEW",
+        "MULTIPLIER",
+        "DIAMETER (inch)",
+        "CLASS / UPPER / LOWER (inch)",
+        "TABLE / ROW",
+        "bore-fit (top)",
+        "\u2014",
+        ".5512",
+        "H7 (+.0006/0)",
+        "H7: synthetic-shop row 1",
+        "Base part, single sheet, ordinary-view diameter dimensions. Rows are dimensions, not part or hole quantities. Table rows are 1-based; user data is not certified.",
+        "Primary units only (including dual-unit drawings); dimension callouts retain their dual display.",
+        "bore-fit: edge n1.bottom|n2.side0#2; face n2.side0#2",
+        "synthetic-shop row 1: trial-only"
+      ],
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              60,
+              40
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 8,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              30,
+              20
+            ],
+            "radius": 7,
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "fits": {
+          "version": 1,
+          "faces": [
+            {
+              "face": "n2.side0#2",
+              "class": "H7"
+            }
+          ],
+          "tables": [
+            {
+              "id": "synthetic-shop",
+              "sources": [
+                {
+                  "id": "trial-only",
+                  "label": "Synthetic test row, not a standard"
+                }
+              ],
+              "rows": [
+                {
+                  "class": "H7",
+                  "over": 10,
+                  "upTo": 18,
+                  "upper": 0.018,
+                  "lower": 0,
+                  "source": "trial-only"
+                }
+              ]
+            }
+          ]
+        },
+        "drawing": {
+          "sheet": "A3",
+          "scope": {
+            "kind": "part"
+          },
+          "scale": 1,
+          "projection": "third",
+          "units": "inch",
+          "dual": true,
+          "hidden": true,
+          "dimensions": [
+            {
+              "id": "bore-fit",
+              "kind": "diameter",
+              "view": "top",
+              "edge": "n1.bottom|n2.side0#2",
+              "near": [
+                30,
+                20,
+                0
+              ],
+              "place": [
+                55,
+                45
+              ],
+              "sig": {
+                "k": "curve",
+                "p": [
+                  24,
+                  20,
+                  0
+                ],
+                "s": 0,
+                "n": 2
+              }
+            }
+          ],
+          "views": [
+            "front",
+            "top"
+          ],
+          "tables": [
+            {
+              "id": "fits",
+              "from": "fits",
+              "at": [
+                15,
+                170
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Synthetic H7 shop data only; no external standards or manufacturing acceptance. Baseline records actual admission; unavailable edits are not treated as successful geometry changes."
+  ],
+  "chromeProcessesLaunched": 1,
+  "phase": "fresh Open fresh-open14"
+}

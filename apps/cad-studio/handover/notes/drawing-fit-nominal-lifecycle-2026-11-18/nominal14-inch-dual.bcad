@@ -1,0 +1,129 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [
+    {
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        0,
+        0
+      ],
+      "max": [
+        60,
+        40
+      ],
+      "id": "n0"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 0,
+      "height": 8,
+      "id": "n1"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 1,
+        "side": "solid"
+      },
+      "center": [
+        30,
+        20
+      ],
+      "radius": 7,
+      "id": "n2"
+    }
+  ],
+  "outputs": {
+    "b2": {
+      "node": 2,
+      "side": "solid"
+    }
+  },
+  "nextId": 3,
+  "fits": {
+    "version": 1,
+    "faces": [
+      {
+        "face": "n2.side0#2",
+        "class": "H7"
+      }
+    ],
+    "tables": [
+      {
+        "id": "synthetic-shop",
+        "sources": [
+          {
+            "id": "trial-only",
+            "label": "Synthetic test row, not a standard"
+          }
+        ],
+        "rows": [
+          {
+            "class": "H7",
+            "over": 10,
+            "upTo": 18,
+            "upper": 0.018,
+            "lower": 0,
+            "source": "trial-only"
+          }
+        ]
+      }
+    ]
+  },
+  "drawing": {
+    "sheet": "A3",
+    "scope": {
+      "kind": "part"
+    },
+    "scale": 1,
+    "projection": "third",
+    "units": "inch",
+    "dual": true,
+    "hidden": true,
+    "dimensions": [
+      {
+        "id": "bore-fit",
+        "kind": "diameter",
+        "view": "top",
+        "edge": "n1.bottom|n2.side0#2",
+        "near": [
+          30,
+          20,
+          0
+        ],
+        "place": [
+          55,
+          45
+        ],
+        "sig": {
+          "k": "curve",
+          "p": [
+            24,
+            20,
+            0
+          ],
+          "s": 0,
+          "n": 2
+        }
+      }
+    ],
+    "views": [
+      "front",
+      "top"
+    ],
+    "tables": [
+      {
+        "id": "fits",
+        "from": "fits",
+        "at": [
+          15,
+          170
+        ]
+      }
+    ]
+  }
+}
