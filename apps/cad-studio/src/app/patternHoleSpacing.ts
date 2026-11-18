@@ -1,3 +1,4 @@
+import { prepareCircularPatternHolePivot } from './circularPatternHolePivot';
 import { CadNumericPolicy } from '@barocss/cad';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import { featureLabel, type ModelNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -65,6 +66,7 @@ function prepareSpanHoleEdit(doc: StudioDoc, draft: ModelNode[], index: number):
 /** Check numbered Hole dependencies and preserve a proven complete bore across the pattern edit. */
 export function prepareLinearPatternHoleEdit(doc: StudioDoc, draft: ModelNode[], index: number): Result {
   const pattern = doc.nodes[index], next = draft[index];
+  if (pattern?.kind === 'circular-pattern') return prepareCircularPatternHolePivot(doc,draft,index);
   if (pattern?.kind === "linear-span-pattern" && next?.kind === "linear-span-pattern" && !Object.is(pattern.span,next.span)) {
     return prepareSpanHoleEdit(doc,draft,index);
   }
