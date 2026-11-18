@@ -1,0 +1,99 @@
+{
+  "issue": 674,
+  "baseline": "9ba47b32d9cc8f254b1fd26d84a30e772ccafb6c",
+  "scope": "Existing single-part injection quote only; not assembly export or manufacturing qualification.",
+  "runs": {
+    "baseline": {
+      "status": "FAIL",
+      "oracle": {
+        "status": "FAIL",
+        "stepHeight": 10.0,
+        "request": {
+          "size": [
+            60,
+            40,
+            20
+          ],
+          "volume": 48000,
+          "mass": null,
+          "bodies": 1
+        }
+      },
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "sourceFrozenCount": 1075
+    },
+    "ordinary": {
+      "status": "PASS",
+      "oracle": {
+        "status": "PASS",
+        "stepHeight": 10.0,
+        "request": {
+          "size": [
+            60,
+            40,
+            10
+          ],
+          "volume": 24000,
+          "mass": null,
+          "bodies": 1
+        }
+      },
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "sourceFrozenCount": 1075
+    },
+    "variant": {
+      "status": "PASS",
+      "oracle": {
+        "status": "PASS",
+        "stepHeight": 20.0,
+        "request": {
+          "size": [
+            60,
+            40,
+            20
+          ],
+          "volume": 48000,
+          "mass": null,
+          "bodies": 1
+        }
+      },
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "sourceFrozenCount": 1075
+    },
+    "rollback": {
+      "status": "PASS",
+      "oracle": {
+        "status": "PASS",
+        "stepHeight": 10.0,
+        "request": {
+          "size": [
+            60,
+            40,
+            10
+          ],
+          "volume": 24000,
+          "mass": null,
+          "bodies": 1
+        }
+      },
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "sourceFrozenCount": 1075
+    }
+  }
+}

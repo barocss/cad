@@ -152,7 +152,9 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
   const exportQuote = async () => {
     if (!fresh) { onNotice({ title: 'Not written yet', hint: busy ? 'The part is still evaluating: export once it is up to date.' : 'The part did not evaluate: fix it first.', detail: '' }); return; }
     if (!massReady) { onNotice({ title: 'Not written yet', hint: 'The part\'s masses are still being worked out: export in a moment.', detail: '' }); return; }
-    const q = await quotePackage(doc, bodies, async d => evaluateDoc(d, 0), { name: fileName });
+    // Match the shown decoration and evaluated feature prefix that own these bodies.
+    const captured = { ...model.shown, nodes: evaluated.nodes, outputs: evaluated.outputs };
+    const q = await quotePackage(captured, bodies, async d => evaluateDoc(d, 0), { name: fileName });
     if ('error' in q) { onNotice({ title: 'No quote package', hint: q.error, detail: '' }); return; }
     downloadBytes(q.zip, `${fileName}-quote.zip`, 'application/zip');
     onNotice({ title: q.manifest.complete ? 'Quote package written' : `Quote package written: ${q.manifest.open.length} open`, hint: q.manifest.complete ? 'STEP, the moulding report and the request — no price: the moulder quotes it.' : q.manifest.open.join(' · '), detail: '' });
