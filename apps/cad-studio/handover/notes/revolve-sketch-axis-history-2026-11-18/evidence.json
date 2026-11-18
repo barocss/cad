@@ -1,0 +1,96 @@
+{
+  "issue": 688,
+  "originalCommit": "007532cbad3fc868b292f64f3c8c74f4cb6ba738",
+  "runs": [
+    {
+      "run": "cad-688-baseline-01",
+      "status": "PASS",
+      "sourceCount": 1078,
+      "sourceUnchanged": true,
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": null
+    },
+    {
+      "run": "cad-688-fixed-01",
+      "status": "FAIL",
+      "sourceCount": 1078,
+      "sourceUnchanged": null,
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": "Fixture expected raw kernel text in visible summary. Product displayed the correct friendly explanation; code detail was collapsed. Fixed separate visible-summary and detail assertions."
+    },
+    {
+      "run": "cad-688-fixed-02",
+      "status": "PASS",
+      "sourceCount": 1078,
+      "sourceUnchanged": true,
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": null
+    },
+    {
+      "run": "cad-688-angle-regression-02",
+      "status": "PASS",
+      "sourceCount": 1076,
+      "sourceUnchanged": true,
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": null
+    },
+    {
+      "run": "cad-688-linked-regression-02",
+      "status": "PASS",
+      "sourceCount": 1075,
+      "sourceUnchanged": true,
+      "errors": [],
+      "consoleErrors": [],
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "failure": null
+    }
+  ],
+  "unitBaseline": "1 PASS / 4 RED: missing Axis choice",
+  "unitFinal": "22/22 PASS",
+  "checks": {
+    "scopedLint": "PASS",
+    "modelType": "PASS",
+    "studioType": "PASS",
+    "build": "PASS 11.08s"
+  },
+  "visualReview": "Original readonly, reopened X and cross-axis refusal screenshots inspected."
+}

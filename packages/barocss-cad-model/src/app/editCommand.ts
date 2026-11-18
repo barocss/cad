@@ -33,8 +33,8 @@ const num = (v: unknown) => typeof v === 'number' ? v : NaN;
 function edited(nodes: readonly ModelNode[], index: number, v: Values, params?: Record<string, number>): ModelNode[] {
   let out = [...nodes];
   for (const f of editFields(nodes, index, params)) {
-    // End-mode changes need History's dynamic depth fields and explicit draft guidance.
-    if (!(f.key in v) || f.kind === 'toggle' || ((nodes[index]?.kind === 'hole' && f.key === 'end') || (nodes[index]?.kind === 'extrude' && f.key === 'cutDepthMode'))) continue;
+    // End/axis changes belong to History's explicit draft controls, not a frozen drag HUD.
+    if (!(f.key in v) || f.kind === 'toggle' || ((nodes[index]?.kind === 'hole' && f.key === 'end') || (nodes[index]?.kind === 'extrude' && f.key === 'cutDepthMode') || (nodes[index]?.kind === 'revolve' && f.key === 'sketchAxis'))) continue;
     if (f.kind === 'number') {
       const x = Number(v[f.key]);
       const unchangedStart = f.key === 'from' && isSketchAnchoredCut(nodes, index) && x === f.get(nodes);
@@ -275,7 +275,7 @@ export function editCommand(index: number, nodes: readonly ModelNode[], rows: Pi
   if (node.kind === 'band-surface') return bandSurfaceEditCommand(index, node);
   if (node.kind === 'text-relief') return textReliefEditCommand(index, node);
   const shape = shapeEdit(index, nodes, rows); if (shape) return shape;
-  const fields = editFields(nodes, index, rows.parameters).filter(f => f.kind !== 'toggle' && !(node.kind === 'hole' && f.key === 'end') && !(node.kind === 'extrude' && f.key === 'cutDepthMode') && !(f.kind === 'number' && Number.isNaN(f.get(nodes))));
+  const fields = editFields(nodes, index, rows.parameters).filter(f => f.kind !== 'toggle' && !(node.kind === 'hole' && f.key === 'end') && !(node.kind === 'extrude' && f.key === 'cutDepthMode') && !(node.kind === 'revolve' && f.key === 'sketchAxis') && !(f.kind === 'number' && Number.isNaN(f.get(nodes))));
   if (!fields.length) return null;
   return {
     id: 'edit', label: node.kind === 'split' ? 'Edit Split' : `Edit ${featureLabel(node, index, nodes)}`, icon: 'edit', group: 'modify', hint: 'Change this feature',

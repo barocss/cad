@@ -224,7 +224,8 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
       }
     }}>
       <div className="card-title" style={{ marginTop: 10 }}>EDIT FEATURE <ToolIconButton size="tiny" aria-label="Close editor" onClick={close}><Icon name="close" small /></ToolIconButton></div>
-      {node?.kind === 'revolve' && <div className="field"><span>Axis</span><span>{node.axisRef
+      {node?.kind === 'revolve' && fields.some(field => field.key === 'sketchAxis') && <p className="small muted">Sketch X/Y axes pass through the sketch origin in its own plane, not world X/Y. The profile stays unchanged.</p>}
+      {node?.kind === 'revolve' && !fields.some(field => field.key === 'sketchAxis') && <div className="field"><span>Axis</span><span>{node.axisRef
         ? `Linked edge ${node.axisRef.edge}` : node.dir ? 'Fixed edge' : `Sketch ${node.axis.toUpperCase()}`}</span></div>}
       {node?.kind === 'loft' && node.sections.length === 2 && !node.guide && <div className="field"><span>Mode</span><span>{node.guides ? 'Two guides' : 'Ruled · 2 sections'}</span></div>}
       {node?.kind === 'sweep-curve' && <SweepHistoryInputs sweep={node} profile={draft[node.sketch]} parameters={parameters} />}

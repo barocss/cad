@@ -55,6 +55,28 @@ function holeEndField(index: number): EditField {
   };
 }
 
+/** A terminal sketch-axis Revolve, never an interpretation of a picked or offset axis. */
+function editableRevolveSketchAxis(nodes: Nodes, index: number) {
+  const node = nodes[index];
+  if (node?.kind !== 'revolve' || index !== nodes.length - 1 || node.held || node.suppressed || node.made !== undefined
+    || (node.axis !== 'x' && node.axis !== 'y') || node.origin !== undefined || node.dir !== undefined || node.axisRef !== undefined
+    || !Number.isInteger(node.sketch) || node.sketch < 0 || node.sketch >= index) return;
+  const sketch = nodes[node.sketch];
+  if (sketch?.kind !== 'sketch' || sketch.held || sketch.suppressed || sketch.association !== undefined || sketch.pocketFloor !== undefined) return;
+  return node;
+}
+function revolveSketchAxisField(index: number): EditField {
+  return { kind: 'choice', key: 'sketchAxis', label: 'Axis',
+    options: [{ value: 'x', label: 'Sketch X' }, { value: 'y', label: 'Sketch Y' }],
+    get: nodes => nodes[index]?.kind === 'revolve' ? nodes[index].axis : '',
+    set: (nodes, value) => {
+      const node = editableRevolveSketchAxis(nodes, index);
+      return node && (value === 'x' || value === 'y') && node.axis !== value
+        ? replace(nodes, index, { ...node, axis: value }) : [...nodes];
+    },
+  };
+}
+
 /** Explicit replacement of an existing cosmetic thread and its drill; never infer a catalogue row. */
 function holeThreadField(nodes: Nodes, index: number, scope?: EditScope): EditField {
   const original = nodes[index] as Extract<ModelNode, { kind: 'hole' }>;
@@ -373,6 +395,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       });
       break;
     case 'revolve':
+      if (editableRevolveSketchAxis(nodes, i)) out.push(revolveSketchAxisField(i));
       out.push(...sketchFields(nodes, node.sketch, '', parameters));
       number('deg', 'Angle', '°', n => (n as typeof node).angle, (n, v) => ({ ...(n as typeof node), angle: v }));
       break;
