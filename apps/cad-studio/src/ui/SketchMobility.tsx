@@ -50,7 +50,8 @@ export function SketchMobility({ owner, inspection, onDimEdit }: {
     onBlur={event => { if (owner.editDim && !keepsDimensionDraft(event.relatedTarget)) onDimEdit(null); }}>
     <summary>Active outline mobility</summary>
     {open && <p>Local first-order directions in sketch X/Y, not world axes. Other points may move together. This is not a finite-motion guarantee.</p>}
-    {open && (result.points.length === 0 ? <p role="status">No locally movable points or edges.</p>
+    {open && eligible?.bulges?.some(Boolean) && <p>An arc can have first-order motion through its centre even when its endpoints are fixed. This does not prove a finite motion.</p>}
+    {open && (result.points.length === 0 && result.edges.length === 0 ? <p role="status">No locally movable points or edges.</p>
         : <ul aria-label="Locally movable geometry">{result.points.map(i => row('point', i))}
           {result.edges.map(i => row('edge', i))}</ul>)}
   </details>;

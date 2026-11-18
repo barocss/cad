@@ -1,0 +1,128 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [
+    {
+      "kind": "sketch",
+      "profile": "loop",
+      "segments": [
+        {
+          "kind": "arc",
+          "start": [
+            0,
+            0
+          ],
+          "center": [
+            10,
+            7.500000000000001
+          ],
+          "direction": "ccw"
+        },
+        {
+          "kind": "line",
+          "start": [
+            20,
+            0
+          ]
+        },
+        {
+          "kind": "line",
+          "start": [
+            20,
+            20
+          ]
+        },
+        {
+          "kind": "line",
+          "start": [
+            0,
+            20
+          ]
+        }
+      ],
+      "outline": {
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            20,
+            0
+          ],
+          [
+            20,
+            20
+          ],
+          [
+            0,
+            20
+          ]
+        ],
+        "bulges": [
+          0.49999999999999994,
+          0,
+          0,
+          0
+        ],
+        "radii": {
+          "0": 12.5
+        },
+        "hv": {
+          "h": [],
+          "v": []
+        },
+        "rules": [
+          {
+            "kind": "fix",
+            "point": 1,
+            "at": [
+              20,
+              0
+            ]
+          },
+          {
+            "kind": "fix",
+            "point": 2,
+            "at": [
+              20,
+              20
+            ]
+          },
+          {
+            "kind": "fix",
+            "point": 3,
+            "at": [
+              0,
+              20
+            ]
+          }
+        ]
+      },
+      "sideTags": {
+        "outer": [
+          "e1",
+          "e2",
+          "e3",
+          "e4"
+        ]
+      },
+      "id": "n0"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 0,
+      "height": 5,
+      "id": "n1"
+    }
+  ],
+  "outputs": {
+    "b1": {
+      "node": 1,
+      "side": "solid"
+    }
+  },
+  "nextId": 2
+}

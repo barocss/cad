@@ -199,20 +199,27 @@ function outlineSystem(points: P2[], c: OutlineConstraints, bulgesIn?: number[])
   return { authoredPoints, bulges, hv, document };
 }
 
-/** Read movement only for the points owned by this outline, excluding solver helpers. */
-export function settledOutlinePointMobility(points: P2[], c: OutlineConstraints, bulges?: number[]) {
+/** Read endpoint and arc-center participation from the same residual-checked authored system. */
+export function settledOutlineMobility(points: P2[], c: OutlineConstraints, bulges?: number[]) {
   const system = outlineSystem(points, c, bulges);
   if (!system) return null;
   const mobility = diagnoseXYNumericalSketchMobility(system.document);
   if (!mobility) return null;
   const movable = new Set(mobility.movablePointIds);
-  return system.authoredPoints.flatMap((point, i) => {
+  const directions = system.authoredPoints.flatMap((point, i) => {
     if (!movable.has(point.id)) return [];
     const local = mobility.pointDirections.find(item => item.pointId === point.id);
     return [{ point: i, motion: local?.dimension === 1
       ? { dimension: 1 as const, direction: local.direction }
       : local?.dimension === 2 ? { dimension: 2 as const } : null }];
   });
+  const movingArcEdges = system.bulges.flatMap((bulge, i) => bulge && movable.has('c' + i) ? [i] : []);
+  return { directions, movingArcEdges };
+}
+
+/** Read movement only for authored points, excluding solver helper centers. */
+export function settledOutlinePointMobility(points: P2[], c: OutlineConstraints, bulges?: number[]) {
+  return settledOutlineMobility(points, c, bulges)?.directions ?? null;
 }
 
 /** Compatibility helper: same movable indices, independent of direction availability. */

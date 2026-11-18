@@ -1,0 +1,434 @@
+[
+  {
+    "case": "fixed endpoints",
+    "b": 0.5,
+    "radius": false,
+    "center": [
+      5,
+      3.75
+    ],
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 9,
+      "rankThreshold": 1.624807680927192e-10,
+      "localDegreesOfFreedom": 1,
+      "movablePointIds": [
+        "c0"
+      ],
+      "pointDirections": [
+        {
+          "pointId": "c0",
+          "dimension": 1,
+          "direction": [
+            6.123233995736766e-17,
+            1
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case": "fixed endpoints",
+    "b": 0.5,
+    "radius": true,
+    "center": [
+      5,
+      3.75
+    ],
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 10,
+      "rankThreshold": 1.8110770276274835e-10,
+      "localDegreesOfFreedom": 0,
+      "movablePointIds": [],
+      "pointDirections": []
+    }
+  },
+  {
+    "case": "fixed endpoints",
+    "b": 1,
+    "radius": false,
+    "center": [
+      5,
+      0
+    ],
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 9,
+      "rankThreshold": 2e-10,
+      "localDegreesOfFreedom": 1,
+      "movablePointIds": [
+        "c0"
+      ],
+      "pointDirections": [
+        {
+          "pointId": "c0",
+          "dimension": 1,
+          "direction": [
+            6.123233995736766e-17,
+            1
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case": "fixed endpoints",
+    "b": 1,
+    "radius": true,
+    "center": [
+      5,
+      0
+    ],
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 9,
+      "rankThreshold": 2.23606797749979e-10,
+      "localDegreesOfFreedom": 1,
+      "movablePointIds": [
+        "c0"
+      ],
+      "pointDirections": [
+        {
+          "pointId": "c0",
+          "dimension": 1,
+          "direction": [
+            6.123233995736766e-17,
+            1
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case": "fixed endpoints",
+    "b": 0.999999999,
+    "radius": false,
+    "center": [
+      5,
+      4.999999863590343e-9
+    ],
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 9,
+      "rankThreshold": 2e-10,
+      "localDegreesOfFreedom": 1,
+      "movablePointIds": [
+        "c0"
+      ],
+      "pointDirections": [
+        {
+          "pointId": "c0",
+          "dimension": 1,
+          "direction": [
+            6.123233995736766e-17,
+            1
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case": "fixed endpoints",
+    "b": 0.999999999,
+    "radius": true,
+    "center": [
+      5,
+      4.999999863590343e-9
+    ],
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": null
+  },
+  {
+    "case": "fixed endpoints",
+    "b": 0.9999999,
+    "radius": false,
+    "center": [
+      5,
+      5.000000247568064e-7
+    ],
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 9,
+      "rankThreshold": 1.99999999999999e-10,
+      "localDegreesOfFreedom": 1,
+      "movablePointIds": [
+        "c0"
+      ],
+      "pointDirections": [
+        {
+          "pointId": "c0",
+          "dimension": 1,
+          "direction": [
+            6.123233995736766e-17,
+            1
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case": "fixed endpoints",
+    "b": 0.9999999,
+    "radius": true,
+    "center": [
+      5,
+      5.000000247568064e-7
+    ],
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": null
+  },
+  {
+    "case": "tangent",
+    "tangents": [],
+    "fixed": false,
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 3,
+      "rankThreshold": 1.4142135623730953e-10,
+      "localDegreesOfFreedom": 9,
+      "movablePointIds": [
+        "p1",
+        "p2",
+        "p3",
+        "p4",
+        "c0"
+      ],
+      "pointDirections": [
+        {
+          "pointId": "p1",
+          "dimension": 2
+        },
+        {
+          "pointId": "p2",
+          "dimension": 2
+        },
+        {
+          "pointId": "p3",
+          "dimension": 2
+        },
+        {
+          "pointId": "p4",
+          "dimension": 2
+        },
+        {
+          "pointId": "c0",
+          "dimension": 2
+        }
+      ]
+    }
+  },
+  {
+    "case": "tangent",
+    "tangents": [],
+    "fixed": true,
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 11,
+      "rankThreshold": 1.7320508075688773e-10,
+      "localDegreesOfFreedom": 1,
+      "movablePointIds": [
+        "c0"
+      ],
+      "pointDirections": [
+        {
+          "pointId": "c0",
+          "dimension": 1,
+          "direction": [
+            0.7071067811865477,
+            -0.7071067811865475
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "case": "tangent",
+    "tangents": [
+      0
+    ],
+    "fixed": false,
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 4,
+      "rankThreshold": 1.4177446878757824e-10,
+      "localDegreesOfFreedom": 8,
+      "movablePointIds": [
+        "p1",
+        "p2",
+        "p3",
+        "p4",
+        "c0"
+      ],
+      "pointDirections": [
+        {
+          "pointId": "p1",
+          "dimension": 2
+        },
+        {
+          "pointId": "p2",
+          "dimension": 2
+        },
+        {
+          "pointId": "p3",
+          "dimension": 2
+        },
+        {
+          "pointId": "p4",
+          "dimension": 2
+        },
+        {
+          "pointId": "c0",
+          "dimension": 2
+        }
+      ]
+    }
+  },
+  {
+    "case": "tangent",
+    "tangents": [
+      0
+    ],
+    "fixed": true,
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 12,
+      "rankThreshold": 1.734935157289747e-10,
+      "localDegreesOfFreedom": 0,
+      "movablePointIds": [],
+      "pointDirections": []
+    }
+  },
+  {
+    "case": "tangent",
+    "tangents": [
+      1
+    ],
+    "fixed": false,
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 4,
+      "rankThreshold": 1.4142135623730953e-10,
+      "localDegreesOfFreedom": 8,
+      "movablePointIds": [
+        "p1",
+        "p2",
+        "p3",
+        "p4",
+        "c0"
+      ],
+      "pointDirections": [
+        {
+          "pointId": "p1",
+          "dimension": 2
+        },
+        {
+          "pointId": "p2",
+          "dimension": 2
+        },
+        {
+          "pointId": "p3",
+          "dimension": 2
+        },
+        {
+          "pointId": "p4",
+          "dimension": 2
+        },
+        {
+          "pointId": "c0",
+          "dimension": 2
+        }
+      ]
+    }
+  },
+  {
+    "case": "tangent",
+    "tangents": [
+      1
+    ],
+    "fixed": true,
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 12,
+      "rankThreshold": 1.7320508075688773e-10,
+      "localDegreesOfFreedom": 0,
+      "movablePointIds": [],
+      "pointDirections": []
+    }
+  },
+  {
+    "case": "tangent",
+    "tangents": [
+      0,
+      1
+    ],
+    "fixed": false,
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 5,
+      "rankThreshold": 1.4177446878757824e-10,
+      "localDegreesOfFreedom": 7,
+      "movablePointIds": [
+        "p1",
+        "p2",
+        "p3",
+        "p4",
+        "c0"
+      ],
+      "pointDirections": [
+        {
+          "pointId": "p1",
+          "dimension": 2
+        },
+        {
+          "pointId": "p2",
+          "dimension": 2
+        },
+        {
+          "pointId": "p3",
+          "dimension": 2
+        },
+        {
+          "pointId": "p4",
+          "dimension": 2
+        },
+        {
+          "pointId": "c0",
+          "dimension": 2
+        }
+      ]
+    }
+  },
+  {
+    "case": "tangent",
+    "tangents": [
+      0,
+      1
+    ],
+    "fixed": true,
+    "maxResidual": 0,
+    "residualOK": true,
+    "mobility": {
+      "numericalRank": 12,
+      "rankThreshold": 1.734935157289747e-10,
+      "localDegreesOfFreedom": 0,
+      "movablePointIds": [],
+      "pointDirections": []
+    }
+  }
+]
