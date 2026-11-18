@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "qualification": "Issued standalone frame drawings notice actual Library section geometry edits.",
+  "observations": [
+    {
+      "a": {
+        "volume": 44399.99999999996
+      },
+      "b": {
+        "volume": 68400.00000000003
+      },
+      "stale": 1
+    }
+  ],
+  "errors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One referenced rectangular-tube section; not manufacturing approval or a universal revision certificate."
+  ],
+  "visualReview": "Images inspected"
+}

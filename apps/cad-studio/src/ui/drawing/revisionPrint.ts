@@ -1,5 +1,6 @@
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { modelPrint } from '@barocss/cad-model/drawing/types';
+import { sectionUses } from '@barocss/cad-model/frames/sections';
 import { canonical } from '@barocss/cad-model/util/revision';
 
 const ignoredDocumentFields = ['drawing', 'render', 'history', 'proposals', 'baselines', 'ecrs', 'questions', 'pendingParts', 'assemblySteps', 'underlays', 'nextId'] as const;
@@ -23,11 +24,18 @@ function assemblySource(doc: StudioDoc): Record<string, unknown> {
   return source;
 }
 
-/** Keep legacy node-only stamps for parameter-free parts; include authored parameter values otherwise.
+/** Keep legacy node-only stamps for ordinary parameter-free parts; include authored parameter values otherwise.
  * Ordinary parts retain their existing JSON key-order policy. Assemblies include conservative semantic source
  * recursively, without paper or workflow records. This issue marker is not a geometry or integrity certificate.
  */
 export function drawingRevisionPrint(doc: StudioDoc): string {
   if (doc.instances !== undefined) return modelPrint(canonical(assemblySource(doc)));
-  return modelPrint(Object.keys(doc.parameters).length ? { nodes: doc.nodes, parameters: doc.parameters } : doc.nodes);
+  const source = Object.keys(doc.parameters).length ? { nodes: doc.nodes, parameters: doc.parameters } : doc.nodes;
+  // A Library section lives outside nodes. Include only referenced row geometry, not
+  // catalogue labels or unused rows. Old node-only issues cannot certify these inputs;
+  // keep their saved stamp unchanged until the user explicitly issues the drawing again.
+  const ids = [...sectionUses({ ...doc, nodes: doc.nodes.filter(n => !n.suppressed) }).keys()].sort();
+  if (!ids.length) return modelPrint(source);
+  const sections = ids.map(id => [id, doc.frames?.sections?.find(row => row.id === id)?.section ?? null]);
+  return modelPrint({ source, sections: canonical(sections) });
 }
