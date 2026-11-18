@@ -1,3 +1,4 @@
+import { sheetReliefShapeHistoryEdit } from '@barocss/cad-model/app/sheetReliefShapeHistoryEdit';
 import { sheetReliefCornerHistoryEdit } from '@barocss/cad-model/app/sheetReliefCornerHistoryEdit';
 import { sweepPathHistoryEdit } from '@barocss/cad-model/app/sweepPathHistoryEdit';
 import { booleanHistoryEdit } from '@barocss/cad-model/app/booleanHistoryEdit';
@@ -46,6 +47,7 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
   const savedCommand = () => fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc)?.command ?? mountHistoryEdit(commandDoc, editNode) ?? connectorHistoryEdit(commandDoc, editNode) ?? subdPrimitiveHistoryEdit(commandDoc, editNode) ?? mirrorHistoryEdit(commandDoc, editNode) ?? sweepHistoryEdit(commandDoc, editNode) ?? loftSectionHistoryEdit(commandDoc, editNode) ?? subtractHistoryEdit(commandDoc, editNode) ?? booleanHistoryEdit(commandDoc, editNode) ?? sheetReliefCornerHistoryEdit(commandDoc, editNode);
   const savedFeature = savedCommand();
   const savedPath = sweepPathHistoryEdit(commandDoc, editNode);
+  const savedReliefShape = sheetReliefShapeHistoryEdit(commandDoc, editNode);
   const startSavedFeature = (make: () => Command | null) => {
     if (owner.document() !== doc || owner.evaluated() !== evaluated || owner.worker() !== workerSession
       || !ownsEvaluatedSource() || owner.marker() !== null || owner.variant() || owner.hasDraft()
@@ -76,6 +78,7 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
     })()} onReplaceAxis={replaceAxis}
     savedFeatureEdit={savedFeature ? { label: savedFeature.label, start: () => startSavedFeature(savedCommand) } : undefined}
     savedPathEdit={savedPath ? { label: savedPath.label, start: () => startSavedFeature(() => sweepPathHistoryEdit(commandDoc, editNode)) } : undefined}
+    savedReliefShapeEdit={savedReliefShape ? { label: savedReliefShape.label, start: () => startSavedFeature(() => savedReliefShape) } : undefined}
     onEditDraft={editSavedDraftCommand(commandDoc, editNode) ? () => {
       if (!ownsEvaluatedSource() || owner.marker() !== null || owner.variant() || !fresh || busy || !canChangeDocument()) return;
       const cmd = editSavedDraftCommand(commandDoc, editNode);
