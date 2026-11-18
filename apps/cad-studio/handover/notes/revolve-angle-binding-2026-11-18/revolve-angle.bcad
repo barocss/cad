@@ -1,0 +1,40 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {
+    "Angle": 90,
+    "Height": 12
+  },
+  "nodes": [
+    {
+      "id": "n0",
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        10,
+        0
+      ],
+      "max": [
+        20,
+        {
+          "parameter": "Height"
+        }
+      ]
+    },
+    {
+      "id": "n1",
+      "kind": "revolve",
+      "sketch": 0,
+      "axis": "y",
+      "angle": 120
+    }
+  ],
+  "outputs": {
+    "b1": {
+      "node": 1,
+      "side": "solid"
+    }
+  },
+  "nextId": 2
+}

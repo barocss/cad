@@ -1,0 +1,86 @@
+{
+  "baselineCommit": "15bde2401",
+  "runs": [
+    {
+      "case": "original",
+      "status": "PASS",
+      "sourceCount": 1076,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "label": "angle-binding-offered",
+          "offered": 1
+        },
+        {
+          "label": "bound-angle-draft-controls",
+          "angleValue": "",
+          "parameterValue": "",
+          "angleDisabled": false
+        },
+        {
+          "label": "binding-result",
+          "doc": {
+            "format": "barocss-cad-model",
+            "schema": 3,
+            "units": "mm",
+            "parameters": {
+              "Angle": 90,
+              "Height": 12
+            },
+            "nodes": [
+              {
+                "id": "n0",
+                "kind": "sketch",
+                "profile": "rectangle",
+                "min": [
+                  10,
+                  0
+                ],
+                "max": [
+                  20,
+                  10
+                ]
+              },
+              {
+                "id": "n1",
+                "kind": "revolve",
+                "sketch": 0,
+                "axis": "y",
+                "angle": 180
+              }
+            ],
+            "outputs": {
+              "b1": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            "nextId": 2
+          },
+          "editor": "EDIT FEATURE AxisSketch Y Edit sketchWidthmm\u0192AngleHeightDepthmm\u0192AngleHeightCorner Xmm\u0192AngleHeightCorner Ymm\u0192AngleHeightAngle\u00b0\u0192AngleHeight Delete featureThe kernel could not build thisUndo the last change, or adjust the values and try again.Failed feature \u00b7 Revolve 180\u00b0 (n1)Kernel detailangle must be in (0, 360]ApplyReset",
+          "accepted": false
+        }
+      ]
+    },
+    {
+      "case": "fixed",
+      "status": "PASS",
+      "sourceCount": 1076,
+      "sourcesUnchanged": true,
+      "errors": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": []
+    }
+  ]
+}

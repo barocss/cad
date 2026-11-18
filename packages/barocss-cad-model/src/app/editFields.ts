@@ -207,6 +207,7 @@ export function editFields(nodes: Nodes, i: number, params?: Record<string, numb
     || (node?.kind === 'fillet' && (f.key === 'stationAt' || f.key === 'station2At'))
     || (node?.kind === 'fillet' && (f.key === 'rho' || f.key === 'tension'))
     || (node?.kind === 'extrude' && f.key === 'draft')
+    || (node?.kind === 'revolve' && f.key === 'deg') // Saved Revolve angles are number-only.
     || (node?.kind === 'circular-pattern' && f.key === 'span')
     || (node?.kind === 'shaft' && (f.key.startsWith('keyseatOffset') || f.key.startsWith('grooveOffset'))) // Saved shaft offsets are number-only.
     || f.key.startsWith('loftGuideControl') || f.key.endsWith('linkedInsetMM') || (nodes[i]?.kind === 'hole' && /^(step|about)[01]$/.test(f.key)) ? f : {
