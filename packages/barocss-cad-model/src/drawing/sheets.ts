@@ -43,6 +43,8 @@ export interface SheetContext {
   noteIds?: readonly string[];
   /** Frame IDs in the whole drawing, reserved for newly generated suggestions. */
   frameIds?: readonly string[];
+  /** Section/detail letters and retained section references across the whole drawing. */
+  sectionLetters?: readonly string[];
   datumLetters: string[]; datumFirst: Record<string, string>;
 }
 
@@ -192,6 +194,7 @@ export function forSheet(s: DrawingSettings, k: number): DrawingSettings {
     datumIds: (s.datums ?? []).map(d => d.id),
     noteIds: (s.notes ?? []).map(note => note.id),
     frameIds: (s.frames ?? []).map(frame => frame.id),
+    sectionLetters: [...new Set([...sectionsOf(s).map(x => x.id), ...(s.details ?? []).map(x => x.id), ...reservedSectionLetters(s)])],
     datumFirst: Object.fromEntries((s.datums ?? []).filter((d, j, all) => all.findIndex(o => o.letter === d.letter) === j).map(d => [d.letter, d.id])),
   };
   return out;

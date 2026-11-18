@@ -1,0 +1,99 @@
+{
+  "status": "FAIL",
+  "observations": [
+    {
+      "before": {
+        "held": {
+          "ok": false,
+          "dim": {
+            "view": "section:B",
+            "kind": "linear",
+            "a": {
+              "edge": "n0.seat1#2|section_b0.cut.top",
+              "at": "end",
+              "near": [
+                -10.000000000000002,
+                4.777360477947854e-15,
+                14
+              ]
+            },
+            "b": {
+              "edge": "n0.keyseat1#3|section_b0.cut.top",
+              "at": "end",
+              "near": [
+                6.5,
+                3,
+                14
+              ]
+            },
+            "orient": "horizontal",
+            "place": [
+              -1.7500000000000009,
+              -29.999941779280757
+            ],
+            "id": "held-old-cut"
+          },
+          "reason": "Its section (B–B) is not on the sheet."
+        }
+      },
+      "after": {
+        "held": {
+          "ok": true,
+          "kind": "linear",
+          "dim": {
+            "view": "section:B",
+            "kind": "linear",
+            "a": {
+              "edge": "n0.seat1#2|section_b0.cut.top",
+              "at": "end",
+              "near": [
+                -10.000000000000002,
+                4.777360477947854e-15,
+                14
+              ]
+            },
+            "b": {
+              "edge": "n0.keyseat1#3|section_b0.cut.top",
+              "at": "end",
+              "near": [
+                6.5,
+                3,
+                14
+              ]
+            },
+            "orient": "horizontal",
+            "place": [
+              -1.7500000000000009,
+              -29.999941779280757
+            ],
+            "id": "held-old-cut"
+          },
+          "a": [
+            -10.000000000000002,
+            4.777360477947854e-15
+          ],
+          "b": [
+            6.5,
+            3
+          ],
+          "value": 16.5,
+          "text": "16.5"
+        }
+      },
+      "sections": [
+        {
+          "id": "B",
+          "view": "top",
+          "at": -15
+        }
+      ]
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "phase": "actual Studio start"
+}

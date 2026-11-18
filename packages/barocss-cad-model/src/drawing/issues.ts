@@ -42,7 +42,7 @@ import { viewBreaksOf } from './breaks';
 import { ambiguousFrameDimensions, ambiguousFrameMessage, frameNotes, frameRules } from './controls';
 import { UNPRINTABLE_FIT_LIMITS, deviationPair, frameValue, presetFor, type DrawingUnits, type FrameRounding } from './standard';
 import { fmtMM, resolvePoint, type Resolved } from './dimensions';
-import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewId, isSectionRef, nextSectionId, sectionLetter, sectionsOf, withSections, type DimPoint, type SectionViewId, type DimView, type DrawingDimension, type DrawingSettings, type DrawingViews, type ViewId, type XY } from './types';
+import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewId, isSectionRef, nextSectionId, reservedSectionLetters, sectionLetter, sectionsOf, withSections, type DimPoint, type SectionViewId, type DimView, type DrawingDimension, type DrawingSettings, type DrawingViews, type ViewId, type XY } from './types';
 
 export const DRAWING_ISSUES_VERSION = 'cad-studio-drawing-issues-v1';
 
@@ -617,7 +617,7 @@ export function sectionFor(ctx: IssueContext, dim: Extract<DrawingDimension, { k
   const at = Math.round(depth.sign * mid * 1e6) / 1e6 + 0, list = sectionsOf(ctx.settings), there = list.find(x => x.view === view && Math.abs(x.at - at) < 1e-6);
   const axisName = 'XYZ'[k];
   if (there) return { text: `section ${there.id}–${there.id} through it shows it: Auto-dimension puts it there.`, fix: { kind: 'auto-dimension' } };
-  const id = view === 'front' && !list.some(x => x.id === 'A') && !ctx.settings.details?.some(d => d.id === 'A') ? 'A' : nextSectionId([{ id: 'A', view: 'front', at: 0 }, ...list], (ctx.settings.details ?? []).map(d => d.id));
+  const id = view === 'front' && !list.some(x => x.id === 'A') && !sectionLettersForFix(ctx.settings).has('A') ? 'A' : nextSectionId([{ id: 'A', view: 'front', at: 0 }, ...list], sectionLettersForFix(ctx.settings));
   return { text: `section ${id}–${id}, square to its axis (${axisName}) through its middle (${axisName} ${fmtMM(mid)}), would show it — the fix adds it.`, fix: { kind: 'add-section', id, view, at } };
 }
 /**
@@ -636,8 +636,12 @@ function alignedSectionFor(ctx: IssueContext, point: readonly number[], u: reado
   const n = Math.hypot(dir[0], dir[1], dir[2]), at = r6(((point[0] + u[0] * mid) * dir[0] + (point[1] + u[1] * mid) * dir[1] + (point[2] + u[2] * mid) * dir[2]) / n);
   const list = sectionsOf(ctx.settings), there = list.find(x => x.dir && Math.abs(dotOf(x.dir, dir) / (Math.hypot(...x.dir) * n) - 1) < 1e-9 && Math.abs(x.at - at) < 1e-6);
   if (there) return { text: `aligned section ${there.id}–${there.id} through it shows it: Auto-dimension puts it there.`, fix: { kind: 'auto-dimension' } };
-  const id = nextSectionId([{ id: 'A', view: 'front', at: 0 }, ...list], (ctx.settings.details ?? []).map(d => d.id));
+  const id = nextSectionId([{ id: 'A', view: 'front', at: 0 }, ...list], sectionLettersForFix(ctx.settings));
   return { text: `its axis runs along none of X, Y and Z: an aligned section ${id}–${id}, square to its axis through its middle, would show it — the fix adds it.`, fix: { kind: 'add-section', id, view, at, dir } };
+}
+/** New fixes cannot repair retained references by reusing their section identity. */
+function sectionLettersForFix(s: DrawingSettings): Set<string> {
+  return new Set([...(s.sheetContext?.sectionLetters ?? []), ...(s.details ?? []).map(d => d.id), ...reservedSectionLetters(s)]);
 }
 const dotOf = (a: readonly number[], b: readonly number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 /** A round edge of a face in the standard views (its circle's centre and normal: a shaft step's axis). */
@@ -959,7 +963,12 @@ export function applyFix(ctx: IssueContext, fix: DrawingFix): DrawingSettings {
     case 'remove-detail': { const kept = (s.details ?? []).filter(d => d.id !== fix.detail), rest: DrawingSettings = { ...s, dimensions: s.dimensions.filter(d => d.view !== `detail:${fix.detail}`) }; delete rest.details; return kept.length ? { ...rest, details: kept } : rest; }
     case 'remove-break': { const kept = (s.breaks ?? []).filter((_, k) => k !== fix.index), rest = { ...s }; delete rest.breaks; return kept.length ? { ...rest, breaks: kept } : rest; }
     case 'remove-datum': return { ...s, datums: (s.datums ?? []).filter(d => d.id !== fix.datum) };
-    case 'add-section': return sectionsOf(s).some(x => x.id === fix.id) ? s : withSections(s, [...sectionsOf(s), { id: fix.id, view: fix.view, at: fix.at, ...(fix.dir ? { dir: fix.dir } : {}) }]);
+    case 'add-section': {
+      const list = sectionsOf(s); if (list.some(x => x.id === fix.id)) return s;
+      const held = sectionLettersForFix(s);
+      const id = held.has(fix.id) ? nextSectionId(list, [...held, ...(fix.id === 'A' ? [] : ['A'])]) : fix.id;
+      return withSections(s, [...list, { id, view: fix.view, at: fix.at, ...(fix.dir ? { dir: fix.dir } : {}) }]);
+    }
     case 'remove-frame': return { ...s, frames: (s.frames ?? []).filter(f => f.id !== fix.frame) };
     case 'move': return { ...s, dimensions: s.dimensions.map(d => d.id === fix.dim ? { ...d, place: fix.place } : d) };
     case 'move-note': return { ...s, notes: (s.notes ?? []).map(n => n.id === fix.note ? { ...n, at: fix.at } : n) };
