@@ -1,0 +1,11 @@
+# #715 — bearing catalogue geometry and drawing revision
+
+Baseline main f02c4db77: a synthetic standalone shaft+bearing drawing is issued as A. Actual Library Bearing rows file replaces row 6204 outside 47 with 57. Total volume changes 56698.919733858784 → 68120.83316185945 mm³ (shaft unchanged); projections and bounds update but Revision out of date is absent. Baseline is an expected FAIL, not a test infrastructure error.
+
+Only active standalone bearing references now add the effective row envelope fields bore/outside/width/chamfer to the revision marker. The evaluator's last-row lookup and omitted chamfer=0 are preserved. Missing rows have a stable null dependency. Unused rows, catalogue labels/citations, abutment limits and fit-report deviations are excluded. Assemblies retain their existing conservative semantic stamp. No geometry, stored drawing record or source document is changed by reading the stamp.
+
+Ordinary legacy and existing section/weld stamps remain compatible. Previously issued bearing-backed node-only stamps cannot certify the external row geometry and are intentionally stale until explicit reissue; no automatic restamping. This is a change indicator, not manufacturing approval or an integrity certificate. Other catalogue families are outside this issue.
+
+Final actual Chrome: row replacement→stale, Undo→current, Redo→stale, Save/fresh Open→stale, explicit Next revision→B/current all PASS. Both frozen receipts have changes=[] and context/browser/server cleanup. Screenshots were directly inspected. Focused bearing and existing revision/section/weld/ECO regressions: 28/28 PASS. Tests cover original preservation, actual volumes, all four envelope dependencies, metadata/unused/suppressed sources, legacy Native roundtrip, default-zero equivalence, row reordering and duplicate last-row semantics.
+
+The initial Studio type check identified test-only mutation of readonly BearingRow fields. Fixtures were corrected to replace rows immutably; focused tests passed again (5/5). Product and browser fixture source were unchanged after the successful frozen actual run. Model type check and owned-file lint passed; final Studio type recheck and owned-file lint also PASS.

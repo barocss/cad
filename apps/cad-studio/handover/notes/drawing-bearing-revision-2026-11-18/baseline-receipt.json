@@ -1,0 +1,26 @@
+{
+  "status": "FAIL",
+  "qualification": "Issued standalone bearing drawings notice actual Library row geometry edits.",
+  "observations": [
+    {
+      "a": {
+        "volume": 56698.919733858784
+      },
+      "b": {
+        "volume": 68120.83316185945
+      },
+      "stale": 0
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "One referenced synthetic bearing row; not manufacturing approval or a universal revision certificate."
+  ],
+  "failure": "AssertionError [ERR_ASSERTION]: changed Library bearing must invalidate issued drawing\n\n0 !== 1\n\n    at file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/drawing-bearing-revision-browser.mjs:8:890\n    at async f.run (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/drawing-bearing-revision-browser.mjs:6:1",
+  "phase": "actual Studio start"
+}

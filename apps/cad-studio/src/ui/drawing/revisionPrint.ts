@@ -37,7 +37,19 @@ export function drawingRevisionPrint(doc: StudioDoc): string {
   // keep their saved stamp unchanged until the user explicitly issues the drawing again.
   const ids = [...sectionUses({ ...doc, nodes: doc.nodes.filter(n => !n.suppressed) }).keys()].sort();
   const sections = ids.map(id => [id, doc.frames?.sections?.find(row => row.id === id)?.section ?? null]);
-  const stamp = ids.length ? modelPrint({ source, sections: canonical(sections) }) : modelPrint(source);
+  let stamp = ids.length ? modelPrint({ source, sections: canonical(sections) }) : modelPrint(source);
+  // Bearing envelopes read their catalogue row outside nodes as well. Mirror the
+  // evaluator's last-row lookup, and its absent corner-radius default. Abutment
+  // limits, fit deviations and citations are reports, not envelope geometry.
+  const bearingIds = [...new Set(doc.nodes.flatMap(n => n.kind === 'bearing' && !n.suppressed ? [n.row] : []))].sort();
+  if (bearingIds.length) {
+    const rows = new Map((doc.bearings?.rows ?? []).map(row => [row.id, row]));
+    const bearings = bearingIds.map(id => {
+      const row = rows.get(id);
+      return [id, row ? { bore: row.bore, outside: row.outside, width: row.width, chamfer: row.chamfer ?? 0 } : null];
+    });
+    stamp = modelPrint({ source: stamp, bearings: canonical(bearings) });
+  }
   if (!doc.frames?.welds?.length) return stamp;
   const gone = new Set(doc.nodes.flatMap((n, i) => n.suppressed ? [i] : []));
   // Requested bead geometry, independent of kernel refusal caches. Symbol annotations
