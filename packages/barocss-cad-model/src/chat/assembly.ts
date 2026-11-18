@@ -28,7 +28,7 @@ import { isRefusal } from '../engine/refusal';
 import { bodyDocOf, instanceJointsOf, setInstanceJoints } from '../assembly/flexible';
 import { lookKey } from '../app/bodies';
 import { instanceLooksListing, setInstanceLooks, type InstanceLookPatch } from '../assembly/looks';
-import { addAssemblyCut, assemblyCutProblems, deleteAssemblyCut, editAssemblyCut } from '../assembly/cuts';
+import { addAssemblyCut, cutsOf, assemblyCutProblems, deleteAssemblyCut, editAssemblyCut } from '../assembly/cuts';
 import { addInstancePattern, deleteInstancePattern, editInstancePattern, patternDeleteRefusal, type AddPatternOptions } from '../assembly/patterns';
 
 type Evaluate = (doc: StudioDoc) => Promise<EvalResult | null>;
@@ -112,10 +112,14 @@ async function describe(doc: StudioDoc, base: BodyResult[], evaluate: Evaluate, 
     const own = !nested || inst.doc.nodes.length || inst.doc.direct ? await evaluate(bodyDocOf(inst)) : null;
     const bodies = own?.ok ? own.bodies : [];
     const { min, max } = boundsOf(bodies), flex = nested && inst.doc.mates?.length ? instanceJointsOf(doc, inst.id) : null;
+    // Occurrence cuts change reported geometry, not authored feature/face/look identities.
+    const made = !nested && cutsOf(inst, doc).length ? await evaluate(placedBase(inst, doc)) : own;
+    const madeBodies = made?.ok ? made.bodies : [];
+    const madeBounds = made === own ? { min, max } : boundsOf(madeBodies);
     const geometry = nested ? await nestedGeometry(inst, doc, evaluate) : {
-      bodies: bodies.length, volume: r3(bodies.reduce((s, b) => s + (b.volume ?? 0), 0)),
-      ...(bodies.length ? { world_bounds: placedBounds(inst, min, max) } : {}),
-      ...(own && !own.ok ? { error: own.error.title } : {}),
+      bodies: madeBodies.length, volume: r3(madeBodies.reduce((s, b) => s + (b.volume ?? 0), 0)),
+      ...(madeBodies.length ? { world_bounds: placedBounds(inst, madeBounds.min, madeBounds.max) } : {}),
+      ...(made && !made.ok ? { error: made.error.title } : {}),
     };
     return {
       id: inst.id, name: inst.name, position: inst.position.map(r3), rotation: inst.rotation.map(r3), ...(inst.grounded ? { grounded: true } : {}), ...(inst.hidden ? { hidden: true } : {}), ...(inst.pattern ? { pattern: inst.pattern.id, k: inst.pattern.k } : {}),

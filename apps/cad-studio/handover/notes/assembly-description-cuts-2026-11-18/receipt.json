@@ -1,0 +1,255 @@
+{
+  "status": "PASS",
+  "qualification": "Public assembly summary agrees with the cut occurrence consumed by Studio and BOM.",
+  "limits": [
+    "Ordinary plate occurrence; definition/mate face identity remains unchanged."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": [],
+  "observations": [
+    {
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0,
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Plate",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    40,
+                    40
+                  ],
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 10,
+                  "id": "n1"
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              },
+              "nextId": 2
+            },
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "id": "p2",
+            "name": "Plate 2",
+            "doc": {
+              "format": "barocss-cad-model",
+              "schema": 3,
+              "units": "mm",
+              "parameters": {},
+              "nodes": [
+                {
+                  "kind": "sketch",
+                  "profile": "rectangle",
+                  "min": [
+                    0,
+                    0
+                  ],
+                  "max": [
+                    40,
+                    40
+                  ],
+                  "id": "n0"
+                },
+                {
+                  "kind": "extrude",
+                  "sketch": 0,
+                  "height": 10,
+                  "id": "n1"
+                }
+              ],
+              "outputs": {
+                "b1": {
+                  "node": 1,
+                  "side": "solid"
+                }
+              },
+              "nextId": 2
+            },
+            "position": [
+              0,
+              0,
+              10
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "assemblyCuts": [
+          {
+            "id": "cut1",
+            "profile": {
+              "kind": "circle",
+              "radius": 5
+            },
+            "at": [
+              20,
+              20,
+              20
+            ],
+            "dir": [
+              0,
+              0,
+              -1
+            ],
+            "depth": "through",
+            "targets": [
+              "p2"
+            ]
+          }
+        ]
+      },
+      "report": {
+        "base": {
+          "id": "base",
+          "feature_count": 0,
+          "bodies": 0,
+          "volume": 0,
+          "note": "the document's own part, fixed at the origin"
+        },
+        "instances": [
+          {
+            "id": "p1",
+            "name": "Plate",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "feature_count": 2,
+            "bodies": 1,
+            "volume": 16000,
+            "world_bounds": {
+              "min": [
+                0,
+                0,
+                0
+              ],
+              "max": [
+                40,
+                40,
+                10
+              ]
+            },
+            "body_keys": [
+              "b1"
+            ]
+          },
+          {
+            "id": "p2",
+            "name": "Plate 2",
+            "position": [
+              0,
+              0,
+              10
+            ],
+            "rotation": [
+              0,
+              0,
+              0
+            ],
+            "feature_count": 2,
+            "bodies": 1,
+            "volume": 15214.602,
+            "world_bounds": {
+              "min": [
+                0,
+                0,
+                10
+              ],
+              "max": [
+                40,
+                40,
+                20
+              ]
+            },
+            "body_keys": [
+              "b1"
+            ]
+          }
+        ],
+        "mates": [],
+        "note": "mateable faces of one part: get_assembly {\"faces_of\": part id or \"base\"}"
+      },
+      "actual": 15214.60183660255,
+      "bom": {
+        "lines": [
+          {
+            "item": "Plate",
+            "parts": [
+              "p1"
+            ],
+            "qty": 1,
+            "material": null,
+            "mass": 43.2,
+            "source": null
+          },
+          {
+            "item": "Plate 2",
+            "parts": [
+              "p2"
+            ],
+            "qty": 1,
+            "material": null,
+            "mass": 41.079,
+            "source": null
+          }
+        ],
+        "totalQty": 2,
+        "totalMass": 84.279
+      },
+      "unchanged": true,
+      "changed": false,
+      "isError": false
+    }
+  ]
+}
