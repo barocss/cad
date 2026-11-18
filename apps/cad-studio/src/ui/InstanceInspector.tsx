@@ -1,3 +1,4 @@
+import { InstanceRevisionNotes } from './InstanceRevisionNotes';
 import { InstanceBriefNotes } from './InstanceBriefNotes';
 import { checkPartDelete } from '@barocss/cad-model/frames/skeleton';
 import { firstProblem } from '@barocss/cad-model/engine/refusal';
@@ -65,6 +66,7 @@ export function InstanceInspector({ model, bearing, assembly, changes, onNotice:
     </aside>;
   }
   return <InstancePanel inst={inst} bodies={entry?.bodies}
+    revisionNotes={<InstanceRevisionNotes doc={doc} id={inst.id} />}
     notes={<InstanceBriefNotes doc={doc} id={inst.id} blocked={bearingBlocked || instanceEditPending} commit={commitParts} onError={hint => setToast({ title: 'Notes not changed', hint, detail: '' })} />}
     onChange={next => commitInstances(list.map(i => i.id === inst.id ? next : i))}
     onDuplicate={() => { const newId = nextInstanceId(doc, 'inst');

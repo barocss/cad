@@ -1,0 +1,209 @@
+{
+  "issue": 274,
+  "issueState": "OPEN",
+  "scope": "Read-only opt-in selected-definition revision note comparison",
+  "runs": {
+    "baseline01": {
+      "status": "PASS",
+      "browserErrors": 0,
+      "consoleErrors": 0,
+      "trackedSourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "publicRevisionFileInput": true,
+          "pendingRevision": "B",
+          "pendingName": "synthetic-note-offer.bcad",
+          "sharedOccurrences": [
+            "p1",
+            "p2"
+          ],
+          "currentAndOfferedTextAbsentBeforeAcceptance": true,
+          "keepRestoresAcceptedData": true,
+          "acceptOnlyChangesNotesAndExpectedRevisionSource": true,
+          "unrelatedInstanceExact": true,
+          "storedGeometryAndPlacementExact": true
+        }
+      ],
+      "sourceBefore": {
+        "apps/cad-studio/src/state/instanceBriefNotes.ts": "9446f08baace00a10d21632026182aba4c225ee3322c9e3b0b13c6ed4a4f1170",
+        "apps/cad-studio/src/ui/InstanceBriefNotes.tsx": "e67395e2dc95c40dcb25ed95d4c229e0d26620d3e6b5db0fca50888818a75095",
+        "apps/cad-studio/src/ui/InstanceInspector.tsx": "2f2c094fb60cba47df4ca5d786e9451cd63de4c3e8d2518fc5e2cb1f22f161f8",
+        "apps/cad-studio/src/ui/InstancePanel.tsx": "a295637bad9cb47bec56dfdf632d9cd38fdbef0a843666709012c98bfca993ef",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "apps/cad-studio/test/instance-revision-note-comparison-baseline-browser.mjs": "7e44f987e5780af2ba518fc470267aea61fc1e0bbb63f5020de9c40f6992357d",
+        "packages/barocss-cad-model/src/assembly/definitions.ts": "98c1c5081795c34a524d2e63fcdde4c1cc0c1aa906846f43416b26ac3ac0fc04"
+      }
+    },
+    "actual01": {
+      "status": "PASS",
+      "browserErrors": 0,
+      "consoleErrors": 0,
+      "trackedSourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "defaultCollapsed": true,
+          "explicitDisclosureOnly": true,
+          "plainTextMarkup": true,
+          "comparisonProvenanceRedacted": true,
+          "sharedSelectionReset": true,
+          "sameRevisionOfferReset": true,
+          "unrelatedSelectionNoComparison": true,
+          "sameContentOpenReset": true,
+          "metadataOnlyTextUnchanged": true,
+          "keepAndOfferedRemovalNonmutating": true,
+          "acceptedOnlyExpectedFieldsChanged": true,
+          "undoDoesNotRestoreDisclosure": true,
+          "nativeSaveFreshOpen": true
+        }
+      ],
+      "sourceBefore": {
+        "apps/cad-studio/src/state/instanceRevisionNotes.ts": "e17e1288a08059a7bae9f71b1b63c759dce0181a58221a3dc662d3c30e1ac6a5",
+        "apps/cad-studio/src/ui/InstanceInspector.tsx": "060413047624ea8dc3d3474f4bd4d318eb2ef3ffe79c299e693a140f7b149f2f",
+        "apps/cad-studio/src/ui/InstancePanel.tsx": "949e728e82cdbc510963a2cf20a5fe329ac721cb94b833c6577127d2f0b078d1",
+        "apps/cad-studio/src/ui/InstanceRevisionNotes.tsx": "eef9f4adfd0b906f5ac7aebe28f17b173a8af9a600fb86cf1fd91f34371d77a0",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "apps/cad-studio/test/instance-revision-note-comparison-browser.mjs": "73a7cb1d091dc594994ad6456b38e4583b36517c808b56f43473b12cd025754a",
+        "packages/barocss-cad-model/src/assembly/definitions.ts": "98c1c5081795c34a524d2e63fcdde4c1cc0c1aa906846f43416b26ac3ac0fc04"
+      },
+      "visualReview": "INCOMPLETE: lower comparison clipped; assertions passed"
+    },
+    "actual02": {
+      "status": "FAIL",
+      "browserErrors": 0,
+      "consoleErrors": 0,
+      "trackedSourceChanges": 2,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "defaultCollapsed": true,
+          "explicitDisclosureOnly": true,
+          "plainTextMarkup": true,
+          "comparisonProvenanceRedacted": true,
+          "sharedSelectionReset": true,
+          "sameRevisionOfferReset": true,
+          "unrelatedSelectionNoComparison": true,
+          "sameContentOpenReset": true,
+          "metadataOnlyTextUnchanged": true,
+          "keepAndOfferedRemovalNonmutating": true,
+          "acceptedOnlyExpectedFieldsChanged": true,
+          "undoDoesNotRestoreDisclosure": true,
+          "nativeSaveFreshOpen": true
+        }
+      ],
+      "sourceBefore": {
+        "apps/cad-studio/src/state/instanceRevisionNotes.ts": "e17e1288a08059a7bae9f71b1b63c759dce0181a58221a3dc662d3c30e1ac6a5",
+        "apps/cad-studio/src/ui/InstanceInspector.tsx": "060413047624ea8dc3d3474f4bd4d318eb2ef3ffe79c299e693a140f7b149f2f",
+        "apps/cad-studio/src/ui/InstancePanel.tsx": "949e728e82cdbc510963a2cf20a5fe329ac721cb94b833c6577127d2f0b078d1",
+        "apps/cad-studio/src/ui/InstanceRevisionNotes.tsx": "eef9f4adfd0b906f5ac7aebe28f17b173a8af9a600fb86cf1fd91f34371d77a0",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "apps/cad-studio/test/instance-revision-note-comparison-browser.mjs": "f948ab4f13f25d937b4da3214316f711cb32aaf629943fae0d4461329fa423ac",
+        "packages/barocss-cad-model/src/assembly/definitions.ts": "98c1c5081795c34a524d2e63fcdde4c1cc0c1aa906846f43416b26ac3ac0fc04"
+      },
+      "failureReason": "Final frozen-source qualification failed: evidence README and verification JSON were created during the run. Coordinating owner started prematurely while evidence writer was active. UI assertions completed; not a qualified pass."
+    },
+    "actual03": {
+      "status": "PASS",
+      "browserErrors": 0,
+      "consoleErrors": 0,
+      "trackedSourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "defaultCollapsed": true,
+          "explicitDisclosureOnly": true,
+          "plainTextMarkup": true,
+          "comparisonProvenanceRedacted": true,
+          "sharedSelectionReset": true,
+          "sameRevisionOfferReset": true,
+          "unrelatedSelectionNoComparison": true,
+          "sameContentOpenReset": true,
+          "metadataOnlyTextUnchanged": true,
+          "keepAndOfferedRemovalNonmutating": true,
+          "acceptedOnlyExpectedFieldsChanged": true,
+          "undoDoesNotRestoreDisclosure": true,
+          "nativeSaveFreshOpen": true
+        }
+      ],
+      "sourceBefore": {
+        "apps/cad-studio/src/state/instanceRevisionNotes.ts": "e17e1288a08059a7bae9f71b1b63c759dce0181a58221a3dc662d3c30e1ac6a5",
+        "apps/cad-studio/src/ui/InstanceInspector.tsx": "060413047624ea8dc3d3474f4bd4d318eb2ef3ffe79c299e693a140f7b149f2f",
+        "apps/cad-studio/src/ui/InstancePanel.tsx": "949e728e82cdbc510963a2cf20a5fe329ac721cb94b833c6577127d2f0b078d1",
+        "apps/cad-studio/src/ui/InstanceRevisionNotes.tsx": "eef9f4adfd0b906f5ac7aebe28f17b173a8af9a600fb86cf1fd91f34371d77a0",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "apps/cad-studio/test/instance-revision-note-comparison-browser.mjs": "f948ab4f13f25d937b4da3214316f711cb32aaf629943fae0d4461329fa423ac",
+        "packages/barocss-cad-model/src/assembly/definitions.ts": "98c1c5081795c34a524d2e63fcdde4c1cc0c1aa906846f43416b26ac3ac0fc04"
+      },
+      "visualReview": "PASS: coordinating reviewer inspected complete current/offered text, disclaimer, Accept and Keep in 02-explicit-comparison.png"
+    }
+  },
+  "checks": {
+    "studioFocused": {
+      "pass": 29,
+      "fail": 0,
+      "skipped": 0,
+      "source": "TAP log inspected"
+    },
+    "studioType": {
+      "status": "PASS",
+      "exitCode": 0,
+      "source": "Empty log inspected; exit code reported by execution owner"
+    },
+    "targetedLint": {
+      "status": "PASS",
+      "exitCode": 0,
+      "source": "Empty log inspected; exit code reported by execution owner"
+    },
+    "model": "No Model product changes; existing definition tests 8/8 PASS; Model type NOT_RUN",
+    "modelDefinitions": {
+      "pass": 8,
+      "fail": 0,
+      "skipped": 0,
+      "source": "TAP log inspected"
+    }
+  },
+  "delivery": {
+    "commit": "PENDING",
+    "push": "PENDING",
+    "exactCommitCI": "PENDING"
+  },
+  "images": [
+    {
+      "file": "before.png",
+      "sha256": "c0a2b7747d29fa1ae9570519375d3fe283dfec95f2cf35502cbb71d3af6b8aa7",
+      "content": "Synthetic fixture only"
+    },
+    {
+      "file": "after.png",
+      "sha256": "5004e12c488bf5fad51f577b714bc3aa409d77e0a63f321f2d9a3c83bbbf6997",
+      "content": "Synthetic fixture only"
+    }
+  ],
+  "limits": [
+    "Synthetic input only; PRIVATE markers are not real secrets",
+    "Comparison DOM redaction only, not application-wide redaction",
+    "Stored JSON preservation, not independently verified geometry",
+    "No linked-source, nested, pattern or asynchronous completion race coverage",
+    "No authentication or manufacturing approval claim"
+  ]
+}

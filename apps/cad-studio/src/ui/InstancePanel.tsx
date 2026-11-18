@@ -7,7 +7,7 @@ import { resetInstancePlacement } from './instancePlacement';
 import { Button } from '@/components/ui/button';
 
 /** A placed part: its name, position and rotation (applied on Enter or when a box is left), duplicate, hide, remove. */
-export function InstancePanel({ inst, bodies, onChange, onDuplicate, onRemove, onGround, shared = 0, pending, onEditPart, onIndependent, onRevision, onAccept, onDismiss, pattern, joints, looks, notes }: {
+export function InstancePanel({ inst, bodies, onChange, onDuplicate, onRemove, onGround, shared = 0, pending, onEditPart, onIndependent, onRevision, onAccept, onDismiss, pattern, joints, looks, notes, revisionNotes }: {
   inst: PartInstance; bodies: BodyResult[] | undefined;
   onChange(next: PartInstance): void; onDuplicate(): void; onRemove(): void;
   /** Fixes it in place (mates never move it) or frees it. */
@@ -24,6 +24,7 @@ export function InstancePanel({ inst, bodies, onChange, onDuplicate, onRemove, o
   /** Its appearance as this occurrence has it (roadmap 10 ①), over its definition's. */
   looks?: ReactNode;
   notes?: ReactNode;
+  revisionNotes?: ReactNode;
 }) {
   const driven = !!inst.pattern;
   const volume = bodies?.reduce((v, b) => v + (b.volume ?? 0), 0);
@@ -39,6 +40,7 @@ export function InstancePanel({ inst, bodies, onChange, onDuplicate, onRemove, o
         {inst.part.source && <div className="kv muted small">From {inst.part.source}</div>}
         {pending && <div className="pending-rev" role="status" aria-label="Revision waiting">
           <div>Rev {pending.rev} is ready ({pending.name}): {shared > 1 ? `all ${shared} instances` : 'this instance'} would take it, each where it is.</div>
+          {revisionNotes}
           <div className="row-actions" style={{ display: 'flex', gap: 6, marginTop: 4 }}>
             <Button variant="default" onClick={onAccept}>Accept Rev {pending.rev}</Button>
             <Button variant="ghost" onClick={onDismiss}>Keep Rev {inst.part.rev}</Button>
