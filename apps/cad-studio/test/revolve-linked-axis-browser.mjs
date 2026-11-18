@@ -56,6 +56,7 @@ await f.run(async () => {
   await f.page.getByRole('group', { name: 'History', exact: true }).getByRole('button', { name: 'Sketch · rectangle', exact: true }).click();
   await f.editor().waitFor();
   await f.closeEditor();
+  await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Revolve');
   const hud = f.page.getByRole('dialog', { name: 'Revolve', exact: true });
   const preview = () => hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();

@@ -1,0 +1,75 @@
+{
+  "baseline-failed": {
+    "status": "FAIL",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "failure": "Fixture palette focus timeout before Revolve; no product finding."
+  },
+  "baseline": {
+    "status": "PASS",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "axis": [
+      {
+        "label": "fixed-axis-baseline",
+        "origin": [
+          0,
+          0
+        ],
+        "dir": [
+          1,
+          0
+        ],
+        "axisRefAbsent": true,
+        "axisYFieldAbsent": true,
+        "volume": 1413.7166941154069,
+        "stockVolume": 16000
+      }
+    ]
+  },
+  "fixed": {
+    "status": "PASS",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  "sketch-axis": {
+    "status": "PASS",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  "linked-axis": {
+    "status": "PASS",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  }
+}

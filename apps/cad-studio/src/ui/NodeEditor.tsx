@@ -226,6 +226,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
       <div className="card-title" style={{ marginTop: 10 }}>EDIT FEATURE <ToolIconButton size="tiny" aria-label="Close editor" onClick={close}><Icon name="close" small /></ToolIconButton></div>
       {node?.kind === 'shell' && fields.some(field => field.key === 'shellOpening') && <p className="small muted">Top and Bottom are the original box caps along Z. Apply an opening change separately before changing Wall. The native parent and face reference are checked before applying.</p>}
       {node?.kind === 'revolve' && fields.some(field => field.key === 'sketchAxis') && <p className="small muted">Sketch X/Y axes pass through the sketch origin in its own plane, not world X/Y. The profile stays unchanged.</p>}
+      {node?.kind === 'revolve' && fields.some(field => field.key === 'fixedAxisPosition') && <p className="small muted">Axis position is measured in the sketch plane. Only the perpendicular position changes; the direction stays fixed. This axis does not follow its originally picked edge.</p>}
       {node?.kind === 'revolve' && !fields.some(field => field.key === 'sketchAxis') && <div className="field"><span>Axis</span><span>{node.axisRef
         ? `Linked edge ${node.axisRef.edge}` : node.dir ? 'Fixed edge' : `Sketch ${node.axis.toUpperCase()}`}</span></div>}
       {node?.kind === 'loft' && node.sections.length === 2 && !node.guide && <div className="field"><span>Mode</span><span>{node.guides ? 'Two guides' : 'Ruled · 2 sections'}</span></div>}
