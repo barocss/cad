@@ -1,3 +1,4 @@
+import { nextMateId } from '../assembly/mateIds';
 // R7.5 (cad-model's facade): the one place the assembly facade calls the core's assembly functions — since R7.3c the
 // assembly's edits are core functions (assembly/edit.ts: addPart, placePart, addMate, withFrames, the very writes the
 // agent's add_part, place_part, add_mate and set_frames make), and the variability (O11), the robot's joint tree and
@@ -67,9 +68,7 @@ export function lockDoc(doc: StudioDoc, part: string, to: string): { doc: Studio
   if (to !== BASE && !a) throw new BarocssError('NO_PART', `No part "${String(to)}"; parts: ${[BASE, ...instances.map(i => i.id)].join(', ')}.`, 'evaluate');
   const driven = drivenRefusal(doc, part, 'it never moves for a lock; lock another part to it.') ?? seedMateRefusal(doc, part, to);
   if (driven) throw driven;
-  const used = new Set(mates.map(m => m.id));
-  let n = mates.length + 1; while (used.has(`m${n}`)) n++;
-  const mate: Mate = { id: `m${n}`, kind: 'lock', a: { part: to, face: '' }, b: { part, face: '' }, rel: lockRel(a ?? null, b) };
+  const mate: Mate = { id: nextMateId(doc, mates.length + 1), kind: 'lock', a: { part: to, face: '' }, b: { part, face: '' }, rel: lockRel(a ?? null, b) };
   const r = solveAssembly(instances, [...mates, mate], tablesFor(doc), instances), problem = r.problems.find(p => p.mate === mate.id);
   if (problem) throw fromTool(problem.reason);
   return { doc: { ...doc, instances: r.instances, mates: [...mates, mate] }, id: mate.id };

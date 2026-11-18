@@ -1,3 +1,4 @@
+import { nextMateId } from '@barocss/cad-model/assembly/mateIds';
 // The studio's mate workflow: reads the parts' faces, re-solves the assembly whenever an instance, a mate
 // or a part changes, and runs "Add mate" (two face picks) and mate edits, refusing what cannot be met.
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
@@ -164,9 +165,7 @@ export function useAssembly({ doc, evaluated, bodies, instanceBodies, setDoc, co
     let kinds: MateKind[];
     try { kinds = mateKindsOf({ a: first.ref, b: second.ref }, { a: fa, b: fb }); } catch (e) { return { ...d, picks: [d.picks[0]], error: String(e instanceof Error ? e.message : e) }; }
     const kind = d.kind === 'auto' ? kinds[0] ?? 'coincident' : d.kind;
-    const used = new Set(mates.map(m => m.id));
-    let n = mates.length + 1; while (used.has(`m${n}`)) n++;
-    const mate: Mate = { id: `m${n}`, kind, a: first.ref, b: second.ref, ...(kind === 'distance' ? { distance: d.distance } : {}), ...(kind === 'angle' ? { angle: d.angle } : {}), ...(kind !== 'concentric' && d.flip ? { flip: true } : {}) };
+    const mate: Mate = { id: nextMateId(doc, mates.length + 1), kind, a: first.ref, b: second.ref, ...(kind === 'distance' ? { distance: d.distance } : {}), ...(kind === 'angle' ? { angle: d.angle } : {}), ...(kind !== 'concentric' && d.flip ? { flip: true } : {}) };
     const why = mateRefusal(mate, fa, fb);
     if (why) return { ...d, picks: [d.picks[0]], error: why };
     const r = solve(instances, [...mates, mate]);
@@ -266,9 +265,7 @@ export function useAssembly({ doc, evaluated, bodies, instanceBodies, setDoc, co
       if (!b || (to !== BASE && !a)) return 'Pick the part to lock it to.';
       const driven = drivenRefusal(doc, part, 'it never moves for a lock; lock another part to it.') ?? seedMateRefusal(doc, part, to);
       if (driven) return driven.message;
-      const used = new Set(mates.map(m => m.id));
-      let n = mates.length + 1; while (used.has(`m${n}`)) n++;
-      const mate: Mate = { id: `m${n}`, kind: 'lock', a: { part: to, face: '' }, b: { part, face: '' }, rel: lockRel(a ?? null, b) };
+      const mate: Mate = { id: nextMateId(doc, mates.length + 1), kind: 'lock', a: { part: to, face: '' }, b: { part, face: '' }, rel: lockRel(a ?? null, b) };
       const r = solve(instances, [...mates, mate]), problem = r.problems.find(p => p.mate === mate.id) ?? (mates.some(m => m.kind === 'universal' || m.kind === 'cylindrical') ? r.problems[0] : undefined);
       if (problem) return problem.reason;
       const patternWhy = patternMateRefusal(doc, mate, [...mates, mate], r.instances, tableFor);

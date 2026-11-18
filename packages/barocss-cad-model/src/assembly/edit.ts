@@ -8,7 +8,7 @@ import { readConnector, validateBallOptions, validateFastenedOptions, validateUn
 import { emptyDoc, type PartInstance, type StudioDoc } from '../engine/doc';
 import { coded, refusal, type CadModelCode } from '../engine/refusal';
 import { nextInstanceId } from './takenIds';
-import { nextFreeId } from '../util/ids';
+import { nextMateId } from './mateIds';
 import { curvePatternDocumentProblem } from '../engine/curveFeaturePattern';
 import { tableOf, tablesFor } from './faces';
 import { faceOriginOf, flatOf, hostOf, occurrenceProblem, splitPart } from '../engine/occurrences';
@@ -164,7 +164,7 @@ export function addMate(doc: StudioDoc, o: AddMateOptions): Mated {
   if (own) throw own;
   const fixed = (p: string) => p === BASE || !!instances.find(i => i.id === hostOf(p))?.grounded;
   if (fixed(b.part)) { if (fixed(a.part)) throw bothFixedRefusal(doc, hostOf(a.part), hostOf(b.part), 'MATE_BOTH_FIXED', 'Both parts are fixed (the base part and grounded parts never move): one of them must be free.'); [a, b] = [b, a]; }
-  const mate: Mate = { id: nextFreeId('m', new Set(mates.map(m => m.id))), kind, a: { ...(kind === 'fastened' || kind === 'ball' || kind === 'universal' || kind === 'cylindrical' ? a : {}), part: a.part, face: a.face, ...(a.at !== undefined ? { at: readConnector(a.at) } : {}) }, b: { ...(kind === 'fastened' || kind === 'ball' || kind === 'universal' || kind === 'cylindrical' ? b : {}), part: b.part, face: b.face, ...(b.at !== undefined ? { at: readConnector(b.at) } : {}) },
+  const mate: Mate = { id: nextMateId(doc), kind, a: { ...(kind === 'fastened' || kind === 'ball' || kind === 'universal' || kind === 'cylindrical' ? a : {}), part: a.part, face: a.face, ...(a.at !== undefined ? { at: readConnector(a.at) } : {}) }, b: { ...(kind === 'fastened' || kind === 'ball' || kind === 'universal' || kind === 'cylindrical' ? b : {}), part: b.part, face: b.face, ...(b.at !== undefined ? { at: readConnector(b.at) } : {}) },
     ...(kind === 'distance' ? { distance: Number(o.distance) } : {}), ...(kind === 'angle' ? { angle: Number(o.angle) } : {}), ...(kind !== 'concentric' && o.flip ? { flip: true } : {}), ...(kind === 'concentric' && typeof o.flip === 'boolean' ? { flip: o.flip } : {}) };
   return mated(doc, mate, [...mates, mate]);
 }
@@ -185,7 +185,7 @@ export function lockPart(doc: StudioDoc, o: { part: string; to: string }): Mated
   let [a, b] = [o.to, o.part];
   if (fixed(b)) { if (fixed(a)) throw bothFixedRefusal(doc, a, b, 'MATE_BOTH_FIXED', 'Both parts are fixed (the base part and grounded parts never move): one of them must be free.'); [a, b] = [b, a]; }
   const at = (p: string) => instances.find(i => i.id === p) ?? null;
-  const mate: Mate = { id: nextFreeId('m', new Set(mates.map(m => m.id))), kind: 'lock', a: { part: a, face: '' }, b: { part: b, face: '' }, rel: lockRel(a === BASE ? null : at(a), at(b)!) };
+  const mate: Mate = { id: nextMateId(doc), kind: 'lock', a: { part: a, face: '' }, b: { part: b, face: '' }, rel: lockRel(a === BASE ? null : at(a), at(b)!) };
   const list = [...mates, mate], r = solveAssembly(instances, list, tablesFor(doc), instances), problem = r.problems.find(p => p.mate === mate.id) ?? (list.some(m => m.kind === 'fastened' || m.kind === 'ball' || m.kind === 'universal' || m.kind === 'cylindrical') ? r.problems[0] : undefined);
   if (problem) throw refusal('MATE_UNMET', problem.reason, { mate: mate.id });
   const solved = solveDoc({ ...doc, instances: r.instances, mates: list }, instances), loose = unsettledRefusal(solved.problems, mate.id, doc, a, b);

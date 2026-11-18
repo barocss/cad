@@ -1,0 +1,55 @@
+{
+  "status": "FAIL",
+  "qualification": "Actual Delete mate and new face-mate creation cannot capture a retained Variant reference.",
+  "limits": [
+    "Current document mate namespace only."
+  ],
+  "observations": [
+    {
+      "problems": [],
+      "positions": [
+        [
+          "p1",
+          [
+            0,
+            0,
+            10
+          ]
+        ],
+        [
+          "p2",
+          [
+            30,
+            0,
+            10
+          ]
+        ]
+      ],
+      "variant": [
+        [
+          "p1",
+          [
+            0,
+            0,
+            10
+          ]
+        ],
+        [
+          "p2",
+          [
+            30,
+            0,
+            20
+          ]
+        ]
+      ]
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": []
+}

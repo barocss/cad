@@ -1,0 +1,44 @@
+{
+  "status": "PASS",
+  "qualification": "Actual Delete mate and new face-mate creation cannot capture a retained Variant reference.",
+  "limits": [
+    "Current document mate namespace only."
+  ],
+  "observations": [
+    {
+      "problems": [
+        {
+          "code": "INPUT_TARGET",
+          "message": "[INPUT_TARGET] Gap: no mate m1"
+        }
+      ],
+      "positions": [
+        [
+          "p1",
+          [
+            0,
+            0,
+            10
+          ]
+        ],
+        [
+          "p2",
+          [
+            30,
+            0,
+            10
+          ]
+        ]
+      ],
+      "variant": null
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": []
+}

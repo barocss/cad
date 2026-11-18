@@ -1,3 +1,4 @@
+import { takenMateIds } from '../assembly/mateIds';
 // Part libraries in the studio (LIB2–LIB4, D62–D64). Libraries are data (packages/barocss-cad library.ts); the studio
 // keeps the built-in ones and those a team or user adds, inserts a part as a `library` node — its features kept in
 // the document, so the part opens without the library — regenerates it when the library is there, and snaps one
@@ -210,7 +211,7 @@ export function snapByInterfaces(doc: StudioDoc, a: { part: string; interface: s
   for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) R.push(RA[3 * i] * p.rotation[j] + RA[3 * i + 1] * p.rotation[3 + j] + RA[3 * i + 2] * p.rotation[6 + j]);
   const position = [0, 1, 2].map(i => RA[3 * i] * p.translation[0] + RA[3 * i + 1] * p.translation[1] + RA[3 * i + 2] * p.translation[2] + tA[i]) as Vec3;
   const rotation = eulerOf(R as Parameters<typeof eulerOf>[0]);
-  const used = new Set((doc.mates ?? []).map(m => m.id)), mates: Mate[] = [];
+  const used = takenMateIds(doc), mates: Mate[] = [];
   for (const [key, kind] of Object.entries(MATE_OF)) {
     const fa = A.itf.faces?.[key], fb = B.itf.faces?.[key];
     if (!fa || !fb) continue;

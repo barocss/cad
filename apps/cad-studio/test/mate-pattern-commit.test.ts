@@ -226,3 +226,21 @@ test('valid seed mate can require pattern regeneration without false refusal, an
     f.cleanup();
   }
 });
+
+test('new face mates and locks cannot capture a retained missing mate binding', async () => {
+  const base = addPart(rectanglePart(100, 50, 5), { name: 'Pin', doc: rectanglePart(10, 10, 20), position: [0, 0, 10] }).doc;
+  const doc: StudioDoc = { ...base, variability: { version: 1, inputs: [{ name: 'Gap', type: 'number', default: 5, bindings: [{ to: 'mate', mate: 'm1', field: 'distance' }] }] } };
+  for (const lock of [false, true]) {
+    const f = harness(doc), before = structuredClone(doc);
+    try {
+      let api = await ready(f);
+      if (lock) assert.equal(api.lock('p1', 'base'), null);
+      else {
+        api.start(); api = f.render(); api.setDraft({ kind: 'distance', distance: 5 });
+        api.pickFace({ part: 'base', face: 'n1.top' }); api.pickFace({ part: 'p1', face: 'n1.bottom' });
+      }
+      assert.equal(f.commits.length, 1); assert.equal(f.args.doc.mates![0].id, 'm2');
+      assert.deepEqual(f.args.doc.variability, doc.variability); assert.deepEqual(doc, before);
+    } finally { f.cleanup(); }
+  }
+});
