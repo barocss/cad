@@ -218,7 +218,7 @@ export function toleranceSuggestions(ctx: IssueContext): ToleranceSuggestion[] {
 export function applySuggestion(settings: DrawingSettings, s: ToleranceSuggestion): DrawingSettings {
   const c = s.change;
   switch (c.kind) {
-    case 'note': { const id = nextFreeId('n', new Set((settings.notes ?? []).map(n => n.id))); return { ...settings, notes: [...(settings.notes ?? []), { id, text: c.text, at: c.at }] }; }
+    case 'note': { const id = nextFreeId('n', new Set([...(settings.sheetContext?.noteIds ?? []), ...(settings.notes ?? []).map(n => n.id)])); return { ...settings, notes: [...(settings.notes ?? []), { id, text: c.text, at: c.at }] }; }
     // (Set where there is none, tightened where a looser ± one is: never loosened.)
     case 'tolerances': return { ...settings, dimensions: settings.dimensions.map(d => c.dims.includes(d.id) && (!d.tol || (d.tol.kind === 'symmetric' && d.tol.value > c.value)) ? { ...d, tol: { kind: 'symmetric', value: c.value } } : d) };
     case 'datum': return { ...settings, datums: [...(settings.datums ?? []).filter(d => d.letter !== c.datum.letter), c.datum] };

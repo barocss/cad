@@ -1,0 +1,56 @@
+{
+  "status": "PASS",
+  "qualification": "A second-sheet general tolerance note cannot collide with an existing first-sheet note.",
+  "limits": [
+    "Existing general-tolerance suggestion and sheet-edit workflow only; no cleanup of pre-existing duplicate IDs."
+  ],
+  "observations": [
+    {
+      "acceptedNotes": [
+        {
+          "id": "n1",
+          "text": "KEEP ORIGINAL",
+          "at": [
+            20,
+            20
+          ]
+        },
+        {
+          "id": "n2",
+          "text": "UNLESS OTHERWISE STATED:\nLINEAR \u00b10.2 mm \u00b7 ANGULAR \u00b10.5\u00b0",
+          "at": [
+            167,
+            154
+          ],
+          "sheet": "S2"
+        }
+      ],
+      "editedNotes": [
+        {
+          "id": "n1",
+          "text": "KEEP ORIGINAL",
+          "at": [
+            20,
+            20
+          ]
+        },
+        {
+          "id": "n2",
+          "text": "UNLESS OTHERWISE STATED:\nLINEAR \u00b10.2 mm \u00b7 ANGULAR \u00b10.5\u00b0",
+          "at": [
+            167,
+            154
+          ],
+          "sheet": "S2"
+        }
+      ]
+    }
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "changes": []
+}

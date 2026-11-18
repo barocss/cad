@@ -39,6 +39,8 @@ export interface SheetContext {
   /** The datum letters the whole drawing has (features and targets), and the first datum feature of each letter: a frame on this sheet may name a datum on another, and a repeated letter is reported once. */
   /** Datum IDs in the whole drawing, reserved for newly generated suggestions. */
   datumIds?: readonly string[];
+  /** Note IDs in the whole drawing, reserved for newly generated suggestions. */
+  noteIds?: readonly string[];
   datumLetters: string[]; datumFirst: Record<string, string>;
 }
 
@@ -186,6 +188,7 @@ export function forSheet(s: DrawingSettings, k: number): DrawingSettings {
     balloonsHere: balloonSheet(s, at) === k,
     datumLetters: [...new Set([...(s.datums ?? []).map(d => d.letter), ...(s.datumTargets ?? []).map(t => t.letter)])],
     datumIds: (s.datums ?? []).map(d => d.id),
+    noteIds: (s.notes ?? []).map(note => note.id),
     datumFirst: Object.fromEntries((s.datums ?? []).filter((d, j, all) => all.findIndex(o => o.letter === d.letter) === j).map(d => [d.letter, d.id])),
   };
   return out;
