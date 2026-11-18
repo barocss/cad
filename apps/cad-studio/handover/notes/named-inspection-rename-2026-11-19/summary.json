@@ -1,0 +1,89 @@
+{
+  "issue": 220,
+  "issueState": "OPEN; limited session-only unit",
+  "folderDate": "Local reporting label, not a UTC execution-date claim",
+  "baseline01": "PASS",
+  "check01": {
+    "tests": "63/63 PASS",
+    "studioType": "PASS",
+    "scopedLint": "PASS",
+    "source": "Coordinator-verified execution results"
+  },
+  "actual01": {
+    "status": "PASS",
+    "observations": {
+      "allCamera": {
+        "target": [
+          17.728307075052694,
+          -0.28788579435877093,
+          0.5302331539942875
+        ],
+        "distance": 96.3387022012121,
+        "yaw": -1.0053096491487339,
+        "pitch": 0.6283185307179586,
+        "fovY": 0.5585053606381855,
+        "ortho": false
+      },
+      "subsetCamera": {
+        "target": [
+          15.63493307047344,
+          -1.5476000711787155,
+          4.997943010704101
+        ],
+        "distance": 88.50463638583264,
+        "yaw": -1.5707963267948966,
+        "pitch": 1.5704821675295375,
+        "fovY": 0.5585053606381855,
+        "ortho": true
+      },
+      "firstRestoreCamera": {
+        "target": [
+          15.63493307047344,
+          -1.5476000711787155,
+          4.997943010704101
+        ],
+        "distance": 88.50463638583264,
+        "yaw": -1.5707963267948966,
+        "pitch": 1.5704821675295375,
+        "fovY": 0.5585053606381855,
+        "ortho": true
+      },
+      "explicitRenameNoRecapture": true,
+      "cancelEscapeBlurAndBlank": true,
+      "rowOrderAndOtherNamePreserved": true,
+      "renameDoesNotNavigate": true,
+      "inactiveAndActiveMarkersPreserved": true,
+      "originalSubsetApplyPreserved": true,
+      "firstRestorePreserved": true,
+      "documentDirtyVisibleHistoryUnchangedBeforeSave": true,
+      "nativeSaveFreshOpenPreservesSourceAndClearsSession": true,
+      "publicOwnerOpenDiscardsDraft": true,
+      "internalStableIds": "UNIT_ONLY",
+      "staleCallbackRace": "NOT_RUN"
+    },
+    "pageErrors": 0,
+    "consoleErrors": 0,
+    "sourceChanges": 0,
+    "nativeDownloads": 1,
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  "interruption": "Mac transport interruption during static review before heavy execution; hashes unchanged after reattachment; not a test failure",
+  "actualFixtureSha256": "ab5a8b3bcf93d78c273b008152264f58c687adfbc810361d679df5068bc2170c",
+  "integrationPushExactShaCI": "PENDING",
+  "unitOnly": [
+    "stable internal IDs",
+    "snapshot object identity",
+    "mock-hook behavior"
+  ],
+  "notRun": [
+    "actual delayed callback race",
+    "independent geometry oracle",
+    "full suite"
+  ],
+  "persistedViews": false
+}

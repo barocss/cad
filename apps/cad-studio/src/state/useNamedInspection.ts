@@ -6,8 +6,8 @@ type Bodies = Parameters<typeof captureInspectionSignature>[2];
 type Signature = NonNullable<ReturnType<typeof captureInspectionSignature>>;
 interface SavedView { id: string; name: string; camera: RenderCamera; visibleKeys: readonly string[]; signature: Signature }
 export interface InspectionTransaction { token: object; camera: RenderCamera; visibleKeys: readonly string[] | null }
-interface State { signature: Signature | null; owner: object; rows: SavedView[]; serial: number; transaction: InspectionTransaction | null; restoreCamera: RenderCamera | null; applied: string | null; active: string | null }
-const empty = (owner: object): State => ({ signature: null, owner, rows: [], serial: 0, transaction: null, restoreCamera: null, applied: null, active: null });
+interface State { signature: Signature | null; owner: object; renameScope: object; rows: SavedView[]; serial: number; transaction: InspectionTransaction | null; restoreCamera: RenderCamera | null; applied: string | null; active: string | null }
+const empty = (owner: object): State => ({ signature: null, owner, renameScope: {}, rows: [], serial: 0, transaction: null, restoreCamera: null, applied: null, active: null });
 
 /** Session-only review state. The caller consumes camera and visibility as one transaction. */
 export function useNamedInspection(input: { owner: object; bodies: Bodies; reason: string | undefined; isCurrent?(): boolean; getCamera(): RenderCamera | null }) {
@@ -23,7 +23,7 @@ export function useNamedInspection(input: { owner: object; bodies: Bodies; reaso
   const publish = (next: State) => { live.current = { input: live.current.input, state: next }; setStored(next); };
   return {
     rows: state.rows.map(row => ({ id: row.id, name: row.name, active: state.active === row.id })),
-    reason: input.reason, transaction: state.transaction, visibleKeys: state.transaction?.visibleKeys ?? null,
+    renameScope: state.renameScope, reason: input.reason, transaction: state.transaction, visibleKeys: state.transaction?.visibleKeys ?? null,
     canCapture: !input.reason && state.rows.length < 2, canRestore: !input.reason && !!state.restoreCamera,
     capture(name: string, keys?: readonly string[]): boolean {
       if (!current() || input.reason || state.rows.length >= 2) return false;
@@ -34,6 +34,16 @@ export function useNamedInspection(input: { owner: object; bodies: Bodies; reaso
       const id = `inspection-${state.serial + 1}`, trimmed = name.trim();
       if (!camera || !signature || !trimmed || !captureNamedInspection({ id, name: trimmed, camera, visibleKeys }, signature, input.owner, input.owner, input.bodies)) return false;
       publish({ ...state, signature, serial: state.serial + 1, rows: [...state.rows, { id, name: trimmed, camera, visibleKeys, signature }] }); return true;
+    },
+    rename(id: string, name: string): boolean {
+      if (!current() || input.reason || typeof name !== 'string') return false;
+      const trimmed = name.trim(), row = state.rows.find(row => row.id === id);
+      if (!trimmed || trimmed.length > 80 || !row
+        || !currentInspectionSignature(row.signature, input.owner, input.owner, input.bodies)) return false;
+      if (trimmed === row.name) return true;
+      // Only the label changes: snapshot and display/Restore identities stay intact.
+      publish({ ...state, rows: state.rows.map(saved => saved === row ? { ...saved, name: trimmed } : saved) });
+      return true;
     },
     update(id: string): boolean {
       if (!current() || input.reason) return false;
