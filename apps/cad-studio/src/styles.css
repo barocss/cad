@@ -442,6 +442,11 @@ details code { display: block; white-space: pre-wrap; word-break: break-word; fo
 :root[data-theme='light'] .vp-overlay .gizmo-handle line + line { stroke: #2f6fd6; }
 :root[data-theme='light'] .vp-overlay .gizmo-handle polygon, :root[data-theme='light'] .vp-overlay .gizmo-handle circle { fill: #2f6fd6; stroke: #ffffff; }
 
+.vp-overlay .gizmo-axis-label { font: 700 10px var(--sans); paint-order: stroke; stroke: #202833; stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+.vp-overlay .gizmo-origin { fill: #eef2f6; stroke: #202833; stroke-width: 2; }
+.vp-overlay .gizmo-readout .dim-chip { stroke-width: 1.5; }
+.vp-overlay .gizmo-readout .dim-text { font-variant-numeric: tabular-nums; }
+
 /* CAD line icons (ui/cadIcons.tsx) and the app's tooltip (ui/Tooltip.tsx). */
 .cad-icon { display: inline-block; vertical-align: middle; flex: none; --icon-ac: #5aa2ff; --icon-bg: var(--panel-solid); }
 /* Faces mix into what the icon sits on (see ui/cadIcons.tsx). */
