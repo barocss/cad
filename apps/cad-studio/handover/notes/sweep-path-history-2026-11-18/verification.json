@@ -1,0 +1,17 @@
+{
+  "issue": 733,
+  "baseline": "PASS",
+  "fixedActual": "PASS",
+  "existingRepresentationActual": "PASS",
+  "focusedTests": "14/14 PASS",
+  "modelTypes": "PASS",
+  "studioTypesVite": "PASS",
+  "scopedLint": "PASS",
+  "frozenSource": "PASS",
+  "cleanup": "PASS",
+  "exactCI": "PENDING at commit; final issue comment authoritative",
+  "notRun": [
+    "Actual delayed-worker/document-switch race injection; focused identity/revision guard tested.",
+    "Arbitrary curves, linked routes, Join/Cut, downstream references and HOLD scopes."
+  ]
+}

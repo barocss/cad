@@ -1,0 +1,77 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nextId": 2,
+  "nodes": [
+    {
+      "id": "n0",
+      "kind": "sketch",
+      "profile": "circle",
+      "center": [
+        0,
+        0
+      ],
+      "radius": 3
+    },
+    {
+      "kind": "sweep-curve",
+      "sketch": 0,
+      "name": "Rail A",
+      "path": {
+        "degree": 1,
+        "knots": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "controlPoints": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            32
+          ]
+        ],
+        "weights": [
+          1,
+          1
+        ]
+      },
+      "mode": "exact-straight",
+      "id": "n1"
+    }
+  ],
+  "outputs": {
+    "b1": {
+      "node": 1,
+      "side": "solid"
+    }
+  },
+  "direct": {
+    "sources": {
+      "ra": "@model railA { version: 0; length-unit: mm; @curve #rail { type: nurbs; degree: 1; knots: [0,0,1,1]; control-points: [[0,0,0],[0,0,32]]; weights: [1,1]; } }",
+      "rb": "@model railB { version: 0; length-unit: mm; @curve #rail { type: nurbs; degree: 1; knots: [0,0,1,1]; control-points: [[30,0,0],[30,0,22]]; weights: [1,1]; } }"
+    },
+    "objects": [
+      {
+        "id": "path-a",
+        "name": "Rail A",
+        "source": "ra",
+        "geometry": "rail"
+      },
+      {
+        "id": "path-b",
+        "name": "Rail B",
+        "source": "rb",
+        "geometry": "rail"
+      }
+    ]
+  }
+}

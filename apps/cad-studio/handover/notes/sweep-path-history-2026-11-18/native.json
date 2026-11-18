@@ -1,0 +1,2184 @@
+{
+  "fixed-path-b-native.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              32
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 622.0353454107791,
+        "centroid": [
+          30,
+          -1.544893523156708e-17,
+          11.000000000000002
+        ],
+        "vertices": [
+          [
+            33,
+            0,
+            0
+          ],
+          [
+            27,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            27,
+            3.6739403974420594e-16,
+            22
+          ],
+          [
+            33,
+            0,
+            22
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              30,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              30,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              27,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              27,
+              -3,
+              22
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "independent-explicit-b-native.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              8,
+              5,
+              0
+            ],
+            [
+              8,
+              5,
+              40
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 622.0353454107791,
+        "centroid": [
+          30,
+          -1.544893523156708e-17,
+          11.000000000000002
+        ],
+        "vertices": [
+          [
+            33,
+            0,
+            0
+          ],
+          [
+            27,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            27,
+            3.6739403974420594e-16,
+            22
+          ],
+          [
+            33,
+            0,
+            22
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              30,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              30,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              27,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              27,
+              -3,
+              22
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "02-exact-native.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              32
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 904.7786842338605,
+        "centroid": [
+          6.871568756248337e-17,
+          -1.544893523156708e-17,
+          16
+        ],
+        "vertices": [
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            32
+          ],
+          [
+            3,
+            0,
+            32
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              1.7763568394002505e-15,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              32
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "fixed-a-open-native.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              32
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 904.7786842338605,
+        "centroid": [
+          6.871568756248337e-17,
+          -1.544893523156708e-17,
+          16
+        ],
+        "vertices": [
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            32
+          ],
+          [
+            3,
+            0,
+            32
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              1.7763568394002505e-15,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              32
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "fixed-back-to-a-native.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              32
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 904.7786842338605,
+        "centroid": [
+          6.871568756248337e-17,
+          -1.544893523156708e-17,
+          16
+        ],
+        "vertices": [
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            32
+          ],
+          [
+            3,
+            0,
+            32
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              1.7763568394002505e-15,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              32
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "curved-candidate-open-native.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              32
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 2,
+          "knots": [
+            0,
+            0,
+            0,
+            1,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              35,
+              0,
+              11
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 904.7786842338605,
+        "centroid": [
+          6.871568756248337e-17,
+          -1.544893523156708e-17,
+          16
+        ],
+        "vertices": [
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            32
+          ],
+          [
+            3,
+            0,
+            32
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              1.7763568394002505e-15,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              32
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "fixed-b-open-native.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              32
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 622.0353454107791,
+        "centroid": [
+          30,
+          -1.544893523156708e-17,
+          11.000000000000002
+        ],
+        "vertices": [
+          [
+            33,
+            0,
+            0
+          ],
+          [
+            27,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            27,
+            3.6739403974420594e-16,
+            22
+          ],
+          [
+            33,
+            0,
+            22
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              30,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              30,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              27,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              27,
+              -3,
+              22
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "fixed-b-redo-native.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              32
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 622.0353454107791,
+        "centroid": [
+          30,
+          -1.544893523156708e-17,
+          11.000000000000002
+        ],
+        "vertices": [
+          [
+            33,
+            0,
+            0
+          ],
+          [
+            27,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            27,
+            3.6739403974420594e-16,
+            22
+          ],
+          [
+            33,
+            0,
+            22
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              30,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              30,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              27,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              27,
+              -3,
+              22
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "fixed-cancel-native.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              32
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 904.7786842338605,
+        "centroid": [
+          6.871568756248337e-17,
+          -1.544893523156708e-17,
+          16
+        ],
+        "vertices": [
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            32
+          ],
+          [
+            3,
+            0,
+            32
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              1.7763568394002505e-15,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              32
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "independent-b-open-native.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              8,
+              5,
+              0
+            ],
+            [
+              8,
+              5,
+              40
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 622.0353454107791,
+        "centroid": [
+          30,
+          -1.544893523156708e-17,
+          11.000000000000002
+        ],
+        "vertices": [
+          [
+            33,
+            0,
+            0
+          ],
+          [
+            27,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            27,
+            3.6739403974420594e-16,
+            22
+          ],
+          [
+            33,
+            0,
+            22
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              30,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              30,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              27,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              27,
+              -3,
+              22
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "independent-direct-original-copy.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              8,
+              5,
+              0
+            ],
+            [
+              8,
+              5,
+              40
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 904.7786842338605,
+        "centroid": [
+          6.871568756248337e-17,
+          -1.544893523156708e-17,
+          16
+        ],
+        "vertices": [
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            32
+          ],
+          [
+            3,
+            0,
+            32
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              1.7763568394002505e-15,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              32
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "curved-candidate-original-native.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              32
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 2,
+          "knots": [
+            0,
+            0,
+            0,
+            1,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              35,
+              0,
+              11
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 904.7786842338605,
+        "centroid": [
+          6.871568756248337e-17,
+          -1.544893523156708e-17,
+          16
+        ],
+        "vertices": [
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            32
+          ],
+          [
+            3,
+            0,
+            32
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              1.7763568394002505e-15,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              32
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "curved-candidate-cancel-native.stdout": {
+    "paths": [
+      {
+        "object": {
+          "id": "path-a",
+          "name": "Rail A",
+          "source": "ra",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 1,
+          "knots": [
+            0,
+            0,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              32
+            ]
+          ],
+          "weights": [
+            1,
+            1
+          ]
+        }
+      },
+      {
+        "object": {
+          "id": "path-b",
+          "name": "Rail B",
+          "source": "rb",
+          "geometry": "rail"
+        },
+        "curve": {
+          "kind": "curve",
+          "id": "rail",
+          "degree": 2,
+          "knots": [
+            0,
+            0,
+            0,
+            1,
+            1,
+            1
+          ],
+          "controlPoints": [
+            [
+              30,
+              0,
+              0
+            ],
+            [
+              35,
+              0,
+              11
+            ],
+            [
+              30,
+              0,
+              22
+            ]
+          ],
+          "weights": [
+            1,
+            1,
+            1
+          ]
+        }
+      }
+    ],
+    "outputs": [
+      {
+        "valid": true,
+        "count": 1,
+        "volume": 904.7786842338605,
+        "centroid": [
+          6.871568756248337e-17,
+          -1.544893523156708e-17,
+          16
+        ],
+        "vertices": [
+          [
+            3,
+            0,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            0
+          ],
+          [
+            -3,
+            3.6739403974420594e-16,
+            32
+          ],
+          [
+            3,
+            0,
+            32
+          ]
+        ],
+        "surfaces": [
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              0,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.0000000000000004,
+            "out": 1
+          },
+          {
+            "kind": "cylinder",
+            "c": [
+              -4.440892098500626e-16,
+              1.7763568394002505e-15,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 3.000000000000001,
+            "out": 1
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              0
+            ],
+            "n": [
+              0,
+              0,
+              -1
+            ]
+          },
+          {
+            "kind": "plane",
+            "o": [
+              -3,
+              -3,
+              32
+            ],
+            "n": [
+              0,
+              0,
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
