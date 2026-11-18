@@ -1,0 +1,78 @@
+{
+  "baseline": {
+    "status": "PASS",
+    "observations": [
+      {
+        "fixtureSha256": "3d107731eb788f66df34db09e0919ee6d9fcbe9fde0dc6cf3ff020715f74aa5d",
+        "validTrimLoopCount": 2,
+        "trimmedExtendEnabled": true,
+        "extendPreflightNoteAbsent": true,
+        "existingRefusal": "This operation does not preserve surface trims (Extend surface). Use Untrim first only if you want to remove the trims.",
+        "refusalWholeDocumentDirtyHistoryUnchanged": true,
+        "explicitUntrimOnlyRemovedTargetTrims": true,
+        "untrimmedExtendCreatedOneObject": true,
+        "sourceStringsPreserved": true,
+        "sourceHiddenByExtend": true,
+        "undoRedoAndFinalOriginalRestored": true,
+        "independentGeometry": "NOT_RUN",
+        "nativeSaveFreshOpen": "NOT_RUN"
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  "actual": {
+    "status": "PASS",
+    "observations": [
+      {
+        "fixtureSha256": "3d107731eb788f66df34db09e0919ee6d9fcbe9fde0dc6cf3ff020715f74aa5d",
+        "validTrimLoopCount": 2,
+        "trimmedExtendDisabled": true,
+        "accessibleTrimGuidance": "Extend does not preserve surface trims. Untrim removes the existing trim boundaries as a separate explicit edit; use it only if intended.",
+        "invalidDistanceAndTrimCompose": true,
+        "blockedWholeDocumentDirtyHistoryUnchanged": true,
+        "untrimRemovesGuidance": true,
+        "explicitUntrimOnlyRemovedTargetTrims": true,
+        "untrimmedExtendCreatedOneObject": true,
+        "sourceStringsPreserved": true,
+        "sourceHiddenByExtend": true,
+        "undoRedoAndFinalOriginalRestored": true,
+        "independentGeometry": "NOT_RUN",
+        "nativeSaveFreshOpen": "NOT_RUN"
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  "existingDraft": {
+    "status": "PASS",
+    "observations": [
+      {
+        "blankZeroNegativeBlocked": true,
+        "validDistance": 2.5,
+        "selectionAndUndoRedoReset": true,
+        "originalSourcesExact": true
+      }
+    ],
+    "errors": [],
+    "consoleErrors": [],
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  }
+}

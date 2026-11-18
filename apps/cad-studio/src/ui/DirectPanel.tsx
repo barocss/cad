@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { curveLength, curvePlaneCrossings, directOps, domainsOf, geometryOf, surfaceIntersection, type DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { SEW_TOLERANCE_LABEL } from '@barocss/cad-model/engine/sew';
 import { directThickenGuidance } from './directThickenGuidance';
+import { directExtendGuidance } from './directExtendGuidance';
 import { inspectSurfacePoint, surfaceIsoScope } from './surfaceInspection';
 import { DirectPoleEditor, type PoleControls } from './DirectPoleEditor';
 import { TwoCurveRoles } from './TwoCurveRoles';
@@ -188,6 +189,8 @@ function SurfaceTools({ id, direct, run, added, onThicken }: { id: string; direc
   const [reachText, setReachText] = useSurfaceDraft(direct, id, 'extend-distance', '5');
   const reachValue = surfaceParameter(reachText), reach = reachValue !== null && reachValue > 0 ? reachValue : null;
   const reachErrorId = `direct-extend-distance-${encodeURIComponent(id)}`;
+  const extendScope = directExtendGuidance(direct.objects.find(o => o.id === id)!), extendScopeId = `direct-extend-scope-${encodeURIComponent(id)}`;
+  const extendDescription = [...(extendScope.blocked ? [extendScopeId] : []), ...(reach === null ? [reachErrorId] : [])].join(' ') || undefined;
   const dom = domainsOf(direct, id), u = dom.kind === 'surface' ? dom.u : [0, 1] as [number, number], v = dom.kind === 'surface' ? dom.v : [0, 1] as [number, number];
   const [axis, setAxis] = useState<'u' | 'v'>('u');
   const range = axis === 'u' ? u : v, mid = (range[0] + range[1]) / 2;
@@ -222,7 +225,8 @@ function SurfaceTools({ id, direct, run, added, onThicken }: { id: string; direc
     <label className={FIELD}><span>Extend by</span><Input type="number" step="any" className="w-24" aria-label="Extend by" value={reachText}
       aria-invalid={reach === null || undefined} aria-describedby={reach === null ? reachErrorId : undefined} onChange={event => setReachText(event.target.value)} /></label>
     {reach === null && <span id={reachErrorId} role="status" className="warn small">Enter a finite positive extension distance.</span>}
-    <Button variant="ghost" aria-label="Extend the surface" title="Run the surface on past the edge, straight along its tangent there" disabled={reach === null} aria-describedby={reach === null ? reachErrorId : undefined} onClick={() => { if (reach !== null) run(() => directOps.extendSurface(direct, id, edge, reach), added); }}>Extend</Button>
+    {extendScope.blocked && <p role="note" aria-label="Extend source scope" id={extendScopeId} className="muted small">{extendScope.text}</p>}
+    <Button variant="ghost" aria-label="Extend the surface" title="Run the surface on past the edge, straight along its tangent there" disabled={reach === null || extendScope.blocked} aria-describedby={extendDescription} onClick={() => { if (reach !== null && !extendScope.blocked) run(() => directOps.extendSurface(direct, id, edge, reach), added); }}>Extend</Button>
     {onThicken && <>
       <div className="card-title" style={{ marginTop: 8 }}>THICKEN</div>
       <p role="note" aria-label="Thicken source scope" id={thickenScopeId} className="muted small">{thickenScope.text}</p>
