@@ -17,8 +17,8 @@ import { measureSecondaryText, useMeasureSecondaryUnit } from './measureSecondar
 import { measureAxesBasis } from '../app/measureProvenance';
 import type { MeasureTarget } from '../app/measureTargets';
 import type { InterferenceReport } from '../app/checkInterference';
-interface MeasurementInspectorProps { pickFilter: MeasurePickFilter; targets: MeasureTarget[]; items: ({ pick: MeasurePick; mesh: DisplayMesh } | null)[]; measured: ReturnType<typeof measureBetween> | null; approximateDistance?: boolean; onClose(): void; onPin?(): void }
-export function MeasurementInspector({ pickFilter, targets, items, measured, approximateDistance, onClose, onPin }: MeasurementInspectorProps) {
+interface MeasurementInspectorProps { pickFilter: MeasurePickFilter; targets: MeasureTarget[]; items: ({ pick: MeasurePick; mesh: DisplayMesh } | null)[]; measured: ReturnType<typeof measureBetween> | null; approximateDistance?: boolean; onClose(): void; onPin?(): void; onMeshCircle?(): void }
+export function MeasurementInspector({ pickFilter, targets, items, measured, approximateDistance, onClose, onPin, onMeshCircle }: MeasurementInspectorProps) {
   const secondary = useMeasureSecondaryUnit();
   const extra = (value: number, dimension: 'length' | 'area' = 'length') => {
     const text = secondary.unit === 'inch' ? measureSecondaryText(value, dimension) : null;
@@ -27,6 +27,7 @@ export function MeasurementInspector({ pickFilter, targets, items, measured, app
   return <aside className="card props" aria-label="Measurement" tabIndex={-1} aria-keyshortcuts="Alt+M">
         <div className="card-title">MEASURE <ToolIconButton size="tiny" aria-label="Done measuring" data-tip="Done measuring" data-tip-key="Esc" data-tip-focus="" onClick={onClose}><Icon name="close" small /></ToolIconButton></div>
         <div className="muted small">Alt+M · focus measurement details</div>
+        {onMeshCircle && <Button onClick={onMeshCircle}>Reference circle (mesh)</Button>}
         <label className={FIELD}><span>Secondary units</span><NativeSelect className={CONTROL} aria-label="Measure secondary units" value={secondary.unit}
           onChange={event => secondary.set(event.target.value === 'inch' ? 'inch' : 'none')}
           onKeyDown={event => { event.stopPropagation(); if (event.key === 'Escape') { event.preventDefault(); onClose(); } }}

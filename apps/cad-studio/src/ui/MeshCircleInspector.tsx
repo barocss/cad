@@ -1,0 +1,22 @@
+import { Button } from '@/components/ui/button';
+import type { MeshCircleState } from '../app/useMeshCircleMeasurement';
+import { measureQuantityText } from './quantityText';
+export function MeshCircleInspector({state,ready,onReset,onBack,onClose}:{state:MeshCircleState;ready:boolean;onReset():void;onBack():void;onClose():void}){
+ const value=(p:readonly number[])=>p.map(x=>measureQuantityText(x,3)).join(', ');
+ const result=state.result?.ok?state.result:null;
+ return <aside className="card props" aria-label="Measurement" tabIndex={-1} onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();onClose();}}}>
+  <div className="card-title">REFERENCE CIRCLE (MESH)</div>
+  <p>Evaluated welded mesh vertices; reference only, not hole diameter or circularity.</p>
+  <p className="muted">Use the All selection filter to pick edge endpoints.</p>
+  <p className="muted">Current model coordinates in mm. Session only; not saved.</p>
+  <p className="muted">Not original file vertex indices; welding may merge input points.</p>
+  <p className="muted">Admission limits: minimum baseline 1e-6 mm; normalized area 1e-8; coordinate/center/radius limit 1e12 mm. These are rejection limits, not an accuracy guarantee.</p>
+  {!ready&&<p role="status">Current base mesh unavailable. Close section or preview and wait for evaluation.</p>}
+  <ol>{state.points.map((p,i)=><li key={p.id}>{'ABC'[i]} · {p.body} · {p.id}: {value(p.at)} mm</li>)}</ol>
+  <p>{state.points.length<3?`Select point ${'ABC'[state.points.length]} on the same base body.`:'Reset to start a new reference circle.'}</p>
+  {state.reason&&<p role="status">{state.reason}</p>}
+  {result&&<dl><dt>Reference center (mm)</dt><dd>{value(result.center)}</dd><dt>Reference radius (mm)</dt><dd>{measureQuantityText(result.radius,3)}</dd><dt>Reference diameter (mm)</dt><dd>{measureQuantityText(result.diameter,3)}</dd><dt>Reference plane normal</dt><dd>{value(result.normal)}</dd></dl>}
+  <Button data-measure-focus onClick={onReset}>Reset reference circle</Button>
+  <Button onClick={onBack}>Two-target measurement</Button><Button onClick={onClose}>Done measuring</Button>
+ </aside>;
+}

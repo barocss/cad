@@ -52,6 +52,8 @@ export interface DisplayEdge { index: number; faces: [number, number]; a: Vec3; 
   nativeJoint?: { edgeId: string; faces: readonly [string, string] };
   /** B-rep vertex IDs in display endpoint order, for one ungrouped native prism edge. */
   nativeVertices?: readonly [string, string];
+  /** Accepted mesh-family B-rep welded vertex IDs, never raw file indices or native Sketch authority. */
+  meshVertices?: readonly [string, string];
   /** Both display endpoints are exact native line poles and vertices on one unmerged prism edge. */
   nativeLine?: true;
   /** Exact native line between two unmerged planes of a single non-prismatic solid supported by Fillet. */
@@ -298,6 +300,9 @@ export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundar
     && brep.bodies[0].shells[0] === brep.shells[0].id && brep.faces.every(face => face.surface.kind === 'surface');
   const nativePrism = nativeSolid && brep.source.family === 'prismatic-solid';
   const nativePoints = nativeSolid ? new Map(brep.vertices.map(vertex => [vertex.id, vertex.point])) : null;
+  // Duplicate vertex IDs invalidate this authority rather than silently selecting a map entry.
+  const meshPoints = brep.source.family === 'mesh' && new Set(brep.vertices.map(v => v.id)).size === brep.vertices.length
+    ? new Map(brep.vertices.filter(v => v.id && v.point.length === 3 && v.point.every(Number.isFinite)).map(v => [v.id, v.point])) : null;
   for (const e of mesh.edges) {
     const fs = facesOfEdge.get(e.edgeId) ?? [], pts: Vec3[] = [];
     for (let k = 0; k < e.points.length; k += 3) pts.push([e.points[k], e.points[k + 1], e.points[k + 2]]);
@@ -325,6 +330,7 @@ export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundar
         if (ends.length === 2) [mate.a, mate.b] = ends; else mate.b = mate.a;
       }
       delete mate.nativeVertices;
+      delete mate.meshVertices;
       delete mate.nativeLine;
       delete mate.nativeFinishLine;
       delete mate.nativeJoint;
@@ -338,6 +344,12 @@ export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundar
     const made: DisplayEdge = { index, faces: [fa, fb], a, b: z, straight, axis, names: [name], ...(nativeCircle ? { nativeCircle } : {}) };
     if (brep.source.family !== 'mesh' && fs.every(face => faceById.get(face)?.surface.kind === 'surface')) {
       made.nativeJoint = { edgeId: source.id, faces: [fs[0], fs[1]] };
+    }
+    if (meshPoints && straight && source.vertices[0] !== source.vertices[1]) {
+      const p = meshPoints.get(source.vertices[0]), q = meshPoints.get(source.vertices[1]);
+      if (p && q && p.some((value, axis) => value !== q[axis])
+        && a.every((value, axis) => value === p[axis]) && z.every((value, axis) => value === q[axis])
+        && nativeStraightEdgeMatches(source.curve, a, z)) made.meshVertices = [...source.vertices];
     }
     // The tessellator replaces its first and last samples with the two native vertices in this order.
     if (nativePoints && straight && source.vertices[0] !== source.vertices[1] && dir.some(Boolean)) {

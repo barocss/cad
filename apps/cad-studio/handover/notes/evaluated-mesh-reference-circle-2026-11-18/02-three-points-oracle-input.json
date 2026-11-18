@@ -1,0 +1,28 @@
+{
+  "points": [
+    "A · b0 · n0_v4: 0, 0, 10 mm",
+    "B · b0 · n0_v5: 40, 0, 10 mm",
+    "C · b0 · n0_v3: 40, 0, 0 mm"
+  ],
+  "values": {
+    "Reference center (mm)": "20, 0, 5",
+    "Reference radius (mm)": "20.62",
+    "Reference diameter (mm)": "41.23",
+    "Reference plane normal": "0, 1, 0"
+  },
+  "raw": {
+    "ok": true,
+    "center": [
+      20,
+      0,
+      4.9999999999999964
+    ],
+    "radius": 20.615528128088304,
+    "diameter": 41.23105625617661,
+    "normal": [
+      0,
+      1,
+      0
+    ]
+  }
+}

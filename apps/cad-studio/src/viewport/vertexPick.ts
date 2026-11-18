@@ -1,11 +1,37 @@
+import { lookOf } from '@barocss/cad-model/app/bodies';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { DisplayMesh, Vec3 } from '@barocss/cad-model/engine/mesh';
 
 type PickFilter = 'all' | 'face' | 'edge' | 'body';
-type EdgeEnds = { a: readonly number[]; b: readonly number[]; index?: number; faces?: readonly number[]; nativeVertices?: readonly [string, string] };
+type EdgeEnds = { a: readonly number[]; b: readonly number[]; index?: number; faces?: readonly number[]; nativeVertices?: readonly [string, string]; meshVertices?: readonly [string, string] };
 type NativePickSource = { mesh: DisplayMesh } & ({ face: number } | { edge: number });
 type VertexPick = { body: number; at: Vec3 };
+
+const meshOwners = new WeakMap<VertexPick, { id: string; mesh: DisplayMesh; at: Vec3 }>();
+export interface MeshVertexTarget { doc: StudioDoc; body: string; mesh: DisplayMesh; id: string; at: Vec3 }
+const meshTargets = new WeakMap<MeshVertexTarget, { at: Vec3; id: string; body: string; doc: StudioDoc; mesh: DisplayMesh }>();
+/** First bounded consumer: one direct, unrepaired imported mesh node. Never raw-file vertex identity. */
+function meshRoot(doc: StudioDoc, bodies: readonly BodyResult[], body: BodyResult | undefined): body is BodyResult {
+  const node = doc.nodes[0];
+  return !!body && doc.nodes.length === 1 && node?.kind === 'mesh' && !node.repair && !node.role
+    && !doc.instances?.length && body.ref?.node === 0 && !lookOf(doc, body).hidden
+    && bodies.filter(b => b.key === body.key).length === 1;
+}
+const finitePoint = (p: readonly number[]): boolean => Array.isArray(p) && p.length === 3 && [0, 1, 2].every(k => Object.hasOwn(p, k) && Number.isFinite(p[k]));
+export function captureMeshVertexPick(pick: VertexPick, doc: StudioDoc, bodies: readonly BodyResult[]): MeshVertexTarget | null {
+  const owner = meshOwners.get(pick), body = bodies[pick.body];
+  if (!owner || !meshRoot(doc, bodies, body) || owner.mesh !== body.mesh || !finitePoint(pick.at) || !pick.at.every((v, k) => v === owner.at[k])) return null;
+  const target: MeshVertexTarget = { doc, body: body.key, mesh: body.mesh, id: owner.id, at: [...owner.at] };
+  meshTargets.set(target, { ...target, at: [...target.at] });
+  return target;
+}
+export function currentMeshVertexTarget(target: MeshVertexTarget, doc: StudioDoc, bodies: readonly BodyResult[]): boolean {
+  const saved = meshTargets.get(target), body = bodies.find(b => b.key === target.body);
+  return !!saved && saved.doc === doc && target.doc === doc && saved.body === target.body && saved.id === target.id
+    && saved.mesh === target.mesh && meshRoot(doc, bodies, body) && body.mesh === saved.mesh
+    && finitePoint(target.at) && target.at.every((v, k) => v === saved.at[k]);
+}
 
 const nativeOwners = new WeakMap<VertexPick, { id: string; mesh: DisplayMesh; doc?: StudioDoc }>();
 
@@ -32,6 +58,7 @@ export function pickVertex(filter: PickFilter, body: number | undefined, edges: 
   if (body === undefined || filter !== 'all') return null;
   const radius = 7;
   let best: Vec3 | null = null, distance = radius, ambiguous = false;
+  let meshPoints: Map<string, Vec3> | undefined, meshAmbiguous = false;
   let native: Map<string, { at: Vec3; pixel: readonly number[] }> | undefined;
   // A native pick must belong to the edge or face that passed the renderer's visibility test.
   for (const edge of edges) {
@@ -41,6 +68,14 @@ export function pickVertex(filter: PickFilter, body: number | undefined, edges: 
       if (printedTop !== undefined && point[2] > printedTop + 1e-7) continue;
       const pixel = project(point), gap = Math.hypot(pixel[0] - x, pixel[1] - y);
       if (gap < radius && visible) {
+        const meshId = edge.meshVertices?.[k];
+        if (!meshId) meshAmbiguous = true;
+        else {
+          meshPoints ??= new Map();
+          const old = meshPoints.get(meshId);
+          if (old && !old.every((v, axis) => v === point[axis])) meshAmbiguous = true;
+          meshPoints.set(meshId, [...point] as Vec3);
+        }
         const id = edge.nativeVertices?.[k];
         if (!id) ambiguous = true;
         else {
@@ -64,5 +99,13 @@ export function pickVertex(filter: PickFilter, body: number | undefined, edges: 
       return pick;
     }
   }
-  return best ? { body, at: best } : null;
+  if (!best) return null;
+  const pick = { body, at: best };
+  // Do not change the ordinary corner pick or lend this authority to native Sketch operations.
+  // Reject even orthographic overlaps: a visible incident edge is not proof of both endpoints' visibility.
+  if (source && meshPoints?.size === 1 && !meshAmbiguous) {
+    const [id, at] = [...meshPoints][0];
+    if (at.every((v, k) => v === best![k])) meshOwners.set(pick, { id, mesh: source.mesh, at: [...at] });
+  }
+  return pick;
 }

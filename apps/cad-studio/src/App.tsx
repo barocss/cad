@@ -1,3 +1,5 @@
+import { useMeshCircleMeasurement, type MeshCircleHit } from './app/useMeshCircleMeasurement';
+import { MeshCircleInspector } from './ui/MeshCircleInspector';
 import { duplicateSelection } from './assembly/duplicateSelection';
 import { rotateSelection } from './assembly/rotateSelection';
 import { translateSelection } from './assembly/translateSelection';
@@ -860,6 +862,7 @@ export function App() {
   const [browserOpen, setBrowserOpen] = useState(() => { try { return localStorage.getItem('cad-studio.browser') !== 'closed'; } catch { return true; } });
   // Measuring: up to two picked faces or edges (null: not measuring).
   const [measure, setMeasure] = useState<MeasureTarget[] | null>(null);
+  const meshCirclePick = useRef<((hit: MeshCircleHit) => boolean) | null>(null);
   const [measurementFocus, setMeasurementFocus] = useState(false);
   const measureNativeReady = useRef(false);
   const [pinnedMeasure, setPinnedMeasure] = useState<{ pair: PinnedFacePair; generation: number; worker: number; project: typeof project.view.store } | null>(null);
@@ -2134,7 +2137,7 @@ export function App() {
   const placedMeasureContextReady = () => placedMeasureContext && docNow.current === doc
     && workerSessionNow.current === workerSession && explodeStore.get() === 0 && !sectionRef.current
     && !activeStore.get() && !halvesShownRef.current;
-  const { onPick, picking } = useViewportPicking({ doc, modelUnavailable, nativeVertexReady, nativePlanePickState: footprintState, sectionPickRef, activeStore, setActive, onFilletPick: pickFillet, onReferenceFacePick: pickCommandReferenceFace, onRevolveAxisPick: pickRevolveAxis, onTransformFacePick: pickTransformFace, retargetSweep: retargetActiveSweep, measure, assembly, sectionRef, sectionFacePickRef, viewBodiesRef,
+  const { onPick, picking } = useViewportPicking({ meshCirclePick, doc, modelUnavailable, nativeVertexReady, nativePlanePickState: footprintState, sectionPickRef, activeStore, setActive, onFilletPick: pickFillet, onReferenceFacePick: pickCommandReferenceFace, onRevolveAxisPick: pickRevolveAxis, onTransformFacePick: pickTransformFace, retargetSweep: retargetActiveSweep, measure, assembly, sectionRef, sectionFacePickRef, viewBodiesRef,
     sectionBoxRef, setSection, setSectionFacePick, setToast, activeRef, halvesShownRef, setPick, setInstanceSel, setSelection, directSel, setDirectSel, setMeasure, measureNativeReady, measureInstances, placedMeasureContextReady, pickFilterRef,
     scene: { active, section, sketch: !!sketch, bodies, selection, setMenu } });
   pickRef.current = onPick;
@@ -2938,6 +2941,9 @@ export function App() {
     && !bodyDrag && !ghost && !workingComparison && !cageEd.session && !skel.session
     && !routePanelOpen && !previewBodies && !routePreviewBodies && !halvesShownRef.current
     && viewBodies === drawnBodies && sameMeshes(drawnBodies, bodies);
+  const meshCircleSession = useMemo(() => ({}), [workerSession, docGeneration, project.view.store]);
+  const meshCircle = useMeshCircleMeasurement(doc, bodies, meshCircleSession, measure !== null, pinReady && !exploded && !assembly.draft && !stepsDisp && !isolatedInstances);
+  meshCirclePick.current = meshCircle.pick;
   measureNativeReady.current = pinReady;
   const pinOffer = pinReady && liveMeasurePicks?.length === measure?.length && liveMeasurePicks ? capturePinnedFacePair(doc, bodies, liveMeasurePicks) : null;
   const pinResult = useMemo(() => pinReady && pinOwned ? readPinnedFacePair(doc, bodies, pinOwned.pair) : null,
@@ -3511,7 +3517,8 @@ export function App() {
         onFov={deg => { const c = viewport.current?.getCamera(); if (c) { viewport.current?.setCamera({ ...c, fovY: deg * Math.PI / 180 }); setFov(deg); } }}
         onSaveCamera={() => { const c = viewport.current?.getCamera(); if (c) commitRender({ ...render, camera: c }); }}
         onUseCamera={() => { if (render.camera) { viewport.current?.setCamera(render.camera); setFov(Math.round(render.camera.fovY * 180 / Math.PI)); } }} /></Suspense>}
-      {fresh && !rendering && !sketch && measure && <MeasurementInspector pickFilter={pickFilter} targets={measure} items={measurementItems ?? []} measured={measured} approximateDistance={approximateMeasure} onClose={() => setMeasure(null)} onPin={pinOffer ? pinMeasurement : undefined} />}
+      {fresh && !rendering && !sketch && measure && meshCircle.mode && <MeshCircleInspector state={meshCircle.state} ready={meshCircle.ready} onReset={meshCircle.reset} onBack={() => { meshCircle.choose(false); setMeasure([]); }} onClose={() => { meshCircle.choose(false); setMeasure(null); }} />}
+      {fresh && !rendering && !sketch && measure && !meshCircle.mode && <MeasurementInspector onMeshCircle={() => { meshCircle.choose(true); setMeasure([]); }} pickFilter={pickFilter} targets={measure} items={measurementItems ?? []} measured={measured} approximateDistance={approximateMeasure} onClose={() => setMeasure(null)} onPin={pinOffer ? pinMeasurement : undefined} />}
       {massPinView && (massPin.pinned || (!active && !measure && !directSel.length && !instanceSel.length)) && <PinnedMassControls pinned={massPin.pinned} result={massPin.result} canPin={massPin.canPin} onPin={massPin.pin} onClear={massPin.clear} />}
       {pinView && pinOwned && !measure && <PinnedMeasurement distance={pinResult?.normalDistance ?? null} onClear={() => setPinnedMeasure(null)} />}
       {cutDraft && !rendering && !sketch && !measure && <AssemblyCutHud draft={cutDraft} instances={doc.instances ?? NO_INSTANCES} problem={draftProblem(doc, cutDraft) ?? (cutTrial?.key === cutKey ? cutTrial.problem : undefined)}

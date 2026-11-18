@@ -1,0 +1,66 @@
+{
+  "status": "PASS",
+  "qualification": "#273 limited evaluated welded mesh vertex reference circle through actual pointer input.",
+  "limits": [
+    "Not original-file vertex indices or welding multiplicity proof. Issue #273 remains partial.",
+    "One synthetic block-cm STL imported as cm; front orthographic visible corners. No arbitrary mesh/ring circularity claim.",
+    "No section/placed/preview UI coverage, numeric edge-case matrix or delayed callback race injection in this actual flow.",
+    "Read-only screen projection hook positions real pointer clicks; no state injection. UI values checked at displayed precision, not a numerical accuracy guarantee.",
+    "History comparison covers displayed feature rows, not internal Undo stack entries.",
+    "Raw product math is separately invoked with the actual displayed integer input coordinates; it is not a read of hidden UI calculation state."
+  ],
+  "observations": [
+    {
+      "evaluatedWeldedOnly": true,
+      "actualPointerPicks": true,
+      "referenceNotCircularity": true,
+      "resetBackDoneEscape": true,
+      "sourceChangeCleared": true,
+      "saveFreshOpenOriginalUnchanged": true
+    }
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "visualReview": "Actual measured and Escape-cleared screenshots inspected; no original-file vertex identity claim.",
+  "artifacts": [
+    {
+      "file": "02-measured.png",
+      "sha256": "37159499034719f741dee5d85f9d5eef7385f4653b18c7a5b5ba7cd15313115f"
+    },
+    {
+      "file": "02-three-points-oracle-input.json",
+      "sha256": "d5087f89c07472799493bc55fe379bbb3cf351f324eb36ca76c7518208f8496d"
+    },
+    {
+      "file": "02-three-points-oracle.json",
+      "sha256": "21feceb93ee22957886dd436f9dd368932599d5ed0411bc273394e5c08be17b4"
+    },
+    {
+      "file": "04-source-change-cleared.png",
+      "sha256": "5cec84c4a992fc2df4d58eceb9f4057cd1f6595f7468b837dbc2ddec66b6f689"
+    },
+    {
+      "file": "06-reopened-measure-oracle-input.json",
+      "sha256": "d5087f89c07472799493bc55fe379bbb3cf351f324eb36ca76c7518208f8496d"
+    },
+    {
+      "file": "06-reopened-measure-oracle.json",
+      "sha256": "21feceb93ee22957886dd436f9dd368932599d5ed0411bc273394e5c08be17b4"
+    },
+    {
+      "file": "07-escape-cleared.png",
+      "sha256": "052254d98f9ab6f21b7a96e9053e19b478ce6f7eb089394626a9440837a62941"
+    },
+    {
+      "file": "unmodified-import.bcad",
+      "sha256": "bd33b4d0a5d24d1771f3bd5a95f01b9dccc39b02b4c6282fa390c4022c7bddc3"
+    }
+  ]
+}
