@@ -1,0 +1,120 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [
+    {
+      "id": "n0",
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        0,
+        0
+      ],
+      "max": [
+        30,
+        12
+      ]
+    },
+    {
+      "id": "n1",
+      "kind": "extrude",
+      "sketch": 0,
+      "height": 6
+    },
+    {
+      "id": "n2",
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        50,
+        0
+      ],
+      "max": [
+        70,
+        8
+      ]
+    },
+    {
+      "id": "n3",
+      "kind": "extrude",
+      "sketch": 2,
+      "height": 10
+    },
+    {
+      "kind": "translate",
+      "parent": {
+        "node": 1,
+        "side": "solid"
+      },
+      "offset": [
+        5,
+        0,
+        0
+      ],
+      "id": "n4"
+    }
+  ],
+  "outputs": {
+    "b3": {
+      "node": 3,
+      "side": "solid"
+    },
+    "b4": {
+      "node": 4,
+      "side": "solid"
+    }
+  },
+  "nextId": 5,
+  "drawing": {
+    "sheet": "A4",
+    "scope": {
+      "kind": "part",
+      "body": {
+        "key": "b1",
+        "feature": "n1",
+        "kind": "extrude"
+      }
+    },
+    "scale": 1,
+    "projection": "third",
+    "hidden": true,
+    "dimensions": [
+      {
+        "id": "manual",
+        "kind": "linear",
+        "view": "front",
+        "a": {
+          "edge": "n1.side0|n1.top",
+          "at": "end",
+          "near": [
+            0,
+            0,
+            6
+          ]
+        },
+        "b": {
+          "edge": "n1.side1|n1.top",
+          "at": "end",
+          "near": [
+            30,
+            0,
+            6
+          ]
+        },
+        "orient": "horizontal",
+        "place": [
+          15,
+          10
+        ]
+      }
+    ],
+    "views": [
+      "front",
+      "top",
+      "right",
+      "iso"
+    ]
+  }
+}
