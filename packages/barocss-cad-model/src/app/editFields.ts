@@ -329,6 +329,7 @@ export function editFields(nodes: Nodes, i: number, params?: Record<string, numb
     || (node?.kind === 'keyway' && f.key === 'angle') // Keyway angles are numeric; width and depth support Dim.
     || (node?.kind === 'scale' && f.key === 'k') // Scale factor is number-only; pivot coordinates support Dim.
     || (node?.kind === 'sweep' && /^bendAngle\d+$/.test(f.key)) // Path angles are number-only; lengths/radii support Dim references.
+    || ((node?.kind === 'linear-pattern' || node?.kind === 'circular-pattern') && f.key === 'count') // Native counts are number-only; spacing and pivot dimensions remain bindable.
     || (node?.kind === 'circular-pattern' && f.key === 'span')
     || (node?.kind === 'shaft' && (f.key.startsWith('keyseatOffset') || f.key.startsWith('grooveOffset'))) // Saved shaft offsets are number-only.
     || f.key.startsWith('loftGuideControl') || f.key.endsWith('linkedInsetMM') || (nodes[i]?.kind === 'hole' && /^(step|about)[01]$/.test(f.key)) ? f : {
