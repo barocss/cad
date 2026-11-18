@@ -1,6 +1,6 @@
 # #715 — bearing catalogue geometry and drawing revision
 
-Baseline main f02c4db77: a synthetic standalone shaft+bearing drawing is issued as A. Actual Library Bearing rows file replaces row 6204 outside 47 with 57. Total volume changes 56698.919733858784 → 68120.83316185945 mm³ (shaft unchanged); projections and bounds update but Revision out of date is absent. Baseline is an expected FAIL, not a test infrastructure error.
+Baseline main f02c4db77: a synthetic standalone shaft+bearing drawing is issued as A. Actual Library Bearing rows file replaces row 6204 outside 47 with 57. Total volume changes 56698.919733858784 → 68120.83316185945 mm³ (shaft unchanged); overall model bounds update but Revision out of date is absent. Baseline is an expected FAIL, not a test infrastructure error. The default part drawing excludes bought bearings; this image demonstrates the whole-document revision warning and model bounds, not a bearing projection change.
 
 Only active standalone bearing references now add the effective row envelope fields bore/outside/width/chamfer to the revision marker. The evaluator's last-row lookup and omitted chamfer=0 are preserved. Missing rows have a stable null dependency. Unused rows, catalogue labels/citations, abutment limits and fit-report deviations are excluded. Assemblies retain their existing conservative semantic stamp. No geometry, stored drawing record or source document is changed by reading the stamp.
 

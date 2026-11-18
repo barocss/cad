@@ -50,6 +50,21 @@ export function drawingRevisionPrint(doc: StudioDoc): string {
     });
     stamp = modelPrint({ source: stamp, bearings: canonical(bearings) });
   }
+  // A gland's authored groove dimensions do not change with its catalogue row.
+  // Only a present, active ring consumes that row for its stretched torus geometry.
+  const ringIds = [...new Set(doc.nodes.flatMap((n, i) => {
+    if (n.kind !== 'oring' || n.suppressed || !Number.isInteger(n.gland) || n.gland < 0 || n.gland >= i) return [];
+    const gland = doc.nodes[n.gland];
+    return gland?.kind === 'oring-gland' && !gland.suppressed ? [gland.ring] : [];
+  }))].sort();
+  if (ringIds.length) {
+    const rows = new Map((doc.orings?.rows ?? []).map(row => [row.id, row]));
+    const orings = ringIds.map(id => {
+      const row = rows.get(id);
+      return [id, row ? { insideDiameter: row.insideDiameter, crossSection: row.crossSection } : null];
+    });
+    stamp = modelPrint({ source: stamp, orings: canonical(orings) });
+  }
   if (!doc.frames?.welds?.length) return stamp;
   const gone = new Set(doc.nodes.flatMap((n, i) => n.suppressed ? [i] : []));
   // Requested bead geometry, independent of kernel refusal caches. Symbol annotations

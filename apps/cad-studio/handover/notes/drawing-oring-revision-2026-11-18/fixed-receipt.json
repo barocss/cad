@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "qualification": "Issued Assembly-scope drawings of a base part with an O-ring notice actual Library row geometry edits.",
+  "observations": [
+    {
+      "a": {
+        "volume": 14825.136062226182
+      },
+      "b": {
+        "volume": 14917.370555192516
+      },
+      "stale": 1,
+      "viewPathsChanged": true
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Base part with machine elements in explicit Assembly drawing scope, without instances; one synthetic O-ring row; not manufacturing approval or a universal revision certificate."
+  ],
+  "phase": "fresh Open reopened"
+}
