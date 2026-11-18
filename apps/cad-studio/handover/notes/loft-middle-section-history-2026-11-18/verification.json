@@ -1,0 +1,38 @@
+{
+  "qualificationBase": "95ac8c81e120af55bfa0208152394a7be69ffe5c",
+  "focused": "8/8 PASS",
+  "actual": "PASS",
+  "actualErrors": [],
+  "actualConsoleErrors": [],
+  "actualChanges": [],
+  "actualCleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "existingSectionReplacement": "PASS",
+  "regressionCleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "modelTypes": "PASS",
+  "studioTypesAndBuild": "PASS",
+  "scopedLint": "PASS",
+  "diffCheck": "PASS",
+  "native": "Independent double-frustum 14000/3 and box 8000 volume, centroid [0,0,10], one-to-one 12/8 corner positions, strict BRep validity",
+  "publicImageRender": "PENDING after publication",
+  "exactCommitCI": "PENDING after publication",
+  "limits": [
+    "Desktop Chrome only; no whole-repository suite claim",
+    "No arbitrary add/reorder, smooth/guide/frame or downstream reference support",
+    "Unsupported metadata/downstream UI fixtures NOT_RUN; focused refusal tests cover admission"
+  ],
+  "initialFailures": [
+    "An exploratory rotated-corner test wrongly expected rejection; native cyclic alignment contract verified and positive geometry regression added.",
+    "First actual and diagnostic failed to expose edit button: live direct:undefined own-key was rejected but serialized doc admitted. Narrowly permit absent Direct only; defined Direct remains rejected. Final live/serialized admission and actual passed."
+  ]
+}
