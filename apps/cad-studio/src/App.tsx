@@ -1,3 +1,4 @@
+import { isOpenLineLengthChange } from './sketch/openLineLength';
 import { useNamedInspection } from './state/useNamedInspection';
 import { useMeshCircleMeasurement, type MeshCircleHit } from './app/useMeshCircleMeasurement';
 import { MeshCircleInspector } from './ui/MeshCircleInspector';
@@ -545,16 +546,22 @@ export function App() {
   const renderedSketch = useRef({ draft: sketch, generation: sketchGeneration.current });
   renderedSketch.current = { draft: sketch, generation: sketchGeneration.current };
   const constructRef = useRef(false); constructRef.current = !!sketch?.construct;
-  const updateShape = useCallback((shape: SketchShape | null, fresh = false, origin?: 'panel' | 'line-point' | 'chord-circle' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish' | 'ellipse-finish' | 'centre-arc-finish' | 'arc-start' | 'arc-preview' | 'arc-finish', coordinate?: CoordinateIntent) => {
+  const updateShape = useCallback((shape: SketchShape | null, fresh = false, origin?: 'panel' | 'open-line-length' | 'line-point' | 'chord-circle' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish' | 'ellipse-finish' | 'centre-arc-finish' | 'arc-start' | 'arc-preview' | 'arc-finish', coordinate?: CoordinateIntent) => {
     const placementEvent = origin === 'rectangle-start' || origin === 'rectangle-preview' || origin === 'rectangle-finish'
       || origin === 'circle-start' || origin === 'circle-preview' || origin === 'circle-finish'
       || origin === 'slot-start' || origin === 'slot-preview' || origin === 'slot-finish'
       || origin === 'arc-start' || origin === 'arc-preview' || origin === 'arc-finish';
     const placementFinished = origin === 'rectangle-finish' || origin === 'circle-finish' || origin === 'slot-finish' || origin === 'arc-finish';
-    if (!placementEvent) shapePlacement.current = null;
-    const fromPanel = origin === 'panel';
+    const fromPanel = origin === 'panel' || origin === 'open-line-length';
     // (An open line or arc stays too: pieces meeting end to end join, and close into an outline.)
     const prev = liveShape.current, keep = fresh && prev && (shapeNode(prev) || prev.construction || prev.kind === 'bezier' || (prev.kind === 'polygon' && !prev.closed && !prev.pending && prev.points.length >= 2)) ? prev : null;
+    if (origin === 'open-line-length') {
+      const rendered = renderedSketch.current;
+      if (fresh || !rendered.draft || rendered.generation !== sketchGeneration.current || rendered.draft?.shape !== prev
+        || rendered.draft.association || rendered.draft.band || rendered.draft.anchor?.face?.linkSource
+        || !isOpenLineLengthChange(prev, shape)) return;
+    }
+    if (!placementEvent) shapePlacement.current = null;
     // A new shape is construction while the mode is on; the one being drawn stays what it began as.
     // A Bézier curve with no usable curve is refused (the reason shows in the panel), and is never construction: it stays the curve it is (D354).
     // An ellipse the model cannot build (no narrower than 1 : 5, within the kernel's range) is refused with the reason and the sketch stays.
@@ -605,7 +612,7 @@ export function App() {
     shapePlacement.current = null;
     const recordEdit = !keep && ((isSettled(prev) && isSettled(r.shape)) || resizedRectangle || changedCircle || changedSlot || changedBezier);
     const geometryChanged = prev !== r.shape && JSON.stringify(prev) !== JSON.stringify(r.shape);
-    const confirmedPlacement = origin === 'line-point' || origin === 'chord-circle' || origin === 'ellipse-finish' || origin === 'centre-arc-finish';
+    const confirmedPlacement = origin === 'open-line-length' || origin === 'line-point' || origin === 'chord-circle' || origin === 'ellipse-finish' || origin === 'centre-arc-finish';
     if (draft && (confirmedPlacement || (recordEdit && (draft.association || draft.associationDetached))) && (geometryChanged || keep)) {
       const next = { ...detachSketchLink(draft), editDim: null, shape: r.shape,
         ...(keep ? { done: joinOpen(draftShapeOrder({ ...draft, shape: keep })), activeOutlineIndex: undefined } : {}) };
@@ -3484,7 +3491,7 @@ export function App() {
           const next = activateDraftOutline(sketch, draftShapeOrder(sketch).indexOf(source));
           if (next && next !== sketch) setActiveOutline(next);
         } : undefined}
-        conflictIds={!sketchFinishError && sketchIssue?.conflict?.doc === doc && sketchIssue.conflict.source === sketch.shape ? sketchIssue?.conflict?.ids : undefined} coordinateFeedback={currentCoordinateFeedback(coordinateFeedback, doc, sketch.shape, sketchGeneration.current)} onTransformOutline={(owner, ownerDoc, candidate) => commitOutlineRotation(owner, ownerDoc, candidate, { doc: docNow.current, rendered: renderedSketch.current.draft, liveShape: liveShape.current, generation: sketchGeneration.current, renderedGeneration: renderedSketch.current.generation }, shape => updateShape(shape, false, 'panel'))} onShape={(shape, coordinate) => updateShape(shape, false, 'panel', coordinate)} onDrivingLength={sketchViewportActions.recoverPanelLength} onPlace={sketch.editNode === undefined ? placeSketch : undefined} onUi={patch => setSketch(s => s && { ...s, ...patch })} onBand={{ make: makeSketchBand, edit: editSketchBand, remove: removeSketchBand }} outlineTools={<SketchOutlineTools sketch={sketch} onOffset={offsetSketch} onLinkedInset={sketch.anchor?.kind === 'face' && sketch.anchor.face?.linkSource && !sketch.anchor.offset && !sketch.anchor.angle ? linkSketchInset : undefined} onToCurves={sketchToCurves} onUseOutline={sketch.anchor?.kind === 'face' && sketch.anchor.face?.outline?.length && !sketch.anchor.offset && !sketch.anchor.angle
+        conflictIds={!sketchFinishError && sketchIssue?.conflict?.doc === doc && sketchIssue.conflict.source === sketch.shape ? sketchIssue?.conflict?.ids : undefined} coordinateFeedback={currentCoordinateFeedback(coordinateFeedback, doc, sketch.shape, sketchGeneration.current)} onTransformOutline={(owner, ownerDoc, candidate) => commitOutlineRotation(owner, ownerDoc, candidate, { doc: docNow.current, rendered: renderedSketch.current.draft, liveShape: liveShape.current, generation: sketchGeneration.current, renderedGeneration: renderedSketch.current.generation }, shape => updateShape(shape, false, 'panel'))} onShape={(shape, coordinate, origin) => { if (origin && (origin.doc !== docNow.current || origin.source !== liveShape.current)) return; updateShape(shape, false, origin?.kind ?? 'panel', coordinate); }} onDrivingLength={sketchViewportActions.recoverPanelLength} onPlace={sketch.editNode === undefined ? placeSketch : undefined} onUi={patch => setSketch(s => s && { ...s, ...patch })} onBand={{ make: makeSketchBand, edit: editSketchBand, remove: removeSketchBand }} outlineTools={<SketchOutlineTools sketch={sketch} onOffset={offsetSketch} onLinkedInset={sketch.anchor?.kind === 'face' && sketch.anchor.face?.linkSource && !sketch.anchor.offset && !sketch.anchor.angle ? linkSketchInset : undefined} onToCurves={sketchToCurves} onUseOutline={sketch.anchor?.kind === 'face' && sketch.anchor.face?.outline?.length && !sketch.anchor.offset && !sketch.anchor.angle
         ? useFaceOutline : undefined} />} />}
       {bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <BomPanel doc={doc} name={fileName} evaluate={d => engine.part(d, revision.current++, 'read')} onCommit={next => commit(next, false)} onClose={() => setBomOpen(false)} onError={(title, hint) => setToast({ title, hint, detail: '', documentSource: { doc, name: fileName } })} />}
       {rebuildOpen && !bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <RebuildPanel store={rebuildStore} evaluated={evaluated} busy={busy} problems={assembly.problems} mode={effectiveDisplayMode} viewport={viewport} onClose={() => setRebuildOpen(false)} />}

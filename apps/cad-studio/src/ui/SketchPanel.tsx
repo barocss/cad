@@ -1,3 +1,4 @@
+import { canEditOpenLineLength, openLineLength } from '../sketch/openLineLength';
 import { slotWidth } from '../sketch/slotWidth';
 import { slotCentre } from '../sketch/slotCentre';
 import { VertexPlaneSummary } from './VertexPlaneSummary';
@@ -36,7 +37,7 @@ const NONE: SketchPick[] = [];
  * tangent joints stay tangent. The app settles every edit (see sketch/settle.ts) and reports `error`. O16: the contents
  * on shadcn (Input, NativeSelect, Button, FIELD); the shell (its title) and the chip toggles are the studio's.
  */
-export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, referencePicker, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand, onTransformOutline }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; referencePicker?: ReactNode; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
+export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, referencePicker, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand, onTransformOutline }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; referencePicker?: ReactNode; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent, origin?: { kind: 'open-line-length'; source: SketchShape; doc: StudioDoc }): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
   onTransformOutline?(owner: SketchState, doc: StudioDoc, candidate: SketchShape): boolean;
   onEditEllipseAxes?(): boolean;
   onDrivingLength?(source: Polygon, edge: number, value: number): boolean;
@@ -48,6 +49,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
   onBand?: { make(offset: number, width?: number): void; edit(patch: { offset?: number; width?: number | null }): void; remove(): void } }) {
   const [splineError, setSplineError] = useState<string | null>(null);
   const s = sketch.shape;
+  const openLineEditable = canEditOpenLineLength(s) && !sketch.association && !sketch.band && !sketch.anchor?.face?.linkSource;
   const outlines = onActivateOutline ? sketchCutInputs(sketch).shapes.flatMap((shape, index) =>
     canActivateDraftOutline(shape) ? [{ shape, index }] : []) : [];
   const activeOutline = outlines.find(outline => outline.shape === s)?.index ?? '';
@@ -172,7 +174,8 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
             hasEdge ? <span key={'e' + i} className="edge-cell">{b ? <em>R</em> : null}
               <Input id={'sk-' + (b ? 'rad' : 'len') + i} type="number" step="any" min={0.5} className={locked ? 'locked' : ''} value={driving ?? round(edge)}
                 aria-label={b ? `Arc ${i + 1} radius` : `Edge ${i + 1} length`}
-                title={locked ? `Locked ${b ? 'radius' : 'length'} · clear to unlock` : `Type a ${b ? 'radius' : 'length'} (or press Enter) to lock it`}
+                readOnly={!s.closed && !b && !openLineEditable}
+                title={!s.closed && !b ? openLineEditable ? 'Change length by moving the second point; direction and first point stay fixed (not a locked dimension)' : 'Length editing is available only for a completed independent two-point straight line without constraints' : locked ? `Locked ${b ? 'radius' : 'length'} · clear to unlock` : `Type a ${b ? 'radius' : 'length'} (or press Enter) to lock it`}
                 onKeyDown={e => {
                   // Enter locks the value as shown instead of finishing the sketch.
                   if (e.key !== 'Enter' || !s.closed) return;
@@ -181,11 +184,12 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
                 onChange={e => {
                   if (e.target.value === '') { if (s.closed) lock(s, b ? 'radii' : 'lengths', i, null); return; }
                   const v = Number(e.target.value); if (!Number.isFinite(v) || v <= 0) return;
-                  if (s.closed) lock(s, b ? 'radii' : 'lengths', i, v); else if (b) bendOpenArc(s, i, v);
+                  if (s.closed) lock(s, b ? 'radii' : 'lengths', i, v); else if (b) bendOpenArc(s, i, v); else if (openLineEditable) { const next = openLineLength(s, v); if (next && next !== s) onShape(next, undefined, { kind: 'open-line-length', source: s, doc: constraintDocument }); }
                 }} /></span> : <span key={'e' + i} />,
           ];
         })}
       </div>}
+      {s?.kind === 'polygon' && !s.closed && !openLineEditable && s.points.some((_, i) => i < s.points.length - 1 && !(s.bulges?.[i] ?? 0)) && <p className="hint">Open straight length editing requires one completed independent two-point line without constraints.</p>}
       {s?.kind === 'bezier' && wellFormedBezier(s) && <BezierSection key={`${sketch.editNode ?? 'new'}:${sketch.activeOutlineIndex ?? 'active'}`} s={s} onShape={onShape} onError={setSplineError} />}
       {s?.kind === 'polygon' && s.ellipse && ell && <EllipseSection s={s} def={s.ellipse} onShape={onShape} onError={setSplineError} />}
       {s?.kind === 'polygon' && s.spline && sketch.tool !== 'spline' && !s.pending && splineMatches(s) && <SplineSection s={s} def={s.spline} onShape={onShape} onError={setSplineError} />}
