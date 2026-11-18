@@ -1,3 +1,4 @@
+import { canEditOpenPolylineTerminalDraft, isOpenPolylineTerminalLengthChange } from './sketch/openPolylineTerminalLength';
 import { prepareParameterPatternHoleSpacing } from './state/parameterPatternHoleSpacing';
 import { isOpenLineLengthChange } from './sketch/openLineLength';
 import { useNamedInspection } from './state/useNamedInspection';
@@ -560,7 +561,7 @@ export function App() {
       const rendered = renderedSketch.current;
       if (fresh || !rendered.draft || rendered.generation !== sketchGeneration.current || rendered.draft?.shape !== prev
         || rendered.draft.association || rendered.draft.band || rendered.draft.anchor?.face?.linkSource
-        || !isOpenLineLengthChange(prev, shape)) return;
+        || !(isOpenLineLengthChange(prev, shape) || canEditOpenPolylineTerminalDraft(rendered.draft) && isOpenPolylineTerminalLengthChange(prev, shape))) return;
     }
     if (!placementEvent) shapePlacement.current = null;
     // A new shape is construction while the mode is on; the one being drawn stays what it began as.

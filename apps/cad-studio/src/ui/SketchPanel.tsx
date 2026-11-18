@@ -1,3 +1,4 @@
+import { canEditOpenPolylineTerminalDraft, openPolylineTerminalLength } from '../sketch/openPolylineTerminalLength';
 import { canEditOpenLineLength, openLineLength } from '../sketch/openLineLength';
 import { slotWidth } from '../sketch/slotWidth';
 import { slotCentre } from '../sketch/slotCentre';
@@ -50,6 +51,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
   const [splineError, setSplineError] = useState<string | null>(null);
   const s = sketch.shape;
   const openLineEditable = canEditOpenLineLength(s) && !sketch.association && !sketch.band && !sketch.anchor?.face?.linkSource;
+  const terminalLineEditable = canEditOpenPolylineTerminalDraft(sketch);
   const outlines = onActivateOutline ? sketchCutInputs(sketch).shapes.flatMap((shape, index) =>
     canActivateDraftOutline(shape) ? [{ shape, index }] : []) : [];
   const activeOutline = outlines.find(outline => outline.shape === s)?.index ?? '';
@@ -174,8 +176,8 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
             hasEdge ? <span key={'e' + i} className="edge-cell">{b ? <em>R</em> : null}
               <Input id={'sk-' + (b ? 'rad' : 'len') + i} type="number" step="any" min={0.5} className={locked ? 'locked' : ''} value={driving ?? round(edge)}
                 aria-label={b ? `Arc ${i + 1} radius` : `Edge ${i + 1} length`}
-                readOnly={!s.closed && !b && !openLineEditable}
-                title={!s.closed && !b ? openLineEditable ? 'Change length by moving the second point; direction and first point stay fixed (not a locked dimension)' : 'Length editing is available only for a completed independent two-point straight line without constraints' : locked ? `Locked ${b ? 'radius' : 'length'} · clear to unlock` : `Type a ${b ? 'radius' : 'length'} (or press Enter) to lock it`}
+                readOnly={!s.closed && !b && !openLineEditable && !(terminalLineEditable && i === s.points.length - 2)}
+                title={!s.closed && !b ? openLineEditable ? 'Change length by moving the second point; direction and first point stay fixed (not a locked dimension)' : terminalLineEditable && i === s.points.length - 2 ? 'Move only the last point along the terminal segment; earlier points stay fixed (not a locked dimension)' : 'Only a completed independent two-point line or the last segment of an unconstrained straight polyline can change length' : locked ? `Locked ${b ? 'radius' : 'length'} · clear to unlock` : `Type a ${b ? 'radius' : 'length'} (or press Enter) to lock it`}
                 onKeyDown={e => {
                   // Enter locks the value as shown instead of finishing the sketch.
                   if (e.key !== 'Enter' || !s.closed) return;
@@ -184,12 +186,12 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
                 onChange={e => {
                   if (e.target.value === '') { if (s.closed) lock(s, b ? 'radii' : 'lengths', i, null); return; }
                   const v = Number(e.target.value); if (!Number.isFinite(v) || v <= 0) return;
-                  if (s.closed) lock(s, b ? 'radii' : 'lengths', i, v); else if (b) bendOpenArc(s, i, v); else if (openLineEditable) { const next = openLineLength(s, v); if (next && next !== s) onShape(next, undefined, { kind: 'open-line-length', source: s, doc: constraintDocument }); }
+                  if (s.closed) lock(s, b ? 'radii' : 'lengths', i, v); else if (b) bendOpenArc(s, i, v); else if (openLineEditable) { const next = openLineLength(s, v); if (next && next !== s) onShape(next, undefined, { kind: 'open-line-length', source: s, doc: constraintDocument }); } else if (terminalLineEditable && i === s.points.length - 2) { const next = openPolylineTerminalLength(s, v); if (next && next !== s) onShape(next, undefined, { kind: 'open-line-length', source: s, doc: constraintDocument }); }
                 }} /></span> : <span key={'e' + i} />,
           ];
         })}
       </div>}
-      {s?.kind === 'polygon' && !s.closed && !openLineEditable && s.points.some((_, i) => i < s.points.length - 1 && !(s.bulges?.[i] ?? 0)) && <p className="hint">Open straight length editing requires one completed independent two-point line without constraints.</p>}
+      {s?.kind === 'polygon' && !s.closed && !openLineEditable && s.points.some((_, i) => i < s.points.length - 1 && !(s.bulges?.[i] ?? 0)) && <p className="hint">Only the last segment of a completed independent unconstrained straight polyline can change length. Earlier segments remain read-only; this does not lock a dimension or check crossings.</p>}
       {s?.kind === 'bezier' && wellFormedBezier(s) && <BezierSection key={`${sketch.editNode ?? 'new'}:${sketch.activeOutlineIndex ?? 'active'}`} s={s} onShape={onShape} onError={setSplineError} />}
       {s?.kind === 'polygon' && s.ellipse && ell && <EllipseSection s={s} def={s.ellipse} onShape={onShape} onError={setSplineError} />}
       {s?.kind === 'polygon' && s.spline && sketch.tool !== 'spline' && !s.pending && splineMatches(s) && <SplineSection s={s} def={s.spline} onShape={onShape} onError={setSplineError} />}
