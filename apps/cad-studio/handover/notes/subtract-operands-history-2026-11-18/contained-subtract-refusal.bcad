@@ -1,0 +1,65 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [
+    {
+      "id": "n0",
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        0,
+        0
+      ],
+      "max": [
+        40,
+        30
+      ]
+    },
+    {
+      "id": "n1",
+      "kind": "extrude",
+      "sketch": 0,
+      "height": 10
+    },
+    {
+      "id": "n2",
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        10,
+        5
+      ],
+      "max": [
+        20,
+        15
+      ]
+    },
+    {
+      "id": "n3",
+      "kind": "extrude",
+      "sketch": 2,
+      "height": 10
+    },
+    {
+      "kind": "difference",
+      "parent": {
+        "node": 1,
+        "side": "solid"
+      },
+      "tool": {
+        "node": 3,
+        "side": "solid"
+      },
+      "id": "n4"
+    }
+  ],
+  "outputs": {
+    "b4": {
+      "node": 4,
+      "side": "solid"
+    }
+  },
+  "nextId": 5
+}

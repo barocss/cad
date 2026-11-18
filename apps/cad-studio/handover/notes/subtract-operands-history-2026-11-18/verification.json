@@ -1,0 +1,41 @@
+{
+  "runs": {
+    "baseline": {
+      "status": "PASS",
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "consoleErrors": []
+    },
+    "fixed": {
+      "status": "PASS",
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "consoleErrors": []
+    },
+    "existing-source-regression": {
+      "status": "PASS",
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "consoleErrors": []
+    }
+  },
+  "focused": "14/14 PASS",
+  "modelType": "PASS",
+  "studioTypeBuild": "PASS; Vite5.39s",
+  "lint": "PASS",
+  "exactCI": "PENDING until publication"
+}
