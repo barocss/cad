@@ -25,12 +25,16 @@ function shapeOf(doc: StudioDoc): string {
   const backed = doc.nodes.some(n => ['bearing', 'oring-gland', 'oring', 'retaining-ring', 'sprocket', 'pulley', 'belt', 'coupling', 'connector-opening'].includes(n.kind) || ((n.kind === 'frame' || n.kind === 'frame-member') && (n.section.kind === 'library' || (n.kind === 'frame' && n.overrides?.some(o => o.section?.kind === 'library')))));
   if (backed) return JSON.stringify(toPartDocument(doc));
   const names = Object.keys(doc.parameters).sort();
-  if (!names.length) return JSON.stringify(doc.nodes);
+  // Authored weld records produce geometry outside doc.nodes. Use only the converted
+  // beads, after evaluation: notes, symbol flags and inactive/refused records are not geometry.
+  const beads = doc.frames?.welds?.length ? toPartDocument(doc).features.filter(f => f.kind === 'weld-bead') : [];
+  const withBeads = (source: string) => beads.length ? JSON.stringify({ source, beads }) : source;
+  if (!names.length) return withBeads(JSON.stringify(doc.nodes));
   // Ordinary feature text can also resolve different parameter values. Keep the whole dictionary as source
   // identity, independent of insertion order; this is not a test for general geometric equivalence.
   const parameters: [string, number][] = [];
   for (const name of names) parameters.push([name, doc.parameters[name]]);
-  return JSON.stringify({ nodes: doc.nodes, parameters });
+  return withBeads(JSON.stringify({ nodes: doc.nodes, parameters }));
 }
 /**
  * A body's mass from its exact volume and its material's density (O169): its own massG is the default material's.

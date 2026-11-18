@@ -1,0 +1,58 @@
+{
+  "status": "PASS",
+  "qualification": "The BOM distinguishes two placed frames with different modeled weld bead legs.",
+  "observations": [
+    {
+      "bom": {
+        "lines": [
+          {
+            "item": "Weld leg 2",
+            "parts": [
+              "p1"
+            ],
+            "qty": 1,
+            "material": null,
+            "mass": 3178.901,
+            "source": null
+          },
+          {
+            "item": "Weld leg 3",
+            "parts": [
+              "p2"
+            ],
+            "qty": 1,
+            "material": null,
+            "mass": 3180.049,
+            "source": null
+          }
+        ],
+        "totalQty": 2,
+        "totalMass": 6358.95,
+        "beadAccounting": {
+          "complete": true,
+          "bodyCount": 2,
+          "nominalVolume": 1086.6666666666663,
+          "ownedVolume": 1086.6666666666663,
+          "sharedSeamCount": 0,
+          "refusedJointIds": []
+        }
+      },
+      "csv": "item no.,item,qty,kind,size,row,catalogue,source,estimate\n1,Weld leg 2,1,part,,,,,\n2,Weld leg 3,1,part,,,,,\n",
+      "volumes": [
+        330.6666666666663,
+        756
+      ]
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Inline frame weld records; no new bead BOM line or manufacturing qualification."
+  ],
+  "phase": "fresh Open welds-reopened"
+}

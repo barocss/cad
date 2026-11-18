@@ -1,0 +1,49 @@
+{
+  "status": "FAIL",
+  "qualification": "The BOM distinguishes two placed frames with different modeled weld bead legs.",
+  "observations": [
+    {
+      "bom": {
+        "lines": [
+          {
+            "item": "Weld leg 2",
+            "parts": [
+              "p1",
+              "p2"
+            ],
+            "qty": 2,
+            "material": null,
+            "mass": 6358.95,
+            "source": null
+          }
+        ],
+        "totalQty": 2,
+        "totalMass": 6358.95,
+        "beadAccounting": {
+          "complete": true,
+          "bodyCount": 2,
+          "nominalVolume": 1086.6666666666663,
+          "ownedVolume": 1086.6666666666663,
+          "sharedSeamCount": 0,
+          "refusedJointIds": []
+        }
+      },
+      "csv": "item no.,item,qty,kind,size,row,catalogue,source,estimate\n1,Weld leg 2,2,part,,,,,\n",
+      "volumes": [
+        330.6666666666663,
+        756
+      ]
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Inline frame weld records; no new bead BOM line or manufacturing qualification."
+  ],
+  "failure": "AssertionError [ERR_ASSERTION]: different modeled weld legs require two BOM lines\n\n1 !== 2\n\n    at file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/bom-weld-identity-browser.mjs:7:1109\n    at async f.run (file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/flow-helper.mjs:301:24)\n    at async file:///private/tmp/cad-drawing-recovery-20261117/apps/cad-studio/test/bom-weld-identity-browser.mjs:7:1",
+  "phase": "actual Studio start"
+}
