@@ -128,7 +128,20 @@ export function variantOf(master: StudioDoc, values: Readonly<Record<string, Inp
     if (x === input.default) continue;
     for (const b of input.bindings) {
       if (b.to === 'parameter') setPart(b.part, d => ({ ...d, parameters: { ...d.parameters, [b.parameter]: (b.scale ?? 1) * (x as number) + (b.offset ?? 0) } }));
-      else if (b.to === 'suppress') { if (matches(b, x)) setPart(b.part, d => { const k = nodeOf(d, b.feature); return { ...d, nodes: d.nodes.map((n, i) => i === k ? { ...n, suppressed: true } as ModelNode : n) }; }); }
+      else if (b.to === 'suppress') {
+        const suppress = matches(b, x);
+        // A matching default owns the master's suppression, so another value may
+        // lift it. Otherwise retain suppression authored independently of this input.
+        if (suppress || matches(b, input.default)) setPart(b.part, d => {
+          const k = nodeOf(d, b.feature);
+          return { ...d, nodes: d.nodes.map((n, i) => {
+            if (i !== k) return n;
+            const next: ModelNode = { ...n };
+            if (suppress) next.suppressed = true; else delete next.suppressed;
+            return next;
+          }) };
+        });
+      }
       else if (b.to === 'mate') doc = { ...doc, mates: doc.mates!.map((m): Mate => m.id === b.mate ? { ...m, [b.field]: x as number } : m) };
       else {
         const inst = doc.instances!.find(i => i.id === b.instance)!, next = component(doc, input.name, String(x), inst, b.options[String(x)]);

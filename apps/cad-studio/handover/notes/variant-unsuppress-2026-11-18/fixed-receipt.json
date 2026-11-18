@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "observations": [
+    {
+      "count": 1,
+      "volume": 500.00000000000006,
+      "mass": 1.35,
+      "csv": "item no.,item,qty,kind,size,row,catalogue,source,estimate\n1,Optional bracket,1,part,,,,,\n2,b1,1,part,,,,,\n"
+    }
+  ],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Input-owned suppression only; unrelated manual suppression stays authored."
+  ],
+  "visualReview": "Screenshots directly inspected"
+}
