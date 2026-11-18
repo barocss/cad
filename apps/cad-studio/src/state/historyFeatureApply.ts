@@ -1,3 +1,4 @@
+import { isFilletSectionChange, proveFilletSectionChange } from './filletSectionHistory';
 import { isShellOpeningChange, proveShellOpeningChange } from './shellOpeningHistory';
 import { holeResultPieces } from '../app/holeResultPieces';
 import type { StudioNotice } from '../app/studioNotice';
@@ -54,13 +55,28 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
       && JSON.stringify(oldShell.open) !== JSON.stringify(newShell.open);
     const openingFailure = {title:'Opening not applied',hint:'Apply only the opening change on an unchanged plain box first. Keep the current opening if its original face cannot be verified.',detail:'The original document and face references are unchanged.'};
     if (openingChanged && !isShellOpeningChange(doc,next,editNode)) return Promise.resolve(openingFailure);
+    const oldFillet = doc.nodes[editNode], newFillet = next.nodes[editNode];
+    const sectionChanged = oldFillet?.kind === 'fillet' && newFillet?.kind === 'fillet'
+      && (oldFillet.section?.kind ?? 'circular') !== (newFillet.section?.kind ?? 'circular');
+    const sectionFailure = {title:'Section not applied',hint:'Apply only the section change on an unchanged plain box first. Keep the current section if its original edge cannot be verified.',detail:'The original document, edge and signature are unchanged.'};
+    if (sectionChanged && !isFilletSectionChange(doc,next,editNode)) return Promise.resolve(sectionFailure);
     let request = nextRevision();
     const heightResize = isRectangleFinishHeightResize(doc,next,editNode);
     const resize = !heightResize && isRectangleFinishResize(doc,next,editNode), worker = owner.worker(), open = owner.open();
     const current = () => ownsDraft() && owner.document() === doc && owner.scope() === scope
       && owner.worker() === worker && owner.open() === open
-      && (!(heightResize || openingChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
+      && (!(heightResize || openingChanged || sectionChanged) || fresh && !busy && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant());
     return (async () => {
+      if (sectionChanged) {
+        if (!current()) return;
+        try {
+          const parentRevision = nextRevision();
+          const parent = await engine.part(prefixDoc(doc,editNode),parentRevision,'refs');
+          if (!current()) return;
+          if (!parent.ok || parent.revision !== parentRevision || !proveFilletSectionChange(doc,next,parent.bodies)) return sectionFailure;
+          request = nextRevision();
+        } catch { if (current()) return sectionFailure; return; }
+      }
       if (openingChanged) {
         if (!current()) return;
         try {
@@ -94,7 +110,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
         } catch { if (current()) return failure; return; }
       }
       const reply = await engine.evaluate(next, request);
-      if (!reply || !current() || (heightResize || openingChanged) && reply.revision !== request) return;
+      if (!reply || !current() || (heightResize || openingChanged || sectionChanged) && reply.revision !== request) return;
       if (reply.ok) {
         if (!resize) {
           const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated

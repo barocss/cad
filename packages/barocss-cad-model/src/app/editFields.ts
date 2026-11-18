@@ -60,6 +60,35 @@ function shellOpeningField(index: number): EditField {
   };
 }
 
+/** Only a plain box's terminal constant Fillet; native edge proof is required at History Apply. */
+function filletSection(nodes: Nodes, index: number): 'circular' | 'conic' | undefined {
+  if (index !== 2 || nodes.length !== 3) return;
+  const [sk,ex,f] = nodes, only = (node: object, keys: string[]) => Object.keys(node).every(key => keys.includes(key));
+  const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  if (sk.kind !== 'sketch' || sk.profile !== 'rectangle' || !only(sk,['id','kind','profile','min','max'])
+    || ![...sk.min,...sk.max].every(finite) || !(Number(sk.max[0]) > Number(sk.min[0]) && Number(sk.max[1]) > Number(sk.min[1]))) return;
+  if (ex.kind !== 'extrude' || ex.sketch !== 0 || !only(ex,['id','kind','sketch','height','from','draft'])
+    || !finite(ex.height) || ex.height <= 0 || ex.height > CadPartLimits.length || (ex.from !== undefined && !finite(ex.from)) || (ex.draft !== undefined && ex.draft !== 0)) return;
+  if (f.kind !== 'fillet' || !only(f,['id','kind','parent','edges','radius','section','sigs']) || !only(f.parent,['node','side'])
+    || f.parent.node !== 1 || f.parent.side !== 'solid' || !finite(f.radius) || f.radius <= 0 || f.radius > CadPartLimits.length
+    || f.edges.length !== 1 || !f.edges[0] || f.edges[0].includes('+')) return;
+  const sig = f.sigs?.[f.edges[0]];
+  if (!sig || (sig.n !== undefined && sig.n !== 1) || Object.keys(f.sigs ?? {}).length !== 1) return;
+  return f.section === undefined ? 'circular' : f.section.kind === 'conic' && finite(f.section.rho) && f.section.rho > 0 && f.section.rho < 1 ? 'conic' : undefined;
+}
+function filletSectionField(index: number): EditField {
+  return {kind:'choice',key:'filletSection',label:'Section',options:[{value:'circular',label:'Circular'},{value:'conic',label:'Conic'}],
+    get: nodes => filletSection(nodes,index) ?? '',
+    set: (nodes,value) => {
+      const mode = filletSection(nodes,index), node = nodes[index];
+      if (!mode || node?.kind !== 'fillet' || !['circular','conic'].includes(value) || mode === value) return [...nodes];
+      const next = {...node};
+      if (value === 'conic') next.section = {kind:'conic',rho:0.5}; else delete next.section;
+      return nodes.map((n,i) => i === index ? next : n);
+    },
+  };
+}
+
 /** End changes add/remove native faces: initially limit them to an ordinary terminal hole. */
 function editableHoleEnd(nodes: Nodes, index: number) {
   const hole = nodes[index];
@@ -525,6 +554,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       }
       break;
     case 'fillet':
+      if (scope?.doc?.direct === undefined && !scope?.doc?.instances?.length && filletSection(nodes,i)) out.push(filletSectionField(i));
       // (A varying radius: its two ends' radii, D100.)
       if (node.radii) {
         const k = (n: ModelNode) => n as typeof node, last = node.radii.length - 1;
