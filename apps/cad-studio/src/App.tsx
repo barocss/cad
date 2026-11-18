@@ -1,3 +1,4 @@
+import { duplicateSelection } from './assembly/duplicateSelection';
 import { rotateSelection } from './assembly/rotateSelection';
 import { translateSelection } from './assembly/translateSelection';
 import { pickPlacedPart } from './assembly/groundSelection';
@@ -3509,6 +3510,11 @@ export function App() {
             if (next.error !== undefined) { setToast({ title: 'Selected parts not rotated', hint: next.error, detail: 'Nothing was changed.' }); return false; }
             if (!next.instances.some((i, index) => i !== doc.instances![index])) return true;
             return commitInstances(next.instances);
+          }} onDuplicate={delta => {
+            if (groupMoveBlocked || !canChangeDocument()) return false;
+            const next = duplicateSelection(doc, instanceSel, delta);
+            if (next.error !== undefined) { setToast({ title: 'Selected parts not duplicated', hint: next.error, detail: 'Nothing was changed.' }); return false; }
+            return commitInstances(next.instances, next.ids);
           }} onGround={on => {
             if (!canChangeDocument()) return;
             const error = assembly.groundMany(instanceSel, on);

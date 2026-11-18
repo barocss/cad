@@ -3,8 +3,8 @@ import type { PartInstance, StudioDoc } from '@barocss/cad-model/engine/doc';
 import { Button } from '@/components/ui/button';
 
 /** Explicit, atomic static-assembly changes; constrained placement and mate editing stay single-owner. */
-export function SelectedInstancesPanel({ doc, instances, moveBlocked, onGround, onTranslate, onRotate }: {
-  doc: StudioDoc; moveBlocked: string | null; instances: readonly PartInstance[]; onGround(on: boolean): void; onTranslate(delta: readonly number[]): boolean; onRotate(value: {axis: 'X' | 'Y' | 'Z'; angle: number; pivot: readonly number[]}): boolean;
+export function SelectedInstancesPanel({ doc, instances, moveBlocked, onGround, onTranslate, onRotate, onDuplicate }: {
+  doc: StudioDoc; moveBlocked: string | null; instances: readonly PartInstance[]; onGround(on: boolean): void; onTranslate(delta: readonly number[]): boolean; onDuplicate(delta: readonly number[]): boolean; onRotate(value: {axis: 'X' | 'Y' | 'Z'; angle: number; pivot: readonly number[]}): boolean;
 }) {
   const selection = JSON.stringify(instances.map(i => i.id));
   const [draft, setDraft] = useState({ doc, selection, moveBlocked, values: ['0', '0', '0'] });
@@ -34,6 +34,7 @@ export function SelectedInstancesPanel({ doc, instances, moveBlocked, onGround, 
     <Button variant="ghost" disabled={!!moveBlocked || !current || !valid || delta.every(v => v === 0)} onClick={() => {
       if (!moveBlocked && current && valid && onTranslate(delta)) clear();
     }}>Move selected parts</Button>
+    <GroupDuplicate doc={doc} selection={selection} blocked={moveBlocked} onDuplicate={onDuplicate} />
     <GroupRotation doc={doc} selection={selection} blocked={moveBlocked} onRotate={onRotate} />
   </aside>;
 }
@@ -61,5 +62,27 @@ function GroupRotation({doc,selection,blocked,onRotate}: {
     {(['X','Y','Z'] as const).map((axis,k)=><label className="kv" key={axis}>Pivot {axis} mm<input aria-label={`Selected parts pivot ${axis}`} type="text" inputMode="decimal" disabled={!!blocked} value={value.pivot[k]} onChange={e=>setDraft({...draft,pivot:value.pivot.map((v,j)=>j===k?e.target.value:v)})} onKeyDown={escape}/></label>)}
     {!valid && <p className="small" role="alert">Enter a finite angle in degrees and world pivot coordinates in mm.</p>}
     <Button variant="ghost" disabled={!!blocked || !current || !valid || angle % 360 === 0} onClick={()=>{if(!blocked && current && valid && onRotate({axis:value.axis,angle,pivot}))clear();}}>Rotate selected parts</Button>
+  </section>;
+}
+
+/** Copy offsets are drafts; zero explicitly creates coincident copies. */
+function GroupDuplicate({doc,selection,blocked,onDuplicate}: {
+  doc: StudioDoc; selection: string; blocked: string | null; onDuplicate(delta: readonly number[]): boolean;
+}) {
+  const defaults = ['20','20','0'];
+  const [draft,setDraft] = useState({doc,selection,blocked,values:defaults});
+  const current = draft.doc === doc && draft.selection === selection && draft.blocked === blocked;
+  const clear = () => setDraft({doc,selection,blocked,values:defaults});
+  if (!current) clear();
+  const values = current ? draft.values : defaults, delta = values.map(Number);
+  const valid = values.every(v=>v.trim() !== '') && delta.every(Number.isFinite);
+  return <section aria-label="Duplicate selected parts together">
+    <div className="card-title" style={{marginTop:12}}>DUPLICATE TOGETHER · WORLD MM</div>
+    <p className="small muted">Copy at one common offset, preserving existing definition links; originals stay in place. The same free-part restrictions as Move apply. Mates and step membership are not copied. Zero offset creates overlapping copies.</p>
+    {(['X','Y','Z'] as const).map((axis,k)=><label className="kv" key={axis}>Offset {axis}<input aria-label={`Selected copies offset ${axis}`} type="text" inputMode="decimal" disabled={!!blocked} value={values[k]}
+      onChange={e=>setDraft({doc,selection,blocked,values:values.map((v,j)=>j===k?e.target.value:v)})}
+      onKeyDown={e=>{e.stopPropagation();if(e.key==='Escape'){e.preventDefault();clear();}}}/></label>)}
+    {!valid && <p role="alert" className="small">Enter finite copy offsets in mm.</p>}
+    <Button variant="ghost" disabled={!!blocked || !current || !valid} onClick={()=>{if(!blocked&&current&&valid&&onDuplicate(delta))clear();}}>Duplicate selected parts</Button>
   </section>;
 }

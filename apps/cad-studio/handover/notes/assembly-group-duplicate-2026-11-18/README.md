@@ -1,0 +1,11 @@
+# Atomic free-group duplicate (#734 / ASM-06)
+
+New bounded multi-part workflow, not a reproduced existing defect. Duplicate two or more free ordinary static occurrences at a common XYZ-mm offset. Defaults match single Duplicate (+20,+20,0); explicit zero offset creates overlapping copies. Originals remain untouched, existing definition linkage and occurrence looks/rotation are retained, new occurrences get globally reserved IDs and collision-free names. Only copies are selected. One commit/Undo covers the group. No mates/steps/drawing/variant references are copied or rebound. Existing Move admission excludes constrained, hidden, fixed, patterned, nested, posed, cut and linked-housing contexts. No Motion or HOLD expansion.
+
+Independent read-only review: no product blocker. The initial text overstated always-linked copies; corrected before frozen execution to preserving existing definition links. Actual revision propagation is not newly qualified; metadata/reference preservation is tested separately from lifecycle propagation.
+
+Frozen actual Chrome **PASS**: original whole-document fields unchanged except appended occurrences; independent translated bounding boxes with retained orientation, new-copy selection, BOM total quantity 4 to 6 and visible block line quantity 4, Undo/Redo, Save/fresh Open, invalid drafts, Escape/selection reset and fixed-source atomic refusal. Local screenshots reviewed. Source capsule changes=[], contexts/browser/server closed and no owned process remains. Disk 38 GiB, above 2 GiB reserve.
+
+Focused Duplicate/Rotate/Move/Fix **21/21 PASS**. Model TypeScript PASS; initial Studio type check found only a new test variable TS7022 inference failure. Explicit PartInstance annotation fixed the fixture; focused21 and Studio type/lint recheck PASS. Product and browser source were not changed after the successful frozen execution. Affected-file lint PASS.
+
+Commands: `node apps/cad-studio/scripts/test.mjs assembly-duplicate-selection assembly-rotate-selection assembly-translate-selection assembly-ground-selection`; TypeScript noEmit for both projects; affected-file ESLint; `ASSEMBLY_DUPLICATE_SELECTION_FROZEN=1 node apps/cad-studio/test/assembly-duplicate-selection-browser.mjs <output>` with Chrome/PW_DIR. Base d46d08a8a. No full assembly or manufacturing qualification claimed.
