@@ -27,7 +27,7 @@ const pins = [
   fixture, canonical,
   ...(flange || rotateFlange ? ['apps/cad-studio/test/sheet-move-flange.mjs'] : []),
   ...(rotate ? ['apps/cad-studio/test/sheet-rotate-flow.mjs'] : []),
-  ...(mirrorStudy ? ['apps/cad-studio/test/sheet-mirror-study.mjs'] : []),
+  ...(mirrorStudy ? ['apps/cad-studio/test/sheet-mirror-study.mjs', 'packages/barocss-cad-model/src/app/commands.ts', 'apps/cad-studio/src/ui/Hud.tsx', 'packages/barocss-cad-model/src/engine/mirrorReplacement.ts'] : []),
   ...(duplicate ? ['apps/cad-studio/test/sheet-copy-flow.mjs'] : []),
 ];
 const f = await createFlow({

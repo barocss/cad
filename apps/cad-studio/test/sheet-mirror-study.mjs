@@ -2,6 +2,21 @@ import assert from 'node:assert/strict';
 import { sha256 } from './flow-helper.mjs';
 
 const button = (parent, name) => parent.getByRole('button', { name, exact: true });
+const expectGuidance = process.env.MIRROR_GUIDANCE_EXPECT === '1';
+async function guidance(f, hud, mode, label) {
+  if (!expectGuidance) return;
+  const text = mode === 'reflected'
+    ? 'Reflected body only supports the YZ plane at X = 0. Flat-pattern availability depends on the evaluated result.'
+    : 'Original and reflection creates a solid result without a sheet-metal flat pattern.';
+  const row = hud.locator('.hud-step').filter({ hasText: text });
+  await row.getByText(text, { exact: true }).waitFor();
+  assert.equal(await row.count(), 1);
+  assert.equal(await row.locator('b').innerText(), 'Flat pattern');
+  assert.equal(await row.evaluate(e => e.classList.contains('done')), false, 'Guidance is not a completed geometry check');
+  assert.equal(await row.locator('span').last().innerText(), text);
+  f.report.observations.push({ label, guidance: text, done: false, preview: await hud.locator('.status').innerText(), applyDisabled: await button(hud, 'Apply').isDisabled() });
+}
+
 const width = 30, thickness = 1.5, radius = 1.5, holeRadius = 2.75, k = 0.44;
 const holeVolume = Math.PI * holeRadius ** 2 * thickness;
 const volume = 2967.768244759665;
@@ -116,6 +131,8 @@ export async function qualifyMirrorBoundary(f, seed, { name, selectBody, showFla
   await hud.getByLabel('Plane', { exact: true }).selectOption('yz');
   await hud.getByLabel('Plane at', { exact: true }).fill('0');
   await f.page.waitForFunction(() => document.querySelector('.hud .status')?.textContent.trim() === 'preview');
+  f.report.observations.push({label:'combined-before-apply',hud:await hud.innerText(),applyDisabled:await button(hud,'Apply').isDisabled()});
+  await guidance(f, hud, 'combined', 'combined-guidance-before-apply');
   await f.snapshot('02-legacy-mirror-preview');
   await button(hud, 'Apply').click();
   await hud.waitFor({ state: 'hidden' });
@@ -150,7 +167,7 @@ export async function qualifyMirrorBoundary(f, seed, { name, selectBody, showFla
   if (!replacement) return;
 
   f.phase = 'refuse reflected-only Mirror outside the origin YZ plane';
-  const reflect = await openSourceMirror();
+  let reflect = await openSourceMirror();
   const plane = reflect.getByLabel('Plane', { exact: true });
   const at = reflect.getByLabel('Plane at', { exact: true });
   const result = reflect.getByLabel('Result', { exact: true });
@@ -160,19 +177,40 @@ export async function qualifyMirrorBoundary(f, seed, { name, selectBody, showFla
   await refusal.waitFor();
   assert.equal(await button(reflect, 'Apply').isDisabled(), true);
   await f.same(source);
+  await guidance(f, reflect, 'reflected', 'offset-refusal-guidance');
   await f.snapshot('06-reflected-offset-refused');
   await plane.selectOption('xz');
   await at.fill('0');
   await refusal.waitFor();
   assert.equal(await button(reflect, 'Apply').isDisabled(), true);
   await f.same(source);
+  await guidance(f, reflect, 'reflected', 'plane-refusal-guidance');
   await f.snapshot('07-reflected-plane-refused');
 
   f.phase = 'replace the sheet with a single reflection and open its Flat dialog';
   await plane.selectOption('yz');
   await at.fill('0');
   await f.page.waitForFunction(() => document.querySelector('.hud .status')?.textContent.trim() === 'preview');
+  f.report.observations.push({label:'reflected-before-apply',hud:await reflect.innerText(),applyDisabled:await button(reflect,'Apply').isDisabled()});
+  await guidance(f, reflect, 'reflected', 'reflected-guidance-before-apply');
   await f.snapshot('08-reflected-preview');
+  if (expectGuidance) {
+    await button(reflect, 'Cancel').click();
+    await reflect.waitFor({ state: 'hidden' });
+    await f.same(source);
+    await f.snapshot('08a-reflected-cancel-preserves-source');
+    await selectBody();
+    await f.page.evaluate(() => document.activeElement?.blur());
+    await f.page.keyboard.press('m');
+    reflect = f.page.getByRole('dialog', { name: 'Mirror', exact: true });
+    await reflect.waitFor();
+    await reflect.getByLabel('Result', { exact: true }).selectOption('reflected');
+    await reflect.getByLabel('Plane', { exact: true }).selectOption('yz');
+    await reflect.getByLabel('Plane at', { exact: true }).fill('0');
+    await f.page.waitForFunction(() => document.querySelector('.hud .status')?.textContent.trim() === 'preview');
+    await guidance(f, reflect, 'reflected', 'reflected-after-cancel-guidance');
+    await f.same(source);
+  }
   await button(reflect, 'Apply').click();
   await reflect.waitFor({ state: 'hidden' });
   const authored = { ...expected, nodes: [...source.nodes, {

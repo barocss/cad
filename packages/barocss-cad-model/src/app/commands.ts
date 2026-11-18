@@ -847,11 +847,15 @@ const allCommands: Command[] = [
       if (!b || !changed.includes('plane')) return v;
       return { ...v, at: r1(b.mesh.bounds.max[MIRROR_AXIS[String(v.plane)]]) };
     },
-    steps: (_, v) => v.pickPlane === 'yes'
+    steps: (ctx, v) => [...(v.pickPlane === 'yes'
       ? [{ label: 'Pick plane', text: 'Click an original planar face normal to X, Y or Z. Cancel plane pick restores the previous preview.', done: false },
         ...(v.planeFace ? [{ label: 'Previous face', text: String(v.planeFace), done: false }] : [])]
       : v.planeFace ? [{ label: 'Plane face', text: String(v.planeFace), done: true },
-        { label: 'Fixed plane', text: 'Uses this face’s current plane position. Later face changes do not move the mirror plane.', done: true }] : [],
+        { label: 'Fixed plane', text: 'Uses this face’s current plane position. Later face changes do not move the mirror plane.', done: true }] : []),
+      ...(oneBody(ctx)?.sheet ? [{ label: 'Flat pattern', text: v.result === 'reflected'
+        ? 'Reflected body only supports the YZ plane at X = 0. Flat-pattern availability depends on the evaluated result.'
+        : 'Original and reflection creates a solid result without a sheet-metal flat pattern.', done: false }] : []),
+    ],
     onPick: (ctx, v, hit) => {
       const face = hit.face && ctx.bodies[hit.face.body]?.mesh.faces[hit.face.face];
       if (!face?.nativePlaneName || !face.nativeAxisPlane) return { error: 'Pick an original planar face normal to X, Y or Z.' };
