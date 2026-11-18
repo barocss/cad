@@ -1018,14 +1018,19 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       break;
     case 'sew': number('tol', SEW_TOLERANCE_LABEL, 'mm', n => (n as typeof node).tolerance ?? 0, (n, v) => { const next = { ...(n as typeof node) }; sewTolerance(next.surfaces, v); if (v > 0) next.tolerance = v; else delete next.tolerance; return next; }); break;
     case 'face-thread':
-      number('pitch', 'Pitch', 'mm', n => (n as typeof node).pitch, (n, pitch) => ({ ...(n as typeof node), pitch }));
-      number('len', 'Length (0: whole face)', 'mm', n => (n as typeof node).length ?? 0, (n, length) => {
+      number('pitch', 'Pitch', 'mm', n => num((n as typeof node).pitch), (n, pitch) => ({ ...(n as typeof node), pitch }));
+      number('len', 'Length (0: whole face)', 'mm', n => num((n as typeof node).length ?? 0), (n, length) => {
         const next = { ...(n as typeof node) }; if (length === 0) delete next.length; else next.length = length; return next;
       });
       if (node.diameter !== undefined) {
-        number('diameter', 'Nominal Ø', 'mm', n => (n as typeof node).diameter!, (n, diameter) => ({ ...(n as typeof node), diameter }));
+        number('diameter', 'Nominal Ø', 'mm', n => num((n as typeof node).diameter!), (n, diameter) => ({ ...(n as typeof node), diameter }));
       }
-      if (node.diameter === undefined) number('relief', 'Relief groove', 'mm', n => (n as typeof node).relief ?? (n as typeof node).pitch, (n, relief) => ({ ...(n as typeof node), relief }));
+      if (node.diameter === undefined) number('relief', 'Relief groove', 'mm', n => {
+        const thread = n as typeof node;
+        if (thread.relief !== undefined) return num(thread.relief);
+        // The default follows pitch; it is not an explicit binding of the relief field.
+        return typeof thread.pitch === 'number' ? thread.pitch : parameters[thread.pitch.parameter] ?? NaN;
+      }, (n, relief) => ({ ...(n as typeof node), relief }));
       for (const [key, label, options] of [
         ['hand', 'Hand', [{ value: 'right', label: 'Right' }, { value: 'left', label: 'Left' }]],
         ['end', 'From', [{ value: '+', label: 'The + end' }, { value: '-', label: 'The − end' }]],

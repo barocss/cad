@@ -812,7 +812,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   /** A face fillet of `radius` between two faces that need not touch — two planes, a plane and a cylinder across or along its axis, two parallel cylinders, cones, spheres and tori with planes and cylinders about one axis, faces at any angle by the rolling ball: the round tangent to both, filled at an inside corner, cut at an outside one. */
   | { kind: 'face-fillet'; parent: BodyRef; faces: [string, string]; radius: Dim }
   /** A modelled ISO metric thread on one whole cylindrical face: a shaft's at its diameter, a hole's (its tap drill) at `diameter`, `clearance` (default 0.04 mm) clear of a bolt's; from `end` over `length` (default the face), `relief` short of a shoulder; right hand unless `hand` is left. */
-  | { kind: 'face-thread'; parent: BodyRef; face: string; pitch: number; diameter?: number; length?: number; end?: '+' | '-'; relief?: number; clearance?: number; hand?: 'left' }
+  | { kind: 'face-thread'; parent: BodyRef; face: string; pitch: Dim; diameter?: Dim; length?: Dim; end?: '+' | '-'; relief?: Dim; clearance?: number; hand?: 'left' }
   /** IM7b (O113): a face split along its isocline n·d = 0 for the pull (the kernel's split-face, D149): its pieces `<face>#1` (the + side), `<face>#2` …, or `names`. */
   | { kind: 'split-face'; parent: BodyRef; face: string; pull: [number, number, number]; names?: string[] }
   /** `radii` (R10.5, D100): a varying radius, given at points of the edges; `radius` then the first point's. `atEnd`: the point is a chain end and follows it when earlier features move it. `section` (R10.5b, D103): a conic or G2 section (default a circle). */
@@ -1381,7 +1381,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'draft': return `Draft ${fmt(node.angle)}° × ${node.faces.length}`;
     case 'full-round': return `Full round × ${node.faces.length}`;
     case 'face-fillet': return `Face fillet ${n(node.radius)}`;
-    case 'face-thread': return (node.diameter !== undefined ? `Thread M${fmt(node.diameter)}×${fmt(node.pitch)}` : `Thread ×${fmt(node.pitch)}`) + (node.hand === 'left' ? ' LH' : '');
+    case 'face-thread': return (node.diameter !== undefined ? `Thread M${n(node.diameter)}×${n(node.pitch)}` : `Thread ×${n(node.pitch)}`) + (node.hand === 'left' ? ' LH' : '');
     case 'thicken': return `Thicken ${node.name} ${n(node.thickness)}`;
     case 'sheet-base': return `Sheet plate T${n(node.thickness)}`;
     case 'sheet-flange': return `Flange ${n(node.length)} · ${fmt(node.angle ?? 90)}°`;

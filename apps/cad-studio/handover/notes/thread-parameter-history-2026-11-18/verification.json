@@ -1,0 +1,170 @@
+{
+  "base": "f02c4db77",
+  "issue": 714,
+  "runs": {
+    "pitch-baseline": {
+      "status": "FAIL",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 1,
+      "consoleErrorCount": 0
+    },
+    "pitch-fixed": {
+      "status": "PASS",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 0,
+      "consoleErrorCount": 0
+    },
+    "nominal-baseline": {
+      "status": "FAIL",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 1,
+      "consoleErrorCount": 0
+    },
+    "nominal-fixed": {
+      "status": "PASS",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 0,
+      "consoleErrorCount": 0
+    },
+    "length-baseline": {
+      "status": "PASS",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 0,
+      "consoleErrorCount": 0
+    },
+    "length-fixed": {
+      "status": "PASS",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 0,
+      "consoleErrorCount": 0
+    },
+    "relief-baseline": {
+      "status": "PASS",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 0,
+      "consoleErrorCount": 0
+    },
+    "relief-fixed": {
+      "status": "PASS",
+      "changes": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "errorCount": 0,
+      "consoleErrorCount": 0
+    }
+  },
+  "focused": {
+    "model": "13/13 PASS",
+    "studio": "1/1 PASS"
+  },
+  "limits": [
+    "Saved synthetic existing supported shaft/bore fixtures; no pointer creation claim",
+    "Native literal equivalence, not independent analytic thread volume or manufacturing qualification",
+    "Existing partial-bore triangulation limitation unchanged",
+    "Whole-suite, other browsers, mobile NOT_RUN"
+  ],
+  "historyFirstAttempt": {
+    "status": "FAIL",
+    "reason": "Evidence note files were added during execution, violating changes[] freeze; product flow reached final whole-bore-1440 but this run is not certified PASS",
+    "errorCount": 0,
+    "consoleErrorCount": 0,
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "observedChanges": [
+      "pitch-baseline-crash.png",
+      "length-baseline-blank.png",
+      "fixed-default-relief.png",
+      "fixed-bore.png",
+      "invalid-relief.png",
+      "verification.json",
+      "README.md"
+    ]
+  },
+  "historyFinal": {
+    "status": "PASS",
+    "changes": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "errorCount": 0,
+    "consoleErrorCount": 0
+  },
+  "typeChecks": {
+    "model": "PASS",
+    "studio": "PASS"
+  },
+  "studioBuild": "PASS",
+  "diskKiB": {
+    "finalStart": 43509484,
+    "finalEnd": 43497748,
+    "reserve": 2097152
+  }
+}
