@@ -185,9 +185,9 @@ function linearCutProblem(ctx: Ctx) {
   return null;
 }
 
-/** A body's box corner (least X, Y, Z), to 0.001 mm. */
+/** The current display bounds corner; Move arithmetic must not quantize authored coordinates. */
 export function cornerOf(b: BodyResult | null | undefined): [number, number, number] {
-  return b ? b.mesh.bounds.min.map(v => Math.round(v * 1000) / 1000) as [number, number, number] : [0, 0, 0];
+  return b ? [...b.mesh.bounds.min] as [number, number, number] : [0, 0, 0];
 }
 /** A body's box centre, to 0.001 mm (the origin when there is none). */
 export function centreOf(b: BodyResult | null | undefined): [number, number, number] {
@@ -798,10 +798,10 @@ const allCommands: Command[] = [
     // Nothing moved until a value is typed or the gizmo dragged.
     defaults: ctx => { const m = cornerOf(oneBody(ctx)); return { x: 0, y: 0, z: 0, ax: m[0], ay: m[1], az: m[2] }; },
     derive: (ctx, v, changed) => {
-      const m = cornerOf(oneBody(ctx)), r = (n: number) => Math.round(n * 1000) / 1000, out = { ...v };
+      const m = cornerOf(oneBody(ctx)), out = { ...v };
       ['x', 'y', 'z'].forEach((k, i) => {
-        if (changed.includes('a' + k)) out[k] = r(Number(v['a' + k]) - m[i]);
-        else out['a' + k] = r(m[i] + Number(v[k]));
+        if (changed.includes('a' + k)) out[k] = Number(v['a' + k]) - m[i];
+        else out['a' + k] = m[i] + Number(v[k]);
       });
       return out;
     },

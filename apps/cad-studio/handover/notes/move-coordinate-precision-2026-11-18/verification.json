@@ -1,0 +1,406 @@
+{
+  "baseline": {
+    "status": "PASS",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "coordinates": [
+      {
+        "label": "to-mixed",
+        "requested": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "draft": {
+          "\u0394X": "1.235",
+          "\u0394Y": "-2.346",
+          "\u0394Z": "3.457",
+          "To X": "1.235",
+          "To Y": "-2.346",
+          "To Z": "3.456789"
+        },
+        "sourceCorner": [
+          0,
+          0,
+          0
+        ],
+        "storedOffset": [
+          1.235,
+          -2.346,
+          3.457
+        ],
+        "actualCorner": [
+          1.235,
+          -2.346,
+          3.457
+        ],
+        "coordinateResidualMM": [
+          0.00043300000000012773,
+          -0.0003220000000001555,
+          0.00021099999999973917
+        ],
+        "requestedPrecisionAchieved": false,
+        "nativeCentroid": [
+          21.235000000000003,
+          12.654000000000002,
+          8.457
+        ],
+        "meaning": "Baseline observation, not an accuracy success assertion."
+      },
+      {
+        "label": "to-opposite",
+        "requested": [
+          -1.234567,
+          2.345678,
+          -3.456789
+        ],
+        "draft": {
+          "\u0394X": "-1.235",
+          "\u0394Y": "2.346",
+          "\u0394Z": "-3.457",
+          "To X": "-1.235",
+          "To Y": "2.346",
+          "To Z": "-3.456789"
+        },
+        "sourceCorner": [
+          0,
+          0,
+          0
+        ],
+        "storedOffset": [
+          -1.235,
+          2.346,
+          -3.457
+        ],
+        "actualCorner": [
+          -1.235,
+          2.346,
+          -3.457
+        ],
+        "coordinateResidualMM": [
+          -0.00043300000000012773,
+          0.0003220000000001555,
+          -0.00021099999999973917
+        ],
+        "requestedPrecisionAchieved": false,
+        "nativeCentroid": [
+          18.765000000000004,
+          17.346000000000004,
+          1.5430000000000001
+        ],
+        "meaning": "Baseline observation, not an accuracy success assertion."
+      },
+      {
+        "label": "delta-control",
+        "requested": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "draft": {
+          "\u0394X": "1.234567",
+          "\u0394Y": "-2.345678",
+          "\u0394Z": "3.456789",
+          "To X": "1.235",
+          "To Y": "-2.346",
+          "To Z": "3.457"
+        },
+        "sourceCorner": [
+          0,
+          0,
+          0
+        ],
+        "storedOffset": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "actualCorner": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "coordinateResidualMM": [
+          0,
+          0,
+          0
+        ],
+        "requestedPrecisionAchieved": true,
+        "nativeCentroid": [
+          21.234567000000002,
+          12.654322000000002,
+          8.456789
+        ],
+        "meaning": "Baseline observation, not an accuracy success assertion."
+      },
+      {
+        "label": "to-fractional-stock",
+        "requested": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "draft": {
+          "\u0394X": "1.235",
+          "\u0394Y": "-2.346",
+          "\u0394Z": "3.457",
+          "To X": "1.235",
+          "To Y": "-2.346",
+          "To Z": "3.456789"
+        },
+        "sourceCorner": [
+          0.000456,
+          -0.000456,
+          0.000321
+        ],
+        "storedOffset": [
+          1.235,
+          -2.346,
+          3.457
+        ],
+        "actualCorner": [
+          1.235456,
+          -2.346456,
+          3.457321
+        ],
+        "coordinateResidualMM": [
+          0.0008890000000001397,
+          -0.0007779999999999454,
+          0.0005319999999997549
+        ],
+        "requestedPrecisionAchieved": false,
+        "nativeCentroid": [
+          21.235456000000003,
+          12.653544000000002,
+          8.457321
+        ],
+        "meaning": "Baseline observation, not an accuracy success assertion."
+      }
+    ]
+  },
+  "fixed": {
+    "status": "PASS",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ],
+    "coordinates": [
+      {
+        "label": "to-mixed",
+        "requested": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "draft": {
+          "\u0394X": "1.234567",
+          "\u0394Y": "-2.345678",
+          "\u0394Z": "3.456789",
+          "To X": "1.234567",
+          "To Y": "-2.345678",
+          "To Z": "3.456789"
+        },
+        "sourceCorner": [
+          0,
+          0,
+          0
+        ],
+        "storedOffset": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "actualCorner": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "coordinateResidualMM": [
+          0,
+          0,
+          0
+        ],
+        "requestedPrecisionAchieved": true,
+        "nativeCentroid": [
+          21.234567000000002,
+          12.654322000000002,
+          8.456789
+        ],
+        "meaning": "Fixed authored targets verified independently against native corners."
+      },
+      {
+        "label": "to-opposite",
+        "requested": [
+          -1.234567,
+          2.345678,
+          -3.456789
+        ],
+        "draft": {
+          "\u0394X": "-1.234567",
+          "\u0394Y": "2.345678",
+          "\u0394Z": "-3.456789",
+          "To X": "-1.234567",
+          "To Y": "2.345678",
+          "To Z": "-3.456789"
+        },
+        "sourceCorner": [
+          0,
+          0,
+          0
+        ],
+        "storedOffset": [
+          -1.234567,
+          2.345678,
+          -3.456789
+        ],
+        "actualCorner": [
+          -1.234567,
+          2.345678,
+          -3.456789
+        ],
+        "coordinateResidualMM": [
+          0,
+          0,
+          0
+        ],
+        "requestedPrecisionAchieved": true,
+        "nativeCentroid": [
+          18.765433000000005,
+          17.345678000000003,
+          1.5432109999999999
+        ],
+        "meaning": "Fixed authored targets verified independently against native corners."
+      },
+      {
+        "label": "delta-control",
+        "requested": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "draft": {
+          "\u0394X": "1.234567",
+          "\u0394Y": "-2.345678",
+          "\u0394Z": "3.456789",
+          "To X": "1.234567",
+          "To Y": "-2.345678",
+          "To Z": "3.456789"
+        },
+        "sourceCorner": [
+          0,
+          0,
+          0
+        ],
+        "storedOffset": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "actualCorner": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "coordinateResidualMM": [
+          0,
+          0,
+          0
+        ],
+        "requestedPrecisionAchieved": true,
+        "nativeCentroid": [
+          21.234567000000002,
+          12.654322000000002,
+          8.456789
+        ],
+        "meaning": "Fixed authored targets verified independently against native corners."
+      },
+      {
+        "label": "to-fractional-stock",
+        "requested": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "draft": {
+          "\u0394X": "1.234111",
+          "\u0394Y": "-2.345222",
+          "\u0394Z": "3.456468",
+          "To X": "1.234567",
+          "To Y": "-2.345678",
+          "To Z": "3.456789"
+        },
+        "sourceCorner": [
+          0.000456,
+          -0.000456,
+          0.000321
+        ],
+        "storedOffset": [
+          1.234111,
+          -2.345222,
+          3.456468
+        ],
+        "actualCorner": [
+          1.234567,
+          -2.345678,
+          3.456789
+        ],
+        "coordinateResidualMM": [
+          0,
+          0,
+          0
+        ],
+        "requestedPrecisionAchieved": true,
+        "nativeCentroid": [
+          21.234567000000002,
+          12.654322000000002,
+          8.456789
+        ],
+        "meaning": "Fixed authored targets verified independently against native corners."
+      }
+    ]
+  },
+  "drag": {
+    "status": "PASS",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  },
+  "appearance": {
+    "status": "PASS",
+    "errors": [],
+    "consoleErrors": [],
+    "cleanup": [
+      "CONTEXT_CLOSED",
+      "CONTEXT_CLOSED",
+      "BROWSER_CLOSED",
+      "SERVER_CLOSED"
+    ]
+  }
+}
