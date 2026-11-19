@@ -1,0 +1,140 @@
+{
+  "issue": 202,
+  "issueStatus": "OPEN",
+  "validationBase": "4d31a90b3",
+  "scope": "Opt-in geometric radius read, one synthetic Studio sheet; not manufacturing interpretation",
+  "runs": {
+    "baseline01": {
+      "status": "PASS",
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "nativeAndUiDimensions": 4,
+          "nativeRadiusMm": 4,
+          "defaultLinearDimensions": 1,
+          "diameterOptInDimensions": 2,
+          "radiusAndLostRadiusOmittedByExistingScope": true,
+          "noDefectClaim": true,
+          "sourceDirtyHistoryUnchanged": true,
+          "nativeSaveFreshOpen": true,
+          "externalMcp": "NOT_RUN"
+        }
+      ],
+      "nativeSaveDownloads": 1,
+      "nativeSaveHash": "a05699b996bef02d5f34a1f9f47b55a40f1af9cb5ad48ba81b8257d20f363b42",
+      "semanticEquality": true,
+      "selectedSourceHashes": {
+        "apps/cad-studio/src/ui/DrawingWorkspace.tsx": "a4a4fa6331167c2b23068e0bf376fe12bb8884e91fe7a3e8fc25916b45e49c6a",
+        "apps/cad-studio/src/ui/drawing/DimensionsList.tsx": "0f5995ad3ab00c8bc5bdd8c40a86e825318c17b5bf151643f20dac6976e22d2c",
+        "apps/cad-studio/test/drawing-radius-read-baseline-browser.mjs": "786e88ad5ae304361ac7a9e9429eb84232807bc4b4a5e2cb61eecb52c5727bb5",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "packages/barocss-cad-model/src/chat/drawing.ts": "31fdc0cbc9f3fb8bcc0dccce97f2b4d7f2248ee952c1ee5f5ad390ed7bac5f29",
+        "packages/barocss-cad-model/src/chat/drawingToleranceStack.ts": "3b98a2161c6217e1feb742b8b3bb1691b4b6e507706df545b2976bd7c0f948c2",
+        "packages/barocss-cad-model/src/chat/groups.ts": "149af2f407b4b5bb06ad66b904877d001836873fef0f6d72148ec50aa6988732",
+        "packages/barocss-cad-model/src/chat/tools.ts": "e7a2618556c1a0fcae186aa9a0d31567063a38c6e8185d1756fb65b009bf037e",
+        "packages/barocss-cad-model/src/drawing/dimensions.ts": "8e2520768d3e4f1c30bc3282a0ba0ab165d1d7d4f0921e186f8377561faeba2d",
+        "packages/barocss-cad-model/src/drawing/types.ts": "34d4a6d9411716d316f506cc7474b5ca21b098c1c2f1cfa30f5e7aa9f2678d31"
+      },
+      "frozenSourceCount": 1343
+    },
+    "actual01": {
+      "status": "PASS",
+      "errors": 0,
+      "consoleErrors": 0,
+      "sourceChanges": 0,
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "observations": [
+        {
+          "nativeAndUiDimensions": 4,
+          "nativeRadiusMm": 4,
+          "defaultLinearDimensions": 1,
+          "diameterOptInDimensions": 2,
+          "radiusOptInDimensions": 3,
+          "bothOptInDimensions": 4,
+          "unresolvedRadiusHasNoValue": true,
+          "minimalGeometryOnlyRadius": true,
+          "malformedRefusals": 14,
+          "defaultAndDiameterFalseCompatibility": true,
+          "revisionUnchanged": true,
+          "freeNoteOmitted": true,
+          "sourceDirtyHistoryUnchanged": true,
+          "nativeSaveFreshOpen": true,
+          "externalMcp": "NOT_RUN"
+        }
+      ],
+      "nativeSaveDownloads": 1,
+      "nativeSaveHash": "a05699b996bef02d5f34a1f9f47b55a40f1af9cb5ad48ba81b8257d20f363b42",
+      "semanticEquality": true,
+      "selectedSourceHashes": {
+        "apps/cad-studio/src/ui/DrawingWorkspace.tsx": "a4a4fa6331167c2b23068e0bf376fe12bb8884e91fe7a3e8fc25916b45e49c6a",
+        "apps/cad-studio/src/ui/drawing/DimensionsList.tsx": "0f5995ad3ab00c8bc5bdd8c40a86e825318c17b5bf151643f20dac6976e22d2c",
+        "apps/cad-studio/test/drawing-radius-read-browser.mjs": "d2bafe2deb192d24d804af7fcf91ca9fd180c7606acdd21206be136688a76e28",
+        "apps/cad-studio/test/flow-helper.mjs": "4ea7a7a7ac4c08bde54cfe7b1447041457fd329def8748f4a140a2b11bdedb23",
+        "packages/barocss-cad-model/src/chat/drawing.ts": "31fdc0cbc9f3fb8bcc0dccce97f2b4d7f2248ee952c1ee5f5ad390ed7bac5f29",
+        "packages/barocss-cad-model/src/chat/drawingToleranceStack.ts": "4246b77573461fbfdcc5d92db71185877da570f40803c0200f12728d347e340f",
+        "packages/barocss-cad-model/src/chat/groups.ts": "712776650e3684e781bfe67a0c538d722e2925474c00b4ea4c57fcd8e0985900",
+        "packages/barocss-cad-model/src/chat/tools.ts": "e7a2618556c1a0fcae186aa9a0d31567063a38c6e8185d1756fb65b009bf037e",
+        "packages/barocss-cad-model/src/drawing/dimensions.ts": "8e2520768d3e4f1c30bc3282a0ba0ab165d1d7d4f0921e186f8377561faeba2d",
+        "packages/barocss-cad-model/src/drawing/types.ts": "34d4a6d9411716d316f506cc7474b5ca21b098c1c2f1cfa30f5e7aa9f2678d31"
+      },
+      "frozenSourceCount": 1343
+    }
+  },
+  "checks": {
+    "model": {
+      "pass": 27,
+      "fail": 0
+    },
+    "toolset": {
+      "pass": 10,
+      "fail": 0,
+      "budget": 25000,
+      "measuredCharacters": 24997,
+      "budgetUnit": "characters"
+    },
+    "modelType": "PASS",
+    "studioType": "PASS",
+    "scopedLint": "PASS",
+    "toolContractSnapshot": "Update procedure performed; no resulting snapshot delta"
+  },
+  "logHashes": {
+    "model.log": "f4270948ad20082a7c0103a6358d42d66b335e02a1834a79e1cc4915afbd2653",
+    "toolset.log": "959459958b610897cf2988c7a5318ea4f7c088e14291e085ec58fef1f7146fd7",
+    "model-type.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "studio-type.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "screenshots": {
+    "baseline.png": "600916335b2b9e63e89942571c4d142b0399e1da9309d28167e8467d9b238c89",
+    "actual.png": "600916335b2b9e63e89942571c4d142b0399e1da9309d28167e8467d9b238c89",
+    "reopened.png": "600916335b2b9e63e89942571c4d142b0399e1da9309d28167e8467d9b238c89"
+  },
+  "limits": [
+    "External MCP NOT_RUN",
+    "Independent geometry certification NOT_RUN",
+    "One sheet only; actual multi-sheet NOT_RUN",
+    "Synthetic projected-reference setup, not mouse annotation authoring",
+    "No tolerance-stack expansion, annotation fix/accept, schema/storage change, or manufacturing approval",
+    "Screenshots show Studio UI, not API response contents",
+    "No full-suite claim"
+  ],
+  "privacy": "Only synthetic geometry and synthetic sentinel Note shown. No raw receipts, local paths, personal data, credentials, or HTML included.",
+  "delivery": {
+    "commit": "PENDING",
+    "push": "PENDING",
+    "exactIntegrationCI": "PENDING"
+  }
+}

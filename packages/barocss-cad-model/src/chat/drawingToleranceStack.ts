@@ -15,10 +15,11 @@ export const DRAWING_TOLERANCE_STACK = 'calculate_drawing_tolerance_stack';
 export const STACK_READ_TOOLS: { name: string; description: string; input_schema: JsonSchema }[] = [
   {
     name: DRAWING_DIMENSIONS,
-    description: 'Lists linear dimensions by default on one sheet of the tool session’s drawing snapshot, with their IDs, views, model lengths in mm, authored tolerances and any unresolved references. Printed annotations are separate. With include_diameters true, also lists geometric diameters in model mm, without diameter annotations or manufacturing meaning. Tolerance stacks remain linear-only. Use this revision and linear IDs to calculate a tolerance stack. Read only.',
+    description: 'Lists linear dimensions by default on one sheet of the tool session’s drawing snapshot, with their IDs, views, model lengths in mm, authored tolerances and any unresolved references. Printed annotations are separate. With include_diameters or include_radii true, also lists the respective geometric diameters or radii in model mm, without annotations or manufacturing meaning. Tolerance stacks remain linear-only. Use this revision and linear IDs to calculate a tolerance stack. Read only.',
     input_schema: { type: 'object', properties: {
       sheet: sheetArg,
       include_diameters: { type: 'boolean', description: 'Include geometric diameters, without annotations or manufacturing meaning. Defaults to false; tolerance stacks remain linear-only.' },
+      include_radii: { type: 'boolean', description: 'Include geometric radii, without annotations or manufacturing meaning. Defaults to false; independent of include_diameters; tolerance stacks remain linear-only.' },
     }, additionalProperties: false },
   },
   {
@@ -54,7 +55,15 @@ export function readDrawingStack(
   if (hasIncludeDiameters && typeof args.include_diameters !== 'boolean') {
     return { error: 'include_diameters must be a boolean.' };
   }
+  const hasIncludeRadii = Object.prototype.hasOwnProperty.call(args, 'include_radii');
+  if (hasIncludeRadii && name === DRAWING_TOLERANCE_STACK) {
+    return { error: 'include_radii is only supported by drawing.dimensions. Tolerance stacks are linear-only.' };
+  }
+  if (hasIncludeRadii && typeof args.include_radii !== 'boolean') {
+    return { error: 'include_radii must be a boolean.' };
+  }
   const includeDiameters = hasIncludeDiameters && args.include_diameters === true;
+  const includeRadii = hasIncludeRadii && args.include_radii === true;
   const sheet = args.sheet === undefined ? 1 : args.sheet;
   const count = sheetCount(settings);
   if (typeof sheet !== 'number' || !Number.isInteger(sheet) || sheet < 1 || sheet > count) {
@@ -89,13 +98,15 @@ export function readDrawingStack(
     ...(r.ok ? { resolved: true, value: r.value, printed: dimensionLine(r, preset) } : { resolved: false, reason: r.reason }),
   });
   if (!terms) {
-    if (includeDiameters) {
-      const selected = dimensions.filter(r => r.dim.kind === 'linear' || r.dim.kind === 'diameter').map(r =>
+    if (includeDiameters || includeRadii) {
+      const selected = dimensions.filter(r => r.dim.kind === 'linear'
+        || includeDiameters && r.dim.kind === 'diameter' || includeRadii && r.dim.kind === 'radius').map(r =>
         r.dim.kind === 'linear' ? { ...describe(r), kind: 'linear' } : {
-          id: r.dim.id, view: r.dim.view, kind: 'diameter',
+          id: r.dim.id, view: r.dim.view, kind: r.dim.kind,
           ...(r.ok ? { resolved: true, value: r.value } : { resolved: false, reason: r.reason }),
         });
-      return { content: { ...provenance, dimensions: selected }, summary: `${selected.length} linear and diameter drawing dimensions` };
+      const kinds = includeRadii ? (includeDiameters ? 'linear, diameter and radius' : 'linear and radius') : 'linear and diameter';
+      return { content: { ...provenance, dimensions: selected }, summary: `${selected.length} ${kinds} drawing dimensions` };
     }
     const linear = dimensions.filter(r => r.dim.kind === 'linear').map(describe);
     return { content: { ...provenance, dimensions: linear }, summary: `${linear.length} linear drawing dimensions` };
