@@ -1,0 +1,67 @@
+{
+  "status": "PASS",
+  "phase": "public B Open first default evaluation",
+  "observations": [
+    {
+      "label": "empty-document",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [],
+        "outputs": {},
+        "nextId": 0
+      }
+    },
+    {
+      "label": "first-and-all-B-requests",
+      "requests": [
+        {
+          "id": 7,
+          "revision": 7,
+          "parameters": {
+            "HeightB": 10
+          },
+          "nodes": 0
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "downloads": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "New boundary only. No repeat cancellation, OPFS, export, A rerun or alternative routes. External evidence driver; product unchanged."
+  ],
+  "productBaseline": "1d857f2fcb288461cb905e682200edfc76418231",
+  "sourceFiles": 593,
+  "sourceHashesUnchanged": true,
+  "driverImportAdaptation": "Only absolute local helper imports replaced with repository-relative imports; no browser rerun on evidence branch.",
+  "oracles": [
+    {
+      "status": "PASS",
+      "volume": 1200,
+      "centroid": [
+        3,
+        2.5,
+        20
+      ]
+    },
+    {
+      "status": "PASS",
+      "volume": 500,
+      "centroid": [
+        5,
+        2.5,
+        5
+      ]
+    }
+  ]
+}
