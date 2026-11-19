@@ -1,0 +1,476 @@
+{
+  "testedCommit": "1d857f2fcb288461cb905e682200edfc76418231",
+  "status": "PASS",
+  "scope": "Public stale draft disabled/no commit, then explicit current B reselection and Apply",
+  "observations": [
+    {
+      "held": {
+        "id": 2,
+        "lane": "drawing-bodies",
+        "revision": 2,
+        "slot": "read",
+        "laneInstance": 1,
+        "node": {
+          "id": "n3",
+          "kind": "extrude",
+          "sketch": 2,
+          "height": 10,
+          "suppressed": true
+        },
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "features": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "suppressed": false
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "suppressed": false
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "suppressed": false
+          },
+          {
+            "id": "n3",
+            "kind": "extrude",
+            "suppressed": true
+          }
+        ],
+        "ok": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "ref": {
+              "node": 1,
+              "side": "solid"
+            }
+          }
+        ],
+        "afterWire": true
+      },
+      "historyBefore": {
+        "undo": true,
+        "redo": false
+      },
+      "publicDisabledMouseClickNoMutation": true,
+      "undoDoesNotReviveDraft": true,
+      "explicitApplyB": true,
+      "hiddenStaleClosure": "NOT_REACHABLE"
+    },
+    {
+      "allAttributionLogs": [
+        {
+          "phase": "request",
+          "id": 1,
+          "lane": "drawing-bodies",
+          "revision": 1,
+          "slot": "read",
+          "laneInstance": 1,
+          "node": {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 10
+          },
+          "outputs": {
+            "b1": {
+              "node": 1,
+              "side": "solid"
+            },
+            "b3": {
+              "node": 3,
+              "side": "solid"
+            }
+          },
+          "features": [
+            {
+              "id": "n0",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n1",
+              "kind": "extrude",
+              "suppressed": false
+            },
+            {
+              "id": "n2",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n3",
+              "kind": "extrude",
+              "suppressed": false
+            }
+          ]
+        },
+        {
+          "phase": "delivered",
+          "id": 1,
+          "lane": "drawing-bodies",
+          "revision": 1,
+          "slot": "read",
+          "laneInstance": 1,
+          "node": {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 10
+          },
+          "outputs": {
+            "b1": {
+              "node": 1,
+              "side": "solid"
+            },
+            "b3": {
+              "node": 3,
+              "side": "solid"
+            }
+          },
+          "features": [
+            {
+              "id": "n0",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n1",
+              "kind": "extrude",
+              "suppressed": false
+            },
+            {
+              "id": "n2",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n3",
+              "kind": "extrude",
+              "suppressed": false
+            }
+          ],
+          "ok": true,
+          "bodies": [
+            {
+              "key": "b1",
+              "ref": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            {
+              "key": "b3",
+              "ref": {
+                "node": 3,
+                "side": "solid"
+              }
+            }
+          ]
+        },
+        {
+          "phase": "request",
+          "id": 2,
+          "lane": "drawing-bodies",
+          "revision": 2,
+          "slot": "read",
+          "laneInstance": 1,
+          "node": {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 10,
+            "suppressed": true
+          },
+          "outputs": {
+            "b1": {
+              "node": 1,
+              "side": "solid"
+            },
+            "b3": {
+              "node": 3,
+              "side": "solid"
+            }
+          },
+          "features": [
+            {
+              "id": "n0",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n1",
+              "kind": "extrude",
+              "suppressed": false
+            },
+            {
+              "id": "n2",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n3",
+              "kind": "extrude",
+              "suppressed": true
+            }
+          ]
+        },
+        {
+          "phase": "request",
+          "id": 3,
+          "lane": "drawing-bodies",
+          "revision": 3,
+          "slot": "read",
+          "laneInstance": 1,
+          "node": {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 10
+          },
+          "outputs": {
+            "b1": {
+              "node": 1,
+              "side": "solid"
+            },
+            "b3": {
+              "node": 3,
+              "side": "solid"
+            }
+          },
+          "features": [
+            {
+              "id": "n0",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n1",
+              "kind": "extrude",
+              "suppressed": false
+            },
+            {
+              "id": "n2",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n3",
+              "kind": "extrude",
+              "suppressed": false
+            }
+          ]
+        },
+        {
+          "phase": "delivered",
+          "id": 3,
+          "lane": "drawing-bodies",
+          "revision": 3,
+          "slot": "read",
+          "laneInstance": 1,
+          "node": {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 10
+          },
+          "outputs": {
+            "b1": {
+              "node": 1,
+              "side": "solid"
+            },
+            "b3": {
+              "node": 3,
+              "side": "solid"
+            }
+          },
+          "features": [
+            {
+              "id": "n0",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n1",
+              "kind": "extrude",
+              "suppressed": false
+            },
+            {
+              "id": "n2",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n3",
+              "kind": "extrude",
+              "suppressed": false
+            }
+          ],
+          "ok": true,
+          "bodies": [
+            {
+              "key": "b1",
+              "ref": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            {
+              "key": "b3",
+              "ref": {
+                "node": 3,
+                "side": "solid"
+              }
+            }
+          ]
+        },
+        {
+          "phase": "request",
+          "id": 4,
+          "lane": "drawing-bodies",
+          "revision": 4,
+          "slot": "read",
+          "laneInstance": 1,
+          "node": {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 10
+          },
+          "outputs": {
+            "b1": {
+              "node": 1,
+              "side": "solid"
+            },
+            "b3": {
+              "node": 3,
+              "side": "solid"
+            }
+          },
+          "features": [
+            {
+              "id": "n0",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n1",
+              "kind": "extrude",
+              "suppressed": false
+            },
+            {
+              "id": "n2",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n3",
+              "kind": "extrude",
+              "suppressed": false
+            }
+          ]
+        },
+        {
+          "phase": "delivered",
+          "id": 4,
+          "lane": "drawing-bodies",
+          "revision": 4,
+          "slot": "read",
+          "laneInstance": 1,
+          "node": {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 10
+          },
+          "outputs": {
+            "b1": {
+              "node": 1,
+              "side": "solid"
+            },
+            "b3": {
+              "node": 3,
+              "side": "solid"
+            }
+          },
+          "features": [
+            {
+              "id": "n0",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n1",
+              "kind": "extrude",
+              "suppressed": false
+            },
+            {
+              "id": "n2",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n3",
+              "kind": "extrude",
+              "suppressed": false
+            }
+          ],
+          "ok": true,
+          "bodies": [
+            {
+              "key": "b1",
+              "ref": {
+                "node": 1,
+                "side": "solid"
+              }
+            },
+            {
+              "key": "b3",
+              "ref": {
+                "node": 3,
+                "side": "solid"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "instrumentationRestored": true
+    }
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "downloads": [],
+  "sourceChanges": [],
+  "sourcesUnchanged": true,
+  "limits": [
+    "Native mouse click of visibly disabled button only; no hidden stale handler call. NOT_REACHABLE means not invoked through this tested public path, not global unreachable proof.",
+    "Undo/Redo button enabled values preserved, not independent full-history-stack equality.",
+    "Front/top SVG extents within1e-7; no fullSVG/right/iso/native mass independent proof.",
+    "No export/download/Save/Open/product change; only decoded actual bodylist Promise delivery paused after FIFO wire completion."
+  ],
+  "assets": {
+    "02-pending-list-draft-disabled.png": "716662a20930c6c3bff9851de672a606047ae09976bb7edd1a2f8f1c7205095b",
+    "04-explicit-current-B-apply.png": "bd93fd3b88063483f7e7044cc6810a824808e8d93ca58bb18631f70968a8df68"
+  },
+  "runnerSHA256": "2600e137bf91a2aefbc4f19039876ab8169d291da099184960ab03a22a8a497d"
+}
