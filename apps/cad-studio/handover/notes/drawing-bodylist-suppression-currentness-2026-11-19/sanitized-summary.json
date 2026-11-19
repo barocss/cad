@@ -1,0 +1,476 @@
+{
+  "testedCommit": "1d857f2fcb288461cb905e682200edfc76418231",
+  "status": "PASS",
+  "scope": "same-mounted Drawing body-list decoded outcome currentness after public Redo suppression",
+  "observations": [
+    {
+      "held": {
+        "id": 1,
+        "lane": "drawing-bodies",
+        "revision": 1,
+        "slot": "read",
+        "laneInstance": 1,
+        "node": {
+          "id": "n3",
+          "kind": "extrude",
+          "sketch": 2,
+          "height": 10
+        },
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "features": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "suppressed": false
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "suppressed": false
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "suppressed": false
+          },
+          {
+            "id": "n3",
+            "kind": "extrude",
+            "suppressed": false
+          }
+        ],
+        "ok": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "ref": {
+              "node": 1,
+              "side": "solid"
+            }
+          },
+          {
+            "key": "b3",
+            "ref": {
+              "node": 3,
+              "side": "solid"
+            }
+          }
+        ],
+        "afterWire": true
+      },
+      "current": {
+        "phase": "delivered",
+        "id": 2,
+        "lane": "drawing-bodies",
+        "revision": 2,
+        "slot": "read",
+        "laneInstance": 1,
+        "node": {
+          "id": "n3",
+          "kind": "extrude",
+          "sketch": 2,
+          "height": 10,
+          "suppressed": true
+        },
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "features": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "suppressed": false
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "suppressed": false
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "suppressed": false
+          },
+          {
+            "id": "n3",
+            "kind": "extrude",
+            "suppressed": true
+          }
+        ],
+        "ok": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "ref": {
+              "node": 1,
+              "side": "solid"
+            }
+          }
+        ]
+      },
+      "options": [
+        "",
+        "b1"
+      ],
+      "liveA": {
+        "sheet": {
+          "scale": 1,
+          "dimensions": [],
+          "hidden": {
+            "front": 0,
+            "top": 0,
+            "right": 0,
+            "iso": 3
+          },
+          "section": null,
+          "sections": [],
+          "placedSections": [],
+          "apartSections": [],
+          "details": [],
+          "boxes": {
+            "front": [
+              107.6507575950825,
+              108.02270384252431,
+              137.6507575950825,
+              114.02270384252431
+            ],
+            "top": [
+              107.6507575950825,
+              69,
+              137.6507575950825,
+              81
+            ],
+            "right": [
+              168.5,
+              108.02270384252431,
+              180.5,
+              114.02270384252431
+            ],
+            "iso": [
+              159.6507575950825,
+              63.97729615747569,
+              189.3492424049175,
+              86.0227038425243
+            ]
+          },
+          "breaks": {},
+          "issues": [
+            {
+              "code": "OVERALL_MISSING",
+              "severity": "warning",
+              "fix": "auto-dimension"
+            }
+          ],
+          "tables": [],
+          "suggestions": [
+            {
+              "id": "general-note",
+              "kind": "general-note",
+              "estimate": true
+            }
+          ]
+        },
+        "paths": {
+          "front": [
+            {
+              "x1": "107.6508",
+              "y1": "114.0227",
+              "x2": "137.6508",
+              "y2": "114.0227",
+              "stroke-width": "0.5"
+            },
+            {
+              "x1": "137.6508",
+              "y1": "114.0227",
+              "x2": "137.6508",
+              "y2": "108.0227",
+              "stroke-width": "0.5"
+            },
+            {
+              "x1": "107.6508",
+              "y1": "108.0227",
+              "x2": "137.6508",
+              "y2": "108.0227",
+              "stroke-width": "0.5"
+            },
+            {
+              "x1": "107.6508",
+              "y1": "114.0227",
+              "x2": "107.6508",
+              "y2": "108.0227",
+              "stroke-width": "0.5"
+            }
+          ],
+          "top": [
+            {
+              "x1": "107.6508",
+              "y1": "81",
+              "x2": "137.6508",
+              "y2": "81",
+              "stroke-width": "0.5"
+            },
+            {
+              "x1": "137.6508",
+              "y1": "81",
+              "x2": "137.6508",
+              "y2": "69",
+              "stroke-width": "0.5"
+            },
+            {
+              "x1": "137.6508",
+              "y1": "69",
+              "x2": "107.6508",
+              "y2": "69",
+              "stroke-width": "0.5"
+            },
+            {
+              "x1": "107.6508",
+              "y1": "81",
+              "x2": "107.6508",
+              "y2": "69",
+              "stroke-width": "0.5"
+            }
+          ]
+        },
+        "sameMount": true
+      }
+    },
+    {
+      "allAttributionLogs": [
+        {
+          "phase": "request",
+          "id": 1,
+          "lane": "drawing-bodies",
+          "revision": 1,
+          "slot": "read",
+          "laneInstance": 1,
+          "node": {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 10
+          },
+          "outputs": {
+            "b1": {
+              "node": 1,
+              "side": "solid"
+            },
+            "b3": {
+              "node": 3,
+              "side": "solid"
+            }
+          },
+          "features": [
+            {
+              "id": "n0",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n1",
+              "kind": "extrude",
+              "suppressed": false
+            },
+            {
+              "id": "n2",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n3",
+              "kind": "extrude",
+              "suppressed": false
+            }
+          ]
+        },
+        {
+          "phase": "request",
+          "id": 2,
+          "lane": "drawing-bodies",
+          "revision": 2,
+          "slot": "read",
+          "laneInstance": 1,
+          "node": {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 10,
+            "suppressed": true
+          },
+          "outputs": {
+            "b1": {
+              "node": 1,
+              "side": "solid"
+            },
+            "b3": {
+              "node": 3,
+              "side": "solid"
+            }
+          },
+          "features": [
+            {
+              "id": "n0",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n1",
+              "kind": "extrude",
+              "suppressed": false
+            },
+            {
+              "id": "n2",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n3",
+              "kind": "extrude",
+              "suppressed": true
+            }
+          ]
+        },
+        {
+          "phase": "delivered",
+          "id": 2,
+          "lane": "drawing-bodies",
+          "revision": 2,
+          "slot": "read",
+          "laneInstance": 1,
+          "node": {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 10,
+            "suppressed": true
+          },
+          "outputs": {
+            "b1": {
+              "node": 1,
+              "side": "solid"
+            },
+            "b3": {
+              "node": 3,
+              "side": "solid"
+            }
+          },
+          "features": [
+            {
+              "id": "n0",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n1",
+              "kind": "extrude",
+              "suppressed": false
+            },
+            {
+              "id": "n2",
+              "kind": "sketch",
+              "suppressed": false
+            },
+            {
+              "id": "n3",
+              "kind": "extrude",
+              "suppressed": true
+            }
+          ],
+          "ok": true,
+          "bodies": [
+            {
+              "key": "b1",
+              "ref": {
+                "node": 1,
+                "side": "solid"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "instrumentationRestored": true
+    }
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "downloads": [],
+  "sourceChanges": [],
+  "frozenSourcesUnchanged": true,
+  "nativeSnapshots": [
+    {
+      "label": "01-current-suppressed-list",
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 2160,
+            "centroid": [
+              15.000000000000004,
+              6,
+              3
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      }
+    },
+    {
+      "label": "02-late-active-list-ignored",
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 2160,
+            "centroid": [
+              15.000000000000004,
+              6,
+              3
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      }
+    }
+  ],
+  "limits": [
+    "Only decoded EngineClient.part outcome deferred after original FIFO wire processing; no Worker events reordered or mutated.",
+    "Compared entire __studioDrawing diagnostic and front/top SVG line attributes with extents tolerance1e-7, not entire SVG/right/iso.",
+    "Current b1 draft preserved and Apply remains enabled; Apply not clicked and stale-Apply protection not claimed.",
+    "No exports/downloads/Save/Open, broader native families, independent mass oracle or production changes.",
+    "Prior raw attribution and global-scope afterwire attempts failed before target hold; later normal observation confirmed actual scope null. Those failures do not prove product defects."
+  ],
+  "assets": {
+    "02-late-active-list-ignored.png": "1a7848eed04988b68cdafea2a6ce91bdbb5ecfac0500238baae9eb5d8f42294e",
+    "01-current-suppressed-list.png": "c9077591c598de36528b638a1a83f898de113156689a6c25b9ae5676de68cbab"
+  },
+  "runnerSHA256": "c4f4214cfa40586d9b19577fb4c94c2122bea9555fe1e037b51d1ec42922cabb"
+}
