@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="540" viewBox="0 0 1120 540" role="img" aria-labelledby="title desc">
+<title id="title">Assembly review replay concept</title><desc id="desc">Walking step by step and jumping straight to step three resolve the same assembly review state, without modifying the source CAD.</desc>
+<rect width="1120" height="540" rx="26" fill="#101826"/>
+<g font-family="system-ui, sans-serif">
+<text x="48" y="53" fill="#7ddbd4" font-size="17" font-weight="700" letter-spacing="2">CAD STUDIO / BACKLOG CONCEPT</text>
+<text x="48" y="108" fill="#f3f7fd" font-size="39" font-weight="700">Two paths. Same assembly state.</text>
+<rect x="48" y="152" width="490" height="134" rx="16" fill="#1b2840" stroke="#344867"/>
+<rect x="582" y="152" width="490" height="134" rx="16" fill="#1b2840" stroke="#344867"/>
+<text x="76" y="190" fill="#c5d2e7" font-size="19" font-weight="650">A · Walk through the steps</text>
+<text x="610" y="190" fill="#c5d2e7" font-size="19" font-weight="650">B · Jump straight to the step</text>
+<g fill="#2b3f61"><rect x="76" y="209" width="105" height="52" rx="9"/><rect x="216" y="209" width="105" height="52" rx="9"/><rect x="610" y="209" width="105" height="52" rx="9"/></g>
+<g fill="#1b555c" stroke="#66dbcf"><rect x="356" y="209" width="105" height="52" rx="9"/><rect x="890" y="209" width="105" height="52" rx="9"/></g>
+<g font-size="17" fill="#f3f7fd" text-anchor="middle"><text x="128" y="241">Step 1</text><text x="268" y="241">Step 2</text><text x="408" y="241">Step 3</text><text x="662" y="241">Step 1</text><text x="942" y="241">Step 3</text></g>
+<g fill="none" stroke="#8faacb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M187 235h21m-7-6 7 6-7 6m126-6h21m-7-6 7 6-7 6M727 235h151m-7-6 7 6-7 6"/><path d="M293 299v23h267m267-23v23H560v22m-7-7 7 7 7-7"/></g>
+<rect x="207" y="360" width="706" height="112" rx="16" fill="#18363f" stroke="#66dbcf"/>
+<text x="560" y="405" text-anchor="middle" fill="#e3fcf8" font-size="24" font-weight="700">STEP 3 · ONE REVIEW STATE</text>
+<text x="560" y="443" text-anchor="middle" fill="#b4e7e1" font-size="18">Part IDs · visibility · highlights · preview poses</text>
+<text x="560" y="508" text-anchor="middle" fill="#9aadc7" font-size="16">Source CAD unchanged  /  Not a physics or clearance check  /  Not implemented</text>
+</g></svg>
