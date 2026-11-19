@@ -75,11 +75,11 @@ test('no last missing owner, middle duplicate, nonadjacent face overlap or repea
   for (const change of cases) reject(change);
 });
 
-test('downstream Hole or cut remains unsupported even with output and evaluated identity updated', () => {
+test('downstream blind Hole or cut remains unsupported even with output and evaluated identity updated', () => {
   for (const kind of ['hole', 'difference'] as const) reject(f => {
     const last = f.doc.nodes.length - 1;
     f.doc.nodes.push(kind === 'hole'
-      ? { id: 'after-hole', kind: 'hole', parent: { node: last, side: 'solid' }, center: [20, 20], radius: 1 }
+      ? { id: 'after-hole', kind: 'hole', parent: { node: last, side: 'solid' }, center: [20, 20], radius: 1, depth: 1 }
       : { id: 'after-cut', kind: 'difference', parent: { node: last, side: 'solid' }, tool: { node: 1, side: 'solid' } });
     f.doc.outputs.result = { node: last + 1, side: 'solid' }; f.body.ref = { node: last + 1, side: 'solid' };
   });

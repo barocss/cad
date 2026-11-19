@@ -43,9 +43,9 @@ function resolve(source: SheetRuleSource, body: BodyResult): FlangeBendOwner[] {
     || base.sketch !== 0 || !positive(base.thickness) || !positive(base.bendRadius)) return [];
   if (base.bendTable !== undefined ? !object(base.bendTable) || !Array.isArray(base.bendTable.rows) || !base.bendTable.rows.length || base.kFactor !== undefined
     : typeof base.kFactor !== 'number' || !Number.isFinite(base.kFactor) || base.kFactor < 0 || base.kFactor > 1) return [];
-  // Consume every node in one contiguous parent chain: reliefs first, then flanges.
+  // Consume every node in one contiguous parent chain: reliefs first, then flanges, then optional through holes.
   const flangeIndices = new Map<string, number>();
-  let flangePhase = false;
+  let flangePhase = false, holePhase = false;
   for (let index = 2; index < doc.nodes.length; index++) {
     const n = doc.nodes[index];
     if (n.kind === 'sheet-corner-relief' && !flangePhase) {
@@ -53,7 +53,14 @@ function resolve(source: SheetRuleSource, body: BodyResult): FlangeBendOwner[] {
         || !parent(n.parent, index - 1) || !edge(n.edges) || !['square', 'round'].includes(n.shape) || !positive(n.size)) return [];
       continue;
     }
-    if (n.kind !== 'sheet-flange' || typeof n.id !== 'string'
+    if (n.kind === 'hole') {
+      if (flangeIndices.size < 2 || !only(n, ['id', 'kind', 'parent', 'center', 'radius', 'axis'])
+        || !parent(n.parent, index - 1) || !pair(n.center) || !positive(n.radius)
+        || (n.axis !== undefined && n.axis !== 'z')) return [];
+      holePhase = true;
+      continue;
+    }
+    if (holePhase || n.kind !== 'sheet-flange' || typeof n.id !== 'string'
       || !only(n, ['id', 'kind', 'parent', 'edges', 'length', 'angle', 'bendRadius', 'measure', 'position', 'sig'])
       || !parent(n.parent, index - 1) || !edge(n.edges) || !positive(n.length)
       || (n.angle !== undefined && n.angle !== 90) || (n.bendRadius !== undefined && !positive(n.bendRadius))
