@@ -1,0 +1,36 @@
+{
+  "status": "PASS",
+  "testedMain": "79c12e5a394b19398aeae05cb314585bbd5e8242",
+  "fixtureSha256": "3f80d1fa0066af2ee68317a8907220852f348532a1d4f69d68efe8cb9cb235a7",
+  "workflow": "D341 obj_3: explicit Untrim, u-max Extend 2.5 mm, actual Save and fresh Open",
+  "independentAffinePositionBoundMM": 6.666704965851977e-10,
+  "thresholdMM": 1e-07,
+  "expectedBounds": {
+    "x": [
+      12,
+      47.5
+    ],
+    "y": [
+      -4,
+      20
+    ],
+    "z": 3
+  },
+  "originalSourcesAndOtherObjectsPreserved": true,
+  "selectedSourceHiddenOnly": true,
+  "savedAndReopenedDocumentAndDecodedGeometryEqual": true,
+  "errors": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "notRun": [
+    "Undo/Redo in this run",
+    "general curved surfaces",
+    "solid/mass",
+    "renderer precision"
+  ],
+  "screenshotLimit": "trimmed-original shows original trimmed geometry, not cropped preflight notice visibility"
+}
