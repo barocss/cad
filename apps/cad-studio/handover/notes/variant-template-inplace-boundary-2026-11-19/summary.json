@@ -1,0 +1,335 @@
+{
+  "testedCommit": "1d857f2fcb288461cb905e682200edfc76418231",
+  "scope": "Synthetic public template and single top-level Edit in place variant boundaries; evidence only",
+  "runs": [
+    {
+      "run": "template-actual01",
+      "qualification": "Public Save as a template / New from template",
+      "status": "PASS",
+      "observations": [
+        {
+          "label": "first-and-all-B-requests",
+          "requests": [
+            {
+              "id": 7,
+              "revision": 7,
+              "parameters": {
+                "HeightB": 10
+              },
+              "nodes": 0
+            }
+          ]
+        }
+      ],
+      "oracles": [
+        {
+          "label": "01-A-working40",
+          "expected": {
+            "status": "PASS",
+            "volume": 1200,
+            "centroid": [
+              3,
+              2.5,
+              20
+            ]
+          },
+          "exit": 0,
+          "inputSHA256": "ab110a591b49ddf05027d7f8e2b4a6aa09d590700352f5a3c50a7104c522c223"
+        },
+        {
+          "label": "02-B-template10",
+          "expected": {
+            "status": "PASS",
+            "volume": 500,
+            "centroid": [
+              5,
+              2.5,
+              5
+            ]
+          },
+          "exit": 0,
+          "inputSHA256": "e02a38a8c1fd9bdd91f9951508a79ccbfa9f65437f71266feef68d0e6fd9897f"
+        }
+      ],
+      "states": [
+        {
+          "label": "01-A-working40",
+          "parameters": {
+            "HeightA": 20
+          },
+          "bodies": {
+            "fresh": true,
+            "bodies": [
+              {
+                "key": "b1",
+                "volume": 1200.0000000000005,
+                "centroid": [
+                  2.999999999999999,
+                  2.499999999999999,
+                  20
+                ],
+                "massRef": null
+              }
+            ],
+            "massReady": true,
+            "colored": []
+          }
+        },
+        {
+          "label": "02-B-template10",
+          "parameters": {
+            "HeightB": 10
+          },
+          "bodies": {
+            "fresh": true,
+            "bodies": [
+              {
+                "key": "b1",
+                "volume": 500.00000000000006,
+                "centroid": [
+                  4.999999999999999,
+                  2.4999999999999996,
+                  5
+                ],
+                "massRef": null
+              }
+            ],
+            "massReady": true,
+            "colored": []
+          }
+        }
+      ],
+      "errors": [],
+      "consoleErrors": [],
+      "sourceChanges": [],
+      "downloads": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "frozenSourcesUnchangedAfterCleanup": true,
+      "frozenSourceCount": 593
+    },
+    {
+      "run": "inplace-actual02",
+      "qualification": "Master and working variant Edit in place boundaries",
+      "status": "PASS",
+      "observations": [
+        {
+          "label": "first-and-all-child-requests",
+          "incoming": [
+            {
+              "id": 5,
+              "revision": 5,
+              "parameters": {
+                "HeightB": 10
+              },
+              "nodes": 0
+            }
+          ]
+        }
+      ],
+      "oracles": [
+        {
+          "label": "02-child-B10",
+          "expected": {
+            "status": "PASS",
+            "volume": 500,
+            "centroid": [
+              5,
+              2.5,
+              5
+            ]
+          },
+          "exit": 0,
+          "inputSHA256": "e02a38a8c1fd9bdd91f9951508a79ccbfa9f65437f71266feef68d0e6fd9897f"
+        },
+        {
+          "label": "04-A-working40",
+          "expected": {
+            "status": "PASS",
+            "volume": 1200,
+            "centroid": [
+              3,
+              2.5,
+              20
+            ]
+          },
+          "exit": 0,
+          "inputSHA256": "ab110a591b49ddf05027d7f8e2b4a6aa09d590700352f5a3c50a7104c522c223"
+        }
+      ],
+      "states": [
+        {
+          "label": "01-A-rejected101",
+          "parameters": {
+            "HeightA": 20
+          },
+          "bodies": {
+            "fresh": true,
+            "bodies": [
+              {
+                "key": "b1",
+                "volume": 600.0000000000002,
+                "centroid": [
+                  2.999999999999999,
+                  2.499999999999999,
+                  10
+                ],
+                "massRef": null
+              }
+            ],
+            "massReady": true,
+            "colored": []
+          }
+        },
+        {
+          "label": "02-child-B10",
+          "parameters": {
+            "HeightB": 10
+          },
+          "bodies": {
+            "fresh": true,
+            "bodies": [
+              {
+                "key": "b1",
+                "volume": 500.00000000000006,
+                "centroid": [
+                  4.999999999999999,
+                  2.4999999999999996,
+                  5
+                ],
+                "massRef": null
+              }
+            ],
+            "massReady": true,
+            "colored": []
+          }
+        },
+        {
+          "label": "03-Master-finished",
+          "parameters": {
+            "HeightA": 20
+          },
+          "bodies": {
+            "fresh": true,
+            "bodies": [
+              {
+                "key": "b1",
+                "volume": 600.0000000000002,
+                "centroid": [
+                  2.999999999999999,
+                  2.499999999999999,
+                  10
+                ],
+                "massRef": null
+              }
+            ],
+            "massReady": true,
+            "colored": []
+          }
+        },
+        {
+          "label": "04-A-working40",
+          "parameters": {
+            "HeightA": 20
+          },
+          "bodies": {
+            "fresh": true,
+            "bodies": [
+              {
+                "key": "b1",
+                "volume": 1200.0000000000005,
+                "centroid": [
+                  2.999999999999999,
+                  2.499999999999999,
+                  20
+                ],
+                "massRef": null
+              }
+            ],
+            "massReady": true,
+            "colored": []
+          }
+        },
+        {
+          "label": "05-child-working-Finish-refused",
+          "parameters": {
+            "HeightB": 10
+          },
+          "bodies": {
+            "fresh": true,
+            "bodies": [
+              {
+                "key": "b1",
+                "volume": 2000.0000000000002,
+                "centroid": [
+                  4.999999999999999,
+                  2.4999999999999996,
+                  20
+                ],
+                "massRef": null
+              }
+            ],
+            "massReady": true,
+            "colored": []
+          }
+        },
+        {
+          "label": "06-Cancel-restored-Master",
+          "parameters": {
+            "HeightA": 20
+          },
+          "bodies": {
+            "fresh": true,
+            "bodies": [
+              {
+                "key": "b1",
+                "volume": 600.0000000000002,
+                "centroid": [
+                  2.999999999999999,
+                  2.499999999999999,
+                  10
+                ],
+                "massRef": null
+              }
+            ],
+            "massReady": true,
+            "colored": []
+          }
+        }
+      ],
+      "errors": [],
+      "consoleErrors": [],
+      "sourceChanges": [],
+      "downloads": [],
+      "cleanup": [
+        "CONTEXT_CLOSED",
+        "BROWSER_CLOSED",
+        "SERVER_CLOSED"
+      ],
+      "frozenSourcesUnchangedAfterCleanup": true,
+      "frozenSourceCount": 593
+    }
+  ],
+  "initialFailure": {
+    "run": "inplace-actual01",
+    "kind": "fixture floating-point exact equality timeout",
+    "observedVolume": 2000.0000000000002,
+    "expectedVolume": 2000,
+    "correction": "wait with absolute tolerance 1e-9, no product change",
+    "notRunInInitialAttempt": [
+      "child working Finish refusal",
+      "Cancel retirement"
+    ]
+  },
+  "assets": {
+    "inplace-Cancel-Master20.png": "3445d0256db819e3d925c1bf0adec3aeb2ff43381de406e46ec32118ff609e52",
+    "template-B10.png": "043595bd7b0443c3938a38599453fdf707171c64e61d130a23e0095cb8473238"
+  },
+  "originalDriverSHA256": {
+    "cad256-template.mjs": "45df3671bc78fdc61a69c615503296f8a2db05ac5f308a100cff0838dcf123b7",
+    "cad256-inplace.mjs": "d0d7dba412946e53b700cd53e53b402ef03ba4f0280988e2f62d918978c3cb7a"
+  }
+}
