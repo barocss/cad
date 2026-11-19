@@ -1,3 +1,4 @@
+import { sharedSheetRuleOwner, ownsSharedSheetRules, sameSheetRuleSource, type SheetRuleSource } from './state/sharedSheetRules';
 import { canRecordOpenSplineFitPointDraft, isOpenSplineFitPointChange } from './sketch/openSplineFitPointHistory';
 import { canRecordOpenArcRadiusDraft, isOpenArcRadiusChange } from './sketch/openArcRadiusHistory';
 import { canEditOpenPolylineTerminalDraft, isOpenPolylineTerminalLengthChange } from './sketch/openPolylineTerminalLength';
@@ -1964,14 +1965,39 @@ export function App() {
     else setActive({ cmd, values: { ...(cmd.defaults?.(startCtx) ?? {}), ...initial }, preview: 'busy', ctx: { ...startCtx }, ...(cmd.place ? { placing: true } : {}) });
   }, [ctx, doc, selection, instanceSel, bodies, engine, commit, evaluated, shownDoc.direct, variants.showing, setSketch, acceptanceScope, openCut, commandPreview.retire, discardFeatureDraft, fresh, busy, modelUnavailable, nativeVertexReady, checkInterference, midpointSketch.start, cancelNativeReview, snapStep, directSel]);
 
+  const sheetRuleSource = { doc, evaluated, bodies, open: openIntent.current, worker: workerSession,
+    generation: workOwnership.current.generation,
+    available: fresh && !busy && marker === null && !variants.showing && !inPlace && !project.opening()
+      && !rendering && !drawing && !sketch && !previewBodies && !active && !assembly.draft };
+  const sheetRuleSourceNow = useRef(sheetRuleSource); sheetRuleSourceNow.current = sheetRuleSource;
+  const sheetRuleCurrent = () => ({ ...sheetRuleSourceNow.current, doc: docNow.current, evaluated: evaluatedRef.current,
+    bodies: bodiesRef.current, open: openIntent.current, worker: workerSessionNow.current, generation: workOwnership.current.generation,
+    available: sheetRuleSourceNow.current.available && !project.opening() && markerNow.current === null
+      && !shownVariant.current && !inPlaceNow.current && !activeStore.get() });
+  const sheetRuleAction = (body: BodyResult, source: SheetRuleSource) => {
+    const owner = sharedSheetRuleOwner(doc, evaluated, body);
+    const owns = () => ownsSharedSheetRules(source, sheetRuleCurrent(), body) && ownsEvaluatedSource();
+    if (!owner || !owns()) return undefined;
+    return () => {
+      if (!owns() || !canChangeDocument()) return;
+      openHistoryFeatureAt(owner.index, undefined, () => owns() && canChangeDocument(), () => setFlatView(null));
+    };
+  };
+
   const readFeatureTransitionDraft = () => assembly.currentDraft() ?? commandDraft() ?? nodeEditorDraft.current;
   const openHistoryFeature = (event: React.MouseEvent<HTMLButtonElement>) => {
     const raw = event.currentTarget.dataset.nodeIndex;
     if (raw === undefined) return;
     const index = Number(raw), node = doc.nodes[index];
     if (!Number.isInteger(index) || index < 0 || !node) return;
-    if (index === editNode && nodeEditorDraft.current) return;
+    openHistoryFeatureAt(index, event);
+  };
+  const openHistoryFeatureAt = (index: number, event?: React.MouseEvent<HTMLButtonElement>, owns?: () => boolean, onOpened?: () => void) => {
+    const node = doc.nodes[index];
+    if (!node || (owns && !owns()) || (index === editNode && nodeEditorDraft.current)) return;
     workspaceModeExit.switchWhenReady(() => {
+      if (owns && !owns()) return;
+      onOpened?.();
       footprintRequest.current++;
       cancelNativeReview();
       setInstanceSel([]); setDirectSel([]); assembly.cancel();
@@ -2489,7 +2515,14 @@ export function App() {
     commit(next);
   };
   // (A sheet-metal body's flat pattern shown: its body key; R12.2, D117.)
-  const [flatView, setFlatView] = useState<string | null>(null);
+  const [flatView, setFlatViewState] = useState<{ body: BodyResult; source: SheetRuleSource } | null>(null);
+  const setFlatView = (key: string | null) => {
+    const body = key === null ? undefined : bodies.find(value => value.key === key);
+    setFlatViewState(body ? { body, source: sheetRuleSource } : null);
+  };
+  useEffect(() => {
+    if (flatView && !sameSheetRuleSource(flatView.source, sheetRuleCurrent(), flatView.body)) setFlatViewState(null);
+  });
   // (FR4a: the part's cut list, open or not.)
   const [cutListView, setCutListView] = useState(false);
   const { open, save, makeVersion, saveShared, exportTaskRun, startTaskRun, stopTaskRun, refreshTaskRun, rebuildTaskRun, observeTaskRunStatus, openTaskRunCheckpoint, openTaskRunBaseline, readTaskRunApproval, checkWorkingApproval, prepareWorkingRepair, prepareTaskReplacement, reviewTaskRun, decideTaskRunCandidate, cancelLocalCandidateReview, meshImport, editRepair } = useStudioDocumentFiles({
@@ -3884,7 +3917,7 @@ export function App() {
       <ViewContextMenu model={{ doc, bodies, ctx, placed: placedMeasureContext ? placedMeasureSources : undefined, placedMeasureContextReady }} menu={modelUnavailable ? null : menu} setMenu={setMenu} viewport={viewport} changes={{ commit, start, deleteSelection, setSelection, setMeasure, setEditNode }} />
 
       {cutListView && (() => { const list = partCutList(doc, bodies, material); return list ? <CutListDialog list={list} nesting={nestCutList(doc, list)} name={fileName.replace(/[^\w.-]+/g, '_')} onClose={() => setCutListView(false)} /> : null; })()}
-      {flatView && (() => { const fb = bodies.find(x => x.key === flatView); return fb?.flat ? <FlatPatternDialog flat={fb.flat} name={`${fileName}-${bodyName(doc, fb)}`.replace(/[^\w.-]+/g, '_')} onClose={() => setFlatView(null)} /> : null; })()}
+      {flatView && (() => { const fb = flatView.body; return sameSheetRuleSource(flatView.source, sheetRuleCurrent(), fb) && fb.flat ? <FlatPatternDialog onEditSharedRules={sheetRuleAction(fb, flatView.source)} flat={fb.flat} name={`${fileName}-${bodyName(doc, fb)}`.replace(/[^\w.-]+/g, '_')} onClose={() => setFlatView(null)} /> : null; })()}
       {!workerFailure && <MeshFileDialogs controller={meshImport}><ModelExportDialogs controller={modelExports} /></MeshFileDialogs>}
       {/* (Notices stack in one column: an Open failure still shows while a recovery copy waits for its answer.) */}
       <div className="toast-stack">

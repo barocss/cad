@@ -1,0 +1,41 @@
+{
+  "status": "PASS",
+  "qualification": "Direct terminal U shared-rule navigation.",
+  "limits": [
+    "Direct terminal sheet-contour only; no manufacturing qualification, downstream owner inference, individual bend edit or exports."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "baseCommit": "3aa17b006",
+  "sourceCount": 1112,
+  "sourceUnchangedAfterCleanup": true,
+  "changedSourceHashes": {
+    "apps/cad-studio/src/App.tsx": "19a528e7ffea08038a79acfcecb33df6e6964f74eb06af90d7f09ded9f654188",
+    "apps/cad-studio/src/state/sharedSheetRules.ts": "932f28c1b0f50fe36a8203aaba938dca1ddab0c48cfc335d46f2a90d8e7d0482",
+    "apps/cad-studio/src/ui/FlatPatternDialog.tsx": "5470616aaae55172e1cc34357b083ee2f09705e7a3d26e4f9b36c6d7bb9475a7",
+    "apps/cad-studio/test/shared-sheet-rules-browser.mjs": "a6f541ab56687de3b25920b2ff2388055f39da816094491c5c2c4e6010127c14"
+  },
+  "checks": {
+    "unit": "11/11 PASS",
+    "studioTypes": "PASS",
+    "modelTypesAfterFinalTestEdit": "PASS",
+    "scopedLint": "PASS",
+    "viteProductionBuild": "PASS",
+    "diffCheck": "PASS"
+  },
+  "pendingOpenQualification": "File.arrayBuffer transport was delayed. Accepted R3 document remained and History was absent; screenshot shows the old flat dialog hidden. A stale button click was conditional, so dispatched-click coverage is not asserted. Captured Open-token mismatch is unit-tested.",
+  "artifacts": {
+    "u-r3-shared-flat.png": "f1e80231b934bb8fea669646fa93b217e3241263c1adb2a2765680aaa6626284",
+    "pending-open-no-history.png": "96a6b02f501a7f0c461ef2a2ea5a50272292070535340f954ac3fe55773fe715",
+    "same-key-open-no-old-dialog.png": "b2ad41a5a79ce537b8060567883257262d359dc494cda63c99c06afe670890b1",
+    "u-r2.bcad": "6b801e1ae312dc013fdcba8319a6ca4f520066ec254b50091b2f308812f1a57f",
+    "u-r3.bcad": "4544ebf707b103def1b51931737aaf31d556835db57c80f80d3c8713146dfd94"
+  }
+}

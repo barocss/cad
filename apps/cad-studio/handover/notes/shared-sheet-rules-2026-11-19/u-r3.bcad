@@ -1,0 +1,59 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [
+    {
+      "kind": "sheet-contour",
+      "path": [
+        [
+          0,
+          30
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          40,
+          0
+        ],
+        [
+          40,
+          30
+        ]
+      ],
+      "side": "left",
+      "width": 25,
+      "thickness": 1.5,
+      "bendRadius": 3,
+      "kFactor": 0.44,
+      "plane": {
+        "origin": [
+          0,
+          25,
+          0
+        ],
+        "normal": [
+          0,
+          -1,
+          0
+        ],
+        "xAxis": [
+          1,
+          0,
+          0
+        ]
+      },
+      "id": "n0"
+    }
+  ],
+  "outputs": {
+    "b0": {
+      "node": 0,
+      "side": "solid"
+    }
+  },
+  "nextId": 1
+}

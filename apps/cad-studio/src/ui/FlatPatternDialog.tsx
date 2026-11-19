@@ -33,7 +33,7 @@ function loopPath(segs: readonly FlatSegment[], h: number): string {
   return d + 'Z';
 }
 
-export function FlatPatternDialog({ flat, name, onClose }: { flat: FlatPattern; name: string; onClose: () => void }) {
+export function FlatPatternDialog({ flat, name, onClose, onEditSharedRules }: { flat: FlatPattern; name: string; onClose: () => void; onEditSharedRules?: () => void }) {
   const [version, setVersion] = useState<DxfVersion>('AC1015');
   const [w, h] = flat.box.max, m = Math.max(w, h) * 0.06 + 2;
   const exportDxf = () => downloadBytes(writeDxf(flatPatternDxf(flat), { version }).bytes, `${name}-flat.dxf`, 'image/vnd.dxf');
@@ -42,6 +42,9 @@ export function FlatPatternDialog({ flat, name, onClose }: { flat: FlatPattern; 
     <div style={{ flex: 1, minWidth: 0 }}>
       <div className="toast-title">Flat pattern · {name}</div>
       <div className="toast-hint">{f2(w)} × {f2(h)} mm · {flat.bends.length} bend{flat.bends.length === 1 ? '' : 's'} · T {f2(flat.thickness)} mm, K {flat.kFactor} · seen from {flat.fixedFace}</div>
+      {onEditSharedRules && <div className="toast-hint">All bends use this profile’s shared thickness, inner radius and K-factor or bend table.
+        <Button variant="ghost" onClick={onEditSharedRules}>Edit shared sheet rules</Button>
+      </div>}
       <svg aria-label="Flat pattern drawing" viewBox={`${f2(-m)} ${f2(-m)} ${f2(w + 2 * m)} ${f2(h + 2 * m)}`} style={{ width: '100%', maxHeight: '55vh', margin: '8px 0', background: 'var(--surface-2, transparent)' }}>
         <path d={flat.loops.map(l => loopPath(l.segments, h)).join('')} fillRule="evenodd" fill="currentColor" fillOpacity={0.08} stroke="currentColor" strokeWidth={Math.max(w, h) / 400} />
         {flat.bends.map((b, k) => {
