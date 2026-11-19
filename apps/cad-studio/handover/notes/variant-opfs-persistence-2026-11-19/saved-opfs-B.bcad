@@ -1,0 +1,73 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {
+    "HeightB": 10
+  },
+  "nodes": [
+    {
+      "id": "n0",
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        0,
+        0
+      ],
+      "max": [
+        10,
+        5
+      ]
+    },
+    {
+      "id": "n1",
+      "kind": "extrude",
+      "sketch": 0,
+      "height": {
+        "parameter": "HeightB"
+      }
+    }
+  ],
+  "outputs": {
+    "b1": {
+      "node": 1,
+      "side": "solid"
+    }
+  },
+  "nextId": 2,
+  "variability": {
+    "version": 1,
+    "inputs": [
+      {
+        "name": "size",
+        "type": "number",
+        "unit": "mm",
+        "min": 1,
+        "max": 100,
+        "default": 10,
+        "bindings": [
+          {
+            "to": "parameter",
+            "part": "base",
+            "parameter": "HeightB"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "name": "Tall",
+        "values": {
+          "size": 22
+        }
+      },
+      {
+        "name": "Persist24",
+        "values": {
+          "size": 24
+        }
+      }
+    ],
+    "active": "Persist24"
+  }
+}

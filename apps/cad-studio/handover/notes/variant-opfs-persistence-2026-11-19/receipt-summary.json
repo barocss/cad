@@ -1,0 +1,266 @@
+{
+  "status": "PASS",
+  "qualification": "#256 B explicit variant save, FIRST Undo/Redo, OPFS saved bytes and same-context fresh-page project reopen.",
+  "limits": [
+    "Evidence only; no product changes. Numeric independent A/B boxes only.",
+    "No repeated export, assembly, native folder, other document-entry matrix or cold browser-process persistence.",
+    "OPFS is retained in the same BrowserContext and origin. No fresh-context JSON import substitutes for project Open."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "downloads": [],
+  "observations": [
+    {
+      "label": "actual-OPFS-saved",
+      "sha256": "846ca54596083d077a9b6d722ea102200bfce57638b2853797f446180e6675eb",
+      "bytes": 1127,
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {
+          "HeightB": 10
+        },
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              10,
+              5
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": {
+              "parameter": "HeightB"
+            }
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "variability": {
+          "version": 1,
+          "inputs": [
+            {
+              "name": "size",
+              "type": "number",
+              "unit": "mm",
+              "min": 1,
+              "max": 100,
+              "default": 10,
+              "bindings": [
+                {
+                  "to": "parameter",
+                  "part": "base",
+                  "parameter": "HeightB"
+                }
+              ]
+            }
+          ],
+          "variants": [
+            {
+              "name": "Tall",
+              "values": {
+                "size": 22
+              }
+            },
+            {
+              "name": "Persist24",
+              "values": {
+                "size": 24
+              }
+            }
+          ],
+          "active": "Persist24"
+        }
+      }
+    },
+    {
+      "label": "first-and-all-reopened-B-requests",
+      "requests": [
+        {
+          "id": 2,
+          "revision": 2,
+          "parameters": {
+            "HeightB": 24
+          }
+        }
+      ],
+      "sameContext": true,
+      "sameOrigin": true
+    }
+  ],
+  "productBase": "2c9897b87ab1dfa3519dff386dd7d18176b72587",
+  "sourceCount": 594,
+  "sourcesUnchangedAfterCleanup": true,
+  "driverSHA256": "0eb326e37a5bc10f09e1409f4919a29992c4f8d41538a6c7c9a46baa0dc22cbe",
+  "firstRun": "Stopped before OPFS at project-panel selector: Variants must be closed because Versions panel visibility excludes an open Variants panel. First save/Undo/Redo passed. First persistence was NOT_RUN, not a product persistence failure. Corrected only the public UI sequencing.",
+  "validation": {
+    "syntax": "PASS",
+    "scopedESLint": "PASS",
+    "diffCheck": "PASS",
+    "browserVisualReview": "PASS",
+    "newProductTypesBuild": "NOT_RUN: standalone evidence-only JS; product unchanged"
+  },
+  "oracles": [
+    {
+      "label": "04-Persist24-saved",
+      "input": {
+        "height": 24,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1200.0000000000002,
+            "centroid": [
+              4.999999999999999,
+              2.4999999999999996,
+              12
+            ],
+            "massRef": null
+          }
+        ]
+      },
+      "output": {
+        "status": "PASS",
+        "expectedVolume": 1200,
+        "expectedCentroid": [
+          5,
+          2.5,
+          12
+        ]
+      }
+    },
+    {
+      "label": "05-FIRST-Undo-Tall22",
+      "input": {
+        "height": 22,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1100.0000000000002,
+            "centroid": [
+              4.999999999999999,
+              2.4999999999999996,
+              11
+            ],
+            "massRef": null
+          }
+        ]
+      },
+      "output": {
+        "status": "PASS",
+        "expectedVolume": 1100,
+        "expectedCentroid": [
+          5,
+          2.5,
+          11
+        ]
+      }
+    },
+    {
+      "label": "06-FIRST-Redo-Persist24",
+      "input": {
+        "height": 24,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1200.0000000000002,
+            "centroid": [
+              4.999999999999999,
+              2.4999999999999996,
+              12
+            ],
+            "massRef": null
+          }
+        ]
+      },
+      "output": {
+        "status": "PASS",
+        "expectedVolume": 1200,
+        "expectedCentroid": [
+          5,
+          2.5,
+          12
+        ]
+      }
+    },
+    {
+      "label": "08-OPFS-reopened-Persist24",
+      "input": {
+        "height": 24,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 1200.0000000000002,
+            "centroid": [
+              4.999999999999999,
+              2.4999999999999996,
+              12
+            ],
+            "massRef": null
+          }
+        ]
+      },
+      "output": {
+        "status": "PASS",
+        "expectedVolume": 1200,
+        "expectedCentroid": [
+          5,
+          2.5,
+          12
+        ]
+      }
+    },
+    {
+      "label": "09-Master10",
+      "input": {
+        "height": 10,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 500.00000000000006,
+            "centroid": [
+              4.999999999999999,
+              2.4999999999999996,
+              5
+            ],
+            "massRef": null
+          }
+        ]
+      },
+      "output": {
+        "status": "PASS",
+        "expectedVolume": 500,
+        "expectedCentroid": [
+          5,
+          2.5,
+          5
+        ]
+      }
+    }
+  ],
+  "artifacts": {
+    "saved-opfs-B.bcad": "846ca54596083d077a9b6d722ea102200bfce57638b2853797f446180e6675eb",
+    "explicit-master10.png": "6aa2c1d0fe592cf62009ca5f61728e9ca1b63497627c83d4f0e2abaffadab999",
+    "reopened-persist24.png": "c0392ddcdde6d78696a3c1f1dcf5135c92dd390454d5fbc5f7e71b2bfe4603d2"
+  }
+}
