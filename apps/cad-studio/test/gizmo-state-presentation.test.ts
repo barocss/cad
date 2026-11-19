@@ -143,3 +143,66 @@ test('presentation state does not move move-axis hit locations or make origin se
   }
   assert.equal(hitTest(P.project(model.origin), model, [], P), null);
 });
+
+// Opacity is a presentation attribute, separate from per-stroke opacity and hit geometry.
+const effectiveOpacity = (node: Element) => node.props.opacity === undefined ? 1 : Number(node.props.opacity);
+function scaleConnector(nodes: Element[], axis: Axis3): Element {
+  const at = layout(g, P).cubes.find(c => c.axis === axis)!.at;
+  const found = nodes.filter(n => n.type === 'line' && n.props.strokeDasharray === '3 3' && n.props.x2 === at[0] && n.props.y2 === at[1]);
+  assert.equal(found.length, 1); return found[0];
+}
+test('only a represented transform drag dims inactive arrows, planes, arcs, cubes and connectors', () => {
+  const cases: [string, GizmoHit][] = [
+    ...([0, 1, 2] as const).flatMap(axis => [
+      ['move' + 'XYZ'[axis], { kind: 'move', axis }],
+      ['turn' + 'XYZ'[axis], { kind: 'turn', axis }],
+      ['scale' + 'XYZ'[axis], { kind: 'scale', axis }],
+    ] as [string, GizmoHit][]),
+    ['scale', { kind: 'scale', axis: null }],
+    ['planeXY', { kind: 'plane', axes: [0, 1] }],
+    ['planeYZ', { kind: 'plane', axes: [1, 2] }],
+    ['planeXZ', { kind: 'plane', axes: [0, 2] }],
+  ];
+  const idle = marks(); assert.equal(idle.filter(n => n.props['data-gizmo']).length, cases.length);
+  for (const [activeId, hit] of cases) {
+    const hovered = marks(hit), dragging = marks(null, { hit, degrees: 0 });
+    for (const [id] of cases) {
+      const base = named(idle, id), hover = named(hovered, id), active = named(dragging, id);
+      assert.equal(effectiveOpacity(base), 1, id + ' idle');
+      assert.equal(effectiveOpacity(hover), 1, id + ' hover alone does not dim');
+      assert.equal(effectiveOpacity(active), id === activeId ? 1 : .65, id + ' while dragging ' + activeId);
+      if (id !== activeId) {
+        assert.equal(outline(active).props.strokeWidth, outline(base).props.strokeWidth, 'dimming does not change inactive width');
+        assert.equal(active.props['data-dragging'], false);
+      } else {
+        assert.ok(Number(outline(active).props.strokeWidth) > Number(outline(hover).props.strokeWidth), 'active outline remains stronger than hover');
+      }
+    }
+    for (const axis of [0, 1, 2] as const) {
+      const base = scaleConnector(idle, axis), hover = scaleConnector(hovered, axis), line = scaleConnector(dragging, axis);
+      const selected = hit.kind === 'scale' && hit.axis === axis;
+      assert.equal(effectiveOpacity(base), 1); assert.equal(effectiveOpacity(hover), 1);
+      assert.equal(effectiveOpacity(line), selected ? 1 : .65);
+      assert.equal(line.props.strokeWidth, selected ? 3 : base.props.strokeWidth);
+      assert.deepEqual([line.props.x1, line.props.y1, line.props.x2, line.props.y2], [base.props.x1, base.props.y1, base.props.x2, base.props.y2]);
+    }
+    assert.equal(html(marks()), html(idle), 'ending/cancelling the presentation restores exact idle markup');
+  }
+});
+
+test('absent or feature drag targets never dim all transforms; origin is not dimmed', () => {
+  const model: TransformGizmo = { origin: [0, 0, 0], move: [0], turn: [0] };
+  const idle = marks(null, null, model);
+  for (const hit of [
+    { kind: 'move', axis: 1 }, { kind: 'turn', axis: 2 },
+    { kind: 'scale', axis: null }, { kind: 'plane', axes: [0, 1] }, { kind: 'handle', index: 0 },
+  ] as GizmoHit[]) assert.equal(html(marks(null, { hit, degrees: 15 }, model)), html(idle), 'unrepresented target does not activate dimming');
+  const collapsed: Projector = { ...P, project: () => [300, 300] };
+  const projectedOut = marks(null, { hit: { kind: 'move', axis: 0 } }, model, collapsed);
+  assert.equal(html(projectedOut), html(marks(null, null, model, collapsed)), 'projected-out move is not represented');
+  const origin = (nodes: Element[]) => nodes.filter(n => n.props['aria-hidden'] === 'true');
+  assert.equal(origin(idle).length, 1);
+  assert.equal(html(origin(marks(null, { hit: { kind: 'move', axis: 0 } }, model))), html(origin(idle)));
+  assert.equal(effectiveOpacity(origin(idle)[0]), 1);
+  // Feature subtrees and readout are covered by the earlier exact-markup invariance test.
+});
