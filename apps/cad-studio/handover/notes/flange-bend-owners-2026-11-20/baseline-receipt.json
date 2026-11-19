@@ -1,0 +1,419 @@
+{
+  "status": "PASS",
+  "qualification": "D122 two-Flange existing flat provenance and navigation baseline",
+  "states": [
+    {
+      "label": "01-two-flanges-flat-baseline",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              80,
+              50
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "sheet-base",
+            "sketch": 0,
+            "thickness": 1.5,
+            "bendRadius": 1.5,
+            "kFactor": 0.44
+          },
+          {
+            "id": "n2",
+            "kind": "sheet-corner-relief",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.side1"
+            ],
+            "shape": "square",
+            "size": 3
+          },
+          {
+            "id": "n3",
+            "kind": "sheet-flange",
+            "parent": {
+              "node": 2,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.top"
+            ],
+            "length": 20
+          },
+          {
+            "id": "n4",
+            "kind": "sheet-flange",
+            "parent": {
+              "node": 3,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side1|n1.top"
+            ],
+            "length": 20
+          }
+        ],
+        "outputs": {
+          "b4": {
+            "node": 4,
+            "side": "solid"
+          }
+        },
+        "nextId": 5
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b4",
+            "volume": 9247.878262763661,
+            "centroid": [
+              44.858426189418104,
+              19.92990363669108,
+              4.479947574040616
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": [
+            0
+          ]
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [
+        "Flat pattern \u00b7 two-flanges-Sheet_plate_T1.597.393 \u00d7 67.393 mm \u00b7 2 bends \u00b7 T 1.5 mm, K 0.44 \u00b7 seen from n1.topUP 90\u00b0 R1.5UP 90\u00b0 R1.5DXF2000R12Close"
+      ],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Sheet plate T1.5",
+        "Corner relief square 3",
+        "Flange 20 \u00b7 90\u00b0",
+        "Flange 20 \u00b7 90\u00b0"
+      ]
+    }
+  ],
+  "downloads": [],
+  "observations": [
+    {
+      "native": {
+        "check": {
+          "valid": true,
+          "issues": [],
+          "counts": {
+            "bodies": 1,
+            "shells": 1,
+            "faces": 16,
+            "loops": 16,
+            "coedges": 76,
+            "edges": 38,
+            "vertices": 24
+          },
+          "topology": [
+            {
+              "body": "n4_body0",
+              "vertices": 24,
+              "edges": 38,
+              "faces": 16,
+              "loops": 16,
+              "shells": 1,
+              "genus": 0
+            }
+          ],
+          "maximumVertexGap": 3.66205343881779e-15,
+          "maximumPcurveGap": 0,
+          "maximumEdgeSurfaceGap": 1.9914625504213745e-15
+        },
+        "sheet": {
+          "thickness": 1.5,
+          "bendRadius": 1.5,
+          "kFactor": 0.44,
+          "fixedFace": "n1.top",
+          "bends": [
+            {
+              "name": "n3.bend",
+              "inner": "n3.bend.inner",
+              "outer": "n3.bend.outer",
+              "radius": 1.5,
+              "angle": 90,
+              "axis": {
+                "origin": [
+                  0,
+                  2.9999999999999996,
+                  3
+                ],
+                "direction": [
+                  -1,
+                  0,
+                  0
+                ]
+              },
+              "allowance": 3.392920065876977,
+              "setback": 2.9999999999999996,
+              "deduction": 2.607079934123022,
+              "kFactor": 0.44
+            },
+            {
+              "name": "n4.bend",
+              "inner": "n4.bend.inner",
+              "outer": "n4.bend.outer",
+              "radius": 1.5,
+              "angle": 90,
+              "axis": {
+                "origin": [
+                  77,
+                  3,
+                  3
+                ],
+                "direction": [
+                  0,
+                  -1,
+                  0
+                ]
+              },
+              "allowance": 3.392920065876977,
+              "setback": 2.9999999999999996,
+              "deduction": 2.607079934123022,
+              "kFactor": 0.44
+            }
+          ]
+        },
+        "flat": {
+          "thickness": 1.5,
+          "kFactor": 0.44,
+          "fixedFace": "n1.top",
+          "loops": [
+            {
+              "outer": true,
+              "segments": [
+                {
+                  "kind": "line",
+                  "a": [
+                    97.39292006587698,
+                    67.39292006587698
+                  ],
+                  "b": [
+                    2.5247572468697606e-15,
+                    67.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    2.5247572468697606e-15,
+                    67.39292006587698
+                  ],
+                  "b": [
+                    0,
+                    0
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    0,
+                    0
+                  ],
+                  "b": [
+                    77,
+                    0
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    77,
+                    0
+                  ],
+                  "b": [
+                    77,
+                    20.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    77,
+                    20.39292006587698
+                  ],
+                  "b": [
+                    97.39292006587698,
+                    20.392920065876975
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    97.39292006587698,
+                    20.392920065876975
+                  ],
+                  "b": [
+                    97.39292006587698,
+                    67.39292006587698
+                  ]
+                }
+              ],
+              "area": 6147.722088168744
+            }
+          ],
+          "bends": [
+            {
+              "name": "n3.bend",
+              "direction": "up",
+              "angle": 90.00000000000001,
+              "radius": 1.5000000000000007,
+              "kFactor": 0.44,
+              "allowance": 3.3929200658769783,
+              "centre": [
+                [
+                  2.5247572468697606e-15,
+                  18.69646003293849
+                ],
+                [
+                  77,
+                  18.69646003293849
+                ]
+              ],
+              "tangents": [
+                [
+                  [
+                    2.5247572468697606e-15,
+                    20.39292006587698
+                  ],
+                  [
+                    77,
+                    20.39292006587698
+                  ]
+                ],
+                [
+                  [
+                    2.5247572468697606e-15,
+                    17
+                  ],
+                  [
+                    77,
+                    17
+                  ]
+                ]
+              ],
+              "faces": [
+                "n3.bend.inner"
+              ]
+            },
+            {
+              "name": "n4.bend",
+              "direction": "up",
+              "angle": 90.00000000000006,
+              "radius": 1.5000000000000002,
+              "kFactor": 0.44,
+              "allowance": 3.3929200658769787,
+              "centre": [
+                [
+                  78.69646003293849,
+                  20.39292006587698
+                ],
+                [
+                  78.69646003293849,
+                  67.39292006587698
+                ]
+              ],
+              "tangents": [
+                [
+                  [
+                    77,
+                    20.39292006587698
+                  ],
+                  [
+                    77,
+                    67.39292006587698
+                  ]
+                ],
+                [
+                  [
+                    80.39292006587698,
+                    20.39292006587698
+                  ],
+                  [
+                    80.39292006587698,
+                    67.39292006587698
+                  ]
+                ]
+              ],
+              "faces": [
+                "n4.bend.inner"
+              ]
+            }
+          ],
+          "area": 6147.722088168744,
+          "box": {
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              97.39292006587698,
+              67.39292006587698
+            ]
+          }
+        },
+        "volume": 9247.878262763661
+      }
+    },
+    {
+      "buttons": [
+        "DXF",
+        "Close"
+      ],
+      "gap": "No bend-specific History/rule-source action in existing flat dialog"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Open synthetic seed only; no export/download or manufacturing qualification; no owner inferred from name alone."
+  ],
+  "phase": "actual Studio start",
+  "productCommit": "2fa66b991788073af1c25d8ae87ecfd16335d7c0",
+  "sourceFreeze": {
+    "count": 1108,
+    "beforeEqualsAfter": true,
+    "afterEqualsCleanup": true
+  },
+  "originalReceiptSHA256": "450b88e636cb9c66da538eda0cc1d0265e30ddfee98d471c84414edf35815104"
+}

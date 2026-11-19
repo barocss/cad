@@ -1,0 +1,60 @@
+{
+  "baselineCommit": "2fa66b991788073af1c25d8ae87ecfd16335d7c0",
+  "verifiedCommit": "e4359b68450ca1a93775c629641295974c393acf",
+  "nativeAndExistingSheet": {
+    "passed": 14,
+    "command": "node packages/barocss-cad-model/scripts/test.mjs flange-bend-provenance sheet.test"
+  },
+  "studioAndSharedRules": {
+    "passed": 24,
+    "command": "node apps/cad-studio/scripts/test.mjs flange-bend-owners shared-sheet-rules"
+  },
+  "actual": "PASS actual03, no downloads",
+  "modelType": "PASS: cd packages/barocss-cad-model && ../../node_modules/.bin/tsc --noEmit",
+  "studioType": "PASS: cd apps/cad-studio && ../../node_modules/.bin/tsc --noEmit",
+  "vite": "PASS: cd apps/cad-studio && ../../node_modules/.bin/vite build (existing dynamic import/module directive warnings)",
+  "lint": "PASS scoped changed TS/TSX files; git diff --check and browser node --check PASS",
+  "history": [
+    {
+      "run": "first validation",
+      "actual": "PASS actual01",
+      "focused": "native5/5, Studio24/24 PASS",
+      "failure": "Model test TS7022 wire inferred any",
+      "NOT_RUN": [
+        "Studio type",
+        "Vite"
+      ],
+      "fix": "Explicit ReturnType<MeshSender[pack]>[result], no assertion relaxation"
+    },
+    {
+      "run": "second validation",
+      "actual": "PASS actual02",
+      "focused": "native+sheet14/14, Studio24/24 PASS",
+      "modelType": "PASS",
+      "failure": "Studio optional node.id type narrowing",
+      "NOT_RUN": [
+        "Vite"
+      ],
+      "fix": "Redundant explicit string guard after existing all-node string validation"
+    },
+    {
+      "run": "final validation",
+      "actual": "PASS actual03",
+      "focused": "Studio24/24 PASS",
+      "studioType": "PASS",
+      "vite": "PASS"
+    }
+  ],
+  "limits": [
+    "History navigation only; no new geometry editing admission",
+    "No new Save/Open persistence or exports tested; public synthetic Open and New only",
+    "No downstream, manufacturing or equipment claims",
+    "Deferred source change tested in unit guard, not forced hidden browser closure"
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED",
+    "heavy returned"
+  ]
+}
