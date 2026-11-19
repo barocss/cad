@@ -33,11 +33,11 @@ function roles(direct: DirectGeometry, ids: [string, string], onSelect?: (ids: s
 
 test('Join compares first end to second start and reports 5mm / reverse 30mm / correct 0 without changing sources', () => {
   const direct = pair(), ids = idsOf(direct), before = structuredClone(direct);
-  assert.deepEqual(joinEndpointGuidance(direct, ids), { firstEnd: [25, 10, 0], secondStart: [25, 15, 0], gap: 5, matches: false, reverseMatches: false });
+  assert.deepEqual(joinEndpointGuidance(direct, ids), { firstDegree: 1, secondDegree: 1, firstEnd: [25, 10, 0], secondStart: [25, 15, 0], gap: 5, matches: false, reverseMatches: false });
   assert.throws(() => directOps.joinCurves(direct, ...ids), /exactly numerically equal/);
   const moved = directOps.move(direct, [ids[1]], [0, -5, 0]), movedBefore = structuredClone(moved);
   const reverse = [ids[1], ids[0]] as [string, string];
-  assert.deepEqual(joinEndpointGuidance(moved, reverse), { firstEnd: [40, 10, 0], secondStart: [10, 10, 0], gap: 30, matches: false, reverseMatches: true });
+  assert.deepEqual(joinEndpointGuidance(moved, reverse), { firstDegree: 1, secondDegree: 1, firstEnd: [40, 10, 0], secondStart: [10, 10, 0], gap: 30, matches: false, reverseMatches: true });
   assert.throws(() => directOps.joinCurves(moved, ...reverse), /exactly numerically equal/);
   assert.equal(joinEndpointGuidance(moved, ids)?.matches, true); assert.equal(joinEndpointGuidance(moved, ids)?.gap, 0);
   const joined = directOps.joinCurves(moved, ...ids);
@@ -89,6 +89,12 @@ test('endpoint match makes no guarantee about other native admission gates; unav
   const ids: [string, string] = [direct.objects[0].id, direct.objects[2].id], before = structuredClone(direct);
   assert.equal(joinEndpointGuidance(direct, ids)?.matches, true); assert.throws(() => directOps.joinCurves(direct, ...ids), /same native degree/);
   assert.doesNotMatch(text(roles(direct, ids).group), /ready|will join|success|opposite order/i);
+  assert.match(text(roles(direct, ids).group), /same native degree. First: 1; Second: 2/);
+  const reversed = text(roles(direct, [ids[1], ids[0]]).group);
+  assert.match(reversed, /same native degree. First: 2; Second: 1/);
+  assert.doesNotMatch(reversed, /then try Join|and try Join|endpoints match in the opposite order/);
+  const html = renderToStaticMarkup(createElement(DirectPanel, { direct, selected: ids, onChange() {}, onError() {}, onHide() {} }));
+  assert.doesNotMatch(html.match(/<button[^>]*>Join<\/button>/)![0], /\sdisabled(?:=|[\s>])/);
   assert.equal(joinEndpointGuidance(direct, ['missing', ids[1]]), null); assert.equal(joinEndpointGuidance(direct, [ids[0], ids[0]]), null);
   const ambiguous = { ...direct, objects: [...direct.objects, direct.objects[0]] };
   assert.equal(joinEndpointGuidance(ambiguous, ids), null);

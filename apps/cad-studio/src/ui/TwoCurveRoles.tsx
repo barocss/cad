@@ -29,7 +29,8 @@ export function TwoCurveRoles({ direct, ids, onSelect }: { direct: DirectGeometr
         <p>First end · {names[0]} [{a}]: ({join.firstEnd.map(String).join(', ')}) mm</p>
         <p>Second start · {names[1]} [{b}]: ({join.secondStart.map(String).join(', ')}) mm</p>
         <p>Gap: {String(join.gap)} mm. Join requires exact endpoint equality; no snapping.</p>
-        {!join.matches && join.reverseMatches && <p role="status">The endpoints match in the opposite order. {onSelect ? 'Use Swap curve order, then try Join.' : 'Select the second curve first, then the first curve, and try Join.'}</p>}
+        {join.firstDegree !== join.secondDegree && <p role="status">Join requires the same native degree. First: {join.firstDegree}; Second: {join.secondDegree}. Swapping the order does not resolve this mismatch.</p>}
+        {join.firstDegree === join.secondDegree && !join.matches && join.reverseMatches && <p role="status">The endpoints match in the opposite order. {onSelect ? 'Use Swap curve order, then try Join.' : 'Select the second curve first, then the first curve, and try Join.'}</p>}
       </> : <p>Join endpoints unavailable.</p>}
     </div>
   </>;
