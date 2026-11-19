@@ -1,0 +1,67 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [
+    {
+      "kind": "sketch",
+      "id": "n0",
+      "profile": "rectangle",
+      "min": [
+        0,
+        0
+      ],
+      "max": [
+        10,
+        10
+      ]
+    },
+    {
+      "kind": "extrude",
+      "id": "n1",
+      "sketch": 0,
+      "height": 10
+    },
+    {
+      "kind": "sketch",
+      "id": "n2",
+      "profile": "rectangle",
+      "min": [
+        30,
+        0
+      ],
+      "max": [
+        40,
+        10
+      ]
+    },
+    {
+      "kind": "extrude",
+      "id": "n3",
+      "sketch": 2,
+      "height": 10
+    }
+  ],
+  "outputs": {
+    "b1": {
+      "node": 1,
+      "side": "solid"
+    },
+    "b3": {
+      "node": 3,
+      "side": "solid"
+    }
+  },
+  "nextId": 4,
+  "bodies": {
+    "b1": {
+      "name": "Cube A",
+      "material": "al6061"
+    },
+    "b3": {
+      "name": "Cube B",
+      "material": "steel"
+    }
+  }
+}

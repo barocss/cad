@@ -1,0 +1,94 @@
+{
+  "status": "PASS",
+  "qualification": "#231 synthetic public project Close clears pinned COM without changing accepted document, selection, dirty or editing history.",
+  "phase": "Explicit repin",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "downloads": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Only synthetic two-cube project Close/reopen and explicit repin; no Save/download/user files.",
+    "No delayed mass, Worker restart, pan/zoom, export, project document Open or overall issue closure claim."
+  ],
+  "sourceCommit": "e4359b68450ca1a93775c629641295974c393acf",
+  "executedDriverSHA256": "bb2301e44ca91dcf31875371849a52a7eabf62ad2b4e435081020e9ff94820d0",
+  "imagesOriginalByteHashes": {
+    "04-repin.png": "a3b57f1db688e59e850479798f3d0137fecc0800c4857043aa87787b694aa7d0",
+    "02-closed-cleared.png": "44362c14ba2c83dc48554e1e32410b830158dd9fdb4304d829484dbaf62fe57a"
+  },
+  "states": [
+    {
+      "label": "01-project-pinned",
+      "marker": "27.322274881516567,4.999999999999997,5",
+      "dirty": false
+    },
+    {
+      "label": "02-closed-cleared",
+      "marker": null,
+      "dirty": false
+    },
+    {
+      "label": "03-no-resurrection",
+      "marker": null,
+      "dirty": false
+    },
+    {
+      "label": "04-repin",
+      "marker": "27.322274881516567,4.999999999999997,5",
+      "dirty": false
+    }
+  ],
+  "analytic": {
+    "volumes": [
+      1000,
+      1000
+    ],
+    "densities": [
+      2.7,
+      7.85
+    ],
+    "masses": [
+      2.7,
+      7.85
+    ],
+    "mass": 10.55,
+    "centroid": [
+      27.322274881516584,
+      5,
+      5
+    ]
+  },
+  "currentWorkerGeometry": {
+    "fresh": true,
+    "bodies": [
+      {
+        "key": "b1",
+        "volume": 1000.0000000000001,
+        "centroid": [
+          4.999999999999999,
+          4.999999999999999,
+          5
+        ],
+        "massRef": null
+      },
+      {
+        "key": "b3",
+        "volume": 1000.0000000000007,
+        "centroid": [
+          34.99999999999997,
+          4.9999999999999964,
+          5
+        ],
+        "massRef": null
+      }
+    ],
+    "massReady": true,
+    "colored": []
+  },
+  "sourceCapsuleUnchanged": true
+}
