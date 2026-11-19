@@ -33,7 +33,11 @@ function loopPath(segs: readonly FlatSegment[], h: number): string {
   return d + 'Z';
 }
 
-export function FlatPatternDialog({ flat, name, onClose, onEditSharedRules }: { flat: FlatPattern; name: string; onClose: () => void; onEditSharedRules?: () => void }) {
+export interface FlatBendAction {
+  featureId: string; bend: FlatPattern['bends'][number]; disabled: boolean; radiusSource: string; ruleSource: string;
+  onEdit: () => void; onEditRules: () => void;
+}
+export function FlatPatternDialog({ flat, name, onClose, onEditSharedRules, bendActions = [] }: { flat: FlatPattern; name: string; onClose: () => void; onEditSharedRules?: () => void; bendActions?: readonly FlatBendAction[] }) {
   const [version, setVersion] = useState<DxfVersion>('AC1015');
   const [w, h] = flat.box.max, m = Math.max(w, h) * 0.06 + 2;
   const exportDxf = () => downloadBytes(writeDxf(flatPatternDxf(flat), { version }).bytes, `${name}-flat.dxf`, 'image/vnd.dxf');
@@ -45,13 +49,21 @@ export function FlatPatternDialog({ flat, name, onClose, onEditSharedRules }: { 
       {onEditSharedRules && <div className="toast-hint">All bends use this profile’s shared thickness, inner radius and K-factor or bend table.
         <Button variant="ghost" onClick={onEditSharedRules}>Edit shared sheet rules</Button>
       </div>}
+      {bendActions.length > 0 && <div aria-label="Flange bend sources">
+        {bendActions.map(action => <div className="toast-hint" key={action.featureId} aria-label={`Bend source ${action.featureId}`}>
+          <span>{action.featureId} · Radius: {action.radiusSource} · {action.ruleSource}</span>
+          <Button variant="ghost" disabled={action.disabled} onClick={action.onEdit} aria-label={`Open Flange ${action.featureId} in History`}>Open in History</Button>
+          <Button variant="ghost" disabled={action.disabled} onClick={action.onEditRules} aria-label={`Open sheet rules for ${action.featureId} in History`}>Open sheet rules in History</Button>
+        </div>)}
+      </div>}
       <svg aria-label="Flat pattern drawing" viewBox={`${f2(-m)} ${f2(-m)} ${f2(w + 2 * m)} ${f2(h + 2 * m)}`} style={{ width: '100%', maxHeight: '55vh', margin: '8px 0', background: 'var(--surface-2, transparent)' }}>
         <path d={flat.loops.map(l => loopPath(l.segments, h)).join('')} fillRule="evenodd" fill="currentColor" fillOpacity={0.08} stroke="currentColor" strokeWidth={Math.max(w, h) / 400} />
         {flat.bends.map((b, k) => {
+          const owner = bendActions.find(action => action.bend === b);
           const [p, q] = b.centre, up = b.direction === 'up', mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-          return <g key={k} aria-label={`Bend ${b.direction}`}>
+          return <g key={k} aria-label={owner ? `Bend ${b.direction}, Flange ${owner.featureId}` : `Bend ${b.direction}`}>
             <line x1={f2(p[0])} y1={f2(h - p[1])} x2={f2(q[0])} y2={f2(h - q[1])} stroke={up ? '#3fb950' : '#f85149'} strokeWidth={Math.max(w, h) / 400} strokeDasharray={`${f2(Math.max(w, h) / 80)} ${f2(Math.max(w, h) / 160)}`} />
-            <text x={f2(mid[0])} y={f2(h - mid[1])} fontSize={f2(Math.max(w, h) / 40)} textAnchor="middle" fill={up ? '#3fb950' : '#f85149'} dy="-0.4em">{`${b.direction.toUpperCase()} ${+b.angle.toFixed(2)}° R${+b.radius.toFixed(3)}`}</text>
+            <text x={f2(mid[0])} y={f2(h - mid[1])} fontSize={f2(Math.max(w, h) / 40)} textAnchor="middle" fill={up ? '#3fb950' : '#f85149'} dy="-0.4em">{`${owner ? owner.featureId + ' · ' : ''}${b.direction.toUpperCase()} ${+b.angle.toFixed(2)}° R${+b.radius.toFixed(3)}`}</text>
           </g>;
         })}
       </svg>

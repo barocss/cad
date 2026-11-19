@@ -73,16 +73,38 @@ function endNotes(ends: NonNullable<NonNullable<CadPartSnapshot['outputs'][numbe
 }
 
 /** A sheet's notes and its flat pattern (worked out once a B-rep), or the flat's refusal as a warning. */
-export function sheetOf(o: CadPartSnapshot['outputs'][number]): Pick<BodyResult, 'notes' | 'flat' | 'flatRefused' | 'sheet'> {
+/** Fail closed on split/alias/mixed faces. Recomputed from the current report, never the BRep flat cache. */
+export function authoredFlangeOwners(o: CadPartSnapshot['outputs'][number], flat: FlatPattern): NonNullable<BodyResult['sheetBendOwners']> {
+  if (o.brep.bodies.length !== 1 || o.brep.bodies[0].kind !== 'solid') return [];
+  const reports = o.sheet?.bends ?? [], faceNames = o.brep.faces.map(face => face.name);
+  const owners: { featureId: string; faces: readonly string[] }[] = [];
+  for (const report of reports) {
+    const id = report.authoredFlange?.featureId;
+    if (!id || reports.filter(other => other.authoredFlange?.featureId === id).length !== 1) continue;
+    const names = [report.inner, report.outer];
+    if (new Set(names).size !== 2 || names.some(name => !name || name.includes('#') || name.includes('|')
+      || faceNames.filter(face => face === name).length !== 1
+      || faceNames.some(face => face !== name && face?.split('|').some(part => part === name || part.startsWith(name + '#'))))) continue;
+    if (reports.some(other => other !== report && [other.inner, other.outer].some(name => names.includes(name)))) continue;
+    const rows = flat.bends.filter(row => row.faces.some(face => names.includes(face)));
+    if (rows.length !== 1 || rows[0].faces.length !== 1 || !names.includes(rows[0].faces[0])) continue;
+    owners.push({ featureId: id, faces: [...rows[0].faces] });
+  }
+  return owners;
+}
+
+export function sheetOf(o: CadPartSnapshot['outputs'][number]): Pick<BodyResult, 'notes' | 'flat' | 'flatRefused' | 'sheet' | 'sheetBendOwners'> {
   let f = flats.get(o.brep);
   if (!f) { try { f = { flat: flatPatternOf(o) }; } catch (e) { f = { refused: e instanceof Error ? e.message.replace(/^[^:]*: /, '') : String(e) }; } flats.set(o.brep, f); }
   const notes = sheetNotes(o.sheet!), sheet = { thickness: o.sheet!.thickness, bendRadius: o.sheet!.bendRadius, ...(o.sheet!.bendTable ? { bendTable: o.sheet!.bendTable.id } : { kFactor: o.sheet!.kFactor }) };
   if ('flat' in f) {
     const b = f.flat.box.max, n = f.flat.bends.length;
-    return { notes: [...notes, { text: `Flat pattern ${+b[0].toFixed(3)} × ${+b[1].toFixed(3)} mm, ${n} bend${n === 1 ? '' : 's'}` }], flat: f.flat, sheet };
+    const owners = authoredFlangeOwners(o, f.flat);
+    return { notes: [...notes, { text: `Flat pattern ${+b[0].toFixed(3)} × ${+b[1].toFixed(3)} mm, ${n} bend${n === 1 ? '' : 's'}` }], flat: f.flat, sheet, ...(owners.length ? { sheetBendOwners: owners } : {}) };
   }
   return { notes: [...notes, { text: `No flat pattern: ${f.refused}`, warning: true }], flatRefused: f.refused, sheet };
 }
+
 
 /**
  * A sheet-metal body's rules and bends as lines for its panel (R12.1, D116). A K-factor of 0.5 (the studio's prefill)

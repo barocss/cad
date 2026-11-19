@@ -15,6 +15,8 @@ export const bendDeduction = (angle: number, radius: number, thickness: number, 
 
 /** One bend as built: its faces, inner radius, angle, axis and its allowance, setback and deduction. */
 export interface SheetBendReport {
+  /** Ephemeral authored feature provenance; never derived from display names. */
+  readonly authoredFlange?: { readonly featureId: string };
   /** `<feature>.bend<k>`, k the path's vertex it rounds. */
   readonly name: string;
   /** Its concave face (radius R) and its convex face (radius R + T). */

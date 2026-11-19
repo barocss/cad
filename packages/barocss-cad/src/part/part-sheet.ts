@@ -181,7 +181,7 @@ export function sheetFlange(o: { part: Part; sheet: SheetReport; at: string; edg
   const vp = exactVolume(plate), vf = exactVolume(piece), vu = exactVolume(out!);
   if (vp + vf - vu > 1e-8 * (vp + vf)) fail('GEOMETRY', `[FLANGES_COLLIDE] the flange on ${e.name} runs into the sheet: ${+(vp + vf - vu).toPrecision(6)} mm³ of it overlaps`);
   const c = add(A, add(scale(m, sec.center[0]), scale(n, sec.center[1])));
-  const bend = { name: `${at}.bend`, inner: `${at}.bend.inner`, outer: `${at}.bend.outer`, radius: R, angle: th * 180 / Math.PI, axis: { origin: c, direction: w }, allowance: bendAllowance(th, R, T, K.kFactor), setback: outsideSetback(th, R, T), deduction: bendDeduction(th, R, T, K.kFactor), kFactor: K.kFactor, ...(K.use ? { table: K.use } : {}) };
+  const bend = { authoredFlange: { featureId: at }, name: `${at}.bend`, inner: `${at}.bend.inner`, outer: `${at}.bend.outer`, radius: R, angle: th * 180 / Math.PI, axis: { origin: c, direction: w }, allowance: bendAllowance(th, R, T, K.kFactor), setback: outsideSetback(th, R, T), deduction: bendDeduction(th, R, T, K.kFactor), kFactor: K.kFactor, ...(K.use ? { table: K.use } : {}) };
   return { kind: 'solid', parts: [{ solid: out!, sheet: { ...sheet, bends: [...sheet.bends, bend] } }] };
 }
 /** An edge of a B-rep by its name, else by its faces' names without their piece numbers (one such edge). */

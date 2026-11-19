@@ -1,3 +1,4 @@
+import { flangeBendOwners, canOpenFlangeBendOwner } from './state/flangeBendOwners';
 import { sharedSheetRuleOwner, ownsSharedSheetRules, sameSheetRuleSource, type SheetRuleSource } from './state/sharedSheetRules';
 import { canRecordOpenSplineFitPointDraft, isOpenSplineFitPointChange } from './sketch/openSplineFitPointHistory';
 import { canRecordOpenArcRadiusDraft, isOpenArcRadiusChange } from './sketch/openArcRadiusHistory';
@@ -1985,6 +1986,19 @@ export function App() {
     };
   };
 
+  const flangeBendActions = (body: BodyResult, source: SheetRuleSource) =>
+    flangeBendOwners(source, body).map(row => {
+      const owns = () => canOpenFlangeBendOwner(source, sheetRuleCurrent(), body, row) && ownsEvaluatedSource();
+      const open = (index: number) => {
+        if (!owns() || !canChangeDocument()) return;
+        openHistoryFeatureAt(index, undefined, () => owns() && canChangeDocument(), () => setFlatView(null));
+      };
+      return { featureId: row.id, bend: row.bend, disabled: !owns(),
+        radiusSource: row.radiusSource === 'own' ? `own Flange ${row.id}` : `inherited from ${row.rulesId}`,
+        ruleSource: `Thickness and ${row.rulesSource === 'bend-table' ? 'bend table' : 'K-factor'}: ${row.rulesId}`,
+        onEdit: () => open(row.index), onEditRules: () => open(row.rulesIndex) };
+    });
+
   const readFeatureTransitionDraft = () => assembly.currentDraft() ?? commandDraft() ?? nodeEditorDraft.current;
   const openHistoryFeature = (event: React.MouseEvent<HTMLButtonElement>) => {
     const raw = event.currentTarget.dataset.nodeIndex;
@@ -3918,7 +3932,7 @@ export function App() {
       <ViewContextMenu model={{ doc, bodies, ctx, placed: placedMeasureContext ? placedMeasureSources : undefined, placedMeasureContextReady }} menu={modelUnavailable ? null : menu} setMenu={setMenu} viewport={viewport} changes={{ commit, start, deleteSelection, setSelection, setMeasure, setEditNode }} />
 
       {cutListView && (() => { const list = partCutList(doc, bodies, material); return list ? <CutListDialog list={list} nesting={nestCutList(doc, list)} name={fileName.replace(/[^\w.-]+/g, '_')} onClose={() => setCutListView(false)} /> : null; })()}
-      {flatView && (() => { const fb = flatView.body; return sameSheetRuleSource(flatView.source, sheetRuleCurrent(), fb) && fb.flat ? <FlatPatternDialog onEditSharedRules={sheetRuleAction(fb, flatView.source)} flat={fb.flat} name={`${fileName}-${bodyName(doc, fb)}`.replace(/[^\w.-]+/g, '_')} onClose={() => setFlatView(null)} /> : null; })()}
+      {flatView && (() => { const fb = flatView.body; return sameSheetRuleSource(flatView.source, sheetRuleCurrent(), fb) && fb.flat ? <FlatPatternDialog bendActions={flangeBendActions(fb, flatView.source)} onEditSharedRules={sheetRuleAction(fb, flatView.source)} flat={fb.flat} name={`${fileName}-${bodyName(doc, fb)}`.replace(/[^\w.-]+/g, '_')} onClose={() => setFlatView(null)} /> : null; })()}
       {!workerFailure && <MeshFileDialogs controller={meshImport}><ModelExportDialogs controller={modelExports} /></MeshFileDialogs>}
       {/* (Notices stack in one column: an Open failure still shows while a recovery copy waits for its answer.) */}
       <div className="toast-stack">

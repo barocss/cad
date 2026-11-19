@@ -66,9 +66,12 @@ function carryRigidSheet(result: Result, brepOf: TransformHelpers['brepOf'], at:
       m[3] * x + m[4] * y + m[5] * z,
       m[6] * x + m[7] * y + m[8] * z,
     ];
-  const bends = sheet.bends.map(bend => ({
-    ...bend, axis: { origin: add(orient(bend.axis.origin), o), direction: orient(bend.axis.direction) },
-  }));
+  const bends = sheet.bends.map(bend => {
+    const carried = { ...bend, axis: { origin: add(orient(bend.axis.origin), o), direction: orient(bend.axis.direction) } };
+    // Authored editing ownership is not a transformed-body editing contract.
+    delete carried.authoredFlange;
+    return carried;
+  });
   return { kind: 'solid', parts: [{ ...part, sheet: { ...sheet, bends } }] };
 }
 

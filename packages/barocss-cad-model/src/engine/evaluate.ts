@@ -114,6 +114,8 @@ export interface BodyResult {
   subd?: SubdSummary;
   /** A sheet-metal body's flat pattern (R12.2, D117), or why it has none (its refusal). */
   flat?: FlatPattern; flatRefused?: string;
+  /** Ephemeral current native provenance, independent of cached flat display names. */
+  sheetBendOwners?: readonly { readonly featureId: string; readonly faces: readonly string[] }[];
   /** A frame member as a piece to cut (FR4a, D127): its axis length, long point, end cuts, volume. */
   cutPiece?: CutPiece;
   /** A sheet-metal body's rules (R12.3, D119: the studio writes them into a flange's relief, the kernel defaulting none). */
@@ -580,7 +582,9 @@ export function placeBody(b: BodyResult, m: readonly number[], t: readonly numbe
   delete mesh.arcSweepExteriorDetail;
   const element = b.element?.kind === 'weld-bead' ? { ...b.element, report: { ...b.element.report,
     sharedSeams: b.element.report.sharedSeams.map(s => ({ ...s, path: [move(m, t, s.path[0]), move(m, t, s.path[1])] as const })) } } : b.element;
-  return { ...b, mesh, ...placedMass(b, m, t), ...(b.massRef !== undefined ? { massPlace: [...(b.massPlace ?? []), { m: [...m], t: [...t] }] } : {}), ...(element ? { element } : {}) };
+  const placedBody = { ...b };
+  delete placedBody.sheetBendOwners;
+  return { ...placedBody, mesh, ...placedMass(b, m, t), ...(b.massRef !== undefined ? { massPlace: [...(b.massPlace ?? []), { m: [...m], t: [...t] }] } : {}), ...(element ? { element } : {}) };
 }
 /** A body's centre of mass moved and its inertia turned by a placement (what it has of them). */
 function placedMass(b: Pick<BodyResult, 'centroid' | 'inertia'>, m: readonly number[], t: readonly number[]): Pick<BodyResult, 'centroid' | 'inertia'> {
