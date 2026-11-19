@@ -1,0 +1,149 @@
+{
+  "status": "PASS",
+  "base": "1d857f2fcb288461cb905e682200edfc76418231",
+  "before": [
+    {
+      "volume": 144,
+      "check": {
+        "valid": true,
+        "issues": [],
+        "counts": {
+          "bodies": 1,
+          "shells": 1,
+          "faces": 6,
+          "loops": 6,
+          "coedges": 24,
+          "edges": 12,
+          "vertices": 8
+        },
+        "topology": [
+          {
+            "body": "n0_b236",
+            "vertices": 8,
+            "edges": 12,
+            "faces": 6,
+            "loops": 6,
+            "shells": 1,
+            "genus": 0
+          }
+        ],
+        "maximumVertexGap": 0,
+        "maximumPcurveGap": 0,
+        "maximumEdgeSurfaceGap": 0
+      }
+    },
+    {
+      "volume": 468.00000000000006,
+      "check": {
+        "valid": true,
+        "issues": [],
+        "counts": {
+          "bodies": 1,
+          "shells": 1,
+          "faces": 11,
+          "loops": 12,
+          "coedges": 48,
+          "edges": 24,
+          "vertices": 16
+        },
+        "topology": [
+          {
+            "body": "n1_body0",
+            "vertices": 16,
+            "edges": 24,
+            "faces": 11,
+            "loops": 12,
+            "shells": 1,
+            "genus": 0
+          }
+        ],
+        "maximumVertexGap": 0,
+        "maximumPcurveGap": 0,
+        "maximumEdgeSurfaceGap": 4.884981308350689e-15
+      }
+    }
+  ],
+  "after": [
+    {
+      "volume": 144,
+      "check": {
+        "valid": true,
+        "issues": [],
+        "counts": {
+          "bodies": 1,
+          "shells": 1,
+          "faces": 6,
+          "loops": 6,
+          "coedges": 24,
+          "edges": 12,
+          "vertices": 8
+        },
+        "topology": [
+          {
+            "body": "n0_b134",
+            "vertices": 8,
+            "edges": 12,
+            "faces": 6,
+            "loops": 6,
+            "shells": 1,
+            "genus": 0
+          }
+        ],
+        "maximumVertexGap": 0,
+        "maximumPcurveGap": 0,
+        "maximumEdgeSurfaceGap": 0
+      }
+    },
+    {
+      "volume": 468.00000000000006,
+      "check": {
+        "valid": true,
+        "issues": [],
+        "counts": {
+          "bodies": 1,
+          "shells": 1,
+          "faces": 11,
+          "loops": 12,
+          "coedges": 48,
+          "edges": 24,
+          "vertices": 16
+        },
+        "topology": [
+          {
+            "body": "n0_b364",
+            "vertices": 16,
+            "edges": 24,
+            "faces": 11,
+            "loops": 12,
+            "shells": 1,
+            "genus": 0
+          }
+        ],
+        "maximumVertexGap": 0,
+        "maximumPcurveGap": 0,
+        "maximumEdgeSurfaceGap": 4.884981308350689e-15
+      }
+    }
+  ],
+  "stepBytes": 16133,
+  "stepSHA256": "8235b563e14d40963476376a0fc50b3ec6aa141060b8fec2e39431f49ef4cf4b",
+  "omitted": [
+    "Native feature history is not included; STEP contains the resulting geometry."
+  ],
+  "wall5": {
+    "ok": false,
+    "revision": 1,
+    "error": {
+      "title": "The wall is too thick",
+      "hint": "Enter Wall less than 5 mm to keep the selected face open.",
+      "detail": "a wall of 5 mm leaves no hollow at n0.a.top; use a wall less than 5 mm",
+      "code": "PARAMETER",
+      "feature": "n1"
+    },
+    "wallTime": 0.0024578750000000013
+  },
+  "limits": [
+    "in-process only",
+    "no browser/download/external CAD"
+  ]
+}
