@@ -1,0 +1,1781 @@
+{
+  "status": "PASS",
+  "qualification": "D121 four-Flange plate plus terminal Hole navigation baseline",
+  "states": [
+    {
+      "label": "01-four-flanges-hole-flat-baseline",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              100,
+              70
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "sheet-base",
+            "sketch": 0,
+            "thickness": 1.5,
+            "bendRadius": 1.5,
+            "kFactor": 0.44,
+            "id": "n1"
+          },
+          {
+            "kind": "sheet-corner-relief",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.side1"
+            ],
+            "shape": "square",
+            "size": 3,
+            "id": "n2"
+          },
+          {
+            "kind": "sheet-corner-relief",
+            "parent": {
+              "node": 2,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side1|n1.side2"
+            ],
+            "shape": "square",
+            "size": 3,
+            "id": "n3"
+          },
+          {
+            "kind": "sheet-corner-relief",
+            "parent": {
+              "node": 3,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side2|n1.side3"
+            ],
+            "shape": "square",
+            "size": 3,
+            "id": "n4"
+          },
+          {
+            "kind": "sheet-corner-relief",
+            "parent": {
+              "node": 4,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.side3"
+            ],
+            "shape": "square",
+            "size": 3,
+            "id": "n5"
+          },
+          {
+            "kind": "sheet-flange",
+            "parent": {
+              "node": 5,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.top"
+            ],
+            "length": 25,
+            "id": "n6"
+          },
+          {
+            "kind": "sheet-flange",
+            "parent": {
+              "node": 6,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side1|n1.top"
+            ],
+            "length": 25,
+            "id": "n7"
+          },
+          {
+            "kind": "sheet-flange",
+            "parent": {
+              "node": 7,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side2|n1.top"
+            ],
+            "length": 25,
+            "id": "n8"
+          },
+          {
+            "kind": "sheet-flange",
+            "parent": {
+              "node": 8,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side3|n1.top"
+            ],
+            "length": 25,
+            "id": "n9"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 9,
+              "side": "solid"
+            },
+            "center": [
+              12,
+              12
+            ],
+            "radius": 1.6,
+            "id": "n10"
+          }
+        ],
+        "outputs": {
+          "b10": {
+            "node": 10,
+            "side": "solid"
+          }
+        },
+        "nextId": 11
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b10",
+            "volume": 21115.190566736892,
+            "centroid": [
+              50.02171049314297,
+              35.01314056163916,
+              7.354336422867266
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": [
+            0
+          ]
+        },
+        "bodies": 1,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [
+        "Flat pattern \u00b7 four-flange-hole-Sheet_plate_T1.5144.786 \u00d7 114.786 mm \u00b7 4 bends \u00b7 T 1.5 mm, K 0.44 \u00b7 seen from n1.topUP 90\u00b0 R1.5UP 90\u00b0 R1.5UP 90\u00b0 R1.5UP 90\u00b0 R1.5DXF2000R12Close"
+      ],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Sheet plate T1.5",
+        "Corner relief square 3",
+        "Corner relief square 3",
+        "Corner relief square 3",
+        "Corner relief square 3",
+        "Flange 25 \u00b7 90\u00b0",
+        "Flange 25 \u00b7 90\u00b0",
+        "Flange 25 \u00b7 90\u00b0",
+        "Flange 25 \u00b7 90\u00b0",
+        "Hole \u00d83.2"
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "openedDocument": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              100,
+              70
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "sheet-base",
+            "sketch": 0,
+            "thickness": 1.5,
+            "bendRadius": 1.5,
+            "kFactor": 0.44,
+            "id": "n1"
+          },
+          {
+            "kind": "sheet-corner-relief",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.side1"
+            ],
+            "shape": "square",
+            "size": 3,
+            "id": "n2"
+          },
+          {
+            "kind": "sheet-corner-relief",
+            "parent": {
+              "node": 2,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side1|n1.side2"
+            ],
+            "shape": "square",
+            "size": 3,
+            "id": "n3"
+          },
+          {
+            "kind": "sheet-corner-relief",
+            "parent": {
+              "node": 3,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side2|n1.side3"
+            ],
+            "shape": "square",
+            "size": 3,
+            "id": "n4"
+          },
+          {
+            "kind": "sheet-corner-relief",
+            "parent": {
+              "node": 4,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.side3"
+            ],
+            "shape": "square",
+            "size": 3,
+            "id": "n5"
+          },
+          {
+            "kind": "sheet-flange",
+            "parent": {
+              "node": 5,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side0|n1.top"
+            ],
+            "length": 25,
+            "id": "n6"
+          },
+          {
+            "kind": "sheet-flange",
+            "parent": {
+              "node": 6,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side1|n1.top"
+            ],
+            "length": 25,
+            "id": "n7"
+          },
+          {
+            "kind": "sheet-flange",
+            "parent": {
+              "node": 7,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side2|n1.top"
+            ],
+            "length": 25,
+            "id": "n8"
+          },
+          {
+            "kind": "sheet-flange",
+            "parent": {
+              "node": 8,
+              "side": "solid"
+            },
+            "edges": [
+              "n1.side3|n1.top"
+            ],
+            "length": 25,
+            "id": "n9"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 9,
+              "side": "solid"
+            },
+            "center": [
+              12,
+              12
+            ],
+            "radius": 1.6,
+            "id": "n10"
+          }
+        ],
+        "outputs": {
+          "b10": {
+            "node": 10,
+            "side": "solid"
+          }
+        },
+        "nextId": 11
+      },
+      "seedContract": "exact authored nodes/output/parameters; reader-level ancillary normalization not compared"
+    },
+    {
+      "native": {
+        "check": {
+          "valid": true,
+          "issues": [],
+          "counts": {
+            "bodies": 1,
+            "shells": 1,
+            "faces": 32,
+            "loops": 34,
+            "coedges": 148,
+            "edges": 74,
+            "vertices": 44
+          },
+          "topology": [
+            {
+              "body": "n10_body0",
+              "vertices": 44,
+              "edges": 74,
+              "faces": 32,
+              "loops": 34,
+              "shells": 1,
+              "genus": 1
+            }
+          ],
+          "maximumVertexGap": 1.7912006889121512e-15,
+          "maximumPcurveGap": 0,
+          "maximumEdgeSurfaceGap": 2.7755575615628914e-15
+        },
+        "sheet": {
+          "thickness": 1.5,
+          "bendRadius": 1.5,
+          "kFactor": 0.44,
+          "fixedFace": "n1.top",
+          "bends": [
+            {
+              "authoredFlange": {
+                "featureId": "n6"
+              },
+              "name": "n6.bend",
+              "inner": "n6.bend.inner",
+              "outer": "n6.bend.outer",
+              "radius": 1.5,
+              "angle": 90,
+              "axis": {
+                "origin": [
+                  3,
+                  2.9999999999999996,
+                  3
+                ],
+                "direction": [
+                  -1,
+                  0,
+                  0
+                ]
+              },
+              "allowance": 3.392920065876977,
+              "setback": 2.9999999999999996,
+              "deduction": 2.607079934123022,
+              "kFactor": 0.44
+            },
+            {
+              "authoredFlange": {
+                "featureId": "n7"
+              },
+              "name": "n7.bend",
+              "inner": "n7.bend.inner",
+              "outer": "n7.bend.outer",
+              "radius": 1.5,
+              "angle": 90,
+              "axis": {
+                "origin": [
+                  97,
+                  3,
+                  3
+                ],
+                "direction": [
+                  0,
+                  -1,
+                  0
+                ]
+              },
+              "allowance": 3.392920065876977,
+              "setback": 2.9999999999999996,
+              "deduction": 2.607079934123022,
+              "kFactor": 0.44
+            },
+            {
+              "authoredFlange": {
+                "featureId": "n8"
+              },
+              "name": "n8.bend",
+              "inner": "n8.bend.inner",
+              "outer": "n8.bend.outer",
+              "radius": 1.5,
+              "angle": 90,
+              "axis": {
+                "origin": [
+                  97,
+                  67,
+                  3
+                ],
+                "direction": [
+                  1,
+                  0,
+                  0
+                ]
+              },
+              "allowance": 3.392920065876977,
+              "setback": 2.9999999999999996,
+              "deduction": 2.607079934123022,
+              "kFactor": 0.44
+            },
+            {
+              "authoredFlange": {
+                "featureId": "n9"
+              },
+              "name": "n9.bend",
+              "inner": "n9.bend.inner",
+              "outer": "n9.bend.outer",
+              "radius": 1.5,
+              "angle": 90,
+              "axis": {
+                "origin": [
+                  2.9999999999999996,
+                  67,
+                  3
+                ],
+                "direction": [
+                  0,
+                  1,
+                  0
+                ]
+              },
+              "allowance": 3.392920065876977,
+              "setback": 2.9999999999999996,
+              "deduction": 2.607079934123022,
+              "kFactor": 0.44
+            }
+          ]
+        },
+        "flat": {
+          "thickness": 1.5,
+          "kFactor": 0.44,
+          "fixedFace": "n1.top",
+          "loops": [
+            {
+              "outer": false,
+              "segments": [
+                {
+                  "kind": "arc",
+                  "center": [
+                    34.39292006587698,
+                    34.392920065876986
+                  ],
+                  "radius": 1.6000000000000014,
+                  "start": [
+                    32.79292006587698,
+                    34.39292006587698
+                  ],
+                  "end": [
+                    32.79292006587698,
+                    34.39292006587698
+                  ],
+                  "ccw": false
+                }
+              ],
+              "area": -8.042477193189878
+            },
+            {
+              "outer": true,
+              "segments": [
+                {
+                  "kind": "line",
+                  "a": [
+                    119.39292006587698,
+                    0
+                  ],
+                  "b": [
+                    119.39292006587698,
+                    25.392920065876982
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    119.39292006587698,
+                    25.392920065876982
+                  ],
+                  "b": [
+                    144.78584013175396,
+                    25.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    144.78584013175396,
+                    25.39292006587698
+                  ],
+                  "b": [
+                    144.78584013175396,
+                    89.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    144.78584013175396,
+                    89.39292006587698
+                  ],
+                  "b": [
+                    119.39292006587698,
+                    89.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    119.39292006587698,
+                    89.39292006587698
+                  ],
+                  "b": [
+                    119.39292006587698,
+                    114.78584013175396
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    119.39292006587698,
+                    114.78584013175396
+                  ],
+                  "b": [
+                    25.392920065876975,
+                    114.78584013175396
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    25.392920065876975,
+                    114.78584013175396
+                  ],
+                  "b": [
+                    25.392920065876975,
+                    89.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    25.39292006587698,
+                    89.39292006587698
+                  ],
+                  "b": [
+                    0,
+                    89.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    0,
+                    89.39292006587698
+                  ],
+                  "b": [
+                    0,
+                    25.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    0,
+                    25.39292006587698
+                  ],
+                  "b": [
+                    25.39292006587698,
+                    25.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    25.39292006587698,
+                    25.392920065876982
+                  ],
+                  "b": [
+                    25.392920065876975,
+                    0
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    25.392920065876975,
+                    0
+                  ],
+                  "b": [
+                    119.39292006587698,
+                    0
+                  ]
+                }
+              ],
+              "area": 14040.162740817126
+            }
+          ],
+          "bends": [
+            {
+              "name": "n6.bend",
+              "direction": "up",
+              "angle": 90.00000000000006,
+              "radius": 1.5000000000000004,
+              "kFactor": 0.44,
+              "allowance": 3.39292006587698,
+              "centre": [
+                [
+                  25.39292006587698,
+                  23.696460032938493
+                ],
+                [
+                  119.39292006587698,
+                  23.696460032938493
+                ]
+              ],
+              "tangents": [
+                [
+                  [
+                    25.39292006587698,
+                    25.392920065876982
+                  ],
+                  [
+                    119.39292006587698,
+                    25.392920065876982
+                  ]
+                ],
+                [
+                  [
+                    25.39292006587698,
+                    22
+                  ],
+                  [
+                    119.39292006587698,
+                    22
+                  ]
+                ]
+              ],
+              "faces": [
+                "n6.bend.inner"
+              ]
+            },
+            {
+              "name": "n7.bend",
+              "direction": "up",
+              "angle": 90.00000000000006,
+              "radius": 1.5000000000000002,
+              "kFactor": 0.44,
+              "allowance": 3.3929200658769787,
+              "centre": [
+                [
+                  121.08938009881547,
+                  25.392920065876982
+                ],
+                [
+                  121.08938009881547,
+                  89.39292006587698
+                ]
+              ],
+              "tangents": [
+                [
+                  [
+                    119.39292006587698,
+                    25.392920065876982
+                  ],
+                  [
+                    119.39292006587698,
+                    89.39292006587698
+                  ]
+                ],
+                [
+                  [
+                    122.78584013175396,
+                    25.392920065876982
+                  ],
+                  [
+                    122.78584013175396,
+                    89.39292006587698
+                  ]
+                ]
+              ],
+              "faces": [
+                "n7.bend.inner"
+              ]
+            },
+            {
+              "name": "n8.bend",
+              "direction": "up",
+              "angle": 90.00000000000006,
+              "radius": 1.5000000000000002,
+              "kFactor": 0.44,
+              "allowance": 3.3929200658769787,
+              "centre": [
+                [
+                  119.39292006587698,
+                  91.08938009881547
+                ],
+                [
+                  25.392920065876975,
+                  91.08938009881547
+                ]
+              ],
+              "tangents": [
+                [
+                  [
+                    119.39292006587698,
+                    89.39292006587698
+                  ],
+                  [
+                    25.392920065876975,
+                    89.39292006587698
+                  ]
+                ],
+                [
+                  [
+                    119.39292006587698,
+                    92.78584013175396
+                  ],
+                  [
+                    25.392920065876975,
+                    92.78584013175396
+                  ]
+                ]
+              ],
+              "faces": [
+                "n8.bend.inner"
+              ]
+            },
+            {
+              "name": "n9.bend",
+              "direction": "up",
+              "angle": 89.99999999999999,
+              "radius": 1.5000000000000004,
+              "kFactor": 0.44,
+              "allowance": 3.392920065876977,
+              "centre": [
+                [
+                  23.69646003293849,
+                  89.39292006587698
+                ],
+                [
+                  23.69646003293849,
+                  25.39292006587698
+                ]
+              ],
+              "tangents": [
+                [
+                  [
+                    25.39292006587698,
+                    89.39292006587698
+                  ],
+                  [
+                    25.39292006587698,
+                    25.39292006587698
+                  ]
+                ],
+                [
+                  [
+                    22,
+                    89.39292006587698
+                  ],
+                  [
+                    22,
+                    25.39292006587698
+                  ]
+                ]
+              ],
+              "faces": [
+                "n9.bend.inner"
+              ]
+            }
+          ],
+          "area": 14032.120263623936,
+          "box": {
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              144.78584013175396,
+              114.78584013175396
+            ]
+          }
+        },
+        "volume": 21115.190566736892,
+        "massMethod": "quadrature",
+        "owners": [
+          {
+            "featureId": "n6",
+            "faces": [
+              "n6.bend.inner"
+            ]
+          },
+          {
+            "featureId": "n7",
+            "faces": [
+              "n7.bend.inner"
+            ]
+          },
+          {
+            "featureId": "n8",
+            "faces": [
+              "n8.bend.inner"
+            ]
+          },
+          {
+            "featureId": "n9",
+            "faces": [
+              "n9.bend.inner"
+            ]
+          }
+        ],
+        "cylinders": [
+          {
+            "name": "n6.bend.outer",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                2.9999999999999996,
+                3.0000000000000004,
+                2.999999999999999
+              ],
+              "a": [
+                1,
+                0,
+                0
+              ],
+              "r": 3.0000000000000004,
+              "out": 1
+            }
+          },
+          {
+            "name": "n6.bend.inner",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                2.9999999999999996,
+                2.999999999999999,
+                2.9999999999999996
+              ],
+              "a": [
+                1,
+                0,
+                0
+              ],
+              "r": 1.5000000000000004,
+              "out": -1
+            }
+          },
+          {
+            "name": "n7.bend.outer",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                97,
+                3,
+                2.9999999999999996
+              ],
+              "a": [
+                0,
+                1,
+                0
+              ],
+              "r": 3.000000000000001,
+              "out": 1
+            }
+          },
+          {
+            "name": "n7.bend.inner",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                97,
+                3,
+                3.000000000000002
+              ],
+              "a": [
+                0,
+                1,
+                0
+              ],
+              "r": 1.5000000000000002,
+              "out": -1
+            }
+          },
+          {
+            "name": "n8.bend.outer",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                3,
+                67,
+                2.9999999999999996
+              ],
+              "a": [
+                1,
+                0,
+                0
+              ],
+              "r": 3.0000000000000004,
+              "out": 1
+            }
+          },
+          {
+            "name": "n8.bend.inner",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                3,
+                67,
+                2.9999999999999996
+              ],
+              "a": [
+                1,
+                0,
+                0
+              ],
+              "r": 1.5000000000000002,
+              "out": -1
+            }
+          },
+          {
+            "name": "n9.bend.outer",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                2.9999999999999996,
+                3,
+                3.0000000000000004
+              ],
+              "a": [
+                0,
+                1,
+                0
+              ],
+              "r": 3.0000000000000004,
+              "out": 1
+            }
+          },
+          {
+            "name": "n9.bend.inner",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                3,
+                3,
+                3.0000000000000004
+              ],
+              "a": [
+                0,
+                1,
+                0
+              ],
+              "r": 1.5000000000000004,
+              "out": -1
+            }
+          },
+          {
+            "name": "n10.side0#2",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                12,
+                12,
+                0
+              ],
+              "a": [
+                0,
+                0,
+                1
+              ],
+              "r": 1.5999999999999996,
+              "out": -1
+            }
+          },
+          {
+            "name": "n10.side0#1",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                12,
+                12,
+                0
+              ],
+              "a": [
+                0,
+                0,
+                1
+              ],
+              "r": 1.5999999999999996,
+              "out": -1
+            }
+          }
+        ]
+      },
+      "parentNative": {
+        "check": {
+          "valid": true,
+          "issues": [],
+          "counts": {
+            "bodies": 1,
+            "shells": 1,
+            "faces": 30,
+            "loops": 30,
+            "coedges": 136,
+            "edges": 68,
+            "vertices": 40
+          },
+          "topology": [
+            {
+              "body": "n9_body0",
+              "vertices": 40,
+              "edges": 68,
+              "faces": 30,
+              "loops": 30,
+              "shells": 1,
+              "genus": 0
+            }
+          ],
+          "maximumVertexGap": 1.7912006889121512e-15,
+          "maximumPcurveGap": 0,
+          "maximumEdgeSurfaceGap": 2.7755575615628914e-15
+        },
+        "sheet": {
+          "thickness": 1.5,
+          "bendRadius": 1.5,
+          "kFactor": 0.44,
+          "fixedFace": "n1.top",
+          "bends": [
+            {
+              "authoredFlange": {
+                "featureId": "n6"
+              },
+              "name": "n6.bend",
+              "inner": "n6.bend.inner",
+              "outer": "n6.bend.outer",
+              "radius": 1.5,
+              "angle": 90,
+              "axis": {
+                "origin": [
+                  3,
+                  2.9999999999999996,
+                  3
+                ],
+                "direction": [
+                  -1,
+                  0,
+                  0
+                ]
+              },
+              "allowance": 3.392920065876977,
+              "setback": 2.9999999999999996,
+              "deduction": 2.607079934123022,
+              "kFactor": 0.44
+            },
+            {
+              "authoredFlange": {
+                "featureId": "n7"
+              },
+              "name": "n7.bend",
+              "inner": "n7.bend.inner",
+              "outer": "n7.bend.outer",
+              "radius": 1.5,
+              "angle": 90,
+              "axis": {
+                "origin": [
+                  97,
+                  3,
+                  3
+                ],
+                "direction": [
+                  0,
+                  -1,
+                  0
+                ]
+              },
+              "allowance": 3.392920065876977,
+              "setback": 2.9999999999999996,
+              "deduction": 2.607079934123022,
+              "kFactor": 0.44
+            },
+            {
+              "authoredFlange": {
+                "featureId": "n8"
+              },
+              "name": "n8.bend",
+              "inner": "n8.bend.inner",
+              "outer": "n8.bend.outer",
+              "radius": 1.5,
+              "angle": 90,
+              "axis": {
+                "origin": [
+                  97,
+                  67,
+                  3
+                ],
+                "direction": [
+                  1,
+                  0,
+                  0
+                ]
+              },
+              "allowance": 3.392920065876977,
+              "setback": 2.9999999999999996,
+              "deduction": 2.607079934123022,
+              "kFactor": 0.44
+            },
+            {
+              "authoredFlange": {
+                "featureId": "n9"
+              },
+              "name": "n9.bend",
+              "inner": "n9.bend.inner",
+              "outer": "n9.bend.outer",
+              "radius": 1.5,
+              "angle": 90,
+              "axis": {
+                "origin": [
+                  2.9999999999999996,
+                  67,
+                  3
+                ],
+                "direction": [
+                  0,
+                  1,
+                  0
+                ]
+              },
+              "allowance": 3.392920065876977,
+              "setback": 2.9999999999999996,
+              "deduction": 2.607079934123022,
+              "kFactor": 0.44
+            }
+          ]
+        },
+        "flat": {
+          "thickness": 1.5,
+          "kFactor": 0.44,
+          "fixedFace": "n1.top",
+          "loops": [
+            {
+              "outer": true,
+              "segments": [
+                {
+                  "kind": "line",
+                  "a": [
+                    119.39292006587698,
+                    0
+                  ],
+                  "b": [
+                    119.39292006587698,
+                    25.392920065876982
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    119.39292006587698,
+                    25.392920065876982
+                  ],
+                  "b": [
+                    144.78584013175396,
+                    25.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    144.78584013175396,
+                    25.39292006587698
+                  ],
+                  "b": [
+                    144.78584013175396,
+                    89.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    144.78584013175396,
+                    89.39292006587698
+                  ],
+                  "b": [
+                    119.39292006587698,
+                    89.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    119.39292006587698,
+                    89.39292006587698
+                  ],
+                  "b": [
+                    119.39292006587698,
+                    114.78584013175396
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    119.39292006587698,
+                    114.78584013175396
+                  ],
+                  "b": [
+                    25.392920065876975,
+                    114.78584013175396
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    25.392920065876975,
+                    114.78584013175396
+                  ],
+                  "b": [
+                    25.392920065876975,
+                    89.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    25.39292006587698,
+                    89.39292006587698
+                  ],
+                  "b": [
+                    0,
+                    89.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    0,
+                    89.39292006587698
+                  ],
+                  "b": [
+                    0,
+                    25.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    0,
+                    25.39292006587698
+                  ],
+                  "b": [
+                    25.39292006587698,
+                    25.39292006587698
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    25.39292006587698,
+                    25.392920065876982
+                  ],
+                  "b": [
+                    25.392920065876975,
+                    0
+                  ]
+                },
+                {
+                  "kind": "line",
+                  "a": [
+                    25.392920065876975,
+                    0
+                  ],
+                  "b": [
+                    119.39292006587698,
+                    0
+                  ]
+                }
+              ],
+              "area": 14040.162740817126
+            }
+          ],
+          "bends": [
+            {
+              "name": "n6.bend",
+              "direction": "up",
+              "angle": 90.00000000000006,
+              "radius": 1.5000000000000004,
+              "kFactor": 0.44,
+              "allowance": 3.39292006587698,
+              "centre": [
+                [
+                  25.39292006587698,
+                  23.696460032938493
+                ],
+                [
+                  119.39292006587698,
+                  23.696460032938493
+                ]
+              ],
+              "tangents": [
+                [
+                  [
+                    25.39292006587698,
+                    25.392920065876982
+                  ],
+                  [
+                    119.39292006587698,
+                    25.392920065876982
+                  ]
+                ],
+                [
+                  [
+                    25.39292006587698,
+                    22
+                  ],
+                  [
+                    119.39292006587698,
+                    22
+                  ]
+                ]
+              ],
+              "faces": [
+                "n6.bend.inner"
+              ]
+            },
+            {
+              "name": "n7.bend",
+              "direction": "up",
+              "angle": 90.00000000000006,
+              "radius": 1.5000000000000002,
+              "kFactor": 0.44,
+              "allowance": 3.3929200658769787,
+              "centre": [
+                [
+                  121.08938009881547,
+                  25.392920065876982
+                ],
+                [
+                  121.08938009881547,
+                  89.39292006587698
+                ]
+              ],
+              "tangents": [
+                [
+                  [
+                    119.39292006587698,
+                    25.392920065876982
+                  ],
+                  [
+                    119.39292006587698,
+                    89.39292006587698
+                  ]
+                ],
+                [
+                  [
+                    122.78584013175396,
+                    25.392920065876982
+                  ],
+                  [
+                    122.78584013175396,
+                    89.39292006587698
+                  ]
+                ]
+              ],
+              "faces": [
+                "n7.bend.inner"
+              ]
+            },
+            {
+              "name": "n8.bend",
+              "direction": "up",
+              "angle": 90.00000000000006,
+              "radius": 1.5000000000000002,
+              "kFactor": 0.44,
+              "allowance": 3.3929200658769787,
+              "centre": [
+                [
+                  119.39292006587698,
+                  91.08938009881547
+                ],
+                [
+                  25.392920065876975,
+                  91.08938009881547
+                ]
+              ],
+              "tangents": [
+                [
+                  [
+                    119.39292006587698,
+                    89.39292006587698
+                  ],
+                  [
+                    25.392920065876975,
+                    89.39292006587698
+                  ]
+                ],
+                [
+                  [
+                    119.39292006587698,
+                    92.78584013175396
+                  ],
+                  [
+                    25.392920065876975,
+                    92.78584013175396
+                  ]
+                ]
+              ],
+              "faces": [
+                "n8.bend.inner"
+              ]
+            },
+            {
+              "name": "n9.bend",
+              "direction": "up",
+              "angle": 89.99999999999999,
+              "radius": 1.5000000000000004,
+              "kFactor": 0.44,
+              "allowance": 3.392920065876977,
+              "centre": [
+                [
+                  23.69646003293849,
+                  89.39292006587698
+                ],
+                [
+                  23.69646003293849,
+                  25.39292006587698
+                ]
+              ],
+              "tangents": [
+                [
+                  [
+                    25.39292006587698,
+                    89.39292006587698
+                  ],
+                  [
+                    25.39292006587698,
+                    25.39292006587698
+                  ]
+                ],
+                [
+                  [
+                    22,
+                    89.39292006587698
+                  ],
+                  [
+                    22,
+                    25.39292006587698
+                  ]
+                ]
+              ],
+              "faces": [
+                "n9.bend.inner"
+              ]
+            }
+          ],
+          "area": 14040.162740817126,
+          "box": {
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              144.78584013175396,
+              114.78584013175396
+            ]
+          }
+        },
+        "volume": 21127.254282526672,
+        "massMethod": "quadrature",
+        "owners": [
+          {
+            "featureId": "n6",
+            "faces": [
+              "n6.bend.inner"
+            ]
+          },
+          {
+            "featureId": "n7",
+            "faces": [
+              "n7.bend.inner"
+            ]
+          },
+          {
+            "featureId": "n8",
+            "faces": [
+              "n8.bend.inner"
+            ]
+          },
+          {
+            "featureId": "n9",
+            "faces": [
+              "n9.bend.inner"
+            ]
+          }
+        ],
+        "cylinders": [
+          {
+            "name": "n6.bend.outer",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                2.9999999999999996,
+                3.0000000000000004,
+                2.999999999999999
+              ],
+              "a": [
+                1,
+                0,
+                0
+              ],
+              "r": 3.0000000000000004,
+              "out": 1
+            }
+          },
+          {
+            "name": "n6.bend.inner",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                2.9999999999999996,
+                2.999999999999999,
+                2.9999999999999996
+              ],
+              "a": [
+                1,
+                0,
+                0
+              ],
+              "r": 1.5000000000000004,
+              "out": -1
+            }
+          },
+          {
+            "name": "n7.bend.outer",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                97,
+                3,
+                2.9999999999999996
+              ],
+              "a": [
+                0,
+                1,
+                0
+              ],
+              "r": 3.000000000000001,
+              "out": 1
+            }
+          },
+          {
+            "name": "n7.bend.inner",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                97,
+                3,
+                3.000000000000002
+              ],
+              "a": [
+                0,
+                1,
+                0
+              ],
+              "r": 1.5000000000000002,
+              "out": -1
+            }
+          },
+          {
+            "name": "n8.bend.outer",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                3,
+                67,
+                2.9999999999999996
+              ],
+              "a": [
+                1,
+                0,
+                0
+              ],
+              "r": 3.0000000000000004,
+              "out": 1
+            }
+          },
+          {
+            "name": "n8.bend.inner",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                3,
+                67,
+                2.9999999999999996
+              ],
+              "a": [
+                1,
+                0,
+                0
+              ],
+              "r": 1.5000000000000002,
+              "out": -1
+            }
+          },
+          {
+            "name": "n9.bend.outer",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                2.9999999999999996,
+                3,
+                3.0000000000000004
+              ],
+              "a": [
+                0,
+                1,
+                0
+              ],
+              "r": 3.0000000000000004,
+              "out": 1
+            }
+          },
+          {
+            "name": "n9.bend.inner",
+            "geometry": {
+              "kind": "cylinder",
+              "c": [
+                3,
+                3,
+                3.0000000000000004
+              ],
+              "a": [
+                0,
+                1,
+                0
+              ],
+              "r": 1.5000000000000004,
+              "out": -1
+            }
+          }
+        ]
+      },
+      "volumeRemoved": 12.063715789779963,
+      "expectedVolumeRemoved": 12.063715789784807,
+      "flatAreaRemoved": 8.04247719319028,
+      "bores": [
+        {
+          "name": "n10.side0#2",
+          "geometry": {
+            "kind": "cylinder",
+            "c": [
+              12,
+              12,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 1.5999999999999996,
+            "out": -1
+          }
+        },
+        {
+          "name": "n10.side0#1",
+          "geometry": {
+            "kind": "cylinder",
+            "c": [
+              12,
+              12,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 1.5999999999999996,
+            "out": -1
+          }
+        }
+      ],
+      "bendFaceSetsPreserved": true
+    },
+    {
+      "buttons": [
+        "DXF",
+        "Close"
+      ],
+      "gap": "No bend-specific History/rule-source action with terminal Hole in current flat dialog"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "Open synthetic seed only; no export/download or manufacturing qualification; no owner inferred from name alone.",
+    "No edit, Undo, Save persistence or general downstream navigation claim.",
+    "Cylinder XY/axis/radius checked without fixing split face count; no independent flat circle center-position oracle."
+  ],
+  "downloads": [],
+  "sourceIntegrity": {
+    "frozenEqualsAfter": true,
+    "afterEqualsCleanup": true
+  },
+  "provenance": "Synthetic D121 first11nodes; original states/observations retained, host diagnostics omitted."
+}
