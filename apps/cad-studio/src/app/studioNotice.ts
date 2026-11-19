@@ -9,3 +9,8 @@ export type StudioNotice = FriendlyError & {
   inputPick?: Command;
   documentSource?: { doc: StudioDoc; name?: string; evaluated?: StudioDoc; placed?: { view: StudioDoc; workerSession: number } };
 };
+
+/** Retire one controller's exact notice without dismissing a newer or unrelated alert. */
+export function retireStudioNotice(current: StudioNotice | null, owned: FriendlyError): StudioNotice | null {
+  return current === owned ? null : current;
+}

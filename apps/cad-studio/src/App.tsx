@@ -32,7 +32,7 @@ import { InstanceInspector } from './ui/InstanceInspector';
 import { createHistoryFeatureApply } from './state/historyFeatureApply';
 import { useFilletEndpointDisplay } from './state/useFilletEndpointDisplay';
 import { createCommandReferencePicking, type CommandPickScope } from './app/commandReferencePicking';
-import type { StudioNotice } from './app/studioNotice';
+import { retireStudioNotice, type StudioNotice } from './app/studioNotice';
 import { filletStationInputKey } from './app/filletEndpoints';
 import { SHARED_HOLE_LAYOUT_EDIT } from './app/sharedHoleLayout';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
@@ -668,6 +668,7 @@ export function App() {
   // (`action`: one button on the toast, e.g. Undo after the agent applied a change directly, D41.)
   const [workerFailure, setWorkerFailure] = useState<FriendlyError | null>(null);
   const [notice, setToast] = useState<StudioNotice | null>(null);
+  const clearDrawingToast = useCallback((owned: FriendlyError) => setToast(current => retireStudioNotice(current, owned)), []);
   const clearBodyClipboard = useCallback(() => {
     clipboard.current = null;
     setToast(current => current?.bodyCopy ? null : current);
@@ -3862,7 +3863,7 @@ export function App() {
 
       {browserPlacement === 'left' && browserPanel}
 
-      {drawing && <Suspense fallback={null}><DrawingWorkspace key={docGeneration} engine={engine} doc={{ ...evaluated, instances: doc.instances, assemblyCuts: doc.assemblyCuts }} bodies={bodies} settings={doc.drawing ?? defaultDrawing()} modelInput={evaluated} workerSession={workerSession} sourceCurrent={fresh && !busy && marker === null && !variants.showing} fileName={fileName} onChange={commitDrawing} onToast={setToast} referencePreview={referencePreview?.owner === doc && fresh && !busy ? referencePreview : null} onClearReferencePreview={clearReferencePreview} onReferenceLabels={receiveReferenceLabels} /></Suspense>}
+      {drawing && <Suspense fallback={null}><DrawingWorkspace key={docGeneration} engine={engine} doc={{ ...evaluated, instances: doc.instances, assemblyCuts: doc.assemblyCuts }} bodies={bodies} settings={doc.drawing ?? defaultDrawing()} modelInput={evaluated} workerSession={workerSession} sourceCurrent={fresh && !busy && marker === null && !variants.showing} fileName={fileName} onChange={commitDrawing} onToast={setToast} onClearToast={clearDrawingToast} referencePreview={referencePreview?.owner === doc && fresh && !busy ? referencePreview : null} onClearReferencePreview={clearReferencePreview} onReferenceLabels={receiveReferenceLabels} /></Suspense>}
 
       {!dockDocked && hud}
 

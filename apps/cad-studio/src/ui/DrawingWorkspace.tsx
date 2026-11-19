@@ -128,9 +128,9 @@ const showDetailHidden = (settings: DrawingSettings, view: DimView) => {
 export interface DrawingReferencePreview { dimensionId: string; edge?: string; candidateNumber?: number }
 export interface DrawingReferenceLabel { dimensionId: string; view: DimView; text: string | null; reason?: string }
 
-export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies, settings: wholeSettings, modelInput, workerSession, sourceCurrent, fileName, onChange: sourceOnChange, onToast, referencePreview, onClearReferencePreview, onReferenceLabels }: {
+export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies, settings: wholeSettings, modelInput, workerSession, sourceCurrent, fileName, onChange: sourceOnChange, onToast, onClearToast, referencePreview, onClearReferencePreview, onReferenceLabels }: {
   engine: EngineClient; doc: StudioDoc; bodies?: readonly BodyResult[]; settings: DrawingSettings; modelInput: StudioDoc; workerSession: number; sourceCurrent: boolean; fileName: string;
-  onChange(next: DrawingSettings): boolean; onToast(e: FriendlyError): void;
+  onChange(next: DrawingSettings): boolean; onToast(e: FriendlyError): void; onClearToast(e: FriendlyError): void;
   referencePreview?: DrawingReferencePreview | null; onClearReferencePreview(): void; onReferenceLabels?(labels: readonly DrawingReferenceLabel[]): void;
 }) {
   // 11 ④: a drawing of several sheets shows one at a time, as a drawing of its own (its views and what belongs to them); what is
@@ -1174,7 +1174,14 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (!dxfCut) return;
     try { downloadBytes(writeDxf(sectionDxfDocument(dxfCut), { version: dxfVersion }).bytes, `${fileName}-section-${dxfCut.id}-${dxfCut.id}.dxf`, 'image/vnd.dxf'); } catch (e) { dxfFailed(e); }
   };
-  useEffect(() => { if (error && !empty) onToast({ title: 'Could not draw the part', hint: 'Fix the model’s errors first, then open the drawing again.', detail: error }); }, [error, empty]);
+  useEffect(() => {
+    if (!error || empty) return;
+    const owned = { title: 'Could not draw the part', hint: 'Fix the model’s errors first, then open the drawing again.', detail: error };
+    onToast(owned);
+    // Recovery, empty results and unmount retire only this effect's exact notice.
+    // Keep it while the existing projection pipeline is pending, as with its inline error.
+    return () => onClearToast(owned);
+  }, [error, empty, onToast, onClearToast]);
 
   // What follows the cursor: the snap, the hovered edge, and the dimension being placed or dragged.
   const overlay = useMemo(() => {
