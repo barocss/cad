@@ -20,6 +20,15 @@ const object = (x: unknown): x is Record<string, unknown> => !!x && typeof x ===
 const only = (x: object, keys: string[]) => Object.keys(x).every(k => keys.includes(k) || (x as Record<string, unknown>)[k] === undefined);
 const positive = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && x > 0;
 const pair = (x: unknown): x is [number, number] => Array.isArray(x) && x.length === 2 && [0, 1].every(i => typeof x[i] === 'number' && Number.isFinite(x[i]));
+const triple = (x: unknown): x is [number, number, number] => Array.isArray(x) && x.length === 3 && [0, 1, 2].every(i => typeof x[i] === 'number' && Number.isFinite(x[i]));
+function planarFrame(x: unknown): boolean {
+  if (!object(x) || !only(x, ['origin', 'normal', 'xAxis']) || !triple(x.origin) || !triple(x.normal) || !triple(x.xAxis)) return false;
+  const normal = x.normal, axis = x.xAxis;
+  const n = Math.hypot(...normal), u = Math.hypot(...axis);
+  if (!Number.isFinite(n) || !Number.isFinite(u) || n <= 1e-12 || u <= 1e-12) return false;
+  const dot = normal.reduce((sum, v, i) => sum + (v / n) * (axis[i] / u), 0);
+  return Number.isFinite(dot) && Math.abs(dot) <= 1e-9;
+}
 const edge = (x: unknown) => Array.isArray(x) && x.length === 1 && typeof x[0] === 'string' && !!x[0];
 const parent = (x: unknown, index: number) => object(x) && only(x, ['node', 'side']) && x.node === index && x.side === 'solid';
 const faces = (x: unknown): x is string[] => Array.isArray(x) && x.length > 0 && Array.from(x).every(v => typeof v === 'string' && !!v) && new Set(x).size === x.length;
@@ -43,10 +52,27 @@ function resolve(source: SheetRuleSource, body: BodyResult): FlangeBendOwner[] {
     || base.sketch !== 0 || !positive(base.thickness) || !positive(base.bendRadius)) return [];
   if (base.bendTable !== undefined ? !object(base.bendTable) || !Array.isArray(base.bendTable.rows) || !base.bendTable.rows.length || base.kFactor !== undefined
     : typeof base.kFactor !== 'number' || !Number.isFinite(base.kFactor) || base.kFactor < 0 || base.kFactor > 1) return [];
-  // Consume every node in one contiguous parent chain: reliefs first, then flanges, then optional through holes.
+  // A terminal explicit tool belongs only to this Difference. The preceding sheet chain
+  // is still validated in full; no geometry or face ownership is inferred from this recipe.
+  let chainEnd = doc.nodes.length;
+  const cut = doc.nodes[terminal];
+  if (cut.kind === 'difference') {
+    const toolSketchIndex = terminal - 2, toolSketch = doc.nodes[toolSketchIndex], tool = doc.nodes[terminal - 1];
+    if (toolSketchIndex < 4 || toolSketch.kind !== 'sketch' || toolSketch.profile !== 'rectangle'
+      || !only(toolSketch, ['id', 'kind', 'profile', 'min', 'max', 'plane'])
+      || !pair(toolSketch.min) || !pair(toolSketch.max)
+      || !positive(toolSketch.max[0] - toolSketch.min[0]) || !positive(toolSketch.max[1] - toolSketch.min[1])
+      || !planarFrame(toolSketch.plane)
+      || tool.kind !== 'extrude' || !only(tool, ['id', 'kind', 'sketch', 'height'])
+      || tool.sketch !== toolSketchIndex || !positive(tool.height)
+      || !only(cut, ['id', 'kind', 'parent', 'tool'])
+      || !parent(cut.parent, toolSketchIndex - 1) || !parent(cut.tool, terminal - 1)) return [];
+    chainEnd = toolSketchIndex;
+  }
+  // Consume every prefix node: reliefs first, then flanges, then optional through holes.
   const flangeIndices = new Map<string, number>();
   let flangePhase = false, holePhase = false;
-  for (let index = 2; index < doc.nodes.length; index++) {
+  for (let index = 2; index < chainEnd; index++) {
     const n = doc.nodes[index];
     if (n.kind === 'sheet-corner-relief' && !flangePhase) {
       if (!only(n, ['id', 'kind', 'parent', 'edges', 'shape', 'size', 'sig'])
