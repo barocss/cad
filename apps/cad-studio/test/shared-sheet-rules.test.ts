@@ -32,7 +32,7 @@ test('same-key new document never adopts an old dialog owner',()=>{
 });
 
 test('suppressed contour and source/output alias mismatches fail closed',()=>{
-  const {doc,evaluated,body}=fixture();const suppressed={...doc,nodes:[{...doc.nodes[0],suppressed:true}]};
+  const {doc,evaluated,body}=fixture();const suppressed={...doc,nodes:[{...doc.nodes[0],suppressed:true as const}]};
   assert.equal(sharedSheetRuleOwner(suppressed,{...suppressed},body),null);
   assert.equal(sharedSheetRuleOwner({...doc,outputs:{}},evaluated,body),null);
   assert.equal(sharedSheetRuleOwner({...doc,outputs:{b7:{node:0,side:'positive'}}},evaluated,body),null);
