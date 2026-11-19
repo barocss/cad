@@ -1,0 +1,19 @@
+{
+  "status": "FAIL",
+  "phase": "actual OPFS Save then project Close and fresh reload Open",
+  "originalReceiptSHA256": "316e508285be04b08a1934d54614f7141b44bd07ee1315583083d05c486da297",
+  "cause": "Fixture requested Project and versions while Drawing mode hides that control. Timeout before Save. Not a product defect.",
+  "completed": "Public b1 selection and Auto at Width30",
+  "NOT_RUN": [
+    "OPFS Save",
+    "fresh Open",
+    "Width40 edit",
+    "separate writers/readback"
+  ],
+  "correction": "Public Model, assert accepted document unchanged, then existing Project and versions flow with source-supported More tools fallback. One corrected retry.",
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ]
+}

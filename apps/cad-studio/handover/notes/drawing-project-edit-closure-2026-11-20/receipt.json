@@ -1,0 +1,2240 @@
+{
+  "status": "PASS",
+  "qualification": "#270 OPFS Save/fresh project Open then ordinary source Width edit and independent dimension writer readback",
+  "states": [
+    {
+      "label": "01-fresh-project-open-dimensions",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              30,
+              12
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 6
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -5,
+              -4
+            ],
+            "max": [
+              35,
+              -2
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 12,
+            "from": -3
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4,
+        "drawing": {
+          "sheet": "A4",
+          "scope": {
+            "kind": "part",
+            "body": {
+              "key": "b1",
+              "feature": "n1",
+              "kind": "extrude"
+            }
+          },
+          "scale": 1,
+          "projection": "third",
+          "hidden": true,
+          "dimensions": [
+            {
+              "view": "top",
+              "kind": "linear",
+              "a": {
+                "edge": "n1.bottom|n1.side0",
+                "at": "end",
+                "near": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "b": {
+                "edge": "n1.bottom|n1.side2",
+                "at": "end",
+                "near": [
+                  0,
+                  12,
+                  0
+                ]
+              },
+              "orient": "vertical",
+              "place": [
+                -10,
+                6
+              ],
+              "id": "d1",
+              "auto": true
+            },
+            {
+              "view": "front",
+              "kind": "linear",
+              "a": {
+                "edge": "n1.bottom|n1.side0",
+                "at": "end",
+                "near": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "b": {
+                "edge": "n1.bottom|n1.side0",
+                "at": "end",
+                "near": [
+                  30,
+                  0,
+                  0
+                ]
+              },
+              "orient": "horizontal",
+              "place": [
+                15,
+                -10
+              ],
+              "id": "d2",
+              "auto": true
+            },
+            {
+              "view": "front",
+              "kind": "linear",
+              "a": {
+                "edge": "n1.bottom|n1.side0",
+                "at": "end",
+                "near": [
+                  0,
+                  0,
+                  0
+                ]
+              },
+              "b": {
+                "edge": "n1.side0|n1.top",
+                "at": "end",
+                "near": [
+                  0,
+                  0,
+                  6
+                ]
+              },
+              "orient": "vertical",
+              "place": [
+                40,
+                3
+              ],
+              "id": "d3",
+              "auto": true
+            }
+          ],
+          "views": [
+            "front",
+            "top",
+            "iso"
+          ]
+        }
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 2160,
+            "centroid": [
+              15.000000000000004,
+              6,
+              3
+            ],
+            "massRef": null
+          },
+          {
+            "key": "b3",
+            "volume": 959.9999999999997,
+            "centroid": [
+              15.000000000000009,
+              -3.0000000000000004,
+              3
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 2,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 6",
+        "Extrude 12"
+      ]
+    },
+    {
+      "label": "source-width40",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              40,
+              12
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 6
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -5,
+              -4
+            ],
+            "max": [
+              35,
+              -2
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 12,
+            "from": -3
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4,
+        "drawing": {
+          "sheet": "A4",
+          "scope": {
+            "kind": "part",
+            "body": {
+              "key": "b1",
+              "feature": "n1",
+              "kind": "extrude"
+            }
+          },
+          "scale": 1,
+          "projection": "third",
+          "hidden": true,
+          "dimensions": [
+            {
+              "view": "top",
+              "kind": "linear",
+              "a": {
+                "edge": "n1.bottom|n1.side0",
+                "at": "end",
+                "near": [
+                  0,
+                  0,
+                  0
+                ],
+                "sig": {
+                  "k": "line",
+                  "p": [
+                    15,
+                    0,
+                    0
+                  ],
+                  "d": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "s": 30
+                }
+              },
+              "b": {
+                "edge": "n1.bottom|n1.side2",
+                "at": "end",
+                "near": [
+                  0,
+                  12,
+                  0
+                ],
+                "sig": {
+                  "k": "line",
+                  "p": [
+                    15,
+                    12,
+                    0
+                  ],
+                  "d": [
+                    -1,
+                    0,
+                    0
+                  ],
+                  "s": 30
+                }
+              },
+              "orient": "vertical",
+              "place": [
+                -10,
+                6
+              ],
+              "id": "d1",
+              "auto": true
+            },
+            {
+              "view": "front",
+              "kind": "linear",
+              "a": {
+                "edge": "n1.bottom|n1.side0",
+                "at": "end",
+                "near": [
+                  0,
+                  0,
+                  0
+                ],
+                "sig": {
+                  "k": "line",
+                  "p": [
+                    15,
+                    0,
+                    0
+                  ],
+                  "d": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "s": 30
+                }
+              },
+              "b": {
+                "edge": "n1.bottom|n1.side0",
+                "at": "end",
+                "near": [
+                  30,
+                  0,
+                  0
+                ],
+                "sig": {
+                  "k": "line",
+                  "p": [
+                    15,
+                    0,
+                    0
+                  ],
+                  "d": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "s": 30
+                }
+              },
+              "orient": "horizontal",
+              "place": [
+                15,
+                -10
+              ],
+              "id": "d2",
+              "auto": true
+            },
+            {
+              "view": "front",
+              "kind": "linear",
+              "a": {
+                "edge": "n1.bottom|n1.side0",
+                "at": "end",
+                "near": [
+                  0,
+                  0,
+                  0
+                ],
+                "sig": {
+                  "k": "line",
+                  "p": [
+                    15,
+                    0,
+                    0
+                  ],
+                  "d": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "s": 30
+                }
+              },
+              "b": {
+                "edge": "n1.side0|n1.top",
+                "at": "end",
+                "near": [
+                  0,
+                  0,
+                  6
+                ],
+                "sig": {
+                  "k": "line",
+                  "p": [
+                    15,
+                    0,
+                    6
+                  ],
+                  "d": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "s": 30
+                }
+              },
+              "orient": "vertical",
+              "place": [
+                40,
+                3
+              ],
+              "id": "d3",
+              "auto": true
+            }
+          ],
+          "views": [
+            "front",
+            "top",
+            "iso"
+          ]
+        }
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 2880.000000000001,
+            "centroid": [
+              19.999999999999993,
+              5.999999999999999,
+              3.0000000000000004
+            ],
+            "massRef": null
+          },
+          {
+            "key": "b3",
+            "volume": 959.9999999999997,
+            "centroid": [
+              15.000000000000009,
+              -3.0000000000000004,
+              3
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 2,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 6",
+        "Extrude 12"
+      ]
+    },
+    {
+      "label": "02-width40-current-dimensions",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "id": "n0",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              0,
+              0
+            ],
+            "max": [
+              40,
+              12
+            ]
+          },
+          {
+            "id": "n1",
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 6
+          },
+          {
+            "id": "n2",
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -5,
+              -4
+            ],
+            "max": [
+              35,
+              -2
+            ]
+          },
+          {
+            "id": "n3",
+            "kind": "extrude",
+            "sketch": 2,
+            "height": 12,
+            "from": -3
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          },
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4,
+        "drawing": {
+          "sheet": "A4",
+          "scope": {
+            "kind": "part",
+            "body": {
+              "key": "b1",
+              "feature": "n1",
+              "kind": "extrude"
+            }
+          },
+          "scale": 1,
+          "projection": "third",
+          "hidden": true,
+          "dimensions": [
+            {
+              "view": "top",
+              "kind": "linear",
+              "a": {
+                "edge": "n1.bottom|n1.side0",
+                "at": "end",
+                "near": [
+                  0,
+                  0,
+                  0
+                ],
+                "sig": {
+                  "k": "line",
+                  "p": [
+                    15,
+                    0,
+                    0
+                  ],
+                  "d": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "s": 30
+                }
+              },
+              "b": {
+                "edge": "n1.bottom|n1.side2",
+                "at": "end",
+                "near": [
+                  0,
+                  12,
+                  0
+                ],
+                "sig": {
+                  "k": "line",
+                  "p": [
+                    15,
+                    12,
+                    0
+                  ],
+                  "d": [
+                    -1,
+                    0,
+                    0
+                  ],
+                  "s": 30
+                }
+              },
+              "orient": "vertical",
+              "place": [
+                -10,
+                6
+              ],
+              "id": "d1",
+              "auto": true
+            },
+            {
+              "view": "front",
+              "kind": "linear",
+              "a": {
+                "edge": "n1.bottom|n1.side0",
+                "at": "end",
+                "near": [
+                  0,
+                  0,
+                  0
+                ],
+                "sig": {
+                  "k": "line",
+                  "p": [
+                    15,
+                    0,
+                    0
+                  ],
+                  "d": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "s": 30
+                }
+              },
+              "b": {
+                "edge": "n1.bottom|n1.side0",
+                "at": "end",
+                "near": [
+                  30,
+                  0,
+                  0
+                ],
+                "sig": {
+                  "k": "line",
+                  "p": [
+                    15,
+                    0,
+                    0
+                  ],
+                  "d": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "s": 30
+                }
+              },
+              "orient": "horizontal",
+              "place": [
+                15,
+                -10
+              ],
+              "id": "d2",
+              "auto": true
+            },
+            {
+              "view": "front",
+              "kind": "linear",
+              "a": {
+                "edge": "n1.bottom|n1.side0",
+                "at": "end",
+                "near": [
+                  0,
+                  0,
+                  0
+                ],
+                "sig": {
+                  "k": "line",
+                  "p": [
+                    15,
+                    0,
+                    0
+                  ],
+                  "d": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "s": 30
+                }
+              },
+              "b": {
+                "edge": "n1.side0|n1.top",
+                "at": "end",
+                "near": [
+                  0,
+                  0,
+                  6
+                ],
+                "sig": {
+                  "k": "line",
+                  "p": [
+                    15,
+                    0,
+                    6
+                  ],
+                  "d": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "s": 30
+                }
+              },
+              "orient": "vertical",
+              "place": [
+                40,
+                3
+              ],
+              "id": "d3",
+              "auto": true
+            }
+          ],
+          "views": [
+            "front",
+            "top",
+            "iso"
+          ]
+        }
+      },
+      "bodies": {
+        "fresh": true,
+        "bodies": [
+          {
+            "key": "b1",
+            "volume": 2880.000000000001,
+            "centroid": [
+              19.999999999999993,
+              5.999999999999999,
+              3.0000000000000004
+            ],
+            "massRef": null
+          },
+          {
+            "key": "b3",
+            "volume": 959.9999999999997,
+            "centroid": [
+              15.000000000000009,
+              -3.0000000000000004,
+              3
+            ],
+            "massRef": null
+          }
+        ],
+        "massReady": true,
+        "colored": []
+      },
+      "selection": {
+        "selection": {
+          "faces": [],
+          "edges": [],
+          "bodies": []
+        },
+        "bodies": 2,
+        "active": null,
+        "sketch": false,
+        "measure": false
+      },
+      "notices": [],
+      "editor": null,
+      "sketchPanel": null,
+      "hud": null,
+      "sketchAlert": null,
+      "sketchStatus": null,
+      "history": [
+        "Extrude 6",
+        "Extrude 12"
+      ]
+    }
+  ],
+  "downloads": [],
+  "observations": [
+    {
+      "phase": "actual OPFS Save then project Close and fresh reload Open",
+      "savedBytes": 2719,
+      "sha256": "b7bc47dda158cd684f0914cf6447b1a83122be2ad61314e24e7c4adb2fa01d57",
+      "scope": {
+        "kind": "part",
+        "body": {
+          "key": "b1",
+          "feature": "n1",
+          "kind": "extrude"
+        }
+      },
+      "dimensionIds": [
+        "d1",
+        "d2",
+        "d3"
+      ]
+    },
+    {
+      "phase": "Apply feature editor source-width40",
+      "expected": {
+        "d1": 12,
+        "d2": 40,
+        "d3": 6
+      },
+      "live": {
+        "dimensions": [
+          {
+            "id": "d1",
+            "text": "12",
+            "value": 12
+          },
+          {
+            "id": "d2",
+            "text": "40",
+            "value": 40
+          },
+          {
+            "id": "d3",
+            "text": "6",
+            "value": 6
+          }
+        ],
+        "texts": {
+          "d1": [
+            "12"
+          ],
+          "d2": [
+            "40"
+          ],
+          "d3": [
+            "6"
+          ]
+        }
+      },
+      "projection": {
+        "options": {
+          "tangentEdges": false,
+          "made": true,
+          "body": {
+            "key": "b1",
+            "feature": "n1",
+            "kind": "extrude"
+          }
+        },
+        "drawing": {
+          "ok": true,
+          "views": {
+            "front": {
+              "right": [
+                1,
+                0,
+                0
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "toward": [
+                0,
+                -1,
+                0
+              ],
+              "edges": [
+                {
+                  "name": "n1.bottom|n1.side0",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      0
+                    ],
+                    [
+                      40,
+                      0,
+                      0
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          0
+                        ],
+                        "b": [
+                          40,
+                          0
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side0|n1.side1",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      0,
+                      0
+                    ],
+                    [
+                      40,
+                      0,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          40,
+                          0
+                        ],
+                        "b": [
+                          40,
+                          6
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side0|n1.top",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      6
+                    ],
+                    [
+                      40,
+                      0,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          6
+                        ],
+                        "b": [
+                          40,
+                          6
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side0|n1.side3",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      0
+                    ],
+                    [
+                      0,
+                      0,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          0
+                        ],
+                        "b": [
+                          0,
+                          6
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side1|n1.side2",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      12,
+                      0
+                    ],
+                    [
+                      40,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": []
+                },
+                {
+                  "name": "n1.bottom|n1.side2",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      12,
+                      0
+                    ],
+                    [
+                      0,
+                      12,
+                      0
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": []
+                },
+                {
+                  "name": "n1.side2|n1.side3",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      12,
+                      0
+                    ],
+                    [
+                      0,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": []
+                },
+                {
+                  "name": "n1.side2|n1.top",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      12,
+                      6
+                    ],
+                    [
+                      0,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": []
+                }
+              ],
+              "min": [
+                0,
+                0
+              ],
+              "max": [
+                40,
+                6
+              ]
+            },
+            "top": {
+              "right": [
+                1,
+                0,
+                0
+              ],
+              "up": [
+                0,
+                1,
+                0
+              ],
+              "toward": [
+                0,
+                0,
+                1
+              ],
+              "edges": [
+                {
+                  "name": "n1.bottom|n1.side0",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      0
+                    ],
+                    [
+                      40,
+                      0,
+                      0
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": []
+                },
+                {
+                  "name": "n1.side0|n1.top",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      6
+                    ],
+                    [
+                      40,
+                      0,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          0
+                        ],
+                        "b": [
+                          40,
+                          0
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.bottom|n1.side1",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      0,
+                      0
+                    ],
+                    [
+                      40,
+                      12,
+                      0
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": []
+                },
+                {
+                  "name": "n1.side1|n1.top",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      0,
+                      6
+                    ],
+                    [
+                      40,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          40,
+                          0
+                        ],
+                        "b": [
+                          40,
+                          12
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.bottom|n1.side2",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      12,
+                      0
+                    ],
+                    [
+                      0,
+                      12,
+                      0
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": []
+                },
+                {
+                  "name": "n1.side2|n1.top",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      12,
+                      6
+                    ],
+                    [
+                      0,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          40,
+                          12
+                        ],
+                        "b": [
+                          0,
+                          12
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.bottom|n1.side3",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      0
+                    ],
+                    [
+                      0,
+                      12,
+                      0
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": []
+                },
+                {
+                  "name": "n1.side3|n1.top",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      6
+                    ],
+                    [
+                      0,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          0
+                        ],
+                        "b": [
+                          0,
+                          12
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                }
+              ],
+              "min": [
+                0,
+                0
+              ],
+              "max": [
+                40,
+                12
+              ]
+            },
+            "right": {
+              "right": [
+                0,
+                1,
+                0
+              ],
+              "up": [
+                0,
+                0,
+                1
+              ],
+              "toward": [
+                1,
+                0,
+                0
+              ],
+              "edges": [
+                {
+                  "name": "n1.side0|n1.side1",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      0,
+                      0
+                    ],
+                    [
+                      40,
+                      0,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          0
+                        ],
+                        "b": [
+                          0,
+                          6
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side0|n1.side3",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      0
+                    ],
+                    [
+                      0,
+                      0,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": []
+                },
+                {
+                  "name": "n1.bottom|n1.side1",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      0,
+                      0
+                    ],
+                    [
+                      40,
+                      12,
+                      0
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          0
+                        ],
+                        "b": [
+                          12,
+                          0
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side1|n1.side2",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      12,
+                      0
+                    ],
+                    [
+                      40,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          12,
+                          0
+                        ],
+                        "b": [
+                          12,
+                          6
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side1|n1.top",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      0,
+                      6
+                    ],
+                    [
+                      40,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          6
+                        ],
+                        "b": [
+                          12,
+                          6
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side2|n1.side3",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      12,
+                      0
+                    ],
+                    [
+                      0,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": []
+                },
+                {
+                  "name": "n1.bottom|n1.side3",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      0
+                    ],
+                    [
+                      0,
+                      12,
+                      0
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": []
+                },
+                {
+                  "name": "n1.side3|n1.top",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      6
+                    ],
+                    [
+                      0,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": []
+                }
+              ],
+              "min": [
+                0,
+                0
+              ],
+              "max": [
+                12,
+                6
+              ]
+            },
+            "iso": {
+              "right": [
+                0.7071067811865476,
+                0.7071067811865476,
+                0
+              ],
+              "up": [
+                -0.4082482904638631,
+                0.4082482904638631,
+                0.8164965809277261
+              ],
+              "toward": [
+                0.5773502691896258,
+                -0.5773502691896258,
+                0.5773502691896258
+              ],
+              "edges": [
+                {
+                  "name": "n1.bottom|n1.side0",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      0
+                    ],
+                    [
+                      40,
+                      0,
+                      0
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          0
+                        ],
+                        "b": [
+                          28.284271247461902,
+                          -16.32993161855452
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side0|n1.side1",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      0,
+                      0
+                    ],
+                    [
+                      40,
+                      0,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          28.284271247461902,
+                          -16.32993161855452
+                        ],
+                        "b": [
+                          28.284271247461902,
+                          -11.430952132988164
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side0|n1.top",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      6
+                    ],
+                    [
+                      40,
+                      0,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          4.898979485566357
+                        ],
+                        "b": [
+                          28.284271247461902,
+                          -11.430952132988164
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side0|n1.side3",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      0
+                    ],
+                    [
+                      0,
+                      0,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          0
+                        ],
+                        "b": [
+                          0,
+                          4.898979485566357
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.bottom|n1.side1",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      0,
+                      0
+                    ],
+                    [
+                      40,
+                      12,
+                      0
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          28.284271247461902,
+                          -16.32993161855452
+                        ],
+                        "b": [
+                          36.76955262170047,
+                          -11.430952132988164
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side1|n1.side2",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      12,
+                      0
+                    ],
+                    [
+                      40,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          36.76955262170047,
+                          -11.430952132988164
+                        ],
+                        "b": [
+                          36.76955262170047,
+                          -6.531972647421807
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side1|n1.top",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      0,
+                      6
+                    ],
+                    [
+                      40,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          28.284271247461902,
+                          -11.430952132988164
+                        ],
+                        "b": [
+                          36.76955262170047,
+                          -6.531972647421807
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.bottom|n1.side2",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      12,
+                      0
+                    ],
+                    [
+                      0,
+                      12,
+                      0
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          36.76955262170047,
+                          -11.430952132988164
+                        ],
+                        "b": [
+                          8.485281374238571,
+                          4.898979485566357
+                        ]
+                      },
+                      "visible": false
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side2|n1.side3",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      12,
+                      0
+                    ],
+                    [
+                      0,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          8.485281374238571,
+                          4.898979485566357
+                        ],
+                        "b": [
+                          8.485281374238571,
+                          9.797958971132713
+                        ]
+                      },
+                      "visible": false
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side2|n1.top",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      40,
+                      12,
+                      6
+                    ],
+                    [
+                      0,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          36.76955262170047,
+                          -6.531972647421807
+                        ],
+                        "b": [
+                          8.485281374238571,
+                          9.797958971132713
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.bottom|n1.side3",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      0
+                    ],
+                    [
+                      0,
+                      12,
+                      0
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          0
+                        ],
+                        "b": [
+                          8.485281374238571,
+                          4.898979485566357
+                        ]
+                      },
+                      "visible": false
+                    }
+                  ]
+                },
+                {
+                  "name": "n1.side3|n1.top",
+                  "kind": "line",
+                  "ends": [
+                    [
+                      0,
+                      0,
+                      6
+                    ],
+                    [
+                      0,
+                      12,
+                      6
+                    ]
+                  ],
+                  "circle": null,
+                  "pieces": [
+                    {
+                      "curve": {
+                        "kind": "line",
+                        "a": [
+                          0,
+                          4.898979485566357
+                        ],
+                        "b": [
+                          8.485281374238571,
+                          9.797958971132713
+                        ]
+                      },
+                      "visible": true
+                    }
+                  ]
+                }
+              ],
+              "min": [
+                0,
+                -16.32993161855452
+              ],
+              "max": [
+                36.76955262170047,
+                9.797958971132713
+              ]
+            },
+            "faces": [
+              {
+                "name": "n1.side0",
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    40,
+                    0,
+                    0
+                  ],
+                  [
+                    40,
+                    0,
+                    6
+                  ],
+                  [
+                    0,
+                    0,
+                    6
+                  ]
+                ]
+              },
+              {
+                "name": "n1.side1",
+                "points": [
+                  [
+                    40,
+                    0,
+                    0
+                  ],
+                  [
+                    40,
+                    12,
+                    0
+                  ],
+                  [
+                    40,
+                    12,
+                    6
+                  ],
+                  [
+                    40,
+                    0,
+                    6
+                  ]
+                ]
+              },
+              {
+                "name": "n1.side2",
+                "points": [
+                  [
+                    40,
+                    12,
+                    0
+                  ],
+                  [
+                    0,
+                    12,
+                    0
+                  ],
+                  [
+                    0,
+                    12,
+                    6
+                  ],
+                  [
+                    40,
+                    12,
+                    6
+                  ]
+                ]
+              },
+              {
+                "name": "n1.side3",
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0,
+                    12,
+                    0
+                  ],
+                  [
+                    0,
+                    0,
+                    6
+                  ],
+                  [
+                    0,
+                    12,
+                    6
+                  ]
+                ]
+              },
+              {
+                "name": "n1.bottom",
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0,
+                    12,
+                    0
+                  ],
+                  [
+                    40,
+                    12,
+                    0
+                  ],
+                  [
+                    40,
+                    0,
+                    0
+                  ]
+                ]
+              },
+              {
+                "name": "n1.top",
+                "points": [
+                  [
+                    0,
+                    0,
+                    6
+                  ],
+                  [
+                    40,
+                    0,
+                    6
+                  ],
+                  [
+                    40,
+                    12,
+                    6
+                  ],
+                  [
+                    0,
+                    12,
+                    6
+                  ]
+                ]
+              }
+            ]
+          },
+          "ms": 2
+        }
+      }
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "limits": [
+    "No browser export/download. Model SVG/DXF writer strings are separate from actual UI file delivery. No arbitrary dimensions or assembly claims."
+  ],
+  "phase": "browser closed: Model writers and independent XML/DXF reader",
+  "chromeProcessesLaunched": 1,
+  "productCommit": "2fa66b991788073af1c25d8ae87ecfd16335d7c0",
+  "sourceFreeze": {
+    "count": 1204,
+    "beforeEqualsAfter": true,
+    "afterEqualsCleanup": true
+  },
+  "oracles": [
+    {
+      "label": "independent-writer-readback",
+      "expectedStatus": "PASS",
+      "inputSHA256": "412aa059dc25076cc50cd87ccc19d1adf86b3c0d1d634b83130303098e42ae22",
+      "stdoutSHA256": "ba42837e0fbc80ab4a799d85efa45eda5cf42bf5de7efbac30a8ed4a7f23f42b",
+      "stderrSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "exit": 0,
+      "signal": null,
+      "error": null,
+      "stdout": {
+        "status": "PASS",
+        "svgDimensionTexts": {
+          "d1": [
+            "12"
+          ],
+          "d2": [
+            "40"
+          ],
+          "d3": [
+            "6"
+          ]
+        },
+        "dxfDimensionTextMeasurements": [
+          [
+            "12",
+            12
+          ],
+          [
+            "40",
+            40
+          ],
+          [
+            "6",
+            6
+          ]
+        ],
+        "nativeVolumes": {
+          "b1": 2880,
+          "b3": 960
+        },
+        "boundary": "Model writer strings, not browser exports"
+      },
+      "stderr": "",
+      "parseError": null
+    }
+  ],
+  "provenance": {
+    "originalReceiptSHA256": "ecade6226fdac8a6bcd9532c5a4f66f857519f2172857529cd01d81606378bee",
+    "originalRunnerSHA256": "2947cf631524d6e245f5f120b452eef8650a24811f654c99ea97d32725f83077",
+    "runnerChange": "Only helper import rewritten to repository-relative path; no rerun."
+  }
+}
