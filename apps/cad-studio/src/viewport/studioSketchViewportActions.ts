@@ -18,6 +18,12 @@ const outlinePickIssues = {
 export const isOutlinePickIssue = (reason: string | undefined) =>
   reason === outlinePickIssues.dimension || reason === outlinePickIssues.select || reason === outlinePickIssues.inactive;
 
+/** A panel input may outlive the render that owned its draft. */
+export function ownsPanelDrivingLength<T>(doc: T, currentDoc: T, owner: SketchState | null,
+  rendered: SketchState | null, generation: number, currentGeneration: number): boolean {
+  return doc === currentDoc && owner !== null && rendered === owner && generation === currentGeneration;
+}
+
 interface ReopenedSketchSource { source: SketchNode; recoveredLengths: WeakSet<Polygon> }
 
 interface SketchViewportInputs {
@@ -72,8 +78,17 @@ export function studioSketchViewportActions({ liveShape, sketch, currentSketchSo
   };
   return {
     recoverPanelLength(source: Polygon, edge: number, value: number): boolean {
+      if (liveShape.current !== source || sketch?.shape !== source) return true;
+      const key = `len${edge}`;
+      const opposite = opposingLengthConflict(source, key, value);
+      if (opposite !== undefined) {
+        const result = commitDimension(source, key, value);
+        if (!result.ok) {
+          setConstraintConflict(result.reason, source, [`len:${opposite}`]);
+          return true;
+        }
+      }
       if (edge !== 2) return false;
-      if (liveShape.current !== source) return true;
       const opened = currentSketchSource();
       if (!opened || !canRecoverLength(sketch, opened, source)) return false;
       if (value !== source.lengths?.[edge]) applyDimension(opened, source, 'len2', value);
