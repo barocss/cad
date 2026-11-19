@@ -16,7 +16,7 @@ test('gizmo presentation labels all visible axes without relying on color', () =
 test('gizmo presentation hover changes emphasis but not arrow geometry or hit locations', () => {
  const idle=markup(null), hot=markup({kind:'move',axis:0});
  assert.deepEqual([...idle.matchAll(/points="([^"]+)"/g)].map(m=>m[1]),[...hot.matchAll(/points="([^"]+)"/g)].map(m=>m[1]));
- assert.match(hot,/data-active="true" data-gizmo="moveX"/);
+ assert.match(hot,/data-active="true" data-dragging="false" data-gizmo="moveX"/);
  for (const arrow of layout(g,P).arrows) assert.deepEqual(hitTest(arrow.to,g,[],P),{kind:'move',axis:arrow.axis});
  assert.equal(hitTest(P.project(g.origin),g,[],P),null,'origin stays a non-interactive reference');
 });

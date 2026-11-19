@@ -1,11 +1,12 @@
 // The transform gizmo and feature handles as SVG marks over the viewport (see gizmo.ts): thin shafts with
-// cone heads, translucent plane squares, quarter arcs with a turn arrow, a centre dot; the handle under the
-// pointer (or being dragged) in the accent colour, and while dragging the value in a chip by the pointer.
+// cone heads, translucent plane squares, quarter arcs, a centre dot; hover uses the accent colour,
+// active transforms add a heavier outline, and only a nonzero turn drag shows a signed arrow.
 import type React from 'react';
 import { AXIS_COLORS, handleLayout, layout, type FeatureHandle, type GizmoHit, type Projector, type TransformGizmo } from './gizmo';
 
 type XY = [number, number];
 const HOT = '#f5c542';
+const DRAG_EDGE = '#ffffff';
 // Plane color identifies its normal axis, using the same XYZ palette as the handles.
 const mix = [AXIS_COLORS[2], AXIS_COLORS[0], AXIS_COLORS[1]];
 const EDGE = '#202833';
@@ -18,36 +19,46 @@ function cone(from: XY, to: XY, len: number, half: number): XY[] {
 }
 const same = (a: GizmoHit | null, b: GizmoHit) => !!a && JSON.stringify(a) === JSON.stringify(b);
 
-export function gizmoMarks(g: TransformGizmo | null, handles: readonly FeatureHandle[], P: Projector, hot: GizmoHit | null, readout: { at: XY; text: string } | null): React.ReactNode[] {
+export function gizmoMarks(g: TransformGizmo | null, handles: readonly FeatureHandle[], P: Projector, hot: GizmoHit | null, readout: { at: XY; text: string } | null, drag: { hit: GizmoHit; degrees?: number } | null = null): React.ReactNode[] {
   const items: React.ReactNode[] = [];
   if (g) {
     const L = layout(g, P);
     for (const q of L.planes) {
-      const on = same(hot, { kind: 'plane', axes: q.axes }), color = on ? HOT : mix[q.axes[0] === 0 && q.axes[1] === 1 ? 0 : q.axes[0] === 1 ? 1 : 2];
-      items.push(<polygon key={'gp' + q.axes.join('')} points={pts(q.points)} fill={color} fillOpacity={on ? 0.48 : 0.18} stroke={color} strokeWidth={on ? 2.5 : 1.8} strokeLinejoin="round" className="gizmo-plane" data-active={on} data-gizmo={'plane' + q.axes.map(a => 'XYZ'[a]).join('')} />);
+      const active = same(drag?.hit ?? null, { kind: 'plane', axes: q.axes }), on = active || same(hot, { kind: 'plane', axes: q.axes }), color = on ? HOT : mix[q.axes[0] === 0 && q.axes[1] === 1 ? 0 : q.axes[0] === 1 ? 1 : 2];
+      items.push(<polygon key={'gp' + q.axes.join('')} points={pts(q.points)} fill={color} fillOpacity={active ? 0.6 : on ? 0.48 : 0.18} stroke={active ? DRAG_EDGE : color} strokeWidth={active ? 4 : on ? 2.5 : 1.8} strokeLinejoin="round" className="gizmo-plane" data-active={on} data-dragging={active} data-gizmo={'plane' + q.axes.map(a => 'XYZ'[a]).join('')} />);
     }
     for (const r of L.arcs) {
-      const on = same(hot, { kind: 'turn', axis: r.axis }), color = on ? HOT : AXIS_COLORS[r.axis], end = r.points[r.points.length - 1], prev = r.points[r.points.length - 3];
-      items.push(<g key={'gr' + r.axis} className="gizmo-arc" data-active={on} data-gizmo={'turn' + 'XYZ'[r.axis]}>
-        <polyline points={pts(r.points)} fill="none" stroke={EDGE} strokeOpacity={0.85} strokeWidth={on ? 7 : 5.5} strokeLinecap="round" />
-        <polyline points={pts(r.points)} fill="none" stroke={color} strokeWidth={on ? 4.5 : 3} strokeLinecap="round" />
-        <polygon points={pts(cone(prev, end, 9, 5))} fill={color} stroke={EDGE} strokeWidth={1} strokeLinejoin="round" /></g>);
+      const active = same(drag?.hit ?? null, { kind: 'turn', axis: r.axis }), on = active || same(hot, { kind: 'turn', axis: r.axis }), color = on ? HOT : AXIS_COLORS[r.axis];
+      const u = (r.axis + 1) % 3, v = (r.axis + 2) % 3;
+      // layout's cyclic u/v quarter arc runs with world sign su*sv, not a fixed screen direction.
+      const su = P.forward[u] > 0 ? -1 : 1, sv = P.forward[v] > 0 ? -1 : 1;
+      const forward = Math.sign(drag?.degrees ?? 0) === su * sv;
+      const end = r.points[forward ? r.points.length - 1 : 0], prev = r.points[forward ? r.points.length - 3 : 2];
+      const first = r.points[0], last = r.points[r.points.length - 1];
+      const area = (first[0] - L.origin[0]) * (last[1] - L.origin[1]) - (first[1] - L.origin[1]) * (last[0] - L.origin[0]);
+      const showTurn = active && Number.isFinite(drag?.degrees) && drag?.degrees !== 0
+        && P.forward.every(Number.isFinite) && r.points.every(p => p.every(Number.isFinite))
+        && Number.isFinite(area) && Math.abs(area) > 1e-6 && Math.hypot(end[0] - prev[0], end[1] - prev[1]) > 1e-6;
+      items.push(<g key={'gr' + r.axis} className="gizmo-arc" data-active={on} data-dragging={active} data-gizmo={'turn' + 'XYZ'[r.axis]}>
+        <polyline points={pts(r.points)} fill="none" stroke={active ? DRAG_EDGE : EDGE} strokeOpacity={active ? 1 : 0.85} strokeWidth={active ? 9 : on ? 7 : 5.5} strokeLinecap="round" />
+        <polyline points={pts(r.points)} fill="none" stroke={color} strokeWidth={active ? 5.5 : on ? 4.5 : 3} strokeLinecap="round" />
+        {showTurn && <polygon points={pts(cone(prev, end, 9, 5))} fill={color} stroke={DRAG_EDGE} strokeWidth={2} strokeLinejoin="round" />}</g>);
     }
     for (const a of L.arrows) {
-      const on = same(hot, { kind: 'move', axis: a.axis }), color = on ? HOT : AXIS_COLORS[a.axis], head = cone(a.from, a.to, 13, 5.5);
+      const active = same(drag?.hit ?? null, { kind: 'move', axis: a.axis }), on = active || same(hot, { kind: 'move', axis: a.axis }), color = on ? HOT : AXIS_COLORS[a.axis], head = cone(a.from, a.to, 13, 5.5);
       const base = head[2], length = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]);
       const label: XY = [a.to[0] + (a.to[0] - a.from[0]) / length * 11, a.to[1] + (a.to[1] - a.from[1]) / length * 11];
-      items.push(<g key={'ga' + a.axis} className="gizmo-arrow" data-active={on} data-gizmo={'move' + 'XYZ'[a.axis]}>
-        <line x1={a.from[0]} y1={a.from[1]} x2={base[0]} y2={base[1]} stroke={EDGE} strokeOpacity={0.85} strokeWidth={on ? 6.5 : 5.5} strokeLinecap="round" />
-        <line x1={a.from[0]} y1={a.from[1]} x2={base[0]} y2={base[1]} stroke={color} strokeWidth={on ? 3.5 : 2.8} strokeLinecap="round" />
-        <polygon points={pts(head)} fill={color} stroke={EDGE} strokeWidth={1} strokeLinejoin="round" />
+      items.push(<g key={'ga' + a.axis} className="gizmo-arrow" data-active={on} data-dragging={active} data-gizmo={'move' + 'XYZ'[a.axis]}>
+        <line x1={a.from[0]} y1={a.from[1]} x2={base[0]} y2={base[1]} stroke={active ? DRAG_EDGE : EDGE} strokeOpacity={active ? 1 : 0.85} strokeWidth={active ? 9 : on ? 6.5 : 5.5} strokeLinecap="round" />
+        <line x1={a.from[0]} y1={a.from[1]} x2={base[0]} y2={base[1]} stroke={color} strokeWidth={active ? 5 : on ? 3.5 : 2.8} strokeLinecap="round" />
+        <polygon points={pts(head)} fill={color} stroke={active ? DRAG_EDGE : EDGE} strokeWidth={active ? 2.5 : 1} strokeLinejoin="round" />
         <text x={label[0]} y={label[1]} className="gizmo-axis-label" fill={color} textAnchor="middle" dominantBaseline="central">{'XYZ'[a.axis]}</text></g>);
     }
     for (const c of L.cubes) {
-      const on = same(hot, { kind: 'scale', axis: c.axis }), half = c.axis === null ? 7 : 5, color = on ? HOT : c.axis === null ? '#e8e9eb' : AXIS_COLORS[c.axis];
-      if (c.axis !== null) items.push(<line key={'gsl' + c.axis} x1={L.origin[0]} y1={L.origin[1]} x2={c.at[0]} y2={c.at[1]} stroke={color} strokeOpacity={0.6} strokeWidth={1.5} strokeDasharray="3 3" />);
-      items.push(<rect key={'gs' + c.axis} x={c.at[0] - half} y={c.at[1] - half} width={half * 2} height={half * 2} rx={1.5} fill={color} stroke="#000" strokeOpacity={0.4} strokeWidth={1}
-        className="gizmo-scale" data-active={on} data-gizmo={'scale' + (c.axis === null ? '' : 'XYZ'[c.axis])} />);
+      const active = same(drag?.hit ?? null, { kind: 'scale', axis: c.axis }), on = active || same(hot, { kind: 'scale', axis: c.axis }), half = c.axis === null ? 7 : 5, color = on ? HOT : c.axis === null ? '#e8e9eb' : AXIS_COLORS[c.axis];
+      if (c.axis !== null) items.push(<line key={'gsl' + c.axis} x1={L.origin[0]} y1={L.origin[1]} x2={c.at[0]} y2={c.at[1]} stroke={color} strokeOpacity={active ? 1 : 0.6} strokeWidth={active ? 3 : 1.5} strokeDasharray="3 3" />);
+      items.push(<rect key={'gs' + c.axis} x={c.at[0] - half} y={c.at[1] - half} width={half * 2} height={half * 2} rx={1.5} fill={color} stroke={active ? DRAG_EDGE : "#000"} strokeOpacity={active ? 1 : 0.4} strokeWidth={active ? 3 : 1}
+        className="gizmo-scale" data-active={on} data-dragging={active} data-gizmo={'scale' + (c.axis === null ? '' : 'XYZ'[c.axis])} />);
     }
     if (!L.cubes.length) items.push(<g key="go" aria-hidden="true">
       <circle cx={L.origin[0]} cy={L.origin[1]} r={5} className="gizmo-origin" />
