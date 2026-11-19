@@ -1,0 +1,145 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [
+    {
+      "id": "n0",
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        0,
+        0
+      ],
+      "max": [
+        25.4,
+        12
+      ]
+    },
+    {
+      "id": "n1",
+      "kind": "extrude",
+      "sketch": 0,
+      "height": 10
+    }
+  ],
+  "outputs": {
+    "b1": {
+      "node": 1,
+      "side": "solid"
+    }
+  },
+  "nextId": 2,
+  "drawing": {
+    "sheet": "A3",
+    "scope": {
+      "kind": "part"
+    },
+    "scale": 2,
+    "projection": "third",
+    "units": "inch",
+    "hidden": true,
+    "dimensions": [
+      {
+        "id": "L",
+        "kind": "linear",
+        "view": "front",
+        "a": {
+          "edge": "n1.side0|n1.top",
+          "at": "end",
+          "near": [
+            0,
+            0,
+            10
+          ]
+        },
+        "b": {
+          "edge": "n1.side0|n1.top",
+          "at": "end",
+          "near": [
+            25.4,
+            0,
+            10
+          ]
+        },
+        "orient": "horizontal",
+        "place": [
+          12.7,
+          18
+        ],
+        "tol": {
+          "kind": "deviation",
+          "upper": 0.254,
+          "lower": -0.127
+        }
+      },
+      {
+        "id": "A",
+        "kind": "angle",
+        "view": "front",
+        "a": {
+          "edge": "n1.side0|n1.top",
+          "near": [
+            0,
+            0,
+            10
+          ]
+        },
+        "b": {
+          "edge": "n1.side0|n1.side1",
+          "near": [
+            25.4,
+            0,
+            10
+          ]
+        },
+        "place": [
+          35,
+          18
+        ],
+        "tol": {
+          "kind": "symmetric",
+          "value": 0.5
+        }
+      },
+      {
+        "id": "F",
+        "kind": "linear",
+        "view": "front",
+        "a": {
+          "edge": "n1.side0|n1.top",
+          "at": "end",
+          "near": [
+            0,
+            0,
+            10
+          ]
+        },
+        "b": {
+          "edge": "n1.side0|n1.top",
+          "at": "end",
+          "near": [
+            25.4,
+            0,
+            10
+          ]
+        },
+        "orient": "horizontal",
+        "place": [
+          12.7,
+          25
+        ],
+        "tol": {
+          "kind": "fit",
+          "code": "H7"
+        }
+      }
+    ],
+    "views": [
+      "front",
+      "top",
+      "right"
+    ]
+  }
+}

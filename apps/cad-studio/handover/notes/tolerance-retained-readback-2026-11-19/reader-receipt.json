@@ -1,0 +1,36 @@
+{
+  "status": "PASS",
+  "results": [
+    {
+      "case": "symmetric",
+      "status": "PASS",
+      "wholeDocumentParity": true,
+      "svgLTexts": [
+        "1.000 ±.010"
+      ],
+      "dxfDimension": "1.000 ±.010",
+      "dxfBlock": "*D1",
+      "inchEndpoints": [
+        "0.99",
+        "1.01"
+      ]
+    },
+    {
+      "case": "saved",
+      "status": "PASS",
+      "wholeDocumentParity": true,
+      "svgLTexts": [
+        "1.000",
+        "+.010",
+        "-.005"
+      ],
+      "dxfDimension": "1.000 +.010/-.005",
+      "dxfBlock": "*D1",
+      "inchEndpoints": [
+        "0.995",
+        "1.01"
+      ]
+    }
+  ],
+  "scope": "retained writer outputs only; no writer, browser or download executed"
+}
