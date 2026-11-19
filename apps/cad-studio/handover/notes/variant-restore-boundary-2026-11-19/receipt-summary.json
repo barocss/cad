@@ -1,0 +1,109 @@
+{
+  "status": "PASS",
+  "phase": "valid autosave B clears A working",
+  "observations": [
+    {
+      "label": "04-named-B-default10",
+      "requests": [
+        {
+          "type": "evaluate",
+          "id": 6,
+          "revision": 6,
+          "parameters": {
+            "HeightB": 10
+          }
+        }
+      ]
+    },
+    {
+      "label": "06-autosave-B-default10",
+      "requests": [
+        {
+          "type": "evaluate",
+          "id": 9,
+          "revision": 9,
+          "parameters": {
+            "HeightB": 10
+          }
+        }
+      ]
+    }
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "downloads": [],
+  "limits": [
+    "Synthetic isolated OPFS copies. Invalid native Offset copy copied from existing #100 fixture; no claim normal editing produces it. Only selected named/autosave boundaries, not template/in-place or full issue. No downloads."
+  ],
+  "productBaseline": "1d857f2fcb288461cb905e682200edfc76418231",
+  "sourceHashesUnchanged": 1130,
+  "injectedOrigin": "Independent B and invalid Offset copies deliberately seeded into isolated A-owned OPFS paths; not a claim normal editing produced those copies.",
+  "oracles": [
+    {
+      "label": "01-A-working40-oracle",
+      "status": "PASS",
+      "volume": 1200,
+      "centroid": [
+        3,
+        2.5,
+        20
+      ]
+    },
+    {
+      "label": "02-invalid-autosave-retained-oracle",
+      "status": "PASS",
+      "volume": 1200,
+      "centroid": [
+        3,
+        2.5,
+        20
+      ]
+    },
+    {
+      "label": "03-invalid-named-retained-oracle",
+      "status": "PASS",
+      "volume": 1200,
+      "centroid": [
+        3,
+        2.5,
+        20
+      ]
+    },
+    {
+      "label": "04-named-B-default10-oracle",
+      "status": "PASS",
+      "volume": 500,
+      "centroid": [
+        5,
+        2.5,
+        5
+      ]
+    },
+    {
+      "label": "05-autosave-A-working40-oracle",
+      "status": "PASS",
+      "volume": 1200,
+      "centroid": [
+        3,
+        2.5,
+        20
+      ]
+    },
+    {
+      "label": "06-autosave-B-default10-oracle",
+      "status": "PASS",
+      "volume": 500,
+      "centroid": [
+        5,
+        2.5,
+        5
+      ]
+    }
+  ]
+}
