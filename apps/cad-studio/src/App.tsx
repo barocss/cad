@@ -1,3 +1,4 @@
+import { canRecordOpenSplineFitPointDraft, isOpenSplineFitPointChange } from './sketch/openSplineFitPointHistory';
 import { canRecordOpenArcRadiusDraft, isOpenArcRadiusChange } from './sketch/openArcRadiusHistory';
 import { canEditOpenPolylineTerminalDraft, isOpenPolylineTerminalLengthChange } from './sketch/openPolylineTerminalLength';
 import { prepareParameterPatternHoleSpacing } from './state/parameterPatternHoleSpacing';
@@ -549,13 +550,13 @@ export function App() {
   const renderedSketch = useRef({ draft: sketch, generation: sketchGeneration.current });
   renderedSketch.current = { draft: sketch, generation: sketchGeneration.current };
   const constructRef = useRef(false); constructRef.current = !!sketch?.construct;
-  const updateShape = useCallback((shape: SketchShape | null, fresh = false, origin?: 'panel' | 'open-line-length' | 'open-arc-radius' | 'line-point' | 'chord-circle' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish' | 'ellipse-finish' | 'centre-arc-finish' | 'arc-start' | 'arc-preview' | 'arc-finish', coordinate?: CoordinateIntent) => {
+  const updateShape = useCallback((shape: SketchShape | null, fresh = false, origin?: 'panel' | 'open-line-length' | 'open-arc-radius' | 'open-spline-fit-point' | 'line-point' | 'chord-circle' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish' | 'ellipse-finish' | 'centre-arc-finish' | 'arc-start' | 'arc-preview' | 'arc-finish', coordinate?: CoordinateIntent) => {
     const placementEvent = origin === 'rectangle-start' || origin === 'rectangle-preview' || origin === 'rectangle-finish'
       || origin === 'circle-start' || origin === 'circle-preview' || origin === 'circle-finish'
       || origin === 'slot-start' || origin === 'slot-preview' || origin === 'slot-finish'
       || origin === 'arc-start' || origin === 'arc-preview' || origin === 'arc-finish';
     const placementFinished = origin === 'rectangle-finish' || origin === 'circle-finish' || origin === 'slot-finish' || origin === 'arc-finish';
-    const fromPanel = origin === 'panel' || origin === 'open-line-length' || origin === 'open-arc-radius';
+    const fromPanel = origin === 'open-spline-fit-point' || origin === 'panel' || origin === 'open-line-length' || origin === 'open-arc-radius';
     // (An open line or arc stays too: pieces meeting end to end join, and close into an outline.)
     const prev = liveShape.current, keep = fresh && prev && (shapeNode(prev) || prev.construction || prev.kind === 'bezier' || (prev.kind === 'polygon' && !prev.closed && !prev.pending && prev.points.length >= 2)) ? prev : null;
     if (origin === 'open-line-length') {
@@ -568,6 +569,11 @@ export function App() {
       const rendered = renderedSketch.current;
       if (fresh || !rendered.draft || rendered.generation !== sketchGeneration.current || rendered.draft.shape !== prev
         || !canRecordOpenArcRadiusDraft(rendered.draft) || !isOpenArcRadiusChange(prev, shape)) return;
+    }
+    if (origin === 'open-spline-fit-point') {
+      const rendered = renderedSketch.current;
+      if (fresh || !rendered.draft || rendered.generation !== sketchGeneration.current || rendered.draft.shape !== prev
+        || !canRecordOpenSplineFitPointDraft(rendered.draft) || !isOpenSplineFitPointChange(prev, shape)) return;
     }
     if (!placementEvent) shapePlacement.current = null;
     // A new shape is construction while the mode is on; the one being drawn stays what it began as.
@@ -620,7 +626,7 @@ export function App() {
     shapePlacement.current = null;
     const recordEdit = !keep && ((isSettled(prev) && isSettled(r.shape)) || resizedRectangle || changedCircle || changedSlot || changedBezier);
     const geometryChanged = prev !== r.shape && JSON.stringify(prev) !== JSON.stringify(r.shape);
-    const confirmedPlacement = origin === 'open-arc-radius' || origin === 'open-line-length' || origin === 'line-point' || origin === 'chord-circle' || origin === 'ellipse-finish' || origin === 'centre-arc-finish';
+    const confirmedPlacement = origin === 'open-spline-fit-point' || origin === 'open-arc-radius' || origin === 'open-line-length' || origin === 'line-point' || origin === 'chord-circle' || origin === 'ellipse-finish' || origin === 'centre-arc-finish';
     if (draft && (confirmedPlacement || (recordEdit && (draft.association || draft.associationDetached))) && (geometryChanged || keep)) {
       const next = { ...detachSketchLink(draft), editDim: null, shape: r.shape,
         ...(keep ? { done: joinOpen(draftShapeOrder({ ...draft, shape: keep })), activeOutlineIndex: undefined } : {}) };

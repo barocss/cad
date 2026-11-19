@@ -1,3 +1,4 @@
+import { canRecordOpenSplineFitPointDraft, isOpenSplineFitPointChange } from '../sketch/openSplineFitPointHistory';
 import { canRecordOpenArcRadiusDraft, isOpenArcRadiusChange } from '../sketch/openArcRadiusHistory';
 import { slotEndpoint } from '../sketch/slotEndpoint';
 import { canEditOpenPolylineTerminalDraft, openPolylineTerminalLength } from '../sketch/openPolylineTerminalLength';
@@ -40,7 +41,7 @@ const NONE: SketchPick[] = [];
  * tangent joints stay tangent. The app settles every edit (see sketch/settle.ts) and reports `error`. O16: the contents
  * on shadcn (Input, NativeSelect, Button, FIELD); the shell (its title) and the chip toggles are the studio's.
  */
-export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, referencePicker, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand, onTransformOutline }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; referencePicker?: ReactNode; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent, origin?: { kind: 'open-line-length' | 'open-arc-radius'; source: SketchShape; doc: StudioDoc }): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
+export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, referencePicker, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand, onTransformOutline }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; referencePicker?: ReactNode; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent, origin?: { kind: 'open-line-length' | 'open-arc-radius' | 'open-spline-fit-point'; source: SketchShape; doc: StudioDoc }): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
   onTransformOutline?(owner: SketchState, doc: StudioDoc, candidate: SketchShape): boolean;
   onEditEllipseAxes?(): boolean;
   onDrivingLength?(source: Polygon, edge: number, value: number): boolean;
@@ -203,7 +204,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
       {s?.kind === 'polygon' && !s.closed && !openLineEditable && s.points.some((_, i) => i < s.points.length - 1 && !(s.bulges?.[i] ?? 0)) && <p className="hint">Only the last segment of a completed independent unconstrained straight polyline can change length. Earlier segments remain read-only; this does not lock a dimension or check crossings.</p>}
       {s?.kind === 'bezier' && wellFormedBezier(s) && <BezierSection key={`${sketch.editNode ?? 'new'}:${sketch.activeOutlineIndex ?? 'active'}`} s={s} onShape={onShape} onError={setSplineError} />}
       {s?.kind === 'polygon' && s.ellipse && ell && <EllipseSection s={s} def={s.ellipse} onShape={onShape} onError={setSplineError} />}
-      {s?.kind === 'polygon' && s.spline && sketch.tool !== 'spline' && !s.pending && splineMatches(s) && <SplineSection s={s} def={s.spline} onShape={onShape} onError={setSplineError} />}
+      {s?.kind === 'polygon' && s.spline && sketch.tool !== 'spline' && !s.pending && splineMatches(s) && <SplineSection s={s} def={s.spline} onShape={onShape} onFitShape={next => { if (canRecordOpenSplineFitPointDraft(sketch) && isOpenSplineFitPointChange(s, next)) onShape(next, undefined, { kind: 'open-spline-fit-point', source: s, doc: constraintDocument }); else onShape(next); }} onError={setSplineError} />}
       {s?.kind === 'polygon' && !ell && s.closed && !s.pending && s.points.some((_, j) => canBeTangent(s.points as P2[], s.bulges, j)) && <>
         <div className="card-title" style={{ marginTop: 10 }}>TANGENCY</div>
         <div className="tangents" role="group" aria-label="Tangent joints">
@@ -314,10 +315,10 @@ function BezierSection({ s, onShape, onError }: { s: Extract<SketchShape, { kind
   </>;
 }
 /** A spline outline's fit points (X, Y) and handle directions (degrees; empty is automatic), applied on Enter or blur. */
-function SplineSection({ s, def, onShape, onError }: { s: Polygon; def: SplineDef; onShape(shape: SketchShape | null): void; onError(e: string | null): void }) {
+function SplineSection({ s, def, onShape, onFitShape, onError }: { s: Polygon; def: SplineDef; onShape(shape: SketchShape | null): void; onFitShape(shape: SketchShape | null): void; onError(e: string | null): void }) {
   const auto = splineAutoHandles(def.fit, def.closed);
   useEffect(() => () => onError(null), [onError]);
-  const setFit = (i: number, k: number, text: string) => { const v = Number(text); if (text === '' || !Number.isFinite(v)) return; applySpline(s, { ...def, fit: def.fit.map((p, j) => j === i ? (k === 0 ? [v, p[1]] : [p[0], v]) as [number, number] : p) }, onShape, onError); };
+  const setFit = (i: number, k: number, text: string) => { const v = Number(text); if (text === '' || !Number.isFinite(v)) return; applySpline(s, { ...def, fit: def.fit.map((p, j) => j === i ? (k === 0 ? [v, p[1]] : [p[0], v]) as [number, number] : p) }, onFitShape, onError); };
   const setHandle = (i: number, text: string) => {
     const v = text === '' ? null : Number(text); if (v !== null && !Number.isFinite(v)) return;
     const handles = def.fit.map((_, j) => j === i ? v : def.handles?.[j] ?? null);

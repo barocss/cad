@@ -1,0 +1,51 @@
+{
+  "issue": 21,
+  "scope": "Completed independent open three-fit/five-vertex automatic-handle spline: one explicit numeric fit coordinate edit creates a draft Undo step.",
+  "baseline": {
+    "numericEdits": [
+      25,
+      30
+    ],
+    "undoEnabled": false,
+    "redoEnabled": false,
+    "classification": "disabled",
+    "nativeCurve": "NOT_RUN",
+    "finish": "NOT_RUN",
+    "save": "NOT_RUN"
+  },
+  "fixed": {
+    "numericEdits": [
+      25,
+      30
+    ],
+    "undoValues": [
+      25,
+      20
+    ],
+    "redoValues": [
+      25,
+      30
+    ],
+    "sameStringNoop": "no extra step",
+    "document": "empty authored document unchanged",
+    "interpolation": "fit vertices agree with requested input; not a full independent biarc/native oracle",
+    "nativeCurve": "NOT_RUN",
+    "finish": "NOT_RUN",
+    "save": "NOT_RUN"
+  },
+  "regressions": {
+    "openArcRadius": "PASS",
+    "openLineLength": "PASS",
+    "closedSplineHandlesNativeUndoSave": "PASS after fixture entry correction"
+  },
+  "history": [
+    "Legacy closed Spline first attempt failed before Sketch entry: obsolete palette-input expectation; later stages NOT_RUN. Replaced only the entry with the visible Sketch mode button; retry PASS.",
+    "Model type-check PASS; first Studio type-check failed on two deliberately malformed fromSpline:false test inputs; Vite NOT_RUN. Added explicit unknown cast boundaries only; focused 6/6 PASS. Final type/build result recorded in README."
+  ],
+  "limits": [
+    "No new placement history, closed/handle/longer spline history, solver or general NURBS support claimed.",
+    "Document/source/generation stale guards reviewed; helper/replay owner boundaries unit-tested, not all async UI races exercised.",
+    "No actual alternate fit-coordinate or native/Finish/Save open-spline continuation claimed. Existing closed spline lifecycle is a separate regression."
+  ],
+  "privacy": "Synthetic Untitled document screenshots only; no private paths, tokens or user documents."
+}

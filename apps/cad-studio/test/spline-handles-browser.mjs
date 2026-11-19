@@ -168,7 +168,6 @@ async function openFile(file, nodeCount) {
   await page.waitForFunction(n => window.__studioDoc?.nodes?.length === n, nodeCount, { timeout: 60000 }); await ready();
 }
 async function freshOpen(file, expected, label) { phase = `fresh Open ${label}`; await newPage(); await openFile(file, expected.nodes.length); await same(expected); return snapshot(label); }
-async function command(label) { await page.keyboard.press('Space'); await page.locator('.palette input').fill(label); await page.keyboard.press('Enter'); }
 const screenOf = point => page.evaluate(point => window.__studioScreenOf?.(point), [...point, 0]);
 async function worldClick(point) { const pixel = await screenOf(point); assert.ok(pixel?.length === 2, 'screen position of the point'); await page.mouse.click(pixel[0], pixel[1]); await page.waitForTimeout(60); }
 // Every fit point must be on the canvas (not under a panel) before the first click; zoom out with the wheel until they are. Records the pixel scale.
@@ -268,7 +267,7 @@ try {
 
   // Context 1: empty document.
   phase = 'empty document'; await newPage(); await page.click('[aria-label="New part"]'); await page.waitForFunction(() => window.__studioDoc.nodes.length === 0); await ready(); const empty = await doc(); assert.equal(empty.nodes.length, 0, 'the document starts empty'); await snapshot('00-empty');
-  phase = 'start XY sketch'; await command('Sketch'); await sketchPanel().waitFor(); await sketchPanel().getByLabel('Sketch plane', { exact: true }).selectOption('xy');
+  phase = 'start XY sketch'; await page.locator('.mode').getByRole('button', { name: 'Sketch', exact: true }).click(); await sketchPanel().waitFor(); await sketchPanel().getByLabel('Sketch plane', { exact: true }).selectOption('xy');
   const spline = page.getByRole('button', { name: 'Spline', exact: true }); report.observations.push({ label: 'spline-button', count: await spline.count() });
   if (await spline.count() === 1) await spline.click(); else { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press('p'); }
   await frameFit(FIT);
