@@ -29,38 +29,59 @@ function resolve(source: SheetRuleSource, body: BodyResult): FlangeBendOwner[] {
   if (!source.available || !source.bodies.includes(body) || !body.flat || !body.sheet || body.flatRefused
     || !only(doc, ['format', 'schema', 'units', 'parameters', 'nodes', 'outputs', 'nextId'])
     || !only(evaluated, ['format', 'schema', 'units', 'parameters', 'nodes', 'outputs', 'nextId'])
-    || doc.nodes.length !== 5 || evaluated.nodes.length !== 5
-    || !doc.nodes.every((n, i) => n === evaluated.nodes[i] && typeof n.id === 'string' && !!n.id)
-    || new Set(doc.nodes.map(n => n.id)).size !== 5) return [];
+    || doc.nodes.length < 4 || evaluated.nodes.length !== doc.nodes.length
+    || !Array.from(doc.nodes).every((n, i) => n && n === evaluated.nodes[i] && typeof n.id === 'string' && !!n.id)
+    || new Set(doc.nodes.map(n => n.id)).size !== doc.nodes.length) return [];
+  const terminal = doc.nodes.length - 1;
   const keys = Object.keys(doc.outputs);
   if (keys.length !== 1 || keys[0] !== body.key || Object.keys(evaluated.outputs).length !== 1
-    || !parent(doc.outputs[body.key], 4) || !parent(evaluated.outputs[body.key], 4) || !parent(body.ref, 4)) return [];
-  const [sketch, base, relief, a, b] = doc.nodes;
+    || !parent(doc.outputs[body.key], terminal) || !parent(evaluated.outputs[body.key], terminal) || !parent(body.ref, terminal)) return [];
+  const [sketch, base] = doc.nodes;
   if (sketch.kind !== 'sketch' || sketch.profile !== 'rectangle' || !only(sketch, ['id', 'kind', 'profile', 'min', 'max'])
     || !pair(sketch.min) || !pair(sketch.max) || sketch.max[0] <= sketch.min[0] || sketch.max[1] <= sketch.min[1]) return [];
   if (base.kind !== 'sheet-base' || !only(base, ['id', 'kind', 'sketch', 'thickness', 'bendRadius', 'kFactor', 'bendTable'])
     || base.sketch !== 0 || !positive(base.thickness) || !positive(base.bendRadius)) return [];
   if (base.bendTable !== undefined ? !object(base.bendTable) || !Array.isArray(base.bendTable.rows) || !base.bendTable.rows.length || base.kFactor !== undefined
     : typeof base.kFactor !== 'number' || !Number.isFinite(base.kFactor) || base.kFactor < 0 || base.kFactor > 1) return [];
-  if (relief.kind !== 'sheet-corner-relief' || !only(relief, ['id', 'kind', 'parent', 'edges', 'shape', 'size', 'sig'])
-    || !parent(relief.parent, 1) || !edge(relief.edges) || !['square', 'round'].includes(relief.shape) || !positive(relief.size)) return [];
-  for (const [n, p] of [[a, 2], [b, 3]] as const) {
-    if (n.kind !== 'sheet-flange' || !only(n, ['id', 'kind', 'parent', 'edges', 'length', 'angle', 'bendRadius', 'measure', 'position', 'sig'])
-      || !parent(n.parent, p) || !edge(n.edges) || !positive(n.length)
+  // Consume every node in one contiguous parent chain: reliefs first, then flanges.
+  const flangeIndices = new Map<string, number>();
+  let flangePhase = false;
+  for (let index = 2; index < doc.nodes.length; index++) {
+    const n = doc.nodes[index];
+    if (n.kind === 'sheet-corner-relief' && !flangePhase) {
+      if (!only(n, ['id', 'kind', 'parent', 'edges', 'shape', 'size', 'sig'])
+        || !parent(n.parent, index - 1) || !edge(n.edges) || !['square', 'round'].includes(n.shape) || !positive(n.size)) return [];
+      continue;
+    }
+    if (n.kind !== 'sheet-flange' || typeof n.id !== 'string'
+      || !only(n, ['id', 'kind', 'parent', 'edges', 'length', 'angle', 'bendRadius', 'measure', 'position', 'sig'])
+      || !parent(n.parent, index - 1) || !edge(n.edges) || !positive(n.length)
       || (n.angle !== undefined && n.angle !== 90) || (n.bendRadius !== undefined && !positive(n.bendRadius))
       || (n.measure !== undefined && n.measure !== 'outer') || (n.position !== undefined && n.position !== 'material-inside')) return [];
+    flangePhase = true;
+    flangeIndices.set(n.id, index);
   }
+  if (flangeIndices.size < 2) return [];
   // This sidecar is produced from typed native provenance, never parsed from display bend names.
   const owners = body.sheetBendOwners;
-  if (!owners || owners.length !== 2 || body.flat.bends.length !== 2 || new Set(owners.map(o => o.featureId)).size !== 2
-    || owners.some(o => !faces(o.faces)) || owners[0].faces.some(f => owners[1].faces.includes(f))) return [];
-  const rows: FlangeBendOwner[] = [];
+  if (!owners || owners.length !== flangeIndices.size || body.flat.bends.length !== flangeIndices.size) return [];
+  const byFaces = new Map<string, number>(), ownerIds = new Set<string>(), allFaces = new Set<string>();
+  for (const owner of owners) {
+    const index = flangeIndices.get(owner.featureId);
+    if (index === undefined || ownerIds.has(owner.featureId) || !faces(owner.faces)) return [];
+    ownerIds.add(owner.featureId);
+    for (const face of owner.faces) {
+      if (allFaces.has(face)) return [];
+      allFaces.add(face);
+    }
+    byFaces.set(faceKey(owner.faces), index);
+  }
+  const rows: FlangeBendOwner[] = [], consumed = new Set<number>();
   for (const bend of body.flat.bends) {
     if (!faces(bend.faces)) return [];
-    const matches = owners.filter(o => faceKey(o.faces) === faceKey(bend.faces));
-    if (matches.length !== 1) return [];
-    const index = doc.nodes.findIndex(n => n.id === matches[0].featureId);
-    if (index !== 3 && index !== 4 || rows.some(r => r.index === index)) return [];
+    const index = byFaces.get(faceKey(bend.faces));
+    if (index === undefined || consumed.has(index)) return [];
+    consumed.add(index);
     const node = doc.nodes[index];
     if (node.kind !== 'sheet-flange' || typeof node.id !== 'string' || typeof base.id !== 'string') return [];
     rows.push(Object.freeze({ bend, index, id: node.id, node, rulesIndex: 1, rulesId: base.id, rulesNode: base,
