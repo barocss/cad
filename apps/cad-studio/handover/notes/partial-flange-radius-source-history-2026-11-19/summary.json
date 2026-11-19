@@ -1,0 +1,20 @@
+{
+  "issue": 27,
+  "baseline": "Source control absent; source transitions NOT_RUN, not data loss.",
+  "actual": "PASS: inherited to own and reverse; own R2 to sheet R1.5 and reverse copies current sheet R1.5. Same-source no-op, Cancel, Undo/Redo, actual Save and fresh Open.",
+  "native": "PASS: strict solid, independent volume/flat area/bend and relief geometry, original parent topology/signature.",
+  "refusal": "PASS: valid own R2 with parent R19 refuses Sheet source; Cancel preserves document/native. After-refusal Undo/Save NOT_RUN.",
+  "scope": "Actual: numeric XY 80x50 sheet T1.5, terminal 3-node xmax 90deg insideOuter partial flange, offsets10/25, Obround relief1.5/1.5. Rectangular covered by unit tests only. No other corners, Dim, downstream, manufacturing or schema expansion.",
+  "tests": {
+    "modelFocused": "6/6 PASS",
+    "studioFocused": "21/21 PASS",
+    "actual": "3/3 PASS",
+    "existingBrowserRegression": "own numeric radius, relief dimensions, full-width radius source PASS",
+    "modelType": "PASS",
+    "studioType": "PASS",
+    "viteBuild": "PASS with existing bundler warnings"
+  },
+  "cleanup": "All browser/context/server cleanup complete; gate returned.",
+  "history": "Initial launch deferred before gate because unrelated heavy build was active. No product test failure in final frozen run.",
+  "privacy": "Synthetic fixture images individually reviewed; no personal or authentication information."
+}

@@ -1,3 +1,4 @@
+import { partialFlangeRadiusSourceHistoryEdit } from '@barocss/cad-model/app/partialFlangeRadiusSourceHistoryEdit';
 import { partialFlangeRadiusHistoryEdit } from '@barocss/cad-model/app/partialFlangeRadiusHistoryEdit';
 import { flangeReliefDimensionsHistoryEdit } from '@barocss/cad-model/app/flangeReliefDimensionsHistoryEdit';
 import { flangeWidthHistoryEdit } from '@barocss/cad-model/app/flangeWidthHistoryEdit';
@@ -51,6 +52,7 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
   const savedWidth = flangeWidthHistoryEdit(commandDoc, editNode) ?? flangeReliefDimensionsHistoryEdit(commandDoc, editNode) ?? partialFlangeRadiusHistoryEdit(commandDoc, editNode);
   const savedFeature = savedWidth ?? savedCommand();
   const savedPath = sweepPathHistoryEdit(commandDoc, editNode);
+  const savedPartialRadiusSource = partialFlangeRadiusSourceHistoryEdit(commandDoc, editNode);
   const savedReliefShape = sheetReliefShapeHistoryEdit(commandDoc, editNode);
   const startSavedFeature = (make: () => Command | null) => {
     if (owner.document() !== doc || owner.evaluated() !== evaluated || owner.worker() !== workerSession
@@ -82,6 +84,7 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
     })()} onReplaceAxis={replaceAxis}
     savedFeatureEdit={savedFeature ? { label: savedFeature.label, start: () => startSavedFeature(savedWidth ? () => savedWidth : savedCommand) } : undefined}
     savedPathEdit={savedPath ? { label: savedPath.label, start: () => startSavedFeature(() => sweepPathHistoryEdit(commandDoc, editNode)) } : undefined}
+    savedPartialRadiusSourceEdit={savedPartialRadiusSource ? { label: savedPartialRadiusSource.label, start: () => startSavedFeature(() => savedPartialRadiusSource) } : undefined}
     savedReliefShapeEdit={savedReliefShape ? { label: savedReliefShape.label, start: () => startSavedFeature(() => savedReliefShape) } : undefined}
     onEditDraft={editSavedDraftCommand(commandDoc, editNode) ? () => {
       if (!ownsEvaluatedSource() || owner.marker() !== null || owner.variant() || !fresh || busy || !canChangeDocument()) return;
