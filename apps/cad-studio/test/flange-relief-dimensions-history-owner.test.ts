@@ -35,7 +35,7 @@ test('partial inherited flange offers captured Relief command with explicit reli
  const f=fixture(),e=f.editor();assert.equal(e.savedFeatureEdit?.label,'Edit flange relief');
  assert.equal(e.savedReliefShapeEdit,undefined);e.savedFeatureEdit!.start();
  assert.deepEqual(f.events,['discard','close']);const active=f.active.get();assert.ok(active);
- assert.equal(active.cmd.label,'Edit flange relief');assert.deepEqual(active.values,{rw:1.5,rd:1.5});
+ assert.equal(active.cmd.label,'Edit flange relief');assert.deepEqual(active.values,{rw:1.5,rd:1.5,kind:'obround'});
  assert.equal(active.ctx.doc,f.doc);assert.equal(active.ownsSource?.(),true);
  assert.equal(active.cmd.available(active.ctx).ok,true);
 });

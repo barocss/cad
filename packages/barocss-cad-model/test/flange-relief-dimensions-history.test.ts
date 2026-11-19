@@ -38,7 +38,7 @@ test('width and depth edit independently preserves all other authored data for b
  }
 });
 test('defaults and no-op retain exact original identity without resetting dimensions',()=>{
- const doc=fixture(),c=flangeReliefDimensionsHistoryEdit(doc,2);assert.ok(c?.build&&c.defaults);assert.equal(c.label,'Edit flange relief');assert.deepEqual(c.defaults(ctx(doc)),{rw:1.5,rd:1.5});assert.equal(c.build(ctx(doc),c.defaults(ctx(doc))),doc);
+ const doc=fixture(),c=flangeReliefDimensionsHistoryEdit(doc,2);assert.ok(c?.build&&c.defaults);assert.equal(c.label,'Edit flange relief');assert.deepEqual(c.defaults(ctx(doc)),{rw:1.5,rd:1.5,kind:'obround'});assert.equal(c.build(ctx(doc),c.defaults(ctx(doc))),doc);
 });
 test('incomplete invalid mixed and impossible dimensions refuse and preserve source',()=>{
  const doc=fixture(),saved=structuredClone(doc),c=flangeReliefDimensionsHistoryEdit(doc,2);assert.ok(c?.build);
@@ -67,4 +67,44 @@ test('native Dim relief remains supported independently but is excluded from thi
 });
 test('numeric edit codec roundtrip preserves relief type and unrelated feature fields',async()=>{
  for(const kind of ['rectangular','obround'] as const){const doc=build(fixture(kind),{rw:2,rd:2.5}),file=await readStudioFile(encodeStudioFile(doc));assert.ok('doc' in file);assert.deepEqual(file.doc,JSON.parse(JSON.stringify(doc)));oracle(file.doc,kind,2,2.5);}
+});
+
+test('kind-only bidirectional transition preserves exact dimensions and all unrelated authored fields',async()=>{
+ for(const kind of ['rectangular','obround'] as const){
+  const target=kind==='rectangular'?'obround':'rectangular',doc=fixture(kind),saved=structuredClone(doc),n=doc.nodes[2];
+  assert.ok(n.kind==='sheet-flange');
+  const next=build(doc,{kind:target,rw:1.5,rd:1.5});
+  assert.deepEqual(next,{...doc,nodes:[doc.nodes[0],doc.nodes[1],{...n,relief:{kind:target,width:1.5,depth:1.5}}]});
+  assert.equal(next.nodes[0],doc.nodes[0]);assert.equal(next.nodes[1],doc.nodes[1]);assert.equal(next.nodes[2].sigs,n.sigs);
+  assert.ok(next.nodes[2].kind==='sheet-flange');assert.equal(next.nodes[2].edges,n.edges);assert.equal(next.nodes[2].offsets,n.offsets);
+  oracle(doc,kind,1.5,1.5);oracle(next,target,1.5,1.5);
+  const file=await readStudioFile(encodeStudioFile(next));assert.ok('doc' in file);assert.deepEqual(file.doc,JSON.parse(JSON.stringify(next)));oracle(file.doc,target,1.5,1.5);
+  const restored=build(file.doc,{kind,rw:1.5,rd:1.5});assert.deepEqual(restored,JSON.parse(JSON.stringify(doc)));oracle(restored,kind,1.5,1.5);assert.deepEqual(doc,saved);
+ }
+});
+test('kind choice is exactly two types and unknown or mixed transitions refuse atomically',()=>{
+ for(const kind of ['rectangular','obround'] as const){
+  const doc=fixture(kind),saved=structuredClone(doc),c=flangeReliefDimensionsHistoryEdit(doc,2);assert.ok(c?.build&&c.fields);
+  const fields=c.fields(ctx(doc),{rw:1.5,rd:1.5,kind}),field=fields.find(f=>f.key==='kind');assert.ok(field&&field.kind==='choice');
+  assert.deepEqual(field.options,[{value:'rectangular',label:'Rectangular'},{value:'obround',label:'Obround'}]);
+  const other=kind==='rectangular'?'obround':'rectangular';
+  const invalid:Values[]=[{kind:'none',rw:1.5,rd:1.5},{kind:'unknown',rw:1.5,rd:1.5},{kind:'',rw:1.5,rd:1.5},{kind:0,rw:1.5,rd:1.5},{kind:other,rw:2,rd:1.5},{kind:other,rw:1.5,rd:2},{kind:other,rw:2,rd:2}];
+  for(const v of invalid){assert.throws(()=>c.build!(ctx(doc),v));assert.deepEqual(doc,saved);}
+  assert.equal(c.build(ctx(doc),{kind,rw:'1.5',rd:'1.5'}),doc);
+  assert.equal(c.build(ctx(doc),{rw:1.5,rd:1.5}),doc);
+  oracle(c.build(ctx(doc),{kind:other,rw:1.5,rd:1.5}),other,1.5,1.5);
+ }
+});
+test('kind transition cannot bypass original signature, native validity or captured revision proof',()=>{
+ const doc=fixture(),n=doc.nodes[2];assert.ok(n.kind==='sheet-flange');
+ const stale=patch(doc,2,{sigs:{[n.edges[0]]:{...n.sigs![n.edges[0]],s:49}}});
+ const invalid=patch(doc,2,{relief:{kind:'obround',width:4,depth:1}});
+ for(const d of [stale,invalid]){const saved=structuredClone(d);assert.throws(()=>build(d,{kind:'rectangular',rw:d===invalid?4:1.5,rd:d===invalid?1:1.5}));assert.deepEqual(d,saved);}
+ const c=flangeReliefDimensionsHistoryEdit(doc,2);assert.ok(c?.build);assert.throws(()=>c.build!(ctx(structuredClone(doc)),{kind:'rectangular',rw:1.5,rd:1.5}));
+ doc.parameters.changed=1;assert.throws(()=>c.build!(ctx(doc),{kind:'rectangular',rw:1.5,rd:1.5}));
+});
+
+test('valid shallow rectangular relief refuses impossible obround candidate without source changes',()=>{
+ const doc=patch(fixture('rectangular'),2,{relief:{kind:'rectangular',width:4,depth:1}}),saved=structuredClone(doc);
+ oracle(doc,'rectangular',4,1);assert.throws(()=>build(doc,{kind:'obround',rw:4,rd:1}));assert.deepEqual(doc,saved);oracle(doc,'rectangular',4,1);
 });

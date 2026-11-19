@@ -8,7 +8,7 @@ import { canonical } from '../util/revision';
 import type { Command } from './commands';
 import { flangeRadiusSourceEdit } from './flangeRadiusSourceEdit';
 function fail():never {throw refusal('BAD_REFERENCE','Open the current numeric partial Flange relief in History again.');}
-/** Existing partial relief dimensions only; native evidence runs in build, never render. */
+/** Existing partial relief dimensions or a separate kind-only change; native evidence runs in build, never render. */
 export function flangeReliefDimensionsHistoryEdit(doc:StudioDoc,index:number):Command|null{
  if(!doc||!Array.isArray(doc.nodes)||doc.nodes.length!==3||index!==2)return null;
  const [sk,base,n]=doc.nodes;
@@ -77,18 +77,23 @@ export function flangeReliefDimensionsHistoryEdit(doc:StudioDoc,index:number):Co
  };
  return {id:'edit',label:'Edit flange relief',icon:'cad-sheet-flange',group:'modify',
   available:ctx=>current(ctx.doc)?{ok:true}:{ok:false,reason:'Open the current Flange in History again.'},
-  defaults:()=>({rw,rd}),
-  fields:()=>[{key:'rw',label:'Relief width',kind:'mm',min:0},{key:'rd',label:'Relief depth',kind:'mm',min:0}],
-  steps:()=>[{label:'Saved relief',text:`Keep ${relief.kind}, offsets ${offsets[0]} / ${offsets[1]} mm and ${n.edges[0]}. Only relief width and depth change.`,done:true},
-   {label:'Explicit dimensions',text:'Enter positive dimensions. There are no automatic thickness defaults or manufacturing recommendations.',done:false}],
+  defaults:()=>({rw,rd,kind}),
+  fields:()=>[{key:'kind',label:'Relief',kind:'choice',options:[{value:'rectangular',label:'Rectangular'},{value:'obround',label:'Obround'}]},{key:'rw',label:'Relief width',kind:'mm',min:0},{key:'rd',label:'Relief depth',kind:'mm',min:0}],
+  steps:()=>[{label:'Saved relief',text:`Saved ${relief.kind}. Keep offsets ${offsets[0]} / ${offsets[1]} mm and ${n.edges[0]}. Change relief kind separately from width and depth.`,done:true},
+   {label:'Explicit dimensions',text:'For a kind change, keep the saved dimensions. Apply dimension changes separately. There are no automatic thickness defaults or manufacturing recommendations.',done:false}],
   build:(ctx,v)=>{
    if(!current(ctx.doc))fail();
-   if(Object.keys(v).some(k=>!['rw','rd'].includes(k)))throw refusal('VALUE','Edit relief width and depth only.');
+   if(Object.keys(v).some(k=>!['rw','rd','kind'].includes(k)))throw refusal('VALUE','Edit relief kind or dimensions only.');
    const numeric=(x:number|string|undefined)=>(typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>0;
    if(!numeric(v.rw)||!numeric(v.rd))throw refusal('VALUE','Enter finite positive relief width and depth.');
-   const original=prove(),width=Number(v.rw),depth=Number(v.rd);
-   if(width===rw&&depth===rd)return doc;
-   const result:StudioDoc={...doc,nodes:doc.nodes.map((node,i)=>i===index?{...n,relief:{kind,width,depth}}:node)};
+   // Missing kind preserves older numeric-only command callers.
+   const nextKind=v.kind===undefined?kind:v.kind;
+   if(nextKind!=='rectangular'&&nextKind!=='obround')throw refusal('VALUE','Choose Rectangular or Obround relief.');
+   const width=Number(v.rw),depth=Number(v.rd);
+   if(nextKind!==kind&&(width!==rw||depth!==rd))throw refusal('VALUE','Apply relief kind and dimension changes separately.');
+   const original=prove();
+   if(nextKind===kind&&width===rw&&depth===rd)return doc;
+   const result:StudioDoc={...doc,nodes:doc.nodes.map((node,i)=>i===index?{...n,relief:{kind:nextKind,width,depth}}:node)};
    const output=solid(result,n.id!);verifyFlat(output);
    if(canonical(output.sheet)!==canonical(original.sheet))fail();
    return result;
