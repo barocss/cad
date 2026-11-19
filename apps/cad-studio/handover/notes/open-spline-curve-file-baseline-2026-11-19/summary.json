@@ -1,0 +1,42 @@
+{
+  "status": "PASS",
+  "testedCommit": "4883100a68594f1e294510c4531e5c31083a8e34",
+  "fixtureSHA256": "b7a7e2b8e90942802bcf3f870e6cb277cf6c9608f13244537d70258a47ca3639",
+  "scope": "Actual three-point open spline [10,10],[30,20],[50,10], middle fit Y edited to25, Finish intended refusal preserving draft fields/document, Make curves, actual Save and fresh Open.",
+  "observations": [
+    {
+      "label": "independent-source-oracle",
+      "spans": 4,
+      "fitPoints": 3,
+      "centre": [
+        30,
+        4.166666666666667
+      ],
+      "radius": 20.833333333333332,
+      "serializationGrid": 1e-09,
+      "rationalPositionTolerance": 1e-07,
+      "sourceRationalSpanCheck": "PASS",
+      "rawDraftBiarcEquivalence": "NOT_RUN"
+    },
+    {
+      "label": "lifecycle",
+      "finish": "REFUSED_DRAFT_PRESERVED",
+      "makeCurves": "PASS",
+      "saveOpen": "PASS",
+      "undoRedo": "NOT_RUN",
+      "nativeSolid": "NOT_APPLICABLE"
+    }
+  ],
+  "limits": [
+    "Independent rational span evaluation checks source geometry and authored fit interpolation; raw draft bulges/centres are not exposed, so exact draft-to-source biarc equivalence is NOT_RUN.",
+    "No solid, closure, manufacturing, general spline or UndoRedo claim.",
+    "Does not prove restoration of original editable spline metadata; saved output is direct rational curve geometry.",
+    "No product defect observed. No product/main change or new runtime verification in this evidence branch."
+  ],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ]
+}
