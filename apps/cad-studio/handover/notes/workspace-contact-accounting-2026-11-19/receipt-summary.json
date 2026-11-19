@@ -1,0 +1,59 @@
+{
+  "status": "PASS",
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "sourceFrozenCount": 594,
+  "browserRunBase": "8250151272bcdd0b9db6a23b7bc919c3aa286dcb",
+  "upstreamCompared": "6315e9cce",
+  "sourceUnchangedThroughCleanup": true,
+  "observations": [
+    {
+      "label": "before-browser",
+      "availableBytes": 27759865856
+    },
+    {
+      "label": "contact-false",
+      "availableBytes": 27737907200
+    },
+    {
+      "contactFree": false,
+      "samples": 128,
+      "excluded": 0,
+      "voxelCountSum": 128,
+      "occupiedVoxels": 105,
+      "summary": "Workspace of 128 poses: 105 voxels of 10 mm, reach 91.5 mm, best manipulability 2.040e-3\nJSON\nHide",
+      "file": "contact-off-download.json",
+      "sha256": "08f9a6ff77157bb0c97b92f40f60ed8f7bd989ccfa9d5d5cc0e40e0dc4f6f7d6"
+    },
+    {
+      "label": "contact-true",
+      "availableBytes": 27736621056
+    },
+    {
+      "contactFree": true,
+      "samples": 128,
+      "excluded": 21,
+      "voxelCountSum": 107,
+      "occupiedVoxels": 90,
+      "summary": "Workspace of 128 poses (21 in self-contact left out): 90 voxels of 10 mm, reach 91.5 mm, best manipulability 2.040e-3\nJSON\nHide",
+      "file": "contact-on-download.json",
+      "sha256": "d39a1d3a271f19c979db44955f4a9a7216136afb98f1513c1fefaa04f2aedaed"
+    },
+    {
+      "label": "contact-finished",
+      "availableBytes": 27738791936
+    }
+  ],
+  "sourceFixture": "packages/barocss-cad/conformance/rm/ccd-post/case.json",
+  "sourceAdjustment": "a.position=[10,10,10], b.position=[50,10,15]; existing solved placements, grounded post unchanged",
+  "preservation": "asserted exact document/instance placements/displayed history and evaluated body key, volume, centroid; Hide verified; not hidden Undo-stack certification",
+  "visualReview": "PASS: actual off/on PNGs inspected, synthetic native source",
+  "actualDownloadCount": 3,
+  "note": "Driver phase stayed at actual Studio start; named observations identify off/on stages. No later-SHA browser run claim."
+}

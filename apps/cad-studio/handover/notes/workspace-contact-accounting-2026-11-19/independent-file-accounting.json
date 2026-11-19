@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "reader": "Python standard-library JSON, actual saved files, no product imports",
+  "results": [
+    {
+      "file": "contact-off-download.json",
+      "samples": 128,
+      "excluded": 0,
+      "voxelCountSum": 128,
+      "occupiedVoxels": 105,
+      "sha256": "08f9a6ff77157bb0c97b92f40f60ed8f7bd989ccfa9d5d5cc0e40e0dc4f6f7d6"
+    },
+    {
+      "file": "contact-on-download.json",
+      "samples": 128,
+      "excluded": 21,
+      "voxelCountSum": 107,
+      "occupiedVoxels": 90,
+      "sha256": "d39a1d3a271f19c979db44955f4a9a7216136afb98f1513c1fefaa04f2aedaed"
+    },
+    {
+      "file": "contact-on-repeat-download.json",
+      "samples": 128,
+      "excluded": 21,
+      "voxelCountSum": 107,
+      "occupiedVoxels": 90,
+      "sha256": "d39a1d3a271f19c979db44955f4a9a7216136afb98f1513c1fefaa04f2aedaed"
+    }
+  ]
+}
