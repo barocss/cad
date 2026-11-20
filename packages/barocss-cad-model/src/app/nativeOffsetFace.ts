@@ -345,7 +345,7 @@ export function resolveDirectOffsetFace(ctx: Ctx): { parent: ReturnType<typeof r
   const node = ctx.doc.nodes[ref.node];
   if (ref.side !== 'solid' || (node.kind !== 'draft' && node.kind !== 'offset-face' && node.kind !== 'extrude')) return undefined;
   if (node.kind === 'extrude' && !node.draft &&
-      (!isStraightHexagonalExtrusion(ctx.doc.nodes, node) || display.nativeAxisPlane)) return undefined;
+      (!isStraightHexagonalExtrusion(ctx.doc.nodes, node) || display.nativeAxisPlane?.axis === 'z')) return undefined;
   currentOffsetBody(ctx, body);
   const { brep } = nativeOffsetBody(ctx, body, display);
   const frame = draftedFaceOffsetFrame(brep, display.name) ?? prismWallOffsetFrame(brep, display.name);

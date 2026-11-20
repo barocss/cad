@@ -12,8 +12,8 @@ const pins = ['apps/cad-studio/src/state/commandBuildFailure.ts','apps/cad-studi
   ...(baseline ? [] : ['packages/barocss-cad/src/features/prism-wall-offset.ts'])];
 const f = await createFlow({
   name: 'hex-wall-scope-recovery', envFrozen: 'D1369_SOURCE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Offset an oblique upright wall of an authored hexagonal prism in desktop Studio.',
-  limits: ['One convex six-sided profile extruded along world Z. One oblique side and two signed offsets.'],
+  qualification: 'Offset an axis-aligned and an oblique wall on the same authored six-sided prism.',
+  limits: ['One convex six-sided profile extruded along world Z. Signed distance on the two verified walls.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkBrep, faceGeometry, brepMassProperties } from '@barocss/cad';
@@ -46,7 +46,12 @@ d=json.load(sys.stdin)
 dmm=F(str(d['distance']))
 # The chosen wall 4x−3y=72 moves by signed normal distance d.
 # Re-intersect with its neighbors y=0 and 4x+3y=120.
-foot=[(0,0),(18+5*dmm/4,0),(24+5*dmm/8,8-5*dmm/6),(18,16),(0,16),(-6,8)]
+axis=d.get('axis',False)
+if axis:
+    # y=-d intersects 4x+3y=0 and 4x-3y=72.
+    foot=[(3*dmm/4,-dmm),(18-3*dmm/4,-dmm),(24,8),(18,16),(0,16),(-6,8)]
+else:
+    foot=[(0,0),(18+5*dmm/4,0),(24+5*dmm/8,8-5*dmm/6),(18,16),(0,16),(-6,8)]
 area=abs(sum(a[0]*b[1]-a[1]*b[0] for a,b in zip(foot,foot[1:]+foot[:1])))/2
 volume=float(10*area)
 n=d['native']
@@ -58,7 +63,7 @@ def check_points(actual, expected):
     assert all(sum(math.dist(p,q)<=1e-9 for q in actual)==1 for p in expected)
 check_points(n['vertices'],points)
 normals=[(0,-1,0),(.8,-.6,0),(.8,.6,0),(0,1,0),(-.8,.6,0),(-.8,-.6,0)]
-offsets=[0,(72+5*float(dmm))/5,24,16,9.6,0]
+offsets=[float(dmm),14.4,24,16,9.6,0] if axis else [0,(72+5*float(dmm))/5,24,16,9.6,0]
 dot=lambda a,b:sum(x*y for x,y in zip(a,b))
 maximum=0
 for face in n['faces']:
@@ -108,7 +113,7 @@ const hud = name => f.page.getByRole('dialog', { name, exact: true });
 const distance = scope => scope.getByLabel('Offset', { exact: true });
 const status = (scope, state) => scope.locator('.status').filter({ hasText: new RegExp('^' + state + '$') }).waitFor();
 
-async function measure(label, doc, mm, original) {
+async function measure(label, doc, mm, original, axis = false) {
   const native = await f.inspect(label, doc);
   const bodies = (await f.bodies()).bodies;
   assert.equal(bodies.length, 1);
@@ -118,7 +123,7 @@ async function measure(label, doc, mm, original) {
     assert.equal(native.incidenceHash, original.incidenceHash);
     assert.deepEqual(native.bindings, original.bindings);
   }
-  await f.runOracle({ native, distance: mm, studioVolume: bodies[0].volume }, label);
+  await f.runOracle({ native, distance: mm, studioVolume: bodies[0].volume, axis }, label);
   f.report.observations.push({ label, shapeSHA256: native.hash, identityRetained: !!original });
   return native;
 }
@@ -147,15 +152,41 @@ await f.run(async () => {
   await f.page.waitForFunction(()=>document.querySelector('.view-cube .vc-label')?.textContent==='FRONT');
   const pixel=await f.page.evaluate(()=>window.__studioScreenOf([9,0,5])); await f.page.mouse.click(...pixel);
   await f.page.waitForFunction(()=>window.__studioSelection.selection.faces.length===1);
-  await f.command('Offset face'); const panel=hud('Offset face');
-  for(const d of ['2','-2']) {
-   await distance(panel).fill(d);await status(panel,'refused');assert.ok(await button('Apply',panel).isDisabled());
-   assert.match(await panel.innerText(),/oblique/i);assert.match(await panel.innerText(),/Cancel/);
-   assert.equal(await panel.locator('.hud-step').filter({has:f.page.locator('b',{hasText:/^Move$/})}).evaluate(e=>e.classList.contains('done')),false);
-   await f.same(source);
+  await f.command('Offset face');
+  let panel = hud('Offset face');
+  f.phase = 'Refuse axis wall collapse on either side';
+  for (const d of ['12', '-8']) {
+    await distance(panel).fill(d); await status(panel, 'refused');
+    assert.ok(await button('Apply', panel).isDisabled());
+    await f.same(source);
   }
-  await f.snapshot(`${width}-cardinal-refused`);await button('Cancel',panel).click();await f.same(source);
+  await f.snapshot(`${width}-axis-collapse-refused`);
+  f.phase = 'Apply signed native offsets to the axis-aligned wall';
+  await distance(panel).fill('1'); await status(panel, 'preview'); await button('Apply', panel).click(); await f.changed(source);
+  const axisOut = await f.doc();
+  assert.deepEqual(axisOut.nodes.slice(0, 2), source.nodes);
+  assert.equal(axisOut.nodes[2].kind, 'offset-face');
+  assert.deepEqual(axisOut.nodes[2].faces, ['n1.side0']);
+  assert.equal(axisOut.nodes[2].distance, 1);
+  await measure(`${width}-axis-out`, axisOut, 1, original, true);
+  await f.snapshot(`${width}-axis-out`);
+  await f.openFeatureEditor(2, 'axis wall');
+  await button('Edit offset', f.editor()).click();
+  const axisEdit = hud('Edit Offset face');
+  await distance(axisEdit).fill('-1'); await status(axisEdit, 'preview'); await button('Apply', axisEdit).click(); await f.changed(axisOut);
+  const axisIn = await f.doc();
+  assert.deepEqual(axisIn.nodes[2], { ...axisOut.nodes[2], distance: -1 });
+  await measure(`${width}-axis-in`, axisIn, -1, original, true);
+  await f.undo(); await f.same(axisOut); await f.redo(); await f.same(axisIn);
+  const axisSaved = await f.save(`${width}-axis-wall`);
+  await f.freshOpen(axisSaved.file, axisIn, `${width}-axis-reopened`);
+  await measure(`${width}-axis-reopened`, axisIn, -1, original, true);
+  await f.page.setViewportSize({ width, height: 900 });
+  const [reopen] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
+  await reopen.setFiles({ name: 'hex-wall-source.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
+  await f.same(source);
   await pickWall();await f.command('Offset face');
+  panel = hud('Offset face');
   await distance(panel).fill('9.599');await status(panel,'preview');await button('Apply',panel).click();await f.changed(source);
   const outward=await f.doc();assert.equal(outward.nodes[2].distance,9.599);assert.deepEqual(outward.nodes.slice(0,2),source.nodes);
   await measure(`${width}-outward`,outward,9.599,original);await f.snapshot(`${width}-outward`);
@@ -166,6 +197,6 @@ await f.run(async () => {
   await f.undo();await f.same(outward);await f.redo();await f.same(inward);
   const saved=await f.save(`${width}-hex-wall`);await f.freshOpen(saved.file,inward,`${width}-reopened`);
   await measure(`${width}-reopened`,inward,-9.599,original);
-  f.report.observations.push({width,cardinalSignedRefusal:true,obliqueSignedBoundaryAccepted:true,undoRedoSaveOpen:true});
+  f.report.observations.push({width,cardinalSignedOffset:true,obliqueSignedBoundaryAccepted:true,undoRedoSaveOpen:true});
  }
 });

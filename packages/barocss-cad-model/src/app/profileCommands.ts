@@ -361,7 +361,7 @@ export function offsetFaceDescription(ctx: Ctx, fallback = ''): string {
 /** Move an admitted native face along its signed normal. */
 export const offsetFaceCommand: Command = {
   id: 'offset-face', label: 'Offset face', icon: 'cad-extrude', group: 'modify', keywords: 'move face push pull offset direct edit press',
-  hint: 'Move a prism or cylinder cap, a rectangular taper face, or an oblique wall of a convex hexagonal prism. Drag the arrow or enter a signed distance.',
+  hint: 'Move a prism or cylinder cap, a rectangular taper face, or an upright wall of a straight convex hexagonal prism. Drag the arrow or enter a signed distance.',
   available: ctx => {
     const selection = ctx.selection;
     if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length || selection.vertices?.length || ctx.direct?.length) return no('Pick a supported planar face.');

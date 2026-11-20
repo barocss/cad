@@ -64,7 +64,7 @@ export function commandBuildFailure(command: string, cause: unknown, ctx?: Ctx):
       && sketch?.kind === 'sketch' && !sketch.plane && face?.nativeAxisPlane && face.nativeAxisPlane.axis !== 'z'
       && bodyKeyFor(ctx.doc.nodes, ref.node, ref.side) === body.key) {
       return { title: 'Offset face does not support this prism side',
-        hint: 'Changing Offset distance will not enable this face. Cancel Offset face and select an oblique side face of this hexagonal prism instead.',
+        hint: 'Changing Offset distance will not enable this face. Cancel Offset face and select a wall on a straight convex hexagonal prism.',
         detail: cause.message, code: cause.code };
     }
   }

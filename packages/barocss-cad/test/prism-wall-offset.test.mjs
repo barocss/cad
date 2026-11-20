@@ -84,7 +84,7 @@ test('prism wall offset rejects an exact edge collapse before volume vanishes an
   assert.deepEqual(source, before);
 });
 
-test('prism wall admission excludes cardinal, concave, tilted, ambiguous and mismatched supports', () => {
+test('prism wall admission excludes concave, tilted, ambiguous and mismatched supports', () => {
   const source = solidOf();
   const tilted = transformBrep(source, { matrix: [1, 0, 0.1, 0, 1, 0, 0, 0, 1] });
   const badWall = structuredClone(source);
@@ -93,10 +93,10 @@ test('prism wall admission excludes cardinal, concave, tilted, ambiguous and mis
   const other = solidOf(part([[0, 0], [18, 0], [10, 7], [18, 16], [0, 16], [-6, 8]]));
   const pentagon = solidOf(part(footprint.slice(1)));
   const drafted = solidOf(part(footprint, { draft: 5 }));
-  for (const [brep, face] of [[source, 'n1.top'], [source, 'n1.side0'], [tilted, selected], [badWall, selected],
+  for (const [brep, face] of [[source, 'n1.top'], [tilted, selected], [badWall, selected],
     [other, selected], [pentagon, selected], [drafted, selected]]) {
     assert.equal(prismWallOffsetFrame(brep, face), undefined);
-    assert.throws(() => offsetPrismWall(brep, face, 1), /oblique wall of one straight convex hexagonal prism/);
+    assert.throws(() => offsetPrismWall(brep, face, 1), /wall of one straight convex hexagonal prism/);
   }
   const duplicate = structuredClone(source);
   faceOf(duplicate, 'n1.side0').name = selected;
@@ -133,4 +133,50 @@ test('the native Part offset-face uses the oblique prism route under the authore
   const stale = { ...expectation, dir: [-0.8, 0.6, 0] };
   assert.throws(() => evaluateCadPart({ ...doc, features: [...doc.features, { ...move, expect: { [selected]: stale } }] }), /REFERENCE_MOVED/);
   assert.throws(() => evaluateCadPart({ ...doc, features: [...doc.features, { ...move, distance: -9.6 }] }), /collapse or cross a wall/);
+});
+
+test('an axis-aligned wall offsets the same six-sided prism by intersecting its fixed neighbors', () => {
+  const source = solidOf(), before = structuredClone(source), face = 'n1.side0';
+  const frame = prismWallOffsetFrame(source, face);
+  pointClose(frame.anchor, [9, 0, 5]);
+  pointClose(frame.normal, [0, -1, 0]);
+  for (const distance of [1, -1, 11.999, -7.999]) {
+    const moved = offsetPrismWall(source, face, distance), report = checkBrep(moved, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.ok(report.maximumPcurveGap < 1e-9);
+    assert.deepEqual(identity(moved), identity(source));
+    const target = [[3 * distance / 4, -distance], [18 - 3 * distance / 4, -distance]];
+    source.vertices.forEach(({ point: [x, y, z] }, i) =>
+      pointClose(moved.vertices[i].point, y !== 0 ? [x, y, z] : [...target[x === 0 ? 0 : 1], z]));
+    for (const original of source.faces) {
+      const support = faceGeometry(original);
+      const result = faceOf(moved, original.name);
+      result.surface.controlPoints.flat().forEach(point => {
+        const signed = point.reduce((sum, value, i) => sum + (value - support.o[i]) * support.n[i], 0);
+        close(signed, original.name === face ? distance : 0);
+      });
+    }
+    close(brepMassProperties(moved, 1).volume, 3840 + 180 * distance - 7.5 * distance ** 2, 1e-7);
+  }
+  for (const distance of [12, -8, 13, -9]) {
+    assert.throws(() => offsetPrismWall(source, face, distance), /collapse or cross a wall/);
+  }
+  assert.deepEqual(source, before);
+});
+
+test('the rotated X wall has the same signed volume and native topology', () => {
+  const rotate = { matrix: [0, -1, 0, 1, 0, 0, 0, 0, 1] };
+  const original = solidOf(), source = transformBrep(original, rotate), face = 'n1.side0';
+  const frame = prismWallOffsetFrame(source, face);
+  pointClose(frame.anchor, [0, 9, 5]);
+  pointClose(frame.normal, [1, 0, 0]);
+  for (const [distance, expectedVolume] of [[1, 4012.5], [-1, 3652.5]]) {
+    const result = offsetPrismWall(source, face, distance);
+    const reference = transformBrep(offsetPrismWall(original, face, distance), rotate);
+    assert.equal(checkBrep(result, { strict: true }).valid, true);
+    assert.deepEqual(identity(result), identity(source));
+    assert.equal(result.vertices.length, 12);
+    result.vertices.forEach((vertex, i) => pointClose(vertex.point, reference.vertices[i].point));
+    close(brepMassProperties(result, 1).volume, expectedVolume, 1e-7);
+  }
 });

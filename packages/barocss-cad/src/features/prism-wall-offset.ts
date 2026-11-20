@@ -155,7 +155,11 @@ function admittedPrism(brep: Brep, faceName: string): Prism | undefined {
     walls.push({ face, origin, normal });
   }
   const selected = walls.findIndex(wall => wall.face.original.name === faceName);
-  if (selected < 0 || walls[selected].normal.slice(0, 2).some(component => Math.abs(component) <= 64 * Number.EPSILON)
+  if (selected < 0) return undefined;
+  const [x, y] = walls[selected].normal;
+  const minorComponent = Math.min(Math.abs(x), Math.abs(y));
+  // An exact axis direction is valid. Keep the existing cutoff for near-axis oblique walls.
+  if ((minorComponent > 0 && minorComponent <= 64 * Number.EPSILON)
     || !keepsSection(upper.map(vertex => vertex.point), walls, selected, 0, extent)
     || !checkBrep(brep, { strict: true }).valid) return undefined;
   return { caps: [caps[0], caps[1]], walls, lower, upper, selected, extent };
@@ -212,12 +216,12 @@ function uvPoint(chart: Chart, point: Point): Point {
   return [at(u, U), at(v, V), 0];
 }
 
-/** Offset one oblique upright wall of a straight convex hexagonal prism. */
+/** Offset one upright wall of a straight convex hexagonal prism. */
 export function offsetPrismWall(brep: Brep, faceName: string, distance: number): Brep {
   if (typeof distance !== 'number' || !Number.isFinite(distance)) fail('INPUT', 'distance must be finite');
   if (!namedFace(brep, faceName)) fail('INPUT', 'the selected face name is missing or ambiguous');
   const prism = admittedPrism(brep, faceName);
-  if (!prism) return fail('GEOMETRY', 'pick an oblique wall of one straight convex hexagonal prism');
+  if (!prism) return fail('GEOMETRY', 'pick an upright wall of one straight convex hexagonal prism');
   return offsetWall(brep, prism, distance);
 }
 
