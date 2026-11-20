@@ -16,7 +16,7 @@ If a depth edit loses overlap, the selected target remains visible as unavailabl
 | Delayed successful reply after another depth edit or Cancel | The harness delayed delivery of the actual worker response. The accepted document and history stayed unchanged. |
 | Face-anchored rectangle | The default Join produces one closed 4,500 mm³ solid. |
 
-The Studio command application module now owns the Apply readiness checks and the Enter and Shift-Enter queue. The App connects those decisions to the document, focus and preview. App.tsx was 4,119 lines at the parent revision and is 4,112 lines with this feature. Keep future feature rules with the command that owns them. The next useful split is sketch launch inside the command start handler, where source selection, plane resolution and camera setup can be tested together.
+The Studio command application module now owns the Apply readiness checks and the Enter and Shift-Enter queue. The App connects those decisions to the document, focus and preview. App.tsx was 4,119 lines at the parent revision and is 4,112 lines with this feature. Keep future feature rules with the command that owns them.
 
 ## Reproduction
 
@@ -36,3 +36,16 @@ D845_SOURCE_FROZEN=1 node test/extrude-end-face-preview-ownership-browser.mjs "$
 **FAIL** — The global documentation checker reports a stale refusal table and a core API inventory mismatch (44 expected members, 46 in source). Both diagnostics were present on the clean parent before this feature. The reviewed inventory change for this feature adds two optional command-context members and six exports.
 
 **NOT_RUN** — Mobile and other modeling commands. The checked scopes do not establish overall CAD readiness.
+
+## Follow-up: isolate sketch launch
+
+`sketchLaunch.ts` computes the initial plane, anchor, tool and framing bounds from the current selection. Studio still displays refusal notices at their original point in the command and updates the camera only after accepting the launch. App.tsx decreased from 4,112 to 4,069 lines. When adding a tool, put its input and selection rules in its feature module. Keep the document update and screen transition explicit at the call site.
+
+Three desktop Chrome runs covered distinct launch paths. The XY run edited a rectangle and its plane offset, exercised Undo/Redo and extruded the result. The native-vertex run selected three ordered corners with the pointer, finished the sketch and reopened the saved result. The face run placed a sketch on a pocket floor, moved its parent, and verified the child Cut after Save and fresh Open. All three passed with the same sketch launch source and no source changes during execution.
+
+```sh
+cd apps/cad-studio
+D1076_SOURCE_FROZEN=1 node test/sketch-plane-draft-history-browser.mjs "$XY_OUT"
+D792_SOURCE_FROZEN=1 node test/three-vertex-sketch-browser.mjs "$VERTEX_OUT"
+D1157_SOURCE_FROZEN=1 node test/sketch-pocket-floor-placement-browser.mjs "$FACE_OUT"
+```

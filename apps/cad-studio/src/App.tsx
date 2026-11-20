@@ -154,8 +154,6 @@ import { scheduleProjectOpenFit } from './app/projectOpenFit';
 import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
 import { type DisplayMode, type DisplayModeStatus } from './viewport/renderer';
 import { retainedSectionEdges } from './viewport/sectionEdgePick';
-import { toPartDocument } from '@barocss/cad-model/engine/part';
-import { bindPocketFloor, canBindPocketFloor, type PocketFloorBinding } from '@barocss/cad-model/engine/pocketFloor';
 import { placedDoc, type PartInstance } from '@barocss/cad-model/engine/doc';
 import { placementOf } from '@barocss/cad-model/engine/placement';
 import { instanceEvaluationCurrent, instanceEvaluationSources, withPlacedProposalBodies, WORKER_CANDIDATE_TINT } from './viewport/instanceEvaluation';
@@ -179,7 +177,7 @@ import { usesCurvedMeshDistance } from './app/measureProvenance';
 import { captureMeasureTarget, readMeasureTarget, sameMeasureOccurrence, type MeasureTarget, type PlacedMeasureSource } from './app/measureTargets';
 import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportInstanceSelection } from './assembly/nestedSelection';
 import { NestedPartPanel } from './ui/NestedPartPanel';
-import { DRAG_TYPE, snapshotInstanceIsolation, type Spot, type SketchAnchor, type SketchShape, type SketchState, type TransformGizmo, type ViewportHandle } from './viewport/Viewport';
+import { DRAG_TYPE, snapshotInstanceIsolation, type Spot, type SketchShape, type SketchState, type TransformGizmo, type ViewportHandle } from './viewport/Viewport';
 import { ClearancePanel } from './viewport/ClearancePanel';
 import { PrintPanel } from './viewport/PrintPanel';
 import { CamPanel } from './viewport/CamPanel';
@@ -312,8 +310,8 @@ import { PreviewSection, type PreviewMode } from './layout/PreviewSection';
 import { CHAT_DEFAULT, CHAT_STRIP } from './layout/useLayout';
 import { sketchDxf } from '@barocss/cad-model/sketch/dxf';
 import { settleShape } from '@barocss/cad-model/sketch/settle';
-import { currentNativeVertexPoints } from './viewport/vertexPick';
-import { orderedVertexPlane, planeLabel, planeOfDisplayFace, xyPlane } from '@barocss/cad-model/sketch/plane';
+import { prepareSketchLaunch, resolveSketchLaunchVertices } from './sketch/sketchLaunch';
+import { planeLabel, planeOfDisplayFace, xyPlane } from '@barocss/cad-model/sketch/plane';
 import { shapeNode } from '@barocss/cad-model/sketch/loops';
 import { isSettled } from '@barocss/cad-model/sketch/rules';
 import { createDraftHistory, draftHistoryState, outlineHistoryState, restoreDraftHistory } from './sketch/draftHistory';
@@ -1840,19 +1838,8 @@ export function App() {
       }, { readFeature: () => cageEdRef.current.session, title: 'Discard cage draft and edit another cage?' });
       return;
     }
-    const vertexSelection = cmd.id === 'sketch' && selection.vertices?.length ? selection.vertices : undefined;
-    const mixedVertexBodies = vertexSelection?.length === 3 && vertexSelection.some(pick => pick.body !== vertexSelection[0].body);
-    const vertexPoints = vertexSelection && nativeVertexReady &&
-      !selection.faces.length && !selection.edges.length && !selection.bodies.length && !selection.sketches?.length
-      ? currentNativeVertexPoints(doc, bodies, vertexSelection) : null;
-    const vertexPlane = vertexPoints ? orderedVertexPlane(vertexPoints) : null;
-    if (vertexSelection && !vertexPlane) {
-      const hint = mixedVertexBodies ? 'Selected vertices belong to different bodies. Select three vertices on one body.'
-        : vertexPoints ? 'Selected vertices are collinear or too close to define a plane. Select a vertex away from the line.'
-        : 'Select three distinct, non-collinear native vertices on the same current body.';
-      setToast({ title: 'Sketch plane not set', hint, detail: '' });
-      return;
-    }
+    const vertices = cmd.id === 'sketch' ? resolveSketchLaunchVertices(doc, ctx, nativeVertexReady) : null;
+    if (vertices?.ok === false) { setToast(vertices.notice); return; }
     discardRouteRef.current(); setRoutePanelOpen(false);
     if (cmd.action !== 'assembly-cut') setCutDraft(null);
     setPalette(false); setRendering(false); setPlaying(false); setDrawing(false);
@@ -1878,41 +1865,11 @@ export function App() {
     if (cmd.id === SKETCH3D_COMMAND.id) { cancel(); skel.begin(null); setSelection(emptySel); setEditNode(null); return; }
     if (cmd.id === STEPS_COMMAND.id) { cancel(); setBomOpen(false); setRebuildOpen(false); setVariantsOpen(false); setLibraryOpen(false); setParamsOpen(false); setStepsOpen(true); return; }
     if (cmd.action === 'sketch') {
-      if (instanceSel.length && !selection.faces.length) {
-        setToast({ title: 'Placed face sketch unavailable', hint: 'Use Edit part to sketch on a placed face, or clear the selection to start on XY.', detail: '' });
-        return;
-      }
-      // On a selected flat face (horizontal or vertical), joined to its body by default; else on XY.
-      const f = selection.faces[0]; const face = f && bodies[f.body]?.mesh.faces[f.face];
-      const plane = vertexPlane ?? (face ? planeOfDisplayFace(face) : xyPlane());
-      if (!plane) { setToast({ title: 'Can’t sketch on this face', hint: 'Pick a flat face, or clear the selection to sketch on XY.', detail: '' }); return; }
-      const base = face ? refOf(bodies[f.body]) : null;
-      const make = cmd.id === 'revolve' ? 'revolve-y' as const : cmd.id === 'pipe' ? 'pipe' as const : cmd.id === 'loft' ? 'loft' as const : undefined;
-      const fp = face ? faceProfile(bodies[f.body].mesh, f.face) : null, outline = fp ? (({ shape, done }) => [...(shape ? [shape] : []), ...done])(sketchShapes(fp)) : undefined;
-      const canLinkFace = face && base?.side === 'solid' && !doc.instances?.length;
-      const straightOutline = face?.nativeInsetOutline && fp?.profile === 'loop' && !fp.holes?.length
-        && fp.segments.length >= 3 && fp.segments.every(segment => segment.kind === 'line');
-      const linkSource = canLinkFace && base && straightOutline && face.nativePlaneName
-        ? { kind: 'planar-face-outline-inset' as const, version: 1 as const, source: base, sourceFeature: featureId(doc.nodes, base.node), face: face.nativePlaneName } : undefined;
-      const linkSourceHint = canLinkFace && !linkSource && outline?.length
-        ? fp?.profile === 'loop' && fp.holes?.length ? 'Linked inset needs a face without holes.'
-          : face.curvedBoundary ? 'Linked inset needs a straight outer boundary.'
-          : 'Linked inset needs one native straight outline without holes.'
-        : undefined;
-      const nativeFloor = cmd.id === 'sketch' && f && base && !doc.instances?.length && currentNativePlanePick(ctx, f, doc);
-      let pocketFloor: PocketFloorBinding | undefined;
-      if (nativeFloor && base && canBindPocketFloor(doc, base, plane, nativeFloor.face.name)) {
-        try {
-          pocketFloor = bindPocketFloor(doc, base, plane, nativeFloor.face.name, toPartDocument(prefixDoc(doc, base.node + 1)).features);
-        } catch {
-          // An unsupported native floor remains an ordinary fixed face sketch.
-        }
-      }
-      const anchor: SketchAnchor = vertexPlane ? { kind: 'vertices', offset: 0, vertexPlane } : face ? { kind: 'face', offset: 0, face: { plane, base, ...(outline?.length ? { outline } : {}), ...(linkSource ? { linkSource } : {}), ...(linkSourceHint ? { linkSourceHint } : {}), ...(pocketFloor ? { pocketFloor } : {}) } } : { kind: 'xy', offset: 0 };
+      const launch = prepareSketchLaunch({ command: cmd.id, doc, ctx, hasPlacedSelection: instanceSel.length > 0, vertexPlane: vertices?.plane });
+      if (!launch.ok) { setToast(launch.notice); return; }
       discardFeatureDraft();
-      setSketch({ plane, anchor, tool: make && make !== 'loft' ? 'circle' : 'rectangle', shape: null, base, ...(make ? { make } : {}) }); setPreviewBodies(null);
-      const [min, max] = sketchRegion(base && f ? [bodies[f.body]] : bodies, plane);
-      viewport.current?.frameSketch(min, max, plane); return;
+      setSketch(launch.sketch); setPreviewBodies(null);
+      viewport.current?.frameSketch(...launch.bounds, launch.sketch.plane); return;
     }
     if (cmd.action === 'assembly-cut') { cancel(); openCut(null); return; }
     if (cmd.action === 'interference') { checkInterference(); return; }
