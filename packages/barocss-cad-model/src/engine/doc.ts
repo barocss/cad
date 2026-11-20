@@ -367,12 +367,17 @@ export function isBoredCapOffsetSource(nodes: readonly unknown[], index: number)
   }
 }
 
-function straightExtrudeSketch(nodes: readonly unknown[], index: number): Record<string, unknown> | undefined {
+function plainExtrudeSketch(nodes: readonly unknown[], index: number): Record<string, unknown> | undefined {
   const stock = nodes[index];
-  if (!textRecord(stock) || stock.kind !== 'extrude' || stock.draft || stock.cutDepth || typeof stock.sketch !== 'number' ||
+  if (!textRecord(stock) || stock.kind !== 'extrude' || stock.cutDepth || typeof stock.sketch !== 'number' ||
       !Number.isSafeInteger(stock.sketch) || stock.sketch < 0 || stock.sketch >= index) return;
   const sketch = nodes[stock.sketch];
   if (textRecord(sketch) && sketch.kind === 'sketch') return sketch;
+}
+
+function straightExtrudeSketch(nodes: readonly unknown[], index: number): Record<string, unknown> | undefined {
+  const stock = nodes[index];
+  if (textRecord(stock) && !stock.draft) return plainExtrudeSketch(nodes, index);
 }
 
 /** Straight rectangular stock for a box face replacement. The kernel proves the exact solid. */
@@ -380,6 +385,13 @@ export function isBoxReplacementSource(nodes: readonly unknown[], index: number)
   return straightExtrudeSketch(nodes, index)?.profile === 'rectangle';
 }
 export { isBoxReplacementSource as isBoxWallReplacementSource };
+
+/** Authored rectangular Draft Extrude for cap replacement. Native admission verifies the four walls. */
+export function isDraftedCapReplacementSource(nodes: readonly unknown[], index: number): boolean {
+  const stock = nodes[index];
+  return textRecord(stock) && typeof stock.draft === 'number' && Number.isFinite(stock.draft) && stock.draft !== 0 &&
+    plainExtrudeSketch(nodes, index)?.profile === 'rectangle';
+}
 
 /** Identify the authored fillet. The kernel proves the current solid and its concave arc. */
 export function isDeleteFaceFilletSource(nodes: readonly unknown[], index: number): boolean {
@@ -449,7 +461,8 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       }
       const parentIndex = (node.parent as BodyRef).node;
       if (node.kind === 'replace-face') {
-        if (!isBoxReplacementSource(value.nodes, parentIndex)) return 'Replace face: a preceding straight rectangular extrusion is required.';
+        if (!isBoxReplacementSource(value.nodes, parentIndex) && !isDraftedCapReplacementSource(value.nodes, parentIndex))
+          return 'Replace face: a preceding rectangular extrusion is required.';
         continue;
       }
       const parent = value.nodes[parentIndex];

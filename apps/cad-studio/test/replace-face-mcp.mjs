@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { copyFile, mkdir, readFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { withMcpSession } from './mcp-browser-session.mjs';
-import { capCase } from './replace-face-cap-fixture.mjs';
+import { capCase, draftedCapOracle } from './replace-face-cap-fixture.mjs';
 
 const [output, variant = 'height'] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
 assert.ok(output && isAbsolute(output) && relative(resolve(app, '../..'), output).startsWith('../'));
-assert.ok(['height', 'diagonal', 'upper', 'lower'].includes(variant));
+assert.ok(['height', 'diagonal', 'upper', 'lower', 'drafted-upper', 'drafted-lower'].includes(variant));
 const diagonal = variant === 'diagonal';
 const cap = capCase(variant);
 const unit = vector => vector.map(value => value / Math.hypot(...vector));
@@ -20,7 +20,14 @@ const file = join(output, 'mcp-replaced.bcad');
 const source = join(output, 'box-and-reference.bcad');
 
 await withMcpSession({ app, output, clientName: 'barocss-replace-face', autonomy: 3 }, file, 'replace-face', async call => {
-  await call('features', { action: 'command', command: 'box', values: { w: 40, d: 30, h: 10, x: 0, y: 0, z: 0 } });
+  if (cap?.drafted) {
+    await call('features', { action: 'add', features: [
+      { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 30] },
+      { kind: 'extrude', sketch: 0, height: 10, draft: Math.atan(0.1) * 180 / Math.PI },
+    ] });
+  } else {
+    await call('features', { action: 'command', command: 'box', values: { w: 40, d: 30, h: 10, x: 0, y: 0, z: 0 } });
+  }
   await call('features', { action: 'add', features: [
     cap?.sketch ?? profile,
     { kind: 'extrude', sketch: 2, height: diagonal || cap ? 3 : 10 },
@@ -43,7 +50,8 @@ await withMcpSession({ app, output, clientName: 'barocss-replace-face', autonomy
   assert.equal(node.target.face, faces[1]);
   const { bodies } = await call('query', { action: 'summary' });
   assert.equal(bodies.length, 2);
-  assert.ok(Math.abs(bodies.find(body => body.key === 'b5').volume - (cap ? 15600 : diagonal ? 12300 : 11850)) < 1e-7);
+  const targetVolume = cap?.drafted ? draftedCapOracle(cap, cap.height).volume : cap ? 15600 : diagonal ? 12300 : 11850;
+  assert.ok(Math.abs(bodies.find(body => body.key === 'b5').volume - targetVolume) <= 5e-4);
   assert.ok(Math.abs(bodies.find(body => body.key === 'b4').volume - (diagonal || cap ? 192 : 950)) < 1e-7);
   const stale = await call('features', replace, true);
   assert.equal(stale.code, 'COMMAND_STALE');

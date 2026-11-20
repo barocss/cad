@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
-import { capCase } from './replace-face-cap-fixture.mjs';
+import { capCase, draftedCapOracle } from './replace-face-cap-fixture.mjs';
 
 const [output, inputFile, agentFile, variant = 'height'] = process.argv.slice(2);
 assert.ok(output && inputFile && agentFile && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
-assert.ok(['height', 'diagonal', 'upper', 'lower'].includes(variant));
+assert.ok(['height', 'diagonal', 'upper', 'lower', 'drafted-upper', 'drafted-lower'].includes(variant));
 const diagonal = variant === 'diagonal';
 const cap = capCase(variant);
 const sourceFace = cap?.face ?? 'n1.side1';
@@ -30,8 +30,8 @@ const pins = [
 ];
 const f = await createFlow({
   name: 'replace-face', envFrozen: 'REPLACE_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Replace a box face with a tilted exact support in desktop Studio.',
-  limits: [cap ? `One 40 × 30 × 10 mm box and two tilted reference faces for its ${variant} cap.` : diagonal
+  qualification: 'Replace a rectangular extrusion face with a tilted exact support in desktop Studio.',
+  limits: [cap ? `One 40 × 30 × 10 mm extrusion and two tilted reference faces for its ${variant} cap.` : diagonal
     ? 'One 40 × 30 × 10 mm box and two faces of a disconnected prism tilted along Y and Z.'
     : 'One 40 × 30 × 10 mm box, one disconnected prismatic donor, two planes tilted along Z.'],
   inspectorSource: `
@@ -98,23 +98,28 @@ async function measure(label, doc, original, positionAt, donor) {
     n.forEach((value, axis) => near(now[axis], value));
     near(support, offset);
   }
+  const tapered = cap?.drafted ? draftedCapOracle(cap, positionAt) : undefined;
   for (const vertex of original.brep.vertices) {
     const [x, y, z] = vertex.point, next = box.brep.vertices.find(v => v.id === vertex.id);
-    const expected = cap ? [x, y, z === cap.station ? positionAt(x, y) : z] : [x === 40 ? positionAt(y, z) : x, y, z];
+    let expected = cap ? [x, y, z === cap.station ? positionAt(x, y) : z] : [x === 40 ? positionAt(y, z) : x, y, z];
+    if (tapered && z === cap.station) {
+      const index = y < 15 ? (x < 20 ? 0 : 1) : (x < 20 ? 3 : 2);
+      expected = tapered.moving[index];
+    }
     expected.forEach((value, axis) => near(next.point[axis], value));
   }
   // The thickness is affine, so its mean over the fixed rectangle is its value at the centre.
-  const volume = cap ? 40 * 30 * Math.abs(positionAt(20, 15) - cap.opposite) : 30 * 10 * positionAt(15, 5);
+  const volume = tapered?.volume ?? (cap ? 40 * 30 * Math.abs(positionAt(20, 15) - cap.opposite) : 30 * 10 * positionAt(15, 5));
   near(box.mass.volume, volume);
   const workerVolume = shape(worker, 'b5').volume;
   near(workerVolume, volume);
   near(reference.mass.volume, diagonal || cap ? 192 : 950);
   if ((diagonal || cap) && positionAt === position) {
-    const centroid = cap?.centroid ?? [10103 / 492, 1245 / 82, 1255 / 246];
+    const centroid = tapered?.centroid ?? cap?.centroid ?? [10103 / 492, 1245 / 82, 1255 / 246];
     centroid.forEach((value, axis) => near(box.mass.centroid[axis], value));
   }
   const corners = cap ? [[0, 0], [40, 0], [0, 30], [40, 30]] : [[0, 0], [30, 0], [0, 10], [30, 10]];
-  const coordinates = corners.map(([u, v]) => positionAt(u, v));
+  const coordinates = tapered?.moving.map(point => point[2]) ?? corners.map(([u, v]) => positionAt(u, v));
   f.report.observations.push({ label, axis: cap ? 'z' : 'x', coordinates, volume, nativeVolume: box.mass.volume, workerVolume,
     maximumEdgeSurfaceGap: box.report.maximumEdgeSurfaceGap });
   return reference;
@@ -136,7 +141,7 @@ await f.run(async () => {
   await open(inputFile);
   await f.same(source);
   const native = await f.inspect('source', source), original = shape(native, 'b1'), donor = shape(native, 'b4');
-  near(original.mass.volume, 12000);
+  near(original.mass.volume, cap?.drafted ? 11300 + 40 / 3 : 12000);
   await view(cap?.name ?? 'Right');
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();

@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CadPartError, checkBrep, evaluateCadPart, faceGeometry } from '../dist/index.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
-import { boxFaceReplacementFrame, boxWallReplacementFrame, draftedFaceOffsetFrame, replaceBoxFace, replaceBoxWall } from '../dist/features/drafted-cap-offset.js';
+import {
+  boxFaceReplacementFrame, boxWallReplacementFrame, draftedCapReplacementFrame, draftedFaceOffsetFrame,
+  replaceBoxFace, replaceBoxWall, replaceRectangularSolidFace,
+} from '../dist/features/drafted-cap-offset.js';
 
 const doc = features => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features });
 const output = features => evaluateCadPart(doc(features)).outputs[0];
@@ -31,7 +34,7 @@ function assertPlanesAndTopology(before, after, replaced, reference) {
   assert.deepEqual(after.edges.map(e => [e.id, e.name, e.vertices, e.curve.id]), before.edges.map(e => [e.id, e.name, e.vertices, e.curve.id]));
   const useIdentity = ({ pcurve, ...use }) => [use, pcurve?.id];
   assert.deepEqual(after.coedges.map(useIdentity), before.coedges.map(useIdentity));
-  assert.equal(after.coedges.filter(use => use.pcurve).length, 24);
+  assert.equal(after.coedges.filter(use => use.pcurve).length, before.coedges.filter(use => use.pcurve).length);
   assert.deepEqual(after.faces.map(f => [f.id, f.name, f.loops, f.surface.id]), before.faces.map(f => [f.id, f.name, f.loops, f.surface.id]));
 
   for (const actual of after.faces) {
@@ -154,6 +157,57 @@ test('cap replacement refuses perpendicular and parallel references and one-corn
     assert.throws(() => replaceBoxFace(before, 'b.top', candidate), error);
     assert.deepEqual(before, saved);
   }
+});
+
+const tapered = [source[0], { ...source[1], draft: Math.atan(0.1) * 180 / Math.PI }];
+
+test('both drafted caps re-intersect the four fixed inclined wall supports', () => {
+  const before = output(tapered).brep, saved = structuredClone(before);
+  const cases = [
+    { name: 'b.top', direction: 1, station: 10, z: [800 / 97, 400 / 33, 1800 / 103, 1400 / 101],
+      volume: 14397.372877113554, centroid: [20.831182003594446, 15.892207818082822, 6.4373939209218785] },
+    { name: 'b.bottom', direction: -1, station: 0, z: [200 / 103, -200 / 101, -800 / 97, -400 / 99],
+      volume: 15042.506704412142, centroid: [21.13660116152962, 16.291190469235328, 3.1184577347508458] },
+  ];
+  const footprint = [[0, 0], [40, 0], [40, 30], [0, 30]];
+  for (const { name, direction, station, z, volume, centroid } of cases) {
+    const reference = { origin: [0, 60, direction === 1 ? 20 : -10], normal: [-1, -2, 10 * direction] };
+    assert.deepEqual(draftedCapReplacementFrame(before, name), { anchor: [20, 15, station], normal: [0, 0, direction] });
+    assert.equal(draftedCapReplacementFrame(before, 'b.side1'), undefined);
+    assert.equal(boxFaceReplacementFrame(before, name), undefined);
+    const after = output([...tapered, { ...replacement, face: name, plane: reference }]).brep;
+    assert.deepEqual(after, replaceRectangularSolidFace(before, name, reference));
+    assertPlanesAndTopology(before, after, name, reference);
+    for (const vertex of before.vertices) {
+      const [x, y, oldZ] = vertex.point, actual = after.vertices.find(v => v.id === vertex.id);
+      if (oldZ !== station) {
+        assert.deepEqual(actual, vertex);
+        continue;
+      }
+      const corner = footprint.findIndex(([u, v]) => (x < 20) === (u === 0) && (y < 15) === (v === 0));
+      const [u, v] = footprint[corner], h = z[corner];
+      [u + (u === 0 ? h : -h) / 10, v + (v === 0 ? h : -h) / 10, h]
+        .forEach((value, axis) => close(actual.point[axis], value));
+    }
+    const mass = brepMassProperties(after, 1);
+    close(mass.volume, volume);
+    mass.centroid.forEach((value, axis) => close(value, centroid[axis]));
+  }
+  assert.deepEqual(before, saved);
+});
+
+test('drafted cap replacement refuses corner turnover, opposite contact and crossed side supports', () => {
+  const before = output(tapered).brep, saved = structuredClone(before);
+  for (const [candidate, message] of [
+    [{ origin: [0, 0, 8], normal: [-5, -5, 1] }, /parallel to a corner rail/],
+    [{ origin: [0, 0, 8], normal: [-6, -6, 1] }, /would turn it over/],
+    [{ origin: [0, 0, 0], normal: [-1, -2, 10] }, /opposite cap at one corner/],
+    [{ origin: [0, 0, 148], normal: [-1, 0, 10] }, /close or cross a side wall/],
+  ]) {
+    assert.throws(() => replaceRectangularSolidFace(before, 'b.top', candidate), message);
+    assert.deepEqual(before, saved);
+  }
+  assert.throws(() => replaceRectangularSolidFace(before, 'b.side1', plane), /planar face of a straight rectangular box|cap of a drafted/);
 });
 
 test('Replace face refuses corner collapse, unsupported slope and stale picks', () => {

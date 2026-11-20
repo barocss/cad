@@ -1,10 +1,10 @@
-import { isBoxReplacementSource, withNode, type StudioDoc } from '../engine/doc';
+import { isBoxReplacementSource, isDraftedCapReplacementSource, withNode, type StudioDoc } from '../engine/doc';
 import { captureSignatures } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
 import { captureOffsetPlane, offsetPlaneStep, pickReferencePlane, restoreOffsetPlaneValues } from './offsetPlanePick';
 
-const SOURCE = 'Select one face of a straight rectangular extrusion.';
+const SOURCE = 'Select a box face or a cap of a drafted rectangular extrusion.';
 const REFERENCE = 'Pick a tilted face on another solid.';
 
 function pickedFace(ctx: Ctx) {
@@ -12,14 +12,16 @@ function pickedFace(ctx: Ctx) {
   if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length ||
       selection.vertices?.length || selection.profileRegions || ctx.direct?.length) return;
   const pick = selection.faces[0], body = ctx.bodies[pick.body], parent = body?.ref, face = body?.mesh.faces[pick.face];
-  if (!parent || parent.side !== 'solid' || !isBoxReplacementSource(ctx.doc.nodes, parent.node) ||
+  if (!parent || parent.side !== 'solid' ||
       !face?.name || face.nativePlaneName !== face.name || face.exact?.kind !== 'plane' || !face.nativeAxisPlane) return;
+  if (!isBoxReplacementSource(ctx.doc.nodes, parent.node) &&
+      (face.nativeAxisPlane.axis !== 'z' || !isDraftedCapReplacementSource(ctx.doc.nodes, parent.node))) return;
   return { parent, face: face.name };
 }
 
 export const replaceFaceCommand: Command = {
   id: 'replace-face', label: 'Replace face', icon: 'cad-offset-face', group: 'modify',
-  hint: 'Replace one box face with a tilted plane.',
+  hint: 'Replace a box face or drafted cap with a tilted plane.',
   keywords: 'replace face plane tilt wall cap reextend direct edit',
   available: ctx => pickedFace(ctx) ? { ok: true } : { ok: false, reason: SOURCE },
   fields: () => [],

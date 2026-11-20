@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1431: [Replace either cap of a drafted rectangular extrusion](notes/replace-drafted-cap-tilted-plane-2026-11-21/README.md), #17. Re-intersect all four sloped wall pairs with a tilted reference and qualify both caps in Studio.
+
 - D1430: [Replace either box cap with a tilted plane](notes/replace-box-cap-tilted-plane-2026-11-21/README.md), #17. Keep the other five box supports and all native IDs through reference edits and Studio reopen.
 
 - D1429: [Bind feature deletion to a reviewed revision](notes/review-pinned-feature-delete-2026-11-21/README.md), #324. Refuse a stale index before deletion and verify the current proposal, approval and native reopen in Studio.

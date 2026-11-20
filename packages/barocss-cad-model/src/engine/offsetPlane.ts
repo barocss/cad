@@ -2,7 +2,7 @@ import {
   CadNumericPolicy, CadPartLimits, checkOutput, evaluateCadPart, faceGeometry,
   type Brep, type CadPartFeature, type CadPartOutput,
 } from '@barocss/cad';
-import { boxFaceReplacementFrame, draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
+import { boxFaceReplacementFrame, draftedCapReplacementFrame, draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import type { OffsetFaceNode, OffsetPlaneRef, ReplaceFaceNode, StudioDoc } from './doc';
 import { featureId } from './ids';
@@ -78,7 +78,9 @@ export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneR
 export function resolveReplacementPlane(doc: StudioDoc, node: ReplaceFaceNode, prefix: CadPartFeature[]) {
   const missing = (reason: string) => refusal('BAD_REFERENCE', `Replace face: ${reason}`);
   const { source, target } = boundSolids(doc, node.target, node.parent, prefix, missing);
-  if (!boxFaceReplacementFrame(source, node.faces[0])) throw missing('the original box face is unavailable.');
+  const face = node.faces[0];
+  if (!boxFaceReplacementFrame(source, face) && !draftedCapReplacementFrame(source, face))
+    throw missing('the original rectangular face no longer supports replacement.');
   const plane = checkedPlane(target, node.target, missing);
   return { origin: plane.point, normal: plane.normal };
 }
