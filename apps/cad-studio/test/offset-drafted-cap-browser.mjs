@@ -5,6 +5,7 @@ const lower = process.argv.includes('--lower');
 const cap = lower ? 'n1.bottom' : 'n1.top';
 const pins = [
   'apps/cad-studio/src/App.tsx',
+  'apps/cad-studio/src/viewport/offsetFaceLaunchView.ts',
   'apps/cad-studio/src/ui/NodeEditor.tsx',
   'apps/cad-studio/src/files/documentFile.ts',
   'packages/barocss-cad-model/src/app/nativeOffsetFace.ts',
@@ -125,32 +126,42 @@ await f.run(async () => {
   const original = await native('source-shape', seed, 0);
   await pickCap(lower);
   if (lower) await button('Iso', f.page.locator('.views')).click();
+  const end = lower ? 0 : height, direction = lower ? -1 : 1;
+  const normalPixels = () => f.page.evaluate(([end, direction]) => {
+    const from = window.__studioScreenOf([10, 5, end]), to = window.__studioScreenOf([10, 5, end + direction]);
+    return [to[0] - from[0], to[1] - from[1]];
+  }, [end, direction]);
+  const readCamera = () => f.page.evaluate(() => window.__studioCamera());
+  const before = await readCamera(), beforePixels = await normalPixels();
+  assert.ok(lower ? Math.hypot(...beforePixels) > 8 : Math.hypot(...beforePixels) < 1);
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Offset face');
   const panel = hud('Offset face');
   await status(panel, 'preview');
   assert.match(await panel.innerText(), lower ? /Bottom end.*Outward −Z/s : /Top end.*Outward \+Z/s);
-  if (lower) {
-    const handle = f.page.locator('g.gizmo-handle[data-handle="d"]');
-    const head = await handle.locator('polygon').evaluate(polygon => {
-      const box = polygon.getBoundingClientRect();
-      return [box.x + box.width / 2, box.y + box.height / 2];
-    });
-    const [from, to] = await f.page.evaluate(() => [
-      window.__studioScreenOf([10, 5, 0]), window.__studioScreenOf([10, 5, -1]),
-    ]);
-    const delta = to.map((value, i) => value - from[i]);
-    assert.ok(Math.hypot(...delta) > 8);
-    await f.page.mouse.move(...head);
-    await f.page.mouse.down();
-    await f.page.mouse.move(...head.map((value, i) => value + delta[i]), { steps: 6 });
-    await f.page.mouse.up();
-    assert.equal(await offsetField(panel).inputValue(), '3');
-    await status(panel, 'preview');
-    await f.same(seed);
-    f.report.observations.push({ label: 'lower-cap-drag', startDistance: 2, endDistance: 3, dragCssPx: delta });
+  const after = await readCamera(), dragPixels = await normalPixels();
+  assert.ok(Math.hypot(...dragPixels) > 8);
+  if (lower) assert.deepEqual(after, before, 'keep an already usable oblique camera');
+  else {
+    assert.equal(after.ortho, before.ortho);
+    assert.notEqual(after.pitch, before.pitch);
   }
-  await offsetField(panel).fill('2');
+  const arrow = f.page.locator('g.gizmo-handle[data-handle="d"] polygon');
+  const head = await arrow.evaluate(polygon => {
+    const svg = polygon.closest('svg').getBoundingClientRect(), points = [...polygon.points];
+    return [svg.x + points.reduce((sum, p) => sum + p.x, 0) / points.length,
+      svg.y + points.reduce((sum, p) => sum + p.y, 0) / points.length];
+  });
+  await f.page.mouse.move(...head);
+  await f.page.mouse.down();
+  await f.page.mouse.move(...head.map((value, i) => value + dragPixels[i]), { steps: 6 });
+  await f.page.mouse.up();
+  assert.equal(await offsetField(panel).inputValue(), '3');
+  await status(panel, 'preview');
+  await f.same(seed);
+  f.report.observations.push({ label: 'offset-distance-handle', lower, before, after, beforePixels, dragPixels, startDistance: 2, endDistance: 3 });
+  const outwardDistance = lower ? 2 : 3;
+  if (lower) await offsetField(panel).fill('2');
   await status(panel, 'preview');
   await f.same(seed);
   await f.snapshot('taper-outward-preview');
@@ -162,15 +173,22 @@ await f.run(async () => {
   assert.equal(node.kind, 'offset-face');
   assert.deepEqual(node.faces, [cap]);
   assert.deepEqual(node.parent, { node: 1, side: 'solid' });
-  assert.equal(node.distance, 2);
+  assert.equal(node.distance, outwardDistance);
   assert.ok(node.sigs?.[cap]);
   await button('Iso', f.page.locator('.views')).click();
   await f.snapshot('taper-outward-applied');
-  await native('outward-shape', outward, 2, original);
+  await native('outward-shape', outward, outwardDistance, original);
+  if (!lower) {
+    await f.undo(); await f.same(seed);
+    await f.redo(); await f.same(outward);
+    const file = await f.save('offset-dragged-cap');
+    await f.freshOpen(file.file, outward, 'dragged-cap-opened');
+    await native('outward-reopened', outward, outwardDistance, original);
+  }
 
   f.phase = 'Refuse a collapse in History, then move the same cap inwards';
   const history = await edit(index);
-  assert.equal(await offsetField(history).inputValue(), '2');
+  assert.equal(await offsetField(history).inputValue(), String(outwardDistance));
   assert.match(await history.innerText(), lower ? /Bottom end.*Outward −Z/s : /Top end.*Outward \+Z/s);
   const collapse = lower ? -height : 8;
   await offsetField(history).fill(String(collapse));

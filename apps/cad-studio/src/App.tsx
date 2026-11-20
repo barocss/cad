@@ -178,6 +178,7 @@ import { usesCurvedMeshDistance } from './app/measureProvenance';
 import { captureMeasureTarget, readMeasureTarget, sameMeasureOccurrence, type MeasureTarget, type PlacedMeasureSource } from './app/measureTargets';
 import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportInstanceSelection } from './assembly/nestedSelection';
 import { NestedPartPanel } from './ui/NestedPartPanel';
+import { offsetFaceLaunchView } from './viewport/offsetFaceLaunchView';
 import { DRAG_TYPE, snapshotInstanceIsolation, type Spot, type SketchShape, type SketchState, type TransformGizmo, type ViewportHandle } from './viewport/Viewport';
 import { ClearancePanel } from './viewport/ClearancePanel';
 import { PrintPanel } from './viewport/PrintPanel';
@@ -1861,7 +1862,12 @@ export function App() {
       const ownsModel = () => openIntent.current === open && !project.opening() && ownsEvaluatedSource()
         && shownDocNow.current === doc && bodiesRef.current === bodies;
       const targetLooks = { bodies: doc.bodies, nameOf: (body: BodyResult) => bodyName(doc, body) };
-      setActive({ cmd, values: { ...(cmd.defaults?.(startCtx) ?? {}), ...initial }, preview: 'busy',
+      const values = { ...(cmd.defaults?.(startCtx) ?? {}), ...initial };
+      if (cmd.id === 'offset-face' && viewport.current) {
+        const view = offsetFaceLaunchView(cmd, startCtx, values, viewport.current.camera.basis().forward);
+        if (view) viewport.current.setView(view);
+      }
+      setActive({ cmd, values, preview: 'busy',
         ctx: independent ? { ...startCtx, extrudeJoinLooks: targetLooks } : { ...startCtx },
         ...(independent ? { independentExtrude: { ownsModel, joinScope: () => ownsModel() ? joinViewNow.current : null } } : {}),
         ...(cmd.place ? { placing: true } : {}) });
