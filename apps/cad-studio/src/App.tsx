@@ -191,8 +191,9 @@ import { OutlinerCuts } from './ui/OutlinerCuts';
 import { AssemblyCutHud } from './ui/AssemblyCutHud';
 import { nextInstanceId } from '@barocss/cad-model/assembly/takenIds';
 import { AssemblyStepsPanel } from './ui/AssemblyStepsPanel';
-import { STEPS_COMMAND, cameraOfView, shownSelection as litSelection, stepAfter, stepOffer, stepBatchTransferOffer, stepBatchTakeOutOffer, canSelectStepPart, stepsDisplay, viewOfCamera } from './app/assemblySteps';
-import { addAssemblyStep, assemblyStepProblems, deleteAssemblyStep, editAssemblyStep, moveAssemblyStep, moveAssemblyStepParts, stepsOf, type EditAssemblyStepOptions } from '@barocss/cad-model/assembly/steps';
+import { STEPS_COMMAND, shownSelection as litSelection, stepBatchTransferOffer, stepBatchTakeOutOffer, canSelectStepPart } from './app/assemblySteps';
+import { useAssemblyStepReview } from './app/useAssemblyStepReview';
+import { editAssemblyStep, moveAssemblyStepParts, stepsOf } from '@barocss/cad-model/assembly/steps';
 import { cutOfDraft, cuttableOf, defaultCutAt, draftOfCut, draftProblem, draftTrialProblem, newCutDraft, withAddedTargets, withDraftCut, type CutDraft } from './app/assemblyCutDraft';
 import { addAssemblyCut, deleteAssemblyCut, editAssemblyCut } from '@barocss/cad-model/assembly/cuts';
 import { useJoints } from './state/useJoints';
@@ -866,8 +867,6 @@ export function App() {
   /** O10: the Rebuild panel, and the last evaluation it reads (a store: an evaluation renders only the open panel). */
   const [rebuildOpen, setRebuildOpen] = useState(false);
   const [variantsOpen, setVariantsOpen] = useState(false);
-  // Roadmap 10 ⑥: the Steps panel and its session state — the step shown and whether waiting parts are faded (neither is saved, nor an undo step).
-  const [stepsOpen, setStepsOpen] = useState(false), [stepIndex, setStepIndex] = useState(0), [stepsFaded, setStepsFaded] = useState(false);
   const rebuildStore = useMemo(rebuildStoreOf, []);
   // (AM2: the overhang map along +Z for the part's printing process, the bed at the bodies' lowest point.)
   const printing = processProfile(doc.process)?.additive ? processProfile(doc.process)! : null;
@@ -1538,38 +1537,10 @@ export function App() {
   const [instDrag, setInstDrag] = useState<{ id: string; drag: InstanceDrag; settling: boolean; key: string } | null>(null);
   // (R1c (3a): the placed parts as they are shown — placed, posed, exploded, dragged and sectioned.)
   const { instancesPlaced, instancePoseMap, cpuInstanceSection, instancesShown } = useScenePoses(doc, sceneInstanceBodies, bodies, jointFk, explode, section, sketch, gpuSection, instDrag, excludedSectionInstances);
-  // Roadmap 10 ⑥: the Steps panel. While it is shown the viewport leaves the waiting parts out (or draws them faded), highlights the step's own
-  // parts and takes the step's explode scale and view; closing it puts the display back (all parts, the explode it had, the camera as it is).
-  const stepsShown = stepsOpen && !bomOpen && !libraryOpen && !paramsOpen && !variantsOpen && !rebuildOpen && !rendering && !drawing && !sketch && !active;
-  const stepCount = stepsOf(doc).length, stepAt = stepCount ? Math.min(stepIndex, stepCount - 1) : 0;
-  const stepsDisp = useMemo(() => stepsShown ? stepsDisplay(doc, stepAt, stepsFaded) : null, [stepsShown, doc.assemblySteps, doc.instances, stepAt, stepsFaded]);
-  const explodeBefore = useRef<number | null>(null), stepExplode = stepsDisp?.explode;
-  useEffect(() => {
-    if (stepExplode === undefined) { if (explodeBefore.current !== null) { setExplode(explodeBefore.current); explodeBefore.current = null; } return; }
-    if (explodeBefore.current === null) explodeBefore.current = explodeStore.get();
-    setExplode(stepExplode);
-  }, [stepExplode]);
-  const stepView = stepsDisp?.state.step.view, stepViewRef = useRef(stepView), stepId = stepsDisp?.state.step.id;
-  stepViewRef.current = stepView;
-  const applyStepView = useCallback(() => { const v = stepViewRef.current, vp = viewport.current; if (v && vp) vp.setCamera(cameraOfView(v, vp.getCamera())); }, []);
-  // (On entering a step only: an edit of the step's explode scale or note does not take the camera back.)
-  useEffect(() => { if (stepId) applyStepView(); }, [stepId, applyStepView]);
-  const stepEdit = (run: () => { doc: StudioDoc }, then?: () => void) => {
-    let next: StudioDoc;
-    try { next = run().doc; } catch (e) { setToast({ title: 'Step not changed', hint: e instanceof Error ? e.message : String(e), detail: '' }); return; }
-    if (commit(next)) then?.();
-  };
-  const stepChange = (o: EditAssemblyStepOptions) => stepEdit(() => editAssemblyStep(doc, o));
-  const stepParts = () => hostsOf(instanceSel).filter(id => doc.instances?.some(i => i.id === id));
-  const newStep = () => {
-    const add = stepParts();
-    if (!add.length) { setToast({ title: 'Step not added', hint: 'Select the parts the step adds first, in the Browser or the view.', detail: '' }); return; }
-    stepEdit(() => addAssemblyStep(doc, { add }), () => setStepIndex(stepCount));
-  };
-  const stepsProblems = useMemo(() => assemblyStepProblems(doc).map(p => p.message), [doc.assemblySteps, doc.instances]);
-  const stepsOffer = stepsShown ? stepOffer(doc, instanceSel, stepAt) : null;
-  const stepsBatchOffer = stepsShown ? stepBatchTransferOffer(doc, instanceSel, stepAt) : null;
-  const stepsTakeOutOffer = stepsShown ? stepBatchTakeOutOffer(doc, instanceSel, stepAt) : null;
+  const { shown: stepsShown, openPanel: openSteps, display: stepsDisp, index: stepAt, applyEdit: stepEdit, panelProps: stepsPanel } = useAssemblyStepReview({
+    doc, docGeneration, selectedParts: instanceSel, viewport, explodeStore, commit, onNotice: setToast,
+    available: !bomOpen && !libraryOpen && !paramsOpen && !variantsOpen && !rebuildOpen && !rendering && !drawing && !sketch && !active,
+  });
   // A delayed handler must never transfer a previous document's or selection's parts.
   const stepTransferOpen = openIntent.current;
   const stepTransferScope = useRef({ doc, docGeneration, instanceSel, stepAt, stepsShown, open: stepTransferOpen, worker: workerSession });
@@ -1581,7 +1552,7 @@ export function App() {
     if (stepTransferScope.current !== ownedStepTransfer || docNow.current !== doc || !stepsShown || openIntent.current !== ownedStepTransfer.open || workerSessionNow.current !== ownedStepTransfer.worker || project.opening()) return;
     const offer = stepBatchTransferOffer(doc, instanceSel, stepAt);
     if (!offer || offer.target !== id) return;
-    stepEdit(() => moveAssemblyStepParts(doc, id, offer.parts));
+    stepEdit(current => moveAssemblyStepParts(current, id, offer.parts));
   };
   // (`source`: what the instance names as its file — CG6: `./<path>` for a project document, storage/linked.ts.)
   const insertPart = async (file: File, source = file.name) => {
@@ -1816,7 +1787,7 @@ export function App() {
       return;
     }
     if (cmd.id === SKETCH3D_COMMAND.id) { cancel(); skel.begin(null); setSelection(emptySel); setEditNode(null); return; }
-    if (cmd.id === STEPS_COMMAND.id) { cancel(); setBomOpen(false); setRebuildOpen(false); setVariantsOpen(false); setLibraryOpen(false); setParamsOpen(false); setStepsOpen(true); return; }
+    if (cmd.id === STEPS_COMMAND.id) { cancel(); setBomOpen(false); setRebuildOpen(false); setVariantsOpen(false); setLibraryOpen(false); setParamsOpen(false); openSteps(); return; }
     if (cmd.action === 'sketch') {
       const launch = prepareSketchLaunch({ command: cmd.id, doc, ctx, hasPlacedSelection: instanceSel.length > 0, vertexPlane: vertices?.plane });
       if (!launch.ok) { setToast(launch.notice); return; }
@@ -1883,7 +1854,7 @@ export function App() {
         ...(independent ? { independentExtrude: { ownsModel, joinScope: () => ownsModel() ? joinViewNow.current : null } } : {}),
         ...(cmd.place ? { placing: true } : {}) });
     }
-  }, [ctx, doc, selection, instanceSel, bodies, engine, commit, evaluated, shownDoc, variants.showing, setSketch, acceptanceScope, openCut, commandApply, commandPreview.retire, discardFeatureDraft, fresh, busy, modelUnavailable, nativeVertexReady, checkInterference, midpointSketch.start, cancelNativeReview, snapStep, directSel, marker, ownsEvaluatedSource, project.opening]);
+  }, [ctx, doc, selection, instanceSel, bodies, engine, commit, evaluated, shownDoc, variants.showing, setSketch, acceptanceScope, openCut, commandApply, commandPreview.retire, discardFeatureDraft, fresh, busy, modelUnavailable, nativeVertexReady, checkInterference, midpointSketch.start, cancelNativeReview, snapStep, directSel, marker, ownsEvaluatedSource, project.opening, openSteps]);
 
   const sheetRuleSource = { doc, evaluated, bodies, open: openIntent.current, worker: workerSession,
     generation: workOwnership.current.generation,
@@ -1976,7 +1947,7 @@ export function App() {
     const offer = stepBatchTakeOutOffer(doc, instanceSel, stepAt);
     if (!offer || offer.target !== stepId) return;
     const remove = new Set(offer.parts), step = stepsOf(doc)[stepAt];
-    stepEdit(() => editAssemblyStep(doc, { id: stepId, add: step.add.filter(id => !remove.has(id)) }));
+    stepEdit(current => editAssemblyStep(current, { id: stepId, add: step.add.filter(id => !remove.has(id)) }));
   };
 
   const selectStepPart = (stepId: string, partId: string) => {
@@ -3622,16 +3593,10 @@ export function App() {
         onInsert={path => void project.fileOf(path).then(f => { if (f) void insertPart(f, linkSource(path)); })}
         onOpen={d => { replaceDoc(d, 'project'); if (docNow.current !== d) return;
           setCompareBase(null); setDirty(true); setTimeout(() => viewport.current?.fit(), 300); }} />}
-      {stepsShown && <AssemblyStepsPanel doc={doc} index={stepAt} offer={stepsOffer} batchOffer={stepsBatchOffer} takeOutOffer={stepsTakeOutOffer} textDraftScope={ownedStepTextDraft} onTextDraftChange={changeStepTextDraft} onTakeOutSelected={takeOutSelectedStepParts} faded={stepsFaded} problems={stepsProblems}
-        selectedParts={instanceSel} selectionDisabled={!!instanceEdit || instanceEditPending} onSelectPart={selectStepPart}
-        onGo={k => setStepIndex(stepAfter(k, 0, stepCount))} onFaded={setStepsFaded} onNew={newStep}
-        onRename={(id, name) => stepChange({ id, name })} onNote={(id, note) => stepChange({ id, note: note.trim() ? note : null })} onExplode={(id, explode) => stepChange({ id, explode: explode || null })}
-        onAddSelected={id => { const add = stepParts(), step = stepsOf(doc).find(s => s.id === id); if (!step) return; if (!add.length) { setToast({ title: 'Step not changed', hint: 'Select the parts to add first, in the Browser or the view.', detail: '' }); return; } stepChange({ id, add: [...step.add, ...add.filter(a => !step.add.includes(a))] }); }}
-        onTransfer={(id, part) => stepEdit(() => moveAssemblyStepParts(doc, id, [part]))}
-        onTransferSelected={transferSelectedStepParts}
-        onTakeOut={(id, part) => { const step = stepsOf(doc).find(s => s.id === id); if (step) stepChange({ id, add: step.add.filter(a => a !== part) }); }}
-        onCaptureView={id => { const c = viewport.current?.getCamera(); if (c) stepChange({ id, view: viewOfCamera(c) }); }} onResetView={applyStepView} onClearView={id => stepChange({ id, view: null })}
-        onMove={(id, to) => stepEdit(() => moveAssemblyStep(doc, id, to), () => setStepIndex(to))} onDelete={id => stepEdit(() => deleteAssemblyStep(doc, id), () => setStepIndex(k => Math.max(0, Math.min(k, stepCount - 2))))} onClose={() => setStepsOpen(false)} />}
+      {stepsShown && <AssemblyStepsPanel {...stepsPanel}
+        textDraftScope={ownedStepTextDraft} onTextDraftChange={changeStepTextDraft}
+        onTakeOutSelected={takeOutSelectedStepParts} onTransferSelected={transferSelectedStepParts}
+        selectionDisabled={!!instanceEdit || instanceEditPending} onSelectPart={selectStepPart} />}
       {variantsOpen && !bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <VariantsPanel doc={doc} variants={variants} onCommit={next => commit(next, false)} onError={hint => setToast({ title: 'Variants: refused', hint, detail: '' })} onClose={() => setVariantsOpen(false)} />}
       {libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <LibraryPanel doc={doc} documentSession={docGeneration} onCommit={next => commit(next)} onFitTableCommit={next => { void commitFitTables(next); }} onClose={() => setLibraryOpen(false)} onError={(title, hint) => setToast({ title, hint, detail: '' })} onQuote={() => { void exportQuote(); }} />}
       {paramsOpen && !rendering && !drawing && !sketch && !active && <ParametersPanel doc={doc} onClose={() => setParamsOpen(false)}
