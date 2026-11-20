@@ -15,31 +15,46 @@ const walls = {
 assert.ok(Object.hasOwn(walls, view));
 const [faceName, axis, sign, station] = walls[view];
 const bytes = await readFile(input), source = JSON.parse(bytes);
+const replacement = source.nodes.at(-1), tilt = replacement.kind === 'replace-face';
+const capSign = replacement.faces?.[0] === 'n1.bottom' ? -1 : 1;
+const fixed = capSign === 1 ? 0 : 10;
+const capHeight = (x, y) => fixed + capSign * (8 + x / 10 + y / 5);
+const sourceKey = 'b' + (source.nodes.length - 1), resultKey = 'b' + source.nodes.length;
+const donorKey = tilt ? 'b' + replacement.target.body.node : undefined;
 const bores = source.nodes.filter(node => node.kind === 'hole').map(({ center, radius }) =>
   ({ center, radius, volume: 10 * Math.PI * radius ** 2 }));
 assert.ok(bores.length === 1 || bores.length === 2);
+assert.ok(!tilt || (view === 'Right' && bores.length === 1 && ['n1.top', 'n1.bottom'].includes(replacement.faces[0])));
 const contact = Math.max(...bores.map(({ center, radius }) => sign * (center[axis] - station) + radius));
 const positive = 5, negative = -4, centre = [20, 15, 5], normal = [0, 0, 0];
 centre[axis] = station;
 normal[axis] = sign;
 const removedVolume = bores.reduce((sum, bore) => sum + bore.volume, 0);
-const volumeAt = distance => 12000 + distance * (axis === 0 ? 300 : 400) - removedVolume;
+const volumeAt = distance => {
+  if (!tilt) return 12000 + distance * (axis === 0 ? 300 : 400) - removedVolume;
+  const width = 40 + distance;
+  return 30 * width * (11 + width / 20) - 98.1 * Math.PI;
+};
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/viewport/Viewport.tsx',
   'apps/cad-studio/test/offset-bored-wall-browser.mjs',
   'packages/barocss-cad-model/src/app/nativeOffsetFace.ts', 'packages/barocss-cad-model/src/app/profileCommands.ts',
   'packages/barocss-cad-model/src/app/offsetFaceEdit.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
-  'packages/barocss-cad/src/features/bored-cap-offset.ts', 'packages/barocss-cad/src/part/part-model.ts',
+  'packages/barocss-cad/src/features/bored-cap-offset.ts', 'packages/barocss-cad/src/brep/cylindrical-bore.ts',
+  'packages/barocss-cad/src/part/part-model.ts',
 ];
 const f = await createFlow({
   name: 'offset-bored-wall', envFrozen: 'BORED_WALL_OFFSET_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: `Move the ${view.toLowerCase()} exterior wall of a flat plate and retain all ${bores.length} through bore(s).`,
-  limits: [`One 40 × 30 × 10 mm flat rectangular plate with ${bores.length} straight circular bore(s).`],
+  qualification: `Move the ${view.toLowerCase()} exterior wall and retain all ${bores.length} through bore(s).`,
+  limits: [tilt ? 'One rectangular plate with a 40 × 30 mm footprint, one tilted cap, and one straight circular bore.'
+    : `One 40 × 30 × 10 mm flat rectangular plate with ${bores.length} straight circular bore(s).`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, createCylindricalBoreCheck, faceGeometry } from '@barocss/cad';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
-const doc = JSON.parse(readFileSync(process.argv[2], 'utf8')), [{ brep }] = partBreps(doc);
+const doc = JSON.parse(readFileSync(process.argv[2], 'utf8')), bodies = partBreps(doc);
+const donor = bodies.find(({ key }) => key === ${JSON.stringify(donorKey ?? null)});
+const key = 'b' + (doc.nodes.length - 1), { brep } = bodies.find(body => body.key === key);
 const walls = brep.faces.map(face => ({ face, geometry: faceGeometry(face) })).filter(({ geometry }) => geometry.kind === 'cylinder');
 const readDiameter = createCylindricalBoreCheck(brep);
 const diameters = ${JSON.stringify(bores.map(({ center }) => center))}.map(([x, y]) => {
@@ -47,7 +62,7 @@ const diameters = ${JSON.stringify(bores.map(({ center }) => center))}.map(([x, 
   return readDiameter(pair.map(({ face }) => face));
 });
 console.log(JSON.stringify({
-  brep, report: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1),
+  bodies: bodies.length, donor, brep, report: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1),
   diameters,
   supports: Object.fromEntries(brep.faces.map(face => {
     const g = faceGeometry(face);
@@ -68,6 +83,7 @@ const incidence = ({ bodies, shells, faces, loops, coedges, edges, vertices }) =
 
 async function measure(label, doc, distance, before) {
   const native = await f.inspect(label, doc), volume = volumeAt(distance), worker = (await f.bodies()).bodies;
+  const displayed = worker.find(({ key }) => key === (before ? resultKey : sourceKey));
   assert.ok(native.report.valid, native.report.issues.join('\n'));
   const boreCount = bores.length;
   assert.deepEqual(native.report.counts, { bodies: 1, shells: 1, faces: 6 + 2 * boreCount, loops: 6 + 4 * boreCount,
@@ -75,25 +91,42 @@ async function measure(label, doc, distance, before) {
   assert.equal(native.report.topology[0].genus, boreCount);
   assert.ok(native.report.maximumPcurveGap < 1e-9 && native.report.maximumEdgeSurfaceGap < 1e-9);
   bores.forEach(({ radius }, index) => near(native.diameters[index], 2 * radius));
-  assert.equal(worker.length, 1);
-  near(worker[0].volume, volume);
+  assert.equal(worker.length, tilt ? 2 : 1);
+  assert.equal(native.bodies, worker.length);
+  near(displayed.volume, volume);
   near(native.mass.volume, volume);
-  const limit = station + sign * distance, stock = volume + removedVolume;
-  const stockCentre = [20, 15];
-  stockCentre[axis] += sign * distance / 2;
-  const centroid = stockCentre.map((value, k) => {
-    const holeMoment = bores.reduce((sum, bore) => sum + bore.volume * bore.center[k], 0);
-    return (stock * value - holeMoment) / volume;
-  }).concat(5);
-  native.mass.centroid.forEach((value, axis) => near(value, centroid[axis]));
+  if (!tilt) {
+    const stockCentre = [20, 15], stock = volume + removedVolume;
+    stockCentre[axis] += sign * distance / 2;
+    const centroid = stockCentre.map((value, k) => {
+      const holeMoment = bores.reduce((sum, bore) => sum + bore.volume * bore.center[k], 0);
+      return (stock * value - holeMoment) / volume;
+    }).concat(5);
+    native.mass.centroid.forEach((value, axis) => near(value, centroid[axis]));
+  }
+  const limit = station + sign * distance;
   if (before) {
     assert.deepEqual(incidence(native.brep), incidence(before.brep));
-    assert.deepEqual(native.brep.vertices.map(({ point }) => point),
-      before.brep.vertices.map(({ point }) => point.map((value, k) => k === axis && value === station ? limit : value)));
-    assert.deepEqual(native.supports, { ...before.supports, [faceName]: [normal, sign * limit] });
+    if (tilt) assert.deepEqual(native.donor, before.donor);
+    for (const [i, { point }] of before.brep.vertices.entries()) {
+      const [x, y, z] = point;
+      let expected = point.map((value, k) => k === axis && Math.abs(value - station) < 1e-9 ? limit : value);
+      if (tilt && Math.abs(x - station) < 1e-9 && Math.abs(z - fixed) > 1e-9) {
+        expected = [limit, y, capHeight(limit, y)];
+      }
+      native.brep.vertices[i].point.forEach((value, k) => near(value, expected[k]));
+    }
+    const supports = { ...before.supports, [faceName]: [normal, sign * limit] };
+    for (const [name, expected] of Object.entries(supports)) {
+      const actual = native.supports[name];
+      if (Array.isArray(expected)) {
+        actual[0].forEach((value, k) => near(value, expected[0][k]));
+        near(actual[1], expected[1]);
+      } else assert.deepEqual(actual, expected);
+    }
   }
   f.report.observations.push({ label, distance, limit, volume, nativeVolume: native.mass.volume,
-    workerVolume: worker[0].volume, diameters: native.diameters, maximumPcurveGap: native.report.maximumPcurveGap });
+    workerVolume: displayed.volume, diameters: native.diameters, maximumPcurveGap: native.report.maximumPcurveGap });
   return native;
 }
 
@@ -110,8 +143,8 @@ async function offsetWithMcp(distance, checkContact = false) {
     }
     await call('features', edit);
     const accepted = await readFile(file), summary = await call('query', { action: 'summary' });
-    assert.equal(summary.bodies.length, 1);
-    assert.ok(Math.abs(summary.bodies[0].volume - volumeAt(distance)) <= 5e-4);
+    assert.equal(summary.bodies.length, tilt ? 2 : 1);
+    assert.ok(Math.abs(summary.bodies.find(({ key }) => key === resultKey).volume - volumeAt(distance)) <= 5e-4);
     const stale = await call('features', edit, true);
     assert.equal(stale.code, 'COMMAND_STALE');
     assert.deepEqual(await readFile(file), accepted);

@@ -1,10 +1,11 @@
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { BrepError, checkBrep, type Brep, type BrepEdge, type BrepFace, type BrepLoop } from '../brep/brep-core.js';
-import { createCylindricalBoreCheck, readTiltedRectangularBoreForHeal } from '../brep/cylindrical-bore.js';
+import { createCylindricalBoreCheck, readTiltedRectangularPlateBore } from '../brep/cylindrical-bore.js';
 import { add, dist, dot, len, scale, sub } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Curve, Point } from '../types.js';
 import { capSurface } from './extruded-profile-solid.js';
+import { affineChart, coverAffineTrim, uvPoint } from './prism-wall-offset.js';
 
 type XY = [number, number];
 type StockKind = 'bored' | 'two-bore' | 'circular' | 'annular';
@@ -352,34 +353,47 @@ function admittedCardinalWall(brep: Brep, faceName: string) {
   if ((sign !== 1 && sign !== -1) || support.n[transverse] !== 0 || support.n[2] !== 0) return;
   const station = (sign === 1 ? stock.max : stock.min)[axis];
   if (!wall.surface.controlPoints.every(row => row.every(point => point[axis] === station))) return;
+  const trim = readWallContinuation(brep, wall, stock.bottom, stock.top, axis, station);
+  return trim && { ...trim, stock, boreDisks: stock.boreDisks, axis, sign, station } as const;
+}
 
+function readWallContinuation(brep: Brep, wall: BrepFace, bottom: BrepFace, top: BrepFace, axis: 0 | 1, station: number) {
+  const transverse = axis === 0 ? 1 : 0;
   const loops = byId(brep.loops), coedges = byId(brep.coedges), edges = byId(brep.edges), faces = byId(brep.faces);
   const loop = loops.get(wall.loops[0]);
   if (loop?.kind !== 'outer' || loop.coedges.length !== 4) return;
-  const adjacent = new Set<BrepFace>(), corners = new Set<string>();
+  const adjacent = new Set<BrepFace>(), corners = new Set<string>(), capCorners = new Map<string, BrepFace>();
   for (const id of loop.coedges) {
     const use = coedges.get(id), twin = use?.twin ? coedges.get(use.twin) : undefined;
     const neighbor = twin && faces.get(loops.get(twin.loop)?.face ?? ''), edge = use && edges.get(use.edge);
     if (!edge || !neighbor || !line(edge.curve) || !edge.curve.controlPoints.every(point => point[axis] === station)) return;
     adjacent.add(neighbor);
-    for (const vertex of edge.vertices) corners.add(vertex);
+    for (const vertex of edge.vertices) {
+      corners.add(vertex);
+      if (neighbor === bottom || neighbor === top) capCorners.set(vertex, neighbor);
+    }
   }
-  if (corners.size !== 4 || adjacent.size !== 4 || !adjacent.has(stock.bottom) || !adjacent.has(stock.top)) return;
+  if (corners.size !== 4 || capCorners.size !== 4 || adjacent.size !== 4 || !adjacent.has(bottom) || !adjacent.has(top)) return;
   const sideSigns = new Set<number>();
   for (const neighbor of adjacent) {
-    if (neighbor === stock.bottom || neighbor === stock.top) continue;
+    if (neighbor === bottom || neighbor === top) continue;
     const geometry = faceGeometry(neighbor);
     if (geometry.kind !== 'plane' || geometry.n[axis] !== 0 || Math.abs(geometry.n[transverse]) !== 1 || geometry.n[2] !== 0) return;
     sideSigns.add(geometry.n[transverse]);
   }
   if (sideSigns.size !== 2) return;
-  return { stock, boreDisks: stock.boreDisks, axis, sign, station, corners, faces: new Set([wall, ...adjacent]), edges };
+  return { corners, capCorners, faces: new Set([wall, ...adjacent]), edges, loops, coedges };
 }
 
-/** The center and outward normal of a cardinal wall on a flat rectangular plate with one or two bores. */
+/** The center and outward normal of a supported through-bored plate wall. */
 export function boredPlateWallOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
   const admitted = admittedCardinalWall(brep, faceName);
-  if (!admitted) return;
+  if (!admitted) {
+    const tilted = admittedTiltedPositiveXWall(brep, faceName);
+    if (!tilted) return;
+    const { station, min, max, bottomZ, topZ } = tilted, y = (min[1] + max[1]) / 2;
+    return { anchor: [station, y, (bottomZ(station, y) + topZ(station, y)) / 2], normal: [1, 0, 0] };
+  }
   const { stock: { min, max, lo, hi }, axis, sign, station } = admitted;
   const anchor: Point = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (lo + hi) / 2], normal: Point = [0, 0, 0];
   anchor[axis] = station;
@@ -387,12 +401,9 @@ export function boredPlateWallOffsetFrame(brep: Brep, faceName: string): { ancho
   return { anchor, normal };
 }
 
-export function offsetBoredPlateWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
-  const admitted = admittedCardinalWall(brep, faceName);
-  if (!admitted) return;
+function offsetWallStation(brep: Brep, station: number, axis: 0 | 1, sign: 1 | -1, boreDisks: readonly BoreDisk[], distance: number) {
   if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
     throw new BrepError('INPUT', 'bored wall offset: distance must be nonzero and within the modeling range');
-  const { stock, boreDisks, axis, sign, station, corners, faces, edges } = admitted;
   const next = station + sign * distance;
   const extent = Math.max(Math.abs(next), geometryScaleMM(brep.vertices.map(vertex => vertex.point)));
   if (!(extent <= CadNumericPolicy.coordinateAbs)) throw new BrepError('GEOMETRY', 'bored wall offset: the wall leaves the modeling range');
@@ -400,6 +411,17 @@ export function offsetBoredPlateWallIfAdmitted(brep: Brep, faceName: string, dis
   const clearance = linearToleranceMM(extent);
   if (!boreDisks.every(({ center, radius }) => (next - center[axis]) * sign - radius > clearance))
     throw new BrepError('GEOMETRY', 'bored wall offset: the offset would reach or cross the bore');
+  return { next, extent };
+}
+
+export function offsetBoredPlateWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
+  const admitted = admittedCardinalWall(brep, faceName);
+  if (!admitted) {
+    const tilted = admittedTiltedPositiveXWall(brep, faceName);
+    return tilted && offsetTiltedPositiveXWall(brep, tilted, distance);
+  }
+  const { stock, boreDisks, axis, sign, station, corners, faces, edges } = admitted;
+  const { next } = offsetWallStation(brep, station, axis, sign, boreDisks, distance);
 
   const moved = (point: Point): Point => {
     if (point[axis] !== station) return point;
@@ -429,6 +451,101 @@ export function offsetBoredPlateWallIfAdmitted(brep: Brep, faceName: string, dis
       return project && use.pcurve ? { ...use, pcurve: { ...use.pcurve, controlPoints: edges.get(use.edge)!.curve.controlPoints.map(project) } } : use;
     }),
   };
+  const report = checkBrep(candidate, { strict: true });
+  if (!report.valid) throw new BrepError('GEOMETRY', `bored wall offset: the offset solid is invalid: ${report.issues[0]}`, report);
+  return candidate;
+}
+
+type AffineChart = NonNullable<ReturnType<typeof affineChart>>;
+
+function capHeight({ origin: [ox, oy, oz], normal: [nx, ny, nz] }: AffineChart) {
+  return (x: number, y: number) => oz - ((x - ox) * nx + (y - oy) * ny) / nz;
+}
+
+function admittedTiltedPositiveXWall(brep: Brep, faceName: string) {
+  if (brep.faces.length !== stockCounts.bored[0]) return;
+  const matches = brep.faces.filter(face => face.name === faceName), [wall] = matches;
+  if (matches.length !== 1 || wall.loops.length !== 1 || wall.surface.kind !== 'surface' || wall.surface.degreeU !== 1) return;
+  const plate = readTiltedRectangularPlateBore(brep);
+  if (!plate) return;
+  const { bottom, top, bore } = plate, support = faceGeometry(wall);
+  if (support.kind !== 'plane' || !same(support.n, [1, 0, 0])) return;
+  const points = brep.vertices.map(vertex => vertex.point);
+  const xs = points.map(point => point[0]), ys = points.map(point => point[1]);
+  const min: XY = [Math.min(...xs), Math.min(...ys)], max: XY = [Math.max(...xs), Math.max(...ys)];
+  const station = max[0];
+  if (!wall.surface.controlPoints.every(row => row.every(point => point[0] === station))) return;
+  const trim = readWallContinuation(brep, wall, bottom, top, 0, station);
+  if (!trim || brep.edges.some(edge => edge.vertices.some(id => trim.corners.has(id)) && !line(edge.curve))) return;
+
+  const charts = new Map<BrepFace, AffineChart>();
+  for (const face of trim.faces) {
+    const chart = affineChart(face.surface, face.sense);
+    if (!chart || !same(chart.surface.knotsU, lineKnots) || !same(chart.surface.knotsV, lineKnots)) return;
+    for (const id of face.loops) {
+      const loop = trim.loops.get(id);
+      if (!loop || loop.coedges.some(use => !trim.coedges.get(use)?.pcurve)) return;
+    }
+    charts.set(face, chart);
+  }
+  const bottomChart = charts.get(bottom)!, topChart = charts.get(top)!;
+  return { ...trim, wall, bottom, charts, station, min, max, bore, bottomZ: capHeight(bottomChart), topZ: capHeight(topChart) };
+}
+
+function offsetTiltedPositiveXWall(brep: Brep, admitted: NonNullable<ReturnType<typeof admittedTiltedPositiveXWall>>, distance: number): Brep {
+  const { station, min: [x0, y0], max: [, y1], bore, bottom, bottomZ, topZ, capCorners, charts, wall } = admitted;
+  const { next, extent } = offsetWallStation(brep, station, 0, 1, [{ center: bore.c, radius: bore.r }], distance);
+  const heights = [x0, next].flatMap(x => [y0, y1].map(y => [bottomZ(x, y), topZ(x, y)]));
+  const size = Math.max(extent, geometryScaleMM(heights));
+  if (!(size <= CadNumericPolicy.coordinateAbs)) throw new BrepError('GEOMETRY', 'bored wall offset: the wall leaves the modeling range');
+  const clearance = linearToleranceMM(size);
+  if (heights.some(([lo, hi]) => !(hi - lo > clearance)))
+    throw new BrepError('GEOMETRY', 'bored wall offset: the offset would reach or cross the opposite cap');
+
+  // The four end vertices belong to the actual cap rails. Intersect the moved wall with
+  // those same planes, and rebuild only the incident straight edges from their endpoints.
+  const moved = new Map<string, Point>();
+  const vertices = brep.vertices.map(vertex => {
+    const cap = capCorners.get(vertex.id);
+    if (!cap) return vertex;
+    const y = vertex.point[1], z = (cap === bottom ? bottomZ : topZ)(next, y), point: Point = [next, y, z];
+    moved.set(vertex.id, point);
+    return { ...vertex, point };
+  });
+  const changedEdges = new Set<string>();
+  const edges = brep.edges.map(edge => {
+    if (!edge.vertices.some(id => moved.has(id))) return edge;
+    changedEdges.add(edge.id);
+    const controlPoints = edge.vertices.map((id, i) => moved.get(id) ?? edge.curve.controlPoints[i]);
+    return { ...edge, curve: { ...edge.curve, controlPoints } };
+  });
+  const edgeById = byId(edges), chartByLoop = new Map<string, AffineChart>(), changedLoops = new Set<string>();
+  const roundoff = 64 * Number.EPSILON * Math.max(1, size);
+  const faces = brep.faces.map(face => {
+    const original = charts.get(face);
+    if (!original) return face;
+    const poles = face.loops.flatMap(id => admitted.loops.get(id)!.coedges.flatMap(use =>
+      edgeById.get(admitted.coedges.get(use)!.edge)!.curve.controlPoints));
+    const seed = face === wall ? affineChart({ ...original.surface,
+      controlPoints: original.surface.controlPoints.map(row => row.map(([, y, z]): Point => [next, y, z])) }, face.sense) : original;
+    const chart = seed && coverAffineTrim(seed, face.sense, poles, roundoff);
+    if (!chart) throw new BrepError('GEOMETRY', 'bored wall offset: the offset cannot keep the trim on its planar support within the modeling range');
+    for (const id of face.loops) {
+      chartByLoop.set(id, chart);
+      if (chart !== original) changedLoops.add(id);
+    }
+    return chart === original ? face : { ...face, surface: chart.surface };
+  });
+  const coedges = brep.coedges.map(use => {
+    const chart = chartByLoop.get(use.loop);
+    if (!chart || !use.pcurve || (!changedLoops.has(use.loop) && !changedEdges.has(use.edge))) return use;
+    const { curve } = edgeById.get(use.edge)!;
+    // The chart already covers every pole, including the conic rims. Its UV projection also
+    // snaps endpoint roundoff to the closed parameter domain.
+    const controlPoints = curve.controlPoints.map(point => uvPoint(chart, point));
+    return { ...use, pcurve: { ...curve, id: use.pcurve.id, controlPoints } };
+  });
+  const candidate = { ...brep, vertices, edges, faces, coedges };
   const report = checkBrep(candidate, { strict: true });
   if (!report.valid) throw new BrepError('GEOMETRY', `bored wall offset: the offset solid is invalid: ${report.issues[0]}`, report);
   return candidate;
@@ -549,7 +666,7 @@ export function replaceAnnularCapIfAdmitted(brep: Brep, faceName: string, plane:
 export function healBoredPlateIfAdmitted(brep: Brep, faceName: string): Brep | undefined {
   if (typeof faceName !== 'string' || !faceName.trim() || faceName.includes('+')) return undefined;
   const flat = admittedAxialStock(brep, boredPlateKind(brep));
-  const tilted = flat ? undefined : readTiltedRectangularBoreForHeal(brep, faceName);
+  const tilted = flat ? undefined : readTiltedRectangularPlateBore(brep, faceName);
   const plate = flat ?? tilted;
   const selected = flat?.borePairs?.find(pair => pair.some(face => face.name === faceName)) ?? tilted?.selected;
   if (!plate || !selected) return undefined;

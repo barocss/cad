@@ -409,7 +409,15 @@ export function isBoredCapOffsetSource(nodes: readonly unknown[], index: number)
 /** Authored distance-only source with one or two bores. The kernel proves the selected face. */
 export function isBoredPlateOffsetSource(nodes: readonly unknown[], index: number): boolean {
   const base = offsetPlateBase(nodes, index);
-  return base !== undefined && isBoredPlateReplacementSource(nodes, base);
+  return base !== undefined && isBoredPlateOffsetBase(nodes, base);
+}
+
+function isBoredPlateOffsetBase(nodes: readonly unknown[], index: number): boolean {
+  if (isBoredPlateReplacementSource(nodes, index)) return true;
+  const node = nodes[index];
+  if (!textRecord(node) || node.kind !== 'replace-face') return false;
+  const source = precedingSolidParent(node, index);
+  return source !== undefined && isBoredPlateHole(nodes, source);
 }
 
 function plainExtrudeSketch(nodes: readonly unknown[], index: number): Record<string, unknown> | undefined {
@@ -532,7 +540,7 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       }
       const parent = value.nodes[parentIndex];
       if (!textRecord(parent)) return 'Offset face: a supported solid parent is required.';
-      if (boredPlateOffsets.has(parentIndex) || isBoredPlateReplacementSource(value.nodes, parentIndex)) {
+      if (boredPlateOffsets.has(parentIndex) || isBoredPlateOffsetBase(value.nodes, parentIndex)) {
         if (node.target !== undefined) return 'Offset face: this through-hole plate face needs a signed distance.';
         boredPlateOffsets.add(index);
         continue;

@@ -351,9 +351,9 @@ function hasTiltedRim(brep: Brep, topology: Topology, shell: BrepShell, members:
     && checkBrep(brep, { strict: true }).valid;
 }
 
-/** Identify the selected bore on a continued rectangular plate with one or two through bores. */
-export function readTiltedRectangularBoreForHeal(brep: Brep, faceName: string): {
-  readonly bottom: BrepFace; readonly top: BrepFace; readonly selected: readonly BrepFace[];
+/** Identify the sole bore or a named bore on a continued rectangular plate. */
+export function readTiltedRectangularPlateBore(brep: Brep, faceName?: string): {
+  readonly bottom: BrepFace; readonly top: BrepFace; readonly selected: readonly BrepFace[]; readonly bore: Cylinder;
 } | undefined {
   const [body] = brep.bodies, [shell] = brep.shells;
   const twoBore = brep.faces.length === 10, capLoops = twoBore ? 3 : 2;
@@ -361,14 +361,12 @@ export function readTiltedRectangularBoreForHeal(brep: Brep, faceName: string): 
   if (brep.bodies.length !== 1 || body.kind !== 'solid' || body.shells.length !== 1 || brep.shells.length !== 1
     || body.shells[0] !== shell.id || shell.body !== body.id || !shell.closed || shell.faces.length !== faces || brep.faces.length !== faces
     || brep.loops.length !== loops || brep.coedges.length !== uses || brep.edges.length !== edges || brep.vertices.length !== vertices) return;
-  const matches = brep.faces.filter(face => face.name === faceName);
-  if (matches.length !== 1) return;
-  const [selected] = matches;
+  if (twoBore && faceName === undefined) return;
+  const matches = faceName === undefined ? undefined : brep.faces.filter(face => face.name === faceName);
+  if (matches && matches.length !== 1) return;
+  const selected = matches?.[0];
   const topology = readTopology(brep);
   try {
-    const cylinder = inwardCylinder(selected);
-    if (!cylinder || cylinder.a[0] !== 0 || cylinder.a[1] !== 0) return;
-    const tolerance = linearToleranceMM(Math.max(cylinder.r, geometryScaleMM(brep.vertices.map(vertex => vertex.point))));
     const caps = brep.faces.filter(face => face.loops.length === capLoops);
     if (caps.length !== 2) return;
     const [a, b] = caps.map(cap => {
@@ -376,11 +374,15 @@ export function readTiltedRectangularBoreForHeal(brep: Brep, faceName: string): 
       if (loops.length !== capLoops - 1) return;
       const bindings = loops.map(loop => loop?.face === cap.id ? readInnerRim(loop, topology, shell) : undefined);
       if (bindings.some(binding => binding === undefined)) return;
-      const hits = bindings.filter(binding => binding?.members.includes(selected));
+      const hits = selected ? bindings.filter(binding => binding?.members.includes(selected)) : bindings;
       return hits.length === 1 ? hits[0] : undefined;
     });
     if (!a || !b || new Set(a.members).size !== 2 || a.members.some(face => !b.members.includes(face))) return;
-    const mate = inwardCylinder(a.members.find(face => face !== selected)!);
+    const first = selected ?? a.members[0];
+    const cylinder = inwardCylinder(first);
+    if (!cylinder || cylinder.a[0] !== 0 || cylinder.a[1] !== 0) return;
+    const tolerance = linearToleranceMM(Math.max(cylinder.r, geometryScaleMM(brep.vertices.map(vertex => vertex.point))));
+    const mate = inwardCylinder(a.members.find(face => face !== first)!);
     if (!mate || !sameCylinder(mate, cylinder, tolerance)) return;
     const rims = [a, b].map(rim => readPlanarRim(rim.loop, rim.boundary, topology, shell, cylinder, tolerance, false, capLoops));
     const lower = rims.find(rim => rim?.side === -1), upper = rims.find(rim => rim?.side === 1);
@@ -390,7 +392,7 @@ export function readTiltedRectangularBoreForHeal(brep: Brep, faceName: string): 
       || !keepsRectangularStock(lower, upper, topology, shell, cylinder.a, tolerance)
       || (twoBore && !hasSeparatePeerBore(lower, upper, topology, shell, a.members, cylinder, tolerance))
       || !checkBrep(brep, { strict: true }).valid) return;
-    return { bottom: lower.face, top: upper.face, selected: a.members };
+    return { bottom: lower.face, top: upper.face, selected: a.members, bore: cylinder };
   } catch { /* Unrecognized native geometry cannot establish a bore. */ }
 }
 

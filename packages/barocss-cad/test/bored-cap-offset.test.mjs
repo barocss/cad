@@ -150,6 +150,71 @@ for (const [face, axis, sign, station] of cardinalWalls) {
 }
 
 for (const sign of [1, -1]) {
+  const cap = sign === 1 ? 'b.top' : 'b.bottom', fixed = sign === 1 ? 0 : 10;
+  const face = 'b.side1', height = (x, y) => fixed + sign * (8 + x / 10 + y / 5);
+  test(`signed right wall offsets retain the exact bore and tilted ${cap} support`, () => {
+    const doc = plate();
+    doc.features.push({
+      id: 'tilt', kind: 'replace-face', target: 'h', face: cap,
+      plane: { origin: [0, 0, height(0, 0)], normal: [-1, -2, 10 * sign] },
+    });
+    const source = freeze(solid(doc)), saved = structuredClone(source);
+    const frame = boredPlateWallOffsetFrame(source, face);
+    assert.deepEqual(frame.normal, [1, 0, 0]);
+    const [x, y, z] = frame.anchor;
+    close(x, 40);
+    assert.ok(y > 0 && y < 30 && (z - fixed) * sign > 0 && (height(x, y) - z) * sign > 0);
+    for (const distance of [5, -4, -25.9]) {
+      const width = 40 + distance;
+      const result = offsetBoredPlateWallIfAdmitted(source, face, distance);
+      assert.ok(assertNativePlate(result).maximumEdgeSurfaceGap < 1e-9);
+      assert.deepEqual(incidence(result), incidence(source));
+      for (const [i, vertex] of source.vertices.entries()) {
+        const [x, y, z] = vertex.point;
+        const expected = Math.abs(x - 40) < 1e-9 ? [width, y, Math.abs(z - fixed) < 1e-9 ? fixed : height(width, y)] : vertex.point;
+        result.vertices[i].point.forEach((actual, k) => close(actual, expected[k]));
+      }
+      for (const [i, original] of source.faces.entries()) {
+        const before = faceGeometry(original), after = faceGeometry(result.faces[i]);
+        if (before.kind === 'cylinder') {
+          assert.deepEqual(after, before);
+        } else {
+          assert.equal(after.kind, 'plane');
+          after.n.forEach((value, k) => close(value, before.n[k]));
+          const support = ({ o, n }) => n.reduce((sum, value, k) => sum + value * o[k], 0);
+          close(support(after), original.name === face ? width : support(before));
+        }
+      }
+      const halves = result.faces.filter(candidate => faceGeometry(candidate).kind === 'cylinder');
+      close(createCylindricalBoreCheck(result)(halves), 6);
+      close(brepMassProperties(result, 1).volume, 30 * width * (11 + width / 20) - 98.1 * Math.PI, 1e-7);
+      const edit = { id: 'offset', kind: 'offset-face', target: 'tilt', face, distance };
+      assert.deepEqual(solid({ ...doc, features: [...doc.features, edit] }), result);
+    }
+    for (const distance of [-26, -27]) {
+      assert.throws(() => offsetBoredPlateWallIfAdmitted(source, face, distance), /reach or cross the bore/);
+    }
+    for (const other of ['b.side0', 'b.side2', 'b.side3', 'b.top', 'b.bottom', 'h.side0#1']) {
+      assert.equal(boredPlateWallOffsetFrame(source, other), undefined);
+      assert.equal(offsetBoredPlateWallIfAdmitted(source, other, 5), undefined);
+    }
+    assert.deepEqual(source, saved);
+  });
+}
+
+test('a right wall offset refuses exact contact with the fixed cap', () => {
+  const doc = plate();
+  doc.features.push({ id: 'tilt', kind: 'replace-face', target: 'h', face: 'b.top',
+    plane: { origin: [0, 0, 30], normal: [1, 0, 2] } });
+  const source = freeze(solid(doc)), saved = structuredClone(source);
+  assertNativePlate(offsetBoredPlateWallIfAdmitted(source, 'b.side1', 19.9));
+  for (const distance of [20, 21]) {
+    assert.throws(() => offsetBoredPlateWallIfAdmitted(source, 'b.side1', distance), /reach or cross the opposite cap/);
+  }
+  assert.deepEqual(source, saved);
+});
+
+for (const sign of [1, -1]) {
   const face = sign === 1 ? 'b.top' : 'b.bottom', fixedZ = sign === 1 ? 0 : 10;
   test(`replace ${face} of a native two-bore plate with both exact trim rings intact`, () => {
     const doc = twoBorePlate(), source = freeze(solid(doc)), before = structuredClone(source);
@@ -214,6 +279,8 @@ for (const sign of [1, -1]) {
     assert.throws(() => replaceBoredCapIfAdmitted(source, face, { ...plane, origin: [0, 0, fixedZ] }), /opposite cap at one corner/);
     assert.equal(boredCapOffsetFrame(source, face), undefined);
     assert.equal(offsetBoredCapIfAdmitted(source, face, 1), undefined);
+    assert.equal(boredPlateWallOffsetFrame(result, 'b.side1'), undefined);
+    assert.equal(offsetBoredPlateWallIfAdmitted(result, 'b.side1', 5), undefined);
     assert.deepEqual(source, before);
   });
 }
