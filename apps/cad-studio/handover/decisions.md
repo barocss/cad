@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1453: [Offset the four walls of a flat two-bore plate](notes/offset-flat-two-bore-plate-walls-2026-11-21/README.md), #17. Verify both fixed diameters, each nearest-bore contact and Studio reopen.
 - D1452: [Offset the other three walls of a rectangular through-bore plate](notes/offset-bored-plate-other-walls-2026-11-21/README.md), #17. Verify X−, Y− and Y+ signed offsets, bore clearance and Studio reopen.
 - D1451: [Offset the right wall of a rectangular through-bore plate](notes/offset-bored-plate-right-wall-2026-11-21/README.md), #17. Keep the exact 6 mm bore and other supports through signed wall moves and Studio reopen.
 - D1450: [Move the source plane after two tilted bore heals](notes/move-donor-after-tilted-heals-2026-11-21/README.md), #17. Qualify a live upstream move, exact healed geometry and corner-contact refusal in Studio and MCP.

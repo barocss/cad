@@ -7,18 +7,23 @@ import { withMcpSession } from './mcp-browser-session.mjs';
 const [output, input, view = 'Right'] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
 assert.ok(output && input && isAbsolute(output) && relative(resolve(app, '../..'), output).startsWith('../'));
 const walls = {
-  Right: ['n1.side1', 0, 1, 40, -26],
-  Left: ['n1.side3', 0, -1, 0, -8],
-  Front: ['n1.side0', 1, -1, 0, -6],
-  Back: ['n1.side2', 1, 1, 30, -18],
+  Right: ['n1.side1', 0, 1, 40],
+  Left: ['n1.side3', 0, -1, 0],
+  Front: ['n1.side0', 1, -1, 0],
+  Back: ['n1.side2', 1, 1, 30],
 };
 assert.ok(Object.hasOwn(walls, view));
-const [faceName, axis, sign, station, contact] = walls[view];
+const [faceName, axis, sign, station] = walls[view];
 const bytes = await readFile(input), source = JSON.parse(bytes);
+const bores = source.nodes.filter(node => node.kind === 'hole').map(({ center, radius }) =>
+  ({ center, radius, volume: 10 * Math.PI * radius ** 2 }));
+assert.ok(bores.length === 1 || bores.length === 2);
+const contact = Math.max(...bores.map(({ center, radius }) => sign * (center[axis] - station) + radius));
 const positive = 5, negative = -4, centre = [20, 15, 5], normal = [0, 0, 0];
 centre[axis] = station;
 normal[axis] = sign;
-const volumeAt = distance => 12000 + distance * (axis === 0 ? 300 : 400) - 90 * Math.PI;
+const removedVolume = bores.reduce((sum, bore) => sum + bore.volume, 0);
+const volumeAt = distance => 12000 + distance * (axis === 0 ? 300 : 400) - removedVolume;
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/viewport/Viewport.tsx',
   'apps/cad-studio/test/offset-bored-wall-browser.mjs',
@@ -28,17 +33,22 @@ const pins = [
 ];
 const f = await createFlow({
   name: 'offset-bored-wall', envFrozen: 'BORED_WALL_OFFSET_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: `Move the ${view.toLowerCase()} exterior wall of a single-bore rectangular plate without moving the bore.`,
-  limits: ['One 40 × 30 × 10 mm flat rectangular plate and one straight Ø6 bore at (11, 9) mm.'],
+  qualification: `Move the ${view.toLowerCase()} exterior wall of a flat plate and retain all ${bores.length} through bore(s).`,
+  limits: [`One 40 × 30 × 10 mm flat rectangular plate with ${bores.length} straight circular bore(s).`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, createCylindricalBoreCheck, faceGeometry } from '@barocss/cad';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8')), [{ brep }] = partBreps(doc);
-const walls = brep.faces.filter(face => faceGeometry(face).kind === 'cylinder');
+const walls = brep.faces.map(face => ({ face, geometry: faceGeometry(face) })).filter(({ geometry }) => geometry.kind === 'cylinder');
+const readDiameter = createCylindricalBoreCheck(brep);
+const diameters = ${JSON.stringify(bores.map(({ center }) => center))}.map(([x, y]) => {
+  const pair = walls.filter(({ geometry }) => Math.hypot(geometry.c[0] - x, geometry.c[1] - y) < 1e-9);
+  return readDiameter(pair.map(({ face }) => face));
+});
 console.log(JSON.stringify({
   brep, report: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1),
-  diameter: createCylindricalBoreCheck(brep)(walls),
+  diameters,
   supports: Object.fromEntries(brep.faces.map(face => {
     const g = faceGeometry(face);
     return [face.name, g.kind === 'plane' ? [g.n, g.n.reduce((sum, value, i) => sum + value * g.o[i], 0)] : g];
@@ -59,17 +69,22 @@ const incidence = ({ bodies, shells, faces, loops, coedges, edges, vertices }) =
 async function measure(label, doc, distance, before) {
   const native = await f.inspect(label, doc), volume = volumeAt(distance), worker = (await f.bodies()).bodies;
   assert.ok(native.report.valid, native.report.issues.join('\n'));
-  assert.deepEqual(native.report.counts, { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 });
-  assert.equal(native.report.topology[0].genus, 1);
+  const boreCount = bores.length;
+  assert.deepEqual(native.report.counts, { bodies: 1, shells: 1, faces: 6 + 2 * boreCount, loops: 6 + 4 * boreCount,
+    coedges: 24 + 12 * boreCount, edges: 12 + 6 * boreCount, vertices: 8 + 4 * boreCount });
+  assert.equal(native.report.topology[0].genus, boreCount);
   assert.ok(native.report.maximumPcurveGap < 1e-9 && native.report.maximumEdgeSurfaceGap < 1e-9);
-  near(native.diameter, 6);
+  bores.forEach(({ radius }, index) => near(native.diameters[index], 2 * radius));
   assert.equal(worker.length, 1);
   near(worker[0].volume, volume);
   near(native.mass.volume, volume);
-  const limit = station + sign * distance, removed = 90 * Math.PI, stock = volume + removed;
+  const limit = station + sign * distance, stock = volume + removedVolume;
   const stockCentre = [20, 15];
   stockCentre[axis] += sign * distance / 2;
-  const centroid = [11, 9].map((value, k) => (stock * stockCentre[k] - removed * value) / volume).concat(5);
+  const centroid = stockCentre.map((value, k) => {
+    const holeMoment = bores.reduce((sum, bore) => sum + bore.volume * bore.center[k], 0);
+    return (stock * value - holeMoment) / volume;
+  }).concat(5);
   native.mass.centroid.forEach((value, axis) => near(value, centroid[axis]));
   if (before) {
     assert.deepEqual(incidence(native.brep), incidence(before.brep));
@@ -78,7 +93,7 @@ async function measure(label, doc, distance, before) {
     assert.deepEqual(native.supports, { ...before.supports, [faceName]: [normal, sign * limit] });
   }
   f.report.observations.push({ label, distance, limit, volume, nativeVolume: native.mass.volume,
-    workerVolume: worker[0].volume, diameter: native.diameter, maximumPcurveGap: native.report.maximumPcurveGap });
+    workerVolume: worker[0].volume, diameters: native.diameters, maximumPcurveGap: native.report.maximumPcurveGap });
   return native;
 }
 

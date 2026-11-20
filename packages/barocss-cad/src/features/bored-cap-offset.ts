@@ -10,8 +10,10 @@ type XY = [number, number];
 type StockKind = 'bored' | 'two-bore' | 'circular' | 'annular';
 type Cap = { readonly point: Point; readonly sign: 1 | -1; readonly opposite: number; readonly min: XY; readonly max: XY;
   readonly center: XY; readonly radius: number };
+type BoreDisk = { readonly center: Point; readonly radius: number };
 type AxialStock = {
   readonly bottom: BrepFace; readonly top: BrepFace; readonly borePairs?: readonly (readonly BrepFace[])[];
+  readonly boreDisks?: readonly BoreDisk[];
   readonly lo: number; readonly hi: number; readonly anchorX: number; readonly anchorY: number; readonly radius: number;
   readonly min: XY; readonly max: XY; readonly center: XY;
 };
@@ -51,7 +53,7 @@ function boreClearsRectangle([x, y]: Point, radius: number, [x0, y0]: XY, [x1, y
 }
 
 /** Prove that the two native half cylinders together cover a full circle. */
-function cylinderPair(cylinders: readonly BrepFace[], extent: number, out: 1 | -1): { center: Point; radius: number } | undefined {
+function cylinderPair(cylinders: readonly BrepFace[], extent: number, out: 1 | -1): BoreDisk | undefined {
   if (cylinders.length !== 2) return;
   const roundoff = 64 * Number.EPSILON * Math.max(1, extent);
   const halves = [];
@@ -253,7 +255,8 @@ function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined
       || !(dist(first.center, second.center) > first.radius + second.radius + tolerance)) return;
     const [x, y] = first.center;
     const left = Math.min(x - first.radius, second.center[0] - second.radius) - min[0];
-    return { bottom, top, borePairs: lower, lo, hi, min, max, radius: first.radius, center: [x, y], anchorX: min[0] + left / 2, anchorY: y };
+    return { bottom, top, borePairs: lower, boreDisks: [first, second], lo, hi, min, max,
+      radius: first.radius, center: [x, y], anchorX: min[0] + left / 2, anchorY: y };
   }
   const diameter = readDiameter(cylinders);
   const bore = faceGeometry(cylinders[0], extent);
@@ -262,7 +265,8 @@ function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined
   const [x, y] = bore.c, radius = diameter / 2, left = x - radius - min[0];
   if (!boreClearsRectangle(bore.c, radius, min, max, tolerance)) return undefined;
 
-  return { bottom, top, borePairs: [cylinders], lo, hi, min, max, radius, center: [x, y], anchorX: min[0] + left / 2, anchorY: y };
+  return { bottom, top, borePairs: [cylinders], boreDisks: [{ center: bore.c, radius }], lo, hi, min, max,
+    radius, center: [x, y], anchorX: min[0] + left / 2, anchorY: y };
 }
 
 function admittedCap(brep: Brep, faceName: string, kind: StockKind = 'bored'): Cap | undefined {
@@ -339,8 +343,8 @@ export function offsetBoredCapIfAdmitted(brep: Brep, faceName: string, distance:
 function admittedCardinalWall(brep: Brep, faceName: string) {
   const matches = brep.faces.filter(face => face.name === faceName), [wall] = matches;
   if (matches.length !== 1 || wall.loops.length !== 1 || wall.surface.kind !== 'surface' || wall.surface.degreeU !== 1) return;
-  const stock = admittedAxialStock(brep, 'bored');
-  if (!stock) return;
+  const stock = admittedAxialStock(brep, boredPlateKind(brep));
+  if (!stock?.boreDisks) return;
   const support = faceGeometry(wall);
   if (support.kind !== 'plane') return;
   const axis = support.n[0] !== 0 ? 0 : 1, transverse = axis === 0 ? 1 : 0;
@@ -369,10 +373,10 @@ function admittedCardinalWall(brep: Brep, faceName: string) {
     sideSigns.add(geometry.n[transverse]);
   }
   if (sideSigns.size !== 2) return;
-  return { stock, axis, sign, station, corners, faces: new Set([wall, ...adjacent]), edges };
+  return { stock, boreDisks: stock.boreDisks, axis, sign, station, corners, faces: new Set([wall, ...adjacent]), edges };
 }
 
-/** The center and outward normal of a cardinal wall on a flat, single-bore rectangular plate. */
+/** The center and outward normal of a cardinal wall on a flat rectangular plate with one or two bores. */
 export function boredPlateWallOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
   const admitted = admittedCardinalWall(brep, faceName);
   if (!admitted) return;
@@ -388,12 +392,13 @@ export function offsetBoredPlateWallIfAdmitted(brep: Brep, faceName: string, dis
   if (!admitted) return;
   if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
     throw new BrepError('INPUT', 'bored wall offset: distance must be nonzero and within the modeling range');
-  const { stock, axis, sign, station, corners, faces, edges } = admitted;
+  const { stock, boreDisks, axis, sign, station, corners, faces, edges } = admitted;
   const next = station + sign * distance;
   const extent = Math.max(Math.abs(next), geometryScaleMM(brep.vertices.map(vertex => vertex.point)));
   if (!(extent <= CadNumericPolicy.coordinateAbs)) throw new BrepError('GEOMETRY', 'bored wall offset: the wall leaves the modeling range');
   if (next === station) throw new BrepError('GEOMETRY', 'bored wall offset: distance is too small to move the wall');
-  if (!((next - stock.center[axis]) * sign - stock.radius > linearToleranceMM(extent)))
+  const clearance = linearToleranceMM(extent);
+  if (!boreDisks.every(({ center, radius }) => (next - center[axis]) * sign - radius > clearance))
     throw new BrepError('GEOMETRY', 'bored wall offset: the offset would reach or cross the bore');
 
   const moved = (point: Point): Point => {
@@ -410,8 +415,8 @@ export function offsetBoredPlateWallIfAdmitted(brep: Brep, faceName: string, dis
     if (loop.kind === 'inner' && (loop.face === stock.top.id || loop.face === stock.bottom.id))
       capTrims.set(loop.id, capProjection(min, max, loop.face === stock.top.id));
   }
-  // The straight boundaries keep their original UV charts. The bore stays in place, so only
-  // its uses on the resized caps need new UV coordinates from their unchanged 3D rim poles.
+  // The straight boundaries keep their original UV charts. The bores stay in place, so only
+  // their uses on the resized caps need new UV coordinates from their unchanged 3D rim poles.
   const candidate: Brep = {
     ...brep,
     vertices: brep.vertices.map(vertex => corners.has(vertex.id) ? { ...vertex, point: moved(vertex.point) } : vertex),

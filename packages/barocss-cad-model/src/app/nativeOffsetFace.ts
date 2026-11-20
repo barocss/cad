@@ -5,7 +5,7 @@ import { boredCapOffsetFrame, boredPlateWallOffsetFrame } from '@barocss/cad/int
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
-import { isBoredCapOffsetSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
+import { isBoredPlateOffsetSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, massOfRef, partBreps, type BodyResult } from '../engine/evaluate';
 import { bodyKeyFor, withIds } from '../engine/ids';
 import { refusal } from '../engine/refusal';
@@ -345,7 +345,7 @@ export function resolveDirectOffsetFace(ctx: Ctx): { parent: ReturnType<typeof r
   if (display.exact?.kind !== 'plane') return undefined;
   const node = ctx.doc.nodes[ref.node];
   if (ref.side !== 'solid') return undefined;
-  const boredPlate = isBoredCapOffsetSource(ctx.doc.nodes, ref.node);
+  const boredPlate = isBoredPlateOffsetSource(ctx.doc.nodes, ref.node);
   if (!boredPlate && node.kind !== 'draft' && node.kind !== 'offset-face' && node.kind !== 'extrude') return undefined;
   if (node.kind === 'extrude' && !node.draft &&
       (!isStraightHexagonalExtrusion(ctx.doc.nodes, node) || display.nativeAxisPlane?.axis === 'z')) return undefined;

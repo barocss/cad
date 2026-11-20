@@ -17,11 +17,12 @@ const plate = ({ min = [0, 0], max = [40, 30], height = 10, from = 0, center = [
 });
 const solid = spec => evaluateCadPart(spec).outputs[0].brep;
 const close = (actual, expected, tolerance = 1e-9) => assert.ok(Math.abs(actual - expected) < tolerance, `${actual} != ${expected}`);
-const assertNativePlate = brep => {
+const assertNativePlate = (brep, boreCount = 1) => {
   const report = checkBrep(brep, { strict: true });
   assert.equal(report.valid, true, report.issues.join('\n'));
-  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 });
-  assert.equal(report.topology[0].genus, 1);
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6 + 2 * boreCount, loops: 6 + 4 * boreCount,
+    coedges: 24 + 12 * boreCount, edges: 12 + 6 * boreCount, vertices: 8 + 4 * boreCount });
+  assert.equal(report.topology[0].genus, boreCount);
   assert.ok(report.maximumPcurveGap < 1e-9);
   return report;
 };
@@ -68,70 +69,85 @@ const tube = (center = [14, 12]) => {
   return doc;
 };
 
-const cardinalWalls = [
-  ['b.side0', 1, -1, 0, -6], ['b.side1', 0, 1, 40, -26],
-  ['b.side2', 1, 1, 30, -18], ['b.side3', 0, -1, 0, -8],
-];
-
-for (const [face, axis, sign, station, contact] of cardinalWalls) {
-  test(`signed offsets on ${face} keep the exact rectangular plate bore fixed`, () => {
-    const doc = plate(), source = freeze(solid(doc)), saved = structuredClone(source);
-    const anchor = [20, 15, 5], normal = [0, 0, 0];
-    anchor[axis] = station;
-    normal[axis] = sign;
-    assert.deepEqual(boredPlateWallOffsetFrame(source, face), { anchor, normal });
-    for (const other of ['b.top', 'b.bottom', 'h.side0#1']) {
-      assert.equal(boredPlateWallOffsetFrame(source, other), undefined);
-      assert.equal(offsetBoredPlateWallIfAdmitted(source, other, 1), undefined);
-    }
-    for (const distance of [5, -4, contact + 0.1]) {
-      const limit = station + sign * distance, result = offsetBoredPlateWallIfAdmitted(source, face, distance);
-      assertNativePlate(result);
-      assert.deepEqual(incidence(result), incidence(source));
-      assert.deepEqual(result.vertices.map(({ point }) => point),
-        source.vertices.map(({ point }) => point.map((value, k) => k === axis && value === station ? limit : value)));
-      const walls = result.faces.filter(candidate => faceGeometry(candidate).kind === 'cylinder');
-      assert.equal(walls.length, 2);
-      close(createCylindricalBoreCheck(result)(walls), 6);
-      for (const candidate of source.faces) {
-        const before = faceGeometry(candidate), after = faceGeometry(result.faces.find(item => item.id === candidate.id));
-        if (before.kind === 'cylinder') {
-          assert.deepEqual(after, before);
-          continue;
-        }
-        assert.equal(after.kind, 'plane');
-        const support = plane => plane.n.reduce((sum, component, k) => sum + component * plane.o[k], 0);
-        before.n.forEach((value, k) => close(after.n[k], value));
-        close(support(after), candidate.name === face ? sign * limit : support(before));
-      }
-      const min = [0, 0], max = [40, 30];
-      (sign === 1 ? max : min)[axis] = limit;
-      const outer = (max[0] - min[0]) * (max[1] - min[1]) * 10, cut = 90 * Math.PI, volume = outer - cut;
-      const mass = brepMassProperties(result, 1);
-      close(mass.volume, volume, 1e-7);
-      for (const [k, center] of [11, 9].entries()) {
-        close(mass.centroid[k], (outer * (min[k] + max[k]) / 2 - cut * center) / volume, 1e-7);
-      }
-      close(mass.centroid[2], 5);
-      const edit = { id: 'offset', kind: 'offset-face', target: 'h', face, distance };
-      assert.deepEqual(solid({ ...doc, features: [...doc.features, edit] }), result);
-      if (distance === 5 || distance === -4) assert.deepEqual(offsetBoredPlateWallIfAdmitted(result, face, -distance), source);
-    }
-    for (const distance of [contact, contact - 1]) {
-      assert.throws(() => offsetBoredPlateWallIfAdmitted(source, face, distance), /reach or cross the bore/);
-    }
-    for (const distance of [0, NaN, Infinity]) {
-      assert.throws(() => offsetBoredPlateWallIfAdmitted(source, face, distance), /distance/);
-    }
-    assert.deepEqual(source, saved);
-  });
-}
-
 const twoBorePlate = () => {
   const doc = plate();
   doc.features.push({ id: 'j', kind: 'hole', target: 'h', center: [27, 20], radius: 2, face: 'b.top' });
   return doc;
 };
+
+const cardinalWalls = [
+  ['b.side0', 1, -1, 0], ['b.side1', 0, 1, 40],
+  ['b.side2', 1, 1, 30], ['b.side3', 0, -1, 0],
+];
+const plateBores = [{ center: [11, 9], radius: 3 }, { center: [27, 20], radius: 2 }];
+
+for (const [face, axis, sign, station] of cardinalWalls) {
+  for (const boreCount of [1, 2]) {
+    test(`signed offsets on ${face} preserve ${boreCount} exact through bore(s)`, () => {
+      const doc = boreCount === 1 ? plate() : twoBorePlate(), bores = plateBores.slice(0, boreCount);
+      const source = freeze(solid(doc)), saved = structuredClone(source);
+      const anchor = [20, 15, 5], normal = [0, 0, 0];
+      anchor[axis] = station;
+      normal[axis] = sign;
+      assert.deepEqual(boredPlateWallOffsetFrame(source, face), { anchor, normal });
+      for (const other of ['b.top', 'b.bottom', 'h.side0#1']) {
+        assert.equal(boredPlateWallOffsetFrame(source, other), undefined);
+        assert.equal(offsetBoredPlateWallIfAdmitted(source, other, 1), undefined);
+      }
+      const contact = Math.max(...bores.map(({ center, radius }) => sign * (center[axis] - station) + radius));
+      for (const distance of [5, -4, contact + 0.1]) {
+        const limit = station + sign * distance, result = offsetBoredPlateWallIfAdmitted(source, face, distance);
+        assertNativePlate(result, boreCount);
+        assert.deepEqual(incidence(result), incidence(source));
+        assert.deepEqual(result.vertices.map(({ point }) => point),
+          source.vertices.map(({ point }) => point.map((value, k) => k === axis && value === station ? limit : value)));
+        const walls = result.faces.filter(candidate => faceGeometry(candidate).kind === 'cylinder');
+        assert.equal(walls.length, 2 * boreCount);
+        const readDiameter = createCylindricalBoreCheck(result);
+        for (const { center, radius } of bores) {
+          const pair = walls.filter(candidate => {
+            const { c } = faceGeometry(candidate);
+            return Math.hypot(c[0] - center[0], c[1] - center[1]) < 1e-9;
+          });
+          assert.equal(pair.length, 2);
+          close(readDiameter(pair), 2 * radius);
+        }
+        for (const candidate of source.faces) {
+          const before = faceGeometry(candidate), after = faceGeometry(result.faces.find(item => item.id === candidate.id));
+          if (before.kind === 'cylinder') {
+            assert.deepEqual(after, before);
+            continue;
+          }
+          assert.equal(after.kind, 'plane');
+          const support = plane => plane.n.reduce((sum, component, k) => sum + component * plane.o[k], 0);
+          before.n.forEach((value, k) => close(after.n[k], value));
+          close(support(after), candidate.name === face ? sign * limit : support(before));
+        }
+        const min = [0, 0], max = [40, 30];
+        (sign === 1 ? max : min)[axis] = limit;
+        const outer = (max[0] - min[0]) * (max[1] - min[1]) * 10;
+        const holes = bores.map(({ radius, center }) => ({ center, volume: 10 * Math.PI * radius ** 2 }));
+        const volume = outer - holes.reduce((sum, hole) => sum + hole.volume, 0), mass = brepMassProperties(result, 1);
+        close(mass.volume, volume, 1e-7);
+        for (const k of [0, 1]) {
+          const holeMoment = holes.reduce((sum, hole) => sum + hole.volume * hole.center[k], 0);
+          close(mass.centroid[k], (outer * (min[k] + max[k]) / 2 - holeMoment) / volume, 1e-7);
+        }
+        close(mass.centroid[2], 5);
+        const edit = { id: 'offset', kind: 'offset-face', target: doc.features.at(-1).id, face, distance };
+        assert.deepEqual(solid({ ...doc, features: [...doc.features, edit] }), result);
+        if (distance === 5 || distance === -4) assert.deepEqual(offsetBoredPlateWallIfAdmitted(result, face, -distance), source);
+      }
+      for (const distance of [contact, contact - 1]) {
+        assert.throws(() => offsetBoredPlateWallIfAdmitted(source, face, distance), /reach or cross the bore/);
+      }
+      for (const distance of [0, NaN, Infinity]) {
+        assert.throws(() => offsetBoredPlateWallIfAdmitted(source, face, distance), /distance/);
+      }
+      assert.deepEqual(source, saved);
+    });
+  }
+}
 
 for (const sign of [1, -1]) {
   const face = sign === 1 ? 'b.top' : 'b.bottom', fixedZ = sign === 1 ? 0 : 10;
