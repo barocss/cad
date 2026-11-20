@@ -74,6 +74,32 @@ test('Delete face refuses the cap, blind hole and a changed stored signature', a
   assert.equal(result.error.code, 'REFERENCE_MOVED');
 });
 
+test('Delete face reopens the two-bore plate after filling each bore in either order', async () => {
+  const source = withNode(plate(), { kind: 'hole', parent: { node: 2, side: 'solid' }, center: [27, 20], radius: 2, face: 'n1.top' });
+  for (const order of [['n2.side0', 'n3.side0'], ['n3.side0', 'n2.side0']]) {
+    let doc = source;
+    for (const face of order) {
+      const before = await evaluate(doc);
+      assert.ok(before.ok);
+      const edit = { action: 'command', command: 'delete-face', faces: [face], expectedRevision: revisionOf(doc) };
+      const reply = await dispatchTool({ doc, bodies: before.bodies }, 'features', edit, evaluate);
+      assert.ok(reply.changed && !reply.isError, reply.content);
+      const reopened = readStudioDoc(JSON.stringify(reply.state.doc));
+      assert.ok('doc' in reopened);
+      const node = reopened.doc.nodes.at(-1);
+      assert.ok(node?.kind === 'delete-face');
+      assert.deepEqual(node.parent, { node: doc.nodes.length - 1, side: 'solid' });
+      assert.ok(node.faces[0].startsWith(face + '#'));
+      assert.deepEqual(reopened.doc.nodes.slice(0, -1), doc.nodes);
+      doc = reopened.doc;
+    }
+    const finished = await evaluate(doc);
+    assert.ok(finished.ok);
+    assert.equal(finished.bodies[0].volume, 12000);
+    assert.equal(partBreps(doc)[0].brep.faces.length, 6);
+  }
+});
+
 test('Delete face heals the exact inside fillet of a straight L-section', async () => {
   const sketch = withNode(emptyDoc(), { kind: 'sketch', profile: 'polygon',
     points: [[0, 0], [3, 0], [3, 27], [40, 27], [40, 30], [0, 30]] });

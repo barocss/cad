@@ -375,10 +375,14 @@ export function isBoredPlateHole(nodes: readonly unknown[], index: number): bool
   return throughHoleStockProfile(nodes, index) === 'rectangle';
 }
 
+function isTwoBorePlate(nodes: readonly unknown[], index: number): boolean {
+  const stockIndex = throughHoleStockIndex(nodes, index);
+  return stockIndex !== undefined && isBoredPlateHole(nodes, stockIndex);
+}
+
 /** Authored rectangular plate with one or two straight through bores. The kernel verifies both trims. */
 export function isBoredPlateReplacementSource(nodes: readonly unknown[], index: number): boolean {
-  const stockIndex = throughHoleStockIndex(nodes, index);
-  return isBoredPlateHole(nodes, index) || (stockIndex !== undefined && isBoredPlateHole(nodes, stockIndex));
+  return isBoredPlateHole(nodes, index) || isTwoBorePlate(nodes, index);
 }
 
 /** Authored cylindrical extrusion with one straight through bore. The kernel verifies both supports. */
@@ -430,7 +434,11 @@ export { isDraftedFaceReplacementSource as isDraftedCapReplacementSource };
 
 /** Identify a rectangular source for bore healing. The kernel proves the selected wall pair. */
 export function isBoredPlateHealSource(nodes: readonly unknown[], index: number): boolean {
-  return isBoredPlateReplacementSource(nodes, index) || isBoredCapOffsetSource(nodes, index);
+  if (isBoredPlateReplacementSource(nodes, index) || isBoredCapOffsetSource(nodes, index)) return true;
+  const heal = nodes[index];
+  if (!textRecord(heal) || heal.kind !== 'delete-face') return false;
+  const plate = precedingSolidParent(heal, index);
+  return plate !== undefined && isTwoBorePlate(nodes, plate);
 }
 
 /** Identify the authored fillet. The kernel proves the current solid and its concave arc. */

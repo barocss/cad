@@ -4,12 +4,15 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const [output, variant = 'single'] = process.argv.slice(2);
+const [output, variant = 'single', mode] = process.argv.slice(2);
 assert.ok(output && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
 assert.ok(['single', 'first', 'second'].includes(variant));
 const twoBores = variant !== 'single';
-const removed = variant === 'second' ? { name: 'n3.side0', x: 27, y: 20 } : { name: 'n2.side0', x: 11, y: 9 };
-const retainedRadius = variant === 'first' ? 2 : variant === 'second' ? 3 : 0;
+assert.ok(mode === undefined || (mode === 'successive' && twoBores));
+const firstBore = { name: 'n2.side0', x: 11, y: 9, radius: 3 };
+const secondBore = { name: 'n3.side0', x: 27, y: 20, radius: 2 };
+const [removed, survivor] = variant === 'second' ? [secondBore, firstBore] : [firstBore, secondBore];
+const sequence = mode === 'successive' ? [removed, survivor] : [removed];
 const source = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
@@ -24,9 +27,10 @@ if (twoBores) {
   source.outputs = { b3: { node: 3, side: 'solid' } };
   source.nextId = 4;
 }
-const initialCount = source.nodes.length, finalBody = 'b' + initialCount;
+const initialCount = source.nodes.length, boreCount = twoBores ? 2 : 1;
 const initialVolume = 12000 - (twoBores ? 130 : 90) * Math.PI;
-const finalVolume = 12000 - 10 * Math.PI * retainedRadius ** 2;
+const retainedRadius = step => boreCount - step === 1 ? survivor.radius : 0;
+const volumeAfter = step => step === 0 ? initialVolume : 12000 - 10 * Math.PI * retainedRadius(step) ** 2;
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/files/documentFile.ts', 'apps/cad-studio/src/state/commandApply.ts',
   'packages/barocss-cad-model/src/app/deleteFaceCommand.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
@@ -59,24 +63,24 @@ async function openDoc(doc, name) {
 }
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-7, `${actual} != ${expected}`);
 
-async function measure(label, doc, before) {
+async function measure(label, doc, before, step = 0) {
   const result = await f.inspect(label, doc), worker = (await f.bodies()).bodies;
   assert.equal(result.solids, 1);
   assert.ok(result.report.valid, result.report.issues.join('\n'));
   assert.equal(worker.length, 1);
-  const expected = before ? finalVolume : initialVolume;
+  const expected = volumeAfter(step);
   near(result.mass.volume, expected);
   near(worker[0].volume, expected);
-  assert.equal(result.report.topology[0].genus, Number(twoBores) + Number(!before));
+  assert.equal(result.report.topology[0].genus, boreCount - step);
   if (before) {
-    assert.deepEqual(result.report.counts, twoBores ? { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 } :
+    assert.deepEqual(result.report.counts, retainedRadius(step) ? { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 } :
       { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
-    const removedWalls = before.faces.filter(face => face.name.startsWith(removed.name + '#'));
+    const removedWalls = before.faces.filter(face => face.name.startsWith(sequence[step - 1].name + '#'));
     assert.equal(removedWalls.length, 2);
     assert.deepEqual(result.faces.map(face => face.id),
       before.faces.filter(face => !removedWalls.includes(face)).map(face => face.id));
     const retainedLoops = new Set(result.loops.map(loop => loop.id));
-    if (twoBores) near(result.retainedDiameter, 2 * retainedRadius);
+    if (retainedRadius(step)) near(result.retainedDiameter, 2 * retainedRadius(step));
     else result.mass.centroid.forEach((x, i) => near(x, [20, 15, 5][i]));
     for (const face of result.faces) {
       const original = before.faces.find(candidate => candidate.id === face.id);
@@ -96,19 +100,47 @@ async function healWithMcp() {
   await writeFile(file, bytes);
   return withMcpSession({ app: resolve(import.meta.dirname, '..'), output, clientName: 'cad-two-bore-heal', autonomy: 3 },
     file, 'delete-two-bore-face', async call => {
-      const faces = [removed.name], pin = await call('query', { action: 'render', highlight: faces });
-      const edit = { action: 'command', command: 'delete-face', faces, expectedRevision: pin.revision };
-      await call('features', edit);
-      const accepted = await readFile(file), doc = JSON.parse(accepted);
-      assert.deepEqual(doc.nodes.slice(0, initialCount), source.nodes);
-      const summary = await call('query', { action: 'summary' });
-      assert.ok(Math.abs(summary.bodies.find(body => body.key === finalBody).volume - finalVolume) < 5e-4);
-      const refused = await call('features', edit, true);
-      assert.equal(refused.code, 'COMMAND_STALE');
-      assert.deepEqual(await readFile(file), accepted);
-      f.report.observations.push({ mcpRevision: pin.revision, removedFace: removed.name, stale: refused.code });
-      return { doc, file };
+      const documents = [source];
+      for (const [index, target] of sequence.entries()) {
+        const faces = [target.name], pin = await call('query', { action: 'render', highlight: faces });
+        const edit = { action: 'command', command: 'delete-face', faces, expectedRevision: pin.revision };
+        await call('features', edit);
+        const accepted = await readFile(file), doc = JSON.parse(accepted);
+        assert.deepEqual(doc.nodes.slice(0, initialCount + index), documents[index].nodes);
+        const summary = await call('query', { action: 'summary' }), body = 'b' + (initialCount + index);
+        assert.ok(Math.abs(summary.bodies.find(candidate => candidate.key === body).volume - volumeAfter(index + 1)) < 5e-4);
+        const refused = await call('features', edit, true);
+        assert.equal(refused.code, 'COMMAND_STALE');
+        assert.deepEqual(await readFile(file), accepted);
+        f.report.observations.push({ mcpRevision: pin.revision, removedFace: target.name, stale: refused.code });
+        documents.push(doc);
+      }
+      return { documents, file };
     });
+}
+
+async function healInStudio(target, previous) {
+  f.phase = 'Pick ' + target.name + ' and preview Delete face';
+  const pickFilter = button('Selection filter');
+  if (!(await pickFilter.innerText()).includes('Faces')) await pickFilter.click();
+  assert.match(await pickFilter.innerText(), /Faces/);
+  const label = f.page.getByLabel('Face property and colour target');
+  for (const z of [8, 9.25, 8.5, 9.6, 9.9]) {
+    const bore = await f.page.evaluate(point => window.__studioScreenOf(point), [target.x, target.y, z]);
+    assert.ok(bore?.length === 2);
+    await f.page.mouse.click(...bore);
+    await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+    if (await label.count() && (await label.innerText()).includes(target.name)) break;
+  }
+  assert.ok((await label.innerText()).includes(target.name));
+  await f.page.waitForFunction(() => window.__studioSelection.selection.faces.length === 1);
+  await f.command('Delete face');
+  const dialog = f.page.getByRole('dialog', { name: 'Delete face', exact: true });
+  const apply = button('Apply', dialog);
+  await apply.waitFor();
+  await apply.click();
+  await f.changed(previous);
+  return f.doc();
 }
 
 await f.run(async () => {
@@ -128,48 +160,39 @@ await f.run(async () => {
   await f.newPage();
   await openDoc(source, 'plate-with-bore.bcad');
   await f.same(source);
-  const original = await measure('before-heal', source);
+  let native = await measure('before-heal', source), priorNative = native;
   await f.snapshot('original-bore');
-
-  f.phase = 'Pick the cylindrical wall and preview Delete face';
-  const pickFilter = button('Selection filter');
-  await pickFilter.click();
-  assert.match(await pickFilter.innerText(), /Faces/);
-  const label = f.page.getByLabel('Face property and colour target');
-  for (const z of [8, 9.25, 8.5, 9.6, 9.9]) {
-    const bore = await f.page.evaluate(point => window.__studioScreenOf(point), [removed.x, removed.y, z]);
-    assert.ok(bore?.length === 2);
-    await f.page.mouse.click(...bore);
-    await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
-    if (await label.count() && (await label.innerText()).includes(removed.name)) break;
+  const documents = [source];
+  for (const [index, target] of sequence.entries()) {
+    const previous = documents[index], healed = await healInStudio(target, previous), node = healed.nodes[initialCount + index];
+    if (agent) assert.deepEqual(healed, agent.documents[index + 1]);
+    assert.equal(node.kind, 'delete-face');
+    assert.deepEqual(node.parent, { node: initialCount + index - 1, side: 'solid' });
+    assert.ok(node.faces[0].startsWith(target.name + '#'));
+    assert.equal(node.sigs[node.faces[0]].k, 'curved');
+    assert.deepEqual(healed.nodes.slice(0, initialCount + index), previous.nodes);
+    priorNative = native;
+    native = await measure(index === 0 ? 'after-heal' : 'after-second-heal', healed, priorNative, index + 1);
+    documents.push(healed);
+    await f.snapshot(index === 0 ? 'healed' : 'healed-both');
   }
-  assert.ok((await label.innerText()).includes(removed.name));
-  await f.page.waitForFunction(() => window.__studioSelection.selection.faces.length === 1);
-  await f.command('Delete face');
-  const dialog = f.page.getByRole('dialog', { name: 'Delete face', exact: true });
-  const apply = button('Apply', dialog);
-  await apply.waitFor();
-  await apply.click();
-  await f.changed(source);
-  const healed = await f.doc(), node = healed.nodes[initialCount];
-  if (agent) assert.deepEqual(healed, agent.doc);
-  assert.equal(node.kind, 'delete-face');
-  assert.deepEqual(node.parent, { node: initialCount - 1, side: 'solid' });
-  assert.ok(node.faces[0].startsWith(removed.name + '#'));
-  assert.equal(node.sigs[node.faces[0]].k, 'curved');
-  assert.deepEqual(healed.nodes.slice(0, initialCount), source.nodes);
-  await measure('after-heal', healed, original);
-  await f.snapshot('healed');
-
-  await f.undo(); await f.same(source);
-  await f.redo(); await f.same(healed);
+  for (let i = documents.length - 2; i >= 0; i--) {
+    await f.undo();
+    await f.same(documents[i]);
+    if (i === 1) await f.snapshot('undo-second-heal');
+  }
+  for (const document of documents.slice(1)) {
+    await f.redo();
+    await f.same(document);
+  }
+  const healed = documents.at(-1);
   const saved = await f.save('healed-plate');
   await f.freshOpen(saved.file, healed, 'healed-reopened');
-  await measure('reopened-heal', healed, original);
-  if (agent) await f.freshOpen(agent.file, agent.doc, 'mcp-healed-reopened');
+  await measure('reopened-heal', healed, priorNative, sequence.length);
+  if (agent) await f.freshOpen(agent.file, agent.documents.at(-1), 'mcp-healed-reopened');
 
   f.phase = 'Refuse a stale native bore recipe before adopting the file';
-  const stale = structuredClone(healed), recipe = stale.nodes[initialCount];
+  const stale = structuredClone(healed), recipe = stale.nodes.at(-1);
   recipe.sigs[recipe.faces[0]].r = 30;
   await openDoc(stale, 'stale-bore-reference.bcad');
   await f.page.locator('.toast').filter({ hasText: /part is unchanged/i }).waitFor();

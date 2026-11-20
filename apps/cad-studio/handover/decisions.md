@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1446: [Heal both bores in two separate edits](notes/heal-two-bores-in-sequence-2026-11-21/README.md), #17. Restore the exact six-face plate in either order with independent Undo and Studio reopen.
 - D1445: [Heal the selected through bore in a two-bore plate](notes/heal-selected-two-bore-plate-2026-11-21/README.md), #17. Keep the other bore and all surviving trim IDs through Studio reopen.
 - D1444: [Verify both bore diameters after tilted cap replacement](notes/verify-two-tilted-bore-diameters-2026-11-21/README.md), #17. Keep the two exact diameter checks independent in Studio and MCP.
 - D1443: [Replace a rectangular plate cap with two through bores](notes/replace-two-bore-plate-cap-2026-11-21/README.md), #17. Retain both exact cylindrical supports and trim rings through Studio reopen.

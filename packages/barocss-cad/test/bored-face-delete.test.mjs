@@ -125,6 +125,26 @@ test('healing either exact bore of a flat two-bore plate preserves the other bor
   assert.deepEqual(source, before);
 });
 
+test('both successive bore-heal orders restore the same exact outer solid', () => {
+  const doc = secondBore(plate()), [, reference] = halves;
+  const orders = [[reference, 'h2.side0#1'], ['h2.side0#1', reference]];
+  const results = orders.map(([first, second]) => {
+    const initial = output(doc).brep;
+    const firstHeal = append(doc, deletion(first, undefined, 'h2'));
+    const before = output(firstHeal).brep;
+    const authored = append(firstHeal, { ...deletion(second, undefined, 'heal'), id: 'finish' });
+    const final = healBoredPlateIfAdmitted(before, second);
+    assertHealed(before, final);
+    assert.deepEqual(output(authored).brep, final);
+    for (const face of final.faces) assert.equal(face.surface.id, initial.faces.find(candidate => candidate.id === face.id).surface.id);
+    const mass = brepMassProperties(final, 1);
+    close(mass.volume, 12000);
+    for (const [axis, coordinate] of [20, 15, 5].entries()) close(mass.centroid[axis], coordinate);
+    return final;
+  });
+  assert.deepEqual(results[0], results[1]);
+});
+
 test('the authored operation checks the selected native member signature', () => {
   const doc = plate(), signatures = faceSignatures(output(doc).brep), [name, other] = halves;
   const size = Math.PI * 3 * 10;
