@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1460: [Restore a sharp box corner by deleting its chamfer face](notes/heal-full-height-box-chamfer-2026-11-21/README.md), #17. Verify the original sharp edge and 12000 mm³ through Studio and MCP reopen.
 - D1459: [Heal the original plate by deleting a cylindrical boss top](notes/delete-cylindrical-boss-top-2026-11-21/README.md), #17. Verify 12000 mm³ and the six surviving native faces through Studio and MCP reopen.
 - D1458: [Keep the original faces when offsetting a box cap](notes/native-box-cap-offset-2026-11-21/README.md), #17. Verify the 7000 mm³ benchmark and all six original faces through Studio, MCP and fresh Open.
 - D1457: [Verify that an inverse wall offset restores the source](notes/reverse-bored-plate-wall-offset-2026-11-21/README.md), #17. Check 16 seeded cases against the ray oracle and verify separate moves through Studio and MCP reopen.

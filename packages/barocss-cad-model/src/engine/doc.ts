@@ -503,6 +503,30 @@ export function cylindricalBossTopFace(nodes: readonly unknown[], index: number)
   return id + '.top';
 }
 
+type PlanarHealRole = 'boss' | 'chamfer';
+
+/** The original planar face of a supported authored Delete face source. */
+export function planarDeleteFaceTarget(nodes: readonly unknown[], index: number): { name: string; role: PlanarHealRole } | undefined {
+  const bossTop = cylindricalBossTopFace(nodes, index);
+  if (bossTop) return { name: bossTop, role: 'boss' };
+  const chamfer = nodes[index];
+  if (!textRecord(chamfer) || chamfer.kind !== 'chamfer' || !Array.isArray(chamfer.edges) ||
+      chamfer.edges.length !== 1 || typeof chamfer.edges[0] !== 'string') return;
+  const parent = precedingSolidParent(chamfer, index);
+  if (parent === undefined || !isBoxReplacementSource(nodes, parent)) return;
+  const stock = nodes[parent], id = textRecord(stock) && typeof stock.id === 'string' ? stock.id : `n${parent}`;
+  const walls = [0, 1, 2, 3].map(side => `${id}.side${side}`);
+  const ends = chamfer.edges[0].split('|').map(name => walls.indexOf(name)), [a, b] = ends;
+  if (ends.length !== 2 || a < 0 || b < 0 || (a + b) % 2 !== 1) return;
+  const name = typeof chamfer.id === 'string' ? chamfer.id : `n${index}`;
+  return { name: name + '.face', role: 'chamfer' };
+}
+
+export function planarDeleteFaceDirection(dir: readonly number[], role: PlanarHealRole): boolean {
+  return role === 'boss' ? dir[0] === 0 && dir[1] === 0 && dir[2] === 1
+    : dir[2] === 0 && Math.abs(Math.abs(dir[0]) - Math.SQRT1_2) < 1e-8 && Math.abs(Math.abs(dir[1]) - Math.SQRT1_2) < 1e-8;
+}
+
 function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly unknown[], index: number): string | null {
   const allowed = new Set(['kind', 'parent', 'faces', ...NODE_EXTRA_FIELDS]);
   for (const key of Object.keys(node)) if (!allowed.has(key)) return `Delete face: unknown field ${key}.`;
@@ -510,19 +534,19 @@ function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly 
   if (!textRecord(parent) || Object.keys(parent).sort().join(',') !== 'node,side' || parent.side !== 'solid' ||
       typeof parent.node !== 'number' || !Number.isSafeInteger(parent.node) || parent.node < 0 || parent.node >= index)
     return 'Delete face: a preceding solid is required.';
-  const bossTop = cylindricalBossTopFace(nodes, parent.node);
-  if (!bossTop && !isBoredPlateHealSource(nodes, parent.node) && !isDeleteFaceFilletSource(nodes, parent.node))
-    return 'Delete face: a supported through-hole plate, cylindrical boss or filleted L-section is required.';
+  const plane = planarDeleteFaceTarget(nodes, parent.node);
+  if (!plane && !isBoredPlateHealSource(nodes, parent.node) && !isDeleteFaceFilletSource(nodes, parent.node))
+    return 'Delete face: a supported through-hole plate, cylindrical boss, chamfered box or filleted L-section is required.';
   const name = Array.isArray(node.faces) && node.faces.length === 1 ? node.faces[0] : undefined;
   if (typeof name !== 'string' || !name.trim() || /[+\0]/.test(name)) return 'Delete face: one exact native face is required.';
   if (node.rematched !== undefined && (!textRecord(node.rematched) || Object.keys(node.rematched).length))
     return 'Delete face: the original face name is required.';
   const sig = textRecord(node.sigs) && Object.hasOwn(node.sigs, name) && Object.keys(node.sigs).length === 1 ? node.sigs[name] : undefined;
-  if (bossTop) {
-    if (name !== bossTop || !textRecord(sig) || Object.keys(sig).sort().join(',') !== 'd,k,p,s' || sig.k !== 'plane' ||
-        !textVector(sig.p, false) || !textVector(sig.d, false) || sig.d[0] !== 0 || sig.d[1] !== 0 || sig.d[2] !== 1 ||
+  if (plane) {
+    if (name !== plane.name || !textRecord(sig) || Object.keys(sig).sort().join(',') !== 'd,k,p,s' || sig.k !== 'plane' ||
+        !textVector(sig.p, false) || !textVector(sig.d, false) || !planarDeleteFaceDirection(sig.d, plane.role) ||
         typeof sig.s !== 'number' || !Number.isFinite(sig.s) || sig.s <= 0)
-      return 'Delete face: the original cylindrical boss top needs its stored individual planar signature.';
+      return `Delete face: the original ${plane.role === 'boss' ? 'cylindrical boss top' : 'planar chamfer'} needs its stored individual planar signature.`;
     return null;
   }
   if (!textRecord(sig) || Object.keys(sig).sort().join(',') !== 'k,p,r,s' || sig.k !== 'curved' || !textVector(sig.p, false) ||
@@ -1612,7 +1636,8 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
       return `${kind} ${n(node.height)}${node.draft ? ` · ${node.draft}°` : ''}`;
     }
     case 'revolve': return `Revolve ${node.angle}°`;
-    case 'delete-face': return node.sigs?.[node.faces[0]]?.k === 'plane' ? 'Delete face · Heal boss'
+    case 'delete-face': return node.sigs?.[node.faces[0]]?.k === 'plane'
+      ? node.faces[0].endsWith('.face') ? 'Delete face · Heal chamfer' : 'Delete face · Heal boss'
       : node.faces[0].endsWith('.face') ? 'Delete face · Heal fillet' : 'Delete face · Heal through hole';
     case 'hole': return (node.thread ? `Tapped ${node.thread}` : `${node.countersink ? 'Countersunk' : 'Hole'} Ø${typeof node.radius === 'number' ? fmt(node.radius * 2) : node.radius.parameter}`) + (node.pattern && node.pattern.count > 1 ? ` × ${node.pattern.count}` : '');
     case 'chamfer': return `Chamfer ${n(node.distance)}`;

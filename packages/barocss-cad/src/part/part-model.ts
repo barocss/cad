@@ -71,6 +71,7 @@ import { healBoredPlateIfAdmitted, healCylindricalBossIfAdmitted, offsetBoredCap
   replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
 import { healAnalyticLFilletIfAdmitted } from '../features/heal-analytic-l-fillet.js';
 import { healPrismaticFilletIfAdmitted } from '../features/heal-prismatic-fillet.js';
+import { healPrismaticChamferIfAdmitted } from '../features/heal-prismatic-chamfer.js';
 import { boundaryBindingRefusal } from './part-boundary-refusal-internal.js';
 import { refusalCodeOf, type CadRefusalCode } from '../core/error-codes.js';
 
@@ -689,7 +690,12 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
               healed = healAnalyticLFilletIfAdmitted(brep, face, sharpEdge, at);
           }
         }
-        if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket. Select its fillet face. To remove a fully enclosed cylindrical boss from straight rectangular stock, select the top face of the boss.');
+        if (!healed && part.solid.kind === 'upright' && part.chamferTargets?.length === 1) {
+          const { author } = t.ref(f.target, 'target');
+          if (author?.kind === 'chamfer' && author.edges.length === 1 && face === `${author.id}.face`)
+            healed = healPrismaticChamferIfAdmitted(brep, face, part.chamferTargets[0]);
+        }
+        if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket. Select its fillet face. To remove a fully enclosed cylindrical boss from straight rectangular stock, select the top face of the boss. To heal one full-height corner chamfer on a straight rectangular box, select the chamfer face.');
         return one({ kind: 'brep', brep: healed });
       };
     }

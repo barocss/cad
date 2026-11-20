@@ -4,25 +4,33 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const [output, input] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
+const [output, input, kind] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
 assert.ok(output && input && isAbsolute(output) && relative(resolve(app, '../..'), output).startsWith('../'));
+assert.ok(['boss', 'chamfer'].includes(kind));
 const sourceBytes = await readFile(input), source = JSON.parse(sourceBytes);
-const cap = 'n3.top', stockCap = 'n1.top', stockVolume = 12000, sourceVolume = stockVolume + 54 * Math.PI;
+const boss = kind === 'boss', selectedFace = boss ? 'n3.top' : 'n2.face', unrelated = boss ? 'n1.top' : 'n1.side0';
+const view = boss ? 'Top' : 'Front', stockVolume = 12000, sourceVolume = boss ? stockVolume + 54 * Math.PI : 11980;
+const reason = boss ? /cylindrical boss top/i : /box chamfer/i;
 const pins = [
-  'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/viewport/Viewport.tsx', 'apps/cad-studio/test/delete-boss-face-browser.mjs',
+  'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/viewport/Viewport.tsx', 'apps/cad-studio/test/delete-planar-face-browser.mjs',
   'packages/barocss-cad-model/src/app/deleteFaceCommand.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
-  'packages/barocss-cad/src/features/bored-cap-offset.ts', 'packages/barocss-cad/src/part/part-model.ts',
+  'packages/barocss-cad/src/features/bored-cap-offset.ts', 'packages/barocss-cad/src/features/heal-prismatic-chamfer.ts',
+  'packages/barocss-cad/src/part/part-model.ts',
 ];
 const f = await createFlow({
-  name: 'delete-boss-face', envFrozen: 'DELETE_BOSS_CAP_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Heal the stock plane by deleting the selected top of the exact cylindrical boss.',
-  limits: ['One cylindrical boss fully within the top of a straight rectangular plate.'],
+  name: 'delete-planar-face', envFrozen: 'DELETE_PLANAR_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
+  qualification: `Heal the stock by deleting the original planar face of the ${kind}.`,
+  limits: [boss ? 'One cylindrical boss fully within the top of a straight rectangular plate.' : 'One constant full-height box chamfer.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
-import { brepMassProperties, checkBrep } from '@barocss/cad';
+import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8')), [{ brep }] = partBreps(doc);
-console.log(JSON.stringify({ brep, report: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1) }));
+const supports = Object.fromEntries(brep.faces.map(face => {
+  const plane = faceGeometry(face);
+  return [face.name, plane.kind === 'plane' ? [plane.n, plane.n.reduce((sum, n, k) => sum + n * plane.o[k], 0)] : plane];
+}));
+console.log(JSON.stringify({ brep, supports, report: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1) }));
 `,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -39,19 +47,35 @@ async function inspect(label, doc, expected, before) {
   if (before) {
     assert.deepEqual(native.report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
     assert.deepEqual(native.mass.centroid, [20, 15, 5]);
-    const retainedLoops = new Set(native.brep.loops.map(loop => loop.id));
-    for (const face of native.brep.faces) {
-      const original = before.brep.faces.find(item => item.id === face.id);
-      assert.deepEqual(face, { ...original, loops: original.loops.filter(id => retainedLoops.has(id)) });
-    }
     assert.deepEqual(native.brep.faces.map(face => face.name).sort(),
-      ['n1.bottom', 'n1.side0', 'n1.side1', 'n1.side2', 'n1.side3', stockCap]);
-    for (const key of ['coedges', 'edges', 'loops', 'vertices']) {
-      for (const item of native.brep[key]) assert.deepEqual(item, before.brep[key].find(candidate => candidate.id === item.id));
-    }
+      ['n1.bottom', 'n1.side0', 'n1.side1', 'n1.side2', 'n1.side3', 'n1.top']);
+    if (boss) assertBossSurvivors(native.brep, before.brep);
+    else assertChamferSurvivors(native, before);
   }
   f.report.observations.push({ label, volume: native.mass.volume, workerVolume: worker[0].volume, counts: native.report.counts });
   return native;
+}
+
+function assertBossSurvivors(healed, before) {
+  const retainedLoops = new Set(healed.loops.map(loop => loop.id));
+  for (const face of healed.faces) {
+    const original = before.faces.find(item => item.id === face.id);
+    assert.deepEqual(face, { ...original, loops: original.loops.filter(id => retainedLoops.has(id)) });
+  }
+  for (const key of ['coedges', 'edges', 'loops', 'vertices']) {
+    for (const item of healed[key]) assert.deepEqual(item, before[key].find(candidate => candidate.id === item.id));
+  }
+}
+
+function assertChamferSurvivors(healed, before) {
+  for (const face of healed.brep.faces) {
+    const original = before.brep.faces.find(item => item.name === face.name);
+    assert.equal(face.id, original.id);
+    assert.deepEqual(healed.supports[face.name], before.supports[face.name]);
+  }
+  const edge = healed.brep.edges.find(item => item.name === 'n1.side0|n1.side3');
+  assert.ok(edge);
+  assert.deepEqual(edge.curve.controlPoints.toSorted((a, b) => a[2] - b[2]), [[0, 0, 0], [0, 0, 10]]);
 }
 
 async function pickFace(point, name) {
@@ -65,13 +89,13 @@ async function pickFace(point, name) {
 }
 
 async function healAgent() {
-  const file = join(output, 'mcp-healed-boss.bcad');
+  const file = join(output, `mcp-healed-${kind}.bcad`);
   await copyFile(input, file);
-  return withMcpSession({ app, output, clientName: 'delete-boss-face', autonomy: 3 }, file, 'boss-heal', async call => {
-    const faces = [cap], pin = await call('query', { action: 'render', highlight: faces });
+  return withMcpSession({ app, output, clientName: 'delete-planar-face', autonomy: 3 }, file, kind + '-heal', async call => {
+    const faces = [selectedFace], pin = await call('query', { action: 'render', highlight: faces });
     const edit = { action: 'command', command: 'delete-face', faces, expectedRevision: pin.revision };
-    const failure = await call('features', { ...edit, faces: [stockCap] }, true);
-    assert.match(JSON.stringify(failure), /cylindrical boss top/i);
+    const failure = await call('features', { ...edit, faces: [unrelated] }, true);
+    assert.match(JSON.stringify(failure), reason);
     assert.deepEqual(await readFile(file), sourceBytes);
     await call('features', edit);
     const bytes = await readFile(file), summary = await call('query', { action: 'summary' });
@@ -94,37 +118,37 @@ await f.run(async () => {
     });
     return context;
   };
-  f.phase = 'Require the boss cap by name through stdio MCP';
+  f.phase = 'Require the original planar face by name through stdio MCP';
   const agent = await healAgent();
-  await f.freshOpen(input, source, 'boss-source');
+  await f.freshOpen(input, source, kind + '-source');
   const original = await inspect('source', source, sourceVolume);
 
-  f.phase = 'Refuse the stock plane and select the exact boss top';
+  f.phase = 'Refuse an unrelated stock plane';
   await button('View cube directions').click();
-  await f.page.getByRole('menuitem', { name: 'Top', exact: true }).click();
-  await f.page.waitForFunction(() => {
+  await f.page.getByRole('menuitem', { name: view, exact: true }).click();
+  await f.page.waitForFunction(expected => {
     const labels = [...document.querySelectorAll('.view-cube .vc-label')];
-    return labels.length === 1 && labels[0].textContent === 'TOP';
-  });
+    return labels.length === 1 && labels[0].textContent === expected;
+  }, view.toUpperCase());
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const filter = button('Selection filter');
   if (!(await filter.innerText()).includes('Faces')) await filter.click();
-  await pickFace([30, 21, 10], stockCap);
+  await pickFace(boss ? [30, 21, 10] : [20, 0, 5], unrelated);
   await f.page.keyboard.press('Space');
   await f.page.locator('.palette input').fill('Delete face');
   const entry = f.page.locator('.palette .pl-item[data-value="delete-face"]');
   await entry.waitFor();
   assert.match(await entry.getAttribute('class'), /off/);
-  assert.match(await entry.innerText(), /cylindrical boss top/i);
+  assert.match(await entry.innerText(), reason);
   await f.page.keyboard.press('Enter');
   await f.same(source);
   await f.snapshot('delete-stock-plane-refused');
   await f.page.keyboard.press('Escape');
   await f.page.locator('.palette').waitFor({ state: 'hidden' });
 
-  f.phase = 'Apply one Delete face to the cylindrical boss';
-  await pickFace([11, 9, 16], cap);
+  f.phase = 'Apply one Delete face to the original planar face';
+  await pickFace(boss ? [11, 9, 16] : [1, 1, 5], selectedFace);
   await f.command('Delete face');
   const panel = f.page.getByRole('dialog', { name: 'Delete face', exact: true }), apply = button('Apply', panel);
   await apply.waitFor();
@@ -134,26 +158,26 @@ await f.run(async () => {
   const healed = await f.doc(), edit = healed.nodes.at(-1);
   assert.deepEqual(healed, agent.doc);
   assert.equal(edit.kind, 'delete-face');
-  assert.deepEqual(edit.faces, [cap]);
-  assert.deepEqual(edit.parent, { node: 4, side: 'solid' });
-  assert.equal(edit.sigs[cap].k, 'plane');
+  assert.deepEqual(edit.faces, [selectedFace]);
+  assert.deepEqual(edit.parent, { node: source.nodes.length - 1, side: 'solid' });
+  assert.equal(edit.sigs[selectedFace].k, 'plane');
   const result = await inspect('healed', healed, stockVolume, original);
   await f.undo(); await f.same(source);
   await f.redo(); await f.same(healed);
-  const saved = await f.save('healed-boss');
-  await f.freshOpen(saved.file, healed, 'boss-healed-reopened');
+  const saved = await f.save('healed-' + kind);
+  await f.freshOpen(saved.file, healed, kind + '-healed-reopened');
   assert.deepEqual((await inspect('reopened', healed, stockVolume, original)).brep, result.brep);
-  await f.freshOpen(agent.file, agent.doc, 'boss-healed-mcp-reopened');
+  await f.freshOpen(agent.file, agent.doc, kind + '-healed-mcp-reopened');
   assert.deepEqual((await inspect('mcp-file', agent.doc, stockVolume, original)).brep, result.brep);
   assert.deepEqual(await readFile(input), sourceBytes);
 
-  f.phase = 'Refuse a saved cap signature that points in the wrong direction';
-  const wrong = structuredClone(healed), wrongFile = join(output, 'wrong-boss-cap.bcad');
-  wrong.nodes.at(-1).sigs[cap].d = [0, 0, -1];
+  f.phase = 'Refuse a saved planar signature that points in the wrong direction';
+  const wrong = structuredClone(healed), wrongFile = join(output, 'wrong-planar-signature.bcad');
+  wrong.nodes.at(-1).sigs[selectedFace].d = [0, 0, -1];
   await writeFile(wrongFile, JSON.stringify(wrong));
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles(wrongFile);
   await f.waitToast(/part is unchanged/i);
   await f.same(healed);
-  await f.snapshot('boss-cap-file-refused');
+  await f.snapshot(kind + '-signature-file-refused');
 });
