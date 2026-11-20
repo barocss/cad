@@ -4,8 +4,9 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const [output, input, view = 'Right'] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
+const [output, input, view = 'Right', mode] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
 assert.ok(output && input && isAbsolute(output) && relative(resolve(app, '../..'), output).startsWith('../'));
+assert.ok(mode === undefined || mode === 'reverse');
 const walls = {
   Right: ['n1.side1', 0, 1, 40],
   Left: ['n1.side3', 0, -1, 0],
@@ -20,7 +21,6 @@ const capSign = replacement.faces?.[0] === 'n1.bottom' ? -1 : 1;
 const fixed = capSign === 1 ? 0 : 10;
 const thickness = (x, y) => 8 + x / 10 + y / 5;
 const capHeight = (x, y) => fixed + capSign * thickness(x, y);
-const sourceKey = 'b' + (source.nodes.length - 1), resultKey = 'b' + source.nodes.length;
 const donorKey = tilt ? 'b' + replacement.target.body.node : undefined;
 const bores = source.nodes.filter(node => node.kind === 'hole').map(({ center, radius }) =>
   ({ center, radius, volume: (tilt ? thickness(...center) : 10) * Math.PI * radius ** 2 }));
@@ -87,7 +87,7 @@ const incidence = ({ bodies, shells, faces, loops, coedges, edges, vertices }) =
 
 async function measure(label, doc, distance, before) {
   const native = await f.inspect(label, doc), volume = volumeAt(distance), worker = (await f.bodies()).bodies;
-  const displayed = worker.find(({ key }) => key === (before ? resultKey : sourceKey));
+  const displayed = worker.find(({ key }) => key === 'b' + (doc.nodes.length - 1));
   assert.ok(native.report.valid, native.report.issues.join('\n'));
   const boreCount = bores.length;
   assert.deepEqual(native.report.counts, { bodies: 1, shells: 1, faces: 6 + 2 * boreCount, loops: 6 + 4 * boreCount,
@@ -134,27 +134,90 @@ async function measure(label, doc, distance, before) {
   return native;
 }
 
-async function offsetWithMcp(distance, checkContact = false) {
+async function offsetWithMcp(distance, checkContact = false, prior = { file: input, doc: source, total: 0 }) {
   const file = join(output, 'mcp-offset-' + distance + '.bcad');
-  await copyFile(input, file);
+  const priorBytes = await readFile(prior.file), total = prior.total + distance;
+  const resultKey = 'b' + prior.doc.nodes.length;
+  await copyFile(prior.file, file);
   return withMcpSession({ app, output, clientName: 'cad-bored-wall-offset', autonomy: 3 }, file, 'offset-wall-' + distance, async call => {
     const faces = [faceName], pin = await call('query', { action: 'render', highlight: faces });
     const edit = { action: 'command', command: 'offset-face', faces, values: { d: distance }, expectedRevision: pin.revision };
     if (checkContact) {
       const refused = await call('features', { ...edit, values: { d: contact } }, true);
       assert.match(JSON.stringify(refused), /reach or cross the bore/i);
-      assert.deepEqual(await readFile(file), bytes);
+      assert.deepEqual(await readFile(file), priorBytes);
     }
     await call('features', edit);
     const accepted = await readFile(file), summary = await call('query', { action: 'summary' });
     assert.equal(summary.bodies.length, tilt ? 2 : 1);
-    assert.ok(Math.abs(summary.bodies.find(({ key }) => key === resultKey).volume - volumeAt(distance)) <= 5e-4);
+    assert.ok(Math.abs(summary.bodies.find(({ key }) => key === resultKey).volume - volumeAt(total)) <= 5e-4);
     const stale = await call('features', edit, true);
     assert.equal(stale.code, 'COMMAND_STALE');
     assert.deepEqual(await readFile(file), accepted);
+    assert.deepEqual(await readFile(prior.file), priorBytes);
     f.report.observations.push({ distance, revision: pin.revision, stale: stale.code });
-    return { file, doc: JSON.parse(accepted) };
+    return { file, doc: JSON.parse(accepted), total };
   });
+}
+
+async function selectWall(distance) {
+  await button('View cube directions').click();
+  await f.page.getByRole('menuitem', { name: view, exact: true }).click();
+  await f.page.waitForFunction(expected => {
+    const labels = [...document.querySelectorAll('.view-cube .vc-label')];
+    return labels.length === 1 && labels[0].textContent === expected;
+  }, view.toUpperCase());
+  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  const filter = button('Selection filter');
+  if (!(await filter.innerText()).includes('Faces')) await filter.click();
+  assert.match(await filter.innerText(), /Faces/);
+  const point = centre.map((value, k) => value + distance * normal[k]);
+  const pixel = await f.page.evaluate(position => window.__studioScreenOf(position), point);
+  assert.ok(pixel?.length === 2);
+  await f.page.mouse.click(...pixel);
+  const target = f.page.getByLabel('Face property and colour target');
+  await target.waitFor();
+  assert.ok((await target.innerText()).includes(faceName));
+  await f.page.evaluate(() => document.activeElement?.blur());
+}
+
+async function verifyReverse(outward, original, inverseAgent) {
+  f.phase = 'Apply the reverse as a second Offset face feature';
+  await selectWall(positive);
+  await f.command('Offset face');
+  const panel = dialog('Offset face');
+  await status(panel, 'preview');
+  await offset(panel).fill(String(-positive));
+  await status(panel, 'preview');
+  await f.same(outward);
+  await button('Apply', panel).click();
+  await f.changed(outward);
+  const restored = await f.doc();
+  assert.deepEqual(restored, inverseAgent.doc);
+  assert.deepEqual(restored.nodes.slice(0, -1), outward.nodes);
+  assert.equal(restored.nodes.at(-1).distance, -positive);
+  assert.deepEqual(restored.nodes.at(-1).parent, { node: source.nodes.length, side: 'solid' });
+  const reverted = await measure('two-feature-reverse', restored, 0, original);
+  if (!tilt) assert.deepEqual(reverted.brep, original.brep);
+
+  for (const [step, distance] of [positive, -positive].entries()) {
+    await f.openFeatureEditor(source.nodes.length + step, `offset ${step + 1}`);
+    await button('Edit offset', f.editor()).click();
+    const history = dialog('Edit Offset face');
+    assert.equal(Number(await offset(history).inputValue()), distance);
+    await button('Cancel', history).click();
+    await f.same(restored);
+  }
+  await f.undo(); await f.same(outward);
+  await f.redo(); await f.same(restored);
+  const saved = await f.save('bored-wall-reverse');
+  await f.freshOpen(saved.file, restored, 'bored-wall-reverse-reopened');
+  const reopened = await measure('reverse-reopened', restored, 0, original);
+  assert.deepEqual(reopened.brep, reverted.brep);
+  await f.freshOpen(inverseAgent.file, inverseAgent.doc, 'bored-wall-reverse-mcp-reopened');
+  const fromMcp = await measure('reverse-mcp-file', inverseAgent.doc, 0, original);
+  assert.deepEqual(fromMcp.brep, reverted.brep);
 }
 
 await f.run(async () => {
@@ -168,29 +231,13 @@ await f.run(async () => {
     });
     return context;
   };
-  f.phase = 'Apply outward and inward wall offsets through stdio MCP';
-  const outwardAgent = await offsetWithMcp(positive, true), inwardAgent = await offsetWithMcp(negative);
+  f.phase = 'Apply signed wall offsets through stdio MCP';
+  const outwardAgent = await offsetWithMcp(positive, true);
+  const secondAgent = mode === 'reverse' ? await offsetWithMcp(-positive, false, outwardAgent) : await offsetWithMcp(negative);
   await f.freshOpen(input, source, 'bored-wall-source');
   const original = await measure('source', source, 0);
   f.phase = 'Select the ' + view.toLowerCase() + ' wall and launch its signed offset';
-  await button('View cube directions').click();
-  await f.page.getByRole('menuitem', { name: view, exact: true }).click();
-  await f.page.waitForFunction(expected => {
-    const labels = [...document.querySelectorAll('.view-cube .vc-label')];
-    return labels.length === 1 && labels[0].textContent === expected;
-  }, view.toUpperCase());
-  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
-  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  const filter = button('Selection filter');
-  if (!(await filter.innerText()).includes('Faces')) await filter.click();
-  assert.match(await filter.innerText(), /Faces/);
-  const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), centre);
-  assert.ok(pixel?.length === 2);
-  await f.page.mouse.click(...pixel);
-  const target = f.page.getByLabel('Face property and colour target');
-  await target.waitFor();
-  assert.ok((await target.innerText()).includes(faceName));
-  await f.page.evaluate(() => document.activeElement?.blur());
+  await selectWall(0);
   await f.command('Offset face');
   const panel = dialog('Offset face');
   await status(panel, 'preview');
@@ -223,6 +270,11 @@ await f.run(async () => {
   assert.deepEqual(edit.faces, [faceName]);
   await measure('outward', outward, positive, original);
   await f.snapshot('bored-wall-outward');
+  if (mode === 'reverse') {
+    await verifyReverse(outward, original, secondAgent);
+    assert.deepEqual(await readFile(input), bytes);
+    return;
+  }
 
   f.phase = 'Refuse bore contact and apply a 4 mm inward offset in History';
   await f.openFeatureEditor(source.nodes.length, 'bored wall offset');
@@ -241,7 +293,7 @@ await f.run(async () => {
   await button('Apply', history).click();
   await f.changed(outward);
   const inward = await f.doc();
-  assert.deepEqual(inward, inwardAgent.doc);
+  assert.deepEqual(inward, secondAgent.doc);
   assert.deepEqual(inward.nodes.at(-1), { ...edit, distance: negative });
   await measure('inward', inward, negative, original);
   await f.undo(); await f.same(outward);
@@ -249,7 +301,7 @@ await f.run(async () => {
   const saved = await f.save('bored-wall-offset');
   await f.freshOpen(saved.file, inward, 'bored-wall-reopened');
   await measure('reopened', inward, negative, original);
-  await f.freshOpen(inwardAgent.file, inwardAgent.doc, 'bored-wall-mcp-reopened');
-  await measure('mcp-file', inwardAgent.doc, negative, original);
+  await f.freshOpen(secondAgent.file, secondAgent.doc, 'bored-wall-mcp-reopened');
+  await measure('mcp-file', secondAgent.doc, negative, original);
   assert.deepEqual(await readFile(input), bytes);
 });
