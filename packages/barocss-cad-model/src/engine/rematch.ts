@@ -41,7 +41,7 @@ export function signaturesOf(body: BodyResult, nativeFaces: boolean | 'plane' | 
       continue;
     }
     for (const member of nativeFaces ? f.nativeFaces ?? [] : []) faces.set(member.name, { kind: member.kind, at: member.centroid, dir: member.kind === 'plane' ? member.normal : null, size: member.area, ...(member.radius ? { radius: member.radius } : {}) });
-    if (nativeFaces === 'individual') continue;
+    if (nativeFaces === 'individual' && (f.nativeFaces?.length || f.name.includes('+'))) continue;
     const names = f.name.split('+'), sig: Signature = { kind: f.kind, at: f.centroid, dir: f.kind === 'plane' ? f.normal : null, size: f.area, ...(f.radius ? { radius: f.radius } : {}), ...(names.length > 1 ? { shared: names.length } : {}) };
     for (const name of names) faces.set(name, sig);
   }

@@ -116,8 +116,8 @@ test('heal refuses a partial or ambiguous selection and other hole topology', ()
     ['b.top', 'CAPABILITY', /Select its cylindrical wall/],
     ['b.side0', 'CAPABILITY', /Select its cylindrical wall/],
     ['h.side0', 'REFERENCE', /missing or ambiguous/],
-    [halves.join('+'), 'INPUT', /one exact native bore wall name/],
-    ['', 'INPUT', /one exact native bore wall name/],
+    [halves.join('+'), 'INPUT', /one exact native face name/],
+    ['', 'INPUT', /one exact native face name/],
   ]) {
     assert.throws(() => output(append(doc, deletion(face))),
       error => error instanceof CadPartError && error.code === code && message.test(error.message));
