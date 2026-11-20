@@ -32,6 +32,7 @@ import { LinearSpanSpacing } from './LinearSpanSpacing';
 import { SweepHistoryInputs } from './SweepHistoryInputs';
 import { HoleHistoryInputs } from './HoleHistoryInputs';
 import { editExtrudeTriangleLength } from '../sketch/fixedTriangleEditor';
+import { inspectHistoryOpposingLength } from '../sketch/historyOpposingLength';
 import type { FeatureFailure } from '../app/failedFeature';
 import { featureNumberBounds, featureNumberInvalid, featureNumberRange, historyNumberRule } from '../app/featureNumberInput';
 function invalidInteger(value: number, range: { min: number; max: number }): boolean {
@@ -51,6 +52,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
   const historyErrorId = useId();
   const guideDescriptionId = useId();
   const countersinkErrorId = useId();
+  const opposedLengthErrorId = useId();
   const [readingEnd, setReadingEnd] = useState(false);
   const ordinaryLocked = pending || !!edgeReplacement?.draft || !!draftFaceReplacement?.view;
   const request = useRef<object | null>(null);
@@ -58,6 +60,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
   const failureArea = useRef<HTMLDivElement>(null);
   const draftScope = useRef({ nodes, index });
   const sameDraftScope = draftScope.current.nodes === nodes && draftScope.current.index === index;
+  const sameOpposedLengthScope = sameDraftScope && stationDraftOrigin.nodes === nodes && stationDraftOrigin.index === index;
   const [evaluation, setEvaluation] = useState<{ nodes: ModelNode[]; index: number; error?: FeatureFailure; opener?: HTMLElement } | null>(null);
   useLayoutEffect(() => {
     draftScope.current = { nodes, index };
@@ -97,6 +100,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
         return;
       }
     }
+    if (sameOpposedLengthScope && inspectHistoryOpposingLength(nodes, draft, index, field.key, value)) return;
     const rule = historyNumberRule(draft, index, field.key);
     if (Number.isFinite(value) && (!rule || !featureNumberInvalid(value, rule)) && (!field.integerRange || !invalidInteger(value, field.integerRange))) {
       const anchored = isSketchAnchoredCut(draft, index);
@@ -175,8 +179,18 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
   const countersinkField = fields.find(field => field.kind === 'number' && field.key === 'csk');
   const countersinkProblem = node?.kind === 'hole' && diameterField?.kind === 'number' && countersinkField?.kind === 'number'
     ? countersinkHistoryProblem(typed.dia ?? diameterField.get(draft), typed.csk ?? countersinkField.get(draft)) : null;
+  const opposedLengths = new Map(sameOpposedLengthScope ? fields.flatMap(field => {
+    const raw = typed[field.key];
+    const problem = raw?.trim() ? inspectHistoryOpposingLength(nodes, draft, index, field.key, Number(raw)) : undefined;
+    if (problem?.kind !== 'conflict') return [];
+    return [[field.key, `${field.label} conflicts with the locked length of edge ${problem.opposite + 1} (${problem.locked} mm). ${onEditSketch ? 'Use Edit sketch to review the opposite lock, or correct this value.' : 'Correct this value.'}`] as const];
+  }) : []);
+  // The passive reset clears typed and draft together. Until it runs, do not let a
+  // previously proven opposed-length draft apply under the newly selected owner.
+  const staleOpposedLength = !sameOpposedLengthScope && Object.entries(typed).some(([field, raw]) => raw.trim()
+    && inspectHistoryOpposingLength(stationDraftOrigin.nodes, draft, stationDraftOrigin.index, field, Number(raw))?.kind === 'conflict');
   const splitProblem = splitPlaneProblem(node);
-  const hasInvalidNumber = !!splitProblem || hasMissingNumber || invalidCounts.length > 0 || invalidDimensions.length > 0 || !!countersinkProblem || Object.keys(interiorProblems).length > 0;
+  const hasInvalidNumber = staleOpposedLength || opposedLengths.size > 0 || !!splitProblem || hasMissingNumber || invalidCounts.length > 0 || invalidDimensions.length > 0 || !!countersinkProblem || Object.keys(interiorProblems).length > 0;
   useLayoutEffect(() => {
     if (!onDraft || (!changed && !Object.keys(typed).length)) return;
     onDraft({});
@@ -372,7 +386,9 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
         const failedGuideX = !!guideGapError && guideX;
         const interiorProblem = interiorProblems[f.key as FilletInteriorKey];
         const interiorId = `history-fillet-interior-${f.key}`;
-        const description = [rangeId, guideId, interiorProblem && interiorId, f.key === 'csk' && countersinkProblem && countersinkErrorId, failedGuideX && `${guideDescriptionId}-gap`].filter(Boolean).join(' ') || undefined;
+        const opposedLength = opposedLengths.get(f.key);
+        const opposedId = `${opposedLengthErrorId}-${f.key}`;
+        const description = [opposedLength && opposedId, rangeId, guideId, interiorProblem && interiorId, f.key === 'csk' && countersinkProblem && countersinkErrorId, failedGuideX && `${guideDescriptionId}-gap`].filter(Boolean).join(' ') || undefined;
         const selectedGuide = f.kind === 'choice' && f.key === 'loftGuide' && sameDraftScope
           ? f.options.find(option => option.value === loftGuideChoice)?.value : undefined;
         const refusedHistoryField = current?.error?.historyField === f.key;
@@ -383,9 +399,10 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
           {guideX && guide && <div id={guideId} className="col-span-2 small mono break-words">
             Guide {Number(guideField[1]) + 1} · ({guide.controlPoints[0].join(', ')}) → ({guide.controlPoints[2].join(', ')}) mm
           </div>}
+          {opposedLength && <div id={opposedId} role="status" className="col-span-2 hud-error">{opposedLength}</div>}
           {extrudeFailure && <span className="col-span-2"><FeatureFailureNotice id={historyErrorId} error={extrudeFailure} /></span>}
           <span>{f.label}</span>
-          {f.kind === 'number' ? <span className="num"><input ref={element => element?.setCustomValidity(interiorProblem ?? ((rule === 'scale-factor' || rule === 'open-unit' || node?.kind === 'chamfer' && rule === 'positive') && invalidDimension ? featureNumberRange(rule) + '.' : ''))} type="number" step={f.integerRange ? 1 : "any"} min={f.integerRange?.min ?? numberBounds.min} max={f.integerRange?.max ?? numberBounds.max} aria-label={f.label} aria-describedby={extrudeFailure ? historyErrorId : description} aria-invalid={!!extrudeFailure || typed[f.key]?.trim() === '' || invalidCounts.includes(f) || invalidDimension || !!interiorProblem || failedGuideX || (f.key === 'csk' && !!countersinkProblem) || (f.key === 'olen2' && !!lengthProblem) || undefined} data-loft-guide-gap={failedGuideX || undefined} value={typed[f.key] ?? f.get(draft)} disabled={ordinaryLocked || !!(f as BindableField).param?.(draft)} onChange={e => changeNumber(f, e.target.value)} />{f.unit && <em>{f.unit}</em>}
+          {f.kind === 'number' ? <span className="num"><input ref={element => element?.setCustomValidity(interiorProblem ?? ((rule === 'scale-factor' || rule === 'open-unit' || node?.kind === 'chamfer' && rule === 'positive') && invalidDimension ? featureNumberRange(rule) + '.' : ''))} type="number" step={f.integerRange ? 1 : "any"} min={f.integerRange?.min ?? numberBounds.min} max={f.integerRange?.max ?? numberBounds.max} aria-label={f.label} aria-describedby={extrudeFailure ? historyErrorId : description} aria-invalid={!!extrudeFailure || !!opposedLength || typed[f.key]?.trim() === '' || invalidCounts.includes(f) || invalidDimension || !!interiorProblem || failedGuideX || (f.key === 'csk' && !!countersinkProblem) || (f.key === 'olen2' && !!lengthProblem) || undefined} data-loft-guide-gap={failedGuideX || undefined} value={typed[f.key] ?? f.get(draft)} disabled={ordinaryLocked || !!(f as BindableField).param?.(draft)} onChange={e => changeNumber(f, e.target.value)} />{f.unit && <em>{f.unit}</em>}
             {names.length > 0 && 'bind' in f && <select className="param-bind" disabled={ordinaryLocked} aria-label={`${f.label} parameter`} data-tip="Parameter" data-tip-desc="Bind this value to a named parameter (Parameters panel)" value={(f as BindableField).param(draft) ?? ''}
               onChange={e => {
                 retireEvaluation();
