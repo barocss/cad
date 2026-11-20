@@ -23,9 +23,12 @@ test('All still copies a three-hole cap outside the selective range', () => {
   }
   const section = cut(doc);
   const result = sectionSketch(section, nextSerial(doc), 'all');
-  assert.ok('shapes' in result);
-  assert.equal(result.shapes.length, 4);
-  assert.equal(result.shapes.filter(shape => shape.kind === 'circle').length, 3);
+  assert.ok('draft' in result);
+  const { draft } = result;
+  assert.deepEqual(draft.anchor, { kind: 'face', offset: 0, face: { plane: draft.plane, base: null } });
+  assert.equal(draft.shape, null);
+  assert.equal(draft.done?.length, 4);
+  assert.equal(draft.done?.filter(shape => shape.kind === 'circle').length, 3);
   assert.ok('error' in sectionSketch(section, nextSerial(doc), 'inner'));
 });
 
@@ -38,8 +41,8 @@ test('multi-body All copies both caps or refuses the whole draft', () => {
   assert.equal(section.bodies.length, 2);
   const from = nextSerial(doc);
   const result = sectionSketch(section, from, 'all');
-  assert.ok('shapes' in result);
-  assert.equal(result.shapes.length, 2);
+  assert.ok('draft' in result);
+  assert.equal(result.draft.done?.length, 2);
   assert.ok('error' in sectionSketch(section, from, 'outer'));
 
   const [first, second] = section.bodies;

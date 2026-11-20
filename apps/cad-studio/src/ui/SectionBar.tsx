@@ -7,20 +7,12 @@ import type { SectionOutlineMode } from '@barocss/cad-model/app/sectionSketchPro
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { fmt } from '@barocss/cad-model/engine/doc';
 import type { FeatureHandle } from '../viewport/gizmo';
+import type { SectionExclusionControls } from '../viewport/useSectionExclusion';
 import { boxSection, cutoutCorner, flipPlane, middlePlane, planeAxis, type Section, type SectionPlane } from '../viewport/sectionView';
 import { SECTION_SPAN_UNAVAILABLE, projectedSectionSpan, sectionDragRange, sectionDragValue } from '../viewport/sectionSpan';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Icon } from './atoms';
-
-export interface SectionExclusionControls {
-  ids: readonly string[];
-  labels: readonly { id: string; name: string }[];
-  selectionReason: string | null;
-  excludeSelected(): void;
-  restore(id: string): void;
-  clear(): void;
-}
 
 type Box = { min: Vec3; max: Vec3 };
 const AXES = ['x', 'y', 'z'] as const;

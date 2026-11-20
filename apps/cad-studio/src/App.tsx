@@ -54,7 +54,7 @@ import { type SectionPick, useViewportPicking, type ViewportMenu } from './viewp
 import { isOutlinePickIssue, ownsPanelDrivingLength, studioSketchViewportActions } from './viewport/studioSketchViewportActions';
 import { sewPreviewDirect } from './viewport/sewPreviewDirect';
 import { useSectionState } from './viewport/useSectionState';
-import { useSectionExclusion, sectionExclusionReason } from './viewport/useSectionExclusion';
+import { useSectionExclusion } from './viewport/useSectionExclusion';
 import { useSectionEvaluation } from './viewport/useSectionEvaluation';
 import { useSectionDisplay } from './viewport/useSectionDisplay';
 import { useOwnedScalarHover } from './viewport/useOwnedScalarHover';
@@ -881,8 +881,6 @@ export function App() {
   const [fov, setFov] = useState(32);
   const { sectionDragFrom, sectionDebug, setSectionDebug, sectionLive, section, setSection, dragSection, sectionFacePick, setSectionFacePick,
     sectionFacePickRef, cancelSectionFacePick, sectionExact, setSectionExact, sectionRef } = useSectionState(viewBackend);
-  const sectionExclusion = useSectionExclusion(doc, section);
-  const excludedSectionInstances = sectionExclusion.ids;
 
   const resetDocumentSection = useCallback(() => {
     lanes.cancel('section');
@@ -1138,19 +1136,11 @@ export function App() {
   useEffect(() => { if (claimBodies.current) { claimBodies.current = false; setBodiesFor(evaluated); } }, [evaluated]);
   const fresh = bodiesFor === evaluated;
   const modelUnavailable = !fresh && !busy;
-  const sectionExclusionControls = {
-    ids: excludedSectionInstances,
-    labels: excludedSectionInstances.map(id => ({ id, name: doc.instances?.find(i => i.id === id)?.name ?? id })),
-    selectionReason: (!fresh || busy) ? 'Wait for a current model before excluding instances.' : sectionExclusionReason(doc, instanceSel),
-    excludeSelected: () => {
-      if (docNow.current !== doc || sectionRef.current !== section || section?.mode !== 'plane' || !fresh || busy) return;
-      const reason = sectionExclusionReason(doc, instanceSel);
-      if (reason) { setToast({ title: 'Cannot exclude this selection', hint: reason, detail: '' }); return; }
-      sectionExclusion.set([...excludedSectionInstances, ...instanceSel]);
-    },
-    restore: (id: string) => { if (docNow.current === doc && sectionRef.current === section) sectionExclusion.set(excludedSectionInstances.filter(x => x !== id)); },
-    clear: () => { if (docNow.current === doc && sectionRef.current === section) sectionExclusion.set([]); },
-  };
+  const sectionExclusionControls = useSectionExclusion(doc, section, {
+    selected: instanceSel, ready: fresh && !busy, onNotice: setToast,
+    isCurrent: () => docNow.current === doc && sectionRef.current === section,
+  });
+  const excludedSectionInstances = sectionExclusionControls.ids;
 
   useEffect(() => {
     evaluationEvidence.settle(doc, evaluated, bodiesFor, bodies);
@@ -2337,10 +2327,10 @@ export function App() {
     if (!canChangeDocument()) return;
     const result = sectionSketch(sectionExact, nextSerial(evaluated), mode);
     if ('error' in result) { setToast({ ...result.error, documentSource: { doc, evaluated } }); return; }
-    const { plane, shapes } = result;
+    const { draft } = result;
     setToast(null); setSection(null); setSelection(emptySel);
-    setSketch({ plane, anchor: { kind: 'face', offset: 0, face: { plane, base: null } }, tool: 'rectangle', shape: null, done: shapes, base: null });
-    const [min, max] = sketchRegion(bodies, plane); viewport.current?.frameSketch(min, max, plane);
+    setSketch(draft);
+    const [min, max] = sketchRegion(bodies, draft.plane); viewport.current?.frameSketch(min, max, draft.plane);
   };
   /**
    * Arrow keys move the picked body: a move of its own, added once and then grown while the body's newest

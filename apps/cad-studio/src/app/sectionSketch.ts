@@ -4,9 +4,9 @@ import type { SketchNode } from '@barocss/cad-model/engine/doc';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { cutAfter } from '@barocss/cad-model/engine/ids';
-import { planeOfDisplayFace, type SketchPlane } from '@barocss/cad-model/sketch/plane';
+import { planeOfDisplayFace } from '@barocss/cad-model/sketch/plane';
 import { sketchShapes } from '@barocss/cad-model/sketch/reopen';
-import type { SketchShape } from '@barocss/cad-model/sketch/types';
+import type { SketchShape, SketchState } from '@barocss/cad-model/sketch/types';
 
 const unreadable = { title: 'The section’s outline could not be read', hint: 'Move the plane and try again.', detail: '' };
 const unsupported = { title: 'Outline selection unavailable', hint: 'Cut one body with one outer outline and up to two inner outlines, or choose All.', detail: '' };
@@ -21,7 +21,7 @@ export function sectionSketch(
   exact: { bodies: readonly BodyResult[]; sourceBodies: readonly BodyResult[]; from: ReadonlyMap<string, string> },
   from: number,
   mode: SectionOutlineMode,
-): { plane: SketchPlane; shapes: SketchShape[] } | { error: FriendlyError } {
+): { draft: SketchState } | { error: FriendlyError } {
   const faces = exact.bodies.flatMap(body => body.mesh.faces
     .filter(face => face.kind === 'plane' && cutAfter(face.name, from))
     .map(face => ({ body, face })));
@@ -49,5 +49,8 @@ export function sectionSketch(
     if (!outlines.length) return { error: unreadable };
     shapes.push(...outlines);
   }
-  return { plane, shapes };
+  return { draft: {
+    plane, anchor: { kind: 'face', offset: 0, face: { plane, base: null } },
+    tool: 'rectangle', shape: null, done: shapes, base: null,
+  } };
 }
