@@ -18,6 +18,7 @@ import type { ComponentProps, Dispatch, SetStateAction } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { Command, Ctx } from '@barocss/cad-model/app/commands';
 import { canEditSavedExtrudeEndFace, editSavedExtrudeEndFaceCommand } from '@barocss/cad-model/app/extrudeEndFaceEdit';
+import { editSavedReplaceFaceCommand } from '@barocss/cad-model/app/replaceFaceCommand';
 import { canEditSavedOffsetFace, editSavedOffsetFaceCommand } from '@barocss/cad-model/app/offsetFaceEdit';
 import { editSavedDraftCommand } from '@barocss/cad-model/app/draftEdit';
 import { roundedInsetSourceWidth } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
@@ -48,7 +49,7 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
   const { doc, evaluated, commandDoc, editNode, fresh, busy, workerSession } = model;
   const { ctx, discardFeatureDraft, closeForCommand, setActive, editSketch, replaceAxis } = commands;
   const { ownsEvaluatedSource } = owner;
-  const savedCommand = () => fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc)?.command ?? mountHistoryEdit(commandDoc, editNode) ?? connectorHistoryEdit(commandDoc, editNode) ?? subdPrimitiveHistoryEdit(commandDoc, editNode) ?? mirrorHistoryEdit(commandDoc, editNode) ?? sweepHistoryEdit(commandDoc, editNode) ?? loftSectionHistoryEdit(commandDoc, editNode) ?? subtractHistoryEdit(commandDoc, editNode) ?? booleanHistoryEdit(commandDoc, editNode) ?? sheetReliefCornerHistoryEdit(commandDoc, editNode);
+  const savedCommand = () => fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc)?.command ?? mountHistoryEdit(commandDoc, editNode) ?? connectorHistoryEdit(commandDoc, editNode) ?? subdPrimitiveHistoryEdit(commandDoc, editNode) ?? mirrorHistoryEdit(commandDoc, editNode) ?? sweepHistoryEdit(commandDoc, editNode) ?? loftSectionHistoryEdit(commandDoc, editNode) ?? subtractHistoryEdit(commandDoc, editNode) ?? booleanHistoryEdit(commandDoc, editNode) ?? sheetReliefCornerHistoryEdit(commandDoc, editNode) ?? editSavedReplaceFaceCommand(commandDoc, editNode);
   const savedWidth = flangeWidthHistoryEdit(commandDoc, editNode) ?? flangeReliefDimensionsHistoryEdit(commandDoc, editNode) ?? partialFlangeRadiusHistoryEdit(commandDoc, editNode);
   const savedFeature = savedWidth ?? savedCommand();
   const savedPath = sweepPathHistoryEdit(commandDoc, editNode);

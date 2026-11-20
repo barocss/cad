@@ -28,6 +28,7 @@ import { REFERENCE_CODES } from '../../engine/schema/references';
 import { addParameters, bindParameter, parameterUses, PARAMETER_CODES, removeParameter, renameParameter, withParameters, type Binding } from '../../engine/parameters';
 import { featureId } from '../../engine/ids';
 import { sweepSourceRevision } from '../sweepSource';
+import { isReferencePlaneEdit } from '../../app/offsetPlanePick';
 
 /** Commands the chat can run (the ones that build; sketch-mode and measure UI actions are tools of their own). */
 // (Loft takes sketches picked in the studio, Align a face clicked there; chat writes a loft node with
@@ -52,6 +53,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
     representation: 'required: exact-straight for one straight segment, or exact for one 30°–120° circular arc in one or two rational quadratic spans. The path starts at the outer profile’s area centroid. Creates a new body.',
   } },
   'offset-face': { selection: 'Distance: faces [source]. To plane: faces [source, reference] in that order, on distinct current solids.', values: { offsetMode: 'distance (default) | to-plane (direct native source face and a parallel reference face)', d: 'distance along the face normal: + out (material added), − in (taken off)' } },
+  'replace-face': { selection: 'Two exact faces in source, reference order. Select a straight box wall and a plane tilted along the height on another solid.', values: {} },
   box: { selection: 'none (or a top face to stack on)', values: { w: 'width along X', d: 'depth along Y', h: 'height along Z', x: 'min corner X', y: 'min corner Y', z: 'base Z' } },
   cylinder: { selection: 'none', values: { r: 'radius', h: 'height', x: 'centre X', y: 'centre Y', z: 'base Z' } },
   sphere: { selection: 'none', values: { r: 'radius', x: 'centre X', y: 'centre Y', z: 'Z it stands on (its bottom)' } },
@@ -176,11 +178,11 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   if (unknown.length) return fail(state, `No face, edge or body named ${unknown.map(n => `"${n}"`).join(', ')} on the current part. Use the names from the last result or get_part_summary.`);
   const point = Array.isArray(args.point) && args.point.length === 3 ? args.point.map(Number) as [number, number, number] : undefined;
   let given = isObj(args.values) ? args.values : {};
-  const toPlane = cmd.id === 'offset-face' && given.offsetMode === 'to-plane';
+  const toPlane = isReferencePlaneEdit(cmd.id, { offsetMode: typeof given.offsetMode === 'string' ? given.offsetMode : '' });
   const [sourceFace, referenceFace] = selection.faces;
   if (toPlane && (sel.names.faces.length !== 2 || selection.faces.length !== 2 ||
       sel.names.faces.some(name => state.bodies.flatMap(body => body.mesh.faces.filter(face => face.name === name && face.nativePlaneName === name)).length !== 1)))
-    return fail(state, 'Offset face to plane needs two unique native face names in source, reference order.');
+    return fail(state, `${cmd.id === 'offset-face' ? 'Offset face to plane' : cmd.label} needs two unique native face names in source, reference order.`);
   let ctx: Ctx = { doc: state.doc, bodies: state.bodies, selection: toPlane ? { ...selection, faces: [sourceFace] } : selection, pick: point };
   if (cmd.id === 'sweep-curve') {
     const { sketch, path, pathRevision, representation, ...other } = given;

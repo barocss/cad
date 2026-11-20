@@ -265,25 +265,33 @@ export interface OffsetPlaneRef {
 }
 export type OffsetFaceNode = { kind: 'offset-face'; parent: BodyRef; faces: [string] } &
   ({ distance: number; target?: never } | { target: OffsetPlaneRef; distance?: never });
+export type ReplaceFaceNode = { kind: 'replace-face'; parent: BodyRef; faces: [string]; target: OffsetPlaneRef };
 export type DeleteFaceNode = { kind: 'delete-face'; parent: BodyRef; faces: [string] };
 
 /** Check the authored recipe before capture or geometry evaluation. */
 export function offsetFaceNodeProblem(input: unknown, index: number): string | null {
-  if (!textRecord(input) || input.kind !== 'offset-face') return 'Offset face: an offset recipe is required.';
-  const allowed = new Set(['kind', 'parent', 'faces', 'distance', 'target', ...NODE_EXTRA_FIELDS]);
-  for (const key of Object.keys(input)) if (!allowed.has(key)) return `Offset face: unknown field ${key}.`;
+  return planarFaceEditNodeProblem(input, index, 'offset-face');
+}
+
+function planarFaceEditNodeProblem(input: unknown, index: number, kind: 'offset-face' | 'replace-face'): string | null {
+  const label = kind === 'offset-face' ? 'Offset face' : 'Replace face';
+  if (!textRecord(input) || input.kind !== kind) return kind === 'offset-face'
+    ? 'Offset face: an offset recipe is required.' : 'Replace face: a replacement recipe is required.';
+  const allowed = new Set(['kind', 'parent', 'faces', 'target', ...(kind === 'offset-face' ? ['distance'] : []), ...NODE_EXTRA_FIELDS]);
+  for (const key of Object.keys(input)) if (!allowed.has(key)) return `${label}: unknown field ${key}.`;
   const parent = input.parent;
   if (!textRecord(parent) || Object.keys(parent).sort().join(',') !== 'node,side' || parent.side !== 'solid' ||
       typeof parent.node !== 'number' || !Number.isSafeInteger(parent.node) || parent.node < 0 || parent.node >= index) {
-    return 'Offset face: a preceding solid parent is required.';
+    return `${label}: a preceding solid parent is required.`;
   }
   const face = Array.isArray(input.faces) && input.faces.length === 1 ? input.faces[0] : undefined;
-  if (typeof face !== 'string' || !face.trim() || face.includes('+') || face.includes('\0')) return 'Offset face: one exact individual face name is required.';
+  if (typeof face !== 'string' || !face.trim() || face.includes('+') || face.includes('\0')) return `${label}: one exact individual face name is required.`;
+  if (kind === 'replace-face' && !Object.hasOwn(input, 'target')) return 'Replace face: a reference plane is required.';
   if (Object.hasOwn(input, 'target')) {
     const target = input.target;
     if (Object.hasOwn(input, 'distance') || !textRecord(target) ||
         Object.keys(target).sort().join(',') !== 'body,face,feature,localAnchor,localSupport,normal') {
-      return 'Offset face: give one reference plane or one signed distance.';
+      return `${label}: give one reference plane or one signed distance.`;
     }
     const body = target.body;
     if (!textRecord(body) || Object.keys(body).sort().join(',') !== 'node,side' || body.side !== 'solid' ||
@@ -292,25 +300,25 @@ export function offsetFaceNodeProblem(input: unknown, index: number): string | n
         typeof target.face !== 'string' || !target.face.trim() || /[+\0]|#\d+$/.test(target.face) ||
         !textVector(target.normal, false) || Math.abs(Math.hypot(...target.normal) - 1) > 1e-8 ||
         !textVector(target.localAnchor, false) || typeof target.localSupport !== 'number' || !Number.isFinite(target.localSupport)) {
-      return 'Offset face: pick one persistent planar face of a different preceding solid.';
+      return `${label}: pick one persistent planar face of a different preceding solid.`;
     }
   } else if (typeof input.distance !== 'number' || !Number.isFinite(input.distance) || input.distance === 0 || Math.abs(input.distance) > CadPartLimits.length) {
-    return 'Offset face: distance must be a finite nonzero native length.';
+    return `${label}: distance must be a finite nonzero native length.`;
   }
-  if (input.id !== undefined && (typeof input.id !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(input.id))) return 'Offset face: the authored feature id is invalid.';
-  if (input.suppressed !== undefined && input.suppressed !== true) return 'Offset face: suppressed, when present, must be true.';
-  if (input.bought !== undefined && typeof input.bought !== 'boolean') return 'Offset face: bought must be boolean.';
-  if (input.held !== undefined && typeof input.held !== 'string') return 'Offset face: held must be a string.';
-  if (input.rematched !== undefined && (!textRecord(input.rematched) || Object.keys(input.rematched).length)) return 'Offset face: the original face name is required.';
+  if (input.id !== undefined && (typeof input.id !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]{0,63}$/.test(input.id))) return `${label}: the authored feature id is invalid.`;
+  if (input.suppressed !== undefined && input.suppressed !== true) return `${label}: suppressed, when present, must be true.`;
+  if (input.bought !== undefined && typeof input.bought !== 'boolean') return `${label}: bought must be boolean.`;
+  if (input.held !== undefined && typeof input.held !== 'string') return `${label}: held must be a string.`;
+  if (input.rematched !== undefined && (!textRecord(input.rematched) || Object.keys(input.rematched).length)) return `${label}: the original face name is required.`;
   if (input.sigs !== undefined) {
     const sigs = input.sigs;
-    if (!textRecord(sigs) || Object.keys(sigs).length !== 1 || !Object.hasOwn(sigs, face)) return 'Offset face: the signature must describe the selected face.';
+    if (!textRecord(sigs) || Object.keys(sigs).length !== 1 || !Object.hasOwn(sigs, face)) return `${label}: the signature must describe the selected face.`;
     const sig = sigs[face];
     if (!textRecord(sig) || Object.keys(sig).some(key => !['k', 'p', 'd', 's', 'n'].includes(key)) ||
         sig.k !== 'plane' || !textVector(sig.p, true) || !textVector(sig.d, false) ||
         Math.abs(Math.hypot(...sig.d) - 1) > 1e-8 ||
         typeof sig.s !== 'number' || !Number.isFinite(sig.s) || sig.s <= 0 || sig.n !== undefined && sig.n !== 1) {
-      return 'Offset face: an individual planar face signature is required.';
+      return `${label}: an individual planar face signature is required.`;
     }
   }
   return null;
@@ -367,6 +375,11 @@ function straightExtrudeSketch(nodes: readonly unknown[], index: number): Record
   if (textRecord(sketch) && sketch.kind === 'sketch') return sketch;
 }
 
+/** Straight rectangular stock for a cardinal wall replacement. The kernel proves the exact solid. */
+export function isBoxWallReplacementSource(nodes: readonly unknown[], index: number): boolean {
+  return straightExtrudeSketch(nodes, index)?.profile === 'rectangle';
+}
+
 /** Identify the authored fillet. The kernel proves the current solid and its concave arc. */
 export function isDeleteFaceFilletSource(nodes: readonly unknown[], index: number): boolean {
   const fillet = nodes[index];
@@ -420,19 +433,24 @@ export function directFaceDocumentProblem(input: unknown): string | null {
         if (problem) return problem;
         continue;
       }
-      if (node.kind !== 'offset-face') continue;
-      const problem = offsetFaceNodeProblem(node, index);
+      if (node.kind !== 'offset-face' && node.kind !== 'replace-face') continue;
+      const label = node.kind === 'offset-face' ? 'Offset face' : 'Replace face';
+      const problem = planarFaceEditNodeProblem(node, index, node.kind);
       if (problem) return problem;
-      if (node.sigs === undefined) return 'Offset face: the selected face needs its stored individual signature.';
+      if (node.sigs === undefined) return `${label}: the selected face needs its stored individual signature.`;
       if (node.target !== undefined) {
         const target = node.target as OffsetPlaneRef;
         const source = value.nodes[target.body.node];
         if (!textRecord(source) || source.id !== target.feature ||
             value.nodes.filter(candidate => textRecord(candidate) && candidate.id === target.feature).length !== 1) {
-          return 'Offset face: the reference feature identity is missing, changed or ambiguous.';
+          return `${label}: the reference feature identity is missing, changed or ambiguous.`;
         }
       }
       const parentIndex = (node.parent as BodyRef).node;
+      if (node.kind === 'replace-face') {
+        if (!isBoxWallReplacementSource(value.nodes, parentIndex)) return 'Replace face: a preceding straight rectangular extrusion is required.';
+        continue;
+      }
       const parent = value.nodes[parentIndex];
       if (!textRecord(parent)) return 'Offset face: a supported solid parent is required.';
       if (boredCapOffsets.has(parentIndex) || isBoredPlateHole(value.nodes, parentIndex)) {
@@ -639,7 +657,7 @@ export type NodeExtras = { suppressed?: true; id?: string; rematched?: Record<st
  */
 export const NODE_EXTRA_FIELDS = ['suppressed', 'id', 'rematched', 'sigs', 'held', 'bought'] as const satisfies readonly (keyof NodeExtras)[];
 export const _nodeFieldsComplete: [Exclude<keyof NodeExtras, typeof NODE_EXTRA_FIELDS[number]>] extends [never] ? true : never = true;
-type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode | TextNode | TextReliefNode | CylindricalWrapNode | OffsetFaceNode | DeleteFaceNode
+type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode | TextNode | TextReliefNode | CylindricalWrapNode | OffsetFaceNode | ReplaceFaceNode | DeleteFaceNode
   /** `draft` (degrees) leans the walls into the material away from the sketch plane. */
   | RegionExtrudeNode
   | { kind: 'extrude'; sketch: number; height: Dim; from?: Dim; draft?: number; made?: Made; cutDepth?: 'through' }
@@ -1263,7 +1281,7 @@ export const usesOf = (node: ModelNode, nodes?: readonly ModelNode[]): number[] 
     ? [node.sketch, ...(nodes ? nodes.flatMap((_, i) => featureId(nodes, i) === node.axisRef!.sourceFeature ? [i] : []) : [])]
   : node.kind === 'align' ? [node.parent.node, node.target.body.node]
   : node.kind === 'face-end-extrude' ? [node.sketch, node.target.body.node]
-  : node.kind === 'offset-face' && node.target ? [node.parent.node, node.target.body.node]
+  : (node.kind === 'offset-face' || node.kind === 'replace-face') && node.target ? [node.parent.node, node.target.body.node]
   : node.kind === 'extrude' && node.cutDepth === 'through' ? throughCutSources(node, nodes) : parentsOf(node);
 
 function throughCutSources(node: Extract<ModelNode, { kind: 'extrude' }>, nodes?: readonly ModelNode[]): number[] {
@@ -1457,6 +1475,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'text': return `Text · ${node.text}`;
     case 'cylindrical-wrap': return 'Cylindrical wrap';
     case 'offset-face': return (node.target ? 'Offset face to plane' : `Offset face ${node.distance > 0 ? '+' : ''}${node.distance} mm`) + offsetFaceLabelSuffix(node.faces[0]);
+    case 'replace-face': return 'Replace face';
     case 'band-surface': return 'Band surface';
     case 'text-relief': return `${node.mode === 'emboss' ? 'Text emboss' : 'Text engrave'} · ${node.text}`;
     case 'driven-sketch': return 'Sketch · driven outline';

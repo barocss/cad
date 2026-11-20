@@ -1,6 +1,6 @@
 import type { Command, Ctx, Values } from '@barocss/cad-model/app/commands';
 import { awaitingExtrudeEndFace, EXTRUDE_END_FACE_EDIT, isExtrudeToFace } from '@barocss/cad-model/app/extrudeEndFacePick';
-import { awaitingOffsetPlane, isOffsetToPlane } from '@barocss/cad-model/app/offsetPlanePick';
+import { awaitingOffsetPlane, isReferencePlaneEdit } from '@barocss/cad-model/app/offsetPlanePick';
 import { awaitingRevolveAxis, REVOLVE_AXIS_EDIT } from '@barocss/cad-model/app/revolveAxisEdit';
 import { SWEEP_CURVE } from '@barocss/cad-model/app/profileCommands';
 import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
@@ -39,7 +39,7 @@ export function commandApplyReadiness(active: Active, scope: ModelScope): ApplyR
   if ((active.ownsSource && !active.ownsSource()) || (id === SHARED_HOLE_LAYOUT_EDIT && !cmd.available(ctx).ok)) {
     return { kind: 'retire', clearRepeat: true };
   }
-  const toFace = isExtrudeToFace(id, values) || isOffsetToPlane(id, values);
+  const toFace = isExtrudeToFace(id, values) || isReferencePlaneEdit(id, values);
   const region = id === 'extrude' && values.region !== undefined && values.region !== 'all';
   const replaceAxis = id === REVOLVE_AXIS_EDIT;
   const sweep = id === SWEEP_CURVE;
@@ -73,7 +73,7 @@ export function createCommandApplyQueue() {
       pending = { cmd: active.cmd, ctx: active.ctx, ...(active.independentExtrude ? { values: active.values } : {}) };
     },
     requestRepeat(cmd: Command) {
-      if (!['edit', EXTRUDE_END_FACE_EDIT, REVOLVE_AXIS_EDIT, OFFSET_FACE_EDIT, DRAFT_EDIT, SHARED_HOLE_LAYOUT_EDIT].includes(cmd.id)) repeat = cmd;
+      if (!['edit', 'replace-face-edit', EXTRUDE_END_FACE_EDIT, REVOLVE_AXIS_EDIT, OFFSET_FACE_EDIT, DRAFT_EDIT, SHARED_HOLE_LAYOUT_EDIT].includes(cmd.id)) repeat = cmd;
     },
     takeRepeat() { const cmd = repeat; clearRepeat(); return cmd; },
     clearApply,

@@ -20,6 +20,10 @@ const DRAFT_ANGLE_HELP = { title: 'Draft needs a nonzero angle below 45°',
   hint: 'Enter a finite angle greater than −45° and less than 45°, excluding 0°. Use a positive or negative angle to choose the taper direction.' };
 
 const rules: { code?: string | readonly string[]; text?: RegExp; title: string; hint: string }[] = [
+  { text: /(?:^|: )Replace face: the reference plane must tilt only along the height of the selected wall\./,
+    title: 'Reference plane does not fit this wall', hint: 'Pick a face that tilts only along the height of the selected wall.' },
+  { text: /(?:^|: )Replace face: the replacement would reach or cross the opposite wall at one end\./,
+    title: 'Replacement would collapse the box', hint: 'Pick a plane that leaves space to the opposite wall at both ends.' },
   { code: 'CONNECTOR_EDIT_KEEPOUT', title: 'Connector keep-out cannot be moved',
     hint: 'The saved keep-out is missing, modified or ambiguous. Recreate the connector instead of overwriting that space.' },
   { text: /\[FACE_THREAD_SIZE\].*length .*longer than the face/,

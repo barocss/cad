@@ -41,7 +41,7 @@ function fail(code: BrepError['code'], detail: string): never {
 }
 
 /** An affine, degree-one chart with a stable inverse and the original parameter directions. */
-function affineChart(surface: BrepFace['surface'], sense: BrepFace['sense']): Chart | undefined {
+export function affineChart(surface: BrepFace['surface'], sense: BrepFace['sense']): Chart | undefined {
   if (surface.kind !== 'surface' || surface.degreeU !== 1 || surface.degreeV !== 1 || surface.controlPoints.length !== 2
     || surface.controlPoints.some(row => row.length !== 2) || surface.weights.length !== 2
     || surface.weights.some(row => row.length !== 2 || row.some(weight => weight !== surface.weights[0][0]))) return undefined;
@@ -58,7 +58,7 @@ function fractions(chart: Chart, point: Point): [number, number] {
   return [dot(delta, chart.dualU), dot(delta, chart.dualV)];
 }
 
-function trimFits(chart: Chart, point: Point, roundoff: number): boolean {
+export function trimFits(chart: Chart, point: Point, roundoff: number): boolean {
   const [u, v] = fractions(chart, point), uSlack = roundoff * len(chart.dualU), vSlack = roundoff * len(chart.dualV);
   return Math.abs(dot(sub(point, chart.origin), chart.normal)) <= roundoff
     && u >= -uSlack && u <= 1 + uSlack && v >= -vSlack && v <= 1 + vSlack;
@@ -210,7 +210,7 @@ function rebuiltChart(face: Face, points: readonly Point[], shift: Point, roundo
   return result;
 }
 
-function uvPoint(chart: Chart, point: Point): Point {
+export function uvPoint(chart: Chart, point: Point): Point {
   const [u, v] = fractions(chart, point), U = chart.surface.knotsU, V = chart.surface.knotsV;
   const at = (value: number, knots: number[]) => knots[1] + Math.min(1, Math.max(0, value)) * (knots[2] - knots[1]);
   return [at(u, U), at(v, V), 0];

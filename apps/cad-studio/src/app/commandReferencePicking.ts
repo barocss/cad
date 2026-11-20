@@ -2,7 +2,7 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { Selection } from '@barocss/cad-model/app/commands';
-import { isOffsetToPlane } from '@barocss/cad-model/app/offsetPlanePick';
+import { isReferencePlaneEdit } from '@barocss/cad-model/app/offsetPlanePick';
 import { isExtrudeToFace } from '@barocss/cad-model/app/extrudeEndFacePick';
 import { REVOLVE_AXIS_EDIT } from '@barocss/cad-model/app/revolveAxisEdit';
 import { SWEEP_CURVE, retargetSweep } from '@barocss/cad-model/app/profileCommands';
@@ -31,8 +31,8 @@ export function createCommandReferencePicking({ model, command, selection, onNot
   const pickCommandReferenceFace = (hit: ExtrudeEndHit, blocked: boolean): boolean => {
     const current = activeStore.get();
     if (!current) return false;
-    const offset = isOffsetToPlane(current.cmd.id, current.values);
-    if (!offset && !isExtrudeToFace(current.cmd.id, current.values)) return false;
+    const planeEdit = isReferencePlaneEdit(current.cmd.id, current.values);
+    if (!planeEdit && !isExtrudeToFace(current.cmd.id, current.values)) return false;
     clearQueuedApply();
     if (!isCurrent() || current.ctx.doc !== commandDoc) {
       retire();
@@ -45,7 +45,7 @@ export function createCommandReferencePicking({ model, command, selection, onNot
     const picked = face && current.cmd.onPick?.(current.ctx, current.values, { face, edge: null });
     if (!picked || typeof picked.error === 'string') {
       const hint = typeof picked?.error === 'string' ? picked.error : 'Pick one original planar face of a current solid.';
-      if (offset) {
+      if (planeEdit) {
         retire();
         setActive(active => active === current ? refuseOffsetPlanePick(active, hint) : active);
       } else setToast({ title: 'End face not selected', hint, detail: '' });

@@ -1,4 +1,4 @@
-import { resolveOffsetPlaneDistance } from './offsetPlane';
+import { resolveOffsetPlaneDistance, resolveReplacementPlane } from './offsetPlane';
 import { splitOutputDocumentProblem } from './splitOutput';
 import { assertRevolveAxisBindings, linkedRevolveSource, resolveRevolveAxis } from './revolveAxis';
 import { assertPocketFloorBindings, pocketFloorSource, resolvePocketFloor } from './pocketFloor';
@@ -154,6 +154,7 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
       return { ...at, kind: 'cylindrical-wrap', target: ref(node.parent), faces: [name], rectangle: structuredClone(node.rectangle), height: structuredClone(node.height), ...expectOf(node, node.faces) };
     }
     case 'delete-face': return { ...at, kind: 'delete-face', target: ref(node.parent), face: node.faces[0], ...expectOf(node, node.faces) };
+    case 'replace-face': throw refusal('BAD_REFERENCE', 'Replace face requires the current native document prefix.');
     case 'offset-face': {
       if (node.target) throw refusal('BAD_REFERENCE', 'Offset face to plane requires the current native document prefix.');
       const face = node.faces[0];
@@ -742,6 +743,12 @@ function buildPartDocument(doc: StudioDoc, before?: number): CadPartDocument {
     // Suppressing the pattern itself keeps the ordinary parent pass-through below.
     if ((node.kind === 'fill-feature-pattern' || node.kind === 'curve-feature-pattern' || node.kind === 'linear-feature-pattern' || node.kind === 'rectangular-feature-pattern' || node.kind === 'rib' || node.kind === 'rectangular-relief' || node.kind === 'text-relief') && !node.suppressed) { features.push(...featuresOf(node, i, CadPartLimits.features - features.length)); return; }
     const parent = (node as { parent: BodyRef }).parent;
+    if (node.kind === 'replace-face' && !node.suppressed) {
+      if (hasText) checkTextExpansion(features);
+      const plane = resolveReplacementPlane(doc, node, features);
+      features.push({ id: id(i), kind: 'replace-face', target: ref(node.parent), face: node.faces[0], plane, ...expectOf(node, node.faces) });
+      return;
+    }
     if (node.kind === 'offset-face' && node.target && !node.suppressed) {
       if (hasText) checkTextExpansion(features);
       const { target, ...recipe } = node;

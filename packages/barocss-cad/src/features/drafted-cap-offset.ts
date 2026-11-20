@@ -1,8 +1,10 @@
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { BrepError, checkBrep, type Brep, type BrepFace, type BrepVertex } from '../brep/brep-core.js';
-import { CadNumericPolicy, linearToleranceMM } from '../numeric-policy.js';
+import { dot, len, scale, sub } from '../core/vec3.js';
+import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Point, Surface } from '../types.js';
 import { capSurface } from './extruded-profile-solid.js';
+import { affineChart, trimFits, uvPoint } from './prism-wall-offset.js';
 
 type Axis = 0 | 1;
 type End = 0 | 1;
@@ -74,7 +76,7 @@ function roundoffAt(points: readonly Point[]): number {
 }
 
 /** One solid, two four-edge sections, four matching straight connectors and one support per side. */
-function admittedTaper(brep: Brep): Taper | undefined {
+function admittedTaper(brep: Brep, profile: 'taper' | 'box' = 'taper'): Taper | undefined {
   const { bodies, shells, faces, loops, coedges, edges, vertices } = brep;
   if (bodies.length !== 1 || bodies[0].kind !== 'solid' || bodies[0].shells.length !== 1 || shells.length !== 1
     || !shells[0].closed || faces.length !== 6 || loops.length !== 6 || coedges.length !== 24 || edges.length !== 12 || vertices.length !== 8) return undefined;
@@ -84,8 +86,11 @@ function admittedTaper(brep: Brep): Taper | undefined {
   if (!base || !top) return undefined;
   const roundoff = roundoffAt(vertices.map(vertex => vertex.point));
   const widths = (s: Section, axis: Axis) => s.ranges[axis][1] - s.ranges[axis][0];
-  // A parallel-sided extrusion or pure shear does not have a tapered section.
-  if (!XY_AXES.some(axis => Math.abs(widths(base, axis) - widths(top, axis)) > roundoff)) return undefined;
+  if (profile === 'box') {
+    const extent = geometryScaleMM(vertices.map(vertex => vertex.point)), linear = linearToleranceMM(extent);
+    if (!(extent <= CadNumericPolicy.coordinateAbs && top.z - base.z > linear)
+      || !XY_AXES.every(axis => widths(base, axis) > linear && ENDS.every(end => base.ranges[axis][end] === top.ranges[axis][end]))) return undefined;
+  } else if (!XY_AXES.some(axis => Math.abs(widths(base, axis) - widths(top, axis)) > roundoff)) return undefined;
 
   const point = new Map(vertices.map(vertex => [vertex.id, vertex.point]));
   const edgeById = new Map(edges.map(edge => [edge.id, edge]));
@@ -421,4 +426,131 @@ export function offsetDraftedFace(brep: Brep, faceName: string, distance: number
   const wall = inclinedWall(taper, face);
   if (!wall) fail('GEOMETRY', 'pick a Z-facing cap or one inclined wall of the rectangular taper');
   return offsetWall(brep, taper, face, wall, distance);
+}
+
+type ReplacementPlane = { readonly origin: Point; readonly normal: Point };
+
+function certifiedBoxWall(brep: Brep, faceName: string) {
+  const face = namedFace(brep, faceName), box = face && admittedTaper(brep, 'box');
+  const wall = face && box?.walls.get(face.id);
+  return face && box && wall ? { face, box, wall } : undefined;
+}
+
+/** The exact selected side and its original outward direction for Replace face picks. */
+export function boxWallReplacementFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
+  const admitted = certifiedBoxWall(brep, faceName);
+  if (!admitted) return undefined;
+  const { box, wall } = admitted, [base, top] = box.sections, across = wall.axis === 0 ? 1 : 0;
+  const anchor: Point = [0, 0, (base.z + top.z) / 2];
+  anchor[wall.axis] = base.ranges[wall.axis][wall.end];
+  anchor[across] = (base.ranges[across][0] + base.ranges[across][1]) / 2;
+  return { anchor, normal: wall.plane.n };
+}
+
+function replacementFailure(code: BrepError['code'], detail: string): never {
+  throw new BrepError(code, `Replace face: ${detail}`);
+}
+
+const finitePoint = (value: unknown): value is Point => Array.isArray(value) && value.length === 3 && value.every(component => typeof component === 'number' && Number.isFinite(component));
+
+function continuedSections(box: Taper, wall: Wall, plane: ReplacementPlane): { sections: [Section, Section]; wanted: Plane } {
+  if (!plane || typeof plane !== 'object' || Array.isArray(plane) || Object.keys(plane).sort().join(',') !== 'normal,origin'
+    || !finitePoint(plane.origin) || !finitePoint(plane.normal)) return replacementFailure('INPUT', 'the reference needs a finite origin and normal.');
+  const magnitude = len(plane.normal);
+  if (!Number.isFinite(magnitude) || magnitude === 0) return replacementFailure('INPUT', 'the reference normal must have a finite nonzero length.');
+  const { axis, end } = wall, across = axis === 0 ? 1 : 0;
+  const n: Point = [plane.normal[0] / magnitude, plane.normal[1] / magnitude, plane.normal[2] / magnitude];
+  const roundoff = 64 * Number.EPSILON;
+  if (Math.abs(n[across]) > roundoff || Math.abs(n[axis]) <= roundoff || Math.abs(n[2]) <= roundoff)
+    return replacementFailure('GEOMETRY', 'the reference plane must tilt only along the height of the selected wall.');
+  const withPlane = ({ z, ranges }: Section): Section => {
+    const next: Rectangle = [[...ranges[0]], [...ranges[1]]];
+    next[axis][end] = plane.origin[axis] - (z - plane.origin[2]) * n[2] / n[axis];
+    return { z, ranges: next };
+  };
+  const sections: [Section, Section] = [withPlane(box.sections[0]), withPlane(box.sections[1])];
+  const extent = Math.max(...plane.origin.map(Math.abs), ...sections.flatMap(section => [Math.abs(section.z), ...section.ranges.flat().map(Math.abs)]));
+  if (!(extent <= CadNumericPolicy.coordinateAbs)) return replacementFailure('GEOMETRY', 'the replacement exceeds the modeling coordinate range.');
+  const linear = linearToleranceMM(extent);
+  if (sections.some(section => section.ranges[axis][1] - section.ranges[axis][0] <= linear))
+    return replacementFailure('GEOMETRY', 'the replacement would reach or cross the opposite wall at one end.');
+  if (Math.abs(sections[1].ranges[axis][end] - sections[0].ranges[axis][end]) <= linear)
+    return replacementFailure('GEOMETRY', 'the reference plane tilt is too small for this wall.');
+  return { sections, wanted: { kind: 'plane', o: plane.origin, n: dot(n, wall.plane.n) > 0 ? n : scale(n, -1) } };
+}
+
+/** Replace a cardinal wall of a strict box with the chosen transverse-axis-invariant plane. */
+export function replaceBoxWall(brep: Brep, faceName: string, plane: ReplacementPlane): Brep {
+  const admitted = certifiedBoxWall(brep, faceName);
+  if (!admitted) return replacementFailure('GEOMETRY', 'pick one upright wall of a straight rectangular box.');
+  const { face, box, wall } = admitted, { axis, end } = wall;
+  const { sections: [base, top], wanted } = continuedSections(box, wall, plane);
+  const moved = new Map<string, Point>();
+  const vertices = brep.vertices.map(vertex => {
+    if (vertex.point[axis] !== box.sections[0].ranges[axis][end]) return vertex;
+    const point: Point = [...vertex.point];
+    point[axis] = (point[2] === base.z ? base : top).ranges[axis][end];
+    moved.set(vertex.id, point);
+    return { ...vertex, point };
+  });
+  const changed = new Set<string>();
+  const edges = brep.edges.map(edge => {
+    const [a, b] = edge.vertices.map(id => moved.get(id));
+    if (!a && !b) return edge;
+    changed.add(edge.id);
+    return { ...edge, curve: { ...edge.curve, controlPoints: [a ?? edge.curve.controlPoints[0], b ?? edge.curve.controlPoints[1]] } };
+  });
+
+  const point = new Map(vertices.map(vertex => [vertex.id, vertex.point]));
+  const edgeById = new Map(edges.map(edge => [edge.id, edge]));
+  const uses = new Map(brep.coedges.map(use => [use.id, use]));
+  const loops = new Map(brep.loops.map(loop => [loop.id, loop]));
+  const charts = new Map<string, NonNullable<ReturnType<typeof affineChart>>>(), changedLoops = new Set<string>();
+  const faces = brep.faces.map(current => {
+    const loop = loops.get(current.loops[0])!;
+    const corners = loop.coedges.map(id => {
+      const use = uses.get(id)!, edge = edgeById.get(use.edge)!;
+      return point.get(edge.vertices[use.sense === 'forward' ? 0 : 1])!;
+    });
+    const support = box.walls.get(current.id), original = current.surface as Surface;
+    const originalChart = affineChart(original, current.sense);
+    const allowance = roundoffAt([...corners, ...original.controlPoints.flat(), wanted.o]);
+    if (current !== face && originalChart && corners.every(p => trimFits(originalChart, p, allowance))) {
+      charts.set(loop.id, originalChart);
+      return current;
+    }
+
+    let surface: Surface, sense: BrepFace['sense'];
+    if (current === face) {
+      surface = sideSurface(original.id, axis, end, base, top);
+      sense = wallChartSense(wall);
+    } else if (support) {
+      surface = extendWallChart(original, support, base, top);
+      sense = wallChartSense(support);
+    } else {
+      const section = current === box.caps[0] ? base : top, [[x0, x1], [y0, y1]] = section.ranges;
+      surface = capSurface({ min: [x0, y0], max: [x1, y1] }, section.z, original.id, section === top);
+      sense = 'forward';
+    }
+    const chart = affineChart(surface, sense);
+    const continued = current === face ? wanted : support?.plane ?? planeOf(current);
+    const poles = surface.controlPoints.flat();
+    const roundoff = roundoffAt([...poles, ...corners, ...(continued ? [continued.o] : [])]);
+    if (!continued || !chart || !polesFit(surface) || len(sub(chart.normal, continued.n)) > 128 * Number.EPSILON
+      || [...poles, ...corners].some(p => Math.abs(dot(sub(p, continued.o), continued.n)) > roundoff)
+      || corners.some(p => !trimFits(chart, p, roundoff)))
+      return replacementFailure('GEOMETRY', 'the replacement cannot preserve the planar supports and their trims.');
+    charts.set(loop.id, chart);
+    changedLoops.add(loop.id);
+    return { ...current, surface, sense };
+  });
+  const coedges = brep.coedges.map(use => {
+    if (!use.pcurve || (!changed.has(use.edge) && !changedLoops.has(use.loop))) return use;
+    const { curve } = edgeById.get(use.edge)!, chart = charts.get(use.loop)!;
+    return { ...use, pcurve: { ...curve, id: use.pcurve.id, controlPoints: curve.controlPoints.map(p => uvPoint(chart, p)) } };
+  });
+  const result: Brep = { ...brep, vertices, edges, faces, coedges };
+  const report = checkBrep(result, { strict: true });
+  if (!report.valid) return replacementFailure('GEOMETRY', `the replacement solid is invalid: ${report.issues[0]}`);
+  return result;
 }

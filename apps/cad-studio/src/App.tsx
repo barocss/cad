@@ -120,7 +120,7 @@ import { ReferenceDecisions, type ReferencePreviewOptions } from './ui/Reference
 import { useRobotExports } from './robot/useRobotExports';
 import { RobotInspector } from './robot/RobotInspector';
 import { shownExtrudeEndFace } from './app/extrudeEndFace';
-import { isOffsetToPlane } from '@barocss/cad-model/app/offsetPlanePick';
+import { isReferencePlaneEdit } from '@barocss/cad-model/app/offsetPlanePick';
 import { isExtrudeToFace } from '@barocss/cad-model/app/extrudeEndFacePick';
 import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
 import { editSavedRevolveAxisCommand, joinedRevolveStock } from '@barocss/cad-model/app/revolveAxisEdit';
@@ -1665,7 +1665,7 @@ export function App() {
     }
     // (Not when it places an instance: those bodies are the instance's, shown once it is evaluated.)
     if (!commit(active.cmd.id === 'move' ? moveRenderAppearance(doc, next) : next)) return;
-    const clearSelection = active.cmd.id === 'offset-face' || active.cmd.id === 'delete-face' || active.cmd.id === OFFSET_FACE_EDIT || active.cmd.id === 'fill-feature-pattern' || active.cmd.id === 'curve-feature-pattern';
+    const clearSelection = active.cmd.id === 'offset-face' || active.cmd.id === 'delete-face' || active.cmd.id === 'replace-face' || active.cmd.id === 'replace-face-edit' || active.cmd.id === OFFSET_FACE_EDIT || active.cmd.id === 'fill-feature-pattern' || active.cmd.id === 'curve-feature-pattern';
     if (clearSelection) setSelection(emptySel);
     if (active.cmd.id === 'thicken' || active.cmd.id === 'sew') setDirectSel([]);
     const acceptedPreview = independentPreview?.bodies ?? previewBodies;
@@ -2940,7 +2940,7 @@ export function App() {
     && !ghost && !rendering && !drawing && !bodyDrag && previewMode === 'none' && (shownBodies === drawnBodies || shownBodies === previewBodies)
     ? { bodies: shownBodies, hidden: hiddenBodies, preview: shownBodies === previewBodies } : null;
   const shownEndFace = active && commandPickScope.current && active.preview === 'ok' &&
-    (isExtrudeToFace(active.cmd.id, active.values) || isOffsetToPlane(active.cmd.id, active.values))
+    (isExtrudeToFace(active.cmd.id, active.values) || isReferencePlaneEdit(active.cmd.id, active.values))
     ? shownExtrudeEndFace(active, shownBodies) : null;
   const sectionEdgeSources = useMemo(() => {
     if (!sectionExactShown || shownBodies !== sectionBodies || section?.mode !== 'plane' || section.planes.length !== 1) return [];

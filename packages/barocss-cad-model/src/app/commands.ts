@@ -8,6 +8,7 @@ import { curveFeaturePatternProblem, eligibleCurvePatternPaths, type CurveFeatur
 // which fields its HUD shows, and how it changes the document.
 import { profileCommands, type ExtrudeJoinEvidence } from './profileCommands';
 import { deleteFaceCommand } from './deleteFaceCommand';
+import { replaceFaceCommand } from './replaceFaceCommand';
 import { sheetCommands } from './sheetCommands';
 import { frameCommands } from './frameCommands';
 import { primitives, puck } from './primitives';
@@ -473,6 +474,7 @@ const allCommands: Command[] = [
   },
   ...profileCommands,
   deleteFaceCommand,
+  replaceFaceCommand,
   ...sheetCommands,
   ...frameCommands,
   ...fitCommands,

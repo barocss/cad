@@ -15,7 +15,7 @@ import type { FilletType, RadiusMode } from '../app/filletFamily';
 import { commandIconName } from './commandIcons';
 import { shownFields } from '@barocss/cad-model/app/commands';
 import { bodyName } from '@barocss/cad-model/app/bodies';
-import { isOffsetToPlane } from '@barocss/cad-model/app/offsetPlanePick';
+import { isReferencePlaneEdit } from '@barocss/cad-model/app/offsetPlanePick';
 import { isExtrudeToFace } from '@barocss/cad-model/app/extrudeEndFacePick';
 import { REVOLVE_AXIS_EDIT } from '@barocss/cad-model/app/revolveAxisEdit';
 import { useEffect, useRef, type ChangeEvent, type ReactNode } from 'react';
@@ -169,7 +169,7 @@ export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFil
         }).map(step => {
           const endFace = step.label === 'End face' && isExtrudeToFace(active.cmd.id, active.values);
           const guideStep = active.cmd.id === 'loft' && step.label === 'Guides';
-          const requiresPreview = guideStep || endFace || (step.label === 'Move' && (active.cmd.id === 'offset-face' || active.cmd.id === 'offset-face-edit')) || (step.label === 'Reference plane' && isOffsetToPlane(active.cmd.id, active.values))
+          const requiresPreview = guideStep || endFace || (step.label === 'Move' && (active.cmd.id === 'offset-face' || active.cmd.id === 'offset-face-edit')) || (step.label === 'Reference plane' && isReferencePlaneEdit(active.cmd.id, active.values))
             || (step.label === 'Axis' && replacingAxis);
           const pathError = step.label === 'Faces' ? faceSelectionFeedback?.text : step.label === 'Path' ? pathFeedback : step.label === 'Reference plane' ? planePickFeedback : undefined;
           const done = step.done && !(pathError && step.label !== 'Faces') && (!requiresPreview || active.preview === 'ok');

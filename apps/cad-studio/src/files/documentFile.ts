@@ -104,8 +104,8 @@ export function verifyStoredNativeOpen(opened: StudioDoc, readPart: (doc: Studio
     checked.add(part);
     for (let index = part.nodes.length - 1; index >= 0; index--) {
       const node = part.nodes[index];
-      if ((node.kind !== 'offset-face' && node.kind !== 'delete-face') || node.suppressed) continue;
-      activeFaceEdits.push({ doc: prefixDoc({ ...part, instances: undefined }, index + 1), label: node.kind === 'delete-face' ? 'Delete face' : 'Offset face' });
+      if ((node.kind !== 'offset-face' && node.kind !== 'replace-face' && node.kind !== 'delete-face') || node.suppressed) continue;
+      activeFaceEdits.push({ doc: prefixDoc({ ...part, instances: undefined }, index + 1), label: node.kind === 'delete-face' ? 'Delete face' : node.kind === 'replace-face' ? 'Replace face' : 'Offset face' });
       break;
     }
     const regionNodes = part.nodes.filter(node => node.kind === 'region-extrude').filter(node => !node.suppressed);
@@ -136,7 +136,7 @@ export function verifyStoredNativeOpen(opened: StudioDoc, readPart: (doc: Studio
         const error = result.error;
         // A saved model has not been adopted, so its reference cannot be picked again here.
         const changedPlane = error.code === 'BAD_REFERENCE' &&
-          /^(?:\[BAD_REFERENCE\] )?Offset face: the original reference face changed\. Pick it again\.$/.test(error.detail);
+          /^(?:\[BAD_REFERENCE\] )?(?:Offset|Replace) face: the original reference face changed\. Pick it again\.$/.test(error.detail);
         const detail = changedPlane
           ? 'The saved reference plane has changed. This saved model was not applied; your current model is unchanged. Open an earlier saved copy with the original reference plane.'
           : `${error.detail || error.title} Your part is unchanged.`;

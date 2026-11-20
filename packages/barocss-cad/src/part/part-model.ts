@@ -65,7 +65,7 @@ import { frameOperation, planEndpointBeads, endpointContext, isEndpointBead } fr
 import type { EndpointBead } from './part-frame.js';
 import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
-import { offsetDraftedFace } from '../features/drafted-cap-offset.js';
+import { offsetDraftedFace, replaceBoxWall } from '../features/drafted-cap-offset.js';
 import { offsetPrismWallIfAdmitted } from '../features/prism-wall-offset.js';
 import { healBoredPlateIfAdmitted, offsetBoredCapIfAdmitted } from '../features/bored-cap-offset.js';
 import { healAnalyticLFilletIfAdmitted } from '../features/heal-analytic-l-fillet.js';
@@ -183,7 +183,7 @@ function expectedThen(f: CadPartFeature & Record<string, unknown>, t: Tools, exp
   const parts = t.solids(f.target, 'target'), edges = f.kind === 'fillet' || f.kind === 'chamfer';
   return () => {
     for (const p of parts) {
-      const brep = f.kind === 'offset-face' || f.kind === 'delete-face' ? namedFaceTargetBrep(t, f.target, p) : brepOf(p, t.at);
+      const brep = f.kind === 'offset-face' || f.kind === 'replace-face' || f.kind === 'delete-face' ? namedFaceTargetBrep(t, f.target, p) : brepOf(p, t.at);
       checkExpected(brep, expect, edges, f.kind, t.fail);
     }
     return run();
@@ -645,6 +645,22 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         const offset = offsetBoredCapIfAdmitted(brep, face, distance) ?? offsetPrismWallIfAdmitted(brep, face, distance)
           ?? offsetDraftedFace(brep, face, distance);
         return one({ kind: 'brep', brep: offset });
+      };
+    }
+    case 'replace-face': {
+      const target = solids(f.target, 'target'), face = f.face, plane = f.plane;
+      if (target.length !== 1) return fail('REFERENCE', 'Replace face needs one closed solid.');
+      if (typeof face !== 'string' || !face.trim() || /[+\0]/.test(face)) return fail('INPUT', 'Replace face needs one exact native face name.');
+      return () => {
+        const brep = namedFaceTargetBrep(t, f.target, target[0]);
+        if (brep.faces.filter(candidate => candidate.name === face).length !== 1)
+          return fail('REFERENCE', 'Replace face: the selected native face is missing or ambiguous.');
+        try {
+          return one({ kind: 'brep', brep: replaceBoxWall(brep, face, plane) });
+        } catch (cause) {
+          if (cause instanceof BrepError) return fail(cause.code === 'INPUT' ? 'INPUT' : 'GEOMETRY', cause.message.replace(/^B-rep: /, ''));
+          throw cause;
+        }
       };
     }
     case 'delete-face': {

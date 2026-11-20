@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1427: [Replace a box wall with a tilted reference face](notes/replace-box-wall-tilted-plane-2026-11-21/README.md), #17; preserve native incidence, follow the reference, and retarget, save and reopen the same replacement in Studio.
+
 - D1426: [Heal the inside fillet of a two-box L bracket](notes/delete-union-l-fillet-2026-11-21/README.md), #17; restore one analytic union corner while keeping the surviving topology and verify the same authored result in MCP and Studio.
 
 - D1425: [Heal the inside fillet of a straight L-section](notes/delete-l-section-fillet-2026-11-21/README.md), #17; extend the two tangent planar walls and verify the sharp result against an independent two-box union and fresh Studio Open.

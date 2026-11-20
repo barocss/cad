@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { patchValues, type Values } from '@barocss/cad-model/app/commands';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { isExtrudeToFace } from '@barocss/cad-model/app/extrudeEndFacePick';
-import { isOffsetToPlane } from '@barocss/cad-model/app/offsetPlanePick';
+import { isReferencePlaneEdit } from '@barocss/cad-model/app/offsetPlanePick';
 import { REVOLVE_AXIS_EDIT } from '@barocss/cad-model/app/revolveAxisEdit';
 import { SWEEP_CURVE } from '@barocss/cad-model/app/profileCommands';
 import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
@@ -80,7 +80,7 @@ export function createCommandHudActions({ commandDoc, activeStore, preview, pend
       || owner.cmd.id === DRAFT_EDIT || current.cmd.id === DRAFT_EDIT
       || owner.cmd.id === SHARED_HOLE_LAYOUT_EDIT || current.cmd.id === SHARED_HOLE_LAYOUT_EDIT
       || isExtrudeToFace(owner.cmd.id, owner.values) || isExtrudeToFace(current.cmd.id, current.values)
-      || isOffsetToPlane(owner.cmd.id, owner.values) || isOffsetToPlane(current.cmd.id, current.values)
+      || isReferencePlaneEdit(owner.cmd.id, owner.values) || isReferencePlaneEdit(current.cmd.id, current.values)
       || (current.cmd.id === 'extrude' && owner.values.region !== current.values.region))) return;
     apply();
   };

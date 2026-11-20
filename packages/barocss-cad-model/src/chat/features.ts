@@ -464,7 +464,7 @@ export function renumber(node: ModelNode, map: (i: number) => number): ModelNode
   if ((n.kind === 'sketch' || n.kind === 'driven-sketch') && n.on) (n as { on: BodyRef }).on = ref(n.on);
   if (n.kind === 'sketch' && n.association !== undefined) { parentsOf(n); n.association = { ...n.association, source: ref(n.association.source) }; }
   if (n.kind === 'align') n.target = { ...n.target, body: ref(n.target.body) };
-  if (n.kind === 'face-end-extrude' || (n.kind === 'offset-face' && n.target)) n.target = { ...n.target, body: ref(n.target.body) };
+  if (n.kind === 'replace-face' || n.kind === 'face-end-extrude' || (n.kind === 'offset-face' && n.target)) n.target = { ...n.target, body: ref(n.target.body) };
   if ((n.kind === 'gear' || n.kind === 'rack' || n.kind === 'bevel-gear' || n.kind === 'worm') && n.mesh) (n as { mesh: GearMesh }).mesh = { ...n.mesh, gear: map(n.mesh.gear) };
   // (R12c.3b, D157: the shaft a key, ring or pin goes on, and a key's hub keyway.)
   if (n.kind === 'oring') (n as { gland: number }).gland = map(n.gland);
@@ -502,6 +502,9 @@ function renameNode(node: ModelNode, rename: (id: string) => string): ModelNode 
   if (node.kind === 'shell') return { ...node, open: node.open.map(r) };
   if (node.kind === 'delete-face') return { ...node, faces: [r(node.faces[0])],
     ...(node.sigs && { sigs: Object.fromEntries(Object.entries(node.sigs).map(([name, sig]) => [r(name), sig])) }) };
+  if (node.kind === 'replace-face') return { ...node, faces: [r(node.faces[0])],
+    target: { ...node.target, feature: rename(node.target.feature), face: r(node.target.face) },
+    ...(node.sigs && { sigs: Object.fromEntries(Object.entries(node.sigs).map(([name, sig]) => [r(name), sig])) }) };
   if (node.kind === 'offset-face') {
     const { target, distance, ...rest } = node;
     const recipe = { ...rest, faces: [r(node.faces[0])] as [string],
@@ -517,7 +520,7 @@ function renameNode(node: ModelNode, rename: (id: string) => string): ModelNode 
   return node;
 }
 /** The persistent names a node is built on. */
-const named = (n: ModelNode): readonly string[] => n.kind === 'band-surface' ? [...n.a.edges, ...n.b.edges] : n.kind === 'fillet' || n.kind === 'chamfer' || n.kind === 'sheet-flange' || n.kind === 'sheet-corner-relief' ? n.edges : n.kind === 'shell' ? n.open : n.kind === 'draft' || n.kind === 'full-round' || n.kind === 'face-fillet' || n.kind === 'offset-face' || n.kind === 'delete-face' ? n.faces : n.kind === 'keyway' || n.kind === 'oring-gland' || n.kind === 'connector-opening' || n.kind === 'face-thread' ? [n.face] : [];
+const named = (n: ModelNode): readonly string[] => n.kind === 'band-surface' ? [...n.a.edges, ...n.b.edges] : n.kind === 'fillet' || n.kind === 'chamfer' || n.kind === 'sheet-flange' || n.kind === 'sheet-corner-relief' ? n.edges : n.kind === 'shell' ? n.open : n.kind === 'draft' || n.kind === 'full-round' || n.kind === 'face-fillet' || n.kind === 'offset-face' || n.kind === 'replace-face' || n.kind === 'delete-face' ? n.faces : n.kind === 'keyway' || n.kind === 'oring-gland' || n.kind === 'connector-opening' || n.kind === 'face-thread' ? [n.face] : [];
 
 /** A drawing dimension's edge names, renamed (null when one of them is gone). */
 function renameDimension(d: DrawingDimension, rename: (name: string) => string | null): DrawingDimension | null {
@@ -705,6 +708,7 @@ export function duplicateBody(doc: StudioDoc, body: BodyRef, offset: [number, nu
   }
   if ([...chain].some(i => nodes[i].kind === 'align')) throw refusal('BAD_REFERENCE', 'Align: duplicating a body with a bound target face is not supported.');
   if ([...chain].some(i => { const node = nodes[i]; return node.kind === 'offset-face' && node.target; })) throw refusal('BAD_REFERENCE', 'Offset face: duplicating a body with a reference plane is not supported.');
+  if ([...chain].some(i => nodes[i].kind === 'replace-face')) throw refusal('BAD_REFERENCE', 'Replace face: duplicating a body with a reference plane is not supported.');
   if ([...chain].some(i => nodes[i].kind === 'face-end-extrude')) throw refusal('BAD_REFERENCE', 'Extrude to face: duplicating a body with a bound end face is not supported.');
   const order = [...chain].sort((a, b) => a - b), at = new Map(order.map((old, k) => [old, nodes.length + k]));
   const map = (i: number) => at.get(i) ?? i;

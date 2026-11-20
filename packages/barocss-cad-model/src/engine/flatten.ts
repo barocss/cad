@@ -93,6 +93,8 @@ function shiftNode(node: ModelNode, k: number, s: number): ModelNode {
     case 'chamfer': case 'fillet': return { ...node, parent: ref(node.parent), edges: node.edges.map(name) };
     case 'sheet-flange': case 'sheet-corner-relief': return { ...node, parent: ref(node.parent), edges: [name(node.edges[0])] };
     case 'draft': case 'full-round': return { ...node, parent: ref(node.parent), faces: node.faces.map(name) };
+    case 'replace-face': return { ...node, parent: ref(node.parent), faces: [name(node.faces[0])],
+      target: { ...node.target, body: ref(node.target.body), feature: id(node.target.feature), face: name(node.target.face) } };
     case 'offset-face':
       return node.target
         ? { ...node, parent: ref(node.parent), faces: [name(node.faces[0])], target: { ...node.target, body: ref(node.target.body), feature: id(node.target.feature), face: name(node.target.face) } }
