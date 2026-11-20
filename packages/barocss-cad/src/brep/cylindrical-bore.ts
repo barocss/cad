@@ -41,6 +41,11 @@ function inwardCylinder(face: BrepFace): Cylinder | undefined {
   return Number.isFinite(cosine) && cosine < -1 + ANGULAR_TOLERANCE ? cylinder : undefined;
 }
 
+function sameCylinder(a: Cylinder, b: Cylinder, tolerance: number): boolean {
+  return Math.abs(a.r - b.r) <= tolerance && len(cross(a.a, b.a)) <= ANGULAR_TOLERANCE
+    && len(cross(sub(a.c, b.c), b.a)) <= tolerance;
+}
+
 function arcOnCylinder(curve: Brep['edges'][number]['curve'], cylinder: Cylinder, tolerance: number) {
   const circle = circleOf(curve);
   if (!circle || !(Math.abs(circle.r - cylinder.r) <= tolerance)) return;
@@ -108,25 +113,26 @@ function sameRadialSupport(a: RadialSupport, b: RadialSupport, tolerance: number
   return Math.abs(a.radius - b.radius) <= tolerance && len(sub(a.offset, b.offset)) <= tolerance;
 }
 
-function capClearsBore(outer: BrepLoop, topology: Topology, cylinder: Cylinder, side: number,
-  onCap: (point: Point) => boolean, tolerance: number): boolean {
-  if (outer.coedges.length !== 4) return false;
+function readPlateOuterRing(outer: BrepLoop, topology: Topology, cylinder: Cylinder, side: number,
+  onCap: (point: Point) => boolean, tolerance: number): Point[] | undefined {
+  if (outer.coedges.length !== 4) return;
   const ring: Point[] = [];
   for (const id of outer.coedges) {
     const use = topology.coedges.get(id), edge = use && topology.edges.get(use.edge);
     if (!use || use.loop !== outer.id || !edge || edge.curve.degree !== 1 || edge.curve.controlPoints.length !== 2
-      || !edge.curve.controlPoints.every(onCap)) return false;
+      || !edge.curve.controlPoints.every(onCap)) return;
     const start = edge.curve.controlPoints[use.sense === 'forward' ? 0 : 1];
     ring.push(radialProject(sub(start, cylinder.c), cylinder.a));
   }
   // A full disk fits only when it clears every support of the projected convex outer rim.
-  return ring.every((corner, i) => {
+  const clearsBore = ring.every((corner, i) => {
     const j = (i + 1) % ring.length, direction = sub(ring[j], corner);
     if (!(len(direction) > tolerance)) return false;
     const inward = scale(unit(cross(cylinder.a, direction)), side);
     return -dot(corner, inward) > cylinder.r + tolerance
       && ring.every((point, k) => k === i || k === j || dot(sub(point, corner), inward) > tolerance);
   });
+  return clearsBore ? ring : undefined;
 }
 
 function projectedArc(use: BrepCoedge, edge: BrepEdge, cylinder: Cylinder, station: number,
@@ -168,15 +174,15 @@ function readAnnularOuterRim(outer: BrepLoop, topology: Topology, shell: BrepShe
 }
 
 function readPlanarRim(loop: BrepLoop, group: readonly BoundaryUse[], topology: Topology, shell: BrepShell,
-  cylinder: Cylinder, tolerance: number, annular: boolean) {
+  cylinder: Cylinder, tolerance: number, annular: boolean, capLoops: number) {
   const face = topology.faces.get(loop.face);
-  if (!face || face.shell !== shell.id || !shell.faces.includes(face.id) || face.loops.length !== 2
+  if (!face || face.shell !== shell.id || !shell.faces.includes(face.id) || face.loops.length !== capLoops
     || !face.loops.includes(loop.id) || face.surface.kind !== 'surface' || loop.kind !== 'inner'
     || group.length !== 2 || loop.coedges.length !== group.length
     || !loop.coedges.every(id => group.some(({ twin }) => twin.id === id))) return;
-  const outer = topology.loops.get(face.loops.find(id => id !== loop.id)!);
+  const [outer, ...otherOuters] = face.loops.map(id => topology.loops.get(id)).filter(loop => loop?.kind === 'outer');
   const plane = faceGeometry(face);
-  if (outer?.kind !== 'outer' || outer.face !== face.id || plane.kind !== 'plane') return;
+  if (!outer || otherOuters.length || outer.face !== face.id || plane.kind !== 'plane') return;
   const alignment = dot(plane.n, cylinder.a), side = Math.sign(alignment);
   if (!(Math.abs(alignment) > ANGULAR_TOLERANCE)) return;
   const station = dot(plane.n, sub(plane.o, cylinder.c)) / alignment;
@@ -184,7 +190,8 @@ function readPlanarRim(loop: BrepLoop, group: readonly BoundaryUse[], topology: 
   const onCap = (point: Point) => Math.abs(dot(sub(point, plane.o), plane.n)) <= tolerance;
   if (!face.surface.controlPoints.every(row => row.every(onCap))) return;
   const outerRim = annular ? readAnnularOuterRim(outer, topology, shell, cylinder, side, onCap, tolerance) : undefined;
-  if (annular ? !outerRim : !capClearsBore(outer, topology, cylinder, side, onCap, tolerance)) return;
+  const plateRing = annular ? undefined : readPlateOuterRing(outer, topology, cylinder, side, onCap, tolerance);
+  if (!outerRim && !plateRing) return;
 
   const arcs: RimArc[] = [];
   for (const { use, edge } of group) {
@@ -194,7 +201,65 @@ function readPlanarRim(loop: BrepLoop, group: readonly BoundaryUse[], topology: 
   }
   const vertices = new Set(arcs.map(arc => arc.start));
   const wallUses = new Set(group.map(({ use }) => use.id));
-  return rimWinding(arcs) === side ? { face, station, side, slope, vertices, wallUses, outerRim } : undefined;
+  return rimWinding(arcs) === side ? { face, loop, outer, station, side, slope, vertices, wallUses, outerRim, plateRing } : undefined;
+}
+
+type PlanarRim = NonNullable<ReturnType<typeof readPlanarRim>>;
+
+function readRimNeighbors(loop: BrepLoop, topology: Topology, shell: BrepShell) {
+  const neighbors = [];
+  for (const id of loop.coedges) {
+    const use = topology.coedges.get(id), twin = use?.twin ? topology.coedges.get(use.twin) : undefined;
+    const wallLoop = twin && topology.loops.get(twin.loop), wall = wallLoop && topology.faces.get(wallLoop.face);
+    const edge = use && topology.edges.get(use.edge);
+    if (!use || use.loop !== loop.id || !edge || !twin || twin.twin !== id || twin.edge !== use.edge || twin.sense === use.sense
+      || wallLoop?.kind !== 'outer' || wallLoop.coedges.length !== 4 || !wallLoop.coedges.includes(twin.id)
+      || !wall || wall.shell !== shell.id || !shell.faces.includes(wall.id) || wall.loops.length !== 1 || wall.loops[0] !== wallLoop.id) return;
+    neighbors.push({ wall, edge, use, twin });
+  }
+  return neighbors;
+}
+
+function readPeerLoop(rim: PlanarRim, topology: Topology, shell: BrepShell) {
+  const [loop] = rim.face.loops.map(id => topology.loops.get(id)).filter(loop => loop?.kind === 'inner' && loop !== rim.loop);
+  if (!loop || loop.face !== rim.face.id || loop.coedges.length !== 2) return;
+  const neighbors = readRimNeighbors(loop, topology, shell);
+  if (!neighbors) return;
+  const members = neighbors.map(({ wall }) => wall);
+  const boundary = neighbors.map(({ use, twin, edge }): BoundaryUse => ({ use: twin, twin: use, edge, capLoop: loop }));
+  return { loop, members, boundary };
+}
+
+function readPlateWalls(rim: PlanarRim, topology: Topology, shell: BrepShell, axis: Point, tolerance: number) {
+  const neighbors = readRimNeighbors(rim.outer, topology, shell);
+  if (!neighbors) return;
+  const walls = new Set<BrepFace>();
+  for (const { wall, edge } of neighbors) {
+    const plane = faceGeometry(wall);
+    if (wall.surface.kind !== 'surface' || plane.kind !== 'plane' || Math.abs(dot(plane.n, axis)) > ANGULAR_TOLERANCE
+      || !edge.curve.controlPoints.every(point => Math.abs(dot(sub(point, plane.o), plane.n)) <= tolerance)) return;
+    if (!wall.surface.controlPoints.every(row => row.every(point => Math.abs(dot(sub(point, plane.o), plane.n)) <= tolerance))) return;
+    walls.add(wall);
+  }
+  return walls.size === 4 ? walls : undefined;
+}
+
+function keepsRectangularStock(lower: PlanarRim, upper: PlanarRim, topology: Topology, shell: BrepShell,
+  axis: Point, tolerance: number): boolean {
+  const a = lower.plateRing, b = upper.plateRing;
+  if (!a || !b) return false;
+  const centerGap = upper.station - lower.station, slope = sub(upper.slope, lower.slope);
+  const matched = new Set<number>();
+  if (!a.every((corner, i) => {
+    const incoming = unit(sub(corner, a[(i + 3) % 4])), outgoing = unit(sub(a[(i + 1) % 4], corner));
+    const opposite = b.findIndex(point => len(sub(point, corner)) <= tolerance);
+    if (Math.abs(dot(incoming, outgoing)) > ANGULAR_TOLERANCE || !(centerGap + dot(slope, corner) > tolerance)
+      || opposite < 0 || matched.has(opposite)) return false;
+    matched.add(opposite);
+    return true;
+  })) return false;
+  const lowerWalls = readPlateWalls(lower, topology, shell, axis, tolerance), upperWalls = readPlateWalls(upper, topology, shell, axis, tolerance);
+  return !!lowerWalls && !!upperWalls && [...lowerWalls].every(wall => upperWalls.has(wall));
 }
 
 function hasAxialSeams(topology: Topology, shell: BrepShell, members: readonly BrepFace[],
@@ -222,11 +287,23 @@ function hasAxialSeams(topology: Topology, shell: BrepShell, members: readonly B
   return seams.size === 2;
 }
 
+function hasSeparatePeerBore(lower: PlanarRim, upper: PlanarRim, topology: Topology, shell: BrepShell,
+  members: readonly BrepFace[], cylinder: Cylinder, tolerance: number): boolean {
+  const a = readPeerLoop(lower, topology, shell), b = readPeerLoop(upper, topology, shell);
+  if (!a || !b || new Set(a.members).size !== 2 || a.members.some(face => !b.members.includes(face) || members.includes(face))) return false;
+  const peer = inwardCylinder(a.members[0]), mate = inwardCylinder(a.members[1]);
+  if (!peer || !mate || !sameCylinder(peer, mate, tolerance) || len(cross(peer.a, cylinder.a)) > 64 * Number.EPSILON
+    || !(len(radialProject(sub(peer.c, cylinder.c), cylinder.a)) > peer.r + cylinder.r + tolerance)) return false;
+  const peerLower = readPlanarRim(a.loop, a.boundary, topology, shell, peer, tolerance, false, 3);
+  const peerUpper = readPlanarRim(b.loop, b.boundary, topology, shell, peer, tolerance, false, 3);
+  return peerLower?.side === -1 && peerUpper?.side === 1 && hasAxialSeams(topology, shell, a.members, peerLower, peerUpper, peer.a, tolerance);
+}
+
 /** The native bored plate or straight tube with one rim lifted to a tilted plane. */
 function hasTiltedRim(brep: Brep, topology: Topology, shell: BrepShell, members: readonly BrepFace[],
   boundary: readonly BoundaryUse[], cylinder: Cylinder): boolean {
-  const annular = brep.faces.length === 6;
-  const [faces, loops, uses, edges, vertices] = annular ? [6, 8, 24, 12, 8] : [8, 10, 36, 18, 12];
+  const annular = brep.faces.length === 6, twoBore = brep.faces.length === 10;
+  const [faces, loops, uses, edges, vertices] = annular ? [6, 8, 24, 12, 8] : twoBore ? [10, 14, 48, 24, 16] : [8, 10, 36, 18, 12];
   if (brep.bodies.length !== 1 || brep.shells.length !== 1 || brep.faces.length !== faces || shell.faces.length !== faces
     || brep.loops.length !== loops || brep.coedges.length !== uses || brep.edges.length !== edges || brep.vertices.length !== vertices
     || members.length !== 2 || boundary.length !== 4) return false;
@@ -239,7 +316,7 @@ function hasTiltedRim(brep: Brep, topology: Topology, shell: BrepShell, members:
     else groups.set(use.capLoop, [use]);
   }
   if (groups.size !== 2) return false;
-  const rims = [...groups].map(([loop, group]) => readPlanarRim(loop, group, topology, shell, cylinder, tolerance, annular));
+  const rims = [...groups].map(([loop, group]) => readPlanarRim(loop, group, topology, shell, cylinder, tolerance, annular, twoBore ? 3 : 2));
   const lower = rims.find(rim => rim?.side === -1), upper = rims.find(rim => rim?.side === 1);
   if (!lower || !upper || lower.face === upper.face) return false;
   let supports: readonly RadialSupport[] = [{ offset: [0, 0, 0], radius: cylinder.r }];
@@ -251,12 +328,18 @@ function hasTiltedRim(brep: Brep, topology: Topology, shell: BrepShell, members:
     supports = [...a.supports, ...b.supports];
   }
   const clearanceRadius = Math.max(...supports.map(support => support.radius));
-  const flat = (rim: typeof lower) => clearanceRadius * len(rim.slope) <= tolerance;
+  const flat = (rim: PlanarRim) => {
+    if (!twoBore || !rim.plateRing) return clearanceRadius * len(rim.slope) <= tolerance;
+    const heights = rim.plateRing.map(point => dot(rim.slope, point));
+    return Math.max(...heights) - Math.min(...heights) <= tolerance;
+  };
   if (flat(lower) === flat(upper)) return false;
   const centerGap = upper.station - lower.station, slope = sub(upper.slope, lower.slope), slopeLength = len(slope);
   // Evaluate the minimum axial gap about each verified support's actual center.
   return supports.every(({ offset, radius }) => centerGap + dot(slope, offset) - radius * slopeLength > tolerance)
     && hasAxialSeams(topology, shell, members, lower, upper, cylinder.a, tolerance)
+    && (!twoBore || (keepsRectangularStock(lower, upper, topology, shell, cylinder.a, tolerance)
+      && hasSeparatePeerBore(lower, upper, topology, shell, members, cylinder, tolerance)))
     && checkBrep(brep, { strict: true }).valid;
 }
 
@@ -282,9 +365,7 @@ export function createCylindricalBoreCheck(brep: Brep): (members: readonly BrepF
       for (const face of members) {
         if (faces.get(face.id) !== face || face.shell !== shell.id) return;
         const geometry = face === first ? cylinder : inwardCylinder(face);
-        if (!geometry || Math.abs(geometry.r - cylinder.r) > tolerance
-          || len(cross(geometry.a, cylinder.a)) > ANGULAR_TOLERANCE
-          || len(cross(sub(geometry.c, cylinder.c), cylinder.a)) > tolerance) return;
+        if (!geometry || !sameCylinder(geometry, cylinder, tolerance)) return;
 
         for (const loopId of face.loops) {
           const loop = loops.get(loopId);

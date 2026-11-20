@@ -98,15 +98,24 @@ for (const sign of [1, -1]) {
     const moving = result.faces.find(candidate => candidate.name === face);
     const innerRims = result.loops.filter(loop => moving.loops.includes(loop.id) && loop.kind === 'inner');
     assert.equal(innerRims.length, 2);
-    const walls = result.faces.map(candidate => faceGeometry(candidate)).filter(g => g.kind === 'cylinder');
+    const walls = result.faces.filter(candidate => faceGeometry(candidate).kind === 'cylinder');
     assert.equal(walls.length, 4);
+    const readBore = createCylindricalBoreCheck(result), boreHalves = [];
     for (const [cx, cy, radius] of bores) {
-      const halves = walls.filter(g => Math.hypot(g.c[0] - cx, g.c[1] - cy) < 1e-9);
+      const halves = walls.filter(candidate => {
+        const g = faceGeometry(candidate);
+        return Math.hypot(g.c[0] - cx, g.c[1] - cy) < 1e-9;
+      });
       assert.equal(halves.length, 2);
+      boreHalves.push(halves);
       for (const half of halves) {
-        close(half.r, radius);
-        assert.deepEqual([half.a, half.out], [[0, 0, 1], -1]);
+        const g = faceGeometry(half);
+        close(g.r, radius);
+        assert.deepEqual([g.a, g.out], [[0, 0, 1], -1]);
       }
+      close(readBore(halves), 2 * radius);
+      close(readBore([...halves].reverse()), 2 * radius);
+      assert.equal(readBore(halves.slice(0, 1)), undefined);
       const rings = innerRims.filter(loop => loop.coedges.every(id => {
         const use = result.coedges.find(candidate => candidate.id === id);
         const { curve } = result.edges.find(edge => edge.id === use.edge);
@@ -116,6 +125,14 @@ for (const sign of [1, -1]) {
       assert.equal(rings.length, 1);
       assert.equal(rings[0].coedges.length, 2);
     }
+    assert.equal(readBore([boreHalves[0][0], boreHalves[1][0]]), undefined);
+    assert.equal(readBore(walls), undefined);
+    const broken = structuredClone(result), other = boreHalves[1][0];
+    const otherLoop = broken.loops.find(loop => loop.id === other.loops[0]);
+    const brokenUse = broken.coedges.find(use => use.id === otherLoop.coedges[0]);
+    delete brokenUse.twin;
+    const survivingHalves = boreHalves[0].map(half => broken.faces.find(candidate => candidate.id === half.id));
+    assert.equal(createCylindricalBoreCheck(broken)(survivingHalves), undefined);
     close(brepMassProperties(result, 1).volume, 15600 - 156.9 * Math.PI, 1e-6);
     const change = { id: 'replace', kind: 'replace-face', target: 'j', face, plane };
     assert.deepEqual(solid({ ...doc, features: [...doc.features, change] }), result);
