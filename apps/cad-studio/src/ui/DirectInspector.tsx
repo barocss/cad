@@ -1,3 +1,4 @@
+import type { DirectCurveEdit } from '../app/directCurveCandidate';
 import type { PoleControls } from './DirectPoleEditor';
 import { lazy, Suspense } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -12,7 +13,7 @@ interface DirectInspectorProps {
   directSel: string[];
   onSelect(ids: string[]): void;
   curveCurvature?: CurvatureCombControls;
-  changes: { commitDirect(next: DirectGeometry, selection?: string[]): boolean };
+  changes: { commitDirect(next: DirectGeometry, selection?: string[], edit?: DirectCurveEdit): boolean };
   onSew(ids: string[], tolerance: number): void;
   onThicken(id: string, thickness: number, side: 'normal' | 'reverse' | 'both'): void;
   onNotice(notice: FriendlyError): void;

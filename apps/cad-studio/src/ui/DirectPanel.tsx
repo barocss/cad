@@ -1,3 +1,4 @@
+import type { DirectCurveEdit } from '../app/directCurveCandidate';
 import { useEffect, useState, type ReactNode } from 'react';
 import { curveLength, curvePlaneCrossings, directOps, domainsOf, geometryOf, surfaceIntersection, type DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { SEW_TOLERANCE_LABEL } from '@barocss/cad-model/engine/sew';
@@ -23,7 +24,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 export function DirectPanel({ direct, selected, onChange, onSelect, onError, onHide, onThicken, onSew, poleControls, children }: {
   direct: DirectGeometry; selected: string[]; poleControls?: PoleControls;
   children?: ReactNode;
-  onChange(next: DirectGeometry, select?: string[]): void;
+  onChange(next: DirectGeometry, select?: string[], edit?: DirectCurveEdit): void;
   onSelect?(ids: string[]): void;
   onError(message: string): void;
   onHide(ids: string[]): void;
@@ -37,8 +38,8 @@ export function DirectPanel({ direct, selected, onChange, onSelect, onError, onH
   const objs = selected.map(id => direct.objects.find(o => o.id === id)).filter((o): o is NonNullable<typeof o> => !!o);
   const trimBlockers = sewTrimBlockers(objs);
   const geoms = objs.map(o => { try { return geometryOf(direct, o); } catch { return null; } });
-  const run = (op: () => DirectGeometry, select?: (next: DirectGeometry) => string[]) => {
-    try { const next = op(); onChange(next, select?.(next)); }
+  const run = (op: () => DirectGeometry, select?: (next: DirectGeometry) => string[], edit?: DirectCurveEdit) => {
+    try { const next = op(); onChange(next, select?.(next), edit); }
     catch (e) { onError(e instanceof Error ? e.message : String(e)); }
   };
   /** The objects an operation added (to select them). */
@@ -55,7 +56,8 @@ export function DirectPanel({ direct, selected, onChange, onSelect, onError, onH
       {one && g?.kind === 'curve' && children}
       <Transform direct={direct} selected={selected} moveControls={<DirectMoveControls direct={direct} selected={selected} onMove={by => run(() => directOps.move(direct, selected, by))} />} onRotate={(axis, deg) => run(() => directOps.rotate(direct, selected, axis, deg))}
         onScale={k => run(() => directOps.scale(direct, selected, k))} onDuplicate={() => run(() => directOps.duplicate(direct, selected), added)}
-        onStretch={k => run(() => directOps.stretch(direct, selected, k))} onShear={(a, b, k) => run(() => directOps.shear(direct, selected, a, b, k))} />
+        onStretch={k => run(() => directOps.stretch(direct, selected, k), undefined,
+          selected.length === 1 ? { kind: 'stretch', objectId: selected[0] } : undefined)} onShear={(a, b, k) => run(() => directOps.shear(direct, selected, a, b, k))} />
       {one && g?.kind === 'curve' && <CurveTools id={one.id} direct={direct} run={run} added={added} />}
       {one && g?.kind === 'surface' && <SurfaceTools id={one.id} direct={direct} run={run} added={added} onThicken={onThicken} />}
       {one && g && poleControls && <DirectPoleEditor direct={direct} id={one.id} controls={poleControls} rows={g.kind === 'curve' ? g.controlPoints.map((point, i) => ({ key: String(i), label: `P${i}`, point, weight: g.weights[i] })) : g.controlPoints.flatMap((row, i) => row.map((point, j) => ({ key: `${i},${j}`, label: `P${i},${j}`, point, weight: g.weights[i][j] })))} />}

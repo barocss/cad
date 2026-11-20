@@ -115,7 +115,7 @@ import { MeshFileDialogs } from './files/MeshFileDialogs';
 import { useRouteBundleEditor } from './state/useRouteBundleEditor';
 import { cutPatternSourceLabel, isCutPattern, selectedCutPatternSource } from './app/cutPatternSource';
 import { moveRenderAppearance } from './app/moveRenderAppearance';
-import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument, insertedCurvePartProblem, prepareDirectCurveCandidate } from './app/directCurveCandidate';
+import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument, insertedCurvePartProblem, prepareDirectCurveCandidate, type DirectCurveEdit } from './app/directCurveCandidate';
 import { LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
 import { ReferenceDecisions, type ReferencePreviewOptions } from './ui/ReferenceDecisions';
 import { useRobotExports } from './robot/useRobotExports';
@@ -1311,12 +1311,17 @@ export function App() {
     }
   };
   /** One undoable change of the direct geometry (the model stays as evaluated). */
-  const commitDirect = useCallback((next: DirectGeometry, select?: string[]) => {
+  const commitDirect = useCallback((next: DirectGeometry, select?: string[], edit?: DirectCurveEdit) => {
     if (!canChangeDocument()) return false;
     try { assertRouteBundleDocument({ ...doc, direct: next }); }
     catch (error) { setToast({ title: 'Direct geometry not changed', hint: `${routeMessage(error)} Detach the route bundle before editing a bound member.`, detail: '' }); return false; }
     try {
-      const candidate = prepareDirectCurveCandidate(doc, next);
+      // The advisory belongs to the current, displayed Model, not a stale or rolled-back authoring snapshot.
+      const currentEdit = edit && fresh && !busy && !workerFailure && docNow.current === doc && shownDocNow.current === doc
+        && ownsEvaluatedSource() && markerNow.current === null && !shownVariant.current && !inPlaceNow.current
+        && !activeStore.get() && !parameterEditNow.current && !project.opening() && !referenceProblems.current.get(doc)?.length
+        ? edit : undefined;
+      const candidate = prepareDirectCurveCandidate(doc, next, currentEdit);
       if (candidate) {
         stageFeatureCandidate(candidate, select);
         return false;
@@ -1326,7 +1331,7 @@ export function App() {
     if (!setDoc({ ...doc, direct: next })) return false; setDirty(true);
     if (select) setDirectSel(select);
     return true;
-  }, [doc, marker, acceptanceScope, stageFeatureCandidate]);
+  }, [doc, marker, acceptanceScope, stageFeatureCandidate, fresh, busy, workerFailure, ownsEvaluatedSource, activeStore, project.opening]);
   const poleObj = directSel.length === 1 ? directSel[0] : null;
   // The direct tools load when the document first has direct geometry (state: re-render once they are in).
   const [directReady, setDirectReady] = useState(() => !!directNow());
