@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BrepError, checkBrep, evaluateCadPart, evaluateCurve, evaluateSurface, faceGeometry } from '../dist/index.js';
+import { BrepError, checkBrep, createCylindricalBoreCheck, evaluateCadPart, evaluateCurve, evaluateSurface, faceGeometry } from '../dist/index.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
 import { boredCapOffsetFrame, boredCapReplacementFrame, offsetBoredCapIfAdmitted, replaceBoredCapIfAdmitted } from '../dist/features/bored-cap-offset.js';
 
@@ -107,6 +107,17 @@ for (const [name, sign] of [['b.top', 1], ['b.bottom', -1]]) {
     const mass = brepMassProperties(result, 1);
     close(mass.volume, tiltedVolume, 1e-7);
     mass.centroid.forEach((value, axis) => close(value, axis === 2 && sign === -1 ? 10 - tiltedCentroid[axis] : tiltedCentroid[axis], 1e-8));
+    const halves = result.faces.filter(face => faceGeometry(face).kind === 'cylinder');
+    const readDiameter = createCylindricalBoreCheck(result);
+    close(readDiameter(halves), 6);
+    close(readDiameter([...halves].reverse()), 6);
+    assert.equal(readDiameter(halves.slice(0, 1)), undefined);
+    assert.equal(readDiameter([halves[0], halves[0]]), undefined);
+    assert.equal(readDiameter(halves.map(face => ({ ...face }))), undefined);
+    const broken = structuredClone(result);
+    const rim = broken.coedges.find(use => use.pcurve?.degree === 3);
+    rim.pcurve.controlPoints[0][1] += 0.02;
+    assert.equal(createCylindricalBoreCheck(broken)(broken.faces.filter(face => halves.some(half => half.id === face.id))), undefined);
     const feature = { id: 'replace', kind: 'replace-face', target: 'h', face: name, plane };
     assert.deepEqual(solid({ ...input, features: [...input.features, feature] }), result);
     assert.throws(() => replaceBoredCapIfAdmitted(source, name, { ...plane, origin: [0, 0, fixedZ] }), /reach or cross the opposite cap/);
