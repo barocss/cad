@@ -1,6 +1,6 @@
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { BrepError, checkBrep, type Brep, type BrepEdge, type BrepFace, type BrepLoop } from '../brep/brep-core.js';
-import { createCylindricalBoreCheck } from '../brep/cylindrical-bore.js';
+import { createCylindricalBoreCheck, readTiltedRectangularBoreForHeal } from '../brep/cylindrical-bore.js';
 import { add, dist, dot, len, scale, sub } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Curve, Point } from '../types.js';
@@ -446,8 +446,10 @@ export function replaceAnnularCapIfAdmitted(brep: Brep, faceName: string, plane:
 /** Select either native half of a bore and restore the material removed by that bore. */
 export function healBoredPlateIfAdmitted(brep: Brep, faceName: string): Brep | undefined {
   if (typeof faceName !== 'string' || !faceName.trim() || faceName.includes('+')) return undefined;
-  const plate = admittedAxialStock(brep, boredPlateKind(brep));
-  const selected = plate?.borePairs?.find(pair => pair.some(face => face.name === faceName));
+  const flat = admittedAxialStock(brep, boredPlateKind(brep));
+  const tilted = flat ? undefined : readTiltedRectangularBoreForHeal(brep, faceName);
+  const plate = flat ?? tilted;
+  const selected = flat?.borePairs?.find(pair => pair.some(face => face.name === faceName)) ?? tilted?.selected;
   if (!plate || !selected) return undefined;
 
   const removed = new Set(selected.map(face => face.id));

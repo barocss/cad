@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CadPartError, checkBrep, createCylindricalBoreCheck, evaluateCadPart } from '../dist/index.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
-import { healBoredPlateIfAdmitted } from '../dist/features/bored-cap-offset.js';
+import { healBoredPlateIfAdmitted, replaceBoredCapIfAdmitted } from '../dist/features/bored-cap-offset.js';
 import { faceSignatures } from '../dist/part/part-expect.js';
 
 const halves = ['h.side0#1', 'h.side0#2'];
@@ -144,6 +144,30 @@ test('both successive bore-heal orders restore the same exact outer solid', () =
   });
   assert.deepEqual(results[0], results[1]);
 });
+
+for (const sign of [1, -1]) {
+  const cap = sign === 1 ? 'b.top' : 'b.bottom', opposite = sign === 1 ? 0 : 10;
+  test(`healing preserves the exact tilted ${cap} and the five other supports`, () => {
+    const doc = plate(), plane = { origin: [0, 0, opposite + sign * 8], normal: [-1, -2, 10 * sign] };
+    const tilted = append(doc, { id: 'tilt', kind: 'replace-face', target: 'h', face: cap, plane });
+    const before = freeze(output(tilted).brep), source = structuredClone(before);
+    assert.ok(Math.abs(brepMassProperties(before, 1).volume - (15600 - 98.1 * Math.PI)) < 1e-7);
+    const results = halves.map(name => {
+      const healed = healBoredPlateIfAdmitted(before, name);
+      assertHealed(before, healed);
+      const { volume, centroid } = brepMassProperties(healed, 1);
+      close(volume, 15600);
+      for (const [axis, coordinate] of [820 / 39, 210 / 13, sign === 1 ? 20 / 3 : 10 / 3].entries()) close(centroid[axis], coordinate);
+      assert.deepEqual(output(append(tilted, deletion(name, undefined, 'tilt'))).brep, healed);
+      return healed;
+    });
+    assert.deepEqual(results[0], results[1]);
+    assert.deepEqual(before, source);
+    const withTwo = output(secondBore(doc)).brep;
+    const tiltedTwo = replaceBoredCapIfAdmitted(withTwo, cap, plane);
+    assert.equal(healBoredPlateIfAdmitted(tiltedTwo, halves[0]), undefined);
+  });
+}
 
 test('the authored operation checks the selected native member signature', () => {
   const doc = plate(), signatures = faceSignatures(output(doc).brep), [name, other] = halves;

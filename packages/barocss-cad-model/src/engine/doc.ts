@@ -435,10 +435,11 @@ export { isDraftedFaceReplacementSource as isDraftedCapReplacementSource };
 /** Identify a rectangular source for bore healing. The kernel proves the selected wall pair. */
 export function isBoredPlateHealSource(nodes: readonly unknown[], index: number): boolean {
   if (isBoredPlateReplacementSource(nodes, index) || isBoredCapOffsetSource(nodes, index)) return true;
-  const heal = nodes[index];
-  if (!textRecord(heal) || heal.kind !== 'delete-face') return false;
-  const plate = precedingSolidParent(heal, index);
-  return plate !== undefined && isTwoBorePlate(nodes, plate);
+  const edit = nodes[index];
+  if (!textRecord(edit) || (edit.kind !== 'delete-face' && edit.kind !== 'replace-face')) return false;
+  const plate = precedingSolidParent(edit, index);
+  if (plate === undefined) return false;
+  return edit.kind === 'delete-face' ? isTwoBorePlate(nodes, plate) : isBoredPlateHole(nodes, plate);
 }
 
 /** Identify the authored fillet. The kernel proves the current solid and its concave arc. */

@@ -220,14 +220,23 @@ function readRimNeighbors(loop: BrepLoop, topology: Topology, shell: BrepShell) 
   return neighbors;
 }
 
-function readPeerLoop(rim: PlanarRim, topology: Topology, shell: BrepShell) {
-  const [loop] = rim.face.loops.map(id => topology.loops.get(id)).filter(loop => loop?.kind === 'inner' && loop !== rim.loop);
-  if (!loop || loop.face !== rim.face.id || loop.coedges.length !== 2) return;
+function readInnerRim(loop: BrepLoop, topology: Topology, shell: BrepShell) {
+  if (loop.kind !== 'inner' || loop.coedges.length !== 2) return;
   const neighbors = readRimNeighbors(loop, topology, shell);
   if (!neighbors) return;
   const members = neighbors.map(({ wall }) => wall);
   const boundary = neighbors.map(({ use, twin, edge }): BoundaryUse => ({ use: twin, twin: use, edge, capLoop: loop }));
   return { loop, members, boundary };
+}
+
+function readPeerLoop(rim: PlanarRim, topology: Topology, shell: BrepShell) {
+  const [loop] = rim.face.loops.map(id => topology.loops.get(id)).filter(loop => loop?.kind === 'inner' && loop !== rim.loop);
+  return loop?.face === rim.face.id ? readInnerRim(loop, topology, shell) : undefined;
+}
+
+function heightRange(ring: readonly Point[], slope: Point): number {
+  const heights = ring.map(point => dot(slope, point));
+  return Math.max(...heights) - Math.min(...heights);
 }
 
 function readPlateWalls(rim: PlanarRim, topology: Topology, shell: BrepShell, axis: Point, tolerance: number) {
@@ -330,8 +339,7 @@ function hasTiltedRim(brep: Brep, topology: Topology, shell: BrepShell, members:
   const clearanceRadius = Math.max(...supports.map(support => support.radius));
   const flat = (rim: PlanarRim) => {
     if (!twoBore || !rim.plateRing) return clearanceRadius * len(rim.slope) <= tolerance;
-    const heights = rim.plateRing.map(point => dot(rim.slope, point));
-    return Math.max(...heights) - Math.min(...heights) <= tolerance;
+    return heightRange(rim.plateRing, rim.slope) <= tolerance;
   };
   if (flat(lower) === flat(upper)) return false;
   const centerGap = upper.station - lower.station, slope = sub(upper.slope, lower.slope), slopeLength = len(slope);
@@ -341,6 +349,41 @@ function hasTiltedRim(brep: Brep, topology: Topology, shell: BrepShell, members:
     && (!twoBore || (keepsRectangularStock(lower, upper, topology, shell, cylinder.a, tolerance)
       && hasSeparatePeerBore(lower, upper, topology, shell, members, cylinder, tolerance)))
     && checkBrep(brep, { strict: true }).valid;
+}
+
+/** Identify the bore and its cap trims on the continued, single-bore rectangular plate. */
+export function readTiltedRectangularBoreForHeal(brep: Brep, faceName: string): {
+  readonly bottom: BrepFace; readonly top: BrepFace; readonly selected: readonly BrepFace[];
+} | undefined {
+  const [body] = brep.bodies, [shell] = brep.shells;
+  if (brep.bodies.length !== 1 || body.kind !== 'solid' || body.shells.length !== 1 || brep.shells.length !== 1
+    || body.shells[0] !== shell.id || shell.body !== body.id || !shell.closed || shell.faces.length !== 8 || brep.faces.length !== 8
+    || brep.loops.length !== 10 || brep.coedges.length !== 36 || brep.edges.length !== 18 || brep.vertices.length !== 12) return;
+  const matches = brep.faces.filter(face => face.name === faceName);
+  if (matches.length !== 1) return;
+  const topology = readTopology(brep);
+  try {
+    const cylinder = inwardCylinder(matches[0]);
+    if (!cylinder || cylinder.a[0] !== 0 || cylinder.a[1] !== 0) return;
+    const tolerance = linearToleranceMM(Math.max(cylinder.r, geometryScaleMM(brep.vertices.map(vertex => vertex.point))));
+    const caps = brep.faces.filter(face => face.loops.length === 2);
+    if (caps.length !== 2) return;
+    const [a, b] = caps.map(cap => {
+      const loops = cap.loops.map(id => topology.loops.get(id)).filter(loop => loop?.kind === 'inner');
+      return loops.length === 1 && loops[0]?.face === cap.id ? readInnerRim(loops[0], topology, shell) : undefined;
+    });
+    if (!a || !b || new Set(a.members).size !== 2 || !a.members.includes(matches[0])
+      || a.members.some(face => !b.members.includes(face))) return;
+    const mate = inwardCylinder(a.members.find(face => face !== matches[0])!);
+    if (!mate || !sameCylinder(mate, cylinder, tolerance)) return;
+    const rims = [a, b].map(rim => readPlanarRim(rim.loop, rim.boundary, topology, shell, cylinder, tolerance, false, 2));
+    const lower = rims.find(rim => rim?.side === -1), upper = rims.find(rim => rim?.side === 1);
+    if (!lower?.plateRing || !upper?.plateRing) return;
+    const lowerFlat = heightRange(lower.plateRing, lower.slope) <= tolerance, upperFlat = heightRange(upper.plateRing, upper.slope) <= tolerance;
+    if (lowerFlat === upperFlat || !hasAxialSeams(topology, shell, a.members, lower, upper, cylinder.a, tolerance)
+      || !keepsRectangularStock(lower, upper, topology, shell, cylinder.a, tolerance) || !checkBrep(brep, { strict: true }).valid) return;
+    return { bottom: lower.face, top: upper.face, selected: a.members };
+  } catch { /* Unrecognized native geometry cannot establish a bore. */ }
 }
 
 /** Reads the diameter of a cylindrical through bore with two complete native rims. */
