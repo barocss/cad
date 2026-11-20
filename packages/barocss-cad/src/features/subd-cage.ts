@@ -166,26 +166,34 @@ function regionNormals(c: Cage, faces: readonly number[]): Map<number, V3> {
   return out;
 }
 /**
- * The faces extruded as one region: their vertices copied and moved `distance` along the region's normal there, the
- * faces moved onto the copies, and a side quad along every border edge of the region (an edge with no other region
- * face; `noWall`: none along such boundary edges). Returns the cage and the new faces' indices (the region, now at the copies).
+ * Extrude the faces as one region. Keep the original boundary vertices for the side quads and move the cap
+ * vertices `distance` along the region's normals. Reuse interior vertices that only belong to selected faces.
+ * `noWall` can suppress side quads along open edges. Returns the cage and the cap's face and vertex indices.
  */
 export function extrudeFaces(c: Cage, faces: readonly number[], distance = 0, noWall?: (a: number, b: number) => boolean): { cage: Cage; faces: number[]; vertices: number[] } {
   const region = new Set(faces);
   if (!region.size || [...region].some(k => !(k >= 0 && k < c.faces.length))) throw new SubdError('INPUT', 'extrude: name faces of the cage');
-  const t = cageTopology(c), normals = regionNormals(c, [...region]), positions = [...c.positions], copy = new Map<number, number>();
-  for (const k of region) for (const v of c.faces[k]) if (!copy.has(v)) {
-    const n = normals.get(v)!, p = pt(c, v); copy.set(v, positions.length / 3); positions.push(p[0] + distance * n[0], p[1] + distance * n[1], p[2] + distance * n[2]);
-  }
-  const out = c.faces.map((f, k) => region.has(k) ? f.map(v => copy.get(v)!) : [...f]);
+  const t = cageTopology(c), normals = regionNormals(c, [...region]), positions = [...c.positions], cap = new Map<number, number>();
+  const border: { a: number; b: number; open: boolean }[] = [], borderVertices = new Set<number>();
   for (const k of region) c.faces[k].forEach((a, s, f) => {
     const b = f[(s + 1) % f.length], across = t.edges.get(ek(a, b))!.faces.find(g => g !== k);
     if (across !== undefined && region.has(across)) return;
-    // (No wall where told: a mirrored half's open side on the plane, R8.2.)
-    if (across === undefined && noWall?.(a, b)) return;
-    out.push([a, b, copy.get(b)!, copy.get(a)!]);
+    border.push({ a, b, open: across === undefined });
+    borderVertices.add(a);
+    borderVertices.add(b);
   });
-  return { cage: withCreases(c, out, positions, [...(c.creases ?? [])] as [number, number][]), faces: [...region], vertices: [...copy.values()] };
+  for (const k of region) for (const v of c.faces[k]) if (!cap.has(v)) {
+    const n = normals.get(v)!, p = pt(c, v);
+    const id = !borderVertices.has(v) && t.vertexFaces[v].every(face => region.has(face)) ? v : positions.length / 3;
+    cap.set(v, id);
+    for (let axis = 0; axis < 3; axis++) positions[3 * id + axis] = p[axis] + distance * n[axis];
+  }
+  const out = c.faces.map((f, k) => region.has(k) ? f.map(v => cap.get(v)!) : [...f]);
+  for (const { a, b, open } of border) {
+    if (open && noWall?.(a, b)) continue;
+    out.push([a, b, cap.get(b)!, cap.get(a)!]);
+  }
+  return { cage: withCreases(c, out, positions, [...(c.creases ?? [])] as [number, number][]), faces: [...region], vertices: [...cap.values()] };
 }
 /** Boundary edges extruded: each [a, b] (a face's side, no face across) gets a new quad out to a + delta, b + delta (shared along a chain). */
 export function extrudeEdges(c: Cage, edges: readonly (readonly [number, number])[], delta: readonly number[]): { cage: Cage; vertices: number[] } {

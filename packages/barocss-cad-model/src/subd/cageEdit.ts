@@ -9,7 +9,7 @@ import {
   mirrorCage, moveVertices, selectionVertices, setCreases, SubdError, subdPreviewMesh, validateCage, weldVertices, weldWithin, type Cage, type CageValidation, type MirrorAxis,
 } from '@barocss/cad';
 
-import { insetPlanarQuad } from './cageInset';
+import { insetPlanarRegion } from './cageInset';
 
 export type CageMode = 'vertex' | 'edge' | 'face';
 export interface CageSelection { readonly vertices: readonly number[]; readonly edges: readonly (readonly [number, number])[]; readonly faces: readonly number[] }
@@ -295,13 +295,19 @@ export function commitDrag(s: CageSession, delta: readonly number[], extrude: bo
   return step(s, d.cage, d.sel);
 }
 
-/** One selected planar convex quad becomes an inner quad plus a surrounding ring. */
+/** Inset the selected planar quad region once and retain the inner faces for Extrude. */
 export function insetCageSelection(s: CageSession, distance: number): CageSession {
-  if (s.mode !== 'face' || s.sel.faces.length !== 1 || s.sel.vertices.length || s.sel.edges.length) throw new SubdError('INPUT', 'inset: pick exactly one quad face');
-  const face = s.sel.faces[0], vertices = s.cage.faces[face];
-  if (s.mirror && vertices?.some(v => onPlane(s).includes(v))) throw new SubdError('INPUT', 'inset: faces touching the mirror seam are not supported');
-  const cage = insetPlanarQuad(s.cage, face, distance);
-  return step(s, plain(cage), { ...emptyCageSel, faces: [face] });
+  if (s.mode !== 'face' || !s.sel.faces.length || s.sel.vertices.length || s.sel.edges.length) throw new SubdError('INPUT', 'inset: pick quad faces');
+  if (s.mirror) {
+    const axis = s.mirror === 'x' ? 0 : s.mirror === 'y' ? 1 : 2;
+    const coordinates = s.sel.faces.flatMap(face => s.cage.faces[face]?.map(v => s.cage.positions[3 * v + axis]) ?? []);
+    if (coordinates.some(value => Math.abs(value) <= 1e-9)
+      || (coordinates.some(value => value < 0) && coordinates.some(value => value > 0))) {
+      throw new SubdError('INPUT', 'inset: faces touching or crossing the mirror seam are not supported');
+    }
+  }
+  const cage = insetPlanarRegion(s.cage, s.sel.faces, distance);
+  return step(s, plain(cage), { ...emptyCageSel, faces: [...s.sel.faces] });
 }
 
 export type CageSelectionTransform =

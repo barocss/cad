@@ -35,6 +35,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
   const v = validationOf(s), n = s.sel.vertices.length + s.sel.edges.length + s.sel.faces.length;
   const centre = selectionCentre(s);
   const previewActive = !!editor.loopDraft || !!editor.transformDraft || !!editor.insetDraft;
+  const insetLabel = s.sel.faces.length > 1 ? 'Inset region' : 'Inset face';
   const pickedEdges = selectedCageEdges(s), sharpCount = pickedEdges.filter(edge => edge.sharp).length;
   const what = s.sel.faces.length ? `${s.sel.faces.length} face${s.sel.faces.length === 1 ? '' : 's'}` : s.sel.edges.length ? `${s.sel.edges.length} edge${s.sel.edges.length === 1 ? '' : 's'}` : s.sel.vertices.length ? `${s.sel.vertices.length} vertex${s.sel.vertices.length === 1 ? '' : 'es'}` : 'nothing';
   return <aside className="card props cage-panel" aria-label="Cage editor">
@@ -64,7 +65,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
         onClick={() => { if (!blocked) editor.op(o.op); }} disabled={!readiness && blocked}>{o.label}</Button>;
     })}</div>
     <div className="flex flex-wrap gap-1">
-      <Button variant="ghost" disabled={s.mode !== 'face' || s.sel.faces.length !== 1} data-tip="Inset face" data-tip-desc="One planar convex quad; inward cage distance in mm. Not final smooth wall thickness" onClick={() => editor.previewInset('1')}>Inset face</Button>
+      <Button variant="ghost" disabled={s.mode !== 'face' || !s.sel.faces.length} data-tip={insetLabel} data-tip-desc="Inset the outer boundary of a convex, planar quad region" onClick={() => editor.previewInset('1')}>{insetLabel}</Button>
       <Button variant="ghost" disabled={!n} onClick={() => editor.previewTransform({ kind: 'move', axis: 2, value: '0', pivot: 'centre', vertex: '' })}>Move selection</Button>
       <Button variant="ghost" disabled={!n} onClick={() => editor.previewTransform({ kind: 'rotate', axis: 2, value: '0', pivot: 'centre', vertex: '' })}>Rotate selection</Button>
       <Button variant="ghost" disabled={!n} onClick={() => editor.previewTransform({ kind: 'scale', axis: 2, value: '1', pivot: 'centre', vertex: '' })}>Scale selection</Button>

@@ -46,7 +46,7 @@ test('unsupported geometry and distances reject without mutating source',()=>{
  for(const d of [0,-1,NaN,Infinity,4,4.1,6]) {const before=structuredClone(quad);assert.throws(()=>insetPlanarQuad(quad,0,d));assert.deepEqual(quad,before);}
  for(const f of [-1,.5,1]) assert.throws(()=>insetPlanarQuad(quad,f,1));
 });
-test('session requires one face and refuses mirror seam faces without consuming history',()=>{
+test('session requires valid face picks and refuses mirror seam faces without consuming history',()=>{
  const s=picked();
  for(const bad of [{...s,mode:'vertex' as const},{...s,sel:{vertices:[],edges:[],faces:[]}},{...s,sel:{vertices:[],edges:[],faces:[0,0]}}]) assert.throws(()=>insetCageSelection(bad,1));
  const seam={...picked({...quad,positions:quad.positions.map((x,i)=>i%3===0?x-2:x)}),mirror:'x' as const};

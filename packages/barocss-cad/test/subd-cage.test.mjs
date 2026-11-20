@@ -76,6 +76,23 @@ test('edits keep the cage valid and the kernel builds it: extrude the cube\'s to
   const open = insertEdgeLoop(gridCage(3, 1), 1, 5, 0.5); sound(open.cage, 'sheet');
 });
 
+test('extruding four connected top quads keeps their center in use and builds one closed solid', () => {
+  const cage = box([0, 0, 0], [20, 20, 10], [2, 2, 1]);
+  const top = cage.faces.flatMap((face, id) => face.every(v => cage.positions[3 * v + 2] === 10) ? [id] : []);
+  assert.equal(top.length, 4);
+  const previous = structuredClone(cage);
+  const raised = extrudeFaces(cage, top, 2);
+  assert.deepEqual(cage, previous);
+  assert.deepEqual(raised.faces, top);
+  assert.equal(raised.cage.faces.length, cage.faces.length + 8);
+  assert.deepEqual(validateCage(raised.cage).unused, []);
+  assert.equal(raised.cage.positions.length, cage.positions.length + 8 * 3);
+  assert.equal(new Set(raised.vertices).size, 9);
+  for (const v of raised.vertices) assert.equal(raised.cage.positions[3 * v + 2], 12);
+  const { b } = sound(raised.cage);
+  assert.equal(b.bodies.length, 1);
+});
+
 test('delete and fill: the cube\'s top removed (an open box, 4 boundary edges), filled again (the cube\'s volume); two open boxes bridged into one closed body; weld; creases make the cube exact', () => {
   const box = deleteFaces(CUBE, [1]);
   assert.deepEqual([box.faces.length, validateCage(box).boundaryEdges.length], [5, 4]); sound(box, 'sheet');
