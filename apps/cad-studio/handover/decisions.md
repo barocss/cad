@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1430: [Replace either box cap with a tilted plane](notes/replace-box-cap-tilted-plane-2026-11-21/README.md), #17. Keep the other five box supports and all native IDs through reference edits and Studio reopen.
+
 - D1429: [Bind feature deletion to a reviewed revision](notes/review-pinned-feature-delete-2026-11-21/README.md), #324. Refuse a stale index before deletion and verify the current proposal, approval and native reopen in Studio.
 
 - D1428: [Replace a box wall with a plane tilted in two directions](notes/replace-box-wall-diagonal-plane-2026-11-21/README.md), #17. Extend each corner to the reference plane, verify native mass and reject a one-corner collapse.

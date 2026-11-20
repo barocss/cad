@@ -2,15 +2,19 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { capCase } from './replace-face-cap-fixture.mjs';
 
 const [output, inputFile, agentFile, variant = 'height'] = process.argv.slice(2);
 assert.ok(output && inputFile && agentFile && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
-assert.ok(['height', 'diagonal'].includes(variant));
+assert.ok(['height', 'diagonal', 'upper', 'lower'].includes(variant));
 const diagonal = variant === 'diagonal';
-const firstFace = diagonal ? 'n3.bottom' : 'n3.side1', nextFace = diagonal ? 'n3.top' : 'n3.side3';
-const width = (y, z) => 37 + (diagonal ? y / 10 : 0) + z / 2;
-const movedWidth = (y, z) => width(y, z) + 2;
-const retargetedWidth = diagonal ? (y, z) => movedWidth(y, z) - 3 * Math.sqrt(126) / 10 : (_y, z) => 30 + 4 * z / 10;
+const cap = capCase(variant);
+const sourceFace = cap?.face ?? 'n1.side1';
+const firstFace = diagonal || cap ? 'n3.bottom' : 'n3.side1', nextFace = diagonal || cap ? 'n3.top' : 'n3.side3';
+const position = cap?.height ?? ((y, z) => 37 + (diagonal ? y / 10 : 0) + z / 2);
+const movedPosition = cap?.movedHeight ?? ((y, z) => position(y, z) + 2);
+const retargetedPosition = cap?.retargetedHeight ??
+  (diagonal ? (y, z) => movedPosition(y, z) - 3 * Math.sqrt(126) / 10 : (_y, z) => 30 + 4 * z / 10);
 // Centre of the 8 × 8 mm reference face in the authored plane.
 const diagonalPick = [48 + 4 * (1 / Math.sqrt(101) - 50 / Math.sqrt(126 * 101)),
   60 + 4 * (10 / Math.sqrt(101) + 5 / Math.sqrt(126 * 101)), 10 - 404 / Math.sqrt(126 * 101)];
@@ -19,14 +23,15 @@ const originalBytes = await readFile(inputFile), source = JSON.parse(originalByt
 const agentDoc = JSON.parse(await readFile(agentFile));
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/app/commandReferencePicking.ts', 'apps/cad-studio/src/files/documentFile.ts',
+  'apps/cad-studio/test/replace-face-cap-fixture.mjs',
   'packages/barocss-cad-model/src/app/replaceFaceCommand.ts', 'packages/barocss-cad-model/src/engine/offsetPlane.ts',
   'packages/barocss-cad-model/src/engine/doc.ts', 'packages/barocss-cad-model/src/engine/errors.ts',
   'packages/barocss-cad/src/features/drafted-cap-offset.ts', 'packages/barocss-cad/src/features/prism-wall-offset.ts',
 ];
 const f = await createFlow({
   name: 'replace-face', envFrozen: 'REPLACE_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Replace a cardinal box wall with a tilted exact support in desktop Studio.',
-  limits: [diagonal
+  qualification: 'Replace a box face with a tilted exact support in desktop Studio.',
+  limits: [cap ? `One 40 × 30 × 10 mm box and two tilted reference faces for its ${variant} cap.` : diagonal
     ? 'One 40 × 30 × 10 mm box and two faces of a disconnected prism tilted along Y and Z.'
     : 'One 40 × 30 × 10 mm box, one disconnected prismatic donor, two planes tilted along Z.'],
   inspectorSource: `
@@ -76,7 +81,7 @@ async function point(world) {
   await f.page.mouse.click(...pixel);
 }
 
-async function measure(label, doc, original, widthAt, donor) {
+async function measure(label, doc, original, positionAt, donor) {
   const native = await f.inspect(label, doc), box = shape(native, 'b5'), reference = shape(native, 'b4');
   const worker = (await f.bodies()).bodies;
   assert.equal(worker.length, 2);
@@ -88,27 +93,29 @@ async function measure(label, doc, original, widthAt, donor) {
   assert.deepEqual(incidence(box.brep), incidence(original.brep));
   if (donor) assert.deepEqual(reference.brep, donor.brep);
   for (const [name, [n, offset]] of Object.entries(original.supports)) {
-    if (name === 'n1.side1') continue;
+    if (name === sourceFace) continue;
     const [now, support] = box.supports[name];
     n.forEach((value, axis) => near(now[axis], value));
     near(support, offset);
   }
   for (const vertex of original.brep.vertices) {
     const [x, y, z] = vertex.point, next = box.brep.vertices.find(v => v.id === vertex.id);
-    const expected = [x === 40 ? widthAt(y, z) : x, y, z];
+    const expected = cap ? [x, y, z === cap.station ? positionAt(x, y) : z] : [x === 40 ? positionAt(y, z) : x, y, z];
     expected.forEach((value, axis) => near(next.point[axis], value));
   }
-  // The width is affine, so its mean over the base rectangle is its value at the centre.
-  const volume = 30 * 10 * widthAt(15, 5);
+  // The thickness is affine, so its mean over the fixed rectangle is its value at the centre.
+  const volume = cap ? 40 * 30 * Math.abs(positionAt(20, 15) - cap.opposite) : 30 * 10 * positionAt(15, 5);
   near(box.mass.volume, volume);
   const workerVolume = shape(worker, 'b5').volume;
   near(workerVolume, volume);
-  near(reference.mass.volume, diagonal ? 192 : 950);
-  if (diagonal && widthAt === width) {
-    [10103 / 492, 1245 / 82, 1255 / 246].forEach((value, axis) => near(box.mass.centroid[axis], value));
+  near(reference.mass.volume, diagonal || cap ? 192 : 950);
+  if ((diagonal || cap) && positionAt === position) {
+    const centroid = cap?.centroid ?? [10103 / 492, 1245 / 82, 1255 / 246];
+    centroid.forEach((value, axis) => near(box.mass.centroid[axis], value));
   }
-  const cornerX = [[0, 0], [30, 0], [0, 10], [30, 10]].map(([y, z]) => widthAt(y, z));
-  f.report.observations.push({ label, cornerX, volume, nativeVolume: box.mass.volume, workerVolume,
+  const corners = cap ? [[0, 0], [40, 0], [0, 30], [40, 30]] : [[0, 0], [30, 0], [0, 10], [30, 10]];
+  const coordinates = corners.map(([u, v]) => positionAt(u, v));
+  f.report.observations.push({ label, axis: cap ? 'z' : 'x', coordinates, volume, nativeVolume: box.mass.volume, workerVolume,
     maximumEdgeSurfaceGap: box.report.maximumEdgeSurfaceGap });
   return reference;
 }
@@ -124,39 +131,40 @@ await f.run(async () => {
     });
     return context;
   };
-  f.phase = 'Open the exact MCP source and pick its X-max wall';
+  f.phase = 'Open the exact MCP source and pick the box face';
   await f.newPage();
   await open(inputFile);
   await f.same(source);
   const native = await f.inspect('source', source), original = shape(native, 'b1'), donor = shape(native, 'b4');
   near(original.mass.volume, 12000);
-  await view('Right');
+  await view(cap?.name ?? 'Right');
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const filter = button('Selection filter');
   for (let i = 0; i < 4 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
-  await point([40, 15, 5]);
-  await f.page.getByText(/Properties and face colour: .*n1\.side1/).waitFor();
+  await point(cap ? [20, 15, cap.station] : [40, 15, 5]);
+  await f.page.getByText(new RegExp('Properties and face colour: .*' + sourceFace.replace('.', '\\.'))).waitFor();
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Replace face');
   const dialog = hud('Replace face');
   await dialog.getByText('Pick a tilted face on another solid.', { exact: true }).waitFor();
   assert.ok(await button('Apply', dialog).isDisabled());
 
-  if (!diagonal) {
+  if (!diagonal && !cap) {
     f.phase = 'Refuse a horizontal plane';
     await view('Top');
     await point([37, 65, 10]);
     await status(dialog, 'refused');
-    assert.match(await dialog.locator('.hud-error').innerText(), /smaller angle to the selected wall/i);
+    assert.match(await dialog.locator('.hud-error').innerText(), /smaller angle to the selected face/i);
     assert.ok(await button('Apply', dialog).isDisabled());
     await f.same(source);
     await f.snapshot('replace-horizontal-refused');
     await view('Right');
   }
   f.phase = 'Accept the tilted donor';
-  await point(diagonal ? diagonalPick : [39.5, 65, 5]);
+  if (cap) await view(cap.oppositeName);
+  await point(cap?.referencePick ?? (diagonal ? diagonalPick : [39.5, 65, 5]));
   await status(dialog, 'preview');
   await dialog.getByText(firstFace, { exact: false }).waitFor();
   await f.snapshot('replace-tilted-preview');
@@ -165,21 +173,21 @@ await f.run(async () => {
   const first = await f.doc(), bound = first.nodes[5];
   assert.deepEqual(first, agentDoc);
   assert.equal(bound.kind, 'replace-face');
-  await measure('applied', first, original, width, donor);
+  await measure('applied', first, original, position, donor);
 
   f.phase = 'Move the donor and retarget the saved replacement';
   await f.openFeatureEditor(4, 'reference position');
-  await f.editor().getByLabel('ΔX', { exact: true }).fill('2');
+  await f.editor().getByLabel(cap ? 'ΔZ' : 'ΔX', { exact: true }).fill(String(cap?.moved ?? 2));
   await f.applyEditor(first, 'reference-moved');
   const moved = await f.doc();
   assert.deepEqual(moved.nodes[5], bound);
-  const movedDonor = await measure('donor-moved', moved, original, movedWidth);
+  const movedDonor = await measure('donor-moved', moved, original, movedPosition);
   await f.openFeatureEditor(5, 'reference-bound Replace face');
   await button('Edit Replace face', f.editor()).click();
   const history = hud('Edit Replace face');
   await history.getByText(firstFace, { exact: false }).waitFor();
-  await view('Left');
-  await point(diagonal ? oppositePick : [32, 65, 5]);
+  await view(cap?.name ?? 'Left');
+  await point(cap?.otherPick ?? (diagonal ? oppositePick : [32, 65, 5]));
   await status(history, 'preview');
   await history.getByText(nextFace, { exact: false }).waitFor();
   await button('Apply', history).click();
@@ -187,20 +195,20 @@ await f.run(async () => {
   const retargeted = await f.doc();
   assert.equal(retargeted.nodes[5].id, bound.id);
   assert.equal(retargeted.nodes[5].target.face, nextFace);
-  await measure('retargeted', retargeted, original, retargetedWidth, movedDonor);
+  await measure('retargeted', retargeted, original, retargetedPosition, movedDonor);
   await f.undo(); await f.same(moved);
   await f.redo(); await f.same(retargeted);
   const saved = await f.save('retargeted-wall');
   await f.freshOpen(saved.file, retargeted, 'replacement-reopened');
-  await measure('reopened', retargeted, original, retargetedWidth, movedDonor);
+  await measure('reopened', retargeted, original, retargetedPosition, movedDonor);
   await f.freshOpen(agentFile, agentDoc, 'replacement-mcp-opened');
-  await measure('agent-file', agentDoc, original, width, donor);
+  await measure('agent-file', agentDoc, original, position, donor);
 
-  f.phase = 'Refuse a saved replacement which collapses at the opposite wall';
+  f.phase = 'Refuse a saved replacement which collapses at the opposite face';
   const stale = structuredClone(first);
-  stale.nodes[4].offset[0] = -37;
+  stale.nodes[4].offset[cap ? 2 : 0] = cap?.collapse ?? -37;
   await open({ name: 'collapsed-wall.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(stale)) });
-  await f.waitToast(/reach or cross the opposite wall.*Your part is unchanged/i);
+  await f.waitToast(/reach or cross the opposite (?:wall|cap).*Your part is unchanged/i);
   await f.same(agentDoc);
   await f.snapshot('replacement-collapse-refused');
   assert.deepEqual(await readFile(inputFile), originalBytes);

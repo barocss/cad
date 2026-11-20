@@ -1,36 +1,35 @@
-import { isBoxWallReplacementSource, withNode, type StudioDoc } from '../engine/doc';
+import { isBoxReplacementSource, withNode, type StudioDoc } from '../engine/doc';
 import { captureSignatures } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
 import { captureOffsetPlane, offsetPlaneStep, pickReferencePlane, restoreOffsetPlaneValues } from './offsetPlanePick';
 
-const SOURCE = 'Select one vertical wall of a straight rectangular extrusion.';
+const SOURCE = 'Select one face of a straight rectangular extrusion.';
 const REFERENCE = 'Pick a tilted face on another solid.';
 
-function pickedWall(ctx: Ctx) {
+function pickedFace(ctx: Ctx) {
   const { selection } = ctx;
   if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length ||
       selection.vertices?.length || selection.profileRegions || ctx.direct?.length) return;
   const pick = selection.faces[0], body = ctx.bodies[pick.body], parent = body?.ref, face = body?.mesh.faces[pick.face];
-  if (!parent || parent.side !== 'solid' || !isBoxWallReplacementSource(ctx.doc.nodes, parent.node) ||
-      !face?.name || face.nativePlaneName !== face.name || face.exact?.kind !== 'plane' ||
-      (face.nativeAxisPlane?.axis !== 'x' && face.nativeAxisPlane?.axis !== 'y')) return;
+  if (!parent || parent.side !== 'solid' || !isBoxReplacementSource(ctx.doc.nodes, parent.node) ||
+      !face?.name || face.nativePlaneName !== face.name || face.exact?.kind !== 'plane' || !face.nativeAxisPlane) return;
   return { parent, face: face.name };
 }
 
 export const replaceFaceCommand: Command = {
   id: 'replace-face', label: 'Replace face', icon: 'cad-offset-face', group: 'modify',
-  hint: 'Replace one box wall with a tilted plane.',
-  keywords: 'replace face plane tilt wall reextend direct edit',
-  available: ctx => pickedWall(ctx) ? { ok: true } : { ok: false, reason: SOURCE },
+  hint: 'Replace one box face with a tilted plane.',
+  keywords: 'replace face plane tilt wall cap reextend direct edit',
+  available: ctx => pickedFace(ctx) ? { ok: true } : { ok: false, reason: SOURCE },
   fields: () => [],
   steps: (ctx, values) => {
-    const picked = pickedWall(ctx);
+    const picked = pickedFace(ctx);
     return [{ label: 'Face', text: picked?.face ?? SOURCE, done: !!picked }, offsetPlaneStep(values, undefined, ctx, REFERENCE)];
   },
-  onPick: (ctx, values, hit) => pickReferencePlane(ctx, values, hit.face, pickedWall(ctx)?.parent, ctx.doc.nodes.length),
+  onPick: (ctx, values, hit) => pickReferencePlane(ctx, values, hit.face, pickedFace(ctx)?.parent, ctx.doc.nodes.length),
   build(ctx, values) {
-    const picked = pickedWall(ctx);
+    const picked = pickedFace(ctx);
     if (!picked) throw refusal('BAD_REFERENCE', SOURCE);
     const { parent, face } = picked;
     const target = captureOffsetPlane(ctx, values, parent, ctx.doc.nodes.length, 'Replace face');

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CadPartError, checkBrep, evaluateCadPart, faceGeometry } from '../dist/index.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
-import { boxWallReplacementFrame, draftedFaceOffsetFrame, replaceBoxWall } from '../dist/features/drafted-cap-offset.js';
+import { boxFaceReplacementFrame, boxWallReplacementFrame, draftedFaceOffsetFrame, replaceBoxFace, replaceBoxWall } from '../dist/features/drafted-cap-offset.js';
 
 const doc = features => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features });
 const output = features => evaluateCadPart(doc(features)).outputs[0];
@@ -42,7 +42,7 @@ function assertPlanesAndTopology(before, after, replaced, reference) {
     const unit = wanted.normal.map(x => x / Math.hypot(...wanted.normal));
     const alignment = dot(next.n, unit);
     close(Math.abs(alignment), 1, 1e-12);
-    // The source wall defines outward orientation even when the reference normal points inwards.
+    // The source face defines outward orientation even when the reference normal points inwards.
     assert.ok(dot(previous.n, next.n) > 0);
     assert.ok(actual.surface.controlPoints.flat().every(point => Math.abs(dot(sub(point, wanted.origin), unit)) < 1e-9));
   }
@@ -112,6 +112,50 @@ test('a width-only tilt leaves the extrusion caps on their original planes', () 
   close(brepMassProperties(after, 1).volume, 11700);
 });
 
+test('either box cap can take the same reflected two-direction tilt with all native identities', () => {
+  const before = output(source).brep, saved = structuredClone(before);
+  for (const upper of [true, false]) {
+    const name = upper ? 'b.top' : 'b.bottom', station = upper ? 10 : 0;
+    const reference = upper ? { origin: [0, 60, 20], normal: [-1, -2, 10] }
+      : { origin: [0, 60, -10], normal: [-1, -2, -10] };
+    assert.deepEqual(boxFaceReplacementFrame(before, name),
+      { anchor: [20, 15, station], normal: [0, 0, upper ? 1 : -1] });
+    assert.equal(boxWallReplacementFrame(before, name), undefined);
+    const after = output([...source, { ...replacement, face: name, plane: reference }]).brep;
+    assert.deepEqual(after, replaceBoxFace(before, name, reference));
+    const reversed = { ...reference, normal: reference.normal.map(value => -value) };
+    assert.deepEqual(after, replaceBoxFace(before, name, reversed));
+    assertPlanesAndTopology(before, after, name, reference);
+    for (const vertex of before.vertices) {
+      const [x, y, z] = vertex.point, actual = after.vertices.find(v => v.id === vertex.id);
+      const height = 8 + x / 10 + y / 5;
+      assert.deepEqual(actual.point.slice(0, 2), [x, y]);
+      close(actual.point[2], z !== station ? z : upper ? height : 10 - height);
+    }
+    const mass = brepMassProperties(after, 1);
+    close(mass.volume, 15600);
+    // Integrate h=8+x/10+y/5 over the footprint. The underside case reflects Z about 5 mm.
+    [820 / 39, 210 / 13, upper ? 20 / 3 : 10 / 3].forEach((value, axis) => close(mass.centroid[axis], value));
+  }
+  assert.deepEqual(before, saved);
+});
+
+test('cap replacement refuses perpendicular and parallel references and one-corner collapse without touching the box', () => {
+  const before = output(source).brep, saved = structuredClone(before);
+  for (const [candidate, error] of [
+    [{ origin: [0, 60, 10], normal: [1, 0, 0] }, /perpendicular to the selected cap/],
+    [{ origin: [0, 60, 10], normal: [1, 0, 1e-16] }, /perpendicular to the selected cap/],
+    [{ origin: [0, 60, 10], normal: [0, 0, 1] }, /tilt is too small for this cap/],
+    [{ origin: [0, 60, 10], normal: [1e-10, 0, 1] }, /tilt is too small for this cap/],
+    // Moving the plane down 8 or 9 mm closes or crosses only its minimum corner.
+    [{ origin: [0, 60, 12], normal: [-1, -2, 10] }, /opposite cap at one corner/],
+    [{ origin: [0, 60, 11], normal: [-1, -2, 10] }, /opposite cap at one corner/],
+  ]) {
+    assert.throws(() => replaceBoxFace(before, 'b.top', candidate), error);
+    assert.deepEqual(before, saved);
+  }
+});
+
 test('Replace face refuses corner collapse, unsupported slope and stale picks', () => {
   const before = output(source).brep, saved = structuredClone(before);
   const refuses = (params, category, message) => assert.throws(() => output([...source, { ...replacement, ...params }]),
@@ -131,7 +175,7 @@ test('Replace face refuses corner collapse, unsupported slope and stale picks', 
   for (const normal of [[1, 0, 0], [1, 0, 1e-10]]) refuses({ plane: { ...plane, normal } }, 'GEOMETRY', /tilt is too small/);
   refuses({ plane: { ...plane, normal: [0, 0, 0] } }, 'INPUT', /finite nonzero length/);
   refuses({ plane: { ...plane, origin: [10000, 60, 0] } }, 'GEOMETRY', /modeling coordinate range/);
-  refuses({ face: 'b.top' }, 'GEOMETRY', /upright wall/);
+  assert.throws(() => replaceBoxWall(before, 'b.top', plane), /upright wall/);
   refuses({ face: 'b.side1#1' }, 'REFERENCE', /missing or ambiguous/);
   refuses({ expect: { [face]: { kind: 'plane', at: [40, 15, 5], dir: [0, 1, 0], size: 300 } } }, 'REFERENCE', /REFERENCE_MOVED/);
 

@@ -375,10 +375,11 @@ function straightExtrudeSketch(nodes: readonly unknown[], index: number): Record
   if (textRecord(sketch) && sketch.kind === 'sketch') return sketch;
 }
 
-/** Straight rectangular stock for a cardinal wall replacement. The kernel proves the exact solid. */
-export function isBoxWallReplacementSource(nodes: readonly unknown[], index: number): boolean {
+/** Straight rectangular stock for a box face replacement. The kernel proves the exact solid. */
+export function isBoxReplacementSource(nodes: readonly unknown[], index: number): boolean {
   return straightExtrudeSketch(nodes, index)?.profile === 'rectangle';
 }
+export { isBoxReplacementSource as isBoxWallReplacementSource };
 
 /** Identify the authored fillet. The kernel proves the current solid and its concave arc. */
 export function isDeleteFaceFilletSource(nodes: readonly unknown[], index: number): boolean {
@@ -448,7 +449,7 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       }
       const parentIndex = (node.parent as BodyRef).node;
       if (node.kind === 'replace-face') {
-        if (!isBoxWallReplacementSource(value.nodes, parentIndex)) return 'Replace face: a preceding straight rectangular extrusion is required.';
+        if (!isBoxReplacementSource(value.nodes, parentIndex)) return 'Replace face: a preceding straight rectangular extrusion is required.';
         continue;
       }
       const parent = value.nodes[parentIndex];

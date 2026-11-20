@@ -429,22 +429,39 @@ export function offsetDraftedFace(brep: Brep, faceName: string, distance: number
 }
 
 type ReplacementPlane = { readonly origin: Point; readonly normal: Point };
+type CertifiedBoxFace = FaceRole & { readonly box: Taper; readonly face: BrepFace; readonly normal: Point };
 
-function certifiedBoxWall(brep: Brep, faceName: string) {
+function certifiedBoxFace(brep: Brep, faceName: string): CertifiedBoxFace | undefined {
   const face = namedFace(brep, faceName), box = face && admittedTaper(brep, 'box');
-  const wall = face && box?.walls.get(face.id);
-  return face && box && wall ? { face, box, wall } : undefined;
+  if (!face || !box) return undefined;
+  const wall = box.walls.get(face.id);
+  if (wall) return { face, box, axis: wall.axis, end: wall.end, normal: wall.plane.n };
+  const cap = admittedCap(box, face);
+  return cap && { face, box, axis: 2, end: cap.end, normal: [0, 0, cap.end === 0 ? -1 : 1] };
+}
+
+function boxBounds(box: Taper): [Range, Range, Range] {
+  const [base, top] = box.sections;
+  return [base.ranges[0], base.ranges[1], [base.z, top.z]];
+}
+
+function boxReplacementFrame({ box, axis, end, normal }: CertifiedBoxFace): { anchor: Point; normal: Point } {
+  const bounds = boxBounds(box), [[x0, x1], [y0, y1], [z0, z1]] = bounds;
+  const anchor: Point = [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2];
+  anchor[axis] = bounds[axis][end];
+  return { anchor, normal };
+}
+
+/** The exact selected box face and its original outward direction. */
+export function boxFaceReplacementFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
+  const admitted = certifiedBoxFace(brep, faceName);
+  return admitted && boxReplacementFrame(admitted);
 }
 
 /** The exact selected side and its original outward direction for Replace face picks. */
 export function boxWallReplacementFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
-  const admitted = certifiedBoxWall(brep, faceName);
-  if (!admitted) return undefined;
-  const { box, wall } = admitted, [base, top] = box.sections, across = wall.axis === 0 ? 1 : 0;
-  const anchor: Point = [0, 0, (base.z + top.z) / 2];
-  anchor[wall.axis] = base.ranges[wall.axis][wall.end];
-  anchor[across] = (base.ranges[across][0] + base.ranges[across][1]) / 2;
-  return { anchor, normal: wall.plane.n };
+  const admitted = certifiedBoxFace(brep, faceName);
+  return admitted && admitted.axis !== 2 ? boxReplacementFrame(admitted) : undefined;
 }
 
 function replacementFailure(code: BrepError['code'], detail: string): never {
@@ -453,20 +470,20 @@ function replacementFailure(code: BrepError['code'], detail: string): never {
 
 const finitePoint = (value: unknown): value is Point => Array.isArray(value) && value.length === 3 && value.every(component => typeof component === 'number' && Number.isFinite(component));
 
-function replacementPlane(wall: Wall, plane: ReplacementPlane): Plane {
+function replacementPlane({ axis, normal }: CertifiedBoxFace, plane: ReplacementPlane): Plane {
   if (!plane || typeof plane !== 'object' || Array.isArray(plane) || Object.keys(plane).sort().join(',') !== 'normal,origin'
     || !finitePoint(plane.origin) || !finitePoint(plane.normal)) return replacementFailure('INPUT', 'the reference needs a finite origin and normal.');
   const magnitude = len(plane.normal);
   if (!Number.isFinite(magnitude) || magnitude === 0) return replacementFailure('INPUT', 'the reference normal must have a finite nonzero length.');
   const n: Point = [plane.normal[0] / magnitude, plane.normal[1] / magnitude, plane.normal[2] / magnitude];
-  if (Math.abs(n[wall.axis]) <= 64 * Number.EPSILON)
-    return replacementFailure('GEOMETRY', 'the reference plane is too close to perpendicular to the selected wall.');
-  return { kind: 'plane', o: plane.origin, n: dot(n, wall.plane.n) > 0 ? n : scale(n, -1) };
+  if (Math.abs(n[axis]) <= 64 * Number.EPSILON)
+    return replacementFailure('GEOMETRY', `the reference plane is too close to perpendicular to the selected ${axis === 2 ? 'cap' : 'wall'}.`);
+  return { kind: 'plane', o: plane.origin, n: dot(n, normal) > 0 ? n : scale(n, -1) };
 }
 
-function liftToPlane(point: Point, axis: Axis, { o, n }: Plane): Point {
-  const across = axis === 0 ? 1 : 0, lifted: Point = [...point];
-  lifted[axis] = o[axis] - ((point[across] - o[across]) * n[across] + (point[2] - o[2]) * n[2]) / n[axis];
+function liftToPlane(point: Point, axis: FaceRole['axis'], { o, n }: Plane): Point {
+  const u = (axis + 1) % 3, v = (axis + 2) % 3, lifted: Point = [...point];
+  lifted[axis] = o[axis] - ((point[u] - o[u]) * n[u] + (point[v] - o[v]) * n[v]) / n[axis];
   return lifted;
 }
 
@@ -477,24 +494,35 @@ function boxFaceSurface(face: BrepFace, box: Taper): { surface: Surface; sense: 
   return { surface: capSurface({ min: [x0, y0], max: [x1, y1] }, section.z, face.surface.id, section === top), sense: 'forward' };
 }
 
+/** Replace one face of a strict box with the chosen nonparallel plane. */
+export function replaceBoxFace(brep: Brep, faceName: string, plane: ReplacementPlane): Brep {
+  const admitted = certifiedBoxFace(brep, faceName);
+  if (!admitted) return replacementFailure('GEOMETRY', 'pick one planar face of a straight rectangular box.');
+  return buildBoxReplacement(brep, admitted, plane);
+}
+
 /** Replace a cardinal wall of a strict box with the chosen nonparallel plane. */
 export function replaceBoxWall(brep: Brep, faceName: string, plane: ReplacementPlane): Brep {
-  const admitted = certifiedBoxWall(brep, faceName);
-  if (!admitted) return replacementFailure('GEOMETRY', 'pick one upright wall of a straight rectangular box.');
-  const { face, box, wall } = admitted, { axis, end } = wall;
-  const wanted = replacementPlane(wall, plane);
-  const bounds = box.sections[0].ranges[axis], opposite = bounds[end === 0 ? 1 : 0], outward = end === 1 ? 1 : -1;
+  const admitted = certifiedBoxFace(brep, faceName);
+  if (!admitted || admitted.axis === 2) return replacementFailure('GEOMETRY', 'pick one upright wall of a straight rectangular box.');
+  return buildBoxReplacement(brep, admitted, plane);
+}
+
+function buildBoxReplacement(brep: Brep, admitted: CertifiedBoxFace, plane: ReplacementPlane): Brep {
+  const { face, box, axis, end } = admitted, role = axis === 2 ? 'cap' : 'wall';
+  const wanted = replacementPlane(admitted, plane);
+  const bounds = boxBounds(box)[axis], opposite = bounds[end === 0 ? 1 : 0], outward = end === 1 ? 1 : -1;
   const lifted = brep.vertices.filter(vertex => vertex.point[axis] === bounds[end])
     .map(vertex => ({ vertex, point: liftToPlane(vertex.point, axis, wanted) }));
   const extent = geometryScaleMM(brep.vertices.map(vertex => vertex.point), lifted.map(({ point }) => point), [wanted.o]);
   if (!(extent <= CadNumericPolicy.coordinateAbs)) return replacementFailure('GEOMETRY', 'the replacement exceeds the modeling coordinate range.');
   const linear = linearToleranceMM(extent);
-  // The signed width is affine across the transverse-by-height rectangle, so its minimum is at a corner.
+  // The signed distance along the selected axis is affine on the trim rectangle, so its minimum is at a corner.
   const coordinates = lifted.map(({ point }) => point[axis]);
   if (coordinates.some(coordinate => (coordinate - opposite) * outward <= linear))
-    return replacementFailure('GEOMETRY', 'the replacement would reach or cross the opposite wall at one corner.');
+    return replacementFailure('GEOMETRY', `the replacement would reach or cross the opposite ${role} at one corner.`);
   if (Math.max(...coordinates) - Math.min(...coordinates) <= linear)
-    return replacementFailure('GEOMETRY', 'the reference plane tilt is too small for this wall.');
+    return replacementFailure('GEOMETRY', `the reference plane tilt is too small for this ${role}.`);
   const moved = new Map<string, Point>();
   for (const { vertex, point } of lifted) if (vertex.point[axis] !== point[axis]) moved.set(vertex.id, point);
   const vertices = brep.vertices.map(vertex => {
@@ -526,7 +554,7 @@ export function replaceBoxWall(brep: Brep, faceName: string, plane: ReplacementP
     function fit(surface: Surface, sense: BrepFace['sense']) {
       const original = affineChart(surface, sense);
       if (!original) return undefined;
-      // With transverse and Z unchanged, lifting a parallelogram to the new plane is affine.
+      // Holding the other two coordinates fixed makes the lift of a parallelogram affine.
       const chart = current === face ? affineChart({ ...surface, controlPoints: surface.controlPoints.map(row => row.map(p => liftToPlane(p, axis, wanted))) }, sense) : original;
       const fitted = chart && coverAffineTrim(chart, sense, corners, roundoffAt([...corners, support.o]));
       if (!fitted || len(sub(fitted.normal, support.n)) > 128 * Number.EPSILON) return undefined;
