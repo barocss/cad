@@ -265,6 +265,7 @@ export interface OffsetPlaneRef {
 }
 export type OffsetFaceNode = { kind: 'offset-face'; parent: BodyRef; faces: [string] } &
   ({ distance: number; target?: never } | { target: OffsetPlaneRef; distance?: never });
+export type DeleteFaceNode = { kind: 'delete-face'; parent: BodyRef; faces: [string] };
 
 /** Check the authored recipe before capture or geometry evaluation. */
 export function offsetFaceNodeProblem(input: unknown, index: number): string | null {
@@ -355,8 +356,26 @@ export function isBoredCapOffsetSource(nodes: readonly unknown[], index: number)
   }
 }
 
-/** Check raw recipes in the root model and its placed or pending part definitions. */
-export function offsetFaceDocumentProblem(input: unknown): string | null {
+function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly unknown[], index: number): string | null {
+  const allowed = new Set(['kind', 'parent', 'faces', ...NODE_EXTRA_FIELDS]);
+  for (const key of Object.keys(node)) if (!allowed.has(key)) return `Delete face: unknown field ${key}.`;
+  const parent = node.parent;
+  if (!textRecord(parent) || Object.keys(parent).sort().join(',') !== 'node,side' || parent.side !== 'solid' ||
+      typeof parent.node !== 'number' || !Number.isSafeInteger(parent.node) || parent.node < 0 || parent.node >= index ||
+      !isBoredCapOffsetSource(nodes, parent.node)) return 'Delete face: a preceding through-hole plate solid is required.';
+  const name = Array.isArray(node.faces) && node.faces.length === 1 ? node.faces[0] : undefined;
+  if (typeof name !== 'string' || !name.trim() || /[+\0]/.test(name)) return 'Delete face: one exact native bore wall is required.';
+  if (node.rematched !== undefined && (!textRecord(node.rematched) || Object.keys(node.rematched).length))
+    return 'Delete face: the original bore wall name is required.';
+  const sig = textRecord(node.sigs) && Object.hasOwn(node.sigs, name) && Object.keys(node.sigs).length === 1 ? node.sigs[name] : undefined;
+  if (!textRecord(sig) || Object.keys(sig).sort().join(',') !== 'k,p,r,s' || sig.k !== 'curved' || !textVector(sig.p, false) ||
+      typeof sig.r !== 'number' || !Number.isFinite(sig.r) || sig.r <= 0 || typeof sig.s !== 'number' || !Number.isFinite(sig.s) || sig.s <= 0)
+    return 'Delete face: the bore wall needs its stored individual signature.';
+  return null;
+}
+
+/** Check raw face-edit recipes in the root model and its placed or pending part definitions. */
+export function directFaceDocumentProblem(input: unknown): string | null {
   const stack: unknown[] = [input], seen = new Set<object>();
   while (stack.length) {
     const value = stack.pop();
@@ -364,7 +383,13 @@ export function offsetFaceDocumentProblem(input: unknown): string | null {
     seen.add(value);
     const boredCapOffsets = new Set<number>();
     if (Array.isArray(value.nodes)) for (const [index, node] of value.nodes.entries()) {
-      if (!textRecord(node) || node.kind !== 'offset-face') continue;
+      if (!textRecord(node)) continue;
+      if (node.kind === 'delete-face') {
+        const problem = deleteFaceRecipeProblem(node, value.nodes, index);
+        if (problem) return problem;
+        continue;
+      }
+      if (node.kind !== 'offset-face') continue;
       const problem = offsetFaceNodeProblem(node, index);
       if (problem) return problem;
       if (node.sigs === undefined) return 'Offset face: the selected face needs its stored individual signature.';
@@ -396,6 +421,7 @@ export function offsetFaceDocumentProblem(input: unknown): string | null {
   }
   return null;
 }
+export const offsetFaceDocumentProblem = directFaceDocumentProblem;
 /** Validate text recipes in saved part trees without loading fonts or evaluating geometry. */
 export function textDocumentProblem(input: unknown): string | null {
   const stack: unknown[] = [input], seen = new Set<object>();
@@ -582,7 +608,7 @@ export type NodeExtras = { suppressed?: true; id?: string; rematched?: Record<st
  */
 export const NODE_EXTRA_FIELDS = ['suppressed', 'id', 'rematched', 'sigs', 'held', 'bought'] as const satisfies readonly (keyof NodeExtras)[];
 export const _nodeFieldsComplete: [Exclude<keyof NodeExtras, typeof NODE_EXTRA_FIELDS[number]>] extends [never] ? true : never = true;
-type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode | TextNode | TextReliefNode | CylindricalWrapNode | OffsetFaceNode
+type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode | TextNode | TextReliefNode | CylindricalWrapNode | OffsetFaceNode | DeleteFaceNode
   /** `draft` (degrees) leans the walls into the material away from the sketch plane. */
   | RegionExtrudeNode
   | { kind: 'extrude'; sketch: number; height: Dim; from?: Dim; draft?: number; made?: Made; cutDepth?: 'through' }
@@ -1414,6 +1440,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
       return `${kind} ${n(node.height)}${node.draft ? ` · ${node.draft}°` : ''}`;
     }
     case 'revolve': return `Revolve ${node.angle}°`;
+    case 'delete-face': return 'Delete face · Heal through hole';
     case 'hole': return (node.thread ? `Tapped ${node.thread}` : `${node.countersink ? 'Countersunk' : 'Hole'} Ø${typeof node.radius === 'number' ? fmt(node.radius * 2) : node.radius.parameter}`) + (node.pattern && node.pattern.count > 1 ? ` × ${node.pattern.count}` : '');
     case 'chamfer': return `Chamfer ${n(node.distance)}`;
     case 'draft': return `Draft ${fmt(node.angle)}° × ${node.faces.length}`;

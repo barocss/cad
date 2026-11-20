@@ -97,15 +97,15 @@ export function verifyStoredNativeOpen(opened: StudioDoc, readPart: (doc: Studio
   const regionParts = [opened];
   const checked = new Set<StudioDoc>();
   const activeRegionParts: StudioDoc[] = [];
-  const activeOffsets: StudioDoc[] = [];
+  const activeFaceEdits: { doc: StudioDoc; label: string }[] = [];
   while (regionParts.length) {
     const part = regionParts.pop()!;
     if (checked.has(part)) continue;
     checked.add(part);
     for (let index = part.nodes.length - 1; index >= 0; index--) {
       const node = part.nodes[index];
-      if (node.kind !== 'offset-face' || node.suppressed) continue;
-      activeOffsets.push(prefixDoc({ ...part, instances: undefined }, index + 1));
+      if ((node.kind !== 'offset-face' && node.kind !== 'delete-face') || node.suppressed) continue;
+      activeFaceEdits.push({ doc: prefixDoc({ ...part, instances: undefined }, index + 1), label: node.kind === 'delete-face' ? 'Delete face' : 'Offset face' });
       break;
     }
     const regionNodes = part.nodes.filter(node => node.kind === 'region-extrude').filter(node => !node.suppressed);
@@ -127,8 +127,8 @@ export function verifyStoredNativeOpen(opened: StudioDoc, readPart: (doc: Studio
       if (!result.ok) throw new Error(`Extrude region: ${result.error.detail} Your part is unchanged.`);
     }
   };
-  const checkOffsets = async () => {
-    for (const part of activeOffsets) {
+  const checkFaceEdits = async () => {
+    for (const { doc: part, label } of activeFaceEdits) {
       if (!current()) return;
       const result = await readPart(part);
       if (!current()) return;
@@ -140,7 +140,7 @@ export function verifyStoredNativeOpen(opened: StudioDoc, readPart: (doc: Studio
         const detail = changedPlane
           ? 'The saved reference plane has changed. This saved model was not applied; your current model is unchanged. Open an earlier saved copy with the original reference plane.'
           : `${error.detail || error.title} Your part is unchanged.`;
-        throw new Error(`Offset face: ${error.feature ? error.feature + ': ' : ''}${detail}`);
+        throw new Error(`${label}: ${error.feature ? error.feature + ': ' : ''}${detail}`);
       }
     }
   };
@@ -148,7 +148,7 @@ export function verifyStoredNativeOpen(opened: StudioDoc, readPart: (doc: Studio
     const cavities = verifyStoredStepCavities(opened, readPart, current);
     const earlier = cavities ? cavities.then(checkPart) : checkPart();
     const regions = activeRegionParts.length ? Promise.resolve(earlier).then(checkRegions) : earlier;
-    return activeOffsets.length ? Promise.resolve(regions).then(checkOffsets) : regions;
+    return activeFaceEdits.length ? Promise.resolve(regions).then(checkFaceEdits) : regions;
   };
   const hasInsets = opened.nodes.some(node => node.kind === 'rounded-rectangle-inset' ||
     (node.kind === 'sketch' && node.profile !== 'band' && node.association !== undefined));

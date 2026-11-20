@@ -7,6 +7,10 @@ import { capSurface } from './extruded-profile-solid.js';
 
 type XY = [number, number];
 type Cap = { readonly point: Point; readonly sign: 1 | -1; readonly opposite: number };
+type BoredPlate = {
+  readonly bottom: BrepFace; readonly top: BrepFace; readonly cylinders: readonly BrepFace[];
+  readonly lo: number; readonly hi: number; readonly anchorX: number; readonly anchorY: number;
+};
 type Use = { readonly edge: BrepEdge; readonly pcurve: Curve; readonly neighbor: BrepFace };
 const lineKnots = [0, 0, 1, 1];
 const halfCircleKnots = [0, 0, 0, 0.5, 0.5, 1, 1, 1];
@@ -26,7 +30,7 @@ function matchingPcurve(uv: Curve, edge: Curve, map: (point: Point) => Point): b
 }
 
 /** The supported stock is the native rectangular-prism chart with one cylindrical through bore. */
-function admittedCap(brep: Brep, faceName: string): Cap | undefined {
+function admittedBoredPlate(brep: Brep): BoredPlate | undefined {
   const { bodies, shells, faces, loops, coedges, edges, vertices } = brep;
   const [body] = bodies, [shell] = shells;
   if (bodies.length !== 1 || body.kind !== 'solid' || shells.length !== 1 || body.shells.length !== 1
@@ -148,9 +152,7 @@ function admittedCap(brep: Brep, faceName: string): Cap | undefined {
   }
 
   const bottom = caps.get(lo), top = caps.get(hi);
-  if (!bottom || !top || cylinders.length !== 2 || faces.filter(face => face.name === faceName).length !== 1
-    || !checkBrep(brep, { strict: true }).valid) return undefined;
-  if (top.name !== faceName && bottom.name !== faceName) return undefined;
+  if (!bottom || !top || cylinders.length !== 2 || !checkBrep(brep, { strict: true }).valid) return undefined;
   const diameter = createCylindricalBoreCheck(brep)(cylinders);
   const bore = faceGeometry(cylinders[0], extent);
   if (diameter === undefined || !(diameter > 2 * tolerance) || bore.kind !== 'cylinder'
@@ -159,8 +161,17 @@ function admittedCap(brep: Brep, faceName: string): Cap | undefined {
   if (!(left > tolerance && max[0] - x - radius > tolerance
     && y - radius - min[1] > tolerance && max[1] - y - radius > tolerance)) return undefined;
 
+  return { bottom, top, cylinders, lo, hi, anchorX: min[0] + left / 2, anchorY: y };
+}
+
+function admittedCap(brep: Brep, faceName: string): Cap | undefined {
+  if (brep.faces.filter(face => face.name === faceName).length !== 1) return undefined;
+  const plate = admittedBoredPlate(brep);
+  if (!plate) return undefined;
+  const { bottom, top, lo, hi, anchorX, anchorY } = plate;
+  if (top.name !== faceName && bottom.name !== faceName) return undefined;
   const up = top.name === faceName;
-  return { point: [min[0] + left / 2, y, up ? hi : lo], sign: up ? 1 : -1, opposite: up ? lo : hi };
+  return { point: [anchorX, anchorY, up ? hi : lo], sign: up ? 1 : -1, opposite: up ? lo : hi };
 }
 
 /** A handle anchor on the material and its exact signed axial direction. */
@@ -198,5 +209,33 @@ export function offsetBoredCapIfAdmitted(brep: Brep, faceName: string, distance:
   };
   const report = checkBrep(candidate, { strict: true });
   if (!report.valid) throw new BrepError('GEOMETRY', `bored cap offset: the offset solid is invalid: ${report.issues[0]}`, report);
+  return candidate;
+}
+
+/** Select either native half of the sole bore and restore both of the original planar caps. */
+export function healBoredPlateIfAdmitted(brep: Brep, faceName: string): Brep | undefined {
+  if (typeof faceName !== 'string' || !faceName.trim() || faceName.includes('+')) return undefined;
+  const plate = admittedBoredPlate(brep);
+  if (!plate?.cylinders.some(face => face.name === faceName)) return undefined;
+
+  const removed = new Set(plate.cylinders.map(face => face.id));
+  const outerLoops = new Set(brep.loops.filter(loop => loop.kind === 'outer').map(loop => loop.id));
+  const faces = brep.faces.filter(face => !removed.has(face.id)).map(face => face.loops.length === 1
+    ? face : { ...face, loops: face.loops.filter(id => outerLoops.has(id)) });
+  // Retain the existing outer shell topology and its pcurves. Only the two cap trim rings and the bore wall disappear.
+  const liveLoops = new Set(faces.flatMap(face => face.loops));
+  const loops = brep.loops.filter(loop => liveLoops.has(loop.id));
+  const liveUses = new Set(loops.flatMap(loop => loop.coedges));
+  const coedges = brep.coedges.filter(use => liveUses.has(use.id));
+  const liveEdges = new Set(coedges.map(use => use.edge));
+  const edges = brep.edges.filter(edge => liveEdges.has(edge.id));
+  const liveVertices = new Set(edges.flatMap(edge => edge.vertices));
+  const vertices = brep.vertices.filter(vertex => liveVertices.has(vertex.id));
+  const [shell] = brep.shells;
+  const candidate: Brep = {
+    ...brep, shells: [{ ...shell, faces: shell.faces.filter(id => !removed.has(id)) }], faces, loops, coedges, edges, vertices,
+  };
+  const report = checkBrep(candidate, { strict: true });
+  if (!report.valid) throw new BrepError('GEOMETRY', `Delete face: the healed solid is invalid: ${report.issues[0]}`, report);
   return candidate;
 }

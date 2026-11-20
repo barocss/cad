@@ -203,6 +203,8 @@ export type CadPartFeature = Base & (
   | { readonly kind: 'draft'; readonly target: string; readonly faces: readonly string[]; readonly angle: number; readonly pull?: CadPartAxis | '-x' | '-y' | '-z'; readonly neutral?: CadPartDim; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   /** Move a named end cap of a rectangular taper in its outward direction and continue its original side planes. */
   | { readonly kind: 'offset-face'; readonly target: string; readonly face: string; readonly distance: number; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
+  /** Heal the sole straight circular through bore of a rectangular plate, selected by one exact native wall name. */
+  | { readonly kind: 'delete-face'; readonly target: string; readonly face: string; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   /**
    * D149: one face of a part split along NURBS curves lying on it (`curves`, mm), or along its isocline n·d = 0 for the pull
    * `pull`; the face by name (a base name naming one face). The pieces are named `<face>#1`, `<face>#2` … (an isocline's +

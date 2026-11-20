@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1424: [Delete and heal one through bore](notes/delete-through-bore-face-2026-11-21/README.md), #17; remove the bore by its selected native wall, keep the exterior face identities, and verify Undo, Redo, Save and Open in Studio.
+
 - D1423: [Studio History layout ownership](notes/studio-history-layout-2026-11-21/README.md) moves step fitting, expansion, labels and focus fallback into one hook. Desktop confirms the same overflow position and keyboard focus after an accepted edit.
 
 - D1422: [Review-pinned feature commands](notes/review-pinned-feature-command-2026-11-21/README.md), #324; refuse a stale Hole command and verify the accepted hole through a native Studio file round trip.

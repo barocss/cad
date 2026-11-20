@@ -50,7 +50,7 @@ type Tables = (part: string) => FaceTable | undefined;
 /** One stored reference: what it names, and where its geometry is. */
 export interface Ref {
   where: string; edge: boolean; name: string; sig?: Sig; rematched: boolean;
-  nativeFace?: true | 'plane';
+  nativeFace?: true | 'plane' | 'individual';
   /** Selected-body drawing references never search excluded outputs; null means the owner is invalid. */
   drawingBodyKey?: string | null;
   /** Datum targets keep their exact edge name and require an explicitly selected endpoint. */
@@ -71,7 +71,7 @@ type Pointed = { sig?: Sig; was?: string };
 
 /** The list of names a feature references (its key), or null. */
 function refKey(node: ModelNode): 'edges' | 'open' | 'faces' | null {
-  const key = node.kind === 'fillet' || node.kind === 'chamfer' || node.kind === 'sheet-flange' || node.kind === 'sheet-corner-relief' ? 'edges' : node.kind === 'shell' ? 'open' : node.kind === 'draft' || node.kind === 'full-round' || node.kind === 'face-fillet' || node.kind === 'text-relief' || node.kind === 'cylindrical-wrap' || node.kind === 'offset-face' ? 'faces' : null;
+  const key = node.kind === 'fillet' || node.kind === 'chamfer' || node.kind === 'sheet-flange' || node.kind === 'sheet-corner-relief' ? 'edges' : node.kind === 'shell' ? 'open' : node.kind === 'draft' || node.kind === 'full-round' || node.kind === 'face-fillet' || node.kind === 'text-relief' || node.kind === 'cylindrical-wrap' || node.kind === 'offset-face' || node.kind === 'delete-face' ? 'faces' : null;
   return key && 'parent' in node ? key : null;
 }
 /** A band surface's two edge lists, each on its own parent body (B2); other nodes have one list under `refKey`. */
@@ -118,7 +118,7 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
     const key = refKey(node), groups = bandGroups(node) ?? (key && 'parent' in node ? [{ parent: node.parent, list: (node as unknown as Record<string, string[]>)[key] }] : null);
     if (!groups) return;
     const n = node as unknown as Record<string, unknown> & Named;
-    const nativeFace = node.kind === 'offset-face' ? 'plane' : node.kind === 'cylindrical-wrap' ? true : undefined;
+    const nativeFace = node.kind === 'offset-face' ? 'plane' : node.kind === 'delete-face' ? 'individual' : node.kind === 'cylindrical-wrap' ? true : undefined;
     for (const { parent, list } of groups) list.forEach((name, i) => refs.push({
       where: `feature ${k}`, nativeFace, edge: key === 'edges' || node.kind === 'band-surface', node: k, parent, name, sig: n.sigs?.[name], rematched: !!n.rematched?.[name], was: n.rematched?.[name],
       rename(to, mark) {
@@ -314,7 +314,7 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
     let m = splitCap ? (cands.has(ref.name) && !ambiguous ? ref.name : []) : matchSignature(fromSig(ref.sig), cands, ref.edge);
     const node = ref.node === null ? undefined : out.nodes[ref.node];
     // The bounded wrap and offset use their original named faces.
-    if ((node?.kind === 'cylindrical-wrap' || node?.kind === 'offset-face') && m !== ref.name) m = [];
+    if ((node?.kind === 'cylindrical-wrap' || node?.kind === 'offset-face' || node?.kind === 'delete-face') && m !== ref.name) m = [];
     const finish = ref.edge && (node?.kind === 'fillet' || node?.kind === 'chamfer') ? node : undefined;
     const splitFinish = finish && (finish.parent.side === 'negative' || finish.parent.side === 'positive') &&
       ref.name.split('|').some(face => face.startsWith(featureId(out.nodes, finish.parent.node) + '.cut.') && isSplitCapFace(out.nodes, face));

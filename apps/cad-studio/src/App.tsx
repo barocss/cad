@@ -1665,7 +1665,7 @@ export function App() {
     }
     // (Not when it places an instance: those bodies are the instance's, shown once it is evaluated.)
     if (!commit(active.cmd.id === 'move' ? moveRenderAppearance(doc, next) : next)) return;
-    const clearSelection = active.cmd.id === 'offset-face' || active.cmd.id === OFFSET_FACE_EDIT || active.cmd.id === 'fill-feature-pattern' || active.cmd.id === 'curve-feature-pattern';
+    const clearSelection = active.cmd.id === 'offset-face' || active.cmd.id === 'delete-face' || active.cmd.id === OFFSET_FACE_EDIT || active.cmd.id === 'fill-feature-pattern' || active.cmd.id === 'curve-feature-pattern';
     if (clearSelection) setSelection(emptySel);
     if (active.cmd.id === 'thicken' || active.cmd.id === 'sew') setDirectSel([]);
     const acceptedPreview = independentPreview?.bodies ?? previewBodies;

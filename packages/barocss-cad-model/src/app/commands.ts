@@ -7,6 +7,7 @@ import { curveFeaturePatternProblem, eligibleCurvePatternPaths, type CurveFeatur
 // Commands are driven by the current selection. Each one says whether it applies (and why not),
 // which fields its HUD shows, and how it changes the document.
 import { profileCommands, type ExtrudeJoinEvidence } from './profileCommands';
+import { deleteFaceCommand } from './deleteFaceCommand';
 import { sheetCommands } from './sheetCommands';
 import { frameCommands } from './frameCommands';
 import { primitives, puck } from './primitives';
@@ -471,6 +472,7 @@ const allCommands: Command[] = [
     available: () => ok, action: 'sketch',
   },
   ...profileCommands,
+  deleteFaceCommand,
   ...sheetCommands,
   ...frameCommands,
   ...fitCommands,

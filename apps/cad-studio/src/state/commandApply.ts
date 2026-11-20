@@ -44,7 +44,7 @@ export function commandApplyReadiness(active: Active, scope: ModelScope): ApplyR
   const replaceAxis = id === REVOLVE_AXIS_EDIT;
   const sweep = id === SWEEP_CURVE;
   const needsCurrentModel = active.fillet || toFace || region || replaceAxis || sweep
-    || ['split', 'align', 'mirror', OFFSET_FACE_EDIT, DRAFT_EDIT].includes(id);
+    || ['split', 'align', 'mirror', 'delete-face', OFFSET_FACE_EDIT, DRAFT_EDIT].includes(id);
   if (needsCurrentModel && (ctx.doc !== scope.commandDoc || !scope.modelCurrent)) {
     return { kind: 'retire', clearRepeat: false };
   }

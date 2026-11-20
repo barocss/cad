@@ -67,7 +67,7 @@ import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
 import { offsetDraftedFace } from '../features/drafted-cap-offset.js';
 import { offsetPrismWallIfAdmitted } from '../features/prism-wall-offset.js';
-import { offsetBoredCapIfAdmitted } from '../features/bored-cap-offset.js';
+import { healBoredPlateIfAdmitted, offsetBoredCapIfAdmitted } from '../features/bored-cap-offset.js';
 import { boundaryBindingRefusal } from './part-boundary-refusal-internal.js';
 import { refusalCodeOf, type CadRefusalCode } from '../core/error-codes.js';
 
@@ -167,10 +167,10 @@ function partOutputId(feature: CadPartFeature, count: number, part: Part, index:
   return count === 1 ? feature.id : `${feature.id}/${index}`;
 }
 
-function offsetFaceTargetBrep(t: Tools, target: unknown, part: Part): Brep {
+function namedFaceTargetBrep(t: Tools, target: unknown, part: Part): Brep {
   if (part.solid.kind !== 'upright') return part.solid.brep;
   const { result, author } = t.ref(target, 'target');
-  if (result.kind !== 'solid' || !author) return t.fail('REFERENCE', 'Offset face needs a solid target.');
+  if (result.kind !== 'solid' || !author) return t.fail('REFERENCE', 'A named face needs a solid target.');
   const id = partOutputId(author, result.parts.length, part, result.parts.indexOf(part)).replace('/', '_');
   // Another consumer may already have converted this upright part under its own id.
   return part.brep?.source.id === id ? part.brep : brepOf({ solid: part.solid }, id);
@@ -181,7 +181,7 @@ function expectedThen(f: CadPartFeature & Record<string, unknown>, t: Tools, exp
   const parts = t.solids(f.target, 'target'), edges = f.kind === 'fillet' || f.kind === 'chamfer';
   return () => {
     for (const p of parts) {
-      const brep = f.kind === 'offset-face' ? offsetFaceTargetBrep(t, f.target, p) : brepOf(p, t.at);
+      const brep = f.kind === 'offset-face' || f.kind === 'delete-face' ? namedFaceTargetBrep(t, f.target, p) : brepOf(p, t.at);
       checkExpected(brep, expect, edges, f.kind, t.fail);
     }
     return run();
@@ -639,10 +639,26 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       if (typeof distance !== 'number' || !Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadPartLimits.length)
         return fail('PARAMETER', 'Offset face needs a nonzero signed distance within the modeling range.');
       return () => {
-        const brep = offsetFaceTargetBrep(t, f.target, target[0]);
+        const brep = namedFaceTargetBrep(t, f.target, target[0]);
         const offset = offsetBoredCapIfAdmitted(brep, face, distance) ?? offsetPrismWallIfAdmitted(brep, face, distance)
           ?? offsetDraftedFace(brep, face, distance);
         return one({ kind: 'brep', brep: offset });
+      };
+    }
+    case 'delete-face': {
+      const target = solids(f.target, 'target'), face = f.face;
+      if (target.length !== 1) return fail('REFERENCE', 'Delete face needs one closed solid.');
+      if (typeof face !== 'string' || !face.trim() || face.includes('+'))
+        return fail('INPUT', 'Delete face needs one exact native bore wall name.');
+      return () => {
+        const brep = namedFaceTargetBrep(t, f.target, target[0]);
+        if (brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid')
+          return fail('REFERENCE', 'Delete face needs one closed solid.');
+        if (brep.faces.filter(candidate => candidate.name === face).length !== 1)
+          return fail('REFERENCE', 'Delete face: the selected native face is missing or ambiguous.');
+        const healed = healBoredPlateIfAdmitted(brep, face);
+        if (!healed) return fail('CAPABILITY', 'Delete face supports one fully enclosed straight circular through bore in a rectangular plate. Select its cylindrical wall.');
+        return one({ kind: 'brep', brep: healed });
       };
     }
 

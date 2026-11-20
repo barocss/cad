@@ -21,7 +21,7 @@ export const GROUPS: Record<string, Group> = {
     title: 'Features',
     about: 'Edit the feature tree. Pick faces and edges by name ("n1.top", "n1.side0|n1.side1") or selector ({"feature": 1, "role": "top"}, {"normal": [0, 0, 1], "pick": "max"}, {"between": [face, face]}).',
     actions: {
-      command: ['run_command', 'command, values?, faces?, edges?, bodies?, point?, expectedRevision? — Studio command'],
+      command: ['run_command', 'command, values?, faces?, edges?, bodies?, point?, expectedRevision?'],
       add: ['add_features', 'features: [node] — raw feature nodes (sketches, extrudes, revolves, sweeps, lofts, …)'],
       edit: ['edit_feature', 'index, values? | feature?, expectedRevision?'],
       parameters: ['set_parameters', 'add?, set?, rename?, bind?, remove? — named parameters; bind a feature\'s value to one'],
