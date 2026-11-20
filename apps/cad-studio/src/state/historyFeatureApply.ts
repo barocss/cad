@@ -290,6 +290,14 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
         if (!current()) return;
         const failure = {title:'Height not applied',hint:'The original finishing edge could not be verified. Keep the current height or explicitly replace its edge first.',detail:'No reference was renamed or refreshed.'};
         try {
+          const finish = doc.nodes[2];
+          if (finish.kind === 'fillet' && finish.radii?.some(control => control.fraction !== undefined)) {
+            // Interior stations retain the native reference guard before any signature refresh.
+            const original = await engine.evaluate(next, request);
+            if (!current()) return;
+            if (!original || original.revision !== request) return failure;
+            if (!original.ok) return { ...original.error, failedFeature: failedFeatureText(original.error.feature, next.nodes, doc.nodes) };
+          }
           const beforeRevision = nextRevision();
           const before = await engine.part(prefixDoc(doc,2),beforeRevision,'refs');
           if (!current()) return;

@@ -34,16 +34,20 @@ function plain(nodes:readonly ModelNode[],parameters?:StudioDoc['parameters']):b
   &&(i===0||i===last?p.atEnd===true&&p.fraction===undefined:p.atEnd===undefined&&finite(p.fraction)&&p.fraction>1e-9&&p.fraction<1-1e-9&&(i===1||p.fraction-f.radii![i-1].fraction!>1e-9)))
   &&f.radii[0].at.some((v,i)=>v!==f.radii![last].at[i]);
 }
-/** Height may retain two numeric end radii on a top edge; native topology and pairing are proved later. */
+/** Height may retain a numeric radius law on a top edge; native topology and pairing are proved later. */
 function heightFinishLaw(finish:ModelNode,extrude:Extract<ModelNode,{kind:'extrude'}>):boolean {
  if(finish.kind==='chamfer')return true;
  if(finish.kind!=='fillet')return false;
  if(finish.radii===undefined)return true;
- if(!finite(finish.radius)||finish.radii.length!==2||!finish.radii.every(p=>finite(p.radius)&&p.atEnd===true&&p.fraction===undefined))return false;
+ // plain() already checked both ends and any ordered interior fractions.
+ if(!finite(finish.radius)||!finish.radii.every(p=>finite(p.radius)))return false;
  const sig=finish.sigs?.[finish.edges[0]],top=Number(extrude.from??0)+Number(extrude.height);
  // Admission only: no edge name is trusted, and the complete native proof below remains mandatory.
  const storedTop=toSig({kind:'line',at:[0,0,top],dir:null,size:1}).p[2];
- return sig?.k==='line'&&sig.p[2]===storedTop&&sig.d?.[2]===0;
+ // Route a signed top-edge station law through the proof even if its saved height is stale.
+ // The name can require a check, but only the actual old and new native edges can pass it.
+ const namedStationTop=finish.radii.length>2&&!!sig&&finish.edges[0].split('|').includes(`${extrude.id??'n1'}.top`);
+ return namedStationTop||sig?.k==='line'&&sig.p[2]===storedTop&&sig.d?.[2]===0;
 }
 /** Resolve only a Height proof copy. Authored bindings must never be committed as numbers. */
 function heightProofDoc(doc:StudioDoc):StudioDoc|null {

@@ -4,6 +4,9 @@ import { rectanglePart, withNode, prefixDoc, type StudioDoc, type ModelNode } fr
 import { evaluateDoc, type BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { toSig } from '@barocss/cad-model/engine/references';
+import { encodeStudioFile, readStudioFile } from '@barocss/cad-model/engine/container';
+import { prepareSignedFinishOpen } from '../src/files/documentFile';
+import { createHistoryFeatureApply } from '../src/state/historyFeatureApply';
 import { isRectangleFinishHeightResize, proveRectangleFinishResize } from '../src/state/rectangleFinishResize';
 function bodies(doc: StudioDoc) {
  const r = evaluateDoc(prefixDoc(doc, 2), 1);
@@ -49,11 +52,11 @@ test('all four native top edges retain historical numeric endpoint laws through 
   assert.deepEqual(originalLaw, initial.nodes[2].kind === 'fillet' ? initial.nodes[2].radii : null);
  }
 });
-test('Height excludes station laws, bound radii, noncircular finishes, downstream and combined edits', () => {
+test('Height excludes bound station and endpoint radii, noncircular finishes, downstream and combined edits', () => {
  const { before } = fixture(), f = before.nodes[2]; assert.ok(f.kind === 'fillet'); if (f.kind !== 'fillet') return;
  const [a, b] = f.radii!;
  const unsupported = [
-  { radii: [a, { at: [15, 0, 10], radius: 1.5, fraction: 0.5 }, b] },
+  { radii: [a, { at: [15, 0, 10], radius: { parameter: 'R' }, fraction: 0.5 }, b] },
   { radius: { parameter: 'R' } }, { radii: [{ ...a, radius: { parameter: 'R' } }, b] },
   { section: { kind: 'conic', rho: 0.5 } }, { section: { kind: 'g2' } }, { held: 'missing' }, { suppressed: true }, { rematched: {} },
  ];
@@ -111,4 +114,69 @@ test('admission uses stored signature precision while native top proof retains e
  const next=height(before,30.987654321);
  assert.equal(isRectangleFinishHeightResize(before,next,1),true);
  assert.ok(proveRectangleFinishResize(before,next,bs,bodies(next)));
+});
+
+function stationFixture() {
+ const base = rectanglePart(40, 30, 10);
+ const name = 'n1.side0|n1.top';
+ const signature = toSig(signaturesOf(bodies(base)[0]).edges.get(name)!);
+ return withNode(base, { kind: 'fillet', parent: { node: 1, side: 'solid' }, edges: [name], radius: 1.25,
+  radii: [{ at: [0, 0, 10], atEnd: true, radius: 1.25 }, { at: [10, 0, 10], fraction: .25, radius: 3 },
+   { at: [25, 0, 10], fraction: .625, radius: 1 }, { at: [40, 0, 10], atEnd: true, radius: 2.5 }],
+  sigs: { [name]: signature } });
+}
+async function applyStationHeight(doc: StudioDoc, h: number) {
+ let revision = 0;
+ const saved: StudioDoc[] = [], reads: string[] = [], scope = {};
+ const apply = createHistoryFeatureApply({ model: { doc, evaluated: doc, editNode: 1, fresh: true, busy: false },
+  owner: { document: () => doc, evaluated: () => doc, marker: () => null, variant: () => null, scope: () => scope, worker: () => 1, open: () => scope },
+  worker: { nextRevision: () => ++revision, engine: {
+   evaluate: async (candidate, rev) => { reads.push('feature'); return evaluateDoc(candidate, rev); },
+   part: async (candidate, rev) => { reads.push('parent'); return evaluateDoc(candidate, rev); },
+  } },
+  changes: { canChangeDocument: () => true, commit: candidate => { saved.push(candidate); return true; },
+   applyRoundedInsetEdit: () => assert.fail('unexpected inset'), stageFeatureCandidate: () => assert.fail('unexpected pattern') } });
+ const notice = await apply(height(doc, h).nodes, () => true);
+ return { saved, notice, reads };
+}
+test('Height retains both numeric interior stations and their native geometry after file Open', async () => {
+ const before = stationFixture(), original = structuredClone(before), read = async (d: StudioDoc) => evaluateDoc(d, 1);
+ const measured = (d: StudioDoc) => {
+  const r = evaluateDoc(d, 1); assert.ok(r.ok, r.ok ? '' : r.error.hint);
+  assert.equal(r.bodies.length, 1); return r.bodies[0].volume!;
+ };
+ const removed = 40 * 30 * 10 - measured(before);
+ assert.ok(removed > 0);
+ for (const h of [15, 16]) {
+  const { saved, notice, reads } = await applyStationHeight(before, h);
+  assert.equal(notice, undefined); assert.equal(saved.length, 1);
+  const doc = saved[0], finish = doc.nodes[2], old = before.nodes[2];
+  assert.ok(finish.kind === 'fillet' && old.kind === 'fillet');
+  const name = old.edges[0];
+  assert.deepEqual(finish, { ...old, sigs: { [name]: toSig(signaturesOf(bodies(doc)[0]).edges.get(name)!) } });
+  assert.equal(finish.radii, old.radii);
+  const reopened = await readStudioFile(encodeStudioFile(doc));
+  assert.ok('doc' in reopened);
+  assert.equal(await prepareSignedFinishOpen(reopened.doc, read, () => true), undefined);
+  assert.deepEqual(reopened.doc.nodes[2], finish);
+  assert.ok(Math.abs(measured(reopened.doc) - (40 * 30 * h - removed)) < 1e-7);
+  assert.deepEqual(reads, ['feature', 'parent', 'parent', 'feature']);
+ }
+ assert.deepEqual(before, original);
+});
+
+test('Height preserves the native reference refusal and rejects a stale old station signature before commit', async () => {
+ const before = stationFixture();
+ const refused = await applyStationHeight(before, 30);
+ assert.equal(refused.notice?.code, 'REFERENCE_MOVED');
+ assert.deepEqual(refused.saved, []); assert.deepEqual(refused.reads, ['feature']);
+ const f = before.nodes[2]; assert.ok(f.kind === 'fillet');
+ const name = f.edges[0], sig = f.sigs![name];
+ const stale = patch(before, 2, { sigs: { [name]: { ...sig, p: [20, 0, 11] } } });
+ const rejected = await applyStationHeight(stale, 16);
+ assert.ok(rejected.notice); assert.deepEqual(rejected.saved, []);
+ const next = height(before, 16), parents = bodies(next);
+ const selected = parents[0].mesh.edges.find(e => e.names.includes(name))!;
+ [selected.a, selected.b] = [selected.b, selected.a];
+ assert.equal(proveRectangleFinishResize(before, next, bodies(before), parents), null);
 });
