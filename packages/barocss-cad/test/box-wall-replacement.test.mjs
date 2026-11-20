@@ -84,15 +84,51 @@ test('a reflected Y-min wall takes the signed tilted plane with a negative cap s
   close(brepMassProperties(after, 1).volume, 30 * 8 * (38 + 42) / 2);
 });
 
-test('Replace face refuses collapse at either end, unsupported slope and stale picks', () => {
+test('a plane tilted in height and width replaces all four wall corners on the same support', () => {
+  const before = output(source).brep, saved = structuredClone(before);
+  const reference = { origin: [48, 60, 10], normal: [-10, 1, 5] };
+  const after = output([...source, { ...replacement, plane: reference }]).brep;
+  assertPlanesAndTopology(before, after, face, reference);
+  for (const vertex of before.vertices) {
+    const [x, y, z] = vertex.point;
+    const actual = after.vertices.find(v => v.id === vertex.id);
+    close(actual.point[0], x === 40 ? 37 + y / 10 + z / 2 : x);
+    assert.deepEqual(actual.point.slice(1), [y, z]);
+  }
+  const mass = brepMassProperties(after, 1);
+  close(mass.volume, 12300);
+  // Integrate x=0..37+y/10+z/2 over y=0..30 and z=0..10 for the first moments.
+  [10103 / 492, 1245 / 82, 1255 / 246].forEach((value, axis) => close(mass.centroid[axis], value));
+  assert.deepEqual(before, saved);
+});
+
+test('a width-only tilt leaves the extrusion caps on their original planes', () => {
+  const before = output(source).brep;
+  const reference = { origin: [36, 0, 70], normal: [5, -1, 0] };
+  const after = output([...source, { ...replacement, plane: reference }]).brep;
+  assertPlanesAndTopology(before, after, face, reference);
+  const expected = new Map([[0, 36], [30, 42]]);
+  for (const vertex of after.vertices.filter(v => v.point[0] > 0)) close(vertex.point[0], expected.get(vertex.point[1]));
+  close(brepMassProperties(after, 1).volume, 11700);
+});
+
+test('Replace face refuses corner collapse, unsupported slope and stale picks', () => {
+  const before = output(source).brep, saved = structuredClone(before);
   const refuses = (params, category, message) => assert.throws(() => output([...source, { ...replacement, ...params }]),
     error => error instanceof CadPartError && error.details.category === category && message.test(error.message));
   for (const bad of [
     { origin: [0, 60, 0], normal: [2, 0, -1] },
     { origin: [5, 60, 0], normal: [2, 0, 1] },
-  ]) refuses({ plane: bad }, 'GEOMETRY', /reach or cross the opposite wall/);
-  for (const normal of [[1, 0, 0], [0, 0, 1], [2, 1, -1]]) refuses({ plane: { ...plane, normal } }, 'GEOMETRY', /tilt only along the height/);
-  refuses({ plane: { ...plane, normal: [1, 0, 1e-10] } }, 'GEOMETRY', /tilt is too small/);
+    // Only the minimum y/z corner closes or crosses. The affine integral is still positive.
+    { origin: [11, 60, 10], normal: [-10, 1, 5] },
+    { origin: [10, 60, 10], normal: [-10, 1, 5] },
+  ]) {
+    refuses({ plane: bad }, 'GEOMETRY', /reach or cross the opposite wall/);
+    assert.throws(() => replaceBoxWall(before, face, bad), /reach or cross the opposite wall/);
+    assert.deepEqual(before, saved);
+  }
+  for (const normal of [[0, 0, 1], [0, 1, 0], [1e-16, 1, 0]]) refuses({ plane: { ...plane, normal } }, 'GEOMETRY', /too close to perpendicular/);
+  for (const normal of [[1, 0, 0], [1, 0, 1e-10]]) refuses({ plane: { ...plane, normal } }, 'GEOMETRY', /tilt is too small/);
   refuses({ plane: { ...plane, normal: [0, 0, 0] } }, 'INPUT', /finite nonzero length/);
   refuses({ plane: { ...plane, origin: [10000, 60, 0] } }, 'GEOMETRY', /modeling coordinate range/);
   refuses({ face: 'b.top' }, 'GEOMETRY', /upright wall/);

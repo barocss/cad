@@ -189,23 +189,32 @@ function meet(a: Wall, b: Wall, corner: Point, offset: number): Point {
   return [corner[0] + (p * my - q * ny) / determinant, corner[1] + (nx * q - mx * p) / determinant, corner[2]];
 }
 
-function rebuiltChart(face: Face, points: readonly Point[], shift: Point, roundoff: number): Chart {
-  const { chart } = face;
-  const translated = { ...chart, origin: add(chart.origin, shift) };
-  if (shift.every(value => value === 0) && points.every(point => trimFits(chart, point, roundoff))) return chart;
-
+function expandAffineTrim(chart: Chart, origin: Point, sense: BrepFace['sense'], points: readonly Point[], roundoff: number): Chart | undefined {
+  const translated = { ...chart, origin };
   const uv = points.map(point => fractions(translated, point));
   // Keep the previous chart span when possible. A short trim edge can still have a wide, stable support chart.
   const build = (includeOriginal: boolean): Chart | undefined => {
     const us = uv.map(value => value[0]), vs = uv.map(value => value[1]);
     if (includeOriginal) { us.push(0, 1); vs.push(0, 1); }
     const grid = [Math.min(...us), Math.max(...us)].map(u => [Math.min(...vs), Math.max(...vs)].map(v =>
-      add(translated.origin, add(scale(chart.u, u), scale(chart.v, v)))));
+      add(origin, add(scale(chart.u, u), scale(chart.v, v)))));
     if (geometryScaleMM(grid.flat()) > CadNumericPolicy.coordinateAbs) return undefined;
-    const adjusted = affineChart({ ...chart.surface, controlPoints: grid }, face.original.sense);
+    const adjusted = affineChart({ ...chart.surface, controlPoints: grid }, sense);
     return adjusted && points.every(point => trimFits(adjusted, point, roundoff)) ? adjusted : undefined;
   };
-  const result = build(true) ?? build(false);
+  return build(true) ?? build(false);
+}
+
+/** Keep or extend the original affine chart so it covers all trim corners on the same plane. */
+export function coverAffineTrim(chart: Chart, sense: BrepFace['sense'], points: readonly Point[], roundoff: number): Chart | undefined {
+  if (geometryScaleMM(chart.surface.controlPoints.flat()) <= CadNumericPolicy.coordinateAbs && points.every(point => trimFits(chart, point, roundoff))) return chart;
+  return expandAffineTrim(chart, chart.origin, sense, points, roundoff);
+}
+
+function rebuiltChart(face: Face, points: readonly Point[], shift: Point, roundoff: number): Chart {
+  const { chart } = face, { sense } = face.original;
+  if (shift.every(value => value === 0) && points.every(point => trimFits(chart, point, roundoff))) return chart;
+  const result = expandAffineTrim(chart, add(chart.origin, shift), sense, points, roundoff);
   if (!result) return fail('GEOMETRY', 'the offset cannot keep the trim in its planar chart within the modeling range');
   return result;
 }

@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1428: [Replace a box wall with a plane tilted in two directions](notes/replace-box-wall-diagonal-plane-2026-11-21/README.md), #17. Extend each corner to the reference plane, verify native mass and reject a one-corner collapse.
+
 - D1427: [Replace a box wall with a tilted reference face](notes/replace-box-wall-tilted-plane-2026-11-21/README.md), #17; preserve native incidence, follow the reference, and retarget, save and reopen the same replacement in Studio.
 
 - D1426: [Heal the inside fillet of a two-box L bracket](notes/delete-union-l-fillet-2026-11-21/README.md), #17; restore one analytic union corner while keeping the surviving topology and verify the same authored result in MCP and Studio.

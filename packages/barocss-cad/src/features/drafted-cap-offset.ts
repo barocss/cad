@@ -4,7 +4,7 @@ import { dot, len, scale, sub } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Point, Surface } from '../types.js';
 import { capSurface } from './extruded-profile-solid.js';
-import { affineChart, trimFits, uvPoint } from './prism-wall-offset.js';
+import { affineChart, coverAffineTrim, uvPoint } from './prism-wall-offset.js';
 
 type Axis = 0 | 1;
 type End = 0 | 1;
@@ -453,45 +453,53 @@ function replacementFailure(code: BrepError['code'], detail: string): never {
 
 const finitePoint = (value: unknown): value is Point => Array.isArray(value) && value.length === 3 && value.every(component => typeof component === 'number' && Number.isFinite(component));
 
-function continuedSections(box: Taper, wall: Wall, plane: ReplacementPlane): { sections: [Section, Section]; wanted: Plane } {
+function replacementPlane(wall: Wall, plane: ReplacementPlane): Plane {
   if (!plane || typeof plane !== 'object' || Array.isArray(plane) || Object.keys(plane).sort().join(',') !== 'normal,origin'
     || !finitePoint(plane.origin) || !finitePoint(plane.normal)) return replacementFailure('INPUT', 'the reference needs a finite origin and normal.');
   const magnitude = len(plane.normal);
   if (!Number.isFinite(magnitude) || magnitude === 0) return replacementFailure('INPUT', 'the reference normal must have a finite nonzero length.');
-  const { axis, end } = wall, across = axis === 0 ? 1 : 0;
   const n: Point = [plane.normal[0] / magnitude, plane.normal[1] / magnitude, plane.normal[2] / magnitude];
-  const roundoff = 64 * Number.EPSILON;
-  if (Math.abs(n[across]) > roundoff || Math.abs(n[axis]) <= roundoff || Math.abs(n[2]) <= roundoff)
-    return replacementFailure('GEOMETRY', 'the reference plane must tilt only along the height of the selected wall.');
-  const withPlane = ({ z, ranges }: Section): Section => {
-    const next: Rectangle = [[...ranges[0]], [...ranges[1]]];
-    next[axis][end] = plane.origin[axis] - (z - plane.origin[2]) * n[2] / n[axis];
-    return { z, ranges: next };
-  };
-  const sections: [Section, Section] = [withPlane(box.sections[0]), withPlane(box.sections[1])];
-  const extent = Math.max(...plane.origin.map(Math.abs), ...sections.flatMap(section => [Math.abs(section.z), ...section.ranges.flat().map(Math.abs)]));
-  if (!(extent <= CadNumericPolicy.coordinateAbs)) return replacementFailure('GEOMETRY', 'the replacement exceeds the modeling coordinate range.');
-  const linear = linearToleranceMM(extent);
-  if (sections.some(section => section.ranges[axis][1] - section.ranges[axis][0] <= linear))
-    return replacementFailure('GEOMETRY', 'the replacement would reach or cross the opposite wall at one end.');
-  if (Math.abs(sections[1].ranges[axis][end] - sections[0].ranges[axis][end]) <= linear)
-    return replacementFailure('GEOMETRY', 'the reference plane tilt is too small for this wall.');
-  return { sections, wanted: { kind: 'plane', o: plane.origin, n: dot(n, wall.plane.n) > 0 ? n : scale(n, -1) } };
+  if (Math.abs(n[wall.axis]) <= 64 * Number.EPSILON)
+    return replacementFailure('GEOMETRY', 'the reference plane is too close to perpendicular to the selected wall.');
+  return { kind: 'plane', o: plane.origin, n: dot(n, wall.plane.n) > 0 ? n : scale(n, -1) };
 }
 
-/** Replace a cardinal wall of a strict box with the chosen transverse-axis-invariant plane. */
+function liftToPlane(point: Point, axis: Axis, { o, n }: Plane): Point {
+  const across = axis === 0 ? 1 : 0, lifted: Point = [...point];
+  lifted[axis] = o[axis] - ((point[across] - o[across]) * n[across] + (point[2] - o[2]) * n[2]) / n[axis];
+  return lifted;
+}
+
+function boxFaceSurface(face: BrepFace, box: Taper): { surface: Surface; sense: BrepFace['sense'] } {
+  const [base, top] = box.sections, wall = box.walls.get(face.id);
+  if (wall) return { surface: sideSurface(face.surface.id, wall.axis, wall.end, base, top), sense: wallChartSense(wall) };
+  const section = face === box.caps[0] ? base : top, [[x0, x1], [y0, y1]] = section.ranges;
+  return { surface: capSurface({ min: [x0, y0], max: [x1, y1] }, section.z, face.surface.id, section === top), sense: 'forward' };
+}
+
+/** Replace a cardinal wall of a strict box with the chosen nonparallel plane. */
 export function replaceBoxWall(brep: Brep, faceName: string, plane: ReplacementPlane): Brep {
   const admitted = certifiedBoxWall(brep, faceName);
   if (!admitted) return replacementFailure('GEOMETRY', 'pick one upright wall of a straight rectangular box.');
   const { face, box, wall } = admitted, { axis, end } = wall;
-  const { sections: [base, top], wanted } = continuedSections(box, wall, plane);
+  const wanted = replacementPlane(wall, plane);
+  const bounds = box.sections[0].ranges[axis], opposite = bounds[end === 0 ? 1 : 0], outward = end === 1 ? 1 : -1;
+  const lifted = brep.vertices.filter(vertex => vertex.point[axis] === bounds[end])
+    .map(vertex => ({ vertex, point: liftToPlane(vertex.point, axis, wanted) }));
+  const extent = geometryScaleMM(brep.vertices.map(vertex => vertex.point), lifted.map(({ point }) => point), [wanted.o]);
+  if (!(extent <= CadNumericPolicy.coordinateAbs)) return replacementFailure('GEOMETRY', 'the replacement exceeds the modeling coordinate range.');
+  const linear = linearToleranceMM(extent);
+  // The signed width is affine across the transverse-by-height rectangle, so its minimum is at a corner.
+  const coordinates = lifted.map(({ point }) => point[axis]);
+  if (coordinates.some(coordinate => (coordinate - opposite) * outward <= linear))
+    return replacementFailure('GEOMETRY', 'the replacement would reach or cross the opposite wall at one corner.');
+  if (Math.max(...coordinates) - Math.min(...coordinates) <= linear)
+    return replacementFailure('GEOMETRY', 'the reference plane tilt is too small for this wall.');
   const moved = new Map<string, Point>();
+  for (const { vertex, point } of lifted) if (vertex.point[axis] !== point[axis]) moved.set(vertex.id, point);
   const vertices = brep.vertices.map(vertex => {
-    if (vertex.point[axis] !== box.sections[0].ranges[axis][end]) return vertex;
-    const point: Point = [...vertex.point];
-    point[axis] = (point[2] === base.z ? base : top).ranges[axis][end];
-    moved.set(vertex.id, point);
-    return { ...vertex, point };
+    const point = moved.get(vertex.id);
+    return point ? { ...vertex, point } : vertex;
   });
   const changed = new Set<string>();
   const edges = brep.edges.map(edge => {
@@ -512,37 +520,31 @@ export function replaceBoxWall(brep: Brep, faceName: string, plane: ReplacementP
       const use = uses.get(id)!, edge = edgeById.get(use.edge)!;
       return point.get(edge.vertices[use.sense === 'forward' ? 0 : 1])!;
     });
-    const support = box.walls.get(current.id), original = current.surface as Surface;
-    const originalChart = affineChart(original, current.sense);
-    const allowance = roundoffAt([...corners, ...original.controlPoints.flat(), wanted.o]);
-    if (current !== face && originalChart && corners.every(p => trimFits(originalChart, p, allowance))) {
-      charts.set(loop.id, originalChart);
-      return current;
+    const continued = current === face ? wanted : box.walls.get(current.id)?.plane ?? planeOf(current);
+    if (!continued) return replacementFailure('GEOMETRY', 'the original planar support is unavailable.');
+    const support = continued;
+    function fit(surface: Surface, sense: BrepFace['sense']) {
+      const original = affineChart(surface, sense);
+      if (!original) return undefined;
+      // With transverse and Z unchanged, lifting a parallelogram to the new plane is affine.
+      const chart = current === face ? affineChart({ ...surface, controlPoints: surface.controlPoints.map(row => row.map(p => liftToPlane(p, axis, wanted))) }, sense) : original;
+      const fitted = chart && coverAffineTrim(chart, sense, corners, roundoffAt([...corners, support.o]));
+      if (!fitted || len(sub(fitted.normal, support.n)) > 128 * Number.EPSILON) return undefined;
+      const points = [...fitted.surface.controlPoints.flat(), ...corners], roundoff = roundoffAt([...points, support.o]);
+      if (points.some(p => Math.abs(dot(sub(p, support.o), support.n)) > roundoff)) return undefined;
+      return { chart: fitted, sense };
     }
-
-    let surface: Surface, sense: BrepFace['sense'];
-    if (current === face) {
-      surface = sideSurface(original.id, axis, end, base, top);
-      sense = wallChartSense(wall);
-    } else if (support) {
-      surface = extendWallChart(original, support, base, top);
-      sense = wallChartSense(support);
-    } else {
-      const section = current === box.caps[0] ? base : top, [[x0, x1], [y0, y1]] = section.ranges;
-      surface = capSurface({ min: [x0, y0], max: [x1, y1] }, section.z, original.id, section === top);
-      sense = 'forward';
+    let fitted = current.surface.kind === 'surface' ? fit(current.surface, current.sense) : undefined;
+    if (!fitted) {
+      const { surface, sense } = boxFaceSurface(current, box);
+      fitted = fit(surface, sense);
     }
-    const chart = affineChart(surface, sense);
-    const continued = current === face ? wanted : support?.plane ?? planeOf(current);
-    const poles = surface.controlPoints.flat();
-    const roundoff = roundoffAt([...poles, ...corners, ...(continued ? [continued.o] : [])]);
-    if (!continued || !chart || !polesFit(surface) || len(sub(chart.normal, continued.n)) > 128 * Number.EPSILON
-      || [...poles, ...corners].some(p => Math.abs(dot(sub(p, continued.o), continued.n)) > roundoff)
-      || corners.some(p => !trimFits(chart, p, roundoff)))
-      return replacementFailure('GEOMETRY', 'the replacement cannot preserve the planar supports and their trims.');
+    if (!fitted) return replacementFailure('GEOMETRY', 'the replacement cannot preserve the planar supports and their trims.');
+    const { chart, sense } = fitted;
     charts.set(loop.id, chart);
+    if (chart.surface === current.surface && sense === current.sense) return current;
     changedLoops.add(loop.id);
-    return { ...current, surface, sense };
+    return { ...current, surface: chart.surface, sense };
   });
   const coedges = brep.coedges.map(use => {
     if (!use.pcurve || (!changed.has(use.edge) && !changedLoops.has(use.loop))) return use;

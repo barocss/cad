@@ -5,7 +5,7 @@ import type { Command, Ctx } from './commands';
 import { captureOffsetPlane, offsetPlaneStep, pickReferencePlane, restoreOffsetPlaneValues } from './offsetPlanePick';
 
 const SOURCE = 'Select one vertical wall of a straight rectangular extrusion.';
-const REFERENCE = 'Pick a face on another solid tilted along the height.';
+const REFERENCE = 'Pick a tilted face on another solid.';
 
 function pickedWall(ctx: Ctx) {
   const { selection } = ctx;
@@ -20,7 +20,7 @@ function pickedWall(ctx: Ctx) {
 
 export const replaceFaceCommand: Command = {
   id: 'replace-face', label: 'Replace face', icon: 'cad-offset-face', group: 'modify',
-  hint: 'Replace one box wall with a face tilted along the height.',
+  hint: 'Replace one box wall with a tilted plane.',
   keywords: 'replace face plane tilt wall reextend direct edit',
   available: ctx => pickedWall(ctx) ? { ok: true } : { ok: false, reason: SOURCE },
   fields: () => [],
