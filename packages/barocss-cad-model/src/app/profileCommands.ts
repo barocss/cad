@@ -344,7 +344,7 @@ function offsetPlaneAvailable(ctx: Ctx): boolean {
   const node = ref && ctx.doc.nodes[ref.node];
   if (!node || !body.mesh.faces[pick.face]?.exact || ref.side !== 'solid') return false;
   return node.kind === 'draft' || node.kind === 'offset-face' || (node.kind === 'extrude' &&
-    (!!node.draft || (!body.mesh.faces[pick.face].nativeAxisPlane && isStraightHexagonalExtrusion(ctx.doc.nodes, node))));
+    (!!node.draft || (body.mesh.faces[pick.face].nativeAxisPlane?.axis !== 'z' && isStraightHexagonalExtrusion(ctx.doc.nodes, node))));
 }
 
 /** Display the selected original face and its outward world normal, not the signed movement. */

@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1416: [Axis-aligned wall reference-plane Offset](notes/axis-wall-offset-reference-plane-2026-11-21/README.md), #17; expose the existing direct Offset mode at command launch and verify native reference edits and reopen on desktop.
+
 - 2026-11-17, bounded #274 decision: [explicit definition notes](notes/instance-brief-notes-2026-11-17/README.md) reuse existing Brief/editDefinition with owned Save/Cancel; no manufacturing approval or schema expansion. Whole issue remains OPEN. This dated addendum does not renumber historical decisions.
 
 - D1415: [Shell opening recovery](notes/shell-opening-recovery-mac-2026-11-15/README.md), #125; exact temporary-opening diagnosis with current-owner/source-name guards, Cancel-first recovery and bounded independent Shell volume verification.

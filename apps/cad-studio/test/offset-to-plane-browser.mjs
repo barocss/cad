@@ -4,11 +4,26 @@ import { createFlow } from './flow-helper.mjs';
 
 const output = process.argv[2];
 assert.ok(output && relative(resolve(import.meta.dirname, '../../..'), resolve(output)).startsWith('../'));
+const axisAligned = process.argv[3] === 'axis';
+const fixture = axisAligned ? {
+  sketch: { profile: 'rectangle', min: [4, -1], max: [14, 4] },
+  sourceFace: 'n1.side0', sourceView: 'Front', sourcePoint: [9, 0, 5], sourceNormal: '0, -1, 0',
+  topPoint: [9, 1.5, 40], referenceView: 'Front', referencePoint: [9, -1, 35], referenceFace: 'n3.side0',
+  move: [0, 2], retargetView: 'Back', retargetPoint: [9, 6, 35], retargetFace: 'n3.side2',
+  supports: [-1, 1, 6], collapse: [0, 9, 0],
+} : {
+  sketch: { profile: 'polygon', points: [[20, 1], [24, -2], [27, 2], [23, 5]] },
+  sourceFace: 'n1.side1', sourceView: 'Iso', sourcePoint: [21, 4, 5], sourceNormal: '0.8, -0.6, 0',
+  topPoint: [23.5, 1.5, 40], referenceView: 'Left', referencePoint: [21.5, 3, 35], referenceFace: 'n3.side3',
+  move: [-3, 1], retargetView: 'Right', retargetPoint: [22.5, 1, 35], retargetFace: 'n3.side1',
+  supports: [77, 62, 87], collapse: [-13.25, 0, 0],
+};
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/viewport/useViewportPicking.ts',
   'apps/cad-studio/src/ui/Hud.tsx', 'apps/cad-studio/src/state/useCommandPreview.ts',
   'apps/cad-studio/src/files/documentFile.ts', 'apps/cad-studio/test/flow-helper.mjs',
-  ...['app/profileCommands', 'app/offsetPlanePick', 'app/offsetFaceEdit', 'engine/doc', 'engine/part', 'engine/offsetPlane']
+  'apps/cad-studio/test/offset-to-plane-browser.mjs',
+  ...['app/profileCommands', 'app/nativeOffsetFace', 'app/offsetPlanePick', 'app/offsetFaceEdit', 'engine/doc', 'engine/part', 'engine/offsetPlane']
     .map(file => 'packages/barocss-cad-model/src/' + file + '.ts'),
 ];
 const f = await createFlow({
@@ -44,8 +59,14 @@ import json,math,sys
 from fractions import Fraction as F
 r=json.load(sys.stdin)
 support=F(r['support'])
-d=(support-72)/5
-p=[(0,0),(support/4,0),((support+120)/8,(120-support)/6),(18,16),(0,16),(-6,8)]
+if r['axisAligned']:
+    d=-support
+    p=[(3*d/4,-d),(18-3*d/4,-d),(24,8),(18,16),(0,16),(-6,8)]
+    signed_residual=lambda x,y: y-float(support)
+else:
+    d=(support-72)/5
+    p=[(0,0),(support/4,0),((support+120)/8,(120-support)/6),(18,16),(0,16),(-6,8)]
+    signed_residual=lambda x,y: (4*x-3*y-float(support))/5
 volume=float(10*abs(sum(a[0]*b[1]-a[1]*b[0] for a,b in zip(p,p[1:]+p[:1])))/2)
 n=r['source']
 assert n['check']['valid'] and r['target']['check']['valid']
@@ -53,9 +74,9 @@ assert n['check']['counts']=={'bodies':1,'shells':1,'faces':8,'loops':8,'coedges
 points=[(float(x),float(y),z) for z in (0,10) for x,y in p]
 assert len(points)==len(n['vertices'])
 assert all(sum(math.dist(p,q)<1e-9 for q in n['vertices'])==1 for p in points)
-source=n['planes']['n1.side1']
+source=n['planes'][r['sourceFace']]
 target=r['target']['planes'][r['face']]
-residual=max(abs(4*x-3*y-float(support))/5 for x,y,z in source['trim']+source['poles']+target['trim']+target['poles'])
+residual=max(abs(signed_residual(x,y)) for x,y,z in source['trim']+source['poles']+target['trim']+target['poles'])
 assert residual<1e-9
 assert min(v[2] for v in target['trim'])==30 and max(v[2] for v in source['trim'])==10
 assert abs(n['volume']-volume)<1e-7 and abs(r['workerVolume']-volume)<1e-7
@@ -68,7 +89,7 @@ const source = {
   nodes: [
     { id: 'n0', kind: 'sketch', profile: 'polygon', points: [[0, 0], [18, 0], [24, 8], [18, 16], [0, 16], [-6, 8]] },
     { id: 'n1', kind: 'extrude', sketch: 0, height: 10 },
-    { id: 'n2', kind: 'sketch', profile: 'polygon', points: [[20, 1], [24, -2], [27, 2], [23, 5]] },
+    { id: 'n2', kind: 'sketch', ...fixture.sketch },
     { id: 'n3', kind: 'extrude', sketch: 2, height: 10, from: 30 },
     { id: 'n4', kind: 'translate', parent: { node: 3, side: 'solid' }, offset: [0, 0, 0] },
   ],
@@ -107,7 +128,8 @@ async function measure(label, doc, support, face, baseline) {
   assert.equal(worker.length, 2);
   assert.deepEqual(read.map(body => body.key).sort(), ['b4', key].sort());
   if (baseline) assert.equal(part.incidence, baseline.part.incidence);
-  await f.runOracle({ source: part, target: reference, workerVolume: worker.find(body => body.key === key).volume, support, face }, label);
+  await f.runOracle({ source: part, target: reference, workerVolume: worker.find(body => body.key === key).volume,
+    support, face, axisAligned, sourceFace: fixture.sourceFace }, label);
   f.report.observations.push({ label, bodyHash: part.hash, referenceHash: reference.hash, incidenceHash: part.incidence });
   return { part, reference };
 }
@@ -137,15 +159,15 @@ await f.run(async () => {
   const before = await f.inspect('before', source);
   const baseline = { part: before.find(body => body.key === 'b1'), reference: before.find(body => body.key === 'b4') };
   assert.ok(baseline.part.check.valid && baseline.reference.check.valid);
-  await view('Iso');
+  await view(fixture.sourceView);
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await frame();
   const filter = button('Selection filter');
   for (let i = 0; i < 6 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
-  await point([21, 4, 5]);
+  await point(fixture.sourcePoint);
   const selection = f.page.getByRole('complementary', { name: 'Selection', exact: true });
-  await selection.getByText('0.8, -0.6, 0', { exact: true }).waitFor();
+  await selection.getByText(fixture.sourceNormal, { exact: true }).waitFor();
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Offset face');
   const panel = hud('Offset face');
@@ -155,53 +177,53 @@ await f.run(async () => {
 
   f.phase = 'Refuse a nonparallel face, then accept an antiparallel reference';
   await view('Top');
-  await point([23.5, 1.5, 40]);
+  await point(fixture.topPoint);
   await status(panel, 'refused');
   assert.match(await panel.locator('.hud-error').innerText(), /parallel/i);
   assert.ok(await button('Apply', panel).isDisabled());
   await f.same(source);
   await f.snapshot('nonparallel-refused');
-  await view('Left');
-  await point([21.5, 3, 35]);
+  await view(fixture.referenceView);
+  await point(fixture.referencePoint);
   await status(panel, 'preview');
-  await panel.getByText('n3.side3', { exact: true }).waitFor();
+  await panel.getByText(fixture.referenceFace).waitFor();
   await f.same(source);
   await button('Apply', panel).click();
   await f.changed(source);
   const outward = await f.doc(), bound = outward.nodes[5];
   assert.equal(bound.kind, 'offset-face');
-  assert.deepEqual(bound.faces, ['n1.side1']);
+  assert.deepEqual(bound.faces, [fixture.sourceFace]);
   assert.deepEqual(bound.target.body, { node: 4, side: 'solid' });
   assert.equal(bound.target.feature, 'n4');
-  assert.equal(bound.target.face, 'n3.side3');
+  assert.equal(bound.target.face, fixture.referenceFace);
   assert.ok(!Object.hasOwn(bound, 'distance'));
-  const first = await measure('outward', outward, 77, 'n3.side3', baseline);
+  const first = await measure('outward', outward, fixture.supports[0], fixture.referenceFace, baseline);
   assert.equal(first.reference.hash, baseline.reference.hash);
   await f.snapshot('reference-applied');
 
   await f.openFeatureEditor(4, 'reference position');
-  await f.editor().getByLabel('ΔX', { exact: true }).fill('-3');
-  await f.editor().getByLabel('ΔY', { exact: true }).fill('1');
+  await f.editor().getByLabel('ΔX', { exact: true }).fill(String(fixture.move[0]));
+  await f.editor().getByLabel('ΔY', { exact: true }).fill(String(fixture.move[1]));
   await f.applyEditor(outward, 'reference-moved');
   const moved = await f.doc();
   assert.deepEqual(moved.nodes[5], bound);
-  const second = await measure('inward', moved, 62, 'n3.side3', baseline);
+  const second = await measure('inward', moved, fixture.supports[1], fixture.referenceFace, baseline);
 
   await f.openFeatureEditor(5, 'reference-bound Offset');
   await button('Edit offset', f.editor()).click();
   const history = hud('Edit Offset face');
   assert.equal(await history.getByLabel('Mode', { exact: true }).inputValue(), 'to-plane');
-  await history.getByText('n3.side3', { exact: true }).waitFor();
-  await view('Right');
-  await point([22.5, 1, 35]);
-  await history.getByText('n3.side1', { exact: true }).waitFor();
+  await history.getByText(fixture.referenceFace).waitFor();
+  await view(fixture.retargetView);
+  await point(fixture.retargetPoint);
+  await history.getByText(fixture.retargetFace).waitFor();
   await status(history, 'preview');
   await button('Apply', history).click();
   await f.changed(moved);
   const retargeted = await f.doc();
   assert.equal(retargeted.nodes[5].id, bound.id);
-  assert.equal(retargeted.nodes[5].target.face, 'n3.side1');
-  const third = await measure('retargeted', retargeted, 87, 'n3.side1', baseline);
+  assert.equal(retargeted.nodes[5].target.face, fixture.retargetFace);
+  const third = await measure('retargeted', retargeted, fixture.supports[2], fixture.retargetFace, baseline);
   assert.equal(third.reference.hash, second.reference.hash);
 
   await f.undo();
@@ -210,10 +232,10 @@ await f.run(async () => {
   await f.same(retargeted);
   const saved = await f.save('offset-reference-plane');
   await f.freshOpen(saved.file, retargeted, 'native-reopen');
-  assert.equal((await measure('reopen', await f.doc(), 87, 'n3.side1', baseline)).part.hash, third.part.hash);
+  assert.equal((await measure('reopen', await f.doc(), fixture.supports[2], fixture.retargetFace, baseline)).part.hash, third.part.hash);
 
   f.phase = 'Invalid collapse file retains the accepted model';
-  const collapsed = { ...outward, nodes: outward.nodes.map((node, index) => index === 4 ? { ...node, offset: [-13.25, 0, 0] } : node) };
+  const collapsed = { ...outward, nodes: outward.nodes.map((node, index) => index === 4 ? { ...node, offset: fixture.collapse } : node) };
   await open(collapsed, 'collapse-reference-plane.bcad');
   await f.waitToast(/Offset face:.*(?:collapse|cross).*Your part is unchanged/i);
   await f.same(retargeted);

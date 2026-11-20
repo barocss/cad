@@ -60,3 +60,16 @@ test('admitted axis wall uses a native signed offset and leaves end caps on thei
   const cap = offsetFaceCommand.build!(context('n1.top'), { d: 1 });
   assert.deepEqual(cap.nodes.slice(2).map(node => node.kind), ['sketch', 'extrude', 'union']);
 });
+
+test('new Offset face offers a reference plane for both wall directions and keeps Z caps distance-only', () => {
+  for (const name of ['n1.side0', 'n1.side1']) {
+    const ctx = context(name);
+    assert.ok(offsetFaceCommand.fields!(ctx).some(field => field.key === 'offsetMode'));
+    assert.equal(offsetFaceCommand.defaults!(ctx).offsetMode, 'distance');
+  }
+  for (const name of ['n1.top', 'n1.bottom']) {
+    const ctx = context(name);
+    assert.ok(!offsetFaceCommand.fields!(ctx).some(field => field.key === 'offsetMode'));
+    assert.equal(offsetFaceCommand.defaults!(ctx).offsetMode, undefined);
+  }
+});
