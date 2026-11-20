@@ -35,7 +35,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
   const s = editor.session; if (!s) return null;
   const v = validationOf(s), n = s.sel.vertices.length + s.sel.edges.length + s.sel.faces.length;
   const centre = selectionCentre(s);
-  const { previewActive, loopDraft } = editor;
+  const { previewActive, loopDraft, dragging, dragSettings } = editor;
   const slide = loopDraft?.kind === 'slide' ? loopDraft : null;
   const ratioLabel = slide ? 'Slide ratio' : 'Loop ratio';
   const insetLabel = s.sel.faces.length > 1 ? 'Inset region' : 'Inset face';
@@ -52,6 +52,11 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
     <div className="seg" role="group" aria-label="Show">
       <button className={focusClass} style={!s.smooth ? activeStyle : undefined} aria-pressed={!s.smooth} data-tip="Box" data-tip-desc="The cage as it is (Tab)" onClick={() => s.smooth && editor.toggleSmooth()}>Box</button>
       <button className={focusClass} style={s.smooth ? activeStyle : undefined} aria-pressed={s.smooth} data-tip="Smooth" data-tip-desc="The limit surface (Tab)" onClick={() => !s.smooth && editor.toggleSmooth()}>Smooth</button></div>
+    {s.mode === 'vertex' && <div className="space-y-1">
+      <label className="flex items-center gap-2"><input type="checkbox" checked={dragSettings.enabled} disabled={dragging} onChange={e => dragSettings.setEnabled(e.target.checked)} />Connected proportional drag</label>
+      {dragSettings.enabled && <label className={FIELD}><span>Drag graph radius mm</span><input className={CONTROL} type="number" min="0" step="1" value={dragSettings.radius} disabled={dragging} aria-invalid={!dragSettings.radiusValid} onChange={e => dragSettings.setRadius(e.target.value)} /></label>}
+      {dragSettings.enabled && !dragSettings.radiusValid && <div className="warn" role="status">Enter a radius greater than 0 mm.</div>}
+    </div>}
     <div className={FIELD}><span>Picked</span> <b aria-label="Picked">{what}</b></div>
     {centre && <div className="muted small" aria-label="Picked cage centre">Picked centre: ({centre.map(value => Number(value.toFixed(3))).join(', ')}) mm</div>}
     {pickedEdges.length > 0 && <details className="small" aria-label="Picked edge creases">
@@ -95,7 +100,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
       <Button variant="ghost" aria-label="Redo cage step" disabled={previewActive || !s.redo.length} onClick={editor.redo}>Redo</Button>
       <span className="flex-1" />
       <Button variant="ghost" aria-label="Cancel cage edit" onClick={editor.cancel}>Cancel</Button>
-      <Button variant="default" aria-label="Done editing cage" data-tip="Done" data-tip-desc="Apply this cage only after its current evaluation succeeds" data-tip-off={!editor.doneReadiness.ok ? editor.doneReadiness.reason : undefined} data-tip-focus aria-description={editor.doneReadiness.reason} aria-disabled={!editor.doneReadiness.ok} disabled={!!slide} className={!editor.doneReadiness.ok ? 'opacity-50' : undefined} onClick={editor.done}>Done</Button>
+      <Button variant="default" aria-label="Done editing cage" data-tip="Done" data-tip-desc="Apply this cage only after its current evaluation succeeds" data-tip-off={!editor.doneReadiness.ok ? editor.doneReadiness.reason : undefined} data-tip-focus aria-description={editor.doneReadiness.reason} aria-disabled={!editor.doneReadiness.ok} disabled={!!slide || dragging} className={!editor.doneReadiness.ok ? 'opacity-50' : undefined} onClick={editor.done}>Done</Button>
     </div>
   </aside>;
 }

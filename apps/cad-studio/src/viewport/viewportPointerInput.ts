@@ -184,7 +184,7 @@ interface PointerDrag {
   scalarHandleDrag?: ScalarHandleDrag | null;
   factor?: number;
   gizmo?: TransformGizmo;
-  sessionKey?: string | number;
+  sessionKey?: TransformGizmo['sessionKey'];
 }
 
 const sameRef = (a: { body: number; face?: number; edge?: number } | null | undefined, b: { body: number; face?: number; edge?: number } | null | undefined) =>
@@ -465,9 +465,14 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
   const listenForSketchKeys = () => {
     // (Capture phase: the drag's Escape is not also the app's.)
     // The pointer owns the gesture from the press. Escape cancels it without leaving the sketch.
-    let trimEscaped = false;
+    let trimEscaped = false, gizmoEscaped = false;
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (!e.repeat) {
+          gizmoEscaped = drag.current.mode === 'gizmo' && drag.current.gizmo?.cancelOnEscape === true;
+          if (gizmoEscaped) cancelGizmo('escape');
+        }
+        if (gizmoEscaped) { e.stopImmediatePropagation(); e.preventDefault(); return; }
         selectBandRail(null);
         if (!e.repeat) trimEscaped = cancelDragTrim();
         if (trimEscaped) { e.stopImmediatePropagation(); e.preventDefault(); return; }
@@ -827,7 +832,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
         // The existing Shift release remains a pick; movement past its threshold gets a canceled scalar frame.
         scalarHandleDrag: historyPress === 'shift-pick-only' ? null : hd?.scalarDragSession ? captureScalarHandleDrag(hd, projector()) : undefined,
         origin: propsRef.current.gizmo ? [...propsRef.current.gizmo.origin] as Vec3 : undefined, gizmo: g, pointerId: e.pointerId, sessionKey: g?.sessionKey };
-      g?.onStart?.(e.pointerId);
+      g?.onStart?.(e.pointerId, e.shiftKey);
       return;
     }
     if (e.button === 2 && !e.shiftKey) drag.current = { mode: 'orbit', x, y, moved: false };

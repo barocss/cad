@@ -296,6 +296,52 @@ export function commitDrag(s: CageSession, delta: readonly number[], extrude: bo
   return step(s, d.cage, d.sel);
 }
 
+export interface CageProportionalDragPlan {
+  readonly base: CageSession;
+  readonly radius: number;
+  /** Baseline graph weights, indexed by cage vertex ID. */
+  readonly weights: readonly number[];
+}
+
+/** Use one cage, selection, radius and weight array for the full drag. */
+export function planCageProportionalDrag(base: CageSession, radius: number): CageProportionalDragPlan {
+  const weights = Object.freeze(cageProportionalWeights(base, radius));
+  return Object.freeze({ base, radius, weights });
+}
+
+/** Apply the full pointer displacement from the baseline without adding history. */
+export function previewCageProportionalDrag(plan: CageProportionalDragPlan, delta: readonly number[]): CageSession {
+  if (delta.length !== 3 || ![0, 1, 2].every(axis => Number.isFinite(delta[axis]))) {
+    throw new SubdError('INPUT', 'proportional move: use three finite displacement coordinates in mm');
+  }
+  const { base, weights } = plan;
+  if (delta.every(value => value === 0)) return base;
+
+  const source = base.cage.positions;
+  const mirrorAxis = base.mirror ? 'xyz'.indexOf(base.mirror) : -1;
+  let positions: number[] | undefined;
+  for (const [vertex, weight] of weights.entries()) {
+    if (weight === 0) continue;
+    const first = 3 * vertex;
+    for (const [axis, displacement] of delta.entries()) {
+      if (displacement === 0 || (axis === mirrorAxis && source[first + axis] === 0)) continue;
+      const index = first + axis;
+      const next = source[index] + weight * displacement;
+      if (!Number.isFinite(next)) throw new SubdError('INPUT', 'proportional move: coordinates overflow; reduce the displacement');
+      if (next === source[index]) continue;
+      positions ??= [...source];
+      positions[index] = next;
+    }
+  }
+  return positions ? { ...base, cage: { ...base.cage, positions } } : base;
+}
+
+/** Commit one drag from its original baseline. A constrained or rounded no-op preserves redo. */
+export function commitCageProportionalDrag(plan: CageProportionalDragPlan, delta: readonly number[]): CageSession {
+  const preview = previewCageProportionalDrag(plan, delta);
+  return preview === plan.base ? plan.base : step(plan.base, preview.cage, plan.base.sel);
+}
+
 function requireEdgeSlideSelection(s: CageSession): void {
   if (s.mirror) throw new SubdError('INPUT', 'edge slide: mirrored cages are unsupported');
   if (s.mode !== 'edge' || !s.sel.edges.length || s.sel.vertices.length || s.sel.faces.length) {
@@ -342,6 +388,14 @@ export type CageSelectionTransform =
  * This is cage editing, not a rigid transform of the final smooth surface. No-op transformations add no history.
  */
 export function transformCageSelection(s: CageSession, transform: CageSelectionTransform): CageSession {
+  if (transform.kind === 'move-proportional') {
+    if (![0, 1, 2].includes(transform.axis) || !Number.isFinite(transform.distance)) {
+      throw new SubdError('INPUT', 'move: use a world axis and finite distance in mm');
+    }
+    const delta: [number, number, number] = [0, 0, 0];
+    delta[transform.axis] = transform.distance;
+    return commitCageProportionalDrag(planCageProportionalDrag(s, transform.radius), delta);
+  }
   const c = s.cage, nv = c.positions.length / 3, validVertex = (v: number) => Number.isInteger(v) && v >= 0 && v < nv;
   if (!Number.isInteger(nv) || c.positions.some(v => !Number.isFinite(v)) || c.faces.some(f => f.length < 3 || f.some(v => !validVertex(v)))) throw new SubdError('INPUT', 'transform: invalid cage coordinates or topology');
   if (s.sel.vertices.some(v => !validVertex(v)) || s.sel.edges.some(([a, b]) => !validVertex(a) || !validVertex(b)) || s.sel.faces.some(f => !Number.isInteger(f) || f < 0 || f >= c.faces.length)) throw new SubdError('INPUT', 'transform: pick current cage elements again');
@@ -349,19 +403,17 @@ export function transformCageSelection(s: CageSession, transform: CageSelectionT
   if (s.sel.edges.some(([a, b]) => !topology.edges.has(ek(a, b)))) throw new SubdError('INPUT', 'transform: selected edge is not in this cage');
   const vertices = selectedVertices(s);
   if (!vertices.length) throw new SubdError('INPUT', 'transform: pick vertices, edges or faces first');
-  if (transform.kind !== 'move' && transform.kind !== 'move-along' && transform.kind !== 'move-proportional' && (transform.pivot.length !== 3 || transform.pivot.some(v => !Number.isFinite(v)))) throw new SubdError('INPUT', 'transform: pivot must be finite');
+  if (transform.kind !== 'move' && transform.kind !== 'move-along' && (transform.pivot.length !== 3 || transform.pivot.some(v => !Number.isFinite(v)))) throw new SubdError('INPUT', 'transform: pivot must be finite');
   if (transform.kind === 'rotate' && (![0, 1, 2].includes(transform.axis) || !Number.isFinite(transform.degrees))) throw new SubdError('INPUT', 'rotate: use a world axis and finite degrees');
   if (transform.kind === 'scale' && (!Number.isFinite(transform.factor) || transform.factor <= 0)) throw new SubdError('INPUT', 'scale: factor must be finite and greater than zero');
-  if ((transform.kind === 'move' || transform.kind === 'move-proportional') && (![0, 1, 2].includes(transform.axis) || !Number.isFinite(transform.distance))) throw new SubdError('INPUT', 'move: use a world axis and finite distance in mm');
-  const weights = transform.kind === 'move-proportional' ? cageProportionalWeights(s, transform.radius) : null;
+  if (transform.kind === 'move' && (![0, 1, 2].includes(transform.axis) || !Number.isFinite(transform.distance))) throw new SubdError('INPUT', 'move: use a world axis and finite distance in mm');
   const direction = transform.kind === 'move-along' || transform.kind === 'rotate-along' ? normalizedCageDirection(transform.direction) : null;
   if (transform.kind === 'move-along' && !Number.isFinite(transform.distance)) throw new SubdError('INPUT', 'move: use finite distance in mm');
   if (transform.kind === 'rotate-along' && !Number.isFinite(transform.degrees)) throw new SubdError('INPUT', 'rotate: use finite degrees');
   const angle = transform.kind === 'rotate' || transform.kind === 'rotate-along' ? transform.degrees % 360 : 0;
-  if (transform.kind === 'move' || transform.kind === 'move-along' || transform.kind === 'move-proportional' ? transform.distance === 0 : transform.kind === 'rotate' || transform.kind === 'rotate-along' ? angle === 0 : transform.factor === 1) return s;
+  if (transform.kind === 'move' || transform.kind === 'move-along' ? transform.distance === 0 : transform.kind === 'rotate' || transform.kind === 'rotate-along' ? angle === 0 : transform.factor === 1) return s;
   const positions = [...c.positions], radians = angle * Math.PI / 180, cosine = Math.cos(radians), sine = Math.sin(radians);
-  for (const v of weights ? weights.flatMap((w, i) => w > 0 ? [i] : []) : vertices) {
-    if (transform.kind === 'move-proportional') { positions[3*v+transform.axis] += weights![v]*transform.distance; continue; }
+  for (const v of vertices) {
     if (transform.kind === 'move-along') { for (let k = 0; k < 3; k++) positions[3*v+k] += direction![k]*transform.distance; continue; }
     if (transform.kind === 'move') { positions[3 * v + transform.axis] += transform.distance; continue; }
     const p = at(c, v).map((x, k) => x - transform.pivot[k]);
