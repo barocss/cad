@@ -5,14 +5,20 @@ import { edgeDetail, faceDetail } from '../observe';
 import { renderViews } from '../views';
 import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, json, fail, strings, list } from '../toolKit';
 import { isObj } from '../../util/guards';
+import { revisionOf } from '../../util/revision';
 
 async function renderViewsTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate): Promise<ToolOutcome> {
+  if (args.expectedRevision !== undefined && (typeof args.expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(args.expectedRevision)))
+    return fail(state, 'expectedRevision must be the 16-digit revision from query.rebuild for the same part.', { code: 'RENDER_INPUT' });
+  const revision = revisionOf(state.doc);
+  if (args.expectedRevision !== undefined && args.expectedRevision !== revision)
+    return fail(state, 'The part changed since the requested revision. Read query.rebuild again for the same part.', { code: 'RENDER_STALE', expectedRevision: args.expectedRevision, revision });
   const highlight = strings(args.highlight), sec = isObj(args.section) ? args.section : undefined;
   if (sec && (!['x', 'y', 'z'].includes(String(sec.axis)) || !Number.isFinite(Number(sec.at)))) return fail(state, 'A section takes an axis (x, y or z) and at (mm).');
   const r = await renderViews(state.doc, state.bodies, evaluate, { ...(highlight.length ? { highlight } : {}), ...(sec ? { section: { axis: String(sec.axis) as 'x' | 'y' | 'z', at: Number(sec.at) } } : {}) });
   if (typeof r === 'string') return fail(state, r);
   const { image, ...rest } = r;
-  return { state, content: json(rest), isError: false, changed: false, summary: `views (${Object.keys(r.legend).length} faces labelled)`, images: [{ data: image, mediaType: 'image/png' }] };
+  return { state, content: json({ revision, ...rest }), isError: false, changed: false, summary: `views (${Object.keys(r.legend).length} faces labelled)`, images: [{ data: image, mediaType: 'image/png' }] };
 }
 async function inspectTool(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
   const r = resolveSelectors(state.doc.nodes, state.bodies, { faces: list(args.faces), edges: list(args.edges) });

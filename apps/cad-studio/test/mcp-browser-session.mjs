@@ -5,8 +5,8 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
-export async function withMcpSession({ app, output, clientName }, path, label, run) {
-  const child = spawn(process.execPath, [join(app, 'scripts/cad-mcp.mjs'), '--doc', path, '--autonomy', '1'],
+export async function withMcpSession({ app, output, clientName, autonomy = 1 }, path, label, run) {
+  const child = spawn(process.execPath, [join(app, 'scripts/cad-mcp.mjs'), '--doc', path, '--autonomy', String(autonomy)],
     { stdio: ['pipe', 'pipe', 'inherit'] });
   const closed = once(child, 'close');
   const lines = createInterface({ input: child.stdout }), replies = lines[Symbol.asyncIterator]();
@@ -34,7 +34,7 @@ export async function withMcpSession({ app, output, clientName }, path, label, r
       const reply = await request('tools/call', { name, arguments: args });
       assert.equal(reply.isError, error, JSON.stringify(reply));
       return JSON.parse(reply.content[0].text);
-    });
+    }, request);
   } finally {
     child.stdin.end();
     lines.close();

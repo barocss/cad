@@ -9,6 +9,7 @@ import { withNode, type StudioDoc } from '../engine/doc';
 import { partBreps, type BodyResult, type EvalResult } from '../engine/evaluate';
 import { bodyKeyFor } from '../engine/ids';
 import { contentKey } from '../engine/evalMemo';
+import { sha256Hex } from '../util/sha256';
 import { refOf } from '../app/bodyRef';
 import { VIEWS } from '../drawing/views';
 import { VIEW_IDS, type ViewId } from '../drawing/types';
@@ -116,8 +117,8 @@ function curvePoints(c: ProjectedCurve): [number, number][] {
   return out;
 }
 
-export interface ViewsResult { image: string; legend: Record<string, string>; views: Record<string, { visible_faces: string[]; mm_per_px: number }>; layout: string; notes: string[] }
-const cache = new Map<string, ViewsResult>();
+export interface ViewsResult { image: string; imageSha256: string; legend: Record<string, string>; views: Record<string, { visible_faces: string[]; mm_per_px: number }>; layout: string; notes: string[] }
+const cache = new Map<string, { doc: WeakRef<StudioDoc>; bodies: WeakRef<readonly BodyResult[]>; result: ViewsResult }>();
 
 /**
  * The part's 2 × 2 sheet of views: `highlight` names faces to fill red (and ring their labels), `section` cuts
@@ -138,8 +139,10 @@ function projectionOf(breps: readonly Brep[], id: ViewId): BrepProjection {
 }
 export async function renderViews(doc: StudioDoc, bodies: readonly BodyResult[], evaluate: (doc: StudioDoc) => Promise<EvalResult | null>, options: { highlight?: readonly string[]; section?: { axis: 'x' | 'y' | 'z'; at: number } } = {}): Promise<ViewsResult | string> {
   // (The model by its nodes' kept texts — not the whole document written out, a STEP import's text and all; PERF3 C16.)
+  if (!bodies.length) return 'there is no body to show';
   const key = `${contentKey(doc)}\u0003${JSON.stringify(options)}`;
-  const hit = cache.get(key); if (hit) return hit;
+  const hit = cache.get(key);
+  if (hit?.doc.deref() === doc && hit.bodies.deref() === bodies) return hit.result;
   let shown: readonly BodyResult[] = bodies, model = doc;
   if (options.section) {
     const { axis, at } = options.section, k = 'xyz'.indexOf(axis);
@@ -215,11 +218,12 @@ export async function renderViews(doc: StudioDoc, bodies: readonly BodyResult[],
     segment(ox + 0.5, oy + CELL - 0.5, ox + CELL - 0.5, oy + CELL - 0.5, 1, 200, 200, 205, 0, 0); segment(ox + CELL - 0.5, oy + 0.5, ox + CELL - 0.5, oy + CELL - 0.5, 1, 200, 200, 205, 0, 0);
     out[id] = { visible_faces: visible, mm_per_px: Math.round(1e4 / s) / 1e4 };
   });
+  const bytes = await png(img, W, H);
   const result: ViewsResult = {
-    image: base64(await png(img, W, H)), legend: Object.fromEntries([...numbers].map(([name, n]) => [String(n), name])), views: out,
+    image: base64(bytes), imageSha256: sha256Hex(bytes), legend: Object.fromEntries([...numbers].map(([name, n]) => [String(n), name])), views: out,
     layout: 'one 1000 × 1000 PNG, four views: front (top left), top (top right), right (bottom left), isometric (bottom right); third-angle',
     notes: ['edges by the kernel\'s exact hidden-line projection: solid visible, thin dashed hidden', 'face fill and labels from the display mesh (to its chord error); a face showing under 60 px is listed but not labelled', ...(options.section ? [`cut at ${options.section.axis} = ${options.section.at}, the side ${options.section.axis === 'y' ? 'beyond (y > at)' : `below (${options.section.axis} < at)`} kept: its cut faces look at the ${options.section.axis === 'y' ? 'front' : options.section.axis === 'x' ? 'right' : 'top'} view`] : []), ...(hot.size ? ['highlighted faces filled red, their labels ringed red'] : [])],
   };
-  cache.set(key, result); if (cache.size > 8) cache.delete(cache.keys().next().value!);
+  cache.set(key, { doc: new WeakRef(doc), bodies: new WeakRef(bodies), result }); if (cache.size > 8) cache.delete(cache.keys().next().value!);
   return result;
 }

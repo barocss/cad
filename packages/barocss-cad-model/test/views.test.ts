@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { evaluatePart } from '../src/engine/evaluate';
-import { rectanglePart, type StudioDoc } from '../src/engine/doc';
+import { rectanglePart, cylinderPart, withNode, type StudioDoc } from '../src/engine/doc';
+import { revisionOf } from '../src/util/revision';
 import { runTool, type ChatState } from '../src/chat/tools';
 
 // Views for an agent (A2.3): one PNG sheet of exact line views with numbered faces, and its legend.
@@ -17,6 +19,8 @@ test('render_views: a 1000 × 1000 PNG of four views, faces numbered with a lege
   assert.ok(!r.isError, r.content);
   const out = parse(r.content), png = Buffer.from(r.images![0].data, 'base64');
   if (process.env.VIEWS_OUT) writeFileSync(process.env.VIEWS_OUT, png);
+  assert.equal(out.revision, parse((await runTool(s, 'query', { action: 'rebuild' }, evaluate)).content).revision);
+  assert.equal(out.imageSha256, createHash('sha256').update(png).digest('hex'));
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1000, 1000]);
   assert.ok(png.length < 200_000, `${png.length} bytes`);
@@ -29,4 +33,79 @@ test('render_views: a 1000 × 1000 PNG of four views, faces numbered with a lege
   const cut = await runTool(s, 'render_views', { section: { axis: 'y', at: 10 } }, evaluate);
   assert.ok(!cut.isError, cut.content);
   assert.ok(parse(cut.content).views.front.visible_faces.some((n: string) => n.includes('.cut')), JSON.stringify(parse(cut.content).views.front));
+});
+
+test('query.render checks an optional rebuild revision before rendering and pins section images to the source', async () => {
+  const s = await stateOf(rectanglePart(30, 15, 6)), before = structuredClone(s.doc);
+  const rebuild = await runTool(s, 'query', { action: 'rebuild' }, evaluate);
+  assert.ok(!rebuild.isError, rebuild.content);
+  const revision = parse(rebuild.content).revision;
+  const pinned = await runTool(s, 'query', { action: 'render', expectedRevision: revision, section: { axis: 'z', at: 3 } }, evaluate);
+  assert.ok(!pinned.isError, pinned.content);
+  const view = parse(pinned.content);
+  assert.equal(view.revision, revision);
+  assert.equal(view.imageSha256, createHash('sha256').update(Buffer.from(pinned.images![0].data, 'base64')).digest('hex'));
+  assert.equal(pinned.changed, false);
+  assert.equal(pinned.state.doc, s.doc);
+  assert.deepEqual(s.doc, before);
+  const neverEvaluate = async () => { throw new Error('a refused render must not evaluate a section'); };
+  for (const expectedRevision of ['', 'short', 'a'.repeat(64), 'A'.repeat(16), null, 0]) {
+    const refused = await runTool(s, 'query', { action: 'render', expectedRevision }, neverEvaluate);
+    assert.equal(refused.isError, true);
+    assert.equal(parse(refused.content).code, 'RENDER_INPUT');
+    assert.equal(refused.images, undefined);
+    assert.equal(refused.state, s);
+  }
+  const changed = await stateOf(rectanglePart(31, 15, 6));
+  const stale = await runTool(changed, 'query', { action: 'render', expectedRevision: revision, section: { axis: 'z', at: 3 } }, neverEvaluate);
+  assert.equal(stale.isError, true);
+  assert.equal(parse(stale.content).code, 'RENDER_STALE');
+  assert.equal(parse(stale.content).revision, revisionOf(changed.doc));
+  assert.equal(parse(stale.content).expectedRevision, revision);
+  assert.equal(stale.images, undefined);
+  assert.equal(stale.state, changed);
+});
+
+test('review pins follow document changes and cached images follow the supplied bodies', async () => {
+  const master = withNode(withNode(rectanglePart(20, 10, 4), { kind: 'sketch', profile: 'circle', center: [35, 5], radius: 4 }), { kind: 'extrude', sketch: 2, height: 12 });
+  const combined = await stateOf(master);
+  assert.equal(combined.bodies.length, 2);
+  const full = await runTool(combined, 'query', { action: 'render' }, evaluate);
+  const subset = await runTool({ ...combined, bodies: [combined.bodies[0]] }, 'query', { action: 'render' }, evaluate);
+  assert.ok(!full.isError && !subset.isError, full.content + subset.content);
+  assert.equal(parse(full.content).revision, parse(subset.content).revision);
+  assert.notEqual(parse(full.content).imageSha256, parse(subset.content).imageSha256);
+  const empty = await runTool({ ...combined, bodies: [] }, 'query', { action: 'render' }, evaluate);
+  assert.equal(empty.isError, true);
+  assert.match(parse(empty.content).error, /no body to show/);
+  assert.equal(empty.images, undefined);
+  // An unused parameter changes the rebuild revision without changing the rendered geometry.
+  const changed = await stateOf({ ...master, parameters: { ...master.parameters, spare: 1 } });
+  const updated = await runTool(changed, 'query', { action: 'render' }, evaluate);
+  assert.ok(!full.isError && !updated.isError, full.content + updated.content);
+  assert.notEqual(parse(full.content).revision, parse(updated.content).revision);
+  assert.equal(parse(full.content).imageSha256, parse(updated.content).imageSha256);
+});
+
+test('part-scoped render uses the same scoped revision as rebuild and preserves the root document', async () => {
+  const part = cylinderPart(4, 12);
+  const s = await stateOf({ ...rectanglePart(40, 30, 8), instances: [{ id: 'p1', name: 'Pin', doc: part, position: [50, 0, 0], rotation: [0, 0, 0], grounded: true }] });
+  const before = structuredClone(s.doc);
+  const rebuild = await runTool(s, 'query', { action: 'rebuild', part: 'p1' }, evaluate);
+  assert.ok(!rebuild.isError, rebuild.content);
+  const pin = parse(rebuild.content);
+  assert.equal(pin.part, 'p1');
+  assert.notEqual(pin.revision, revisionOf(s.doc));
+  const out = await runTool(s, 'query', { action: 'render', part: 'p1', expectedRevision: pin.revision }, evaluate);
+  assert.ok(!out.isError, out.content);
+  assert.equal(parse(out.content).part, 'p1');
+  assert.equal(parse(out.content).revision, pin.revision);
+  assert.equal(parse(out.content).imageSha256, createHash('sha256').update(Buffer.from(out.images![0].data, 'base64')).digest('hex'));
+  assert.equal(out.changed, false);
+  assert.equal(out.state.doc, s.doc);
+  assert.deepEqual(s.doc, before);
+  const stale = await runTool(s, 'query', { action: 'render', part: 'p1', expectedRevision: revisionOf(s.doc) }, evaluate);
+  assert.equal(stale.isError, true);
+  assert.equal(parse(stale.content).code, 'RENDER_STALE');
+  assert.equal(stale.images, undefined);
 });

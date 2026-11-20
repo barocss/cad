@@ -51,11 +51,13 @@ This is a source-confirmed missing public contract, not a demonstrated stale-ima
 
 Acceptance should connect one real agent review to one supported editable part: render A with provenance → edit to B → reject an A-pinned request against B → render B with a distinct identity → retain each PNG/legend pairing → native check → existing Studio Open → user dimension edit → Save/fresh Open. Add only changed-contract checks and this focused consumer. Existing protocol/PNG tests are prerequisites to reuse, not a new broad validation campaign. Live-model quality, token savings and multi-agent speed stay NOT_RUN/NOT_MEASURED unless actually measured.
 
+Follow-up: the [revision-pinned local review and editable Studio handoff](../agent-review-part-2026-11-20/README.md) now cover the working-document path. Review across distinct candidate attempts remains open.
+
 ### Dependencies and later AI work
 
 - Pin current cad source, client and owned paths. Reuse grouped v2 discovery/describe and `runTool` approval gates; do not create a parallel geometry or tool implementation.
 - #324's render provenance fits its revision-bound review scope. #204 WebMCP and #325 external semantic adapter are separate transports/consumers, not prerequisites.
-- #322 remains the AI-native direction: spec snapshot → task contracts → candidate atomicity → two workers with one writer → editable Studio output. Its old #2398/#2399/#2400/#2401 cross-repository leaf links require current owner/state and migration resolution before execution. Do not recreate them or claim they are unresolved from old prose alone.
+- #322 connects requirements, candidate review, and editable Studio output. A follow-up read of the original issue comments found that all four referenced implementation issues closed with bounded product evidence. The current CAD tree retains the decisions for [call isolation](../tool-call-context-2026-11-10/README.md), [specification-to-task ownership](../spec-task-contract-2026-11-11/README.md), [candidate acceptance and cancellation](../candidate-atomicity-2026-11-11/README.md) and the [local two-worker runner with one writer](../local-task-run-2026-11-11/README.md). [D629](../reopen-local-task-run-2026-11-11/README.md) adds fresh Studio reopening of a pending or approved run. These receipts were inspected here. The next review should exercise image ownership across two distinct candidate attempts, including a late result after cancellation, using the existing runner. Whole-epic acceptance and live-model quality remain unmeasured.
 - Real native geometry, independent checks, actual Studio/file use, and live model quality need separate results. A visual review cannot pass a failed or unknown native check.
 
 ## Examples of implemented or proved subsets inside open issues

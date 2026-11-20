@@ -53,7 +53,7 @@ Reads the part without changing it.
 | `query.purchase_csv` | `output_purchase_csv` | withMade?, expectedRevision? |
 | `query.clearance` | `output_clearance` | near?, expectedRevision? — current assembly map |
 | `query.cam` | `output_cam_package` | part?, toolDiameter?, expectedRevision? — NOT FOR PRODUCTION |
-| `query.render` | `render_views` | highlight?, section? — pictures of the part |
+| `query.render` | `render_views` | highlight?, section?, expectedRevision? |
 | `query.select` | `select` | faces?, edges?, bodies? — shows them selected in the studio |
 | `query.manufacturability` | `check_printability` | direction?, finish?, sides? — the report for the part's process: printing, injection moulding (pull, finish, halves), machining, casting (pull) |
 
@@ -114,8 +114,9 @@ Parts placed and mated with the base part; changes to it are proposed. A part to
 
 | Action | Handler | Arguments and notes |
 |---|---|---|
+| `assembly.add_step` | `add_assembly_step` | name, parts: exact occurrence IDs — propose for user approval |
 | `assembly.bundle` | `output_bundle` | baseline?, expectedRevision? — approved current evidence files |
-| `assembly.get` | `get_assembly` | faces_of? |
+| `assembly.get` | `get_assembly` | faces_of?, include_steps?, step_index? — saved instructions only; index requires include_steps true |
 | `assembly.add_part` | `add_part` | name, copy_of?, position?, rotation?, grounded? |
 | `assembly.place` | `place_part` | part, position?, rotation?, name?, grounded?, hidden?, joints?, looks? |
 | `assembly.delete_part` | `delete_part` | part |
@@ -174,9 +175,9 @@ The part's 2D drawing; a drawing change is always the user's, so make it as ops 
 
 | Action | Handler | Arguments and notes |
 |---|---|---|
-| `drawing.issues` | `drawing_issues` | — |
+| `drawing.issues` | `drawing_issues` | include_targets? — opaque dimension IDs and view for this snapshot only |
 | `drawing.tolerances` | `tolerance_suggestions` | mode? |
-| `drawing.dimensions` | `get_drawing_dimensions` | sheet? |
+| `drawing.dimensions` | `get_drawing_dimensions` | sheet?, include_diameters?, include_radii? |
 | `drawing.stack` | `calculate_drawing_tolerance_stack` | sheet?, expectedRevision from dimensions, terms: [{id, sign: 1 or -1}] |
 | `drawing.auto` | `auto_dimension` | layout? |
 | `drawing.fix` | `fix_drawing` | codes? |

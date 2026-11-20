@@ -101,7 +101,7 @@ const READ: Record<string, JsonSchema | null> = {
   rebuild_report: o({ revision: str, evaluation: num, basis: str, evaluationTime: num, features: arr, built: num, builtTime: num, slowest: { type: ['string', 'null'] }, reused: num, mates: arr, loops: arr, limits: str }, ['revision', 'basis', 'evaluationTime', 'features', 'built', 'builtTime', 'slowest', 'reused', 'mates', 'loops', 'limits']),
   diff: o({ from: str, to: str, diff: obj }, ['diff']),
   list_proposals: o({ proposals: arr }, ['proposals']),
-  render_views: o({ legend: obj, views: obj, layout: str, notes: arr }, ['views']),
+  render_views: o({ revision: str, imageSha256: str, legend: obj, views: obj, layout: str, notes: arr }, ['views', 'revision', 'imageSha256']),
   inspect: o({ faces: arr, edges: arr }),
   select: o({ ok: bool, selected: obj }, ['ok']),
   checkpoint: o({ ok: bool, checkpoint: str, model_hash: str, checkpoints: arr }, ['ok', 'checkpoint']),
