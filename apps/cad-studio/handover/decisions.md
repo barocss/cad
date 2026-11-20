@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1436: [Replace caps and walls of straight convex polygon prisms](notes/replace-convex-polygon-faces-2026-11-21/README.md), #17. Qualify the variable native topology on triangular, pentagonal and heptagonal stock and verify independent volume and Studio reopen.
 - D1435: [Rotate a convex hexagonal prism wall in Top view](notes/replace-hex-prism-wall-top-turn-2026-11-21/README.md), #17. Replace the wall with a plane that rotates in Top view and can tilt along Z. Keep the fixed supports and verify Studio reopen.
 - D1434: [Tilt a convex hexagonal prism side wall](notes/replace-hex-prism-wall-2026-11-21/README.md), #17. Keep the wall's horizontal direction, both cap stations and all 36 pcurve IDs through Studio edit and reopen.
 - D1433: [Replace either cap of a convex hexagonal prism](notes/replace-hex-prism-cap-2026-11-21/README.md), #17. Keep seven plane supports and all 36 pcurve IDs through Studio reference edits and reopen.

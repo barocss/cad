@@ -80,11 +80,79 @@ test('prism cap replacement refuses unsupported stock and unsuitable donor plane
     assert.throws(() => replacePrismCapIfAdmitted(source, face, { origin, normal }), /tilt is too small/);
   }
   assert.throws(() => replacePrismCapIfAdmitted(source, face, { origin, normal: [1, 0, 0] }), /perpendicular/);
-  for (const [brep, name] of [[source, selected], [solidOf(part(footprint.slice(1))), face],
+  for (const [brep, name] of [[source, selected], [solidOf(part([[0, 0], [18, 0], [18, 16], [0, 16]])), face],
     [solidOf(part([[0, 0], [18, 0], [10, 7], [18, 16], [0, 16], [-6, 8]])), face],
     [solidOf(part(footprint, { draft: 5 })), face]]) {
     assert.equal(prismCapReplacementFrame(brep, name), undefined);
     assert.equal(replacePrismCapIfAdmitted(brep, name, { origin, normal: [-1, -2, 10] }), undefined);
+  }
+});
+
+test('replace a pentagonal prism cap and keep its five wall supports and opposite cap', () => {
+  const doc = part(footprint.slice(0, 5)), source = solidOf(doc), before = structuredClone(source), faceName = 'n1.top';
+  const change = { id: 'replace', kind: 'replace-face', target: 'n1', face: faceName,
+    plane: { origin: [0, 0, 8], normal: [-1, -2, 10] } };
+  const result = solidOf({ ...doc, features: [...doc.features, change] });
+  const report = checkBrep(result, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 7, loops: 7, coedges: 30, edges: 15, vertices: 10 });
+  assert.equal(result.coedges.filter(coedge => coedge.pcurve).length, 30);
+  assert.deepEqual(identity(result), identity(source));
+  assert.ok(report.maximumPcurveGap < 1e-9);
+  for (const [i, { point: [x, y, z] }] of source.vertices.entries())
+    pointClose(result.vertices[i].point, [x, y, z === 10 ? 8 + x / 10 + y / 5 : z]);
+  for (const original of source.faces) {
+    if (original.name === faceName) continue;
+    const support = faceGeometry(original), next = faceOf(result, original.name);
+    pointClose(faceGeometry(next).n, support.n);
+    for (const point of next.surface.controlPoints.flat())
+      close(point.reduce((sum, value, axis) => sum + (value - support.o[axis]) * support.n[axis], 0), 0);
+  }
+  const mass = brepMassProperties(result, 1);
+  close(mass.volume, 17904 / 5, 1e-7);
+  pointClose(mass.centroid, [4077 / 373, 9368 / 1119, 120487 / 22380]);
+  assert.throws(() => replacePrismCapIfAdmitted(source, faceName, {
+    ...change.plane, origin: [0, 0, 0],
+  }), /reach or cross the opposite cap/);
+  assert.deepEqual(source, before);
+});
+
+test('replace the oblique wall of a heptagonal prism with both turn and tilt', () => {
+  const points = [...footprint.slice(0, 5), [-5, 12], footprint[5]];
+  const source = solidOf(part(points)), before = structuredClone(source);
+  const plane = { origin: [18, 0, 0], normal: [4, -2, -4 / 5] };
+  assert.equal(prismWallOffsetFrame(source, selected), undefined);
+  assert.ok(prismWallReplacementFrame(source, selected));
+  const result = replacePrismWallIfAdmitted(source, selected, plane);
+  const report = checkBrep(result, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 9, loops: 9, coedges: 42, edges: 21, vertices: 14 });
+  assert.equal(result.coedges.filter(coedge => coedge.pcurve).length, 42);
+  assert.deepEqual(identity(result), identity(source));
+  assert.ok(report.maximumPcurveGap < 1e-9);
+  for (const [i, vertex] of source.vertices.entries()) {
+    const [x, y, z] = vertex.point, newY = (48 - 4 * z / 5) / 5;
+    pointClose(result.vertices[i].point, x === 18 && y === 0 ? [18 + z / 5, 0, z] :
+      x === 24 && y === 8 ? [30 - 3 * newY / 4, newY, z] : vertex.point);
+  }
+  // The extra triangle adds area 8 at every station compared to the six-sided witness.
+  close(brepMassProperties(result, 1).volume, 11744 / 3, 1e-7);
+  assert.throws(() => replacePrismWallIfAdmitted(source, selected, {
+    ...plane, origin: [28, 0, 0],
+  }), /collapse or cross a wall of the polygon section/);
+  assert.deepEqual(source, before);
+});
+
+test('the triangular prism admits a cap and a wall through the same strict shape checks', () => {
+  const source = solidOf(part([[0, 0], [18, 0], [0, 16]]));
+  const cap = replacePrismCapIfAdmitted(source, 'n1.top', { origin: [0, 0, 8], normal: [-1, -2, 10] });
+  const wall = replacePrismWallIfAdmitted(source, 'n1.side0', { origin: [0, 0, 0], normal: [0, -1, -1 / 10] });
+  for (const [result, volume] of [[cap, 1392], [wall, 1531.875]]) {
+    const report = checkBrep(result, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 5, loops: 5, coedges: 18, edges: 9, vertices: 6 });
+    assert.deepEqual(identity(result), identity(source));
+    close(brepMassProperties(result, 1).volume, volume, 1e-7);
   }
 });
 

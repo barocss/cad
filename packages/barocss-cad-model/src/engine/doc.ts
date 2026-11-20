@@ -324,13 +324,23 @@ function planarFaceEditNodeProblem(input: unknown, index: number, kind: 'offset-
   return null;
 }
 
-/** Straight polygon extrusion source for the direct wall offset. Native admission checks the evaluated solid. */
-export function isStraightHexagonalExtrusion(nodes: readonly unknown[], parent: unknown): boolean {
+function straightPolygonExtrusionPointCount(nodes: readonly unknown[], parent: unknown): number | undefined {
   if (!textRecord(parent) || parent.kind !== 'extrude' || (parent.draft !== undefined && parent.draft !== 0) ||
-      !Number.isSafeInteger(parent.sketch) || typeof parent.sketch !== 'number' || parent.sketch < 0) return false;
+      !Number.isSafeInteger(parent.sketch) || typeof parent.sketch !== 'number' || parent.sketch < 0) return;
   const sketch = nodes[parent.sketch];
-  return textRecord(sketch) && sketch.kind === 'sketch' && sketch.profile === 'polygon' &&
-    Array.isArray(sketch.points) && sketch.points.length === 6;
+  if (textRecord(sketch) && sketch.kind === 'sketch' && sketch.profile === 'polygon' && Array.isArray(sketch.points))
+    return sketch.points.length;
+}
+
+/** Authored hexagonal source for the direct wall offset. Native admission checks the evaluated solid. */
+export function isStraightHexagonalExtrusion(nodes: readonly unknown[], parent: unknown): boolean {
+  return straightPolygonExtrusionPointCount(nodes, parent) === 6;
+}
+
+/** Authored polygon source for Replace face. The separate rectangular path handles rectangle sketches. */
+export function isStraightPolygonReplacementSource(nodes: readonly unknown[], parent: unknown): boolean {
+  const count = straightPolygonExtrusionPointCount(nodes, parent);
+  return count !== undefined && count >= 3 && count !== 4 && count <= CadPartLimits.points;
 }
 
 function precedingSolidIndex(parent: unknown, index: number): number | undefined {
@@ -463,8 +473,8 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const parentIndex = (node.parent as BodyRef).node;
       if (node.kind === 'replace-face') {
         if (!isBoxReplacementSource(value.nodes, parentIndex) && !isDraftedFaceReplacementSource(value.nodes, parentIndex) &&
-            !isStraightHexagonalExtrusion(value.nodes, value.nodes[parentIndex]))
-          return 'Replace face: a preceding rectangular or straight hexagonal extrusion is required.';
+            !isStraightPolygonReplacementSource(value.nodes, value.nodes[parentIndex]))
+          return 'Replace face: a preceding rectangular or supported straight polygon extrusion is required.';
         continue;
       }
       const parent = value.nodes[parentIndex];

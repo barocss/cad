@@ -3,9 +3,12 @@ import { add, cross, dist, dot, len, lerp, scale, sub } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Point, Surface } from '../types.js';
 
-const SIDE_COUNT = 6;
-const next = (i: number) => (i + 1) % SIDE_COUNT;
-const prev = (i: number) => (i + SIDE_COUNT - 1) % SIDE_COUNT;
+const HEXAGON_SIDE_COUNT = 6;
+// Match the authored Part polygon limit. The quadratic support proof is bounded by this count.
+const MAX_PRISM_SIDES = 1024;
+const supportsPrismSides = (count: number) => count >= 3 && count !== 4 && count <= MAX_PRISM_SIDES;
+const next = (i: number, count: number) => (i + 1) % count;
+const prev = (i: number, count: number) => (i + count - 1) % count;
 const samePoint = (a: Point, b: Point) => a.every((value, i) => value === b[i]);
 const pair = (a: string, b: string) => JSON.stringify(a < b ? [a, b] : [b, a]);
 const allowance = (extent: number) => 64 * Number.EPSILON * Math.max(1, extent);
@@ -67,22 +70,24 @@ export function trimFits(chart: Chart, point: Point, roundoff: number): boolean 
 /** Each nonincident corner must lie strictly inside every continued wall support. */
 function keepsSection(points: readonly Point[], walls: readonly Wall[], selected: number, distance: number, extent: number): boolean {
   const linear = linearToleranceMM(extent), roundoff = allowance(extent);
-  return walls.every(({ origin, normal }, i) => {
-    const j = next(i), edge = sub(points[j], points[i]), shift = i === selected ? distance : 0;
-    return normal[0] * edge[1] - normal[1] * edge[0] > linear && points.every((point, vertex) => {
-      const signed = dot(sub(point, origin), normal) - shift;
+  return walls.every(({ origin: [ox, oy], normal: [nx, ny] }, i) => {
+    const j = next(i, walls.length), edge = sub(points[j], points[i]), shift = i === selected ? distance : 0;
+    return nx * edge[1] - ny * edge[0] > linear && points.every(([x, y], vertex) => {
+      const signed = (x - ox) * nx + (y - oy) * ny - shift;
       return vertex === i || vertex === j ? Math.abs(signed) <= roundoff : signed < -linear;
     });
   });
 }
 
-/** Prove both straight cap rings and the six matching wall loops from native incidence. */
+/** Prove both straight cap rings and their matching wall loops from native incidence. */
 function admittedPrism(brep: Brep): Prism | undefined {
   const { bodies, shells, faces, loops, coedges, edges, vertices } = brep;
-  if (bodies.length !== 1 || bodies[0].kind !== 'solid' || shells.length !== 1 || bodies[0].shells.length !== 1
-    || bodies[0].shells[0] !== shells[0].id || !shells[0].closed || shells[0].faces.length !== 8
-    || new Set(shells[0].faces).size !== 8 || faces.length !== 8 || loops.length !== 8
-    || coedges.length !== 36 || edges.length !== 18 || vertices.length !== 12) return undefined;
+  const count = faces.length - 2;
+  if (!supportsPrismSides(count) || bodies.length !== 1 || bodies[0].kind !== 'solid' || shells.length !== 1 || bodies[0].shells.length !== 1
+    || bodies[0].shells[0] !== shells[0].id || !shells[0].closed || shells[0].faces.length !== count + 2
+    || loops.length !== count + 2 || coedges.length !== 6 * count || edges.length !== 3 * count || vertices.length !== 2 * count) return undefined;
+  const shellFaces = new Set(shells[0].faces);
+  if (shellFaces.size !== count + 2) return undefined;
   const heights = [...new Set(vertices.map(vertex => vertex.point[2]))].sort((a, b) => a - b);
   const [z0, z1] = heights, extent = geometryScaleMM(vertices.map(vertex => vertex.point)), linear = linearToleranceMM(extent);
   const roundoff = allowance(extent);
@@ -104,14 +109,14 @@ function admittedPrism(brep: Brep): Prism | undefined {
     if (low.point[0] !== high.point[0] || low.point[1] !== high.point[1] || below.has(high.id)) return undefined;
     below.set(high.id, low);
   }
-  if (below.size !== SIDE_COUNT || new Set(below.values()).size !== SIDE_COUNT) return undefined;
+  if (below.size !== count || new Set(below.values()).size !== count) return undefined;
 
   const caps: [Face?, Face?] = [], sideFaces: Face[] = [];
   for (const face of faces) {
     const loop = face.loops.length === 1 ? loopById.get(face.loops[0]) : undefined;
     const chart = affineChart(face.surface, face.sense);
-    if (!chart || loop?.kind !== 'outer' || !shells[0].faces.includes(face.id)
-      || ![4, SIDE_COUNT].includes(loop.coedges.length)) return undefined;
+    if (!chart || loop?.kind !== 'outer' || !shellFaces.has(face.id)
+      || (loop.coedges.length !== 4 && loop.coedges.length !== count)) return undefined;
     const corners: BrepVertex[] = [], boundary: BrepEdge[] = [];
     for (const coedge of loop.coedges) {
       const use = coedgeById.get(coedge), edge = use && edgeById.get(use.edge);
@@ -130,23 +135,29 @@ function admittedPrism(brep: Brep): Prism | undefined {
       || !chart.surface.controlPoints.flat().every(point => Math.abs(point[2] - z) <= roundoff)) return undefined;
     caps[cap] = binding;
   }
-  if (!caps[0] || !caps[1] || sideFaces.length !== SIDE_COUNT) return undefined;
+  if (!caps[0] || !caps[1] || sideFaces.length !== count) return undefined;
   const upper = caps[1].corners, lower: BrepVertex[] = [];
+  const lowerCorners = new Set(caps[0].corners);
   for (const vertex of upper) {
     const counterpart = below.get(vertex.id);
-    if (!counterpart || !caps[0].corners.includes(counterpart)) return undefined;
+    if (!counterpart || !lowerCorners.has(counterpart)) return undefined;
     lower.push(counterpart);
   }
 
+  const lowerRim = new Set(caps[0].edges), upperRim = new Set(caps[1].edges), faceByRim = new Map<BrepEdge, Face>();
+  for (const face of sideFaces) {
+    const rims = face.edges.filter(edge => upperRim.has(edge)), [rim] = rims;
+    if (rims.length !== 1 || faceByRim.has(rim)) return undefined;
+    faceByRim.set(rim, face);
+  }
   const walls: Wall[] = [];
-  for (let i = 0; i < SIDE_COUNT; i++) {
-    const j = next(i), rim = caps[1].edges[i];
-    const face = sideFaces.find(candidate => candidate.edges.includes(rim));
-    if (!face || walls.some(wall => wall.face === face)) return undefined;
+  for (let i = 0; i < count; i++) {
+    const j = next(i, count), rim = caps[1].edges[i], face = faceByRim.get(rim);
+    if (!face) return undefined;
     const base = edgeBetween.get(pair(lower[i].id, lower[j].id));
     const start = edgeBetween.get(pair(lower[i].id, upper[i].id));
     const end = edgeBetween.get(pair(lower[j].id, upper[j].id));
-    if (!base || !caps[0].edges.includes(base) || !start || !end
+    if (!base || !lowerRim.has(base) || !start || !end
       || ![base, start, end].every(edge => face.edges.includes(edge))) return undefined;
     const { origin, normal: [x, y] } = face.chart, length = Math.hypot(x, y);
     if (!(length > 0)) return undefined;
@@ -163,7 +174,17 @@ function namedFace(brep: Brep, name: string): boolean {
   return brep.faces.filter(face => face.name === name).length === 1;
 }
 
+/** Check the intended face kind before running the full native prism proof. */
+function namedPrismFace(brep: Brep, name: string, corners: number): boolean {
+  const count = brep.faces.length - 2;
+  if (!supportsPrismSides(count)) return false;
+  const matches = brep.faces.filter(face => face.name === name), [face] = matches;
+  return matches.length === 1 && face.loops.length === 1
+    && brep.loops.find(loop => loop.id === face.loops[0])?.coedges.length === corners;
+}
+
 function admittedWallPrism(brep: Brep, faceName: string): WallPrism | undefined {
+  if (!namedPrismFace(brep, faceName, 4)) return undefined;
   const prism = admittedPrism(brep);
   if (!prism) return undefined;
   const selected = prism.walls.findIndex(wall => wall.face.original.name === faceName);
@@ -176,17 +197,20 @@ function admittedWallPrism(brep: Brep, faceName: string): WallPrism | undefined 
 
 /** The face center and outward unit normal used by the signed offset handle. */
 export function prismWallOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
-  if (!namedFace(brep, faceName)) return undefined;
+  return brep.faces.length === HEXAGON_SIDE_COUNT + 2 ? prismWallReplacementFrame(brep, faceName) : undefined;
+}
+
+/** The face center and outward unit normal for the exact prism Replace face. */
+export function prismWallReplacementFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
   try {
     const prism = admittedWallPrism(brep, faceName);
     if (!prism) return undefined;
     const { lower, upper, walls, selected } = prism;
-    const anchor = lerp(lerp(lower[selected].point, upper[selected].point, 0.5), lerp(lower[next(selected)].point, upper[next(selected)].point, 0.5), 0.5);
+    const end = next(selected, walls.length);
+    const anchor = lerp(lerp(lower[selected].point, upper[selected].point, 0.5), lerp(lower[end].point, upper[end].point, 0.5), 0.5);
     return { anchor, normal: walls[selected].normal };
   } catch { return undefined; }
 }
-
-export const prismWallReplacementFrame = prismWallOffsetFrame;
 
 /** Intersect the two supports in coordinates local to their old corner. */
 function meet(a: Wall, b: Wall, corner: Point, offset: number, refuse = fail): Point {
@@ -236,14 +260,14 @@ export function uvPoint(chart: Chart, point: Point): Point {
 export function offsetPrismWall(brep: Brep, faceName: string, distance: number): Brep {
   if (typeof distance !== 'number' || !Number.isFinite(distance)) fail('INPUT', 'distance must be finite');
   if (!namedFace(brep, faceName)) fail('INPUT', 'the selected face name is missing or ambiguous');
-  const prism = admittedWallPrism(brep, faceName);
+  const prism = brep.faces.length === HEXAGON_SIDE_COUNT + 2 && admittedWallPrism(brep, faceName);
   if (!prism) return fail('GEOMETRY', 'pick an upright wall of one straight convex hexagonal prism');
   return offsetWall(brep, prism, distance);
 }
 
 /** The Part route uses this for a valid request before it tries the rectangular taper recipe. */
 export function offsetPrismWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
-  if (!namedFace(brep, faceName)) return undefined;
+  if (brep.faces.length !== HEXAGON_SIDE_COUNT + 2) return undefined;
   const prism = admittedWallPrism(brep, faceName);
   return prism && offsetWall(brep, prism, distance);
 }
@@ -252,7 +276,7 @@ function offsetWall(brep: Brep, prism: WallPrism, distance: number): Brep {
   if (distance === 0) return brep;
   if (Math.abs(distance) <= allowance(prism.extent)) fail('GEOMETRY', 'distance is too small to move the wall');
   const { lower, upper, walls, selected, caps } = prism;
-  const wall = walls[selected], end = next(selected), previous = prev(selected);
+  const wall = walls[selected], end = next(selected, walls.length), previous = prev(selected, walls.length);
   const a = meet(wall, walls[previous], upper[selected].point, distance);
   const b = meet(wall, walls[end], upper[end].point, distance);
   const extent = Math.max(prism.extent, geometryScaleMM([a, b]));
@@ -314,7 +338,7 @@ type ReplacementPlane = { readonly origin: Point; readonly normal: Point };
 type PrismCap = { readonly prism: Prism; readonly cap: Face; readonly end: 0 | 1 };
 
 function admittedPrismCap(brep: Brep, faceName: string): PrismCap | undefined {
-  if (!namedFace(brep, faceName)) return undefined;
+  if (!namedPrismFace(brep, faceName, brep.faces.length - 2)) return undefined;
   const prism = admittedPrism(brep);
   if (!prism) return undefined;
   const end = prism.caps[0].original.name === faceName ? 0 : prism.caps[1].original.name === faceName ? 1 : undefined;
@@ -328,8 +352,8 @@ export function prismCapReplacementFrame(brep: Brep, faceName: string): { anchor
   const { cap, end } = admitted;
   const anchor: Point = [0, 0, cap.corners[0].point[2]];
   for (const { point } of cap.corners) {
-    anchor[0] += point[0] / SIDE_COUNT;
-    anchor[1] += point[1] / SIDE_COUNT;
+    anchor[0] += point[0] / cap.corners.length;
+    anchor[1] += point[1] / cap.corners.length;
   }
   return { anchor, normal: [0, 0, end === 0 ? -1 : 1] };
 }
@@ -348,7 +372,7 @@ function replacementPlaneInput(plane: ReplacementPlane): ReplacementPlane {
   return { origin: plane.origin, normal: [plane.normal[0] / magnitude, plane.normal[1] / magnitude, plane.normal[2] / magnitude] };
 }
 
-/** Replace the upper or lower cap of the admitted straight hexagonal prism. */
+/** Replace the upper or lower cap of the admitted straight convex polygon prism. */
 export function replacePrismCapIfAdmitted(brep: Brep, faceName: string, plane: ReplacementPlane): Brep | undefined {
   const admitted = admittedPrismCap(brep, faceName);
   if (!admitted) return undefined;
@@ -364,7 +388,7 @@ export function replacePrismCapIfAdmitted(brep: Brep, faceName: string, plane: R
   const extent = Math.max(prism.extent, geometryScaleMM(points, [origin]));
   if (!(extent <= CadNumericPolicy.coordinateAbs)) return replacementFailure('GEOMETRY', 'the replacement exceeds the modeling coordinate range.');
   const heights = points.map(point => point[2]), linear = linearToleranceMM(extent);
-  // Signed height is affine over the fixed convex hexagon, so the minimum is at a corner.
+  // Signed height is affine over the fixed convex polygon, so the minimum is at a corner.
   if (heights.some(z => (z - fixed) * outward <= linear))
     return replacementFailure('GEOMETRY', 'the replacement would reach or cross the opposite cap at one corner.');
   if (Math.max(...heights) - Math.min(...heights) <= linear)
@@ -395,14 +419,13 @@ export function replacePrismCapIfAdmitted(brep: Brep, faceName: string, plane: R
   return result;
 }
 
-/** Replace one wall of the admitted straight hexagonal prism with a nonparallel plane. */
+/** Replace one wall of the admitted straight convex polygon prism with a nonparallel plane. */
 export function replacePrismWallIfAdmitted(brep: Brep, faceName: string, plane: ReplacementPlane): Brep | undefined {
-  if (!namedFace(brep, faceName)) return undefined;
   const prism = admittedWallPrism(brep, faceName);
   if (!prism) return undefined;
   const { origin, normal: unit } = replacementPlaneInput(plane);
   const { selected, walls, lower, upper, caps } = prism;
-  const wall = walls[selected], previous = prev(selected), end = next(selected);
+  const wall = walls[selected], previous = prev(selected, walls.length), end = next(selected, walls.length);
   const horizontal = Math.hypot(unit[0], unit[1]), angularRoundoff = 64 * Number.EPSILON;
   const alignment = dot(unit, wall.normal), projected = Math.abs(alignment);
   if (horizontal <= angularRoundoff || projected <= angularRoundoff)
@@ -437,7 +460,7 @@ export function replacePrismWallIfAdmitted(brep: Brep, faceName: string, plane: 
   for (const { points, supports } of sections) {
     if (!keepsSection(points, supports, selected, 0, extent)
       || points.some((point, i) => !incident(i) && supportAt(point) >= -linear * horizontal))
-      return replacementFailure('GEOMETRY', 'the replacement would collapse or cross a wall of the hexagonal section.');
+      return replacementFailure('GEOMETRY', 'the replacement would collapse or cross a wall of the polygon section.');
     if (points.some((point, i) => incident(i) && Math.abs(supportAt(point)) > roundoff))
       return replacementFailure('GEOMETRY', 'the replacement cannot preserve the reference plane and its trim.');
   }

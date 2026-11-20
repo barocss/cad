@@ -2,20 +2,20 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
-import { capCase, draftedCapOracle, draftedWallVolume, HEX_CAP_FOOTPRINT, hexWallCase, hexWallOracle, REPLACE_FACE_VARIANTS } from './replace-face-cap-fixture.mjs';
+import { capCase, draftedCapOracle, draftedWallVolume, polygonWallCase, polygonWallOracle, REPLACE_FACE_VARIANTS } from './replace-face-cap-fixture.mjs';
 
 const [output, inputFile, agentFile, variant = 'height'] = process.argv.slice(2);
 assert.ok(output && inputFile && agentFile && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
 assert.ok(REPLACE_FACE_VARIANTS.includes(variant));
-const hexWall = hexWallCase(variant);
-const draftedWall = variant === 'drafted-wall', diagonal = variant === 'diagonal' || draftedWall || !!hexWall;
+const polygonWall = polygonWallCase(variant);
+const draftedWall = variant === 'drafted-wall', diagonal = variant === 'diagonal' || draftedWall || !!polygonWall;
 const cap = capCase(variant);
-const hexStock = cap?.hex || !!hexWall;
+const stock = cap?.stock ?? polygonWall?.stock;
 const sourceFace = cap?.face ?? 'n1.side1';
 const firstFace = diagonal || cap ? 'n3.bottom' : 'n3.side1', nextFace = diagonal || cap ? 'n3.top' : 'n3.side3';
-const position = cap?.height ?? hexWall?.distance ?? ((y, z) => 37 + (diagonal ? y / 10 : 0) + z / 2);
-const movedPosition = cap?.movedHeight ?? hexWall?.movedDistance ?? ((y, z) => position(y, z) + 2);
-const retargetedPosition = cap?.retargetedHeight ?? hexWall?.retargetedDistance ??
+const position = cap?.height ?? polygonWall?.distance ?? ((y, z) => 37 + (diagonal ? y / 10 : 0) + z / 2);
+const movedPosition = cap?.movedHeight ?? polygonWall?.movedDistance ?? ((y, z) => position(y, z) + 2);
+const retargetedPosition = cap?.retargetedHeight ?? polygonWall?.retargetedDistance ??
   (diagonal ? (y, z) => movedPosition(y, z) - 3 * Math.sqrt(126) / 10 : (_y, z) => 30 + 4 * z / 10);
 // Centre of the 8 × 8 mm reference face in the authored plane.
 const diagonalPick = [48 + 4 * (1 / Math.sqrt(101) - 50 / Math.sqrt(126 * 101)),
@@ -34,8 +34,8 @@ const pins = [
 const f = await createFlow({
   name: 'replace-face', envFrozen: 'REPLACE_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: 'Replace an exact planar extrusion face with a tilted support in desktop Studio.',
-  limits: [hexWall ? 'One convex straight hexagonal prism and two tilted reference faces for its oblique wall.' :
-    cap?.hex ? 'One convex straight hexagonal prism and two tilted reference faces for its cap.' :
+  limits: [polygonWall ? `One convex ${stock.points.length}-sided prism and two tilted reference faces for its oblique wall.` :
+    cap?.stock ? `One convex ${stock.points.length}-sided prism and two tilted reference faces for its cap.` :
     cap ? `One 40 × 30 × 10 mm extrusion and two tilted reference faces for its ${variant} cap.` : draftedWall
     ? 'One 1:10 drafted rectangular extrusion and a separate tilted prism.'
     : diagonal
@@ -96,9 +96,9 @@ async function measure(label, doc, original, positionAt, donor) {
   assert.ok(reference.report.valid, reference.report.issues.join('\n'));
   assert.ok(box.report.maximumEdgeSurfaceGap < 1e-9);
   assert.ok(box.report.maximumPcurveGap < 1e-9);
-  assert.deepEqual(box.report.counts, hexStock ?
-    { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 36, edges: 18, vertices: 12 } :
-    { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+  const sides = stock?.points.length ?? 4;
+  assert.deepEqual(box.report.counts, { bodies: 1, shells: 1, faces: sides + 2, loops: sides + 2,
+    coedges: sides * 6, edges: sides * 3, vertices: sides * 2 });
   assert.deepEqual(incidence(box.brep), incidence(original.brep));
   if (donor) assert.deepEqual(reference.brep, donor.brep);
   for (const [name, [n, offset]] of Object.entries(original.supports)) {
@@ -108,7 +108,7 @@ async function measure(label, doc, original, positionAt, donor) {
     near(support, offset);
   }
   const tapered = cap?.drafted ? draftedCapOracle(cap, positionAt) : undefined;
-  const hexagonalWall = hexWall ? hexWallOracle(positionAt, hexWall.section) : undefined;
+  const wallMeasure = polygonWall ? polygonWallOracle(positionAt, polygonWall.section) : undefined;
   for (const vertex of original.brep.vertices) {
     const [x, y, z] = vertex.point, next = box.brep.vertices.find(v => v.id === vertex.id);
     const movedWall = draftedWall ? x > 20 : x === 40;
@@ -117,30 +117,30 @@ async function measure(label, doc, original, positionAt, donor) {
       const index = y < 15 ? (x < 20 ? 0 : 1) : (x < 20 ? 3 : 2);
       expected = tapered.moving[index];
     }
-    if (hexWall) {
-      const index = HEX_CAP_FOOTPRINT.findIndex(([u, v]) => x === u && y === v);
-      expected = [...hexWall.section(positionAt(0, z))[index], z];
+    if (polygonWall) {
+      const index = stock.points.findIndex(([u, v]) => x === u && y === v);
+      expected = [...polygonWall.section(positionAt(0, z))[index], z];
     }
     expected.forEach((value, axis) => near(next.point[axis], value));
   }
   // For straight stock, the mean affine thickness is its value at the footprint centroid.
-  const volume = hexagonalWall?.volume ?? (draftedWall ? draftedWallVolume(positionAt) :
-    tapered?.volume ?? (cap?.hex ? 384 * Math.abs(positionAt(9, 8) - cap.opposite) :
+  const volume = wallMeasure?.volume ?? (draftedWall ? draftedWallVolume(positionAt) :
+    tapered?.volume ?? (cap?.stock ? stock.area * Math.abs(positionAt(...stock.center) - cap.opposite) :
       cap ? 40 * 30 * Math.abs(positionAt(20, 15) - cap.opposite) : 30 * 10 * positionAt(15, 5)));
   near(box.mass.volume, volume);
   const workerVolume = shape(worker, 'b5').volume;
   near(workerVolume, volume);
   near(reference.mass.volume, diagonal || cap ? 192 : 950);
   if ((diagonal || cap) && positionAt === position) {
-    const centroid = hexagonalWall?.centroid ?? (draftedWall ? [29251159 / 1408600, 1068659 / 70430, 35390 / 7043] :
+    const centroid = wallMeasure?.centroid ?? (draftedWall ? [29251159 / 1408600, 1068659 / 70430, 35390 / 7043] :
       tapered?.centroid ?? cap?.centroid ?? [10103 / 492, 1245 / 82, 1255 / 246]);
     centroid.forEach((value, axis) => near(box.mass.centroid[axis], value));
   }
-  const corners = cap?.hex ? HEX_CAP_FOOTPRINT : cap ? [[0, 0], [40, 0], [0, 30], [40, 30]] :
+  const corners = cap?.stock ? stock.points : cap ? [[0, 0], [40, 0], [0, 30], [40, 30]] :
     [[0, 0], [30, 0], [draftedWall ? 1 : 0, 10], [draftedWall ? 29 : 30, 10]];
-  const coordinates = hexWall ? [0, 10].flatMap(z => hexWall.section(positionAt(0, z)).slice(1, 3).map(point => [...point, z])) :
+  const coordinates = polygonWall ? [0, 10].flatMap(z => polygonWall.section(positionAt(0, z)).slice(1, 3).map(point => [...point, z])) :
     tapered?.moving.map(point => point[2]) ?? corners.map(([u, v]) => positionAt(u, v));
-  f.report.observations.push({ label, axis: hexWall ? 'xy' : cap ? 'z' : 'x', coordinates, volume, nativeVolume: box.mass.volume, workerVolume,
+  f.report.observations.push({ label, axis: polygonWall ? 'xy' : cap ? 'z' : 'x', coordinates, volume, nativeVolume: box.mass.volume, workerVolume,
     maximumEdgeSurfaceGap: box.report.maximumEdgeSurfaceGap });
   return reference;
 }
@@ -161,14 +161,14 @@ await f.run(async () => {
   await open(inputFile);
   await f.same(source);
   const native = await f.inspect('source', source), original = shape(native, 'b1'), donor = shape(native, 'b4');
-  near(original.mass.volume, hexStock ? 3840 : cap?.drafted || draftedWall ? 11300 + 40 / 3 : 12000);
+  near(original.mass.volume, stock ? stock.area * 10 : cap?.drafted || draftedWall ? 11300 + 40 / 3 : 12000);
   await view(cap?.name ?? 'Right');
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const filter = button('Selection filter');
   for (let i = 0; i < 4 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
-  await point(hexWall ? [21, 4, 5] : cap?.hex ? [9, 8, cap.station] :
+  await point(polygonWall ? [21, 4, 5] : cap?.stock ? [...stock.center, cap.station] :
     cap ? [20, 15, cap.station] : [draftedWall ? 39.5 : 40, 15, 5]);
   await f.page.getByText(new RegExp('Properties and face colour: .*' + sourceFace.replace('.', '\\.'))).waitFor();
   await f.page.evaluate(() => document.activeElement?.blur());
@@ -190,7 +190,7 @@ await f.run(async () => {
   }
   f.phase = 'Accept the tilted donor';
   if (cap) await view(cap.oppositeName);
-  await point(cap?.referencePick ?? hexWall?.referencePick ?? (diagonal ? diagonalPick : [39.5, 65, 5]));
+  await point(cap?.referencePick ?? polygonWall?.referencePick ?? (diagonal ? diagonalPick : [39.5, 65, 5]));
   await status(dialog, 'preview');
   await dialog.getByText(firstFace, { exact: false }).waitFor();
   await f.snapshot('replace-tilted-preview');
@@ -213,7 +213,7 @@ await f.run(async () => {
   const history = hud('Edit Replace face');
   await history.getByText(firstFace, { exact: false }).waitFor();
   await view(cap?.name ?? 'Left');
-  await point(cap?.otherPick ?? hexWall?.otherPick ?? (diagonal ? oppositePick : [32, 65, 5]));
+  await point(cap?.otherPick ?? polygonWall?.otherPick ?? (diagonal ? oppositePick : [32, 65, 5]));
   await status(history, 'preview');
   await history.getByText(nextFace, { exact: false }).waitFor();
   await button('Apply', history).click();
@@ -232,9 +232,9 @@ await f.run(async () => {
 
   f.phase = 'Refuse a saved replacement which collapses at the opposite face';
   const stale = structuredClone(first);
-  stale.nodes[4].offset[cap ? 2 : 0] = hexWall?.collapse ?? cap?.collapse ?? -37;
+  stale.nodes[4].offset[cap ? 2 : 0] = polygonWall?.collapse ?? cap?.collapse ?? -37;
   await open({ name: 'collapsed-wall.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(stale)) });
-  await f.waitToast(hexWall ? /collapse or cross a wall of the hexagonal section.*Your part is unchanged/i :
+  await f.waitToast(polygonWall ? /collapse or cross a wall of the polygon section.*Your part is unchanged/i :
     /reach or cross the opposite (?:wall|cap).*Your part is unchanged/i);
   await f.same(agentDoc);
   await f.snapshot('replacement-collapse-refused');
