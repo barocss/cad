@@ -41,7 +41,9 @@ await withMcpSession({ app, output, clientName: 'barocss-replace-face', autonomy
   } else {
     await call('features', { action: 'command', command: 'box', values: { w: 40, d: 30, h: 10, x: 0, y: 0, z: 0 } });
   }
-  if (cap?.bore) await call('features', { action: 'add', features: [{ kind: 'hole', parent: { node: 1, side: 'solid' }, ...cap.bore }] });
+  for (const [index, bore] of (cap?.bores ?? []).entries()) {
+    await call('features', { action: 'add', features: [{ kind: 'hole', parent: { node: index + 1, side: 'solid' }, ...bore }] });
+  }
   await call('features', { action: 'add', features: [
     cap?.sketch ?? polygonWall?.sketch ?? profile,
     { kind: 'extrude', sketch: layout.donorSketch, height: diagonal || cap ? 3 : 10 },

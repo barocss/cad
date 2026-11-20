@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1443: [Replace a rectangular plate cap with two through bores](notes/replace-two-bore-plate-cap-2026-11-21/README.md), #17. Retain both exact cylindrical supports and trim rings through Studio reopen.
 - D1442: [Replace a circular tube cap with one eccentric through bore](notes/replace-eccentric-tube-cap-2026-11-21/README.md), #17. Use the actual outer-cylinder clearance and keep both exact axes and the bore diameter through Studio reopen.
 - D1441: [Replace a cap of a straight coaxial circular tube](notes/replace-coaxial-tube-cap-2026-11-21/README.md), #17. Retain both exact cylinders, both cap trim rings and the verified bore diameter through Studio reopen.
 - D1440: [Replace a cap of a straight circular cylinder](notes/replace-circular-cylinder-cap-2026-11-21/README.md), #17. Retain the outward cylinder and exact elliptical rim, then verify independent volume and Studio reopen.

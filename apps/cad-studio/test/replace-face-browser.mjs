@@ -11,8 +11,12 @@ const polygonWall = polygonWallCase(variant);
 const draftedWall = variant === 'drafted-wall', diagonal = variant === 'diagonal' || draftedWall || !!polygonWall;
 const cap = capCase(variant);
 const stock = cap?.stock ?? polygonWall?.stock;
-const curvedRims = { ...(cap?.bore && { inner: cap.bore }), ...(cap?.cylinder && { outer: cap.cylinder }) };
+const curvedRims = [
+  ...(cap?.bores ?? []).map(bore => ({ ...bore, kind: 'inner' })),
+  ...(cap?.cylinder ? [{ ...cap.cylinder, kind: 'outer' }] : []),
+];
 const tube = cap?.bore && cap?.cylinder;
+const boreCount = cap?.bores.length ?? 0;
 const layout = replaceFaceLayout(cap);
 const sourceFace = cap?.face ?? 'n1.side1';
 const donorPrefix = `n${layout.donorExtrude}.`;
@@ -33,6 +37,7 @@ const pins = [
   'apps/cad-studio/test/replace-face-cap-fixture.mjs',
   'packages/barocss-cad-model/src/app/replaceFaceCommand.ts', 'packages/barocss-cad-model/src/engine/offsetPlane.ts',
   'packages/barocss-cad-model/src/engine/doc.ts', 'packages/barocss-cad-model/src/engine/errors.ts',
+  'packages/barocss-cad/src/features/bored-cap-offset.ts',
   'packages/barocss-cad/src/features/drafted-cap-offset.ts', 'packages/barocss-cad/src/features/prism-wall-offset.ts',
   'packages/barocss-cad/src/part/part-expect.ts',
 ];
@@ -40,7 +45,7 @@ const f = await createFlow({
   name: 'replace-face', envFrozen: 'REPLACE_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: 'Replace an exact planar extrusion face with a tilted support in desktop Studio.',
   limits: [tube ? 'One straight circular tube and two tilted reference faces for its cap.' :
-    cap?.bore ? 'One rectangular through-bore plate and two tilted reference faces for its cap.' :
+    cap?.bore ? `One rectangular plate with ${boreCount} through bore(s) and two tilted reference faces for its cap.` :
     cap?.cylinder ? 'One straight circular cylinder and two tilted reference faces for its cap.' :
     polygonWall ? `One convex ${stock.points.length}-sided prism and two tilted reference faces for its oblique wall.` :
     cap?.stock ? `One convex ${stock.points.length}-sided prism and two tilted reference faces for its cap.` :
@@ -56,14 +61,14 @@ import { partBreps } from '@barocss/cad-model/engine/evaluate';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 function curvedRim(brep) {
   const cap = brep.faces.find(face => face.name === ${JSON.stringify(sourceFace)});
-  return Object.fromEntries(${JSON.stringify(Object.keys(curvedRims))}.map(kind => {
-    const loop = brep.loops.find(loop => cap?.loops.includes(loop.id) && loop.kind === kind);
-    const samples = loop?.coedges.map(id => {
+  const kinds = ${JSON.stringify([...new Set(curvedRims.map(rim => rim.kind))])};
+  return brep.loops.filter(loop => cap?.loops.includes(loop.id) && kinds.includes(loop.kind)).map(loop => ({
+    kind: loop.kind,
+    samples: loop.coedges.map(id => {
       const coedge = brep.coedges.find(use => use.id === id);
       const edge = brep.edges.find(edge => edge.id === coedge.edge);
       return Array.from({ length: 17 }, (_, index) => evaluateCurve(edge.curve, index / 16));
-    }) ?? [];
-    return [kind, samples];
+    }),
   }));
 }
 console.log(JSON.stringify(partBreps(doc).map(({ key, brep }) => ({
@@ -120,7 +125,8 @@ async function measure(label, doc, original, positionAt, donor) {
   const sides = stock?.points.length ?? 4;
   assert.deepEqual(box.report.counts, tube ?
     { bodies: 1, shells: 1, faces: 6, loops: 8, coedges: 24, edges: 12, vertices: 8 } : cap?.bore ?
-    { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 } :
+    { bodies: 1, shells: 1, faces: 6 + 2 * boreCount, loops: 6 + 4 * boreCount,
+      coedges: 24 + 12 * boreCount, edges: 12 + 6 * boreCount, vertices: 8 + 4 * boreCount } :
     cap?.cylinder ? { bodies: 1, shells: 1, faces: 4, loops: 4, coedges: 12, edges: 6, vertices: 4 } :
     { bodies: 1, shells: 1, faces: sides + 2, loops: sides + 2, coedges: sides * 6, edges: sides * 3, vertices: sides * 2 });
   assert.deepEqual(incidence(box.brep), incidence(original.brep));
@@ -132,10 +138,13 @@ async function measure(label, doc, original, positionAt, donor) {
     if (Array.isArray(offset)) offset.forEach((value, axis) => near(support[axis], value));
     else near(support, offset);
   }
-  for (const [kind, { center: [cx, cy], radius }] of Object.entries(curvedRims)) {
-    assert.equal(box.report.topology[0].genus, cap.bore ? 1 : 0);
-    assert.equal(box.curvedRim[kind].length, 2);
-    for (const [x, y, z] of box.curvedRim[kind].flat()) {
+  assert.equal(box.curvedRim.length, curvedRims.length);
+  assert.equal(box.report.topology[0].genus, boreCount);
+  for (const { kind, center: [cx, cy], radius } of curvedRims) {
+    const rims = box.curvedRim.filter(rim => rim.kind === kind && rim.samples.length === 2 &&
+      rim.samples.flat().every(([x, y]) => Math.abs(Math.hypot(x - cx, y - cy) - radius) < 1e-7));
+    assert.equal(rims.length, 1);
+    for (const [x, y, z] of rims[0].samples.flat()) {
       near(Math.hypot(x - cx, y - cy), radius);
       near(z, positionAt(x, y));
     }
@@ -161,7 +170,7 @@ async function measure(label, doc, original, positionAt, donor) {
   const volume = curved?.volume ?? wallMeasure?.volume ?? (draftedWall ? draftedWallVolume(positionAt) :
     tapered?.volume ?? (cap?.stock ? stock.area * Math.abs(positionAt(...stock.center) - cap.opposite) :
       cap ? 40 * 30 * Math.abs(positionAt(20, 15) - cap.opposite) : 30 * 10 * positionAt(15, 5)));
-  const volumeTolerance = tube ? volume * 1e-9 : 1e-7;
+  const volumeTolerance = tube || boreCount > 1 ? volume * 1e-9 : 1e-7;
   near(box.mass.volume, volume, volumeTolerance);
   const workerVolume = shape(worker, layout.editedBody).volume;
   near(workerVolume, volume, volumeTolerance);
@@ -174,7 +183,7 @@ async function measure(label, doc, original, positionAt, donor) {
   const corners = cap?.stock ? stock.points : cap ? [[0, 0], [40, 0], [0, 30], [40, 30]] :
     [[0, 0], [30, 0], [draftedWall ? 1 : 0, 10], [draftedWall ? 29 : 30, 10]];
   const coordinates = polygonWall ? [0, 10].flatMap(z => polygonWall.section(positionAt(0, z)).slice(1, 3).map(point => [...point, z])) :
-    cap?.cylinder ? box.curvedRim.outer.flat().map(([x, y]) => positionAt(x, y)) :
+    cap?.cylinder ? box.curvedRim.find(rim => rim.kind === 'outer').samples.flat().map(([x, y]) => positionAt(x, y)) :
       tapered?.moving.map(point => point[2]) ?? corners.map(([u, v]) => positionAt(u, v));
   f.report.observations.push({ label, axis: polygonWall ? 'xy' : cap ? 'z' : 'x', coordinates, volume, nativeVolume: box.mass.volume, workerVolume,
     maximumEdgeSurfaceGap: box.report.maximumEdgeSurfaceGap });
@@ -198,7 +207,7 @@ await f.run(async () => {
   await f.same(source);
   const native = await f.inspect('source', source), original = shape(native, layout.stockBody), donor = shape(native, layout.donorBody);
   near(original.mass.volume, cap?.cylinder ? 10 * Math.PI * (cap.cylinder.radius ** 2 - (cap.bore?.radius ?? 0) ** 2) :
-    cap?.bore ? 12000 - 10 * Math.PI * cap.bore.radius ** 2 :
+    cap?.bore ? 12000 - 10 * Math.PI * cap.bores.reduce((sum, bore) => sum + bore.radius ** 2, 0) :
     stock ? stock.area * 10 : cap?.drafted || draftedWall ? 11300 + 40 / 3 : 12000);
   await view(cap?.name ?? 'Right');
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();

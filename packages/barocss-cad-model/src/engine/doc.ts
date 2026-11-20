@@ -352,12 +352,16 @@ function precedingSolidParent(node: Record<string, unknown>, index: number): num
   return precedingSolidIndex(node.parent, index);
 }
 
-function throughHoleStockProfile(nodes: readonly unknown[], index: number): unknown {
+function throughHoleStockIndex(nodes: readonly unknown[], index: number): number | undefined {
   const hole = nodes[index];
   if (!textRecord(hole) || hole.kind !== 'hole' || (hole.axis !== undefined && hole.axis !== 'z') ||
       hole.depth !== undefined || hole.pattern !== undefined || hole.countersink !== undefined || hole.csk !== undefined ||
       hole.thread !== undefined) return;
-  const stockIndex = precedingSolidParent(hole, index);
+  return precedingSolidParent(hole, index);
+}
+
+function throughHoleStockProfile(nodes: readonly unknown[], index: number): unknown {
+  const stockIndex = throughHoleStockIndex(nodes, index);
   if (stockIndex === undefined) return;
   const stock = nodes[stockIndex];
   if (!textRecord(stock) || stock.kind !== 'extrude' || (stock.draft !== undefined && stock.draft !== 0) ||
@@ -371,7 +375,13 @@ export function isBoredPlateHole(nodes: readonly unknown[], index: number): bool
   return throughHoleStockProfile(nodes, index) === 'rectangle';
 }
 
-/** Authored cylindrical extrusion with one straight through bore. The kernel verifies coaxial supports. */
+/** Authored rectangular plate with one or two straight through bores. The kernel verifies both trims. */
+export function isBoredPlateReplacementSource(nodes: readonly unknown[], index: number): boolean {
+  const stockIndex = throughHoleStockIndex(nodes, index);
+  return isBoredPlateHole(nodes, index) || (stockIndex !== undefined && isBoredPlateHole(nodes, stockIndex));
+}
+
+/** Authored cylindrical extrusion with one straight through bore. The kernel verifies both supports. */
 export function isAnnularReplacementSource(nodes: readonly unknown[], index: number): boolean {
   return throughHoleStockProfile(nodes, index) === 'circle';
 }
@@ -487,7 +497,7 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const parentIndex = (node.parent as BodyRef).node;
       if (node.kind === 'replace-face') {
         if (!isBoxReplacementSource(value.nodes, parentIndex) && !isDraftedFaceReplacementSource(value.nodes, parentIndex) &&
-            !isStraightPolygonReplacementSource(value.nodes, value.nodes[parentIndex]) && !isBoredPlateHole(value.nodes, parentIndex) &&
+            !isStraightPolygonReplacementSource(value.nodes, value.nodes[parentIndex]) && !isBoredPlateReplacementSource(value.nodes, parentIndex) &&
             !isCylinderReplacementSource(value.nodes, parentIndex) && !isAnnularReplacementSource(value.nodes, parentIndex))
           return 'Replace face: select a supported extrusion or a cap with a supported through bore.';
         continue;

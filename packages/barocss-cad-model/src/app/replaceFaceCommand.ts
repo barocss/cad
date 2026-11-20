@@ -1,5 +1,5 @@
 import {
-  isAnnularReplacementSource, isBoredPlateHole, isBoxReplacementSource, isCylinderReplacementSource, isDraftedFaceReplacementSource,
+  isAnnularReplacementSource, isBoredPlateReplacementSource, isBoxReplacementSource, isCylinderReplacementSource, isDraftedFaceReplacementSource,
   isStraightPolygonReplacementSource, withNode, type StudioDoc,
 } from '../engine/doc';
 import { captureSignatures } from '../engine/references';
@@ -20,7 +20,7 @@ function pickedFace(ctx: Ctx) {
   const boxFace = face.nativeAxisPlane && isBoxReplacementSource(ctx.doc.nodes, parent.node);
   const polygonFace = isStraightPolygonReplacementSource(ctx.doc.nodes, ctx.doc.nodes[parent.node]);
   const circularCap = face.nativeAxisPlane?.axis === 'z' &&
-    (isBoredPlateHole(ctx.doc.nodes, parent.node) || isCylinderReplacementSource(ctx.doc.nodes, parent.node) ||
+    (isBoredPlateReplacementSource(ctx.doc.nodes, parent.node) || isCylinderReplacementSource(ctx.doc.nodes, parent.node) ||
      isAnnularReplacementSource(ctx.doc.nodes, parent.node));
   if (!boxFace && !polygonFace && !circularCap && !isDraftedFaceReplacementSource(ctx.doc.nodes, parent.node)) return;
   return { parent, face: face.name };

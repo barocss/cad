@@ -4,7 +4,7 @@ import { BrepError, checkBrep, createCylindricalBoreCheck, evaluateCadPart, eval
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
 import {
   annularCapReplacementFrame, boredCapOffsetFrame, boredCapReplacementFrame, circularCapReplacementFrame,
-  offsetBoredCapIfAdmitted, replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted,
+  healBoredPlateIfAdmitted, offsetBoredCapIfAdmitted, replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted,
 } from '../dist/features/bored-cap-offset.js';
 
 const plate = ({ min = [0, 0], max = [40, 30], height = 10, from = 0, center = [11, 9], radius = 3, ...ends } = {}) => ({
@@ -67,6 +67,76 @@ const tube = (center = [14, 12]) => {
   doc.features.push({ id: 'h', kind: 'hole', target: 'c', face: 'c.top', center, radius: 4 });
   return doc;
 };
+
+const twoBorePlate = () => {
+  const doc = plate();
+  doc.features.push({ id: 'j', kind: 'hole', target: 'h', center: [27, 20], radius: 2, face: 'b.top' });
+  return doc;
+};
+
+for (const sign of [1, -1]) {
+  const face = sign === 1 ? 'b.top' : 'b.bottom', fixedZ = sign === 1 ? 0 : 10;
+  test(`replace ${face} of a native two-bore plate with both exact trim rings intact`, () => {
+    const doc = twoBorePlate(), source = freeze(solid(doc)), before = structuredClone(source);
+    const height = (x, y) => fixedZ + sign * (8 + x / 10 + y / 5);
+    const plane = { origin: [0, 0, height(0, 0)], normal: [-1, -2, 10 * sign] };
+    const frame = boredCapReplacementFrame(source, face);
+    assert.deepEqual(frame.normal, [0, 0, sign]);
+    const [ax, ay, az] = frame.anchor;
+    close(az, 10 - fixedZ);
+    const bores = [[11, 9, 3], [27, 20, 2]];
+    assert.ok(ax > 0 && ax < 40 && ay > 0 && ay < 30);
+    for (const [x, y, radius] of bores) assert.ok(Math.hypot(ax - x, ay - y) > radius);
+
+    const result = replaceBoredCapIfAdmitted(source, face, plane);
+    const report = checkBrep(result, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 10, loops: 14, coedges: 48, edges: 24, vertices: 16 });
+    assert.equal(report.topology[0].genus, 2);
+    assert.ok(report.maximumPcurveGap < 1e-9 && report.maximumEdgeSurfaceGap < 1e-9);
+    assert.deepEqual(incidence(result), incidence(source));
+    const moving = result.faces.find(candidate => candidate.name === face);
+    const innerRims = result.loops.filter(loop => moving.loops.includes(loop.id) && loop.kind === 'inner');
+    assert.equal(innerRims.length, 2);
+    const walls = result.faces.map(candidate => faceGeometry(candidate)).filter(g => g.kind === 'cylinder');
+    assert.equal(walls.length, 4);
+    for (const [cx, cy, radius] of bores) {
+      const halves = walls.filter(g => Math.hypot(g.c[0] - cx, g.c[1] - cy) < 1e-9);
+      assert.equal(halves.length, 2);
+      for (const half of halves) {
+        close(half.r, radius);
+        assert.deepEqual([half.a, half.out], [[0, 0, 1], -1]);
+      }
+      const rings = innerRims.filter(loop => loop.coedges.every(id => {
+        const use = result.coedges.find(candidate => candidate.id === id);
+        const { curve } = result.edges.find(edge => edge.id === use.edge);
+        return Array.from({ length: 33 }, (_, index) => evaluateCurve(curve, index / 32))
+          .every(([x, y, z]) => Math.abs(Math.hypot(x - cx, y - cy) - radius) < 1e-9 && Math.abs(z - height(x, y)) < 1e-9);
+      }));
+      assert.equal(rings.length, 1);
+      assert.equal(rings[0].coedges.length, 2);
+    }
+    close(brepMassProperties(result, 1).volume, 15600 - 156.9 * Math.PI, 1e-6);
+    const change = { id: 'replace', kind: 'replace-face', target: 'j', face, plane };
+    assert.deepEqual(solid({ ...doc, features: [...doc.features, change] }), result);
+    assert.throws(() => replaceBoredCapIfAdmitted(source, face, { ...plane, origin: [0, 0, fixedZ] }), /opposite cap at one corner/);
+    assert.equal(boredCapOffsetFrame(source, face), undefined);
+    assert.equal(offsetBoredCapIfAdmitted(source, face, 1), undefined);
+    for (const candidate of source.faces.filter(candidate => faceGeometry(candidate).kind === 'cylinder')) {
+      assert.equal(healBoredPlateIfAdmitted(source, candidate.name), undefined);
+    }
+    assert.deepEqual(source, before);
+  });
+}
+
+test('a rectangular plate with three straight bores stays outside the two-bore replacement', () => {
+  const doc = twoBorePlate();
+  doc.features.push({ id: 'k', kind: 'hole', target: 'j', center: [8, 23], radius: 2, face: 'b.top' });
+  const source = solid(doc);
+  assert.equal(checkBrep(source, { strict: true }).topology[0].genus, 3);
+  assert.equal(boredCapReplacementFrame(source, 'b.top'), undefined);
+  assert.equal(replaceBoredCapIfAdmitted(source, 'b.top', { origin: [0, 0, 8], normal: [-1, -2, 10] }), undefined);
+});
 
 for (const [boreX, sign] of [[14, 1], [14, -1], [16, 1], [16, -1]]) {
   const face = sign === 1 ? 'c.top' : 'c.bottom', fixedZ = sign === 1 ? 0 : 10;
