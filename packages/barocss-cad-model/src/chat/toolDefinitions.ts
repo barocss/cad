@@ -86,6 +86,7 @@ const PART_TOOLS: ToolDefinition[] = [
         edges: selectorList('Edges to select'),
         bodies: { ...nameList, description: 'Body keys to select (e.g. "b1").' },
         point: { type: 'array', items: { type: 'number' }, description: 'Optional picked point [x, y, z] on the face (hole default centre).' },
+        expectedRevision: { type: 'string', description: 'Revision from query.render or query.rebuild in the same part scope. Refuses before selecting any geometry if the part has changed.' },
       },
       required: ['command'], additionalProperties: false,
     },

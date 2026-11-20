@@ -151,7 +151,21 @@ function removeRows<T extends { id: string }>(rows: readonly T[] | undefined, re
   return { rows: was.filter(r => !remove.includes(r.id)) };
 }
 
+function checkFeatureRevision(state: ChatState, expectedRevision: unknown, action: 'EDIT' | 'COMMAND') {
+  if (expectedRevision === undefined) return;
+  if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(expectedRevision))
+    return fail(state, 'Set expectedRevision to the 16-digit revision from query.render or query.rebuild for the same part.', { code: action + '_INPUT' });
+  const revision = revisionOf(state.doc);
+  if (revision !== expectedRevision)
+    return fail(state, 'The part changed since the requested revision. Review the current part again before ' +
+      (action === 'EDIT' ? 'editing.' : 'running the command.'), {
+      code: action + '_STALE', expectedRevision, revision, kept: 'the part is unchanged',
+    });
+}
+
 async function runCommandTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {
+  const refusal = checkFeatureRevision(state, args.expectedRevision, 'COMMAND');
+  if (refusal) return refusal;
   const cmd = commandById(String(args.command));
   if (!cmd?.build) return fail(state, `Unknown command "${String(args.command)}". Commands: ${CHAT_COMMANDS.join(', ')}.`);
   // (Faces and edges by name or by selector, A1.2: each selector resolves to its name, reported back.)
@@ -236,16 +250,8 @@ async function addFeaturesTool(state: ChatState, args: Record<string, unknown>, 
   return accept(state, doc, evaluate, options, `added ${list.length} feature${list.length > 1 ? 's' : ''}`, { added: doc.nodes.slice(state.doc.nodes.length).map((n, k) => `${state.doc.nodes.length + k}: ${featureLabel(n, state.doc.nodes.length + k, doc.nodes)}`), ...(solves.length ? { skeletons: solves } : {}) });
 }
 async function editFeatureTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {
-  const { expectedRevision } = args;
-  if (expectedRevision !== undefined) {
-    if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(expectedRevision))
-      return fail(state, 'Set expectedRevision to the 16-digit revision from query.render or query.rebuild for the same part.', { code: 'EDIT_INPUT' });
-    const revision = revisionOf(state.doc);
-    if (revision !== expectedRevision)
-      return fail(state, 'The part changed since the requested revision. Review the current part again before editing.', {
-        code: 'EDIT_STALE', expectedRevision, revision, kept: 'the part is unchanged',
-      });
-  }
+  const refusal = checkFeatureRevision(state, args.expectedRevision, 'EDIT');
+  if (refusal) return refusal;
   const index = Number(args.index), nodes = state.doc.nodes;
   if (!Number.isInteger(index) || !nodes[index]) return fail(state, `There is no feature ${String(args.index)} (features 0–${nodes.length - 1}).`);
   const retainBox = args.retainBoxCommand === true;

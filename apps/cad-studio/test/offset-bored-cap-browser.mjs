@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
@@ -9,7 +10,9 @@ const cap = lower ? 'n1.bottom' : 'n1.top';
 const sign = lower ? -1 : 1;
 const level = lower ? 0 : 10;
 const area = 40 * 30 - 9 * Math.PI;
-const source = {
+const input = process.argv[3] && process.argv[3] !== '--lower' ? process.argv[3] : undefined;
+const inputBytes = input && await readFile(input);
+const source = inputBytes ? JSON.parse(inputBytes) : {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
     { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 30] },
@@ -102,9 +105,10 @@ await f.run(async () => {
   await f.newPage();
   await f.page.setViewportSize({ width: lower ? 1024 : 1440, height: 900 });
   const [file] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
-  await file.setFiles({ name: 'bored-plate.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
+  await file.setFiles(input ?? { name: 'bored-plate.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
   await f.same(source);
   const original = await measure('source-shape', source, 0);
+  if (input) await f.snapshot('mcp-bored-plate-opened');
   let bottomTurnStarted;
   if (lower) {
     await button('View cube directions').click();
@@ -193,4 +197,5 @@ await f.run(async () => {
   assert.equal(await offset(hud('Edit Offset face')).inputValue(), '-2');
   await button('Cancel', hud('Edit Offset face')).click();
   await f.same(inward);
+  if (input) assert.deepEqual(await readFile(input), inputBytes, 'Studio preserves the original MCP file');
 });

@@ -14,7 +14,7 @@ Edit the feature tree. Pick faces and edges by name ("n1.top", "n1.side0|n1.side
 
 | Action | Handler | Arguments and notes |
 |---|---|---|
-| `features.command` | `run_command` | command, values?, faces?, edges?, bodies?, point? — a studio command as the toolbar runs it |
+| `features.command` | `run_command` | command, values?, faces?, edges?, bodies?, point?, expectedRevision? — Studio command |
 | `features.add` | `add_features` | features: [node] — raw feature nodes (sketches, extrudes, revolves, sweeps, lofts, …) |
 | `features.edit` | `edit_feature` | index, values? \| feature?, expectedRevision? |
 | `features.parameters` | `set_parameters` | add?, set?, rename?, bind?, remove? — named parameters; bind a feature's value to one |

@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1422: [Review-pinned feature commands](notes/review-pinned-feature-command-2026-11-21/README.md), #324; refuse a stale Hole command and verify the accepted hole through a native Studio file round trip.
+
 - D1421: [Review-pinned feature edits](notes/review-pinned-feature-edit-2026-11-21/README.md), #324; an optional reviewed revision guards editing in the same part scope, with actual MCP refusal and native Studio handoff proof.
 
 - D1420: [Through-hole plate cap Offset](notes/bored-plate-cap-offset-2026-11-21/README.md), #17; move either cap with the planar walls and cylindrical bore intact through signed drag, edit and native reopen.
