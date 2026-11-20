@@ -1,0 +1,9 @@
+# Section exclusions through isolation, Undo and Open (#258)
+
+Evidence only, tested on `6fddbc7de87186e37962b70d58915b352347b21c` in actual desktop Chrome with a live WebGL2 rendering context. The synthetic Model document places two rotated top-level occurrences of the same box, with no base-part solids. Start a single X Section at −1 mm and exclude Plate 2 (`p2`) through the normal UI.
+
+- [Isolate Plate 1](02-isolated-p1-exclusion-still-scoped.png): Plate 2 becomes faded and is not pickable at the removed-side probe [−4,40,11]. The retained-side Plate 1 probe still selects Plate 1; the X plane and the live `p2` exclusion remain unchanged. [Restore view](03-restored-view-p2-whole.png) makes Plate 2 whole and pickable at the same probe. Document, visible History, dirty state and Undo/Redo control enablement remain unchanged across isolation and restore.
+- Removing Plate 2 clears the exclusion but leaves the X plane active. [Undo](05-undo-restores-p2-not-its-exclusion.png) restores the exact original document and Plate 2 without reviving its old exclusion. The removed-side probe misses; the retained-side probe [0,40,11] selects Plate 2. The X plane was still active immediately after Undo.
+- With Plate 2 excluded again, explicitly opening a different synthetic document using the same occurrence IDs clears both Section and the exclusion. Turning the same X Section on in the new source does not transfer the old exclusion: the removed-side probe still misses, and the retained-side probe selects Plate 2.
+
+No downloads or application changes were needed. The three cases do not cover the Hide command, nested occurrences, all cap/edge picking routes, the complete Undo stack or every interruption. This run used WebGL2 only; the separate placed-only Section drag check covers both backends.
