@@ -122,8 +122,8 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'delete_feature',
-    description: 'Deletes a feature (and the sketches only it used). Refused while a later feature uses it. Later features move down one index per deleted node; face and edge names keep their feature ids (`n<k>`), so names in results stay as they were.',
-    input_schema: { type: 'object', properties: { index: { type: 'integer' } }, required: ['index'], additionalProperties: false },
+    description: 'Deletes the feature at index and any sketches only it used. Refused while a later feature uses it. Deletion shifts later indices and keeps their feature IDs. Send expectedRevision from query.render or query.rebuild in the same part scope. A stale pin refuses before resolving the index. After a refusal, read the current feature tree before selecting an index again.',
+    input_schema: { type: 'object', properties: { index: { type: 'integer' }, expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$' } }, required: ['index'], additionalProperties: false },
   },
   {
     name: 'get_image_layers',

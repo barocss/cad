@@ -10,7 +10,7 @@ Builds or changes the part with a script, all or nothing (the language is below)
 
 ### `features`: Features
 
-Edit the feature tree. Pick faces and edges by name ("n1.top", "n1.side0|n1.side1") or selector ({"feature": 1, "role": "top"}, {"normal": [0, 0, 1], "pick": "max"}, {"between": [face, face]}).
+Edit features. Use face and edge names ("n1.top", "n1.side0|n1.side1") or selectors ({"feature":1,"role":"top"}, {"normal":[0,0,1],"pick":"max"}, {"between":[face,face]}).
 
 | Action | Handler | Arguments and notes |
 |---|---|---|
@@ -19,7 +19,7 @@ Edit the feature tree. Pick faces and edges by name ("n1.top", "n1.side0|n1.side
 | `features.edit` | `edit_feature` | index, values? \| feature?, expectedRevision? |
 | `features.parameters` | `set_parameters` | add?, set?, rename?, bind?, remove? — named parameters; bind a feature's value to one |
 | `features.load_rows` | `load_rows` | kind, file, part?, feature? — rows from the person’s conversation file |
-| `features.delete` | `delete_feature` | index |
+| `features.delete` | `delete_feature` | index, expectedRevision? |
 | `features.material` | `set_material` | material, bodies?, part? — what bodies are made of |
 | `features.stock` | `set_stock` | file?, remove?, allowance? — the shop's stock list and the allowance |
 | `features.frame_stock` | `set_frame_stock` | file?, remove?, kerf? — the shop's stock lengths for frames and the saw's kerf |

@@ -72,9 +72,10 @@ changed before making another edit. Body details depend on `response_format` and
 list does not mean the body has no faces. Read the part summary before using a face or edge name you have not seen.
 
 To work on the version you reviewed, pass the `revision` from `query.render` or `query.rebuild` as
-`expectedRevision` on `features.edit` or `features.command`. Use the same part scope for both calls.
-If the model has changed, `EDIT_STALE` or `COMMAND_STALE` returns the requested and current revisions.
-Review the current part before resubmitting. In a batch, the pin applies to the document at the operation's position.
+`expectedRevision` on `features.edit`, `features.command` or `features.delete`. Use the same part scope for both calls.
+If the model has changed, `EDIT_STALE`, `COMMAND_STALE` or `DELETE_STALE` returns the requested and current revisions.
+Review the current part before resubmitting. For delete, read the current feature tree to find the new index.
+In a batch, the pin applies to the document at the operation's position.
 
 A part-tool refusal returns `ok: false` and `error`; fields such as `code`, `detail` and `kept` appear when the handler
 supplies them. Do not assume every tool result has the object API's `code`, `where` and `details` error fields.

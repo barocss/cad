@@ -154,14 +154,15 @@ function removeRows<T extends { id: string }>(rows: readonly T[] | undefined, re
   return { rows: was.filter(r => !remove.includes(r.id)) };
 }
 
-function checkFeatureRevision(state: ChatState, expectedRevision: unknown, action: 'EDIT' | 'COMMAND') {
+const featureRevisionAction = { EDIT: 'editing', COMMAND: 'running the command', DELETE: 'deleting the feature' } as const;
+
+function checkFeatureRevision(state: ChatState, expectedRevision: unknown, action: keyof typeof featureRevisionAction) {
   if (expectedRevision === undefined) return;
   if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(expectedRevision))
     return fail(state, 'Set expectedRevision to the 16-digit revision from query.render or query.rebuild for the same part.', { code: action + '_INPUT' });
   const revision = revisionOf(state.doc);
   if (revision !== expectedRevision)
-    return fail(state, 'The part changed since the requested revision. Review the current part again before ' +
-      (action === 'EDIT' ? 'editing.' : 'running the command.'), {
+    return fail(state, `The part changed since the requested revision. Review the current part again before ${featureRevisionAction[action]}.`, {
       code: action + '_STALE', expectedRevision, revision, kept: 'the part is unchanged',
     });
 }
@@ -299,6 +300,8 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
     rm.changes.length ? { rematched: rm.changes.map(c => ({ feature: c.node, was: c.from, now: c.to })), note_rematched: 'these stored names were renumbered by the edit and matched again by their geometry; check them' } : {}, true);
 }
 async function deleteFeatureTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {
+  const refusal = checkFeatureRevision(state, args.expectedRevision, 'DELETE');
+  if (refusal) return refusal;
   const r = deleteFeature(state.doc, Number(args.index));
   if ('error' in r) return fail(state, r.error);
   return accept(state, r.doc, evaluate, options, `deleted feature${r.removed.length > 1 ? 's' : ''} ${r.removed.join(', ')}`, { note_indices: 'later features moved down; face and edge names (by feature id) stayed as they were' });
