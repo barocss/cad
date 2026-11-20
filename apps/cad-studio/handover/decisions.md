@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1441: [Replace a cap of a straight coaxial circular tube](notes/replace-coaxial-tube-cap-2026-11-21/README.md), #17. Retain both exact cylinders, both cap trim rings and the verified bore diameter through Studio reopen.
 - D1440: [Replace a cap of a straight circular cylinder](notes/replace-circular-cylinder-cap-2026-11-21/README.md), #17. Retain the outward cylinder and exact elliptical rim, then verify independent volume and Studio reopen.
 - D1439: [Verify a through-bore diameter after a tilted cap replacement](notes/tilted-bore-diameter-2026-11-21/README.md), #17. Authenticate the exact projected rim, then read the same diameter through Studio Requirements and MCP.
 - D1438: [Replace a cap on a rectangular plate with one through bore](notes/replace-bored-plate-cap-2026-11-21/README.md), #17. Keep the exact cylindrical support and all trim IDs through a tilted cap, with independent mass and Studio reopen.

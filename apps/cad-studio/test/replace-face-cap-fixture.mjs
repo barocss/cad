@@ -6,7 +6,7 @@ const trapezoid = { points: [[0, 0], [18, 0], [24, 16], [0, 16]], area: 336, cen
 export const REPLACE_FACE_VARIANTS = [
   'height', 'diagonal', 'upper', 'lower', 'drafted-upper', 'drafted-lower', 'drafted-wall',
   'hex-upper', 'hex-lower', 'hex-wall', 'hex-wall-turn', 'hex-wall-turn-tilt', 'pentagon-upper', 'heptagon-wall',
-  'trapezoid-upper', 'trapezoid-wall', 'bored-upper', 'bored-lower', 'cylinder-upper', 'cylinder-lower',
+  'trapezoid-upper', 'trapezoid-wall', 'bored-upper', 'bored-lower', 'cylinder-upper', 'cylinder-lower', 'tube-upper', 'tube-lower',
 ];
 
 export function replaceFaceLayout(cap) {
@@ -61,11 +61,12 @@ export function polygonWallOracle(distance, section) {
 /** A stock cap and a separate 8 × 8 × 3 mm reference extruded from the exact tilted plane. */
 export function capCase(variant) {
   const drafted = variant.startsWith('drafted-');
-  const bore = variant.startsWith('bored-') ? { center: [11, 9], radius: 3 } : undefined;
-  const cylinder = variant.startsWith('cylinder-') ? { center: [14, 12], radius: 8 } : undefined;
+  const tube = variant.startsWith('tube-');
+  const bore = tube ? { center: [14, 12], radius: 4 } : variant.startsWith('bored-') ? { center: [11, 9], radius: 3 } : undefined;
+  const cylinder = tube ? { center: [14, 12], radius: 12 } : variant.startsWith('cylinder-') ? { center: [14, 12], radius: 8 } : undefined;
   const stock = variant.startsWith('hex-') ? hexagon : variant.startsWith('pentagon-') ? pentagon :
     variant.startsWith('trapezoid-') ? trapezoid : undefined;
-  const end = variant.replace(/^(?:drafted|hex|pentagon|trapezoid|bored|cylinder)-/, '');
+  const end = variant.replace(/^(?:drafted|hex|pentagon|trapezoid|bored|cylinder|tube)-/, '');
   if (end !== 'upper' && end !== 'lower') return;
   const direction = end === 'upper' ? 1 : -1;
   const station = direction === 1 ? 10 : 0, opposite = 10 - station;
@@ -111,10 +112,11 @@ export function boredCapOracle(cap, support) {
 
 export function cylinderCapOracle(cap, support) {
   const { direction, opposite, cylinder: { center: [x, y], radius } } = cap;
-  const h = (support(x, y) - opposite) * direction, variance = radius ** 2 / 4;
+  const innerSquared = (cap.bore?.radius ?? 0) ** 2;
+  const h = (support(x, y) - opposite) * direction, variance = (radius ** 2 + innerSquared) / 4;
   const dx = (support(x + 1, y) - support(x, y)) * direction;
   const dy = (support(x, y + 1) - support(x, y)) * direction;
-  return { volume: Math.PI * radius ** 2 * h, centroid: [x + variance * dx / h, y + variance * dy / h,
+  return { volume: Math.PI * (radius ** 2 - innerSquared) * h, centroid: [x + variance * dx / h, y + variance * dy / h,
     opposite + direction * (h ** 2 + variance * (dx ** 2 + dy ** 2)) / (2 * h)] };
 }
 

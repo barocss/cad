@@ -64,7 +64,7 @@ await withMcpSession({ app, output, clientName: 'barocss-replace-face', autonomy
   assert.equal(node.target.face, faces[1]);
   const { bodies } = await call('query', { action: 'summary' });
   assert.equal(bodies.length, 2);
-  const targetVolume = cap?.bore ? boredCapOracle(cap, cap.height).volume : cap?.cylinder ? cylinderCapOracle(cap, cap.height).volume :
+  const targetVolume = cap?.cylinder ? cylinderCapOracle(cap, cap.height).volume : cap?.bore ? boredCapOracle(cap, cap.height).volume :
     polygonWall ? polygonWallOracle(polygonWall.distance, polygonWall.section).volume :
     draftedWall ? 35215 / 3 : cap?.drafted ? draftedCapOracle(cap, cap.height).volume : cap?.stock ?
       cap.stock.area * Math.abs(cap.height(...cap.stock.center) - cap.opposite) : cap ? 15600 : diagonal ? 12300 : 11850;

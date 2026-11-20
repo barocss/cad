@@ -352,19 +352,28 @@ function precedingSolidParent(node: Record<string, unknown>, index: number): num
   return precedingSolidIndex(node.parent, index);
 }
 
-/** Authored rectangular plate with one straight through bore. The kernel verifies its current geometry. */
-export function isBoredPlateHole(nodes: readonly unknown[], index: number): boolean {
+function throughHoleStockProfile(nodes: readonly unknown[], index: number): unknown {
   const hole = nodes[index];
   if (!textRecord(hole) || hole.kind !== 'hole' || (hole.axis !== undefined && hole.axis !== 'z') ||
       hole.depth !== undefined || hole.pattern !== undefined || hole.countersink !== undefined || hole.csk !== undefined ||
-      hole.thread !== undefined) return false;
+      hole.thread !== undefined) return;
   const stockIndex = precedingSolidParent(hole, index);
-  if (stockIndex === undefined) return false;
+  if (stockIndex === undefined) return;
   const stock = nodes[stockIndex];
   if (!textRecord(stock) || stock.kind !== 'extrude' || (stock.draft !== undefined && stock.draft !== 0) ||
-      typeof stock.sketch !== 'number' || !Number.isSafeInteger(stock.sketch) || stock.sketch < 0 || stock.sketch >= stockIndex) return false;
+      typeof stock.sketch !== 'number' || !Number.isSafeInteger(stock.sketch) || stock.sketch < 0 || stock.sketch >= stockIndex) return;
   const sketch = nodes[stock.sketch];
-  return textRecord(sketch) && sketch.kind === 'sketch' && sketch.profile === 'rectangle';
+  if (textRecord(sketch) && sketch.kind === 'sketch') return sketch.profile;
+}
+
+/** Authored rectangular plate with one straight through bore. The kernel verifies its current geometry. */
+export function isBoredPlateHole(nodes: readonly unknown[], index: number): boolean {
+  return throughHoleStockProfile(nodes, index) === 'rectangle';
+}
+
+/** Authored cylindrical extrusion with one straight through bore. The kernel verifies coaxial supports. */
+export function isAnnularReplacementSource(nodes: readonly unknown[], index: number): boolean {
+  return throughHoleStockProfile(nodes, index) === 'circle';
 }
 
 /** Identify the authored distance-only source. The kernel proves the current rectangular bore geometry. */
@@ -479,8 +488,8 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       if (node.kind === 'replace-face') {
         if (!isBoxReplacementSource(value.nodes, parentIndex) && !isDraftedFaceReplacementSource(value.nodes, parentIndex) &&
             !isStraightPolygonReplacementSource(value.nodes, value.nodes[parentIndex]) && !isBoredPlateHole(value.nodes, parentIndex) &&
-            !isCylinderReplacementSource(value.nodes, parentIndex))
-          return 'Replace face: select a supported extrusion or a cap of a rectangular plate with a through bore.';
+            !isCylinderReplacementSource(value.nodes, parentIndex) && !isAnnularReplacementSource(value.nodes, parentIndex))
+          return 'Replace face: select a supported extrusion or a cap with a supported through bore.';
         continue;
       }
       const parent = value.nodes[parentIndex];

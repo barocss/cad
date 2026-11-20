@@ -3,7 +3,7 @@ import {
   type Brep, type CadPartFeature, type CadPartOutput,
 } from '@barocss/cad';
 import { boxFaceReplacementFrame, draftedCapReplacementFrame, draftedFaceOffsetFrame, draftedWallReplacementFrame } from '@barocss/cad/internal/drafted-cap-offset';
-import { boredCapReplacementFrame, circularCapReplacementFrame } from '@barocss/cad/internal/bored-cap-offset';
+import { annularCapReplacementFrame, boredCapReplacementFrame, circularCapReplacementFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { prismCapReplacementFrame, prismWallOffsetFrame, prismWallReplacementFrame } from '@barocss/cad/internal/prism-wall-offset';
 import type { OffsetFaceNode, OffsetPlaneRef, ReplaceFaceNode, StudioDoc } from './doc';
 import { featureId } from './ids';
@@ -82,7 +82,7 @@ export function resolveReplacementPlane(doc: StudioDoc, node: ReplaceFaceNode, p
   const face = node.faces[0];
   if (!boxFaceReplacementFrame(source, face) && !draftedCapReplacementFrame(source, face) &&
       !draftedWallReplacementFrame(source, face) && !prismCapReplacementFrame(source, face) && !prismWallReplacementFrame(source, face) &&
-      !boredCapReplacementFrame(source, face) && !circularCapReplacementFrame(source, face))
+      !boredCapReplacementFrame(source, face) && !circularCapReplacementFrame(source, face) && !annularCapReplacementFrame(source, face))
     throw missing('the original face no longer supports replacement.');
   const plane = checkedPlane(target, node.target, missing);
   return { origin: plane.point, normal: plane.normal };

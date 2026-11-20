@@ -4,9 +4,11 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const [output, flat, upper, lower] = process.argv.slice(2);
+const [output, flat, upper, lower, expectedRadius = '3'] = process.argv.slice(2);
 const app = resolve(import.meta.dirname, '..');
 assert.ok(output && flat && upper && lower && isAbsolute(output) && relative(resolve(app, '../..'), output).startsWith('../'));
+const radius = Number(expectedRadius), diameter = 2 * radius, wrongDiameter = diameter + 2;
+assert.ok(Number.isFinite(radius) && radius > 0);
 const pins = [
   'apps/cad-studio/src/ui/RequirementsBrowser.tsx',
   'apps/cad-studio/src/state/useModelChecks.ts',
@@ -39,10 +41,10 @@ await f.run(async () => {
   ]) {
     const original = await readFile(input), doc = JSON.parse(original);
     doc.requirements = [
-      req('radius', 'Bore radius 3 mm', 'radius', 3, body),
-      req('diameter', 'Through bore diameter 6 mm', 'hole_diameter', 6, body),
-      req('mismatch', 'Test an 8 mm diameter', 'hole_diameter', 8, body),
-      req('wrong-body', 'Check the separate reference body', 'hole_diameter', 6, reference),
+      req('radius', `Bore radius ${radius} mm`, 'radius', radius, body),
+      req('diameter', `Through bore diameter ${diameter} mm`, 'hole_diameter', diameter, body),
+      req('mismatch', `Test a ${wrongDiameter} mm diameter`, 'hole_diameter', wrongDiameter, body),
+      req('wrong-body', 'Check the separate reference body', 'hole_diameter', diameter, reference),
     ];
     const file = join(output, label + '.bcad'), bytes = Buffer.from(JSON.stringify(doc));
     await writeFile(file, bytes);
@@ -55,9 +57,9 @@ await f.run(async () => {
       assert.equal(check.summary.pass, 2);
       assert.equal(check.summary.fail, 1);
       assert.equal(check.summary.unknown, 1);
-      near(result('radius').number, 3);
-      near(result('diameter').number, 6);
-      near(result('mismatch').number, 6);
+      near(result('radius').number, radius);
+      near(result('diameter').number, diameter);
+      near(result('mismatch').number, diameter);
       assert.equal(result('diameter').verdict, 'pass');
       assert.equal(result('mismatch').verdict, 'fail');
       assert.equal(result('wrong-body').status, 'unsupported');
@@ -72,14 +74,15 @@ await f.run(async () => {
     assert.match(await row('radius').getAttribute('class'), /\bpass\b/);
     assert.match(await row('diameter').getAttribute('class'), /\bpass\b/);
     assert.match(await row('mismatch').getAttribute('class'), /\bfail\b/);
-    const measured = /· ([\d.]+) \(want 8\b/.exec(await row('mismatch').innerText());
+    const measured = /· ([\d.]+) \(want ([\d.]+)/.exec(await row('mismatch').innerText());
     assert.ok(measured);
-    near(Number(measured[1]), 6);
+    near(Number(measured[1]), diameter);
+    near(Number(measured[2]), wrongDiameter);
     assert.match(await row('wrong-body').getAttribute('class'), /\bunknown\b/);
     await f.same(doc);
     assert.deepEqual(await readFile(file), bytes);
     assert.deepEqual(await readFile(input), original);
     await f.snapshot(label + '-requirements');
-    f.report.observations.push({ label, radius: 3, diameter: 6, status: reports });
+    f.report.observations.push({ label, radius, diameter, status: reports });
   }
 });
