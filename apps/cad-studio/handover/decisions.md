@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1423: [Studio History layout ownership](notes/studio-history-layout-2026-11-21/README.md) moves step fitting, expansion, labels and focus fallback into one hook. Desktop confirms the same overflow position and keyboard focus after an accepted edit.
+
 - D1422: [Review-pinned feature commands](notes/review-pinned-feature-command-2026-11-21/README.md), #324; refuse a stale Hole command and verify the accepted hole through a native Studio file round trip.
 
 - D1421: [Review-pinned feature edits](notes/review-pinned-feature-edit-2026-11-21/README.md), #324; an optional reviewed revision guards editing in the same part scope, with actual MCP refusal and native Studio handoff proof.

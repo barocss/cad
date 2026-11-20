@@ -304,8 +304,8 @@ import { FontUpload } from './app/fontUpload';
 import { boundsOf } from '@barocss/cad-model/engine/bounds';
 import { defaultRender, type RenderCamera, type RenderSettings } from '@barocss/cad-model/engine/render';
 import { downloadBytes } from './ui/files';
-import { useBottomRow, HISTORY_LEFT, HISTORY_LEFT_RAIL } from './ui/useBottomRow';
-import { useFitChips } from './ui/useFitChips';
+import { HISTORY_LEFT, HISTORY_LEFT_RAIL } from './ui/useBottomRow';
+import { useFeatureHistoryLayout } from './ui/useFeatureHistoryLayout';
 import { useLayout } from './layout/useLayout';
 import { ChatColumn, columnShown } from './layout/ChatColumn';
 import { Dock } from './layout/Dock';
@@ -333,9 +333,6 @@ export function App() {
     return () => { unsubscribe(); engine.dispose(); };
   }, [engine]);
   const viewport = useRef<ViewportHandle>(null);
-  // (The bottom row: the view bar measured, the history bar beside it or stacked above it.)
-  const cornerRight = useRef<HTMLDivElement>(null), [stripWidth, setStripWidth] = useState(0), [historyNatural, setHistoryNatural] = useState(0);
-  const bottomRow = useBottomRow(cornerRight, stripWidth, BROWSER_PLACEMENT === 'dock' ? HISTORY_LEFT_RAIL : HISTORY_LEFT, historyNatural);
   const [doc, setDocStateRaw] = useState<StudioDoc>(starterDoc);
   // (O11: one guard where every edit of the document lands. While a variant is shown, a change of anything but the
   // document's variability is refused — said as start() says it — and the undo entry it asked for dropped; a whole
@@ -3242,13 +3239,6 @@ export function App() {
     },
   } : null;
 
-  const totalNodes = doc.nodes.length; const markerAt = marker ?? totalNodes;
-  // (G12e: the history bar's whole chips — those past its room hidden, a "+n" chip opening the rest.)
-  const historyBar = useRef<HTMLDivElement>(null), [historyRows, setHistoryRows] = useState(false), [historyLabels, setHistoryLabels] = useState(false);
-  // (Roadmap 21: the bar stays while a command runs or a sketch is open, dimmed and taking no clicks, instead of vanishing.)
-  const historyShown = !rendering, historyBusy = !!sketch || !!active;
-  const { hidden: historyHidden, natural: historyNaturalNow } = useFitChips(historyBar, historyRows, [doc.nodes, markerAt, !!sketch, !!active, rendering, historyLabels, bottomRow.stacked, bottomRow.cramped]);
-  useEffect(() => setHistoryNatural(historyNaturalNow), [historyNaturalNow]);
   const selBodies = selectedBodies(selection).map(i => bodies[i]).filter(Boolean);
   const continuityPick = fresh && !busy && shownDoc === doc && marker === null && !workerFailure
     && !drawing && !rendering && !section && !inPlace && !active && !bodyDrag && !ghost && !workingComparison
@@ -3324,7 +3314,11 @@ export function App() {
   // (What the dock takes at the stage's right edge when it is not docked: its strip, and its sheet while open — the view bar,
   // the view cube and the HUD stand clear of both.)
   const dockEdge = dockDocked ? 0 : CHAT_STRIP + (layout.dockSheet ? layout.dockWidth : 0);
-  useEffect(() => setStripWidth((chatColumnShown ? 0 : CHAT_STRIP) + dockEdge), [chatColumnShown, dockEdge]);
+  const historyLeft = browserPlacement === 'dock' ? HISTORY_LEFT_RAIL : HISTORY_LEFT;
+  const historyLayout = useFeatureHistoryLayout({
+    nodes: doc.nodes, marker, sketching: !!sketch, commandActive: !!active, rendering,
+    left: historyLeft, strip: (chatColumnShown ? 0 : CHAT_STRIP) + dockEdge,
+  });
   // (A panel opened while the dock is a strip opens its sheet: the panel is in it.)
   const midpointReview = midpointSketch.currentReview();
   const insetReview = insetRelink.currentReview();
@@ -3499,9 +3493,7 @@ export function App() {
         if (!commit(next, false, false, true)) return;
         requestAnimationFrame(() => {
           if (docNow.current !== next || document.activeElement !== document.body) return;
-          const step = historyBar.current?.querySelector<HTMLButtonElement>(`[data-node-index="${editNode}"]`);
-          if (step?.getClientRects().length) step.focus({ preventScroll: true });
-          else historyBar.current?.querySelector<HTMLButtonElement>('.hs-more')?.focus({ preventScroll: true });
+          historyLayout.focusStep(editNode);
         });
       },
     });
@@ -3743,7 +3735,7 @@ export function App() {
     try { return !!D && D.geometryOf(doc.direct!, object).kind === 'curve'; } catch { return false; }
   }).length ?? 0) >= 2;
   return (
-    <div className={'studio' + (historyShown ? ' has-history' : '') + (bottomRow.stacked ? ' history-stacked' : '') + (bottomRow.cramped ? ' stage-cramped' : '')} style={{ '--history-left': (browserPlacement === 'dock' ? HISTORY_LEFT_RAIL : HISTORY_LEFT) + 'px', '--strip-w': chatColumnShown ? '0px' : CHAT_STRIP + 'px', '--dock-strip-w': dockEdge + 'px', '--chat-col-w': (chatColumnShown ? layout.chatShown : CHAT_STRIP) + 'px', '--rail-w': sketch || rendering || drawing ? '44px' : '116px' } as CSSProperties}>
+    <div className={'studio' + (historyLayout.visible ? ' has-history' : '') + (historyLayout.row.stacked ? ' history-stacked' : '') + (historyLayout.row.cramped ? ' stage-cramped' : '')} style={{ '--history-left': historyLeft + 'px', '--strip-w': chatColumnShown ? '0px' : CHAT_STRIP + 'px', '--dock-strip-w': dockEdge + 'px', '--chat-col-w': (chatColumnShown ? layout.chatShown : CHAT_STRIP) + 'px', '--rail-w': sketch || rendering || drawing ? '44px' : '116px' } as CSSProperties}>
       <Profiler id="topbar" onRender={onBlockRender}>
         <StudioTopBar
           file={{ name: fileName, dirty, rename: setFileName, open, save, insertPart, newPart: newPartFromToolbar,
@@ -3811,8 +3803,8 @@ export function App() {
           onTime={t => { setPlaying(false); setTime(t); }} onPlay={play} onChange={a => commitRender({ ...render, animation: a })}
           exporting={videoBusy} onExportVideo={() => { setPlaying(false); turnFrom.current = viewport.current?.getCamera() ?? null; void recordVideo(render.animation.duration, setTime, `${fileName}-render.webm`); }} />;
       })()}
-      <Profiler id="history" onRender={onBlockRender}>{historyShown && <FeatureHistoryBar busy={historyBusy} doc={doc} selection={selection} editNode={editNode} marker={marker} source={{ innerSteps, freeSketches }}
-        layout={{ historyBar, historyRows, setHistoryRows, historyLabels, setHistoryLabels, historyHidden }} actions={{ pickProfile, setEditNode: index => {
+      <Profiler id="history" onRender={onBlockRender}>{historyLayout.visible && <FeatureHistoryBar busy={historyLayout.busy} doc={doc} selection={selection} editNode={editNode} marker={marker} source={{ innerSteps, freeSketches }}
+        layout={historyLayout.bar} actions={{ pickProfile, setEditNode: index => {
           const focused = document.activeElement;
           historyEditorOpener.current = focused instanceof HTMLElement && focused.matches('button.hs') ? { index, doc, button: focused } : null;
           setEditNode(index);
@@ -3839,7 +3831,7 @@ export function App() {
         <span className="mono muted">{busy ? (slow ? 'Working…' : 'Computing…') : modelUnavailable ? (bodies.length ? 'Previous result · model evaluation failed' : 'Model evaluation failed') : `${ortho ? 'Orthographic' : 'Perspective'} · ${bodyTopologyCounts(shownBodies)} · ${Math.round(lastMs)} ms`}{!modelUnavailable && <CursorReadout sink={cursorSink} />}</span>
       </div>
 
-      <ViewDisplayControls inspection={inspection} inspectionSelectedKeys={selection.bodies.flatMap(index => bodies[index] ? [bodies[index].key] : [])} doc={doc} viewport={viewport} cornerRight={cornerRight}
+      <ViewDisplayControls inspection={inspection} inspectionSelectedKeys={selection.bodies.flatMap(index => bodies[index] ? [bodies[index].key] : [])} doc={doc} viewport={viewport} cornerRight={historyLayout.cornerRight}
         display={{ ...viewDisplay.controls, isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection }}
         view={{ ortho, sketching: !!sketch, wheelZoom: modelWheelZoom, sketchReopenCamera, fitActiveSketch: sketchActions.fitActiveSketch, ao, setAo, theme, setTheme, rendering, printing: !!printing, viewBackend }}
         section={{ section, documentSession: docGeneration, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye, sectionExclusion: sectionExclusionControls }}
