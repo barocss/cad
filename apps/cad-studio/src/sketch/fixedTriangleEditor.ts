@@ -29,10 +29,11 @@ function isStraightTriangle(shape: Polygon): boolean {
 }
 
 type FeatureLengthEdit = { nodes: ModelNode[] } | { reason: string };
+export type FeatureTriangleRecoveries = WeakMap<SketchNode, { original: ModelNode[]; index: number }>;
 
 /** The Extrude editor can recover only its owned, literal third-edge dimension. */
 export function editExtrudeTriangleLength(original: ModelNode[], draft: ModelNode[], index: number,
-  value: number, params: Record<string, number>, recovered: WeakSet<SketchNode>): FeatureLengthEdit | null {
+  value: number, params: Record<string, number>, recovered: FeatureTriangleRecoveries): FeatureLengthEdit | null {
   const feature = original[index];
   if (feature?.kind !== 'extrude' || draft[index]?.kind !== 'extrude' || draft[index].sketch !== feature.sketch) return null;
   const saved = original[feature.sketch], node = draft[feature.sketch];
@@ -50,12 +51,20 @@ export function editExtrudeTriangleLength(original: ModelNode[], draft: ModelNod
   const shape = current.shape;
   if (!Number.isFinite(value)) return { reason: 'Enter a length for edge 3.' };
   if (value === shape.lengths?.[2]) return { nodes: draft };
-  const solve = node === saved || recovered.has(node) ? commitInlineDimension : commitDimension;
+  const owner = recovered.get(node);
+  const ownedRecovery = owner?.original === original && owner.index === index;
+  if (ownedRecovery && value === initial.shape.lengths?.[2]) {
+    // Intentionally returning to the exact stored scalar on this recovered source is not a
+    // second geometric solve. Keep the original authored node and any unrelated feature edits.
+    const reverted = draft.map((item, position) => position === feature.sketch ? saved : item);
+    return { nodes: reverted.length === original.length && reverted.every((item, i) => item === original[i]) ? original : reverted };
+  }
+  const solve = node === saved || ownedRecovery ? commitInlineDimension : commitDimension;
   const result = solve(shape, 'len2', value);
   if (!result.ok) return { reason: result.reason };
   const outline = outlineOf(result.shape);
   if (!outline) return { reason: 'The edited triangle has no driving outline.' };
   const next = { ...node, points: outline.points, outline };
-  if (isVerifiedFixedTriangleEdit(result.shape, shape)) recovered.add(next);
+  if (isVerifiedFixedTriangleEdit(result.shape, shape)) recovered.set(next, { original, index });
   return { nodes: draft.map((item, position) => position === feature.sketch ? next : item) };
 }

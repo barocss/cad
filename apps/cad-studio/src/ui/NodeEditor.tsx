@@ -31,7 +31,7 @@ import type { useAlignHistoryPreview } from '../app/useAlignHistoryPreview';
 import { LinearSpanSpacing } from './LinearSpanSpacing';
 import { SweepHistoryInputs } from './SweepHistoryInputs';
 import { HoleHistoryInputs } from './HoleHistoryInputs';
-import { editExtrudeTriangleLength } from '../sketch/fixedTriangleEditor';
+import { editExtrudeTriangleLength, type FeatureTriangleRecoveries } from '../sketch/fixedTriangleEditor';
 import { inspectHistoryOpposingLength } from '../sketch/historyOpposingLength';
 import type { FeatureFailure } from '../app/failedFeature';
 import { featureNumberBounds, featureNumberInvalid, featureNumberRange, historyNumberRule } from '../app/featureNumberInput';
@@ -46,7 +46,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
   // What is typed in a number box until it reads as a number (so a box can be cleared and retyped).
   const [typed, setTyped] = useState<Record<string, string>>({});
   const [lengthProblem, setLengthProblem] = useState<string | null>(null);
-  const recoveredLengths = useRef(new WeakSet<Extract<ModelNode, { kind: 'sketch' }>>());
+  const recoveredLengths = useRef<FeatureTriangleRecoveries>(new WeakMap());
   const [modeProblem, setModeProblem] = useState<string | null>(null);
   const [loftGuideChoice, setLoftGuideChoice] = useState<string | null>(null);
   const historyErrorId = useId();
@@ -64,7 +64,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
   const [evaluation, setEvaluation] = useState<{ nodes: ModelNode[]; index: number; error?: FeatureFailure; opener?: HTMLElement } | null>(null);
   useLayoutEffect(() => {
     draftScope.current = { nodes, index };
-    recoveredLengths.current = new WeakSet();
+    recoveredLengths.current = new WeakMap();
     return () => { request.current = null; };
   }, [nodes, index]);
   useEffect(() => { setStationDraftOrigin({nodes,index}); setDraft(nodes); setTyped({}); setEvaluation(null); setModeProblem(null); setLengthProblem(null); setReadingEnd(false); setLoftGuideChoice(null); }, [nodes, index]);
