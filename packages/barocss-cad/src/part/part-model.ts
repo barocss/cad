@@ -687,7 +687,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
               healed = healAnalyticLFilletIfAdmitted(brep, face, sharpEdge, at);
           }
         }
-        if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a flat rectangular plate, or one in a rectangular plate with a tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket. Select its fillet face.');
+        if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket. Select its fillet face.');
         return one({ kind: 'brep', brep: healed });
       };
     }

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1448: [Heal a selected bore on the tilted two-bore plate](notes/heal-selected-bore-after-cap-tilt-2026-11-21/README.md), #17. Keep the slope, exact other bore and reference through Studio reopen.
 - D1447: [Heal one bore while keeping its tilted cap](notes/heal-bore-after-cap-tilt-2026-11-21/README.md), #17. Keep the exact plane and its donor reference through a strict heal and Studio reopen.
 - D1446: [Heal both bores in two separate edits](notes/heal-two-bores-in-sequence-2026-11-21/README.md), #17. Restore the exact six-face plate in either order with independent Undo and Studio reopen.
 - D1445: [Heal the selected through bore in a two-bore plate](notes/heal-selected-two-bore-plate-2026-11-21/README.md), #17. Keep the other bore and all surviving trim IDs through Studio reopen.

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CadPartError, checkBrep, createCylindricalBoreCheck, evaluateCadPart } from '../dist/index.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
-import { healBoredPlateIfAdmitted, replaceBoredCapIfAdmitted } from '../dist/features/bored-cap-offset.js';
+import { healBoredPlateIfAdmitted } from '../dist/features/bored-cap-offset.js';
 import { faceSignatures } from '../dist/part/part-expect.js';
 
 const halves = ['h.side0#1', 'h.side0#2'];
@@ -163,9 +163,41 @@ for (const sign of [1, -1]) {
     });
     assert.deepEqual(results[0], results[1]);
     assert.deepEqual(before, source);
-    const withTwo = output(secondBore(doc)).brep;
-    const tiltedTwo = replaceBoredCapIfAdmitted(withTwo, cap, plane);
-    assert.equal(healBoredPlateIfAdmitted(tiltedTwo, halves[0]), undefined);
+  });
+
+  test(`healing either one of two bores preserves the other bore and the exact ${cap} plane`, () => {
+    const plane = { origin: [0, 0, opposite + sign * 8], normal: [-1, -2, 10 * sign] };
+    const tilted = append(secondBore(plate()), { id: 'tilt', kind: 'replace-face', target: 'h2', face: cap, plane });
+    const before = freeze(output(tilted).brep), source = structuredClone(before);
+    assert.ok(Math.abs(brepMassProperties(before, 1).volume - (15600 - 156.9 * Math.PI)) < 1e-7);
+    for (const [removed, survivor, diameter, excluded] of [
+      ['h.side0#', 'h2.side0#', 4, 58.8], ['h2.side0#', 'h.side0#', 6, 98.1],
+    ]) {
+      const deleted = before.faces.filter(face => face.name.startsWith(removed));
+      const walls = before.faces.filter(face => face.name.startsWith(survivor));
+      assert.equal(deleted.length, 2);
+      assert.equal(walls.length, 2);
+      const results = deleted.map(member => {
+        const healed = healBoredPlateIfAdmitted(before, member.name);
+        const report = checkBrep(healed, { strict: true });
+        assert.ok(report.valid, report.issues.join('\n'));
+        assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 });
+        assert.equal(report.topology[0].genus, 1);
+        assert.ok(report.maximumPcurveGap < 1e-9 && report.maximumEdgeSurfaceGap < 1e-9);
+        close(createCylindricalBoreCheck(healed)(walls), diameter);
+        assert.ok(Math.abs(brepMassProperties(healed, 1).volume - (15600 - excluded * Math.PI)) < 1e-7);
+        const loops = new Set(healed.loops.map(loop => loop.id));
+        assert.deepEqual(healed.faces, before.faces.filter(face => !deleted.includes(face))
+          .map(face => ({ ...face, loops: face.loops.filter(id => loops.has(id)) })));
+        for (const kind of ['loops', 'coedges', 'edges', 'vertices']) {
+          for (const item of healed[kind]) assert.equal(item, before[kind].find(candidate => candidate.id === item.id));
+        }
+        assert.deepEqual(output(append(tilted, deletion(member.name, undefined, 'tilt'))).brep, healed);
+        return healed;
+      });
+      assert.deepEqual(results[0], results[1]);
+    }
+    assert.deepEqual(before, source);
   });
 }
 

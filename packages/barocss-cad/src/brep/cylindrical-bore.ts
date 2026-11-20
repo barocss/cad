@@ -351,37 +351,45 @@ function hasTiltedRim(brep: Brep, topology: Topology, shell: BrepShell, members:
     && checkBrep(brep, { strict: true }).valid;
 }
 
-/** Identify the bore and its cap trims on the continued, single-bore rectangular plate. */
+/** Identify the selected bore on a continued rectangular plate with one or two through bores. */
 export function readTiltedRectangularBoreForHeal(brep: Brep, faceName: string): {
   readonly bottom: BrepFace; readonly top: BrepFace; readonly selected: readonly BrepFace[];
 } | undefined {
   const [body] = brep.bodies, [shell] = brep.shells;
+  const twoBore = brep.faces.length === 10, capLoops = twoBore ? 3 : 2;
+  const [faces, loops, uses, edges, vertices] = twoBore ? [10, 14, 48, 24, 16] : [8, 10, 36, 18, 12];
   if (brep.bodies.length !== 1 || body.kind !== 'solid' || body.shells.length !== 1 || brep.shells.length !== 1
-    || body.shells[0] !== shell.id || shell.body !== body.id || !shell.closed || shell.faces.length !== 8 || brep.faces.length !== 8
-    || brep.loops.length !== 10 || brep.coedges.length !== 36 || brep.edges.length !== 18 || brep.vertices.length !== 12) return;
+    || body.shells[0] !== shell.id || shell.body !== body.id || !shell.closed || shell.faces.length !== faces || brep.faces.length !== faces
+    || brep.loops.length !== loops || brep.coedges.length !== uses || brep.edges.length !== edges || brep.vertices.length !== vertices) return;
   const matches = brep.faces.filter(face => face.name === faceName);
   if (matches.length !== 1) return;
+  const [selected] = matches;
   const topology = readTopology(brep);
   try {
-    const cylinder = inwardCylinder(matches[0]);
+    const cylinder = inwardCylinder(selected);
     if (!cylinder || cylinder.a[0] !== 0 || cylinder.a[1] !== 0) return;
     const tolerance = linearToleranceMM(Math.max(cylinder.r, geometryScaleMM(brep.vertices.map(vertex => vertex.point))));
-    const caps = brep.faces.filter(face => face.loops.length === 2);
+    const caps = brep.faces.filter(face => face.loops.length === capLoops);
     if (caps.length !== 2) return;
     const [a, b] = caps.map(cap => {
       const loops = cap.loops.map(id => topology.loops.get(id)).filter(loop => loop?.kind === 'inner');
-      return loops.length === 1 && loops[0]?.face === cap.id ? readInnerRim(loops[0], topology, shell) : undefined;
+      if (loops.length !== capLoops - 1) return;
+      const bindings = loops.map(loop => loop?.face === cap.id ? readInnerRim(loop, topology, shell) : undefined);
+      if (bindings.some(binding => binding === undefined)) return;
+      const hits = bindings.filter(binding => binding?.members.includes(selected));
+      return hits.length === 1 ? hits[0] : undefined;
     });
-    if (!a || !b || new Set(a.members).size !== 2 || !a.members.includes(matches[0])
-      || a.members.some(face => !b.members.includes(face))) return;
-    const mate = inwardCylinder(a.members.find(face => face !== matches[0])!);
+    if (!a || !b || new Set(a.members).size !== 2 || a.members.some(face => !b.members.includes(face))) return;
+    const mate = inwardCylinder(a.members.find(face => face !== selected)!);
     if (!mate || !sameCylinder(mate, cylinder, tolerance)) return;
-    const rims = [a, b].map(rim => readPlanarRim(rim.loop, rim.boundary, topology, shell, cylinder, tolerance, false, 2));
+    const rims = [a, b].map(rim => readPlanarRim(rim.loop, rim.boundary, topology, shell, cylinder, tolerance, false, capLoops));
     const lower = rims.find(rim => rim?.side === -1), upper = rims.find(rim => rim?.side === 1);
     if (!lower?.plateRing || !upper?.plateRing) return;
     const lowerFlat = heightRange(lower.plateRing, lower.slope) <= tolerance, upperFlat = heightRange(upper.plateRing, upper.slope) <= tolerance;
     if (lowerFlat === upperFlat || !hasAxialSeams(topology, shell, a.members, lower, upper, cylinder.a, tolerance)
-      || !keepsRectangularStock(lower, upper, topology, shell, cylinder.a, tolerance) || !checkBrep(brep, { strict: true }).valid) return;
+      || !keepsRectangularStock(lower, upper, topology, shell, cylinder.a, tolerance)
+      || (twoBore && !hasSeparatePeerBore(lower, upper, topology, shell, a.members, cylinder, tolerance))
+      || !checkBrep(brep, { strict: true }).valid) return;
     return { bottom: lower.face, top: upper.face, selected: a.members };
   } catch { /* Unrecognized native geometry cannot establish a bore. */ }
 }

@@ -4,7 +4,7 @@ import { BrepError, checkBrep, createCylindricalBoreCheck, evaluateCadPart, eval
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
 import {
   annularCapReplacementFrame, boredCapOffsetFrame, boredCapReplacementFrame, circularCapReplacementFrame,
-  healBoredPlateIfAdmitted, offsetBoredCapIfAdmitted, replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted,
+  offsetBoredCapIfAdmitted, replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted,
 } from '../dist/features/bored-cap-offset.js';
 
 const plate = ({ min = [0, 0], max = [40, 30], height = 10, from = 0, center = [11, 9], radius = 3, ...ends } = {}) => ({
@@ -139,9 +139,6 @@ for (const sign of [1, -1]) {
     assert.throws(() => replaceBoredCapIfAdmitted(source, face, { ...plane, origin: [0, 0, fixedZ] }), /opposite cap at one corner/);
     assert.equal(boredCapOffsetFrame(source, face), undefined);
     assert.equal(offsetBoredCapIfAdmitted(source, face, 1), undefined);
-    for (const candidate of walls) {
-      assert.equal(healBoredPlateIfAdmitted(result, candidate.name), undefined);
-    }
     assert.deepEqual(source, before);
   });
 }

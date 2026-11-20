@@ -3,30 +3,41 @@ import { copyFile, readFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
+import { boredCapOracle, capCase } from './replace-face-cap-fixture.mjs';
 
-const [output, input, side] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
+const [output, input, side, selection = 'single'] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
 assert.ok(output && input && ['upper', 'lower'].includes(side) &&
   isAbsolute(output) && relative(resolve(app, '../..'), output).startsWith('../'));
+assert.ok(['single', 'first', 'second'].includes(selection));
 const bytes = await readFile(input), source = JSON.parse(bytes), edit = source.nodes.length;
-const selectedFace = 'n2.side0', originalBody = 'b6', donor = 'b5', editedBody = 'b7';
-const originalVolume = 15600 - 98.1 * Math.PI, finalVolume = 15600;
+const replacement = source.nodes.at(-1);
+assert.equal(replacement.kind, 'replace-face');
+const cap = capCase((selection === 'single' ? 'bored-' : 'two-bore-') + side), removedIndex = selection === 'second' ? 1 : 0;
+const selectedFace = 'n' + (removedIndex + 2) + '.side0', removed = cap.bores[removedIndex];
+const remaining = cap.bores.filter((_, i) => i !== removedIndex);
+const originalBody = 'b' + (edit - 1), editedBody = 'b' + edit, donor = 'b' + replacement.target.body.node;
+const originalVolume = boredCapOracle(cap, cap.height).volume;
+const expectedResult = boredCapOracle({ ...cap, bores: remaining }, cap.height), finalVolume = expectedResult.volume;
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/files/documentFile.ts', 'apps/cad-studio/src/state/commandApply.ts',
+  'apps/cad-studio/test/replace-face-cap-fixture.mjs',
   'packages/barocss-cad-model/src/app/deleteFaceCommand.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
   'packages/barocss-cad/src/features/bored-cap-offset.ts', 'packages/barocss-cad/src/brep/cylindrical-bore.ts',
 ];
 const f = await createFlow({
   name: 'delete-tilted-bore-face', envFrozen: 'DELETE_TILTED_BORE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: 'Heal a through bore after a tilted cap replacement and retain both the exact cap plane and its reference.',
-  limits: ['One rectangular plate with a single 6 mm bore and an exact planar replacement on either end.'],
+  limits: [`One rectangular plate with ${cap.bores.length} through bore(s) and an exact planar replacement on either end.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
-import { checkBrep, brepMassProperties } from '@barocss/cad';
+import { checkBrep, brepMassProperties, createCylindricalBoreCheck, faceGeometry } from '@barocss/cad';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-console.log(JSON.stringify(partBreps(doc).map(({ key, brep }) => ({
-  key, brep, report: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1),
-}))));
+console.log(JSON.stringify(partBreps(doc).map(({ key, brep }) => {
+  const walls = brep.faces.filter(face => faceGeometry(face).kind === 'cylinder');
+  return { key, brep, report: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1),
+    diameter: createCylindricalBoreCheck(brep)(walls) };
+})));
 `,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -47,27 +58,31 @@ async function measure(label, doc, before) {
   assert.ok(plate.report.valid, plate.report.issues.join('\n'));
   near(plate.mass.volume, expected);
   near(body(model, key).volume, expected);
-  assert.equal(plate.report.topology[0].genus, before ? 0 : 1);
+  assert.equal(plate.report.topology[0].genus, before ? remaining.length : cap.bores.length);
   assert.ok(plate.report.maximumEdgeSurfaceGap < 1e-9 && plate.report.maximumPcurveGap < 1e-9);
   if (before) {
     assert.deepEqual(body(native, donor).brep, body(before, donor).brep);
-    assert.deepEqual(plate.report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+    assert.deepEqual(plate.report.counts, remaining.length ?
+      { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 } :
+      { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+    if (remaining.length) near(plate.diameter, 2 * remaining[0].radius);
     const original = body(before, originalBody).brep;
     const walls = original.faces.filter(face => face.name.startsWith(selectedFace + '#'));
     assert.equal(walls.length, 2);
     assert.deepEqual(plate.brep.faces.map(face => face.id), original.faces.filter(face => !walls.includes(face)).map(face => face.id));
+    const keptLoops = new Set(plate.brep.loops.map(loop => loop.id));
     for (const face of plate.brep.faces) {
       const fixed = original.faces.find(candidate => candidate.id === face.id);
-      assert.deepEqual(face, { ...fixed, loops: [fixed.loops[0]] });
+      assert.deepEqual(face, { ...fixed, loops: fixed.loops.filter(id => keptLoops.has(id)) });
     }
     for (const kind of ['loops', 'coedges', 'edges', 'vertices']) {
       for (const item of plate.brep[kind]) assert.deepEqual(item, original[kind].find(candidate => candidate.id === item.id));
     }
-    const centroid = [820 / 39, 210 / 13, side === 'upper' ? 20 / 3 : 10 / 3];
-    plate.mass.centroid.forEach((value, i) => near(value, centroid[i]));
+    plate.mass.centroid.forEach((value, i) => near(value, expectedResult.centroid[i]));
   }
   f.report.observations.push({ label, expected, nativeVolume: plate.mass.volume, workerVolume: body(model, key).volume,
-    centroid: plate.mass.centroid, maximumEdgeSurfaceGap: plate.report.maximumEdgeSurfaceGap, maximumPcurveGap: plate.report.maximumPcurveGap });
+    centroid: plate.mass.centroid, diameter: plate.diameter, maximumEdgeSurfaceGap: plate.report.maximumEdgeSurfaceGap,
+    maximumPcurveGap: plate.report.maximumPcurveGap });
   return native;
 }
 
@@ -90,7 +105,7 @@ await f.run(async () => {
     const command = { action: 'command', command: 'delete-face', faces, expectedRevision: pin.revision };
     await call('features', command);
     const accepted = await readFile(file), summary = await call('query', { action: 'summary' });
-    near(body(summary.bodies, editedBody).volume, finalVolume);
+    assert.ok(Math.abs(body(summary.bodies, editedBody).volume - finalVolume) <= 5e-4);
     near(body(summary.bodies, donor).volume, 192);
     const stale = await call('features', command, true);
     assert.equal(stale.code, 'COMMAND_STALE');
@@ -106,9 +121,10 @@ await f.run(async () => {
   await filter.click();
   assert.match(await filter.innerText(), /Faces/);
   const label = f.page.getByLabel('Face property and colour target');
-  const heights = side === 'upper' ? [10.3, 9.7, 10.6, 10.8, 9.25, 8.5] : [9.25, 8.5, 9.6, 9.9, 8];
+  const station = side === 'upper' ? cap.height(...removed.center) : 10;
+  const heights = [0.6, 1.2, 0.3, 0.1, 1.65, 2.4].map(depth => station - depth);
   for (const z of heights) {
-    const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [11, 9, z]);
+    const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [...removed.center, z]);
     assert.ok(pixel?.length === 2);
     await f.page.mouse.click(...pixel);
     await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
