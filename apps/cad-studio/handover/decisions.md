@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1440: [Replace a cap of a straight circular cylinder](notes/replace-circular-cylinder-cap-2026-11-21/README.md), #17. Retain the outward cylinder and exact elliptical rim, then verify independent volume and Studio reopen.
 - D1439: [Verify a through-bore diameter after a tilted cap replacement](notes/tilted-bore-diameter-2026-11-21/README.md), #17. Authenticate the exact projected rim, then read the same diameter through Studio Requirements and MCP.
 - D1438: [Replace a cap on a rectangular plate with one through bore](notes/replace-bored-plate-cap-2026-11-21/README.md), #17. Keep the exact cylindrical support and all trim IDs through a tilted cap, with independent mass and Studio reopen.
 - D1437: [Replace faces of nonrectangular convex quadrilateral prisms](notes/replace-trapezoid-faces-2026-11-21/README.md), #17. Qualify trapezoidal caps and side walls through strict native incidence and Studio edit, refusal and reopen.

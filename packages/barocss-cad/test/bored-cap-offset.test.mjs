@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BrepError, checkBrep, createCylindricalBoreCheck, evaluateCadPart, evaluateCurve, evaluateSurface, faceGeometry } from '../dist/index.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
-import { boredCapOffsetFrame, boredCapReplacementFrame, offsetBoredCapIfAdmitted, replaceBoredCapIfAdmitted } from '../dist/features/bored-cap-offset.js';
+import {
+  boredCapOffsetFrame, boredCapReplacementFrame, circularCapReplacementFrame,
+  offsetBoredCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted,
+} from '../dist/features/bored-cap-offset.js';
 
 const plate = ({ min = [0, 0], max = [40, 30], height = 10, from = 0, center = [11, 9], radius = 3, ...ends } = {}) => ({
   format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {},
@@ -53,6 +56,73 @@ const incidence = brep => ({
   edges: brep.edges.map(({ curve, ...e }) => [e, curve.id]),
   coedges: brep.coedges.map(({ pcurve, ...c }) => [c, pcurve?.id]),
 });
+
+const cylinder = () => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
+  { id: 's', kind: 'sketch', profile: 'circle', center: [14, 12], radius: 8 },
+  { id: 'c', kind: 'extrude', sketch: 's', height: 10 },
+] });
+
+for (const sign of [1, -1]) {
+  const face = sign === 1 ? 'c.top' : 'c.bottom', fixedZ = sign === 1 ? 0 : 10;
+  test(`replace ${face} with an exact ellipse and retain the outward cylinder`, () => {
+    const doc = cylinder(), source = freeze(solid(doc)), before = structuredClone(source);
+    const height = (x, y) => fixedZ + sign * (8 + x / 10 + y / 5);
+    const plane = { origin: [0, 0, height(0, 0)], normal: [-1, -2, 10 * sign] };
+    const frame = circularCapReplacementFrame(source, face);
+    assert.deepEqual(frame.normal, [0, 0, sign]);
+    close(frame.anchor[0], 14);
+    close(frame.anchor[1], 12);
+    const result = replaceCircularCapIfAdmitted(source, face, plane);
+    const report = checkBrep(result, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 4, loops: 4, coedges: 12, edges: 6, vertices: 4 });
+    assert.equal(report.topology[0].genus, 0);
+    assert.deepEqual(incidence(result), incidence(source));
+    assert.ok(report.maximumEdgeSurfaceGap < 1e-9 && report.maximumPcurveGap < 1e-9);
+
+    const opposite = sign === 1 ? 'c.bottom' : 'c.top';
+    assert.equal(result.faces.find(candidate => candidate.name === opposite), source.faces.find(candidate => candidate.name === opposite));
+    const outer = result.faces.map(face => faceGeometry(face)).filter(support => support.kind === 'cylinder');
+    assert.equal(outer.length, 2);
+    for (const { r, c, a, out } of outer) {
+      close(r, 8);
+      close(c[0], 14);
+      close(c[1], 12);
+      close(Math.abs(a[2]), 1);
+      assert.equal(out, 1);
+    }
+    assert.equal(createCylindricalBoreCheck(result)(result.faces.filter(candidate => faceGeometry(candidate).kind === 'cylinder')), undefined);
+    const cap = result.faces.find(candidate => candidate.name === face);
+    const loop = result.loops.find(loop => cap.loops.includes(loop.id));
+    assert.equal(loop.coedges.length, 2);
+    for (const id of loop.coedges) {
+      const use = result.coedges.find(coedge => coedge.id === id);
+      const { curve } = result.edges.find(edge => edge.id === use.edge);
+      for (let i = 0; i <= 32; i++) {
+        const [x, y, z] = evaluateCurve(curve, i / 32);
+        close(Math.hypot(x - 14, y - 12), 8);
+        close(z, height(x, y));
+      }
+    }
+    const mass = brepMassProperties(result, 1), h = 11.8;
+    close(mass.volume, 755.2 * Math.PI, 1e-7);
+    close(mass.centroid[0], 14 + 1.6 / h, 1e-8);
+    close(mass.centroid[1], 12 + 3.2 / h, 1e-8);
+    close(mass.centroid[2], fixedZ + sign * (h ** 2 + 16 * 0.05) / (2 * h), 1e-8);
+    const feature = { id: 'replace', kind: 'replace-face', target: 'c', face, plane };
+    assert.deepEqual(solid({ ...doc, features: [...doc.features, feature] }), result);
+    for (const penetration of [0, 0.1]) {
+      const contact = height(0, 0) - sign * (h - 8 * Math.hypot(0.1, 0.2) + penetration);
+      assert.throws(() => replaceCircularCapIfAdmitted(source, face, { ...plane, origin: [0, 0, contact] }), /opposite cap on the circular rim/);
+    }
+    const thin = replaceCircularCapIfAdmitted(source, face, { ...plane, origin: [0, 0, fixedZ - sign * 1.8] });
+    assert.ok(checkBrep(thin, { strict: true }).valid);
+    close(brepMassProperties(thin, 1).volume, 128 * Math.PI, 1e-7);
+    assert.throws(() => replaceCircularCapIfAdmitted(source, face, { ...plane, normal: [0, 0, 1] }), /tilt is too small/);
+    assert.throws(() => replaceCircularCapIfAdmitted(source, face, { ...plane, normal: [1, 0, 0] }), /perpendicular/);
+    assert.deepEqual(source, before);
+  });
+}
 
 for (const [name, sign] of [['b.top', 1], ['b.bottom', -1]]) {
   test(`replace the drilled plate ${name} with a tilted plane and preserve the exact bore`, () => {

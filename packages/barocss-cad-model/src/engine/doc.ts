@@ -397,6 +397,10 @@ export function isBoxReplacementSource(nodes: readonly unknown[], index: number)
 }
 export { isBoxReplacementSource as isBoxWallReplacementSource };
 
+export function isCylinderReplacementSource(nodes: readonly unknown[], index: number): boolean {
+  return straightExtrudeSketch(nodes, index)?.profile === 'circle';
+}
+
 /** Authored rectangular Draft Extrude for face replacement. Native admission verifies its supports. */
 export function isDraftedFaceReplacementSource(nodes: readonly unknown[], index: number): boolean {
   const stock = nodes[index];
@@ -474,7 +478,8 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const parentIndex = (node.parent as BodyRef).node;
       if (node.kind === 'replace-face') {
         if (!isBoxReplacementSource(value.nodes, parentIndex) && !isDraftedFaceReplacementSource(value.nodes, parentIndex) &&
-            !isStraightPolygonReplacementSource(value.nodes, value.nodes[parentIndex]) && !isBoredPlateHole(value.nodes, parentIndex))
+            !isStraightPolygonReplacementSource(value.nodes, value.nodes[parentIndex]) && !isBoredPlateHole(value.nodes, parentIndex) &&
+            !isCylinderReplacementSource(value.nodes, parentIndex))
           return 'Replace face: select a supported extrusion or a cap of a rectangular plate with a through bore.';
         continue;
       }

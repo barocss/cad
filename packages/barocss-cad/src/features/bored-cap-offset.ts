@@ -1,16 +1,17 @@
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { BrepError, checkBrep, type Brep, type BrepEdge, type BrepFace } from '../brep/brep-core.js';
 import { createCylindricalBoreCheck } from '../brep/cylindrical-bore.js';
-import { len } from '../core/vec3.js';
+import { add, dist, dot, len, scale, sub } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Curve, Point } from '../types.js';
 import { capSurface } from './extruded-profile-solid.js';
 
 type XY = [number, number];
-type Cap = { readonly point: Point; readonly sign: 1 | -1; readonly opposite: number; readonly min: XY; readonly max: XY };
-type BoredPlate = {
+type StockKind = 'bored' | 'circular';
+type Cap = { readonly point: Point; readonly sign: 1 | -1; readonly opposite: number; readonly min: XY; readonly max: XY; readonly radius: number };
+type AxialStock = {
   readonly bottom: BrepFace; readonly top: BrepFace; readonly cylinders: readonly BrepFace[];
-  readonly lo: number; readonly hi: number; readonly anchorX: number; readonly anchorY: number;
+  readonly lo: number; readonly hi: number; readonly anchorX: number; readonly anchorY: number; readonly radius: number;
   readonly min: XY; readonly max: XY;
 };
 type ReplacementPlane = { readonly origin: Point; readonly normal: Point };
@@ -32,21 +33,48 @@ function matchingPcurve(uv: Curve, edge: Curve, map: (point: Point) => Point): b
     && same(uv.weights, edge.weights) && samePoles(uv.controlPoints, edge.controlPoints.map(map));
 }
 
-/** The supported stock is the native rectangular-prism chart with one cylindrical through bore. */
-function admittedBoredPlate(brep: Brep): BoredPlate | undefined {
+/** The unchanged native circular extrusion is represented by two complementary half cylinders. */
+function outerCylinder(cylinders: readonly BrepFace[], extent: number): { center: Point; radius: number } | undefined {
+  const roundoff = 64 * Number.EPSILON * Math.max(1, extent);
+  const halves = [];
+  for (const face of cylinders) {
+    const surface = face.surface, geometry = faceGeometry(face, extent);
+    if (surface.kind !== 'surface' || geometry.kind !== 'cylinder' || geometry.out !== 1
+      || !same(geometry.a, [0, 0, 1]) || !same(surface.weights.map(row => row[0]), [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1])) return;
+    const [start, tangent1, middle, tangent2, end] = surface.controlPoints.map(row => row[0]);
+    const center = add(start, scale(sub(end, start), 0.5));
+    const radial = sub(start, center), quarter = sub(middle, center), radius = len(radial);
+    if (!(radius > linearToleranceMM(extent)) || !(Math.abs(len(quarter) - radius) <= roundoff)
+      || !(Math.abs(dot(scale(radial, 1 / radius), quarter)) <= roundoff)
+      || !(dist(tangent1, add(start, quarter)) <= roundoff) || !(dist(tangent2, add(end, quarter)) <= roundoff)
+      || !(dist(geometry.c, center) <= roundoff) || !(Math.abs(geometry.r - radius) <= roundoff)) return;
+    halves.push({ center, radius, quarter });
+  }
+  const [a, b] = halves;
+  if (!(dist(a.center, b.center) <= roundoff) || !(Math.abs(a.radius - b.radius) <= roundoff)
+    || !(len(add(a.quarter, b.quarter)) <= roundoff)) return;
+  return { center: a.center, radius: a.radius };
+}
+
+/** Prove the native cap and wall charts before continuing an axial stock. */
+function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined {
   const { bodies, shells, faces, loops, coedges, edges, vertices } = brep;
   const [body] = bodies, [shell] = shells;
+  const bored = kind === 'bored', faceCount = bored ? 8 : 4, capLoops = bored ? 2 : 1;
   if (bodies.length !== 1 || body.kind !== 'solid' || shells.length !== 1 || body.shells.length !== 1
-    || body.shells[0] !== shell.id || shell.body !== body.id || !shell.closed || shell.faces.length !== 8
-    || new Set(shell.faces).size !== 8 || faces.length !== 8 || !faces.every(face => shell.faces.includes(face.id))
-    || loops.length !== 10 || coedges.length !== 36 || edges.length !== 18 || vertices.length !== 12) return undefined;
+    || body.shells[0] !== shell.id || shell.body !== body.id || !shell.closed || shell.faces.length !== faceCount
+    || new Set(shell.faces).size !== faceCount || faces.length !== faceCount || !faces.every(face => shell.faces.includes(face.id))
+    || loops.length !== (bored ? 10 : 4) || coedges.length !== (bored ? 36 : 12)
+    || edges.length !== (bored ? 18 : 6) || vertices.length !== (bored ? 12 : 4)) return undefined;
 
   const vertexById = byId(vertices), edgeById = byId(edges), loopById = byId(loops), coedgeById = byId(coedges), faceById = byId(faces);
   const points = vertices.map(vertex => vertex.point), extent = geometryScaleMM(points), tolerance = linearToleranceMM(extent);
   if (!(extent <= CadNumericPolicy.coordinateAbs) || !points.every(point => point.length === 3 && point.every(Number.isFinite))) return undefined;
   const heights = [...new Set(points.map(point => point[2]))].sort((a, b) => a - b), [lo, hi] = heights;
   if (heights.length !== 2 || !(hi - lo > tolerance)) return undefined;
-  const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
+  // A disk's seam vertices do not bound its chart. Its cap chart bounds come from the rim poles.
+  const rimPoles = bored ? points : edges.filter(edge => edge.curve.degree === 2).flatMap(edge => edge.curve.controlPoints);
+  const xs = rimPoles.map(p => p[0]), ys = rimPoles.map(p => p[1]);
   const min: XY = [Math.min(...xs), Math.min(...ys)], max: XY = [Math.max(...xs), Math.max(...ys)];
   if (!(max[0] - min[0] > tolerance && max[1] - min[1] > tolerance)) return undefined;
 
@@ -84,17 +112,17 @@ function admittedBoredPlate(brep: Brep): BoredPlate | undefined {
     const { controlPoints, weights, degreeU, degreeV, knotsU, knotsV } = surface;
     if (degreeV !== 1 || !same(knotsV, lineKnots)) return undefined;
 
-    if (face.loops.length === 2) {
+    if (face.loops.length === capLoops && (bored || degreeU === 1)) {
       const z = controlPoints[0]?.[0]?.[2], up = z === hi;
       if ((!up && z !== lo) || caps.has(z) || face.sense !== 'forward') return undefined;
       const expected = capSurface({ min, max }, z, surface.id, up);
       if (degreeU !== 1 || !same(knotsU, lineKnots) || controlPoints.length !== 2 || weights.length !== 2
         || !controlPoints.every((row, i) => samePoles(row, expected.controlPoints[i]))
         || !weights.every(row => same(row, [1, 1]))) return undefined;
-      const outer = uses(face, 'outer', 4), inner = uses(face, 'inner', 2);
+      const outer = uses(face, 'outer', bored ? 4 : 2), inner = bored ? uses(face, 'inner', 2) : [];
       if (!outer || !inner) return undefined;
       const sides = new Set<number>();
-      for (const { edge, neighbor } of outer) {
+      for (const { edge, neighbor } of bored ? outer : []) {
         const p = edge.curve.controlPoints;
         const corners = p.every(([x, y]) => (x === min[0] || x === max[0]) && (y === min[1] || y === max[1]));
         if (!line(edge.curve) || !corners
@@ -104,9 +132,10 @@ function admittedBoredPlate(brep: Brep): BoredPlate | undefined {
         const axis = alongY ? 0 : 1;
         sides.add(2 * axis + Number(p[0][axis] === max[axis]));
       }
-      if (sides.size !== 4) return undefined;
-      if (inner.some(({ neighbor }) => neighbor.loops.length !== 1 || neighbor.surface.kind !== 'surface' || neighbor.surface.degreeU !== 2)
-        || new Set(inner.map(use => use.neighbor.id)).size !== 2) return undefined;
+      if (bored && sides.size !== 4) return undefined;
+      const rim = bored ? inner : outer;
+      if (rim.some(({ neighbor }) => neighbor.loops.length !== 1 || neighbor.surface.kind !== 'surface' || neighbor.surface.degreeU !== 2)
+        || new Set(rim.map(use => use.neighbor.id)).size !== 2) return undefined;
       const uv = ([x, y]: Point): Point => {
         const u = (x - min[0]) / (max[0] - min[0]), v = (y - min[1]) / (max[1] - min[1]);
         return up ? [u, v, 0] : [v, u, 0];
@@ -117,7 +146,7 @@ function admittedBoredPlate(brep: Brep): BoredPlate | undefined {
     }
 
     const count = degreeU === 1 ? 2 : 5;
-    if (face.loops.length !== 1 || (degreeU !== 1 && degreeU !== 2) || !same(knotsU, degreeU === 1 ? lineKnots : halfCircleKnots)
+    if (face.loops.length !== 1 || (degreeU !== 2 && (!bored || degreeU !== 1)) || !same(knotsU, degreeU === 1 ? lineKnots : halfCircleKnots)
       || controlPoints.length !== count || weights.length !== count
       || !controlPoints.every(row => row.length === 2 && row[0][2] === lo && row[1][2] === hi
         && row[0][0] === row[1][0] && row[0][1] === row[1][1])
@@ -126,7 +155,8 @@ function admittedBoredPlate(brep: Brep): BoredPlate | undefined {
     if (!boundary) return undefined;
     for (const [station, z] of [lo, hi].entries()) {
       const rails = boundary.filter(({ edge }) => level(edge, z)), [rail] = rails;
-      if (rails.length !== 1 || rail.neighbor.loops.length !== 2) return undefined;
+      if (rails.length !== 1 || rail.neighbor.loops.length !== capLoops
+        || (!bored && (rail.neighbor.surface.kind !== 'surface' || rail.neighbor.surface.degreeU !== 1))) return undefined;
       const { edge, pcurve } = rail, curve = edge.curve;
       if (curve.degree !== degreeU || !same(curve.knots, knotsU)
         || !same(curve.weights, weights.map(row => row[station]))
@@ -156,6 +186,10 @@ function admittedBoredPlate(brep: Brep): BoredPlate | undefined {
 
   const bottom = caps.get(lo), top = caps.get(hi);
   if (!bottom || !top || cylinders.length !== 2 || !checkBrep(brep, { strict: true }).valid) return undefined;
+  if (!bored) {
+    const round = outerCylinder(cylinders, extent);
+    return round && { bottom, top, cylinders, lo, hi, min, max, radius: round.radius, anchorX: round.center[0], anchorY: round.center[1] };
+  }
   const diameter = createCylindricalBoreCheck(brep)(cylinders);
   const bore = faceGeometry(cylinders[0], extent);
   if (diameter === undefined || !(diameter > 2 * tolerance) || bore.kind !== 'cylinder'
@@ -164,18 +198,18 @@ function admittedBoredPlate(brep: Brep): BoredPlate | undefined {
   if (!(left > tolerance && max[0] - x - radius > tolerance
     && y - radius - min[1] > tolerance && max[1] - y - radius > tolerance)) return undefined;
 
-  return { bottom, top, cylinders, lo, hi, min, max, anchorX: min[0] + left / 2, anchorY: y };
+  return { bottom, top, cylinders, lo, hi, min, max, radius, anchorX: min[0] + left / 2, anchorY: y };
 }
 
-function admittedCap(brep: Brep, faceName: string): Cap | undefined {
+function admittedCap(brep: Brep, faceName: string, kind: StockKind = 'bored'): Cap | undefined {
   const matches = brep.faces.filter(face => face.name === faceName);
-  if (matches.length !== 1 || matches[0].loops.length !== 2) return undefined;
-  const plate = admittedBoredPlate(brep);
-  if (!plate) return undefined;
-  const { bottom, top, lo, hi, min, max, anchorX, anchorY } = plate;
+  if (matches.length !== 1 || matches[0].loops.length !== (kind === 'bored' ? 2 : 1)) return undefined;
+  const stock = admittedAxialStock(brep, kind);
+  if (!stock) return undefined;
+  const { bottom, top, lo, hi, min, max, anchorX, anchorY, radius } = stock;
   if (top.name !== faceName && bottom.name !== faceName) return undefined;
   const up = top.name === faceName;
-  return { point: [anchorX, anchorY, up ? hi : lo], sign: up ? 1 : -1, opposite: up ? lo : hi, min, max };
+  return { point: [anchorX, anchorY, up ? hi : lo], sign: up ? 1 : -1, opposite: up ? lo : hi, min, max, radius };
 }
 
 /** A handle anchor on the material and its exact signed axial direction. */
@@ -186,6 +220,12 @@ export function boredCapOffsetFrame(brep: Brep, faceName: string): { anchor: Poi
 
 /** The replacement uses the same exact stock and selected cap as the axial handle. */
 export const boredCapReplacementFrame = boredCapOffsetFrame;
+
+/** The center and outward direction of an exact circular end cap. */
+export function circularCapReplacementFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
+  const cap = admittedCap(brep, faceName, 'circular');
+  return cap && { anchor: cap.point, normal: [0, 0, cap.sign] };
+}
 
 function mapCapStation(brep: Brep, station: number, height: (x: number, y: number) => number): Brep {
   const moved = (point: Point): Point => point[2] === station ? [point[0], point[1], height(point[0], point[1])] : point;
@@ -247,8 +287,9 @@ function ellipsePcurve(pcurve: Curve, edge: Curve, heights: readonly number[]): 
 }
 
 /** Keep the fixed planar and cylindrical supports in their uniform native charts. */
-function encloseSideTrims(brep: Brep, lo: number, hi: number): Brep {
-  const sideFaces = new Set(brep.faces.filter(face => face.loops.length === 1));
+function encloseSideTrims(brep: Brep, lo: number, hi: number, kind: StockKind): Brep {
+  const sideFaces = new Set(brep.faces.filter(face => kind === 'bored' ? face.loops.length === 1
+    : face.surface.kind === 'surface' && face.surface.degreeU === 2));
   const sideLoops = new Set([...sideFaces].map(face => face.loops[0]));
   const edges = byId(brep.edges);
   const faces = brep.faces.map(face => {
@@ -270,9 +311,8 @@ function encloseSideTrims(brep: Brep, lo: number, hi: number): Brep {
   return { ...brep, faces, coedges };
 }
 
-/** Tilt one cap while retaining the straight bore, fixed supports, and trim identities. */
-export function replaceBoredCapIfAdmitted(brep: Brep, faceName: string, plane: ReplacementPlane): Brep | undefined {
-  const cap = admittedCap(brep, faceName);
+function replaceAxialCapIfAdmitted(brep: Brep, faceName: string, plane: ReplacementPlane, kind: StockKind): Brep | undefined {
+  const cap = admittedCap(brep, faceName, kind);
   if (!cap) return undefined;
   if (!plane || typeof plane !== 'object' || Array.isArray(plane) || Object.keys(plane).sort().join(',') !== 'normal,origin'
     || !finitePoint(plane.origin) || !finitePoint(plane.normal))
@@ -287,14 +327,22 @@ export function replaceBoredCapIfAdmitted(brep: Brep, faceName: string, plane: R
   const [ox, oy, oz] = plane.origin;
   const lift = (x: number, y: number) => oz - ((x - ox) * nx + (y - oy) * ny) / nz;
   const [x0, y0] = cap.min, [x1, y1] = cap.max;
-  const heights = [lift(x0, y0), lift(x1, y0), lift(x0, y1), lift(x1, y1)];
+  let heights: number[];
+  if (kind === 'circular') {
+    const atCenter = lift(cap.point[0], cap.point[1]), radialVariation = cap.radius * Math.hypot(nx / nz, ny / nz);
+    // A linear height over a disk reaches its extrema on the rim in the direction of its gradient.
+    heights = [atCenter - radialVariation, atCenter + radialVariation];
+  } else {
+    heights = [lift(x0, y0), lift(x1, y0), lift(x0, y1), lift(x1, y1)];
+  }
   const extent = Math.max(Math.abs(cap.opposite), geometryScaleMM([cap.min, cap.max, heights, plane.origin]));
   if (!(extent <= CadNumericPolicy.coordinateAbs))
     throw new BrepError('GEOMETRY', 'Replace face: the replacement exceeds the modeling coordinate range.');
   const linear = linearToleranceMM(extent);
-  // Thickness is affine across the rectangle. The four corners also bound it along the bore.
-  if (heights.some(z => (z - cap.opposite) * cap.sign <= linear))
-    throw new BrepError('GEOMETRY', 'Replace face: the replacement would reach or cross the opposite cap at one corner.');
+  if (heights.some(z => (z - cap.opposite) * cap.sign <= linear)) {
+    const location = kind === 'circular' ? 'on the circular rim' : 'at one corner';
+    throw new BrepError('GEOMETRY', `Replace face: the replacement would reach or cross the opposite cap ${location}.`);
+  }
   if (Math.max(...heights) - Math.min(...heights) <= linear)
     throw new BrepError('GEOMETRY', 'Replace face: the reference plane tilt is too small for this cap.');
 
@@ -305,16 +353,26 @@ export function replaceBoredCapIfAdmitted(brep: Brep, faceName: string, plane: R
   const surfacePoles = moved.faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints : []);
   if (!(geometryScaleMM(...curvePoles, ...surfacePoles) <= CadNumericPolicy.coordinateAbs))
     throw new BrepError('GEOMETRY', 'Replace face: the replacement exceeds the modeling coordinate range.');
-  const candidate = encloseSideTrims(moved, Math.min(cap.opposite, ...heights), Math.max(cap.opposite, ...heights));
+  const candidate = encloseSideTrims(moved, Math.min(cap.opposite, ...heights), Math.max(cap.opposite, ...heights), kind);
   const report = checkBrep(candidate, { strict: true });
   if (!report.valid) throw new BrepError('GEOMETRY', `Replace face: the replacement solid is invalid: ${report.issues[0]}`, report);
   return candidate;
 }
 
+/** Tilt one cap while retaining the straight bore, fixed supports, and trim identities. */
+export function replaceBoredCapIfAdmitted(brep: Brep, faceName: string, plane: ReplacementPlane): Brep | undefined {
+  return replaceAxialCapIfAdmitted(brep, faceName, plane, 'bored');
+}
+
+/** Tilt an exact circular cap while retaining the outward cylinder and all trim identities. */
+export function replaceCircularCapIfAdmitted(brep: Brep, faceName: string, plane: ReplacementPlane): Brep | undefined {
+  return replaceAxialCapIfAdmitted(brep, faceName, plane, 'circular');
+}
+
 /** Select either native half of the sole bore and restore both of the original planar caps. */
 export function healBoredPlateIfAdmitted(brep: Brep, faceName: string): Brep | undefined {
   if (typeof faceName !== 'string' || !faceName.trim() || faceName.includes('+')) return undefined;
-  const plate = admittedBoredPlate(brep);
+  const plate = admittedAxialStock(brep, 'bored');
   if (!plate?.cylinders.some(face => face.name === faceName)) return undefined;
 
   const removed = new Set(plate.cylinders.map(face => face.id));

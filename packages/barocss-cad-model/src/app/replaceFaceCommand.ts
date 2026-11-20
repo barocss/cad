@@ -1,4 +1,7 @@
-import { isBoredPlateHole, isBoxReplacementSource, isDraftedFaceReplacementSource, isStraightPolygonReplacementSource, withNode, type StudioDoc } from '../engine/doc';
+import {
+  isBoredPlateHole, isBoxReplacementSource, isCylinderReplacementSource, isDraftedFaceReplacementSource,
+  isStraightPolygonReplacementSource, withNode, type StudioDoc,
+} from '../engine/doc';
 import { captureSignatures } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
@@ -16,8 +19,9 @@ function pickedFace(ctx: Ctx) {
       !face?.name || face.nativePlaneName !== face.name || face.exact?.kind !== 'plane') return;
   const boxFace = face.nativeAxisPlane && isBoxReplacementSource(ctx.doc.nodes, parent.node);
   const polygonFace = isStraightPolygonReplacementSource(ctx.doc.nodes, ctx.doc.nodes[parent.node]);
-  const boredCap = face.nativeAxisPlane?.axis === 'z' && isBoredPlateHole(ctx.doc.nodes, parent.node);
-  if (!boxFace && !polygonFace && !boredCap && !isDraftedFaceReplacementSource(ctx.doc.nodes, parent.node)) return;
+  const circularCap = face.nativeAxisPlane?.axis === 'z' &&
+    (isBoredPlateHole(ctx.doc.nodes, parent.node) || isCylinderReplacementSource(ctx.doc.nodes, parent.node));
+  if (!boxFace && !polygonFace && !circularCap && !isDraftedFaceReplacementSource(ctx.doc.nodes, parent.node)) return;
   return { parent, face: face.name };
 }
 

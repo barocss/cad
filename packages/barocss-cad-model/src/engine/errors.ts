@@ -26,6 +26,8 @@ const rules: { code?: string | readonly string[]; text?: RegExp; title: string; 
     title: 'Reference plane is nearly parallel', hint: 'Pick a plane with more tilt or use Offset face for a parallel plane.' },
   { text: /(?:^|: )Replace face: the replacement would reach or cross the opposite (?:wall|cap) at one (?:end|corner)\./,
     title: 'Replacement would collapse the solid', hint: 'Pick a plane that leaves space to the opposite face at every corner.' },
+  { text: /(?:^|: )Replace face: the replacement would reach or cross the opposite cap on the circular rim\./,
+    title: 'Replacement would collapse the cylinder', hint: 'Pick a plane that leaves space to the opposite cap around the full rim.' },
   { text: /(?:^|: )Replace face: the replacement would collapse or cross a wall of the polygon section\./,
     title: 'Replacement would collapse a wall at one cap', hint: 'Pick a plane that leaves every side open at both ends of the prism.' },
   { text: /(?:^|: )Replace face: the reference plane is parallel to an adjacent wall\./,

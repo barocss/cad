@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
-import { boredCapOracle, capCase, draftedCapOracle, draftedWallVolume, polygonWallCase, polygonWallOracle, REPLACE_FACE_VARIANTS, replaceFaceLayout } from './replace-face-cap-fixture.mjs';
+import { boredCapOracle, capCase, cylinderCapOracle, draftedCapOracle, draftedWallVolume, polygonWallCase, polygonWallOracle, REPLACE_FACE_VARIANTS, replaceFaceLayout } from './replace-face-cap-fixture.mjs';
 
 const [output, inputFile, agentFile, variant = 'height'] = process.argv.slice(2);
 assert.ok(output && inputFile && agentFile && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
@@ -11,6 +11,7 @@ const polygonWall = polygonWallCase(variant);
 const draftedWall = variant === 'drafted-wall', diagonal = variant === 'diagonal' || draftedWall || !!polygonWall;
 const cap = capCase(variant);
 const stock = cap?.stock ?? polygonWall?.stock;
+const curvedRimKind = cap?.bore ? 'inner' : cap?.cylinder ? 'outer' : null;
 const layout = replaceFaceLayout(cap);
 const sourceFace = cap?.face ?? 'n1.side1';
 const donorPrefix = `n${layout.donorExtrude}.`;
@@ -38,6 +39,7 @@ const f = await createFlow({
   name: 'replace-face', envFrozen: 'REPLACE_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: 'Replace an exact planar extrusion face with a tilted support in desktop Studio.',
   limits: [cap?.bore ? 'One rectangular through-bore plate and two tilted reference faces for its cap.' :
+    cap?.cylinder ? 'One straight circular cylinder and two tilted reference faces for its cap.' :
     polygonWall ? `One convex ${stock.points.length}-sided prism and two tilted reference faces for its oblique wall.` :
     cap?.stock ? `One convex ${stock.points.length}-sided prism and two tilted reference faces for its cap.` :
     cap ? `One 40 × 30 × 10 mm extrusion and two tilted reference faces for its ${variant} cap.` : draftedWall
@@ -50,10 +52,11 @@ import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, evaluateCurve, faceGeometry } from '@barocss/cad';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-function boreRim(brep) {
-  if (!${!!cap?.bore}) return [];
+function curvedRim(brep) {
+  const kind = ${JSON.stringify(curvedRimKind)};
+  if (!kind) return [];
   const cap = brep.faces.find(face => face.name === ${JSON.stringify(sourceFace)});
-  const loop = brep.loops.find(loop => cap?.loops.includes(loop.id) && loop.kind === 'inner');
+  const loop = brep.loops.find(loop => cap?.loops.includes(loop.id) && loop.kind === kind);
   return loop?.coedges.map(id => {
     const coedge = brep.coedges.find(use => use.id === id);
     const edge = brep.edges.find(edge => edge.id === coedge.edge);
@@ -61,7 +64,7 @@ function boreRim(brep) {
   }) ?? [];
 }
 console.log(JSON.stringify(partBreps(doc).map(({ key, brep }) => ({
-  key, brep, report: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1), boreRim: boreRim(brep),
+  key, brep, report: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1), curvedRim: curvedRim(brep),
   supports: Object.fromEntries(brep.faces.map(face => {
     const g = faceGeometry(face);
     return [face.name, g.kind === 'plane' ? [g.n, g.n.reduce((sum, value, i) => sum + value * g.o[i], 0)] :
@@ -114,6 +117,7 @@ async function measure(label, doc, original, positionAt, donor) {
   const sides = stock?.points.length ?? 4;
   assert.deepEqual(box.report.counts, cap?.bore ?
     { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 } :
+    cap?.cylinder ? { bodies: 1, shells: 1, faces: 4, loops: 4, coedges: 12, edges: 6, vertices: 4 } :
     { bodies: 1, shells: 1, faces: sides + 2, loops: sides + 2, coedges: sides * 6, edges: sides * 3, vertices: sides * 2 });
   assert.deepEqual(incidence(box.brep), incidence(original.brep));
   if (donor) assert.deepEqual(reference.brep, donor.brep);
@@ -124,16 +128,16 @@ async function measure(label, doc, original, positionAt, donor) {
     if (Array.isArray(offset)) offset.forEach((value, axis) => near(support[axis], value));
     else near(support, offset);
   }
-  if (cap?.bore) {
-    assert.equal(box.report.topology[0].genus, 1);
-    assert.equal(box.boreRim.length, 2);
-    const { center: [cx, cy], radius } = cap.bore;
-    for (const [x, y, z] of box.boreRim.flat()) {
+  if (curvedRimKind) {
+    assert.equal(box.report.topology[0].genus, cap.bore ? 1 : 0);
+    assert.equal(box.curvedRim.length, 2);
+    const { center: [cx, cy], radius } = cap.bore ?? cap.cylinder;
+    for (const [x, y, z] of box.curvedRim.flat()) {
       near(Math.hypot(x - cx, y - cy), radius);
       near(z, positionAt(x, y));
     }
   }
-  const bored = cap?.bore ? boredCapOracle(cap, positionAt) : undefined;
+  const curved = cap?.bore ? boredCapOracle(cap, positionAt) : cap?.cylinder ? cylinderCapOracle(cap, positionAt) : undefined;
   const tapered = cap?.drafted ? draftedCapOracle(cap, positionAt) : undefined;
   const wallMeasure = polygonWall ? polygonWallOracle(positionAt, polygonWall.section) : undefined;
   for (const vertex of original.brep.vertices) {
@@ -151,22 +155,23 @@ async function measure(label, doc, original, positionAt, donor) {
     expected.forEach((value, axis) => near(next.point[axis], value));
   }
   // For straight stock, the mean affine thickness is its value at the footprint centroid.
-  const volume = bored?.volume ?? wallMeasure?.volume ?? (draftedWall ? draftedWallVolume(positionAt) :
+  const volume = curved?.volume ?? wallMeasure?.volume ?? (draftedWall ? draftedWallVolume(positionAt) :
     tapered?.volume ?? (cap?.stock ? stock.area * Math.abs(positionAt(...stock.center) - cap.opposite) :
       cap ? 40 * 30 * Math.abs(positionAt(20, 15) - cap.opposite) : 30 * 10 * positionAt(15, 5)));
   near(box.mass.volume, volume);
   const workerVolume = shape(worker, layout.editedBody).volume;
   near(workerVolume, volume);
   near(reference.mass.volume, diagonal || cap ? 192 : 950);
-  if (bored || (diagonal || cap) && positionAt === position) {
-    const centroid = bored?.centroid ?? wallMeasure?.centroid ?? (draftedWall ? [29251159 / 1408600, 1068659 / 70430, 35390 / 7043] :
+  if (curved || (diagonal || cap) && positionAt === position) {
+    const centroid = curved?.centroid ?? wallMeasure?.centroid ?? (draftedWall ? [29251159 / 1408600, 1068659 / 70430, 35390 / 7043] :
       tapered?.centroid ?? cap?.centroid ?? [10103 / 492, 1245 / 82, 1255 / 246]);
     centroid.forEach((value, axis) => near(box.mass.centroid[axis], value));
   }
   const corners = cap?.stock ? stock.points : cap ? [[0, 0], [40, 0], [0, 30], [40, 30]] :
     [[0, 0], [30, 0], [draftedWall ? 1 : 0, 10], [draftedWall ? 29 : 30, 10]];
   const coordinates = polygonWall ? [0, 10].flatMap(z => polygonWall.section(positionAt(0, z)).slice(1, 3).map(point => [...point, z])) :
-    tapered?.moving.map(point => point[2]) ?? corners.map(([u, v]) => positionAt(u, v));
+    cap?.cylinder ? box.curvedRim.flat().map(([x, y]) => positionAt(x, y)) :
+      tapered?.moving.map(point => point[2]) ?? corners.map(([u, v]) => positionAt(u, v));
   f.report.observations.push({ label, axis: polygonWall ? 'xy' : cap ? 'z' : 'x', coordinates, volume, nativeVolume: box.mass.volume, workerVolume,
     maximumEdgeSurfaceGap: box.report.maximumEdgeSurfaceGap });
   return reference;
@@ -189,6 +194,7 @@ await f.run(async () => {
   await f.same(source);
   const native = await f.inspect('source', source), original = shape(native, layout.stockBody), donor = shape(native, layout.donorBody);
   near(original.mass.volume, cap?.bore ? 12000 - 10 * Math.PI * cap.bore.radius ** 2 :
+    cap?.cylinder ? 10 * Math.PI * cap.cylinder.radius ** 2 :
     stock ? stock.area * 10 : cap?.drafted || draftedWall ? 11300 + 40 / 3 : 12000);
   await view(cap?.name ?? 'Right');
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
@@ -197,7 +203,7 @@ await f.run(async () => {
   for (let i = 0; i < 4 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
   await point(polygonWall ? polygonWall.wallPick : cap?.stock ? [...stock.center, cap.station] :
-    cap ? [20, 15, cap.station] : [draftedWall ? 39.5 : 40, 15, 5]);
+    cap?.cylinder ? [...cap.cylinder.center, cap.station] : cap ? [20, 15, cap.station] : [draftedWall ? 39.5 : 40, 15, 5]);
   await f.page.getByText(new RegExp('Properties and face colour: .*' + sourceFace.replace('.', '\\.'))).waitFor();
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Replace face');
@@ -263,6 +269,7 @@ await f.run(async () => {
   stale.nodes[layout.donorMove].offset[cap ? 2 : 0] = polygonWall?.collapse ?? cap?.collapse ?? -37;
   await open({ name: 'collapsed-wall.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(stale)) });
   await f.waitToast(polygonWall ? /collapse or cross a wall of the polygon section.*Your part is unchanged/i :
+    cap?.cylinder ? /reach or cross the opposite cap on the circular rim.*Your part is unchanged/i :
     /reach or cross the opposite (?:wall|cap).*Your part is unchanged/i);
   await f.same(agentDoc);
   await f.snapshot('replacement-collapse-refused');

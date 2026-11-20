@@ -6,7 +6,7 @@ const trapezoid = { points: [[0, 0], [18, 0], [24, 16], [0, 16]], area: 336, cen
 export const REPLACE_FACE_VARIANTS = [
   'height', 'diagonal', 'upper', 'lower', 'drafted-upper', 'drafted-lower', 'drafted-wall',
   'hex-upper', 'hex-lower', 'hex-wall', 'hex-wall-turn', 'hex-wall-turn-tilt', 'pentagon-upper', 'heptagon-wall',
-  'trapezoid-upper', 'trapezoid-wall', 'bored-upper', 'bored-lower',
+  'trapezoid-upper', 'trapezoid-wall', 'bored-upper', 'bored-lower', 'cylinder-upper', 'cylinder-lower',
 ];
 
 export function replaceFaceLayout(cap) {
@@ -62,9 +62,10 @@ export function polygonWallOracle(distance, section) {
 export function capCase(variant) {
   const drafted = variant.startsWith('drafted-');
   const bore = variant.startsWith('bored-') ? { center: [11, 9], radius: 3 } : undefined;
+  const cylinder = variant.startsWith('cylinder-') ? { center: [14, 12], radius: 8 } : undefined;
   const stock = variant.startsWith('hex-') ? hexagon : variant.startsWith('pentagon-') ? pentagon :
     variant.startsWith('trapezoid-') ? trapezoid : undefined;
-  const end = variant.replace(/^(?:drafted|hex|pentagon|trapezoid|bored)-/, '');
+  const end = variant.replace(/^(?:drafted|hex|pentagon|trapezoid|bored|cylinder)-/, '');
   if (end !== 'upper' && end !== 'lower') return;
   const direction = end === 'upper' ? 1 : -1;
   const station = direction === 1 ? 10 : 0, opposite = 10 - station;
@@ -76,11 +77,12 @@ export function capCase(variant) {
   const otherPick = referencePick.map((value, i) => value + 3 * normal[i] + (i === 2 ? moved : 0));
   const height = (x, y) => opposite + direction * (8 + x / 10 + y / 5);
   return {
-    drafted, bore, stock, direction,
+    drafted, bore, cylinder, stock, direction,
     name: direction === 1 ? 'Top' : 'Bottom', oppositeName: direction === 1 ? 'Bottom' : 'Top',
     face: direction === 1 ? 'n1.top' : 'n1.bottom', station, opposite, moved,
     // On the drafted underside the fixed upper corner is (1, 1, 10).
-    collapse: drafted && direction === -1 ? 8.3 : -8 * direction,
+    collapse: cylinder ? -(height(...cylinder.center) - opposite) + direction * cylinder.radius * Math.hypot(0.1, 0.2) :
+      drafted && direction === -1 ? 8.3 : -8 * direction,
     sketch: { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [8, 8], plane: { origin, normal, xAxis } },
     referencePick, otherPick, height,
     movedHeight: (x, y) => height(x, y) + moved,
@@ -105,6 +107,15 @@ export function boredCapOracle(cap, support) {
   const square = h ** 2 * area + 2 * h * (dx * x + dy * y) + dx ** 2 * xx + 2 * dx * dy * xy + dy ** 2 * yy;
   return { volume, centroid: [(h * x + dx * xx + dy * xy) / volume, (h * y + dx * xy + dy * yy) / volume,
     opposite + direction * square / (2 * volume)] };
+}
+
+export function cylinderCapOracle(cap, support) {
+  const { direction, opposite, cylinder: { center: [x, y], radius } } = cap;
+  const h = (support(x, y) - opposite) * direction, variance = radius ** 2 / 4;
+  const dx = (support(x + 1, y) - support(x, y)) * direction;
+  const dy = (support(x, y + 1) - support(x, y)) * direction;
+  return { volume: Math.PI * radius ** 2 * h, centroid: [x + variance * dx / h, y + variance * dy / h,
+    opposite + direction * (h ** 2 + variance * (dx ** 2 + dy ** 2)) / (2 * h)] };
 }
 
 // Independent physical oracle for this fixed fixture. Each corner follows its measured
