@@ -25,7 +25,16 @@ const pair = (v: unknown): v is [number, number] => Array.isArray(v) && v.length
 function prepareSpanHoleEdit(doc: StudioDoc, draft: ModelNode[], index: number): Result {
   const active = (nodes: ModelNode[]) => nodes.some(n => n.kind === "hole" && !n.held && !n.suppressed
     && n.parent.node === index);
-  if (!active(doc.nodes) && !active(draft)) return { nodes: draft };
+  // A dormant terminal bore must keep its copy-relative location, but Count may
+  // still retire its copy. Only the unchanged last-copy owner enters this proof.
+  const dormant = doc.nodes[3], pattern = doc.nodes[index];
+  const suspended = index === 2 && doc.nodes.length === 4 && draft.length === 4
+    && pattern?.kind === "linear-span-pattern" && dormant?.kind === "hole"
+    && dormant.suppressed === true && !dormant.held
+    && same(dormant.parent,{node:2,side:"solid"})
+    && dormant.face === `${featureId(doc.nodes,1)}.top@${pattern.count-1}`
+    && same(dormant,draft[3]);
+  if (!active(doc.nodes) && !active(draft) && !suspended) return { nodes: draft };
   const refuse = (): Result => ({ error: { title: "Pattern span not changed",
     hint: "This numbered Hole cannot safely follow Total span. Keep the current span or edit the Hole and pattern separately.", detail: "" } });
   const [sk, ex, old, hole] = doc.nodes, next = draft[index];
@@ -42,7 +51,7 @@ function prepareSpanHoleEdit(doc: StudioDoc, draft: ModelNode[], index: number):
     || !same(old.parent,{node:1,side:"solid"}) || (old.axis !== "x" && old.axis !== "y")
     || !Number.isInteger(old.count) || old.count < 2 || old.count > 64 || !finite(old.span) || !finite(next.span) || old.span <= 0 || next.span <= 0
     || !same({...old,span:next.span},next)
-    || hole.kind !== "hole" || !only(hole,["id","kind","parent","center","radius","face","axis","side"])
+    || hole.kind !== "hole" || !only(hole,["id","kind","parent","center","radius","face","axis","side",...(suspended ? ["suppressed"] : [])])
     || !same(hole.parent,{node:2,side:"solid"}) || !pair(hole.center) || !finite(hole.radius) || hole.radius <= 0
     || (hole.axis !== undefined && hole.axis !== "z") || (hole.side !== undefined && hole.side !== "max")
     || hole.face !== `${featureId(doc.nodes,1)}.top@${old.count-1}`
@@ -54,12 +63,17 @@ function prepareSpanHoleEdit(doc: StudioDoc, draft: ModelNode[], index: number):
   const spacingNode = (node: typeof old, spacing: number): ModelNode => {
     return {id:node.id,kind:"linear-pattern",parent:node.parent,axis:node.axis,count:node.count,spacing};
   };
-  const before = doc.nodes.map((n,i) => i === index ? spacingNode(old,oldInput.spacing) : n);
-  const after = draft.map((n,i) => i === index ? spacingNode(next,newInput.spacing) : n);
+  // Strip suppression only for the existing complete-bore proof; never evaluate
+  // or commit this temporary pair as the accepted suppressed History draft.
+  const { suppressed: _suppressed, ...withoutSuppression } = hole;
+  void _suppressed;
+  const proofHole = suspended ? withoutSuppression : hole;
+  const before = doc.nodes.map((n,i) => i === index ? spacingNode(old,oldInput.spacing) : i === 3 ? proofHole : n);
+  const after = draft.map((n,i) => i === index ? spacingNode(next,newInput.spacing) : i === 3 ? proofHole : n);
   const proof = prepareLinearPatternHoleEdit({...doc,nodes:before},after,index);
   if ("error" in proof) return proof;
   const moved = proof.nodes[3];
-  if (moved.kind !== "hole" || moved === hole) return refuse();
+  if (moved.kind !== "hole" || moved === proofHole) return refuse();
   return {nodes:draft.map((n,i) => i === 3 ? {...hole,center:moved.center} : n)};
 }
 

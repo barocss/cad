@@ -47,8 +47,15 @@ test('unsupported active dependencies and mixed edits refuse without mutations',
  assert.equal(checkBrep(modeOut.brep,{strict:true}).valid,true);near(massPropertiesOf(modeOut).volume,576-8*Math.PI);
  assert.ok('error' in prepare(doc,patch(draft,3,{suppressed:true}),2));
 });
-test('inactive and absent Hole preserve ordinary span edits; Count-only legacy retarget remains unchanged',()=>{
- const doc=fixture();for(const p of [{suppressed:true},{held:'missing'}]){const a={...doc,nodes:patch(doc.nodes,3,p)},d=patch(a.nodes,2,{span:40});const out=prepare(a,d,2);assert.ok('nodes' in out);if('nodes' in out)assert.equal(out.nodes,d);}
+test('suppressed end-copy Hole follows span; held and absent Hole and Count-only behavior stay unchanged',()=>{
+ const doc=fixture(),suppressed={...doc,nodes:patch(doc.nodes,3,{suppressed:true})};
+ const draft=patch(suppressed.nodes,2,{span:40}),before=structuredClone({suppressed,draft});
+ const remapped=prepare(suppressed,draft,2);
+ assert.deepEqual(remapped,{nodes:patch(draft,3,{center:[-8,13],suppressed:true})});
+ assert.deepEqual({suppressed,draft},before);
+ const held={...doc,nodes:patch(doc.nodes,3,{held:'missing'})},heldDraft=patch(held.nodes,2,{span:40});
+ const heldEdit=prepare(held,heldDraft,2);
+ assert.ok('nodes' in heldEdit);if('nodes' in heldEdit)assert.equal(heldEdit.nodes,heldDraft);
  const noHole={...doc,nodes:doc.nodes.slice(0,3)},d=patch(noHole.nodes,2,{span:40});assert.deepEqual(prepare(noHole,d,2),{nodes:d});
  const count=prepare(doc,patch(doc.nodes,2,{count:4}),2);assert.ok('nodes' in count);if('nodes' in count){const h=count.nodes[3];assert.equal(h.kind,'hole');if(h.kind==='hole'){assert.equal(h.face,'n1.top@3');assert.deepEqual(h.center,[-16,13]);}}
 });
