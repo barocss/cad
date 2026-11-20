@@ -81,12 +81,58 @@ test('prism cap replacement refuses unsupported stock and unsuitable donor plane
   }
   assert.throws(() => replacePrismCapIfAdmitted(source, face, { origin, normal: [1, 0, 0] }), /perpendicular/);
   for (const [brep, name] of [[source, selected], [solidOf(part([[0, 0], [18, 0], [18, 16], [0, 16]])), face],
+    [solidOf(part([[0, 0], [18, 0], [4, 4], [0, 16]])), face],
     [solidOf(part([[0, 0], [18, 0], [10, 7], [18, 16], [0, 16], [-6, 8]])), face],
     [solidOf(part(footprint, { draft: 5 })), face]]) {
     assert.equal(prismCapReplacementFrame(brep, name), undefined);
     assert.equal(replacePrismCapIfAdmitted(brep, name, { origin, normal: [-1, -2, 10] }), undefined);
   }
 });
+
+for (const fixture of [
+  { face: 'n1.top', plane: { origin: [0, 0, 8], normal: [-1, -2, 10] }, volume: 18032 / 5 },
+  { face: 'n1.side1', plane: { origin: [18, 0, 0], normal: [8, -2, -4 / 5] }, volume: 3280 },
+]) {
+  test(`replace ${fixture.face} of a convex trapezoidal prism without changing its native identities`, () => {
+    const doc = part([[0, 0], [18, 0], [24, 16], [0, 16]]), source = solidOf(doc), before = structuredClone(source);
+    const { face, plane, volume } = fixture, cap = face === 'n1.top';
+    const change = { id: 'replace', kind: 'replace-face', target: 'n1', face, plane };
+    const result = solidOf({ ...doc, features: [...doc.features, change] });
+    const report = checkBrep(result, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+    assert.equal(result.coedges.filter(coedge => coedge.pcurve).length, 24);
+    assert.deepEqual(identity(result), identity(source));
+    assert.ok(report.maximumEdgeSurfaceGap < 1e-9);
+    assert.ok(report.maximumPcurveGap < 1e-9);
+    for (const [i, { point: [x, y, z] }] of source.vertices.entries()) {
+      const expected = cap ? [x, y, z === 10 ? 8 + x / 10 + y / 5 : z] :
+        [x === 0 ? 0 : 18 + y / 4 + z / 10, y, z];
+      pointClose(result.vertices[i].point, expected);
+    }
+    for (const original of source.faces) {
+      const next = faceOf(result, original.name);
+      if (original.name === face) {
+        const n = plane.normal.map(value => value / Math.hypot(...plane.normal));
+        pointClose(faceGeometry(next).n, n);
+        for (const point of next.surface.controlPoints.flat())
+          close(point.reduce((sum, value, axis) => sum + (value - plane.origin[axis]) * n[axis], 0), 0);
+      } else {
+        const support = faceGeometry(original);
+        pointClose(faceGeometry(next).n, support.n);
+        for (const point of next.surface.controlPoints.flat())
+          close(point.reduce((sum, value, axis) => sum + (value - support.o[axis]) * support.n[axis], 0), 0);
+      }
+    }
+    const mass = brepMassProperties(result, 1);
+    close(mass.volume, volume, 1e-7);
+    if (cap) pointClose(mass.centroid, [12399 / 1127, 9932 / 1127, 17489 / 3220]);
+    const apply = cap ? replacePrismCapIfAdmitted : replacePrismWallIfAdmitted;
+    assert.throws(() => apply(source, face, { ...plane, origin: [0, 0, 0] }),
+      cap ? /reach or cross the opposite cap/ : /collapse or cross a wall of the polygon section/);
+    assert.deepEqual(source, before);
+  });
+}
 
 test('replace a pentagonal prism cap and keep its five wall supports and opposite cap', () => {
   const doc = part(footprint.slice(0, 5)), source = solidOf(doc), before = structuredClone(source), faceName = 'n1.top';

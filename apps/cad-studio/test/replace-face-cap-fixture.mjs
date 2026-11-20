@@ -2,36 +2,41 @@ const unit = vector => vector.map(value => value / Math.hypot(...vector));
 const hexagon = { points: [[0, 0], [18, 0], [24, 8], [18, 16], [0, 16], [-6, 8]], area: 384, center: [9, 8] };
 const pentagon = { points: hexagon.points.slice(0, 5), area: 336, center: [74 / 7, 8] };
 const heptagon = { points: [...hexagon.points.slice(0, 5), [-5, 12], hexagon.points[5]], area: 392 };
+const trapezoid = { points: [[0, 0], [18, 0], [24, 16], [0, 16]], area: 336, center: [74 / 7, 176 / 21] };
 export const REPLACE_FACE_VARIANTS = [
   'height', 'diagonal', 'upper', 'lower', 'drafted-upper', 'drafted-lower', 'drafted-wall',
   'hex-upper', 'hex-lower', 'hex-wall', 'hex-wall-turn', 'hex-wall-turn-tilt', 'pentagon-upper', 'heptagon-wall',
+  'trapezoid-upper', 'trapezoid-wall',
 ];
 
 export function polygonWallCase(variant) {
-  if (!variant.startsWith('hex-wall') && variant !== 'heptagon-wall') return;
-  const stock = variant === 'heptagon-wall' ? heptagon : hexagon;
+  const trapezoidal = variant === 'trapezoid-wall';
+  if (!variant.startsWith('hex-wall') && variant !== 'heptagon-wall' && !trapezoidal) return;
+  const stock = trapezoidal ? trapezoid : variant === 'heptagon-wall' ? heptagon : hexagon;
+  const xCoefficient = trapezoidal ? 8 : 4;
   const side = variant === 'hex-wall' ? 3 : 2;
   const slope = variant === 'hex-wall-turn' ? 0 : 4 / 5;
-  const donorNormal = [-4, side, slope];
-  const origin = [18 + 15 * side, 60, 0], normal = unit(donorNormal), xAxis = unit([side, 4, 0]);
-  const yAxis = unit([-4 * slope, side * slope, -16 - side ** 2]);
+  const donorNormal = [-xCoefficient, side, slope];
+  const origin = [18 + 60 * side / xCoefficient, 60, 0], normal = unit(donorNormal), xAxis = unit([side, xCoefficient, 0]);
+  const yAxis = unit([-xCoefficient * slope, side * slope, -(xCoefficient ** 2) - side ** 2]);
   const referencePick = origin.map((value, i) => value + 4 * (xAxis[i] + yAxis[i]));
   const otherPick = referencePick.map((value, i) => value + 3 * normal[i] + (i === 0 ? 2 : 0));
   return {
-    stock, referencePick, otherPick,
+    stock, referencePick, otherPick, wallPick: trapezoidal ? [21, 8, 5] : [21, 4, 5],
     sketch: { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [8, 8], plane: { origin, normal, xAxis } },
-    distance: (_y, z) => slope * z / 5,
-    movedDistance: (_y, z) => slope * z / 5 + 8 / 5,
-    retargetedDistance: (_y, z) => slope * z / 5 + 8 / 5 - 3 * Math.hypot(...donorNormal) / 5,
-    section: distance => polygonWallSection(distance, side, stock.points),
-    collapse: 12 - 5 * slope / 2,
+    distance: (_y, z) => slope * z / xCoefficient,
+    movedDistance: (_y, z) => slope * z / xCoefficient + 2,
+    retargetedDistance: (_y, z) => slope * z / xCoefficient + 2 - 3 * Math.hypot(...donorNormal) / xCoefficient,
+    section: shift => trapezoidal ? [[0, 0], [18 + shift, 0], [22 + shift, 16], [0, 16]] :
+      polygonWallSection(shift, side, stock.points),
+    collapse: trapezoidal ? -18 : 12 - 5 * slope / 2,
   };
 }
 
-// The new wall is 4x - side*y = 72 + 5d. Intersect it with y = 0 and 4x + 3y = 120.
-function polygonWallSection(d, side, points) {
-  const y = (48 - 5 * d) / (side + 3);
-  return [points[0], [18 + 5 * d / 4, 0], [30 - 3 * y / 4, y], ...points.slice(3)];
+// Intersect 4x - side*y = 72 + 4*shift with y = 0 and 4x + 3y = 120.
+function polygonWallSection(shift, side, points) {
+  const y = (48 - 4 * shift) / (side + 3);
+  return [points[0], [18 + shift, 0], [30 - 3 * y / 4, y], ...points.slice(3)];
 }
 
 export function polygonWallOracle(distance, section) {
@@ -51,8 +56,9 @@ export function polygonWallOracle(distance, section) {
 /** A stock cap and a separate 8 × 8 × 3 mm reference extruded from the exact tilted plane. */
 export function capCase(variant) {
   const drafted = variant.startsWith('drafted-');
-  const stock = variant.startsWith('hex-') ? hexagon : variant.startsWith('pentagon-') ? pentagon : undefined;
-  const end = variant.replace(/^(?:drafted|hex|pentagon)-/, '');
+  const stock = variant.startsWith('hex-') ? hexagon : variant.startsWith('pentagon-') ? pentagon :
+    variant.startsWith('trapezoid-') ? trapezoid : undefined;
+  const end = variant.replace(/^(?:drafted|hex|pentagon|trapezoid)-/, '');
   if (end !== 'upper' && end !== 'lower') return;
   const direction = end === 'upper' ? 1 : -1;
   const station = direction === 1 ? 10 : 0, opposite = 10 - station;
@@ -74,7 +80,8 @@ export function capCase(variant) {
     movedHeight: (x, y) => height(x, y) + moved,
     retargetedHeight: (x, y) => height(x, y) + moved + direction * 3 * Math.sqrt(105) / 10,
     centroid: stock === hexagon ? [332 / 35, 376 / 45, direction === 1 ? 8363 / 1575 : 7387 / 1575] :
-      stock === pentagon ? [4077 / 373, 9368 / 1119, 120487 / 22380] : [820 / 39, 210 / 13, direction === 1 ? 20 / 3 : 10 / 3],
+      stock === pentagon ? [4077 / 373, 9368 / 1119, 120487 / 22380] :
+      stock === trapezoid ? [12399 / 1127, 9932 / 1127, 17489 / 3220] : [820 / 39, 210 / 13, direction === 1 ? 20 / 3 : 10 / 3],
   };
 }
 

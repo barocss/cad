@@ -6,7 +6,7 @@ import type { Point, Surface } from '../types.js';
 const HEXAGON_SIDE_COUNT = 6;
 // Match the authored Part polygon limit. The quadratic support proof is bounded by this count.
 const MAX_PRISM_SIDES = 1024;
-const supportsPrismSides = (count: number) => count >= 3 && count !== 4 && count <= MAX_PRISM_SIDES;
+const supportsPrismSides = (count: number) => count >= 3 && count <= MAX_PRISM_SIDES;
 const next = (i: number, count: number) => (i + 1) % count;
 const prev = (i: number, count: number) => (i + count - 1) % count;
 const samePoint = (a: Point, b: Point) => a.every((value, i) => value === b[i]);
@@ -128,10 +128,14 @@ function admittedPrism(brep: Brep): Prism | undefined {
     }
     if (new Set(corners).size !== corners.length) return undefined;
     const binding = { original: face, loop, chart, corners, edges: boundary };
-    if (corners.length === 4) { sideFaces.push(binding); continue; }
-    const z = corners[0].point[2], cap = z === z0 ? 0 : 1;
-    if (caps[cap] || chart.normal[2] * (cap === 0 ? -1 : 1) <= 0
-      || !corners.every(({ point }) => point[2] === z)
+    const z = corners[0].point[2];
+    if (!corners.every(({ point }) => point[2] === z)) {
+      if (corners.length !== 4) return undefined;
+      sideFaces.push(binding);
+      continue;
+    }
+    const cap = z === z0 ? 0 : 1;
+    if (corners.length !== count || caps[cap] || chart.normal[2] * (cap === 0 ? -1 : 1) <= 0
       || !chart.surface.controlPoints.flat().every(point => Math.abs(point[2] - z) <= roundoff)) return undefined;
     caps[cap] = binding;
   }
@@ -165,6 +169,8 @@ function admittedPrism(brep: Brep): Prism | undefined {
     if (!face.chart.surface.controlPoints.flat().every(point => Math.abs(dot(sub(point, origin), normal)) <= roundoff)) return undefined;
     walls.push({ face, origin, normal });
   }
+  // Four right angles identify a rectangle, which has its own replacement path.
+  if (count === 4 && walls.every(({ normal }, i) => Math.abs(dot(normal, walls[next(i, count)].normal)) <= allowance(1))) return undefined;
   if (!keepsSection(upper.map(vertex => vertex.point), walls, -1, 0, extent)
     || !checkBrep(brep, { strict: true }).valid) return undefined;
   return { caps: [caps[0], caps[1]], walls, lower, upper, extent };
@@ -175,16 +181,22 @@ function namedFace(brep: Brep, name: string): boolean {
 }
 
 /** Check the intended face kind before running the full native prism proof. */
-function namedPrismFace(brep: Brep, name: string, corners: number): boolean {
+function namedPrismFace(brep: Brep, name: string, kind: 'cap' | 'wall'): boolean {
   const count = brep.faces.length - 2;
   if (!supportsPrismSides(count)) return false;
   const matches = brep.faces.filter(face => face.name === name), [face] = matches;
-  return matches.length === 1 && face.loops.length === 1
-    && brep.loops.find(loop => loop.id === face.loops[0])?.coedges.length === corners;
+  if (matches.length !== 1 || face.loops.length !== 1
+    || brep.loops.find(loop => loop.id === face.loops[0])?.coedges.length !== (kind === 'cap' ? count : 4)) return false;
+  if (count !== 4) return true;
+  // Both loops have four corners here. The chart is a preflight hint; the full proof uses vertex heights.
+  const chart = affineChart(face.surface, face.sense);
+  if (!chart) return false;
+  const [x, y, z] = chart.normal;
+  return (Math.abs(z) > Math.hypot(x, y)) === (kind === 'cap');
 }
 
 function admittedWallPrism(brep: Brep, faceName: string): WallPrism | undefined {
-  if (!namedPrismFace(brep, faceName, 4)) return undefined;
+  if (!namedPrismFace(brep, faceName, 'wall')) return undefined;
   const prism = admittedPrism(brep);
   if (!prism) return undefined;
   const selected = prism.walls.findIndex(wall => wall.face.original.name === faceName);
@@ -338,7 +350,7 @@ type ReplacementPlane = { readonly origin: Point; readonly normal: Point };
 type PrismCap = { readonly prism: Prism; readonly cap: Face; readonly end: 0 | 1 };
 
 function admittedPrismCap(brep: Brep, faceName: string): PrismCap | undefined {
-  if (!namedPrismFace(brep, faceName, brep.faces.length - 2)) return undefined;
+  if (!namedPrismFace(brep, faceName, 'cap')) return undefined;
   const prism = admittedPrism(brep);
   if (!prism) return undefined;
   const end = prism.caps[0].original.name === faceName ? 0 : prism.caps[1].original.name === faceName ? 1 : undefined;

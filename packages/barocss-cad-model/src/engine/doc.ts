@@ -340,7 +340,7 @@ export function isStraightHexagonalExtrusion(nodes: readonly unknown[], parent: 
 /** Authored polygon source for Replace face. The separate rectangular path handles rectangle sketches. */
 export function isStraightPolygonReplacementSource(nodes: readonly unknown[], parent: unknown): boolean {
   const count = straightPolygonExtrusionPointCount(nodes, parent);
-  return count !== undefined && count >= 3 && count !== 4 && count <= CadPartLimits.points;
+  return count !== undefined && count >= 3 && count <= CadPartLimits.points;
 }
 
 function precedingSolidIndex(parent: unknown, index: number): number | undefined {

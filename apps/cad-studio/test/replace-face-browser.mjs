@@ -168,7 +168,7 @@ await f.run(async () => {
   const filter = button('Selection filter');
   for (let i = 0; i < 4 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
-  await point(polygonWall ? [21, 4, 5] : cap?.stock ? [...stock.center, cap.station] :
+  await point(polygonWall ? polygonWall.wallPick : cap?.stock ? [...stock.center, cap.station] :
     cap ? [20, 15, cap.station] : [draftedWall ? 39.5 : 40, 15, 5]);
   await f.page.getByText(new RegExp('Properties and face colour: .*' + sourceFace.replace('.', '\\.'))).waitFor();
   await f.page.evaluate(() => document.activeElement?.blur());
