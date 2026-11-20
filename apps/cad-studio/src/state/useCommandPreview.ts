@@ -133,7 +133,9 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
         const terminal = candidate.nodes.at(-1);
         const cutFeature = shown === candidate && cmd.id === 'extrude' && values.op === 'cut'
           && candidate.nodes.length > ctx.doc.nodes.length && terminal?.kind === 'difference' ? terminal.id : undefined;
-        const reply = await ownedPreview(lifetime.current, ticket, () => engine.preview(shown, revision, cutFeature));
+        const flangeFeature = shown === candidate && !rolled && cmd.id === 'sheet-flange'
+          && candidate.nodes.length === ctx.doc.nodes.length + 1 && terminal?.kind === 'sheet-flange' ? terminal.id : undefined;
+        const reply = await ownedPreview(lifetime.current, ticket, () => engine.preview(shown, revision, cutFeature, flangeFeature));
         if (reply.stale) return; const result = reply.result;
         if (!rolled) wholeCost.current = { doc: ctx.doc, ms: performance.now() - t0 };
         if (cmd.id === 'bearing' && ctx.bearingAssembly?.root !== currentBearingDoc()) return;
@@ -199,6 +201,10 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
             if (target) extrudeResult = { target: bodyName(ctx.doc, target), pieces,
               solid: outputs.length > 0 && outputs.every(body => body.family === 'upright') };
           }
+          const flangeBodies = live && flangeFeature && result.revision === revision
+            ? result.bodies.filter(body => body.ref?.node === candidate.nodes.length - 1) : [];
+          const flangeFlat = flangeBodies.length === 1 && flangeBodies[0].ref?.side === 'solid'
+            ? flangeBodies[0].flangePreviewFlat : undefined;
           previewFor.current = rolled ? '' : JSON.stringify(values);
           setPreviewBodies(result.bodies);
           setActive(a => {
@@ -207,7 +213,9 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
             return { ...a, preview: ready ? 'ok' : 'busy', error: undefined,
               extrudeResult: ready && a.values === values ? extrudeResult : undefined,
               filletScope: ready && a.values === values ? filletScope : undefined,
-              chamferScope: ready && a.values === values ? chamferScope : undefined };
+              chamferScope: ready && a.values === values ? chamferScope : undefined,
+              flangeFlatWarning: ready && a.values === values && flangeFlat?.status === 'refused'
+                ? { ctx, values, reason: flangeFlat.reason } : undefined };
           });
         }
         else if (live && current?.cmd === cmd && current.ctx === ctx && current.values === values) {

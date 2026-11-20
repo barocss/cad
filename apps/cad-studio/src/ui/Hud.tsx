@@ -76,6 +76,8 @@ export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFil
   const extrudeFeedback = extrudeDraftFeedback(active);
   const dependentHoleFeedback = draftDependentHoleFeedback(active);
   const edgeScope = active.preview === 'ok' ? active.filletScope ?? active.chamferScope : undefined;
+  const flangeFlatWarning = active.cmd.id === 'sheet-flange' && active.preview === 'ok'
+    && active.flangeFlatWarning?.ctx === active.ctx && active.flangeFlatWarning.values === active.values ? active.flangeFlatWarning : null;
   const shapedSourceScope = active.cmd.id === 'fillet' && active.fillet?.type === 'edge'
     && active.preview === 'ok' && !edgeScope && (active.values.shape === 'conic' || active.values.shape === 'g2');
   const replacingAxis = active.cmd.id === REVOLVE_AXIS_EDIT;
@@ -164,6 +166,7 @@ export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFil
           </div>;
         })}
       </div>}
+      {flangeFlatWarning && <div className="hud-error" role="status">No flat pattern for this Flange preview. The bend can still be applied. {flangeFlatWarning.reason}</div>}
       {shapedSourceScope && <p className="small muted">This count describes the source selection, not the complete fillet scope. Exact tangent scope unavailable.</p>}
       {active.fillet?.radiusMode === 'varying' && <FilletEndpointNotice locations={filletEndpoints ?? {reason:'Original endpoint locations are unavailable for the current source.'}} />}
       {edgeScope && <div className="hud-steps" role="group" aria-label={active.filletScope ? 'Fillet scope' : 'Chamfer scope'}>

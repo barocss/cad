@@ -114,6 +114,8 @@ export interface BodyResult {
   subd?: SubdSummary;
   /** A sheet-metal body's flat pattern (R12.2, D117), or why it has none (its refusal). */
   flat?: FlatPattern; flatRefused?: string;
+  /** Advisory only on an explicitly requested Flange preview, never an accepted Flat pattern. */
+  flangePreviewFlat?: { status: 'available' } | { status: 'refused'; reason: string };
   /** Ephemeral current native provenance, independent of cached flat display names. */
   sheetBendOwners?: readonly { readonly featureId: string; readonly faces: readonly string[] }[];
   /** A frame member as a piece to cut (FR4a, D127): its axis length, long point, end cuts, volume. */
@@ -410,7 +412,7 @@ function emptyExtrudeCut(snapshot: CadPartSnapshot, doc: StudioDoc, cutFeature: 
  * A command's preview: through its own cache (the features it leaves alone are not built again while
  * it is dragged) and without mass properties (worked out when the part is evaluated).
  */
-export function evaluatePreview(doc: StudioDoc, revision: number, quality = 8, slot: 'preview' | 'section' = 'preview', cutFeature?: string): EvalResult {
+export function evaluatePreview(doc: StudioDoc, revision: number, quality = 8, slot: 'preview' | 'section' = 'preview', cutFeature?: string, flangeFeature?: string): EvalResult {
   const t0 = performance.now();
   try {
     const last = lastPreview[slot], snapshot = partSnapshot(doc, part => last ? reevaluate(last, { document: part }) : evaluateCadPart(part, undefined, PREVIEW)); lastPreview[slot] = snapshot;
@@ -423,6 +425,26 @@ export function evaluatePreview(doc: StudioDoc, revision: number, quality = 8, s
       ...(slot === 'preview' && o.filletTargets ? { filletTargets: o.filletTargets } : {}),
       ...(slot === 'preview' && o.chamferTargets ? { chamferTargets: o.chamferTargets } : {}),
       ...(o.bodyCount > 1 ? { pieces: o.bodyCount } : {}), volume: null, mass: null }));
+    // Ordinary previews do not calculate a flat. The caller must opt in for the exact final
+    // Flange and the worker returns only an advisory for its unique native solid output.
+    const tail = doc.nodes.length - 1, node = doc.nodes[tail];
+    if (slot === 'preview' && flangeFeature && node?.kind === 'sheet-flange'
+        && !node.suppressed && !node.held && featureId(doc.nodes, tail) === flangeFeature) {
+      const outputKey = bodyKeyFor(doc.nodes, tail, 'solid');
+      const matches = bodies.map((body, i) => ({body, i})).filter(({body}) => body.ref?.node === tail);
+      const match = matches.length === 1 ? matches[0] : undefined;
+      const out = match ? snapshot.outputs[match.i] : undefined;
+      if (match && match.body.key === outputKey && match.body.ref?.side === 'solid'
+          && doc.outputs[outputKey]?.node === tail && doc.outputs[outputKey]?.side === 'solid' && out?.sheet) {
+        try {
+          const flat = sheetOf(out);
+          if (flat.flat) match.body.flangePreviewFlat = { status: 'available' };
+          else if (flat.flatRefused) match.body.flangePreviewFlat = { status: 'refused', reason: flat.flatRefused };
+        } catch {
+          // Unexpected advisory failures must not turn a valid constructive preview into a refusal.
+        }
+      }
+    }
     if (slot === 'preview' && quality === 8) refineLoftBody(bodies, snapshot, doc);
     return { ok: true, revision, bodies, wallTime: (performance.now() - t0) / 1000 };
   } catch (cause) {

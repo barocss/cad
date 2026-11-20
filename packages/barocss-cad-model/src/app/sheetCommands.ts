@@ -85,6 +85,15 @@ function sheetEdge(ctx: Parameters<Command['available']>[0]) {
   const body = ctx.bodies[sel[0].body], edge = body?.mesh.edges[sel[0].edge];
   return body && edge && body.sheet ? { body, edge, T: body.sheet.thickness } : null;
 }
+const FLANGE_PICK = 'Pick one straight edge on the skin of a sheet-metal body.';
+const FLANGE_CURVED_PICK = 'Flange cannot use a curved edge. Select a straight edge on the skin of the sheet instead.';
+function flangeEdgeProblem(pick: ReturnType<typeof sheetEdge>): string | null {
+  if (!pick) return FLANGE_PICK;
+  // The exact circular support is native evidence; do not treat an uncertain display edge
+  // as unsupported, or narrow the selection contract for Corner relief.
+  return !pick.edge.straight && pick.edge.nativeCircle ? FLANGE_CURVED_PICK : null;
+}
+
 const POSITIONS = [{ value: 'material-inside', label: 'Material inside' }, { value: 'material-outside', label: 'Material outside' }, { value: 'bend-outside', label: 'Bend outside' }];
 const MEASURES = [{ value: 'outer', label: 'Outer sharp' }, { value: 'inner', label: 'Inner sharp' }, { value: 'tangent', label: 'From the bend' }];
 
@@ -97,7 +106,7 @@ const MEASURES = [{ value: 'outer', label: 'Outer sharp' }, { value: 'inner', la
 export const sheetFlangeCommand: Command = {
   id: 'sheet-flange', label: 'Flange', icon: 'cad-sheet-flange', group: 'modify', keywords: 'sheet metal edge flange bend tab lip return',
   hint: 'Bend a flange up from a straight edge of a sheet: its length, angle and position, part width with reliefs at its ends',
-  available: ctx => sheetEdge(ctx) ? ok : no('Pick one straight edge on the skin of a sheet-metal body.'),
+  available: ctx => { const problem = flangeEdgeProblem(sheetEdge(ctx)); return problem ? no(problem) : ok; },
   fields: () => [
     { key: 'length', label: 'Length', kind: 'mm', min: 0.1 }, { key: 'angle', label: 'Angle', kind: 'deg', min: 1, max: 179, step: 5 },
     { key: 'position', label: 'Position', kind: 'choice', options: POSITIONS }, { key: 'measure', label: 'Length to', kind: 'choice', options: MEASURES },
@@ -108,9 +117,13 @@ export const sheetFlangeCommand: Command = {
     { key: 'rd', label: 'Relief depth (0: T, estimate)', kind: 'mm', min: 0, when: (v: Values) => (Number(v.o0) > 0 || Number(v.o1) > 0) && v.relief !== 'none' },
   ],
   defaults: () => ({ length: 20, angle: 90, position: 'material-inside', measure: 'outer', r: 0, o0: 0, o1: 0, relief: 'rectangular', rw: 0, rd: 0 }),
-  steps: ctx => { const p = sheetEdge(ctx); return [{ label: 'Edge', text: p ? p.edge.names[0] : 'pick a straight edge of a sheet', done: !!p }]; },
+  steps: ctx => {
+    const p = sheetEdge(ctx), problem = flangeEdgeProblem(p);
+    return [{ label: 'Edge', text: problem ?? p?.edge.names[0] ?? FLANGE_PICK, done: !problem }];
+  },
   build: (ctx, v) => {
-    const p = sheetEdge(ctx); if (!p) throw refusal('SHEET_PICK', 'Pick one straight edge of a sheet.');
+    const p = sheetEdge(ctx), problem = flangeEdgeProblem(p);
+    if (!p || problem) throw refusal('SHEET_PICK', problem ?? FLANGE_PICK);
     const [length, angle, r, o0, o1, rw, rd] = ['length', 'angle', 'r', 'o0', 'o1', 'rw', 'rd'].map(k => Number(v[k]));
     if (!(length > 0) || !(angle > 0 && angle < 180)) throw refusal('SHEET_VALUE', 'A flange has a length above 0 and bends between 0 and 180°.');
     // (Part width: its relief written whole — the kernel defaults none (D119); 0 here is the sheet's T, an estimate.)

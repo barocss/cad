@@ -34,7 +34,7 @@ export type WorkerRequest =
   /** A part's bodies' volumes, no meshes (a clash probe, PERF3 B12). */
   | { type: 'volumes'; id: number; doc: WireDoc; intersection: number }
   | { type: 'placed'; id: number; doc: WireDoc; base: WireDoc; place: { m: number[]; t: [number, number, number] }; revision: number; nativeSource: NativeMassSource }
-  | { type: 'preview'; id: number; doc: WireDoc; revision: number; cutFeature?: string }
+  | { type: 'preview'; id: number; doc: WireDoc; revision: number; cutFeature?: string; flangeFeature?: string }
   | { type: 'insetRelink'; id: number; doc: WireDoc; index: number; pick: Parameters<typeof relinkAssociativeInset>[2]; revision: number }
   | { type: 'verifyStoredInsets'; id: number; doc: WireDoc }
   | { type: 'faceEndDistance'; id: number; doc: WireDoc; index: number }
@@ -201,7 +201,7 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       if (request.type === 'placed') result = evaluatePlaced(request.doc, base!, request.place, request.revision);
       else if (request.type === 'part') result = evaluatePart(request.doc, request.revision, 8, request.slot);
       else if (request.type === 'preview' || request.type === 'section') {
-        result = evaluatePreview(request.doc, request.revision, 8, request.type, request.type === 'preview' ? request.cutFeature : undefined);
+        result = evaluatePreview(request.doc, request.revision, 8, request.type, request.type === 'preview' ? request.cutFeature : undefined, request.type === 'preview' ? request.flangeFeature : undefined);
       } else result = evaluateDoc(request.doc, request.revision, 8, true);
     } finally { deferMasses(false); }
     const out = meshesOut.pack(replySlot(request), result);
