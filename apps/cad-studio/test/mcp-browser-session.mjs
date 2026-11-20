@@ -5,23 +5,44 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
-export async function withMcpSession({ app, output, clientName, autonomy = 1 }, path, label, run) {
+export async function withMcpSession({ app, output, clientName, autonomy = 1, telemetry }, path, label, run) {
   const child = spawn(process.execPath, [join(app, 'scripts/cad-mcp.mjs'), '--doc', path, '--autonomy', String(autonomy)],
     { stdio: ['pipe', 'pipe', 'inherit'] });
   const closed = once(child, 'close');
+  // Retain the actual stdout frames, including their line delimiters, for optional wire measurements.
+  let pending = Buffer.alloc(0);
+  const wireReplies = [];
+  if (telemetry) child.stdout.on('data', chunk => {
+    pending = Buffer.concat([pending, chunk]);
+    let newline;
+    while ((newline = pending.indexOf(10)) !== -1) {
+      wireReplies.push(pending.subarray(0, newline + 1));
+      pending = pending.subarray(newline + 1);
+    }
+  });
   const lines = createInterface({ input: child.stdout }), replies = lines[Symbol.asyncIterator]();
   let id = 0, timer;
   const events = [];
-  const request = async (method, params) => {
+  const request = async (method, params, measurement = {}) => {
     const frame = { jsonrpc: '2.0', id: ++id, method, params };
-    child.stdin.write(JSON.stringify(frame) + '\n');
+    const wireRequest = JSON.stringify(frame) + '\n';
+    const started = performance.now();
+    child.stdin.write(wireRequest);
     try {
       const next = await Promise.race([replies.next(), new Promise((_, reject) => {
         timer = setTimeout(() => reject(new Error('MCP call timed out: '+method)), 20000);
       })]);
+      const elapsedMs = performance.now() - started;
       assert.equal(next.done, false);
       const reply = JSON.parse(next.value);
       events.push({ frame, reply });
+      if (telemetry) {
+        const wireReply = wireReplies.shift();
+        assert.ok(wireReply, 'The parsed response has an actual newline-delimited stdout frame');
+        assert.deepEqual(JSON.parse(wireReply.toString('utf8')), reply);
+        telemetry({ ...measurement, id: frame.id, method, requestBytes: Buffer.byteLength(wireRequest, 'utf8'),
+          responseBytes: wireReply.byteLength, elapsedMs });
+      }
       assert.equal(reply.id, frame.id);
       assert.equal(reply.error, undefined, JSON.stringify(reply));
       return reply.result;
