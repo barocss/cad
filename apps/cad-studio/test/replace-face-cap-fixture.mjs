@@ -6,8 +6,13 @@ const trapezoid = { points: [[0, 0], [18, 0], [24, 16], [0, 16]], area: 336, cen
 export const REPLACE_FACE_VARIANTS = [
   'height', 'diagonal', 'upper', 'lower', 'drafted-upper', 'drafted-lower', 'drafted-wall',
   'hex-upper', 'hex-lower', 'hex-wall', 'hex-wall-turn', 'hex-wall-turn-tilt', 'pentagon-upper', 'heptagon-wall',
-  'trapezoid-upper', 'trapezoid-wall',
+  'trapezoid-upper', 'trapezoid-wall', 'bored-upper', 'bored-lower',
 ];
+
+export function replaceFaceLayout(cap) {
+  const stock = cap?.bore ? 2 : 1, donorSketch = stock + 1, donorExtrude = stock + 2, donorMove = stock + 3, edit = stock + 4;
+  return { donorSketch, donorExtrude, donorMove, edit, stockBody: `b${stock}`, donorBody: `b${donorMove}`, editedBody: `b${edit}` };
+}
 
 export function polygonWallCase(variant) {
   const trapezoidal = variant === 'trapezoid-wall';
@@ -56,9 +61,10 @@ export function polygonWallOracle(distance, section) {
 /** A stock cap and a separate 8 × 8 × 3 mm reference extruded from the exact tilted plane. */
 export function capCase(variant) {
   const drafted = variant.startsWith('drafted-');
+  const bore = variant.startsWith('bored-') ? { center: [11, 9], radius: 3 } : undefined;
   const stock = variant.startsWith('hex-') ? hexagon : variant.startsWith('pentagon-') ? pentagon :
     variant.startsWith('trapezoid-') ? trapezoid : undefined;
-  const end = variant.replace(/^(?:drafted|hex|pentagon|trapezoid)-/, '');
+  const end = variant.replace(/^(?:drafted|hex|pentagon|trapezoid|bored)-/, '');
   if (end !== 'upper' && end !== 'lower') return;
   const direction = end === 'upper' ? 1 : -1;
   const station = direction === 1 ? 10 : 0, opposite = 10 - station;
@@ -70,7 +76,7 @@ export function capCase(variant) {
   const otherPick = referencePick.map((value, i) => value + 3 * normal[i] + (i === 2 ? moved : 0));
   const height = (x, y) => opposite + direction * (8 + x / 10 + y / 5);
   return {
-    drafted, stock, direction,
+    drafted, bore, stock, direction,
     name: direction === 1 ? 'Top' : 'Bottom', oppositeName: direction === 1 ? 'Bottom' : 'Top',
     face: direction === 1 ? 'n1.top' : 'n1.bottom', station, opposite, moved,
     // On the drafted underside the fixed upper corner is (1, 1, 10).
@@ -83,6 +89,22 @@ export function capCase(variant) {
       stock === pentagon ? [4077 / 373, 9368 / 1119, 120487 / 22380] :
       stock === trapezoid ? [12399 / 1127, 9932 / 1127, 17489 / 3220] : [820 / 39, 210 / 13, direction === 1 ? 20 / 3 : 10 / 3],
   };
+}
+
+// Integrate affine thickness and its first moments over 40 × 30 mm stock minus the circular bore.
+export function boredCapOracle(cap, support) {
+  const { direction, opposite, bore: { center: [cx, cy], radius } } = cap;
+  const hole = Math.PI * radius ** 2, area = 1200 - hole;
+  const x = 24000 - hole * cx, y = 18000 - hole * cy;
+  const xx = 640000 - hole * (cx ** 2 + radius ** 2 / 4);
+  const yy = 360000 - hole * (cy ** 2 + radius ** 2 / 4);
+  const xy = 360000 - hole * cx * cy;
+  const h = (support(0, 0) - opposite) * direction;
+  const dx = (support(1, 0) - support(0, 0)) * direction, dy = (support(0, 1) - support(0, 0)) * direction;
+  const volume = h * area + dx * x + dy * y;
+  const square = h ** 2 * area + 2 * h * (dx * x + dy * y) + dx ** 2 * xx + 2 * dx * dy * xy + dy ** 2 * yy;
+  return { volume, centroid: [(h * x + dx * xx + dy * xy) / volume, (h * y + dx * xy + dy * yy) / volume,
+    opposite + direction * square / (2 * volume)] };
 }
 
 // Independent physical oracle for this fixed fixture. Each corner follows its measured

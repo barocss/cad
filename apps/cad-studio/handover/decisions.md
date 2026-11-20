@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1438: [Replace a cap on a rectangular plate with one through bore](notes/replace-bored-plate-cap-2026-11-21/README.md), #17. Keep the exact cylindrical support and all trim IDs through a tilted cap, with independent mass and Studio reopen.
 - D1437: [Replace faces of nonrectangular convex quadrilateral prisms](notes/replace-trapezoid-faces-2026-11-21/README.md), #17. Qualify trapezoidal caps and side walls through strict native incidence and Studio edit, refusal and reopen.
 - D1436: [Replace caps and walls of straight convex polygon prisms](notes/replace-convex-polygon-faces-2026-11-21/README.md), #17. Qualify the variable native topology on triangular, pentagonal and heptagonal stock and verify independent volume and Studio reopen.
 - D1435: [Rotate a convex hexagonal prism wall in Top view](notes/replace-hex-prism-wall-top-turn-2026-11-21/README.md), #17. Replace the wall with a plane that rotates in Top view and can tilt along Z. Keep the fixed supports and verify Studio reopen.

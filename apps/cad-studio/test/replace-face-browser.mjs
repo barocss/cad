@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
-import { capCase, draftedCapOracle, draftedWallVolume, polygonWallCase, polygonWallOracle, REPLACE_FACE_VARIANTS } from './replace-face-cap-fixture.mjs';
+import { boredCapOracle, capCase, draftedCapOracle, draftedWallVolume, polygonWallCase, polygonWallOracle, REPLACE_FACE_VARIANTS, replaceFaceLayout } from './replace-face-cap-fixture.mjs';
 
 const [output, inputFile, agentFile, variant = 'height'] = process.argv.slice(2);
 assert.ok(output && inputFile && agentFile && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
@@ -11,8 +11,11 @@ const polygonWall = polygonWallCase(variant);
 const draftedWall = variant === 'drafted-wall', diagonal = variant === 'diagonal' || draftedWall || !!polygonWall;
 const cap = capCase(variant);
 const stock = cap?.stock ?? polygonWall?.stock;
+const layout = replaceFaceLayout(cap);
 const sourceFace = cap?.face ?? 'n1.side1';
-const firstFace = diagonal || cap ? 'n3.bottom' : 'n3.side1', nextFace = diagonal || cap ? 'n3.top' : 'n3.side3';
+const donorPrefix = `n${layout.donorExtrude}.`;
+const firstFace = donorPrefix + (diagonal || cap ? 'bottom' : 'side1');
+const nextFace = donorPrefix + (diagonal || cap ? 'top' : 'side3');
 const position = cap?.height ?? polygonWall?.distance ?? ((y, z) => 37 + (diagonal ? y / 10 : 0) + z / 2);
 const movedPosition = cap?.movedHeight ?? polygonWall?.movedDistance ?? ((y, z) => position(y, z) + 2);
 const retargetedPosition = cap?.retargetedHeight ?? polygonWall?.retargetedDistance ??
@@ -34,7 +37,8 @@ const pins = [
 const f = await createFlow({
   name: 'replace-face', envFrozen: 'REPLACE_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: 'Replace an exact planar extrusion face with a tilted support in desktop Studio.',
-  limits: [polygonWall ? `One convex ${stock.points.length}-sided prism and two tilted reference faces for its oblique wall.` :
+  limits: [cap?.bore ? 'One rectangular through-bore plate and two tilted reference faces for its cap.' :
+    polygonWall ? `One convex ${stock.points.length}-sided prism and two tilted reference faces for its oblique wall.` :
     cap?.stock ? `One convex ${stock.points.length}-sided prism and two tilted reference faces for its cap.` :
     cap ? `One 40 × 30 × 10 mm extrusion and two tilted reference faces for its ${variant} cap.` : draftedWall
     ? 'One 1:10 drafted rectangular extrusion and a separate tilted prism.'
@@ -43,14 +47,25 @@ const f = await createFlow({
     : 'One 40 × 30 × 10 mm box, one disconnected prismatic donor, two planes tilted along Z.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
-import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
+import { brepMassProperties, checkBrep, evaluateCurve, faceGeometry } from '@barocss/cad';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+function boreRim(brep) {
+  if (!${!!cap?.bore}) return [];
+  const cap = brep.faces.find(face => face.name === ${JSON.stringify(sourceFace)});
+  const loop = brep.loops.find(loop => cap?.loops.includes(loop.id) && loop.kind === 'inner');
+  return loop?.coedges.map(id => {
+    const coedge = brep.coedges.find(use => use.id === id);
+    const edge = brep.edges.find(edge => edge.id === coedge.edge);
+    return Array.from({ length: 17 }, (_, index) => evaluateCurve(edge.curve, index / 16));
+  }) ?? [];
+}
 console.log(JSON.stringify(partBreps(doc).map(({ key, brep }) => ({
-  key, brep, report: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1),
+  key, brep, report: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1), boreRim: boreRim(brep),
   supports: Object.fromEntries(brep.faces.map(face => {
     const g = faceGeometry(face);
-    return [face.name, g.kind === 'plane' ? [g.n, g.n.reduce((sum, value, i) => sum + value * g.o[i], 0)] : [g.kind]];
+    return [face.name, g.kind === 'plane' ? [g.n, g.n.reduce((sum, value, i) => sum + value * g.o[i], 0)] :
+      g.kind === 'cylinder' ? [g.a, [g.c[0], g.c[1], g.r]] : [g.kind]];
   })),
 }))));
 `,
@@ -89,7 +104,7 @@ async function point(world) {
 }
 
 async function measure(label, doc, original, positionAt, donor) {
-  const native = await f.inspect(label, doc), box = shape(native, 'b5'), reference = shape(native, 'b4');
+  const native = await f.inspect(label, doc), box = shape(native, layout.editedBody), reference = shape(native, layout.donorBody);
   const worker = (await f.bodies()).bodies;
   assert.equal(worker.length, 2);
   assert.ok(box.report.valid, box.report.issues.join('\n'));
@@ -97,16 +112,28 @@ async function measure(label, doc, original, positionAt, donor) {
   assert.ok(box.report.maximumEdgeSurfaceGap < 1e-9);
   assert.ok(box.report.maximumPcurveGap < 1e-9);
   const sides = stock?.points.length ?? 4;
-  assert.deepEqual(box.report.counts, { bodies: 1, shells: 1, faces: sides + 2, loops: sides + 2,
-    coedges: sides * 6, edges: sides * 3, vertices: sides * 2 });
+  assert.deepEqual(box.report.counts, cap?.bore ?
+    { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 } :
+    { bodies: 1, shells: 1, faces: sides + 2, loops: sides + 2, coedges: sides * 6, edges: sides * 3, vertices: sides * 2 });
   assert.deepEqual(incidence(box.brep), incidence(original.brep));
   if (donor) assert.deepEqual(reference.brep, donor.brep);
   for (const [name, [n, offset]] of Object.entries(original.supports)) {
     if (name === sourceFace) continue;
     const [now, support] = box.supports[name];
     n.forEach((value, axis) => near(now[axis], value));
-    near(support, offset);
+    if (Array.isArray(offset)) offset.forEach((value, axis) => near(support[axis], value));
+    else near(support, offset);
   }
+  if (cap?.bore) {
+    assert.equal(box.report.topology[0].genus, 1);
+    assert.equal(box.boreRim.length, 2);
+    const { center: [cx, cy], radius } = cap.bore;
+    for (const [x, y, z] of box.boreRim.flat()) {
+      near(Math.hypot(x - cx, y - cy), radius);
+      near(z, positionAt(x, y));
+    }
+  }
+  const bored = cap?.bore ? boredCapOracle(cap, positionAt) : undefined;
   const tapered = cap?.drafted ? draftedCapOracle(cap, positionAt) : undefined;
   const wallMeasure = polygonWall ? polygonWallOracle(positionAt, polygonWall.section) : undefined;
   for (const vertex of original.brep.vertices) {
@@ -124,15 +151,15 @@ async function measure(label, doc, original, positionAt, donor) {
     expected.forEach((value, axis) => near(next.point[axis], value));
   }
   // For straight stock, the mean affine thickness is its value at the footprint centroid.
-  const volume = wallMeasure?.volume ?? (draftedWall ? draftedWallVolume(positionAt) :
+  const volume = bored?.volume ?? wallMeasure?.volume ?? (draftedWall ? draftedWallVolume(positionAt) :
     tapered?.volume ?? (cap?.stock ? stock.area * Math.abs(positionAt(...stock.center) - cap.opposite) :
       cap ? 40 * 30 * Math.abs(positionAt(20, 15) - cap.opposite) : 30 * 10 * positionAt(15, 5)));
   near(box.mass.volume, volume);
-  const workerVolume = shape(worker, 'b5').volume;
+  const workerVolume = shape(worker, layout.editedBody).volume;
   near(workerVolume, volume);
   near(reference.mass.volume, diagonal || cap ? 192 : 950);
-  if ((diagonal || cap) && positionAt === position) {
-    const centroid = wallMeasure?.centroid ?? (draftedWall ? [29251159 / 1408600, 1068659 / 70430, 35390 / 7043] :
+  if (bored || (diagonal || cap) && positionAt === position) {
+    const centroid = bored?.centroid ?? wallMeasure?.centroid ?? (draftedWall ? [29251159 / 1408600, 1068659 / 70430, 35390 / 7043] :
       tapered?.centroid ?? cap?.centroid ?? [10103 / 492, 1245 / 82, 1255 / 246]);
     centroid.forEach((value, axis) => near(box.mass.centroid[axis], value));
   }
@@ -160,8 +187,9 @@ await f.run(async () => {
   await f.newPage();
   await open(inputFile);
   await f.same(source);
-  const native = await f.inspect('source', source), original = shape(native, 'b1'), donor = shape(native, 'b4');
-  near(original.mass.volume, stock ? stock.area * 10 : cap?.drafted || draftedWall ? 11300 + 40 / 3 : 12000);
+  const native = await f.inspect('source', source), original = shape(native, layout.stockBody), donor = shape(native, layout.donorBody);
+  near(original.mass.volume, cap?.bore ? 12000 - 10 * Math.PI * cap.bore.radius ** 2 :
+    stock ? stock.area * 10 : cap?.drafted || draftedWall ? 11300 + 40 / 3 : 12000);
   await view(cap?.name ?? 'Right');
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
@@ -196,19 +224,19 @@ await f.run(async () => {
   await f.snapshot('replace-tilted-preview');
   await button('Apply', dialog).click();
   await f.changed(source);
-  const first = await f.doc(), bound = first.nodes[5];
+  const first = await f.doc(), bound = first.nodes[layout.edit];
   assert.deepEqual(first, agentDoc);
   assert.equal(bound.kind, 'replace-face');
   await measure('applied', first, original, position, donor);
 
   f.phase = 'Move the donor and retarget the saved replacement';
-  await f.openFeatureEditor(4, 'reference position');
+  await f.openFeatureEditor(layout.donorMove, 'reference position');
   await f.editor().getByLabel(cap ? 'ΔZ' : 'ΔX', { exact: true }).fill(String(cap?.moved ?? 2));
   await f.applyEditor(first, 'reference-moved');
   const moved = await f.doc();
-  assert.deepEqual(moved.nodes[5], bound);
+  assert.deepEqual(moved.nodes[layout.edit], bound);
   const movedDonor = await measure('donor-moved', moved, original, movedPosition);
-  await f.openFeatureEditor(5, 'reference-bound Replace face');
+  await f.openFeatureEditor(layout.edit, 'reference-bound Replace face');
   await button('Edit Replace face', f.editor()).click();
   const history = hud('Edit Replace face');
   await history.getByText(firstFace, { exact: false }).waitFor();
@@ -219,8 +247,8 @@ await f.run(async () => {
   await button('Apply', history).click();
   await f.changed(moved);
   const retargeted = await f.doc();
-  assert.equal(retargeted.nodes[5].id, bound.id);
-  assert.equal(retargeted.nodes[5].target.face, nextFace);
+  assert.equal(retargeted.nodes[layout.edit].id, bound.id);
+  assert.equal(retargeted.nodes[layout.edit].target.face, nextFace);
   await measure('retargeted', retargeted, original, retargetedPosition, movedDonor);
   await f.undo(); await f.same(moved);
   await f.redo(); await f.same(retargeted);
@@ -232,7 +260,7 @@ await f.run(async () => {
 
   f.phase = 'Refuse a saved replacement which collapses at the opposite face';
   const stale = structuredClone(first);
-  stale.nodes[4].offset[cap ? 2 : 0] = polygonWall?.collapse ?? cap?.collapse ?? -37;
+  stale.nodes[layout.donorMove].offset[cap ? 2 : 0] = polygonWall?.collapse ?? cap?.collapse ?? -37;
   await open({ name: 'collapsed-wall.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(stale)) });
   await f.waitToast(polygonWall ? /collapse or cross a wall of the polygon section.*Your part is unchanged/i :
     /reach or cross the opposite (?:wall|cap).*Your part is unchanged/i);

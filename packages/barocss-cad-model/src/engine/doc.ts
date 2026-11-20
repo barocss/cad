@@ -352,7 +352,8 @@ function precedingSolidParent(node: Record<string, unknown>, index: number): num
   return precedingSolidIndex(node.parent, index);
 }
 
-function isBoredPlateHole(nodes: readonly unknown[], index: number): boolean {
+/** Authored rectangular plate with one straight through bore. The kernel verifies its current geometry. */
+export function isBoredPlateHole(nodes: readonly unknown[], index: number): boolean {
   const hole = nodes[index];
   if (!textRecord(hole) || hole.kind !== 'hole' || (hole.axis !== undefined && hole.axis !== 'z') ||
       hole.depth !== undefined || hole.pattern !== undefined || hole.countersink !== undefined || hole.csk !== undefined ||
@@ -473,8 +474,8 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const parentIndex = (node.parent as BodyRef).node;
       if (node.kind === 'replace-face') {
         if (!isBoxReplacementSource(value.nodes, parentIndex) && !isDraftedFaceReplacementSource(value.nodes, parentIndex) &&
-            !isStraightPolygonReplacementSource(value.nodes, value.nodes[parentIndex]))
-          return 'Replace face: a preceding rectangular or supported straight polygon extrusion is required.';
+            !isStraightPolygonReplacementSource(value.nodes, value.nodes[parentIndex]) && !isBoredPlateHole(value.nodes, parentIndex))
+          return 'Replace face: select a supported extrusion or a cap of a rectangular plate with a through bore.';
         continue;
       }
       const parent = value.nodes[parentIndex];

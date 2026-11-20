@@ -1,10 +1,10 @@
-import { isBoxReplacementSource, isDraftedFaceReplacementSource, isStraightPolygonReplacementSource, withNode, type StudioDoc } from '../engine/doc';
+import { isBoredPlateHole, isBoxReplacementSource, isDraftedFaceReplacementSource, isStraightPolygonReplacementSource, withNode, type StudioDoc } from '../engine/doc';
 import { captureSignatures } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
 import { captureOffsetPlane, offsetPlaneStep, pickReferencePlane, restoreOffsetPlaneValues } from './offsetPlanePick';
 
-const SOURCE = 'Select a planar face of a rectangular extrusion or a supported convex polygon prism.';
+const SOURCE = 'Select a supported extrusion face or a cap of a rectangular plate with a through bore.';
 const REFERENCE = 'Pick a tilted face on another solid.';
 
 function pickedFace(ctx: Ctx) {
@@ -16,13 +16,14 @@ function pickedFace(ctx: Ctx) {
       !face?.name || face.nativePlaneName !== face.name || face.exact?.kind !== 'plane') return;
   const boxFace = face.nativeAxisPlane && isBoxReplacementSource(ctx.doc.nodes, parent.node);
   const polygonFace = isStraightPolygonReplacementSource(ctx.doc.nodes, ctx.doc.nodes[parent.node]);
-  if (!boxFace && !polygonFace && !isDraftedFaceReplacementSource(ctx.doc.nodes, parent.node)) return;
+  const boredCap = face.nativeAxisPlane?.axis === 'z' && isBoredPlateHole(ctx.doc.nodes, parent.node);
+  if (!boxFace && !polygonFace && !boredCap && !isDraftedFaceReplacementSource(ctx.doc.nodes, parent.node)) return;
   return { parent, face: face.name };
 }
 
 export const replaceFaceCommand: Command = {
   id: 'replace-face', label: 'Replace face', icon: 'cad-offset-face', group: 'modify',
-  hint: 'Replace a planar extrusion face with a tilted plane.',
+  hint: 'Replace a supported planar face with a tilted plane.',
   keywords: 'replace face plane tilt wall cap reextend direct edit',
   available: ctx => pickedFace(ctx) ? { ok: true } : { ok: false, reason: SOURCE },
   fields: () => [],

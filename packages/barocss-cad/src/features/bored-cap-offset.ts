@@ -1,16 +1,19 @@
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { BrepError, checkBrep, type Brep, type BrepEdge, type BrepFace } from '../brep/brep-core.js';
 import { createCylindricalBoreCheck } from '../brep/cylindrical-bore.js';
+import { len } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Curve, Point } from '../types.js';
 import { capSurface } from './extruded-profile-solid.js';
 
 type XY = [number, number];
-type Cap = { readonly point: Point; readonly sign: 1 | -1; readonly opposite: number };
+type Cap = { readonly point: Point; readonly sign: 1 | -1; readonly opposite: number; readonly min: XY; readonly max: XY };
 type BoredPlate = {
   readonly bottom: BrepFace; readonly top: BrepFace; readonly cylinders: readonly BrepFace[];
   readonly lo: number; readonly hi: number; readonly anchorX: number; readonly anchorY: number;
+  readonly min: XY; readonly max: XY;
 };
+type ReplacementPlane = { readonly origin: Point; readonly normal: Point };
 type Use = { readonly edge: BrepEdge; readonly pcurve: Curve; readonly neighbor: BrepFace };
 const lineKnots = [0, 0, 1, 1];
 const halfCircleKnots = [0, 0, 0, 0.5, 0.5, 1, 1, 1];
@@ -161,23 +164,41 @@ function admittedBoredPlate(brep: Brep): BoredPlate | undefined {
   if (!(left > tolerance && max[0] - x - radius > tolerance
     && y - radius - min[1] > tolerance && max[1] - y - radius > tolerance)) return undefined;
 
-  return { bottom, top, cylinders, lo, hi, anchorX: min[0] + left / 2, anchorY: y };
+  return { bottom, top, cylinders, lo, hi, min, max, anchorX: min[0] + left / 2, anchorY: y };
 }
 
 function admittedCap(brep: Brep, faceName: string): Cap | undefined {
-  if (brep.faces.filter(face => face.name === faceName).length !== 1) return undefined;
+  const matches = brep.faces.filter(face => face.name === faceName);
+  if (matches.length !== 1 || matches[0].loops.length !== 2) return undefined;
   const plate = admittedBoredPlate(brep);
   if (!plate) return undefined;
-  const { bottom, top, lo, hi, anchorX, anchorY } = plate;
+  const { bottom, top, lo, hi, min, max, anchorX, anchorY } = plate;
   if (top.name !== faceName && bottom.name !== faceName) return undefined;
   const up = top.name === faceName;
-  return { point: [anchorX, anchorY, up ? hi : lo], sign: up ? 1 : -1, opposite: up ? lo : hi };
+  return { point: [anchorX, anchorY, up ? hi : lo], sign: up ? 1 : -1, opposite: up ? lo : hi, min, max };
 }
 
 /** A handle anchor on the material and its exact signed axial direction. */
 export function boredCapOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
   const cap = admittedCap(brep, faceName);
   return cap && { anchor: cap.point, normal: [0, 0, cap.sign] };
+}
+
+/** The replacement uses the same exact stock and selected cap as the axial handle. */
+export const boredCapReplacementFrame = boredCapOffsetFrame;
+
+function mapCapStation(brep: Brep, station: number, height: (x: number, y: number) => number): Brep {
+  const moved = (point: Point): Point => point[2] === station ? [point[0], point[1], height(point[0], point[1])] : point;
+  return {
+    ...brep,
+    vertices: brep.vertices.map(vertex => vertex.point[2] === station ? { ...vertex, point: moved(vertex.point) } : vertex),
+    edges: brep.edges.map(edge => edge.curve.controlPoints.some(point => point[2] === station)
+      ? { ...edge, curve: { ...edge.curve, controlPoints: edge.curve.controlPoints.map(moved) } } : edge),
+    faces: brep.faces.map(face => {
+      if (face.surface.kind !== 'surface' || !face.surface.controlPoints.some(row => row.some(point => point[2] === station))) return face;
+      return { ...face, surface: { ...face.surface, controlPoints: face.surface.controlPoints.map(row => row.map(moved)) } };
+    }),
+  };
 }
 
 export function offsetBoredCapIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
@@ -196,19 +217,97 @@ export function offsetBoredCapIfAdmitted(brep: Brep, faceName: string, distance:
 
   // With positive axial scale this is an affine map of every support and trim. Assign the two
   // stations directly so the fixed cap is exact and the edge/face parameter charts stay valid.
-  const moved = (point: Point): Point => point[2] === z ? [point[0], point[1], next] : point;
-  const candidate: Brep = {
-    ...brep,
-    vertices: brep.vertices.map(vertex => vertex.point[2] === z ? { ...vertex, point: moved(vertex.point) } : vertex),
-    edges: brep.edges.map(edge => edge.curve.controlPoints.some(point => point[2] === z)
-      ? { ...edge, curve: { ...edge.curve, controlPoints: edge.curve.controlPoints.map(moved) } } : edge),
-    faces: brep.faces.map(face => {
-      if (face.surface.kind !== 'surface' || !face.surface.controlPoints.some(row => row.some(point => point[2] === z))) return face;
-      return { ...face, surface: { ...face.surface, controlPoints: face.surface.controlPoints.map(row => row.map(moved)) } };
-    }),
-  };
+  const candidate = mapCapStation(brep, z, () => next);
   const report = checkBrep(candidate, { strict: true });
   if (!report.valid) throw new BrepError('GEOMETRY', `bored cap offset: the offset solid is invalid: ${report.issues[0]}`, report);
+  return candidate;
+}
+
+const finitePoint = (value: unknown): value is Point => Array.isArray(value) && value.length === 3
+  && Number.isFinite(value[0]) && Number.isFinite(value[1]) && Number.isFinite(value[2]);
+
+const elevateQuadratic = ([a, b, c]: readonly number[]) => [a, (a + 2 * b) / 3, (2 * b + c) / 3, c];
+
+function ellipsePcurve(pcurve: Curve, edge: Curve, heights: readonly number[]): Curve {
+  const controlPoints: Point[] = [], weights: number[] = [];
+  // The admitted rim consists of two quadratic rational Bézier spans. In the uniform cylinder
+  // chart, U is the original edge parameter and V is the affine Z coordinate divided by height.
+  for (let span = 0; span < 2; span++) {
+    const start = 2 * span;
+    const w = edge.weights.slice(start, start + 3), weight = elevateQuadratic(w);
+    const v = elevateQuadratic(w.map((value, i) => value * heights[start + i]));
+    // Multiplying the quadratic weight by the local linear parameter gives cubic Bernstein coefficients.
+    const tWeight = [0, w[0] / 3, 2 * w[1] / 3, w[2]];
+    for (let j = span; j < 4; j++) {
+      controlPoints.push([(span + tWeight[j] / weight[j]) / 2, v[j] / weight[j], 0]);
+      weights.push(weight[j]);
+    }
+  }
+  return { ...pcurve, degree: 3, knots: [0, 0, 0, 0, 0.5, 0.5, 0.5, 1, 1, 1, 1], controlPoints, weights };
+}
+
+/** Keep the fixed planar and cylindrical supports in their uniform native charts. */
+function encloseSideTrims(brep: Brep, lo: number, hi: number): Brep {
+  const sideFaces = new Set(brep.faces.filter(face => face.loops.length === 1));
+  const sideLoops = new Set([...sideFaces].map(face => face.loops[0]));
+  const edges = byId(brep.edges);
+  const faces = brep.faces.map(face => {
+    if (!sideFaces.has(face) || face.surface.kind !== 'surface') return face;
+    const controlPoints = face.surface.controlPoints.map(([[x, y]]): Point[] => [[x, y, lo], [x, y, hi]]);
+    return { ...face, surface: { ...face.surface, controlPoints } };
+  });
+  const coedges = brep.coedges.map(use => {
+    const { pcurve } = use;
+    if (!pcurve || !sideLoops.has(use.loop)) return use;
+    const edge = edges.get(use.edge)!.curve;
+    const heights = edge.controlPoints.map(point => (point[2] - lo) / (hi - lo));
+    if (edge.degree === 2 && heights.some(height => height !== heights[0]))
+      return { ...use, pcurve: ellipsePcurve(pcurve, edge, heights) };
+    const [[u0], [u1]] = pcurve.controlPoints;
+    const controlPoints: Point[] = [[u0, heights[0], 0], [u1, heights.at(-1)!, 0]];
+    return samePoles(controlPoints, pcurve.controlPoints) ? use : { ...use, pcurve: { ...pcurve, controlPoints } };
+  });
+  return { ...brep, faces, coedges };
+}
+
+/** Tilt one cap while retaining the straight bore, fixed supports, and trim identities. */
+export function replaceBoredCapIfAdmitted(brep: Brep, faceName: string, plane: ReplacementPlane): Brep | undefined {
+  const cap = admittedCap(brep, faceName);
+  if (!cap) return undefined;
+  if (!plane || typeof plane !== 'object' || Array.isArray(plane) || Object.keys(plane).sort().join(',') !== 'normal,origin'
+    || !finitePoint(plane.origin) || !finitePoint(plane.normal))
+    throw new BrepError('INPUT', 'Replace face: the reference needs a finite origin and normal.');
+  const magnitude = len(plane.normal);
+  if (!Number.isFinite(magnitude) || magnitude === 0)
+    throw new BrepError('INPUT', 'Replace face: the reference normal must have a finite nonzero length.');
+  const [nx, ny, nz] = plane.normal.map(component => component / magnitude);
+  if (Math.abs(nz) <= 64 * Number.EPSILON)
+    throw new BrepError('GEOMETRY', 'Replace face: the reference plane is too close to perpendicular to the selected cap.');
+
+  const [ox, oy, oz] = plane.origin;
+  const lift = (x: number, y: number) => oz - ((x - ox) * nx + (y - oy) * ny) / nz;
+  const [x0, y0] = cap.min, [x1, y1] = cap.max;
+  const heights = [lift(x0, y0), lift(x1, y0), lift(x0, y1), lift(x1, y1)];
+  const extent = Math.max(Math.abs(cap.opposite), geometryScaleMM([cap.min, cap.max, heights, plane.origin]));
+  if (!(extent <= CadNumericPolicy.coordinateAbs))
+    throw new BrepError('GEOMETRY', 'Replace face: the replacement exceeds the modeling coordinate range.');
+  const linear = linearToleranceMM(extent);
+  // Thickness is affine across the rectangle. The four corners also bound it along the bore.
+  if (heights.some(z => (z - cap.opposite) * cap.sign <= linear))
+    throw new BrepError('GEOMETRY', 'Replace face: the replacement would reach or cross the opposite cap at one corner.');
+  if (Math.max(...heights) - Math.min(...heights) <= linear)
+    throw new BrepError('GEOMETRY', 'Replace face: the reference plane tilt is too small for this cap.');
+
+  // Affine lifting preserves the cap chart and all boundary weights. Enclose the lifted trims
+  // in uniform vertical charts to keep the original planar walls and exact cylinder recognizable.
+  const moved = mapCapStation(brep, cap.point[2], lift);
+  const curvePoles = moved.edges.map(edge => edge.curve.controlPoints);
+  const surfacePoles = moved.faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints : []);
+  if (!(geometryScaleMM(...curvePoles, ...surfacePoles) <= CadNumericPolicy.coordinateAbs))
+    throw new BrepError('GEOMETRY', 'Replace face: the replacement exceeds the modeling coordinate range.');
+  const candidate = encloseSideTrims(moved, Math.min(cap.opposite, ...heights), Math.max(cap.opposite, ...heights));
+  const report = checkBrep(candidate, { strict: true });
+  if (!report.valid) throw new BrepError('GEOMETRY', `Replace face: the replacement solid is invalid: ${report.issues[0]}`, report);
   return candidate;
 }
 

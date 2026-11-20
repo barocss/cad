@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BrepError, checkBrep, evaluateCadPart, evaluateSurface, faceGeometry } from '../dist/index.js';
+import { BrepError, checkBrep, evaluateCadPart, evaluateCurve, evaluateSurface, faceGeometry } from '../dist/index.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
-import { boredCapOffsetFrame, offsetBoredCapIfAdmitted } from '../dist/features/bored-cap-offset.js';
+import { boredCapOffsetFrame, boredCapReplacementFrame, offsetBoredCapIfAdmitted, replaceBoredCapIfAdmitted } from '../dist/features/bored-cap-offset.js';
 
 const plate = ({ min = [0, 0], max = [40, 30], height = 10, from = 0, center = [11, 9], radius = 3, ...ends } = {}) => ({
   format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {},
@@ -20,6 +20,7 @@ const assertNativePlate = brep => {
   assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 });
   assert.equal(report.topology[0].genus, 1);
   assert.ok(report.maximumPcurveGap < 1e-9);
+  return report;
 };
 const freeze = value => {
   if (value && typeof value === 'object') {
@@ -33,6 +34,85 @@ const freeze = value => {
 const area = 1200 - 9 * Math.PI;
 const centroidX = (1200 * 20 - 9 * Math.PI * 11) / area;
 const centroidY = (1200 * 15 - 9 * Math.PI * 9) / area;
+
+// First and second area moments of the rectangle minus the off-centre disk.
+const retainedX = 24000 - 99 * Math.PI, retainedY = 18000 - 81 * Math.PI;
+const retainedXX = 640000 - 9 * Math.PI * (121 + 9 / 4);
+const retainedYY = 360000 - 9 * Math.PI * (81 + 9 / 4);
+const retainedXY = 360000 - 891 * Math.PI;
+const tiltedVolume = 15600 - 981 * Math.PI / 10;
+const tiltedCentroid = [
+  (8 * retainedX + retainedXX / 10 + retainedXY / 5) / tiltedVolume,
+  (8 * retainedY + retainedXY / 10 + retainedYY / 5) / tiltedVolume,
+  (64 * area + 8 * retainedX / 5 + 16 * retainedY / 5 + retainedXX / 100 + (retainedXY + retainedYY) / 25) / (2 * tiltedVolume),
+];
+const incidence = brep => ({
+  bodies: brep.bodies, shells: brep.shells, loops: brep.loops,
+  faces: brep.faces.map(({ surface, ...f }) => [f, surface.id]),
+  vertices: brep.vertices.map(({ point, ...v }) => v),
+  edges: brep.edges.map(({ curve, ...e }) => [e, curve.id]),
+  coedges: brep.coedges.map(({ pcurve, ...c }) => [c, pcurve?.id]),
+});
+
+for (const [name, sign] of [['b.top', 1], ['b.bottom', -1]]) {
+  test(`replace the drilled plate ${name} with a tilted plane and preserve the exact bore`, () => {
+    const input = plate(), source = freeze(solid(input)), saved = structuredClone(source);
+    const movingZ = sign === 1 ? 10 : 0, fixedZ = 10 - movingZ;
+    const height = ([x, y]) => fixedZ + sign * (8 + x / 10 + y / 5);
+    const plane = { origin: [0, 0, height([0, 0])], normal: [-1, -2, 10 * sign] };
+    assert.deepEqual(boredCapReplacementFrame(source, name).normal, [0, 0, sign]);
+    const result = replaceBoredCapIfAdmitted(source, name, plane);
+    const report = assertNativePlate(result);
+    assert.deepEqual(incidence(result), incidence(source));
+    close(report.maximumEdgeSurfaceGap, 0);
+    for (const [i, { point: [x, y, z] }] of source.vertices.entries())
+      result.vertices[i].point.forEach((coord, axis) => close(coord, [x, y, z === movingZ ? height([x, y]) : z][axis]));
+
+    const opposite = sign === 1 ? 'b.bottom' : 'b.top';
+    assert.equal(result.faces.find(face => face.name === opposite), source.faces.find(face => face.name === opposite));
+    for (const original of source.faces) {
+      if (original.name === name) continue;
+      const before = faceGeometry(original), current = result.faces.find(face => face.id === original.id);
+      if (before.kind === 'cylinder') {
+        const after = faceGeometry(current);
+        assert.equal(after.kind, 'cylinder');
+        close(after.r, 3);
+        close(after.c[0], 11);
+        close(after.c[1], 9);
+        close(Math.abs(after.a[2]), 1);
+        assert.equal(after.out, -1);
+        for (let i = 0; i <= 16; i++) for (const v of [0, 0.25, 0.5, 1]) {
+          const [x, y] = evaluateSurface(current.surface, i / 16, v);
+          close(Math.hypot(x - 11, y - 9), 3);
+        }
+      } else {
+        const after = faceGeometry(current);
+        assert.equal(after.kind, 'plane');
+        after.n.forEach((value, i) => close(value, before.n[i]));
+        close(after.o.reduce((sum, value, i) => sum + (value - before.o[i]) * before.n[i], 0), 0);
+      }
+    }
+    const cap = result.faces.find(face => face.name === name);
+    const innerLoop = result.loops.find(loop => cap.loops.includes(loop.id) && loop.kind === 'inner');
+    assert.equal(innerLoop.coedges.length, 2);
+    for (const id of innerLoop.coedges) {
+      const use = result.coedges.find(coedge => coedge.id === id);
+      const { curve } = result.edges.find(edge => edge.id === use.edge);
+      for (let i = 0; i <= 32; i++) {
+        const sample = evaluateCurve(curve, i / 32);
+        close(Math.hypot(sample[0] - 11, sample[1] - 9), 3);
+        close(sample[2], height(sample));
+      }
+    }
+    const mass = brepMassProperties(result, 1);
+    close(mass.volume, tiltedVolume, 1e-7);
+    mass.centroid.forEach((value, axis) => close(value, axis === 2 && sign === -1 ? 10 - tiltedCentroid[axis] : tiltedCentroid[axis], 1e-8));
+    const feature = { id: 'replace', kind: 'replace-face', target: 'h', face: name, plane };
+    assert.deepEqual(solid({ ...input, features: [...input.features, feature] }), result);
+    assert.throws(() => replaceBoredCapIfAdmitted(source, name, { ...plane, origin: [0, 0, fixedZ] }), /reach or cross the opposite cap/);
+    assert.deepEqual(source, saved);
+  });
+}
 
 for (const [name, sign] of [['b.top', 1], ['b.bottom', -1]]) {
   for (const distance of [2, -2]) {
