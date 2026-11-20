@@ -11,7 +11,7 @@ import type { MarkHandlers } from '../ui/SketchMarks';
 import type { ScreenBox } from '../ui/sketchConstraintMarkLayout';
 import { viewportRecoveryHost, type ViewportRecoveryNotice } from './viewportRecovery';
 import type { ClearanceDisplay } from './clearanceDisplay';
-import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, forwardRef } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, forwardRef } from 'react';
 import { countRender } from '../devRenders';
 import type { CamDisplay } from './camDisplay';
 import { camStockBounds } from './camOverlayGeometry';
@@ -47,6 +47,7 @@ import type { CageValidation } from '@barocss/cad';
 import type { Analysis } from './analysis';
 import { recordCanvas } from './recordVideo';
 import { drawSketchOverlay, fmtLen, type SketchBandCache } from './sketchOverlay';
+import { useSketchLengthLabelLayout } from './sketchLengthLabelLayout';
 import { createConstraintInspection, type ConstraintInspectionStore } from '../sketch/constraintInspection';
 import { useStoreValue } from '../state/valueStore';
 import type { OverlaidLine } from '../sketch/overlaidLines';
@@ -364,6 +365,8 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
   /** The band's derived outline, recomputed only when the band or the shapes change. */
   const bandCache = useRef<SketchBandCache | null>(null);
   const ticker = useMemo(frameTicker, []);
+  const redrawOverlay = useCallback(() => bumpTicker(ticker), [ticker]);
+  const lengthLabelLayout = useSketchLengthLabelLayout(props.sketch, redrawOverlay);
   const [error, setError] = useState<string | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);
   const [camError, setCamError] = useState<string | null>(null);
@@ -1057,7 +1060,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       inspected: inspection?.target === 'row' ? inspection.entry.involves
         : inspection?.target === 'mobility' ? [inspection.entity] : undefined,
       constraintComparison: inspection?.target === 'comparison' && inspection.result.ok ? inspection.result.display : undefined,
-      bandCache, picking: picking(sk), cutting: cutting(sk), banding: banding(sk), items,
+      bandCache, picking: picking(sk), cutting: cutting(sk), banding: banding(sk), lengthLabelLayout, items,
       dimensions: { onDimClick: props.onDimClick, onDimEdit: props.onDimEdit, onDimCommit: props.onDimCommit },
     }) : null;
     const bb = props.boundsBox;

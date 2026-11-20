@@ -137,6 +137,11 @@ Pick points or edges with **Select**, then add a constraint from the panel: **Ho
 **Parallel**, **Perpendicular**, **Equal**, **Coincident**, **Tangent**, **Symmetric** or **Fix**. The
 **Dimension** tool adds lengths, distances, radii and angles.
 
+With **Select** or **Dimension**, drag a straight driving length label toward or away from its edge. The dimension line
+follows the label. The endpoints and the length stay fixed. Press <kbd>Escape</kbd> during a drag to cancel it.
+Use the reset control beside a moved label to restore its automatic position. A new sketch editing session starts
+with automatic positions. Double-click the number when you want to edit the length.
+
 The status line counts what is still free, for example `2 DOF`, until the sketch reads **Fully defined**. A constraint
 the others already imply is refused, and the message says why: for example, `Vertical edge 4 is already implied by the
 other constraints — adding it would over-define the sketch`. A contradiction can be refused as a proven **Conflict**

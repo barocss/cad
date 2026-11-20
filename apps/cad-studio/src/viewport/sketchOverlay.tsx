@@ -23,6 +23,7 @@ import { draftEllipse, ellipseAxis, ellipseSamples, type EllipseDraft } from './
 import { closedSplineOf, splineHandleGeometry } from './splineHandles';
 import { orthographicSketchScale, projectSketchCircle, projectSketchEdge, type SketchViewportPick } from './sketchOutlinePick';
 import { projectedBezier } from './projectedBezier';
+import type { SketchLengthLabelLayout } from './sketchLengthLabelLayout';
 
 function coversSegment(box: ScreenBox, a: readonly number[], b: readonly number[]): boolean {
   let lo = 0, hi = 1;
@@ -90,12 +91,13 @@ interface SketchOverlayInputs {
   cutting: boolean;
   banding: boolean;
   dimensions: MarkHandlers;
+  lengthLabelLayout: SketchLengthLabelLayout;
   items: ReactNode[];
 }
 
 /** Add the active sketch's SVG marks and return its separate HTML dimension editor. */
 export function drawSketchOverlay({
-  sk, shape, cam, w, h, rail, dimensionArea, draft, bezierPoles, ellipse, centreArc, extensionGuide, pathGap, circleChord, overlaidLine, dragTrim, inspected, constraintComparison, bandCache, picking, cutting, banding, dimensions, items,
+  sk, shape, cam, w, h, rail, dimensionArea, draft, bezierPoles, ellipse, centreArc, extensionGuide, pathGap, circleChord, overlaidLine, dragTrim, inspected, constraintComparison, bandCache, picking, cutting, banding, dimensions, lengthLabelLayout, items,
 }: SketchOverlayInputs): ReactNode {
   let editor: ReactNode = null;
   const P = (u: number, v: number) => cam.project(toWorld(sk.plane, [u, v]), w, h);
@@ -263,7 +265,7 @@ export function drawSketchOverlay({
       const marks = sketchMarks({ shape: s, view: { width: w, height: h }, dimensionArea, outlineLabels, referenceAnchors, rail, done: sk.done,
         project: P, outlinePath: index => paths[index], picked: sk.picked ?? [], inspected,
         hover: picking && draft.hover?.kind !== 'parked-outline-point' && draft.hover?.kind !== 'active-circle' ? draft.hover ?? null : null,
-        editDim: sk.editDim,
+        editDim: sk.editDim, lengthLabelLayout, canDragLengthLabels: picking,
         onDimClick: dimensions.onDimClick, onDimEdit: dimensions.onDimEdit, onDimCommit: dimensions.onDimCommit });
       items.splice(underIndex, 0, ...marks.under);
       items.push(...marks.svg);

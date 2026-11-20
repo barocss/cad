@@ -20,6 +20,14 @@
 .vp-overlay .dim.driving .dim-chip { fill: #16233a; stroke: #8fb8ff; }
 .vp-overlay .dim.driving .dim-text { fill: #d5e5ff; }
 .vp-overlay .dim.driving:hover .dim-chip { fill: #20345a; }
+.vp-overlay .dim.label-positionable { cursor: grab; touch-action: none; }
+.vp-overlay .dim.label-positionable:active { cursor: grabbing; }
+.dim-reset-position {
+  position: absolute; z-index: 3; width: 22px; height: 22px; padding: 0;
+  border: 1px solid var(--muted); border-radius: 4px; background: var(--panel);
+  color: var(--text); font: 500 15px/1 var(--sans); cursor: pointer;
+}
+.dim-reset-position:hover, .dim-reset-position:focus-visible { border-color: var(--accent); color: var(--accent); }
 .vp-overlay .dim.ref .dim-chip { stroke-dasharray: 3 2; opacity: 0.85; }
 .vp-overlay .cons-glyph .cons-text { font-size: 11px; }
 .vp-overlay .cons-leader { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }

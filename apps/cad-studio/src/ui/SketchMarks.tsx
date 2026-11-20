@@ -1,13 +1,14 @@
 // What the viewport draws over a closed outline for its constraints: driving dimensions (lines with
 // arrows and a value chip, double-click to edit), glyphs of explicit constraints, the picked and hovered
 // points and edges, and the inline dimension editor.
-import type { ReactNode } from 'react';
+import type { MouseEvent, PointerEvent, ReactNode } from 'react';
 import type { SketchShape } from '../viewport/Viewport';
 import { arcOf, type P2 } from '@barocss/cad-model/sketch/profile';
 import { dimensionLabel, dimensionValue, drivingDimensionValue, samePick, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
 import type { Project } from '@barocss/cad-model/sketch/select';
 import { InlineSketchDimension, type DimensionAxis } from './InlineSketchDimension';
 import { constraintMarkSize, placeConstraintMarksDetailed, type ScreenBox } from './sketchConstraintMarkLayout';
+import type { SketchLengthLabel, SketchLengthLabelLayout } from '../viewport/sketchLengthLabelLayout';
 import './constraints.css';
 
 export interface MarkHandlers {
@@ -16,6 +17,8 @@ export interface MarkHandlers {
   onDimCommit?(key: string, value: number, source: Polygon | Extract<SketchShape, { kind: 'circle' }>): void;
 }
 interface Args extends MarkHandlers { shape: Polygon; project: Project; outlinePath(index: number): readonly XY[]; view: { width: number; height: number }; dimensionArea?: ScreenBox; outlineLabels: readonly ScreenBox[]; referenceAnchors: ReadonlyMap<string, XY>; rail?: ScreenBox; picked: readonly SketchPick[]; inspected?: readonly SketchPick[]; hover: SketchPick | null; editDim: string | null | undefined;
+  lengthLabelLayout?: SketchLengthLabelLayout;
+  canDragLengthLabels?: boolean;
   /** The sketch's finished shapes (a finished circle can be hovered and picked to dimension it). */
   done?: readonly SketchShape[] }
 /** `under`: drawn beneath the outline's own labels (the picked / hovered highlight); `svg`: on top. */
@@ -34,7 +37,7 @@ export function drivingKeys(s: Polygon): Set<string> {
   return keys;
 }
 
-export function sketchMarks({ shape: s, project, outlinePath, view, dimensionArea, outlineLabels, referenceAnchors, rail, picked, inspected = [], hover, editDim, done = [], onDimClick, onDimEdit, onDimCommit }: Args): Marks {
+export function sketchMarks({ shape: s, project, outlinePath, view, dimensionArea, outlineLabels, referenceAnchors, rail, picked, inspected = [], hover, editDim, done = [], lengthLabelLayout, canDragLengthLabels, onDimClick, onDimEdit, onDimCommit }: Args): Marks {
   const n = s.points.length, P = (p: readonly number[]): XY => { const q = project(p[0], p[1]); return [q[0], q[1]]; };
   const pts = s.points.map(P), centroid: XY = [pts.reduce((a, p) => a + p[0], 0) / n, pts.reduce((a, p) => a + p[1], 0) / n];
   const svg: ReactNode[] = [], under: ReactNode[] = [], anchors = new Map(referenceAnchors);
@@ -74,36 +77,68 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
   picked.forEach(p => mark(p, 'on'));
 
   const dimensionBoxes = [...outlineLabels];
-  const chip = (at: XY, text: string, key: string, driving: boolean) => {
+  const resets: ReactNode[] = [];
+  const chip = (at: XY, text: string, key: string, driving: boolean, lengthLabel?: SketchLengthLabel, manual = false) => {
     const w = Math.max(40, text.length * 7.4 + 14);
     const box = { x: at[0] - w / 2, y: at[1] - 11, width: w, height: 22 };
     dimensionBoxes.push(box);
     anchors.set(key, at);
-    svg.push(<g key={'dd' + key} className={'dim' + (driving ? ' driving' : '')} data-dim={key}
-      onPointerDown={e => { e.stopPropagation(); e.preventDefault(); onDimClick?.(key); }}
-      onDoubleClick={e => { e.stopPropagation(); onDimEdit?.(key); }}>
-      <title>{`${dimensionLabel(s, key)} · double-click to edit`}</title>
+    const label = dimensionLabel(s, key);
+    const layout = lengthLabelLayout;
+    const positionable = canDragLengthLabels && layout && lengthLabel;
+    const events = positionable ? layout.handlers(lengthLabel, () => onDimClick?.(key), () => onDimEdit?.(key)) : {
+      onPointerDown(e: PointerEvent<SVGGElement>) { e.stopPropagation(); e.preventDefault(); onDimClick?.(key); },
+      onDoubleClick(e: MouseEvent<SVGGElement>) { e.stopPropagation(); onDimEdit?.(key); },
+    };
+    svg.push(<g key={'dd' + key} className={'dim' + (driving ? ' driving' : '') + (positionable ? ' label-positionable' : '')} data-dim={key} {...events}>
+      <title>{`${label} · ${positionable ? 'drag to move · ' : ''}double-click to edit`}</title>
       <rect {...box} rx={4} className="dim-chip" />
       <text x={at[0]} y={at[1] + 4} textAnchor="middle" className="dim-text">{text}</text></g>);
+    if (layout && lengthLabel && manual && editDim !== key && at[0] >= 0 && at[0] <= view.width && at[1] >= 0 && at[1] <= view.height) {
+      const size = 22, gap = 4, right = box.x + w + gap;
+      const left = right + size <= view.width ? right : box.x - size - gap;
+      const name = `Reset ${label.toLowerCase()} label position`;
+      dimensionBoxes.push({ x: left, y: box.y, width: size, height: size });
+      resets.push(<button key={key} type="button" className="dim-reset-position" style={{ left, top: box.y }}
+        data-dim-reset={key} data-sketch-action aria-label={name} title={name}
+        onClick={() => layout.reset(lengthLabel)}
+        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}>↶</button>);
+    }
   };
   const arrow = (tip: XY, dir: XY, key: string) => {
     const back = add(tip, dir, -8), side: XY = [-dir[1] * 3.5, dir[0] * 3.5];
     svg.push(<path key={key} d={`M${tip[0]},${tip[1]}L${back[0] + side[0]},${back[1] + side[1]}L${back[0] - side[0]},${back[1] - side[1]}Z`} className="dim-arrow" />);
   };
   /** A linear dimension a–b (measured between `ends`, default a and b), its line offset outwards with extension lines from a and b. */
-  const linear = (a: XY, b: XY, value: number, key: string, ends: [XY, XY] = [a, b]) => {
-    const o = outward(ends[0], ends[1]), a2 = add(ends[0], o, 26), b2 = add(ends[1], o, 26), u = unit(a2, b2);
-    svg.push(<line key={'dx1' + key} x1={a[0] + o[0] * 4} y1={a[1] + o[1] * 4} x2={a2[0] + o[0] * 5} y2={a2[1] + o[1] * 5} className="dim-ext" />,
-      <line key={'dx2' + key} x1={b[0] + o[0] * 4} y1={b[1] + o[1] * 4} x2={b2[0] + o[0] * 5} y2={b2[1] + o[1] * 5} className="dim-ext" />,
-      <line key={'dl' + key} x1={a2[0]} y1={a2[1]} x2={b2[0]} y2={b2[1]} className="dim-line" />);
+  const linear = (a: XY, b: XY, value: number, key: string, ends: [XY, XY] = [a, b], lengthIndex?: number) => {
+    const o = outward(ends[0], ends[1]), u = unit(ends[0], ends[1]);
+    const normal: XY = [-u[1], u[0]];
+    let label: SketchLengthLabel | undefined;
+    if (lengthLabelLayout && lengthIndex !== undefined) {
+      const p = s.points[lengthIndex], q = s.points[(lengthIndex + 1) % n];
+      const pixelsPerMillimeter = Math.hypot(b[0] - a[0], b[1] - a[1]) / Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (Number.isFinite(pixelsPerMillimeter) && pixelsPerMillimeter > 0) {
+        const sign = normal[0] * o[0] + normal[1] * o[1] < 0 ? -1 : 1;
+        label = { shape: s, index: lengthIndex, normal, pixelsPerMillimeter, automatic: sign * 26 / pixelsPerMillimeter };
+      }
+    }
+    const manual = label && lengthLabelLayout?.position(label);
+    const offset = manual === undefined || !label ? 26 : manual * label.pixelsPerMillimeter;
+    const axis = manual === undefined ? o : normal;
+    const extension = offset < 0 ? add([0, 0], axis, -1) : axis;
+    const startGap = Math.min(Math.abs(offset), 4);
+    const a2 = add(ends[0], axis, offset), b2 = add(ends[1], axis, offset);
+    svg.push(<line key={'dx1' + key} data-dim-extension={label && key} x1={a[0] + extension[0] * startGap} y1={a[1] + extension[1] * startGap} x2={a2[0] + extension[0] * 5} y2={a2[1] + extension[1] * 5} className="dim-ext" />,
+      <line key={'dx2' + key} data-dim-extension={label && key} x1={b[0] + extension[0] * startGap} y1={b[1] + extension[1] * startGap} x2={b2[0] + extension[0] * 5} y2={b2[1] + extension[1] * 5} className="dim-ext" />,
+      <line key={'dl' + key} data-dim-line={label && key} x1={a2[0]} y1={a2[1]} x2={b2[0]} y2={b2[1]} className="dim-line" />);
     arrow(a2, [-u[0], -u[1]], 'da1' + key); arrow(b2, u, 'da2' + key);
-    chip([(a2[0] + b2[0]) / 2, (a2[1] + b2[1]) / 2], fmt(value), key, true);
+    chip([(a2[0] + b2[0]) / 2, (a2[1] + b2[1]) / 2], fmt(value), key, true, label, manual !== undefined);
   };
 
   // Driving dimensions.
   for (const key of drivingKeys(s)) {
     const i = Number(key.slice(3)), v = dimensionValue(s, key); if (v === null) continue;
-    if (key.startsWith('len')) linear(pts[i], pts[(i + 1) % n], v, key);
+    if (key.startsWith('len')) linear(pts[i], pts[(i + 1) % n], v, key, undefined, i);
     else {
       const arc = arcOf(s.points[i] as P2, s.points[(i + 1) % n] as P2, s.bulges![i]), c = P(arc.center), m = mid(i), u = unit(c, m);
       svg.push(<line key={'rl' + key} x1={c[0]} y1={c[1]} x2={m[0]} y2={m[1]} className="dim-line" />);
@@ -226,5 +261,5 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
       {layout.budgetExceeded ? 'Constraint symbol layout limit reached.' : 'Constraint symbols are crowded.'} Zoom in or inspect the Constraints list. All symbols are retained.
     </div></>;
   }
-  return { under, svg, html };
+  return { under, svg, html: resets.length ? <>{html}{resets}</> : html };
 }
