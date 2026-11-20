@@ -439,7 +439,10 @@ export function isBoredPlateHealSource(nodes: readonly unknown[], index: number)
   if (!textRecord(edit) || (edit.kind !== 'delete-face' && edit.kind !== 'replace-face')) return false;
   const plate = precedingSolidParent(edit, index);
   if (plate === undefined) return false;
-  return edit.kind === 'delete-face' ? isTwoBorePlate(nodes, plate) : isBoredPlateReplacementSource(nodes, plate);
+  if (edit.kind === 'replace-face') return isBoredPlateReplacementSource(nodes, plate);
+  const firstSource = nodes[plate];
+  const boredPlate = textRecord(firstSource) && firstSource.kind === 'replace-face' ? precedingSolidParent(firstSource, plate) : plate;
+  return boredPlate !== undefined && isTwoBorePlate(nodes, boredPlate);
 }
 
 /** Identify the authored fillet. The kernel proves the current solid and its concave arc. */

@@ -170,6 +170,7 @@ for (const sign of [1, -1]) {
     const tilted = append(secondBore(plate()), { id: 'tilt', kind: 'replace-face', target: 'h2', face: cap, plane });
     const before = freeze(output(tilted).brep), source = structuredClone(before);
     assert.ok(Math.abs(brepMassProperties(before, 1).volume - (15600 - 156.9 * Math.PI)) < 1e-7);
+    const completed = [];
     for (const [removed, survivor, diameter, excluded] of [
       ['h.side0#', 'h2.side0#', 4, 58.8], ['h2.side0#', 'h.side0#', 6, 98.1],
     ]) {
@@ -196,7 +197,18 @@ for (const sign of [1, -1]) {
         return healed;
       });
       assert.deepEqual(results[0], results[1]);
+
+      const final = healBoredPlateIfAdmitted(results[0], walls[0].name);
+      assertHealed(results[0], final);
+      const { volume, centroid } = brepMassProperties(final, 1);
+      close(volume, 15600);
+      for (const [axis, coordinate] of [820 / 39, 210 / 13, sign === 1 ? 20 / 3 : 10 / 3].entries()) close(centroid[axis], coordinate);
+      const firstHeal = append(tilted, deletion(deleted[0].name, undefined, 'tilt'));
+      const replay = append(firstHeal, { ...deletion(walls[0].name, undefined, 'heal'), id: 'finish' });
+      assert.deepEqual(output(replay).brep, final);
+      completed.push(final);
     }
+    assert.deepEqual(completed[0], completed[1]);
     assert.deepEqual(before, source);
   });
 }
