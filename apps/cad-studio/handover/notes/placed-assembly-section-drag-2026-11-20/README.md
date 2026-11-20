@@ -1,0 +1,9 @@
+# Drag a Section plane in a placed-only assembly (#258)
+
+Actual desktop Chrome Model workspace, with two rotated top-level occurrences (`p1`, `p2`) of a shared synthetic 20 × 12 × 8 mm definition and no base-part solids. Turn on the single X Section and exclude `p2` from clipping, using the normal UI.
+
+- [Before](01-original-no-section-arrow.png) (`3c846d2d24f1c658ae848e0c6eac0f1cabc0dfe1`, WebGL2): Section clipped `p1` and left `p2` intact, but there was no Section arrow. The coloured gizmo in the screenshot belongs to the selected occurrence, not the Section.
+- After: use the yellow Section arrow to move the X plane from −1 to +1.5 mm in [WebGL2](02-webgl2-section-drag.png) and [WebGPU](03-webgpu-section-drag.png). Real pointer movement changes the held readout and release keeps the plane in place. A formerly retained point on `p1` at [0,15,11] is no longer pickable; the originally removed-side point on excluded `p2` at [−4,40,11] remains pickable by clicking the canvas.
+- The runtime verified a genuine WebGL2 rendering context in one run and a genuine WebGPU canvas context plus active GPU section in the other. Both runs preserved exact Model document data, displayed History, dirty state and Undo/Redo enablement. No downloads.
+
+The browser source was tested on `37ba435ee21a7f6f069f0d526ea07b15da464457` plus the final four Section files; published product `59dd78b45fe394b79dd5265825b8e222f5887ba4` has the same source files and only adds unrelated Fillet evidence in its parent. Focused Section/picking/pose tests 94/94, lint, Studio typecheck, production build and [exact CAD CI](https://github.com/barocss/cad/actions/runs/44714099353) passed. This covers one Section plane and this placed-only scenario, not every interruption, hidden/isolation, cap/edge picking, fit or full Undo-stack case.
