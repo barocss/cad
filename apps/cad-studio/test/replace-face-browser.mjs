@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
-import { capCase, draftedCapOracle, draftedWallVolume, HEX_CAP_FOOTPRINT, hexWallCase, hexWallOracle, hexWallSection } from './replace-face-cap-fixture.mjs';
+import { capCase, draftedCapOracle, draftedWallVolume, HEX_CAP_FOOTPRINT, hexWallCase, hexWallOracle, REPLACE_FACE_VARIANTS } from './replace-face-cap-fixture.mjs';
 
 const [output, inputFile, agentFile, variant = 'height'] = process.argv.slice(2);
 assert.ok(output && inputFile && agentFile && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
-assert.ok(['height', 'diagonal', 'upper', 'lower', 'drafted-upper', 'drafted-lower', 'drafted-wall', 'hex-upper', 'hex-lower', 'hex-wall'].includes(variant));
-const hexWall = variant === 'hex-wall' ? hexWallCase() : undefined;
+assert.ok(REPLACE_FACE_VARIANTS.includes(variant));
+const hexWall = hexWallCase(variant);
 const draftedWall = variant === 'drafted-wall', diagonal = variant === 'diagonal' || draftedWall || !!hexWall;
 const cap = capCase(variant);
 const hexStock = cap?.hex || !!hexWall;
@@ -108,7 +108,7 @@ async function measure(label, doc, original, positionAt, donor) {
     near(support, offset);
   }
   const tapered = cap?.drafted ? draftedCapOracle(cap, positionAt) : undefined;
-  const hexagonalWall = hexWall ? hexWallOracle(positionAt) : undefined;
+  const hexagonalWall = hexWall ? hexWallOracle(positionAt, hexWall.section) : undefined;
   for (const vertex of original.brep.vertices) {
     const [x, y, z] = vertex.point, next = box.brep.vertices.find(v => v.id === vertex.id);
     const movedWall = draftedWall ? x > 20 : x === 40;
@@ -119,7 +119,7 @@ async function measure(label, doc, original, positionAt, donor) {
     }
     if (hexWall) {
       const index = HEX_CAP_FOOTPRINT.findIndex(([u, v]) => x === u && y === v);
-      expected = [...hexWallSection(positionAt(0, z))[index], z];
+      expected = [...hexWall.section(positionAt(0, z))[index], z];
     }
     expected.forEach((value, axis) => near(next.point[axis], value));
   }
@@ -138,7 +138,7 @@ async function measure(label, doc, original, positionAt, donor) {
   }
   const corners = cap?.hex ? HEX_CAP_FOOTPRINT : cap ? [[0, 0], [40, 0], [0, 30], [40, 30]] :
     [[0, 0], [30, 0], [draftedWall ? 1 : 0, 10], [draftedWall ? 29 : 30, 10]];
-  const coordinates = hexWall ? [0, 10].flatMap(z => hexWallSection(positionAt(0, z)).slice(1, 3).map(point => [...point, z])) :
+  const coordinates = hexWall ? [0, 10].flatMap(z => hexWall.section(positionAt(0, z)).slice(1, 3).map(point => [...point, z])) :
     tapered?.moving.map(point => point[2]) ?? corners.map(([u, v]) => positionAt(u, v));
   f.report.observations.push({ label, axis: hexWall ? 'xy' : cap ? 'z' : 'x', coordinates, volume, nativeVolume: box.mass.volume, workerVolume,
     maximumEdgeSurfaceGap: box.report.maximumEdgeSurfaceGap });
@@ -156,7 +156,7 @@ await f.run(async () => {
     });
     return context;
   };
-  f.phase = 'Open the exact MCP source and pick the box face';
+  f.phase = 'Open the exact MCP source and pick the stock face';
   await f.newPage();
   await open(inputFile);
   await f.same(source);
@@ -232,7 +232,7 @@ await f.run(async () => {
 
   f.phase = 'Refuse a saved replacement which collapses at the opposite face';
   const stale = structuredClone(first);
-  stale.nodes[4].offset[cap ? 2 : 0] = hexWall ? 10 : cap?.collapse ?? -37;
+  stale.nodes[4].offset[cap ? 2 : 0] = hexWall?.collapse ?? cap?.collapse ?? -37;
   await open({ name: 'collapsed-wall.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(stale)) });
   await f.waitToast(hexWall ? /collapse or cross a wall of the hexagonal section.*Your part is unchanged/i :
     /reach or cross the opposite (?:wall|cap).*Your part is unchanged/i);

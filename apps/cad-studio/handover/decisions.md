@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1435: [Rotate a convex hexagonal prism wall in Top view](notes/replace-hex-prism-wall-top-turn-2026-11-21/README.md), #17. Replace the wall with a plane that rotates in Top view and can tilt along Z. Keep the fixed supports and verify Studio reopen.
 - D1434: [Tilt a convex hexagonal prism side wall](notes/replace-hex-prism-wall-2026-11-21/README.md), #17. Keep the wall's horizontal direction, both cap stations and all 36 pcurve IDs through Studio edit and reopen.
 - D1433: [Replace either cap of a convex hexagonal prism](notes/replace-hex-prism-cap-2026-11-21/README.md), #17. Keep seven plane supports and all 36 pcurve IDs through Studio reference edits and reopen.
 - D1432: [Replace a drafted rectangular side wall](notes/replace-drafted-wall-tilted-plane-2026-11-21/README.md), #17. Keep five native supports and verify the inclined wall replacement through reference edits and Studio reopen.

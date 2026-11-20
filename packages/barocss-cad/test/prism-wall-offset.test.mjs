@@ -133,6 +133,47 @@ test('replace a Y-min hexagonal prism wall and preserve both cap stations', () =
   close(brepMassProperties(result, 1).volume, 3927.5, 1e-7);
 });
 
+for (const [slope, volume] of [[0, 3744], [4 / 5, 11504 / 3]]) {
+  test(`replace a hexagonal prism wall with a plane turned in plan and Z slope ${slope}`, () => {
+    const source = solidOf(), before = structuredClone(source);
+    const plane = { origin: [18, 0, 0], normal: [4, -2, -slope] };
+    const result = replacePrismWallIfAdmitted(source, selected, plane);
+    const report = checkBrep(result, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.equal(result.coedges.filter(coedge => coedge.pcurve).length, 36);
+    assert.deepEqual(identity(result), identity(source));
+    assert.ok(report.maximumPcurveGap < 1e-9);
+    assert.ok(report.maximumEdgeSurfaceGap < 1e-9);
+    for (const [i, vertex] of source.vertices.entries()) {
+      const [x, y, z] = vertex.point;
+      const secondY = (48 - slope * z) / 5;
+      const expected = x === 18 && y === 0 ? [18 + slope * z / 4, 0, z] :
+        x === 24 && y === 8 ? [30 - 3 * secondY / 4, secondY, z] : vertex.point;
+      pointClose(result.vertices[i].point, expected);
+    }
+    for (const face of source.faces) {
+      const changed = faceOf(result, face.name);
+      if (face.name === selected) {
+        const normal = plane.normal.map(value => value / Math.hypot(...plane.normal));
+        pointClose(faceGeometry(changed).n, normal);
+        for (const [x, y, z] of changed.surface.controlPoints.flat()) close(4 * x - 2 * y - slope * z, 72);
+      } else {
+        const support = faceGeometry(face);
+        pointClose(faceGeometry(changed).n, support.n);
+        for (const point of changed.surface.controlPoints.flat())
+          close(point.reduce((sum, value, axis) => sum + (value - support.o[axis]) * support.n[axis], 0), 0);
+      }
+    }
+    const mass = brepMassProperties(result, 1);
+    assert.equal(mass.method, 'planar-exact');
+    close(mass.volume, volume, 1e-7);
+    for (const x of [30 - 5 * slope / 2, 31 - 5 * slope / 2, 10, 9]) {
+      assert.throws(() => replacePrismWallIfAdmitted(source, selected, { ...plane, origin: [x, 0, 0] }), /collapse or cross a wall/);
+    }
+    assert.deepEqual(source, before);
+  });
+}
+
 test('prism wall replacement refuses a collapsed end and an unsupported donor direction', () => {
   const source = solidOf(), before = structuredClone(source), normal = [-4, 3, 4 / 5];
   // Each listed donor contact or crossing still has a positive integrated signed volume.
@@ -145,7 +186,8 @@ test('prism wall replacement refuses a collapsed end and an unsupported donor di
     assert.throws(() => replacePrismWallIfAdmitted(source, selected, { origin: [18, 0, 0], normal: direction }), /tilt is too small/);
   }
   assert.throws(() => replacePrismWallIfAdmitted(source, selected, { origin: [18, 0, 0], normal: [0, 0, 1] }), /perpendicular/);
-  assert.throws(() => replacePrismWallIfAdmitted(source, selected, { origin: [18, 0, 0], normal: [4, -2, -4 / 5] }), /horizontal direction/);
+  assert.throws(() => replacePrismWallIfAdmitted(source, selected, { origin: [18, 0, 0], normal: [3, 4, 1] }), /perpendicular/);
+  assert.throws(() => replacePrismWallIfAdmitted(source, selected, { origin: [18, 0, 0], normal: [4, 3, 4 / 5] }), /parallel to an adjacent wall/);
   assert.equal(prismWallReplacementFrame(source, 'n1.top'), undefined);
   assert.equal(replacePrismWallIfAdmitted(source, 'n1.top', { origin: [18, 0, 0], normal }), undefined);
   assert.deepEqual(source, before);

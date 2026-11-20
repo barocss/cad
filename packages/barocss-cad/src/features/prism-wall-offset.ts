@@ -395,7 +395,7 @@ export function replacePrismCapIfAdmitted(brep: Brep, faceName: string, plane: R
   return result;
 }
 
-/** Tilt one wall along Z while keeping its horizontal direction on the admitted straight hexagonal prism. */
+/** Replace one wall of the admitted straight hexagonal prism with a nonparallel plane. */
 export function replacePrismWallIfAdmitted(brep: Brep, faceName: string, plane: ReplacementPlane): Brep | undefined {
   if (!namedFace(brep, faceName)) return undefined;
   const prism = admittedWallPrism(brep, faceName);
@@ -404,40 +404,39 @@ export function replacePrismWallIfAdmitted(brep: Brep, faceName: string, plane: 
   const { selected, walls, lower, upper, caps } = prism;
   const wall = walls[selected], previous = prev(selected), end = next(selected);
   const horizontal = Math.hypot(unit[0], unit[1]), angularRoundoff = 64 * Number.EPSILON;
-  if (horizontal <= angularRoundoff)
+  const alignment = dot(unit, wall.normal), projected = Math.abs(alignment);
+  if (horizontal <= angularRoundoff || projected <= angularRoundoff)
     return replacementFailure('GEOMETRY', 'the reference plane is too close to perpendicular to the selected wall.');
-  const skew = Math.abs(unit[0] * wall.normal[1] - unit[1] * wall.normal[0]) / horizontal;
-  if (skew > angularRoundoff)
-    return replacementFailure('GEOMETRY', 'the reference plane must retain the horizontal direction of the selected wall.');
-  const normal = dot(unit, wall.normal) > 0 ? unit : scale(unit, -1);
-  const projected = dot(normal, wall.normal);
+  const normal = alignment > 0 ? unit : scale(unit, -1);
+  const horizontalNormal: Point = [normal[0] / horizontal, normal[1] / horizontal, 0];
   const sourceExtent = Math.max(prism.extent, geometryScaleMM([origin]));
   if (!(sourceExtent <= CadNumericPolicy.coordinateAbs))
     return replacementFailure('GEOMETRY', 'the replacement exceeds the modeling coordinate range.');
-  const distanceAt = (z: number) => {
-    const [x, y] = wall.origin;
-    const distance = dot(sub(origin, [x, y, z]), normal) / projected;
-    return Math.abs(distance) <= allowance(sourceExtent) ? 0 : distance;
-  };
+  const supportAt = (point: Point) => dot(sub(point, origin), normal);
+  const refuseParallel = (code: BrepError['code']) => replacementFailure(code, 'the reference plane is parallel to an adjacent wall.');
   const sections = [lower, upper].map(corners => {
-    const distance = distanceAt(corners[0].point[2]);
-    if (distance === 0) return { corners, points: corners.map(vertex => vertex.point), distance };
-    const a = meet(wall, walls[previous], corners[selected].point, distance, replacementFailure);
-    const b = meet(wall, walls[end], corners[end].point, distance, replacementFailure);
-    return { corners, points: corners.map((vertex, i) => i === selected ? a : i === end ? b : vertex.point), distance };
+    const anchor: Point = [wall.origin[0], wall.origin[1], corners[0].point[2]];
+    const support = { ...wall, origin: add(anchor, scale(horizontalNormal, -supportAt(anchor) / horizontal)), normal: horizontalNormal };
+    const supports = walls.map((original, i) => i === selected ? support : original);
+    function fitCorner(index: number, neighbor: Wall): Point {
+      const old = corners[index].point, point = meet(support, neighbor, old, 0, refuseParallel);
+      return dist(point, old) <= allowance(sourceExtent) ? old : point;
+    }
+    const a = fitCorner(selected, walls[previous]), b = fitCorner(end, walls[end]);
+    return { corners, points: corners.map((vertex, i) => i === selected ? a : i === end ? b : vertex.point), supports };
   });
   const extent = Math.max(sourceExtent, geometryScaleMM(...sections.map(section => section.points)));
   if (!(extent <= CadNumericPolicy.coordinateAbs))
     return replacementFailure('GEOMETRY', 'the replacement exceeds the modeling coordinate range.');
   const roundoff = allowance(extent), linear = linearToleranceMM(extent);
-  if (Math.abs(sections[1].distance - sections[0].distance) <= linear)
+  const displacements = wall.face.corners.map(vertex => supportAt(vertex.point) / projected);
+  if (Math.max(...displacements) - Math.min(...displacements) <= linear)
     return replacementFailure('GEOMETRY', 'the reference plane tilt is too small for this wall.');
-  const supportAt = (point: Point) => dot(sub(point, origin), normal);
   const incident = (i: number) => i === selected || i === end;
   // Intersections and signed plane distances are affine in Z, so both certified end sections prove the entire slab.
-  for (const { points, distance } of sections) {
-    if (!keepsSection(points, walls, selected, distance, extent)
-      || points.some((point, i) => !incident(i) && supportAt(point) >= -linear * projected))
+  for (const { points, supports } of sections) {
+    if (!keepsSection(points, supports, selected, 0, extent)
+      || points.some((point, i) => !incident(i) && supportAt(point) >= -linear * horizontal))
       return replacementFailure('GEOMETRY', 'the replacement would collapse or cross a wall of the hexagonal section.');
     if (points.some((point, i) => incident(i) && Math.abs(supportAt(point)) > roundoff))
       return replacementFailure('GEOMETRY', 'the replacement cannot preserve the reference plane and its trim.');
