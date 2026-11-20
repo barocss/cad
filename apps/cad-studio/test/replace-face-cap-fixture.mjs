@@ -51,3 +51,9 @@ export function draftedCapOracle(cap, support) {
   }
   return { moving, volume, centroid: moment.map(value => value / volume) };
 }
+
+/** Integrate the drafted wall witness by three horizontal sections. The area is quadratic in Z. */
+export function draftedWallVolume(support) {
+  const area = z => (30 - z / 5) * (support(15, z) - z / 10);
+  return 10 * (area(0) + 4 * area(5) + area(10)) / 6;
+}

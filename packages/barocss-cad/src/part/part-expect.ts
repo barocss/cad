@@ -91,7 +91,7 @@ export function edgeSignatures(brep: Brep): Map<string, Sig> {
 }
 
 /** Each face name's signature on a body: planar or curved, its area centroid and normal over its tessellation, its radius. */
-export function faceSignatures(brep: Brep, nativeOffset = false): Map<string, Sig> {
+export function faceSignatures(brep: Brep, nativePlanar = false): Map<string, Sig> {
   const mesh = tessellateBrep(brep, { segmentsPerQuarter: 8 }), byId = new Map(brep.faces.map(f => [f.id, f])), P = mesh.positions, out = new Map<string, Sig>();
   for (const mf of mesh.faces) {
     const face = byId.get(mf.faceId); if (!face?.name) continue;
@@ -102,7 +102,7 @@ export function faceSignatures(brep: Brep, nativeOffset = false): Map<string, Si
       const cr = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], ar = Math.hypot(cr[0], cr[1], cr[2]) / 2;
       area += ar; for (let k = 0; k < 3; k++) { c[k] += (P[ia + k] + P[ib + k] + P[ic + k]) / 3 * ar; n[k] += cr[k]; }
     }
-    const draftedPlane = nativeOffset && brep.source.family === 'drafted-extrusion' && mf.kind !== 'planar' && mf.kind !== 'facet' ? draftedWallPlane(face) : undefined;
+    const draftedPlane = nativePlanar && brep.source.family === 'drafted-extrusion' && mf.kind !== 'planar' && mf.kind !== 'facet' ? draftedWallPlane(face) : undefined;
     const planar = mf.kind === 'planar' || (mf.kind === 'facet' && planeOf(face)) || draftedPlane !== undefined;
     const nl = Math.hypot(n[0], n[1], n[2]) || 1;
     const radius = planar || mf.kind === 'facet' ? undefined : radiusOf(face);
@@ -131,7 +131,7 @@ function radiusOf(face: BrepFace): number | undefined {
  * A name not on the body is left to the feature's own refusal.
  */
 export function checkExpected(brep: Brep, expect: ReadonlyMap<string, Sig>, edges: boolean, kind: string, fail: (code: CadPartErrorCode, detail: string) => never): void {
-  const sigs = edges ? edgeSignatures(brep) : faceSignatures(brep, kind === 'offset-face'), what = edges ? 'edge' : 'face';
+  const sigs = edges ? edgeSignatures(brep) : faceSignatures(brep, kind === 'offset-face' || kind === 'replace-face'), what = edges ? 'edge' : 'face';
   for (const [name, old] of expect) {
     const now = sigs.get(name); if (!now) continue;
     if (!alike(old, now, edges)) fail('REFERENCE', moved(kind, what, name, old, now, old.kind !== now.kind ? `; it is a ${now.kind} ${what} now, was ${old.kind}` : old.radius !== now.radius ? `; its radius ${now.radius ?? 'none'}, was ${old.radius ?? 'none'}` : '; it faces another way'));

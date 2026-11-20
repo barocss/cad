@@ -464,21 +464,34 @@ export function boxWallReplacementFrame(brep: Brep, faceName: string): { anchor:
   return admitted && admitted.axis !== 2 ? boxReplacementFrame(admitted) : undefined;
 }
 
-function certifiedDraftedReplacementCap(brep: Brep, faceName: string): DraftedCap | undefined {
+function certifiedDraftedReplacement(brep: Brep, faceName: string): { face: BrepFace; profile: Taper } | undefined {
   const face = namedFace(brep, faceName), taper = face && admittedTaper(brep);
-  const cap = face && taper && admittedCap(taper, face);
-  if (!cap) return undefined;
-  const [base, top] = cap.sections, extent = geometryScaleMM(brep.vertices.map(vertex => vertex.point));
+  if (!face || !taper) return undefined;
+  const [base, top] = taper.sections, extent = geometryScaleMM(brep.vertices.map(vertex => vertex.point));
   const linear = linearToleranceMM(extent);
   if (!(extent <= CadNumericPolicy.coordinateAbs && top.z - base.z > linear)
-    || cap.sections.some(section => section.ranges.some(([lo, hi]) => hi - lo <= linear))) return undefined;
-  return cap;
+    || taper.sections.some(section => section.ranges.some(([lo, hi]) => hi - lo <= linear))) return undefined;
+  return { face, profile: taper };
 }
 
 /** The exact selected cap of a strict rectangular taper and its original outward direction. */
 export function draftedCapReplacementFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
-  const cap = certifiedDraftedReplacementCap(brep, faceName);
+  const admitted = certifiedDraftedReplacement(brep, faceName);
+  const cap = admitted && admittedCap(admitted.profile, admitted.face);
   return cap && capFrame(cap);
+}
+
+/** The exact selected side of a strict rectangular taper and its original outward direction. */
+export function draftedWallReplacementFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
+  const admitted = certifiedDraftedReplacement(brep, faceName);
+  if (!admitted) return undefined;
+  const wall = admitted.profile.walls.get(admitted.face.id);
+  if (!wall) return undefined;
+  const [base, top] = admitted.profile.sections, { axis, end } = wall, across = axis === 0 ? 1 : 0;
+  const anchor: Point = [0, 0, (base.z + top.z) / 2];
+  anchor[axis] = (base.ranges[axis][end] + top.ranges[axis][end]) / 2;
+  anchor[across] = (base.ranges[across][0] + base.ranges[across][1] + top.ranges[across][0] + top.ranges[across][1]) / 4;
+  return { anchor, normal: wall.plane.n };
 }
 
 function replacementFailure(code: BrepError['code'], detail: string): never {
@@ -487,7 +500,7 @@ function replacementFailure(code: BrepError['code'], detail: string): never {
 
 const finitePoint = (value: unknown): value is Point => Array.isArray(value) && value.length === 3 && value.every(component => typeof component === 'number' && Number.isFinite(component));
 
-function replacementPlane({ axis, normal }: Pick<CertifiedBoxFace, 'axis' | 'normal'>, plane: ReplacementPlane): Plane {
+function replacementPlane({ axis, end }: FaceRole, plane: ReplacementPlane): Plane {
   if (!plane || typeof plane !== 'object' || Array.isArray(plane) || Object.keys(plane).sort().join(',') !== 'normal,origin'
     || !finitePoint(plane.origin) || !finitePoint(plane.normal)) return replacementFailure('INPUT', 'the reference needs a finite origin and normal.');
   const magnitude = len(plane.normal);
@@ -495,7 +508,9 @@ function replacementPlane({ axis, normal }: Pick<CertifiedBoxFace, 'axis' | 'nor
   const n: Point = [plane.normal[0] / magnitude, plane.normal[1] / magnitude, plane.normal[2] / magnitude];
   if (Math.abs(n[axis]) <= 64 * Number.EPSILON)
     return replacementFailure('GEOMETRY', `the reference plane is too close to perpendicular to the selected ${axis === 2 ? 'cap' : 'wall'}.`);
-  return { kind: 'plane', o: plane.origin, n: dot(n, normal) > 0 ? n : scale(n, -1) };
+  // Material is on the original side of the selected axis, even for a steeply tilted plane.
+  const outward = end === 0 ? -1 : 1;
+  return { kind: 'plane', o: plane.origin, n: n[axis] * outward > 0 ? n : scale(n, -1) };
 }
 
 function liftToPlane(point: Point, axis: FaceRole['axis'], { o, n }: Plane): Point {
@@ -525,13 +540,15 @@ export function replaceBoxWall(brep: Brep, faceName: string, plane: ReplacementP
   return buildBoxReplacement(brep, admitted, plane);
 }
 
-/** Replace a strict box face or a strict rectangular taper cap with a nonparallel plane. */
+/** Replace one face of a strict box or rectangular taper with a nonparallel plane. */
 export function replaceRectangularSolidFace(brep: Brep, faceName: string, plane: ReplacementPlane): Brep {
   const box = certifiedBoxFace(brep, faceName);
   if (box) return buildBoxReplacement(brep, box, plane);
-  const cap = certifiedDraftedReplacementCap(brep, faceName);
+  const drafted = certifiedDraftedReplacement(brep, faceName);
+  if (!drafted) return replacementFailure('GEOMETRY', 'pick one planar face of a straight rectangular box or a rectangular taper.');
+  const { profile, face } = drafted, cap = admittedCap(profile, face);
   if (cap) return buildDraftedCapReplacement(brep, cap, plane);
-  return replacementFailure('GEOMETRY', 'pick one planar face of a straight rectangular box or one cap of a rectangular taper.');
+  return buildDraftedWallReplacement(brep, profile, face, plane);
 }
 
 function replacementExtent(brep: Brep, points: readonly Point[], wanted: Plane): number {
@@ -560,9 +577,25 @@ function buildBoxReplacement(brep: Brep, admitted: CertifiedBoxFace, plane: Repl
   return rebuildReplacementTrim(brep, box, face, axis, wanted, lifted);
 }
 
+function buildDraftedWallReplacement(brep: Brep, profile: Taper, face: BrepFace, plane: ReplacementPlane): Brep {
+  const wall = profile.walls.get(face.id)!;
+  const { axis, end } = wall, [base, top] = profile.sections;
+  const opposite = [...profile.walls.values()].find(other => other.axis === axis && other.end !== end)!;
+  const wanted = replacementPlane(wall, plane), outward = end === 0 ? -1 : 1;
+  const lifted = brep.vertices.filter(({ point }) => point[axis] === (point[2] === base.z ? base : top).ranges[axis][end])
+    .map(vertex => ({ vertex, point: liftToPlane(vertex.point, axis, wanted) }));
+  const linear = linearToleranceMM(replacementExtent(brep, lifted.map(({ point }) => point), wanted));
+  // Signed width is affine over the wall's fixed transverse-by-height trapezoid.
+  if (lifted.some(({ point }) => (point[axis] - wallAt(opposite, point[2])) * outward <= linear))
+    return replacementFailure('GEOMETRY', 'the replacement would reach or cross the opposite wall at one corner.');
+  const displacements = lifted.map(({ point }) => point[axis] - wallAt(wall, point[2]));
+  requireReplacementTilt(displacements, linear, 'wall');
+  return rebuildReplacementTrim(brep, profile, face, axis, wanted, lifted);
+}
+
 function buildDraftedCapReplacement(brep: Brep, cap: DraftedCap, plane: ReplacementPlane): Brep {
   const outward = cap.end === 0 ? -1 : 1;
-  const wanted = replacementPlane({ axis: 2, normal: [0, 0, outward] }, plane);
+  const wanted = replacementPlane({ axis: 2, end: cap.end }, plane);
   const selected = cap.sections[cap.end], fixed = cap.sections[cap.end === 0 ? 1 : 0];
   const walls = [...cap.walls.values()];
   const lifted = brep.vertices.filter(vertex => vertex.point[2] === selected.z).map(vertex => {

@@ -203,7 +203,7 @@ export type CadPartFeature = Base & (
   | { readonly kind: 'draft'; readonly target: string; readonly faces: readonly string[]; readonly angle: number; readonly pull?: CadPartAxis | '-x' | '-y' | '-z'; readonly neutral?: CadPartDim; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   /** Move a named end cap of a rectangular taper in its outward direction and continue its original side planes. */
   | { readonly kind: 'offset-face'; readonly target: string; readonly face: string; readonly distance: number; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
-  /** Replace a straight box face or a rectangular taper cap with a tilted plane and keep the other five supports. */
+  /** Replace a rectangular extrusion face with a tilted plane and keep the other five supports. */
   | { readonly kind: 'replace-face'; readonly target: string; readonly face: string; readonly plane: { readonly origin: Point; readonly normal: Point }; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   /** Heal a sole circular through bore in a rectangular plate or a full-height concave fillet in a straight L prism or two-plate L bracket. Select one exact native face name. */
   | { readonly kind: 'delete-face'; readonly target: string; readonly face: string; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }

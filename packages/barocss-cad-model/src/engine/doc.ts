@@ -386,12 +386,13 @@ export function isBoxReplacementSource(nodes: readonly unknown[], index: number)
 }
 export { isBoxReplacementSource as isBoxWallReplacementSource };
 
-/** Authored rectangular Draft Extrude for cap replacement. Native admission verifies the four walls. */
-export function isDraftedCapReplacementSource(nodes: readonly unknown[], index: number): boolean {
+/** Authored rectangular Draft Extrude for face replacement. Native admission verifies its supports. */
+export function isDraftedFaceReplacementSource(nodes: readonly unknown[], index: number): boolean {
   const stock = nodes[index];
   return textRecord(stock) && typeof stock.draft === 'number' && Number.isFinite(stock.draft) && stock.draft !== 0 &&
     plainExtrudeSketch(nodes, index)?.profile === 'rectangle';
 }
+export { isDraftedFaceReplacementSource as isDraftedCapReplacementSource };
 
 /** Identify the authored fillet. The kernel proves the current solid and its concave arc. */
 export function isDeleteFaceFilletSource(nodes: readonly unknown[], index: number): boolean {
@@ -461,7 +462,7 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       }
       const parentIndex = (node.parent as BodyRef).node;
       if (node.kind === 'replace-face') {
-        if (!isBoxReplacementSource(value.nodes, parentIndex) && !isDraftedCapReplacementSource(value.nodes, parentIndex))
+        if (!isBoxReplacementSource(value.nodes, parentIndex) && !isDraftedFaceReplacementSource(value.nodes, parentIndex))
           return 'Replace face: a preceding rectangular extrusion is required.';
         continue;
       }

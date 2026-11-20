@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1432: [Replace a drafted rectangular side wall](notes/replace-drafted-wall-tilted-plane-2026-11-21/README.md), #17. Keep five native supports and verify the inclined wall replacement through reference edits and Studio reopen.
+
 - D1431: [Replace either cap of a drafted rectangular extrusion](notes/replace-drafted-cap-tilted-plane-2026-11-21/README.md), #17. Re-intersect all four sloped wall pairs with a tilted reference and qualify both caps in Studio.
 
 - D1430: [Replace either box cap with a tilted plane](notes/replace-box-cap-tilted-plane-2026-11-21/README.md), #17. Keep the other five box supports and all native IDs through reference edits and Studio reopen.

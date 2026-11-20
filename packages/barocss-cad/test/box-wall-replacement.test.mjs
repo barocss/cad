@@ -3,7 +3,7 @@ import test from 'node:test';
 import { CadPartError, checkBrep, evaluateCadPart, faceGeometry } from '../dist/index.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
 import {
-  boxFaceReplacementFrame, boxWallReplacementFrame, draftedCapReplacementFrame, draftedFaceOffsetFrame,
+  boxFaceReplacementFrame, boxWallReplacementFrame, draftedCapReplacementFrame, draftedFaceOffsetFrame, draftedWallReplacementFrame,
   replaceBoxFace, replaceBoxWall, replaceRectangularSolidFace,
 } from '../dist/features/drafted-cap-offset.js';
 
@@ -207,7 +207,58 @@ test('drafted cap replacement refuses corner turnover, opposite contact and cros
     assert.throws(() => replaceRectangularSolidFace(before, 'b.top', candidate), message);
     assert.deepEqual(before, saved);
   }
-  assert.throws(() => replaceRectangularSolidFace(before, 'b.side1', plane), /planar face of a straight rectangular box|cap of a drafted/);
+});
+
+test('an authored drafted wall follows the donor and retains all five fixed supports', () => {
+  const before = output(tapered).brep, saved = structuredClone(before);
+  const reference = { origin: [48, 60, 10], normal: [-10, 1, 5] };
+  const frame = draftedWallReplacementFrame(before, face);
+  assert.ok(frame);
+  assert.equal(draftedWallReplacementFrame(before, 'b.top'), undefined);
+  const expect = { [face]: { kind: 'plane', at: frame.anchor, dir: frame.normal, size: 290 } };
+  const after = output([...tapered, { ...replacement, plane: reference, expect }]).brep;
+  assertPlanesAndTopology(before, after, face, reference);
+  for (const vertex of before.vertices) {
+    const [x, y, z] = vertex.point, actual = after.vertices.find(v => v.id === vertex.id);
+    [x > 20 ? 37 + y / 10 + z / 2 : x, y, z].forEach((value, axis) => close(actual.point[axis], value));
+  }
+  const mass = brepMassProperties(after, 1);
+  // Integrate A(z)=(30−0.2z)(38.5+0.4z) and the independent first moments.
+  close(mass.volume, 35215 / 3);
+  [29251159 / 1408600, 1068659 / 70430, 35390 / 7043].forEach((value, axis) => close(mass.centroid[axis], value));
+  assert.deepEqual(before, saved);
+  assert.throws(() => output([...tapered, { ...replacement, plane: reference,
+    expect: { [face]: { ...expect[face], dir: [0, 1, 0] } } }]), /REFERENCE_MOVED/);
+
+  // Rotate the solid and donor to a Y-min wall using (x,y,z) ↦ (y,40−x,z).
+  const rotated = [{ ...tapered[0], max: [30, 40] }, tapered[1]];
+  const yMin = 'b.side0', turned = { origin: [60, -8, 10], normal: [1, 10, 5] };
+  const other = output([...rotated, { ...replacement, face: yMin, plane: turned }]).brep;
+  assertPlanesAndTopology(output(rotated).brep, other, yMin, turned);
+  const rotatedMass = brepMassProperties(other, 1);
+  close(rotatedMass.volume, mass.volume);
+  [mass.centroid[1], 40 - mass.centroid[0], mass.centroid[2]].forEach((value, axis) => close(rotatedMass.centroid[axis], value));
+});
+
+test('a steep drafted wall replacement keeps the selected outward side and safely refuses degeneracies', () => {
+  const before = output(tapered).brep, saved = structuredClone(before);
+  const steep = { origin: [37, 0, 0], normal: [1, 0, -12] };
+  const moved = replaceRectangularSolidFace(before, face, steep);
+  assert.deepEqual(moved, replaceRectangularSolidFace(before, face, { ...steep, normal: [-1, 0, 12] }));
+  const geometry = faceGeometry(moved.faces.find(f => f.name === face));
+  assert.equal(geometry.kind, 'plane');
+  assert.ok(geometry.n[0] > 0);
+  const report = checkBrep(moved, { strict: true });
+  assert.equal(report.valid, true, report.issues.join('\n'));
+  close(brepMassProperties(moved, 1).volume, 11100 + 349.6 * 50 - 2.38 * 1000 / 3);
+  for (const [candidate, message] of [
+    [{ origin: [42, 0, 0], normal: [10, 0, 1] }, /tilt is too small/],
+    [{ origin: [42, 0, 0], normal: [10, 1e-10, 1] }, /tilt is too small/],
+    [{ origin: [42, 0, 0], normal: [0, 0, 1] }, /too close to perpendicular/],
+    [{ origin: [0, 0, 0], normal: [-10, 1, 5] }, /opposite wall at one corner/],
+    [{ origin: [-1, 0, 0], normal: [-10, 1, 5] }, /opposite wall at one corner/],
+  ]) assert.throws(() => replaceRectangularSolidFace(before, face, candidate), message);
+  assert.deepEqual(before, saved);
 });
 
 test('Replace face refuses corner collapse, unsupported slope and stale picks', () => {
