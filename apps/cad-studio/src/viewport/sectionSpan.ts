@@ -1,3 +1,6 @@
+import type { Vec3 } from '@barocss/cad-model/engine/mesh';
+import type { Section } from './sectionView';
+
 interface SectionBounds {
   min: readonly number[];
   max: readonly number[];
@@ -51,4 +54,20 @@ export function sectionDragValue(range: SectionDragRange, start: number, move: n
   if (!move || !Number.isFinite(proposed)) return start;
   const snapped = range.snap ? Math.round(proposed * 2) / 2 : proposed;
   return Math.max(range.lower, Math.min(range.upper, Number.isFinite(snapped) ? snapped : proposed));
+}
+
+/** A one-plane handle can use the current, visible placed bounds when there is no root solid. */
+export function placedSectionHandleBox(section: Section, visible: readonly SectionBounds[]): { min: Vec3; max: Vec3 } | null {
+  if (section.mode !== 'plane' || section.planes.length !== 1 || !visible.length) return null;
+  const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (const box of visible) {
+    if (!validBounds(box)) return null;
+    for (const k of [0, 1, 2]) {
+      min[k] = Math.min(min[k], box.min[k]);
+      max[k] = Math.max(max[k], box.max[k]);
+    }
+  }
+  const { normal, offset } = section.planes[0], span = projectedSectionSpan({ min, max }, normal);
+  const range = span && sectionDragRange(...span);
+  return span && range && range.lower < range.upper && offset > span[0] && offset < span[1] ? { min, max } : null;
 }

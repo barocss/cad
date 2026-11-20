@@ -180,7 +180,7 @@ import { usesCurvedMeshDistance } from './app/measureProvenance';
 import { captureMeasureTarget, readMeasureTarget, sameMeasureOccurrence, type MeasureTarget, type PlacedMeasureSource } from './app/measureTargets';
 import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportInstanceSelection } from './assembly/nestedSelection';
 import { NestedPartPanel } from './ui/NestedPartPanel';
-import { DRAG_TYPE, snapshotInstanceIsolation, type FeatureHandle, type Spot, type SketchAnchor, type SketchShape, type SketchState, type TransformGizmo, type ViewportHandle } from './viewport/Viewport';
+import { DRAG_TYPE, snapshotInstanceIsolation, type Spot, type SketchAnchor, type SketchShape, type SketchState, type TransformGizmo, type ViewportHandle } from './viewport/Viewport';
 import { ClearancePanel } from './viewport/ClearancePanel';
 import { PrintPanel } from './viewport/PrintPanel';
 import { CamPanel } from './viewport/CamPanel';
@@ -271,7 +271,6 @@ import { threadLines, threadsOf } from '@barocss/cad-model/app/threads';
 import { fastenerSizesOf } from '@barocss/cad-model/engine/fastenerSizeRows';
 import type { Analysis } from './viewport/analysis';
 import { asSection, sectionHatch, sectionPlanes, type AxisSection, type Section } from './viewport/sectionView';
-import { sectionHandles } from './ui/SectionBar';
 import { type MapKind } from './viewport/scalarMaps';
 import { edgeChain } from '@barocss/cad-model/app/edgeChain';
 import { joinOpen } from '@barocss/cad-model/sketch/trim';
@@ -3001,8 +3000,20 @@ export function App() {
   const { scalarMaps, isoclines, mouldShown, mapLegend } = useAnalysisMaps({ doc, evaluated, shownBodies, mapKind, rendering, sketch,
     previewBodies, viewport, engine, revision, lanes, mouldResult, setMouldResult, mouldSpread, halvesShownRef, viewBackend });
   const mapScope = mapSourceScope({ shownBodies, sectionBodies, sectionExactShown, gpuSection });
-  const { sectionBox, sectionHatchOn, setSectionHatchOn, hatchStep, sectionClip, sectionLiveView, sectionHatchLines } = useSectionDisplay({
-    bodies, instancesPlaced, section, sketch, gpuSection, shownBodies, sectionBodies, sectionExactShown, sectionLive, active, dragSection, excludedInstances: excludedSectionInstances });
+  const instanceLooks = useInstanceLooks(doc, instanceBodies);
+  const placedHandleOpen = openIntent.current;
+  const ownsPlacedSectionHandle = () => placedHandleOpen === openIntent.current && ownsEvaluatedSource()
+    && shownDocNow.current === doc && markerNow.current === null && !shownVariant.current && !inPlaceNow.current
+    && !project.opening() && !explodeStore.get();
+  const placedHandleBounds = !bodies.length && section?.mode === 'plane' && fresh && !busy && !workerFailure && ownsPlacedSectionHandle()
+    && renderGeometryReady && !rendering && !drawing && !cutDraft && !instDrag && !stepsDisp && !assembly.draft
+    ? instancesPlaced.filter(i => !isolatedInstances || isolatedInstances.includes(i.id))
+      .flatMap(i => i.bodies.filter(b => !instanceLooks.get(i.id)?.get(b.key)?.hidden).map(b => b.mesh.bounds))
+    : [];
+  const { sectionBox, sectionHatchOn, setSectionHatchOn, hatchStep, sectionClip, sectionLiveView, sectionHatchLines, sectionDrag } = useSectionDisplay({
+    bodies, instancesPlaced, placedHandleBounds, section, sketch, gpuSection, shownBodies, sectionBodies, sectionExactShown, sectionLive, active, dragSection, placedDragSection: (update, done) => {
+      if (ownsPlacedSectionHandle()) dragSection(update, done);
+    }, excludedInstances: excludedSectionInstances });
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     const w = window as unknown as { __studioSection: () => unknown; __studioSectionDebug: (d: { hold: boolean; cpu: boolean }) => void };
@@ -3046,7 +3057,6 @@ export function App() {
       return body < 0 ? null : { body, edges: retainedSectionEdges(bodies[body].mesh, shown.mesh, section.planes[0], sectionFrom) };
     });
   }, [sectionExactShown, sectionExact, section, sectionBodies, shownBodies, bodies, sectionFrom]);
-  const instanceLooks = useInstanceLooks(doc, instanceBodies);
   const placedMeasureSources = useMemo(() => {
     const entries = new Map<string, PlacedMeasureSource>();
     if ((!measure && !placedMeasureContext) || !fresh || busy || shownDoc !== doc || section || exploded || jointTree || instDrag || cutDraft || stepsDisp || isolatedInstances
@@ -3193,7 +3203,6 @@ export function App() {
   sectionBoxRef.current = sectionBox;
   // (Where the camera is: a cut-out's default corner faces it, G20.)
   const cameraEye = (): Vec3 | null => { const c = viewport.current?.getCamera(); if (!c) return null; const cp = Math.cos(c.pitch); return [c.target[0] + c.distance * cp * Math.cos(c.yaw), c.target[1] + c.distance * cp * Math.sin(c.yaw), c.target[2] + c.distance * Math.sin(c.pitch)]; };
-  const sectionDrag: FeatureHandle[] = section && !active && !sketch && bodies.length ? sectionHandles(section, sectionBox, dragSection) : [];
   const dragTransforms = useMemo(() => cmdBody !== undefined && bodyDrag ? new Map([[cmdBody, bodyDrag.matrix]]) : null, [cmdBody, bodyDrag]);
   const mapHoverOwner = useMemo(() => fresh && previewMode === 'analysis' && mapLegend && scalarMaps?.length ? {} : null,
     [doc, evaluated, fresh, previewMode, mapKind, scalarMaps, mapLegend, shownBodies, hiddenBodies, viewBackend, animatedOffsets, dragTransforms, sectionClip, mapScope]);
