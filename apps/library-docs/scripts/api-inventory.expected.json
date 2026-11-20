@@ -198043,6 +198043,37 @@
     {
       "package": "@barocss/cad-model",
       "subpath": "./app/faceProfile",
+      "exportName": "completeFaceBoundary",
+      "space": "value",
+      "observedRole": "unclassified-observed; no policy exemption",
+      "variants": [
+        {
+          "conditions": [
+            []
+          ],
+          "target": {
+            "package": "@barocss/cad-model",
+            "file": "src/app/faceProfile.ts",
+            "name": "completeFaceBoundary",
+            "kind": "function"
+          },
+          "shape": {
+            "type": "(mesh: DisplayMesh, face: number) => Vec3[][] | null",
+            "declarationSignatures": [
+              {
+                "kind": "FunctionDeclaration"
+              }
+            ],
+            "callSignatures": [
+              "(mesh: DisplayMesh, face: number) => Vec3[][] | null"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "package": "@barocss/cad-model",
+      "subpath": "./app/faceProfile",
       "exportName": "faceBoundary",
       "space": "value",
       "observedRole": "unclassified-observed; no policy exemption",
@@ -198089,14 +198120,45 @@
             "kind": "function"
           },
           "shape": {
-            "type": "(mesh: DisplayMesh, face: number) => SketchNode | null",
+            "type": "(mesh: DisplayMesh, face: number) => ({ kind: \"sketch\"; profile: \"loop\"; segments: LoopSegment[]; slot?: { a: [number, number]; b: [number, number]; r: number; } | undefined; } & OnPlane) | null",
             "declarationSignatures": [
               {
                 "kind": "FunctionDeclaration"
               }
             ],
             "callSignatures": [
-              "(mesh: DisplayMesh, face: number) => SketchNode | null"
+              "(mesh: DisplayMesh, face: number) => ({ kind: \"sketch\"; profile: \"loop\"; segments: LoopSegment[]; slot?: { a: [number, number]; b: [number, number]; r: number; } | undefined; } & OnPlane) | null"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "package": "@barocss/cad-model",
+      "subpath": "./app/faceProfile",
+      "exportName": "faceProfileTolerance",
+      "space": "value",
+      "observedRole": "unclassified-observed; no policy exemption",
+      "variants": [
+        {
+          "conditions": [
+            []
+          ],
+          "target": {
+            "package": "@barocss/cad-model",
+            "file": "src/app/faceProfile.ts",
+            "name": "faceProfileTolerance",
+            "kind": "function"
+          },
+          "shape": {
+            "type": "(mesh: Pick<DisplayMesh, \"bounds\">) => number",
+            "declarationSignatures": [
+              {
+                "kind": "FunctionDeclaration"
+              }
+            ],
+            "callSignatures": [
+              "(mesh: Pick<DisplayMesh, \"bounds\">) => number"
             ]
           }
         }
@@ -201666,6 +201728,524 @@
             ],
             "callSignatures": [
               "(nodes: readonly ModelNode[]) => number[]"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "package": "@barocss/cad-model",
+      "subpath": "./app/sectionSketchProfile",
+      "exportName": "SectionCapEvidence",
+      "space": "type",
+      "observedRole": "unclassified-observed; no policy exemption",
+      "variants": [
+        {
+          "conditions": [
+            []
+          ],
+          "target": {
+            "package": "@barocss/cad-model",
+            "file": "src/app/sectionSketchProfile.ts",
+            "name": "SectionCapEvidence",
+            "kind": "type"
+          },
+          "shape": {
+            "type": "{ faceId: string; name: string; } & NativeBoundary",
+            "declarationSignatures": [
+              {
+                "kind": "TypeAliasDeclaration",
+                "definition": "{\n    faceId: string;\n    name: string;\n} & NativeBoundary"
+              }
+            ],
+            "members": [
+              {
+                "name": "boundary",
+                "kind": "property",
+                "optional": false,
+                "readonly": false,
+                "type": "Boundary"
+              },
+              {
+                "name": "faceId",
+                "kind": "property",
+                "optional": false,
+                "readonly": false,
+                "type": "string"
+              },
+              {
+                "name": "name",
+                "kind": "property",
+                "optional": false,
+                "readonly": false,
+                "type": "string"
+              },
+              {
+                "name": "status",
+                "kind": "property",
+                "optional": false,
+                "readonly": false,
+                "type": "\"known\""
+              },
+              {
+                "name": "status",
+                "kind": "property",
+                "optional": false,
+                "readonly": false,
+                "type": "\"unsupported\" | \"unreadable\""
+              }
+            ],
+            "indexSignatures": []
+          }
+        }
+      ]
+    },
+    {
+      "package": "@barocss/cad-model",
+      "subpath": "./app/sectionSketchProfile",
+      "exportName": "SectionOutlineMode",
+      "space": "type",
+      "observedRole": "unclassified-observed; no policy exemption",
+      "variants": [
+        {
+          "conditions": [
+            []
+          ],
+          "target": {
+            "package": "@barocss/cad-model",
+            "file": "src/app/sectionSketchProfile.ts",
+            "name": "SectionOutlineMode",
+            "kind": "type"
+          },
+          "shape": {
+            "type": "\"outer\" | \"inner\" | \"all\"",
+            "declarationSignatures": [
+              {
+                "kind": "TypeAliasDeclaration",
+                "definition": "\"all\" | \"outer\" | \"inner\""
+              }
+            ],
+            "members": [
+              {
+                "name": "__@iterator@81",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => StringIterator<string>"
+              },
+              {
+                "name": "anchor",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(name: string) => string"
+              },
+              {
+                "name": "at",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(index: number) => string | undefined"
+              },
+              {
+                "name": "big",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "blink",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "bold",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "charAt",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(pos: number) => string"
+              },
+              {
+                "name": "charCodeAt",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(index: number) => number"
+              },
+              {
+                "name": "codePointAt",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(pos: number) => number | undefined"
+              },
+              {
+                "name": "concat",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(...strings: string[]) => string"
+              },
+              {
+                "name": "endsWith",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(searchString: string, endPosition?: number | undefined) => boolean"
+              },
+              {
+                "name": "fixed",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "fontcolor",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(color: string) => string"
+              },
+              {
+                "name": "fontsize",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "{ (size: number): string; (size: string): string; }"
+              },
+              {
+                "name": "includes",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(searchString: string, position?: number | undefined) => boolean"
+              },
+              {
+                "name": "indexOf",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(searchString: string, position?: number | undefined) => number"
+              },
+              {
+                "name": "italics",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "lastIndexOf",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(searchString: string, position?: number | undefined) => number"
+              },
+              {
+                "name": "length",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "number"
+              },
+              {
+                "name": "link",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(url: string) => string"
+              },
+              {
+                "name": "localeCompare",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "{ (that: string): number; (that: string, locales?: string | string[] | undefined, options?: CollatorOptions | undefined): number; (that: string, locales?: LocalesArgument, options?: CollatorOptions | undefined): number; }"
+              },
+              {
+                "name": "match",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "{ (regexp: string | RegExp): RegExpMatchArray | null; (matcher: { [Symbol.match](string: string): RegExpMatchArray | null; }): RegExpMatchArray | null; }"
+              },
+              {
+                "name": "matchAll",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(regexp: RegExp) => RegExpStringIterator<RegExpExecArray>"
+              },
+              {
+                "name": "normalize",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "{ (form: \"NFC\" | \"NFD\" | \"NFKC\" | \"NFKD\"): string; (form?: string | undefined): string; }"
+              },
+              {
+                "name": "padEnd",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(maxLength: number, fillString?: string | undefined) => string"
+              },
+              {
+                "name": "padStart",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(maxLength: number, fillString?: string | undefined) => string"
+              },
+              {
+                "name": "repeat",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(count: number) => string"
+              },
+              {
+                "name": "replace",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "{ (searchValue: string | RegExp, replaceValue: string): string; (searchValue: string | RegExp, replacer: (substring: string, ...args: any[]) => string): string; (searchValue: { [Symbol.replace](string: string, replaceValue: string): string; }, replaceValue: string): string; (searchValue: { [Symbol.replace](string: string, replacer: (substring: string, ...args: any[]) => string): string; }, replacer: (substring: string, ...args: any[]) => string): string; }"
+              },
+              {
+                "name": "replaceAll",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "{ (searchValue: string | RegExp, replaceValue: string): string; (searchValue: string | RegExp, replacer: (substring: string, ...args: any[]) => string): string; }"
+              },
+              {
+                "name": "search",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "{ (regexp: string | RegExp): number; (searcher: { [Symbol.search](string: string): number; }): number; }"
+              },
+              {
+                "name": "slice",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(start?: number | undefined, end?: number | undefined) => string"
+              },
+              {
+                "name": "small",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "split",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "{ (separator: string | RegExp, limit?: number | undefined): string[]; (splitter: { [Symbol.split](string: string, limit?: number | undefined): string[]; }, limit?: number | undefined): string[]; }"
+              },
+              {
+                "name": "startsWith",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(searchString: string, position?: number | undefined) => boolean"
+              },
+              {
+                "name": "strike",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "sub",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "substr",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(from: number, length?: number | undefined) => string"
+              },
+              {
+                "name": "substring",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "(start: number, end?: number | undefined) => string"
+              },
+              {
+                "name": "sup",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "toLocaleLowerCase",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "{ (locales?: string | string[] | undefined): string; (locales?: LocalesArgument): string; }"
+              },
+              {
+                "name": "toLocaleUpperCase",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "{ (locales?: string | string[] | undefined): string; (locales?: LocalesArgument): string; }"
+              },
+              {
+                "name": "toLowerCase",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "toString",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "toUpperCase",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "trim",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "trimEnd",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "trimLeft",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "trimRight",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "trimStart",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              },
+              {
+                "name": "valueOf",
+                "kind": "method",
+                "optional": false,
+                "readonly": false,
+                "type": "() => string"
+              }
+            ],
+            "indexSignatures": [
+              {
+                "key": "number",
+                "type": "string",
+                "readonly": true,
+                "callable": false
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "package": "@barocss/cad-model",
+      "subpath": "./app/sectionSketchProfile",
+      "exportName": "nativeSectionCaps",
+      "space": "value",
+      "observedRole": "unclassified-observed; no policy exemption",
+      "variants": [
+        {
+          "conditions": [
+            []
+          ],
+          "target": {
+            "package": "@barocss/cad-model",
+            "file": "src/app/sectionSketchProfile.ts",
+            "name": "nativeSectionCaps",
+            "kind": "function"
+          },
+          "shape": {
+            "type": "(brep: Brep, mesh: DisplayMesh, from: number) => SectionCapEvidence[]",
+            "declarationSignatures": [
+              {
+                "kind": "FunctionDeclaration"
+              }
+            ],
+            "callSignatures": [
+              "(brep: Brep, mesh: DisplayMesh, from: number) => SectionCapEvidence[]"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "package": "@barocss/cad-model",
+      "subpath": "./app/sectionSketchProfile",
+      "exportName": "sectionSketchProfile",
+      "space": "value",
+      "observedRole": "unclassified-observed; no policy exemption",
+      "variants": [
+        {
+          "conditions": [
+            []
+          ],
+          "target": {
+            "package": "@barocss/cad-model",
+            "file": "src/app/sectionSketchProfile.ts",
+            "name": "sectionSketchProfile",
+            "kind": "function"
+          },
+          "shape": {
+            "type": "(body: BodyResult, face: DisplayFace, mode: SectionOutlineMode) => CopyResult",
+            "declarationSignatures": [
+              {
+                "kind": "FunctionDeclaration"
+              }
+            ],
+            "callSignatures": [
+              "(body: BodyResult, face: DisplayFace, mode: SectionOutlineMode) => CopyResult"
             ]
           }
         }
@@ -273217,6 +273797,13 @@
                 "type": "\"infill\" | undefined"
               },
               {
+                "name": "sectionCaps",
+                "kind": "property",
+                "optional": true,
+                "readonly": false,
+                "type": "readonly SectionCapEvidence[] | undefined"
+              },
+              {
                 "name": "sheet",
                 "kind": "property",
                 "optional": true,
@@ -280914,6 +281501,13 @@
                 "optional": true,
                 "readonly": false,
                 "type": "\"infill\" | undefined"
+              },
+              {
+                "name": "sectionCaps",
+                "kind": "property",
+                "optional": true,
+                "readonly": false,
+                "type": "readonly SectionCapEvidence[] | undefined"
               },
               {
                 "name": "sheet",

@@ -94,6 +94,8 @@ The HOLD route is separate from P0–P6 counts. An issue outside this route can 
 
 A subsequent comparison on 2026-11-20 found 230 open issues. All original 229 were still open. Route [#740](https://github.com/barocss/cad/issues/740) to P1, part editing. The [Fillet row location delivery](../fillet-picked-edge-location-2026-11-20/README.md) covers hover and keyboard focus on the original straight edge, held preview updates, tangent-chain separation and native Remove/Apply. The [P5 independent Extrude delivery](../independent-extrude-join-2026-11-20/README.md) covers [#739](https://github.com/barocss/cad/issues/739). Desktop Studio offered the named target only after native overlap was established. Explicit New, Join, Undo/Redo and fresh Open retained their expected geometry.
 
+The P5 [section outline copy](https://github.com/barocss/cad/issues/736) started with three desktop stocks. The [baseline measurements](https://github.com/barocss/cad/issues/736#issuecomment-7041138494) record which hole boundaries reached the original sketch and how a synthetic missing rim differed from the native cap. The [selective copy and qualification](../section-contour-copy-2026-11-20/README.md) covers All, Outer only, Inner only, native boundary validation and independent extrusion. The later [sketch dimension label placement proposal](https://github.com/barocss/cad/issues/741) belongs to P1. It covers moving the label of a straight driving length dimension during sketch editing.
+
 ## Reproduce the live census
 
 ```sh

@@ -44,7 +44,7 @@ export function useSectionState(viewBackend: 'webgpu' | 'webgl2' | null) {
     setSectionFacePick(null);
     return true;
   }, []);
-  const [sectionExact, setSectionExact] = useState<{ key: string; source: StudioDoc; sourceBodies: readonly BodyResult[]; bodies: BodyResult[]; from: ReadonlyMap<string, string> } | null>(null);
+  const [sectionExact, setSectionExact] = useState<{ section: Section; source: StudioDoc; sourceBodies: readonly BodyResult[]; bodies: BodyResult[]; from: ReadonlyMap<string, string> } | null>(null);
   const sectionRef = useRef(section); sectionRef.current = section;
 
   return { sectionDragFrom, sectionDebug, setSectionDebug, sectionLive, section, setSection, dragSection, sectionFacePick, setSectionFacePick, cancelSectionFacePick, sectionFacePickRef, sectionExact, setSectionExact, sectionRef };

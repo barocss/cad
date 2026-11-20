@@ -62,6 +62,7 @@ export interface ViewCameraControls {
 export interface ViewSectionControls {
   sectionExclusion?: SectionProps['sectionExclusion'];
   section: Section | null;
+  documentSession: number;
   setSection: StateSetter<Section | null>;
   sectionHatchOn: boolean;
   setSectionHatchOn: SectionProps['setHatch'];
@@ -114,7 +115,7 @@ export function ViewDisplayControls({ inspection, inspectionSelectedKeys = [], d
     displayModeReason, displayModeNotice, clearDisplayModeFailure, isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection } = display;
   const { ortho, sketching, ao, setAo, theme, setTheme, rendering, printing, viewBackend, wheelZoom, sketchReopenCamera, fitActiveSketch } = view;
   const aoAvailable = !lineDisplayMode(effectiveDisplayMode), aoActive = aoAvailable && ao;
-  const { section, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye, sectionExclusion } = sectionState;
+  const { section, documentSession, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye, sectionExclusion } = sectionState;
   const { analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread } = analysisState;
   const { pickFilter, setPickFilter, snapStep, setSnapStep, setSelection } = picking;
   const [sketchCameraProblem, setSketchCameraProblem] = useState<{ doc: StudioDoc; message: string } | null>(null);
@@ -170,7 +171,7 @@ export function ViewDisplayControls({ inspection, inspectionSelectedKeys = [], d
           {displayModeNotice && <span id="cad-display-mode-status" className="cad-display-status" role="status">{displayModeNotice} Shaded with edges is active.</span>}
         </div>
         </div>}
-    {section && <SectionBar sectionExclusion={sectionExclusion} section={section} setSection={setSection} hatch={sectionHatchOn} setHatch={setSectionHatchOn} box={sectionBox} facePick={sectionFacePick} setFacePick={setSectionFacePick} onSketch={sketchSection} eye={cameraEye} onProblem={reportSectionProblem} />}
+    {section && <SectionBar sectionExclusion={sectionExclusion} section={section} documentSession={documentSession} setSection={setSection} hatch={sectionHatchOn} setHatch={setSectionHatchOn} box={sectionBox} facePick={sectionFacePick} setFacePick={setSectionFacePick} onSketch={sketchSection} eye={cameraEye} onProblem={reportSectionProblem} />}
     {sketchCameraProblem?.doc === doc && <span className="muted small" role="status" aria-label="Sketch camera input">{sketchCameraProblem.message}</span>}
     {sectionProblem?.doc === doc && <span className="muted small" role="status">{sectionProblem.reason}</span>}
         </div>

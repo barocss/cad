@@ -43,8 +43,11 @@ Other view settings:
   corner where their cut-away sides meet is removed.
 - **Reset the section box** puts the box a tenth in from each face of the part.
 - Cut faces are capped. **Hatch the cut** draws hatch lines on them, each part's at its own angle.
-- **Sketch the section** starts a sketch on the section plane with the cut's outlines in it, ready to extrude,
-  revolve or dimension. It needs one plane, since a sketch lies on one plane.
+- **Sketch the section** copies the visible cut outlines onto a single plane. **Section outlines** defaults to **All**.
+  For a cut through one solid with one outer loop and up to two holes bounded by lines or circular arcs, choose
+  **Outer only** to copy its perimeter or **Inner only** to copy its hole boundaries. The copied hole boundaries
+  become independent closed contours that you can extrude. If the cut has no holes, **Inner only** keeps the section
+  open. Review the sketch and choose **Finish sketch** to add it to the part.
 
 ## Preview & analysis
 

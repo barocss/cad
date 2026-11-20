@@ -30,7 +30,7 @@ export function useSectionEvaluation({ section, sectionDragFrom, sectionDebug, s
     // Latest wins: while one section is worked out, only the newest plane waits behind it. (R4b: on the section's O9 lane —
     // a reply overtaken by a newer plane, or by the effect's cleanup, comes back stale.)
     const run = sectionRun.current;
-    run.next = async () => { const at = revision.current++, reply = await lanes.run('section', { revision: at, source: key }, () => engine.section(doc, at)), r = reply.stale ? null : reply.result; if (r?.ok) { const x = exactBodies(r.bodies, kept, from); setSectionExact({ key, source: evaluated, sourceBodies: visibleBodies, bodies: x.bodies, from: x.from }); } };
+    run.next = async () => { const at = revision.current++, reply = await lanes.run('section', { revision: at, source: key }, () => engine.section(doc, at)), r = reply.stale ? null : reply.result; if (r?.ok) { const x = exactBodies(r.bodies, kept, from); setSectionExact({ section, source: evaluated, sourceBodies: visibleBodies, bodies: x.bodies, from: x.from }); } };
     if (!run.busy) void (async () => { run.busy = true; try { while (run.next) { const j = run.next; run.next = null; await j(); } } finally { run.busy = false; } })();
     return () => lanes.cancel('section');
   }, [section, visibleBodies, evaluated, engine, sectionDragFrom]);
@@ -42,7 +42,7 @@ export function useSectionEvaluation({ section, sectionDragFrom, sectionDebug, s
     // (The section's first split is the next feature: its cut faces are named after the next id, engine/ids.ts.)
     return sectionedBodies(visibleBodies, section, gpuSection, `n${nextSerial(evaluated)}.cut`);
   }, [section, visibleBodies, evaluated, gpuSection]);
-  const sectionExactShown = !!section && !sectionDragFrom && sectionExact?.key === JSON.stringify(section) && sectionExact.source === evaluated && sectionExact.sourceBodies === visibleBodies && !sectionDebug.hold;
+  const sectionExactShown = !!section && !sectionDragFrom && sectionExact?.section === section && sectionExact.source === evaluated && sectionExact.sourceBodies === visibleBodies && !sectionDebug.hold;
   const sectionBodies = section ? (sectionExactShown ? sectionExact!.bodies : sectionClipped) : null;
 
   return { gpuSection, sectionExactShown, sectionBodies };

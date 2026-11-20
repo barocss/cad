@@ -117,7 +117,7 @@ test('a face click after cancellation follows ordinary section selection, not a 
 
 test('existing SectionBar removes the waiting status and pressed state without replacing its controls', () => {
   for (const plane of [0, 1, 2]) {
-    const html = (facePick: number | null) => renderToStaticMarkup(createElement(SectionBar, { section, facePick,
+    const html = (facePick: number | null) => renderToStaticMarkup(createElement(SectionBar, { section, facePick, documentSession: 1,
       setSection() {}, setFacePick() {}, hatch: true, setHatch() {}, box: { min: [0, 0, 0], max: [20, 12, 8] }, onSketch() {}, eye: () => null, onProblem() {} }));
     const armed = html(plane), canceled = html(null);
     assert.match(armed, /Click a flat face/); assert.doesNotMatch(canceled, /Click a flat face/);

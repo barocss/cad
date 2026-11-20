@@ -119,7 +119,7 @@ test('a selected Join stays pinned across edits and refuses stale evidence or a 
     [{ ...proven, selection: { ...proven.selection, sketches: [3] } }, joined],
     [{ ...proven, extrudeJoinLooks: hidden }, joined],
     [proven, { ...joined, depth: 'to-face' }],
-  ] as const) {
+  ] satisfies [Ctx, Values][]) {
     assert.equal(currentExtrudeJoin(stale, values), null);
     assert.throws(() => build(stale, values), error => isRefusal(error, 'BAD_REFERENCE'));
   }

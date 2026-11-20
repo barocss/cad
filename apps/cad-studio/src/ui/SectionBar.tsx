@@ -2,6 +2,8 @@
 // or three planes (each along an axis or from a face, its offset typed or dragged) — and the drag handles for each plane.
 // The kept region is the intersection of the planes' kept sides — or, a cut-out (G20: two or three planes), their union:
 // the corner where the planes' cut-away sides meet removed.
+import { useState } from 'react';
+import type { SectionOutlineMode } from '@barocss/cad-model/app/sectionSketchProfile';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { fmt } from '@barocss/cad-model/engine/doc';
 import type { FeatureHandle } from '../viewport/gizmo';
@@ -73,13 +75,29 @@ export function sectionHandles(section: Section, box: Box, set: (f: (s: Section 
   });
 }
 
+function SectionSketchControls({ excluded, onSketch }: { excluded: boolean; onSketch(mode: SectionOutlineMode): void }) {
+  const [mode, setMode] = useState<SectionOutlineMode>('all');
+  return <span className="cad-display-control">
+    <select aria-label="Section outlines" title="Section outlines" value={mode} disabled={excluded}
+      onChange={event => setMode(event.target.value as SectionOutlineMode)}>
+      <option value="all">All</option>
+      <option value="outer">Outer only</option>
+      <option value="inner">Inner only</option>
+    </select>
+    <Button size="sm" variant="ghost" aria-label="Sketch the section" data-sketch-action="" data-tip="Sketch the section"
+      data-tip-desc="Copy the visible cut outlines into an independent sketch" disabled={excluded}
+      onClick={() => onSketch(mode)}><Icon name="cad-sketch" small /></Button>
+  </span>;
+}
+
 /**
  * The bar. `box`: the part's and its placed parts' box; `facePick`: the plane a face click sets (its index) or null;
  * `onSketch`: Sketch the section (one plane only); `eye`: where the camera is (a cut-out's default corner faces it).
  */
-export function SectionBar({ section, setSection, hatch, setHatch, box, facePick, setFacePick, onSketch, eye, onProblem, sectionExclusion }: {
+export function SectionBar({ section, documentSession, setSection, hatch, setHatch, box, facePick, setFacePick, onSketch, eye, onProblem, sectionExclusion }: {
   sectionExclusion?: SectionExclusionControls;
-  section: Section; setSection(f: (s: Section | null) => Section | null): void; hatch: boolean; setHatch(on: boolean): void; box: Box; facePick: number | null; setFacePick(i: number | null): void; onSketch(): void; eye(): Vec3 | null; onProblem(reason: string | null): void;
+  documentSession: number;
+  section: Section; setSection(f: (s: Section | null) => Section | null): void; hatch: boolean; setHatch(on: boolean): void; box: Box; facePick: number | null; setFacePick(i: number | null): void; onSketch(mode: SectionOutlineMode): void; eye(): Vec3 | null; onProblem(reason: string | null): void;
 }) {
   const excluded = !!sectionExclusion?.ids.length;
   const exclusionReason = 'Restore all section instances before changing section mode or sketching the section.';
@@ -122,7 +140,7 @@ export function SectionBar({ section, setSection, hatch, setHatch, box, facePick
         {...(m === 'box' ? { 'data-tip': 'Section box', 'data-tip-desc': "Drag a face's arrow to move that side of the section box.", 'data-tip-focus': '' } : m === 'cutout' ? { 'data-tip': 'Cut-out', 'data-tip-desc': 'Take a corner out: a quarter (two planes) or an eighth (three), the rest kept' } : {})}>{m === 'plane' ? 'Plane' : m === 'box' ? 'Box' : m === 'planes' ? 'Planes' : 'Cut-out'}</ToggleGroupItem>)}</ToggleGroup>
     {section.mode === 'plane' && <>{axisButtons(0)}{faceButton(0)}{flip(0)}
       {section.planes[0].face && <span className="mono muted" aria-label="Face-derived section position">{label(section.planes[0])}</span>}
-      <Button size="sm" variant="ghost" aria-label="Sketch the section" data-tip="Sketch the section" data-tip-desc="Copy the visible cut outlines into an independent sketch" disabled={excluded} onClick={() => { if (!excluded) onSketch(); }}><Icon name="cad-sketch" small /></Button></>}
+      <SectionSketchControls key={JSON.stringify([documentSession, section])} excluded={excluded} onSketch={onSketch} /></>}
     {section.mode === 'plane' && sectionExclusion && <div role="group" aria-label="Section instance exclusions">
       <Button size="sm" variant="ghost" disabled={sectionExclusion.selectionReason !== null} onClick={() => { if (sectionExclusion.selectionReason === null) sectionExclusion.excludeSelected(); }}>Exclude selected instances</Button>
       {sectionExclusion.selectionReason && <p className="small muted" role="status">{sectionExclusion.selectionReason}</p>}

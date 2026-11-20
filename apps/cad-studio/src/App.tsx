@@ -272,8 +272,8 @@ import { asSection, sectionHatch, sectionPlanes, type AxisSection, type Section 
 import { type MapKind } from './viewport/scalarMaps';
 import { edgeChain } from '@barocss/cad-model/app/edgeChain';
 import { joinOpen } from '@barocss/cad-model/sketch/trim';
-import { faceProfile } from '@barocss/cad-model/app/faceProfile';
-import { sketchShapes } from '@barocss/cad-model/sketch/reopen';
+import type { SectionOutlineMode } from '@barocss/cad-model/app/sectionSketchProfile';
+import { sectionSketch } from './app/sectionSketch';
 import { bodyName, describeChange, lookOf, rootOf } from '@barocss/cad-model/app/bodies';
 import { bodyLookRef } from '@barocss/cad-model/app/lookKey';
 import { readBrief } from '@barocss/cad-model/chat/brief';
@@ -312,7 +312,7 @@ import { CHAT_DEFAULT, CHAT_STRIP } from './layout/useLayout';
 import { sketchDxf } from '@barocss/cad-model/sketch/dxf';
 import { settleShape } from '@barocss/cad-model/sketch/settle';
 import { prepareSketchLaunch, resolveSketchLaunchVertices } from './sketch/sketchLaunch';
-import { planeLabel, planeOfDisplayFace } from '@barocss/cad-model/sketch/plane';
+import { planeLabel } from '@barocss/cad-model/sketch/plane';
 import { shapeNode } from '@barocss/cad-model/sketch/loops';
 import { isSettled } from '@barocss/cad-model/sketch/rules';
 import { createDraftHistory, draftHistoryState, outlineHistoryState, restoreDraftHistory } from './sketch/draftHistory';
@@ -2325,19 +2325,20 @@ export function App() {
     changes: { canChangeDocument, commit, setSelection },
     onNotice: (message, options) => setToast(options?.acceptedDocument ? { ...message, documentSource: { doc: docNow.current } } : message) });
   const { deleteNode, separate, reorder, toggleSuppress, cascade, setCascade, deleteCascade, deleteSelection } = featureHistory;
-  /** A sketch on the section plane holding the exact section's cut outlines (its cut faces' outlines), the section closed. */
-  const sketchSection = () => {
+  const sectionSketchOpen = openIntent.current;
+  const sketchSection = (mode: SectionOutlineMode) => {
     if (excludedSectionInstances.length) { setToast({ title: 'Restore section instances first', hint: 'Selective clipping is display-only; restore excluded instances before creating a section sketch.', detail: '' }); return; }
-    // (One plane only: a sketch lies on one.)
-    if (!section || section.planes.length !== 1) return;
-    const exact = sectionExactShown ? sectionExact!.bodies : null;
-    if (!exact) { setToast({ title: 'The section is still being cut', hint: 'Wait a moment for the exact section, then try again.', detail: '' }); return; }
-    const from = nextSerial(evaluated), faces = exact.flatMap(b => b.mesh.faces.filter(f => f.kind === 'plane' && cutAfter(f.name, from)).map(f => ({ b, f })));
-    if (!faces.length) { setToast({ title: 'Nothing is cut there', hint: 'Move the section plane through the part first.', detail: '' }); return; }
-    const plane = planeOfDisplayFace(faces[0].f); if (!plane) return;
-    const shapes = faces.flatMap(({ b, f }) => { const fp = faceProfile(b.mesh, f.index); return fp ? (({ shape, done }) => [...(shape ? [shape] : []), ...done])(sketchShapes(fp)) : []; });
-    if (!shapes.length) { setToast({ title: 'The section’s outline could not be read', hint: 'Its edges are not lines and arcs yet.', detail: '' }); return; }
-    setSection(null); setSelection(emptySel);
+    if (section?.mode !== 'plane' || section.planes.length !== 1) return;
+    if (!sectionExactShown || !sectionExact || sectionRef.current !== section || sectionLive.get()
+        || !fresh || busy || !ownsEvaluatedSource() || sectionSketchOpen !== openIntent.current || project.opening()) {
+      setToast({ title: 'The section is still being cut', hint: 'Wait a moment for the exact section, then try again.', detail: '' });
+      return;
+    }
+    if (!canChangeDocument()) return;
+    const result = sectionSketch(sectionExact, nextSerial(evaluated), mode);
+    if ('error' in result) { setToast({ ...result.error, documentSource: { doc, evaluated } }); return; }
+    const { plane, shapes } = result;
+    setToast(null); setSection(null); setSelection(emptySel);
     setSketch({ plane, anchor: { kind: 'face', offset: 0, face: { plane, base: null } }, tool: 'rectangle', shape: null, done: shapes, base: null });
     const [min, max] = sketchRegion(bodies, plane); viewport.current?.frameSketch(min, max, plane);
   };
@@ -3942,7 +3943,7 @@ export function App() {
         display={{ displayOpen, setDisplayOpen, displayMode, setDisplayMode, effectiveDisplayMode, displayScopeReason, displayModeReason, displayModeNotice,
           clearDisplayModeFailure: () => setDisplayModeFailure(null), isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection }}
         view={{ ortho, sketching: !!sketch, wheelZoom: modelWheelZoom, sketchReopenCamera, fitActiveSketch: sketchActions.fitActiveSketch, ao, setAo, theme, setTheme, rendering, printing: !!printing, viewBackend }}
-        section={{ section, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye, sectionExclusion: sectionExclusionControls }}
+        section={{ section, documentSession: docGeneration, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye, sectionExclusion: sectionExclusionControls }}
         analysis={{ analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread }}
         picking={{ pickFilter, setPickFilter, snapStep, setSnapStep, setSelection }} explodeStore={explodeStore} />
 

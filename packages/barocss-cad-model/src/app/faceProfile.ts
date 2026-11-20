@@ -3,8 +3,9 @@
 // with runs of points on one circle turned back into arcs and straight runs into single lines. The
 // outer loop is the profile; the loops inside it are its holes.
 import type { DisplayMesh, Vec3 } from '../engine/mesh';
-import type { LoopSegment, SketchNode } from '../engine/doc';
+import type { SketchNode } from '../engine/doc';
 import { planeOfDisplayFace, toLocal } from '../sketch/plane';
+import type { LoopSegment } from '../sketch/profile';
 import { signedArea as area } from '../engine/geom2';
 
 type XY = [number, number];
@@ -13,25 +14,48 @@ const r4 = (x: number) => Math.round(x * 1e4) / 1e4 || 0;
 
 /** The closed boundary loops of face `face` of a display mesh, as world points (in triangle winding order). */
 export function faceBoundary(mesh: DisplayMesh, face: number): Vec3[][] {
+  return readFaceBoundary(mesh, face, false) ?? [];
+}
+
+/** A section copy can use these loops only when every exposed edge belongs to a complete, oriented ring. */
+export function completeFaceBoundary(mesh: DisplayMesh, face: number): Vec3[][] | null {
+  return readFaceBoundary(mesh, face, true);
+}
+
+function readFaceBoundary(mesh: DisplayMesh, face: number, complete: boolean): Vec3[][] | null {
   const key = (v: number) => [0, 1, 2].map(k => Math.round(mesh.positions[v * 3 + k] * 1e5)).join(',');
   const point = new Map<string, Vec3>(), count = new Map<string, number>(), directed: [string, string][] = [];
+  const balance = new Map<string, number>();
   for (let t = 0; t < mesh.indices.length; t += 3) {
     if (mesh.faceOfVertex[mesh.indices[t]] !== face) continue;
+    if (complete && [0, 1, 2].some(j => {
+      const v = mesh.indices[t + j];
+      return mesh.faceOfVertex[v] !== face || ![0, 1, 2].every(k => Number.isFinite(mesh.positions[v * 3 + k]));
+    })) return null;
     const ks = [0, 1, 2].map(j => { const v = mesh.indices[t + j], k = key(v); if (!point.has(k)) point.set(k, [mesh.positions[v * 3], mesh.positions[v * 3 + 1], mesh.positions[v * 3 + 2]]); return k; });
+    if (complete && new Set(ks).size !== 3) return null;
     for (let j = 0; j < 3; j++) {
       const a = ks[j], b = ks[(j + 1) % 3]; if (a === b) continue;
       const u = a < b ? `${a}|${b}` : `${b}|${a}`;
       count.set(u, (count.get(u) ?? 0) + 1); directed.push([a, b]);
+      if (complete) balance.set(u, (balance.get(u) ?? 0) + (a < b ? 1 : -1));
     }
   }
-  const next = new Map<string, string>();
-  for (const [a, b] of directed) if (count.get(a < b ? `${a}|${b}` : `${b}|${a}`) === 1) next.set(a, b);
+  if (complete && [...count].some(([edge, n]) => n > 2 || (n === 2 && balance.get(edge) !== 0))) return null;
+  const next = new Map<string, string>(), previous = new Set<string>();
+  for (const [a, b] of directed) {
+    if (count.get(a < b ? `${a}|${b}` : `${b}|${a}`) !== 1) continue;
+    if (complete && (next.has(a) || previous.has(b))) return null;
+    next.set(a, b);
+    if (complete) previous.add(b);
+  }
   const loops: Vec3[][] = [], seen = new Set<string>();
   for (const start of next.keys()) {
     if (seen.has(start)) continue;
     const loop: Vec3[] = []; let k: string | undefined = start;
     while (k !== undefined && !seen.has(k)) { seen.add(k); loop.push(point.get(k)!); k = next.get(k); }
     if (k === start && loop.length >= 3) loops.push(loop);
+    else if (complete) return null;
   }
   return loops;
 }
@@ -98,11 +122,16 @@ export function fitLoop(ring: readonly XY[], tol: number): LoopSegment[] {
   return out;
 }
 
+/** The established display-outline fitting tolerance for a body of this size. */
+export function faceProfileTolerance(mesh: Pick<DisplayMesh, 'bounds'>): number {
+  return Math.max(1e-4, Math.max(...[0, 1, 2].map(k => mesh.bounds.max[k] - mesh.bounds.min[k])) * 2e-4);
+}
+
 /** The sketch a flat face makes (its plane, outline and holes), or null for a curved face or no closed boundary. */
-export function faceProfile(mesh: DisplayMesh, face: number): SketchNode | null {
+export function faceProfile(mesh: DisplayMesh, face: number): Extract<SketchNode, { profile: 'loop' }> | null {
   const f = mesh.faces[face]; if (!f) return null;
   const plane = planeOfDisplayFace(f); if (!plane) return null;
-  const size = Math.max(...[0, 1, 2].map(k => mesh.bounds.max[k] - mesh.bounds.min[k])), tol = Math.max(1e-4, size * 2e-4);
+  const tol = faceProfileTolerance(mesh);
   const rings = faceBoundary(mesh, face).map(l => l.map(p => toLocal(plane, p)))
     // Counter-clockwise each (holes too, as drawn ones are), the largest first: the outline.
     .map(r => area(r) < 0 ? [...r].reverse() : r).sort((a, b) => area(b) - area(a));

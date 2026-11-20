@@ -3,6 +3,7 @@ import { sewGapLocation } from './sewGapLocation';
 import { holeMissLocation } from './holeMissLocation';
 import { requireStepGeometry } from './stepOutputAdmission';
 import { bodyLookRef } from '../app/lookKey';
+import { nativeSectionCaps, type SectionCapEvidence } from '../app/sectionSketchProfile';
 import { nativeBodyTopology, type NativeBodyTopology } from './bodyTopology';
 import { provenanceOfTree, type ShopTreeProvenance } from './shopRows';
 import { resolveSkeletons } from '../frames/skeleton';
@@ -22,7 +23,7 @@ import { friendlyCause, type FriendlyError } from './errors';
 import { bodyKeyOf, partSnapshot } from './part';
 import { bodyKey, placedBase, placedDoc, type PartInstance, type BodyRef, type ModelNode, type Side, type StudioDoc } from './doc';
 import { placementOf } from './placement';
-import { bodyKeyFor, bodyNodeOf, featureId } from './ids';
+import { bodyKeyFor, bodyNodeOf, featureId, serialOf } from './ids';
 import { registerPartBox, type PartBox } from './assemblyCut';
 import { boundsOf } from './bounds';
 import { evaluationKey } from './evalMemo';
@@ -56,6 +57,8 @@ export interface BodyResult {
   ref?: BodyRef;
   /** 'upright' (Z-prismatic: holes, fillets, curved Booleans), 'planar' or 'curved' (general B-rep). */
   family: string; mesh: DisplayMesh;
+  /** Original cut-face trim evidence for a body in the exact Section result. */
+  sectionCaps?: readonly SectionCapEvidence[];
   /** The successful circular Edge Fillet preview's original native edge targets. */
   filletTargets?: readonly string[];
   /** The successful Chamfer preview's original native edge targets. */
@@ -421,10 +424,18 @@ export function evaluatePreview(doc: StudioDoc, revision: number, quality = 8, s
         error: { code: 'CUT_NO_MATERIAL', feature: cutFeature, title: 'Cut does not remove any material',
           hint: 'Move the profile or change the distance so the cutter intersects the target.', detail: '' } };
     }
-    const bodies: BodyResult[] = snapshot.outputs.map(o => ({ ...keyed(o.id, doc.nodes), topology: nativeBodyTopology(o.brep), family: o.representation, mesh: meshOf(o.brep, revision, quality),
-      ...(slot === 'preview' && o.filletTargets ? { filletTargets: o.filletTargets } : {}),
-      ...(slot === 'preview' && o.chamferTargets ? { chamferTargets: o.chamferTargets } : {}),
-      ...(o.bodyCount > 1 ? { pieces: o.bodyCount } : {}), volume: null, mass: null }));
+    const bodies: BodyResult[] = snapshot.outputs.map(o => {
+      const owner = keyed(o.id, doc.nodes);
+      const at = owner.ref?.node;
+      const mesh = meshOf(o.brep, revision, quality);
+      const caps = slot === 'section' && at !== undefined && doc.nodes[at]?.kind === 'split'
+        ? nativeSectionCaps(o.brep, mesh, serialOf(featureId(doc.nodes, at))) : [];
+      return { ...owner, topology: nativeBodyTopology(o.brep), family: o.representation, mesh,
+        ...(caps.length ? { sectionCaps: caps } : {}),
+        ...(slot === 'preview' && o.filletTargets ? { filletTargets: o.filletTargets } : {}),
+        ...(slot === 'preview' && o.chamferTargets ? { chamferTargets: o.chamferTargets } : {}),
+        ...(o.bodyCount > 1 ? { pieces: o.bodyCount } : {}), volume: null, mass: null };
+    });
     // Ordinary previews do not calculate a flat. The caller must opt in for the exact final
     // Flange and the worker returns only an advisory for its unique native solid output.
     const tail = doc.nodes.length - 1, node = doc.nodes[tail];
