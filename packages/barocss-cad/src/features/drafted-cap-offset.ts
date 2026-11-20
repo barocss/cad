@@ -464,6 +464,36 @@ export function boxWallReplacementFrame(brep: Brep, faceName: string): { anchor:
   return admitted && admitted.axis !== 2 ? boxReplacementFrame(admitted) : undefined;
 }
 
+/** Locate one exact Z-facing cap of a straight rectangular box. */
+export function boxCapOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
+  const admitted = certifiedBoxFace(brep, faceName);
+  return admitted?.axis === 2 ? boxReplacementFrame(admitted) : undefined;
+}
+
+function boxCapOffsetFailure(code: BrepError['code'], detail: string): never {
+  throw new BrepError(code, `box cap offset: ${detail}`);
+}
+
+/** Offset a strict box cap along its outward normal while retaining the original native trims. */
+export function offsetBoxCapIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
+  const admitted = certifiedBoxFace(brep, faceName);
+  if (admitted?.axis !== 2) return;
+  if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
+    return boxCapOffsetFailure('INPUT', 'distance must be nonzero and within the modeling range');
+  const { box, face, end } = admitted, { anchor, normal } = boxReplacementFrame(admitted);
+  const opposite = box.sections[1 - end].z, next = anchor[2] + normal[2] * distance;
+  const extent = Math.max(Math.abs(next), geometryScaleMM(brep.vertices.map(vertex => vertex.point)));
+  if (!(extent <= CadNumericPolicy.coordinateAbs)) return boxCapOffsetFailure('GEOMETRY', 'the cap leaves the modeling range');
+  if (next === anchor[2]) return boxCapOffsetFailure('GEOMETRY', 'distance is too small to move the cap');
+  if (!((next - opposite) * normal[2] > linearToleranceMM(extent)))
+    return boxCapOffsetFailure('GEOMETRY', 'the offset would reach or cross the opposite cap');
+
+  const wanted: Plane = { kind: 'plane', o: [anchor[0], anchor[1], next], n: normal };
+  const lifted = brep.vertices.filter(vertex => vertex.point[2] === anchor[2])
+    .map(vertex => ({ vertex, point: [vertex.point[0], vertex.point[1], next] as Point }));
+  return rebuildReplacementTrim(brep, box, face, 2, wanted, lifted, boxCapOffsetFailure);
+}
+
 function certifiedDraftedReplacement(brep: Brep, faceName: string): { face: BrepFace; profile: Taper } | undefined {
   const face = namedFace(brep, faceName), taper = face && admittedTaper(brep);
   if (!face || !taper) return undefined;
@@ -633,7 +663,7 @@ function buildDraftedCapReplacement(brep: Brep, cap: DraftedCap, plane: Replacem
 }
 
 function rebuildReplacementTrim(brep: Brep, profile: Taper, face: BrepFace, axis: FaceRole['axis'], wanted: Plane,
-  lifted: readonly { readonly vertex: BrepVertex; readonly point: Point }[]): Brep {
+  lifted: readonly { readonly vertex: BrepVertex; readonly point: Point }[], refuse = replacementFailure): Brep {
   const moved = new Map<string, Point>();
   for (const { vertex, point } of lifted) if (point.some((value, i) => value !== vertex.point[i])) moved.set(vertex.id, point);
   const vertices = brep.vertices.map(vertex => {
@@ -661,7 +691,7 @@ function rebuildReplacementTrim(brep: Brep, profile: Taper, face: BrepFace, axis
       return point.get(edge.vertices[use.sense === 'forward' ? 0 : 1])!;
     });
     const continued = current === face ? wanted : profile.walls.get(current.id)?.plane ?? planeOf(current);
-    if (!continued) return replacementFailure('GEOMETRY', 'the original planar support is unavailable.');
+    if (!continued) return refuse('GEOMETRY', 'the original planar support is unavailable.');
     const support = continued;
     function fit(surface: Surface, sense: BrepFace['sense']) {
       const original = affineChart(surface, sense);
@@ -679,7 +709,7 @@ function rebuildReplacementTrim(brep: Brep, profile: Taper, face: BrepFace, axis
       const { surface, sense } = replacementFaceSurface(current, profile);
       fitted = fit(surface, sense);
     }
-    if (!fitted) return replacementFailure('GEOMETRY', 'the replacement cannot preserve the planar supports and their trims.');
+    if (!fitted) return refuse('GEOMETRY', 'the replacement cannot preserve the planar supports and their trims.');
     const { chart, sense } = fitted;
     charts.set(loop.id, chart);
     if (chart.surface === current.surface && sense === current.sense) return current;
@@ -693,6 +723,6 @@ function rebuildReplacementTrim(brep: Brep, profile: Taper, face: BrepFace, axis
   });
   const result: Brep = { ...brep, vertices, edges, faces, coedges };
   const report = checkBrep(result, { strict: true });
-  if (!report.valid) return replacementFailure('GEOMETRY', `the replacement solid is invalid: ${report.issues[0]}`);
+  if (!report.valid) return refuse('GEOMETRY', `the replacement solid is invalid: ${report.issues[0]}`);
   return result;
 }

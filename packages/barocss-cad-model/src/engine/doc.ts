@@ -390,7 +390,7 @@ export function isAnnularReplacementSource(nodes: readonly unknown[], index: num
   return throughHoleStockProfile(nodes, index) === 'circle';
 }
 
-function offsetPlateBase(nodes: readonly unknown[], index: number): number | undefined {
+function offsetSourceBase(nodes: readonly unknown[], index: number): number | undefined {
   for (;;) {
     const node = nodes[index];
     if (!textRecord(node) || node.kind !== 'offset-face') return index;
@@ -402,13 +402,13 @@ function offsetPlateBase(nodes: readonly unknown[], index: number): number | und
 
 /** A distance-only rectangular plate source with one bore. */
 export function isBoredCapOffsetSource(nodes: readonly unknown[], index: number): boolean {
-  const base = offsetPlateBase(nodes, index);
+  const base = offsetSourceBase(nodes, index);
   return base !== undefined && isBoredPlateHole(nodes, base);
 }
 
 /** Authored distance-only source with one or two bores. The kernel proves the selected face. */
 export function isBoredPlateOffsetSource(nodes: readonly unknown[], index: number): boolean {
-  const base = offsetPlateBase(nodes, index);
+  const base = offsetSourceBase(nodes, index);
   return base !== undefined && isBoredPlateOffsetBase(nodes, base);
 }
 
@@ -438,6 +438,12 @@ export function isBoxReplacementSource(nodes: readonly unknown[], index: number)
   return straightExtrudeSketch(nodes, index)?.profile === 'rectangle';
 }
 export { isBoxReplacementSource as isBoxWallReplacementSource };
+
+/** Signed native cap offset on an authored box or its own offset chain. */
+export function isBoxCapOffsetSource(nodes: readonly unknown[], index: number): boolean {
+  const base = offsetSourceBase(nodes, index);
+  return base !== undefined && isBoxReplacementSource(nodes, base);
+}
 
 export function isCylinderReplacementSource(nodes: readonly unknown[], index: number): boolean {
   return straightExtrudeSketch(nodes, index)?.profile === 'circle';
@@ -510,6 +516,7 @@ export function directFaceDocumentProblem(input: unknown): string | null {
     if (!textRecord(value) || seen.has(value)) continue;
     seen.add(value);
     const boredPlateOffsets = new Set<number>();
+    const boxCapOffsets = new Set<number>();
     if (Array.isArray(value.nodes)) for (const [index, node] of value.nodes.entries()) {
       if (!textRecord(node)) continue;
       if (node.kind === 'delete-face') {
@@ -545,12 +552,17 @@ export function directFaceDocumentProblem(input: unknown): string | null {
         boredPlateOffsets.add(index);
         continue;
       }
+      if (boxCapOffsets.has(parentIndex) || isBoxReplacementSource(value.nodes, parentIndex)) {
+        if (node.target !== undefined) return 'Offset face: this box cap needs a signed distance.';
+        boxCapOffsets.add(index);
+        continue;
+      }
       if (parent.kind === 'draft' || parent.kind === 'offset-face') continue;
       if (parent.kind === 'extrude') {
         if (typeof parent.draft === 'number' && Number.isFinite(parent.draft) && parent.draft !== 0) continue;
         if (isStraightHexagonalExtrusion(value.nodes, parent)) continue;
       }
-      return 'Offset face: the parent must be Draft, a drafted extrusion, a straight hexagonal extrusion, a supported through-hole plate, or a previous face offset.';
+      return 'Offset face: the parent must be Draft, a drafted extrusion, a box, a straight hexagonal extrusion, a supported through-hole plate, or a previous face offset.';
     }
     if (Array.isArray(value.instances)) for (const instance of value.instances) if (textRecord(instance)) stack.push(instance.doc);
     if (textRecord(value.pendingParts)) for (const pending of Object.values(value.pendingParts)) if (textRecord(pending)) stack.push(pending.doc);

@@ -3,8 +3,8 @@ import test from 'node:test';
 import { CadPartError, checkBrep, evaluateCadPart, faceGeometry } from '../dist/index.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
 import {
-  boxFaceReplacementFrame, boxWallReplacementFrame, draftedCapReplacementFrame, draftedFaceOffsetFrame, draftedWallReplacementFrame,
-  replaceBoxFace, replaceBoxWall, replaceRectangularSolidFace,
+  boxCapOffsetFrame, boxFaceReplacementFrame, boxWallReplacementFrame, draftedCapReplacementFrame, draftedFaceOffsetFrame, draftedWallReplacementFrame,
+  offsetBoxCapIfAdmitted, replaceBoxFace, replaceBoxWall, replaceRectangularSolidFace,
 } from '../dist/features/drafted-cap-offset.js';
 
 const doc = features => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features });
@@ -49,6 +49,33 @@ function assertPlanesAndTopology(before, after, replaced, reference) {
     assert.ok(dot(previous.n, next.n) > 0);
     assert.ok(actual.surface.controlPoints.flat().every(point => Math.abs(dot(sub(point, wanted.origin), unit)) < 1e-9));
   }
+}
+
+for (const sign of [1, -1]) {
+  const cap = sign === 1 ? 'b.top' : 'b.bottom', station = sign === 1 ? 30 : 0;
+  test(`an exact native signed box offset keeps all six faces after moving ${cap}`, () => {
+    const stock = box([0, 0], [10, 20], 30), original = output(stock).brep, saved = structuredClone(original);
+    const normal = [0, 0, sign];
+    assert.deepEqual(boxCapOffsetFrame(original, cap), { anchor: [5, 10, station], normal });
+    assert.equal(boxCapOffsetFrame(original, face), undefined);
+    assert.equal(offsetBoxCapIfAdmitted(original, face, 5), undefined);
+    for (const distance of [5, -5]) {
+      const z = station + sign * distance;
+      const edit = { id: 'offset', kind: 'offset-face', target: 'b', face: cap, distance };
+      const result = output([...stock, edit]).brep;
+      assert.deepEqual(result, offsetBoxCapIfAdmitted(original, cap, distance));
+      assertPlanesAndTopology(original, result, cap, { origin: [0, 0, z], normal });
+      const mass = brepMassProperties(result, 1);
+      close(mass.volume, 200 * (30 + distance));
+      mass.centroid.forEach((value, k) => close(value, [5, 10, 15 + sign * distance / 2][k]));
+      assert.deepEqual(result.vertices.map(({ point }) => point), original.vertices.map(({ point: [x, y, h] }) =>
+        [x, y, h === station ? z : h]));
+    }
+    for (const rejected of [-30, -31]) {
+      assert.throws(() => offsetBoxCapIfAdmitted(original, cap, rejected), /reach or cross the opposite cap/);
+    }
+    assert.deepEqual(original, saved);
+  });
 }
 
 test('a native box wall is replaced by the tilted plane and retains every topology identity', () => {

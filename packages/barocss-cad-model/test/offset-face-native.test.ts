@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { brepMassProperties, checkBrep, exportStep, type Brep } from '@barocss/cad';
-import { offsetFaceCommand } from '../src/app/profileCommands';
+import { buildNativeOffsetFace, offsetFaceCommand } from '../src/app/profileCommands';
 import { editSavedOffsetFaceCommand } from '../src/app/offsetFaceEdit';
 import { deleteFeature, duplicateBody } from '../src/chat/features';
 import { dispatchTool } from '../src/chat/tools';
@@ -68,6 +68,39 @@ function assertBoxNative(doc: StudioDoc, target: ReturnType<typeof boxOracle>, a
   }
 }
 const translated = (): StudioDoc => withNode(rectanglePart(20.00003, 10.00007, 5.00009), { kind: 'translate', parent: { node: 1, side: 'solid' }, offset: [0.1234567, -0.2345678, 0.3456789] });
+
+test('Offset on a plain 10 × 20 × 30 mm box keeps its six face identities through tool, History and Open', async () => {
+  const source = rectanglePart(10, 20, 30), ctx = context(source), sourceCopy = structuredClone(source), original = bodyOf(source);
+  const evaluate = async (doc: StudioDoc) => evaluateDoc(doc, 1);
+  const identity = (brep: Brep) => brep.faces.map(face => [face.id, face.name, face.surface.id]);
+  const face = 'n1.top', index = source.nodes.length;
+  const direct = offsetFaceCommand.build!(ctx, { d: 5 });
+  const reply = await dispatchTool({ doc: source, bodies: ctx.bodies }, 'features',
+    { action: 'command', command: 'offset-face', faces: [face], values: { d: 5 } }, evaluate);
+  assert.ok(!reply.isError && reply.changed, reply.content);
+  assert.deepEqual(reply.state.doc, direct);
+  const edit = direct.nodes[index];
+  assert.ok(edit.kind === 'offset-face' && edit.sigs?.[face]);
+  assert.deepEqual(edit.parent, { node: 1, side: 'solid' });
+  assert.equal(edit.distance, 5);
+  assert.equal(direct.nodes.length, index + 1);
+  assert.deepEqual(identity(bodyOf(direct)), identity(original));
+  assertBoxNative(direct, boxOracle(bounds(original), 2, 1, 5), 2, 30);
+  const cmd = editSavedOffsetFaceCommand(direct, index), directCtx = context(direct);
+  assert.ok(cmd?.build);
+  assert.ok(cmd.fields!(directCtx, {}).every(field => field.key !== 'offsetMode'));
+  const inward = cmd.build(directCtx, { d: -5 });
+  assert.deepEqual(inward.nodes.at(-1), { ...edit, distance: -5 });
+  const opened = await readStudioFile(encodeStudioFile(inward));
+  assert.ok('doc' in opened);
+  assert.deepEqual(identity(bodyOf(opened.doc)), identity(original));
+  assertBoxNative(opened.doc, boxOracle(bounds(original), 2, 1, -5), 2, 30);
+  const reverse = offsetFaceCommand.build!(directCtx, { d: -5 });
+  assert.equal(reverse.nodes.at(-1)?.kind, 'offset-face');
+  assert.deepEqual(identity(bodyOf(reverse)), identity(original));
+  near(brepMassProperties(bodyOf(reverse), 1).volume, 6000);
+  assert.deepEqual(source, sourceCopy);
+});
 
 test('Offset admits a STEP box with padded supports but still refuses drafted STEP walls', () => {
   const importBrep = (brep: Brep): StudioDoc => withNode(emptyDoc(), {
@@ -143,7 +176,9 @@ test('Offset native face: distance and unsupported draft refusals are atomic, th
   for (const d of [0, NaN, Infinity, -Infinity, -6]) assert.throws(() => offsetFaceCommand.build!(ctx, { d }), e => isRefusal(e, 'FACE_DISTANCE'));
   assert.deepEqual(doc, before); assert.deepEqual(ctx.selection, selection);
   const exactCollapse = context(rectanglePart(20, 10, 5));
-  assert.throws(() => offsetFaceCommand.build!(exactCollapse, { d: -5 }), e => isRefusal(e, 'FACE_DISTANCE'));
+  assert.throws(() => buildNativeOffsetFace(exactCollapse, -5), e => isRefusal(e, 'FACE_DISTANCE'));
+  const failure = evaluateDoc(offsetFaceCommand.build!(exactCollapse, { d: -5 }), 1);
+  assert.ok(!failure.ok && /cross the opposite cap/.test(failure.error.detail));
   const draft = part('Tapered triangle').extrude(sketch().polygon([[0, 0], [20, 0], [0, 20]]), { h: 5, draft: 5 }).doc;
   const drafted = context(draft), draftBefore = structuredClone(draft);
   freezeDoc(draft);
@@ -405,8 +440,15 @@ test('Offset on a tapered lower cap moves in its outward direction and retains t
 
 test('legacy Offset chain refuses an upstream edit before a downstream absolute tool can go stale', async () => {
   const seed = rectanglePart(40, 30, 10);
-  const first = offsetFaceCommand.build!(context(seed), { d: 3 });
-  const chain = offsetFaceCommand.build!(context(first), { d: -4 });
+  const legacy = (doc: StudioDoc, d: number): StudioDoc => {
+    const ctx = context(doc), pick = ctx.selection.faces[0], face = ctx.bodies[pick.body].mesh.faces[pick.face].name;
+    const composed = buildNativeOffsetFace(ctx, d), operation = composed.nodes.at(-1);
+    assert.ok(operation?.kind === 'union' || operation?.kind === 'difference');
+    return { ...composed, nodes: [...composed.nodes.slice(0, -1),
+      { ...operation, made: { command: 'offset-face', nodes: 3, values: { d, face } } }] };
+  };
+  const first = legacy(seed, 3);
+  const chain = legacy(first, -4);
   assert.ok(offsetFaceGroup(chain.nodes, 4)); assert.ok(offsetFaceGroup(chain.nodes, 7));
   const original = structuredClone(chain), native = bodyOf(chain); closed(native);
   assert.deepEqual(bounds(native), { min: [0, 0, 0], max: [40, 30, 9] }); near(brepMassProperties(native, 1).volume, 10800);

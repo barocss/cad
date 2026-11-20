@@ -1,4 +1,4 @@
-import { isBoredPlateOffsetSource, offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
+import { isBoredPlateOffsetSource, isBoxCapOffsetSource, offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc } from '../engine/evaluate';
 import { bodyKeyFor, featureId } from '../engine/ids';
 import { refusal } from '../engine/refusal';
@@ -80,7 +80,7 @@ function preserveFollowingOffsetRecipes(doc: StudioDoc, index: number): StudioDo
 /** Edit the direct native operation or rebuild the legacy cap recipe at its original History slot. */
 export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Command | null {
   const direct = directOffsetAt(doc, index);
-  const allowPlane = !!direct && !isBoredPlateOffsetSource(doc.nodes, direct.parent.node);
+  const allowPlane = !!direct && !isBoredPlateOffsetSource(doc.nodes, direct.parent.node) && !isBoxCapOffsetSource(doc.nodes, direct.parent.node);
   let directSource: Ctx | undefined;
   const describe = (getSource: () => Ctx, face: string) => {
     try { return offsetFaceDescription(getSource(), face); } catch { return face; }
@@ -103,7 +103,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
       const { target: priorTarget, distance: priorDistance, ...recipe } = direct;
       const nodes = [...doc.nodes];
       if (values.offsetMode === 'to-plane') {
-        if (!allowPlane) return rejected('this through-hole plate face needs a signed distance.');
+        if (!allowPlane) return rejected('this face needs a signed distance.');
         if (priorTarget && values.keepPlane === 1) return doc;
         const target = captureOffsetPlane(ctx, values, direct.parent, index);
         nodes[index] = { ...recipe, target };

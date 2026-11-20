@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1458: [Keep the original faces when offsetting a box cap](notes/native-box-cap-offset-2026-11-21/README.md), #17. Verify the 7000 mm³ benchmark and all six original faces through Studio, MCP and fresh Open.
 - D1457: [Verify that an inverse wall offset restores the source](notes/reverse-bored-plate-wall-offset-2026-11-21/README.md), #17. Check 16 seeded cases against the ray oracle and verify separate moves through Studio and MCP reopen.
 - D1456: [Offset the four walls of a tilted two-bore plate](notes/offset-tilted-two-bore-plate-walls-2026-11-21/README.md), #17. Verify both rim pairs, the nearest contact for each wall and fresh Studio Open.
 - D1455: [Offset the remaining walls of a tilted one-bore plate](notes/offset-tilted-one-bore-plate-walls-2026-11-21/README.md), #17. Verify both cap variants on X−, Y− and Y+ through signed moves, contact refusal and Studio reopen.
