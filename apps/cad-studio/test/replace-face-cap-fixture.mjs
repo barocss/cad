@@ -1,8 +1,10 @@
 const unit = vector => vector.map(value => value / Math.hypot(...vector));
+export const HEX_CAP_FOOTPRINT = [[0, 0], [18, 0], [24, 8], [18, 16], [0, 16], [-6, 8]];
 
-/** A box cap and a separate 8 × 8 × 3 mm reference extruded from the exact tilted plane. */
+/** A stock cap and a separate 8 × 8 × 3 mm reference extruded from the exact tilted plane. */
 export function capCase(variant) {
-  const drafted = variant.startsWith('drafted-'), end = variant.replace(/^drafted-/, '');
+  const drafted = variant.startsWith('drafted-'), hex = variant.startsWith('hex-');
+  const end = variant.replace(/^(?:drafted|hex)-/, '');
   if (end !== 'upper' && end !== 'lower') return;
   const direction = end === 'upper' ? 1 : -1;
   const station = direction === 1 ? 10 : 0, opposite = 10 - station;
@@ -14,7 +16,7 @@ export function capCase(variant) {
   const otherPick = referencePick.map((value, i) => value + 3 * normal[i] + (i === 2 ? moved : 0));
   const height = (x, y) => opposite + direction * (8 + x / 10 + y / 5);
   return {
-    drafted, direction,
+    drafted, hex, direction,
     name: direction === 1 ? 'Top' : 'Bottom', oppositeName: direction === 1 ? 'Bottom' : 'Top',
     face: direction === 1 ? 'n1.top' : 'n1.bottom', station, opposite, moved,
     // On the drafted underside the fixed upper corner is (1, 1, 10).
@@ -23,7 +25,8 @@ export function capCase(variant) {
     referencePick, otherPick, height,
     movedHeight: (x, y) => height(x, y) + moved,
     retargetedHeight: (x, y) => height(x, y) + moved + direction * 3 * Math.sqrt(105) / 10,
-    centroid: [820 / 39, 210 / 13, direction === 1 ? 20 / 3 : 10 / 3],
+    centroid: hex ? [332 / 35, 376 / 45, direction === 1 ? 8363 / 1575 : 7387 / 1575] :
+      [820 / 39, 210 / 13, direction === 1 ? 20 / 3 : 10 / 3],
   };
 }
 

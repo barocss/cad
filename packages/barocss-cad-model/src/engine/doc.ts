@@ -462,8 +462,9 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       }
       const parentIndex = (node.parent as BodyRef).node;
       if (node.kind === 'replace-face') {
-        if (!isBoxReplacementSource(value.nodes, parentIndex) && !isDraftedFaceReplacementSource(value.nodes, parentIndex))
-          return 'Replace face: a preceding rectangular extrusion is required.';
+        if (!isBoxReplacementSource(value.nodes, parentIndex) && !isDraftedFaceReplacementSource(value.nodes, parentIndex) &&
+            !isStraightHexagonalExtrusion(value.nodes, value.nodes[parentIndex]))
+          return 'Replace face: a preceding rectangular or straight hexagonal extrusion is required.';
         continue;
       }
       const parent = value.nodes[parentIndex];

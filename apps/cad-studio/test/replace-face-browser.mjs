@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
-import { capCase, draftedCapOracle, draftedWallVolume } from './replace-face-cap-fixture.mjs';
+import { capCase, draftedCapOracle, draftedWallVolume, HEX_CAP_FOOTPRINT } from './replace-face-cap-fixture.mjs';
 
 const [output, inputFile, agentFile, variant = 'height'] = process.argv.slice(2);
 assert.ok(output && inputFile && agentFile && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
-assert.ok(['height', 'diagonal', 'upper', 'lower', 'drafted-upper', 'drafted-lower', 'drafted-wall'].includes(variant));
+assert.ok(['height', 'diagonal', 'upper', 'lower', 'drafted-upper', 'drafted-lower', 'drafted-wall', 'hex-upper', 'hex-lower'].includes(variant));
 const draftedWall = variant === 'drafted-wall', diagonal = variant === 'diagonal' || draftedWall;
 const cap = capCase(variant);
 const sourceFace = cap?.face ?? 'n1.side1';
@@ -32,7 +32,8 @@ const pins = [
 const f = await createFlow({
   name: 'replace-face', envFrozen: 'REPLACE_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: 'Replace a rectangular extrusion face with a tilted exact support in desktop Studio.',
-  limits: [cap ? `One 40 × 30 × 10 mm extrusion and two tilted reference faces for its ${variant} cap.` : draftedWall
+  limits: [cap?.hex ? 'One convex straight hexagonal prism and two tilted reference faces for its cap.' :
+    cap ? `One 40 × 30 × 10 mm extrusion and two tilted reference faces for its ${variant} cap.` : draftedWall
     ? 'One 1:10 drafted rectangular extrusion and a separate tilted prism.'
     : diagonal
     ? 'One 40 × 30 × 10 mm box and two faces of a disconnected prism tilted along Y and Z.'
@@ -92,7 +93,9 @@ async function measure(label, doc, original, positionAt, donor) {
   assert.ok(reference.report.valid, reference.report.issues.join('\n'));
   assert.ok(box.report.maximumEdgeSurfaceGap < 1e-9);
   assert.ok(box.report.maximumPcurveGap < 1e-9);
-  assert.deepEqual(box.report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+  assert.deepEqual(box.report.counts, cap?.hex ?
+    { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 36, edges: 18, vertices: 12 } :
+    { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
   assert.deepEqual(incidence(box.brep), incidence(original.brep));
   if (donor) assert.deepEqual(reference.brep, donor.brep);
   for (const [name, [n, offset]] of Object.entries(original.supports)) {
@@ -112,9 +115,10 @@ async function measure(label, doc, original, positionAt, donor) {
     }
     expected.forEach((value, axis) => near(next.point[axis], value));
   }
-  // The thickness is affine, so its mean over the fixed rectangle is its value at the centre.
+  // For straight stock, the mean affine thickness is its value at the footprint centroid.
   const volume = draftedWall ? draftedWallVolume(positionAt) :
-    tapered?.volume ?? (cap ? 40 * 30 * Math.abs(positionAt(20, 15) - cap.opposite) : 30 * 10 * positionAt(15, 5));
+    tapered?.volume ?? (cap?.hex ? 384 * Math.abs(positionAt(9, 8) - cap.opposite) :
+      cap ? 40 * 30 * Math.abs(positionAt(20, 15) - cap.opposite) : 30 * 10 * positionAt(15, 5));
   near(box.mass.volume, volume);
   const workerVolume = shape(worker, 'b5').volume;
   near(workerVolume, volume);
@@ -124,7 +128,7 @@ async function measure(label, doc, original, positionAt, donor) {
       tapered?.centroid ?? cap?.centroid ?? [10103 / 492, 1245 / 82, 1255 / 246];
     centroid.forEach((value, axis) => near(box.mass.centroid[axis], value));
   }
-  const corners = cap ? [[0, 0], [40, 0], [0, 30], [40, 30]] :
+  const corners = cap?.hex ? HEX_CAP_FOOTPRINT : cap ? [[0, 0], [40, 0], [0, 30], [40, 30]] :
     [[0, 0], [30, 0], [draftedWall ? 1 : 0, 10], [draftedWall ? 29 : 30, 10]];
   const coordinates = tapered?.moving.map(point => point[2]) ?? corners.map(([u, v]) => positionAt(u, v));
   f.report.observations.push({ label, axis: cap ? 'z' : 'x', coordinates, volume, nativeVolume: box.mass.volume, workerVolume,
@@ -148,14 +152,14 @@ await f.run(async () => {
   await open(inputFile);
   await f.same(source);
   const native = await f.inspect('source', source), original = shape(native, 'b1'), donor = shape(native, 'b4');
-  near(original.mass.volume, cap?.drafted || draftedWall ? 11300 + 40 / 3 : 12000);
+  near(original.mass.volume, cap?.hex ? 3840 : cap?.drafted || draftedWall ? 11300 + 40 / 3 : 12000);
   await view(cap?.name ?? 'Right');
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const filter = button('Selection filter');
   for (let i = 0; i < 4 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
-  await point(cap ? [20, 15, cap.station] : [draftedWall ? 39.5 : 40, 15, 5]);
+  await point(cap?.hex ? [9, 8, cap.station] : cap ? [20, 15, cap.station] : [draftedWall ? 39.5 : 40, 15, 5]);
   await f.page.getByText(new RegExp('Properties and face colour: .*' + sourceFace.replace('.', '\\.'))).waitFor();
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Replace face');

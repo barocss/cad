@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { checkBrep, evaluateCadPart, faceGeometry, reevaluate } from '../dist/index.js';
 import { transformBrep } from '../dist/brep/brep-transform.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
-import { offsetPrismWall, prismWallOffsetFrame } from '../dist/features/prism-wall-offset.js';
+import { offsetPrismWall, prismCapReplacementFrame, prismWallOffsetFrame, replacePrismCapIfAdmitted } from '../dist/features/prism-wall-offset.js';
 
 const footprint = [[0, 0], [18, 0], [24, 8], [18, 16], [0, 16], [-6, 8]];
 const selected = 'n1.side1';
@@ -28,6 +28,61 @@ const identity = brep => ({
   coedges: brep.coedges.map(({ pcurve, ...record }) => ({ ...record, pcurve: pcurve?.id ?? null })),
   edges: brep.edges.map(({ curve, ...record }) => ({ ...record, curve: curve.id })),
   vertices: brep.vertices.map(({ point, ...record }) => record),
+});
+
+for (const direction of [1, -1]) {
+  const upper = direction === 1, faceName = upper ? 'n1.top' : 'n1.bottom';
+  const station = upper ? 10 : 0, fixed = 10 - station;
+  const plane = { origin: [0, 0, fixed + 8 * direction], normal: [-1, -2, 10 * direction] };
+  test(`replace ${faceName} on a convex hexagonal prism and keep the seven fixed supports`, () => {
+    const doc = part(), source = solidOf(doc), before = structuredClone(source);
+    const frame = prismCapReplacementFrame(source, faceName);
+    pointClose(frame.normal, [0, 0, direction]);
+    const change = { id: 'replace', kind: 'replace-face', target: 'n1', face: faceName, plane };
+    const result = solidOf({ ...doc, features: [...doc.features, change] });
+    const report = checkBrep(result, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 36, edges: 18, vertices: 12 });
+    assert.equal(result.coedges.filter(coedge => coedge.pcurve).length, 36);
+    assert.deepEqual(identity(result), identity(source));
+    assert.ok(report.maximumPcurveGap < 1e-9);
+    assert.ok(report.maximumEdgeSurfaceGap < 1e-9);
+    for (const [i, vertex] of source.vertices.entries()) {
+      const [x, y, z] = vertex.point;
+      pointClose(result.vertices[i].point, [x, y, z === station ? fixed + direction * (8 + x / 10 + y / 5) : z]);
+    }
+    for (const face of source.faces) {
+      if (face.name === faceName) continue;
+      const support = faceGeometry(face), moved = faceOf(result, face.name);
+      pointClose(faceGeometry(moved).n, support.n);
+      for (const point of moved.surface.controlPoints.flat())
+        close(point.reduce((sum, value, axis) => sum + (value - support.o[axis]) * support.n[axis], 0), 0);
+    }
+    const mass = brepMassProperties(result, 1);
+    assert.equal(mass.method, 'planar-exact');
+    close(mass.volume, 4032, 1e-7);
+    pointClose(mass.centroid, [332 / 35, 376 / 45, upper ? 8363 / 1575 : 7387 / 1575]);
+    assert.deepEqual(source, before);
+    for (const distance of [8, 9]) {
+      assert.throws(() => replacePrismCapIfAdmitted(source, faceName, {
+        ...plane, origin: [0, 0, plane.origin[2] - direction * distance],
+      }), /reach or cross the opposite cap at one corner/);
+    }
+  });
+}
+
+test('prism cap replacement refuses unsupported stock and unsuitable donor planes', () => {
+  const source = solidOf(), face = 'n1.top', origin = [0, 0, 8];
+  for (const normal of [[0, 0, 1], [1e-10, 0, 1]]) {
+    assert.throws(() => replacePrismCapIfAdmitted(source, face, { origin, normal }), /tilt is too small/);
+  }
+  assert.throws(() => replacePrismCapIfAdmitted(source, face, { origin, normal: [1, 0, 0] }), /perpendicular/);
+  for (const [brep, name] of [[source, selected], [solidOf(part(footprint.slice(1))), face],
+    [solidOf(part([[0, 0], [18, 0], [10, 7], [18, 16], [0, 16], [-6, 8]])), face],
+    [solidOf(part(footprint, { draft: 5 })), face]]) {
+    assert.equal(prismCapReplacementFrame(brep, name), undefined);
+    assert.equal(replacePrismCapIfAdmitted(brep, name, { origin, normal: [-1, -2, 10] }), undefined);
+  }
 });
 
 for (const distance of [1, -2, -9.599, 9.599]) {

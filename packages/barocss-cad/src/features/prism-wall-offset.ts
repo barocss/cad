@@ -32,9 +32,9 @@ type Prism = {
   readonly walls: readonly Wall[];
   readonly lower: readonly BrepVertex[];
   readonly upper: readonly BrepVertex[];
-  readonly selected: number;
   readonly extent: number;
 };
+type WallPrism = Prism & { readonly selected: number };
 
 function fail(code: BrepError['code'], detail: string): never {
   throw new BrepError(code, `prism wall offset: ${detail}`);
@@ -77,7 +77,7 @@ function keepsSection(points: readonly Point[], walls: readonly Wall[], selected
 }
 
 /** Prove both straight cap rings and the six matching wall loops from native incidence. */
-function admittedPrism(brep: Brep, faceName: string): Prism | undefined {
+function admittedPrism(brep: Brep): Prism | undefined {
   const { bodies, shells, faces, loops, coedges, edges, vertices } = brep;
   if (bodies.length !== 1 || bodies[0].kind !== 'solid' || shells.length !== 1 || bodies[0].shells.length !== 1
     || bodies[0].shells[0] !== shells[0].id || !shells[0].closed || shells[0].faces.length !== 8
@@ -154,26 +154,31 @@ function admittedPrism(brep: Brep, faceName: string): Prism | undefined {
     if (!face.chart.surface.controlPoints.flat().every(point => Math.abs(dot(sub(point, origin), normal)) <= roundoff)) return undefined;
     walls.push({ face, origin, normal });
   }
-  const selected = walls.findIndex(wall => wall.face.original.name === faceName);
-  if (selected < 0) return undefined;
-  const [x, y] = walls[selected].normal;
-  const minorComponent = Math.min(Math.abs(x), Math.abs(y));
-  // An exact axis direction is valid. Keep the existing cutoff for near-axis oblique walls.
-  if ((minorComponent > 0 && minorComponent <= 64 * Number.EPSILON)
-    || !keepsSection(upper.map(vertex => vertex.point), walls, selected, 0, extent)
+  if (!keepsSection(upper.map(vertex => vertex.point), walls, -1, 0, extent)
     || !checkBrep(brep, { strict: true }).valid) return undefined;
-  return { caps: [caps[0], caps[1]], walls, lower, upper, selected, extent };
+  return { caps: [caps[0], caps[1]], walls, lower, upper, extent };
 }
 
 function namedFace(brep: Brep, name: string): boolean {
   return brep.faces.filter(face => face.name === name).length === 1;
 }
 
+function admittedWallPrism(brep: Brep, faceName: string): WallPrism | undefined {
+  const prism = admittedPrism(brep);
+  if (!prism) return undefined;
+  const selected = prism.walls.findIndex(wall => wall.face.original.name === faceName);
+  if (selected < 0) return undefined;
+  const [x, y] = prism.walls[selected].normal, minorComponent = Math.min(Math.abs(x), Math.abs(y));
+  // An exact axis direction is valid. Keep the existing Offset cutoff for near-axis oblique walls.
+  if (minorComponent > 0 && minorComponent <= 64 * Number.EPSILON) return undefined;
+  return { ...prism, selected };
+}
+
 /** The face center and outward unit normal used by the signed offset handle. */
 export function prismWallOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
   if (!namedFace(brep, faceName)) return undefined;
   try {
-    const prism = admittedPrism(brep, faceName);
+    const prism = admittedWallPrism(brep, faceName);
     if (!prism) return undefined;
     const { lower, upper, walls, selected } = prism;
     const anchor = lerp(lerp(lower[selected].point, upper[selected].point, 0.5), lerp(lower[next(selected)].point, upper[next(selected)].point, 0.5), 0.5);
@@ -229,7 +234,7 @@ export function uvPoint(chart: Chart, point: Point): Point {
 export function offsetPrismWall(brep: Brep, faceName: string, distance: number): Brep {
   if (typeof distance !== 'number' || !Number.isFinite(distance)) fail('INPUT', 'distance must be finite');
   if (!namedFace(brep, faceName)) fail('INPUT', 'the selected face name is missing or ambiguous');
-  const prism = admittedPrism(brep, faceName);
+  const prism = admittedWallPrism(brep, faceName);
   if (!prism) return fail('GEOMETRY', 'pick an upright wall of one straight convex hexagonal prism');
   return offsetWall(brep, prism, distance);
 }
@@ -237,11 +242,11 @@ export function offsetPrismWall(brep: Brep, faceName: string, distance: number):
 /** The Part route uses this for a valid request before it tries the rectangular taper recipe. */
 export function offsetPrismWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
   if (!namedFace(brep, faceName)) return undefined;
-  const prism = admittedPrism(brep, faceName);
+  const prism = admittedWallPrism(brep, faceName);
   return prism && offsetWall(brep, prism, distance);
 }
 
-function offsetWall(brep: Brep, prism: Prism, distance: number): Brep {
+function offsetWall(brep: Brep, prism: WallPrism, distance: number): Brep {
   if (distance === 0) return brep;
   if (Math.abs(distance) <= allowance(prism.extent)) fail('GEOMETRY', 'distance is too small to move the wall');
   const { lower, upper, walls, selected, caps } = prism;
@@ -259,6 +264,18 @@ function offsetWall(brep: Brep, prism: Prism, distance: number): Brep {
     moved.set(upper[i].id, section[i]);
     moved.set(lower[i].id, [x, y, lower[i].point[2]]);
   }
+  const charts = new Map<Face, Chart>(), unchanged: Point = [0, 0, 0], shift = scale(wall.normal, distance);
+  for (const face of [...caps, walls[previous].face, wall.face, walls[end].face]) {
+    const points = face.corners.map(vertex => moved.get(vertex.id) ?? vertex.point);
+    charts.set(face, rebuiltChart(face, points, face === wall.face ? shift : unchanged, allowance(extent)));
+  }
+  const result = rebindPrismTrim(brep, moved, charts);
+  const report = checkBrep(result, { strict: true });
+  if (!report.valid) fail('GEOMETRY', `the offset solid is invalid: ${report.issues[0]}`);
+  return result;
+}
+
+function rebindPrismTrim(brep: Brep, moved: ReadonlyMap<string, Point>, charts: ReadonlyMap<Face, Chart>): Brep {
   const vertices = brep.vertices.map(vertex => {
     const point = moved.get(vertex.id);
     return point ? { ...vertex, point } : vertex;
@@ -273,10 +290,7 @@ function offsetWall(brep: Brep, prism: Prism, distance: number): Brep {
 
   const changedCharts = new Set<string>(), affectedCharts = new Map<string, Chart>();
   const changedFaces = new Map<string, BrepFace>();
-  const unchanged: Point = [0, 0, 0], shift = scale(wall.normal, distance);
-  for (const face of [...caps, walls[previous].face, wall.face, walls[end].face]) {
-    const points = face.corners.map(vertex => moved.get(vertex.id) ?? vertex.point);
-    const chart = rebuiltChart(face, points, face === wall.face ? shift : unchanged, allowance(extent));
+  for (const [face, chart] of charts) {
     affectedCharts.set(face.loop.id, chart);
     if (chart === face.chart) continue;
     changedCharts.add(face.loop.id);
@@ -291,8 +305,86 @@ function offsetWall(brep: Brep, prism: Prism, distance: number): Brep {
     return { ...coedge, pcurve };
   });
 
-  const result: Brep = { ...brep, vertices, edges, faces, coedges };
-  const report = checkBrep(result, { strict: true });
-  if (!report.valid) fail('GEOMETRY', `the offset solid is invalid: ${report.issues[0]}`);
+  return { ...brep, vertices, edges, faces, coedges };
+}
+
+type ReplacementPlane = { readonly origin: Point; readonly normal: Point };
+type PrismCap = { readonly prism: Prism; readonly cap: Face; readonly end: 0 | 1 };
+
+function admittedPrismCap(brep: Brep, faceName: string): PrismCap | undefined {
+  if (!namedFace(brep, faceName)) return undefined;
+  const prism = admittedPrism(brep);
+  if (!prism) return undefined;
+  const end = prism.caps[0].original.name === faceName ? 0 : prism.caps[1].original.name === faceName ? 1 : undefined;
+  return end === undefined ? undefined : { prism, cap: prism.caps[end], end };
+}
+
+/** The selected cap and its original outward direction for the exact prism Replace face. */
+export function prismCapReplacementFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
+  const admitted = admittedPrismCap(brep, faceName);
+  if (!admitted) return undefined;
+  const { cap, end } = admitted;
+  const anchor: Point = [0, 0, cap.corners[0].point[2]];
+  for (const { point } of cap.corners) {
+    anchor[0] += point[0] / SIDE_COUNT;
+    anchor[1] += point[1] / SIDE_COUNT;
+  }
+  return { anchor, normal: [0, 0, end === 0 ? -1 : 1] };
+}
+
+const finitePoint = (value: unknown): value is Point => Array.isArray(value) && value.length === 3 && value.every(component => typeof component === 'number' && Number.isFinite(component));
+
+function replacementFailure(code: BrepError['code'], detail: string): never {
+  throw new BrepError(code, `Replace face: ${detail}`);
+}
+
+/** Replace the upper or lower cap of the admitted straight hexagonal prism. */
+export function replacePrismCapIfAdmitted(brep: Brep, faceName: string, plane: ReplacementPlane): Brep | undefined {
+  const admitted = admittedPrismCap(brep, faceName);
+  if (!admitted) return undefined;
+  if (!plane || typeof plane !== 'object' || Array.isArray(plane) || Object.keys(plane).sort().join(',') !== 'normal,origin'
+    || !finitePoint(plane.origin) || !finitePoint(plane.normal)) return replacementFailure('INPUT', 'the reference needs a finite origin and normal.');
+  const magnitude = len(plane.normal);
+  if (!Number.isFinite(magnitude) || magnitude === 0) return replacementFailure('INPUT', 'the reference normal must have a finite nonzero length.');
+  const unit: Point = [plane.normal[0] / magnitude, plane.normal[1] / magnitude, plane.normal[2] / magnitude];
+  if (Math.abs(unit[2]) <= 64 * Number.EPSILON)
+    return replacementFailure('GEOMETRY', 'the reference plane is too close to perpendicular to the selected cap.');
+
+  const { prism, cap, end } = admitted, outward = end === 0 ? -1 : 1;
+  const normal = unit[2] * outward > 0 ? unit : scale(unit, -1), { origin } = plane;
+  const lift = ([x, y]: Point): Point => [x, y, origin[2] - ((x - origin[0]) * normal[0] + (y - origin[1]) * normal[1]) / normal[2]];
+  const fixed = prism.caps[end === 0 ? 1 : 0].corners[0].point[2];
+  const points = cap.corners.map(vertex => lift(vertex.point));
+  const extent = Math.max(prism.extent, geometryScaleMM(points, [origin]));
+  if (!(extent <= CadNumericPolicy.coordinateAbs)) return replacementFailure('GEOMETRY', 'the replacement exceeds the modeling coordinate range.');
+  const heights = points.map(point => point[2]), linear = linearToleranceMM(extent);
+  // Signed height is affine over the fixed convex hexagon, so the minimum is at a corner.
+  if (heights.some(z => (z - fixed) * outward <= linear))
+    return replacementFailure('GEOMETRY', 'the replacement would reach or cross the opposite cap at one corner.');
+  if (Math.max(...heights) - Math.min(...heights) <= linear)
+    return replacementFailure('GEOMETRY', 'the reference plane tilt is too small for this cap.');
+
+  const moved = new Map<string, Point>();
+  for (const [i, vertex] of cap.corners.entries()) if (vertex.point[2] !== heights[i]) moved.set(vertex.id, points[i]);
+  const surface = { ...cap.chart.surface, controlPoints: cap.chart.surface.controlPoints.map(row => row.map(lift)) };
+  const roundoff = allowance(extent), seed = affineChart(surface, cap.original.sense);
+  const chart = seed && coverAffineTrim(seed, cap.original.sense, points, roundoff);
+  if (!chart) return replacementFailure('GEOMETRY', 'the replacement cannot preserve the reference plane and its trim.');
+  const support = [...points, ...chart.surface.controlPoints.flat()];
+  const supportRoundoff = allowance(Math.max(extent, geometryScaleMM(support)));
+  if (len(sub(chart.normal, normal)) > 128 * Number.EPSILON
+    || support.some(point => Math.abs(dot(sub(point, origin), normal)) > supportRoundoff))
+    return replacementFailure('GEOMETRY', 'the replacement cannot preserve the reference plane and its trim.');
+
+  const charts = new Map<Face, Chart>([[cap, chart]]);
+  for (const { face } of prism.walls) {
+    if (!face.corners.some(vertex => moved.has(vertex.id))) continue;
+    const corners = face.corners.map(vertex => moved.get(vertex.id) ?? vertex.point);
+    const kept = coverAffineTrim(face.chart, face.original.sense, corners, roundoff);
+    if (!kept) return replacementFailure('GEOMETRY', 'the replacement cannot preserve the side supports and their trims.');
+    charts.set(face, kept);
+  }
+  const result = rebindPrismTrim(brep, moved, charts), report = checkBrep(result, { strict: true });
+  if (!report.valid) return replacementFailure('GEOMETRY', `the replacement solid is invalid: ${report.issues[0]}`);
   return result;
 }
