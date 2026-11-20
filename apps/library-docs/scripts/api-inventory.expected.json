@@ -196355,6 +196355,20 @@
                 "type": "StudioDoc"
               },
               {
+                "name": "extrudeJoin",
+                "kind": "property",
+                "optional": true,
+                "readonly": false,
+                "type": "ExtrudeJoinEvidence | undefined"
+              },
+              {
+                "name": "extrudeJoinLooks",
+                "kind": "property",
+                "optional": true,
+                "readonly": false,
+                "type": "(Pick<StudioDoc, \"bodies\"> & { nameOf?(body: BodyResult): string; }) | undefined"
+              },
+              {
                 "name": "fillPatternAnchor",
                 "kind": "property",
                 "optional": true,
@@ -200788,6 +200802,248 @@
     {
       "package": "@barocss/cad-model",
       "subpath": "./app/profileCommands",
+      "exportName": "ExtrudeJoinEvidence",
+      "space": "type",
+      "observedRole": "unclassified-observed; no policy exemption",
+      "variants": [
+        {
+          "conditions": [
+            []
+          ],
+          "target": {
+            "package": "@barocss/cad-model",
+            "file": "src/app/profileCommands.ts",
+            "name": "ExtrudeJoinEvidence",
+            "kind": "type"
+          },
+          "shape": {
+            "type": "ExtrudeJoinScope & { readonly volume: number; }",
+            "declarationSignatures": [
+              {
+                "kind": "TypeAliasDeclaration",
+                "definition": "ExtrudeJoinScope & {\n    readonly volume: number;\n}"
+              }
+            ],
+            "members": [
+              {
+                "name": "bodies",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "readonly BodyResult[]"
+              },
+              {
+                "name": "height",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "number"
+              },
+              {
+                "name": "looks",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "Record<string, BodyLook> | undefined"
+              },
+              {
+                "name": "owner",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "StudioDoc"
+              },
+              {
+                "name": "sketch",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "SketchNode"
+              },
+              {
+                "name": "sketchIndex",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "number"
+              },
+              {
+                "name": "target",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "BodyResult"
+              },
+              {
+                "name": "targetKey",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "string"
+              },
+              {
+                "name": "targetRef",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "BodyRef"
+              },
+              {
+                "name": "volume",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "number"
+              }
+            ],
+            "indexSignatures": []
+          }
+        }
+      ]
+    },
+    {
+      "package": "@barocss/cad-model",
+      "subpath": "./app/profileCommands",
+      "exportName": "ExtrudeJoinProbe",
+      "space": "type",
+      "observedRole": "unclassified-observed; no policy exemption",
+      "variants": [
+        {
+          "conditions": [
+            []
+          ],
+          "target": {
+            "package": "@barocss/cad-model",
+            "file": "src/app/profileCommands.ts",
+            "name": "ExtrudeJoinProbe",
+            "kind": "type"
+          },
+          "shape": {
+            "type": "ExtrudeJoinScope & { readonly doc: StudioDoc; readonly outputKey: string; }",
+            "declarationSignatures": [
+              {
+                "kind": "TypeAliasDeclaration",
+                "definition": "ExtrudeJoinScope & {\n    readonly doc: StudioDoc;\n    readonly outputKey: string;\n}"
+              }
+            ],
+            "members": [
+              {
+                "name": "bodies",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "readonly BodyResult[]"
+              },
+              {
+                "name": "doc",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "StudioDoc"
+              },
+              {
+                "name": "height",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "number"
+              },
+              {
+                "name": "looks",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "Record<string, BodyLook> | undefined"
+              },
+              {
+                "name": "outputKey",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "string"
+              },
+              {
+                "name": "owner",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "StudioDoc"
+              },
+              {
+                "name": "sketch",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "SketchNode"
+              },
+              {
+                "name": "sketchIndex",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "number"
+              },
+              {
+                "name": "target",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "BodyResult"
+              },
+              {
+                "name": "targetKey",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "string"
+              },
+              {
+                "name": "targetRef",
+                "kind": "property",
+                "optional": false,
+                "readonly": true,
+                "type": "BodyRef"
+              }
+            ],
+            "indexSignatures": []
+          }
+        }
+      ]
+    },
+    {
+      "package": "@barocss/cad-model",
+      "subpath": "./app/profileCommands",
+      "exportName": "currentExtrudeJoin",
+      "space": "value",
+      "observedRole": "unclassified-observed; no policy exemption",
+      "variants": [
+        {
+          "conditions": [
+            []
+          ],
+          "target": {
+            "package": "@barocss/cad-model",
+            "file": "src/app/profileCommands.ts",
+            "name": "currentExtrudeJoin",
+            "kind": "function"
+          },
+          "shape": {
+            "type": "(ctx: Ctx, v: Values) => ExtrudeJoinEvidence | null",
+            "declarationSignatures": [
+              {
+                "kind": "FunctionDeclaration"
+              }
+            ],
+            "callSignatures": [
+              "(ctx: Ctx, v: Values) => ExtrudeJoinEvidence | null"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "package": "@barocss/cad-model",
+      "subpath": "./app/profileCommands",
       "exportName": "extrudeCommand",
       "space": "value",
       "observedRole": "unclassified-observed; no policy exemption",
@@ -200839,6 +201095,37 @@
             ],
             "callSignatures": [
               "(ctx: Ctx) => { index: number; node: SketchNode; fresh: boolean; } | null"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "package": "@barocss/cad-model",
+      "subpath": "./app/profileCommands",
+      "exportName": "isIndependentExtrudeJoinProfile",
+      "space": "value",
+      "observedRole": "unclassified-observed; no policy exemption",
+      "variants": [
+        {
+          "conditions": [
+            []
+          ],
+          "target": {
+            "package": "@barocss/cad-model",
+            "file": "src/app/profileCommands.ts",
+            "name": "isIndependentExtrudeJoinProfile",
+            "kind": "function"
+          },
+          "shape": {
+            "type": "(ctx: Ctx) => boolean",
+            "declarationSignatures": [
+              {
+                "kind": "FunctionDeclaration"
+              }
+            ],
+            "callSignatures": [
+              "(ctx: Ctx) => boolean"
             ]
           }
         }
@@ -200962,6 +201249,37 @@
     {
       "package": "@barocss/cad-model",
       "subpath": "./app/profileCommands",
+      "exportName": "prepareExtrudeJoin",
+      "space": "value",
+      "observedRole": "unclassified-observed; no policy exemption",
+      "variants": [
+        {
+          "conditions": [
+            []
+          ],
+          "target": {
+            "package": "@barocss/cad-model",
+            "file": "src/app/profileCommands.ts",
+            "name": "prepareExtrudeJoin",
+            "kind": "function"
+          },
+          "shape": {
+            "type": "(ctx: Ctx, v: Values) => ExtrudeJoinProbe | null",
+            "declarationSignatures": [
+              {
+                "kind": "FunctionDeclaration"
+              }
+            ],
+            "callSignatures": [
+              "(ctx: Ctx, v: Values) => ExtrudeJoinProbe | null"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "package": "@barocss/cad-model",
+      "subpath": "./app/profileCommands",
       "exportName": "profileCommands",
       "space": "value",
       "observedRole": "unclassified-observed; no policy exemption",
@@ -200982,6 +201300,37 @@
               {
                 "kind": "VariableDeclaration"
               }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "package": "@barocss/cad-model",
+      "subpath": "./app/profileCommands",
+      "exportName": "resolveExtrudeJoin",
+      "space": "value",
+      "observedRole": "unclassified-observed; no policy exemption",
+      "variants": [
+        {
+          "conditions": [
+            []
+          ],
+          "target": {
+            "package": "@barocss/cad-model",
+            "file": "src/app/profileCommands.ts",
+            "name": "resolveExtrudeJoin",
+            "kind": "function"
+          },
+          "shape": {
+            "type": "(probe: ExtrudeJoinProbe, reply: VolumeEvaluation | { ok: false; }) => ExtrudeJoinEvidence | null",
+            "declarationSignatures": [
+              {
+                "kind": "FunctionDeclaration"
+              }
+            ],
+            "callSignatures": [
+              "(probe: ExtrudeJoinProbe, reply: VolumeEvaluation | { ok: false; }) => ExtrudeJoinEvidence | null"
             ]
           }
         }

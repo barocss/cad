@@ -60,7 +60,9 @@ This image is reused from the sketch guide. It is not a new result from this wor
 ### 2. Make a solid feature
 
 Choose Extrude for a profile pulled along its normal.
-When a body already exists, use Operation to choose Join to body, New body or Cut from body.
+For a sketch attached to a body face, use **Operation** to choose **Join to body**, **New body** or **Cut from body**.
+
+An independent rectangular XY sketch starts as a new body. For a positive distance with zero draft, Studio offers **Join to** with the body name when the part has one visible upright solid and the two solids overlap in volume. Choose that target to merge the bodies. Contact at a face or edge leaves the bodies separate.
 Revolve turns a profile about an axis. Sweep follows a path. Loft connects profiles.
 Use the feature history to edit a feature; the features after it rebuild.
 See [Part features](/studio/features#from-a-sketch) before choosing another construction method.

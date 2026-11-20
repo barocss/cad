@@ -21,7 +21,7 @@ import { REVOLVE_AXIS_EDIT } from '@barocss/cad-model/app/revolveAxisEdit';
 import { useEffect, useRef, type ChangeEvent, type ReactNode } from 'react';
 import { useStoreValue, type ValueStore } from '../state/valueStore';
 import type { Field, Values } from '@barocss/cad-model/app/commands';
-import { activeKey, awaitingMirrorPlane, type Active } from '../app/commandState';
+import { activeKey, awaitingMirrorPlane, currentIndependentExtrudePreview, extrudeJoinContext, selectedExtrudeJoin, type Active } from '../app/commandState';
 import { commandNumberRule, featureNumberBounds, featureNumberInvalid, featureNumberRange, filletSectionNumberProblem } from '../app/featureNumberInput';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,7 +44,7 @@ interface Props {
   filletEndpoints?: FilletEndpoints | null;
   /** The running command (R1d): the HUD subscribes to it — its values, preview state and error — not the App. */
   store: ValueStore<Active | null>;
-  onChange(key: string, value: number | string): void; onApply(owner: Active): void; onCancel(): void;
+  onChange(key: string, value: number | string, owner?: Active): void; onApply(owner: Active): void; onCancel(): void;
   onFilletType?(type: FilletType): void; onRadiusMode?(mode: RadiusMode): void;
   onRemoveFilletEdge?(owner: Active, edge: Active['ctx']['selection']['edges'][number]): void;
   onLocateFilletEdge?(owner: Active, edge: Active['ctx']['selection']['edges'][number] | null): void;
@@ -89,13 +89,15 @@ export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFil
     ? alignTargetBody ? `${bodyName(active.ctx.doc, alignTargetBody)} · ${alignTargetFace}` : alignTargetFace
     : null;
   const cutSource = isCutPattern(active.cmd.id) ? cutPatternSourceLabel(active.ctx.doc.nodes, selectedCutPatternSource(active.ctx)) : null;
-  const fields = shownFields(active.cmd.fields?.(active.ctx, active.values) ?? [], active.values).filter(f =>
+  const fields = shownFields(active.cmd.fields?.(extrudeJoinContext(active), active.values) ?? [], active.values).filter(f =>
     !(active.fillet?.type === 'edge' && active.fillet.radiusMode === 'constant' && (f.key === 'endRadius' || f.key.startsWith('station'))));
+  const applyBlocked = active.preview !== 'ok' || interiorInvalid || !!sectionProblem || draftAngleInvalid
+    || ((active.independentExtrude || selectedExtrudeJoin(active)) && !currentIndependentExtrudePreview(active));
   const captureFirst = (element: HTMLInputElement | HTMLSelectElement | null) => { first.current = element; };
   const changeValue = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const input = event.currentTarget, key = input.dataset.key;
     if (!key) return;
-    onChange(key, input.dataset.kind === 'text' || input.dataset.kind === 'choice' ? input.value : input.value === '' ? '' : Number(input.value));
+    onChange(key, input.dataset.kind === 'text' || input.dataset.kind === 'choice' ? input.value : input.value === '' ? '' : Number(input.value), active);
   };
   const chooseFile = (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget, key = input.dataset.key, file = input.files?.[0];
@@ -122,11 +124,18 @@ export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFil
     const guideErrorId = `hud-loft-guide-error-${field.key}`;
     const shapeError = field.key === 'shape' ? sectionRecovery : undefined;
     const shapeErrorId = 'hud-fillet-section-recovery';
+    const independentOperation = field.key === 'op' && !!active.independentExtrude;
+    const suggestion = independentOperation && value === 'new' && field.kind === 'choice'
+      ? field.options.find(option => option.value.startsWith('join:'))?.label : undefined;
+    const suggestionId = suggestion ? 'hud-extrude-join-suggestion' : undefined;
     let control: ReactNode;
     if (field.kind === 'choice') control = <NativeSelect className={FIELD} ref={ref} aria-label={field.label} data-key={field.key} data-kind="choice" value={String(value)} onChange={changeValue}
       title={loftGuide ? 'Loft copies the curve. Later edits to the source curve do not update the Loft.' : undefined}
-      aria-invalid={guideError || shapeError ? true : undefined} aria-describedby={guideError ? guideErrorId : shapeError ? shapeErrorId : undefined}
-      onKeyDown={active.cmd.id === 'hole' && field.key === 'type' ? event => stepNativeSelect(event, next => onChange(field.key, next)) : undefined}>
+      aria-invalid={guideError || shapeError ? true : undefined} aria-describedby={guideError ? guideErrorId : shapeError ? shapeErrorId : suggestionId}
+      onKeyDown={independentOperation || (active.cmd.id === 'hole' && field.key === 'type') ? event => {
+        if (independentOperation && (event.key === 'Enter' || event.key === ' ')) event.stopPropagation();
+        stepNativeSelect(event, next => onChange(field.key, next, active));
+      } : undefined}>
       {field.options.map(option => <option key={option.value} value={option.value}>
         {alignTargetName && field.key === 'target' && option.value === 'face' ? alignTargetName : option.label}
       </option>)}
@@ -140,7 +149,9 @@ export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFil
       {interiorProblem && <span className="hud-error col-span-2" id={interiorId} role="status">{interiorProblem}</span>}
       {shapeError && <span className="col-span-2"><FeatureFailureNotice error={shapeError} id={shapeErrorId} /></span>}
       {collapseError && <span className="col-span-2"><FeatureFailureNotice error={collapseError} id={collapseId} /></span>}
-      {guideError && <span className="hud-error col-span-2" id={guideErrorId} role="status">{guideError}</span>}</label>;
+      {guideError && <span className="hud-error col-span-2" id={guideErrorId} role="status">{guideError}</span>}
+      {suggestion && <span className="muted small col-span-2" id={suggestionId}>Suggested · {suggestion}</span>}
+    </label>;
   };
   return (
     <div className="card hud" role="dialog" aria-label={active.fillet ? 'Fillet' : active.cmd.label}>
@@ -208,7 +219,7 @@ export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFil
         {/* Keep native button activation from also reaching the window's Apply shortcut. */}
         {active.cmd.id === 'retaining-ring' && onFramePreview && <Button variant="ghost" disabled={active.preview !== 'ok'} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }} onClick={() => onFramePreview(active)}>View preview</Button>}
         <Button variant="ghost" onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }} onClick={onCancel}>Cancel</Button>
-        <Button variant="default" disabled={active.preview !== 'ok' || interiorInvalid || !!sectionProblem || draftAngleInvalid} onClick={() => { if (!interiorInvalid && !sectionProblem && !draftAngleInvalid) onApply(active); }}>Apply</Button>
+        <Button variant="default" disabled={applyBlocked} onClick={() => { if (!applyBlocked) onApply(active); }}>Apply</Button>
       </div>
     </div>
   );

@@ -16,7 +16,8 @@ import { awaitingExtrudeEndFace } from '@barocss/cad-model/app/extrudeEndFacePic
 import { awaitingRevolveAxis } from '@barocss/cad-model/app/revolveAxisEdit';
 import { awaitingAlignTarget } from '@barocss/cad-model/app/alignCommand';
 import { flattenAssembly } from '@barocss/cad-model/engine/flatten';
-import { awaitingMirrorPlane, missingCommandField, type Active } from '../app/commandState';
+import { currentExtrudeJoin, prepareExtrudeJoin, resolveExtrudeJoin } from '@barocss/cad-model/app/profileCommands';
+import { awaitingMirrorPlane, extrudeJoinContext, missingCommandField, selectedExtrudeJoin, type Active, type ExtrudeJoinReceipt } from '../app/commandState';
 import { commandNumberRule, featureNumberInvalid, featureNumberRange, filletSectionNumberProblem } from '../app/featureNumberInput';
 import { edgeFinishFailure, failedFeatureText } from '../app/failedFeature';
 import type { EngineClient } from '../engine/client';
@@ -77,7 +78,8 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
         setActive(a => a && { ...a, preview: 'error', error: { title: 'Assembly changed', hint: 'Start Bearing again to use the current housing geometry.', detail: '' } });
         return;
       }
-      if (awaitingExtrudeEndFace(active.cmd.id, active.values) || awaitingOffsetPlane(active.cmd.id, active.values) || awaitingRevolveAxis(active.cmd.id, active.values)
+      const joining = selectedExtrudeJoin(active);
+      if ((awaitingExtrudeEndFace(active.cmd.id, active.values) && !joining) || awaitingOffsetPlane(active.cmd.id, active.values) || awaitingRevolveAxis(active.cmd.id, active.values)
         || awaitingMirrorPlane(active.cmd.id, active.values) || (active.cmd.id === 'align' && awaitingAlignTarget(active.values))) {
         previewFor.current = null;
         setPreviewBodies(null);
@@ -85,7 +87,7 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
         return;
       }
       let live = true; const ticket = lifetime.current.capture();
-      const fields = shownFields(active.cmd.fields?.(active.ctx, active.values) ?? [], active.values);
+      const fields = shownFields(active.cmd.fields?.(extrudeJoinContext(active), active.values) ?? [], active.values);
       const interiorProblem = Object.entries(filletInteriorProblems(active))[0];
       if (interiorProblem) {
         previewFor.current = null; setPreviewBodies(null);
@@ -108,10 +110,40 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
         return;
       }
       const values = active.values, cmd = active.cmd, ctx = active.ctx;
+      const independent = active.independentExtrude;
+      const joinScope = independent?.joinScope();
+      const ownsInputs = () => {
+        const now = activeStore.get();
+        return live && lifetime.current.current(ticket) && now?.cmd === cmd && now.ctx === ctx && now.values === values;
+      };
+      const ownsJoin = () => ownsInputs() && independent?.ownsModel() && independent.joinScope() === joinScope;
+      const refuseJoin = (title: string, hint: string) => {
+        if (!ownsInputs()) return;
+        previewFor.current = null;
+        setPreviewBodies(null);
+        setActive(a => a && { ...a, preview: 'error', extrudeJoinReceipt: undefined, independentExtrudePreview: undefined, error: { title, hint, detail: '' } });
+      };
+      if (independent && !independent.ownsModel()) {
+        refuseJoin('Source changed', 'Start Extrude again on the current model.');
+        return;
+      }
+      let joinReceipt: ExtrudeJoinReceipt | undefined;
+      const checkJoin = async () => {
+        if (!joinScope || !ownsJoin()) return undefined;
+        const receipt = active.extrudeJoinReceipt;
+        if (receipt?.scope === joinScope && currentExtrudeJoin(extrudeJoinContext(active), values) === receipt.evidence) return receipt;
+        const probe = prepareExtrudeJoin(ctx, values);
+        if (!probe) return undefined;
+        const reply = await engine.volumes(probe.doc).catch(() => ({ ok: false as const }));
+        if (!ownsJoin()) return undefined;
+        const evidence = resolveExtrudeJoin(probe, reply);
+        return evidence ? { scope: joinScope, evidence } : undefined;
+      };
       const job = async (full = false) => {
-        if (!live || !historyFilletPreviewCurrent(active)) return;
+        if (!live || !historyFilletPreviewCurrent(active) || (independent && !ownsJoin())) return;
+        const buildContext = joinReceipt ? { ...ctx, extrudeJoin: joinReceipt.evidence } : ctx;
         let candidate: StudioDoc;
-        try { candidate = cmd.build!(ctx, values); } catch (e) {
+        try { candidate = cmd.build!(buildContext, values); } catch (e) {
           const current = activeStore.get();
           if (live && current?.cmd === cmd && current.values === values) {
             setPreviewBodies(null);
@@ -137,7 +169,7 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
         const flangeFeature = shown === candidate && !rolled && cmd.id === 'sheet-flange'
           && candidate.nodes.length === ctx.doc.nodes.length + 1 && terminal?.kind === 'sheet-flange' ? terminal.id : undefined;
         const reply = await ownedPreview(lifetime.current, ticket, () => engine.preview(shown, revision, cutFeature, flangeFeature));
-        if (reply.stale || !historyFilletPreviewCurrent(active)) return;
+        if (reply.stale || !historyFilletPreviewCurrent(active) || (independent && !ownsJoin())) return;
         if (active.historyFilletRadius) {
           const now=activeStore.get();
           if (!now || now.cmd!==cmd || now.ctx!==ctx || now.ownsSource!==active.ownsSource || !historyFilletPreviewCurrent(now)) return;
@@ -153,7 +185,7 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
         if (!live && (!previewRun.current.next || !current || current.cmd !== cmd || current.ctx !== ctx || current.preview === 'error')) return;
         const hd = handleDrag.current, hv = hd ? Number(values[hd.key]) : NaN;
         let bisect = false;
-        if (hd && Number.isFinite(hv)) {
+        if (hd && Number.isFinite(hv) && !joining) {
           // (Only the whole part decides the bound: the part up to the feature may take what its later features refuse.)
           if (result.ok) {
             if (!rolled) {
@@ -196,7 +228,7 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
             }
           }
           if (shown === candidate && cmd.id === 'extrude' && candidate.nodes.length > ctx.doc.nodes.length
-            && ((values.op === 'join' && terminal?.kind === 'union') || (values.op === 'cut' && terminal?.kind === 'difference'))) {
+            && (((values.op === 'join' || joining) && terminal?.kind === 'union') || (values.op === 'cut' && terminal?.kind === 'difference'))) {
             const ref = terminal.kind === 'union' ? terminal.left : terminal.parent;
             const target = ctx.bodies.find(body => {
               const source = refOf(body);
@@ -204,8 +236,12 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
             });
             const outputs = result.bodies.filter(body => body.ref?.node === candidate.nodes.length - 1);
             const pieces = outputs.reduce((total, body) => total + (body.pieces ?? 1), 0);
-            if (target) extrudeResult = { target: bodyName(ctx.doc, target), pieces,
+            if (target) extrudeResult = { target: joining && ctx.extrudeJoinLooks?.nameOf ? ctx.extrudeJoinLooks.nameOf(target) : bodyName(ctx.doc, target), pieces,
               solid: outputs.length > 0 && outputs.every(body => body.family === 'upright') };
+          }
+          if (joining && (!joinReceipt || result.revision !== revision || !extrudeResult?.solid || extrudeResult.pieces !== 1)) {
+            refuseJoin('Join target unavailable', 'Choose New body or change the distance.');
+            return;
           }
           const flangeBodies = live && flangeFeature && result.revision === revision
             ? result.bodies.filter(body => body.ref?.node === candidate.nodes.length - 1) : [];
@@ -218,6 +254,10 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
             const ready = !rolled && JSON.stringify(a.values) === JSON.stringify(values);
             return { ...a, preview: ready ? 'ok' : 'busy', error: undefined,
               extrudeResult: ready && a.values === values ? extrudeResult : undefined,
+              ...(joining && ready ? { extrudeJoinReceipt: joinReceipt } : {}),
+              ...(independent && ready && a.values === values
+                ? { independentExtrudePreview: { receipt: joinReceipt, values, doc: candidate, bodies: result.bodies } }
+                : {}),
               filletScope: ready && a.values === values ? filletScope : undefined,
               chamferScope: ready && a.values === values ? chamferScope : undefined,
               flangeFlatWarning: ready && a.values === values && flangeFlat?.status === 'refused'
@@ -245,8 +285,27 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
       };
       const run = previewRun.current;
       const pump = async () => { while (run.next) { const j = run.next; run.next = null; run.busy = true; try { await j(); } finally { run.busy = false; } } };
+      const queue = () => { run.next = job; if (!run.busy) void pump(); };
       const typed = Date.now() - lastTyped.current < 50;
-      const t = setTimeout(() => { run.next = job; if (!run.busy) void pump(); }, typed ? 140 : 0);
+      const t = setTimeout(() => {
+        if (joining) {
+          void checkJoin().then(receipt => {
+            if (!ownsInputs() || independent && !ownsJoin()) return;
+            if (!receipt || values.op !== `join:${receipt.evidence.targetKey}`) {
+              refuseJoin('Join target unavailable', 'Choose New body or change the distance.');
+              return;
+            }
+            joinReceipt = receipt;
+            queue();
+          });
+        } else {
+          queue();
+          if (independent && joinScope) void checkJoin().then(receipt => {
+            if (!ownsJoin()) return;
+            setActive(a => a && a.extrudeJoinReceipt !== receipt ? { ...a, extrudeJoinReceipt: receipt } : a);
+          });
+        }
+      }, typed ? 140 : 0);
       return () => { live = false; clearTimeout(t); };
     };
     const follow = () => { const a = activeStore.get(); if (a?.values === seen) return; seen = a?.values; stop?.(); stop = evaluate(a); stopCurrent.current = stop; };

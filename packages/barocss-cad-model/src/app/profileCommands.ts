@@ -1,12 +1,13 @@
-import { CadNumericPolicy } from '@barocss/cad';
+import { CadNumericPolicy, CadPartLimits } from '@barocss/cad';
 import { revolveAxisReference } from '../engine/revolveAxis';
-import { featureId } from '../engine/ids';
+import { bodyKeyFor, featureId } from '../engine/ids';
 import { captureSignatures } from '../engine/references';
+import type { BodyResult, VolumeEvaluation } from '../engine/evaluate';
 // The commands that make a solid from finished sketches, each on its own as CAD tools have them: Extrude
 // (a picked profile pulled along its normal), Revolve (turned about a sketch axis), Pipe (carried along
 // runs and bends) and Loft (through two or more picked sections). A profile drawn on a body's face joins
 // that body by default; Operation can make a new body or cut it instead.
-import { offsetFaceEndLabel, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
+import { featureLabel, offsetFaceEndLabel, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
 import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle, twoGuideLoftSections } from './profiles';
@@ -19,6 +20,7 @@ import type { Command, Ctx, Field, Values } from './commands';
 
 // (Only types from commands.ts: it lists these commands, so a value import would be a cycle.)
 import { refOf } from './bodyRef';
+import { lookKey, rootOf } from './lookKey';
 import { refusal } from '../engine/refusal';
 import { captureExtrudeRegion, resolveExtrudeRegion } from '../engine/regionExtrude';
 import { isFaceEndExtrudeSketch } from '../engine/faceEndExtrude';
@@ -103,6 +105,101 @@ const regionValue = (v: Values) => v.region === undefined || v.region === 'all' 
 
 const hasRegionExtrude = (ctx: Ctx, sketch: number) => ctx.doc.nodes.some(node => node.kind === 'region-extrude' && node.sketch === sketch);
 
+function independentExtrudeJoinProfile(ctx: Ctx) {
+  const p = extrudeProfile(ctx);
+  if (!p || p.fresh || ctx.selection.profileRegions?.indices.length) return null;
+  const sketch = ctx.doc.nodes[p.index];
+  if (sketch !== p.node || sketch.held || !isFaceEndExtrudeSketch(sketch) || sketch.profile !== 'rectangle' || sketch.pocketFloor
+    || (sketch.plane && sketch.plane.normal[2] !== 1) || sketch.holeOutlines?.length || sketch.regionLengths?.length) return null;
+  return p;
+}
+
+export function isIndependentExtrudeJoinProfile(ctx: Ctx): boolean {
+  return independentExtrudeJoinProfile(ctx) !== null;
+}
+
+type ExtrudeJoinScope = {
+  readonly owner: StudioDoc;
+  readonly bodies: readonly BodyResult[];
+  readonly looks: StudioDoc['bodies'];
+  readonly sketch: SketchNode;
+  readonly sketchIndex: number;
+  readonly target: BodyResult;
+  readonly targetRef: BodyRef;
+  readonly targetKey: string;
+  readonly height: number;
+};
+export type ExtrudeJoinProbe = ExtrudeJoinScope & { readonly doc: StudioDoc; readonly outputKey: string };
+export type ExtrudeJoinEvidence = ExtrudeJoinScope & { readonly volume: number };
+
+function extrudeJoinScope(ctx: Ctx, v: Values): ExtrudeJoinScope | null {
+  const profile = independentExtrudeJoinProfile(ctx), height = Number(v.h);
+  if (!profile || (v.depth !== undefined && v.depth !== 'distance') || regionValue(v) !== null || v.draft === '' || Number(v.draft ?? 0) !== 0
+    || !Number.isFinite(height) || height <= CadNumericPolicy.linearTolerance || height > CadPartLimits.length) return null;
+  const [target] = ctx.bodies, targetRef = target?.ref;
+  const looks = (ctx.extrudeJoinLooks ?? ctx.doc).bodies;
+  if (ctx.bodies.length !== 1 || targetRef?.side !== 'solid' || target.family !== 'upright' || target.pieces
+    || target.topology?.kind !== 'solid' || target.topology.bodyCount !== 1 || target.band || target.role
+    || looks?.[lookKey(ctx.doc.nodes, target)]?.hidden) return null;
+  const node = ctx.doc.nodes[targetRef.node], output = ctx.doc.outputs[target.key];
+  if (!node || node.suppressed || node.held || bodyKeyFor(ctx.doc.nodes, targetRef.node) !== target.key
+    || output?.node !== targetRef.node || output.side !== targetRef.side) return null;
+  return { owner: ctx.doc, bodies: ctx.bodies, looks, sketch: profile.node, sketchIndex: profile.index, target, targetRef, targetKey: target.key, height };
+}
+
+/** Create a transient native intersection against the same tool that New would build. */
+export function prepareExtrudeJoin(ctx: Ctx, v: Values): ExtrudeJoinProbe | null {
+  const scope = extrudeJoinScope(ctx, v);
+  if (!scope || v.op === 'cut' || v.op === 'join') return null;
+  try {
+    const separate = extrudeCommand.build!(ctx, { ...v, op: 'new' });
+    const doc = withNode(separate, { kind: 'intersect', left: scope.targetRef, right: { node: separate.nodes.length - 1, side: 'solid' } });
+    return { ...scope, doc, outputKey: bodyKeyFor(doc.nodes, doc.nodes.length - 1) };
+  } catch {
+    return null;
+  }
+}
+
+// The same minimum positive volume (mm³) as the Studio interference check.
+const minimumExtrudeJoinVolume = 1e-6;
+
+/** A supported single output must report positive native intersection volume. */
+export function resolveExtrudeJoin(probe: ExtrudeJoinProbe, reply: VolumeEvaluation | { ok: false }): ExtrudeJoinEvidence | null {
+  if (!reply.ok || reply.emptyIntersection || reply.volumes.length !== 1) return null;
+  const [{ key, volume }] = reply.volumes;
+  if (key !== probe.outputKey || volume === null || !Number.isFinite(volume) || volume <= minimumExtrudeJoinVolume) return null;
+  const { owner, bodies, looks, sketch, sketchIndex, target, targetRef, targetKey, height } = probe;
+  return { owner, bodies, looks, sketch, sketchIndex, target, targetRef, targetKey, height, volume };
+}
+
+export function currentExtrudeJoin(ctx: Ctx, v: Values): ExtrudeJoinEvidence | null {
+  const evidence = ctx.extrudeJoin;
+  if (!evidence || evidence.owner !== ctx.doc || evidence.bodies !== ctx.bodies) return null;
+  const current = extrudeJoinScope(ctx, v);
+  return current && evidence.looks === current.looks && evidence.sketch === current.sketch && evidence.sketchIndex === current.sketchIndex
+    && evidence.target === current.target && evidence.targetKey === current.targetKey && evidence.height === current.height ? evidence : null;
+}
+
+function explicitExtrudeJoin(op: Values[string] | undefined): op is string {
+  return typeof op === 'string' && op.startsWith('join:');
+}
+
+function independentExtrudeJoinFields(ctx: Ctx, v: Values | undefined): Field[] {
+  const selected = v?.op;
+  const pinned = explicitExtrudeJoin(selected);
+  const evidence = v && currentExtrudeJoin(ctx, v);
+  if (!pinned && !evidence && (!ctx.extrudeJoinLooks || !isIndependentExtrudeJoinProfile(ctx))) return [];
+  const options = [{ value: 'new', label: 'New body' }];
+  if (evidence) {
+    const { nodes } = ctx.doc, root = rootOf(nodes, evidence.targetRef.node);
+    const name = ctx.extrudeJoinLooks?.nameOf?.(evidence.target) ?? evidence.looks?.[lookKey(nodes, evidence.target)]?.name
+      ?? featureLabel(nodes[root], root, nodes);
+    options.push({ value: `join:${evidence.targetKey}`, label: `Join to ${name}` });
+  }
+  if (pinned && !options.some(option => option.value === selected)) options.push({ value: selected, label: 'Selected body unavailable' });
+  return [{ key: 'op', label: 'Operation', kind: 'choice', options, when: values => values.depth !== 'to-face' || explicitExtrudeJoin(values.op) }];
+}
+
 export const extrudeCommand: Command = {
   id: 'extrude', label: 'Extrude', icon: 'cad-extrude', shortcut: 'E', group: 'create', keywords: 'pull push pad boss cut pocket press',
   hint: 'Pull a flat face or a finished sketch along its normal: drag the arrow or type the distance',
@@ -113,12 +210,13 @@ export const extrudeCommand: Command = {
     if (faceSketch(ctx) === null) return no('Pick a flat face: a curved one has no plane to pull along.');
     return no('Pick a flat face or a finished sketch (in the viewport or the History).');
   },
-  fields: ctx => {
+  fields: (ctx, values) => {
     const p = extrudeProfile(ctx), base = !!(p && baseOf(ctx, p.node));
     const fields: Field[] = [
       { key: 'h', label: 'Distance', kind: 'mm', min: 0.1, when: fixedExtrudeDepth },
       { key: 'draft', label: 'Draft', kind: 'deg', min: -60, max: 60, step: 1, when: v => v.depth !== 'to-face' && regionValue(v) === null },
       ...opFields(base).map(field => ({ ...field, when: (v: Values) => regionValue(v) === null })),
+      ...(!base ? independentExtrudeJoinFields(ctx, values) : []),
     ];
     if (p && !p.fresh && p.node.regions?.length) fields.unshift({ key: 'region', label: 'Region', kind: 'choice',
       options: [
@@ -127,14 +225,14 @@ export const extrudeCommand: Command = {
         ...Array.from({ length: p.node.regions.length + 1 }, (_, i) => ({ value: String(i), label: `Region ${i + 1}` }))] });
     const distance = { value: 'distance', label: 'Distance' };
     if (base) fields.push({ key: 'depth', label: 'Depth', kind: 'choice', options: [distance, { value: 'through', label: 'Through all' }], when: v => v.op === 'cut' && regionValue(v) === null });
-    else if (canExtrudeToFace(ctx, p)) fields.push({ key: 'depth', label: 'Depth', kind: 'choice', options: [distance, { value: 'to-face', label: 'To face' }] });
+    else if (canExtrudeToFace(ctx, p) && !explicitExtrudeJoin(values?.op)) fields.push({ key: 'depth', label: 'Depth', kind: 'choice', options: [distance, { value: 'to-face', label: 'To face' }] });
     return fields;
   },
   defaults: ctx => {
     const p = extrudeProfile(ctx), picked = ctx.selection.profileRegions;
     const region = p && picked?.sketch === p.index && picked.indices.length === 1 ? String(picked.indices[0]) : p && hasRegionExtrude(ctx, p.index) ? '' : 'all';
     return { h: 8, draft: 0, ...(p && !p.fresh && p.node.regions?.length ? { region } : {}), ...(canExtrudeToFace(ctx, p) ? { depth: 'distance' } : {}),
-      ...(p && baseOf(ctx, p.node) ? { op: 'join', depth: 'distance' } : {}) };
+      ...(p && baseOf(ctx, p.node) ? { op: 'join', depth: 'distance' } : isIndependentExtrudeJoinProfile(ctx) ? { op: 'new' } : {}) };
   },
   derive: (_ctx, v, changed) => {
     const regionChanged = changed.includes('region');
@@ -173,6 +271,10 @@ export const extrudeCommand: Command = {
   },
   build: (ctx, v) => {
     if ((ctx.selection.profileRegions?.indices.length ?? 0) > 1) throw refusal('BAD_REFERENCE', 'Select one sketch region to extrude, or select the whole sketch in the Browser.');
+    const join = explicitExtrudeJoin(v.op) ? currentExtrudeJoin(ctx, v) : null;
+    if (explicitExtrudeJoin(v.op) && (!join || v.op !== `join:${join.targetKey}`)) {
+      throw refusal('BAD_REFERENCE', 'The selected body needs a verified overlap at this distance. Choose New body or restore the overlap.');
+    }
     const region = regionValue(v);
     if (region !== null) {
       const p = extrudeProfile(ctx);
@@ -196,7 +298,7 @@ export const extrudeCommand: Command = {
     const node: ModelNode = cut ? (draft ? { kind: 'extrude', sketch: p.index, height: -height, draft }
       : { kind: 'extrude', sketch: p.index, height, from: -height, ...(persistentThrough ? { cutDepth: 'through' } : {}) })
       : { kind: 'extrude', sketch: p.index, height, ...(draft ? { draft } : {}) };
-    return combine(withNode(doc, node), base?.ref ?? null, v.op);
+    return combine(withNode(doc, node), join?.targetRef ?? base?.ref ?? null, join ? 'join' : v.op);
   },
   // The distance: an arrow from the profile's middle along the normal (into the body for a cut).
   handles: (ctx, v) => {

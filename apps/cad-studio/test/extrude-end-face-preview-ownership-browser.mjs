@@ -113,9 +113,13 @@ function holdPreview() {
   };
 }
 
-async function open(name, doc) {
+async function open(name, doc, { discardDraft = false } = {}) {
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button(f.page, 'Open').click()]);
   await chooser.setFiles({ name, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) });
+  if (discardDraft) {
+    const dialog = f.page.getByRole('dialog', { name: 'Discard feature changes?' });
+    await dialog.getByRole('button', { name: 'Discard changes', exact: true }).click();
+  }
   await f.same(doc);
 }
 
@@ -359,7 +363,7 @@ await f.run(async () => {
   f.phase = 'Open replaces the document with the same feature IDs before a queued success is delivered';
   await begin();
   const replaced = await holdA();
-  await open('D845-replacement.bcad', replacement);
+  await open('D845-replacement.bcad', replacement, { discardDraft: true });
   await hud().waitFor({ state: 'hidden' });
   const beforeRelease = await f.snapshot('05-replacement-before-old-reply');
   assert.deepEqual(beforeRelease.bodies.bodies.map(body => body.key), ['b1', 'b3']);

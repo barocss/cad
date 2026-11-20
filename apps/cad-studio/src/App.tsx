@@ -42,8 +42,7 @@ import { browserRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal'
 import { useBodyBrowserReveal } from './app/useBodyBrowserReveal';
 import { useContinuityLocation } from './app/useContinuityLocation';
 import { annotationCounts, printPreviewSummary } from './app/previewStatus';
-import { filletSectionNumberProblem } from './app/featureNumberInput';
-import { hasFilletInteriorProblem } from './app/filletInteriorInput';
+import { commandApplyReadiness, createCommandApplyQueue } from './state/commandApply';
 import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
 import { returnEditorFocus } from './ui/editorReturnFocus';
@@ -122,11 +121,10 @@ import { ReferenceDecisions, type ReferencePreviewOptions } from './ui/Reference
 import { useRobotExports } from './robot/useRobotExports';
 import { RobotInspector } from './robot/RobotInspector';
 import { shownExtrudeEndFace } from './app/extrudeEndFace';
-import { awaitingOffsetPlane, isOffsetToPlane } from '@barocss/cad-model/app/offsetPlanePick';
-import { awaitingExtrudeEndFace, EXTRUDE_END_FACE_EDIT, isExtrudeToFace } from '@barocss/cad-model/app/extrudeEndFacePick';
+import { isOffsetToPlane } from '@barocss/cad-model/app/offsetPlanePick';
+import { isExtrudeToFace } from '@barocss/cad-model/app/extrudeEndFacePick';
 import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
-import { DRAFT_EDIT } from '@barocss/cad-model/app/draftEdit';
-import { awaitingRevolveAxis, editSavedRevolveAxisCommand, joinedRevolveStock, REVOLVE_AXIS_EDIT } from '@barocss/cad-model/app/revolveAxisEdit';
+import { editSavedRevolveAxisCommand, joinedRevolveStock } from '@barocss/cad-model/app/revolveAxisEdit';
 import { filletLaunchAvailability, filletType, newFilletActive, pickedFilletSelection, prepareFilletPick, replaceFilletSelection, replaceFillet, type FilletType, type RadiusMode } from './app/filletFamily';
 import { alignFaceBinding } from '@barocss/cad-model/app/alignCommand';
 import { currentNativePlanePick, midpointFaces, midpointSelectionHint, SKETCH_AT_MIDPOINT } from './app/midpointSketch';
@@ -142,7 +140,7 @@ import { activateDraftBezier, activateDraftOutline, draftShapeOrder, sketchCutIn
 import { ellipseError } from '@barocss/cad-model/sketch/ellipse';
 import { detachRoundedInsetRecipe, resizeRoundedInsetSource, roundedInsetSourceWidth, validateRoundedInsetDocument } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
 import { roundedInsetMinimumSpan } from '@barocss/cad-model/sketch/internal/roundedRectangleInset';
-import { awaitingMirrorPlane, activeKey, type Active } from './app/commandState';
+import { activeKey, type Active } from './app/commandState';
 import { emptySel, NO_CUTS, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
 import { routeMessage } from './app/routeSession';
 import { CursorReadout } from './ui/CursorReadout';
@@ -286,7 +284,7 @@ import { ReferencesPanel } from './ui/ReferencesPanel';
 import { placeReference, readReferences } from '@barocss/cad-model/chat/references';
 import { confirmDimension, liveDrafts } from '@barocss/cad-model/chat/drafts';
 import { DraftsPanel } from './ui/DraftsPanel';
-import { sweepPath, SWEEP_CURVE, extrudeProfile } from '@barocss/cad-model/app/profileCommands';
+import { sweepPath, extrudeProfile, isIndependentExtrudeJoinProfile } from '@barocss/cad-model/app/profileCommands';
 import { editCommand } from '@barocss/cad-model/app/editCommand';
 import { isBodyEyeVisibilityOnly } from './state/bodyVisibilityReferenceProblems';
 import { heldDraftFacePreviewClear, heldDraftFaceWorkCurrent } from './state/heldDraftFaceSession';
@@ -461,6 +459,7 @@ export function App() {
   const [pick, setPick] = useState<Vec3 | null>(null);
   // (R1d: the running command outside React state — see activeKey. The HUD subscribes to all of it.)
   const activeStore = useMemo(() => createValueStore<Active | null>(null), []), setActive = activeStore.set;
+  const commandApply = useMemo(createCommandApplyQueue, []);
   const fontUpload = useMemo(() => new FontUpload(), []);
   useEffect(() => {
     const sync = () => fontUpload.sync(activeStore.get()?.ctx ?? null);
@@ -1118,7 +1117,8 @@ export function App() {
         setBodies(result.bodies); setBodiesFor(evaluated); claimBodies.current = false;
         if (handoff) evaluationEvidence.markInstalled(result, docNow.current, evaluated);
         if (chatSelection.current) setSelection(resolveNames(result.bodies, chatSelection.current).selection); else setSelection(sel => carrySelection(sel, prev, result.bodies));
-        if (again.current) { setRestart(again.current); again.current = null; }
+        const repeat = commandApply.takeRepeat();
+        if (repeat) setRestart(repeat);
         chatSelection.current = null;
       }
       else {
@@ -1638,6 +1638,7 @@ export function App() {
   const cancel = useCallback(() => {
     const running = activeStore.get();
     const command = running?.cmd;
+    if (running?.independentExtrude) commandApply.clear();
     holeCloseFocus(running);
     if (running?.cmd.id === 'extrude' && document.activeElement?.closest('.hud')) {
       const opener = extrudeOpener.current, scope = openIntent.current;
@@ -1646,7 +1647,7 @@ export function App() {
     }
     if (command) setToast(current => current?.inputPick === command ? null : current);
     discardDirectCandidateRef.current(); discardRouteRef.current(); setActive(null); setPreviewBodies(null); setSketch(null);
-  }, [activeStore, holeCloseFocus, setSketch]);
+  }, [activeStore, commandApply, holeCloseFocus, setSketch]);
 
   const openRoute = () => {
     cancel(); setPole(null); setPoleDrag(null); routeEditor.open(directSel);
@@ -1656,55 +1657,47 @@ export function App() {
   useEffect(() => () => routeEditor.dispose(), []);
 
   const bearingRootCurrent = active?.cmd.id !== 'bearing' || active.ctx.bearingAssembly?.root === doc;
+  const joinViewAvailable = fresh && !busy && !workerFailure && !project.opening() && marker === null
+    && shownDoc === doc && !inPlace && !isolatedInstances && !section && !rendering && !drawing
+    && !exploded && !stepsDisp && previewMode === 'none';
+  const joinView = useMemo(() => joinViewAvailable ? {} : null, [joinViewAvailable, doc, evaluated, bodies, workerSession]);
+  const joinViewNow = useRef(joinView); joinViewNow.current = joinView;
   const commandPreview = useCommandPreview({ command: { activeStore, bearingRootCurrent }, worker: { engine, nextRevision: () => revision.current++, currentBearingDoc: () => bearingEditScope.current.doc, wholeMs: () => lastEvalMs.current },
     result: { setPreviewBodies, previewFor } });
   const { handleDrag, lastTyped } = commandPreview;
-  useEffect(() => commandPreview.watch(), [active?.cmd, engine, bearingRootCurrent, activeStore]);
+  const activeJoinView = active?.independentExtrude ? joinView : undefined;
+  const activeJoinSource = active?.independentExtrude ? doc : undefined;
+  useEffect(() => commandPreview.watch(), [active?.cmd, engine, bearingRootCurrent, activeStore, activeJoinView, activeJoinSource]);
 
-  /** The command to start again once what Shift-Enter applied is the part (its bodies evaluated). */
-  const again = useRef<Command | null>(null);
   const [restart, setRestart] = useState<Command | null>(null);
-  // Apply while the preview is still computing (just after a drag or a typed value) waits for it.
-  const applyWhenReady = useRef<Command | null>(null);
   const discardFeatureDraft = useCallback(() => {
     if (!activeStore.get()) return;
-    applyWhenReady.current = null;
-    again.current = null;
+    commandApply.clear();
     setRestart(null);
     commandPreview.retire();
     activeStore.set(null);
-  }, [activeStore, commandPreview.retire]);
+  }, [activeStore, commandApply, commandPreview.retire]);
   const apply = useCallback(() => {
     // (R1d: the command as it is now, its values and preview state — the App may not have rendered since they changed.)
     const active = activeStore.get();
-    if (!active?.cmd.build || !canChangeDocument()) return;
-    if ((active.ownsSource && !active.ownsSource()) || (active.cmd.id === SHARED_HOLE_LAYOUT_EDIT && !active.cmd.available(active.ctx).ok)) {
-      commandPreview.retire(); applyWhenReady.current = null; again.current = null; setActive(null); setPreviewBodies(null); return;
-    }
-    const toFace = isExtrudeToFace(active.cmd.id, active.values) || isOffsetToPlane(active.cmd.id, active.values);
-    const region = active.cmd.id === 'extrude' && active.values.region !== undefined && active.values.region !== 'all';
-    const replaceAxis = active.cmd.id === REVOLVE_AXIS_EDIT;
-    const sweep = active.cmd.id === SWEEP_CURVE;
-    if ((active.fillet || toFace || region || replaceAxis || sweep || ['split', 'align', 'mirror'].includes(active.cmd.id) || active.cmd.id === OFFSET_FACE_EDIT || active.cmd.id === DRAFT_EDIT) && (active.ctx.doc !== commandDoc || docNow.current !== doc || evaluatedRef.current !== evaluated)) { commandPreview.retire(); applyWhenReady.current = null; setActive(null); return; }
-    if ((active.cmd.id === 'thicken' || active.cmd.id === 'sew' || active.cmd.id === 'offset-face') && active.ctx.doc !== commandDoc) {
-      applyWhenReady.current = null;
-      setToast({ title: 'Source changed', hint: active.cmd.id === 'offset-face' ? 'Start Offset face again on the current body and face.' : `Start ${active.cmd.label} again to copy the current surfaces.`, detail: '' });
+    if (!active?.cmd.build) return;
+    const readiness = commandApplyReadiness(active, { commandDoc, bearingRootCurrent, canChangeDocument,
+      modelCurrent: docNow.current === doc && evaluatedRef.current === evaluated });
+    if (readiness.kind === 'skip') return;
+    if (readiness.kind === 'wait') { commandApply.requestApply(active); return; }
+    commandApply.clearApply();
+    if (readiness.kind === 'blocked' || readiness.kind === 'retire') {
+      if (readiness.clearRepeat) commandApply.clearRepeat();
+      if (readiness.kind === 'retire') { commandPreview.retire(); setActive(null); }
       return;
     }
-    if (active.upload) { applyWhenReady.current = null; return; }
-    if (!bearingRootCurrent) { applyWhenReady.current = null; return; }
-    if (awaitingExtrudeEndFace(active.cmd.id, active.values) || awaitingOffsetPlane(active.cmd.id, active.values) || awaitingRevolveAxis(active.cmd.id, active.values) || awaitingMirrorPlane(active.cmd.id, active.values)) {
-      applyWhenReady.current = null; again.current = null; return;
-    }
-    if (hasFilletInteriorProblem(active) || filletSectionNumberProblem(active)) { applyWhenReady.current = null; again.current = null; return; }
-    if (active.preview === 'busy') { applyWhenReady.current = active.cmd; return; }
-    applyWhenReady.current = null;
-    if (active.preview !== 'ok') { if (toFace || replaceAxis || sweep) again.current = null; return; }
+    if (readiness.kind === 'source-changed') { setToast({ title: 'Source changed', hint: readiness.hint, detail: '' }); return; }
+    const independentPreview = readiness.preview;
     // The preview is what the part becomes: shown as the part at once (no step back to the old bodies
     // while the committed document evaluates).
-    const next = active.cmd.build(active.ctx, active.values);
+    const next = independentPreview?.doc ?? active.cmd.build(active.ctx, active.values);
     if (active.cmd.id === SHARED_HOLE_LAYOUT_EDIT && next === doc) {
-      applyWhenReady.current = null; again.current = null; setActive(null); setPreviewBodies(null); return;
+      commandApply.clear(); setActive(null); setPreviewBodies(null); return;
     }
     if (active.cmd === LINKED_INSET_EXTRUDE) {
       if (active.ctx.doc !== doc || markerNow.current !== null || !fresh || busy || !massReady) {
@@ -1720,20 +1713,21 @@ export function App() {
     const clearSelection = active.cmd.id === 'offset-face' || active.cmd.id === OFFSET_FACE_EDIT || active.cmd.id === 'fill-feature-pattern' || active.cmd.id === 'curve-feature-pattern';
     if (clearSelection) setSelection(emptySel);
     if (active.cmd.id === 'thicken' || active.cmd.id === 'sew') setDirectSel([]);
-    if (previewBodies && Object.keys(next.outputs).length && (next.instances?.length ?? 0) === (active.ctx.doc.instances?.length ?? 0)) {
+    const acceptedPreview = independentPreview?.bodies ?? previewBodies;
+    if (acceptedPreview && Object.keys(next.outputs).length && (next.instances?.length ?? 0) === (active.ctx.doc.instances?.length ?? 0)) {
       // Resolve the picks against the accepted topology before installing the preview's new indices.
       const acceptedBodies = bodies;
-      if (!clearSelection) setSelection(sel => carrySelection(sel, acceptedBodies, previewBodies));
-      setBodies(previewBodies); claimBodies.current = true;
+      if (!clearSelection) setSelection(sel => carrySelection(sel, acceptedBodies, acceptedPreview));
+      setBodies(acceptedPreview); claimBodies.current = true;
     }
     holeCloseFocus(active);
     setActive(null); setPreviewBodies(null); setSketch(null);
-  }, [activeStore, holeCloseFocus, commit, previewBodies, bodies, bearingRootCurrent, commandDoc, setSketch, acceptanceScope, doc, evaluated, commandPreview.retire, stageFeatureCandidate, fresh, busy, massReady]);
+  }, [activeStore, commandApply, holeCloseFocus, commit, previewBodies, bodies, bearingRootCurrent, commandDoc, setSketch, acceptanceScope, doc, evaluated, commandPreview.retire, stageFeatureCandidate, fresh, busy, massReady]);
   const uploadFont = useCallback(async (key: string, file: File) => {
     const captured = activeStore.get();
     if (!captured || key !== 'font') return;
     const { cmd, ctx } = captured;
-    applyWhenReady.current = null;
+    commandApply.clearApply();
     lastTyped.current = Date.now(); handleDrag.current = null;
     setPreviewBodies(null);
     setActive(a => {
@@ -1754,19 +1748,8 @@ export function App() {
         title: 'Could not read the font', hint: error instanceof Error ? error.message : String(error), detail: '',
       } } : a);
     }
-  }, [activeStore, fontUpload]);
-  // (Only for the command it was asked for: cancelled or replaced, it is forgotten. R1d: looked at after each render — a
-  // preview's result renders the App with its bodies — and as the preview's state settles without one, an error.)
-  useEffect(() => {
-    const check = () => {
-      const a = activeStore.get();
-      if (applyWhenReady.current && applyWhenReady.current !== a?.cmd) applyWhenReady.current = null;
-      else if (applyWhenReady.current && a?.preview === 'error') apply();
-    };
-    check();
-    if (applyWhenReady.current && activeStore.get()?.preview === 'ok') apply();
-    return activeStore.subscribe(check);
-  }, [previewBodies, active?.cmd, apply, activeStore]);
+  }, [activeStore, commandApply, fontUpload]);
+  useEffect(() => commandApply.watch(activeStore, apply), [commandApply, previewBodies, active?.cmd, apply, activeStore]);
 
   // Roadmap 10 ⑤: the Assembly cut HUD — new (on the selected parts, at the middle of their top, going down) or editing a cut of the Browser.
   const openCut = useCallback((id: string | null) => {
@@ -1978,9 +1961,19 @@ export function App() {
       const focused = document.activeElement;
       holeOpener.current = focused instanceof HTMLElement && focused.closest('nav[aria-label="Tools"]') ? focused : null;
     }
-    if (family) { commandPreview.retire(); applyWhenReady.current = null; const next = newFilletActive(family, startCtx, initial); setSelection(next.ctx.selection); setActive(next); }
-    else setActive({ cmd, values: { ...(cmd.defaults?.(startCtx) ?? {}), ...initial }, preview: 'busy', ctx: { ...startCtx }, ...(cmd.place ? { placing: true } : {}) });
-  }, [ctx, doc, selection, instanceSel, bodies, engine, commit, evaluated, shownDoc.direct, variants.showing, setSketch, acceptanceScope, openCut, commandPreview.retire, discardFeatureDraft, fresh, busy, modelUnavailable, nativeVertexReady, checkInterference, midpointSketch.start, cancelNativeReview, snapStep, directSel]);
+    if (family) { commandPreview.retire(); commandApply.clearApply(); const next = newFilletActive(family, startCtx, initial); setSelection(next.ctx.selection); setActive(next); }
+    else {
+      const independent = cmd.id === 'extrude' && marker === null && shownDoc === doc && isIndependentExtrudeJoinProfile(startCtx);
+      const open = openIntent.current;
+      const ownsModel = () => openIntent.current === open && !project.opening() && ownsEvaluatedSource()
+        && shownDocNow.current === doc && bodiesRef.current === bodies;
+      const targetLooks = { bodies: doc.bodies, nameOf: (body: BodyResult) => bodyName(doc, body) };
+      setActive({ cmd, values: { ...(cmd.defaults?.(startCtx) ?? {}), ...initial }, preview: 'busy',
+        ctx: independent ? { ...startCtx, extrudeJoinLooks: targetLooks } : { ...startCtx },
+        ...(independent ? { independentExtrude: { ownsModel, joinScope: () => ownsModel() ? joinViewNow.current : null } } : {}),
+        ...(cmd.place ? { placing: true } : {}) });
+    }
+  }, [ctx, doc, selection, instanceSel, bodies, engine, commit, evaluated, shownDoc, variants.showing, setSketch, acceptanceScope, openCut, commandApply, commandPreview.retire, discardFeatureDraft, fresh, busy, modelUnavailable, nativeVertexReady, checkInterference, midpointSketch.start, cancelNativeReview, snapStep, directSel, marker, ownsEvaluatedSource, project.opening]);
 
   const sheetRuleSource = { doc, evaluated, bodies, open: openIntent.current, worker: workerSession,
     generation: workOwnership.current.generation,
@@ -2159,7 +2152,7 @@ export function App() {
   const { pickCommandReferenceFace, pickTransformFace, pickRevolveAxis, retargetActiveSweep } = createCommandReferencePicking({
     model: { doc, commandDoc, isCurrent: () => docNow.current === doc && evaluatedRef.current === evaluated, ownsEvaluatedSource },
     command: { activeStore, scope: commandPickScope, previewFor, retire: commandPreview.retire,
-      clearQueuedApply: () => { applyWhenReady.current = null; again.current = null; } },
+      clearQueuedApply: commandApply.clear },
     selection: { setSelection, setDirectSel }, onNotice: setToast,
   });
   const replaceRevolveAxis = editNode === null ? null : editSavedRevolveAxisCommand(commandDoc, editNode);
@@ -2223,15 +2216,15 @@ export function App() {
   };
   const sectionBoxRef = useRef<{ min: Vec3; max: Vec3 }>(null!);
   const changeFillet = (type: FilletType, mode?: RadiusMode) => {
-    if (docNow.current !== doc || evaluatedRef.current !== evaluated || activeStore.get()?.ctx.doc !== ctx.doc) { commandPreview.retire(); applyWhenReady.current = null; setActive(null); return; }
-    replaceFillet({ current: activeStore.get, context: () => ctx, retire: commandPreview.retire, clearApply: () => { applyWhenReady.current = null; }, set: setActive, select: setSelection }, type, mode);
+    if (docNow.current !== doc || evaluatedRef.current !== evaluated || activeStore.get()?.ctx.doc !== ctx.doc) { commandPreview.retire(); commandApply.clearApply(); setActive(null); return; }
+    replaceFillet({ current: activeStore.get, context: () => ctx, retire: commandPreview.retire, clearApply: commandApply.clearApply, set: setActive, select: setSelection }, type, mode);
   };
   const pickFillet = (hit: { face: { body: number; face: number } | null; edge: { body: number; edge: number } | null; instance?: string }, additive: boolean): boolean => {
     const current = activeStore.get(); if (!current?.fillet) return false;
-    if (docNow.current !== doc || evaluatedRef.current !== evaluated || current.ctx.doc !== ctx.doc) { commandPreview.retire(); applyWhenReady.current = null; setActive(null); return true; }
-    const selection = prepareFilletPick(current, viewBodiesRef.current, hit, additive, () => { applyWhenReady.current = null; });
+    if (docNow.current !== doc || evaluatedRef.current !== evaluated || current.ctx.doc !== ctx.doc) { commandPreview.retire(); commandApply.clearApply(); setActive(null); return true; }
+    const selection = prepareFilletPick(current, viewBodiesRef.current, hit, additive, commandApply.clearApply);
     if (!selection) { setToast(filletPickFailure(current)); return true; }
-    replaceFilletSelection({ current: activeStore.get, context: () => ctx, retire: commandPreview.retire, clearApply: () => { applyWhenReady.current = null; }, set: setActive, select: setSelection }, selection); return true;
+    replaceFilletSelection({ current: activeStore.get, context: () => ctx, retire: commandPreview.retire, clearApply: commandApply.clearApply, set: setActive, select: setSelection }, selection); return true;
   };
   const removeFilletEdge = (owner: Active, edge: Selection['edges'][number]) => {
     if (owner !== activeStore.get() || owner.fillet?.type !== 'edge'
@@ -2239,7 +2232,7 @@ export function App() {
     const next = pickedFilletSelection(owner, { face: null, edge }, true);
     if (!next || next.edges.length !== owner.ctx.selection.edges.length - 1) return;
     replaceFilletSelection({ current: activeStore.get, context: () => ctx, retire: commandPreview.retire,
-      clearApply: () => { applyWhenReady.current = null; }, set: setActive, select: setSelection }, next);
+      clearApply: commandApply.clearApply, set: setActive, select: setSelection }, next);
   };
   const locateFilletEdge = (owner: Active, edge: Selection['edges'][number] | null) => {
     if (!edge) {
@@ -2922,7 +2915,7 @@ export function App() {
       if (e.key === 'Escape') { footprintRequest.current++; if (palette) setPalette(false); else if (sketch && !active && (sketch.picked?.length || sketch.editDim)) setSketch(s => s && { ...s, picked: [], editDim: null }); else if (active || sketch) cancel(); else if (assembly.draft) assembly.cancel(); else if (measure) setMeasure(null); else if (cancelSectionFacePick(e.repeat)) e.preventDefault(); else { setSelection(emptySel); setInstanceSel([]); setDirectSel([]); } return; }
       if (e.key === 'Enter' && e.target instanceof HTMLButtonElement && e.target.closest('[data-workspace-mode]')) return;
       // Enter applies; Shift-Enter applies and starts the same command again (another hole, another shape).
-      if (e.key === 'Enter' && !palette && !(e.target instanceof HTMLInputElement && e.target.type === 'file')) { if (sketch) { e.preventDefault(); finishSketch(); } else if (active) { e.preventDefault(); if (e.shiftKey && active.cmd.id !== 'edit' && active.cmd.id !== EXTRUDE_END_FACE_EDIT && active.cmd.id !== REVOLVE_AXIS_EDIT && active.cmd.id !== OFFSET_FACE_EDIT && active.cmd.id !== DRAFT_EDIT && active.cmd.id !== SHARED_HOLE_LAYOUT_EDIT) again.current = active.cmd; apply(); } return; }
+      if (e.key === 'Enter' && !palette && !(e.target instanceof HTMLInputElement && e.target.type === 'file')) { if (sketch) { e.preventDefault(); finishSketch(); } else if (active) { e.preventDefault(); if (e.shiftKey) commandApply.requestRepeat(active.cmd); apply(); } return; }
       // A sketch tool key still works from a number box (letters are no numbers): it leaves the box.
       const numberBox = e.target instanceof HTMLInputElement && e.target.type === 'number' && !e.target.classList.contains('dim-edit');
       if (palette || (typing && !(sketch && numberBox && !e.metaKey && !e.ctrlKey && !e.altKey && /^[a-z]$/i.test(e.key)))) return;
@@ -3208,7 +3201,7 @@ export function App() {
     const running=activeStore.get();
     if (!running?.historyFilletRadius || running.ownsSource?.()===true) return;
     commandPreview.retire();
-    applyWhenReady.current=null;
+    commandApply.clearApply();
     setActive(current=>current===running?null:current);
   });
   const commandGizmos = useCommandGizmos({ historyFillet, model: { doc, evaluated, bodies, selection, marker, editNode }, command: { active, ctx, setActive, handleDrag, previewFor, readActive:activeStore.get },
@@ -3868,7 +3861,7 @@ export function App() {
     commandDoc, activeStore, canChangeDocument, apply,
     preview: { retire: commandPreview.retire, typed: () => { lastTyped.current = Date.now(); handleDrag.current = null; },
       publishValues: values => { hudValues.current = values; } },
-    pending: { clearApply: () => { applyWhenReady.current = null; }, clearRepeat: () => { again.current = null; } },
+    pending: commandApply,
     onNotice: setToast,
   });
   const hud = active && <Hud filletEndpoints={filletEndpointLocations} store={activeStore} onChange={changeHudValue} onFilletType={changeFillet} onRemoveFilletEdge={removeFilletEdge} onLocateFilletEdge={locateFilletEdge}
