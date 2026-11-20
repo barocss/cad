@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {emptyDoc} from '@barocss/cad-model/engine/doc';
 import {xyPlane} from '@barocss/cad-model/sketch/plane';
+import {radiusToBulge} from "@barocss/cad-model/sketch/profile";
+import {shapeNode} from "@barocss/cad-model/sketch/loops";
+import {partBreps} from "@barocss/cad-model/engine/evaluate";
+import {brepMassProperties,checkBrep,faceGeometry} from "@barocss/cad";
 import type {SketchShape,SketchState} from '@barocss/cad-model/sketch/types';
 import {canRecordOpenArcRadiusDraft as allowed,isOpenArcRadiusChange as change} from '../src/sketch/openArcRadiusHistory';
 import {createDraftHistory,draftHistoryState,restoreDraftHistory} from '../src/sketch/draftHistory';
@@ -62,4 +66,55 @@ test('sparse bulges, metadata changes and nonterminal arc migration cannot masqu
  for(const bulges of [sparse,[0,NaN,.4,0],[0,Infinity,.4,0],[0,.4,0,0]])assert.equal(change(s,{...after,bulges}),false);
  assert.equal(change(s,{...after,lengths:{}}),false);assert.equal(change(s,{...after,ids:['new1','new2','new3','new4']}),false);
  assert.equal(change(s,{...after,points:[...s.points]}),false);
+});
+
+test('same numeric radius is not admitted as a draft change while Redo is available',()=>{
+ // Pure source pieces only: do not infer a real DOM input or App callback from this test.
+ const doc=emptyDoc(),initial=draft(),history=createDraftHistory(),source=initial.shape as Polygon;
+ function atRadius(s:Polygon, text:string):Polygon {
+  const bulge=radiusToBulge(s.points[2]!,s.points[3]!,Number(text),Math.sign(s.bulges![2]!));
+  assert.notEqual(bulge,null);return radiusEdit(s,bulge!);
+ }
+ const b={...initial,shape:atRadius(source,'14')},c={...b,shape:atRadius(b.shape,'16')};
+ assert.ok(change(source,b.shape));assert.ok(change(b.shape,c.shape));
+ history.push(draftHistoryState(doc,initial),draftHistoryState(doc,b));
+ history.push(draftHistoryState(doc,b),draftHistoryState(doc,c));
+ const undone=history.undo(draftHistoryState(doc,c));assert.ok(undone);
+ const current=restoreDraftHistory(c,undone),restored=current.shape as Polygon;
+ assert.equal(restored,b.shape);assert.equal(restored.points,source.points);
+ const reentered=atRadius(restored,'14.0');
+ assert.equal(reentered.bulges?.[2],restored.bulges?.[2]);
+ assert.equal(change(restored,reentered),false);
+ assert.equal(change(restored,atRadius(restored,'14.0001')),true);
+ const redone=history.redo(draftHistoryState(doc,current));assert.ok(redone);
+ const redo=restoreDraftHistory(current,redone).shape;
+ assert.equal(redo,c.shape);
+
+ // This is explicit synthetic closure and a direct native geometry check, not browser Finish/Open.
+ const solidDoc=(s:Polygon)=>{
+  const node=shapeNode({...s,closed:true});
+  assert.ok(node?.kind==='sketch' && node.profile==='loop');
+  assert.deepEqual(node.segments.map(x=>x.kind),['line','line','arc','line']);
+  assert.deepEqual(node.segments.map(x=>x.start),source.points);
+  return {...doc,nodes:[node,{kind:'extrude' as const,sketch:0,height:3}]};
+ };
+ const before=solidDoc(restored),after=solidDoc(reentered);
+ assert.deepEqual(after,before);
+ function checkNative(solid:ReturnType<typeof solidDoc>,radius:number) {
+  const rows=partBreps(solid);assert.equal(rows.length,1);
+  const {brep}=rows[0]!;
+  assert.equal(checkBrep(brep,{strict:true}).valid,true);
+  assert.deepEqual(brep.bodies.map(x=>x.kind),['solid']);
+  const faces=brep.faces.map(x=>faceGeometry(x)).filter(x=>x.kind==='cylinder');
+  assert.equal(faces.length,1);
+  const c=faces[0]!,a=Math.sqrt(radius*radius-100);
+  assert.ok(Math.abs(c.r-radius)<1e-8);
+  assert.ok(Math.hypot(c.c[0]-20,c.c[1]-(30-a))<1e-8);
+  assert.ok(Math.abs(Math.abs(c.a[2])-1)<1e-8);
+  const analyticallyExpected=3*(400+radius*radius*Math.asin(10/radius)-10*a);
+  assert.ok(Math.abs(brepMassProperties(brep,1).volume-analyticallyExpected)<1e-7);
+ }
+ checkNative(before,14);
+ checkNative(JSON.parse(JSON.stringify(after)),14);
+ checkNative(solidDoc(c.shape),16);
 });
