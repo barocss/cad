@@ -1,5 +1,7 @@
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { digestOf } from '@barocss/cad-model/util/digest';
+import { localTaskCandidateImage } from '../chat/taskCandidateImage';
 import type { TaskRunDecision } from '../chat/taskRunOffer';
 import type { CandidateReview } from '../files/taskCandidateReview';
 
@@ -37,6 +39,8 @@ export function CandidateReviewSection({ review, shown, available, toggle, decid
     <Button type="button" variant="ghost" size="xs" disabled={!available || !!deciding} onClick={toggle}>
       {shown ? 'Show accepted model' : 'Preview candidate'}
     </Button>
+    {review.localRun && available && shown && <CandidateViews key={digestOf({ decision: review.localRun.decision,
+      occurrence: review.occurrence, feature: review.feature, renderRevision: review.renderRevision })} review={review} disabled={!!deciding} />}
     {decide && <>
       <Button type="button" size="xs" disabled={!canDecide} onClick={() => void decideCandidate('approve')}>
         {deciding === 'approve' ? 'Approving…' : 'Approve candidate'}
@@ -47,4 +51,36 @@ export function CandidateReviewSection({ review, shown, available, toggle, decid
     </>}
     {error && <div role="status">{error}</div>}
   </section>;
+}
+
+/** A view belongs to one local review. Hiding or changing that review retires all its requests. */
+function CandidateViews({ review, disabled }: { review: CandidateReview; disabled: boolean }) {
+  const intent = useRef<object | undefined>(undefined);
+  const [image, setImage] = useState<{ phase: 'loading' | 'ready' | 'error'; src?: string; error?: string }>();
+  useEffect(() => () => { intent.current = undefined; }, []);
+  async function renderCandidate() {
+    if (disabled || image?.phase === 'loading') return;
+    const request = {};
+    intent.current = request;
+    const current = () => intent.current === request;
+    setImage({ phase: 'loading' });
+    try {
+      const src = await localTaskCandidateImage(review, current);
+      if (src && current()) setImage({ phase: 'ready', src });
+    } catch (error) {
+      if (current()) setImage({ phase: 'error', error: error instanceof Error ? error.message : 'Could not render the candidate image.' });
+    }
+  }
+  return <>
+    <Button type="button" variant="ghost" size="xs" disabled={disabled || image?.phase === 'loading'} onClick={() => void renderCandidate()}>
+      {image?.phase === 'loading' ? 'Rendering candidate…' : 'Render candidate four views'}
+    </Button>
+    {image?.phase === 'ready' && <figure className="m-0" aria-label="Current candidate image">
+      <figcaption>Current candidate · {review.occurrence} · four views</figcaption>
+      <img src={image.src} alt="Current candidate four views" width={1000} height={1000} className="h-auto w-full"
+        onError={() => setImage(previous => previous?.phase === 'ready' && previous.src === image.src
+          ? { phase: 'error', error: 'Could not display the candidate image.' } : previous)} />
+    </figure>}
+    {image?.phase === 'error' && <div role="status">{image.error}</div>}
+  </>;
 }

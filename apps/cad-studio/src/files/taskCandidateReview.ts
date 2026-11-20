@@ -21,7 +21,7 @@ export interface CandidateReviewReceipt {
   candidateDigest: string;
 }
 export interface CandidateReview {
-  localRun?: { request: TaskRunReviewRequest; revision: number; decision: TaskRunDecisionRequest };
+  localRun?: { request: TaskRunReviewRequest; revision: number; receipt: CandidateReviewReceipt; decision: TaskRunDecisionRequest };
   taskId: string;
   attemptId: string;
   candidateDigest: string;
@@ -31,6 +31,8 @@ export interface CandidateReview {
   beforeMm: TaskValue;
   candidateMm: TaskValue;
   checks: TaskCandidate['checks'];
+  geometry: TaskCandidate['geometry'];
+  renderRevision: string;
   preview: Extract<PlacedProposalPreview, { kind: 'ready' }>;
 }
 

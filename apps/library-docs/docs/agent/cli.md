@@ -141,6 +141,19 @@ references, such as `ref0`, are refused. This input form covers one rectangle. A
 
 `team` and `board` run the scripted team and candidate-board scenarios. `cad-cli help` prints the full usage.
 
+## Review a pending worker candidate
+
+For a local run named `run` with a pending task named `base`, export the review receipt. Pass that exact file to the renderer. Choose paths outside the run directory for the output files.
+
+```sh
+node apps/cad-studio/scripts/cad-cli.mjs task-run review run base base.bcad-candidate
+node apps/cad-studio/scripts/cad-cli.mjs task-run render-candidate run base --review base.bcad-candidate > views.json
+```
+
+On success, `views.json` contains four views of the proposed occurrence in its local coordinates, the face legend, and its verified dimensions and checks. Decode `image.data` as base64 and compare the SHA-256 of the PNG bytes with `imageSha256`. Match `runId`, `taskId`, `attemptId` and `candidateDigest` to the current review before displaying the result. Two attempts can produce identical geometry and PNG bytes.
+
+A retired receipt produces a nonzero exit status. Read the current run status before requesting another review. The command leaves the accepted document and the approval decision intact. In Studio, open a pending candidate from the local run to request the same four views.
+
 ## Using another agent
 
 Any agent that speaks MCP can drive a part through `cad-mcp`:

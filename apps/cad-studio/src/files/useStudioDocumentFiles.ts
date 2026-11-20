@@ -10,6 +10,7 @@ import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import { placementOf } from '@barocss/cad-model/engine/placement';
 import type { Problem as RefProblem } from '@barocss/cad-model/engine/references';
 import { digestOf, sha256Hex } from '@barocss/cad-model/util/digest';
+import { revisionOf } from '@barocss/cad-model/util/revision';
 import { isObj } from '@barocss/cad-model/util/guards';
 import { readRender } from '@barocss/cad-model/engine/render';
 import { clearRecovery } from '../app/recovery';
@@ -480,7 +481,8 @@ export function useStudioDocumentFiles({ document, ownership, worker, changes, v
     if (preview?.kind !== 'ready' || preview.bodies.size !== 1 || !preview.bodies.has(occurrence))
       throw new Error('Could not preview the exact placed occurrence.');
     return { taskId: candidate.task.id, attemptId: candidate.receipt.attemptId, candidateDigest: candidate.receipt.candidateDigest,
-      occurrence, feature, field, beforeMm: candidate.beforeMm, candidateMm: candidate.candidateMm, checks: verified.checks, preview };
+      occurrence, feature, field, beforeMm: candidate.beforeMm, candidateMm: candidate.candidateMm, checks: verified.checks,
+      geometry: verified.geometry, renderRevision: revisionOf(candidate.local), preview };
   };
 
   const showCandidateReview = (review: CandidateReview) => {
@@ -545,7 +547,7 @@ export function useStudioDocumentFiles({ document, ownership, worker, changes, v
       const status = intent.local.status;
       if (status && retiresTaskRunReview(status, request, latest.receipt.revision))
         throw new Error('The worker candidate changed during review.');
-      showCandidateReview({ ...review, localRun: { request, revision: latest.receipt.revision, decision: latest.decision } });
+      showCandidateReview({ ...review, localRun: { request, revision: latest.receipt.revision, receipt: latest.receipt, decision: latest.decision } });
     } catch (error) {
       if (current()) throw error;
     }

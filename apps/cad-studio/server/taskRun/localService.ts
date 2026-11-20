@@ -16,6 +16,7 @@ import { encodeTaskCheckpoint, MAX_TASK_CHECKPOINT_BYTES, type TaskCheckpoint } 
 import { planWorkingTaskReplacement } from '../../src/files/workingTaskReplacement';
 import { encodeCandidateReview } from '../../src/files/taskCandidateReview';
 import { TaskRunHost } from './host';
+import { renderTaskCandidate } from './candidateRender';
 import { prepareTaskRunHandoff, startLocalTaskRun } from './start';
 import { candidateReviewFor, taskApprovalFor, taskApprovals, taskCheckpointFor, RunStoreError, TaskRunStore, type RunRecord, type RunTask } from './store';
 
@@ -498,5 +499,23 @@ function readLocalCheckpoint(root: string, request: unknown, select: (record: Ru
     if (error instanceof LocalRunRequestError) throw error;
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new LocalRunRequestError(404, 'The local task run could not be found.');
     throw new LocalRunRequestError(409, 'Could not read the approved local checkpoint.');
+  }
+}
+
+/** Render only a current review selection, using the service-owned local store path. */
+export async function readLocalTaskCandidateRender(root: string, request: unknown) {
+  const selection = readReviewRequest(request);
+  const record = readOwnedTaskRun(root, selection);
+  try {
+    const directory = privateDirectory(join(privateDirectory(resolve(root)), selection.runKey));
+    const receipt = candidateReviewFor(record, selection.taskId);
+    if (receipt.runId !== selection.runId || receipt.attemptId !== selection.attemptId
+      || receipt.candidateDigest !== selection.candidateDigest
+      || receipt.baseline.modelDigest !== selection.baselineDigest)
+      throw new Error('The candidate changed. Refresh the local run review.');
+    return await renderTaskCandidate(directory, selection.taskId, receipt);
+  } catch (error) {
+    if (error instanceof LocalRunRequestError) throw error;
+    throw new LocalRunRequestError(409, error instanceof Error ? error.message : 'Could not render the current candidate.');
   }
 }

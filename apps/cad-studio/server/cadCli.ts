@@ -67,7 +67,7 @@ cad-cli task-run start dir --plan plan.json
   Starts the reviewed plan. The existing start dir config.json form also works.
 cad-cli task-run start dir --handoff source.bcad-task
   Starts the task plan and native snapshot exported from Studio.
-cad-cli task-run <status|work|refresh|review|decide|pause|resume|stop|policy|answer|export> ...
+cad-cli task-run <status|work|refresh|review|render-candidate|decide|pause|resume|stop|policy|answer|export> ...
   Runs one to three independent local tasks. Decisions require a terminal operator.
 cad-cli run <script | -> [-o part.bcad] [--doc base.bcad] [--step part.step] [--stl part.stl] [--check] [--dry-run]
   Runs a run_script script (on base.bcad, else an empty part) and writes what is asked; prints a JSON summary.

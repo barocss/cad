@@ -19,10 +19,11 @@ import { deriveLocalRunPlan, localRunPlanInputs } from './localPlan';
 import { candidateReviewFor, TaskRunStore, type RunLimits, type RunRecord } from './store';
 import { localRunStatus, localRunTargets, prepareTaskRunHandoff, startLocalTaskRun, taskInputKey } from './start';
 import { threadWorker } from './thread';
+import { renderTaskCandidate } from './candidateRender';
 
 interface Io { stdout: Pick<NodeJS.WriteStream, 'write'>; stderr: Pick<NodeJS.WriteStream, 'write'> }
 interface Config { name: string; source: string; plan: TaskPlanRequest; limits: RunLimits; budget: number; heightsMm?: Record<string, number>; widthsMm?: Record<string, number>; depthsMm?: Record<string, number>; diametersMm?: Record<string, number>; footprintsMm?: Record<string, RectangleFootprint> }
-const HELP = 'cad-cli task-run <plan source.bcad occurrenceA [occurrenceB] [occurrenceC] | start dir config.json | start dir --plan plan.json | start dir --handoff source.bcad-task | status dir | work dir operation task valueMm [depthMm] | refresh dir operation task | export dir part.bcad|part.bcad-run | review dir task part.bcad-candidate | decide dir operation task approve|reject [--review file.bcad-candidate] | pause|resume|stop dir operation | policy dir operation revision 1|2 | answer dir operation task batch answers.json>';
+const HELP = 'cad-cli task-run <plan source.bcad occurrenceA [occurrenceB] [occurrenceC] | start dir config.json | start dir --plan plan.json | start dir --handoff source.bcad-task | status dir | work dir operation task valueMm [depthMm] | refresh dir operation task | export dir part.bcad|part.bcad-run | review dir task part.bcad-candidate | render-candidate dir task --review file.bcad-candidate | decide dir operation task approve|reject [--review file.bcad-candidate] | pause|resume|stop dir operation | policy dir operation revision 1|2 | answer dir operation task batch answers.json>';
 
 function exportPath(directory: string, output: string): string {
   const parent = realpathSync.native(dirname(output)), run = statSync(directory, { bigint: true });
@@ -132,7 +133,7 @@ async function confirmReviewedDecision(run: string, operation: string, task: str
 export async function taskRunMain(argv: readonly string[], io: Io): Promise<number> {
   const [command, directory, ...args] = argv;
   const print = (value: unknown) => io.stdout.write(JSON.stringify(value) + '\n');
-  if (!directory || !['plan', 'start', 'status', 'work', 'refresh', 'export', 'review', 'decide', 'pause', 'resume', 'stop', 'policy', 'answer'].includes(command)) {
+  if (!directory || !['plan', 'start', 'status', 'work', 'refresh', 'export', 'review', 'render-candidate', 'decide', 'pause', 'resume', 'stop', 'policy', 'answer'].includes(command)) {
     io.stderr.write(HELP + '\n');
     return 2;
   }
@@ -153,6 +154,12 @@ export async function taskRunMain(argv: readonly string[], io: Io): Promise<numb
 
     const run = realpathSync(directory);
     if (command === 'status' && !args.length) { print(localRunStatus(TaskRunStore.inspect(run))); return 0; }
+    if (command === 'render-candidate') {
+      const [task, flag, file] = args;
+      if (args.length !== 3 || flag !== '--review') throw new Error(HELP);
+      print(await renderTaskCandidate(run, task, readDecisionReview(file)));
+      return 0;
+    }
     if (command === 'review') {
       const [task, output] = args;
       if (args.length !== 2 || !output.toLowerCase().endsWith(TASK_CANDIDATE_EXT)) throw new Error(HELP);
