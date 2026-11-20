@@ -1,0 +1,25 @@
+{
+  "testedRevision": "4bd39ab3dddc22a286b30eb72ee85d5201530f31",
+  "mode": "Actual Chrome/WebGPU, synthetic terminal Flange",
+  "held": { "owner": "n5", "volumeMm3": 5250 },
+  "previews": [
+    { "candidate": 1, "edge": "n1.top|n3.side3", "meshEdgeIndex": 6, "midpointMm": [70, 25, 1.5] },
+    { "candidate": 2, "edge": "n1.bottom|n3.side3", "meshEdgeIndex": 4, "midpointMm": [70, 25, 0] }
+  ],
+  "previewPreservedDocumentAndHistory": true,
+  "previewPreservedAcceptedNativeGeometry": true,
+  "previewOpenedNoActiveTool": true,
+  "explicitTopChoice": {
+    "owner": "n5",
+    "parent": "n4",
+    "flangeLengthMm": 20,
+    "strictNativeSolid": true,
+    "volumeMm3": 6565.071880146642,
+    "undoRedoExact": true,
+    "browserProjectReopenedExact": true
+  },
+  "downloads": 0,
+  "pageErrors": 0,
+  "consoleErrors": 0,
+  "sourceChanges": 0
+}
