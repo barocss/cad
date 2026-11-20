@@ -32,6 +32,8 @@ P0 findings that can lose work, export stale geometry or misattribute results ta
 
 ## GitHub requirement and issue inventory
 
+The [November 20 routing snapshot](notes/open-issue-routing-2026-11-20/README.md) covers all 229 open issues in the standalone CAD repository. It links each issue to a primary route and identifies model-version tracking for agent visual review as the next AI workflow to measure (#324).
+
 The November 10 intake routes the 135 issues from #2288 through #2422, including the CSS exclusion. It records source-backed safety candidates, drawing and exchange follow-ups, and the AI delivery sequence. The new runtime checks are NOT_RUN. [November 10 issue follow-up](roadmap-tracks/13-issue-followup-2026-11-10.md).
 
 [Registered target](roadmap-tracks/07-requirement-registry.md):129 exact requirement IDs from15 existing CAD epics #528–#542. [Live issue reconciliation](roadmap-tracks/06-github-issues.md):192 open repository issues screened;85 CAD-title issues plus16 related dependencies receive primary destinations. The new map preserves older delivered evidence and adds #2284 local visual-review research, #2285 edit semantics and #2286 fillet scalar interaction. Owner later-reference #2287 is routed separately to P4 Inspector/command/focus research; it does not remeasure the historical census or lift UI HOLD. Issue proposals/checklists are input data; current owner decisions and explicit HOLDs remain execution authority. [The other91 open issues](roadmap-tracks/08-other-issue-routing.md) have metadata-only provider/domain/other-owner routing, so shared GPU/Interop dependencies are not lost by a CAD-title filter. Requirement coverage is NOT_ADJUDICATED; an unchecked box is not proof of missing implementation.
