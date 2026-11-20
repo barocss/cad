@@ -1,0 +1,20 @@
+{
+  "scope": "Synthetic oblique linked Path cut pattern, actual desktop Chrome/WebGPU",
+  "baseline": "1acd99a97d717530130f135c5819f0748e971a12",
+  "verificationBase": "17f72e93cd85483399a8b724484678435fbc1571",
+  "product": "17b0ccebd2e45c5eb01e22118a7f3941aa9c60e2",
+  "pattern": { "source": "n7", "count": 4, "spacingMm": 10, "requiredTravelMm": 30 },
+  "observed": {
+    "linkedXFactor08NominalTravelMm": 37.318092127009926,
+    "linkedXFactor08RemainsRefused": true,
+    "specificSpanGuidance": true,
+    "refusedDocumentHistoryAndNativeUnchanged": true,
+    "linkedXFactor0875AcceptedAndUndoRedoExact": true,
+    "trueShortRetainsLengthRefusal": true,
+    "unlinkedXFactor08Accepted": true
+  },
+  "downloads": 0,
+  "pageErrors": 0,
+  "consoleErrors": 0,
+  "sourceChanges": 0
+}
