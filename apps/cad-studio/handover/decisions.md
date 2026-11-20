@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1417: [Studio top bar extraction](notes/studio-topbar-extraction-2026-11-21/README.md) moves markup and file chooser ownership from App into a private component. Desktop verifies focus, native file ownership and sketch workspace exit.
+
 - D1416: [Axis-aligned wall reference-plane Offset](notes/axis-wall-offset-reference-plane-2026-11-21/README.md), #17; expose the existing direct Offset mode at command launch and verify native reference edits and reopen on desktop.
 
 - 2026-11-17, bounded #274 decision: [explicit definition notes](notes/instance-brief-notes-2026-11-17/README.md) reuse existing Brief/editDefinition with owned Save/Cancel; no manufacturing approval or schema expansion. Whole issue remains OPEN. This dated addendum does not renumber historical decisions.

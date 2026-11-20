@@ -68,7 +68,6 @@ import { FeatureHistoryMenu } from './ui/FeatureHistoryMenu';
 import { useRenderPlayback } from './viewport/useRenderPlayback';
 import { useModelChecks } from './state/useModelChecks';
 import { ViewContextMenu } from './ui/ViewContextMenu';
-import { TemplatePicker } from './ui/TemplatePicker';
 import { useCommandPreview } from './state/useCommandPreview';
 import { DirectInspector } from './ui/DirectInspector';
 import { ModelTools } from './ui/ModelTools';
@@ -208,10 +207,10 @@ import { useInstanceGizmo } from './assembly/useInstanceGizmo';
 import type { CamOptions } from './viewport/camDisplay';
 import { withPrintPreviewSettings, type PrintPreviewPatch } from './viewport/printSettings';
 import { isRefusal, refusal } from '@barocss/cad-model/engine/refusal';
-import { Icon, Kbd } from './ui/atoms';
+import { Icon } from './ui/atoms';
 import { FlatPatternDialog } from './ui/FlatPatternDialog';
 import { CutListDialog } from './ui/CutListDialog';
-import { ToolsTray } from './ui/ToolsTray';
+import { StudioTopBar } from './ui/StudioTopBar';
 import { BomPanel, bomHasLinkedHousing } from './ui/BomPanel';
 import { RebuildPanel, rebuildStoreOf } from './ui/RebuildPanel';
 import { useVariants } from './state/useVariants';
@@ -527,7 +526,6 @@ export function App() {
   }), [engine]);
   const massReady = useMemo(() => !bodies.some(b => b.massRef !== undefined) && ![...instanceBodies.values()].some(e => e.bodies.some(b => b.massRef !== undefined)), [bodies, instanceBodies]);
   const instanceRun = useRef(0);
-  const partInput = useRef<HTMLInputElement>(null);
   /** Selected direct curves and surfaces (by object id). */
   const [directSel, setDirectSel] = useState<string[]>([]);
   const routeContext = useRef({ blocked: true });
@@ -859,7 +857,6 @@ export function App() {
   const [inertiaAt, setInertiaAt] = useState<'centre' | 'origin'>('centre');
   const [showBox, setShowBox] = useState(false);
   /** The templates menu and the name a template is saved under. */
-  const [templatesOpen, setTemplatesOpen] = useState(false), [templateName, setTemplateName] = useState('');
   /** The Parameters panel. */
   const [paramsOpen, setParamsOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -916,8 +913,6 @@ export function App() {
   const [menu, setMenu] = useState<ViewportMenu | null>(null);
   const revision = useRef(1);
   const evaluateVersion = useCallback((input: StudioDoc) => engine.part(input, revision.current++, 'read'), [engine]);
-  const fileInput = useRef<HTMLInputElement>(null);
-  const fileOpenFocus = useRef<HTMLElement | null>(null);
   const requestNativeOpen = useRef<(accept: () => void, focus: HTMLElement | null) => void>(() => {});
   requestNativeOpen.current = (accept, focus) => workspaceModeExit.switchWhenReady(accept, { originFocus: focus });
   const pickRef = useRef<(hit: { face: { body: number; face: number } | null; edge: { body: number; edge: number } | null; point: Vec3 | null }, additive: boolean) => void>(() => {});
@@ -3728,77 +3723,63 @@ export function App() {
     onRadiusMode={mode => { const a = activeStore.get(); if (a?.fillet) changeFillet(a.fillet.type, mode); }}
     onFramePreview={owner => { if (activeStore.get() === owner && owner.preview === 'ok') viewport.current?.fit(); }}
     onFile={uploadFont} onHoleOptions={applyHoleOptions} onApply={applyHud} onCancel={cancel} />;
+  const newPartFromToolbar = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (sessionBlocked('starting a new part')) return;
+    workspaceModeExit.switchWhenReady(() => replaceDoc(emptyDoc(), 'new-part'), { event,
+      readFeature: () => cageEdRef.current?.session ?? commandDraft() ?? nodeEditorDraft.current,
+      title: cageEdRef.current?.session ? 'Discard cage draft and start a new part?' : undefined });
+  };
+  const chooseTemplate = (next: StudioDoc, focus: HTMLElement | null) => {
+    if (sessionBlocked('starting from a template')) return;
+    workspaceModeExit.switchWhenReady(() => {
+      if (!replaceDoc(next)) return;
+      setFileName('Untitled');
+      setTimeout(() => viewport.current?.fit(), 300);
+    }, { originFocus: focus });
+  };
+  const toggleVersions = () => {
+    if (sessionBlocked('opening the project')) return;
+    if (versionsOpen) cancelLocalCandidateReview();
+    setVersionsOpen(v => !v);
+  };
+  const historyLabel = (action: 'Undo' | 'Redo') => {
+    if (cageHistoryAvailable) return `${action} cage edit`;
+    if (skeletonHistoryAvailable) return `${action} 3D sketch edit`;
+    if (sketch) return `${action} sketch edit`;
+    if (action === 'Undo' && undo.length) return `Undo ${describeChange(undo[undo.length - 1].doc, doc)}`;
+    if (action === 'Redo' && redo.length) return `Redo ${describeChange(doc, redo[redo.length - 1].doc)}`;
+    return `Nothing to ${action.toLowerCase()}`;
+  };
+  const canExportIges = !!doc.direct?.objects.some(object => !object.hidden);
+  const exportIges = async () => {
+    try { downloadBytes(new TextEncoder().encode((await loadDirect()).directIGES(doc.direct!, fileName)), `${fileName}.igs`, 'model/iges'); }
+    catch (e) { setToast({ title: 'Could not write IGES', hint: e instanceof Error ? e.message : String(e), detail: '' }); }
+  };
+  const routeAvailable = !!doc.routeBundles?.length || (doc.direct?.objects.filter(object => {
+    try { return !!D && D.geometryOf(doc.direct!, object).kind === 'curve'; } catch { return false; }
+  }).length ?? 0) >= 2;
   return (
     <div className={'studio' + (historyShown ? ' has-history' : '') + (bottomRow.stacked ? ' history-stacked' : '') + (bottomRow.cramped ? ' stage-cramped' : '')} style={{ '--history-left': (browserPlacement === 'dock' ? HISTORY_LEFT_RAIL : HISTORY_LEFT) + 'px', '--strip-w': chatColumnShown ? '0px' : CHAT_STRIP + 'px', '--dock-strip-w': dockEdge + 'px', '--chat-col-w': (chatColumnShown ? layout.chatShown : CHAT_STRIP) + 'px', '--rail-w': sketch || rendering || drawing ? '44px' : '116px' } as CSSProperties}>
-      {/* (G12b: the top bar across the centre and the dock — the window less the chat column — the dock under it.) */}
-      <Profiler id="topbar" onRender={onBlockRender}><header className="topbar">
-        <span className="brand"><Icon name="deployed_code" className="accent" />barocss</span>
-        <label className="doc-tab"><span className="sr">File name</span>
-          <input value={fileName} onChange={e => setFileName(e.target.value)} size={Math.max(8, fileName.length)} />
-          {dirty && <span className="dot" aria-label="Unsaved changes" />}</label>
-        <div className="grow" />
-        <div className="mode" role="group" aria-label="Mode" data-workspace-mode>
-          <Button size="sm" variant={!sketch && !rendering && !drawing ? 'default' : 'ghost'} className={!sketch && !rendering && !drawing ? 'on' : ''}
-            onPointerDown={workspaceModeExit.rememberFocus} onClick={event => requestWorkspace('Model', event)}>Model</Button>
-          <Button ref={sketchModeButton} size="sm" variant={sketch ? 'default' : 'ghost'} className={sketch ? 'on sketching' : ''}
-            onPointerDown={workspaceModeExit.rememberFocus} onClick={requestSketchWorkspace}>{sketch ? `Sketch · ${planeLabel(sketch.plane)}` : 'Sketch'}</Button>
-          <Button size="sm" variant={rendering ? 'default' : 'ghost'} className={rendering ? 'on' : ''}
-            onPointerDown={workspaceModeExit.rememberFocus} onClick={event => requestWorkspace('Render', event)}>Render</Button>
-          <Button size="sm" variant={drawing ? 'default' : 'ghost'} className={drawing ? 'on' : ''}
-            onPointerDown={workspaceModeExit.rememberFocus} onClick={event => requestWorkspace('Drawing', event)}>Drawing</Button>
-        </div>
-        {workspaceModeExit.dialog}
-        <div className="grow" />
-        {sketch && <Button variant="default" size="default" className="finish" disabled={!!circleChord.visible} onClick={finishSketch}><Icon name="check" />Finish sketch <Kbd>⏎</Kbd></Button>}
-        {/* (The right-hand tools fold into More tools when the bar has no room for them: ui/ToolsTray.tsx.) */}
-        <ToolsTray items={[
-          <ToolIconButton key="tool0" state={chat ? 'on' : 'idle'} aria-label="Chat" data-tip="Chat" data-tip-desc="Model by chat" onClick={() => setChat(v => !v)}><Icon name="chat" /></ToolIconButton>,
-          <ToolIconButton key="tool1" aria-label="Undo" data-tip={cageHistoryAvailable ? 'Undo cage edit' : skeletonHistoryAvailable ? 'Undo 3D sketch edit' : sketch ? 'Undo sketch edit' : undo.length ? `Undo ${describeChange(undo[undo.length - 1].doc, doc)}` : 'Nothing to undo'} data-tip-key="⌘Z" disabled={editorHistoryAvailable ? !editorHistoryAvailable.undo : !undo.length} onPointerDown={workspaceModeExit.rememberFocus} onClick={event => replayHistory(false, event)}><Icon name="undo" /></ToolIconButton>,
-          <ToolIconButton key="tool2" aria-label="Redo" data-tip={cageHistoryAvailable ? 'Redo cage edit' : skeletonHistoryAvailable ? 'Redo 3D sketch edit' : sketch ? 'Redo sketch edit' : redo.length ? `Redo ${describeChange(doc, redo[redo.length - 1].doc)}` : 'Nothing to redo'} data-tip-key="⇧⌘Z" disabled={editorHistoryAvailable ? !editorHistoryAvailable.redo : !redo.length} onPointerDown={workspaceModeExit.rememberFocus} onClick={event => replayHistory(true, event)}><Icon name="redo" /></ToolIconButton>,
-          <ToolIconButton key="tool3" aria-label="New part" data-tip="New part" onPointerDown={workspaceModeExit.rememberFocus}
-            onClick={event => {
-              if (sessionBlocked('starting a new part')) return;
-              workspaceModeExit.switchWhenReady(() => replaceDoc(emptyDoc(), 'new-part'), { event,
-                readFeature: () => cageEdRef.current?.session ?? commandDraft() ?? nodeEditorDraft.current,
-                title: cageEdRef.current?.session ? 'Discard cage draft and start a new part?' : undefined });
-            }}><Icon name="add_box" /></ToolIconButton>,
-          <TemplatePicker key="tool4" doc={doc} state={{ templatesOpen, setTemplatesOpen, templateName, setTemplateName }} open={open} onNotice={setToast}
-            onTemplate={(next, focus) => {
-              if (sessionBlocked('starting from a template')) return;
-              workspaceModeExit.switchWhenReady(() => {
-                if (!replaceDoc(next)) return;
-                setFileName('Untitled');
-                setTimeout(() => viewport.current?.fit(), 300);
-              }, { originFocus: focus });
-            }} />,
-          <ToolIconButton key="tool5" state={libraryOpen ? 'on' : 'idle'} aria-label="Library" data-tip="Library" data-tip-desc="Catalogue parts from libraries (built-in, team, yours): insert them, snap them by their interfaces" onClick={() => setLibraryOpen(v => !v)} hidden={rendering || drawing}><Icon name="menu_book" /></ToolIconButton>,
-          <ToolIconButton key="tool6" state={paramsOpen ? 'on' : 'idle'} aria-label="Parameters" data-tip="Parameters" data-tip-desc="Named sizes the part depends on, and saved sets of them (configurations)" onClick={() => setParamsOpen(v => !v)} hidden={rendering || drawing}><Icon name="function" /></ToolIconButton>,
-          <ToolIconButton key="tool7" aria-label="Open" data-tip="Open" data-tip-desc="A model, worker file or supported exchange file" onPointerDown={workspaceModeExit.rememberFocus}
-            onClick={event => { fileOpenFocus.current = workspaceModeExit.takeFocus(event); fileInput.current?.click(); }}><Icon name="folder_open" /></ToolIconButton>,
-          <ToolIconButton key="tool8" aria-label="Save" data-tip="Save" data-tip-key="⌘S" data-tip-desc={cageEd.session ? 'Saves the applied part only. Cage draft is excluded until Done.' : project.view.store ? `Into ${project.view.store.name}` : undefined} onClick={save}><Icon name="save" /></ToolIconButton>,
-          <ToolIconButton key="tool8b" state={versionsOpen ? 'on' : 'idle'} aria-label="Project and versions" data-tip="Project & versions" data-tip-desc="Open a folder (or keep a project in this browser) to save into it, keep versions, branch and compare" onClick={() => {
-            if (sessionBlocked('opening the project')) return;
-            if (versionsOpen) cancelLocalCandidateReview();
-            setVersionsOpen(v => !v);
-          }} hidden={rendering || drawing}><Icon name="history" /></ToolIconButton>,
-          <ToolIconButton key="tool9" aria-label="Export STL" data-tip="Export STL" data-tip-desc="A mesh for printing" onClick={askStlExport}><Icon name="download" /></ToolIconButton>,
-          <ToolIconButton key="tool10" aria-label="Export 3MF" data-tip="Export 3MF" data-tip-desc="For a slicer: bodies, materials, colours, the print orientation" onClick={() => void exportThreeMf()}><Icon name="print" /></ToolIconButton>,
-          <ToolIconButton key="tool11" aria-label="Export STEP" data-tip="Export STEP" data-tip-desc="The exact solids, for other CAD" onClick={() => void exportStepFile()}><Icon name="deployed_code_update" /></ToolIconButton>,
-          !!doc.direct?.objects.some(o => !o.hidden) && <ToolIconButton key="tool12" aria-label="Export IGES" data-tip="Export IGES" data-tip-desc="The visible curves and surfaces" onClick={async () => {
-          try { downloadBytes(new TextEncoder().encode((await loadDirect()).directIGES(doc.direct!, fileName)), `${fileName}.igs`, 'model/iges'); }
-          catch (e) { setToast({ title: 'Could not write IGES', hint: e instanceof Error ? e.message : String(e), detail: '' }); }
-        }}><Icon name="polyline" /></ToolIconButton>,
-          (!!doc.routeBundles?.length || (doc.direct?.objects.filter(object => { try { return !!D && D.geometryOf(doc.direct!, object).kind === 'curve'; } catch { return false; } }).length ?? 0) >= 2) && <ToolIconButton key="route-bundle" state={routePanelOpen ? 'on' : 'idle'} aria-label="Route bundle" data-tip="Route bundle" data-tip-desc="Link two curve control points and their copied sweeps" disabled={routeContext.current.blocked} onClick={openRoute}><Icon name="conversion_path" /></ToolIconButton>,
-          <ToolIconButton key="tool13" aria-label="Insert part" data-tip="Insert part" data-tip-desc="Another part (.bcad) as an instance" onClick={() => partInput.current?.click()}><Icon name="add_to_photos" /></ToolIconButton>,
-        ].filter(Boolean)} />
-        <input ref={partInput} type="file" accept=".bcad,.json" hidden aria-label="Part file" onChange={e => { const f = e.target.files?.[0]; if (f) insertPart(f); e.target.value = ''; }} />
-        <input ref={fileInput} aria-label="Model file" type="file" accept=".bcad,.bcad-task,.bcad-run,.bcad-candidate,.json,.step,.stp,.stl,.obj,.igs,.iges,.barocad,.dwg" hidden onChange={e => {
-          const f = e.target.files?.[0], focus = fileOpenFocus.current;
-          fileOpenFocus.current = null;
-          if (f) void open(f, focus);
-          e.target.value = '';
-        }} />
-      </header></Profiler>
+      <Profiler id="topbar" onRender={onBlockRender}>
+        <StudioTopBar
+          file={{ name: fileName, dirty, rename: setFileName, open, save, insertPart, newPart: newPartFromToolbar,
+            saveHint: cageEd.session ? 'Saves the applied part only. Cage draft is excluded until Done.' : project.view.store ? `Into ${project.view.store.name}` : undefined }}
+          workspace={{ sketchPlane: sketch ? planeLabel(sketch.plane) : undefined, rendering, drawing,
+            sketchButton: sketchModeButton, requestMode: requestWorkspace, requestSketch: requestSketchWorkspace,
+            finishSketch, finishBlocked: !!circleChord.visible,
+            focus: { remember: workspaceModeExit.rememberFocus, take: workspaceModeExit.takeFocus, dialog: workspaceModeExit.dialog } }}
+          history={{ replay: replayHistory,
+            undo: { text: historyLabel('Undo'), disabled: editorHistoryAvailable ? !editorHistoryAvailable.undo : !undo.length },
+            redo: { text: historyLabel('Redo'), disabled: editorHistoryAvailable ? !editorHistoryAvailable.redo : !redo.length } }}
+          panels={{ chat: { open: chat, toggle: () => setChat(v => !v) },
+            library: { open: libraryOpen, toggle: () => setLibraryOpen(v => !v) },
+            parameters: { open: paramsOpen, toggle: () => setParamsOpen(v => !v) },
+            versions: { open: versionsOpen, toggle: toggleVersions },
+            route: routeAvailable ? { open: routePanelOpen, disabled: routeContext.current.blocked, show: openRoute } : undefined }}
+          template={{ doc, onTemplate: chooseTemplate, onNotice: setToast }}
+          exchange={{ stl: askStlExport, threeMf: exportThreeMf, step: exportStepFile, iges: canExportIges ? exportIges : undefined }}
+        />
+      </Profiler>
       <div className="stage">
       <SceneViewport inspectionTransaction={inspection.transaction} onInspectionCamera={inspection.observeCamera} reverseWheelZoom={modelWheelZoom?.enabled} ref={viewport} onProjectionChange={setOrtho} onRecoveryNotice={next => setToast(current => viewportRecoveryToast(current, next))}
         poses={{ poseStore, explodeStore, jointTree, bodies: drawnBodies, instancesPlaced: viewportPlacements, cpuInstanceSection }} liveSection={sectionLiveView}
