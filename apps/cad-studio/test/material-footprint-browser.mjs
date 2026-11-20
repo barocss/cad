@@ -186,7 +186,8 @@ await f.run(async () => {
   const source = await f.snapshot('03-source-selected');
   await projectSketch();
   await f.sketchPanel().waitFor();
-  assertExact(await f.snapshot('04-independent-draft'), source);
+  // A new draft has its own empty Undo/Redo stack. Cancel restores the document controls.
+  assertExact(await f.snapshot('04-independent-draft'), { ...source, historyControls: [true, true] });
   await f.page.keyboard.press('Escape');
   await f.sketchPanel().waitFor({ state: 'hidden' });
   assertExact(await f.snapshot('05-draft-cancelled'), source);

@@ -127,9 +127,10 @@ import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
 import { editSavedRevolveAxisCommand, joinedRevolveStock } from '@barocss/cad-model/app/revolveAxisEdit';
 import { filletLaunchAvailability, filletType, newFilletActive, pickedFilletSelection, prepareFilletPick, replaceFilletSelection, replaceFillet, type FilletType, type RadiusMode } from './app/filletFamily';
 import { alignFaceBinding } from '@barocss/cad-model/app/alignCommand';
-import { currentNativePlanePick, midpointFaces, midpointSelectionHint, SKETCH_AT_MIDPOINT } from './app/midpointSketch';
+import { currentNativePlanePick, SKETCH_AT_MIDPOINT } from './app/midpointSketch';
 import { insetRelinkReadiness } from '@barocss/cad-model/app/associativeInsetRelink';
-import { footprintBody, PROJECT_TO_SKETCH } from './app/materialFootprint';
+import { PROJECT_TO_SKETCH } from './app/materialFootprint';
+import { launchDerivedSketch } from './app/launchDerivedSketch';
 import { useModelExports } from './files/useModelExports';
 import { ModelExportDialogs } from './files/ModelExportDialogs';
 import { StepExportPanel } from './files/StepExportPanel';
@@ -311,7 +312,7 @@ import { CHAT_DEFAULT, CHAT_STRIP } from './layout/useLayout';
 import { sketchDxf } from '@barocss/cad-model/sketch/dxf';
 import { settleShape } from '@barocss/cad-model/sketch/settle';
 import { prepareSketchLaunch, resolveSketchLaunchVertices } from './sketch/sketchLaunch';
-import { planeLabel, planeOfDisplayFace, xyPlane } from '@barocss/cad-model/sketch/plane';
+import { planeLabel, planeOfDisplayFace } from '@barocss/cad-model/sketch/plane';
 import { shapeNode } from '@barocss/cad-model/sketch/loops';
 import { isSettled } from '@barocss/cad-model/sketch/rules';
 import { createDraftHistory, draftHistoryState, outlineHistoryState, restoreDraftHistory } from './sketch/draftHistory';
@@ -485,7 +486,7 @@ export function App() {
   const [constraintInspection] = useState(createConstraintInspection);
   // Invalidate an in-flight linked Finish before a queued sketch change renders (including Cancel).
   const sketchGeneration = useRef(0);
-  const footprintRequest = useRef(0);
+  const projectionRequest = useRef(0);
   const footprintState = useRef<{ ready: boolean; midpointReady: boolean; insetReady: boolean; editor: number | null; selection: Selection | null }>({ ready: false, midpointReady: false, insetReady: false, editor: null, selection: null });
   const setSketch = useCallback((next: Parameters<typeof setSketchState>[0]) => { sketchGeneration.current++; setSketchState(next); }, []);
   const nodeEditorDraft = useRef<object | null>(null);
@@ -1759,66 +1760,28 @@ export function App() {
   const nativeVertexReady = fresh && !busy && marker === null && !inPlace && !doc.instances?.length &&
     !active && !rendering && !drawing && !section && previewMode === 'none';
   const start = useCallback((cmd: Command, initial?: Values) => {
-    const request = ++footprintRequest.current;
+    const request = ++projectionRequest.current;
     cancelNativeReview();
     if (modelUnavailable && (cmd.build || cmd.action === 'sketch' || cmd.action === 'measure' || cmd.action === 'cage')) {
       setPalette(false);
       setToast({ title: `${cmd.label} not started`, hint: 'Fix the model evaluation or undo the last change first.', detail: '', documentSource: { doc, evaluated } });
       return;
     }
-    if (cmd.id === SKETCH_AT_MIDPOINT.id) {
+    if (cmd.id === SKETCH_AT_MIDPOINT.id || cmd.id === PROJECT_TO_SKETCH.id) {
       setPalette(false);
-      const target = midpointFaces(ctx, doc);
-      const refuse = (hint: string) => setToast({ title: 'Midpoint sketch not started', hint, detail: '' });
-      if (!target) { refuse(midpointSelectionHint); return; }
-      if (!footprintState.current.midpointReady) {
-        refuse('Close other tools and wait for the current part in Model.');
-        return;
-      }
-      if (!canChangeDocument()) return;
-      const open = openIntent.current, worker = workerSessionNow.current, work = workOwnership.current;
-      const sketchRevision = sketchGeneration.current;
-      midpointSketch.start({
-        faces: target.faces,
-        current: () => open === openIntent.current && worker === workerSessionNow.current &&
-          work.generation === workOwnership.current.generation && work.scope === workOwnership.current.scope &&
-          sketchRevision === sketchGeneration.current && docNow.current === doc && evaluatedRef.current === evaluated &&
-          footprintState.current.selection === selection && footprintState.current.midpointReady && !activeStore.get(),
-        read: () => engine.midpointPlane(evaluated, target.key, target.faces),
-        refuse,
-        adopt: plane => {
-          if (!canChangeDocument()) return;
-          discardFeatureDraft();
-          setSketch({ plane, anchor: { kind: 'midpoint', offset: 0, midpointPlane: plane }, tool: 'rectangle', shape: null, base: null });
-          setPreviewBodies(null);
-          const [min, max] = sketchRegion(bodies, plane);
-          viewport.current?.frameSketch(min, max, plane);
+      launchDerivedSketch(cmd.id === SKETCH_AT_MIDPOINT.id ? 'midpoint' : 'projection', { ctx, doc, evaluated }, {
+        readOwner: () => ({
+          doc: docNow.current, evaluated: evaluatedRef.current, selection: footprintState.current.selection,
+          open: openIntent.current, worker: workerSessionNow.current, scope: workOwnership.current.scope,
+          generation: workOwnership.current.generation, sketchRevision: sketchGeneration.current, commandActive: !!activeStore.get(),
+        }),
+        projection: { request, currentRequest: () => projectionRequest.current, ready: () => footprintState.current.ready },
+        midpoint: { ready: () => footprintState.current.midpointReady, review: midpointSketch.start },
+        engine, canChangeDocument, notice: setToast,
+        editor: {
+          discardFeatureDraft, setSketch, clearPreview: () => setPreviewBodies(null),
+          clearHistoryEditor: () => setEditNode(null), frame: (min, max, plane) => viewport.current?.frameSketch(min, max, plane),
         },
-      });
-      return;
-    }
-    if (cmd.id === PROJECT_TO_SKETCH.id) {
-      setPalette(false);
-      const key = footprintBody(ctx);
-      const refuse = (hint: string) => setToast({ title: 'Projection not started', hint, detail: '' });
-      if (!key || !footprintState.current.ready || !canChangeDocument()) {
-        refuse('Close other tools and select one current solid in Model.');
-        return;
-      }
-      const open = openIntent.current, worker = workerSessionNow.current, work = workOwnership.current;
-      const sketchRevision = sketchGeneration.current;
-      void engine.projectFootprint(evaluated, key).then(result => {
-        if (request !== footprintRequest.current || open !== openIntent.current || worker !== workerSessionNow.current
-          || work.generation !== workOwnership.current.generation || work.scope !== workOwnership.current.scope
-          || sketchRevision !== sketchGeneration.current
-          || docNow.current !== doc || evaluatedRef.current !== evaluated || footprintState.current.selection !== selection
-          || !footprintState.current.ready || activeStore.get()) return;
-        if ('error' in result) { refuse(result.error); return; }
-        const plane = xyPlane(), { shape, done } = sketchShapes(result.sketch);
-        setEditNode(null);
-        setSketch({ plane, anchor: { kind: 'xy', offset: 0 }, tool: 'rectangle', shape, done, base: null });
-        const [min, max] = sketchRegion(bodies, plane);
-        viewport.current?.frameSketch(min, max, plane);
       });
       return;
     }
@@ -1978,7 +1941,7 @@ export function App() {
     workspaceModeExit.switchWhenReady(() => {
       if (owns && !owns()) return;
       onOpened?.();
-      footprintRequest.current++;
+      projectionRequest.current++;
       cancelNativeReview();
       setInstanceSel([]); setDirectSel([]); assembly.cancel();
       // Inspecting a Subtract is source intent in History just as it is in Browser.
@@ -2869,7 +2832,7 @@ export function App() {
       if (e.key === 'Enter' && (circleChord.input.read(sketch) || twoPointSnap.input.read() || arcExtensionSnap.input.read(sketch) || pathGap.input.read(sketch))) { e.preventDefault(); return; }
       if (e.key === 'Escape' && parameterEditNow.current?.kind === 'direct') { e.preventDefault(); discardDirectCandidateRef.current(); return; }
       if (e.key === 'Escape' && routePanelOpen && !active && !sketch && !assembly.draft && !measure && !cageEd.session && !skel.session) { e.preventDefault(); discardRouteRef.current(); return; }
-      if (e.key === 'Escape') { footprintRequest.current++; if (palette) setPalette(false); else if (sketch && !active && (sketch.picked?.length || sketch.editDim)) setSketch(s => s && { ...s, picked: [], editDim: null }); else if (active || sketch) cancel(); else if (assembly.draft) assembly.cancel(); else if (measure) setMeasure(null); else if (cancelSectionFacePick(e.repeat)) e.preventDefault(); else { setSelection(emptySel); setInstanceSel([]); setDirectSel([]); } return; }
+      if (e.key === 'Escape') { projectionRequest.current++; if (palette) setPalette(false); else if (sketch && !active && (sketch.picked?.length || sketch.editDim)) setSketch(s => s && { ...s, picked: [], editDim: null }); else if (active || sketch) cancel(); else if (assembly.draft) assembly.cancel(); else if (measure) setMeasure(null); else if (cancelSectionFacePick(e.repeat)) e.preventDefault(); else { setSelection(emptySel); setInstanceSel([]); setDirectSel([]); } return; }
       if (e.key === 'Enter' && e.target instanceof HTMLButtonElement && e.target.closest('[data-workspace-mode]')) return;
       // Enter applies; Shift-Enter applies and starts the same command again (another hole, another shape).
       if (e.key === 'Enter' && !palette && !(e.target instanceof HTMLInputElement && e.target.type === 'file')) { if (sketch) { e.preventDefault(); finishSketch(); } else if (active) { e.preventDefault(); if (e.shiftKey) commandApply.requestRepeat(active.cmd); apply(); } return; }

@@ -39,7 +39,7 @@ D845_SOURCE_FROZEN=1 node test/extrude-end-face-preview-ownership-browser.mjs "$
 
 ## Follow-up: isolate sketch launch
 
-`sketchLaunch.ts` computes the initial plane, anchor, tool and framing bounds from the current selection. Studio still displays refusal notices at their original point in the command and updates the camera only after accepting the launch. App.tsx decreased from 4,112 to 4,069 lines. When adding a tool, put its input and selection rules in its feature module. Keep the document update and screen transition explicit at the call site.
+`sketchLaunch.ts` computes the initial plane, anchor, tool and framing bounds from the current selection. Studio still displays refusal notices at their original point in the command and updates the camera only after accepting the launch. App.tsx decreased from 4,112 to 4,069 lines. When adding a tool, put its input and selection rules in its feature module. Keep the document update and screen transition explicit at the call site. The [midpoint and projected sketch follow-up](../derived-sketch-launch-2026-11-20/README.md) covers commands that first wait for a native result.
 
 Three desktop Chrome runs covered distinct launch paths. The XY run edited a rectangle and its plane offset, exercised Undo/Redo and extruded the result. The native-vertex run selected three ordered corners with the pointer, finished the sketch and reopened the saved result. The face run placed a sketch on a pocket floor, moved its parent, and verified the child Cut after Save and fresh Open. All three passed with the same sketch launch source and no source changes during execution.
 

@@ -132,6 +132,14 @@ async function launch() {
   await f.command('Sketch at midpoint');
 }
 
+async function expectUnavailableSelection() {
+  const row = f.page.getByRole('option', { name: /Sketch at midpoint/ });
+  await row.getByText('Select two distinct native planar faces on one visible solid.', { exact: true }).waitFor();
+  assert.equal(await review().isVisible(), false);
+  await f.page.keyboard.press('Escape');
+  await row.waitFor({ state: 'hidden' });
+}
+
 async function readyReview(origin = [0, 0, midpoint], direction = normal) {
   await launch();
   await review().getByText('Independent plane snapshot', { exact: true }).waitFor();
@@ -148,7 +156,7 @@ async function refuseSelection(label, verifySelection) {
   const before = await f.snapshot(label + '-input');
   verifySelection(before.selection.selection);
   await launch();
-  await f.waitToast(/select two distinct native planar faces on one visible solid/i);
+  await expectUnavailableSelection();
   await review().waitFor({ state: 'hidden' });
   assert.equal(await f.sketchPanel().isVisible(), false);
   unchanged(await f.snapshot(label + '-refused'), before);
@@ -561,7 +569,7 @@ await f.run(async () => {
   f.browser.newContext = async options => {
     const context = await newContext({ ...options, acceptDownloads: false, serviceWorkers: 'block' });
     context.setDefaultTimeout(10000);
-    if (admission || ownership) context.setDefaultNavigationTimeout(30000);
+    context.setDefaultNavigationTimeout(30000);
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
       if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
@@ -592,7 +600,7 @@ await f.run(async () => {
   await pick('Top');
   const single = await f.snapshot('01-one-face');
   await launch();
-  await f.waitToast(/select two distinct native planar faces/i);
+  await expectUnavailableSelection();
   unchanged(await f.snapshot('02-incomplete-refusal'), single);
   await f.dismissToasts();
   await button(f.page.locator('.mode'), 'Sketch').click();
