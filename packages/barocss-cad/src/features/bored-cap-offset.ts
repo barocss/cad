@@ -475,12 +475,12 @@ function capHeight({ origin: [ox, oy, oz], normal: [nx, ny, nz] }: AffineChart) 
 }
 
 function admittedTiltedCardinalWall(brep: Brep, faceName: string) {
-  if (brep.faces.length !== stockCounts.bored[0]) return;
+  if (brep.faces.length !== stockCounts[boredPlateKind(brep)][0]) return;
   const matches = brep.faces.filter(face => face.name === faceName), [wall] = matches;
   if (matches.length !== 1 || wall.loops.length !== 1 || wall.surface.kind !== 'surface' || wall.surface.degreeU !== 1) return;
   const plate = readTiltedRectangularPlateBore(brep);
   if (!plate) return;
-  const { bottom, top, bore } = plate;
+  const { bottom, top, boreDisks } = plate;
   const points = brep.vertices.map(vertex => vertex.point);
   const xs = points.map(point => point[0]), ys = points.map(point => point[1]);
   const min: XY = [Math.min(...xs), Math.min(...ys)], max: XY = [Math.max(...xs), Math.max(...ys)];
@@ -500,12 +500,12 @@ function admittedTiltedCardinalWall(brep: Brep, faceName: string) {
     charts.set(face, chart);
   }
   const bottomChart = charts.get(bottom)!, topChart = charts.get(top)!;
-  return { ...trim, ...role, wall, bottom, charts, min, max, bore, bottomZ: capHeight(bottomChart), topZ: capHeight(topChart) };
+  return { ...trim, ...role, wall, bottom, charts, min, max, boreDisks, bottomZ: capHeight(bottomChart), topZ: capHeight(topChart) };
 }
 
 function offsetTiltedCardinalWall(brep: Brep, admitted: NonNullable<ReturnType<typeof admittedTiltedCardinalWall>>, distance: number): Brep {
-  const { axis, sign, station, bore, bottom, bottomZ, topZ, capCorners, charts, wall } = admitted;
-  const { next, extent } = offsetWallStation(brep, station, axis, sign, [{ center: bore.c, radius: bore.r }], distance);
+  const { axis, sign, station, boreDisks, bottom, bottomZ, topZ, capCorners, charts, wall } = admitted;
+  const { next, extent } = offsetWallStation(brep, station, axis, sign, boreDisks, distance);
   const min: XY = [...admitted.min], max: XY = [...admitted.max], bound = sign === 1 ? max : min;
   bound[axis] = next;
   const heights = [min[0], max[0]].flatMap(x => [min[1], max[1]].map(y => [bottomZ(x, y), topZ(x, y)]));

@@ -417,7 +417,7 @@ function isBoredPlateOffsetBase(nodes: readonly unknown[], index: number): boole
   const node = nodes[index];
   if (!textRecord(node) || node.kind !== 'replace-face') return false;
   const source = precedingSolidParent(node, index);
-  return source !== undefined && isBoredPlateHole(nodes, source);
+  return source !== undefined && isBoredPlateReplacementSource(nodes, source);
 }
 
 function plainExtrudeSketch(nodes: readonly unknown[], index: number): Record<string, unknown> | undefined {
@@ -550,7 +550,7 @@ export function directFaceDocumentProblem(input: unknown): string | null {
         if (typeof parent.draft === 'number' && Number.isFinite(parent.draft) && parent.draft !== 0) continue;
         if (isStraightHexagonalExtrusion(value.nodes, parent)) continue;
       }
-      return 'Offset face: the parent must be Draft, a drafted extrusion, a straight hexagonal extrusion, a rectangular extrusion with one through hole, or a previous face offset.';
+      return 'Offset face: the parent must be Draft, a drafted extrusion, a straight hexagonal extrusion, a supported through-hole plate, or a previous face offset.';
     }
     if (Array.isArray(value.instances)) for (const instance of value.instances) if (textRecord(instance)) stack.push(instance.doc);
     if (textRecord(value.pendingParts)) for (const pending of Object.values(value.pendingParts)) if (textRecord(pending)) stack.push(pending.doc);

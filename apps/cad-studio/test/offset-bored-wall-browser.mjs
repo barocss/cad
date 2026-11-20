@@ -18,13 +18,14 @@ const bytes = await readFile(input), source = JSON.parse(bytes);
 const replacement = source.nodes.at(-1), tilt = replacement.kind === 'replace-face';
 const capSign = replacement.faces?.[0] === 'n1.bottom' ? -1 : 1;
 const fixed = capSign === 1 ? 0 : 10;
-const capHeight = (x, y) => fixed + capSign * (8 + x / 10 + y / 5);
+const thickness = (x, y) => 8 + x / 10 + y / 5;
+const capHeight = (x, y) => fixed + capSign * thickness(x, y);
 const sourceKey = 'b' + (source.nodes.length - 1), resultKey = 'b' + source.nodes.length;
 const donorKey = tilt ? 'b' + replacement.target.body.node : undefined;
 const bores = source.nodes.filter(node => node.kind === 'hole').map(({ center, radius }) =>
-  ({ center, radius, volume: 10 * Math.PI * radius ** 2 }));
+  ({ center, radius, volume: (tilt ? thickness(...center) : 10) * Math.PI * radius ** 2 }));
 assert.ok(bores.length === 1 || bores.length === 2);
-assert.ok(!tilt || (bores.length === 1 && ['n1.top', 'n1.bottom'].includes(replacement.faces[0])));
+assert.ok(!tilt || ['n1.top', 'n1.bottom'].includes(replacement.faces[0]));
 const contact = Math.max(...bores.map(({ center, radius }) => sign * (center[axis] - station) + radius));
 const positive = 5, negative = -4, centre = [20, 15, 5], normal = [0, 0, 0];
 centre[axis] = station;
@@ -35,8 +36,8 @@ const volumeAt = distance => {
   const min = [0, 0], max = [40, 30];
   (sign === 1 ? max : min)[axis] = station + sign * distance;
   const area = (max[0] - min[0]) * (max[1] - min[1]);
-  const meanThickness = 8 + (min[0] + max[0]) / 20 + (min[1] + max[1]) / 10;
-  return area * meanThickness - 98.1 * Math.PI;
+  const meanThickness = thickness((min[0] + max[0]) / 2, (min[1] + max[1]) / 2);
+  return area * meanThickness - removedVolume;
 };
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/viewport/Viewport.tsx',
@@ -49,7 +50,7 @@ const pins = [
 const f = await createFlow({
   name: 'offset-bored-wall', envFrozen: 'BORED_WALL_OFFSET_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: `Move the ${view.toLowerCase()} exterior wall and retain all ${bores.length} through bore(s).`,
-  limits: [tilt ? 'One rectangular plate with a 40 × 30 mm footprint, one tilted cap, and one straight circular bore.'
+  limits: [tilt ? `One 40 × 30 mm rectangular plate with a tilted cap and ${bores.length} straight circular bore(s).`
     : `One 40 × 30 × 10 mm flat rectangular plate with ${bores.length} straight circular bore(s).`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';

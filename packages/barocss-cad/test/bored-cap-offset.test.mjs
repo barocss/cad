@@ -152,11 +152,12 @@ for (const [face, axis, sign, station] of cardinalWalls) {
 for (const [face, axis, wallSign, station] of cardinalWalls) for (const capSign of [1, -1]) {
   const cap = capSign === 1 ? 'b.top' : 'b.bottom', fixed = capSign === 1 ? 0 : 10;
   const height = (x, y) => fixed + capSign * (8 + x / 10 + y / 5);
-  const contact = wallSign * (plateBores[0].center[axis] - station) + plateBores[0].radius;
-  test(`signed offsets of ${face} retain the exact bore and tilted ${cap} support`, () => {
-    const doc = plate();
+  for (const boreCount of [1, 2]) test(`signed offsets of ${face} retain ${boreCount} exact bore(s) and tilted ${cap} support`, () => {
+    const doc = boreCount === 1 ? plate() : twoBorePlate(), bores = plateBores.slice(0, boreCount);
+    const contact = Math.max(...bores.map(({ center, radius }) => wallSign * (center[axis] - station) + radius));
+    const removed = bores.reduce((sum, { center, radius }) => sum + Math.PI * radius ** 2 * Math.abs(height(...center) - fixed), 0);
     doc.features.push({
-      id: 'tilt', kind: 'replace-face', target: 'h', face: cap,
+      id: 'tilt', kind: 'replace-face', target: doc.features.at(-1).id, face: cap,
       plane: { origin: [0, 0, height(0, 0)], normal: [-1, -2, 10 * capSign] },
     });
     const source = freeze(solid(doc)), saved = structuredClone(source);
@@ -171,7 +172,7 @@ for (const [face, axis, wallSign, station] of cardinalWalls) for (const capSign 
     for (const distance of [5, -4, contact + 0.1]) {
       const limit = station + wallSign * distance;
       const result = offsetBoredPlateWallIfAdmitted(source, face, distance);
-      assert.ok(assertNativePlate(result).maximumEdgeSurfaceGap < 1e-9);
+      assert.ok(assertNativePlate(result, boreCount).maximumEdgeSurfaceGap < 1e-9);
       assert.deepEqual(incidence(result), incidence(source));
       for (const [i, vertex] of source.vertices.entries()) {
         const expected = [...vertex.point];
@@ -185,6 +186,7 @@ for (const [face, axis, wallSign, station] of cardinalWalls) for (const capSign 
         const before = faceGeometry(original), after = faceGeometry(result.faces[i]);
         if (before.kind === 'cylinder') {
           assert.deepEqual(after, before);
+          assert.equal(result.faces[i], original);
         } else {
           assert.equal(after.kind, 'plane');
           after.n.forEach((value, k) => close(value, before.n[k]));
@@ -193,31 +195,41 @@ for (const [face, axis, wallSign, station] of cardinalWalls) for (const capSign 
         }
       }
       const halves = result.faces.filter(candidate => faceGeometry(candidate).kind === 'cylinder');
-      close(createCylindricalBoreCheck(result)(halves), 6);
+      assert.equal(halves.length, 2 * boreCount);
+      const readDiameter = createCylindricalBoreCheck(result);
+      for (const { center, radius } of bores) {
+        const pair = halves.filter(candidate => {
+          const { c } = faceGeometry(candidate);
+          return Math.hypot(c[0] - center[0], c[1] - center[1]) < 1e-9;
+        });
+        assert.equal(pair.length, 2);
+        close(readDiameter(pair), 2 * radius);
+      }
       const min = [0, 0], max = [40, 30];
       (wallSign === 1 ? max : min)[axis] = limit;
       const outer = (max[0] - min[0]) * (max[1] - min[1]);
       const meanThickness = 8 + (min[0] + max[0]) / 20 + (min[1] + max[1]) / 10;
-      close(brepMassProperties(result, 1).volume, outer * meanThickness - 98.1 * Math.PI, 1e-7);
+      close(brepMassProperties(result, 1).volume, outer * meanThickness - removed, 1e-7);
       const edit = { id: 'offset', kind: 'offset-face', target: 'tilt', face, distance };
       assert.deepEqual(solid({ ...doc, features: [...doc.features, edit] }), result);
     }
     for (const distance of [contact, contact - 1]) {
       assert.throws(() => offsetBoredPlateWallIfAdmitted(source, face, distance), /reach or cross the bore/);
     }
-    for (const other of ['b.top', 'b.bottom', 'h.side0#1']) {
+    for (const other of ['b.top', 'b.bottom', 'h.side0#1', 'j.side0#1']) {
       assert.equal(boredPlateWallOffsetFrame(source, other), undefined);
       assert.equal(offsetBoredPlateWallIfAdmitted(source, other, 5), undefined);
     }
     assert.deepEqual(source, saved);
   });
-  test(`an offset of ${face} refuses exact contact with the opposite cap after tilting ${cap}`, () => {
-    const doc = plate(), normal = [0, 0, 2 * capSign], baseThickness = 10 + wallSign * station / 2;
+  for (const boreCount of [1, 2]) test(`an offset of ${face} refuses opposite-cap contact on ${boreCount}-bore stock after tilting ${cap}`, () => {
+    const doc = boreCount === 1 ? plate() : twoBorePlate();
+    const normal = [0, 0, 2 * capSign], baseThickness = 10 + wallSign * station / 2;
     normal[axis] = wallSign;
-    doc.features.push({ id: 'tilt', kind: 'replace-face', target: 'h', face: cap,
+    doc.features.push({ id: 'tilt', kind: 'replace-face', target: doc.features.at(-1).id, face: cap,
       plane: { origin: [0, 0, fixed + capSign * baseThickness], normal } });
     const source = freeze(solid(doc)), saved = structuredClone(source);
-    assertNativePlate(offsetBoredPlateWallIfAdmitted(source, face, 19.9));
+    assertNativePlate(offsetBoredPlateWallIfAdmitted(source, face, 19.9), boreCount);
     for (const distance of [20, 21]) {
       assert.throws(() => offsetBoredPlateWallIfAdmitted(source, face, distance), /reach or cross the opposite cap/);
     }
@@ -290,8 +302,6 @@ for (const sign of [1, -1]) {
     assert.throws(() => replaceBoredCapIfAdmitted(source, face, { ...plane, origin: [0, 0, fixedZ] }), /opposite cap at one corner/);
     assert.equal(boredCapOffsetFrame(source, face), undefined);
     assert.equal(offsetBoredCapIfAdmitted(source, face, 1), undefined);
-    assert.equal(boredPlateWallOffsetFrame(result, 'b.side1'), undefined);
-    assert.equal(offsetBoredPlateWallIfAdmitted(result, 'b.side1', 5), undefined);
     assert.deepEqual(source, before);
   });
 }
