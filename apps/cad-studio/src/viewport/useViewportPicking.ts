@@ -19,7 +19,7 @@ import { bindMidpointPick } from '../app/midpointSketch';
 import { captureMeasureTarget, capturePlacedMeasureFace, readMeasureTarget, sameMeasureOccurrence, type MeasureTarget, type PlacedMeasureSource } from '../app/measureTargets';
 import { bindNativeVertexPick } from './vertexPick';
 import type { EdgeRef, FaceRef } from './renderer';
-import type { ScenePickingActions } from './SceneViewport';
+import type { ScenePickingActions } from './sceneSelection';
 
 export interface ViewportMenu {
   at: { x: number; y: number };

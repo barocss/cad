@@ -201,6 +201,7 @@ import { refuseMotionSweep, timedMotion } from './state/motion';
 import { timedPathOf } from '@barocss/cad-model/robot/motion';
 import { createValueStore, useStoreValue } from './state/valueStore';
 import { SceneViewport } from './viewport/SceneViewport';
+import { sceneSelection } from './viewport/sceneSelection';
 import { GravityExperimentPanel } from './ui/GravityExperimentPanel';
 import { useScenePoses } from './state/useScenePoses';
 import { useInstanceGizmo } from './assembly/useInstanceGizmo';
@@ -2163,11 +2164,7 @@ export function App() {
     sectionBoxRef, setSection, setSectionFacePick, setToast, activeRef, halvesShownRef, setPick, setInstanceSel, setSelection, directSel, setDirectSel, setMeasure, measureNativeReady, measureInstances, placedMeasureContextReady, pickFilterRef,
     scene: { active, section, sketch: !!sketch, bodies, selection, setMenu } });
   pickRef.current = onPick;
-  const finishEdgePicking = finishEdgeEditor.current ? {
-    ...picking,
-    onPick: finishEdgeEditor.pick,
-    onPickBody: () => {}, onPickChain: () => {}, onBoxSelect: () => {}, onContextMenu: () => {},
-  } : null;
+  const finishEdgePick = finishEdgeEditor.current ? finishEdgeEditor.pick : undefined;
   const pickProfile = picking.onPickProfile;
   // Finished sketches waiting for a feature, drawn and picked in the viewport and the History.
   const freeSketches = useMemo(() => unusedSketches(evaluated.nodes, true), [evaluated.nodes]);
@@ -2545,7 +2542,6 @@ export function App() {
       return true;
     },
   });
-  const heldDraftFacePicking = heldDraftFace.view && heldDraftFace.view.kind !== 'ready';
   const proposalReviewRecovery = proposals.reviewBlocked
     ? active ? `Apply or cancel ${active.cmd.label} to review the proposal.`
       : sketch ? 'Finish or cancel the sketch to review the proposal.'
@@ -3206,17 +3202,21 @@ export function App() {
   const meshBoxCrossing = !modelUnavailable && viewBodies === drawnBodies && viewportInstances.length === 0 && previewMode === 'none'
     && !active && !sketch && !drawing && !section && !measure && !inPlace && !assembly.draft
     && !cageEd.session && !skel.session && !ghost && !compareOverlay && !bodyDrag && !animatedOffsets?.size;
-  const viewportPicking = historyPreviewBodies ? { ...picking, onPick: () => {}, onPickBody: () => {},
-    onPickChain: () => {}, onBoxSelect: () => {}, onContextMenu: () => {},
-    ...(heldDraftFace.view?.kind === 'ready' ? { onPickProfile: () => {} } : {}) }
-    : heldDraftFacePicking ? { ...picking, onPick: heldDraftFace.pick, onPickBody: () => {}, onPickChain: () => {},
-      onBoxSelect: () => {}, onContextMenu: () => {}, onPickProfile: () => {} }
-    : finishEdgePicking ?? (placedProposal ? { ...picking, onPick: (...args: Parameters<typeof picking.onPick>) => {
-    const id = args[0].instance;
-    if (id && placedProposal.has(id)) return;
-    picking.onPick(...args);
-  } } : picking);
   const steppedSelection = useMemo(() => { const own = stepsDisp ? [...litSelection(viewportInstanceSel, stepsDisp.hidden)] : viewportInstanceSel; return stepsDisp?.highlight.length ? [...new Set([...own, ...stepsDisp.highlight])] : own; }, [viewportInstanceSel, stepsDisp]);
+  const modelSelection = sceneSelection({
+    display: {
+      selection: cageInputActive ? emptySel : shownSelection,
+      pickedVertices: modelUnavailable || historyPreviewBodies ? undefined : selection.vertices,
+      hoverBody: shownPreviewBodies ? null : rowHover,
+      instanceSelection: assembly.draft ? assembly.highlight.instances : steppedSelection,
+      instanceFaces: mateFaces ? assembly.highlight.instanceFaces : measuredInstanceFaces,
+    },
+    actions: picking, historyPreview: !!historyPreviewBodies,
+    draftFace: !heldDraftFace.view ? null : heldDraftFace.view.kind === 'ready' ? { kind: 'ready' } : { kind: 'picking', pick: heldDraftFace.pick },
+    finishEdge: finishEdgePick, proposedInstances: placedProposal,
+    filter: pickFilter, command: { active: !!active, edgeFillet: active?.fillet?.type === 'edge' },
+    bandRailsAvailable: !section && !measure && !assembly.draft, meshBoxCrossing,
+  });
 
   // A hole's whole region, see-through, while it is placed or edited: where it runs off the part's edge
   // only a notch shows of it otherwise.
@@ -3784,9 +3784,8 @@ export function App() {
       <SceneViewport inspectionTransaction={inspection.transaction} onInspectionCamera={inspection.observeCamera} reverseWheelZoom={modelWheelZoom?.enabled} ref={viewport} onProjectionChange={setOrtho} onRecoveryNotice={next => setToast(current => viewportRecoveryToast(current, next))}
         poses={{ poseStore, explodeStore, jointTree, bodies: drawnBodies, instancesPlaced: viewportPlacements, cpuInstanceSection }} liveSection={sectionLiveView}
         displayMode={effectiveDisplayMode} requestedDisplayMode={displayMode} displayModeReason={displayModeReason}
-        bandRailPicking={!active && !finishEdgePicking && !heldDraftFace.view && !section && !measure && !assembly.draft}
         onDisplayModeStatus={onDisplayModeStatus} onBackend={setViewBackend}
-        modelUnavailable={modelUnavailable} bodies={cageInputActive ? cageEd.shown(shownBodies) : viewBodies} selection={cageInputActive ? emptySel : shownSelection}
+        modelUnavailable={modelUnavailable} bodies={cageInputActive ? cageEd.shown(shownBodies) : viewBodies} modelSelection={modelSelection}
         ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? curvature.overlay} continuityLocation={continuityLocation.curve} filletEndpoints={displayedFilletEndpoints} filletPickedEdgeHighlight={filletPickedEdgeHighlight} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
         gizmo={cageInputActive ? cageEd.gizmo : routeGizmo ?? gizmo ?? instGizmo ?? poleGizmo} cage={cageInputActive ? cageEd.overlay : null} onPickCage={cageInputActive ? cageEd.onPick : undefined} tool={skel.tool}
         handles={sectionDrag.length ? sectionDrag : handles} instancePreview={instancePreview} contactLinks={contactShown && motionContact ? motionContact.links : undefined}
@@ -3799,11 +3798,9 @@ export function App() {
         isolatedInstances={displayScopeReason ? undefined : stepsDisp?.opaque ?? isolatedInstances}
         clip={sectionClip} sectionHatch={sectionHatchLines} scalarMaps={scalarMaps} onHoverScalar={mapHoverOwner ? setMapHover : undefined}
         mould={mouldShown} isoclines={isoclines} proposal={ghost ? proposalOverlay : compareOverlay}
-        instanceSelection={assembly.draft ? assembly.highlight.instances : steppedSelection} instanceFaces={mateFaces ? assembly.highlight.instanceFaces : measuredInstanceFaces}
         placing={!!active?.placing} placeSkip={placeSkip} onSpot={onSpot}
-        bodyColors={bodyColors} faceColors={faceColors} pickedVertices={modelUnavailable || historyPreviewBodies ? undefined : selection.vertices} hiddenBodies={hiddenBodies}
-        snapStep={snapStep} pickFilter={heldDraftFacePicking ? 'face' : finishEdgePicking || (active?.fillet?.type === 'edge' && pickFilter === 'edge') ? 'edge' : active ? 'all' : pickFilter} hoverBody={shownPreviewBodies ? null : rowHover}
-        picking={viewportPicking} meshBoxCrossing={meshBoxCrossing} sketchActions={sketchViewportActions} sketchSnaps={{ twoPoint: twoPointSnap.input, extension: arcExtensionSnap.input, crossingBodies, placed: placedSketchSnaps, objectKinds: objectSnapKinds }} onCursor={onCursor}
+        bodyColors={bodyColors} faceColors={faceColors} hiddenBodies={hiddenBodies} snapStep={snapStep}
+        sketchActions={sketchViewportActions} sketchSnaps={{ twoPoint: twoPointSnap.input, extension: arcExtensionSnap.input, crossingBodies, placed: placedSketchSnaps, objectKinds: objectSnapKinds }} onCursor={onCursor}
         boundsBox={fresh && showBox ? (() => {
           const shown = selBodies.length ? selBodies : bodies, box = shown.length ? boundsOf(shown) : null;
           return box ? { ...box, label: [0, 1, 2].map(k => fmt(Math.round((box.max[k] - box.min[k]) * 100) / 100)).join(' × ') } : null;
