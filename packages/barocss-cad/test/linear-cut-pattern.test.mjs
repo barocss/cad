@@ -148,3 +148,38 @@ test('linear feature pattern: existing axis, count and spacing admission and cou
   assert.deepEqual(accepted.doc, before);
   shape(evaluateCadPart(accepted.linearFeaturePattern({ axis: 'x', spacing: 16, count: 3 }).doc), [[8, 12], [24, 28], [40, 44]]);
 });
+
+test('linear feature pattern: a later Subtract only supersedes the source it consumes', () => {
+  const doc = { format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [] };
+  const box = (doc, id, min, max) => {
+    doc.features.push({ id: id + 'Sketch', kind: 'sketch', profile: 'rectangle', min, max });
+    doc.features.push({ id, kind: 'extrude', sketch: id + 'Sketch', height: 10 });
+  };
+  box(doc, 'stockA', [0, 0], [60, 40]);
+  box(doc, 'toolA', [8, 8], [12, 10]);
+  doc.features.push({ id: 'n4', kind: 'difference', target: 'stockA', tool: 'toolA' });
+  const repeat = { id: 'repeatA', kind: 'linear-feature-pattern', target: 'n4', axis: 'x', spacing: 16, count: 2 };
+  const consumed = structuredClone(doc);
+  box(consumed, 'toolB', [8, 26], [14, 28]);
+  consumed.features.push({ id: 'n7', kind: 'difference', target: 'n4', tool: 'toolB' }, repeat);
+  const consumedBefore = structuredClone(consumed);
+  coreRefused(consumed, 'REFERENCE', /must still be active/);
+  assert.deepEqual(consumed, consumedBefore);
+
+
+  box(doc, 'stockB', [100, 0], [160, 40]);
+  box(doc, 'toolB', [108, 26], [114, 28]);
+  doc.features.push({ id: 'n12', kind: 'difference', target: 'stockB', tool: 'toolB' });
+  const baseline = evaluateCadPart(doc);
+  doc.features.push(repeat);
+  const before = structuredClone(doc), { outputs } = evaluateCadPart(doc);
+  assert.deepEqual(outputs.map(out => out.id).sort(), ['n12', 'repeatA']);
+  const old = outputs.find(out => out.id === 'repeatA'), newer = outputs.find(out => out.id === 'n12');
+  for (const out of [old, newer]) assert.equal(checkBrep(out.brep, { strict: true }).valid, true);
+  close(massPropertiesOf(old).volume, 23840); // 60 x 40 x 10 stock less two 4 x 2 x 10 cuts.
+  for (const y of [8, 10]) for (const z of [0, 10]) for (const x of [24, 28]) {
+    assert.ok(old.brep.vertices.some(v => v.point.every((p, i) => Math.abs(p - [x, y, z][i]) < 1e-8)));
+  }
+  assert.deepEqual(newer, baseline.outputs.find(out => out.id === 'n12'));
+  assert.deepEqual(doc, before);
+});
