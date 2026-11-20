@@ -92,6 +92,7 @@ export function useCageGizmo(
 
   return {
     gizmo, live, dragging: !!active, extruding: !!active?.delta && active.gesture.extrude, isDragging, cancel, reset,
+    influence: active?.gesture.plan?.weights,
     settings: {
       enabled, radius, radiusValid,
       setEnabled: (next: boolean) => { if (!isDragging()) setEnabled(next); },

@@ -313,6 +313,8 @@ export interface ViewportTool {
 
 export interface CageOverlay {
   cage: StudioCage; mode: CageMode; pickDepth?: 'front' | 'back'; sel: CageSelection; validation: CageValidation;
+  /** Frozen influence weights for the active proportional gesture. */
+  influence?: readonly number[];
   /** The mirrored half (drawn faint), when the cage is one half. */
   mirrored?: StudioCage | null;
 }

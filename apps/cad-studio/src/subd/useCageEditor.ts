@@ -66,7 +66,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
   const [pickDepth, setPickDepth] = useState<'front' | 'back'>('front');
   const from = useRef<ModelNode | null>(null);
   const sourceCurrent = !!session && doc.nodes[session.node] === from.current;
-  const { gizmo, live, dragging, extruding, isDragging, cancel: cancelDrag, reset: resetDrag, settings: dragSettings } = useCageGizmo(session, doc, sourceCurrent && !previewActive, setSession, fail);
+  const { gizmo, live, dragging, extruding, influence, isDragging, cancel: cancelDrag, reset: resetDrag, settings: dragSettings } = useCageGizmo(session, doc, sourceCurrent && !previewActive, setSession, fail);
   const [exact, setExact] = useState<{ of: CageSession; doc: StudioDoc; bodies: BodyResult[] } | null>(null);
   const [buildReceipt, setBuildReceipt] = useState<CageBuildReceipt<CageSession, StudioDoc> | null>(null);
   const exactReadiness = cageDoneReadiness(session, doc, dragging, buildReceipt);
@@ -176,7 +176,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
 
   // (A move keeps the topology: the session's validation stands; an extrusion's is the dragged cage's.)
   const baseValidation = useMemo(() => session ? validationOf(session) : null, [session]);
-  const overlay = useMemo((): CageOverlay | null => live ? { cage: live.cage, mode: live.mode, pickDepth, sel: live.sel, validation: extruding ? validationOf(live) : baseValidation!, mirrored: live.mirror ? (() => { const full = mirrorCage(live.cage, live.mirror); return { positions: [...full.positions], faces: full.faces.slice(live.cage.faces.length).map(f => [...f]) } as never; })() : null } : null, [live, extruding, baseValidation, pickDepth]);
+  const overlay = useMemo((): CageOverlay | null => live ? { cage: live.cage, mode: live.mode, pickDepth, sel: live.sel, validation: extruding ? validationOf(live) : baseValidation!, influence, mirrored: live.mirror ? (() => { const full = mirrorCage(live.cage, live.mirror); return { positions: [...full.positions], faces: full.faces.slice(live.cage.faces.length).map(f => [...f]) } as never; })() : null } : null, [live, extruding, influence, baseValidation, pickDepth]);
 
   // The body while dragged, or in Box mode: triangles straight from the cage (or its quick limit preview).
   const quick = useMemo(() => {

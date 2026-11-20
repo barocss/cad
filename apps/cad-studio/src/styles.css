@@ -579,6 +579,7 @@ button.chip.snap:hover { background: #3a3c41; }
 .cage-vertex.picked { fill: #ffb020; }
 .cage-vertex.pole { fill: none; stroke: #e98a3b; stroke-width: 1.5; }
 .cage-vertex.bad { fill: #ff4d4d; }
+.cage-vertex.influence { fill: none; stroke: #4ee6cb; stroke-width: 1.5; }
 .cage-face.picked { fill: rgba(255, 176, 32, 0.22); stroke: none; }
 .cage-face.ngon { fill: rgba(233, 138, 59, 0.12); stroke: none; }
 .cage-mirror { fill: none; stroke: #7aa7ff; stroke-width: 0.8; opacity: 0.3; stroke-dasharray: 3 3; }

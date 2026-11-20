@@ -13,7 +13,7 @@ type EdgeKind = 'plain' | 'picked' | 'crease' | 'open' | 'bad';
 type VertexKind = 'plain' | 'picked' | 'pole' | 'bad';
 const EDGE_KINDS: readonly EdgeKind[] = ['plain', 'picked', 'crease', 'open', 'bad'];
 /** What an overlay draws, apart from where: each edge once with its kind, each vertex's kind and size, the faces tinted. */
-interface Prepared { edgeA: Int32Array; edgeB: Int32Array; edgeKind: Uint8Array; seen: number; vertKind: (VertexKind | null)[]; vertR: Float64Array; ngonFaces: number[]; selFaces: number[]; selCount: number; ngonCount: number }
+interface Prepared { influenced: number[]; edgeA: Int32Array; edgeB: Int32Array; edgeKind: Uint8Array; seen: number; vertKind: (VertexKind | null)[]; vertR: Float64Array; ngonFaces: number[]; selFaces: number[]; selCount: number; ngonCount: number }
 // (Per overlay — it changes with the cage, the selection or the mode, not from frame to frame — so a frame only
 // projects and writes the paths: PERF3 C16, 2.8 ms a frame on a 2k-face cage before.)
 const prepared = new WeakMap<CageOverlay, Prepared>();
@@ -35,9 +35,11 @@ function prepare(overlay: CageOverlay): Prepared {
   for (let i = 0; i < n; i++) {
     if (selVerts.has(i)) { vertKind[i] = 'picked'; vertR[i] = 4.5; } else if (badVerts.has(i)) { vertKind[i] = 'bad'; vertR[i] = 4; } else if (poles.has(i)) { vertKind[i] = 'pole'; vertR[i] = 4; } else if (mode === 'vertex') { vertKind[i] = 'plain'; vertR[i] = 2.5; }
   }
+  const influenced: number[] = [];
+  overlay.influence?.forEach((weight, i) => { if (weight > 0 && !selVerts.has(i) && i < n) influenced.push(i); });
   const ngonFaces: number[] = [], selList: number[] = [];
   cage.faces.forEach((_, k) => { if (ngons.has(k) && !selFaces.has(k)) ngonFaces.push(k); if (selFaces.has(k)) selList.push(k); });
-  const out: Prepared = { edgeA: Int32Array.from(A), edgeB: Int32Array.from(B), edgeKind: Uint8Array.from(K), seen: seen.size, vertKind, vertR, ngonFaces, selFaces: selList, selCount: selFaces.size, ngonCount: ngons.size };
+  const out: Prepared = { influenced, edgeA: Int32Array.from(A), edgeB: Int32Array.from(B), edgeKind: Uint8Array.from(K), seen: seen.size, vertKind, vertR, ngonFaces, selFaces: selList, selCount: selFaces.size, ngonCount: ngons.size };
   prepared.set(overlay, out);
   return out;
 }
@@ -87,11 +89,18 @@ export function cagePoints(overlay: CageOverlay): [string, OverlayPoints][] {
   const out: [string, OverlayPoints][] = [];
   // (A pole's ring: no fill, its border.)
   for (const k of VERTEX_ORDER) if (at[k].length) out.push(['cage:v:' + k, { positions: Float32Array.from(at[k]), ...VERTEX_LOOK[k], ...(k === 'pole' ? { colors: new Float32Array((at[k].length / 3) * 4) } : {}) }]);
+  if (pre.influenced.length) {
+    const positions = Float32Array.from(pre.influenced.flatMap(i => [P[3 * i], P[3 * i + 1], P[3 * i + 2]]));
+    out.push(['cage:v:influence', {
+      positions, size: 11, colors: new Float32Array(pre.influenced.length * 4),
+      border: { width: 1.5, color: '#4ee6cb' }, over: true,
+    }]);
+  }
   pointCache.set(overlay, out);
   return out;
 }
 /** Every key cageLines and cagePoints can use (to clear them). */
-export const CAGE_LINE_KEYS = ['cage:mirror', ...LINE_ORDER.map(k => 'cage:' + k), ...VERTEX_ORDER.map(k => 'cage:v:' + k)];
+export const CAGE_LINE_KEYS = ['cage:mirror', 'cage:v:influence', ...LINE_ORDER.map(k => 'cage:' + k), ...VERTEX_ORDER.map(k => 'cage:v:' + k)];
 const dot = (X: Float64Array, Y: Float64Array, i: number, r: number) => `M${(X[i] - r).toFixed(1)},${Y[i].toFixed(1)}a${r},${r} 0 1 0 ${2 * r},0a${r},${r} 0 1 0 ${-2 * r},0`;
 const facePath = (faces: readonly (readonly number[])[], list: readonly number[], S: readonly string[]) => list.map(k => 'M' + faces[k].map(i => S[i]).join('L') + 'Z').join('');
 
@@ -109,11 +118,12 @@ export function CageMarks({ overlay, project, lines = true }: { overlay: CageOve
   const ngons = { size: pre.ngonCount }, selFaces = { size: pre.selCount }, seen = { size: pre.seen };
   const m = overlay.mirrored;
   const mirrorPath = m && lines ? (() => { const M = Array.from({ length: m.positions.length / 3 }, (_, i) => project([m.positions[3 * i], m.positions[3 * i + 1], m.positions[3 * i + 2]])); return m.faces.map(f => 'M' + f.map(i => `${M[i][0].toFixed(1)},${M[i][1].toFixed(1)}`).join('L') + 'Z').join(''); })() : '';
-  return <g className="cage" aria-label="SubD cage" data-edges={seen.size} data-picked-edges={pickedEdges} data-engine-lines={lines ? undefined : 1}>
+  return <g className="cage" aria-label="SubD cage" data-edges={seen.size} data-picked-edges={pickedEdges} data-influenced-vertices={pre.influenced.length || undefined} data-engine-lines={lines ? undefined : 1}>
     {mirrorPath && <path d={mirrorPath} className="cage-mirror" />}
     {ngons.size > 0 && <path d={facePath(cage.faces, pre.ngonFaces, S)} className="cage-face ngon" />}
     {selFaces.size > 0 && <path d={facePath(cage.faces, pre.selFaces, S)} className="cage-face picked" data-picked-faces={selFaces.size} />}
     {(['plain', 'crease', 'open', 'bad', 'picked'] as const).map(k => paths[k].length > 0 && <path key={k} d={paths[k].join('')} className={`cage-edge${k === 'plain' ? '' : ' ' + k}`} />)}
-    {(['plain', 'pole', 'bad', 'picked'] as const).map(k => verts[k].length > 0 && <path key={'v' + k} d={verts[k].join('')} className={`cage-vertex${k === 'plain' ? '' : ' ' + k}`} />)}
+    {VERTEX_ORDER.map(k => verts[k].length > 0 && <path key={'v' + k} d={verts[k].join('')} className={`cage-vertex${k === 'plain' ? '' : ' ' + k}`} />)}
+    {lines && pre.influenced.length > 0 && <path className="cage-vertex influence" d={pre.influenced.map(i => dot(X, Y, i, 5.5)).join('')} />}
   </g>;
 }
