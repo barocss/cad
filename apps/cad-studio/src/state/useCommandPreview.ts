@@ -1,3 +1,4 @@
+import { historyFilletPreviewCurrent } from './historyFilletRadiusReceipt';
 import { openingShellFailure } from './openingShellFailure';
 import { filletInteriorProblems } from '../app/filletInteriorInput';
 import { offsetCollapseFailure } from '../app/offsetCollapseFeedback';
@@ -70,7 +71,7 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
     // into the HUD or placed by the pointer.)
     let seen: Values | undefined, stop: (() => void) | undefined;
     const evaluate = (active: Active | null): (() => void) | undefined => {
-      if (!active?.cmd.build || active.upload) return;
+      if (!active?.cmd.build || active.upload || !historyFilletPreviewCurrent(active)) return;
       if (!bearingRootCurrent) {
         setPreviewBodies(null);
         setActive(a => a && { ...a, preview: 'error', error: { title: 'Assembly changed', hint: 'Start Bearing again to use the current housing geometry.', detail: '' } });
@@ -108,7 +109,7 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
       }
       const values = active.values, cmd = active.cmd, ctx = active.ctx;
       const job = async (full = false) => {
-        if (!live) return;
+        if (!live || !historyFilletPreviewCurrent(active)) return;
         let candidate: StudioDoc;
         try { candidate = cmd.build!(ctx, values); } catch (e) {
           const current = activeStore.get();
@@ -136,7 +137,12 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
         const flangeFeature = shown === candidate && !rolled && cmd.id === 'sheet-flange'
           && candidate.nodes.length === ctx.doc.nodes.length + 1 && terminal?.kind === 'sheet-flange' ? terminal.id : undefined;
         const reply = await ownedPreview(lifetime.current, ticket, () => engine.preview(shown, revision, cutFeature, flangeFeature));
-        if (reply.stale) return; const result = reply.result;
+        if (reply.stale || !historyFilletPreviewCurrent(active)) return;
+        if (active.historyFilletRadius) {
+          const now=activeStore.get();
+          if (!now || now.cmd!==cmd || now.ctx!==ctx || now.ownsSource!==active.ownsSource || !historyFilletPreviewCurrent(now)) return;
+        }
+        const result = reply.result;
         if (!rolled) wholeCost.current = { doc: ctx.doc, ms: performance.now() - t0 };
         if (cmd.id === 'bearing' && ctx.bearingAssembly?.root !== currentBearingDoc()) return;
         if (rolled && live) fullTimer.current = window.setTimeout(() => { if (!live) return; run.next = () => job(true); if (!run.busy) void pump(); }, 220);

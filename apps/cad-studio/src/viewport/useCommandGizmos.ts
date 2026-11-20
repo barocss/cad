@@ -1,3 +1,4 @@
+import { ownedHistoryFilletHandle, historyFilletCanPatch, type HistoryFilletReceipt } from '../state/historyFilletRadiusReceipt';
 import { commandFieldLabel } from '../app/commandFieldLabel';
 import { draggedScaleFactor } from './draggedScaleFactor';
 import { useMemo, useRef, type Dispatch, type SetStateAction, type RefObject } from 'react';
@@ -12,15 +13,16 @@ import { alignMove, previewMatrix } from '@barocss/cad-model/assembly/drag';
 type BodyDrag = { matrix: Float64Array; settling: boolean } | null;
 interface CommandGizmoOptions {
   model: { doc: StudioDoc; evaluated: StudioDoc; bodies: BodyResult[]; selection: Selection; marker: number | null; editNode: number | null };
-  command: { active: Active | null; ctx: Ctx; setActive: Dispatch<SetStateAction<Active | null>>; handleDrag: RefObject<{ key: string; lastOk: number; wall: number; bad: number | null; want: number; step: number; dragging: boolean } | null>; previewFor: RefObject<string | null> };
+  command: { active: Active | null; readActive?():Active|null; ctx: Ctx; setActive: Dispatch<SetStateAction<Active | null>>; handleDrag: RefObject<{ key: string; lastOk: number; wall: number; bad: number | null; want: number; step: number; dragging: boolean } | null>; previewFor: RefObject<string | null> };
   context: { sketch: object | null; rendering: boolean; drawing: boolean; measure: readonly unknown[] | null; assemblyDraft: object | null; instanceCount: number; snapStep: number };
+  historyFillet?: {receipt?:HistoryFilletReceipt;eligible:boolean};
   splitSource?: { evidence: Ctx['splitSourceBounds']; canStart(evidence: Ctx['splitSourceBounds']): boolean };
   drag: { bodyDrag: BodyDrag; setBodyDrag: Dispatch<SetStateAction<BodyDrag>> };
 }
 /** Command gizmos and dimension handles share the original drag refs and central command store. */
-export function useCommandGizmos({ model, command, context, drag, splitSource }: CommandGizmoOptions) {
+export function useCommandGizmos({ model, command, context, drag, splitSource, historyFillet }: CommandGizmoOptions) {
   const { doc, evaluated, bodies, selection, marker, editNode } = model;
-  const { active, ctx, setActive, handleDrag, previewFor } = command;
+  const { active, readActive, ctx, setActive, handleDrag, previewFor } = command;
   const { sketch, rendering, drawing, measure, assemblyDraft, instanceCount, snapStep } = context;
   const { bodyDrag, setBodyDrag } = drag;
   // Move and Rotate gizmos on the selected body: while dragged it follows at once (a renderer transform
@@ -86,17 +88,26 @@ export function useCommandGizmos({ model, command, context, drag, splitSource }:
     const step = h.arc || h.unit !== undefined ? h.step ?? 1 : Math.max(0.001, (h.step ?? 1) * (snapStep || 0.01)), snap = (start: number, mm: number) => Math.min(h.max ?? Infinity, Math.max(h.min ?? -Infinity, Math.round((start + mm * (h.scale ?? 1)) / step) * step));
     const pair = h.pair, value2 = pair ? Number(handleValues[pair.key]) : NaN;
     const label = commandFieldLabel(handleCmd.id, active?.fillet, field.key, field.label);
+    const history = readActive ? ownedHistoryFilletHandle(historyFillet?.receipt, handleCmd, handleCtx, h, active) : undefined;
+    if (active?.historyFilletRadius && !history) return [];
+    const waitForHistoryProof = !active && historyFillet?.eligible && !history && handleCmd.id==='edit' && h.key==='r' && !h.arc && !h.pair;
+    const canWrite=()=>canUseHandle() && (!history || (!!readActive && historyFilletCanPatch(history,handleCmd,handleCtx,readActive(),active)));
     if (pair && !Number.isFinite(value2)) return [];
     return [{ id: pair ? `${h.key}+${pair.key}` : h.key, at: h.at, dir: h.dir, label: pair ? label.replace(/ \w$/, '') : label, value, screenOffset: h.screenOffset, ...(h.arc ? { arc: h.arc } : {}),
       ...(pair ? { plane: { dir2: pair.dir, value2, toValue2: snap } } : {}),
-      ...(active && handleCmd.id === 'fillet' && h.key === 'radius' && !h.arc && !pair ? { scalarDragSession: active.ctx } : {}),
+      ...(history ? { scalarDragSession: history } :
+        active && handleCmd.id === 'fillet' && h.key === 'radius' && !h.arc && !pair ? { scalarDragSession: active.ctx } : {}),
+      ...(waitForHistoryProof ? { historyFilletProofPending: true as const } : {}),
       toValue: snap,
       format: (v: number) => h.arc ? `${fmt(v)}°` : h.unit !== undefined ? `${fmt(v)}${h.unit ? ' ' + h.unit : ''}` : `${fmt(v)} mm`,
       unit: h.arc ? '°' : h.unit ?? 'mm', owner: handleCmd, editing: !!active, ...(!active ? { shiftPick: true as const } : {}),
       // (A typed value, as the HUD's: no drag bound, the preview follows.)
-      onType: (v: number) => { if (!canUseHandle()) return; handleDrag.current = null; setActive(a => a ? { ...a, values: patchValues(a.cmd, a.ctx, a.values, { [h.key]: v }), preview: 'busy' } : a); },
+      onType: (v: number) => { if (!canWrite()) return; handleDrag.current = null;
+        setActive(a => a && (!history || historyFilletCanPatch(history,handleCmd,handleCtx,a,active))
+          ? { ...a, values: patchValues(a.cmd, a.ctx, a.values, { [h.key]: v }), preview: 'busy' } : a);
+      },
       onDrag: (v: number, done: boolean, v2?: number) => {
-        if (!canUseHandle()) return;
+        if (!canWrite()) return;
         if (pair) {
           // (Both coordinates at once; a refused spot shows as the preview's error, no wall.)
           handleDrag.current = null;
@@ -115,8 +126,12 @@ export function useCommandGizmos({ model, command, context, drag, splitSource }:
         }
         if (done) hd.dragging = false;
         // An idle handle opens its feature's edit as the drag starts.
-        setActive(a => a ? (a.values[h.key] !== v ? { ...a, values: patchValues(a.cmd, a.ctx, a.values, { [h.key]: v }), preview: 'busy' } : a)
-          : { cmd: handleCmd, values: patchValues(handleCmd, handleCtx, handleValues, { [h.key]: v }), preview: 'busy', ctx: { ...handleCtx }, ...(evidence ? { ownsSource: evidence.isCurrent } : {}) });
+        setActive(a => {
+          if (history && !historyFilletCanPatch(history,handleCmd,handleCtx,a,active)) return a;
+          return a ? (a.values[h.key] !== v ? { ...a, values: patchValues(a.cmd, a.ctx, a.values, { [h.key]: v }), preview: 'busy' } : a)
+            : { cmd: handleCmd, values: patchValues(handleCmd, handleCtx, handleValues, { [h.key]: v }), preview: 'busy',
+              ctx: history ? handleCtx : { ...handleCtx }, ...(history ? {historyFilletRadius:true as const,ownsSource:history.isCurrent} : evidence ? { ownsSource: evidence.isCurrent } : {}) };
+        });
       } }];
   }) : [];
   const settleDrag = () => { if (bodyDrag?.settling && active && previewFor.current === JSON.stringify(active.values)) setBodyDrag(null); };

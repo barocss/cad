@@ -26,3 +26,16 @@ export function scalarHandleDragValue(frame: ScalarHandleDrag | null, handle: Fe
   const value = frame.toValue(frame.start, mm);
   return Number.isFinite(value) ? value : null;
 }
+
+/** Until its own proof is ready, do not start a History Fillet end-on gesture via the generic fallback. */
+export function historyFilletEndOnBlocked(handle:FeatureHandle|undefined,projector:Projector):boolean {
+  if(!handle?.historyFilletProofPending || handle.scalarDragSession) return false;
+  return captureScalarHandleDrag({...handle,scalarDragSession:handle},projector)?.fallback!==false;
+}
+
+/** A pending end-on press may keep the legacy Shift pick, but may never become a radius drag. */
+export function historyFilletPendingPress(handle:FeatureHandle|undefined,projector:Projector,shiftPickArmed:boolean):
+  'consume' | 'shift-pick-only' | undefined {
+  if (!historyFilletEndOnBlocked(handle,projector)) return;
+  return shiftPickArmed ? 'shift-pick-only' : 'consume';
+}

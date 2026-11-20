@@ -1,4 +1,4 @@
-import { captureScalarHandleDrag, scalarHandleDragValue, type ScalarHandleDrag } from './scalarHandleDrag';
+import { captureScalarHandleDrag, historyFilletPendingPress, scalarHandleDragValue, type ScalarHandleDrag } from './scalarHandleDrag';
 import { wheelZoomFactor } from './wheelZoomPreference';
 import { useCallback, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type RefObject, type WheelEvent } from 'react';
 import { CadPartLimits, ExtrudedProfileLimits } from '@barocss/cad';
@@ -816,9 +816,16 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
       const g = hit.kind === 'handle' ? undefined : propsRef.current.gizmo ?? undefined;
       const filter = propsRef.current.pickFilter;
       const shiftPickHandle = e.shiftKey && e.pointerType === 'mouse' && hd?.shiftPick && (filter === 'face' || filter === 'edge') ? hd : undefined;
+      const historyPress = hd?.historyFilletProofPending ? historyFilletPendingPress(hd,projector(),!!shiftPickHandle) : undefined;
+      if (historyPress === 'consume') {
+        // Consume this gesture, even if evidence arrives before pointer-up.
+        drag.current={mode:null,x,y,moved:true};
+        return;
+      }
       drag.current = { mode: 'gizmo', x, y, moved: false, hit, shiftPickHandle, from: [x, y], last: [x, y], turned: 0, start: hd?.value, start2: hd?.plane?.value2,
         handleAt: hd ? [...hd.at] as Vec3 : undefined, handleToValue: hd?.toValue,
-        scalarHandleDrag: hd?.scalarDragSession ? captureScalarHandleDrag(hd, projector()) : undefined,
+        // The existing Shift release remains a pick; movement past its threshold gets a canceled scalar frame.
+        scalarHandleDrag: historyPress === 'shift-pick-only' ? null : hd?.scalarDragSession ? captureScalarHandleDrag(hd, projector()) : undefined,
         origin: propsRef.current.gizmo ? [...propsRef.current.gizmo.origin] as Vec3 : undefined, gizmo: g, pointerId: e.pointerId, sessionKey: g?.sessionKey };
       g?.onStart?.(e.pointerId);
       return;

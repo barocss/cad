@@ -291,6 +291,7 @@ import { editCommand } from '@barocss/cad-model/app/editCommand';
 import { isBodyEyeVisibilityOnly } from './state/bodyVisibilityReferenceProblems';
 import { heldDraftFacePreviewClear, heldDraftFaceWorkCurrent } from './state/heldDraftFaceSession';
 import { useHeldDraftFace } from './state/useHeldDraftFace';
+import { useHistoryFilletRadius } from './app/useHistoryFilletRadius';
 import { useHeldFinishEdge } from './state/useHeldFinishEdge';
 import { flattenAssembly } from '@barocss/cad-model/engine/flatten';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
@@ -3155,7 +3156,30 @@ export function App() {
       && markerNow.current === null && !shownVariant.current && !inPlaceNow.current,
     editorCurrent: () => editNodeNow.current === editNode && !activeStore.get() && !nodeEditorDraft.current,
   });
-  const commandGizmos = useCommandGizmos({ model: { doc, evaluated, bodies, selection, marker, editNode }, command: { active, ctx, setActive, handleDrag, previewFor },
+  const historyFilletOpen = openIntent.current, historyFilletWork = workOwnership.current.scope;
+  const historyFillet = useHistoryFilletRadius({
+    doc, commandDoc, evaluated, bodies, index:editNode, worker:workerSession, open:historyFilletOpen, scope:historyFilletWork, engine, readIdle:!active,
+    enabled:fresh && !busy && !workerFailure && marker===null && !variants.showing && !inPlace && !doc.instances?.length
+      && !instanceSel.length && !directSel.length && !sketch && !rendering && !drawing && !measure && !assembly.draft
+      && !cageEd.session && !skel.session && !section && previewMode==='none' && !bodyDrag && !exploded && !ghost
+      && !workingComparison && !candidateReview?.shown && !parameterEdit && !routePanelOpen && !routePreviewBodies,
+    revision:()=>revision.current++,
+    idle:()=>!activeStore.get() && !nodeEditorDraft.current,
+    liveSourceCurrent:()=>docNow.current===doc && shownDocNow.current===doc && evaluatedRef.current===evaluated
+      && bodiesRef.current===bodies && ownsEvaluatedSource() && workOwnership.current.scope===historyFilletWork
+      && !workEditRefusal(workOwnership.current,historyFilletWork) && workerSessionNow.current===workerSession
+      && openIntent.current===historyFilletOpen && editNodeNow.current===editNode && markerNow.current===null
+      && !shownVariant.current && !inPlaceNow.current && !sectionRef.current && !nodeEditorDraft.current
+      && !parameterEditNow.current && !project.opening() && !referenceProblems.current.get(doc)?.length,
+  });
+  useLayoutEffect(() => {
+    const running=activeStore.get();
+    if (!running?.historyFilletRadius || running.ownsSource?.()===true) return;
+    commandPreview.retire();
+    applyWhenReady.current=null;
+    setActive(current=>current===running?null:current);
+  });
+  const commandGizmos = useCommandGizmos({ historyFillet, model: { doc, evaluated, bodies, selection, marker, editNode }, command: { active, ctx, setActive, handleDrag, previewFor, readActive:activeStore.get },
     splitSource: { evidence: splitSourceBounds, canStart: evidence => {
       const running = activeStore.get();
       return canChangeDocument() && (running
