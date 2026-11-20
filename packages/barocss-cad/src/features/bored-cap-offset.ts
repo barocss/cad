@@ -336,13 +336,18 @@ export function offsetBoredCapIfAdmitted(brep: Brep, faceName: string, distance:
   return candidate;
 }
 
-function admittedPositiveXWall(brep: Brep, faceName: string) {
+function admittedCardinalWall(brep: Brep, faceName: string) {
   const matches = brep.faces.filter(face => face.name === faceName), [wall] = matches;
   if (matches.length !== 1 || wall.loops.length !== 1 || wall.surface.kind !== 'surface' || wall.surface.degreeU !== 1) return;
   const stock = admittedAxialStock(brep, 'bored');
-  if (!stock || !wall.surface.controlPoints.every(row => row.every(point => point[0] === stock.max[0]))) return;
+  if (!stock) return;
   const support = faceGeometry(wall);
-  if (support.kind !== 'plane' || !same(support.n, [1, 0, 0])) return;
+  if (support.kind !== 'plane') return;
+  const axis = support.n[0] !== 0 ? 0 : 1, transverse = axis === 0 ? 1 : 0;
+  const sign = support.n[axis];
+  if ((sign !== 1 && sign !== -1) || support.n[transverse] !== 0 || support.n[2] !== 0) return;
+  const station = (sign === 1 ? stock.max : stock.min)[axis];
+  if (!wall.surface.controlPoints.every(row => row.every(point => point[axis] === station))) return;
 
   const loops = byId(brep.loops), coedges = byId(brep.coedges), edges = byId(brep.edges), faces = byId(brep.faces);
   const loop = loops.get(wall.loops[0]);
@@ -351,7 +356,7 @@ function admittedPositiveXWall(brep: Brep, faceName: string) {
   for (const id of loop.coedges) {
     const use = coedges.get(id), twin = use?.twin ? coedges.get(use.twin) : undefined;
     const neighbor = twin && faces.get(loops.get(twin.loop)?.face ?? ''), edge = use && edges.get(use.edge);
-    if (!edge || !neighbor || !line(edge.curve) || !edge.curve.controlPoints.every(point => point[0] === stock.max[0])) return;
+    if (!edge || !neighbor || !line(edge.curve) || !edge.curve.controlPoints.every(point => point[axis] === station)) return;
     adjacent.add(neighbor);
     for (const vertex of edge.vertices) corners.add(vertex);
   }
@@ -360,40 +365,50 @@ function admittedPositiveXWall(brep: Brep, faceName: string) {
   for (const neighbor of adjacent) {
     if (neighbor === stock.bottom || neighbor === stock.top) continue;
     const geometry = faceGeometry(neighbor);
-    if (geometry.kind !== 'plane' || geometry.n[0] !== 0 || Math.abs(geometry.n[1]) !== 1 || geometry.n[2] !== 0) return;
-    sideSigns.add(geometry.n[1]);
+    if (geometry.kind !== 'plane' || geometry.n[axis] !== 0 || Math.abs(geometry.n[transverse]) !== 1 || geometry.n[2] !== 0) return;
+    sideSigns.add(geometry.n[transverse]);
   }
   if (sideSigns.size !== 2) return;
-  return { stock, corners, faces: new Set([wall, ...adjacent]), edges };
+  return { stock, axis, sign, station, corners, faces: new Set([wall, ...adjacent]), edges };
 }
 
-/** The center and normal of the positive X wall on a flat, single-bore rectangular plate. */
+/** The center and outward normal of a cardinal wall on a flat, single-bore rectangular plate. */
 export function boredPlateWallOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
-  const admitted = admittedPositiveXWall(brep, faceName);
+  const admitted = admittedCardinalWall(brep, faceName);
   if (!admitted) return;
-  const { min, max, lo, hi } = admitted.stock;
-  return { anchor: [max[0], (min[1] + max[1]) / 2, (lo + hi) / 2], normal: [1, 0, 0] };
+  const { stock: { min, max, lo, hi }, axis, sign, station } = admitted;
+  const anchor: Point = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (lo + hi) / 2], normal: Point = [0, 0, 0];
+  anchor[axis] = station;
+  normal[axis] = sign;
+  return { anchor, normal };
 }
 
 export function offsetBoredPlateWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
-  const admitted = admittedPositiveXWall(brep, faceName);
+  const admitted = admittedCardinalWall(brep, faceName);
   if (!admitted) return;
   if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
     throw new BrepError('INPUT', 'bored wall offset: distance must be nonzero and within the modeling range');
-  const { stock, corners, faces, edges } = admitted;
-  const x = stock.max[0], next = x + distance;
+  const { stock, axis, sign, station, corners, faces, edges } = admitted;
+  const next = station + sign * distance;
   const extent = Math.max(Math.abs(next), geometryScaleMM(brep.vertices.map(vertex => vertex.point)));
   if (!(extent <= CadNumericPolicy.coordinateAbs)) throw new BrepError('GEOMETRY', 'bored wall offset: the wall leaves the modeling range');
-  if (next === x) throw new BrepError('GEOMETRY', 'bored wall offset: distance is too small to move the wall');
-  if (!(next - stock.center[0] - stock.radius > linearToleranceMM(extent)))
+  if (next === station) throw new BrepError('GEOMETRY', 'bored wall offset: distance is too small to move the wall');
+  if (!((next - stock.center[axis]) * sign - stock.radius > linearToleranceMM(extent)))
     throw new BrepError('GEOMETRY', 'bored wall offset: the offset would reach or cross the bore');
 
-  const moved = (point: Point): Point => point[0] === x ? [next, point[1], point[2]] : point;
-  const max: XY = [next, stock.max[1]];
+  const moved = (point: Point): Point => {
+    if (point[axis] !== station) return point;
+    const output: Point = [...point];
+    output[axis] = next;
+    return output;
+  };
+  const min: XY = [...stock.min], max: XY = [...stock.max];
+  const bound = sign === 1 ? max : min;
+  bound[axis] = next;
   const capTrims = new Map<string, (point: Point) => Point>();
   for (const loop of brep.loops) {
     if (loop.kind === 'inner' && (loop.face === stock.top.id || loop.face === stock.bottom.id))
-      capTrims.set(loop.id, capProjection(stock.min, max, loop.face === stock.top.id));
+      capTrims.set(loop.id, capProjection(min, max, loop.face === stock.top.id));
   }
   // The straight boundaries keep their original UV charts. The bore stays in place, so only
   // its uses on the resized caps need new UV coordinates from their unchanged 3D rim poles.

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1452: [Offset the other three walls of a rectangular through-bore plate](notes/offset-bored-plate-other-walls-2026-11-21/README.md), #17. Verify X−, Y− and Y+ signed offsets, bore clearance and Studio reopen.
 - D1451: [Offset the right wall of a rectangular through-bore plate](notes/offset-bored-plate-right-wall-2026-11-21/README.md), #17. Keep the exact 6 mm bore and other supports through signed wall moves and Studio reopen.
 - D1450: [Move the source plane after two tilted bore heals](notes/move-donor-after-tilted-heals-2026-11-21/README.md), #17. Qualify a live upstream move, exact healed geometry and corner-contact refusal in Studio and MCP.
 - D1449: [Heal both bores in sequence after a cap tilt](notes/heal-two-bores-after-cap-tilt-2026-11-21/README.md), #17. Preserve the tilted plane and reference through either heal order and independent Studio Undo.

@@ -4,11 +4,21 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const [output, input] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
+const [output, input, view = 'Right'] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
 assert.ok(output && input && isAbsolute(output) && relative(resolve(app, '../..'), output).startsWith('../'));
-const bytes = await readFile(input), source = JSON.parse(bytes), faceName = 'n1.side1';
-const contact = -26, positive = 5, negative = -4, centre = [40, 15, 5];
-const volumeAt = distance => 300 * (40 + distance) - 90 * Math.PI;
+const walls = {
+  Right: ['n1.side1', 0, 1, 40, -26],
+  Left: ['n1.side3', 0, -1, 0, -8],
+  Front: ['n1.side0', 1, -1, 0, -6],
+  Back: ['n1.side2', 1, 1, 30, -18],
+};
+assert.ok(Object.hasOwn(walls, view));
+const [faceName, axis, sign, station, contact] = walls[view];
+const bytes = await readFile(input), source = JSON.parse(bytes);
+const positive = 5, negative = -4, centre = [20, 15, 5], normal = [0, 0, 0];
+centre[axis] = station;
+normal[axis] = sign;
+const volumeAt = distance => 12000 + distance * (axis === 0 ? 300 : 400) - 90 * Math.PI;
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/viewport/Viewport.tsx',
   'apps/cad-studio/test/offset-bored-wall-browser.mjs',
@@ -18,7 +28,7 @@ const pins = [
 ];
 const f = await createFlow({
   name: 'offset-bored-wall', envFrozen: 'BORED_WALL_OFFSET_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Move the X+ exterior wall of a single-bore rectangular plate without moving the bore.',
+  qualification: `Move the ${view.toLowerCase()} exterior wall of a single-bore rectangular plate without moving the bore.`,
   limits: ['One 40 × 30 × 10 mm flat rectangular plate and one straight Ø6 bore at (11, 9) mm.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -56,14 +66,16 @@ async function measure(label, doc, distance, before) {
   assert.equal(worker.length, 1);
   near(worker[0].volume, volume);
   near(native.mass.volume, volume);
-  const limit = 40 + distance, stock = 300 * limit, removed = 90 * Math.PI;
-  const centroid = [(stock * limit / 2 - removed * 11) / volume, (stock * 15 - removed * 9) / volume, 5];
+  const limit = station + sign * distance, removed = 90 * Math.PI, stock = volume + removed;
+  const stockCentre = [20, 15];
+  stockCentre[axis] += sign * distance / 2;
+  const centroid = [11, 9].map((value, k) => (stock * stockCentre[k] - removed * value) / volume).concat(5);
   native.mass.centroid.forEach((value, axis) => near(value, centroid[axis]));
   if (before) {
     assert.deepEqual(incidence(native.brep), incidence(before.brep));
     assert.deepEqual(native.brep.vertices.map(({ point }) => point),
-      before.brep.vertices.map(({ point: [x, y, z] }) => [x === 40 ? limit : x, y, z]));
-    assert.deepEqual(native.supports, { ...before.supports, [faceName]: [[1, 0, 0], limit] });
+      before.brep.vertices.map(({ point }) => point.map((value, k) => k === axis && value === station ? limit : value)));
+    assert.deepEqual(native.supports, { ...before.supports, [faceName]: [normal, sign * limit] });
   }
   f.report.observations.push({ label, distance, limit, volume, nativeVolume: native.mass.volume,
     workerVolume: worker[0].volume, diameter: native.diameter, maximumPcurveGap: native.report.maximumPcurveGap });
@@ -108,13 +120,13 @@ await f.run(async () => {
   const outwardAgent = await offsetWithMcp(positive, true), inwardAgent = await offsetWithMcp(negative);
   await f.freshOpen(input, source, 'bored-wall-source');
   const original = await measure('source', source, 0);
-  f.phase = 'Select the X+ wall and launch its signed offset';
+  f.phase = 'Select the ' + view.toLowerCase() + ' wall and launch its signed offset';
   await button('View cube directions').click();
-  await f.page.getByRole('menuitem', { name: 'Right', exact: true }).click();
-  await f.page.waitForFunction(() => {
+  await f.page.getByRole('menuitem', { name: view, exact: true }).click();
+  await f.page.waitForFunction(expected => {
     const labels = [...document.querySelectorAll('.view-cube .vc-label')];
-    return labels.length === 1 && labels[0].textContent === 'RIGHT';
-  });
+    return labels.length === 1 && labels[0].textContent === expected;
+  }, view.toUpperCase());
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const filter = button('Selection filter');
@@ -132,11 +144,11 @@ await f.run(async () => {
   await status(panel, 'preview');
   assert.equal(await panel.getByLabel('Mode', { exact: true }).count(), 0);
 
-  f.phase = 'Drag the true X+ handle and apply a 5 mm offset';
-  const projection = await f.page.evaluate(([x, y, z]) => {
-    const a = window.__studioScreenOf([x, y, z]), b = window.__studioScreenOf([x + 1, y, z]);
+  f.phase = 'Drag the native outward handle and apply a 5 mm offset';
+  const projection = await f.page.evaluate(({ centre, normal }) => {
+    const a = window.__studioScreenOf(centre), b = window.__studioScreenOf(centre.map((value, k) => value + normal[k]));
     return [b[0] - a[0], b[1] - a[1]];
-  }, centre);
+  }, { centre, normal });
   assert.ok(Math.hypot(...projection) > 2);
   const handle = await f.page.locator('g.gizmo-handle[data-handle="d"] polygon').evaluate(polygon => {
     const svg = polygon.closest('svg').getBoundingClientRect(), points = [...polygon.points];
