@@ -106,8 +106,31 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     if (flangeSourceSizeChanged && !admitFlangeSourceSizeChange(doc, { ...doc, nodes }, editNode)) return Promise.resolve(flangeSourceSizeFailure);
     const flangeSourceSizeSource = flangeSourceSizeChanged ? canonical(doc) : '', flangeSourceSizeDraft = flangeSourceSizeChanged ? canonical(nodes) : '';
     const scope = owner.scope();
+    const oldPattern = doc.nodes[editNode], newPattern = nodes[editNode];
+    const dependentCircularHole = oldPattern?.kind === 'circular-pattern' && newPattern?.kind === 'circular-pattern'
+      && doc.nodes.some(node => node.kind === 'hole' && !node.held && !node.suppressed && node.parent.node === editNode);
+    // The Axis-at field can round-trip back to the implicit world origin as an explicit zero tuple.
+    const equalCircularHoleDraft = () => {
+      if (!dependentCircularHole) return false;
+      if (canonical(doc.nodes) === canonical(nodes)) return true;
+      if (oldPattern.axis !== 'z' || newPattern.axis !== 'z' || oldPattern.pivot !== undefined
+        || canonical(newPattern.pivot) !== canonical([0, 0, 0])) return false;
+      const originDraft: StudioDoc['nodes'] = [...nodes];
+      originDraft[editNode] = { ...newPattern, pivot: undefined };
+      return canonical(doc.nodes) === canonical(originDraft);
+    };
+    if (equalCircularHoleDraft()) return;
     const patternEdit = prepareLinearPatternHoleEdit(doc, nodes, editNode);
     if ('error' in patternEdit) return Promise.resolve(patternEdit.error);
+    // Only the admitted paired rewrite requires this exact evaluated-owner and reply-revision fence.
+    const circularHolePivotChanged = dependentCircularHole
+      && patternEdit.nodes.some((node, index) => index !== editNode && node !== nodes[index]);
+    const circularHoleSource = circularHolePivotChanged ? canonical(doc) : '';
+    const circularHoleDraft = circularHolePivotChanged ? canonical(nodes) : '';
+    const circularHoleCurrent = () => fresh && !busy && canChangeDocument() && owner.evaluated() === evaluated
+      && owner.marker() === null && !owner.variant()
+      && canonical(doc) === circularHoleSource && canonical(nodes) === circularHoleDraft;
+    if (circularHolePivotChanged && !circularHoleCurrent()) return;
     const cutProblem = rectangularCutEditProblem(doc, patternEdit.nodes, editNode);
     if (cutProblem) return Promise.resolve(cutProblem);
     const hint = holePatternEditProblem(doc.nodes[editNode], patternEdit.nodes[editNode], doc.parameters);
@@ -139,6 +162,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     const resize = !heightResize && isRectangleFinishResize(doc,next,editNode), worker = owner.worker(), open = owner.open();
     const current = () => ownsDraft() && owner.document() === doc && owner.scope() === scope
       && owner.worker() === worker && owner.open() === open
+      && (!circularHolePivotChanged || circularHoleCurrent())
       && (!flangeSourceSizeChanged || canonical(doc) === flangeSourceSizeSource && canonical(nodes) === flangeSourceSizeDraft)
       && (!flangeSourceThicknessChanged || canonical(doc) === flangeSourceThicknessSource && canonical(nodes) === flangeSourceThicknessDraft)
       && (!reliefThicknessChanged || canChangeDocument() && canonical(doc) === reliefThicknessSource && canonical(nodes) === reliefThicknessDraft)
@@ -281,7 +305,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
         } catch { if (current()) return failure; return; }
       }
       const reply = await engine.evaluate(next, request);
-      if (!reply || !current() || (heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeRadiusSourceChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged || flangeSourceSizeChanged) && reply.revision !== request) return;
+      if (!reply || !current() || (circularHolePivotChanged || heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeRadiusSourceChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged || flangeSourceSizeChanged) && reply.revision !== request) return;
       if (reply.ok) {
         if (!resize) {
           const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated
