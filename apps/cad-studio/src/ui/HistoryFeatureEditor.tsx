@@ -37,7 +37,7 @@ interface Props {
     setActive: Dispatch<SetStateAction<Active | null>>; editSketch(index: number): void; replaceAxis?(): void };
   inset: { roundedPending: boolean; detach(): void; problem?: string; relink: Editor['onRelinkInset'] };
   editor: Pick<Editor, 'onFilletStations' | 'filletEndpoints' | 'alignPreview' | 'oppositeRadiusPreview' | 'readAlignTargets' |
-    'edgeReplacement' | 'onDraft' | 'pending' | 'onApply' | 'onDelete' | 'onClose'>;
+    'edgeReplacement' | 'draftFaceReplacement' | 'onDraft' | 'pending' | 'onApply' | 'onDelete' | 'onClose'>;
   worker: Pick<EngineClient, 'faceEndDistance'>;
   canChangeDocument(): boolean;
   onNotice: Dispatch<SetStateAction<StudioNotice | null>>;

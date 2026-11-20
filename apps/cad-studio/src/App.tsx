@@ -288,6 +288,9 @@ import { confirmDimension, liveDrafts } from '@barocss/cad-model/chat/drafts';
 import { DraftsPanel } from './ui/DraftsPanel';
 import { sweepPath, SWEEP_CURVE, extrudeProfile } from '@barocss/cad-model/app/profileCommands';
 import { editCommand } from '@barocss/cad-model/app/editCommand';
+import { isBodyEyeVisibilityOnly } from './state/bodyVisibilityReferenceProblems';
+import { heldDraftFacePreviewClear, heldDraftFaceWorkCurrent } from './state/heldDraftFaceSession';
+import { useHeldDraftFace } from './state/useHeldDraftFace';
 import { useHeldFinishEdge } from './state/useHeldFinishEdge';
 import { flattenAssembly } from '@barocss/cad-model/engine/flatten';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
@@ -2103,7 +2106,10 @@ export function App() {
   const { makeSketchBand, editSketchBand, removeSketchBand, placeSketch, sketchToCurves, edgesToCurves, offsetSketch, useFaceOutline, clearSketchProfile, trimSketch, trimSelectedEdge, dragTrim, editSketch, linkSketchInset, currentSketchSource, finishError: sketchFinishError } = sketchActions;
   const circleChord = useCircleFromChord(doc, sketch, docNow, sketchGeneration, (shape, fresh) => updateShape(shape, fresh, 'chord-circle'));
   const commitBodyVisibility = (next: StudioDoc) => {
+    const problems = docNow.current === doc ? referenceProblems.current.get(doc) : undefined;
     if (!commit(next)) return false;
+    const accepted = docNow.current;
+    if (problems?.length && isBodyEyeVisibilityOnly(doc,accepted)) referenceProblems.current.set(accepted,problems);
     circleChord.carryVisibilityChange(doc);
     return true;
   };
@@ -2608,6 +2614,31 @@ export function App() {
   const proposals = useProposalPreview({ model: { doc, bodies, instances: instanceBodies, marker, active: !!active, sketch: !!sketch }, worker: { engine, lanes, nextRevision: () => revision.current++ },
     changes: { commit: next => commit(next, false, false, true), currentDoc: () => docNow.current, setPreviewBodies }, chatRowFiles, onNotice: setToast });
   const { ghost, proposalOverlay, proposalBusy, evidenceRevision, isStale, partEval, acceptIt, rejectIt } = proposals;
+  const heldDraftPreviewClear = heldDraftFacePreviewClear({ proposal: ghost, proposalBusy, comparison: workingComparison,
+    comparisonOverlay: compareOverlay, candidateShown: candidateReview?.shown });
+  const heldDraftOpen = openIntent.current;
+  const heldDraftWork = { scope: workOwnership.current.scope, generation: workOwnership.current.generation };
+  const heldDraftFace = useHeldDraftFace({
+    doc, evaluated, index: editNode, problems: refProblems, bodies, worker: workerSession, open: heldDraftOpen, work: heldDraftWork,
+    enabled: doc.nodes[editNode ?? -1]?.kind === 'draft' && fresh && !busy && !workerFailure && marker === null
+      && !shownVariant.current && !inPlace && !active && !section && !sketch && !rendering && !drawing && !measure
+      && !directSel.length && !instanceSel.length && !previewBodies && !assembly.draft && !cageEd.session && !skel.session
+      && heldDraftPreviewClear && !routePanelOpen && !routePreviewBodies && !bodyDrag && !instDrag && !exploded
+      && !parameterEdit && previewMode === 'none',
+    ownsSource: () => heldDraftPreviewClear && heldDraftFaceWorkCurrent(heldDraftWork, workOwnership.current) && heldDraftOpen === openIntent.current && ownsEvaluatedSource() && shownDocNow.current === doc
+      && editNodeNow.current === editNode && bodiesRef.current === bodies && referenceProblems.current.get(doc) === refProblems
+      && !shownVariant.current && !inPlaceNow.current && !activeStore.get() && !sectionRef.current
+      && !nodeEditorDraft.current && !parameterEditNow.current && !project.opening()
+      && !workEditRefusal(workOwnership.current, heldDraftWork.scope),
+    revision: () => revision.current++,
+    evaluate: (next,rev) => engine.part(next, rev, 'refs'),
+    accept: (next,problem) => {
+      if (!commit(next, false, false, true)) return false;
+      referenceProblems.current.set(next, refProblems.filter(value => value !== problem));
+      return true;
+    },
+  });
+  const heldDraftFacePicking = heldDraftFace.view && heldDraftFace.view.kind !== 'ready';
   const proposalReviewRecovery = proposals.reviewBlocked
     ? active ? `Apply or cancel ${active.cmd.label} to review the proposal.`
       : sketch ? 'Finish or cancel the sketch to review the proposal.'
@@ -2833,6 +2864,7 @@ export function App() {
       const control = target instanceof Element && target.closest('button, summary, select, [role="button"], [role="menuitem"]');
       if ((e.key === 'Enter' || e.key === ' ') && control) return;
       if (e.key === 'Tab' && (control || typing || (target instanceof HTMLElement && target.tabIndex >= 0))) return;
+      if (e.key === 'Escape' && heldDraftFace.view) { e.preventDefault(); heldDraftFace.cancel(); return; }
       if (e.key === 'Escape' && finishEdgeEditor.current) { e.preventDefault(); finishEdgeEditor.cancel(); return; }
       if (e.key === 'Escape' && stepAsk) { e.preventDefault(); clearStepAsk(); return; }
       if (cageInputActive && cageEd.onKey(e)) return;
@@ -2933,7 +2965,8 @@ export function App() {
     open: openIntent.current, enabled: historyPreviewEnabled }, historyPreviewRevision, readFlangeHistoryRefs, readFlangeHistoryPreview, ownsFlangePreview);
   const alignPreviewBodies = historyAlign.result?.kind === 'ready' ? historyAlign.result.bodies : null;
   const oppositeRadiusPreviewBodies = oppositeRadiusPreview.result?.result.kind === 'ready' ? oppositeRadiusPreview.result.result.bodies : null;
-  const historyPreviewBodies = alignPreviewBodies ?? oppositeRadiusPreviewBodies;
+  const historyPreviewBodies = (heldDraftFace.view?.kind === 'ready' ? heldDraftFace.view.bodies : null)
+    ?? alignPreviewBodies ?? oppositeRadiusPreviewBodies;
   const shownPreviewBodies = previewBodies ?? historyPreviewBodies;
   // Session-only inspection never enters document/history or the export source.
   const inspectionOwner = useMemo(() => ({}), [docGeneration, workerSession, project.view.store, doc, evaluated]);
@@ -3260,7 +3293,10 @@ export function App() {
     && !active && !sketch && !drawing && !section && !measure && !inPlace && !assembly.draft
     && !cageEd.session && !skel.session && !ghost && !compareOverlay && !bodyDrag && !animatedOffsets?.size;
   const viewportPicking = historyPreviewBodies ? { ...picking, onPick: () => {}, onPickBody: () => {},
-    onPickChain: () => {}, onBoxSelect: () => {}, onContextMenu: () => {} }
+    onPickChain: () => {}, onBoxSelect: () => {}, onContextMenu: () => {},
+    ...(heldDraftFace.view?.kind === 'ready' ? { onPickProfile: () => {} } : {}) }
+    : heldDraftFacePicking ? { ...picking, onPick: heldDraftFace.pick, onPickBody: () => {}, onPickChain: () => {},
+      onBoxSelect: () => {}, onContextMenu: () => {}, onPickProfile: () => {} }
     : finishEdgePicking ?? (placedProposal ? { ...picking, onPick: (...args: Parameters<typeof picking.onPick>) => {
     const id = args[0].instance;
     if (id && placedProposal.has(id)) return;
@@ -3746,6 +3782,7 @@ export function App() {
           worker={engine} canChangeDocument={canChangeDocument} onNotice={setToast}
           editor={{ onFilletStations: publishFilletStations, filletEndpoints: replacementEndpointLocations ?? historyEndpointLocations,
             alignPreview: historyAlign, oppositeRadiusPreview, readAlignTargets: readAlignHistoryTargets,
+            draftFaceReplacement: heldDraftFace.available ? heldDraftFace : undefined,
             edgeReplacement: finishEdgeEditor.available ? { start: finishEdgeEditor.start, cancel: finishEdgeEditor.cancel,
               apply: finishEdgeEditor.apply, draft: finishEdgeEditor.current } : undefined,
             onDraft: reportNodeEditorDraft, pending: parameterEdit?.kind === 'direct',
@@ -3761,7 +3798,7 @@ export function App() {
               const opener = historyEditorOpener.current;
               if (opener?.index === editNode && opener.doc === doc) returnAfterEditorClose(opener.button);
               historyEditorOpener.current = null;
-              finishEdgeEditor.cancel(); discardDirectCandidateRef.current(); setEditNode(null);
+              heldDraftFace.cancel(); finishEdgeEditor.cancel(); discardDirectCandidateRef.current(); setEditNode(null);
             },
           }} />}
       </SelectionInspector>}
@@ -3853,7 +3890,7 @@ export function App() {
       <SceneViewport inspectionTransaction={inspection.transaction} onInspectionCamera={inspection.observeCamera} reverseWheelZoom={modelWheelZoom?.enabled} ref={viewport} onProjectionChange={setOrtho} onRecoveryNotice={next => setToast(current => viewportRecoveryToast(current, next))}
         poses={{ poseStore, explodeStore, jointTree, bodies: drawnBodies, instancesPlaced: viewportPlacements, cpuInstanceSection }} liveSection={sectionLiveView}
         displayMode={effectiveDisplayMode} requestedDisplayMode={displayMode} displayModeReason={displayModeReason}
-        bandRailPicking={!active && !finishEdgePicking && !section && !measure && !assembly.draft}
+        bandRailPicking={!active && !finishEdgePicking && !heldDraftFace.view && !section && !measure && !assembly.draft}
         onDisplayModeStatus={onDisplayModeStatus} onBackend={setViewBackend}
         modelUnavailable={modelUnavailable} bodies={cageInputActive ? cageEd.shown(shownBodies) : viewBodies} selection={cageInputActive ? emptySel : shownSelection}
         ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? curvature.overlay} continuityLocation={continuityLocation.curve} filletEndpoints={displayedFilletEndpoints} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
@@ -3871,7 +3908,7 @@ export function App() {
         instanceSelection={assembly.draft ? assembly.highlight.instances : steppedSelection} instanceFaces={mateFaces ? assembly.highlight.instanceFaces : measuredInstanceFaces}
         placing={!!active?.placing} placeSkip={placeSkip} onSpot={onSpot}
         bodyColors={bodyColors} faceColors={faceColors} pickedVertices={modelUnavailable || historyPreviewBodies ? undefined : selection.vertices} hiddenBodies={hiddenBodies}
-        snapStep={snapStep} pickFilter={finishEdgePicking || (active?.fillet?.type === 'edge' && pickFilter === 'edge') ? 'edge' : active ? 'all' : pickFilter} hoverBody={shownPreviewBodies ? null : rowHover}
+        snapStep={snapStep} pickFilter={heldDraftFacePicking ? 'face' : finishEdgePicking || (active?.fillet?.type === 'edge' && pickFilter === 'edge') ? 'edge' : active ? 'all' : pickFilter} hoverBody={shownPreviewBodies ? null : rowHover}
         picking={viewportPicking} meshBoxCrossing={meshBoxCrossing} sketchActions={sketchViewportActions} sketchSnaps={{ twoPoint: twoPointSnap.input, extension: arcExtensionSnap.input, crossingBodies, placed: placedSketchSnaps, objectKinds: objectSnapKinds }} onCursor={onCursor}
         boundsBox={fresh && showBox ? (() => {
           const shown = selBodies.length ? selBodies : bodies, box = shown.length ? boundsOf(shown) : null;

@@ -78,7 +78,7 @@ export interface ViewportPointerProps {
   /** A double-click on a body's face: pick the whole body; on an edge: its chain (`onPickChain`). */
   onPickBody?(body: number): void;
   onPickChain?(body: number, edge: number): void;
-  onPick(hit: { face: FaceRef | null; edge: EdgeRef | null; edgeMesh?: BodyResult['mesh']; point: Vec3 | null; direct?: string; instance?: string; instanceFace?: FaceRef; instanceCap?: { body: number }; vertex?: { body: number; at: Vec3 } }, additive: boolean): void;
+  onPick(hit: { face: FaceRef | null; edge: EdgeRef | null; edgeMesh?: BodyResult['mesh']; faceMesh?: BodyResult['mesh']; point: Vec3 | null; direct?: string; instance?: string; instanceFace?: FaceRef; instanceCap?: { body: number }; vertex?: { body: number; at: Vec3 } }, additive: boolean): void;
   /** `fresh`: a new shape starts (the current one, if closed, is kept beside it). */
   onSketchShape(shape: SketchShape | null, fresh?: boolean, origin?: 'line-point' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish' | 'ellipse-finish' | 'centre-arc-finish' | 'arc-start' | 'arc-preview' | 'arc-finish'): void;
   onSplineDragChange?(active: boolean): void;
@@ -1186,7 +1186,8 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     if (selectBandRail(edge)) return;
     if (vertex) { propsRef.current.onPick({ face: null, edge: null, point: vertex.at, vertex }, e.shiftKey); return; }
     const edgeMesh = edge ? rendererBodies.current[edge.body]?.mesh : undefined;
-    propsRef.current.onPick({ face, edge, edgeMesh, point: surfacePoint(x, y, w, h, face) }, e.shiftKey || !!shiftPick);
+    const faceMesh = face ? rendererBodies.current[face.body]?.mesh : undefined;
+    propsRef.current.onPick({ face, edge, edgeMesh, faceMesh, point: surfacePoint(x, y, w, h, face) }, e.shiftKey || !!shiftPick);
   };
 
   /** Window selection left→right (fully inside), crossing right→left (touching). */

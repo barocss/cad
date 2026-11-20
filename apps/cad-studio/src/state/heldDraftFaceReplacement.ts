@@ -1,0 +1,126 @@
+import { commandById } from '@barocss/cad-model/app/commands';
+import { prefixDoc, type ModelNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
+import type { BodyResult, EvalResult } from '@barocss/cad-model/engine/evaluate';
+import { bodyKeyFor, featureId } from '@barocss/cad-model/engine/ids';
+import { isSplitCapFace, signaturesOf } from '@barocss/cad-model/engine/rematch';
+import { toSig, type Problem } from '@barocss/cad-model/engine/references';
+
+type Draft = Extract<ModelNode, { kind: 'draft' }>;
+type Owner = {
+  doc: StudioDoc;
+  index: number;
+  problems: readonly Problem[];
+  bodies: readonly BodyResult[];
+  /** Must check exact document/evaluated/history/editor lifetime and worker generation, not just revision numbers. */
+  isCurrent(): boolean;
+};
+type Hit = { face: { body: number; face: number } | null; faceMesh?: BodyResult['mesh']; instance?: string };
+type Pick = { owner: Owner; draft: Draft; problem: Problem; prefix: StudioDoc; display: BodyResult;
+  name: string; signature: ReturnType<typeof toSig>; parentKey: string; siblingKey: string; displayKey: string };
+
+const plane = (b: BodyResult, name: string) => {
+  if (b.mesh.faces.filter(f => f.name === name && f.kind === 'plane').length !== 1) return;
+  const s = signaturesOf(b, 'plane').faces.get(name);
+  if (s?.kind === 'plane') return toSig(s);
+};
+const samePlane = (a: ReturnType<typeof toSig>, b: ReturnType<typeof toSig>) =>
+  a.k === 'plane' && b.k === 'plane' && a.s === b.s &&
+  a.p.every((v, i) => v === b.p[i]) && a.d?.length === 3 && b.d?.length === 3 && a.d.every((v, i) => v === b.d![i]);
+
+/** Deliberately only the single negative-side rectangular Split Draft with no offered candidate. */
+export function pickHeldDraftFace(owner: Owner, hit: Hit): Pick | null {
+  const { doc, index, problems, bodies } = owner;
+  if (!owner.isCurrent() || doc.format !== 'barocss-cad-model' || doc.schema !== 3 || doc.units !== 'mm' ||
+      Object.hasOwn(doc,'routeBundles') || Object.hasOwn(doc,'routeBundleMember') ||
+      doc.nodes.some(n=>Object.hasOwn(n,'routeBundleMember')) || index !== 3 || doc.nodes.length !== 4 || doc.direct !== undefined ||
+      doc.instances?.length || doc.configurations !== undefined || doc.variability !== undefined || !hit.face || hit.instance !== undefined) return null;
+  const [sketch, extrude, split, draft] = doc.nodes;
+  if (sketch.kind !== 'sketch' || sketch.profile !== 'rectangle' || sketch.plane !== undefined || sketch.suppressed ||
+      extrude.kind !== 'extrude' || extrude.sketch !== 0 || extrude.suppressed || extrude.draft !== undefined ||
+      extrude.from !== undefined || typeof extrude.height !== 'number' || !(extrude.height > 0 && Number.isFinite(extrude.height)) ||
+      split.kind !== 'split' || split.suppressed || split.parent.node !== 1 || split.parent.side !== 'solid' ||
+      split.axis !== 'x' || split.normal?.join(',') !== '-1,0,0' || typeof split.at !== 'number' || !Number.isFinite(split.at) || split.outputSide !== undefined ||
+      draft.kind !== 'draft' || !draft.held || draft.suppressed !== true || draft.rematched !== undefined ||
+      draft.parent.node !== 2 || draft.parent.side !== 'negative' || draft.faces.length !== 1 ||
+      draft.pull !== 'z' || draft.neutral !== 0 || !Number.isFinite(draft.angle) || !(draft.angle > 0 && draft.angle < 45)) return null;
+  const [xmin, ymin] = sketch.min, [xmax, ymax] = sketch.max;
+  const x = -split.at;
+  if (typeof xmin !== 'number' || typeof xmax !== 'number' || typeof ymin !== 'number' || typeof ymax !== 'number' ||
+      ![xmin,xmax,ymin,ymax].every(Number.isFinite) || !(xmin < x && x < xmax && ymin < ymax)) return null;
+  const old = draft.faces[0];
+  const oldSig = draft.sigs?.[old];
+  if (old !== featureId(doc.nodes, 2) + '.cut.side1' || !isSplitCapFace(doc.nodes, old) || draft.held !== `"${old}" is gone` ||
+      oldSig?.k !== 'plane' || oldSig.d?.join(',') !== '1,0,0' ||
+      !(oldSig.p[0] > xmin && oldSig.p[0] < xmax) ||
+      !samePlane(oldSig,toSig({ kind:'plane', at:[oldSig.p[0],(ymin+ymax)/2,extrude.height/2],dir:[1,0,0],size:(ymax-ymin)*extrude.height })) ||
+      Object.keys(draft.sigs ?? {}).length !== 1 ||
+      problems.length !== 1 || problems[0].node !== index || problems[0].name !== old ||
+      problems[0].candidates.length !== 0 || problems[0].reason !== undefined) return null;
+
+  const displayKey = bodyKeyFor(doc.nodes,index,'solid'), parentKey = bodyKeyFor(doc.nodes,2,'negative'), siblingKey = bodyKeyFor(doc.nodes,2,'positive');
+  const display = bodies[hit.face.body], face = display?.mesh.faces[hit.face.face];
+  if (Object.keys(doc.outputs).length !== 2 || doc.outputs[displayKey]?.node !== index || doc.outputs[displayKey].side !== 'solid' ||
+      doc.outputs[siblingKey]?.node !== 2 || doc.outputs[siblingKey].side !== 'positive' || !bodyPair(bodies,displayKey,siblingKey) ||
+      display?.key !== displayKey || hit.faceMesh !== display.mesh || face?.name !== featureId(doc.nodes, 2) + '.cut.side3') return null;
+  const name = face.name, signature = plane(display,name);
+  if (!signature || !isSplitCapFace(doc.nodes,name) || signature.d?.join(',') !== '-1,0,0' ||
+      !samePlane(signature,toSig({ kind:'plane',at:[x,(ymin+ymax)/2,extrude.height/2],dir:[-1,0,0],size:(ymax-ymin)*extrude.height }))) return null;
+  try {
+    return { owner, draft, problem:problems[0], prefix:prefixDoc(doc,index), display, name, signature,parentKey,siblingKey,displayKey };
+  } catch { return null; }
+
+}
+
+function bodyPair(bodies: readonly BodyResult[], first: string, second: string): boolean {
+  return bodies.length === 2 && bodies.filter(b=>b.key===first && (b.pieces ?? 1)===1).length === 1
+    && bodies.filter(b=>b.key===second && (b.pieces ?? 1)===1).length === 1;
+}
+
+type Plan = { pick: Pick; next: StudioDoc; prefixReply: EvalResult; sibling: BodyResult };
+export function planHeldDraftReplacement(pick: Pick, reply: EvalResult, revision: number): Plan | null {
+  if (!pick.owner.isCurrent() || !reply.ok || reply.revision !== revision || !bodyPair(reply.bodies,pick.parentKey,pick.siblingKey)) return null;
+  const parentIndex = reply.bodies.findIndex(b=>b.key===pick.parentKey);
+  const sibling = reply.bodies.find(b=>b.key===pick.siblingKey)!;
+  const parent = reply.bodies[parentIndex], sig = plane(parent,pick.name);
+  if (!sig || !samePlane(pick.signature,sig) || plane(sibling,pick.name)) return null;
+  const face = parent.mesh.faces.findIndex(f=>f.name===pick.name);
+  const command = commandById('draft');
+  const ctx = { doc:pick.prefix, bodies:reply.bodies, selection:{faces:[{body:parentIndex,face}],edges:[],bodies:[]} };
+  const values = {deg:pick.draft.angle,pull:'z',neutralMode:'fixed',neutral:0};
+  try {
+    if (!command?.build || !command.available(ctx).ok || !command.steps?.(ctx,values).every(step=>step.done)) return null;
+    const created = command.build(ctx,values), node = created.nodes[pick.owner.index];
+    if (created.nodes.length !== pick.prefix.nodes.length+1 || node?.kind !== 'draft' ||
+        node.faces.length !== 1 || node.faces[0] !== pick.name || node.parent.node !== pick.draft.parent.node ||
+        node.parent.side !== pick.draft.parent.side || node.angle !== pick.draft.angle ||
+        (node.pull ?? 'z') !== pick.draft.pull || node.neutral !== pick.draft.neutral) return null;
+    const original = {...pick.draft};
+    delete original.held;
+    delete original.suppressed;
+    const doc=pick.owner.doc;
+    const next: StudioDoc = {...doc, nodes:[...doc.nodes.slice(0,pick.owner.index),{...original,faces:node.faces,sigs:{[pick.name]:sig}}]};
+    return pick.owner.isCurrent() ? {pick,next,prefixReply:reply,sibling} : null;
+  } catch { return null; }
+}
+
+export function readyHeldDraftReplacement(plan: Plan, reply: EvalResult, revision: number): StudioDoc | null {
+  const { pick, next, sibling } = plan;
+  if (!pick.owner.isCurrent() || !reply.ok || reply.revision !== revision || reply === plan.prefixReply || reply.revision === plan.prefixReply.revision ||
+      !bodyPair(reply.bodies,pick.displayKey,pick.siblingKey)) return null;
+  const s = reply.bodies.find(b=>b.key===pick.siblingKey)!;
+  // Refs packets keep geometry, not mass: compare all canonical planar faces of the untouched box half.
+  const oldFaces = signaturesOf(sibling,'plane').faces, newFaces=signaturesOf(s,'plane').faces;
+  if (oldFaces.size !== 6 || newFaces.size !== oldFaces.size || [...oldFaces].some(([name, old])=>{
+    const other=newFaces.get(name);
+    return !other || !samePlane(toSig(old),toSig(other));
+  })) return null;
+  const pickedOutput=reply.bodies.find(b=>b.key===pick.displayKey)!;
+  const outputFaces=signaturesOf(pickedOutput,'plane').faces;
+  const drafted=outputFaces.get(featureId(next.nodes,pick.owner.index)+'.draft.bottom');
+  const angle=pick.draft.angle*Math.PI/180;
+  const [x,y,z]=pick.signature.p;
+  if (outputFaces.size!==6 || outputFaces.has(pick.name) || drafted?.kind!=='plane' ||
+      !samePlane(toSig(drafted),toSig({kind:'plane',at:[x+z*Math.tan(angle),y,z],
+        dir:[-Math.cos(angle),0,Math.sin(angle)],size:pick.signature.s/Math.cos(angle)}))) return null;
+  return pick.owner.isCurrent() ? next : null;
+}
