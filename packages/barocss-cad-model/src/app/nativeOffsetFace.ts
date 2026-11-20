@@ -1,7 +1,7 @@
 // Offset face owns a native cap snapshot. Display data identifies the pick only; it never authors a profile.
 import { CadNumericPolicy, CadPartLimits, brepFromPrismatic, checkBrep, prismaticFromProfile, prismaticMassProperties, transformBrep, type Brep, type BrepFace, type Curve, type Surface } from '@barocss/cad';
 import { draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
-import { boredCapOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
+import { boredCapOffsetFrame, boredPlateWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
@@ -345,15 +345,15 @@ export function resolveDirectOffsetFace(ctx: Ctx): { parent: ReturnType<typeof r
   if (display.exact?.kind !== 'plane') return undefined;
   const node = ctx.doc.nodes[ref.node];
   if (ref.side !== 'solid') return undefined;
-  const boredCap = isBoredCapOffsetSource(ctx.doc.nodes, ref.node);
-  if (!boredCap && node.kind !== 'draft' && node.kind !== 'offset-face' && node.kind !== 'extrude') return undefined;
+  const boredPlate = isBoredCapOffsetSource(ctx.doc.nodes, ref.node);
+  if (!boredPlate && node.kind !== 'draft' && node.kind !== 'offset-face' && node.kind !== 'extrude') return undefined;
   if (node.kind === 'extrude' && !node.draft &&
       (!isStraightHexagonalExtrusion(ctx.doc.nodes, node) || display.nativeAxisPlane?.axis === 'z')) return undefined;
   currentOffsetBody(ctx, body);
   const { brep } = nativeOffsetBody(ctx, body, display);
-  const frame = boredCap ? boredCapOffsetFrame(brep, display.name)
+  const frame = boredPlate ? boredCapOffsetFrame(brep, display.name) ?? boredPlateWallOffsetFrame(brep, display.name)
     : draftedFaceOffsetFrame(brep, display.name) ?? prismWallOffsetFrame(brep, display.name);
-  return frame ? { parent: ref, face: display.name, ...frame, allowsPlane: !boredCap } : undefined;
+  return frame ? { parent: ref, face: display.name, ...frame, allowsPlane: !boredPlate } : undefined;
 }
 
 /** Current native semantic identity is resolved before qualification; every returned snapshot is owned. */

@@ -3,8 +3,8 @@ import test from 'node:test';
 import { BrepError, checkBrep, createCylindricalBoreCheck, evaluateCadPart, evaluateCurve, evaluateSurface, faceGeometry } from '../dist/index.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
 import {
-  annularCapReplacementFrame, boredCapOffsetFrame, boredCapReplacementFrame, circularCapReplacementFrame,
-  offsetBoredCapIfAdmitted, replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted,
+  annularCapReplacementFrame, boredCapOffsetFrame, boredCapReplacementFrame, boredPlateWallOffsetFrame, circularCapReplacementFrame,
+  offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted, replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted,
 } from '../dist/features/bored-cap-offset.js';
 
 const plate = ({ min = [0, 0], max = [40, 30], height = 10, from = 0, center = [11, 9], radius = 3, ...ends } = {}) => ({
@@ -67,6 +67,50 @@ const tube = (center = [14, 12]) => {
   doc.features.push({ id: 'h', kind: 'hole', target: 'c', face: 'c.top', center, radius: 4 });
   return doc;
 };
+
+test('signed right-wall offsets extend the exact rectangular stock and keep the bore fixed', () => {
+  const doc = plate(), source = freeze(solid(doc)), saved = structuredClone(source), face = 'b.side1';
+  assert.deepEqual(boredPlateWallOffsetFrame(source, face), { anchor: [40, 15, 5], normal: [1, 0, 0] });
+  for (const other of ['b.side0', 'b.side2', 'b.side3', 'b.top', 'b.bottom', 'h.side0#1']) {
+    assert.equal(boredPlateWallOffsetFrame(source, other), undefined);
+    assert.equal(offsetBoredPlateWallIfAdmitted(source, other, 1), undefined);
+  }
+  for (const distance of [5, -4, -25.9]) {
+    const limit = 40 + distance, result = offsetBoredPlateWallIfAdmitted(source, face, distance);
+    assertNativePlate(result);
+    assert.deepEqual(incidence(result), incidence(source));
+    assert.deepEqual(result.vertices.map(({ point }) => point),
+      source.vertices.map(({ point: [x, y, z] }) => [x === 40 ? limit : x, y, z]));
+    const walls = result.faces.filter(candidate => faceGeometry(candidate).kind === 'cylinder');
+    assert.equal(walls.length, 2);
+    close(createCylindricalBoreCheck(result)(walls), 6);
+    for (const candidate of source.faces) {
+      const before = faceGeometry(candidate), after = faceGeometry(result.faces.find(item => item.id === candidate.id));
+      if (before.kind === 'cylinder') {
+        assert.deepEqual(after, before);
+        continue;
+      }
+      assert.equal(after.kind, 'plane');
+      const support = plane => plane.n.reduce((sum, component, axis) => sum + component * plane.o[axis], 0);
+      before.n.forEach((value, axis) => close(after.n[axis], value));
+      close(support(after), candidate.name === face ? limit : support(before));
+    }
+    const outer = 300 * limit, cut = 90 * Math.PI, volume = outer - cut, mass = brepMassProperties(result, 1);
+    close(mass.volume, volume, 1e-7);
+    close(mass.centroid[0], (outer * limit / 2 - cut * 11) / volume, 1e-7);
+    close(mass.centroid[1], (outer * 15 - cut * 9) / volume, 1e-7);
+    close(mass.centroid[2], 5);
+    const edit = { id: 'offset', kind: 'offset-face', target: 'h', face, distance };
+    assert.deepEqual(solid({ ...doc, features: [...doc.features, edit] }), result);
+  }
+  for (const distance of [-26, -27]) {
+    assert.throws(() => offsetBoredPlateWallIfAdmitted(source, face, distance), /reach or cross the bore/);
+  }
+  for (const distance of [0, NaN, Infinity]) {
+    assert.throws(() => offsetBoredPlateWallIfAdmitted(source, face, distance), /distance/);
+  }
+  assert.deepEqual(source, saved);
+});
 
 const twoBorePlate = () => {
   const doc = plate();

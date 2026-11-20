@@ -103,7 +103,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
       const { target: priorTarget, distance: priorDistance, ...recipe } = direct;
       const nodes = [...doc.nodes];
       if (values.offsetMode === 'to-plane') {
-        if (!allowPlane) return rejected('this through-hole plate cap needs a signed distance.');
+        if (!allowPlane) return rejected('this through-hole plate face needs a signed distance.');
         if (priorTarget && values.keepPlane === 1) return doc;
         const target = captureOffsetPlane(ctx, values, direct.parent, index);
         nodes[index] = { ...recipe, target };

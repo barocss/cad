@@ -67,7 +67,8 @@ import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
 import { offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
 import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallIfAdmitted } from '../features/prism-wall-offset.js';
-import { healBoredPlateIfAdmitted, offsetBoredCapIfAdmitted, replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
+import { healBoredPlateIfAdmitted, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted,
+  replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
 import { healAnalyticLFilletIfAdmitted } from '../features/heal-analytic-l-fillet.js';
 import { healPrismaticFilletIfAdmitted } from '../features/heal-prismatic-fillet.js';
 import { boundaryBindingRefusal } from './part-boundary-refusal-internal.js';
@@ -642,7 +643,8 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         return fail('PARAMETER', 'Offset face needs a nonzero signed distance within the modeling range.');
       return () => {
         const brep = namedFaceTargetBrep(t, f.target, target[0]);
-        const offset = offsetBoredCapIfAdmitted(brep, face, distance) ?? offsetPrismWallIfAdmitted(brep, face, distance)
+        const offset = offsetBoredCapIfAdmitted(brep, face, distance) ?? offsetBoredPlateWallIfAdmitted(brep, face, distance)
+          ?? offsetPrismWallIfAdmitted(brep, face, distance)
           ?? offsetDraftedFace(brep, face, distance);
         return one({ kind: 'brep', brep: offset });
       };

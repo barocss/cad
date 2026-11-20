@@ -522,7 +522,7 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const parent = value.nodes[parentIndex];
       if (!textRecord(parent)) return 'Offset face: a supported solid parent is required.';
       if (boredCapOffsets.has(parentIndex) || isBoredPlateHole(value.nodes, parentIndex)) {
-        if (node.target !== undefined) return 'Offset face: this through-hole plate cap needs a signed distance.';
+        if (node.target !== undefined) return 'Offset face: this through-hole plate face needs a signed distance.';
         boredCapOffsets.add(index);
         continue;
       }
