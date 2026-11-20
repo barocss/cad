@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { sha256 } from './flow-helper.mjs';
 import { imagePixels } from './render-image-test-helpers.mjs';
 
@@ -147,6 +147,75 @@ export async function taskRunCandidateRenderFlow({ f, row, launch, source, saved
     assert.deepEqual(retryShown.pixels, shown.pixels);
     await f.snapshot('11-current-B-render-retry');
 
+    f.phase = 'refuse the actual Studio approval with a real controlled zero-height native replay';
+    const beforeRefusal = JSON.parse(await readFile(recordFile)).record;
+    const beforeRefusalNative = (await durable()).native;
+    let nativeRefusal;
+    const refusalErrors = [];
+    const observeRefusal = message => {
+      if (message.type() === 'error' && message.location().url.endsWith(base + 'approve')
+        && /409/.test(message.text())) refusalErrors.push(message.text());
+    };
+    const approvePattern = '**' + base + 'approve';
+    const refuseNative = async route => {
+      try {
+        const request = route.request().postDataJSON();
+        assert.equal(request.attemptId, bPin.attemptId);
+        assert.equal(request.candidateDigest, bPin.candidateDigest);
+        nativeRefusal = await f.inspect('candidate-native-refusal', { root: dirname(launch.directory), request }, 'candidate-native-refusal');
+        // Deliver the unchanged request to the real HTTP server after the native refusal is recorded.
+        await route.continue();
+      } catch (error) { await route.abort(); throw error; }
+    };
+    f.page.on('console', observeRefusal);
+    await f.page.route(approvePattern, refuseNative, { times: 1 });
+    try {
+      const [response] = await Promise.all([f.page.waitForResponse(matches('approve')), button(review, 'Approve candidate').click()]);
+      assert.equal(response.status(), 409);
+      assert.deepEqual(await response.json(), { error: nativeRefusal.reply.error, reviewRequired: true });
+      await f.page.locator('[role="status"], [role="alert"]').filter({ hasText: /TASK_NATIVE_GATE/ }).first().waitFor();
+      const refused = JSON.parse(await readFile(recordFile)).record;
+      assert.deepEqual(refused.accepted, beforeRefusal.accepted);
+      assert.deepEqual(refused.commits, beforeRefusal.commits);
+      assert.deepEqual((await durable()).native, beforeRefusalNative);
+      assert.equal(refused.pending, undefined);
+      assert.equal(refused.state.tasks.find(task => task.id === 'p1').phase, 'awaiting-decision');
+      assert.ok(refused.state.operations.some(operation => operation.phase === 'failed' && operation.code === 'TASK_NATIVE_GATE'));
+      await f.same(source);
+      assert.deepEqual(await savedBytes(), saved);
+      const refusedPresentation = { reviewCount: await review.count(), text: await review.count() ? await review.innerText() : null,
+        currentImageCount: await image().count(), checks: await review.count()
+          ? await review.getByRole('list', { name: 'Candidate checks', exact: true }).innerText() : null };
+      await writeFile(join(f.output, 'candidate-native-refusal.json'), JSON.stringify({ ...nativeRefusal, refusedPresentation,
+        acceptedUnchanged: true, publicationsBeforeAndAfter: [beforeRefusal.commits.length, refused.commits.length], nativeFilesUnchanged: true }));
+      await f.snapshot('12-native-refusal-source-and-checkpoint-preserved');
+      f.report.observations.push({ nativeRefusalControl: 'Actual evaluator receives a cloned candidate with zero extrusion height; product decision service returns its real refusal',
+        code: 'TASK_NATIVE_GATE', refusedPresentation, acceptedUnchanged: true, nativeFilesUnchanged: true });
+      await review.waitFor({ state: 'hidden' });
+      assert.equal(await image().count(), 0);
+      await f.page.getByRole('alert').filter({ hasText: /TASK_NATIVE_GATE/ }).waitFor();
+    } finally {
+      await f.page.unroute(approvePattern, refuseNative);
+      f.page.off('console', observeRefusal);
+    }
+    assert.equal(refusalErrors.length, 1);
+    f.report.expectedConsoleErrors = [...(f.report.expectedConsoleErrors ?? []), ...refusalErrors];
+    for (const expected of refusalErrors) {
+      const index = f.report.consoleErrors.indexOf(expected);
+      assert.ok(index >= 0);
+      f.report.consoleErrors.splice(index, 1);
+    }
+
+    f.phase = 'refresh the refused review and recover through the unchanged product approval service';
+    await capture('status', button(row, 'Refresh local run status'));
+    const recovered = await pick();
+    assert.equal(recovered.response.attemptId, bPin.attemptId);
+    assert.equal(recovered.response.candidateDigest, bPin.candidateDigest);
+    assert.ok(recovered.receipt.revision > b.receipt.revision);
+    assert.equal(await image().count(), 0);
+    await capture('render-candidate', render());
+    assert.deepEqual((await decoded()).pixels, shown.pixels);
+
     f.phase = 'approve only the still-current B decision and preserve the original saved native file';
     const approval = await capture('approve', button(review, 'Approve candidate'));
     assert.equal(approval.request().postDataJSON().attemptId, bPin.attemptId);
@@ -158,7 +227,7 @@ export async function taskRunCandidateRenderFlow({ f, row, launch, source, saved
     await f.same(source);
     assert.deepEqual(await savedBytes(), saved);
     await review.waitFor({ state: 'hidden' });
-    await f.snapshot('12-current-B-approved-source-preserved');
+    await f.snapshot('13-current-B-approved-source-preserved');
     const delivered = await f.page.evaluate(() => window.__candidateRenderDelivered);
     await writeFile(join(f.output, 'candidate-render-ownership.json'), JSON.stringify({ aPin, bPin, regenerated, approved, delivered,
       imageSha256: bReply.imageSha256, pixels: shown.pixels }));

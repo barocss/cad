@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline';
 import { readStudioFile } from '@barocss/cad-model/engine/container';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { evaluatePart } from '@barocss/cad-model/engine/evaluate';
+import type { Evaluate } from '@barocss/cad-model/chat/toolKit';
 import { userToken } from '@barocss/cad-model/team/ecr';
 import { compileTaskPlan, taskField } from '@barocss/cad-model/team/taskPlan';
 import { readTaskSubmission } from '@barocss/cad-model/team/taskExecution';
@@ -21,10 +22,10 @@ import { prepareTaskRunHandoff, startLocalTaskRun } from './start';
 import { candidateReviewFor, taskApprovalFor, taskApprovals, taskCheckpointFor, RunStoreError, TaskRunStore, type RunRecord, type RunTask } from './store';
 
 export class LocalRunRequestError extends Error {
-  constructor(readonly status: number, message: string) { super(message); }
+  constructor(readonly status: number, message: string, readonly reviewRequired = false) { super(message); }
 }
 
-type LocalRunReply = { result: TaskRunLaunch } | { status: number; error: string };
+type LocalRunReply = { result: TaskRunLaunch } | { status: number; error: string; reviewRequired?: true };
 type AdmissionNotice = (run: TaskRunLaunch) => void;
 type BindRunControl = (run: TaskRunLaunch, stop: () => void) => (() => void) | void;
 
@@ -58,7 +59,7 @@ function runInProcess(root: string, bytes: Uint8Array, action: LocalRunAction) {
       if (code !== 0 || processError || !reply)
         return reject(new LocalRunRequestError(500, 'The local task run process did not return a result.'));
       if ('result' in reply) resolve(reply.result);
-      else reject(new LocalRunRequestError(reply.status, reply.error));
+      else reject(new LocalRunRequestError(reply.status, reply.error, reply.reviewRequired));
     });
     child.stdin!.end(bytes);
   });
@@ -330,7 +331,7 @@ export async function runLocalTaskStop(root: string, request: unknown): Promise<
   } finally { host?.close(); }
 }
 
-export async function runLocalTaskDecision(root: string, request: unknown, decision: TaskRunDecision): Promise<LocalRunReply> {
+export async function runLocalTaskDecision(root: string, request: unknown, decision: TaskRunDecision, evaluate?: Evaluate): Promise<LocalRunReply> {
   if (!isTaskRunDecisionRequest(request)) return { status: 400, error: 'Expected the exact worker candidate review.' };
   const approved = decision === 'approve', expectedCode = approved ? 'RUN_ACCEPTED' : 'RUN_REJECTED';
   let host: TaskRunHost | undefined;
@@ -355,13 +356,22 @@ export async function runLocalTaskDecision(root: string, request: unknown, decis
         throw new LocalRunRequestError(409, `The reviewed candidate changed. Review it again before ${approved ? 'approving' : 'rejecting'}.`);
     };
     guard(current);
+    const refused = (reason: string, reviewRequired: boolean): LocalRunReply => ({
+      status: 409, error: `Could not ${decision} the worker candidate (${reason}).`, ...(reviewRequired && { reviewRequired: true as const }),
+    });
+    // A retried HTTP request carries the same receipt even if reopening the host would advance its epoch.
+    const previous = current.state.operations.find(op => op.id === operationId && op.phase === 'failed');
+    if (previous) return refused(previous.code ?? previous.phase, true);
     let revision = 0;
-    host = await TaskRunHost.open(directory, async doc => evaluatePart(doc, ++revision), undefined, guard);
+    host = await TaskRunHost.open(directory, evaluate ?? (async doc => evaluatePart(doc, ++revision)), undefined, guard);
     const { runId, epoch, state } = host.snapshot;
     const outcome = await host.decide({ operationId, runId, epoch, taskId: request.taskId, attemptId: request.attemptId,
       specRevision: state.specRevision, candidateDigest: request.candidateDigest, approved }, userToken(new Date().toISOString()));
-    if (outcome.code !== expectedCode)
-      throw new LocalRunRequestError(409, `Could not ${decision} the worker candidate (${outcome.code ?? outcome.phase}).`);
+    if (outcome.code !== expectedCode) {
+      // A recorded refusal is final for this decision receipt. A new review gets a new operation ID.
+      const recorded = host.snapshot.state.operations.some(op => op.id === operationId && op.phase === 'failed');
+      return refused(outcome.code ?? outcome.phase, recorded);
+    }
     return result(host.snapshot);
   } catch (error) {
     if (error instanceof LocalRunRequestError) return { status: error.status, error: error.message };

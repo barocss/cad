@@ -3,6 +3,8 @@ import { isObj } from '@barocss/cad-model/util/guards';
 import { MAX_TASK_CHECKPOINT_BYTES } from '../files/taskCheckpoint';
 import { isLocalTaskRunHost, type TaskRunBaselineRequest, type TaskRunCheckpointRequest } from './taskRunOffer';
 
+export class CandidateReviewRequiredError extends Error {}
+
 async function postLocalTaskRun(action: string, body: Blob | string, progress = false) {
   if (!isLocalTaskRunHost(window.location.hostname)) throw new Error('Open Studio on this computer to use a local task run.');
   const res = await fetch('/api/chat/task-runs/' + action, {
@@ -13,6 +15,8 @@ async function postLocalTaskRun(action: string, body: Blob | string, progress = 
   });
   if (!res.ok) {
     const value: unknown = await res.json().catch(() => null);
+    if (res.status === 409 && (action === 'approve' || action === 'reject') && isObj(value)
+      && value.reviewRequired === true && typeof value.error === 'string') throw new CandidateReviewRequiredError(value.error);
     throw new Error(isObj(value) && typeof value.error === 'string' ? value.error : 'The local task run service did not respond.');
   }
   return res;

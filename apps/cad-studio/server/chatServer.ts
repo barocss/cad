@@ -295,7 +295,7 @@ export function createChatServer(options: ChatServerOptions) {
           : new LocalRunRequestError(500, 'Could not read the request or access the local task run directory.');
         if (res.headersSent) return res.end(JSON.stringify({ error: problem.message }));
         if (problem.status === 413) res.setHeader('connection', 'close');
-        return sendJson(res, problem.status, { error: problem.message });
+        return sendJson(res, problem.status, { error: problem.message, ...(problem.reviewRequired && { reviewRequired: true }) });
       }
     }
     if (req.method === 'GET' && path === '/status') {

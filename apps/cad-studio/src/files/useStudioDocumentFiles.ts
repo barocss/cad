@@ -30,7 +30,7 @@ import { downloadBytes } from '../ui/files';
 import type { RequirementEvidence } from '@barocss/cad-model/chat/requirementEvidence';
 import { planWorkingTaskReplacement } from './workingTaskReplacement';
 import { planWorkingApprovalRepair, readWorkingApprovalChecks } from './workingApprovalChecks';
-import { localTaskBaselineBytes, localTaskCheckpointBytes, localTaskRunJSON } from '../chat/localTaskRun';
+import { CandidateReviewRequiredError, localTaskBaselineBytes, localTaskCheckpointBytes, localTaskRunJSON } from '../chat/localTaskRun';
 import { isLocalTaskRunHost, isTaskRunDecisionRequest, isTaskRunStatus, matchesTaskRunReplan, sameTaskRunCheckpoint, retiresTaskRunReview, taskRunDecisionId, type TaskRunLaunch, type TaskRunOffer,
   type TaskRunBaselineRequest, type TaskRunCheckpointRequest, type TaskRunDecision, type TaskRunLocator, type SavedTaskRunPlan, type TaskRunRebuildRequest, type TaskRunReplanSelection, type TaskRunReviewRequest, type TaskRunStatus } from '../chat/taskRunOffer';
 
@@ -84,6 +84,7 @@ interface StudioDocumentFileOptions {
 /** What Open reads, said when it is given another kind of file. */
 const OPEN_READS = 'Open reads models (.bcad, .json), worker files (.bcad-task, .bcad-run, .bcad-candidate), STEP (.step, .stp), STL, OBJ, IGES (.igs, .iges) and .barocad curve and surface sources. Your part is unchanged.';
 const CANDIDATE_REVIEW_REFUSED = 'Could not review the worker candidate';
+const CANDIDATE_DECISION_REFUSED = 'Candidate decision refused';
 
 /** File actions use the App's current document, dispatch and Worker ownership. */
 export function useStudioDocumentFiles({ document, ownership, worker, changes, validateSave, getUnappliedSaveHint, fit, onNotice: setToast }: StudioDocumentFileOptions) {
@@ -488,7 +489,7 @@ export function useStudioDocumentFiles({ document, ownership, worker, changes, v
   const showCandidateReview = (review: CandidateReview) => {
     if (sessionBlocked('reviewing a worker candidate')) return;
     changes.onCandidateOpened(review);
-    setToast(current => current?.title === CANDIDATE_REVIEW_REFUSED ? null : current);
+    setToast(current => current?.title === CANDIDATE_REVIEW_REFUSED || current?.title === CANDIDATE_DECISION_REFUSED ? null : current);
   };
 
   const openCandidate = async (file: File, owner: () => boolean) => {
@@ -560,7 +561,18 @@ export function useStudioDocumentFiles({ document, ownership, worker, changes, v
       || (intent.status && retiresTaskRunReview(intent.status, local.request, local.revision)))
       throw new Error('The worker candidate review moved. Review it again before making a decision.');
     const { decision, revision } = local;
-    const status = checkedRunStatus({ ...local.request, revision }, await localTaskRunJSON(action, JSON.stringify(decision)));
+    let status: TaskRunStatus;
+    try {
+      status = checkedRunStatus({ ...local.request, revision }, await localTaskRunJSON(action, JSON.stringify(decision)));
+    } catch (error) {
+      if (!(error instanceof CandidateReviewRequiredError)) throw error;
+      if (candidateIntent.current?.local === intent && digestOf(docNow.current) === local.request.baselineDigest) {
+        cancelLocalCandidateReview();
+        changes.onLocalCandidateReviewIntent();
+        setToast({ title: CANDIDATE_DECISION_REFUSED, hint: error.message + ' Review the candidate again.', detail: '' });
+      }
+      return;
+    }
     const confirmed = action === 'approve'
       ? status.approvals?.some(pin => pin.operationId === taskRunDecisionId(decision, action) && pin.taskId === review.taskId)
       : status.tasks.some(task => task.id === review.taskId && task.phase === 'cancelled' && task.reason === 'RUN_REJECTED');

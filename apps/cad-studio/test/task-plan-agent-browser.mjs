@@ -116,6 +116,7 @@ const f = await createFlow({
   name: 'task-plan-agent', envFrozen: candidateRenderMode ? 'CANDIDATE_RENDER_SOURCE_FROZEN' : namedCylinderHeight ? 'D825_SOURCE_FROZEN' : namedHeightMode ? 'D782_SOURCE_FROZEN' : boxScalarAxis ? 'D781_SOURCE_FROZEN' : boxFootprintMode ? 'D780_SOURCE_FROZEN' : footprintMode ? 'D779_SOURCE_FROZEN' : cylinderHeightMode ? 'D778_SOURCE_FROZEN' : depthMode ? 'D777_SOURCE_FROZEN' : inchDiameterMode ? 'D648_SOURCE_FROZEN' : mixedDiameterMode ? 'D647_SOURCE_FROZEN' : diameterMode ? 'D646_SOURCE_FROZEN' : studioRejectionMode ? 'D645_SOURCE_FROZEN' : studioDeliveryMode ? 'D644_SOURCE_FROZEN' : studioApprovalMode ? 'D643_SOURCE_FROZEN' : reopenedStopMode ? 'D642_SOURCE_FROZEN' : liveStopMode ? 'D641_SOURCE_FROZEN' : liveStartMode ? 'D640_SOURCE_FROZEN' : stoppedFindingMode ? 'D639_SOURCE_FROZEN' : sharedHoleDeliveryMode ? 'D638_SOURCE_FROZEN' : sharedHoleRepairMode ? 'D637_SOURCE_FROZEN' : agentFindingMode ? 'D636_SOURCE_FROZEN' : findingMode ? 'D635_SOURCE_FROZEN' : interfaceMode ? 'D634_SOURCE_FROZEN' : provenanceMode ? 'D633_SOURCE_FROZEN' : replanMode ? 'D632_SOURCE_FROZEN' : rebuildMode ? 'D631_SOURCE_FROZEN' : baselineMode ? 'D630_SOURCE_FROZEN' : reopenMode ? 'D629_SOURCE_FROZEN' : repairMode ? 'D627_SOURCE_FROZEN' : prepareRepairMode ? 'D628_SOURCE_FROZEN' : workingMode ? 'D626_SOURCE_FROZEN' : historyMode ? 'D625_SOURCE_FROZEN' : threeMode ? 'D624_SOURCE_FROZEN' : widthMode ? 'D623_SOURCE_FROZEN' : checkpointMode ? 'D622_SOURCE_FROZEN' : statusMode ? 'D621_SOURCE_FROZEN' : reviewMode ? 'D620_SOURCE_FROZEN' : startMode ? 'D619_SOURCE_FROZEN' : handoffMode ? 'D618_SOURCE_FROZEN' : 'D617_SOURCE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   inspectorSource: `import { readFileSync } from 'node:fs';
 import { TaskRunHost } from './server/taskRun/host';
+import { runLocalTaskDecision } from './server/taskRun/localService';
 import { userToken } from '@barocss/cad-model/team/ecr';
 import { digestOf, requirementEvidenceRevision } from '@barocss/cad-model/util/digest';
 import { commandById } from '@barocss/cad-model/app/commands';
@@ -129,7 +130,23 @@ import { fixtureDoc, footprintDoc, holeDiameterDocs, inchDiameterDocs, mixedDiam
 if (process.argv[3]) {
   const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
   const action = JSON.parse(process.argv[3]);
-  if (action === 'candidate-regenerate') {
+  if (action === 'candidate-native-refusal') {
+    const evaluations = [];
+    const reply = await runLocalTaskDecision(doc.root, doc.request, 'approve', async value => {
+      const input = structuredClone(value);
+      const extrusion = input.nodes.find(node => node.kind === 'extrude' && node.height === 6);
+      if (extrusion) extrusion.height = 0;
+      const result = evaluatePart(input, 1);
+      evaluations.push({ controlledInput: !!extrusion, input, native: { ok: result.ok,
+        bodies: result.ok ? result.bodies.length : 0, error: result.ok ? undefined : result.error } });
+      return result;
+    });
+    if (!evaluations.some(entry => entry.controlledInput && (!entry.native.ok || entry.native.bodies !== 1)))
+      throw new Error('The controlled zero-height input did not produce a real native refusal.');
+    if (!('status' in reply) || reply.status !== 409 || !/TASK_NATIVE_GATE/.test(reply.error))
+      throw new Error(JSON.stringify(reply));
+    console.log(JSON.stringify({ reply, evaluations }));
+  } else if (action === 'candidate-regenerate') {
     const host = await TaskRunHost.open(doc.directory, async (value) => evaluatePart(value, 1));
     try {
       const task = host.snapshot.state.tasks.find(task => task.id === doc.taskId);
