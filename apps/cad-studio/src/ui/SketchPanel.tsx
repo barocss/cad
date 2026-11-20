@@ -53,6 +53,9 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
   onBand?: { make(offset: number, width?: number): void; edit(patch: { offset?: number; width?: number | null }): void; remove(): void } }) {
   const [splineError, setSplineError] = useState<string | null>(null);
   const s = sketch.shape;
+  const [blankField, setBlankField] = useState<{ id: string; owner: SketchShape } | null>(null);
+  // Undo and outline switches can restore a previously rendered shape object.
+  if (blankField && blankField.owner !== s) setBlankField(null);
   const openLineEditable = canEditOpenLineLength(s) && !sketch.association && !sketch.band && !sketch.anchor?.face?.linkSource;
   const terminalLineEditable = canEditOpenPolylineTerminalDraft(sketch);
   const outlines = onActivateOutline ? sketchCutInputs(sketch).shapes.flatMap((shape, index) =>
@@ -62,8 +65,20 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
   useEffect(() => setSplineError(null), [s]);
   const num = (id: string, label: string, value: number, set: (v: number) => void, min?: number) => (
     <label className={FIELD} key={id}><span>{label}</span>
-      <span className={NUM}><Input id={'sk-' + id} type="number" step="any" min={min} value={round(value)}
-        onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v)) set(v); }} /><em>mm</em></span></label>);
+      <span className={NUM}><Input id={'sk-' + id} type="number" step="any" min={min} value={blankField?.owner === s && blankField?.id === id ? '' : round(value)}
+        onChange={event => {
+          const text = event.currentTarget.value;
+          if (text === '') {
+            if (s) setBlankField({ id, owner: s });
+            return;
+          }
+          const next = Number(text);
+          if (Number.isFinite(next)) {
+            setBlankField(null);
+            set(next);
+          }
+        }}
+        onBlur={() => setBlankField(current => current?.id === id && current.owner === s ? null : current)} /><em>mm</em></span></label>);
   const solved = useMemo(() => isSettled(s) ? solveShape(s) : null, [s]);
   const status = sketchStatus(s, solved, sketch.tool);
   // A matching ellipse is edited by its definition: its 192 outline points, joints and arc pairs are not listed, and its constraint list is one summary row (plus any non-arc constraint).
