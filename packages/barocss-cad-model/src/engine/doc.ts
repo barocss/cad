@@ -489,19 +489,42 @@ export function isDeleteFaceFilletSource(nodes: readonly unknown[], index: numbe
     Array.isArray(sketch.points) && sketch.points.length === 6;
 }
 
+/** The named top of a straight cylindrical boss united with a rectangular plate. */
+export function cylindricalBossTopFace(nodes: readonly unknown[], index: number): string | undefined {
+  const union = nodes[index];
+  if (!textRecord(union) || union.kind !== 'union') return;
+  const left = precedingSolidIndex(union.left, index), right = precedingSolidIndex(union.right, index);
+  if (left === undefined || right === undefined || left === right) return;
+  const boss = isBoxReplacementSource(nodes, left) && isCylinderReplacementSource(nodes, right) ? right
+    : isBoxReplacementSource(nodes, right) && isCylinderReplacementSource(nodes, left) ? left : undefined;
+  if (boss === undefined) return;
+  const node = nodes[boss];
+  const id = textRecord(node) && typeof node.id === 'string' ? node.id : `n${boss}`;
+  return id + '.top';
+}
+
 function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly unknown[], index: number): string | null {
   const allowed = new Set(['kind', 'parent', 'faces', ...NODE_EXTRA_FIELDS]);
   for (const key of Object.keys(node)) if (!allowed.has(key)) return `Delete face: unknown field ${key}.`;
   const parent = node.parent;
   if (!textRecord(parent) || Object.keys(parent).sort().join(',') !== 'node,side' || parent.side !== 'solid' ||
-      typeof parent.node !== 'number' || !Number.isSafeInteger(parent.node) || parent.node < 0 || parent.node >= index ||
-      (!isBoredPlateHealSource(nodes, parent.node) && !isDeleteFaceFilletSource(nodes, parent.node)))
-    return 'Delete face: a preceding through-hole plate or filleted L-section solid is required.';
+      typeof parent.node !== 'number' || !Number.isSafeInteger(parent.node) || parent.node < 0 || parent.node >= index)
+    return 'Delete face: a preceding solid is required.';
+  const bossTop = cylindricalBossTopFace(nodes, parent.node);
+  if (!bossTop && !isBoredPlateHealSource(nodes, parent.node) && !isDeleteFaceFilletSource(nodes, parent.node))
+    return 'Delete face: a supported through-hole plate, cylindrical boss or filleted L-section is required.';
   const name = Array.isArray(node.faces) && node.faces.length === 1 ? node.faces[0] : undefined;
-  if (typeof name !== 'string' || !name.trim() || /[+\0]/.test(name)) return 'Delete face: one exact native curved face is required.';
+  if (typeof name !== 'string' || !name.trim() || /[+\0]/.test(name)) return 'Delete face: one exact native face is required.';
   if (node.rematched !== undefined && (!textRecord(node.rematched) || Object.keys(node.rematched).length))
-    return 'Delete face: the original curved face name is required.';
+    return 'Delete face: the original face name is required.';
   const sig = textRecord(node.sigs) && Object.hasOwn(node.sigs, name) && Object.keys(node.sigs).length === 1 ? node.sigs[name] : undefined;
+  if (bossTop) {
+    if (name !== bossTop || !textRecord(sig) || Object.keys(sig).sort().join(',') !== 'd,k,p,s' || sig.k !== 'plane' ||
+        !textVector(sig.p, false) || !textVector(sig.d, false) || sig.d[0] !== 0 || sig.d[1] !== 0 || sig.d[2] !== 1 ||
+        typeof sig.s !== 'number' || !Number.isFinite(sig.s) || sig.s <= 0)
+      return 'Delete face: the original cylindrical boss top needs its stored individual planar signature.';
+    return null;
+  }
   if (!textRecord(sig) || Object.keys(sig).sort().join(',') !== 'k,p,r,s' || sig.k !== 'curved' || !textVector(sig.p, false) ||
       typeof sig.r !== 'number' || !Number.isFinite(sig.r) || sig.r <= 0 || typeof sig.s !== 'number' || !Number.isFinite(sig.s) || sig.s <= 0)
     return 'Delete face: the curved face needs its stored individual signature.';
@@ -1589,7 +1612,8 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
       return `${kind} ${n(node.height)}${node.draft ? ` · ${node.draft}°` : ''}`;
     }
     case 'revolve': return `Revolve ${node.angle}°`;
-    case 'delete-face': return node.faces[0].endsWith('.face') ? 'Delete face · Heal fillet' : 'Delete face · Heal through hole';
+    case 'delete-face': return node.sigs?.[node.faces[0]]?.k === 'plane' ? 'Delete face · Heal boss'
+      : node.faces[0].endsWith('.face') ? 'Delete face · Heal fillet' : 'Delete face · Heal through hole';
     case 'hole': return (node.thread ? `Tapped ${node.thread}` : `${node.countersink ? 'Countersunk' : 'Hole'} Ø${typeof node.radius === 'number' ? fmt(node.radius * 2) : node.radius.parameter}`) + (node.pattern && node.pattern.count > 1 ? ` × ${node.pattern.count}` : '');
     case 'chamfer': return `Chamfer ${n(node.distance)}`;
     case 'draft': return `Draft ${fmt(node.angle)}° × ${node.faces.length}`;

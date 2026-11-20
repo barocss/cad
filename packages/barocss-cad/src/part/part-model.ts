@@ -67,7 +67,7 @@ import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
 import { offsetBoxCapIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
 import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallIfAdmitted } from '../features/prism-wall-offset.js';
-import { healBoredPlateIfAdmitted, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted,
+import { healBoredPlateIfAdmitted, healCylindricalBossIfAdmitted, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted,
   replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
 import { healAnalyticLFilletIfAdmitted } from '../features/heal-analytic-l-fillet.js';
 import { healPrismaticFilletIfAdmitted } from '../features/heal-prismatic-fillet.js';
@@ -680,7 +680,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
           return fail('REFERENCE', 'Delete face needs one closed solid.');
         if (brep.faces.filter(candidate => candidate.name === face).length !== 1)
           return fail('REFERENCE', 'Delete face: the selected native face is missing or ambiguous.');
-        let healed = healBoredPlateIfAdmitted(brep, face);
+        let healed = healBoredPlateIfAdmitted(brep, face) ?? healCylindricalBossIfAdmitted(brep, face);
         if (!healed && part.filletTargets?.length === 1) {
           if (part.solid.kind === 'upright') healed = healPrismaticFilletIfAdmitted(part.solid.solid, brep, face, at);
           else if (part.history?.finishes.length === 1) {
@@ -689,7 +689,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
               healed = healAnalyticLFilletIfAdmitted(brep, face, sharpEdge, at);
           }
         }
-        if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket. Select its fillet face.');
+        if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket. Select its fillet face. To remove a fully enclosed cylindrical boss from straight rectangular stock, select the top face of the boss.');
         return one({ kind: 'brep', brep: healed });
       };
     }

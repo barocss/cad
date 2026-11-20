@@ -4,6 +4,7 @@ import { createCylindricalBoreCheck, readTiltedRectangularPlateBore } from '../b
 import { add, dist, dot, len, scale, sub } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Curve, Point } from '../types.js';
+import { boxCapOffsetFrame } from './drafted-cap-offset.js';
 import { capSurface } from './extruded-profile-solid.js';
 import { affineChart, coverAffineTrim, uvPoint } from './prism-wall-offset.js';
 
@@ -19,7 +20,7 @@ type AxialStock = {
   readonly min: XY; readonly max: XY; readonly center: XY;
 };
 type ReplacementPlane = { readonly origin: Point; readonly normal: Point };
-type Use = { readonly edge: BrepEdge; readonly pcurve: Curve; readonly neighbor: BrepFace };
+type Use = { readonly edge: BrepEdge; readonly pcurve: Curve; readonly neighbor: BrepFace; readonly neighborLoop: BrepLoop };
 const lineKnots = [0, 0, 1, 1];
 const halfCircleKnots = [0, 0, 0, 0.5, 0.5, 1, 1, 1];
 const stockCounts = { bored: [8, 10, 36, 18, 12], 'two-bore': [10, 14, 48, 24, 16], circular: [4, 4, 12, 6, 4], annular: [6, 8, 24, 12, 8] } as const;
@@ -48,7 +49,7 @@ function capProjection(min: XY, max: XY, up: boolean): (point: Point) => Point {
   };
 }
 
-function boreClearsRectangle([x, y]: Point, radius: number, [x0, y0]: XY, [x1, y1]: XY, tolerance: number): boolean {
+function diskClearsRectangle([x, y]: Point, radius: number, [x0, y0]: XY, [x1, y1]: XY, tolerance: number): boolean {
   return x - radius - x0 > tolerance && x1 - x - radius > tolerance
     && y - radius - y0 > tolerance && y1 - y - radius > tolerance;
 }
@@ -79,6 +80,25 @@ function cylinderPair(cylinders: readonly BrepFace[], extent: number, out: 1 | -
   return { center: a.center, radius: a.radius };
 }
 
+function nativeLoopReader(brep: Brep) {
+  const loopById = byId(brep.loops), coedgeById = byId(brep.coedges), edgeById = byId(brep.edges), faceById = byId(brep.faces);
+  // Resolve every use through its actual twin, independently of the authored face names.
+  function readUses(face: BrepFace, loop: BrepLoop, count: number): Use[] | undefined {
+    if (loop.face !== face.id || loop.coedges.length !== count) return undefined;
+    const result: Use[] = [];
+    for (const id of loop.coedges) {
+      const use = coedgeById.get(id), twin = use?.twin ? coedgeById.get(use.twin) : undefined;
+      const edge = use && edgeById.get(use.edge), other = twin && loopById.get(twin.loop);
+      const neighbor = other && faceById.get(other.face);
+      if (!use?.pcurve || use.loop !== loop.id || !edge || !twin || twin.twin !== id || twin.edge !== use.edge
+        || twin.sense === use.sense || !other || !neighbor || neighbor === face || !neighbor.loops.includes(other.id)) return undefined;
+      result.push({ edge, pcurve: use.pcurve, neighbor, neighborLoop: other });
+    }
+    return new Set(result.map(use => use.edge.id)).size === count ? result : undefined;
+  }
+  return { loopById, readUses };
+}
+
 /** Prove the native cap and wall charts before continuing an axial stock. */
 function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined {
   const { bodies, shells, faces, loops, coedges, edges, vertices } = brep;
@@ -90,7 +110,7 @@ function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined
     || new Set(shell.faces).size !== faceCount || faces.length !== faceCount || !faces.every(face => shell.faces.includes(face.id))
     || loops.length !== loopCount || coedges.length !== useCount || edges.length !== edgeCount || vertices.length !== vertexCount) return undefined;
 
-  const vertexById = byId(vertices), edgeById = byId(edges), loopById = byId(loops), coedgeById = byId(coedges), faceById = byId(faces);
+  const vertexById = byId(vertices), { loopById, readUses } = nativeLoopReader(brep);
   const points = vertices.map(vertex => vertex.point), extent = geometryScaleMM(points), tolerance = linearToleranceMM(extent);
   if (!(extent <= CadNumericPolicy.coordinateAbs) || !points.every(point => point.length === 3 && point.every(Number.isFinite))) return undefined;
   const heights = [...new Set(points.map(point => point[2]))].sort((a, b) => a - b), [lo, hi] = heights;
@@ -109,21 +129,6 @@ function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined
     if (face.surface.kind !== 'surface') return undefined;
     const poles = face.surface.controlPoints.flat();
     if (!poles.every(p => p.length === 3 && p.every(Number.isFinite)) || !(geometryScaleMM(poles) <= CadNumericPolicy.coordinateAbs)) return undefined;
-  }
-
-  // Resolve every use through its actual twin. A face's label cannot establish the wall or the bore.
-  function readUses(face: BrepFace, loop: BrepLoop, count: number): Use[] | undefined {
-    if (loop.face !== face.id || loop.coedges.length !== count) return undefined;
-    const result: Use[] = [];
-    for (const id of loop.coedges) {
-      const use = coedgeById.get(id), twin = use?.twin ? coedgeById.get(use.twin) : undefined;
-      const edge = use && edgeById.get(use.edge), other = twin && loopById.get(twin.loop);
-      const neighbor = other && faceById.get(other.face);
-      if (!use?.pcurve || use.loop !== loop.id || !edge || !twin || twin.twin !== id || twin.edge !== use.edge
-        || twin.sense === use.sense || !other || !neighbor || neighbor === face || !neighbor.loops.includes(other.id)) return undefined;
-      result.push({ edge, pcurve: use.pcurve, neighbor });
-    }
-    return new Set(result.map(use => use.edge.id)).size === count ? result : undefined;
   }
 
   function uses(face: BrepFace, count: number): Use[] | undefined {
@@ -251,8 +256,8 @@ function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined
       || !strutNeighbors.get(b)?.every(face => face === a))) return;
     const [first, second] = lower.map(pair => cylinderPair(pair, extent, -1));
     if (!first || !second || lower.some(pair => readDiameter(pair) === undefined)
-      || !boreClearsRectangle(first.center, first.radius, min, max, tolerance)
-      || !boreClearsRectangle(second.center, second.radius, min, max, tolerance)
+      || !diskClearsRectangle(first.center, first.radius, min, max, tolerance)
+      || !diskClearsRectangle(second.center, second.radius, min, max, tolerance)
       || !(dist(first.center, second.center) > first.radius + second.radius + tolerance)) return;
     const [x, y] = first.center;
     const left = Math.min(x - first.radius, second.center[0] - second.radius) - min[0];
@@ -264,7 +269,7 @@ function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined
   if (diameter === undefined || !(diameter > 2 * tolerance) || bore.kind !== 'cylinder'
     || bore.a[0] !== 0 || bore.a[1] !== 0) return undefined;
   const [x, y] = bore.c, radius = diameter / 2, left = x - radius - min[0];
-  if (!boreClearsRectangle(bore.c, radius, min, max, tolerance)) return undefined;
+  if (!diskClearsRectangle(bore.c, radius, min, max, tolerance)) return undefined;
 
   return { bottom, top, borePairs: [cylinders], boreDisks: [{ center: bore.c, radius }], lo, hi, min, max,
     radius, center: [x, y], anchorX: min[0] + left / 2, anchorY: y };
@@ -706,9 +711,13 @@ export function healBoredPlateIfAdmitted(brep: Brep, faceName: string): Brep | u
     capTrims.add(trims[0]);
   }
 
+  return healWithoutTrims(brep, removed, capTrims);
+}
+
+function healWithoutTrims(brep: Brep, removed: ReadonlySet<string>, capTrims: ReadonlySet<string>): Brep {
   const faces = brep.faces.filter(face => !removed.has(face.id)).map(face => face.loops.some(id => capTrims.has(id))
     ? { ...face, loops: face.loops.filter(id => !capTrims.has(id)) } : face);
-  // Retain every other face chart and incidence. Only the selected bore walls and their cap trims disappear.
+  // Retain the original charts and incidence of the surviving faces.
   const liveLoops = new Set(faces.flatMap(face => face.loops));
   const loops = brep.loops.filter(loop => liveLoops.has(loop.id));
   const liveUses = new Set(loops.flatMap(loop => loop.coedges));
@@ -723,5 +732,90 @@ export function healBoredPlateIfAdmitted(brep: Brep, faceName: string): Brep | u
   };
   const report = checkBrep(candidate, { strict: true });
   if (!report.valid) throw new BrepError('GEOMETRY', `Delete face: the healed solid is invalid: ${report.issues[0]}`, report);
+  return candidate;
+}
+
+function boundsXY(points: readonly Point[]): { min: XY; max: XY } {
+  const xs = points.map(point => point[0]), ys = points.map(point => point[1]);
+  return { min: [Math.min(...xs), Math.min(...ys)], max: [Math.max(...xs), Math.max(...ys)] };
+}
+
+function exactBossCap(face: BrepFace, z: number, bounds: { min: XY; max: XY }, rim: readonly Use[]): boolean {
+  const { surface } = face;
+  if (face.sense !== 'forward' || surface.kind !== 'surface' || surface.degreeU !== 1 || surface.degreeV !== 1
+    || !same(surface.knotsU, lineKnots) || !same(surface.knotsV, lineKnots)
+    || !same(surface.weights.flat(), [1, 1, 1, 1]) || surface.controlPoints.length !== 2) return false;
+  const expected = capSurface(bounds, z, surface.id, true), project = capProjection(bounds.min, bounds.max, true);
+  return surface.controlPoints.every((row, i) => samePoles(row, expected.controlPoints[i]))
+    && rim.every(({ edge, pcurve }) => level(edge, z) && matchingPcurve(pcurve, edge.curve, project));
+}
+
+function readBossWall(wall: BrepFace, boundary: readonly Use[], mate: BrepFace, tipLoop: BrepLoop, lo: number, hi: number) {
+  const { surface } = wall;
+  if (surface.kind !== 'surface' || surface.degreeU !== 2 || surface.degreeV !== 1
+    || !same(surface.knotsU, halfCircleKnots) || !same(surface.knotsV, lineKnots)
+    || surface.controlPoints.length !== 5 || surface.weights.length !== 5
+    || !surface.controlPoints.every(row => row.length === 2 && row[0][2] === lo && row[1][2] === hi
+      && row[0][0] === row[1][0] && row[0][1] === row[1][1])
+    || !surface.weights.every(row => row.length === 2 && row[0] > 0 && row[0] === row[1])) return;
+  const lowerUses = boundary.filter(({ edge }) => level(edge, lo)), upperUses = boundary.filter(({ edge }) => level(edge, hi));
+  const [lower] = lowerUses, [upper] = upperUses;
+  if (lowerUses.length !== 1 || upperUses.length !== 1 || lower.neighborLoop.kind !== 'inner' || upper.neighborLoop !== tipLoop) return;
+  for (const [station, { edge, pcurve }] of [lower, upper].entries()) {
+    if (edge.curve.degree !== 2 || !same(edge.curve.knots, surface.knotsU)
+      || !same(edge.curve.weights, surface.weights.map(row => row[station]))
+      || !samePoles(edge.curve.controlPoints, surface.controlPoints.map(row => row[station]))
+      || !line(pcurve) || !samePoles(pcurve.controlPoints, [[0, station, 0], [1, station, 0]])) return;
+  }
+  const seams = boundary.filter(use => use !== lower && use !== upper);
+  const positions = new Set<number>();
+  for (const { edge, pcurve, neighbor } of seams) {
+    if (neighbor !== mate || !line(edge.curve) || !line(pcurve)) return;
+    const u = pcurve.controlPoints[0][0];
+    if ((u !== 0 && u !== 1) || !samePoles(pcurve.controlPoints, [[u, 0, 0], [u, 1, 0]])
+      || !samePoles(edge.curve.controlPoints, surface.controlPoints[u === 0 ? 0 : 4])) return;
+    positions.add(u);
+  }
+  return positions.size === 2 ? { lower, seams } : undefined;
+}
+
+/** Remove one exposed cylindrical boss from the top of a straight rectangular stock. */
+export function healCylindricalBossIfAdmitted(brep: Brep, faceName: string): Brep | undefined {
+  const { bodies, shells, faces, loops, coedges, edges, vertices } = brep;
+  const [body] = bodies, [shell] = shells;
+  if (bodies.length !== 1 || body.kind !== 'solid' || body.shells.length !== 1 || shells.length !== 1
+    || body.shells[0] !== shell.id || shell.body !== body.id || !shell.closed || shell.faces.length !== 9 || new Set(shell.faces).size !== 9
+    || faces.length !== 9 || !faces.every(face => shell.faces.includes(face.id)) || loops.length !== 10
+    || coedges.length !== 36 || edges.length !== 18 || vertices.length !== 12) return;
+  const matches = faces.filter(face => face.name === faceName), [tip] = matches;
+  if (matches.length !== 1 || tip.loops.length !== 1 || tip.surface.kind !== 'surface' || tip.surface.degreeU !== 1) return;
+  const { loopById, readUses } = nativeLoopReader(brep), tipLoop = loopById.get(tip.loops[0]);
+  const tipRim = tipLoop?.kind === 'outer' ? readUses(tip, tipLoop, 2) : undefined;
+  if (!tipLoop || !tipRim || new Set(tipRim.map(use => use.neighbor)).size !== 2) return;
+  const [a, b] = tipRim.map(use => use.neighbor);
+  if (a.loops.length !== 1 || b.loops.length !== 1 || a.surface.kind !== 'surface') return;
+  const extent = geometryScaleMM(vertices.map(vertex => vertex.point), ...edges.map(edge => edge.curve.controlPoints),
+    ...faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints : []));
+  if (!(extent <= CadNumericPolicy.coordinateAbs) || !checkBrep(brep, { strict: true }).valid) return;
+  const lo = a.surface.controlPoints[0]?.[0]?.[2], hi = tip.surface.controlPoints[0]?.[0]?.[2];
+  const tolerance = linearToleranceMM(extent);
+  if (!(hi - lo > tolerance)) return;
+
+  const boundaryA = readUses(a, tipRim[0].neighborLoop, 4), boundaryB = readUses(b, tipRim[1].neighborLoop, 4);
+  const wallA = boundaryA && readBossWall(a, boundaryA, b, tipLoop, lo, hi);
+  const wallB = boundaryB && readBossWall(b, boundaryB, a, tipLoop, lo, hi);
+  if (!wallA || !wallB || wallA.lower.neighborLoop !== wallB.lower.neighborLoop
+    || wallA.seams.some(({ edge }) => !wallB.seams.some(use => use.edge === edge))) return;
+  const footprint = cylinderPair([a, b], extent, 1);
+  const tipBounds = boundsXY(tipRim.flatMap(({ edge }) => edge.curve.controlPoints));
+  if (!footprint || !exactBossCap(tip, hi, tipBounds, tipRim)) return;
+
+  const base = wallA.lower.neighbor, baseLoop = wallA.lower.neighborLoop;
+  const baseRim = readUses(base, baseLoop, 2);
+  if (!base.name || base.loops.length !== 2 || !baseRim || !baseRim.every(({ neighbor }) => neighbor === a || neighbor === b)) return;
+  const candidate = healWithoutTrims(brep, new Set([tip.id, a.id, b.id]), new Set([baseLoop.id]));
+  const frame = boxCapOffsetFrame(candidate, base.name), bounds = boundsXY(candidate.vertices.map(vertex => vertex.point));
+  if (!frame || frame.anchor[2] !== lo || !same(frame.normal, [0, 0, 1])
+    || !exactBossCap(base, lo, bounds, baseRim) || !diskClearsRectangle(footprint.center, footprint.radius, bounds.min, bounds.max, tolerance)) return;
   return candidate;
 }
