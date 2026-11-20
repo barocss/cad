@@ -2677,7 +2677,7 @@ export function App() {
   const sketchHistoryAvailable = sketch ? sketchHistory.available(draftHistoryState(doc, sketch)) : null;
   const skeletonHistoryAvailable = sketch3dInputActive && skel.session ? skel.historyAvailable : null;
   const cageHistoryAvailable = cageInputActive && cageEd.session
-    ? { undo: cageEd.session.undo.length > 0, redo: cageEd.session.redo.length > 0 } : null;
+    ? { undo: cageEd.loopDraft?.kind !== 'slide' && cageEd.session.undo.length > 0, redo: cageEd.loopDraft?.kind !== 'slide' && cageEd.session.redo.length > 0 } : null;
   const editorHistoryAvailable = sketchHistoryAvailable ?? cageHistoryAvailable ?? skeletonHistoryAvailable;
   const replayHistory = (forward: boolean, event?: React.MouseEvent<HTMLButtonElement>) => {
     if (cageHistoryAvailable) {

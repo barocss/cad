@@ -9,6 +9,7 @@ import {
   mirrorCage, moveVertices, selectionVertices, setCreases, SubdError, subdPreviewMesh, validateCage, weldVertices, weldWithin, type Cage, type CageValidation, type MirrorAxis,
 } from '@barocss/cad';
 
+import { planCageEdgeSlide, slideEdgeLoop, type CageEdgeSlideDirections } from './cageEdgeSlide';
 import { insetPlanarRegion } from './cageInset';
 
 export type CageMode = 'vertex' | 'edge' | 'face';
@@ -293,6 +294,26 @@ export function commitDrag(s: CageSession, delta: readonly number[], extrude: bo
   // A mirror-plane constraint may consume a nonzero pointer drag completely.
   if (!extrude && d.cage.positions.every((value, i) => value === s.cage.positions[i])) return s;
   return step(s, d.cage, d.sel);
+}
+
+function requireEdgeSlideSelection(s: CageSession): void {
+  if (s.mirror) throw new SubdError('INPUT', 'edge slide: mirrored cages are unsupported');
+  if (s.mode !== 'edge' || !s.sel.edges.length || s.sel.vertices.length || s.sel.faces.length) {
+    throw new SubdError('INPUT', 'edge slide: select one complete edge loop');
+  }
+}
+
+/** The selected anchor edge and its two target edges, using the current cage's vertex IDs. */
+export function cageEdgeSlideDirections(s: CageSession): CageEdgeSlideDirections {
+  requireEdgeSlideSelection(s);
+  return planCageEdgeSlide(s.cage, s.sel.edges).directions;
+}
+
+/** Slide the current loop along its rails and record one cage step if its coordinates changed. */
+export function slideCageSelection(s: CageSession, ratio: number): CageSession {
+  requireEdgeSlideSelection(s);
+  const cage = slideEdgeLoop(s.cage, s.sel.edges, ratio);
+  return cage === s.cage ? s : step(s, cage, s.sel);
 }
 
 /** Inset the selected planar quad region once and retain the inner faces for Extrude. */

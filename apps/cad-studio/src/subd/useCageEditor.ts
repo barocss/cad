@@ -10,29 +10,33 @@ import { triangleMesh, type Vec3 } from '@barocss/cad-model/engine/mesh';
 import { refOf } from '@barocss/cad-model/app/bodyRef';
 import type { TransformGizmo } from '../viewport/gizmo';
 import type { CageOverlay } from '../viewport/Viewport';
-import { commitDrag, dragged, fullCage, previewTriangles, redoSession, runOp, select, selectionCentre, startSession, undoSession, validationOf, type CageHit, type CageMode, type CageOp, type CageSession } from '@barocss/cad-model/subd/cageEdit';
+import { cageEdgeSlideDirections, commitDrag, dragged, fullCage, previewTriangles, redoSession, runOp, select, selectionCentre, startSession, undoSession, validationOf, type CageHit, type CageMode, type CageOp, type CageSession } from '@barocss/cad-model/subd/cageEdit';
 import { mirrorCage } from '@barocss/cad';
 import { Lanes } from '../engine/lanes';
 import { cageDoneReadiness, type CageBuildReceipt } from './cageCommitReadiness';
 import { previewCageTransform, type CageTransformInput } from './cageTransformDraft';
 import { previewCageInset } from './cageInsetDraft';
-import { previewCageLoop } from './cageLoopDraft';
+import { previewCageLoop, previewCageSlide } from './cageLoopDraft';
 import { cageBeginPolicy } from './cageBeginPolicy';
 
 /** The cage's exact build: one lane, each step's build replacing the last. */
 const CAGE_LANE = 'cage';
+type CageLoopDraft = { base: CageSession; value: string; error: string | null } & (
+  { kind: 'insert' } | { kind: 'slide'; doc: StudioDoc; directions: ReturnType<typeof cageEdgeSlideDirections> }
+);
 export interface CageEditor {
   readonly session: CageSession | null;
+  readonly previewActive: boolean;
   readonly transformDraft: { base: CageSession; input: CageTransformInput; error: string | null; pivot: readonly [number, number, number] | null } | null;
   readonly transformReady: boolean;
   previewTransform(input: CageTransformInput): void; applyTransform(): void; cancelTransform(): void;
   readonly insetDraft: { base: CageSession; value: string; error: string | null } | null;
   readonly insetReady: boolean;
   previewInset(value: string): void; applyInset(): void; cancelInset(): void;
-  readonly loopDraft: { base: CageSession; value: string; error: string | null } | null;
+  readonly loopDraft: CageLoopDraft | null;
   readonly loopReady: boolean;
   readonly loopStatus: string;
-  previewLoop(value: string): void; applyLoop(): void; cancelLoop(): void;
+  beginSlide(): void; previewLoop(value: string): void; applyLoop(): void; cancelLoop(): void;
   readonly doneReadiness: { ok: boolean; reason: string };
   begin(node: number, discardCurrent?: boolean): boolean;
   overlay: CageOverlay | null;
@@ -51,14 +55,17 @@ export interface CageEditor {
 
 export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise<EvalResult>, commit: (next: StudioDoc) => void, fail: (title: string, hint: string) => void): CageEditor {
   const [session, setSession] = useState<CageSession | null>(null);
-  const [loopDraft, setLoopDraft] = useState<{ base: CageSession; value: string; error: string | null } | null>(null);
+  const [loopDraft, setLoopDraft] = useState<CageLoopDraft | null>(null);
   const [transformDraft, setTransformDraft] = useState<CageEditor['transformDraft']>(null);
   const [insetDraft, setInsetDraft] = useState<CageEditor['insetDraft']>(null);
   const previewActive = !!loopDraft || !!transformDraft || !!insetDraft;
+  const slideSourceChanged = loopDraft?.kind === 'slide' && loopDraft.doc !== doc;
   const [pickDepth, setPickDepth] = useState<'front' | 'back'>('front');
   const [drag, setDrag] = useState<{ delta: Vec3; extrude: boolean } | null>(null);
   const [exact, setExact] = useState<{ of: CageSession; doc: StudioDoc; bodies: BodyResult[] } | null>(null);
   const [buildReceipt, setBuildReceipt] = useState<CageBuildReceipt<CageSession, StudioDoc> | null>(null);
+  const exactReadiness = cageDoneReadiness(session, doc, !!drag, buildReceipt);
+  const loopReady = !!loopDraft && !loopDraft.error && !slideSourceChanged && exactReadiness.ok;
   const [previewMs, setPreviewMs] = useState<number | null>(null);
   const shift = useRef(false);
   const sessionId = useRef(0);
@@ -72,7 +79,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
   // (R4b: on its O9 lane — a newer step's build, or the session gone, makes an older reply stale, never shown.)
   const lanes = useMemo(() => new Lanes(), []);
   useEffect(() => {
-    if (!session || drag) return;
+    if (!session || drag || slideSourceChanged) return;
     let cancelled = false;
     setBuildReceipt({ session, doc, status: 'pending' });
     void lanes.run(CAGE_LANE, { revision: session.undo.length, source: `n${session.node}` }, () => preview(withCage(session))).then(r => {
@@ -87,16 +94,27 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
       if (!cancelled) setBuildReceipt({ session, doc, status: 'error', reason: `${error instanceof Error ? error.message : String(error)}. Adjust the cage or use Cage Undo; the draft has not been applied.` });
     });
     return () => { cancelled = true; lanes.cancel(CAGE_LANE); };
-  }, [session, doc, drag, withCage, preview, lanes]);
+  }, [session, doc, drag, slideSourceChanged, withCage, preview, lanes]);
 
   // The node the session began on. The part changed under it (a new part, a file opened, the agent's edit): the
   // session ends with nothing written, and says so — Done would write over the change (D84).
   const from = useRef<ModelNode | null>(null);
   useEffect(() => {
-    if (!session || doc.nodes[session.node] === from.current) return;
-    setLoopDraft(null); setTransformDraft(null); setInsetDraft(null); setSession(null); setExact(null); setBuildReceipt(null); setDrag(null); from.current = null;
-    fail('Cage edit ended', 'The part changed while its cage was being edited; nothing was written. Edit the cage again.');
-  }, [doc, session, fail]);
+    if (!session) return;
+    if (doc.nodes[session.node] !== from.current) {
+      setLoopDraft(null); setTransformDraft(null); setInsetDraft(null); setSession(null); setExact(null); setBuildReceipt(null); setDrag(null); from.current = null;
+      fail('Cage edit ended', 'The part changed while its cage was being edited; nothing was written. Edit the cage again.');
+    } else if (slideSourceChanged) {
+      setSession(loopDraft.base); setLoopDraft(null);
+    }
+  }, [doc, session, fail, loopDraft, slideSourceChanged]);
+
+  useEffect(() => {
+    if (loopDraft?.kind !== 'slide' || slideSourceChanged || session === loopDraft.base
+      || !buildReceipt || buildReceipt.session !== session || buildReceipt.doc !== doc || buildReceipt.status !== 'error') return;
+    setSession(loopDraft.base);
+    setLoopDraft({ ...loopDraft, error: buildReceipt.reason ?? 'This slide could not be evaluated.' });
+  }, [loopDraft, slideSourceChanged, session, buildReceipt, doc]);
 
   const begin = useCallback((node: number, discardCurrent = false) => {
     const n = doc.nodes[node];
@@ -112,16 +130,26 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
     try { return f(s); } catch (e) { fail('Not done', e instanceof Error ? e.message.replace(/^SubD: /, '') : String(e)); return s; }
   }), [fail, previewActive]);
 
+  const beginSlide = useCallback(() => {
+    if (!session || previewActive || drag || doc.nodes[session.node] !== from.current) return;
+    try {
+      const directions = cageEdgeSlideDirections(session);
+      setLoopDraft({ kind: 'slide', base: session, doc, directions, value: '0', error: null });
+    } catch (error) {
+      fail('Cannot slide loop', error instanceof Error ? error.message.replace(/^SubD: /, '') : String(error));
+    }
+  }, [session, doc, previewActive, drag, fail]);
   const previewLoop = useCallback((value: string) => {
     const base = loopDraft?.base ?? session;
-    if (!base || drag || transformDraft || insetDraft) return;
-    const result = previewCageLoop(base, value);
-    setLoopDraft({ base, value, error: result.error }); setSession(result.session);
-  }, [loopDraft, session, drag, transformDraft, insetDraft]);
+    if (!base || drag || transformDraft || insetDraft || slideSourceChanged) return;
+    const result = loopDraft?.kind === 'slide' ? previewCageSlide(base, value) : previewCageLoop(base, value);
+    setLoopDraft({ ...(loopDraft ?? { kind: 'insert', base }), value, error: result.error });
+    setSession(result.session);
+  }, [loopDraft, session, drag, transformDraft, insetDraft, slideSourceChanged]);
   const cancelLoop = useCallback(() => { if (loopDraft) { setSession(loopDraft.base); setLoopDraft(null); } }, [loopDraft]);
   const applyLoop = useCallback(() => {
-    if (loopDraft && !loopDraft.error && cageDoneReadiness(session, doc, !!drag, buildReceipt).ok) setLoopDraft(null);
-  }, [loopDraft, session, doc, drag, buildReceipt]);
+    if (loopReady) setLoopDraft(null);
+  }, [loopReady]);
 
   const previewTransform = useCallback((input: CageTransformInput) => {
     const base = transformDraft?.base ?? session;
@@ -177,7 +205,7 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
     },
   } : null;
 
-  const doneReadiness = previewActive ? { ok: false, reason: 'Apply or cancel the cage preview first.' } : cageDoneReadiness(session, doc, !!drag, buildReceipt);
+  const doneReadiness = previewActive ? { ok: false, reason: 'Apply or cancel the cage preview first.' } : exactReadiness;
   const done = useCallback(() => {
     if (!session) return;
     if (previewActive) { fail('Cage preview active', 'Apply or cancel the cage preview first.'); return; }
@@ -217,7 +245,10 @@ export function useCageEditor(doc: StudioDoc, preview: (d: StudioDoc) => Promise
   }, [session, done, cancel, guard, fail, previewActive, loopDraft, transformDraft, cancelLoop, cancelTransform, cancelInset, previewLoop]);
 
   return {
-    session, insetDraft, insetReady: !!insetDraft && !insetDraft.error && cageDoneReadiness(session, doc, !!drag, buildReceipt).ok, previewInset, applyInset, cancelInset, transformDraft, transformReady: !!transformDraft && !transformDraft.error && cageDoneReadiness(session, doc, !!drag, buildReceipt).ok, previewTransform, applyTransform, cancelTransform, loopDraft, loopStatus: cageDoneReadiness(session, doc, !!drag, buildReceipt).reason, loopReady: !!loopDraft && !loopDraft.error && cageDoneReadiness(session, doc, !!drag, buildReceipt).ok, previewLoop, applyLoop, cancelLoop, doneReadiness, begin, overlay, gizmo, shown, previewMs, pickDepth, setPickDepth,
+    session, previewActive, doneReadiness, begin, overlay, gizmo, shown, previewMs, pickDepth, setPickDepth,
+    insetDraft, insetReady: !!insetDraft && !insetDraft.error && exactReadiness.ok, previewInset, applyInset, cancelInset,
+    transformDraft, transformReady: !!transformDraft && !transformDraft.error && exactReadiness.ok, previewTransform, applyTransform, cancelTransform,
+    loopDraft, loopStatus: exactReadiness.reason, loopReady, beginSlide, previewLoop, applyLoop, cancelLoop,
     onPick: (hit, additive, grow) => guard(s => select(s, hit, additive, grow)),
     setMode: m => setSession(s => s && (previewActive ? s : s.mode === m ? s : { ...s, mode: m, sel: { vertices: [], edges: [], faces: [] } })),
     toggleSmooth: () => setSession(s => s && (previewActive ? s : { ...s, smooth: !s.smooth })),

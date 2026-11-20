@@ -1,5 +1,5 @@
 import { edgeRing } from '@barocss/cad';
-import { runOp, type CageSession } from '@barocss/cad-model/subd/cageEdit';
+import { runOp, slideCageSelection, type CageSession } from '@barocss/cad-model/subd/cageEdit';
 
 /** Every preview starts at the same accepted cage, never at the previous preview. */
 export function previewCageLoop(base: CageSession, value: string): { session: CageSession; error: string | null } {
@@ -13,5 +13,14 @@ export function previewCageLoop(base: CageSession, value: string): { session: Ca
     }
     return { session: runOp(base, 'insert-loop', 0.01, t), error: null };
   }
+  catch (error) { return { session: base, error: error instanceof Error ? error.message.replace(/^SubD: /, '') : String(error) }; }
+}
+
+export function previewCageSlide(base: CageSession, value: string): { session: CageSession; error: string | null } {
+  const ratio = value.trim() === '' ? NaN : Number(value);
+  if (!Number.isFinite(ratio) || ratio <= -1 || ratio >= 1) {
+    return { session: base, error: 'Enter a ratio greater than −1 and less than 1.' };
+  }
+  try { return { session: slideCageSelection(base, ratio), error: null }; }
   catch (error) { return { session: base, error: error instanceof Error ? error.message.replace(/^SubD: /, '') : String(error) }; }
 }
