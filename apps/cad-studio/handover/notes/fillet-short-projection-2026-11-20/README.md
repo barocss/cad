@@ -1,0 +1,9 @@
+# Radius drag across a foreshortened guide (#214)
+
+A real 8 CSS pixel upward drag of the same R2 Fillet on a 40 × 30 × 10 mm box produced R2.5 at a 3.79999 px projected axis and R0.1 at 4.20001 px. The two camera pitches were 0.83065 and 0.83542 radians. A four-pixel cutoff abruptly selected an opposite and much more sensitive conversion.
+
+The opt-in scalar handle now uses the captured screen-up scale through 8 px and the original projected conversion from 24 px. Between these lengths the response changes smoothly. Movement across a short projected guide retains more screen-up response than movement along it. A pending History edge check blocks the nonstandard conversion until the source is verified.
+
+**PASS.** Both desktop Studio camera positions produced R2.5 while held and on release. Returning the pointer to its start restored the captured value. The source document survived preview. Explicit Apply, Undo and Redo produced the expected native Fillet. The existing full end-on browser flow also passed, including typed equivalence, zoom and fresh Open. The near-threshold browser fixture uses a new straight-edge Fillet in orthographic projection. Focused tests cover the shared History capture, positive-depth perspective and a directional sweep of intermediate projections. The sweep measures available response across directions, not a minimum for every pointer direction.
+
+Run the Studio focused tests with the filters `scalar-handle-drag history-fillet-radius-receipt gizmo` (37/37), lint the changed source and tests, and run the Studio production build. For Chrome, set `FILLET_END_ON_SOURCE_FROZEN=1`, `PW_DIR` and `CHROME`, then run `node apps/cad-studio/test/fillet-end-on-handle-browser.mjs <fresh external directory> --near-transition`. Add `--baseline` with the original scalar conversion. Omit both flags for the existing end-on flow. General curved and multi-edge handle design remains open.

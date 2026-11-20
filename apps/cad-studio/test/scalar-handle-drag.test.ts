@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { captureScalarHandleDrag, scalarHandleDragValue } from '../src/viewport/scalarHandleDrag';
+import { captureScalarHandleDrag, historyFilletEndOnBlocked, scalarHandleDragValue } from '../src/viewport/scalarHandleDrag';
 import { dragAlong, handleLayout, hitTest, type FeatureHandle, type Projector } from '../src/viewport/gizmo';
 const top: Projector = { project: p => [500 + p[0] * 10, 500 - p[1] * 10], forward: [0, 0, -1], size: 8.4 };
 const iso: Projector = { project: p => [500 + 7 * (p[0] - p[1]), 500 + 4 * (p[0] + p[1]) - 8 * p[2]], forward: [-0.6, -0.6, -0.5], size: 10 };
@@ -62,11 +62,75 @@ test('Non-finite pointer or conversion result is refused', () => {
   for (const bad of [NaN, Infinity, -Infinity]) assert.equal(scalarHandleDragValue(frame, h, [0, 0], [bad, 0]), null);
   const bad = handle({ toValue: () => Infinity }); assert.equal(scalarHandleDragValue(captureScalarHandleDrag(bad, top), bad, [0, 0], [0, -20]), null);
 });
-test('Four-pixel threshold is selected once per gesture, including exact boundary', () => {
+test('Screen-up and projected limits are captured once, with History blocked throughout the transition', () => {
   const h = handle({ dir: [1, 0, 0] });
-  for (const [length, fallback] of [[3.999, true], [4, false], [4.001, false]] as const) {
+  for (const [length, blend, fallback] of [[3.8, 0, true], [4.2, 0, true], [8, 0, true], [16, 0.5, true], [24, 1, false], [25, 1, false]] as const) {
     const P: Projector = { size: 1, forward: [0, 0, -1], project: p => [p[0] * length, 0] };
-    const frame = captureScalarHandleDrag(h, P); assert.ok(frame); assert.equal(frame.fallback, fallback);
+    const frame = captureScalarHandleDrag(h, P); assert.ok(frame); assert.equal(frame.fallback, fallback); near(frame.blend, blend);
+    assert.equal(historyFilletEndOnBlocked({ ...h, scalarDragSession: undefined, historyFilletProofPending: true }, P), fallback);
+  }
+});
+
+test('Both sides of the former four-pixel boundary retain the same finite move and release', () => {
+  const h = handle({ dir: [1, 0, 0], toValue: (start, mm) => Math.max(0.1, Math.round((start + mm) * 10) / 10) });
+  for (const length of [3.8, 4.2]) {
+    const P: Projector = { size: 5.25, forward: [0, 0, -1], project: p => [0, p[0] * length / 5.25] };
+    const frame = captureScalarHandleDrag(h, P); assert.ok(frame);
+    near(scalarHandleDragValue(frame, h, [20, 30], [20, 22]), 2.5);
+    near(scalarHandleDragValue(frame, { ...h, value: 2.5 }, [20, 30], [20, 22]), 2.5);
+    near(scalarHandleDragValue(frame, h, [20, 30], [20, 30]), 2);
+    near(scalarHandleDragValue(frame, h, [20, 30], [20, 38]), 1.5);
+  }
+});
+
+function projectedFrame(length: number, angle: number) {
+  const h = handle({ at: [0, 0, 0], dir: [1, 0, 0] }), radians = angle * Math.PI / 180;
+  const P: Projector = { size: 1, forward: [0, 0, -1], project: p => [p[0] * length * Math.cos(radians), p[0] * length * Math.sin(radians)] };
+  const frame = captureScalarHandleDrag(h, P); assert.ok(frame);
+  return { h, frame };
+}
+
+test('Transition uses t along the guide and t squared across it, with the captured scale and converter', () => {
+  const { h, frame } = projectedFrame(16, 45), diagonal = Math.SQRT1_2;
+  near(scalarHandleDragValue(frame, h, [0, 0], [diagonal, diagonal]), h.value - 0.5 * diagonal / 84 + 0.5 / 16);
+  near(scalarHandleDragValue(frame, h, [0, 0], [-diagonal, diagonal]), h.value - 0.75 * diagonal / 84);
+  const pointer: [number, number] = [8, -8], expected = scalarHandleDragValue(frame, h, [0, 0], pointer);
+  const preview = { ...h, at: [100, 200, 300] as [number, number, number], dir: [0, 1, 0] as [number, number, number], value: 1000, toValue: () => 999 };
+  assert.equal(scalarHandleDragValue(frame, preview, [0, 0], pointer), expected);
+  near(scalarHandleDragValue(frame, preview, [0, 0], [0, 0]), h.value);
+});
+
+test('The full transition retains an available directional response and bounds gain at every camera angle', () => {
+  let minimumAvailable = Infinity, maximumGain = 0;
+  for (let length = 8; length <= 24; length += 0.25) for (let angle = 0; angle < 360; angle += 2) {
+    const { h, frame } = projectedFrame(length, angle);
+    let available = 0;
+    for (let direction = 0; direction < 360; direction += 45) {
+      const radians = direction * Math.PI / 180, pointer: [number, number] = [Math.cos(radians), Math.sin(radians)];
+      const delta = scalarHandleDragValue(frame, h, [0, 0], pointer)! - h.value;
+      assert.ok(Number.isFinite(delta));
+      near(scalarHandleDragValue(frame, h, [0, 0], [-pointer[0], -pointer[1]]), h.value - delta);
+      near(scalarHandleDragValue(frame, h, [0, 0], [pointer[0] * 7, pointer[1] * 7]), h.value + delta * 7);
+      available = Math.max(available, Math.abs(delta) * 84);
+      maximumGain = Math.max(maximumGain, Math.abs(delta) * 84);
+    }
+    minimumAvailable = Math.min(minimumAvailable, available);
+  }
+  // Relative to the ordinary screen-up scale. This is available response, not a lower bound in every direction.
+  assert.ok(minimumAvailable > 0.21, `minimum available gain: ${minimumAvailable}`);
+  assert.ok(maximumGain < 3.73, `maximum gain: ${maximumGain}`);
+});
+
+test('Transition output is continuous across camera angles, lengths and pointer directions', () => {
+  for (const length of [8, 10, 14, 18, 22, 24]) for (let angle = 0; angle < 360; angle += 15) {
+    const { h, frame } = projectedFrame(length, angle);
+    const byAngle = projectedFrame(length, angle + 1e-6), byLength = projectedFrame(length + 1e-6, angle);
+    for (let direction = 0; direction < 360; direction += 15) {
+      const r = direction * Math.PI / 180, pointer: [number, number] = [Math.cos(r) * 8, Math.sin(r) * 8];
+      const value = scalarHandleDragValue(frame, h, [0, 0], pointer)!;
+      for (const next of [scalarHandleDragValue(byAngle.frame, byAngle.h, [0, 0], pointer), scalarHandleDragValue(byLength.frame, byLength.h, [0, 0], pointer),
+        scalarHandleDragValue(frame, h, [0, 0], [pointer[0] + 1e-6, pointer[1] - 1e-6])]) assert.ok(Math.abs(next! - value) < 1e-5);
+    }
   }
 });
 

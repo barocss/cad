@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import {createFlow} from './flow-helper.mjs';
 const baseline=process.argv.includes('--baseline');
+const nearTransition=process.argv.includes('--near-transition');
 const pins=['apps/cad-studio/src/viewport/scalarHandleDrag.ts','apps/cad-studio/src/viewport/useCommandGizmos.ts','apps/cad-studio/test/fillet-end-on-handle-browser.mjs','apps/cad-studio/src/viewport/gizmo.ts','apps/cad-studio/src/viewport/viewportPointerInput.ts','packages/barocss-cad-model/src/app/commands.ts'];
-const f=await createFlow({name:'fillet-end-on-handle',output:process.argv[2],envFrozen:'FILLET_END_ON_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:'Observe a real pointer drag of a new Fillet radius handle aligned with the orthographic camera',limits:['Single new Fillet on a 40×30×10 rectangle top edge. Camera changes use actual right-button orbit. No runtime handler calls or synthetic state writes; History handles, perspective end-on rays and command replacement during a held pointer are not browser-qualified. Two orthographic zooms are exercised; perspective behavior remains focused-test scope.'],inspectorSource:`
+const f=await createFlow({name:'fillet-end-on-handle',output:process.argv[2],envFrozen:'FILLET_END_ON_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:nearTransition?'Observe identical short pointer drags of a new straight Fillet across the near-end-on 4px projection boundary':'Observe a real pointer drag of a new Fillet radius handle aligned with the orthographic camera',limits:['Single new Fillet on a 40×30×10 rectangle top edge. Camera changes use actual right-button orbit. No runtime handler calls or synthetic state writes; History handles, perspective end-on rays and command replacement during a held pointer are not browser-qualified. The default mode exercises two orthographic zooms. --near-transition instead measures 3.8/4.2px projected axes and identical upward 8px drags with geometric increase pointing down. Perspective behavior remains focused-test scope.'],inspectorSource:`
 import {readFileSync} from 'node:fs';
 import {partBreps} from '@barocss/cad-model/engine/evaluate';
 import {brepMassProperties,checkBrep,evaluateSurface} from '@barocss/cad';
@@ -44,12 +45,78 @@ async function freshFillet(){
  const point=await f.page.evaluate(()=>window.__studioScreenOf([20,0,10]));assert.ok(point);await f.page.mouse.click(...point);await f.page.waitForFunction(()=>window.__studioSelection?.selection?.edges?.length===1);
  await f.command('Fillet');await radius().waitFor();await radius().fill('2');await preview();await orbit(-Math.PI/2,Math.PI/4);await f.page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
 }
+// Independent orthographic metric for this source's straight top edge. The radius
+// increases along [0,-1,1]/sqrt(2); X is perpendicular to the end-on view and
+// gives world-mm screen scale. No product drag helper is imported by this driver.
+async function nearMetric(){return f.page.evaluate(()=>{
+ const a=window.__studioScreenOf([20,0,10]),x=window.__studioScreenOf([21,0,10]);
+ const d=window.__studioScreenOf([20,-Math.SQRT1_2,10+Math.SQRT1_2]);
+ const perMm=Math.hypot(x[0]-a[0],x[1]-a[1]);
+ return {perMm,axis:[d[0]-a[0],d[1]-a[1]],idealLength:84*Math.hypot(d[0]-a[0],d[1]-a[1])/perMm};
+});}
+async function nearTransitionRun(){
+ const pixels=8,targets=[3.8,4.2],samples=[];
+ // Find the side of end-on where a geometric increase points DOWN. The two
+ // targets differ by only about 0.27 degrees, and cross the former 4px switch.
+ let sign=1;
+ await orbit(-Math.PI/2,Math.PI/4+Math.asin(targets[0]/84));
+ if((await nearMetric()).axis[1]<0)sign=-1;
+ for(const target of targets){
+  await radius().fill('2');await preview();
+  const camera=await orbit(-Math.PI/2,Math.PI/4+sign*Math.asin(target/84));
+  await f.page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+  const metric=await nearMetric();
+  assert.ok(Math.abs(metric.idealLength-target)<.025,JSON.stringify({target,metric,camera}));
+  assert.ok(metric.axis[1]>0,'geometric increasing direction must point down');
+  const label=`near-${String(target).replace('.','p')}`,h=await handle();assert.ok(h);
+  await f.snapshot(`${label}-01-before`);
+  const start=Number(await radius().inputValue());
+  await f.page.mouse.move(...h.root);await f.page.mouse.down();
+  await f.page.mouse.move(h.root[0],h.root[1]-pixels,{steps:4});
+  assert.match(await f.page.locator('.gizmo-readout').textContent(),/Radius/i);
+  const held=Number(await radius().inputValue());assert.ok(Number.isFinite(held));
+  await f.snapshot(`${label}-02-up-${pixels}px-held`);
+  await f.page.mouse.up();const released=Number(await radius().inputValue());
+  assert.equal(released,held,'release must retain the held value');
+  await preview();await f.same(source);await f.snapshot(`${label}-03-released`);
+  // Start a separate physical gesture from the newly rendered handle, then
+  // return its pointer to the exact down position while still held.
+  const next=await handle();assert.ok(next);await f.page.mouse.move(...next.root);await f.page.mouse.down();
+  await f.page.mouse.move(next.root[0],next.root[1]-pixels,{steps:4});
+  await f.page.mouse.move(...next.root,{steps:4});
+  const roundTrip=Number(await radius().inputValue());await f.page.mouse.up();
+  assert.equal(roundTrip,released,'pointer round trip must restore the captured scalar');
+  assert.equal(Number(await radius().inputValue()),released);
+  await preview();await f.same(source);
+  const sample={label,camera,metric,pixels,start,held,released,roundTrip,documentUnchanged:true};
+  samples.push(sample);f.report.observations.push(sample);await f.persist();
+ }
+ const difference=Math.abs(samples[1].held-samples[0].held);
+ f.report.observations.push({label:'near-transition-comparison',baseline,difference,samples});await f.persist();
+ if(baseline){
+  assert.ok(samples[0].held>samples[0].start,'old sub-4px fallback increases upward');
+  assert.ok(samples[1].held<samples[1].start,'old over-4px geometry decreases upward');
+ }else{
+  assert.ok(samples.every(s=>s.held>s.start),'both short upward drags must increase the radius');
+  assert.ok(difference<=.5,'two close angles must differ by at most 0.5 mm');
+  // Commit a value produced by the physical drag, and check native geometry.
+  const appliedRadius=samples[1].released;
+  await preview();await apply();const dragged=await f.doc();
+  assert.equal(dragged.nodes[2].radius,appliedRadius);assert.deepEqual(dragged.nodes.slice(0,2),source.nodes);
+  await verify(dragged,'near-04-applied-native',appliedRadius);
+  await f.undo();await f.same(source);await f.redo();await f.same(dragged);
+  await verify(dragged,'near-05-redo-native',appliedRadius);
+  await button('Iso').click();await f.page.getByTitle('Frame all (F)',{exact:true}).click();await f.snapshot('near-06-final-iso');return;
+ }
+ await cancel();await f.snapshot('near-04-baseline-cancel');
+}
 async function verify(doc,label,value){const native=await f.inspect(label,doc),[body]=(await f.bodies()).bodies;assert.equal(native.key,body.key);await f.runOracle({native,width:40,depth:30,height:10,chamfer:false,radius:value,workerVolume:body.volume},label);}
 await f.run(async()=>{
  await f.newPage();await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'end-on-box.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(source))});await f.same(source);await button('Iso').click();if(await button('Ortho').getAttribute('aria-pressed')!=='true')await button('Ortho').click();await f.page.getByTitle('Frame all (F)',{exact:true}).click();
  // Pick through the actual viewport, never through the selection hook.
  const filter=button('Selection filter');for(let i=0;i<6&&!(await filter.innerText()).includes('Edges');i++)await filter.click();assert.ok((await filter.innerText()).includes('Edges'));const point=await f.page.evaluate(()=>window.__studioScreenOf([20,0,10]));assert.ok(point);await f.page.mouse.click(...point);await f.page.waitForFunction(()=>window.__studioSelection?.selection?.edges?.length===1);await f.command('Fillet');await radius().waitFor();await radius().fill('2');await f.page.locator('.hud .status').filter({hasText:/^preview$/}).waitFor();
  const camera=await orbit(-Math.PI/2,Math.PI/4);await f.page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+ if(nearTransition){await nearTransitionRun();return;}
  const projection=await f.page.evaluate(()=>{const a=window.__studioScreenOf([20,0,10]),b=window.__studioScreenOf([20,-10,20]);return {a,b,length:Math.hypot(b[0]-a[0],b[1]-a[1])};});assert.ok(projection.length<1,'end-on world direction is collapsed');
  const h=await handle();assert.ok(h,'collapsed radius handle remains rendered');await f.snapshot('01-end-on-before');const start=Number(await radius().inputValue());const samples=[];
  await f.page.mouse.move(...h.root);await f.page.mouse.down();
