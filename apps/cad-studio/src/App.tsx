@@ -203,6 +203,7 @@ import { createValueStore, useStoreValue } from './state/valueStore';
 import { SceneViewport } from './viewport/SceneViewport';
 import { GravityExperimentPanel } from './ui/GravityExperimentPanel';
 import { useScenePoses } from './state/useScenePoses';
+import { useInstanceGizmo } from './assembly/useInstanceGizmo';
 import type { CamOptions } from './viewport/camDisplay';
 import { withPrintPreviewSettings, type PrintPreviewPatch } from './viewport/printSettings';
 import { isRefusal, refusal } from '@barocss/cad-model/engine/refusal';
@@ -295,7 +296,6 @@ import { flattenAssembly } from '@barocss/cad-model/engine/flatten';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
 import { elsewhereOf, openAccepted, beginInPlace, editInPlaceRefusal, finishInPlace, inPlaceBlock, sessionChanged, stacksAfter, type InPlaceSession } from './app/editInPlace';
 import { freshPartId, revisionOf } from '@barocss/cad-model/assembly/definitions';
-import { alignMove, gizmoAxes, movedInstance, previewMatrix, turnedInstance, type InstanceDrag } from '@barocss/cad-model/assembly/drag';
 import { BASE, type Mate } from '@barocss/cad-model/assembly/mates';
 import type { DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { directNow, loadDirect } from '@barocss/cad-model/engine/directModule';
@@ -1534,13 +1534,25 @@ export function App() {
   const exploded = useSyncExternalStore(explodeStore.subscribe, () => explodeStore.get() !== 0);
   // (Dev/bench: any explode factor, as a drag would set it frame by frame; the button steps 0, 0.5, 1, 2.)
   useEffect(() => { if (import.meta.env.DEV) (window as unknown as { __studioSetExplode: (k: number) => void }).__studioSetExplode = setExplode; }, []);
-  const [instDrag, setInstDrag] = useState<{ id: string; drag: InstanceDrag; settling: boolean; key: string } | null>(null);
-  // (R1c (3a): the placed parts as they are shown — placed, posed, exploded, dragged and sectioned.)
-  const { instancesPlaced, instancePoseMap, cpuInstanceSection, instancesShown } = useScenePoses(doc, sceneInstanceBodies, bodies, jointFk, explode, section, sketch, gpuSection, instDrag, excludedSectionInstances);
   const { shown: stepsShown, openPanel: openSteps, display: stepsDisp, index: stepAt, applyEdit: stepEdit, panelProps: stepsPanel } = useAssemblyStepReview({
     doc, docGeneration, selectedParts: instanceSel, viewport, explodeStore, commit, onNotice: setToast,
     available: !bomOpen && !libraryOpen && !paramsOpen && !variantsOpen && !rebuildOpen && !rendering && !drawing && !sketch && !active,
   });
+  const selectedTopId = singleTop(instanceSel);
+  const instanceGizmoSession = useMemo(() => ({}), [docGeneration, workerSession]);
+  const instanceGizmoOpen = openIntent.current;
+  const { instDrag, instancePreview: dragPreview, gizmo: instGizmo } = useInstanceGizmo({
+    doc, selectedId: selectedTopId, bodies, instanceBodies, freedom: assembly.freedom,
+    enabled: !active && !sketch && !rendering && !drawing && !measure && !assembly.draft && !exploded
+      && (!selectedTopId || !stepsDisp?.hidden.has(selectedTopId)),
+    documentSession: instanceGizmoSession, open: instanceGizmoOpen,
+    sourceCurrent: () => docNow.current === doc && openIntent.current === instanceGizmoOpen
+      && workerSessionNow.current === workerSession && !project.opening(),
+    commit: commitInstances,
+  });
+  // The CPU section clips the dragged placement. Other views use the viewport's preview matrix.
+  const { instancesPlaced, instancePoseMap, cpuInstanceSection, instancesShown } = useScenePoses(doc, sceneInstanceBodies, bodies, jointFk, explode, section, sketch, gpuSection, instDrag, excludedSectionInstances);
+  const instancePreview = cpuInstanceSection ? null : dragPreview;
   // A delayed handler must never transfer a previous document's or selection's parts.
   const stepTransferOpen = openIntent.current;
   const stepTransferScope = useRef({ doc, docGeneration, instanceSel, stepAt, stepsShown, open: stepTransferOpen, worker: workerSession });
@@ -3105,52 +3117,18 @@ export function App() {
     [doc, evaluated, fresh, previewMode, mapKind, scalarMaps, mapLegend, shownBodies, hiddenBodies, viewBackend, animatedOffsets, dragTransforms, sectionClip, mapScope]);
   const { hover: mapHover, setHover: setMapHover } = useOwnedScalarHover(mapHoverOwner);
 
-  // The selected part instance's gizmo: moves along and turns about world axes through its box's centre
-  // (only what its mates leave free). It follows at once on screen; let go, it is placed (mates re-solve)
-  // and shown as dragged until it is evaluated where it lands.
-  // (Roadmap 10 ②c: a nested occurrence path has no gizmo: its sub-assembly's definition places it.)
   const groupMoveBlocked = !fresh || busy || !renderGeometryReady || project.opening()
     || (doc.instances ?? []).some(i => !assembly.tableFor(i.id)) || assembly.problems.length
     ? 'Wait for the current assembly evaluation and resolve its mate errors.'
     : shownDoc !== doc || marker !== null || inPlace || jointTree || exploded || stepsDisp || cutDraft || workingComparison
       || section || previewMode !== 'none' || routePanelOpen || isolatedInstances
       ? 'Return to the current master Model without a pose, section, isolation or step preview to move parts.' : null;
-  const selectedTopId = singleTop(instanceSel), selectedInst = selectedTopId ? doc.instances?.find(i => i.id === selectedTopId) : undefined;
   const nestedSelected = singleNested(instanceSel);
   const canAttachFaceDiagnosis = approvalAttachmentsEnabled && shownDoc === doc && marker === null && !cutDraft && !rendering && !drawing && !sketch;
   const faceDiagnosis = useFaceDiagnosisAttachment({ enabled: canAttachFaceDiagnosis, part: nestedSelected ?? null, project: project.view.store,
     owner: () => project.opening() ? undefined : openIntent.current });
   // (A nested path lights only the host's bodies from that part; a top-level id, the whole placed part.)
   const viewportInstanceSel = useMemo(() => viewportInstanceSelection(instanceSel, host => instanceBodies.get(host)), [instanceSel, instanceBodies]) as string[];
-  const instGizmo: TransformGizmo | null = (() => {
-    // (An occurrence of a pattern is placed by its seed: no gizmo of its own.)
-    if (!selectedInst || stepsDisp?.hidden.has(selectedInst.id) || selectedInst.pattern || active || sketch || rendering || drawing || measure || assembly.draft || exploded) return null;
-    const ib = instanceBodies.get(selectedInst.id), axes = gizmoAxes(selectedInst, assembly.freedom[selectedInst.id]);
-    if (!ib?.bodies.length || !axes) return null;
-    const lo = [0, 1, 2].map(k => Math.min(...ib.bodies.map(b => b.mesh.bounds.min[k]))), hi = [0, 1, 2].map(k => Math.max(...ib.bodies.map(b => b.mesh.bounds.max[k])));
-    const centre = [0, 1, 2].map(k => (lo[k] + hi[k]) / 2) as Vec3, d = instDrag?.id === selectedInst.id && instDrag.drag.kind === 'move' ? instDrag.drag.delta : [0, 0, 0];
-    const place = (next: (i: PartInstance) => PartInstance, drag: InstanceDrag, done: boolean, nothing: boolean) => {
-      if (done && nothing) { setInstDrag(null); return; }
-      setInstDrag({ id: selectedInst.id, drag, settling: done, key: ib.key });
-      if (done) commitInstances((doc.instances ?? []).map(i => i.id === selectedInst.id ? next(i) : i));
-    };
-    return { origin: [centre[0] + d[0], centre[1] + d[1], centre[2] + d[2]], move: axes.move, turn: axes.turn,
-      onMove: (raw, done) => {
-        // Lined up with the part's bodies and the other placed parts when it comes close (as bodies are).
-        const others = [...bodies.map(b => b.mesh.bounds), ...[...instanceBodies.entries()].filter(([id]) => id !== selectedInst.id).flatMap(([, v]) => v.bodies.map(b => b.mesh.bounds))];
-        const delta = alignMove({ min: lo, max: hi }, others, raw, raw.map(v => v !== 0), Math.max(1, Math.max(...[0, 1, 2].map(k => hi[k] - lo[k])) * 0.02)).move;
-        place(i => movedInstance(i, delta), { kind: 'move', delta }, done, delta.every(v => v === 0));
-      },
-      onTurn: (axis, degrees, done) => place(i => turnedInstance(i, axis, degrees, centre), { kind: 'turn', axis, degrees, centre }, done, degrees === 0) };
-  })();
-  // Placed: the preview goes once the instance is evaluated where it landed (or after a moment, when the mates put it back).
-  useEffect(() => {
-    if (!instDrag?.settling) return;
-    if (instanceBodies.get(instDrag.id)?.key !== instDrag.key) { setInstDrag(null); return; }
-    const t = setTimeout(() => setInstDrag(null), 3000); return () => clearTimeout(t);
-  }, [instDrag, instanceBodies]);
-  const instancePreview = useMemo(() => !cpuInstanceSection && instDrag ? { id: instDrag.id, matrix: previewMatrix(instDrag.drag) } : null, [cpuInstanceSection, instDrag]);
-
   // Cosmetic threads (tapped holes, bolts, nuts): rings on the part's bodies and the placed parts'
   // (not on a preview, a section or a render).
   const threads = useMemo(() => {
