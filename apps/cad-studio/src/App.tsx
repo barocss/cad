@@ -152,7 +152,6 @@ import { beginWork, createWorkOwnership, finishWork, invalidateWork, reserveAcce
 import type { OpenScope } from './state/openOwnership';
 import { scheduleProjectOpenFit } from './app/projectOpenFit';
 import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
-import { type DisplayMode, type DisplayModeStatus } from './viewport/renderer';
 import { retainedSectionEdges } from './viewport/sectionEdgePick';
 import { placedDoc, type PartInstance } from '@barocss/cad-model/engine/doc';
 import { placementOf } from '@barocss/cad-model/engine/placement';
@@ -202,6 +201,7 @@ import { timedPathOf } from '@barocss/cad-model/robot/motion';
 import { createValueStore, useStoreValue } from './state/valueStore';
 import { SceneViewport } from './viewport/SceneViewport';
 import { sceneSelection } from './viewport/sceneSelection';
+import { useSceneDisplayMode } from './viewport/useSceneDisplayMode';
 import { GravityExperimentPanel } from './ui/GravityExperimentPanel';
 import { useScenePoses } from './state/useScenePoses';
 import { useInstanceGizmo } from './assembly/useInstanceGizmo';
@@ -779,8 +779,6 @@ export function App() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
   const [ortho, setOrtho] = useState(false);
-  // Session appearance only: no document, history, recovery or analysis input changes.
-  const [displayMode, setDisplayMode] = useState<DisplayMode>('shaded-with-edges');
   // (G12c: the previews one at a time — CNC, print layers, clearance or the analysis maps — a choice, not toggles that
   // refuse each other. The dock's switch chooses it, G12e.)
   const [previewMode, setPreviewMode] = useState<PreviewMode>('none');
@@ -793,16 +791,7 @@ export function App() {
   // (G24: the drawing's annotations on the model, session only, and the one picked.)
   const [pmiEnabled, setPmiEnabled] = useState(false);
   const [pmiSelected, setPmiSelected] = useState<string | null>(null);
-  // (The display mode, isolate and the previews' toggles, in a popover over the Views row: open only when asked.)
-  const [displayOpen, setDisplayOpen] = useState(false);
   const [isolatedInstances, setIsolatedInstances] = useState<readonly string[] | undefined>();
-  const displayModeContext = useRef('');
-  const [displayModeFailure, setDisplayModeFailure] = useState<{ requested: DisplayMode; reason: string; context: string } | null>(null);
-  const onDisplayModeStatus = useCallback((status: DisplayModeStatus) => {
-    if (status.supported || status.requested === 'shaded-with-edges' || !status.reason) return;
-    setDisplayModeFailure(previous => previous?.requested === status.requested && previous.reason === status.reason && previous.context === displayModeContext.current
-      ? previous : { requested: status.requested, reason: status.reason!, context: displayModeContext.current });
-  }, []);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => { try { return (localStorage.getItem('cad-studio-theme') as 'dark' | 'light') || 'dark'; } catch { return 'dark'; } });
   /** A surface analysis look on the bodies (modelling view only). */
   const [analysis, setAnalysis] = useState<'zebra' | 'curvature' | 'overhang' | null>(null);
@@ -3304,19 +3293,14 @@ export function App() {
     selection: { setInstanceSel, setDirectSel, setSelection } });
   useEffect(() => { if (import.meta.env.DEV) (window as unknown as { __studioCam: () => unknown }).__studioCam = () => ({ reason: camReason, stage: camState.stage, error: camState.error, display: camDisplay }); }, [camReason, camState.stage, camState.error, camDisplay]);
 
-  const displayScopeReason = instancePreview ? 'CAD display modes are not available while an instance is dragged.'
-    : assembly.draft ? 'CAD display modes are not available during an assembly edit.'
-    : rendering || drawing ? 'CAD display modes are available in Model view.'
-    : viewAnalysis || scalarMaps?.length || mouldShown ? 'CAD display modes are not available with analysis or mould displays.'
-    : directShown.length || ghost && proposalOverlay ? 'CAD display modes are not available with direct geometry or proposal previews.'
-    : sketch || cageInputActive || skel.tool || active || regions.length ? 'CAD display modes are not available while a sketch, cage or tool is being edited.'
-    : undefined;
-  const displayContextKey = JSON.stringify([displayScopeReason ?? null, !!sectionClip, !!instancesDrawn.length]);
-  displayModeContext.current = displayContextKey;
-  const displayModeReason = displayScopeReason
-    ?? (displayModeFailure?.requested === displayMode && displayModeFailure.context === displayContextKey ? displayModeFailure.reason : undefined);
-  const displayModeNotice = displayModeReason ?? displayScopeReason;
-  const effectiveDisplayMode: DisplayMode = displayModeReason ? 'shaded-with-edges' : displayMode;
+  const viewDisplay = useSceneDisplayMode({
+    draggingInstance: !!instancePreview, assemblyEdit: !!assembly.draft, outsideModel: rendering || drawing,
+    analysisOverlay: !!(viewAnalysis || scalarMaps?.length || mouldShown),
+    directOverlay: !!(directShown.length || ghost && proposalOverlay),
+    editorActive: !!(sketch || cageInputActive || skel.tool || active || regions.length),
+    sectionClipped: !!sectionClip, hasInstances: instancesDrawn.length > 0,
+  });
+  const { displayScopeReason, effectiveDisplayMode } = viewDisplay.controls;
   const isolationSelection = snapshotInstanceIsolation(hostsOf(instanceSel), instancesPlaced);
   const isolationReason = displayScopeReason ? 'Isolate selection is available with ordinary solids in Model view.'
     : !isolationSelection ? 'Select a visible placed instance to isolate.' : undefined;
@@ -3783,8 +3767,7 @@ export function App() {
       <div className="stage">
       <SceneViewport inspectionTransaction={inspection.transaction} onInspectionCamera={inspection.observeCamera} reverseWheelZoom={modelWheelZoom?.enabled} ref={viewport} onProjectionChange={setOrtho} onRecoveryNotice={next => setToast(current => viewportRecoveryToast(current, next))}
         poses={{ poseStore, explodeStore, jointTree, bodies: drawnBodies, instancesPlaced: viewportPlacements, cpuInstanceSection }} liveSection={sectionLiveView}
-        displayMode={effectiveDisplayMode} requestedDisplayMode={displayMode} displayModeReason={displayModeReason}
-        onDisplayModeStatus={onDisplayModeStatus} onBackend={setViewBackend}
+        display={viewDisplay.viewport} onBackend={setViewBackend}
         modelUnavailable={modelUnavailable} bodies={cageInputActive ? cageEd.shown(shownBodies) : viewBodies} modelSelection={modelSelection}
         ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? curvature.overlay} continuityLocation={continuityLocation.curve} filletEndpoints={displayedFilletEndpoints} filletPickedEdgeHighlight={filletPickedEdgeHighlight} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
         gizmo={cageInputActive ? cageEd.gizmo : routeGizmo ?? gizmo ?? instGizmo ?? poleGizmo} cage={cageInputActive ? cageEd.overlay : null} onPickCage={cageInputActive ? cageEd.onPick : undefined} tool={skel.tool}
@@ -3857,8 +3840,7 @@ export function App() {
       </div>
 
       <ViewDisplayControls inspection={inspection} inspectionSelectedKeys={selection.bodies.flatMap(index => bodies[index] ? [bodies[index].key] : [])} doc={doc} viewport={viewport} cornerRight={cornerRight}
-        display={{ displayOpen, setDisplayOpen, displayMode, setDisplayMode, effectiveDisplayMode, displayScopeReason, displayModeReason, displayModeNotice,
-          clearDisplayModeFailure: () => setDisplayModeFailure(null), isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection }}
+        display={{ ...viewDisplay.controls, isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection }}
         view={{ ortho, sketching: !!sketch, wheelZoom: modelWheelZoom, sketchReopenCamera, fitActiveSketch: sketchActions.fitActiveSketch, ao, setAo, theme, setTheme, rendering, printing: !!printing, viewBackend }}
         section={{ section, documentSession: docGeneration, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye, sectionExclusion: sectionExclusionControls }}
         analysis={{ analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread }}

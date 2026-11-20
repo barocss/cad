@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
-const f = await createFlow({ name: 'gpu-display-smoke', envFrozen: 'GPU_DISPLAY_SOURCE_FROZEN', output: process.argv[2], qualification: 'D401_GPU_TEST_REPAIR',
+const f = await createFlow({ name: 'gpu-display-smoke', envFrozen: 'GPU_DISPLAY_SOURCE_FROZEN', output: process.argv[2], qualification: 'Studio display modes, isolation, clearance and analysis fallback',
   snapshotExtra: () => ({ frameCosts: window.__studioFrameCost?.(), instanceBounds: window.__studioInstanceBounds?.() }),
   initialFiles: ['apps/cad-studio/test/gpu-display-smoke-browser.mjs', 'apps/cad-studio/test/fixtures/clearance-states.bcad', 'packages/barocss-gpu/tests/cad-clearance-gpu.test.mjs', 'packages/barocss-gpu/tests/cad-gpu-display-contract.test.mjs', 'packages/barocss-gpu/tests/cad-instance-display-diagnostics.test.mjs'],
-  requiredFrozen: ['apps/cad-studio/src/viewport/gpuRenderer.ts', 'apps/cad-studio/src/ui/ViewDisplayControls.tsx'],
-  limits: ['Test fixtures and diagnostic tests changed; product code did not change.', 'One WebGPU assembly is checked; WebGL2, broad GPU suites, Save and exports are not run.', 'Images require visual review; frame costs verify actual renderer modes and instance draws.'] });
+  requiredFrozen: ['apps/cad-studio/src/viewport/gpuRenderer.ts', 'apps/cad-studio/src/ui/ViewDisplayControls.tsx',
+    'apps/cad-studio/src/viewport/useSceneDisplayMode.ts', 'apps/cad-studio/src/viewport/SceneViewport.tsx', 'apps/cad-studio/src/App.tsx'],
+  limits: ['One WebGPU assembly is checked; WebGL2, broad GPU suites, Save and exports are not run.', 'Images require visual review; frame costs verify actual renderer modes and instance draws.'] });
 await f.run(async () => {
   await f.newPage(); f.phase = 'Open assembly'; await f.openFile(join(f.app, 'test/fixtures/clearance-states.bcad'), 2);
   await f.page.waitForFunction(() => window.__studioDoc?.instances?.length === 8 && window.__studioInstanceBounds?.()?.length === 8, null, { timeout: 60000 });
@@ -40,5 +41,27 @@ await f.run(async () => {
   assert.equal(state.error, undefined); assert.deepEqual(state.pairs, ['designed', 'touching', 'overlap', 'near', 'clear']);
   assert.deepEqual(state.overlays, ['designed', 'near', 'overlap', 'touching']); f.report.observations.push({ clearance: state }); await f.snapshot('03-clearance');
   await clearance.click(); await f.page.waitForFunction(() => !window.__studioClearance?.(), null, { timeout: 15000 });
-  await f.snapshot('04-clearance-cleared'); await f.same(original); assert.deepEqual(f.report.downloads, []);
+  await f.snapshot('04-clearance-cleared');
+
+  f.phase = 'analysis temporarily suspends the requested wireframe mode';
+  const waitMode = (effective, blocked) => f.page.waitForFunction(({ effective, blocked }) => {
+    const control = document.querySelector('select[aria-label="CAD display mode"]');
+    const viewport = document.querySelector('.viewport');
+    return control?.disabled === blocked && control.dataset.displayModeRequested === 'wireframe'
+      && control.dataset.displayModeEffective === effective && viewport?.dataset.displayModeRequested === 'wireframe'
+      && viewport.dataset.displayModeEffective === effective && viewport.dataset.displayModeSupported === String(!blocked);
+  }, { effective, blocked });
+  await select.selectOption('wireframe');
+  await waitMode('wireframe', false);
+  await f.page.locator('[aria-label="Preview: Analysis"]').click();
+  await waitMode('shaded-with-edges', true);
+  assert.match(await f.page.locator('#cad-display-mode-status').innerText(), /not available with analysis or mould displays.*Shaded with edges is active\./);
+  const blocked = await f.snapshot('05-analysis-suspends-wireframe');
+  await f.page.locator('[aria-label="Preview: None"]').click();
+  await waitMode('wireframe', false);
+  assert.equal(await f.page.locator('#cad-display-mode-status').count(), 0);
+  await f.snapshot('06-analysis-restores-wireframe');
+  await f.same(original);
+  assert.deepEqual(blocked.doc, original);
+  assert.deepEqual(f.report.downloads, []);
 });

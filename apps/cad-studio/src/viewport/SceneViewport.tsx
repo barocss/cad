@@ -9,6 +9,7 @@ import { poseKinematics } from '../state/useJoints';
 import { createValueStore, useStoreValue, type ValueStore } from '../state/valueStore';
 import type { Section } from './sectionView';
 import type { SceneSelection } from './sceneSelection';
+import type { SceneDisplayMode } from './useSceneDisplayMode';
 import { countRender } from '../devRenders';
 
 type ViewportProps = ComponentPropsWithoutRef<typeof Viewport>;
@@ -18,11 +19,12 @@ export type SceneSketchActions = Pick<ViewportProps,
 
 type SceneSelectionProps = Omit<SceneSelection, 'actions'> & SceneSelection['actions'];
 
-export interface SceneViewportProps extends Omit<ViewportProps, 'instanceTransforms' | keyof SceneSelectionProps | keyof SceneSketchActions> {
+export interface SceneViewportProps extends Omit<ViewportProps, 'instanceTransforms' | keyof SceneSelectionProps | keyof SceneSketchActions | keyof SceneDisplayMode> {
   poses: ScenePoseInputs;
   liveSection: LiveSection | null;
   modelSelection: SceneSelection;
   sketchActions: SceneSketchActions;
+  display: SceneDisplayMode;
 }
 
 /** What the placed parts' matrices are made from, beside the pose and the explode factor (useScenePoses' inputs). */
@@ -49,7 +51,7 @@ const NO_SECTION = createValueStore<Section | null>(null);
  * joint played or an explode dragged renders this, not the App. The matrices as useScenePoses makes them. A section plane
  * dragged on WebGPU likewise: its clip and handles from the plane as it is dragged.
  */
-export const SceneViewport = forwardRef<ViewportHandle, SceneViewportProps>(function SceneViewport({ poses, liveSection, modelSelection, sketchActions, ...props }, ref) {
+export const SceneViewport = forwardRef<ViewportHandle, SceneViewportProps>(function SceneViewport({ poses, liveSection, modelSelection, sketchActions, display, ...props }, ref) {
   countRender('SceneViewport');
   const values = useStoreValue(poses.poseStore), explode = useStoreValue(poses.explodeStore);
   const fk = useMemo(() => poseKinematics(poses.jointTree, values), [poses.jointTree, values]);
@@ -82,6 +84,6 @@ export const SceneViewport = forwardRef<ViewportHandle, SceneViewportProps>(func
     } : undefined;
   const sketchSnaps = props.sketchSnaps && { ...props.sketchSnaps, placed: placedSnaps };
   const { actions: picking, ...selection } = modelSelection;
-  return <Viewport ref={ref} {...props} {...selection} {...picking} {...sketchActions} {...live} sketchSnaps={sketchSnaps}
+  return <Viewport ref={ref} {...props} {...display} {...selection} {...picking} {...sketchActions} {...live} sketchSnaps={sketchSnaps}
     frames={frames} frameSize={frameSize} instanceTransforms={poses.cpuInstanceSection ? undefined : poseMap} />;
 });

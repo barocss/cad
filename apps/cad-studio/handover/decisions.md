@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1419: [Studio display mode state](notes/studio-display-mode-state-2026-11-21/README.md) owns the display request and reports for the current scope. Desktop verifies five modes, wireframe suspension and restoration, and project isolation persistence boundaries.
+
 - D1418: [SceneViewport selection routing](notes/studio-scene-selection-2026-11-21/README.md) groups displayed selection, input flags and editor routing. Desktop crossing snapshots match before and after.
 
 - D1417: [Studio top bar extraction](notes/studio-topbar-extraction-2026-11-21/README.md) moves markup and file chooser ownership from App into a private component. Desktop verifies focus, native file ownership and sketch workspace exit.
