@@ -145,7 +145,9 @@ export async function rematchNames(prev: StudioDoc, next: StudioDoc, evaluate: (
     if (!a?.ok || !b?.ok) continue;
     const before = a.bodies.find(x => x.key === bodyKeyFor(prev.nodes, parentBefore.node, parentBefore.side)), after = b.bodies.find(x => x.key === bodyKeyFor(nodes, node.parent.node, node.parent.side));
     if (!before || !after) continue;
-    const nativeFaces = node.kind === 'offset-face' || node.kind === 'replace-face' ? 'plane' : node.kind === 'delete-face' ? 'individual' : node.kind === 'cylindrical-wrap';
+    const nativeFaces = node.kind === 'offset-face' || node.kind === 'replace-face' ? 'plane'
+      : node.kind === 'delete-face' ? node.sigs?.[node.faces[0]]?.k === 'plane' ? 'plane' : 'individual'
+      : node.kind === 'cylindrical-wrap';
     const sa = signaturesOf(before, nativeFaces), sb = signaturesOf(after, nativeFaces);
     const old = what.edge ? sa.edges : sa.faces, now = what.edge ? sb.edges : sb.faces;
     const stableNames = sameNames(old, now, what.edge);

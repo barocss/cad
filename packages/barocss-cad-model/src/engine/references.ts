@@ -118,7 +118,9 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
     const key = refKey(node), groups = bandGroups(node) ?? (key && 'parent' in node ? [{ parent: node.parent, list: (node as unknown as Record<string, string[]>)[key] }] : null);
     if (!groups) return;
     const n = node as unknown as Record<string, unknown> & Named;
-    const nativeFace = node.kind === 'offset-face' || node.kind === 'replace-face' ? 'plane' : node.kind === 'delete-face' ? 'individual' : node.kind === 'cylindrical-wrap' ? true : undefined;
+    const nativeFace = node.kind === 'offset-face' || node.kind === 'replace-face' ? 'plane'
+      : node.kind === 'delete-face' ? node.sigs?.[node.faces[0]]?.k === 'plane' ? 'plane' : 'individual'
+      : node.kind === 'cylindrical-wrap' ? true : undefined;
     for (const { parent, list } of groups) list.forEach((name, i) => refs.push({
       where: `feature ${k}`, nativeFace, edge: key === 'edges' || node.kind === 'band-surface', node: k, parent, name, sig: n.sigs?.[name], rematched: !!n.rematched?.[name], was: n.rematched?.[name],
       rename(to, mark) {

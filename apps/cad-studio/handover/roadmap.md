@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-21 · Priority authority: D520 · Latest delivery: D1461 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-21 · Priority authority: D520 · Latest delivery: D1462 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1461](notes/heal-box-cap-edge-chamfer-2026-11-21/README.md), P5 row 31, heals one full-width box chamfer along either cap. Studio and MCP verify both original sharp edges, all six surviving faces and fresh Open. See the [decision index](decisions.md), [row 31](roadmap-rows/31.md), and the [previous status snapshot](https://github.com/barocss/cad/blob/0fdb189054361ac7c151bce25942ac8b185b295d/apps/cad-studio/handover/roadmap.md#now-and-next) for earlier deliveries.
-- **Next MAIN:** D1462, P5 row 31, [#17](https://github.com/barocss/cad/issues/17). Check whether Delete face can remove one of two separate full-height corner chamfers while retaining the other bevel and its identities. Verify the independent retained volume and Studio Save and Open.
+- **Current position:** [D1462](notes/heal-one-of-two-opposite-chamfers-2026-11-21/README.md), P5 row 31, heals either of two opposite full-height box chamfers. Studio and MCP verify distinct target names, the retained bevel, 11980 mm³ and fresh Open. See the [decision index](decisions.md), [row 31](roadmap-rows/31.md), and the [previous status snapshot](https://github.com/barocss/cad/blob/5c19e0ec30de1f96598f82341fff96d9537cd06f/apps/cad-studio/handover/roadmap.md#now-and-next) for earlier deliveries.
+- **Next MAIN:** D1463, P5 row 31, [#17](https://github.com/barocss/cad/issues/17). Apply a separate Delete face to the remaining bevel and verify 11960 → 11980 → 12000 mm³ in either order, with independent Undo and fresh Open.
 - **Separate follow-ups:** #126 Shell G2 face-kind guidance, #613 four unresolved overlaps, #608 Rendering HOLD, #152 legacy provenance, #22, and API inventory drift remain open.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Measured progress:** whole CAD and core readiness **NOT_MEASURED**; B01 v1 **12/12 accepted groups**; B02 v1 **11/11 accepted groups**; B04 v1 **26/26 accepted groups**; B07 v1 **6/6 accepted profiles**; B09 v1 **9/9 accepted groups**; initial scenarios **8/10 accepted**; B06 **6/7 qualified groups, PDF held**; B05 **7/7 accepted groups**; B08 **6/6 accepted groups**; B10 **7/7 accepted groups**; B03 **NOT_ADJUDICATED**. The legacy43% is frozen history. P0 has12 acceptance items; R01–R12 have bounded D521–D532 closeouts; D785 demonstrates one R04 native collision; no whole-product acceptance follows. This is backlog state, not a whole-CAD percentage.

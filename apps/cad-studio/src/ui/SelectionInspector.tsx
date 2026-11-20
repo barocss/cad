@@ -55,7 +55,7 @@ export function SelectionInspector({ model, selection, materialSettings, display
           {selection.vertices.length === 2 && (() => { const [a, b] = selection.vertices!.map(v => v.at), d = [0, 1, 2].map(k => b[k] - a[k]); return <><div className="kv">Distance <b>{fmt(Math.round(Math.hypot(d[0], d[1], d[2]) * 1000) / 1000)} mm</b></div><div className="kv">ΔX ΔY ΔZ <b>{d.map(x => fmt(Math.round(x * 1000) / 1000)).join(', ')}</b></div></>; })()}
         </>) : sel1?.kind === 'face' && sel1.face ? (<>
           <div className="card-title">SELECTION · {edges ? `${faces} FACE${faces === 1 ? '' : 'S'}, ${edges} EDGE${edges === 1 ? '' : 'S'}` : `${faces} FACE${faces === 1 ? '' : 'S'}`}</div>
-          <div id={faceScopeId} className="muted small" style={{ overflowWrap: 'anywhere' }} aria-label="Face property and colour target">Properties and face colour: {bodyName(doc, sel1.body)} ({sel1.body.key}) · {sel1.face.name}{faces > 1 ? ' — first selected face only' : ''}.</div>
+          <div id={faceScopeId} className="muted small" style={{ overflowWrap: 'anywhere' }} aria-label="Face property and colour target">Properties and face colour: {bodyName(doc, sel1.body)} ({sel1.body.key}) · {sel1.face.nativePlaneName ?? sel1.face.name}{faces > 1 ? ' — first selected face only' : ''}.</div>
           <div className="kv">Type <b>{faceGeometry?.label}</b></div>
           {faceGeometry?.normal && <div className="kv">Normal <b>{faceGeometry.normal.map(v => String(Math.round(v * 1000) / 1000)).join(', ')}</b></div>}
           <div className="kv">Area <b>{fmt(Math.round(sel1.face.area * 100) / 100)} mm²</b></div>

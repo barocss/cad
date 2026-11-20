@@ -14,12 +14,14 @@ function pickedHealFace(ctx: Ctx) {
   const pick = selection.faces[0], body = ctx.bodies[pick.body], parent = body?.ref, face = body?.mesh.faces[pick.face];
   if (!parent || parent.side !== 'solid' || !face || face.facet) return;
   if (face.kind === 'plane') {
-    const target = planarDeleteFaceTarget(ctx.doc.nodes, parent.node);
-    if (target?.name !== face.name) return;
-    const signature = signaturesOf(body, 'individual').faces.get(face.name);
+    const name = face.nativePlaneName;
+    if (!name) return;
+    const target = planarDeleteFaceTarget(ctx.doc.nodes, parent.node, name);
+    if (target?.name !== name) return;
+    const signature = signaturesOf(body, 'plane').faces.get(name);
     if (signature?.kind !== 'plane' || !signature.dir || !planarDeleteFaceDirection(signature.dir, target.role) ||
         !Number.isFinite(signature.size) || signature.size <= 0) return;
-    return { parent, name: face.name, signature: toSig(signature) };
+    return { parent, name, signature: toSig(signature) };
   }
   if (face.kind !== 'curved') return;
   if (isDeleteFaceFilletSource(ctx.doc.nodes, parent.node)) {

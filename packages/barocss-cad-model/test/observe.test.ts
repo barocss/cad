@@ -68,5 +68,7 @@ test('response format: concise keeps facts and change only; detailed lists every
   assert.deepEqual([p1.page.page, p2.page.page, p1.page.pages >= 2], [1, 2, true]);
   assert.notDeepEqual(p1.faces.map((f: { name: string }) => f.name), p2.faces.map((f: { name: string }) => f.name));
   const concise = parse((await runTool(big, 'get_part_summary', { response_format: 'concise' }, evaluate)).content);
-  assert.equal(concise.bodies[0].faces, undefined); assert.deepEqual(Object.keys(concise.features[0]), ['index', 'label']);
+  assert.equal(concise.bodies[0].faces, undefined);
+  assert.deepEqual(Object.keys(concise.features[0]), ['index', 'label', 'id']);
+  assert.deepEqual(Object.keys(concise.features[1]), ['index', 'label']);
 });

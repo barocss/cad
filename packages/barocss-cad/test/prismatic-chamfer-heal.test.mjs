@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { brepMassProperties, checkBrep, evaluateCadPart, faceGeometry } from '../dist/index.js';
-import { healHorizontalChamferIfAdmitted, healPrismaticChamferIfAdmitted } from '../dist/features/heal-prismatic-chamfer.js';
+import { healHorizontalChamferIfAdmitted, healOppositePrismaticChamferIfAdmitted, healPrismaticChamferIfAdmitted } from '../dist/features/heal-prismatic-chamfer.js';
 
 const doc = features => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features });
 const evaluate = features => evaluateCadPart(doc(features)).outputs[0].brep;
@@ -75,4 +75,44 @@ test('the full-height heal refuses plain stock, a cap edge chamfer and two chamf
   const top = 'b.side0|b.top';
   assert.equal(healPrismaticChamferIfAdmitted(evaluate([...stock, bevel([top])]), faceName, top), undefined);
   assert.equal(healPrismaticChamferIfAdmitted(evaluate([...stock, bevel([corners[0], corners[2]])]), faceName, corners[0]), undefined);
+});
+
+for (const pair of [[corners[0], corners[2]], [corners[1], corners[3]]]) {
+  for (const edges of [pair, [...pair].reverse()]) test(`heal either opposite chamfer with authored order ${edges.join(', ')}`, () => {
+    const features = [...stock, bevel(edges)], source = evaluate(features), saved = structuredClone(source);
+    near(brepMassProperties(source, 1).volume, 11960);
+    const targets = source.faces.filter(face => face.name.startsWith(faceName + '#'));
+    assert.equal(targets.length, 2);
+    for (const selected of targets) {
+      const peer = targets.find(face => face !== selected);
+      const healed = healOppositePrismaticChamferIfAdmitted(source, selected.name, edges);
+      const report = checkBrep(healed, { strict: true });
+      assert.ok(report.valid, report.issues.join(', '));
+      assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 7, loops: 7, coedges: 30, edges: 15, vertices: 10 });
+      assert.equal(report.topology[0].genus, 0);
+      near(brepMassProperties(healed, 1).volume, 11980);
+      assert.deepEqual(healed.faces.map(face => [face.id, face.name]), source.faces.filter(face => face !== selected).map(face => [face.id, face.name]));
+      assert.equal(healed.faces.find(face => face.id === peer.id), peer);
+      const loop = source.loops.find(item => item.id === peer.loops[0]);
+      assert.deepEqual(healed.loops.find(item => item.id === loop.id), loop);
+      for (const id of loop.coedges) {
+        const use = source.coedges.find(item => item.id === id), edge = source.edges.find(item => item.id === use.edge);
+        assert.deepEqual(healed.coedges.find(item => item.id === id), use);
+        assert.deepEqual(healed.coedges.find(item => item.id === use.twin), source.coedges.find(item => item.id === use.twin));
+        assert.deepEqual(healed.edges.find(item => item.id === edge.id), edge);
+      }
+      assert.equal(healed.edges.filter(edge => edges.includes(edge.name)).length, 1);
+      assert.deepEqual(evaluate([...features, { id: 'heal', kind: 'delete-face', target: 'chamfer', face: selected.name }]), healed);
+    }
+    assert.equal(healOppositePrismaticChamferIfAdmitted(source, faceName, edges), undefined);
+    assert.equal(healOppositePrismaticChamferIfAdmitted(source, targets[0].name, [edges[0], edges[0]]), undefined);
+    assert.deepEqual(source, saved);
+  });
+}
+
+test('selective healing does not admit adjacent chamfers', () => {
+  const edges = [corners[0], corners[1]], source = evaluate([...stock, bevel(edges)]);
+  const selected = source.faces.find(face => face.name.startsWith(faceName + '#'));
+  assert.ok(selected);
+  assert.equal(healOppositePrismaticChamferIfAdmitted(source, selected.name, edges), undefined);
 });

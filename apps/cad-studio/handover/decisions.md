@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1462: [Heal either of two opposite box chamfers](notes/heal-one-of-two-opposite-chamfers-2026-11-21/README.md), #17. Verify distinct native names, the retained bevel and 11980 mm³ in Studio and MCP.
 - D1461: [Restore the sharp cap edge of a chamfered box](notes/heal-box-cap-edge-chamfer-2026-11-21/README.md), #17. Verify upper and lower sharp edges, six original faces and fresh Studio Open.
 - D1460: [Restore a sharp box corner by deleting its chamfer face](notes/heal-full-height-box-chamfer-2026-11-21/README.md), #17. Verify the original sharp edge and 12000 mm³ through Studio and MCP reopen.
 - D1459: [Heal the original plate by deleting a cylindrical boss top](notes/delete-cylindrical-boss-top-2026-11-21/README.md), #17. Verify 12000 mm³ and the six surviving native faces through Studio and MCP reopen.

@@ -163,7 +163,13 @@ export async function renderViews(doc: StudioDoc, bodies: readonly BodyResult[],
   const faceBase: number[] = []; let nFaces = 0; for (const b of shown) { faceBase.push(nFaces); nFaces += b.mesh.faces.length; }
   // (Each face's name and whether it is highlighted, once — not split out of its full name at every pixel it covers.)
   const names: string[] = new Array(nFaces), hotFace = new Uint8Array(nFaces);
-  shown.forEach((b, bi) => { for (let f = 0; f < b.mesh.faces.length; f++) { const name = b.mesh.faces[f]?.name.split('+')[0] ?? ''; names[faceBase[bi] + f] = name; hotFace[faceBase[bi] + f] = hot.has(name) ? 1 : 0; } });
+  shown.forEach((b, bi) => {
+    for (const [f, face] of b.mesh.faces.entries()) {
+      const display = face.name.split('+')[0], name = face.nativePlaneName ?? display;
+      names[faceBase[bi] + f] = name;
+      hotFace[faceBase[bi] + f] = hot.has(name) || hot.has(display) ? 1 : 0;
+    }
+  });
   img = new Uint8ClampedArray(W * H * 4).fill(255);
   const numbers = new Map<string, number>(), out: ViewsResult['views'] = {};
   VIEW_IDS.forEach((id: ViewId, v) => {

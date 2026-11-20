@@ -15,8 +15,44 @@ type Support = { axis: Axis; at: number; sign: number };
 
 /** Heal one equal-leg convex bevel along a full-height corner of an upright rectangular box. */
 export function healPrismaticChamferIfAdmitted(brep: Brep, faceName: string, sharpEdgeName: string): Brep | undefined {
+  const edit = readVerticalChamfer(brep, faceName, [sharpEdgeName]);
+  if (!edit) return undefined;
+  const healed = rebuildVerticalCorner(brep, edit, 0);
+  return healed && boxCapOffsetFrame(healed, edit.capName) ? healed : undefined;
+}
+
+/** Heal one selected full-height bevel from a single pair of opposite corners of an upright box. */
+export function healOppositePrismaticChamferIfAdmitted(brep: Brep, faceName: string, sharpEdges: readonly string[]): Brep | undefined {
+  if (sharpEdges.length !== 2 || new Set(sharpEdges).size !== 2) return undefined;
+  const bevels = [`${brep.source.id}.face#1`, `${brep.source.id}.face#2`];
+  if (!bevels.includes(faceName)) return undefined;
+  const peerName = bevels.find(name => name !== faceName)!;
+  const edit = readVerticalChamfer(brep, faceName, sharpEdges), peer = readVerticalChamfer(brep, peerName, sharpEdges);
+  if (!edit || !peer || edit.sharpEdgeName === peer.sharpEdgeName || edit.sx !== -peer.sx || edit.sy !== -peer.sy
+    || Math.abs(edit.leg - peer.leg) > edit.source.roundoff
+    || edit.rails.some(rail => !peer.rails.some(other => other.loop === rail.loop))
+    || [edit.xSeam, edit.ySeam].some(seam => [peer.xSeam, peer.ySeam].some(other => other.loop === seam.loop))) return undefined;
+
+  const healed = rebuildVerticalCorner(brep, edit, 1);
+  if (!healed || !keepsPeerBevel(healed, peer.source)) return undefined;
+  // Certify the remaining shape as the existing one-bevel rectangular stock. Publish only the first repair.
+  return healPrismaticChamferIfAdmitted(healed, peerName, peer.sharpEdgeName) ? healed : undefined;
+}
+
+function keepsPeerBevel(brep: Brep, { selected, loops, neighbors, uses, vertices }: Chamfer): boolean {
+  const nextLoops = byId(brep.loops), nextUses = byId(brep.coedges), nextEdges = byId(brep.edges), nextVertices = byId(brep.vertices);
+  return brep.faces.includes(selected) && nextLoops.get(selected.loops[0]) === loops.get(selected.loops[0])
+    && neighbors.every(({ edge, twin }) => {
+      const own = uses.get(twin.twin!)!, nextTwin = nextUses.get(twin.id), nextOwn = nextUses.get(own.id);
+      return !!nextTwin && !!nextOwn && nextEdges.get(edge.id) === edge && edge.vertices.every(id => nextVertices.get(id) === vertices.get(id))
+        && nextTwin.pcurve === twin.pcurve && nextOwn.pcurve === own.pcurve
+        && nextTwin.next === twin.next && nextTwin.prev === twin.prev && nextOwn.next === own.next && nextOwn.prev === own.prev;
+    });
+}
+
+function readVerticalChamfer(brep: Brep, faceName: string, sharpEdges: readonly string[]) {
   if (brep.source.family !== 'prismatic-solid' || brep.coedges.some(use => !use.pcurve)) return undefined;
-  const source = readChamfer(brep, faceName, sharpEdgeName);
+  const source = readChamfer(brep, faceName, sharpEdges);
   if (!source) return undefined;
   const { chartByFace, neighbors, vertices, bevel, linear, roundoff } = source;
   const levels = [...new Set(brep.vertices.map(({ point }) => point[2]))].sort((a, b) => a - b);
@@ -24,7 +60,7 @@ export function healPrismaticChamferIfAdmitted(brep: Brep, faceName: string, sha
   const axial = ({ edge }: Neighbor) => edge.curve.controlPoints[0][2] !== edge.curve.controlPoints[1][2];
   const rails = neighbors.filter(item => !axial(item)), seams = neighbors.filter(axial);
   if (seams.length !== 2 || rails.length !== 2 || rails[0].edge.curve.controlPoints[0][2] === rails[1].edge.curve.controlPoints[0][2]
-    || rails.some(({ loop }) => loop.coedges.length !== 5) || seams.some(({ loop }) => loop.coedges.length !== 4)) return undefined;
+    || rails.some(({ loop }) => loop.coedges.length !== 4 + sharpEdges.length) || seams.some(({ loop }) => loop.coedges.length !== 4)) return undefined;
 
   // The two named walls must be cardinal, face outwards from the omitted corner and meet at that corner.
   const cardinalSeam = (axis: 0 | 1) => seams.find(({ loop }) => {
@@ -32,7 +68,8 @@ export function healPrismaticChamferIfAdmitted(brep: Brep, faceName: string, sha
     return normal?.every((value, i) => i === axis ? Math.abs(value) > 0 : value === 0);
   });
   const xSeam = cardinalSeam(0), ySeam = cardinalSeam(1);
-  if (!xSeam || !ySeam || sharpName(brep, seams) !== sharpEdgeName) return undefined;
+  const sharpEdgeName = sharpName(brep, seams);
+  if (!xSeam || !ySeam || !sharpEdges.includes(sharpEdgeName)) return undefined;
   const xWall = chartByFace.get(xSeam.loop.face)!, yWall = chartByFace.get(ySeam.loop.face)!;
   const x = xWall.origin[0], y = yWall.origin[1], sx = Math.sign(xWall.normal[0]), sy = Math.sign(yWall.normal[1]);
   const [a, aEnd] = xSeam.edge.curve.controlPoints, [b, bEnd] = ySeam.edge.curve.controlPoints;
@@ -47,17 +84,22 @@ export function healPrismaticChamferIfAdmitted(brep: Brep, faceName: string, sha
   const sharpPoints = new Map(xSeam.edge.vertices.map(id => [id, [x, y, vertices.get(id)!.point[2]] as Point]));
   const remap = new Map(ySeam.edge.vertices.map(id => [id, xSeam.edge.vertices.find(keep => vertices.get(keep)!.point[2] === vertices.get(id)!.point[2])!]));
   const capName = brep.faces.find(face => face.id === rails[0].loop.face)!.name!;
-  return rebuildBox(brep, source, xSeam, ySeam, rails, sharpPoints, remap, sharpEdgeName, capName);
+  return { source, xSeam, ySeam, rails, sharpPoints, remap, sharpEdgeName, capName, sx, sy, leg: dx };
 }
 
-function readChamfer(brep: Brep, faceName: string, sharpEdgeName: string) {
+function rebuildVerticalCorner(brep: Brep, edit: NonNullable<ReturnType<typeof readVerticalChamfer>>, remaining: 0 | 1): Brep | undefined {
+  return rebuildSharpCorner(brep, edit.source, edit.xSeam, edit.ySeam, edit.rails, edit.sharpPoints, edit.remap, edit.sharpEdgeName, remaining);
+}
+
+function readChamfer(brep: Brep, faceName: string, sharpEdges: readonly string[]) {
   const [body] = brep.bodies, [shell] = brep.shells;
+  const count = sharpEdges.length;
   if (brep.bodies.length !== 1 || body.kind !== 'solid' || body.shells.length !== 1
-    || brep.shells.length !== 1 || !shell.closed || brep.faces.length !== 7 || brep.loops.length !== 7
-    || brep.coedges.length !== 30 || brep.edges.length !== 15 || brep.vertices.length !== 10
+    || brep.shells.length !== 1 || !shell.closed || brep.faces.length !== 6 + count || brep.loops.length !== 6 + count
+    || brep.coedges.length !== 24 + 6 * count || brep.edges.length !== 12 + 3 * count || brep.vertices.length !== 8 + 2 * count
     || brep.loops.some(loop => loop.kind !== 'outer') || brep.faces.some(face => !face.name || face.loops.length !== 1)
-    || new Set(brep.faces.map(face => face.name)).size !== 7
-    || brep.edges.some(edge => edge.name === sharpEdgeName) || !checkBrep(brep, { strict: true }).valid) return undefined;
+    || new Set(brep.faces.map(face => face.name)).size !== 6 + count
+    || brep.edges.some(edge => edge.name && sharpEdges.includes(edge.name)) || !checkBrep(brep, { strict: true }).valid) return undefined;
 
   const selected = brep.faces.find(face => face.name === faceName);
   if (!selected) return undefined;
@@ -103,7 +145,7 @@ function cardinalSupport(chart: ReturnType<typeof affineChart>): Support | undef
 /** Heal one full-span 45-degree bevel between a horizontal cap and a cardinal side of a straight box. */
 export function healHorizontalChamferIfAdmitted(brep: Brep, faceName: string, sharpEdgeName: string): Brep | undefined {
   if (brep.source.family !== 'polyhedral-boolean' || brep.coedges.some(use => use.pcurve !== null)) return undefined;
-  const source = readChamfer(brep, faceName, sharpEdgeName);
+  const source = readChamfer(brep, faceName, [sharpEdgeName]);
   if (!source) return undefined;
   const { selected, chartByFace, neighbors, vertices, loops, uses, edges, bevel, linear, roundoff } = source;
   const remaining = brep.faces.filter(face => face !== selected);
@@ -174,11 +216,12 @@ export function healHorizontalChamferIfAdmitted(brep: Brep, faceName: string, sh
   }
 
   const capName = brep.faces.find(face => face.id === capSeam.loop.face)!.name!;
-  return rebuildBox(brep, source, wallSeam, capSeam, rails, points, remap, sharpEdgeName, capName);
+  const healed = rebuildSharpCorner(brep, source, wallSeam, capSeam, rails, points, remap, sharpEdgeName, 0);
+  return healed && boxCapOffsetFrame(healed, capName) ? healed : undefined;
 }
 
-function rebuildBox(brep: Brep, source: Chamfer, keepSeam: Neighbor, discardSeam: Neighbor, rails: readonly Neighbor[],
-  points: ReadonlyMap<string, Point>, remap: ReadonlyMap<string, string>, sharpEdgeName: string, capName: string): Brep | undefined {
+function rebuildSharpCorner(brep: Brep, source: Chamfer, keepSeam: Neighbor, discardSeam: Neighbor, rails: readonly Neighbor[],
+  points: ReadonlyMap<string, Point>, remap: ReadonlyMap<string, string>, sharpEdgeName: string, remaining: 0 | 1): Brep | undefined {
   const { shell, selected, loops, uses, edges, chartByFace, roundoff } = source;
   const kept = keepSeam.edge, removed = discardSeam.edge;
   const nextVertices = brep.vertices.flatMap(vertex => {
@@ -201,13 +244,13 @@ function rebuildBox(brep: Brep, source: Chamfer, keepSeam: Neighbor, discardSeam
   if (keptUse.sense === joinedUse.sense) return undefined;
 
   const nextFaces: Brep['faces'][number][] = [], nextLoops: Brep['loops'][number][] = [], nextUses: BrepCoedge[] = [];
-  const remaining = brep.faces.filter(face => face !== selected);
-  for (const face of remaining) {
+  const surviving = brep.faces.filter(face => face !== selected);
+  for (const face of surviving) {
     const loop = loops.get(face.loops[0])!, chart = chartByFace.get(face.id);
     if (!chart) return undefined;
     const cycle = loop.coedges.map(id => id === keptUse.id ? keptUse : id === joinedUse.id ? joinedUse : uses.get(id)!)
       .filter(use => !railIds.has(use.edge));
-    if (cycle.length !== 4) return undefined;
+    if (cycle.length !== 4 + (rails.some(rail => rail.loop === loop) ? remaining : 0)) return undefined;
     const points = cycle.map(use => pointById.get(startOf(edgeById.get(use.edge)!, use))!.point);
     const extended = coverAffineTrim(chart, face.sense, points, roundoff);
     if (!extended || !points.every(point => trimFits(extended, point, roundoff))) return undefined;
@@ -220,7 +263,6 @@ function rebuildBox(brep: Brep, source: Chamfer, keepSeam: Neighbor, discardSeam
       nextUses.push({ ...use, pcurve, next: cycle[(i + 1) % cycle.length].id, prev: cycle[(i + cycle.length - 1) % cycle.length].id });
     }
   }
-  const healed: Brep = { ...brep, shells: [{ ...shell, faces: shell.faces.filter(id => id !== selected.id) }],
+  return { ...brep, shells: [{ ...shell, faces: shell.faces.filter(id => id !== selected.id) }],
     faces: nextFaces, loops: nextLoops, coedges: nextUses, edges: nextEdges, vertices: nextVertices };
-  return boxCapOffsetFrame(healed, capName) ? healed : undefined;
 }

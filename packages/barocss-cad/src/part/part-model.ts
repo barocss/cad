@@ -71,7 +71,7 @@ import { healBoredPlateIfAdmitted, healCylindricalBossIfAdmitted, offsetBoredCap
   replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
 import { healAnalyticLFilletIfAdmitted } from '../features/heal-analytic-l-fillet.js';
 import { healPrismaticFilletIfAdmitted } from '../features/heal-prismatic-fillet.js';
-import { healHorizontalChamferIfAdmitted, healPrismaticChamferIfAdmitted } from '../features/heal-prismatic-chamfer.js';
+import { healHorizontalChamferIfAdmitted, healOppositePrismaticChamferIfAdmitted, healPrismaticChamferIfAdmitted } from '../features/heal-prismatic-chamfer.js';
 import { boundaryBindingRefusal } from './part-boundary-refusal-internal.js';
 import { refusalCodeOf, type CadRefusalCode } from '../core/error-codes.js';
 
@@ -702,7 +702,13 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
             }
           }
         }
-        if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket. Select its fillet face. To remove a fully enclosed cylindrical boss from straight rectangular stock, select the top face of the boss. To heal one full-height vertical or full-span horizontal chamfer on a straight rectangular box, select the chamfer face.');
+        if (!healed && part.solid.kind === 'upright' && part.chamferTargets?.length === 2) {
+          const { author } = t.ref(f.target, 'target');
+          if (author?.kind === 'chamfer' && author.edges.length === 2 && part.chamferTargets.every(edge => author.edges.includes(edge))
+            && (face === `${author.id}.face#1` || face === `${author.id}.face#2`))
+            healed = healOppositePrismaticChamferIfAdmitted(brep, face, part.chamferTargets);
+        }
+        if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket. Select its fillet face. To remove a fully enclosed cylindrical boss from straight rectangular stock, select the top face of the boss. To heal a full-height vertical or full-span horizontal chamfer on a straight rectangular box, select the chamfer face. For one of two opposite full-height chamfers, select its exact numbered face.');
         return one({ kind: 'brep', brep: healed });
       };
     }

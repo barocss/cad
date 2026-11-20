@@ -39,7 +39,7 @@ export const CHAT_COMMANDS = commands.filter(c => c.build && c.id !== 'loft' && 
 
 /** What each command needs selected and what its values mean. */
 export const COMMAND_DOCS: Record<string, { selection: string; values: Record<string, string> }> = {
-  'delete-face': { selection: 'Select one straight bore wall, a cylindrical boss top on a rectangular plate, one full-span box chamfer, or the sole inside fillet of a straight L-bracket.', values: {} },
+  'delete-face': { selection: 'Select one straight bore wall, cylindrical boss top, full-span box chamfer, or inside L-bracket fillet. Use the exact native_name when shown.', values: {} },
   text: { selection: 'none: creates a standalone solid', values: { text: 'one scalar run, without shaping or kerning', font: 'JSON FontSource descriptor of an already loaded static TTF, prepared by fontFromBytes or the Studio font chooser', size: 'em height in model units', height: 'positive extrusion height', tolerance: 'explicit quadratic-to-chord deviation', tracking: 'extra spacing between scalars' } },
   'cylindrical-wrap': { selection: 'faces: [one selected merged cylinder wall]; the operation binds its original +Y native half and uses its first quarter', values: { u0: 'native U start, strictly above 0', u1: 'native U end, strictly below 0.5 and above u0', v0: 'native V start, strictly above 0', v1: 'native V end, strictly below 1 and above v0', height: 'positive outward height, must equal the source radius; one rectangle only, no text or holes' } },
   'text-relief': { selection: 'faces: [one uniquely named flat +Z top face of one supported upright solid]', values: { text: 'one scalar run without shaping or kerning', font: 'JSON FontSource of an already loaded static TTF', size: 'em height', depth: 'positive relief depth; engrave keeps a bottom web', tolerance: 'quadratic chord deviation, also added to boundary clearance', tracking: 'extra scalar spacing', x: 'world X of the baseline', y: 'world Y of the baseline', mode: 'emboss | engrave' } },
@@ -175,8 +175,14 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   // (Faces and edges by name or by selector, A1.2: each selector resolves to its name, reported back.)
   const sel = resolveSelectors(state.doc.nodes, state.bodies, { faces: list(args.faces), edges: list(args.edges), bodies: list(args.bodies) });
   if (sel.error) return fail(state, sel.error);
-  const { selection, unknown } = resolveNames(state.bodies, sel.names);
-  if (unknown.length) return fail(state, `No face, edge or body named ${unknown.map(n => `"${n}"`).join(', ')} on the current part. Use the names from the last result or get_part_summary.`);
+  const deleteFace = cmd.id === 'delete-face';
+  if (deleteFace && sel.names.faces.length > 1) return fail(state, 'Delete face takes one original face.');
+  const { selection, unknown } = resolveNames(state.bodies, sel.names, deleteFace);
+  if (unknown.length) {
+    const names = unknown.map(n => `"${n}"`).join(', ');
+    if (deleteFace) return fail(state, `Delete face could not resolve a unique target named ${names}. Use the exact native face name from query.summary or query.render.`);
+    return fail(state, `No face, edge or body named ${names} on the current part. Use the names from the last result or get_part_summary.`);
+  }
   const point = Array.isArray(args.point) && args.point.length === 3 ? args.point.map(Number) as [number, number, number] : undefined;
   let given = isObj(args.values) ? args.values : {};
   const toPlane = isReferencePlaneEdit(cmd.id, { offsetMode: typeof given.offsetMode === 'string' ? given.offsetMode : '' });

@@ -80,7 +80,7 @@ function madeBy(doc: StudioDoc, name: string): string | undefined {
 /** A face's detail by name: kind, area, normal or axis, radius, centre, its neighbours and the feature that made it. */
 export function faceDetail(doc: StudioDoc, bodies: readonly BodyResult[], name: string): Record<string, unknown> | null {
   for (const b of bodies) {
-    const f = b.mesh.faces.find(x => x.name.split('+').includes(name)); if (!f) continue;
+    const f = b.mesh.faces.find(x => x.nativePlaneName === name || x.name.split('+').includes(name)); if (!f) continue;
     const axis = f.kind === 'curved' ? roundFaceAxis(b.mesh, f.index) : null;
     const next = [...new Set(b.mesh.edges.filter(e => e.faces.includes(f.index)).map(e => b.mesh.faces[e.faces[0] === f.index ? e.faces[1] : e.faces[0]]?.name.split('+')[0]).filter((n): n is string => !!n && n !== name))];
     return { name, body: b.key, kind: f.kind, area: r3(f.area), centre: v3(f.centroid),

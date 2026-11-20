@@ -54,7 +54,10 @@ export function describeBodies(doc: StudioDoc, bodies: BodyResult[], detail: boo
     };
     if (detail) {
       const from = (page - 1) * cap, pages = Math.max(1, Math.ceil(Math.max(m.faces.length, m.edges.length) / cap));
-      out.faces = m.faces.slice(from, from + cap).map(f => ({ name: f.name.split('+')[0], ...(f.name.includes('+') ? { also: f.name.split('+').slice(1) } : {}), kind: f.kind, normal: v3(f.normal), centre: v3(f.centroid), area: r3(f.area), ...(f.radius ? { radius: r3(f.radius) } : {}) }));
+      out.faces = m.faces.slice(from, from + cap).map(f => ({ name: f.name.split('+')[0],
+        ...(f.nativePlaneName && f.nativePlaneName !== f.name ? { native_name: f.nativePlaneName } : {}),
+        ...(f.name.includes('+') ? { also: f.name.split('+').slice(1) } : {}), kind: f.kind, normal: v3(f.normal),
+        centre: v3(f.centroid), area: r3(f.area), ...(f.radius ? { radius: r3(f.radius) } : {}) }));
       out.edges = m.edges.slice(from, from + cap).map(e => ({ name: e.names[0], from: v3(e.a), to: v3(e.b), ...(e.straight ? { line: e.axis ? `along ${e.axis}` : 'oblique' } : { line: 'curve' }) }));
       if (pages > 1) out.page = { page, pages, note: `faces and edges ${from + 1}–${from + cap}; the next page: get_part_summary {"body": "${b.key}", "page": ${Math.min(pages, page + 1)}}` };
     }
