@@ -47,6 +47,7 @@ interface Props {
   onChange(key: string, value: number | string): void; onApply(owner: Active): void; onCancel(): void;
   onFilletType?(type: FilletType): void; onRadiusMode?(mode: RadiusMode): void;
   onRemoveFilletEdge?(owner: Active, edge: Active['ctx']['selection']['edges'][number]): void;
+  onLocateFilletEdge?(owner: Active, edge: Active['ctx']['selection']['edges'][number] | null): void;
   onFramePreview?(owner: Active): void;
   onFile?(key: string, file: File): void;
   onHoleOptions(owner: Active, patch: Values): boolean;
@@ -54,7 +55,7 @@ interface Props {
 
 /** The floating command HUD: few fields, keyboard-first, with the kernel’s answer inline. (G12f: its fields, choices and
  * actions shadcn's Input, NativeSelect and Button, at the HUD's 26 px in the studio's mono type.) */
-export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFile, onFilletType, onRadiusMode, onRemoveFilletEdge, onHoleOptions, onFramePreview }: Props) {
+export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFile, onFilletType, onRadiusMode, onRemoveFilletEdge, onLocateFilletEdge, onHoleOptions, onFramePreview }: Props) {
   const active = useStoreValue(store);
   const first = useRef<HTMLInputElement | HTMLSelectElement | null>(null);
   useEffect(() => { first.current?.focus(); if (first.current instanceof HTMLInputElement && first.current.type !== 'file') first.current.select(); }, [active?.cmd.id]);
@@ -177,7 +178,7 @@ export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFil
 
       </div>}
       {active.fillet?.type === 'edge' && onRemoveFilletEdge && active.ctx.selection.edges.length > 0
-        && <FilletPickedEdges active={active} onRemove={onRemoveFilletEdge} />}
+        && <FilletPickedEdges active={active} onRemove={onRemoveFilletEdge} onLocate={onLocateFilletEdge} />}
       {active.preview === 'ok' && active.extrudeResult && <div className="hud-steps" aria-label="Extrude result">
         <div className="field"><span>Target</span><span>{active.extrudeResult.target}</span></div>
         <div className="field"><span>Result</span><span>{active.extrudeResult.pieces}{active.extrudeResult.solid ? ' solid' : ''} piece{active.extrudeResult.pieces === 1 ? '' : 's'}</span></div>

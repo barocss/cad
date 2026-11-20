@@ -82,7 +82,29 @@ await f.run(async()=>{
  await clickModelCommand(f.page,'Modify','Fillet');const hud=f.page.getByRole('dialog',{name:'Fillet',exact:true});const radius=hud.getByLabel('Radius',{exact:true});await radius.fill(String(r));const ready=()=>hud.locator('.status').filter({hasText:/^preview$/}).waitFor();await ready();
  await scope(hud,topSeed.names,top.flatMap(e=>e.names).filter(n=>!topSeed.names.includes(n)));
  const position=await f.screenOf([10,-4,0]);await f.page.keyboard.down('Shift');try{await f.page.mouse.click(...position);}finally{await f.page.keyboard.up('Shift');}await ready();const both=[...topSeed.names,...bottomSeed.names];await scope(hud,both,[...top,...bottom].flatMap(e=>e.names).filter(n=>!both.includes(n)));await f.same(seed);await f.snapshot('02-both-chains');
- await hud.getByText('Edit picked edges',{exact:true}).click();await button('Remove '+topSeed.names.join(', '),hud).click();await ready();assert.equal(Number(await radius.inputValue()),r);
+ await hud.getByText('Edit picked edges',{exact:true}).click();
+ const rows = hud.getByRole('listitem');
+ assert.equal(await rows.count(), 2);
+ await rows.filter({ hasText: topSeed.names[0] }).hover();
+ const location = f.page.locator('g[aria-label="Picked fillet edge location"]');
+ await location.waitFor();
+ const ends = await Promise.all([f.screenOf(topSeed.a), f.screenOf(topSeed.b)]);
+ const pixels = await location.locator('line').evaluateAll(lines => lines.flatMap(line => {
+   const matrix = line.getScreenCTM();
+   return [new DOMPoint(line.x1.baseVal.value, line.y1.baseVal.value), new DOMPoint(line.x2.baseVal.value, line.y2.baseVal.value)]
+     .map(p => { const q = p.matrixTransform(matrix); return [q.x, q.y]; });
+ }));
+ const [[ax, ay], [bx, by]] = ends, dx = bx - ax, dy = by - ay, length = Math.hypot(dx, dy);
+ assert.ok(length > 1 && pixels.length >= 2);
+ for (const [x, y] of pixels) {
+   const along = ((x - ax) * dx + (y - ay) * dy) / length;
+   assert.ok(along >= -1 && along <= length + 1 && Math.abs((x - ax) * dy - (y - ay) * dx) / length <= 1,
+     'The location must stay on the directly picked straight seed');
+ }
+ for (const [x, y] of ends) assert.ok(pixels.some(([px, py]) => Math.hypot(px - x, py - y) <= 1));
+ await scope(hud, both, [...top,...bottom].flatMap(e => e.names).filter(n => !both.includes(n)));
+ await f.snapshot('02a-locate-one-seed-with-tangent-chains');
+ await button('Remove '+topSeed.names.join(', '),hud).click();await ready();assert.equal(Number(await radius.inputValue()),r);
  await scope(hud,bottomSeed.names,bottom.flatMap(e=>e.names).filter(n=>!bottomSeed.names.includes(n)));await f.same(seed);await f.snapshot('03-bottom-only-preview');await button('Apply',hud).click();await f.changed(seed);await f.ready();const applied=await f.doc();assert.deepEqual(applied.nodes.slice(0,2),seed.nodes);assert.deepEqual(applied.nodes[2].edges,bottomSeed.names);assert.equal(applied.nodes[2].radius,r);
  async function verify(label){const n=await f.inspect(label,applied);near(n.mass.volume,volume,1e-7);n.mass.centroid.forEach((v,i)=>near(v,[10,0,cz][i],1e-8));const topNames=top.flatMap(e=>e.names),bottomNames=bottom.flatMap(e=>e.names);assert.ok(topNames.every(name=>n.edges.includes(name)));assert.ok(bottomNames.every(name=>!n.edges.includes(name)));assert.ok(Array.isArray(n.nativeTargets)&&n.nativeTargets.every(name=>typeof name==='string'));assert.deepEqual([...new Set(n.nativeTargets)].sort(),bottomNames.sort());
   const cylinders=n.faces.filter(face=>face.name?.startsWith('n2.face')&&face.geometry.kind==='cylinder'&&Math.abs(face.geometry.a[0])>.999999);assert.equal(cylinders.length,2);for(const face of cylinders){near(face.geometry.r,r,1e-8);near(Math.abs(face.geometry.c[1]),4-r,1e-8);near(face.geometry.c[2],r,1e-8);}const bodies=(await f.bodies()).bodies;assert.equal(bodies.length,1);near(bodies[0].volume,volume,1e-7);f.report.observations.push({label,volume:n.mass.volume,centroid:n.mass.centroid,expectedVolume:volume,expectedCentroid:[10,0,cz],stored:applied.nodes[2].edges,nativeTargets:n.nativeTargets,untouchedTop:topNames});}

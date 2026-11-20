@@ -35,6 +35,7 @@ import { useFilletEndpointDisplay } from './state/useFilletEndpointDisplay';
 import { createCommandReferencePicking, type CommandPickScope } from './app/commandReferencePicking';
 import { retireStudioNotice, type StudioNotice } from './app/studioNotice';
 import { filletStationInputKey } from './app/filletEndpoints';
+import { readFilletPickedEdgeHighlight, type FilletPickedEdgeRequest } from './app/filletPickedEdgeHighlight';
 import { SHARED_HOLE_LAYOUT_EDIT } from './app/sharedHoleLayout';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { browserRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal';
@@ -471,6 +472,11 @@ export function App() {
   useSyncExternalStore(activeStore.subscribe, () => activeKey(activeStore.get(), hudValues.current));
   useSyncExternalStore(activeStore.subscribe, () => filletStationInputKey(activeStore.get()));
   const active = activeStore.get();
+  const [filletPickedEdgeRequest, setFilletPickedEdgeRequest] = useState<FilletPickedEdgeRequest | null>(null);
+  useEffect(() => activeStore.subscribe(() => {
+    const current = activeStore.get();
+    setFilletPickedEdgeRequest(request => request && (!current || request.owner.cmd !== current.cmd || request.owner.ctx !== current.ctx) ? null : request);
+  }), [activeStore]);
   const [previewBodies, setPreviewBodies] = useState<BodyResult[] | null>(null);
   /**
    * A Move or Rotate gizmo drag: the body follows at once by this matrix on the evaluated part; once let
@@ -2235,6 +2241,14 @@ export function App() {
     replaceFilletSelection({ current: activeStore.get, context: () => ctx, retire: commandPreview.retire,
       clearApply: () => { applyWhenReady.current = null; }, set: setActive, select: setSelection }, next);
   };
+  const locateFilletEdge = (owner: Active, edge: Selection['edges'][number] | null) => {
+    if (!edge) {
+      setFilletPickedEdgeRequest(request => request?.owner.cmd === owner.cmd && request.owner.ctx === owner.ctx ? null : request);
+      return;
+    }
+    if (owner !== activeStore.get() || docNow.current !== doc || evaluatedRef.current !== evaluated || !ownsEvaluatedSource()) return;
+    setFilletPickedEdgeRequest({ owner, doc, evaluated, edge });
+  };
   const finishEdgeOpen = openIntent.current;
   const finishEdgeEditor = useHeldFinishEdge({
     doc, index: editNode, problems: refProblems, bodies,
@@ -3044,6 +3058,14 @@ export function App() {
   // (The Band surface command highlights what it has picked — A and B — while it runs, also when its preview hides the selection.)
   const bandShown = fresh && !busy && (shownBodies === drawnBodies || shownBodies === previewBodies)
     ? activeBandHighlight(active, commandDoc, shownBodies) : null;
+  const filletPickedEdgeHighlight = readFilletPickedEdgeHighlight(filletPickedEdgeRequest, {
+    active, doc, evaluated, commandDoc, bodies,
+    available: fresh && !busy && ownsEvaluatedSource() && marker === null && !shownVariant.current && !inPlace
+      && !section && !sketch && !ghost && !rendering && !drawing && !bodyDrag && !exploded && !jointTree && !instDrag
+      && !cageEd.session && !routePreviewBodies && previewMode === 'none' && !workingComparison && !candidateReview?.shown
+      && (shownBodies === drawnBodies || shownBodies === previewBodies)
+      && !!filletPickedEdgeRequest && !!bodies[filletPickedEdgeRequest.edge.body] && !lookOf(doc, bodies[filletPickedEdgeRequest.edge.body]).hidden,
+  });
   commandPickScope.current = fresh && !busy && !section && !sketch && !inPlace && !cageEd.session && !routePreviewBodies
     && !ghost && !rendering && !drawing && !bodyDrag && previewMode === 'none' && (shownBodies === drawnBodies || shownBodies === previewBodies)
     ? { bodies: shownBodies, hidden: hiddenBodies, preview: shownBodies === previewBodies } : null;
@@ -3849,7 +3871,7 @@ export function App() {
     pending: { clearApply: () => { applyWhenReady.current = null; }, clearRepeat: () => { again.current = null; } },
     onNotice: setToast,
   });
-  const hud = active && <Hud filletEndpoints={filletEndpointLocations} store={activeStore} onChange={changeHudValue} onFilletType={changeFillet} onRemoveFilletEdge={removeFilletEdge}
+  const hud = active && <Hud filletEndpoints={filletEndpointLocations} store={activeStore} onChange={changeHudValue} onFilletType={changeFillet} onRemoveFilletEdge={removeFilletEdge} onLocateFilletEdge={locateFilletEdge}
     onRadiusMode={mode => { const a = activeStore.get(); if (a?.fillet) changeFillet(a.fillet.type, mode); }}
     onFramePreview={owner => { if (activeStore.get() === owner && owner.preview === 'ok') viewport.current?.fit(); }}
     onFile={uploadFont} onHoleOptions={applyHoleOptions} onApply={applyHud} onCancel={cancel} />;
@@ -3931,7 +3953,7 @@ export function App() {
         bandRailPicking={!active && !finishEdgePicking && !heldDraftFace.view && !section && !measure && !assembly.draft}
         onDisplayModeStatus={onDisplayModeStatus} onBackend={setViewBackend}
         modelUnavailable={modelUnavailable} bodies={cageInputActive ? cageEd.shown(shownBodies) : viewBodies} selection={cageInputActive ? emptySel : shownSelection}
-        ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? curvature.overlay} continuityLocation={continuityLocation.curve} filletEndpoints={displayedFilletEndpoints} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
+        ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? curvature.overlay} continuityLocation={continuityLocation.curve} filletEndpoints={displayedFilletEndpoints} filletPickedEdgeHighlight={filletPickedEdgeHighlight} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
         gizmo={cageInputActive ? cageEd.gizmo : routeGizmo ?? gizmo ?? instGizmo ?? poleGizmo} cage={cageInputActive ? cageEd.overlay : null} onPickCage={cageInputActive ? cageEd.onPick : undefined} tool={skel.tool}
         handles={sectionDrag.length ? sectionDrag : handles} instancePreview={instancePreview} contactLinks={contactShown && motionContact ? motionContact.links : undefined}
         render={rendering ? render : null} analysis={rendering ? null : viewAnalysis}

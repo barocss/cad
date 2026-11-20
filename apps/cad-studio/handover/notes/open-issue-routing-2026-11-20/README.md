@@ -92,7 +92,7 @@ The HOLD route is separate from P0–P6 counts. An issue outside this route can 
 
 ## Additions since the 229-issue snapshot
 
-A subsequent comparison on 2026-11-20 found 230 open issues. All original 229 were still open. Route [#740](https://github.com/barocss/cad/issues/740) to P1, part editing. The existing Fillet list names and removes selected edges. The proposed increment is to highlight the matching original edge on hover or keyboard focus while keeping the selection intact. Its desktop acceptance is pending.
+A subsequent comparison on 2026-11-20 found 230 open issues. All original 229 were still open. Route [#740](https://github.com/barocss/cad/issues/740) to P1, part editing. The [Fillet row location delivery](../fillet-picked-edge-location-2026-11-20/README.md) covers hover and keyboard focus on the original straight edge, held preview updates, tangent-chain separation and native Remove/Apply. The next bounded modeling proposal is [#739](https://github.com/barocss/cad/issues/739): measure one independent rectangular Extrude against a single supported stock before offering an explicit Join target. Establish positive native overlap and contact-only refusal before changing the command UI.
 
 ## Reproduce the live census
 

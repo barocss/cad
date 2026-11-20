@@ -1,5 +1,6 @@
 import { pmiGpuTextBounds, type PmiGpuCommit } from './pmiGpuBounds';
 import type { FilletEndpoints } from '../app/filletEndpoints';
+import type { FilletPickedEdgeHighlight } from '../app/filletPickedEdgeHighlight';
 import { applySketchCameraFrame, ownsSketchCameraFrame, type SketchCameraFrame } from './sketchCameraFrame';
 import { ContinuityLocation } from './ContinuityLocation';
 import type { EdgeCurvatureMeasurement } from '@barocss/cad-model/engine/edgeCurvature';
@@ -110,6 +111,7 @@ interface Props extends ViewportPointerProps, MarkHandlers {
   onInspectionCamera?(camera: RenderCamera): void;
   curvatureComb?: CurvatureOverlay | null;
   filletEndpoints?: FilletEndpoints | null;
+  filletPickedEdgeHighlight?: FilletPickedEdgeHighlight | null;
   continuityLocation?: EdgeCurvatureMeasurement | null;
   constraintInspection?: ConstraintInspectionStore;
   overlaidLine?: OverlaidLine;
@@ -1018,6 +1020,18 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
         const p = projectOverlaySegment(cam, at, at, w, h)?.[0];
         return p ? <g key={label} data-fillet-endpoint={label === 'Start' || label === 'End' ? label : undefined} data-fillet-station={label.startsWith('Interior') ? label : undefined} data-position={at.join(',')} aria-label={`${label} endpoint`}><circle cx={p[0]} cy={p[1]} r={5} fill={label === 'Start' ? '#55d9ff' : '#ffc247'} stroke="#191919" strokeWidth={2}/><text x={p[0]+9} y={p[1]-9} fill="white" stroke="#191919" strokeWidth={3} paintOrder="stroke" fontSize={13}>{label}</text></g> : null;
       })}</g>);
+    }
+    if (props.filletPickedEdgeHighlight && !props.modelUnavailable) {
+      const segments = props.filletPickedEdgeHighlight;
+      items.push(<g key="fillet-picked-edge-location" aria-label="Picked fillet edge location" pointerEvents="none">
+        {segments.map(([a, b], index) => {
+          const segment = projectOverlaySegment(cam, a, b, w, h);
+          return segment ? <g key={index}>
+            <line x1={segment[0][0]} y1={segment[0][1]} x2={segment[1][0]} y2={segment[1][1]} stroke="#191919" strokeWidth={6} />
+            <line x1={segment[0][0]} y1={segment[0][1]} x2={segment[1][0]} y2={segment[1][1]} stroke="#f472d0" strokeWidth={3} />
+          </g> : null;
+        })}
+      </g>);
     }
     if (props.continuityLocation && !props.modelUnavailable)
       items.push(<ContinuityLocation key="continuity-location" curve={props.continuityLocation} project={point => projectOverlaySegment(cam, point, point, w, h)?.[0] ?? null} />);
