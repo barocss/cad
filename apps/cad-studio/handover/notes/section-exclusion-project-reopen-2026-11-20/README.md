@@ -1,0 +1,9 @@
+# Section exclusion mode guards and project reopen (#258)
+
+Verified on `da338c35e9c250b4a00003583d55e65f52787076` in desktop Chrome Model with a live WebGL2 rendering context. The synthetic document places two rotated occurrences of one box and has no base-part solids. Public controls start a single X section and exclude Plate 2 (`p2`).
+
+- [With the exclusion active](02-incompatible-controls-held.png), Box, Planes, Cut-out and Sketch the section are disabled, with an explicit Restore all explanation. After restoring all, those guards release; selecting Planes transitions normally. No sketch was executed in this placed-only fixture. Closing Section clears the exclusion and restores the uncut pick.
+- Save the same file to browser-local project storage with `p2` excluded. Stored document data, including both occurrence placements, exactly matches the original; Save alone leaves the session mask active. Close the project, reload the browser, reconnect, and explicitly open the same saved file. [The reopened model](05-explicit-project-file-reopen-mask-reset.png) matches the original document and has no active Section or exclusion. Turning the same X section back on [clips the formerly excluded instance](06-reopened-project-p2-clipped.png): the removed-side probe misses and the retained-side probe selects `p2`.
+- Separate baseline control in the same orthographic pose: the silhouette point [−7,40,11] projects to the same pixel before sectioning and with `p2` excluded. The renderer reports the same original edge (`p2`, body 0, edge 7) and no face in both states. A real Edge-filter click there selects neither before nor after; a real click on the interior face still selects `p2`. This verifies no exclusion-specific change for that edge, not first-class placed-edge selection.
+
+No product changes or downloads. This adds WebGL2 project-reopen and baseline parity evidence; separate notes cover WebGL2/WebGPU plane-drag checks and other lifecycle cases.
