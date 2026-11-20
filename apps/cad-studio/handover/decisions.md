@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1426: [Heal the inside fillet of a two-box L bracket](notes/delete-union-l-fillet-2026-11-21/README.md), #17; restore one analytic union corner while keeping the surviving topology and verify the same authored result in MCP and Studio.
+
 - D1425: [Heal the inside fillet of a straight L-section](notes/delete-l-section-fillet-2026-11-21/README.md), #17; extend the two tangent planar walls and verify the sharp result against an independent two-box union and fresh Studio Open.
 
 - D1424: [Delete and heal one through bore](notes/delete-through-bore-face-2026-11-21/README.md), #17; remove the bore by its selected native wall, keep the exterior face identities, and verify Undo, Redo, Save and Open in Studio.

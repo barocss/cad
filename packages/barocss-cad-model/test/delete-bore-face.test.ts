@@ -102,3 +102,42 @@ test('Delete face heals the exact inside fillet of a straight L-section', async 
   assert.deepEqual(partBreps(reopened.doc)[0].brep.faces.map(face => face.name).sort(),
     partBreps(sharp)[0].brep.faces.map(face => face.name).sort());
 });
+
+test('Delete face heals a two-box union fillet through the reviewed Model command and raw reopen', async () => {
+  const foot = withNode(emptyDoc(), { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 20] });
+  const base = withNode(foot, { kind: 'extrude', sketch: 0, height: 3 });
+  const upright = withNode(base, { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [3, 20] });
+  const stock = withNode(upright, { kind: 'extrude', sketch: 2, height: 30 });
+  const sharp = withNode(stock, { kind: 'union', left: { node: 1, side: 'solid' }, right: { node: 3, side: 'solid' } });
+  const doc = withNode(sharp, { kind: 'fillet', parent: { node: 4, side: 'solid' }, edges: ['n1.top|n3.side1'], radius: 2 });
+  const before = await evaluate(doc);
+  assert.ok(before.ok);
+  const { bodies } = before;
+  const index = bodies[0].mesh.faces.findIndex(face => face.name === 'n5.face');
+  assert.ok(index >= 0);
+  const ctx = { doc, bodies, selection: { ...emptySel, faces: [{ body: 0, face: index }] } };
+  assert.equal(command.available(ctx).ok, true);
+  const forged = structuredClone(doc);
+  const node = forged.nodes[5];
+  assert.ok(node.kind === 'fillet');
+  node.edges.push('n1.side2|n1.top');
+  assert.equal(command.available({ ...ctx, doc: forged }).ok, false);
+
+  const reply = await dispatchTool({ doc, bodies }, 'features', {
+    action: 'command', command: 'delete-face', faces: ['n5.face'], expectedRevision: revisionOf(doc),
+  }, evaluate);
+  assert.ok(reply.changed && !reply.isError, reply.content);
+  assert.deepEqual(reply.state.doc.nodes.slice(0, -1), doc.nodes);
+  const healed = reply.state.doc.nodes.at(-1);
+  assert.ok(healed?.kind === 'delete-face' && healed.sigs);
+  assert.deepEqual(healed.faces, ['n5.face']);
+  assert.equal(healed.sigs['n5.face'].r, 2);
+  const reopened = readStudioDoc(JSON.stringify(reply.state.doc));
+  assert.ok('doc' in reopened);
+  const after = await evaluate(reopened.doc);
+  assert.ok(after.ok);
+  assert.ok(Math.abs((after.bodies[0].volume ?? 0) - 4020) < 1e-7);
+  const original = partBreps(doc)[0].brep, final = partBreps(reopened.doc)[0].brep;
+  assert.deepEqual(final.faces.map(face => [face.id, face.name]).sort(),
+    original.faces.filter(face => face.name !== 'n5.face').map(face => [face.id, face.name]).sort());
+});

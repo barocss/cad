@@ -68,6 +68,7 @@ import { KernelError } from '../core/barocss-error.js';
 import { offsetDraftedFace } from '../features/drafted-cap-offset.js';
 import { offsetPrismWallIfAdmitted } from '../features/prism-wall-offset.js';
 import { healBoredPlateIfAdmitted, offsetBoredCapIfAdmitted } from '../features/bored-cap-offset.js';
+import { healAnalyticLFilletIfAdmitted } from '../features/heal-analytic-l-fillet.js';
 import { healPrismaticFilletIfAdmitted } from '../features/heal-prismatic-fillet.js';
 import { boundaryBindingRefusal } from './part-boundary-refusal-internal.js';
 import { refusalCodeOf, type CadRefusalCode } from '../core/error-codes.js';
@@ -657,9 +658,16 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
           return fail('REFERENCE', 'Delete face needs one closed solid.');
         if (brep.faces.filter(candidate => candidate.name === face).length !== 1)
           return fail('REFERENCE', 'Delete face: the selected native face is missing or ambiguous.');
-        const healed = healBoredPlateIfAdmitted(brep, face) ?? (part.solid.kind === 'upright' && part.filletTargets?.length === 1
-          ? healPrismaticFilletIfAdmitted(part.solid.solid, brep, face, at) : undefined);
-        if (!healed) return fail('CAPABILITY', 'Delete face supports one straight circular through bore in a rectangular plate. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism. Select its fillet face.');
+        let healed = healBoredPlateIfAdmitted(brep, face);
+        if (!healed && part.filletTargets?.length === 1) {
+          if (part.solid.kind === 'upright') healed = healPrismaticFilletIfAdmitted(part.solid.solid, brep, face, at);
+          else if (part.history?.finishes.length === 1) {
+            const [finish] = part.history.finishes, [sharpEdge] = part.filletTargets;
+            if (finish.kind === 'fillet' && !finish.radii && finish.edges.length === 1 && finish.edges[0] === sharpEdge && face === `${finish.id}.face`)
+              healed = healAnalyticLFilletIfAdmitted(brep, face, sharpEdge, at);
+          }
+        }
+        if (!healed) return fail('CAPABILITY', 'Delete face supports one straight circular through bore in a rectangular plate. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket. Select its fillet face.');
         return one({ kind: 'brep', brep: healed });
       };
     }

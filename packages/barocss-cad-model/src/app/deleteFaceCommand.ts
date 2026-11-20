@@ -4,7 +4,7 @@ import { toSig } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
 
-const PICK_FACE = 'Select the cylindrical wall of a supported through hole or the inside fillet of a straight L-section.';
+const PICK_FACE = 'Select the cylindrical wall of a supported through hole or the inside fillet of a straight L-bracket.';
 
 function pickedHealFace(ctx: Ctx) {
   const selection = ctx.selection;
@@ -28,7 +28,7 @@ function pickedHealFace(ctx: Ctx) {
 
 export const deleteFaceCommand: Command = {
   id: 'delete-face', label: 'Delete face', icon: 'delete', group: 'modify',
-  hint: 'Heal a supported through hole or a straight L-section’s inside fillet.',
+  hint: 'Heal a supported through hole or a straight L-bracket’s inside fillet.',
   keywords: 'delete remove heal fill bore hole fillet direct edit',
   available: ctx => pickedHealFace(ctx) ? { ok: true } : { ok: false, reason: PICK_FACE },
   fields: () => [],

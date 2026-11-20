@@ -59,13 +59,12 @@ for (const [form, source, edge, reflected, from] of [
   });
 }
 
-test('Delete face refuses the chamfer, convex round, multiple rounds and a non-upright finish result', () => {
+test('Delete face refuses an upright chamfer, convex round and multiple rounds', () => {
   const edge = 'n1.side2|n1.side3';
   const cases = [
     [...unmirrored, { id: 'n2', kind: 'chamfer', target: 'n1', edges: [edge], distance: 2 }],
     [...unmirrored, round('n1.side0|n1.side1')],
     [...unmirrored, { ...round(edge), edges: [edge, 'n1.side0|n1.side1'] }],
-    [...reference, { id: 'n2', kind: 'fillet', target: 'original', edges: ['footSolid.top|wallSolid.side1'], radius: 2 }],
   ];
   for (const features of cases) {
     const face = output(features).brep.faces.find(candidate => candidate.name.startsWith('n2.face'));

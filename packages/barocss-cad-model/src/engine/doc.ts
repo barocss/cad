@@ -325,10 +325,13 @@ export function isStraightHexagonalExtrusion(nodes: readonly unknown[], parent: 
     Array.isArray(sketch.points) && sketch.points.length === 6;
 }
 
-function precedingSolidParent(node: Record<string, unknown>, index: number): number | undefined {
-  const parent = node.parent;
+function precedingSolidIndex(parent: unknown, index: number): number | undefined {
   if (textRecord(parent) && parent.side === 'solid' && typeof parent.node === 'number' &&
       Number.isSafeInteger(parent.node) && parent.node >= 0 && parent.node < index) return parent.node;
+}
+
+function precedingSolidParent(node: Record<string, unknown>, index: number): number | undefined {
+  return precedingSolidIndex(node.parent, index);
 }
 
 function isBoredPlateHole(nodes: readonly unknown[], index: number): boolean {
@@ -356,7 +359,15 @@ export function isBoredCapOffsetSource(nodes: readonly unknown[], index: number)
   }
 }
 
-/** Identify the authored fillet. The kernel proves the current single L-section and its concave arc. */
+function straightExtrudeSketch(nodes: readonly unknown[], index: number): Record<string, unknown> | undefined {
+  const stock = nodes[index];
+  if (!textRecord(stock) || stock.kind !== 'extrude' || stock.draft || stock.cutDepth || typeof stock.sketch !== 'number' ||
+      !Number.isSafeInteger(stock.sketch) || stock.sketch < 0 || stock.sketch >= index) return;
+  const sketch = nodes[stock.sketch];
+  if (textRecord(sketch) && sketch.kind === 'sketch') return sketch;
+}
+
+/** Identify the authored fillet. The kernel proves the current solid and its concave arc. */
 export function isDeleteFaceFilletSource(nodes: readonly unknown[], index: number): boolean {
   const fillet = nodes[index];
   if (!textRecord(fillet) || fillet.kind !== 'fillet' || fillet.radii !== undefined || fillet.section !== undefined ||
@@ -364,10 +375,14 @@ export function isDeleteFaceFilletSource(nodes: readonly unknown[], index: numbe
   const stockIndex = precedingSolidParent(fillet, index);
   if (stockIndex === undefined) return false;
   const stock = nodes[stockIndex];
-  if (!textRecord(stock) || stock.kind !== 'extrude' || stock.draft || stock.cutDepth || typeof stock.sketch !== 'number' ||
-      !Number.isSafeInteger(stock.sketch) || stock.sketch < 0 || stock.sketch >= stockIndex) return false;
-  const sketch = nodes[stock.sketch];
-  return textRecord(sketch) && sketch.kind === 'sketch' && sketch.profile === 'polygon' &&
+  if (textRecord(stock) && stock.kind === 'union') {
+    const left = precedingSolidIndex(stock.left, stockIndex), right = precedingSolidIndex(stock.right, stockIndex);
+    return left !== undefined && right !== undefined && left !== right &&
+      straightExtrudeSketch(nodes, left)?.profile === 'rectangle' &&
+      straightExtrudeSketch(nodes, right)?.profile === 'rectangle';
+  }
+  const sketch = straightExtrudeSketch(nodes, stockIndex);
+  return sketch?.profile === 'polygon' &&
     Array.isArray(sketch.points) && sketch.points.length === 6;
 }
 

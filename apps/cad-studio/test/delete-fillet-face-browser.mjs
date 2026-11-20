@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
 const output = process.argv[2];
 assert.ok(output && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
-const source = {
+const unionFile = process.argv[3];
+const agentFile = process.argv[4];
+const unionBytes = unionFile && await readFile(unionFile);
+const source = unionBytes ? JSON.parse(unionBytes) : {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
     { id: 'n0', kind: 'sketch', profile: 'polygon', points: [[0, 0], [3, 0], [3, 27], [40, 27], [40, 30], [0, 30]] },
@@ -13,15 +17,19 @@ const source = {
   ],
   outputs: { b2: { node: 2, side: 'solid' } }, nextId: 3,
 };
+const selectedName = unionFile ? 'n5.face' : 'n2.face';
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/files/documentFile.ts',
   'packages/barocss-cad-model/src/app/deleteFaceCommand.ts',
   'packages/barocss-cad-model/src/engine/doc.ts', 'packages/barocss-cad/src/features/heal-prismatic-fillet.ts',
+  'packages/barocss-cad/src/part/part-model.ts',
 ];
+if (unionFile) pins.push('packages/barocss-cad/src/features/heal-analytic-l-fillet.ts');
 const f = await createFlow({
   name: 'delete-fillet-face', envFrozen: 'DELETE_FILLET_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: 'Heal the picked inside fillet of a straight L-section, then save and reopen the sharp solid.',
-  limits: ['One constant R2 internal fillet spanning a 20 mm axis-aligned extrusion of the 40 × 30 mm L-section.'],
+  limits: [unionFile ? 'One R2 inside fillet on the union of a 40 × 20 × 3 mm foot and 3 × 20 × 30 mm upright.'
+    : 'One constant R2 internal fillet spanning a 20 mm axis-aligned extrusion of the 40 × 30 mm L-section.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkBrep, brepMassProperties } from '@barocss/cad';
@@ -29,7 +37,8 @@ import { partBreps } from '@barocss/cad-model/engine/evaluate';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const solids = partBreps(doc), brep = solids[0].brep;
 console.log(JSON.stringify({ solids: solids.length, report: checkBrep(brep, { strict: true }),
-  mass: brepMassProperties(brep, 1), faces: brep.faces.map(({ id, name }) => ({ id, name })) }));
+  mass: brepMassProperties(brep, 1), faces: brep.faces.map(({ id, name }) => ({ id, name })),
+  edges: brep.edges.map(({ id, name }) => ({ id, name })) }));
 `,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -46,9 +55,18 @@ async function measure(label, doc, original) {
   near(native.mass.volume, expected);
   near(worker[0].volume, expected);
   if (original) {
-    assert.deepEqual(native.report.counts, { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 36, edges: 18, vertices: 12 });
-    assert.deepEqual(native.faces.map(face => face.name).sort(),
-      original.faces.filter(face => face.name !== 'n2.face').map(face => face.name).sort());
+    const survivingFaces = original.faces.filter(face => face.name !== selectedName);
+    assert.deepEqual(native.report.counts, { bodies: 1, shells: 1, faces: 8, loops: 8,
+      coedges: unionFile ? 40 : 36, edges: unionFile ? 20 : 18, vertices: unionFile ? 14 : 12 });
+    assert.deepEqual(native.faces.map(face => face.name).sort(), survivingFaces.map(face => face.name).sort());
+    if (unionFile) {
+      for (const face of survivingFaces) assert.deepEqual(native.faces.find(candidate => candidate.id === face.id), face);
+      const retained = original.edges.filter(edge => native.edges.some(candidate => candidate.id === edge.id));
+      assert.equal(retained.length, 19);
+      for (const edge of retained) assert.deepEqual(native.edges.find(candidate => candidate.id === edge.id), edge);
+      const centroid = [(2400 * 20 + (1800 - 180) * 1.5) / 4020, 10, ((2400 - 180) * 1.5 + 1800 * 15) / 4020];
+      native.mass.centroid.forEach((value, i) => near(value, centroid[i]));
+    }
   }
   f.report.observations.push({ label, expected, nativeVolume: native.mass.volume, studioVolume: worker[0].volume,
     counts: native.report.counts, maximumEdgeSurfaceGap: native.report.maximumEdgeSurfaceGap });
@@ -69,27 +87,29 @@ await f.run(async () => {
   f.phase = 'Open and measure the R2 L-section';
   await f.newPage();
   const [file] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
-  await file.setFiles({ name: 'l-section-r2.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
+  await file.setFiles(unionFile || { name: 'l-section-r2.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
   await f.same(source);
   const original = await measure('rounded', source);
   await f.snapshot('fillet-original');
 
   f.phase = 'Select the native inside fillet and apply its heal';
   await button('Selection filter').click();
-  const point = [5 - Math.SQRT2, 25 + Math.SQRT2, 10];
+  const point = unionFile ? [5 - Math.SQRT2, 10, 5 - Math.SQRT2] : [5 - Math.SQRT2, 25 + Math.SQRT2, 10];
   const pixel = await f.page.evaluate(p => window.__studioScreenOf(p), point);
   assert.ok(pixel?.length === 2);
   await f.page.mouse.click(...pixel);
   await f.page.waitForFunction(() => window.__studioSelection.selection.faces.length === 1);
+  if (unionFile) await f.page.getByText(/Properties and face colour: .*n5\.face/).waitFor();
+  await f.snapshot('fillet-selected');
   await f.command('Delete face');
   const apply = button('Apply', f.page.getByRole('dialog', { name: 'Delete face', exact: true }));
   await apply.waitFor({ timeout: 10000 });
   await apply.click();
   await f.changed(source);
   const healed = await f.doc();
-  assert.deepEqual(healed.nodes.slice(0, 3), source.nodes);
-  assert.equal(healed.nodes[3].kind, 'delete-face');
-  assert.deepEqual(healed.nodes[3].faces, ['n2.face']);
+  assert.deepEqual(healed.nodes.slice(0, -1), source.nodes);
+  assert.equal(healed.nodes.at(-1).kind, 'delete-face');
+  assert.deepEqual(healed.nodes.at(-1).faces, [selectedName]);
   await measure('sharp', healed, original);
   await f.snapshot('fillet-healed');
   await f.undo(); await f.same(source);
@@ -97,4 +117,21 @@ await f.run(async () => {
   const saved = await f.save('l-section-sharp');
   await f.freshOpen(saved.file, healed, 'fillet-healed-reopened');
   await measure('reopened', healed, original);
+  if (unionFile) {
+    if (agentFile) {
+      const agentDoc = JSON.parse(await readFile(agentFile));
+      assert.deepEqual(agentDoc, healed);
+      await f.freshOpen(agentFile, agentDoc, 'fillet-agent-healed-opened');
+      await measure('agent-file-opened', agentDoc, original);
+    }
+    f.phase = 'Refuse a stale union fillet reference without changing the healed document';
+    const stale = structuredClone(healed);
+    stale.nodes.at(-1).sigs[selectedName].r *= 10;
+    const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
+    await chooser.setFiles({ name: 'stale-fillet-reference.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(stale)) });
+    await f.waitToast(/REFERENCE_MOVED.*Your part is unchanged/);
+    await f.same(healed);
+    await f.snapshot('fillet-stale-reference-refused');
+    assert.deepEqual(await readFile(unionFile), unionBytes);
+  }
 });
