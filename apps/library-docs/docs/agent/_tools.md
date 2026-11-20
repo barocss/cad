@@ -10,13 +10,13 @@ Builds or changes the part with a script, all or nothing (the language is below)
 
 ### `features`: Features
 
-Changes the feature tree one step at a time. Faces and edges by name ("n1.top", "n1.side0|n1.side1") or selector ({"feature": 1, "role": "top"}, {"normal": [0, 0, 1], "pick": "max"}, {"between": [face, face]}).
+Edit the feature tree. Pick faces and edges by name ("n1.top", "n1.side0|n1.side1") or selector ({"feature": 1, "role": "top"}, {"normal": [0, 0, 1], "pick": "max"}, {"between": [face, face]}).
 
 | Action | Handler | Arguments and notes |
 |---|---|---|
 | `features.command` | `run_command` | command, values?, faces?, edges?, bodies?, point? — a studio command as the toolbar runs it |
 | `features.add` | `add_features` | features: [node] — raw feature nodes (sketches, extrudes, revolves, sweeps, lofts, …) |
-| `features.edit` | `edit_feature` | index, values? \| feature? |
+| `features.edit` | `edit_feature` | index, values? \| feature?, expectedRevision? |
 | `features.parameters` | `set_parameters` | add?, set?, rename?, bind?, remove? — named parameters; bind a feature's value to one |
 | `features.load_rows` | `load_rows` | kind, file, part?, feature? — rows from the person’s conversation file |
 | `features.delete` | `delete_feature` | index |

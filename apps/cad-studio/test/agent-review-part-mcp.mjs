@@ -65,8 +65,10 @@ await withMcpSession({ app, output, clientName: 'barocss-agent-review-part', aut
   assert.deepEqual([mismatch.summary.pass, mismatch.summary.fail, mismatch.summary.unknown], [0, 1, 0]);
   const pinnedA = await render(call, 'review-A-pinned', a.revision);
   assert.equal(pinnedA.imageSha256, a.imageSha256);
-  await describe('features', 'edit');
-  await call('features', { action: 'edit', index: extrusion.index, values: { h: 12 } });
+  const editSchema = textJSON(await describe('features', 'edit')).input;
+  assert.deepEqual(editSchema.properties.expectedRevision, { type: 'string', pattern: '^[a-f0-9]{16}$' });
+  assert.ok(!editSchema.required.includes('expectedRevision'));
+  await call('features', { action: 'edit', index: extrusion.index, values: { h: 12 }, expectedRevision: a.revision }, 'edit reviewed A');
   const check = textJSON(await call('requirements', { action: 'check' }));
   assert.deepEqual([check.summary.pass, check.summary.fail, check.summary.unknown], [1, 0, 0]);
   const beforeRefusal = await readFile(file);
@@ -79,6 +81,17 @@ await withMcpSession({ app, output, clientName: 'barocss-agent-review-part', aut
   assert.equal(stale.content.filter(c => c.type === 'image').length, 0);
   assert.deepEqual(await readFile(file), beforeRefusal);
   const rebuildB = textJSON(await call('query', { action: 'rebuild' }, 'rebuild-B'));
+  const staleEdit = await call('features', {
+    action: 'edit', index: extrusion.index, values: { from: 2 }, expectedRevision: a.revision,
+  }, 'refuse edit from review A against B', true);
+  const editRefusal = textJSON(staleEdit);
+  assert.deepEqual([editRefusal.code, editRefusal.expectedRevision, editRefusal.revision], ['EDIT_STALE', a.revision, rebuildB.revision]);
+  assert.deepEqual(await readFile(file), beforeRefusal, 'the stale edit preserves B byte for byte');
+  const invalidEdit = await call('features', {
+    action: 'edit', index: extrusion.index, values: { from: 2 }, expectedRevision: 'invalid',
+  }, 'refuse invalid revision', true);
+  assert.equal(textJSON(invalidEdit).code, 'EDIT_INPUT');
+  assert.deepEqual(await readFile(file), beforeRefusal);
   const b = await render(call, 'review-B');
   assert.equal(b.revision, rebuildB.revision, 'render B and rebuild B identify the same reviewed model');
   assert.equal(refused.revision, b.revision);

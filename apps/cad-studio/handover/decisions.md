@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1421: [Review-pinned feature edits](notes/review-pinned-feature-edit-2026-11-21/README.md), #324; an optional reviewed revision guards editing in the same part scope, with actual MCP refusal and native Studio handoff proof.
+
 - D1420: [Through-hole plate cap Offset](notes/bored-plate-cap-offset-2026-11-21/README.md), #17; move either cap with the planar walls and cylindrical bore intact through signed drag, edit and native reopen.
 
 - D1419: [Studio display mode state](notes/studio-display-mode-state-2026-11-21/README.md) owns the display request and reports for the current scope. Desktop verifies five modes, wireframe suspension and restoration, and project isolation persistence boundaries.

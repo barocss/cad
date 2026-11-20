@@ -71,6 +71,11 @@ An accepted part edit returns `ok: true`, `did`, `feature_count`, `facts` and `c
 changed before making another edit. Body details depend on `response_format` and the result's size; an omitted face
 list does not mean the body has no faces. Read the part summary before using a face or edge name you have not seen.
 
+To edit the version you reviewed, pass the `revision` from `query.render` or `query.rebuild` as
+`expectedRevision` on `features.edit`. Use the same part scope for both calls. If the model has changed,
+`EDIT_STALE` returns the requested and current revisions. Review the current part before resubmitting the edit.
+In a batch, the pin applies to the document at that edit's position in the batch.
+
 A part-tool refusal returns `ok: false` and `error`; fields such as `code`, `detail` and `kept` appear when the handler
 supplies them. Do not assume every tool result has the object API's `code`, `where` and `details` error fields.
 Use an available code to select the response, and read the error text for the input to change. For `needs_proposal`

@@ -20,6 +20,7 @@ import { beadOwnershipError, type BeadOwnership } from '../../frames/beadOwnersh
 import { bearingContextOf } from '../../engine/bearingContext';
 import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, type CallOptions, json, accept, fail, checkValues, strings, list, inRange } from '../toolKit';
 import { isObj, isVec3 } from '../../util/guards';
+import { revisionOf } from '../../util/revision';
 import { mountRowsOf } from '../../engine/mountRows';
 import { mountAxis } from '../../app/mounts';
 import { firstProblem, isRefusal } from '../../engine/refusal';
@@ -235,6 +236,16 @@ async function addFeaturesTool(state: ChatState, args: Record<string, unknown>, 
   return accept(state, doc, evaluate, options, `added ${list.length} feature${list.length > 1 ? 's' : ''}`, { added: doc.nodes.slice(state.doc.nodes.length).map((n, k) => `${state.doc.nodes.length + k}: ${featureLabel(n, state.doc.nodes.length + k, doc.nodes)}`), ...(solves.length ? { skeletons: solves } : {}) });
 }
 async function editFeatureTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {
+  const { expectedRevision } = args;
+  if (expectedRevision !== undefined) {
+    if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(expectedRevision))
+      return fail(state, 'Set expectedRevision to the 16-digit revision from query.render or query.rebuild for the same part.', { code: 'EDIT_INPUT' });
+    const revision = revisionOf(state.doc);
+    if (revision !== expectedRevision)
+      return fail(state, 'The part changed since the requested revision. Review the current part again before editing.', {
+        code: 'EDIT_STALE', expectedRevision, revision, kept: 'the part is unchanged',
+      });
+  }
   const index = Number(args.index), nodes = state.doc.nodes;
   if (!Number.isInteger(index) || !nodes[index]) return fail(state, `There is no feature ${String(args.index)} (features 0–${nodes.length - 1}).`);
   const retainBox = args.retainBoxCommand === true;

@@ -19,11 +19,11 @@ export const GROUPS: Record<string, Group> = {
   model: { title: 'Model (script)', about: 'Builds or changes the part with a script, all or nothing (the language is below).', actions: { run: ['run_script', 'source, dryRun?'] } },
   features: {
     title: 'Features',
-    about: 'Changes the feature tree one step at a time. Faces and edges by name ("n1.top", "n1.side0|n1.side1") or selector ({"feature": 1, "role": "top"}, {"normal": [0, 0, 1], "pick": "max"}, {"between": [face, face]}).',
+    about: 'Edit the feature tree. Pick faces and edges by name ("n1.top", "n1.side0|n1.side1") or selector ({"feature": 1, "role": "top"}, {"normal": [0, 0, 1], "pick": "max"}, {"between": [face, face]}).',
     actions: {
       command: ['run_command', 'command, values?, faces?, edges?, bodies?, point? — a studio command as the toolbar runs it'],
       add: ['add_features', 'features: [node] — raw feature nodes (sketches, extrudes, revolves, sweeps, lofts, …)'],
-      edit: ['edit_feature', 'index, values? | feature?'],
+      edit: ['edit_feature', 'index, values? | feature?, expectedRevision?'],
       parameters: ['set_parameters', 'add?, set?, rename?, bind?, remove? — named parameters; bind a feature\'s value to one'],
       load_rows: ['load_rows', 'kind, file, part?, feature? — rows from the person’s conversation file'],
       delete: ['delete_feature', 'index'],

@@ -116,8 +116,8 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'edit_feature',
-    description: 'Changes an existing feature, as the feature editor does: "values" sets its editable dimensions by key (an extrude also edits its sketch: w, d, c0, c1 for a rectangle; dia, cc0, cc1 for a circle; h height; from; draft — a hole: dia, c0, c1, depth; fillet r; chamfer d; shell t; …). Call it with an index and no values to list the keys. Or pass a whole replacement "feature" node (same rules as add_features). Use "retainBoxCommand": true to replace one or both extents of a standard Box sketch and retain the editable Box command. Later features follow the edit.',
-    input_schema: { type: 'object', properties: { index: { type: 'integer' }, values: { type: 'object', additionalProperties: { type: ['number', 'string', 'boolean'] } }, feature: { type: 'object' }, retainBoxCommand: { type: 'boolean', const: true } }, required: ['index'], additionalProperties: false },
+    description: 'Changes an existing feature, as the feature editor does: "values" sets its editable dimensions by key (an extrude also edits its sketch: w, d, c0, c1 for a rectangle; dia, cc0, cc1 for a circle; h height; from; draft — a hole: dia, c0, c1, depth; fillet r; chamfer d; shell t; …). Call it with an index and no values to list the keys. Or pass a whole replacement "feature" node (same rules as add_features). Use "retainBoxCommand": true to replace one or both extents of a standard Box sketch and retain the editable Box command. Later features follow the edit. Pass expectedRevision from query.render or query.rebuild in the same part scope to refuse a stale edit.',
+    input_schema: { type: 'object', properties: { index: { type: 'integer' }, values: { type: 'object', additionalProperties: { type: ['number', 'string', 'boolean'] } }, feature: { type: 'object' }, retainBoxCommand: { type: 'boolean', const: true }, expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$' } }, required: ['index'], additionalProperties: false },
   },
   {
     name: 'delete_feature',
