@@ -14,6 +14,7 @@ const pins = [
   'packages/barocss-cad-model/src/app/sheetCommands.ts',
   'packages/barocss-cad-model/src/engine/evaluate.ts',
 ];
+const expectedCaps = process.env.CAD27_FLANGE_ADVISORY_LEGACY_SVG === '1' ? false : true;
 const f = await createFlow({
   name: 'flange-preview-advisory-1427', envFrozen: 'CAD27_FLANGE_ADVISORY_FROZEN', output: process.argv[2],
   initialFiles: pins, requiredFrozen: pins,
@@ -106,6 +107,20 @@ async function showFlat(label, size) {
   await button('Show the flat pattern').click();
   await flat().getByLabel('Flat pattern drawing', {exact:true}).waitFor();
   if (size) assert.ok((await flat().locator('.toast-hint').innerText()).startsWith(size + ' mm'));
+  if (label === '05-undone-flat-restored') {
+    const outline = flat().getByLabel('Flat pattern drawing', {exact:true}).locator('path').first();
+    const samples = await outline.evaluate(path => ({
+      left: path.isPointInFill(new DOMPoint(2, 10)),
+      right: path.isPointInFill(new DOMPoint(53, 10)),
+      center: path.isPointInFill(new DOMPoint(27.5, 10)),
+      outsideLeft: path.isPointInFill(new DOMPoint(2, 2)),
+      outsideRight: path.isPointInFill(new DOMPoint(53, 2)),
+    }));
+    f.report.obroundSvgFillAfterUndo = samples;
+    assert.deepEqual(samples, {
+      left:expectedCaps, right:expectedCaps, center:true, outsideLeft:false, outsideRight:false,
+    });
+  }
   await f.snapshot(label);
   await button('Close the flat pattern', flat()).click();
   await flat().waitFor({state:'hidden'});

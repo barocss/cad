@@ -2,7 +2,8 @@
 // down in two colours) with its note — and exported as DXF (2000 or R12) through the kernel's flat document and writer.
 // O16: its actions on shadcn's Button and NativeSelect; the box is the studio's.
 import { useState } from 'react';
-import { evaluateCurve, flatPatternDxf, writeDxf, type DxfVersion, type FlatPattern, type FlatSegment } from '@barocss/cad';
+import { flatPatternDxf, writeDxf, type DxfVersion, type FlatPattern } from '@barocss/cad';
+import { flatLoopPath } from './flatPatternPath';
 import { downloadBytes } from './files';
 import { Icon } from './atoms';
 import { CONTROL } from './panelStyles';
@@ -10,33 +11,11 @@ import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
 
 const f2 = (v: number) => String(Math.round(v * 1000) / 1000);
-/** A loop as SVG path data, y flipped (the flat's y goes up) within a box `h` high. */
-function loopPath(segs: readonly FlatSegment[], h: number): string {
-  const p = (x: number, y: number) => `${f2(x)} ${f2(h - y)}`;
-  let d = '';
-  segs.forEach((s, i) => {
-    if (s.kind === 'line') { d += (i ? 'L' : 'M') + p(s.a[0], s.a[1]) + 'L' + p(s.b[0], s.b[1]); return; }
-    if (s.kind === 'arc') {
-      const closed = s.start[0] === s.end[0] && s.start[1] === s.end[1], r = f2(s.radius);
-      // (Counter-clockwise in the flat is clockwise on screen, y down: SVG's positive sweep.)
-      const sweep = s.ccw ? 1 : 0;
-      if (closed) { const o: [number, number] = [2 * s.center[0] - s.start[0], 2 * s.center[1] - s.start[1]]; d += `M${p(s.start[0], s.start[1])}A${r} ${r} 0 0 ${sweep} ${p(o[0], o[1])}A${r} ${r} 0 0 ${sweep} ${p(s.start[0], s.start[1])}`; return; }
-      const a0 = Math.atan2(s.start[1] - s.center[1], s.start[0] - s.center[0]), a1 = Math.atan2(s.end[1] - s.center[1], s.end[0] - s.center[0]);
-      let sw = a1 - a0; if (s.ccw) { while (sw <= 0) sw += 2 * Math.PI; } else { while (sw >= 0) sw -= 2 * Math.PI; }
-      d += (i ? 'L' : 'M') + p(s.start[0], s.start[1]) + `A${r} ${r} 0 ${Math.abs(sw) > Math.PI ? 1 : 0} ${sweep} ${p(s.end[0], s.end[1])}`;
-      return;
-    }
-    const curve = { kind: 'curve' as const, id: 'flat', degree: s.degree, knots: [...s.knots], controlPoints: s.control.map(q => [q[0], q[1], 0] as [number, number, number]), weights: [...s.weights] };
-    const lo = s.knots[0], hi = s.knots[s.knots.length - 1];
-    for (let k = 0; k <= 64; k++) { const q = evaluateCurve(curve, lo + (hi - lo) * k / 64); d += (i || k ? 'L' : 'M') + p(q[0], q[1]); }
-  });
-  return d + 'Z';
-}
-
 export interface FlatBendAction {
   featureId: string; bend: FlatPattern['bends'][number]; disabled: boolean; radiusSource: string; ruleSource: string;
   onEdit: () => void; onEditRules: () => void;
 }
+
 export function FlatPatternDialog({ flat, name, onClose, onEditSharedRules, bendActions = [] }: { flat: FlatPattern; name: string; onClose: () => void; onEditSharedRules?: () => void; bendActions?: readonly FlatBendAction[] }) {
   const [version, setVersion] = useState<DxfVersion>('AC1015');
   const [w, h] = flat.box.max, m = Math.max(w, h) * 0.06 + 2;
@@ -57,7 +36,7 @@ export function FlatPatternDialog({ flat, name, onClose, onEditSharedRules, bend
         </div>)}
       </div>}
       <svg aria-label="Flat pattern drawing" viewBox={`${f2(-m)} ${f2(-m)} ${f2(w + 2 * m)} ${f2(h + 2 * m)}`} style={{ width: '100%', maxHeight: '55vh', margin: '8px 0', background: 'var(--surface-2, transparent)' }}>
-        <path d={flat.loops.map(l => loopPath(l.segments, h)).join('')} fillRule="evenodd" fill="currentColor" fillOpacity={0.08} stroke="currentColor" strokeWidth={Math.max(w, h) / 400} />
+        <path d={flat.loops.map(l => flatLoopPath(l.segments, h)).join('')} fillRule="evenodd" fill="currentColor" fillOpacity={0.08} stroke="currentColor" strokeWidth={Math.max(w, h) / 400} />
         {flat.bends.map((b, k) => {
           const owner = bendActions.find(action => action.bend === b);
           const [p, q] = b.centre, up = b.direction === 'up', mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
