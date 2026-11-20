@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { CadPartError, checkBrep, evaluateCadPart } from '../dist/index.js';
+import { CadPartError, checkBrep, createCylindricalBoreCheck, evaluateCadPart } from '../dist/index.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
 import { healBoredPlateIfAdmitted } from '../dist/features/bored-cap-offset.js';
 import { faceSignatures } from '../dist/part/part-expect.js';
@@ -14,6 +14,7 @@ const plate = ({ min = [0, 0], max = [40, 30], height = 10, from = 0, center = [
   ],
 });
 const append = (doc, feature) => ({ ...doc, features: [...doc.features, feature] });
+const secondBore = doc => append(doc, { id: 'h2', kind: 'hole', target: 'h', center: [27, 20], radius: 2 });
 const output = doc => evaluateCadPart(doc).outputs[0];
 const deletion = (face, expect, target = 'h') => ({ id: 'heal', kind: 'delete-face', target, face, ...(expect ? { expect } : {}) });
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) <= 1e-8, `${actual} differs from ${expected}`);
@@ -81,6 +82,49 @@ test('healing fills a translated fractional bore through the full current thickn
   for (const [axis, coordinate] of [25.25, 6.5, 0.375].entries()) close(mass.centroid[axis], coordinate);
 });
 
+test('healing either exact bore of a flat two-bore plate preserves the other bore', () => {
+  const doc = secondBore(plate()), source = freeze(output(doc).brep), before = structuredClone(source);
+  const uses = new Map(source.coedges.map(use => [use.id, use]));
+  for (const [remove, retain, center, diameter] of [
+    ['h.side0', 'h2.side0', [27, 20], 4], ['h2.side0', 'h.side0', [11, 9], 6],
+  ]) {
+    const selected = source.faces.filter(face => face.name.startsWith(remove + '#'));
+    const fixed = source.faces.filter(face => face.name.startsWith(retain + '#'));
+    assert.equal(selected.length, 2);
+    assert.equal(fixed.length, 2);
+    const wallLoops = selected.flatMap(face => face.loops);
+    const capLoops = source.loops.filter(loop => loop.kind === 'inner' &&
+      loop.coedges.every(id => wallLoops.includes(uses.get(uses.get(id).twin).loop)));
+    assert.equal(capLoops.length, 2);
+    const gone = new Set([...wallLoops, ...capLoops.map(loop => loop.id)]);
+    const expectedVolume = 12000 - 10 * Math.PI * (diameter / 2) ** 2;
+    for (const member of selected) {
+      const healed = healBoredPlateIfAdmitted(source, member.name);
+      const report = checkBrep(healed, { strict: true });
+      assert.ok(report.valid, report.issues.join('\n'));
+      assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 });
+      assert.equal(report.topology[0].genus, 1);
+      assert.ok(report.maximumPcurveGap < 1e-9 && report.maximumEdgeSurfaceGap < 1e-9);
+      assert.deepEqual(healed.loops, source.loops.filter(loop => !gone.has(loop.id)));
+      assert.deepEqual(healed.faces, source.faces.filter(face => !selected.includes(face))
+        .map(face => ({ ...face, loops: face.loops.filter(id => !gone.has(id)) })));
+      for (const kind of ['loops', 'coedges', 'edges', 'vertices']) {
+        for (const item of healed[kind]) assert.equal(item, source[kind].find(candidate => candidate.id === item.id));
+      }
+      for (const face of fixed) assert.equal(healed.faces.find(candidate => candidate.id === face.id), face);
+      close(createCylindricalBoreCheck(healed)(fixed), diameter);
+      const mass = brepMassProperties(healed, 1);
+      close(mass.volume, expectedVolume);
+      close(mass.centroid[0], (12000 * 20 - (12000 - expectedVolume) * center[0]) / expectedVolume);
+      close(mass.centroid[1], (12000 * 15 - (12000 - expectedVolume) * center[1]) / expectedVolume);
+      close(mass.centroid[2], 5);
+      assert.deepEqual(output(append(doc, deletion(member.name, undefined, 'h2'))).brep, healed);
+    }
+    assert.deepEqual(healBoredPlateIfAdmitted(source, selected[0].name), healBoredPlateIfAdmitted(source, selected[1].name));
+  }
+  assert.deepEqual(source, before);
+});
+
 test('the authored operation checks the selected native member signature', () => {
   const doc = plate(), signatures = faceSignatures(output(doc).brep), [name, other] = halves;
   const size = Math.PI * 3 * 10;
@@ -99,9 +143,9 @@ test('heal refuses a partial or ambiguous selection and other hole topology', ()
   duplicate.faces.find(face => face.name === halves[1]).name = name;
   const malformed = structuredClone(source);
   malformed.coedges[0].pcurve.controlPoints[0][0] += 1e-10;
-  const twoBores = output(append(doc, { id: 'h2', kind: 'hole', target: 'h', center: [26, 17], radius: 2 })).brep;
+  const threeBores = output(append(secondBore(doc), { id: 'h3', kind: 'hole', target: 'h2', center: [8, 23], radius: 2 })).brep;
   for (const brep of [
-    duplicate, malformed, twoBores,
+    duplicate, malformed, threeBores,
     output(plate({ depth: 4 })).brep,
     output(plate({ countersink: 10 })).brep,
     output(plate({ center: [1, 9] })).brep,

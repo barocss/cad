@@ -139,8 +139,8 @@ for (const sign of [1, -1]) {
     assert.throws(() => replaceBoredCapIfAdmitted(source, face, { ...plane, origin: [0, 0, fixedZ] }), /opposite cap at one corner/);
     assert.equal(boredCapOffsetFrame(source, face), undefined);
     assert.equal(offsetBoredCapIfAdmitted(source, face, 1), undefined);
-    for (const candidate of source.faces.filter(candidate => faceGeometry(candidate).kind === 'cylinder')) {
-      assert.equal(healBoredPlateIfAdmitted(source, candidate.name), undefined);
+    for (const candidate of walls) {
+      assert.equal(healBoredPlateIfAdmitted(result, candidate.name), undefined);
     }
     assert.deepEqual(source, before);
   });

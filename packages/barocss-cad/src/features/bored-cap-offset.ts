@@ -11,7 +11,7 @@ type StockKind = 'bored' | 'two-bore' | 'circular' | 'annular';
 type Cap = { readonly point: Point; readonly sign: 1 | -1; readonly opposite: number; readonly min: XY; readonly max: XY;
   readonly center: XY; readonly radius: number };
 type AxialStock = {
-  readonly bottom: BrepFace; readonly top: BrepFace; readonly cylinders: readonly BrepFace[];
+  readonly bottom: BrepFace; readonly top: BrepFace; readonly borePairs?: readonly (readonly BrepFace[])[];
   readonly lo: number; readonly hi: number; readonly anchorX: number; readonly anchorY: number; readonly radius: number;
   readonly min: XY; readonly max: XY; readonly center: XY;
 };
@@ -22,7 +22,7 @@ const halfCircleKnots = [0, 0, 0, 0.5, 0.5, 1, 1, 1];
 const stockCounts = { bored: [8, 10, 36, 18, 12], 'two-bore': [10, 14, 48, 24, 16], circular: [4, 4, 12, 6, 4], annular: [6, 8, 24, 12, 8] } as const;
 const capLoopCount = (kind: StockKind) => kind === 'circular' ? 1 : kind === 'two-bore' ? 3 : 2;
 const isRectangular = (kind: StockKind) => kind === 'bored' || kind === 'two-bore';
-const replacementPlateKind = (brep: Brep) => brep.faces.length === stockCounts['two-bore'][0] ? 'two-bore' : 'bored';
+const boredPlateKind = (brep: Brep) => brep.faces.length === stockCounts['two-bore'][0] ? 'two-bore' : 'bored';
 
 const same = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((value, i) => value === b[i]);
 const byId = <T extends { readonly id: string }>(items: readonly T[]) => new Map(items.map(item => [item.id, item]));
@@ -233,7 +233,7 @@ function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined
       const direction: Point = separation > tolerance ? scale(away, 1 / separation) : [1, 0, 0];
       anchor = add(round.center, scale(direction, (round.radius + bore.radius) / 2));
     }
-    return { bottom, top, cylinders, lo, hi, min, max, radius: round.radius, center, anchorX: anchor[0], anchorY: anchor[1] };
+    return { bottom, top, lo, hi, min, max, radius: round.radius, center, anchorX: anchor[0], anchorY: anchor[1] };
   }
   const readDiameter = createCylindricalBoreCheck(brep);
   if (twoBore) {
@@ -249,7 +249,7 @@ function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined
       || !(dist(first.center, second.center) > first.radius + second.radius + tolerance)) return;
     const [x, y] = first.center;
     const left = Math.min(x - first.radius, second.center[0] - second.radius) - min[0];
-    return { bottom, top, cylinders, lo, hi, min, max, radius: first.radius, center: [x, y], anchorX: min[0] + left / 2, anchorY: y };
+    return { bottom, top, borePairs: lower, lo, hi, min, max, radius: first.radius, center: [x, y], anchorX: min[0] + left / 2, anchorY: y };
   }
   const diameter = readDiameter(cylinders);
   const bore = faceGeometry(cylinders[0], extent);
@@ -258,7 +258,7 @@ function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined
   const [x, y] = bore.c, radius = diameter / 2, left = x - radius - min[0];
   if (!boreClearsRectangle(bore.c, radius, min, max, tolerance)) return undefined;
 
-  return { bottom, top, cylinders, lo, hi, min, max, radius, center: [x, y], anchorX: min[0] + left / 2, anchorY: y };
+  return { bottom, top, borePairs: [cylinders], lo, hi, min, max, radius, center: [x, y], anchorX: min[0] + left / 2, anchorY: y };
 }
 
 function admittedCap(brep: Brep, faceName: string, kind: StockKind = 'bored'): Cap | undefined {
@@ -280,7 +280,7 @@ export function boredCapOffsetFrame(brep: Brep, faceName: string): { anchor: Poi
 
 /** A point on the plate's cap material and its outward direction, for one or two bores. */
 export function boredCapReplacementFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
-  const cap = admittedCap(brep, faceName, replacementPlateKind(brep));
+  const cap = admittedCap(brep, faceName, boredPlateKind(brep));
   return cap && { anchor: cap.point, normal: [0, 0, cap.sign] };
 }
 
@@ -430,7 +430,7 @@ function replaceAxialCapIfAdmitted(brep: Brep, faceName: string, plane: Replacem
 
 /** Tilt one cap while retaining both plate supports and the existing through bores. */
 export function replaceBoredCapIfAdmitted(brep: Brep, faceName: string, plane: ReplacementPlane): Brep | undefined {
-  return replaceAxialCapIfAdmitted(brep, faceName, plane, replacementPlateKind(brep));
+  return replaceAxialCapIfAdmitted(brep, faceName, plane, boredPlateKind(brep));
 }
 
 /** Tilt an exact circular cap while retaining the outward cylinder and all trim identities. */
@@ -443,17 +443,32 @@ export function replaceAnnularCapIfAdmitted(brep: Brep, faceName: string, plane:
   return replaceAxialCapIfAdmitted(brep, faceName, plane, 'annular');
 }
 
-/** Select either native half of the sole bore and restore both of the original planar caps. */
+/** Select either native half of a bore and restore the material removed by that bore. */
 export function healBoredPlateIfAdmitted(brep: Brep, faceName: string): Brep | undefined {
   if (typeof faceName !== 'string' || !faceName.trim() || faceName.includes('+')) return undefined;
-  const plate = admittedAxialStock(brep, 'bored');
-  if (!plate?.cylinders.some(face => face.name === faceName)) return undefined;
+  const plate = admittedAxialStock(brep, boredPlateKind(brep));
+  const selected = plate?.borePairs?.find(pair => pair.some(face => face.name === faceName));
+  if (!plate || !selected) return undefined;
 
-  const removed = new Set(plate.cylinders.map(face => face.id));
-  const outerLoops = new Set(brep.loops.filter(loop => loop.kind === 'outer').map(loop => loop.id));
-  const faces = brep.faces.filter(face => !removed.has(face.id)).map(face => face.loops.length === 1
-    ? face : { ...face, loops: face.loops.filter(id => outerLoops.has(id)) });
-  // Retain the existing outer shell topology and its pcurves. Only the two cap trim rings and the bore wall disappear.
+  const removed = new Set(selected.map(face => face.id));
+  const wallLoops = new Set(selected.flatMap(face => face.loops));
+  const loopById = byId(brep.loops), coedgeById = byId(brep.coedges);
+  const capTrims = new Set<string>();
+  for (const cap of [plate.bottom, plate.top]) {
+    const trims = cap.loops.filter(id => {
+      const loop = loopById.get(id);
+      return loop?.kind === 'inner' && loop.coedges.length === 2 && loop.coedges.every(use => {
+        const twin = coedgeById.get(coedgeById.get(use)?.twin ?? '');
+        return twin !== undefined && wallLoops.has(twin.loop);
+      });
+    });
+    if (trims.length !== 1) return undefined;
+    capTrims.add(trims[0]);
+  }
+
+  const faces = brep.faces.filter(face => !removed.has(face.id)).map(face => face.loops.some(id => capTrims.has(id))
+    ? { ...face, loops: face.loops.filter(id => !capTrims.has(id)) } : face);
+  // Retain every other face chart and incidence. Only the selected bore walls and their cap trims disappear.
   const liveLoops = new Set(faces.flatMap(face => face.loops));
   const loops = brep.loops.filter(loop => liveLoops.has(loop.id));
   const liveUses = new Set(loops.flatMap(loop => loop.coedges));

@@ -428,6 +428,11 @@ export function isDraftedFaceReplacementSource(nodes: readonly unknown[], index:
 }
 export { isDraftedFaceReplacementSource as isDraftedCapReplacementSource };
 
+/** Identify a rectangular source for bore healing. The kernel proves the selected wall pair. */
+export function isBoredPlateHealSource(nodes: readonly unknown[], index: number): boolean {
+  return isBoredPlateReplacementSource(nodes, index) || isBoredCapOffsetSource(nodes, index);
+}
+
 /** Identify the authored fillet. The kernel proves the current solid and its concave arc. */
 export function isDeleteFaceFilletSource(nodes: readonly unknown[], index: number): boolean {
   const fillet = nodes[index];
@@ -453,7 +458,7 @@ function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly 
   const parent = node.parent;
   if (!textRecord(parent) || Object.keys(parent).sort().join(',') !== 'node,side' || parent.side !== 'solid' ||
       typeof parent.node !== 'number' || !Number.isSafeInteger(parent.node) || parent.node < 0 || parent.node >= index ||
-      (!isBoredCapOffsetSource(nodes, parent.node) && !isDeleteFaceFilletSource(nodes, parent.node)))
+      (!isBoredPlateHealSource(nodes, parent.node) && !isDeleteFaceFilletSource(nodes, parent.node)))
     return 'Delete face: a preceding through-hole plate or filleted L-section solid is required.';
   const name = Array.isArray(node.faces) && node.faces.length === 1 ? node.faces[0] : undefined;
   if (typeof name !== 'string' || !name.trim() || /[+\0]/.test(name)) return 'Delete face: one exact native curved face is required.';

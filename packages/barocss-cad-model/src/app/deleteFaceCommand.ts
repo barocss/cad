@@ -1,4 +1,4 @@
-import { isBoredCapOffsetSource, isDeleteFaceFilletSource, withNode } from '../engine/doc';
+import { isBoredPlateHealSource, isDeleteFaceFilletSource, withNode } from '../engine/doc';
 import { featureId } from '../engine/ids';
 import { toSig } from '../engine/references';
 import { refusal } from '../engine/refusal';
@@ -17,7 +17,7 @@ function pickedHealFace(ctx: Ctx) {
         !Number.isFinite(face.radius) || !Number.isFinite(face.area) || face.area <= 0) return;
     return { parent, member: face };
   }
-  if (!isBoredCapOffsetSource(ctx.doc.nodes, parent.node)) return;
+  if (!isBoredPlateHealSource(ctx.doc.nodes, parent.node)) return;
   const members = face.nativeFaces ?? [];
   if (members.length !== 2 || members[0].name === members[1].name ||
       members.some(member => member.kind !== 'curved' || !member.name || /[+\0]/.test(member.name) ||
