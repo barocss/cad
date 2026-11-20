@@ -7,7 +7,7 @@ import type { BodyResult, VolumeEvaluation } from '../engine/evaluate';
 // (a picked profile pulled along its normal), Revolve (turned about a sketch axis), Pipe (carried along
 // runs and bends) and Loft (through two or more picked sections). A profile drawn on a body's face joins
 // that body by default; Operation can make a new body or cut it instead.
-import { featureLabel, offsetFaceEndLabel, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
+import { featureLabel, offsetFaceEndLabel, isBoredCapOffsetSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
 import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle, twoGuideLoftSections } from './profiles';
@@ -343,7 +343,7 @@ function offsetPlaneAvailable(ctx: Ctx): boolean {
   const pick = ctx.selection.faces[0], body = pick && ctx.bodies[pick.body], ref = body?.ref;
   const node = ref && ctx.doc.nodes[ref.node];
   if (!node || !body.mesh.faces[pick.face]?.exact || ref.side !== 'solid') return false;
-  return node.kind === 'draft' || node.kind === 'offset-face' || (node.kind === 'extrude' &&
+  return node.kind === 'draft' || (node.kind === 'offset-face' && !isBoredCapOffsetSource(ctx.doc.nodes, ref.node)) || (node.kind === 'extrude' &&
     (!!node.draft || (body.mesh.faces[pick.face].nativeAxisPlane?.axis !== 'z' && isStraightHexagonalExtrusion(ctx.doc.nodes, node))));
 }
 
@@ -361,7 +361,7 @@ export function offsetFaceDescription(ctx: Ctx, fallback = ''): string {
 /** Move an admitted native face along its signed normal. */
 export const offsetFaceCommand: Command = {
   id: 'offset-face', label: 'Offset face', icon: 'cad-extrude', group: 'modify', keywords: 'move face push pull offset direct edit press',
-  hint: 'Move a prism or cylinder cap, a rectangular taper face, or an upright wall of a straight convex hexagonal prism. Drag the arrow or enter a signed distance.',
+  hint: 'Move a prism or cylinder cap, a rectangular plate cap with one through hole, a rectangular taper face, or an upright wall of a straight convex hexagonal prism. Drag the arrow or enter a signed distance.',
   available: ctx => {
     const selection = ctx.selection;
     if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length || selection.vertices?.length || ctx.direct?.length) return no('Pick a supported planar face.');
@@ -382,7 +382,7 @@ export const offsetFaceCommand: Command = {
   build: (ctx, v) => {
     const d = Number(v.d), direct = resolveDirectOffsetFace(ctx);
     if (v.offsetMode === 'to-plane') {
-      if (!direct) throw refusal('VALUE', 'Offset face: the selected face does not support moving to a reference plane.');
+      if (!direct?.allowsPlane) throw refusal('VALUE', 'Offset face: the selected face does not support moving to a reference plane.');
       const target = captureOffsetPlane(ctx, v, direct.parent, ctx.doc.nodes.length);
       return captureSignatures(withNode(ctx.doc, { kind: 'offset-face', parent: direct.parent, faces: [direct.face], target }), ctx.bodies);
     }

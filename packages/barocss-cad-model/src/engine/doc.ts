@@ -324,6 +324,37 @@ export function isStraightHexagonalExtrusion(nodes: readonly unknown[], parent: 
     Array.isArray(sketch.points) && sketch.points.length === 6;
 }
 
+function precedingSolidParent(node: Record<string, unknown>, index: number): number | undefined {
+  const parent = node.parent;
+  if (textRecord(parent) && parent.side === 'solid' && typeof parent.node === 'number' &&
+      Number.isSafeInteger(parent.node) && parent.node >= 0 && parent.node < index) return parent.node;
+}
+
+function isBoredPlateHole(nodes: readonly unknown[], index: number): boolean {
+  const hole = nodes[index];
+  if (!textRecord(hole) || hole.kind !== 'hole' || (hole.axis !== undefined && hole.axis !== 'z') ||
+      hole.depth !== undefined || hole.pattern !== undefined || hole.countersink !== undefined || hole.csk !== undefined ||
+      hole.thread !== undefined) return false;
+  const stockIndex = precedingSolidParent(hole, index);
+  if (stockIndex === undefined) return false;
+  const stock = nodes[stockIndex];
+  if (!textRecord(stock) || stock.kind !== 'extrude' || (stock.draft !== undefined && stock.draft !== 0) ||
+      typeof stock.sketch !== 'number' || !Number.isSafeInteger(stock.sketch) || stock.sketch < 0 || stock.sketch >= stockIndex) return false;
+  const sketch = nodes[stock.sketch];
+  return textRecord(sketch) && sketch.kind === 'sketch' && sketch.profile === 'rectangle';
+}
+
+/** Identify the authored distance-only source. The kernel proves the current rectangular bore geometry. */
+export function isBoredCapOffsetSource(nodes: readonly unknown[], index: number): boolean {
+  for (;;) {
+    const node = nodes[index];
+    if (!textRecord(node) || node.kind !== 'offset-face') return isBoredPlateHole(nodes, index);
+    const parent = precedingSolidParent(node, index);
+    if (parent === undefined) return false;
+    index = parent;
+  }
+}
+
 /** Check raw recipes in the root model and its placed or pending part definitions. */
 export function offsetFaceDocumentProblem(input: unknown): string | null {
   const stack: unknown[] = [input], seen = new Set<object>();
@@ -331,6 +362,7 @@ export function offsetFaceDocumentProblem(input: unknown): string | null {
     const value = stack.pop();
     if (!textRecord(value) || seen.has(value)) continue;
     seen.add(value);
+    const boredCapOffsets = new Set<number>();
     if (Array.isArray(value.nodes)) for (const [index, node] of value.nodes.entries()) {
       if (!textRecord(node) || node.kind !== 'offset-face') continue;
       const problem = offsetFaceNodeProblem(node, index);
@@ -344,14 +376,20 @@ export function offsetFaceDocumentProblem(input: unknown): string | null {
           return 'Offset face: the reference feature identity is missing, changed or ambiguous.';
         }
       }
-      const parent = value.nodes[(node.parent as BodyRef).node];
+      const parentIndex = (node.parent as BodyRef).node;
+      const parent = value.nodes[parentIndex];
       if (!textRecord(parent)) return 'Offset face: a supported solid parent is required.';
+      if (boredCapOffsets.has(parentIndex) || isBoredPlateHole(value.nodes, parentIndex)) {
+        if (node.target !== undefined) return 'Offset face: this through-hole plate cap needs a signed distance.';
+        boredCapOffsets.add(index);
+        continue;
+      }
       if (parent.kind === 'draft' || parent.kind === 'offset-face') continue;
       if (parent.kind === 'extrude') {
         if (typeof parent.draft === 'number' && Number.isFinite(parent.draft) && parent.draft !== 0) continue;
         if (isStraightHexagonalExtrusion(value.nodes, parent)) continue;
       }
-      return 'Offset face: the parent must be Draft, a drafted extrusion, a straight hexagonal extrusion, or a previous face offset.';
+      return 'Offset face: the parent must be Draft, a drafted extrusion, a straight hexagonal extrusion, a rectangular extrusion with one through hole, or a previous face offset.';
     }
     if (Array.isArray(value.instances)) for (const instance of value.instances) if (textRecord(instance)) stack.push(instance.doc);
     if (textRecord(value.pendingParts)) for (const pending of Object.values(value.pendingParts)) if (textRecord(pending)) stack.push(pending.doc);

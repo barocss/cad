@@ -67,6 +67,7 @@ import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
 import { offsetDraftedFace } from '../features/drafted-cap-offset.js';
 import { offsetPrismWallIfAdmitted } from '../features/prism-wall-offset.js';
+import { offsetBoredCapIfAdmitted } from '../features/bored-cap-offset.js';
 import { boundaryBindingRefusal } from './part-boundary-refusal-internal.js';
 import { refusalCodeOf, type CadRefusalCode } from '../core/error-codes.js';
 
@@ -639,7 +640,9 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         return fail('PARAMETER', 'Offset face needs a nonzero signed distance within the modeling range.');
       return () => {
         const brep = offsetFaceTargetBrep(t, f.target, target[0]);
-        return one({ kind: 'brep', brep: offsetPrismWallIfAdmitted(brep, face, distance) ?? offsetDraftedFace(brep, face, distance) });
+        const offset = offsetBoredCapIfAdmitted(brep, face, distance) ?? offsetPrismWallIfAdmitted(brep, face, distance)
+          ?? offsetDraftedFace(brep, face, distance);
+        return one({ kind: 'brep', brep: offset });
       };
     }
 

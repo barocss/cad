@@ -930,7 +930,14 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     camera: camera.current,
     startRectangleAt: input.startRectangleAt,
     fit(box) { const b = sourceProps.printActive ? boundsForFit() : box ?? boundsForFit(); if (b) fitBounds(b); request(); },
-    setView(name) { propsRef.current.onHoverScalar?.(null); camera.current.setView(name); const b = boundsForFit(); if (b) fitBounds(b); request(); },
+    setView(name) {
+      ++turning.current;
+      propsRef.current.onHoverScalar?.(null);
+      camera.current.setView(name);
+      const bounds = boundsForFit();
+      if (bounds) fitBounds(bounds);
+      request();
+    },
     frameSketch(min, max, plane) { pendingSketchFrame.current = { min, max, plane }; },
     frameActiveSketch(min, max, plane) {
       const frame = { min, max, plane }, view = canvas.current;

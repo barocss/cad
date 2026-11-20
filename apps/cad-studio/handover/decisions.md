@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1420: [Through-hole plate cap Offset](notes/bored-plate-cap-offset-2026-11-21/README.md), #17; move either cap with the planar walls and cylindrical bore intact through signed drag, edit and native reopen.
+
 - D1419: [Studio display mode state](notes/studio-display-mode-state-2026-11-21/README.md) owns the display request and reports for the current scope. Desktop verifies five modes, wireframe suspension and restoration, and project isolation persistence boundaries.
 
 - D1418: [SceneViewport selection routing](notes/studio-scene-selection-2026-11-21/README.md) groups displayed selection, input flags and editor routing. Desktop crossing snapshots match before and after.

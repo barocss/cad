@@ -1,4 +1,4 @@
-import { offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
+import { isBoredCapOffsetSource, offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc } from '../engine/evaluate';
 import { bodyKeyFor, featureId } from '../engine/ids';
 import { refusal } from '../engine/refusal';
@@ -80,6 +80,7 @@ function preserveFollowingOffsetRecipes(doc: StudioDoc, index: number): StudioDo
 /** Edit the direct native operation or rebuild the legacy cap recipe at its original History slot. */
 export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Command | null {
   const direct = directOffsetAt(doc, index);
+  const allowPlane = !!direct && !isBoredCapOffsetSource(doc.nodes, direct.parent.node);
   let directSource: Ctx | undefined;
   const describe = (getSource: () => Ctx, face: string) => {
     try { return offsetFaceDescription(getSource(), face); } catch { return face; }
@@ -87,20 +88,22 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
   if (direct) return {
     id: OFFSET_FACE_EDIT, label: 'Edit Offset face', icon: 'cad-extrude', group: 'modify',
     available: ctx => ctx.doc === doc ? { ok: true } : { ok: false, reason: 'Open the current Offset face in History again.' },
-    fields: () => offsetFields(true),
+    fields: () => offsetFields(allowPlane),
     defaults: ctx => {
+      if (!allowPlane) return { d: direct.distance ?? 2 };
       const values = { d: direct.distance ?? 2, offsetMode: direct.target ? 'to-plane' : 'distance' };
       return direct.target && ctx.doc === doc ? restoreOffsetPlaneValues(ctx, values, direct.target) : values;
     },
     derive: resetOffsetPlane,
     steps: (ctx, values) => [{ label: 'Face', text: describe(() => directSource ??= capContext(prefixDoc(doc, index), direct.parent, direct.faces[0]), direct.faces[0]), done: true },
       ...(values.offsetMode === 'to-plane' ? [offsetPlaneStep(values, direct.target, ctx)] : offsetFaceCommand.steps?.(ctx, values).filter(step => step.label !== 'Face') ?? [])],
-    onPick: (ctx, values, hit) => pickOffsetPlane(ctx, values, hit.face, direct.parent, index),
+    onPick: allowPlane ? (ctx, values, hit) => pickOffsetPlane(ctx, values, hit.face, direct.parent, index) : undefined,
     build: (ctx, values) => {
       if (ctx.doc !== doc || ctx.doc.nodes[index] !== direct) return rejected('open the current Offset face in History again.');
       const { target: priorTarget, distance: priorDistance, ...recipe } = direct;
       const nodes = [...doc.nodes];
       if (values.offsetMode === 'to-plane') {
+        if (!allowPlane) return rejected('this through-hole plate cap needs a signed distance.');
         if (priorTarget && values.keepPlane === 1) return doc;
         const target = captureOffsetPlane(ctx, values, direct.parent, index);
         nodes[index] = { ...recipe, target };
