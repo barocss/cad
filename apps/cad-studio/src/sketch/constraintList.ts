@@ -73,6 +73,36 @@ export function circleDistanceConflict(shape: Polygon, key: string, value: numbe
   return conflict;
 }
 
+/** Two unambiguous projections of the same circle pair determine their straight-line distance. */
+export function circleAxisPairConflict(shape: Polygon, key: string, value: number) {
+  const match = /^ccdist(\d+)_(\d+)$/.exec(key);
+  if (!match || !shape.closed || shape.pending || !isSolverLength(value)) return;
+  const a = Number(match[1]), b = Number(match[2]);
+  if (!Number.isSafeInteger(a) || !Number.isSafeInteger(b) || a >= b || !shape.circles?.[a] || !shape.circles[b]) return;
+  type Projection = { id: string; value: number };
+  let horizontal: Projection | undefined, vertical: Projection | undefined;
+  for (const [i, rule] of (shape.rules ?? []).entries()) {
+    if ((rule.kind !== 'ccdx' && rule.kind !== 'ccdy') || !(rule.a === a && rule.b === b || rule.a === b && rule.b === a)) continue;
+    if (!isSolverLength(rule.value)) return;
+    const projection = { id: `rule:${i}`, value: rule.value };
+    if (rule.kind === 'ccdx') {
+      if (horizontal) return;
+      horizontal = projection;
+    } else {
+      if (vertical) return;
+      vertical = projection;
+    }
+  }
+  if (!horizontal || !vertical) return;
+  const distance = Math.hypot(horizontal.value, vertical.value);
+  // Each projection can spend at most four linear residuals; their Euclidean norm
+  // spends at most sqrt(32). The direct length adds one, with extra space for roundoff.
+  const margin = 16 * CadNumericPolicy.linearTolerance
+    + 16 * Number.EPSILON * Math.max(distance, value);
+  if (Math.abs(distance - value) <= margin) return;
+  return { horizontal, vertical, distance };
+}
+
 /** Find a locked span and opposite distance that jointly rule out either absolute-distance branch. */
 export function edgeCircleDistanceConflict(shape: Polygon, key: string, value: number) {
   const match = /^cedge([0-3])_(\d+)$/.exec(key);

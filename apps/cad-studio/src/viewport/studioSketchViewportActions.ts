@@ -6,7 +6,7 @@ import { isDefaultPlane } from '@barocss/cad-model/sketch/plane';
 import { commitDimension, commitInlineDimension, dimensionLabel, dimensionValue, drivingDimensionValue, isVerifiedFixedTriangleEdit, type Polygon } from '@barocss/cad-model/sketch/rules';
 import { sketchClick } from '@barocss/cad-model/sketch/select';
 import type { SketchShape, SketchState } from '@barocss/cad-model/sketch/types';
-import { circleDistanceConflict, edgeCircleDistanceConflict, fixedPointDistanceConflict, opposingLengthConflict } from '../sketch/constraintList';
+import { circleAxisPairConflict, circleDistanceConflict, edgeCircleDistanceConflict, fixedPointDistanceConflict, opposingLengthConflict } from '../sketch/constraintList';
 import { matchesStoredTriangle } from '../sketch/fixedTriangleEditor';
 import type { SceneSketchActions } from './SceneViewport';
 
@@ -60,6 +60,7 @@ export function studioSketchViewportActions({ liveShape, sketch, currentSketchSo
     if (!result.ok) {
       const edge = opposingLengthConflict(source, key, value);
       const circle = circleDistanceConflict(source, key, value);
+      const circleAxes = circle ? undefined : circleAxisPairConflict(source, key, value);
       const edgeCircle = edgeCircleDistanceConflict(source, key, value);
       const fixed = fixedPointDistanceConflict(source, key, value);
       if (edgeCircle) {
@@ -69,7 +70,10 @@ export function studioSketchViewportActions({ liveShape, sketch, currentSketchSo
         const [a, b] = fixed.points;
         setConstraintConflict(`${dimensionLabel(source, key)} = ${value} mm conflicts with the ${Number(fixed.distance.toPrecision(15))} mm distance set by fixed points ${a + 1} and ${b + 1}.`, source, fixed.ids);
       } else if (circle) setConstraintConflict(`${dimensionLabel(source, key)} = ${value} mm conflicts with the stored ${circle.axis} distance of ${circle.value} mm.`, source, [circle.id]);
-      else if (edge !== undefined) setConstraintConflict(result.reason, source, [`len:${edge}`]);
+      else if (circleAxes) {
+        const { horizontal, vertical, distance } = circleAxes;
+        setConstraintConflict(`${dimensionLabel(source, key)} = ${value} mm conflicts with the stored horizontal ${horizontal.value} mm and vertical ${vertical.value} mm distances (together ≈ ${Number(distance.toPrecision(10))} mm).`, source, [horizontal.id, vertical.id]);
+      } else if (edge !== undefined) setConstraintConflict(result.reason, source, [`len:${edge}`]);
       else setSketchError(result.reason);
       return;
     }
