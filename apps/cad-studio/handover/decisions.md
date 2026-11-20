@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1455: [Offset the remaining walls of a tilted one-bore plate](notes/offset-tilted-one-bore-plate-walls-2026-11-21/README.md), #17. Verify both cap variants on X−, Y− and Y+ through signed moves, contact refusal and Studio reopen.
 - D1454: [Offset the right wall of a tilted one-bore plate](notes/offset-tilted-one-bore-plate-right-wall-2026-11-21/README.md), #17. Verify both cap variants, exact bore geometry and Studio reopen.
 - D1453: [Offset the four walls of a flat two-bore plate](notes/offset-flat-two-bore-plate-walls-2026-11-21/README.md), #17. Verify both fixed diameters, each nearest-bore contact and Studio reopen.
 - D1452: [Offset the other three walls of a rectangular through-bore plate](notes/offset-bored-plate-other-walls-2026-11-21/README.md), #17. Verify X−, Y− and Y+ signed offsets, bore clearance and Studio reopen.

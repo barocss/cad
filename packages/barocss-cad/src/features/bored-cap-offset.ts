@@ -346,15 +346,22 @@ function admittedCardinalWall(brep: Brep, faceName: string) {
   if (matches.length !== 1 || wall.loops.length !== 1 || wall.surface.kind !== 'surface' || wall.surface.degreeU !== 1) return;
   const stock = admittedAxialStock(brep, boredPlateKind(brep));
   if (!stock?.boreDisks) return;
+  const role = cardinalWallSupport(wall, stock.min, stock.max);
+  if (!role) return;
+  const trim = readWallContinuation(brep, wall, stock.bottom, stock.top, role.axis, role.station);
+  return trim && { ...trim, stock, boreDisks: stock.boreDisks, ...role };
+}
+
+function cardinalWallSupport(wall: BrepFace, min: XY, max: XY) {
+  if (wall.surface.kind !== 'surface') return;
   const support = faceGeometry(wall);
   if (support.kind !== 'plane') return;
   const axis = support.n[0] !== 0 ? 0 : 1, transverse = axis === 0 ? 1 : 0;
   const sign = support.n[axis];
   if ((sign !== 1 && sign !== -1) || support.n[transverse] !== 0 || support.n[2] !== 0) return;
-  const station = (sign === 1 ? stock.max : stock.min)[axis];
+  const station = (sign === 1 ? max : min)[axis];
   if (!wall.surface.controlPoints.every(row => row.every(point => point[axis] === station))) return;
-  const trim = readWallContinuation(brep, wall, stock.bottom, stock.top, axis, station);
-  return trim && { ...trim, stock, boreDisks: stock.boreDisks, axis, sign, station } as const;
+  return { axis, sign, station } as const;
 }
 
 function readWallContinuation(brep: Brep, wall: BrepFace, bottom: BrepFace, top: BrepFace, axis: 0 | 1, station: number) {
@@ -389,10 +396,15 @@ function readWallContinuation(brep: Brep, wall: BrepFace, bottom: BrepFace, top:
 export function boredPlateWallOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
   const admitted = admittedCardinalWall(brep, faceName);
   if (!admitted) {
-    const tilted = admittedTiltedPositiveXWall(brep, faceName);
+    const tilted = admittedTiltedCardinalWall(brep, faceName);
     if (!tilted) return;
-    const { station, min, max, bottomZ, topZ } = tilted, y = (min[1] + max[1]) / 2;
-    return { anchor: [station, y, (bottomZ(station, y) + topZ(station, y)) / 2], normal: [1, 0, 0] };
+    const { axis, sign, station, min, max, bottomZ, topZ } = tilted;
+    const anchor: Point = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, 0], normal: Point = [0, 0, 0];
+    anchor[axis] = station;
+    const [x, y] = anchor;
+    anchor[2] = (bottomZ(x, y) + topZ(x, y)) / 2;
+    normal[axis] = sign;
+    return { anchor, normal };
   }
   const { stock: { min, max, lo, hi }, axis, sign, station } = admitted;
   const anchor: Point = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (lo + hi) / 2], normal: Point = [0, 0, 0];
@@ -417,8 +429,8 @@ function offsetWallStation(brep: Brep, station: number, axis: 0 | 1, sign: 1 | -
 export function offsetBoredPlateWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
   const admitted = admittedCardinalWall(brep, faceName);
   if (!admitted) {
-    const tilted = admittedTiltedPositiveXWall(brep, faceName);
-    return tilted && offsetTiltedPositiveXWall(brep, tilted, distance);
+    const tilted = admittedTiltedCardinalWall(brep, faceName);
+    return tilted && offsetTiltedCardinalWall(brep, tilted, distance);
   }
   const { stock, boreDisks, axis, sign, station, corners, faces, edges } = admitted;
   const { next } = offsetWallStation(brep, station, axis, sign, boreDisks, distance);
@@ -462,20 +474,19 @@ function capHeight({ origin: [ox, oy, oz], normal: [nx, ny, nz] }: AffineChart) 
   return (x: number, y: number) => oz - ((x - ox) * nx + (y - oy) * ny) / nz;
 }
 
-function admittedTiltedPositiveXWall(brep: Brep, faceName: string) {
+function admittedTiltedCardinalWall(brep: Brep, faceName: string) {
   if (brep.faces.length !== stockCounts.bored[0]) return;
   const matches = brep.faces.filter(face => face.name === faceName), [wall] = matches;
   if (matches.length !== 1 || wall.loops.length !== 1 || wall.surface.kind !== 'surface' || wall.surface.degreeU !== 1) return;
   const plate = readTiltedRectangularPlateBore(brep);
   if (!plate) return;
-  const { bottom, top, bore } = plate, support = faceGeometry(wall);
-  if (support.kind !== 'plane' || !same(support.n, [1, 0, 0])) return;
+  const { bottom, top, bore } = plate;
   const points = brep.vertices.map(vertex => vertex.point);
   const xs = points.map(point => point[0]), ys = points.map(point => point[1]);
   const min: XY = [Math.min(...xs), Math.min(...ys)], max: XY = [Math.max(...xs), Math.max(...ys)];
-  const station = max[0];
-  if (!wall.surface.controlPoints.every(row => row.every(point => point[0] === station))) return;
-  const trim = readWallContinuation(brep, wall, bottom, top, 0, station);
+  const role = cardinalWallSupport(wall, min, max);
+  if (!role) return;
+  const trim = readWallContinuation(brep, wall, bottom, top, role.axis, role.station);
   if (!trim || brep.edges.some(edge => edge.vertices.some(id => trim.corners.has(id)) && !line(edge.curve))) return;
 
   const charts = new Map<BrepFace, AffineChart>();
@@ -489,13 +500,15 @@ function admittedTiltedPositiveXWall(brep: Brep, faceName: string) {
     charts.set(face, chart);
   }
   const bottomChart = charts.get(bottom)!, topChart = charts.get(top)!;
-  return { ...trim, wall, bottom, charts, station, min, max, bore, bottomZ: capHeight(bottomChart), topZ: capHeight(topChart) };
+  return { ...trim, ...role, wall, bottom, charts, min, max, bore, bottomZ: capHeight(bottomChart), topZ: capHeight(topChart) };
 }
 
-function offsetTiltedPositiveXWall(brep: Brep, admitted: NonNullable<ReturnType<typeof admittedTiltedPositiveXWall>>, distance: number): Brep {
-  const { station, min: [x0, y0], max: [, y1], bore, bottom, bottomZ, topZ, capCorners, charts, wall } = admitted;
-  const { next, extent } = offsetWallStation(brep, station, 0, 1, [{ center: bore.c, radius: bore.r }], distance);
-  const heights = [x0, next].flatMap(x => [y0, y1].map(y => [bottomZ(x, y), topZ(x, y)]));
+function offsetTiltedCardinalWall(brep: Brep, admitted: NonNullable<ReturnType<typeof admittedTiltedCardinalWall>>, distance: number): Brep {
+  const { axis, sign, station, bore, bottom, bottomZ, topZ, capCorners, charts, wall } = admitted;
+  const { next, extent } = offsetWallStation(brep, station, axis, sign, [{ center: bore.c, radius: bore.r }], distance);
+  const min: XY = [...admitted.min], max: XY = [...admitted.max], bound = sign === 1 ? max : min;
+  bound[axis] = next;
+  const heights = [min[0], max[0]].flatMap(x => [min[1], max[1]].map(y => [bottomZ(x, y), topZ(x, y)]));
   const size = Math.max(extent, geometryScaleMM(heights));
   if (!(size <= CadNumericPolicy.coordinateAbs)) throw new BrepError('GEOMETRY', 'bored wall offset: the wall leaves the modeling range');
   const clearance = linearToleranceMM(size);
@@ -504,11 +517,17 @@ function offsetTiltedPositiveXWall(brep: Brep, admitted: NonNullable<ReturnType<
 
   // The four end vertices belong to the actual cap rails. Intersect the moved wall with
   // those same planes, and rebuild only the incident straight edges from their endpoints.
+  const moveToWall = (point: Point): Point => {
+    const moved: Point = [...point];
+    moved[axis] = next;
+    return moved;
+  };
   const moved = new Map<string, Point>();
   const vertices = brep.vertices.map(vertex => {
     const cap = capCorners.get(vertex.id);
     if (!cap) return vertex;
-    const y = vertex.point[1], z = (cap === bottom ? bottomZ : topZ)(next, y), point: Point = [next, y, z];
+    const point = moveToWall(vertex.point), [x, y] = point;
+    point[2] = (cap === bottom ? bottomZ : topZ)(x, y);
     moved.set(vertex.id, point);
     return { ...vertex, point };
   });
@@ -527,7 +546,7 @@ function offsetTiltedPositiveXWall(brep: Brep, admitted: NonNullable<ReturnType<
     const poles = face.loops.flatMap(id => admitted.loops.get(id)!.coedges.flatMap(use =>
       edgeById.get(admitted.coedges.get(use)!.edge)!.curve.controlPoints));
     const seed = face === wall ? affineChart({ ...original.surface,
-      controlPoints: original.surface.controlPoints.map(row => row.map(([, y, z]): Point => [next, y, z])) }, face.sense) : original;
+      controlPoints: original.surface.controlPoints.map(row => row.map(moveToWall)) }, face.sense) : original;
     const chart = seed && coverAffineTrim(seed, face.sense, poles, roundoff);
     if (!chart) throw new BrepError('GEOMETRY', 'bored wall offset: the offset cannot keep the trim on its planar support within the modeling range');
     for (const id of face.loops) {

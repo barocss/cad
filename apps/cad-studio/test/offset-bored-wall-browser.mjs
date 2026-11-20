@@ -24,7 +24,7 @@ const donorKey = tilt ? 'b' + replacement.target.body.node : undefined;
 const bores = source.nodes.filter(node => node.kind === 'hole').map(({ center, radius }) =>
   ({ center, radius, volume: 10 * Math.PI * radius ** 2 }));
 assert.ok(bores.length === 1 || bores.length === 2);
-assert.ok(!tilt || (view === 'Right' && bores.length === 1 && ['n1.top', 'n1.bottom'].includes(replacement.faces[0])));
+assert.ok(!tilt || (bores.length === 1 && ['n1.top', 'n1.bottom'].includes(replacement.faces[0])));
 const contact = Math.max(...bores.map(({ center, radius }) => sign * (center[axis] - station) + radius));
 const positive = 5, negative = -4, centre = [20, 15, 5], normal = [0, 0, 0];
 centre[axis] = station;
@@ -32,8 +32,11 @@ normal[axis] = sign;
 const removedVolume = bores.reduce((sum, bore) => sum + bore.volume, 0);
 const volumeAt = distance => {
   if (!tilt) return 12000 + distance * (axis === 0 ? 300 : 400) - removedVolume;
-  const width = 40 + distance;
-  return 30 * width * (11 + width / 20) - 98.1 * Math.PI;
+  const min = [0, 0], max = [40, 30];
+  (sign === 1 ? max : min)[axis] = station + sign * distance;
+  const area = (max[0] - min[0]) * (max[1] - min[1]);
+  const meanThickness = 8 + (min[0] + max[0]) / 20 + (min[1] + max[1]) / 10;
+  return area * meanThickness - 98.1 * Math.PI;
 };
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/viewport/Viewport.tsx',
@@ -109,10 +112,10 @@ async function measure(label, doc, distance, before) {
     assert.deepEqual(incidence(native.brep), incidence(before.brep));
     if (tilt) assert.deepEqual(native.donor, before.donor);
     for (const [i, { point }] of before.brep.vertices.entries()) {
-      const [x, y, z] = point;
-      let expected = point.map((value, k) => k === axis && Math.abs(value - station) < 1e-9 ? limit : value);
-      if (tilt && Math.abs(x - station) < 1e-9 && Math.abs(z - fixed) > 1e-9) {
-        expected = [limit, y, capHeight(limit, y)];
+      const expected = [...point];
+      if (Math.abs(point[axis] - station) < 1e-9) {
+        expected[axis] = limit;
+        if (tilt && Math.abs(point[2] - fixed) > 1e-9) expected[2] = capHeight(expected[0], expected[1]);
       }
       native.brep.vertices[i].point.forEach((value, k) => near(value, expected[k]));
     }
@@ -178,7 +181,7 @@ await f.run(async () => {
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const filter = button('Selection filter');
-  await filter.click();
+  if (!(await filter.innerText()).includes('Faces')) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
   const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), centre);
   assert.ok(pixel?.length === 2);
