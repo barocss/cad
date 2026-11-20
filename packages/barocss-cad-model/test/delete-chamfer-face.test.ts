@@ -100,6 +100,34 @@ test('Delete face binds either exact opposite chamfer and refuses their shared d
     const opened = await readStudioFile(encodeStudioFile(healed));
     assert.ok('doc' in opened);
     assert.deepEqual(partBreps(opened.doc), partBreps(healed));
+    const afterFirst = evaluateDoc(opened.doc, 1);
+    assert.ok(afterFirst.ok);
+    const second = (face: string) => dispatchTool({ doc: opened.doc, bodies: afterFirst.bodies }, 'features',
+      { action: 'command', command: 'delete-face', faces: [face], expectedRevision: revisionOf(opened.doc) }, evaluate);
+    for (const invalid of [selected, 'n1.top']) {
+      const refused = await second(invalid);
+      assert.ok(refused.isError && !refused.changed);
+      assert.equal(refused.state.doc, opened.doc);
+    }
+    const finished = await second(peer);
+    assert.ok(finished.changed && !finished.isError, finished.content);
+    const complete = finished.state.doc, terminal = complete.nodes.at(-1);
+    assert.ok(terminal?.kind === 'delete-face' && terminal.sigs?.[peer]);
+    assert.deepEqual(complete.nodes.slice(0, -1), opened.doc.nodes);
+    assert.deepEqual(terminal.parent, { node: 3, side: 'solid' });
+    assert.deepEqual(terminal.faces, [peer]);
+    const [{ brep: stock }] = partBreps(complete);
+    assert.ok(checkBrep(stock, { strict: true }).valid);
+    assert.deepEqual(stock.faces.map(face => [face.name, face.id]).sort(),
+      originalNative.faces.filter(face => !expected.includes(face.name!)).map(face => [face.name, face.id]).sort());
+    assert.ok(Math.abs(brepMassProperties(stock, 1).volume - 12000) < 1e-7);
+    const reopened = await readStudioFile(encodeStudioFile(complete));
+    assert.ok('doc' in reopened);
+    assert.deepEqual(partBreps(reopened.doc), partBreps(complete));
+    const invalid = structuredClone(complete), edit = invalid.nodes.at(-1);
+    assert.ok(edit?.kind === 'delete-face');
+    edit.faces = [selected];
+    assert.match(directFaceDocumentProblem(invalid) ?? '', /supported .*chamfered box/);
   }
   assert.deepEqual(doc, original);
 });

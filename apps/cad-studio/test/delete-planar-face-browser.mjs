@@ -4,11 +4,13 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const [output, input, kind] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
+const [output, input, kind, mode] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
 assert.ok(output && input && isAbsolute(output) && relative(resolve(app, '../..'), output).startsWith('../'));
 assert.ok(['boss', 'chamfer', 'chamfer-top', 'chamfer-bottom', 'double-sw', 'double-ne'].includes(kind));
 const sourceBytes = await readFile(input), source = JSON.parse(sourceBytes);
 const boss = kind === 'boss', double = kind === 'double-sw' || kind === 'double-ne', north = kind === 'double-ne';
+const sequence = mode === 'sequence';
+assert.ok(mode === undefined || (sequence && double));
 const picked = north ? 1 : 0, bevelNames = ['n2.face#1', 'n2.face#2'];
 const selectedFace = boss ? 'n3.top' : double ? bevelNames[picked] : 'n2.face';
 const peer = double ? bevelNames[1 - picked] : undefined, unrelated = boss ? 'n1.top' : north ? 'n1.side2' : 'n1.side0';
@@ -28,7 +30,8 @@ const pins = [
 ];
 const f = await createFlow({
   name: 'delete-planar-face', envFrozen: 'DELETE_PLANAR_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: `Heal the stock by deleting the original planar face of the ${kind}.`,
+  qualification: sequence ? `Heal both opposite bevels in two separate edits starting with ${kind}.`
+    : `Heal the stock by deleting the original planar face of the ${kind}.`,
   limits: [boss ? 'One cylindrical boss fully within the top of a straight rectangular plate.'
     : double ? 'Two separate full-height chamfers at opposite corners of one rectangular box.' : 'One constant full-span box chamfer.'],
   inspectorSource: `
@@ -109,6 +112,19 @@ async function pickFace(point, name) {
   await f.page.evaluate(() => document.activeElement?.blur());
 }
 
+async function faceView(direction) {
+  await button('View cube directions').click();
+  await f.page.getByRole('menuitem', { name: direction, exact: true }).click();
+  await f.page.waitForFunction(expected => {
+    const labels = [...document.querySelectorAll('.view-cube .vc-label')];
+    return labels.length === 1 && labels[0].textContent === expected;
+  }, direction.toUpperCase());
+  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  const filter = button('Selection filter');
+  if (!(await filter.innerText()).includes('Faces')) await filter.click();
+}
+
 async function healAgent() {
   const file = join(output, `mcp-healed-${kind}.bcad`);
   await copyFile(input, file);
@@ -136,6 +152,59 @@ async function healAgent() {
   });
 }
 
+async function finishSequence(original, partial, partialNative, agent) {
+  const file = join(output, 'mcp-both-healed.bcad');
+  await copyFile(agent.file, file);
+  const completeAgent = await withMcpSession({ app, output, clientName: 'delete-chamfer-sequence', autonomy: 3 }, file, kind + '-second', async call => {
+    const bytes = await readFile(file), pin = await call('query', { action: 'render', highlight: [peer] });
+    assert.ok(Object.values(pin.legend).includes(peer));
+    const edit = { action: 'command', command: 'delete-face', faces: [peer], expectedRevision: pin.revision };
+    for (const face of [selectedFace, unrelated]) {
+      await call('features', { ...edit, faces: [face] }, true);
+      assert.deepEqual(await readFile(file), bytes);
+    }
+    await call('features', edit);
+    const finalBytes = await readFile(file);
+    assert.equal((await call('query', { action: 'summary' })).bodies[0].volume, stockVolume);
+    assert.equal((await call('features', edit, true)).code, 'COMMAND_STALE');
+    assert.deepEqual(await readFile(file), finalBytes);
+    return JSON.parse(finalBytes);
+  });
+  f.phase = 'Remove the second chamfer in a separate history entry';
+  await faceView(north ? 'Front' : 'Back');
+  await pickFace(north ? [1, 1, 5] : [39, 29, 5], peer);
+  await f.snapshot('remaining-chamfer-selected');
+  await f.command('Delete face');
+  const panel = f.page.getByRole('dialog', { name: 'Delete face', exact: true });
+  await button('Apply', panel).click();
+  await f.changed(partial);
+  const complete = await f.doc(), last = complete.nodes.at(-1);
+  assert.deepEqual(complete, completeAgent);
+  assert.deepEqual(complete.nodes.slice(0, -1), partial.nodes);
+  assert.deepEqual(last.parent, { node: source.nodes.length, side: 'solid' });
+  assert.deepEqual(last.faces, [peer]);
+  assert.equal(last.sigs[peer].k, 'plane');
+  const result = await inspect('both-healed', complete, stockVolume);
+  assert.deepEqual(result.report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+  result.mass.centroid.forEach((point, i) => near(point, [20, 15, 5][i]));
+  assert.deepEqual(result.brep.faces.map(face => [face.name, face.id]).sort(),
+    original.brep.faces.filter(face => !bevelNames.includes(face.name)).map(face => [face.name, face.id]).sort());
+  for (const edge of source.nodes.at(-1).edges) assert.ok(result.brep.edges.some(item => item.name === edge));
+  await f.undo(); await f.same(partial);
+  assert.deepEqual((await inspect('undo-second', partial, healedVolume)).brep, partialNative.brep);
+  await f.undo(); await f.same(source);
+  assert.deepEqual((await inspect('undo-first', source, sourceVolume)).brep, original.brep);
+  await f.redo(); await f.same(partial);
+  await f.redo(); await f.same(complete);
+  await f.snapshot('both-healed-redone');
+  const saved = await f.save('healed-both-' + kind);
+  await f.freshOpen(saved.file, complete, 'both-healed-reopened');
+  assert.deepEqual((await inspect('both-reopened', complete, stockVolume)).brep, result.brep);
+  await f.freshOpen(file, completeAgent, 'both-healed-mcp-reopened');
+  assert.deepEqual((await inspect('both-mcp-file', completeAgent, stockVolume)).brep, result.brep);
+  assert.deepEqual(await readFile(input), sourceBytes);
+}
+
 await f.run(async () => {
   const origin = new URL(f.server.resolvedUrls.local[0]).origin, newContext = f.browser.newContext.bind(f.browser);
   f.browser.newContext = async options => {
@@ -153,16 +222,7 @@ await f.run(async () => {
   const original = await inspect('source', source, sourceVolume);
 
   f.phase = 'Refuse an unrelated stock plane';
-  await button('View cube directions').click();
-  await f.page.getByRole('menuitem', { name: view, exact: true }).click();
-  await f.page.waitForFunction(expected => {
-    const labels = [...document.querySelectorAll('.view-cube .vc-label')];
-    return labels.length === 1 && labels[0].textContent === expected;
-  }, view.toUpperCase());
-  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
-  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  const filter = button('Selection filter');
-  if (!(await filter.innerText()).includes('Faces')) await filter.click();
+  await faceView(view);
   await pickFace(boss ? [30, 21, 10] : [20, north ? 30 : 0, 5], unrelated);
   await f.page.keyboard.press('Space');
   await f.page.locator('.palette input').fill('Delete face');
@@ -192,6 +252,10 @@ await f.run(async () => {
   assert.deepEqual(edit.parent, { node: source.nodes.length - 1, side: 'solid' });
   assert.equal(edit.sigs[selectedFace].k, 'plane');
   const result = await inspect('healed', healed, healedVolume, original);
+  if (sequence) {
+    await finishSequence(original, healed, result, agent);
+    return;
+  }
   await f.undo(); await f.same(source);
   await f.redo(); await f.same(healed);
   const saved = await f.save('healed-' + kind);

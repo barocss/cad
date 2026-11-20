@@ -509,6 +509,18 @@ type PlanarHealRole = 'boss' | 'chamfer';
 export function planarDeleteFaceTarget(nodes: readonly unknown[], index: number, selected?: string): { name: string; role: PlanarHealRole } | undefined {
   const bossTop = cylindricalBossTopFace(nodes, index);
   if (bossTop) return { name: bossTop, role: 'boss' };
+  const source = nodes[index];
+  if (!textRecord(source) || source.kind !== 'delete-face') return chamferDeleteFaceTarget(nodes, index, selected);
+  const parent = precedingSolidParent(source, index);
+  const removed = Array.isArray(source.faces) && source.faces.length === 1 ? source.faces[0] : undefined;
+  if (parent === undefined || !selected || typeof removed !== 'string' || removed === selected) return;
+  const previous = chamferDeleteFaceTarget(nodes, parent, removed);
+  const remaining = chamferDeleteFaceTarget(nodes, parent, selected);
+  if (previous?.name !== removed || remaining?.name !== selected || deleteFaceRecipeProblem(source, nodes, index)) return;
+  return remaining;
+}
+
+function chamferDeleteFaceTarget(nodes: readonly unknown[], index: number, selected?: string): { name: string; role: 'chamfer' } | undefined {
   const chamfer = nodes[index];
   if (!textRecord(chamfer) || chamfer.kind !== 'chamfer' || !Array.isArray(chamfer.edges) ||
       (chamfer.edges.length !== 1 && chamfer.edges.length !== 2)) return;
