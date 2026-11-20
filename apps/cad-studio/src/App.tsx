@@ -95,6 +95,7 @@ import { ProposalBrowser } from './ui/ProposalBrowser';
 import { DeleteDependentsDialog } from './ui/DeleteDependentsDialog';
 import { useFeatureHistory } from './state/useFeatureHistory';
 import { useAlignHistoryPreview } from './app/useAlignHistoryPreview';
+import { useOppositeFlangeRadiusPreview } from './app/useOppositeFlangeRadiusPreview';
 import { carrySketchSelection } from './state/profileSelection';
 import { BodyBrowserRows } from './ui/BodyBrowserRows';
 import { BodySelectionQuery } from './ui/BodySelectionQuery';
@@ -2917,12 +2918,23 @@ export function App() {
     ...selection.bodies.flatMap(b => bodies[b] ? [{ kind: 'body' as const, name: bodies[b].key }] : []),
   ].slice(0, 12).filter(() => fresh), [selection, bodies, fresh]);
   const evaluateHistoryAlign = useCallback((candidate: StudioDoc) => engine.preview(candidate, revision.current++), [engine]);
-  const historyAlign = useAlignHistoryPreview({ doc, index: editNode, workerSession, enabled: fresh && !busy && marker === null
+  const historyPreviewEnabled = fresh && !busy && marker === null
     && !variants.showing && !active && !sketch && !section && !ghost && !compareOverlay && !rendering && !drawing
     && !measure && !routePanelOpen && !inPlace && !cageEd.session && !skel.session && !assembly.draft && !exploded && !bodyDrag
-    && previewMode === 'none' }, evaluateHistoryAlign);
+    && previewMode === 'none';
+  const historyAlign = useAlignHistoryPreview({ doc, index: editNode, workerSession, enabled: historyPreviewEnabled }, evaluateHistoryAlign);
+  const historyPreviewRevision = useCallback(() => revision.current++, []);
+  const readFlangeHistoryRefs = useCallback((source: StudioDoc, rev: number) => engine.part(source, rev, 'refs'), [engine]);
+  const readFlangeHistoryPreview = useCallback((source: StudioDoc, rev: number) => engine.part(source, rev, 'check'), [engine]);
+  const ownsFlangePreview = useCallback((owner: {doc: StudioDoc; evaluated: StudioDoc; workerSession: number; open: object}) =>
+    docNow.current === owner.doc && evaluatedRef.current === owner.evaluated && workerSessionNow.current === owner.workerSession
+    && openIntent.current === owner.open && markerNow.current === null && !shownVariant.current, []);
+  const oppositeRadiusPreview = useOppositeFlangeRadiusPreview({ doc, evaluated, index: editNode, workerSession,
+    open: openIntent.current, enabled: historyPreviewEnabled }, historyPreviewRevision, readFlangeHistoryRefs, readFlangeHistoryPreview, ownsFlangePreview);
   const alignPreviewBodies = historyAlign.result?.kind === 'ready' ? historyAlign.result.bodies : null;
-  const shownPreviewBodies = previewBodies ?? alignPreviewBodies;
+  const oppositeRadiusPreviewBodies = oppositeRadiusPreview.result?.result.kind === 'ready' ? oppositeRadiusPreview.result.result.bodies : null;
+  const historyPreviewBodies = alignPreviewBodies ?? oppositeRadiusPreviewBodies;
+  const shownPreviewBodies = previewBodies ?? historyPreviewBodies;
   // Session-only inspection never enters document/history or the export source.
   const inspectionOwner = useMemo(() => ({}), [docGeneration, workerSession, project.view.store, doc, evaluated]);
   const inspectionBodies = useMemo(() => bodies.map(body => ({ key: body.key, mesh: body.mesh, hidden: !!lookOf(doc, body).hidden })), [bodies, doc]);
@@ -3247,7 +3259,7 @@ export function App() {
   const meshBoxCrossing = !modelUnavailable && viewBodies === drawnBodies && viewportInstances.length === 0 && previewMode === 'none'
     && !active && !sketch && !drawing && !section && !measure && !inPlace && !assembly.draft
     && !cageEd.session && !skel.session && !ghost && !compareOverlay && !bodyDrag && !animatedOffsets?.size;
-  const viewportPicking = alignPreviewBodies ? { ...picking, onPick: () => {}, onPickBody: () => {},
+  const viewportPicking = historyPreviewBodies ? { ...picking, onPick: () => {}, onPickBody: () => {},
     onPickChain: () => {}, onBoxSelect: () => {}, onContextMenu: () => {} }
     : finishEdgePicking ?? (placedProposal ? { ...picking, onPick: (...args: Parameters<typeof picking.onPick>) => {
     const id = args[0].instance;
@@ -3733,7 +3745,7 @@ export function App() {
             relink: insetRelinkReadinessHere && !insetRelinkReadinessHere.problem ? { start: reviewInsetSource, cancel: insetRelink.cancel, reviewing: !!insetReview } : undefined }}
           worker={engine} canChangeDocument={canChangeDocument} onNotice={setToast}
           editor={{ onFilletStations: publishFilletStations, filletEndpoints: replacementEndpointLocations ?? historyEndpointLocations,
-            alignPreview: historyAlign, readAlignTargets: readAlignHistoryTargets,
+            alignPreview: historyAlign, oppositeRadiusPreview, readAlignTargets: readAlignHistoryTargets,
             edgeReplacement: finishEdgeEditor.available ? { start: finishEdgeEditor.start, cancel: finishEdgeEditor.cancel,
               apply: finishEdgeEditor.apply, draft: finishEdgeEditor.current } : undefined,
             onDraft: reportNodeEditorDraft, pending: parameterEdit?.kind === 'direct',
@@ -3858,7 +3870,7 @@ export function App() {
         mould={mouldShown} isoclines={isoclines} proposal={ghost ? proposalOverlay : compareOverlay}
         instanceSelection={assembly.draft ? assembly.highlight.instances : steppedSelection} instanceFaces={mateFaces ? assembly.highlight.instanceFaces : measuredInstanceFaces}
         placing={!!active?.placing} placeSkip={placeSkip} onSpot={onSpot}
-        bodyColors={bodyColors} faceColors={faceColors} pickedVertices={modelUnavailable || alignPreviewBodies ? undefined : selection.vertices} hiddenBodies={hiddenBodies}
+        bodyColors={bodyColors} faceColors={faceColors} pickedVertices={modelUnavailable || historyPreviewBodies ? undefined : selection.vertices} hiddenBodies={hiddenBodies}
         snapStep={snapStep} pickFilter={finishEdgePicking || (active?.fillet?.type === 'edge' && pickFilter === 'edge') ? 'edge' : active ? 'all' : pickFilter} hoverBody={shownPreviewBodies ? null : rowHover}
         picking={viewportPicking} meshBoxCrossing={meshBoxCrossing} sketchActions={sketchViewportActions} sketchSnaps={{ twoPoint: twoPointSnap.input, extension: arcExtensionSnap.input, crossingBodies, placed: placedSketchSnaps, objectKinds: objectSnapKinds }} onCursor={onCursor}
         boundsBox={fresh && showBox ? (() => {

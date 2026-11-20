@@ -7,6 +7,7 @@ import { proveFlangeMeasureChange } from './flangeMeasureHistory';
 import { isSheetReliefThicknessChange, admitSheetReliefThicknessChange, proveSheetReliefThicknessChange } from './sheetReliefThicknessHistory';
 import { isFlangePositionChange } from '@barocss/cad-model/app/flangePositionEdit';
 import { proveFlangePositionChange } from './flangePositionHistory';
+import { checkOppositeFlangeRadiusApply } from './oppositeFlangeRadiusHistory';
 import { flangeRadiusEdit } from '@barocss/cad-model/app/flangeRadiusEdit';
 import { canonical } from '@barocss/cad-model/util/revision';
 import { isFilletRadiusModeChange, proveFilletRadiusModeChange } from './filletRadiusModeHistory';
@@ -57,6 +58,27 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     const flangeRadiusSourceSource = flangeRadiusSourceChanged ? canonical(doc) : '', flangeRadiusSourceDraft = flangeRadiusSourceChanged ? canonical(nodes) : '';
     const flangeRadiusChanged = oldFlange?.kind === 'sheet-flange' && newFlange?.kind === 'sheet-flange'
       && canonical(oldFlange.bendRadius) !== canonical(newFlange.bendRadius);
+    // The four-node own-radius case must never fall through to generic History Apply.
+    if (flangeRadiusChanged && !flangeRadiusSourceChanged && doc.nodes.length === 4 && editNode === 3) {
+      const next = { ...doc, nodes };
+      const stamp = { scope: owner.scope(), worker: owner.worker(), open: owner.open() };
+      const current = () => ownsDraft() && canChangeDocument() && fresh && !busy
+        && owner.document() === doc && owner.evaluated() === evaluated && owner.marker() === null && !owner.variant()
+        && owner.scope() === stamp.scope && owner.worker() === stamp.worker && owner.open() === stamp.open;
+      const beforeKey = canonical(doc), nextKey = canonical(next);
+      return checkOppositeFlangeRadiusApply(doc, next, editNode, {
+        current, nextRevision,
+        refs: (source, revision) => engine.part(source, revision, 'refs'),
+        evaluate: (source, revision) => engine.evaluate(source, revision),
+      }).then(result => {
+        if (result === 'stale' || !current() || canonical(doc) !== beforeKey || canonical(next) !== nextKey) return;
+        if (result !== 'proved') return {
+          title: 'Bend radius not applied', hint: 'Apply only the second Flange’s own radius on the unchanged opposite full-width edge.',
+          detail: 'The original document, bend geometry and references are unchanged.',
+        };
+        commit(next);
+      });
+    }
     if (flangeRadiusChanged && !flangeRadiusSourceChanged && !flangeRadiusEdit(doc, nodes, editNode)) return Promise.resolve({
       title: 'Bend radius not applied', hint: 'Apply only the bend radius change on the unchanged Flange first. Apply Length or Angle changes separately.',
       detail: 'The original document and sheet geometry are unchanged.',

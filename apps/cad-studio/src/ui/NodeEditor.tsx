@@ -1,3 +1,5 @@
+import { oppositeFlangeOwnRadiusField } from '../state/oppositeFlangeRadiusHistory';
+import type { useOppositeFlangeRadiusPreview } from '../app/useOppositeFlangeRadiusPreview';
 import { heldFinishRadiusText } from '../state/heldFinishReplacement';
 import { SewSourceList } from './SewSourceList';
 import { splitPlaneProblem } from '@barocss/cad-model/app/splitPlaneInput';
@@ -35,7 +37,7 @@ function invalidInteger(value: number, range: { min: number; max: number }): boo
   return !Number.isInteger(value) || value < range.min || value > range.max;
 }
 
-export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, onApply, onClose, onEditSketch, onRelinkInset, insetRelinkProblem, onDetachInset, insetSourceWidth, onDelete, readFaceEndDistance, onPickEndFace, onReplaceAxis, onEditOffset, onEditDraft, onEditSharedHoleLayout, savedFeatureEdit, savedPathEdit, savedReliefShapeEdit, savedPartialRadiusSourceEdit, readAlignTargets, alignPreview, edgeReplacement, parameters, onRefuse, bearingAssembly, doc, onDraft, pending = false, pendingLabel = 'Checking the current bearing and housing…' }: { onFilletStations?(draft: FilletStationDraft): () => void; filletEndpoints?: FilletEndpoints | null; nodes: ModelNode[]; index: number; onApply(nodes: ModelNode[], ownsDraft: () => boolean, sourceWidth?: number): void | Promise<FeatureFailure | undefined>; onClose(): void; onEditSketch?(): void; onRelinkInset?: { start(opener: HTMLButtonElement): void; cancel(): void; reviewing: boolean }; insetRelinkProblem?: string; onDetachInset?(): void; insetSourceWidth?: number; onDelete?(opener: HTMLElement): void; readFaceEndDistance?(): Promise<FaceEndDistanceReply>; onPickEndFace?(): void; onReplaceAxis?(): void; onEditOffset?(): void; onEditDraft?(): void; onEditSharedHoleLayout?(): void; savedFeatureEdit?: { label: string; start(): void }; savedPathEdit?: { label: string; start(): void }; savedReliefShapeEdit?: { label: string; start(): void }; savedPartialRadiusSourceEdit?: { label: string; start(): void }; readAlignTargets?(): Promise<AlignTargetOption[]>; alignPreview?: ReturnType<typeof useAlignHistoryPreview>; edgeReplacement?: { start(): void; cancel(): void; apply(): void; draft: { name: string | null; pending?: boolean; endpoints?: {start: readonly number[]; end: readonly number[]; stations?: {label:string; at:readonly number[]; fraction:number}[]} } | null }; parameters: Record<string, number>; onRefuse(message: string): void; bearingAssembly?: BearingAssemblyInput; doc?: StudioDoc; onDraft?(owner: object | null): void; pending?: boolean; pendingLabel?: string }) {
+export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, onApply, onClose, onEditSketch, onRelinkInset, insetRelinkProblem, onDetachInset, insetSourceWidth, onDelete, readFaceEndDistance, onPickEndFace, onReplaceAxis, onEditOffset, onEditDraft, onEditSharedHoleLayout, savedFeatureEdit, savedPathEdit, savedReliefShapeEdit, savedPartialRadiusSourceEdit, readAlignTargets, alignPreview, oppositeRadiusPreview, edgeReplacement, parameters, onRefuse, bearingAssembly, doc, onDraft, pending = false, pendingLabel = 'Checking the current bearing and housing…' }: { onFilletStations?(draft: FilletStationDraft): () => void; filletEndpoints?: FilletEndpoints | null; nodes: ModelNode[]; index: number; onApply(nodes: ModelNode[], ownsDraft: () => boolean, sourceWidth?: number): void | Promise<FeatureFailure | undefined>; onClose(): void; onEditSketch?(): void; onRelinkInset?: { start(opener: HTMLButtonElement): void; cancel(): void; reviewing: boolean }; insetRelinkProblem?: string; onDetachInset?(): void; insetSourceWidth?: number; onDelete?(opener: HTMLElement): void; readFaceEndDistance?(): Promise<FaceEndDistanceReply>; onPickEndFace?(): void; onReplaceAxis?(): void; onEditOffset?(): void; onEditDraft?(): void; onEditSharedHoleLayout?(): void; savedFeatureEdit?: { label: string; start(): void }; savedPathEdit?: { label: string; start(): void }; savedReliefShapeEdit?: { label: string; start(): void }; savedPartialRadiusSourceEdit?: { label: string; start(): void }; readAlignTargets?(): Promise<AlignTargetOption[]>; alignPreview?: ReturnType<typeof useAlignHistoryPreview>; oppositeRadiusPreview?: ReturnType<typeof useOppositeFlangeRadiusPreview>; edgeReplacement?: { start(): void; cancel(): void; apply(): void; draft: { name: string | null; pending?: boolean; endpoints?: {start: readonly number[]; end: readonly number[]; stations?: {label:string; at:readonly number[]; fraction:number}[]} } | null }; parameters: Record<string, number>; onRefuse(message: string): void; bearingAssembly?: BearingAssemblyInput; doc?: StudioDoc; onDraft?(owner: object | null): void; pending?: boolean; pendingLabel?: string }) {
   // The draft is the whole node list: a sketch dimension changes the sketch the feature is made from.
   const [draft, setDraft] = useState<ModelNode[]>(nodes);
   const [stationDraftOrigin, setStationDraftOrigin] = useState({nodes,index});
@@ -80,7 +82,8 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
   };
   const original = nodes[index], originalLoft = original?.kind === 'loft' ? original : undefined;
   const sharedHolePair = onEditSharedHoleLayout ? sharedHoleLayoutPair(nodes, index) : null;
-  const fields = editFields(draft, index, parameters, bearingAssembly, { doc, originalLoft }).filter(f => f.kind !== 'number' || !Number.isNaN(f.get(draft)));
+  const ownRadiusField = oppositeRadiusPreview?.enabled && sameDraftScope ? oppositeFlangeOwnRadiusField(doc, draft, index) : null;
+  const fields = [...editFields(draft, index, parameters, bearingAssembly, { doc, originalLoft }), ...(ownRadiusField ? [ownRadiusField] : [])].filter(f => f.kind !== 'number' || !Number.isNaN(f.get(draft)));
   const changeNumber = (field: Extract<(typeof fields)[number], { kind: 'number' }>, text: string) => {
     retireEvaluation();
     setTyped(values => ({ ...values, [field.key]: text }));
@@ -192,8 +195,19 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
     if (previewAlignDraft && draft[index]?.kind === 'align' && nodes[index]?.kind === 'align') return readAlignPreview?.(draft);
   }, [readAlignPreview, previewAlignDraft, draft, nodes, index]);
   const alignResult = previewAlignDraft ? alignPreview?.result : null;
+  const oppositeRadiusChanged = index === 3 && nodes.length === 4 && original?.kind === 'sheet-flange'
+    && node?.kind === 'sheet-flange' && original.bendRadius !== node.bendRadius;
+  const readOppositeRadius = oppositeRadiusPreview?.read;
+  const canPreviewOppositeRadius = oppositeRadiusChanged && !!ownRadiusField && !ordinaryLocked && !hasInvalidNumber;
+  useLayoutEffect(() => {
+    if (canPreviewOppositeRadius) return readOppositeRadius?.(draft);
+  }, [readOppositeRadius, canPreviewOppositeRadius, draft]);
+  const oppositeRadiusResult = canPreviewOppositeRadius && oppositeRadiusPreview?.result?.nodes === draft
+    ? oppositeRadiusPreview.result.result : null;
+  const blockOppositeRadiusApply = oppositeRadiusChanged && oppositeRadiusResult?.kind !== 'ready';
+
   const apply = (opener?: HTMLElement) => {
-    if (!changed || pending || edgeReplacement?.draft || incompleteInset || hasInvalidNumber || lengthProblem || request.current
+    if (!changed || pending || blockOppositeRadiusApply || edgeReplacement?.draft || incompleteInset || hasInvalidNumber || lengthProblem || request.current
       || node?.kind === 'extrude' && current?.error?.historyField === 'draft') return;
     setModeProblem(null);
     const ticket = {};
@@ -414,12 +428,15 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
       {draft[index]?.kind === 'fill-feature-pattern' && <FillPatternHints />}
       {onDelete && <button className="ghost danger" disabled={ordinaryLocked} aria-label="Delete feature" title="Delete this feature (and the sketch only it uses) · Undo restores it" onClick={event => remove(event.currentTarget)}><Icon name="delete" small /> Delete feature</button>}
       {pending && <div className="empty" role="status">{pendingLabel}</div>}
+      {!current && oppositeRadiusResult?.kind === 'pending' && <div role="status">Checking bend radius preview…</div>}
+      {!current && oppositeRadiusResult?.kind === 'ready' && <div role="status">Bend radius preview</div>}
+      {!current && oppositeRadiusChanged && (!canPreviewOppositeRadius || oppositeRadiusResult?.kind === 'refused') && <div role="status">The bend radius preview is unavailable. {canPreviewOppositeRadius ? 'Check the radius and flange length, or reset the draft.' : 'Edit only the second Flange’s own radius, or reset the draft.'}</div>}
       {!current && alignResult?.kind === 'pending' && <div className="empty" role="status">Checking Align preview…</div>}
       {!current && alignResult?.kind === 'ready' && <div className="small" role="status">Align preview</div>}
       {!current && alignResult?.kind === 'error' && <FeatureFailureNotice error={alignResult.error} />}
       <div ref={failureArea} className={current?.error?.linkedInsetFeature ? 'scroll-mb-2' : undefined}>
         {current?.error && !(node?.kind === 'extrude' && current.error.historyField === 'draft') && <FeatureFailureNotice id={guideGapError ? `${guideDescriptionId}-gap` : current.error.historyField ? historyErrorId : undefined} error={current.error} />}
-        {fields.length > 0 && <div className="row-actions"><button ref={applyButton} className="primary" disabled={!changed || pending || !!edgeReplacement?.draft || incompleteInset || hasInvalidNumber || !!lengthProblem || (current !== null && (!current.error || node?.kind === 'extrude' && current.error.historyField === 'draft'))} onClick={event => apply(event.currentTarget)}>Apply</button><button ref={resetButton} className="ghost" disabled={(!changed && !hasInsetDraft && !incompleteInset && !hasInvalidNumber && !lengthProblem && !loftGuideChoice) || pending} onClick={() => { retireEvaluation(); setDraft(nodes); setTyped({}); setLengthProblem(null); setLoftGuideChoice(null); }}>Reset</button></div>}
+        {fields.length > 0 && <div className="row-actions"><button ref={applyButton} className="primary" disabled={!changed || pending || blockOppositeRadiusApply || !!edgeReplacement?.draft || incompleteInset || hasInvalidNumber || !!lengthProblem || (current !== null && (!current.error || node?.kind === 'extrude' && current.error.historyField === 'draft'))} onClick={event => apply(event.currentTarget)}>Apply</button><button ref={resetButton} className="ghost" disabled={(!changed && !hasInsetDraft && !incompleteInset && !hasInvalidNumber && !lengthProblem && !loftGuideChoice) || pending} onClick={() => { retireEvaluation(); setDraft(nodes); setTyped({}); setLengthProblem(null); setLoftGuideChoice(null); }}>Reset</button></div>}
       </div>
     </div>
   );

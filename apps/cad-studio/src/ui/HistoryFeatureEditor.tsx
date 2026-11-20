@@ -36,7 +36,7 @@ interface Props {
   commands: { ctx: Ctx; discardFeatureDraft(): void; closeForCommand(): void;
     setActive: Dispatch<SetStateAction<Active | null>>; editSketch(index: number): void; replaceAxis?(): void };
   inset: { roundedPending: boolean; detach(): void; problem?: string; relink: Editor['onRelinkInset'] };
-  editor: Pick<Editor, 'onFilletStations' | 'filletEndpoints' | 'alignPreview' | 'readAlignTargets' |
+  editor: Pick<Editor, 'onFilletStations' | 'filletEndpoints' | 'alignPreview' | 'oppositeRadiusPreview' | 'readAlignTargets' |
     'edgeReplacement' | 'onDraft' | 'pending' | 'onApply' | 'onDelete' | 'onClose'>;
   worker: Pick<EngineClient, 'faceEndDistance'>;
   canChangeDocument(): boolean;
