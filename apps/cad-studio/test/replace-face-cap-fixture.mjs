@@ -1,6 +1,39 @@
 const unit = vector => vector.map(value => value / Math.hypot(...vector));
 export const HEX_CAP_FOOTPRINT = [[0, 0], [18, 0], [24, 8], [18, 16], [0, 16], [-6, 8]];
 
+export function hexWallCase() {
+  const origin = [63, 60, 0], normal = unit([-4, 3, 4 / 5]), xAxis = unit([3, 4, 0]);
+  const yAxis = unit([-16 / 5, 12 / 5, -25]);
+  const referencePick = origin.map((value, i) => value + 4 * (xAxis[i] + yAxis[i]));
+  const otherPick = referencePick.map((value, i) => value + 3 * normal[i] + (i === 0 ? 2 : 0));
+  return {
+    referencePick, otherPick,
+    sketch: { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [8, 8], plane: { origin, normal, xAxis } },
+    distance: (_y, z) => 4 * z / 25,
+    movedDistance: (_y, z) => 4 * z / 25 + 8 / 5,
+    retargetedDistance: (_y, z) => 4 * z / 25 + 8 / 5 - 3 * Math.sqrt(641) / 25,
+  };
+}
+
+// The new wall is 4x - 3y = 72 + 5d. Intersect it with the two fixed adjacent walls.
+export function hexWallSection(d) {
+  return [HEX_CAP_FOOTPRINT[0], [18 + 5 * d / 4, 0], [24 + 5 * d / 8, 8 - 5 * d / 6], ...HEX_CAP_FOOTPRINT.slice(3)];
+}
+
+export function hexWallOracle(distance) {
+  const stations = [0, 5, 10].map(z => {
+    const points = hexWallSection(distance(0, z));
+    const sums = points.reduce(([area, x, y], p, i) => {
+      const q = points[(i + 1) % points.length], cross = p[0] * q[1] - p[1] * q[0];
+      return [area + cross / 2, x + (p[0] + q[0]) * cross / 6, y + (p[1] + q[1]) * cross / 6];
+    }, [0, 0, 0]);
+    return [...sums, z * sums[0]];
+  });
+  // Each sectional moment is at most cubic in Z, so Simpson integration is exact.
+  const [volume, ...moment] = stations[0].map((v, i) => 10 * (v + 4 * stations[1][i] + stations[2][i]) / 6);
+  return { volume, centroid: moment.map(value => value / volume) };
+}
+
 /** A stock cap and a separate 8 × 8 × 3 mm reference extruded from the exact tilted plane. */
 export function capCase(variant) {
   const drafted = variant.startsWith('drafted-'), hex = variant.startsWith('hex-');

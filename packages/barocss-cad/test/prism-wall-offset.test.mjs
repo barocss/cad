@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { checkBrep, evaluateCadPart, faceGeometry, reevaluate } from '../dist/index.js';
 import { transformBrep } from '../dist/brep/brep-transform.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
-import { offsetPrismWall, prismCapReplacementFrame, prismWallOffsetFrame, replacePrismCapIfAdmitted } from '../dist/features/prism-wall-offset.js';
+import {
+  offsetPrismWall, prismCapReplacementFrame, prismWallOffsetFrame, prismWallReplacementFrame,
+  replacePrismCapIfAdmitted, replacePrismWallIfAdmitted,
+} from '../dist/features/prism-wall-offset.js';
 
 const footprint = [[0, 0], [18, 0], [24, 8], [18, 16], [0, 16], [-6, 8]];
 const selected = 'n1.side1';
@@ -83,6 +86,69 @@ test('prism cap replacement refuses unsupported stock and unsuitable donor plane
     assert.equal(prismCapReplacementFrame(brep, name), undefined);
     assert.equal(replacePrismCapIfAdmitted(brep, name, { origin, normal: [-1, -2, 10] }), undefined);
   }
+});
+
+test('replace an oblique hexagonal prism wall with an exact plane that tilts over Z', () => {
+  const doc = part(), source = solidOf(doc), before = structuredClone(source);
+  const plane = { origin: [18, 0, 0], normal: [-4, 3, 4 / 5] };
+  pointClose(prismWallReplacementFrame(source, selected).normal, [0.8, -0.6, 0]);
+  const change = { id: 'replace', kind: 'replace-face', target: 'n1', face: selected, plane };
+  const result = solidOf({ ...doc, features: [...doc.features, change] });
+  const report = checkBrep(result, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 36, edges: 18, vertices: 12 });
+  assert.ok(report.maximumPcurveGap < 1e-9);
+  assert.ok(report.maximumEdgeSurfaceGap < 1e-9);
+  assert.deepEqual(identity(result), identity(source));
+  const moved = faceOf(result, selected);
+  pointClose(faceGeometry(moved).n, [20, -15, -4].map(v => v / Math.sqrt(641)));
+  for (const point of moved.surface.controlPoints.flat()) close(4 * point[0] - 3 * point[1] - 4 * point[2] / 5, 72);
+  for (const face of source.faces) {
+    if (face.name === selected) continue;
+    const support = faceGeometry(face), changed = faceOf(result, face.name);
+    pointClose(faceGeometry(changed).n, support.n);
+    for (const point of changed.surface.controlPoints.flat())
+      close(point.reduce((sum, value, axis) => sum + (value - support.o[axis]) * support.n[axis], 0), 0);
+  }
+  for (const [i, vertex] of source.vertices.entries()) {
+    const [x, y, z] = vertex.point, k = footprint.findIndex(point => point[0] === x && point[1] === y);
+    pointClose(result.vertices[i].point, [...footprintAt(4 * z / 25)[k], z]);
+  }
+  const mass = brepMassProperties(result, 1);
+  assert.equal(mass.method, 'planar-exact');
+  close(mass.volume, 35240 / 9, 1e-7);
+  assert.deepEqual(result, replacePrismWallIfAdmitted(source, selected, { ...plane, normal: plane.normal.map(v => -v) }));
+  assert.deepEqual(source, before);
+});
+
+test('replace a Y-min hexagonal prism wall and preserve both cap stations', () => {
+  const source = solidOf(), face = 'n1.side0';
+  const result = replacePrismWallIfAdmitted(source, face, { origin: [0, 0, 0], normal: [0, -1, -1 / 10] });
+  assert.equal(checkBrep(result, { strict: true }).valid, true);
+  assert.deepEqual(identity(result), identity(source));
+  for (const [i, vertex] of source.vertices.entries()) {
+    const [x, y, z] = vertex.point, d = z / 10;
+    pointClose(result.vertices[i].point, y === 0 ? [x + (x === 0 ? 3 : -3) * d / 4, -d, z] : [x, y, z]);
+  }
+  close(brepMassProperties(result, 1).volume, 3927.5, 1e-7);
+});
+
+test('prism wall replacement refuses a collapsed end and an unsupported donor direction', () => {
+  const source = solidOf(), before = structuredClone(source), normal = [-4, 3, 4 / 5];
+  // Each listed donor contact or crossing still has a positive integrated signed volume.
+  for (const x of [28, 29, 6, 5]) {
+    const offset = z => 4 * (x - 18) / 5 + 4 * z / 25;
+    assert.ok(10 * (area(footprintAt(offset(0))) + 4 * area(footprintAt(offset(5))) + area(footprintAt(offset(10)))) / 6 > 0);
+    assert.throws(() => replacePrismWallIfAdmitted(source, selected, { origin: [x, 0, 0], normal }), /collapse or cross a wall/);
+  }
+  for (const direction of [[4, -3, 0], [4, -3, 1e-10]]) {
+    assert.throws(() => replacePrismWallIfAdmitted(source, selected, { origin: [18, 0, 0], normal: direction }), /tilt is too small/);
+  }
+  assert.throws(() => replacePrismWallIfAdmitted(source, selected, { origin: [18, 0, 0], normal: [0, 0, 1] }), /perpendicular/);
+  assert.throws(() => replacePrismWallIfAdmitted(source, selected, { origin: [18, 0, 0], normal: [4, -2, -4 / 5] }), /horizontal direction/);
+  assert.equal(prismWallReplacementFrame(source, 'n1.top'), undefined);
+  assert.equal(replacePrismWallIfAdmitted(source, 'n1.top', { origin: [18, 0, 0], normal }), undefined);
+  assert.deepEqual(source, before);
 });
 
 for (const distance of [1, -2, -9.599, 9.599]) {

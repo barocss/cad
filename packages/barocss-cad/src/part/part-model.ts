@@ -66,7 +66,7 @@ import type { EndpointBead } from './part-frame.js';
 import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
 import { offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
-import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted } from '../features/prism-wall-offset.js';
+import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallIfAdmitted } from '../features/prism-wall-offset.js';
 import { healBoredPlateIfAdmitted, offsetBoredCapIfAdmitted } from '../features/bored-cap-offset.js';
 import { healAnalyticLFilletIfAdmitted } from '../features/heal-analytic-l-fillet.js';
 import { healPrismaticFilletIfAdmitted } from '../features/heal-prismatic-fillet.js';
@@ -656,7 +656,8 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         if (brep.faces.filter(candidate => candidate.name === face).length !== 1)
           return fail('REFERENCE', 'Replace face: the selected native face is missing or ambiguous.');
         try {
-          const replaced = replacePrismCapIfAdmitted(brep, face, plane) ?? replaceRectangularSolidFace(brep, face, plane);
+          const replaced = replacePrismCapIfAdmitted(brep, face, plane) ?? replacePrismWallIfAdmitted(brep, face, plane)
+            ?? replaceRectangularSolidFace(brep, face, plane);
           return one({ kind: 'brep', brep: replaced });
         } catch (cause) {
           if (cause instanceof BrepError) return fail(cause.code === 'INPUT' ? 'INPUT' : 'GEOMETRY', cause.message.replace(/^B-rep: /, ''));

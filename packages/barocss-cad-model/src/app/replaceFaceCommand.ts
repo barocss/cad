@@ -4,7 +4,7 @@ import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
 import { captureOffsetPlane, offsetPlaneStep, pickReferencePlane, restoreOffsetPlaneValues } from './offsetPlanePick';
 
-const SOURCE = 'Select a planar face of a rectangular extrusion or a straight hexagonal prism cap.';
+const SOURCE = 'Select a planar face of a rectangular extrusion or a straight convex hexagonal prism.';
 const REFERENCE = 'Pick a tilted face on another solid.';
 
 function pickedFace(ctx: Ctx) {
@@ -15,14 +15,14 @@ function pickedFace(ctx: Ctx) {
   if (!parent || parent.side !== 'solid' ||
       !face?.name || face.nativePlaneName !== face.name || face.exact?.kind !== 'plane') return;
   const boxFace = face.nativeAxisPlane && isBoxReplacementSource(ctx.doc.nodes, parent.node);
-  const hexCap = face.nativeAxisPlane?.axis === 'z' && isStraightHexagonalExtrusion(ctx.doc.nodes, ctx.doc.nodes[parent.node]);
-  if (!boxFace && !hexCap && !isDraftedFaceReplacementSource(ctx.doc.nodes, parent.node)) return;
+  const hexFace = isStraightHexagonalExtrusion(ctx.doc.nodes, ctx.doc.nodes[parent.node]);
+  if (!boxFace && !hexFace && !isDraftedFaceReplacementSource(ctx.doc.nodes, parent.node)) return;
   return { parent, face: face.name };
 }
 
 export const replaceFaceCommand: Command = {
   id: 'replace-face', label: 'Replace face', icon: 'cad-offset-face', group: 'modify',
-  hint: 'Replace a rectangular extrusion face or a straight hexagonal prism cap with a tilted plane.',
+  hint: 'Replace a planar face of a rectangular extrusion or a straight convex hexagonal prism with a tilted plane.',
   keywords: 'replace face plane tilt wall cap reextend direct edit',
   available: ctx => pickedFace(ctx) ? { ok: true } : { ok: false, reason: SOURCE },
   fields: () => [],

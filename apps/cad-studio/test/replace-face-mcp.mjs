@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import { copyFile, mkdir, readFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { withMcpSession } from './mcp-browser-session.mjs';
-import { capCase, draftedCapOracle, HEX_CAP_FOOTPRINT } from './replace-face-cap-fixture.mjs';
+import { capCase, draftedCapOracle, HEX_CAP_FOOTPRINT, hexWallCase, hexWallOracle } from './replace-face-cap-fixture.mjs';
 
 const [output, variant = 'height'] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
 assert.ok(output && isAbsolute(output) && relative(resolve(app, '../..'), output).startsWith('../'));
-assert.ok(['height', 'diagonal', 'upper', 'lower', 'drafted-upper', 'drafted-lower', 'drafted-wall', 'hex-upper', 'hex-lower'].includes(variant));
-const draftedWall = variant === 'drafted-wall', diagonal = variant === 'diagonal' || draftedWall;
+assert.ok(['height', 'diagonal', 'upper', 'lower', 'drafted-upper', 'drafted-lower', 'drafted-wall', 'hex-upper', 'hex-lower', 'hex-wall'].includes(variant));
+const hexWall = variant === 'hex-wall' ? hexWallCase() : undefined;
+const draftedWall = variant === 'drafted-wall', diagonal = variant === 'diagonal' || draftedWall || !!hexWall;
 const cap = capCase(variant);
 const unit = vector => vector.map(value => value / Math.hypot(...vector));
 const profile = diagonal
@@ -20,7 +21,7 @@ const file = join(output, 'mcp-replaced.bcad');
 const source = join(output, 'box-and-reference.bcad');
 
 await withMcpSession({ app, output, clientName: 'barocss-replace-face', autonomy: 3 }, file, 'replace-face', async call => {
-  if (cap?.hex) {
+  if (cap?.hex || hexWall) {
     await call('features', { action: 'add', features: [
       { kind: 'sketch', profile: 'polygon', points: HEX_CAP_FOOTPRINT },
       { kind: 'extrude', sketch: 0, height: 10 },
@@ -34,7 +35,7 @@ await withMcpSession({ app, output, clientName: 'barocss-replace-face', autonomy
     await call('features', { action: 'command', command: 'box', values: { w: 40, d: 30, h: 10, x: 0, y: 0, z: 0 } });
   }
   await call('features', { action: 'add', features: [
-    cap?.sketch ?? profile,
+    cap?.sketch ?? hexWall?.sketch ?? profile,
     { kind: 'extrude', sketch: 2, height: diagonal || cap ? 3 : 10 },
     { kind: 'translate', parent: { node: 3, side: 'solid' }, offset: [0, 0, 0] },
   ] });
@@ -55,7 +56,7 @@ await withMcpSession({ app, output, clientName: 'barocss-replace-face', autonomy
   assert.equal(node.target.face, faces[1]);
   const { bodies } = await call('query', { action: 'summary' });
   assert.equal(bodies.length, 2);
-  const targetVolume = draftedWall ? 35215 / 3 : cap?.drafted ? draftedCapOracle(cap, cap.height).volume :
+  const targetVolume = hexWall ? hexWallOracle(hexWall.distance).volume : draftedWall ? 35215 / 3 : cap?.drafted ? draftedCapOracle(cap, cap.height).volume :
     cap?.hex ? 4032 : cap ? 15600 : diagonal ? 12300 : 11850;
   assert.ok(Math.abs(bodies.find(body => body.key === 'b5').volume - targetVolume) <= 5e-4);
   assert.ok(Math.abs(bodies.find(body => body.key === 'b4').volume - (diagonal || cap ? 192 : 950)) < 1e-7);
