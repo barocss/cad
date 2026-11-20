@@ -516,15 +516,20 @@ export function planarDeleteFaceTarget(nodes: readonly unknown[], index: number)
   if (parent === undefined || !isBoxReplacementSource(nodes, parent)) return;
   const stock = nodes[parent], id = textRecord(stock) && typeof stock.id === 'string' ? stock.id : `n${parent}`;
   const walls = [0, 1, 2, 3].map(side => `${id}.side${side}`);
-  const ends = chamfer.edges[0].split('|').map(name => walls.indexOf(name)), [a, b] = ends;
-  if (ends.length !== 2 || a < 0 || b < 0 || (a + b) % 2 !== 1) return;
+  const ends = chamfer.edges[0].split('|');
+  if (ends.length !== 2) return;
+  const [a, b] = ends.map(name => walls.indexOf(name));
+  const sideEdge = a >= 0 && b >= 0 && (a + b) % 2 === 1;
+  const capEdge = (a >= 0 || b >= 0) && ends.some(name => name === id + '.top' || name === id + '.bottom');
+  if (!sideEdge && !capEdge) return;
   const name = typeof chamfer.id === 'string' ? chamfer.id : `n${index}`;
   return { name: name + '.face', role: 'chamfer' };
 }
 
 export function planarDeleteFaceDirection(dir: readonly number[], role: PlanarHealRole): boolean {
   return role === 'boss' ? dir[0] === 0 && dir[1] === 0 && dir[2] === 1
-    : dir[2] === 0 && Math.abs(Math.abs(dir[0]) - Math.SQRT1_2) < 1e-8 && Math.abs(Math.abs(dir[1]) - Math.SQRT1_2) < 1e-8;
+    : dir.length === 3 && dir.some(value => value === 0) &&
+      dir.filter(value => Math.abs(Math.abs(value) - Math.SQRT1_2) < 1e-8).length === 2;
 }
 
 function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly unknown[], index: number): string | null {

@@ -11,8 +11,14 @@ import { revisionOf } from '../src/util/revision';
 const source = (edge = 'n1.side0|n1.side3') => withNode(rectanglePart(40, 30, 10),
   { kind: 'chamfer', parent: { node: 1, side: 'solid' }, edges: [edge], distance: 2 });
 
-test('Delete face restores a chamfered box from its exact original bevel and reopens', async () => {
-  const doc = source(), original = structuredClone(doc), before = evaluateDoc(doc, 1), name = 'n2.face';
+const chamfers = [
+  ['n1.side0|n1.side3', 2],
+  ['n1.side0|n1.top', 0],
+  ['n1.bottom|n1.side0', 0],
+] as const;
+
+for (const [sharpEdge, span] of chamfers) test(`Delete face restores ${sharpEdge} from its exact bevel and reopens`, async () => {
+  const doc = source(sharpEdge), original = structuredClone(doc), before = evaluateDoc(doc, 1), name = 'n2.face';
   assert.ok(before.ok);
   const [body] = before.bodies, selection = { faces: [{ body: 0, face: body.mesh.faces.findIndex(face => face.name === name) }], bodies: [], edges: [] };
   assert.ok(selection.faces[0].face >= 0);
@@ -32,13 +38,13 @@ test('Delete face restores a chamfered box from its exact original bevel and reo
   assert.deepEqual(node.faces, [name]);
   assert.deepEqual(node.parent, { node: 2, side: 'solid' });
   assert.equal(node.sigs?.[name].k, 'plane');
-  assert.equal(node.sigs?.[name].d?.[2], 0);
+  assert.ok(node.sigs?.[name].d?.[span] === 0);
   assert.deepEqual(healed.nodes.slice(0, -1), doc.nodes);
   const [{ brep: originalNative }] = partBreps(doc), [{ brep: native }] = partBreps(healed);
   assert.ok(checkBrep(native, { strict: true }).valid);
   assert.equal(native.faces.length, 6);
   assert.ok(native.faces.every(face => originalNative.faces.some(original => original.id === face.id && original.name === face.name)));
-  assert.ok(native.edges.some(edge => edge.name === 'n1.side0|n1.side3'));
+  assert.ok(native.edges.some(edge => edge.name === sharpEdge));
   assert.ok(Math.abs(brepMassProperties(native, 1).volume - 12000) < 1e-7);
   const opened = await readStudioFile(encodeStudioFile(healed));
   assert.ok('doc' in opened);
@@ -50,10 +56,12 @@ test('Delete face restores a chamfered box from its exact original bevel and reo
   assert.deepEqual(doc, original);
 });
 
-test('Delete face does not admit a cap edge chamfer', () => {
-  const doc = source('n1.side0|n1.top'), evaluated = evaluateDoc(doc, 1);
+test('Delete face does not admit a feature with multiple chamfers', () => {
+  const doc = withNode(rectanglePart(40, 30, 10),
+    { kind: 'chamfer', parent: { node: 1, side: 'solid' }, edges: ['n1.side0|n1.side3', 'n1.side1|n1.side2'], distance: 2 });
+  const evaluated = evaluateDoc(doc, 1);
   assert.ok(evaluated.ok);
-  const [body] = evaluated.bodies, face = body.mesh.faces.findIndex(item => item.name === 'n2.face');
+  const [body] = evaluated.bodies, face = body.mesh.faces.findIndex(item => item.name.startsWith('n2.face'));
   assert.ok(face >= 0);
   const selection = { bodies: [], edges: [], faces: [{ body: 0, face }] };
   assert.equal(deleteFaceCommand.available({ doc, bodies: evaluated.bodies, selection }).ok, false);

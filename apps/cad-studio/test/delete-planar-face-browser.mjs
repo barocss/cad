@@ -6,10 +6,13 @@ import { withMcpSession } from './mcp-browser-session.mjs';
 
 const [output, input, kind] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
 assert.ok(output && input && isAbsolute(output) && relative(resolve(app, '../..'), output).startsWith('../'));
-assert.ok(['boss', 'chamfer'].includes(kind));
+assert.ok(['boss', 'chamfer', 'chamfer-top', 'chamfer-bottom'].includes(kind));
 const sourceBytes = await readFile(input), source = JSON.parse(sourceBytes);
 const boss = kind === 'boss', selectedFace = boss ? 'n3.top' : 'n2.face', unrelated = boss ? 'n1.top' : 'n1.side0';
-const view = boss ? 'Top' : 'Front', stockVolume = 12000, sourceVolume = boss ? stockVolume + 54 * Math.PI : 11980;
+const horizontal = kind === 'chamfer-top' || kind === 'chamfer-bottom', upper = kind === 'chamfer-top';
+const view = boss ? 'Top' : 'Front', stockVolume = 12000;
+const sourceVolume = boss ? stockVolume + 54 * Math.PI : horizontal ? 11920 : 11980;
+const bevelPick = horizontal ? [20, 1, upper ? 9 : 1] : [1, 1, 5];
 const reason = boss ? /cylindrical boss top/i : /box chamfer/i;
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/viewport/Viewport.tsx', 'apps/cad-studio/test/delete-planar-face-browser.mjs',
@@ -20,7 +23,7 @@ const pins = [
 const f = await createFlow({
   name: 'delete-planar-face', envFrozen: 'DELETE_PLANAR_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: `Heal the stock by deleting the original planar face of the ${kind}.`,
-  limits: [boss ? 'One cylindrical boss fully within the top of a straight rectangular plate.' : 'One constant full-height box chamfer.'],
+  limits: [boss ? 'One cylindrical boss fully within the top of a straight rectangular plate.' : 'One constant full-span box chamfer.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
@@ -46,7 +49,7 @@ async function inspect(label, doc, expected, before) {
   near(native.mass.volume, expected);
   if (before) {
     assert.deepEqual(native.report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
-    assert.deepEqual(native.mass.centroid, [20, 15, 5]);
+    native.mass.centroid.forEach((value, k) => near(value, [20, 15, 5][k]));
     assert.deepEqual(native.brep.faces.map(face => face.name).sort(),
       ['n1.bottom', 'n1.side0', 'n1.side1', 'n1.side2', 'n1.side3', 'n1.top']);
     if (boss) assertBossSurvivors(native.brep, before.brep);
@@ -71,11 +74,17 @@ function assertChamferSurvivors(healed, before) {
   for (const face of healed.brep.faces) {
     const original = before.brep.faces.find(item => item.name === face.name);
     assert.equal(face.id, original.id);
-    assert.deepEqual(healed.supports[face.name], before.supports[face.name]);
+    const [normal, station] = healed.supports[face.name], [oldNormal, oldStation] = before.supports[face.name];
+    normal.forEach((value, k) => near(value, oldNormal[k]));
+    near(station, oldStation);
   }
-  const edge = healed.brep.edges.find(item => item.name === 'n1.side0|n1.side3');
+  const edge = healed.brep.edges.find(item => item.name === source.nodes.at(-1).edges[0]);
   assert.ok(edge);
-  assert.deepEqual(edge.curve.controlPoints.toSorted((a, b) => a[2] - b[2]), [[0, 0, 0], [0, 0, 10]]);
+  const axis = horizontal ? 0 : 2, z = upper ? 10 : 0;
+  const ends = horizontal ? [[0, 0, z], [40, 0, z]] : [[0, 0, 0], [0, 0, 10]];
+  assert.equal(edge.curve.controlPoints.length, 2);
+  edge.curve.controlPoints.toSorted((a, b) => a[axis] - b[axis]).forEach((point, i) =>
+    point.forEach((value, k) => near(value, ends[i][k])));
 }
 
 async function pickFace(point, name) {
@@ -148,7 +157,7 @@ await f.run(async () => {
   await f.page.locator('.palette').waitFor({ state: 'hidden' });
 
   f.phase = 'Apply one Delete face to the original planar face';
-  await pickFace(boss ? [11, 9, 16] : [1, 1, 5], selectedFace);
+  await pickFace(boss ? [11, 9, 16] : bevelPick, selectedFace);
   await f.command('Delete face');
   const panel = f.page.getByRole('dialog', { name: 'Delete face', exact: true }), apply = button('Apply', panel);
   await apply.waitFor();
