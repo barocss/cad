@@ -53,7 +53,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
     representation: 'required: exact-straight for one straight segment, or exact for one 30°–120° circular arc in one or two rational quadratic spans. The path starts at the outer profile’s area centroid. Creates a new body.',
   } },
   'offset-face': { selection: 'Distance: faces [source]. To plane: faces [source, reference] in that order, on distinct current solids.', values: { offsetMode: 'distance (default) | to-plane (direct native source face and a parallel reference face)', d: 'distance along the face normal: + out (material added), − in (taken off)' } },
-  'replace-face': { selection: 'Select a rectangular extrusion face, a convex prism face, or a straight cylinder, coaxial tube or rectangular through-bore plate cap. Then pick a tilted plane on another solid.', values: {} },
+  'replace-face': { selection: 'Select a rectangular extrusion face, a convex prism face, or a straight cylinder, circular tube or rectangular through-bore plate cap. Then pick a tilted plane on another solid.', values: {} },
   box: { selection: 'none (or a top face to stack on)', values: { w: 'width along X', d: 'depth along Y', h: 'height along Z', x: 'min corner X', y: 'min corner Y', z: 'base Z' } },
   cylinder: { selection: 'none', values: { r: 'radius', h: 'height', x: 'centre X', y: 'centre Y', z: 'base Z' } },
   sphere: { selection: 'none', values: { r: 'radius', x: 'centre X', y: 'centre Y', z: 'Z it stands on (its bottom)' } },

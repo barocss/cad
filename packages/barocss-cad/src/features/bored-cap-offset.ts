@@ -199,14 +199,17 @@ function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined
     const round = cylinderPair([...outerWalls], extent, 1);
     if (!round) return;
     const [x, y] = round.center, center: XY = [x, y];
-    let anchorX = x;
+    let anchor = round.center;
     if (annular) {
       const bore = cylinderPair([...innerWalls], extent, -1);
-      if (!bore || !(round.radius - bore.radius > tolerance)
-        || !(dist(round.center, bore.center) <= 64 * Number.EPSILON * Math.max(1, extent))) return;
-      anchorX += (round.radius + bore.radius) / 2;
+      if (!bore) return;
+      const away = sub(round.center, bore.center), separation = len(away);
+      if (!(round.radius - bore.radius > separation + tolerance)) return;
+      // Pick a point on cap material, on the thicker side of an eccentric tube.
+      const direction: Point = separation > tolerance ? scale(away, 1 / separation) : [1, 0, 0];
+      anchor = add(round.center, scale(direction, (round.radius + bore.radius) / 2));
     }
-    return { bottom, top, cylinders, lo, hi, min, max, radius: round.radius, center, anchorX, anchorY: y };
+    return { bottom, top, cylinders, lo, hi, min, max, radius: round.radius, center, anchorX: anchor[0], anchorY: anchor[1] };
   }
   const diameter = createCylindricalBoreCheck(brep)(cylinders);
   const bore = faceGeometry(cylinders[0], extent);
@@ -393,7 +396,7 @@ export function replaceCircularCapIfAdmitted(brep: Brep, faceName: string, plane
   return replaceAxialCapIfAdmitted(brep, faceName, plane, 'circular');
 }
 
-/** Tilt an exact annular cap while retaining both coaxial cylinders and all trim identities. */
+/** Tilt an exact annular cap while retaining both parallel cylinders and all trim identities. */
 export function replaceAnnularCapIfAdmitted(brep: Brep, faceName: string, plane: ReplacementPlane): Brep | undefined {
   return replaceAxialCapIfAdmitted(brep, faceName, plane, 'annular');
 }

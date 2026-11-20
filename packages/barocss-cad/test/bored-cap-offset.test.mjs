@@ -68,16 +68,16 @@ const tube = (center = [14, 12]) => {
   return doc;
 };
 
-for (const sign of [1, -1]) {
+for (const [boreX, sign] of [[14, 1], [14, -1], [16, 1], [16, -1]]) {
   const face = sign === 1 ? 'c.top' : 'c.bottom', fixedZ = sign === 1 ? 0 : 10;
-  test(`replace ${face} of a coaxial tube and authenticate its retained bore diameter`, () => {
-    const doc = tube(), source = freeze(solid(doc)), before = structuredClone(source);
+  test(`replace ${face} of a tube with bore X=${boreX} and authenticate its retained diameter`, () => {
+    const doc = tube([boreX, 12]), source = freeze(solid(doc)), before = structuredClone(source);
     const height = (x, y) => fixedZ + sign * (8 + x / 10 + y / 5);
     const plane = { origin: [0, 0, height(0, 0)], normal: [-1, -2, 10 * sign] };
     const frame = annularCapReplacementFrame(source, face);
     assert.deepEqual(frame.normal, [0, 0, sign]);
-    const frameRadius = Math.hypot(frame.anchor[0] - 14, frame.anchor[1] - 12);
-    assert.ok(frameRadius > 4 && frameRadius < 12);
+    assert.ok(Math.hypot(frame.anchor[0] - boreX, frame.anchor[1] - 12) > 4);
+    assert.ok(Math.hypot(frame.anchor[0] - 14, frame.anchor[1] - 12) < 12);
     const result = replaceAnnularCapIfAdmitted(source, face, plane);
     const report = checkBrep(result, { strict: true });
     assert.ok(report.valid, report.issues.join('\n'));
@@ -88,14 +88,15 @@ for (const sign of [1, -1]) {
 
     const caps = result.faces.find(candidate => candidate.name === face);
     for (const loopId of caps.loops) {
-      const loop = result.loops.find(candidate => candidate.id === loopId), radius = loop.kind === 'inner' ? 4 : 12;
+      const loop = result.loops.find(candidate => candidate.id === loopId), inner = loop.kind === 'inner';
+      const radius = inner ? 4 : 12, centerX = inner ? boreX : 14;
       assert.equal(loop.coedges.length, 2);
       for (const id of loop.coedges) {
         const use = result.coedges.find(coedge => coedge.id === id);
         const { curve } = result.edges.find(edge => edge.id === use.edge);
         for (let i = 0; i <= 32; i++) {
           const [x, y, z] = evaluateCurve(curve, i / 32);
-          close(Math.hypot(x - 14, y - 12), radius);
+          close(Math.hypot(x - centerX, y - 12), radius);
           close(z, height(x, y));
         }
       }
@@ -108,7 +109,7 @@ for (const sign of [1, -1]) {
     for (const candidate of halves) {
       const { r, c, a, out } = faceGeometry(candidate);
       close(r, out === -1 ? 4 : 12);
-      close(c[0], 14);
+      close(c[0], out === -1 ? boreX : 14);
       close(c[1], 12);
       close(Math.abs(a[2]), 1);
     }
@@ -119,24 +120,33 @@ for (const sign of [1, -1]) {
     assert.equal(verifyBore(outward), undefined);
     assert.equal(verifyBore([inward[0], outward[0]]), undefined);
 
-    const mass = brepMassProperties(result, 1), h = 11.8;
-    const volume = 1510.4 * Math.PI;
+    const areaCenterX = (144 * 14 - 16 * boreX) / 128;
+    const varianceX = (144 * (14 ** 2 + 36) - 16 * (boreX ** 2 + 4)) / 128 - areaCenterX ** 2;
+    const h = 8 + areaCenterX / 10 + 12 / 5, volume = 128 * Math.PI * h;
+    const mass = brepMassProperties(result, 1);
     close(mass.volume, volume, volume * 1e-9);
-    close(mass.centroid[0], 14 + 4 / h, 1e-8);
+    close(mass.centroid[0], areaCenterX + varianceX / (10 * h), 1e-8);
     close(mass.centroid[1], 12 + 8 / h, 1e-8);
-    close(mass.centroid[2], fixedZ + sign * (h ** 2 + 40 * 0.05) / (2 * h), 1e-8);
+    close(mass.centroid[2], fixedZ + sign * (h ** 2 + varianceX / 100 + 40 / 25) / (2 * h), 1e-8);
     const change = { id: 'replace', kind: 'replace-face', target: 'h', face, plane };
     assert.deepEqual(solid({ ...doc, features: [...doc.features, change] }), result);
-    const contact = height(0, 0) - sign * (h - 12 * Math.hypot(0.1, 0.2));
+    const contact = height(0, 0) - sign * (11.8 - 12 * Math.hypot(0.1, 0.2));
     assert.throws(() => replaceAnnularCapIfAdmitted(source, face, { ...plane, origin: [0, 0, contact] }), /opposite cap on the outer circular rim/);
     assert.deepEqual(source, before);
   });
 }
 
-test('annular cap replacement requires the bore and outer cylinder to be coaxial', () => {
-  const source = solid(tube([15, 12])), plane = { origin: [0, 0, 8], normal: [-1, -2, 10] };
-  assert.equal(annularCapReplacementFrame(source, 'c.top'), undefined);
-  assert.equal(replaceAnnularCapIfAdmitted(source, 'c.top', plane), undefined);
+test('an eccentric tube keeps its exact diameter close to outer rim contact', () => {
+  const source = solid(tube([16, 12])), plane = { origin: [14, 12, 2.75], normal: [-1, -2, 10] };
+  const result = replaceAnnularCapIfAdmitted(source, 'c.top', plane);
+  assert.ok(checkBrep(result, { strict: true }).valid);
+  const inward = result.faces.filter(candidate => {
+    const geometry = faceGeometry(candidate);
+    return geometry.kind === 'cylinder' && geometry.out === -1;
+  });
+  close(createCylindricalBoreCheck(result)(inward), 8);
+  const volume = 348.8 * Math.PI;
+  close(brepMassProperties(result, 1).volume, volume, volume * 1e-9);
 });
 
 for (const sign of [1, -1]) {

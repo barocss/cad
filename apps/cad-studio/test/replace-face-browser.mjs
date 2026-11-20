@@ -39,7 +39,7 @@ const pins = [
 const f = await createFlow({
   name: 'replace-face', envFrozen: 'REPLACE_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: 'Replace an exact planar extrusion face with a tilted support in desktop Studio.',
-  limits: [tube ? 'One straight coaxial tube and two tilted reference faces for its cap.' :
+  limits: [tube ? 'One straight circular tube and two tilted reference faces for its cap.' :
     cap?.bore ? 'One rectangular through-bore plate and two tilted reference faces for its cap.' :
     cap?.cylinder ? 'One straight circular cylinder and two tilted reference faces for its cap.' :
     polygonWall ? `One convex ${stock.points.length}-sided prism and two tilted reference faces for its oblique wall.` :

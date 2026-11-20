@@ -11,6 +11,7 @@ type Cylinder = Extract<FaceGeometry, { kind: 'cylinder' }>;
 type RimArc = { start: string; end: string; station: number; sweep: number };
 type BoundaryUse = { use: BrepCoedge; twin: BrepCoedge; capLoop: BrepLoop; edge: BrepEdge };
 type RimBinding = { vertices: ReadonlySet<string>; wallUses: ReadonlySet<string> };
+type RadialSupport = { offset: Point; radius: number };
 const ANGULAR_TOLERANCE = 1e-8;
 const byId = <T extends { readonly id: string }>(items: readonly T[]) => new Map(items.map(item => [item.id, item]));
 const readTopology = (brep: Brep) => ({
@@ -103,6 +104,10 @@ function radialProject(vector: Point, axis: Point): Point {
   return sub(vector, scale(axis, dot(vector, axis)));
 }
 
+function sameRadialSupport(a: RadialSupport, b: RadialSupport, tolerance: number): boolean {
+  return Math.abs(a.radius - b.radius) <= tolerance && len(sub(a.offset, b.offset)) <= tolerance;
+}
+
 function capClearsBore(outer: BrepLoop, topology: Topology, cylinder: Cylinder, side: number,
   onCap: (point: Point) => boolean, tolerance: number): boolean {
   if (outer.coedges.length !== 4) return false;
@@ -139,8 +144,7 @@ function readAnnularOuterRim(outer: BrepLoop, topology: Topology, shell: BrepShe
   onCap: (point: Point) => boolean, tolerance: number) {
   if (outer.coedges.length !== 2) return;
   const arcs: RimArc[] = [], walls = new Set<BrepFace>(), wallUses = new Set<string>();
-  let radius: number | undefined;
-  let maxCenterGap = 0;
+  const supports: RadialSupport[] = [];
   for (const id of outer.coedges) {
     const use = topology.coedges.get(id), twin = use?.twin ? topology.coedges.get(use.twin) : undefined;
     const loop = twin && topology.loops.get(twin.loop), wall = loop && topology.faces.get(loop.face);
@@ -150,19 +154,17 @@ function readAnnularOuterRim(outer: BrepLoop, topology: Topology, shell: BrepShe
       || !wall || wall.shell !== shell.id || wall.surface.kind !== 'surface' || walls.has(wall)) return;
     const cylinder = faceGeometry(wall);
     if (cylinder.kind !== 'cylinder' || cylinder.out !== 1 || len(cross(cylinder.a, bore.a)) > 64 * Number.EPSILON) return;
-    const centerGap = len(radialProject(sub(cylinder.c, bore.c), bore.a));
-    if (!(centerGap <= tolerance && cylinder.r - bore.r > centerGap + tolerance)
-      || (radius !== undefined && Math.abs(radius - cylinder.r) > tolerance)) return;
+    const offset = radialProject(sub(cylinder.c, bore.c), bore.a), support = { offset, radius: cylinder.r };
+    if (!(cylinder.r - bore.r > len(offset) + tolerance)
+      || (supports.length && !sameRadialSupport(supports[0], support, tolerance))) return;
     const arc = projectedArc(use, edge, cylinder, 0, onCap, tolerance);
     if (!arc) return;
     arcs.push(arc);
     walls.add(wall);
     wallUses.add(twin.id);
-    radius = Math.max(radius ?? 0, cylinder.r);
-    maxCenterGap = Math.max(maxCenterGap, centerGap);
+    supports.push(support);
   }
-  return radius !== undefined && rimWinding(arcs) === side
-    ? { radius, maxCenterGap, walls, wallUses, vertices: new Set(arcs.map(arc => arc.start)) } : undefined;
+  return rimWinding(arcs) === side ? { supports, walls, wallUses, vertices: new Set(arcs.map(arc => arc.start)) } : undefined;
 }
 
 function readPlanarRim(loop: BrepLoop, group: readonly BoundaryUse[], topology: Topology, shell: BrepShell,
@@ -240,17 +242,20 @@ function hasTiltedRim(brep: Brep, topology: Topology, shell: BrepShell, members:
   const rims = [...groups].map(([loop, group]) => readPlanarRim(loop, group, topology, shell, cylinder, tolerance, annular));
   const lower = rims.find(rim => rim?.side === -1), upper = rims.find(rim => rim?.side === 1);
   if (!lower || !upper || lower.face === upper.face) return false;
-  let clearanceRadius = cylinder.r;
+  let supports: readonly RadialSupport[] = [{ offset: [0, 0, 0], radius: cylinder.r }];
   if (annular) {
     const a = lower.outerRim, b = upper.outerRim;
-    if (!a || !b || Math.abs(a.radius - b.radius) > tolerance || [...a.walls].some(wall => !b.walls.has(wall))
+    if (!a || !b || !b.supports.every(support => sameRadialSupport(a.supports[0], support, tolerance))
+      || [...a.walls].some(wall => !b.walls.has(wall))
       || !hasAxialSeams(topology, shell, [...a.walls], a, b, cylinder.a, tolerance)) return false;
-    clearanceRadius = Math.max(a.radius, b.radius) + Math.max(a.maxCenterGap, b.maxCenterGap);
+    supports = [...a.supports, ...b.supports];
   }
+  const clearanceRadius = Math.max(...supports.map(support => support.radius));
   const flat = (rim: typeof lower) => clearanceRadius * len(rim.slope) <= tolerance;
   if (flat(lower) === flat(upper)) return false;
-  // The axial gap is affine. Its minimum occurs on the widest circular boundary in scope.
-  return upper.station - lower.station - clearanceRadius * len(sub(upper.slope, lower.slope)) > tolerance
+  const centerGap = upper.station - lower.station, slope = sub(upper.slope, lower.slope), slopeLength = len(slope);
+  // Evaluate the minimum axial gap about each verified support's actual center.
+  return supports.every(({ offset, radius }) => centerGap + dot(slope, offset) - radius * slopeLength > tolerance)
     && hasAxialSeams(topology, shell, members, lower, upper, cylinder.a, tolerance)
     && checkBrep(brep, { strict: true }).valid;
 }
