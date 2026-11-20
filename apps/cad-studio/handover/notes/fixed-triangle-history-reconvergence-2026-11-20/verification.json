@@ -1,0 +1,23 @@
+{
+  "scope": "Synthetic fixed XY triangle in Extrude History, real desktop Chrome/WebGPU",
+  "baseline": {
+    "revision": "1acd99a97d717530130f135c5819f0748e971a12",
+    "sameNumberApplyEnabled": true,
+    "oldRedoLostAfterApply": true,
+    "maximumCoordinateDriftMm": 7.176481631177012e-13
+  },
+  "product": {
+    "revision": "e7bbb76ff259af5594647402702e1f38a75b83fa",
+    "sameNumberApplyEnabled": false,
+    "enterKeepsOldRedo": true,
+    "withIntermediateInvalidValue": true,
+    "withoutIntermediateInvalidValue": true,
+    "oldRedoRestoresExtrudeDistanceMm": 7,
+    "sameNumberWithRealDistanceChangeIsApplicable": true,
+    "nearDistinctLengthMm": 131.9499,
+    "nearDistinctNativeVolumeMm3": 246.05329651185565,
+    "nearDistinctNativeTopology": { "vertices": 6, "edges": 9, "faces": 5 },
+    "undoRedoExact": true
+  },
+  "runs": { "downloads": 0, "pageErrors": 0, "consoleErrors": 0, "sourceChanges": 0 }
+}
