@@ -11,6 +11,8 @@ const index = source.nodes.length - 1;
 const widthEdit = process.argv.includes('--width');
 const triangular = process.argv.includes('--triangle');
 const screw = process.argv.includes('--screw');
+const displayBaseline = process.argv.includes('--screw-display-baseline');
+assert.ok(!displayBaseline || screw);
 assert.ok([widthEdit, triangular, screw].filter(Boolean).length <= 1);
 const edit = screw ? {
   key: 'smoothScrewPitch', value: 64, invalid: 10000, refusal: /axial advance within the model range/,
@@ -34,6 +36,7 @@ const pins = [
   'apps/cad-studio/test/smooth-turn-angle-agent-browser.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs',
   'apps/cad-studio/server/cadMcp.ts', 'packages/barocss-cad-model/src/chat/part/features.ts',
   'packages/barocss-cad-model/src/chat/toolDefinitions.ts', 'packages/barocss-cad-model/src/app/smoothLoftTurn.ts',
+  ...(screw ? ['apps/cad-studio/src/viewport/Viewport.tsx', 'apps/cad-studio/src/state/useProposalPreview.ts'] : []),
 ];
 const f = await createFlow({
   name: screw ? 'smooth-screw-reviewed-pitch-edit' : triangular ? 'triangular-turn-reviewed-angle-edit' : widthEdit ? 'smooth-turn-reviewed-width-edit' : 'smooth-turn-reviewed-angle-edit',
@@ -121,6 +124,23 @@ async function native(label, doc, { angle, width, pitch }) {
   return result;
 }
 
+async function displayedScrew(label) {
+  const view = await f.page.evaluate(() => ({
+    camera: window.__studioCamera(),
+    canvas: document.querySelector('canvas.vp-canvas').getBoundingClientRect().toJSON(),
+    detail: window.__studioLoftDisplay?.(),
+    diff: window.__studioProposalOverlay?.() ?? null,
+    positions: window.__studioSweepCylinderMesh?.(),
+    renderer: document.querySelector('.viewport')?.dataset.renderer,
+  }));
+  assert.ok(view.positions && view.positions.length > 0);
+  const meshHash = createHash('sha256').update(JSON.stringify(view.positions)).digest('hex');
+  const { positions, ...meta } = view;
+  const measured = { ...meta, vertices: positions.length / 3, meshHash };
+  f.report.observations.push({ label, ...measured });
+  return measured;
+}
+
 async function frame() {
   await button('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
@@ -198,6 +218,12 @@ await f.run(async () => {
   }
   await f.same(pending);
   await f.snapshot('reviewed-turn-proposal');
+  let previewDisplay;
+  if (displayBaseline) {
+    await f.page.waitForFunction(() => window.__studioProposalOverlay?.() != null);
+    await f.snapshot('same-camera-screw-preview');
+    previewDisplay = await displayedScrew('preview display');
+  }
   await button('Accept', card).click();
   await f.changed(pending);
   const accepted = await f.doc();
@@ -209,6 +235,17 @@ await f.run(async () => {
   assert.notEqual(result.sha, before.sha);
   const volumeFactor = screw ? edit.after.pitch / edit.before.pitch : widthEdit ? edit.after.width / edit.before.width : 1;
   assert.ok(Math.abs(result.volume - volumeFactor * before.volume) < 1e-7);
+  if (previewDisplay) {
+    await f.page.waitForFunction(() => window.__studioLoftDisplay?.()?.kind === 'smooth-turn');
+    await f.snapshot('same-camera-screw-approved');
+    const approvedDisplay = await displayedScrew('approved display');
+    assert.deepEqual(previewDisplay.camera, approvedDisplay.camera);
+    assert.deepEqual(previewDisplay.canvas, approvedDisplay.canvas);
+    assert.equal(approvedDisplay.detail.kind, 'smooth-turn');
+    assert.equal(previewDisplay.diff?.method, 'boolean');
+    assert.equal(previewDisplay.detail, null);
+    assert.notEqual(previewDisplay.meshHash, approvedDisplay.meshHash);
+  }
   await f.undo();
   await f.same(pending);
   await f.redo();
