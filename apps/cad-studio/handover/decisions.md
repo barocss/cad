@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1495: [Qualify the X and Y SubD cage rotation handles](notes/cage-world-rotation-xy-2026-11-21/README.md), #625. Verify signed rotation, numeric parity, cancellation and native reopening in actual Studio.
 - D1494: [Rotate the selected SubD cage region about a guarded vertex](notes/cage-vertex-rotation-drag-2026-11-21/README.md), #625. Verify shared pivot ownership, numeric parity, cancellation and native reopening.
 - D1493: [Rotate the selected SubD cage region in the viewport](notes/cage-centre-rotation-drag-2026-11-21/README.md), #625. Verify Z rotation, numeric parity, cancellation and native reopening.
 - D1492: [Scale a selected SubD cage region about a current vertex](notes/cage-vertex-scale-pivot-2026-11-21/README.md), #625. Verify numeric parity, reject rebound vertex numbers, and preserve the accepted drag in the native file.

@@ -9,13 +9,15 @@ const scaleDrag = scaleBaseline || vertexScale || process.argv.includes('--scale
 const rotateBaseline = process.argv.includes('--expect-no-rotate-drag');
 const rotateVertexBaseline = process.argv.includes('--expect-no-rotate-vertex');
 const rotateVertex = rotateVertexBaseline || process.argv.includes('--rotate-vertex');
-const rotateDrag = rotateBaseline || rotateVertex || process.argv.includes('--rotate-drag');
+const rotateAxis = process.argv.includes('--rotate-x') ? 0 : process.argv.includes('--rotate-y') ? 1 : 2;
+const axisName = 'XYZ'[rotateAxis];
+const rotateDrag = rotateBaseline || rotateVertex || rotateAxis !== 2 || process.argv.includes('--rotate-drag');
 const pins=['packages/barocss-cad-model/src/subd/cageEdit.ts','apps/cad-studio/src/ui/CagePanel.tsx','apps/cad-studio/src/subd/useCageEditor.ts','apps/cad-studio/src/subd/cageTransformDraft.ts','apps/cad-studio/src/ui/CageTransformControls.tsx'];
 if (scaleDrag || rotateDrag) pins.push('apps/cad-studio/src/subd/useCageGizmo.ts', 'apps/cad-studio/src/viewport/gizmo.ts',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts', 'apps/cad-studio/test/cage-selection-transform-browser.mjs');
 const f=await createFlow({name:'cage-selection-transform',output:process.argv[2],envFrozen:'CAGE_TRANSFORM_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,
  qualification: rotateVertex ? 'Physical signed Z rotation of two connected faces about one guarded cage vertex.'
-   : rotateDrag ? 'Physical signed Z rotation of two connected cage faces about their original centre.'
+   : rotateDrag ? `Physical signed ${axisName} rotation of two connected cage faces about their original centre.`
    : vertexScale ? 'Physical uniform scaling of two connected cage faces about one exact cage vertex.'
    : scaleDrag ? 'Physical uniform scaling of two connected cage faces about the original centre, compared with numeric Scale.'
    : 'Numeric world-axis rotation and uniform scale on selected faces, explicit pivot, no-op/cancel/history and native persistence.',
@@ -235,7 +237,7 @@ async function scaleSelection(seed, base, verify, apply) {
 
 async function rotateSelection(seed, base, verify, apply) {
  const tool = panel().getByLabel('Cage drag tool',{exact:true});
- const arc = f.page.locator('[data-gizmo="turnZ"]');
+ const arc = f.page.locator(`[data-gizmo="turn${axisName}"]`);
  const pivotMode = panel().getByLabel('Rotate drag pivot',{exact:true});
  if (rotateBaseline) {
   assert.equal(await tool.locator('option[value="rotate"]').count(),0);
@@ -247,6 +249,7 @@ async function rotateSelection(seed, base, verify, apply) {
   return;
  }
  await tool.selectOption('rotate');
+ if (rotateAxis !== 2) await button(rotateAxis === 0 ? 'Right' : 'Front').click();
  await arc.waitFor();
  assert.equal(await f.page.locator('[data-gizmo^="move"],[data-gizmo^="scale"]').count(),0);
  if (rotateVertexBaseline) {
@@ -297,30 +300,50 @@ async function rotateSelection(seed, base, verify, apply) {
   await expectPivot();
  }
  const verifyRotation = (result, angle) => {
-  verify(seed,result,'rotate',angle,pivot);
+  verify(seed,result,'rotate',angle,pivot,rotateAxis);
   if (vertexId !== undefined) assert.deepEqual(result.cage.positions.slice(3*vertexId,3*vertexId+3),pivot);
  };
+ const vertices = [...new Set(seed.sel.faces.flatMap(face=>seed.cage.faces[face]))];
+ const worldCentre = pivot ?? [0,1,2].map(k=>vertices.reduce((sum,id)=>sum+seed.cage.positions[3*id+k],0)/vertices.length);
+ const cameraSign = await (await f.page.waitForFunction(({centre,axis})=>{
+  const a = window.__studioScreenOf(centre);
+  const along = k => window.__studioScreenOf(centre.map((v,i)=>v+(i===k?8:0)));
+  const n = along(axis), u = along((axis+1)%3), v = along((axis+2)%3);
+  if (Math.hypot(n[0]-a[0],n[1]-a[1]) > 0.02) return false;
+  const cross = (u[0]-a[0])*(v[1]-a[1])-(u[1]-a[1])*(v[0]-a[0]);
+  return Math.abs(cross) > 4 && -Math.sign(cross);
+ },{centre:worldCentre,axis:rotateAxis})).jsonValue();
  const readout = f.page.locator('.gizmo-readout');
  async function start(angle, steps = 12, fine = false) {
-  const point = await arc.locator('polyline').last().evaluate(polyline => {
+  const point = await arc.locator('polyline').last().evaluate(async polyline => {
+   let previous = '', stable = 0;
+   for (let attempt = 0; attempt < 120 && stable < 8; attempt++) {
+    await new Promise(requestAnimationFrame);
+    const points = polyline.getAttribute('points');
+    stable = points && points === previous ? stable + 1 : 0;
+    previous = points;
+   }
+   if (stable < 8) throw Error('The rotation handle has not settled');
    const svg = polyline.closest('svg'), r = svg.getBoundingClientRect();
    const mark = svg.querySelector('circle.gizmo-origin');
    const centre = [r.x+Number(mark.getAttribute('cx')),r.y+Number(mark.getAttribute('cy'))];
    const p = polyline.points.getItem(9);
-   return {centre,x:Math.round(r.x+p.x),y:Math.round(r.y+p.y)};
+   const x = Math.round(r.x+p.x), y = Math.round(r.y+p.y);
+   return {centre,x,y,onCanvas:document.elementFromPoint(x,y)?.matches('canvas.vp-canvas')};
   });
-  const {centre:[cx,cy],x,y} = point;
-  const dx = x-cx, dy = y-cy, radians = angle*Math.PI/180;
+  const {centre:[cx,cy],x,y,onCanvas} = point;
+  assert.ok(onCanvas);
+  const dx = x-cx, dy = y-cy, radians = cameraSign*angle*Math.PI/180;
   const cos = Math.cos(radians), sin = Math.sin(radians);
   await f.page.mouse.move(x,y);
-  await f.page.locator('[data-gizmo="turnZ"][data-active="true"]').waitFor();
+  await f.page.locator(`[data-gizmo="turn${axisName}"][data-active="true"]`).waitFor();
   await f.page.mouse.down();
   if (angle) {
    const to = [Math.round(cx+cos*dx+sin*dy),Math.round(cy-sin*dx+cos*dy)];
    const screenDegrees = (Math.atan2(-dy,dx)-Math.atan2(cy-to[1],to[0]-cx))*-180/Math.PI;
-   const snapped = fine ? Math.round(((screenDegrees+540)%360)-180) : angle;
+   const snapped = fine ? Math.round(cameraSign*(((screenDegrees+540)%360)-180)) : angle;
    await f.page.mouse.move(...to,{steps});
-   await readout.filter({hasText:`Z ${snapped}°`}).waitFor();
+   await readout.filter({hasText:`${axisName} ${snapped}°`}).waitFor();
    return snapped;
   }
   return 0;
@@ -389,7 +412,7 @@ async function rotateSelection(seed, base, verify, apply) {
  assert.deepEqual(await state(),positive);
  await undo();
  await button('Rotate selection',panel()).click();
- await f.page.getByLabel('Rotation world axis',{exact:true}).selectOption('2');
+ await f.page.getByLabel('Rotation world axis',{exact:true}).selectOption(String(rotateAxis));
  if (vertexId !== undefined) {
   await f.page.getByLabel('Selection pivot',{exact:true}).selectOption('vertex');
   await f.page.getByRole('spinbutton',{name:'Pivot cage vertex',exact:true}).fill(String(vertexId));
@@ -408,7 +431,7 @@ async function rotateSelection(seed, base, verify, apply) {
  await f.redo(); await f.same(accepted);
  const saved = await f.save('selection-rotate-drag');
  await f.freshOpen(saved.file,accepted,'selection-rotate-drag-reopened');
- f.report.observations.push({angles:[-15,15],fineAngle,numericParity:true,selectedFaces:seed.sel.faces,vertexId,pivot});
+ f.report.observations.push({axis:axisName,angles:[-15,15],fineAngle,cameraSign,numericParity:true,selectedFaces:seed.sel.faces,vertexId,pivot});
 }
 
 await f.run(async()=>{
@@ -422,11 +445,14 @@ await f.run(async()=>{
   for(const [i,p] of [[23.75,32.5,26],[16.25,32.5,26]].entries()) {const q=await f.page.evaluate(p=>window.__studioScreenOf(p),p);assert.ok(q);if(i)await f.page.keyboard.down('Shift');await f.page.mouse.click(...q);if(i)await f.page.keyboard.up('Shift');}
   const s=await state();assert.equal(s.sel.faces.length,2);return s;
  };
- const verify=(before,after,kind,value,pivot)=>{
+ const verify=(before,after,kind,value,pivot,axis=2)=>{
   const selected=new Set(before.sel.faces.flatMap(f=>before.cage.faces[f])),out=before.cage.positions.slice();
   if(!pivot)pivot=[0,1,2].map(k=>[...selected].reduce((a,v)=>a+before.cage.positions[3*v+k]/selected.size,0));
   for(const v of selected){const p=before.cage.positions.slice(3*v,3*v+3).map((x,k)=>x-pivot[k]);let q;
-   if(kind==='scale')q=p.map(x=>x*value);else {const t=value*Math.PI/180;q=[Math.cos(t)*p[0]-Math.sin(t)*p[1],Math.sin(t)*p[0]+Math.cos(t)*p[1],p[2]];}
+   if(kind==='scale')q=p.map(x=>x*value);else {
+    const t=value*Math.PI/180, u=(axis+1)%3, v=(axis+2)%3;
+    q=[...p];q[u]=Math.cos(t)*p[u]-Math.sin(t)*p[v];q[v]=Math.sin(t)*p[u]+Math.cos(t)*p[v];
+   }
    for(let k=0;k<3;k++)out[3*v+k]=q[k]+pivot[k];
   }
   out.forEach((v,i)=>{if(selected.has(Math.floor(i/3)))assert.ok(Math.abs(after.cage.positions[i]-v)<1e-10);else assert.equal(after.cage.positions[i],v);});
