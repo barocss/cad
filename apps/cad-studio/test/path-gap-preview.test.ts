@@ -34,3 +34,23 @@ test('the same notice lifecycle accepts native arc and circle previews without c
     assert.equal(JSON.stringify(plan), saved);
   }
 });
+
+test('polyline gap chooses one straight span and refuses a corner or crossing', () => {
+  const ids = ['e1', 'e2', 'e3', 'e4'];
+  const shape = { kind: 'polygon', closed: false, construction: true, ids,
+    points: [[16, 20], [20, 20], [44, 38], [44, 42]] } satisfies Parameters<typeof preparePathGap>[0];
+  const source = preparePathGap(shape);
+  assert.ok(source);
+  const plan = planPathGap(source, [32, 29], 4);
+  assert.ok(plan?.kind === 'polyline');
+  assert.equal(plan.span, 1);
+  assert.deepEqual([plan.cutA, plan.cutB], [[30.4, 27.8], [33.6, 30.2]]);
+  assert.equal(planPathGap(source, [20, 20], 4), null);
+  assert.deepEqual(shape.ids, ids);
+  const crossing = preparePathGap({ ...shape, points: [[-6, -6], [6, 6], [-6, 6], [6, -6]] });
+  assert.ok(crossing);
+  assert.equal(planPathGap(crossing, [0, 0], 4), null);
+  assert.equal(preparePathGap({ ...shape, closed: true }), null);
+  assert.equal(preparePathGap({ ...shape, bulges: [0, 0.5, 0, 0] }), null);
+  assert.equal(preparePathGap({ ...shape, construction: undefined }, true), null);
+});

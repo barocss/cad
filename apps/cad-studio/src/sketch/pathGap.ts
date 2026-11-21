@@ -2,20 +2,26 @@ import { CadNumericPolicy } from '@barocss/cad';
 import { arcOf, type Arc, type P2 } from '@barocss/cad-model/sketch/profile';
 import type { SketchShape } from '@barocss/cad-model/sketch/types';
 
-type Polygon = Extract<SketchShape, { kind: 'polygon' }> & { ids: [string, string] };
+type Outline = Extract<SketchShape, { kind: 'polygon' }>;
+type Polygon = Outline & { ids: [string, string] };
+type Polyline = Outline & { ids: string[] };
 type Circle = Extract<SketchShape, { kind: 'circle' }> & { ids: [string] };
 
 export type PreparedPathGap =
   | { kind: 'line'; shape: Polygon; arc: null }
   | { kind: 'arc'; shape: Polygon; arc: Arc }
+  | { kind: 'polyline'; shape: Polyline }
   | { kind: 'circle'; shape: Circle };
 
-export type PathGapPlan = {
+type GapGeometry = {
   hit: P2;
   removed: P2[];
   cutA: P2;
   cutB: P2;
-} & ({ kind: 'segment'; bulges: [number, number] } | { kind: 'circle'; bulges: [number] });
+};
+type SegmentGap = GapGeometry & { kind: 'segment'; bulges: [number, number] };
+export type PathGapPlan = SegmentGap | (GapGeometry & { kind: 'circle'; bulges: [number] })
+  | (GapGeometry & { kind: 'polyline'; span: number; bulges: [number, number] });
 
 const fullTurn = 2 * Math.PI;
 // Finish calls joinOpen with this distance. A stored gap must survive that join.
@@ -39,13 +45,21 @@ export function preparePathGap(shape: SketchShape, ordinaryDraft = false): Prepa
     if (shape.ids?.length !== 1 || typeof shape.ids[0] !== 'string' || !shape.ids[0] || !boundedCircle(shape.c, shape.r)) return null;
     return { kind: 'circle', shape: shape as Circle };
   }
-  if (shape.kind !== 'polygon' || shape.closed || shape.pending || shape.points.length !== 2) return null;
+  if (shape.kind !== 'polygon' || shape.closed || shape.pending || shape.points.length < 2) return null;
   const { ids } = shape;
-  if (ids?.length !== 2 || typeof ids[0] !== 'string' || typeof ids[1] !== 'string' || !ids[0] || !ids[1] || ids[0] === ids[1]) return null;
+  if (ids?.length !== shape.points.length || !ids.every(id => typeof id === 'string' && id) || new Set(ids).size !== ids.length) return null;
   if (shape.fromRectangle || shape.fromSpline || shape.spline || shape.fromEllipse || shape.ellipse) return null;
   if (Object.keys(shape.lengths ?? {}).length || Object.keys(shape.radii ?? {}).length || shape.tangents?.length ||
       shape.equalRadii?.length || shape.concentric?.length || shape.hv?.h?.length || shape.hv?.v?.length ||
       shape.rules?.length || shape.circles?.length || shape.circleIds?.length) return null;
+
+  if (shape.points.length > 2) {
+    const { points } = shape;
+    if (!shape.construction || shape.bulges?.some(bulge => bulge !== 0) ||
+        !points.every((point, i) => inRange(point) && (i === 0 || distance(point, points[i - 1]) > openJoinTolerance)) ||
+        distance(points[0], points[points.length - 1]) <= openJoinTolerance) return null;
+    return { kind: 'polyline', shape: shape as Polyline };
+  }
 
   const [a, b] = shape.points, bulge = shape.bulges?.[0] ?? 0;
   const { linearTolerance } = CadNumericPolicy;
@@ -69,7 +83,7 @@ function separateStoredEnds(a: P2, cutA: P2, cutB: P2, b: P2): boolean {
   return true;
 }
 
-function planLineGap(a: P2, b: P2, pointer: P2, gapMm: number): PathGapPlan | null {
+function planLineGap(a: P2, b: P2, pointer: P2, gapMm: number): SegmentGap | null {
   const total = distance(a, b);
   const dx = (b[0] - a[0]) / total, dy = (b[1] - a[1]) / total;
   const travelled = dx * (pointer[0] - a[0]) + dy * (pointer[1] - a[1]);
@@ -82,6 +96,26 @@ function planLineGap(a: P2, b: P2, pointer: P2, gapMm: number): PathGapPlan | nu
       Math.abs(distance(a, cutA) - lo) > storedPathTolerance ||
       Math.abs(distance(cutB, b) - (total - hi)) > storedPathTolerance) return null;
   return { kind: 'segment', hit: pointAt(travelled), removed: [cutA, cutB], cutA, cutB, bulges: [0, 0] };
+}
+
+function planPolylineGap(points: readonly P2[], pointer: P2, gapMm: number): PathGapPlan | null {
+  let closest = Infinity, next = Infinity, span = -1;
+  for (let i = 0; i < points.length - 1; i++) {
+    const [x, y] = points[i];
+    const dx = points[i + 1][0] - x, dy = points[i + 1][1] - y;
+    const t = Math.max(0, Math.min(1, ((pointer[0] - x) * dx + (pointer[1] - y) * dy) / (dx * dx + dy * dy)));
+    const distance = Math.hypot(pointer[0] - x - t * dx, pointer[1] - y - t * dy);
+    if (distance < closest) {
+      next = closest;
+      closest = distance;
+      span = i;
+    } else next = Math.min(next, distance);
+  }
+  // Locate the picked span before testing whether a gap fits in it.
+  if (span < 0 || next - closest <= openJoinTolerance) return null;
+  const gap = planLineGap(points[span], points[span + 1], pointer, gapMm);
+  if (!gap || points.some(point => distance(point, gap.cutA) <= openJoinTolerance || distance(point, gap.cutB) <= openJoinTolerance)) return null;
+  return { ...gap, kind: 'polyline', span };
 }
 
 function retainedLength(source: Pick<Arc, 'center' | 'radius' | 'sweep'>, a: P2, b: P2, bulge: number, expectedLength: number): number | null {
@@ -120,6 +154,7 @@ function planCircleGap(shape: Circle, pointer: P2, gapMm: number): PathGapPlan |
 export function planPathGap(source: PreparedPathGap, pointer: P2, gapMm: number): PathGapPlan | null {
   if (!Number.isFinite(gapMm) || gapMm <= openJoinTolerance) return null;
   if (source.kind === 'circle') return planCircleGap(source.shape, pointer, gapMm);
+  if (source.kind === 'polyline') return planPolylineGap(source.shape.points, pointer, gapMm);
   const [a, b] = source.shape.points;
   if (source.kind === 'line') return planLineGap(a, b, pointer, gapMm);
   const { arc } = source;

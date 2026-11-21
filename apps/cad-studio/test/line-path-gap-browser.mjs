@@ -5,12 +5,17 @@ import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
 const output = process.argv[2], baseline = process.env.D803_BASELINE === '1';
+const polyline = process.argv.includes('--polyline');
+const geometryOnly = polyline || process.argv.includes('--geometry-only');
 const pins = ['apps/cad-studio/test/line-path-gap-browser.mjs', 'apps/cad-studio/src/sketch/usePathGap.ts',
+  'apps/cad-studio/src/sketch/pathGap.ts',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts', 'packages/barocss-cad-model/src/sketch/trim.ts'];
 const f = await createFlow({
-  name: 'line-path-gap', output, envFrozen: 'D803_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Cut 4 mm along a slanted construction segment and retain both identified ends.',
-  limits: ['One 30 mm construction segment and one separate closed stock rectangle in XY.'],
+  name: 'line-path-gap', output, envFrozen: polyline ? 'D1602_SOURCE_FROZEN' : 'D803_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
+  qualification: polyline ? 'Cut 4 mm within a middle construction span and retain the adjoining spans and IDs.'
+    : 'Cut 4 mm along a slanted construction segment and retain both identified ends.',
+  limits: [polyline ? 'One four-point straight construction polyline and one separate closed stock rectangle in XY.'
+    : 'One 30 mm construction segment and one separate closed stock rectangle in XY.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { toPartDocument } from '@barocss/cad-model/engine/part';
@@ -21,19 +26,20 @@ console.log(JSON.stringify(evaluateCadPart(toPartDocument(doc)).outputs.map(body
 }))));
 `,
 });
-const line = { kind: 'polygon', points: [[20, 20], [44, 38]], closed: false,
-  bulges: [0, 0], pending: false, construction: true, ids: ['e5', 'e6'] };
+const line = { kind: 'polygon', points: polyline ? [[16, 20], [20, 20], [44, 38], [44, 42]] : [[20, 20], [44, 38]], closed: false,
+  bulges: polyline ? [0, 0, 0, 0] : [0, 0], pending: false, construction: true,
+  ids: polyline ? ['e5', 'e6', 'e7', 'e8'] : ['e5', 'e6'] };
 const stock = { kind: 'sketch', profile: 'rectangle', min: [50, 40], max: [55, 45], sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] }, id: 'n0' };
 const initial = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [{ ...stock, construction: [line] }], outputs: {}, nextId: 1 };
 const replacement = { ...initial, nodes: [stock] };
 const pick = [32, 29], nearEnd = [21, 20.75], outside = [33.2, 27.4], cutPoints = [[30.4, 27.8], [33.6, 30.2]];
 const button = (parent, name) => parent.getByRole('button', { name, exact: true });
-const gap = () => button(f.sketchPanel(), 'Cut line gap');
+const gap = () => button(f.sketchPanel(), polyline ? 'Cut polyline gap' : 'Cut line gap');
 const length = () => f.sketchPanel().getByLabel('Gap length', { exact: true });
 const preview = () => f.page.locator('.vp-overlay .sk-path-gap');
 const versions = () => f.page.getByRole('complementary', { name: 'Versions panel', exact: true });
-const project = 'D803 line gap ' + randomUUID(), name = 'line-gap.bcad';
+const project = (polyline ? 'D1602 polyline gap ' : 'D803 line gap ') + randomUUID(), name = polyline ? 'polyline-gap.bcad' : 'line-gap.bcad';
 async function edit() {
   await button(f.page.getByRole('group', { name: 'History', exact: true }), 'Sketch · rectangle').click();
   await button(f.editor(), 'Edit sketch').click();
@@ -57,6 +63,19 @@ async function openProject() {
 }
 
 await f.run(async () => {
+  if (polyline) {
+    const newContext = f.browser.newContext.bind(f.browser);
+    f.browser.newContext = async options => {
+      const context = await newContext(options);
+      const origin = new URL(f.server.resolvedUrls.local[0]).origin;
+      await context.route('**/*', route => {
+        const url = new URL(route.request().url());
+        if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
+        return url.origin === origin || !['http:', 'https:'].includes(url.protocol) ? route.continue() : route.abort();
+      });
+      return context;
+    };
+  }
   await f.newPage();
   const file = join(output, name);
   await writeFile(file, JSON.stringify(initial));
@@ -86,26 +105,36 @@ await f.run(async () => {
   await hover(outside);
   assert.equal(await preview().count(), 0);
   await f.worldClick(nearEnd);
-  await f.sketchPanel().getByRole('status').getByText('The gap must fit inside the line.').waitFor();
+  const endNotice = polyline ? 'Pick one straight span away from a corner, or reduce Gap length.' : 'The gap must fit inside the line.';
+  await f.sketchPanel().getByRole('status').getByText(endNotice).waitFor();
   await f.same(opened);
+  if (polyline) await f.snapshot('00-corner-refused');
   await hover(pick);
   await preview().waitFor({ timeout: 5000 });
 
-  f.phase = 'retire the preview when a replacement reuses the sketch ID';
-  const replacementFile = join(output, 'same-id-no-line.bcad');
-  await writeFile(replacementFile, JSON.stringify(replacement));
-  const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button(f.page, 'Open').click()]);
-  await chooser.setFiles(replacementFile);
-  await f.same(replacement);
-  await f.sketchPanel().waitFor({ state: 'hidden' });
-  await preview().waitFor({ state: 'hidden' });
-  await edit();
-  assert.equal(await gap().count(), 0);
-  await f.page.keyboard.press('Escape');
-  await f.sketchPanel().waitFor({ state: 'hidden' });
-  await f.openFile(file, 1);
-  await f.same(opened);
-  await edit();
+  if (geometryOnly) {
+    f.phase = 'cancel this preview without changing the sketch';
+    await f.page.keyboard.press('Escape');
+    await length().waitFor({ state: 'hidden' });
+    await preview().waitFor({ state: 'hidden' });
+    await f.same(opened);
+  } else {
+    f.phase = 'retire the preview when a replacement reuses the sketch ID';
+    const replacementFile = join(output, 'same-id-no-line.bcad');
+    await writeFile(replacementFile, JSON.stringify(replacement));
+    const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button(f.page, 'Open').click()]);
+    await chooser.setFiles(replacementFile);
+    await f.same(replacement);
+    await f.sketchPanel().waitFor({ state: 'hidden' });
+    await preview().waitFor({ state: 'hidden' });
+    await edit();
+    assert.equal(await gap().count(), 0);
+    await f.page.keyboard.press('Escape');
+    await f.sketchPanel().waitFor({ state: 'hidden' });
+    await f.openFile(file, 1);
+    await f.same(opened);
+    await edit();
+  }
   assert.equal(await gap().getAttribute('aria-pressed'), 'false');
 
   f.phase = 'cut four millimetres measured along the 3–4–5 direction';
@@ -125,20 +154,24 @@ await f.run(async () => {
   await f.page.mouse.click(...hit);
   await length().waitFor({ state: 'hidden' });
   await f.page.mouse.click(...hit);
+  if (polyline) await f.snapshot('02-cut-polyline');
   const edited = await f.finishSketch('02-line-fragments');
-  const sketch = edited.doc.nodes[0], [first, second] = sketch.construction;
-  assert.equal(sketch.construction.length, 2);
-  assert.deepEqual([first.points[0], second.points[1]], line.points);
-  assert.deepEqual([first.ids, second.ids], [['e5', 'e7'], ['e8', 'e6']]);
-  assert.deepEqual([first.bulges, second.bulges], [[0, 0], [0, 0]]);
+  const { construction, ...stockAfter } = edited.doc.nodes[0], [first, second] = construction;
+  assert.equal(construction.length, 2);
+  assert.deepEqual([...first.points.slice(0, -1), ...second.points.slice(1)], line.points);
+  assert.deepEqual([first.ids, second.ids], polyline ? [['e5', 'e6', 'e9'], ['e10', 'e7', 'e8']] : [['e5', 'e7'], ['e8', 'e6']]);
+  const bulges = polyline ? [0, 0, 0] : [0, 0];
+  assert.deepEqual([first.bulges, second.bulges], [bulges, bulges]);
   assert.ok([first, second].every(part => part.construction && !part.closed && !part.pending));
-  const cuts = [first.points[1], second.points[0]];
+  const cuts = [first.points.at(-1), second.points[0]];
   const distance = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
-  for (const [index, point] of cutPoints.entries()) assert.ok(distance(cuts[index], point) < 3e-6, cuts[index]);
+  // The mouse lands on the projected sketch. Allow the existing stored-path tolerance for the Zoom and camera state.
+  const positionTolerance = geometryOnly ? 1e-5 : 3e-6;
+  for (const [index, point] of cutPoints.entries()) assert.ok(distance(cuts[index], point) < positionTolerance, cuts[index]);
   const removed = distance(...cuts);
   assert.ok(Math.abs(removed - 4) < 1e-5, removed);
-  for (const part of [first, second]) assert.ok(Math.abs(distance(...part.points) - 13) < 1e-5);
-  const { construction, ...stockAfter } = sketch;
+  const lengthOf = ({ points }) => points.slice(1).reduce((total, point, index) => total + distance(points[index], point), 0);
+  for (const part of [first, second]) assert.ok(Math.abs(lengthOf(part) - (polyline ? 17 : 13)) < 1e-5);
   assert.deepEqual(stockAfter, stock);
   await f.undo();
   await f.same(opened);
@@ -172,6 +205,17 @@ await f.run(async () => {
   await f.same(solid.doc);
   assert.equal(await preview().count(), 0);
   await f.snapshot('04-reopened');
+  if (polyline) {
+    await f.openFeatureEditor(1, 'reopened stock Extrude');
+    await button(f.editor(), 'Edit sketch').click();
+    await f.sketchPanel().waitFor();
+    await f.tool('Trim', 't');
+    await f.frame(line.points);
+    await f.snapshot('05-reopened-polyline');
+    await f.page.keyboard.press('Escape');
+    await f.sketchPanel().waitFor({ state: 'hidden' });
+    await f.same(solid.doc);
+  }
   f.report.observations.push({ label: 'line-gap', cuts, removedMm: removed, retainedIds: [first.ids, second.ids], volumeMm3: 50,
     bytes: bytes.length, sha256: sha256(bytes) });
   assert.deepEqual(f.report.downloads, []);

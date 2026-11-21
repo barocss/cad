@@ -25,8 +25,8 @@ export interface PathGapInput {
   apply(owner: SketchState, draft: PathGapDraft, plan: PathGapPlan | null): void;
 }
 
-function pathFragment(a: P2, b: P2, bulge: number, ids: [string, string], construction?: true): SketchShape {
-  return { kind: 'polygon', points: [a, b], bulges: [bulge, 0], closed: false, pending: false, ...(construction ? { construction } : {}), ids };
+function pathFragment(points: P2[], ids: string[], construction?: true, bulges = points.map(() => 0)): SketchShape {
+  return { kind: 'polygon', points, bulges, closed: false, pending: false, ...(construction ? { construction } : {}), ids };
 }
 
 export function usePathGap(doc: StudioDoc, sketch: SketchState | null, docNow: RefObject<StudioDoc>,
@@ -75,7 +75,13 @@ export function usePathGap(doc: StudioDoc, sketch: SketchState | null, docNow: R
     apply(owner, expected, plan) {
       const value = read(owner);
       if (!value || value !== expected) return;
-      if (!plan) { change({ ...value, notice: `The gap must fit inside the ${value.source.kind}. ${value.source.kind === 'circle' ? 'Reduce Gap length or pick another point on the circle.' : `Move away from the ${value.source.kind} endpoints or reduce Gap length.`}` }); return; }
+      if (!plan) {
+        const kind = value.source.kind;
+        const notice = kind === 'polyline' ? 'Pick one straight span away from a corner, or reduce Gap length.'
+          : `The gap must fit inside the ${kind}. ${kind === 'circle' ? 'Reduce Gap length or pick another point on the circle.' : `Move away from the ${kind} endpoints or reduce Gap length.`}`;
+        change({ ...value, notice });
+        return;
+      }
       const source = value.source;
       const done = owner.done ?? [], index = done.indexOf(value.original);
       if (index < 0) return;
@@ -84,12 +90,18 @@ export function usePathGap(doc: StudioDoc, sketch: SketchState | null, docNow: R
       let fragments: SketchShape[];
       if (source.kind === 'circle' && plan.kind === 'circle') {
         // A closed circle has no old endpoints. Retire its ID and identify both new ends.
-        fragments = [pathFragment(plan.cutB, plan.cutA, plan.bulges[0], [secondCutId, firstCutId], source.shape.construction)];
-      } else if (source.kind !== 'circle' && plan.kind === 'segment') {
+        fragments = [pathFragment([plan.cutB, plan.cutA], [secondCutId, firstCutId], source.shape.construction, [plan.bulges[0], 0])];
+      } else if (source.kind === 'polyline' && plan.kind === 'polyline') {
+        const { points, ids } = source.shape, split = plan.span + 1;
+        fragments = [
+          pathFragment([...points.slice(0, split), plan.cutA], [...ids.slice(0, split), firstCutId], true),
+          pathFragment([plan.cutB, ...points.slice(split)], [secondCutId, ...ids.slice(split)], true),
+        ];
+      } else if ((source.kind === 'line' || source.kind === 'arc') && plan.kind === 'segment') {
         const [a, b] = source.shape.points, [startId, endId] = source.shape.ids;
         fragments = [
-          pathFragment(a, plan.cutA, plan.bulges[0], [startId, firstCutId], source.shape.construction),
-          pathFragment(plan.cutB, b, plan.bulges[1], [secondCutId, endId], source.shape.construction),
+          pathFragment([a, plan.cutA], [startId, firstCutId], source.shape.construction, [plan.bulges[0], 0]),
+          pathFragment([plan.cutB, b], [secondCutId, endId], source.shape.construction, [plan.bulges[1], 0]),
         ];
       } else return;
       const replacement = [...done.slice(0, index), ...fragments, ...done.slice(index + 1)];
