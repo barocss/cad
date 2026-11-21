@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checkBrep, subdBrep, validateCage } from '@barocss/cad';
 import { evaluatePart } from '../src/engine/evaluate';
-import { emptyDoc, type ModelNode, type StudioDoc } from '../src/engine/doc';
+import { emptyDoc, withNode, type ModelNode, type StudioDoc } from '../src/engine/doc';
 import { dispatchTool, runTool, TOOLS, type ChatState } from '../src/chat/tools';
 import { fullCage } from '../src/subd/cageEdit';
 
@@ -206,6 +206,57 @@ test('signed rotation uses the exact current vertex or selection centre and refu
   const stale=await dispatchTool(turned,'subd',{...args,pivotVertex},neverEvaluate);
   assert.match(parse(stale.content).error,/cage revision.*changed/i);
   assert.equal(stale.state.doc,turned.doc);
+});
+
+test('one oblique quad uses its winding normal and canonical U/V axes for signed rotation', async () => {
+  const basis = [[1,8,-4],[8,1,4],[4,-4,-7]].map(vector=>vector.map(value=>value/9));
+  const cage: Subd['cage'] = {
+    positions: [[10,11,12],[10,20,30],[12,36,22],[21,45,22],[18,21,34],[12,27,4]].flat(),
+    faces: [[3,4,1,2],[2,1,0,5]], creases:[[1,2]],
+  };
+  const doc = withNode(emptyDoc(),{kind:'subd',name:'Oblique',cage}), initial=await evaluate(doc);
+  assert.ok(initial.ok);
+  const state = {doc,bodies:initial.bodies};
+  const read = async (s:ChatState)=>parse((await dispatchTool(s,'subd',{action:'cage',index:0},evaluate)).content).cageRevision;
+  const args={action:'rotate',index:0,cageRevision:await read(state),faces:[0]};
+  const normal=basis[2];
+  const owners=new Set(cage.faces[0]);
+  const axes=['face-u','face-v','face'];
+  for(const [index,axis] of axes.entries()){
+    for(const degrees of [15,-15]){
+      for(const pivotVertex of [0,undefined]){
+        const result=await dispatchTool(state,'subd',{...args,axis,degrees,pivotVertex},evaluate);
+        assert.ok(!result.isError&&result.changed,result.content);
+        const after=cageOf(result.state), pivot=pivotVertex===0?[10,11,12]:[15.25,30.5,27];
+        const radians=degrees*Math.PI/180, cosine=Math.cos(radians), sine=Math.sin(radians);
+        for(let v=0;v<cage.positions.length/3;v++){
+          const original=cage.positions.slice(v*3,v*3+3), actual=after.positions.slice(v*3,v*3+3);
+          if(!owners.has(v)){assert.deepEqual(actual,original);continue;}
+          const p=original.map((value,i)=>value-pivot[i]);
+          const local=basis.map(axis=>axis.reduce((sum,value,i)=>sum+value*p[i],0));
+          const j=(index+1)%3,k=(index+2)%3,[u,w]=[local[j],local[k]];
+          local[j]=cosine*u-sine*w;local[k]=sine*u+cosine*w;
+          const expected=pivot.map((value,i)=>value+basis.reduce((sum,axis,k)=>sum+axis[i]*local[k],0));
+          assert.ok(actual.every((value,i)=>Math.abs(value-expected[i])<1e-12));
+        }
+        assert.deepEqual(after.faces,cage.faces);assert.deepEqual(after.creases,cage.creases);
+      }
+    }
+  }
+  const assertRefused=async(source:ChatState,changes:Record<string,unknown>,match:RegExp)=>{
+    const result=await dispatchTool(source,'subd',{...args,axis:'face',degrees:15,...changes},
+      async()=>{throw Error('The local frame must refuse before evaluation');});
+    assert.ok(result.isError&&!result.changed);assert.match(parse(result.content).error,match);
+    assert.equal(result.state.doc,source.doc);
+  };
+  await assertRefused(state,{faces:[0,1]},/exactly one planar convex quad/);
+  await assertRefused(state,{vertices:[1]},/exactly one planar convex quad/);
+  await assertRefused(state,{edges:[[1,2]]},/exactly one planar convex quad/);
+  await assertRefused(state,{pivotVertex:6},/current integer cage vertex/);
+  const warpedCage={...cage,positions:cage.positions.map((value,i)=>Math.floor(i/3)===4?value+normal[i%3]*.2:value)};
+  const warped={...state,doc:withNode(emptyDoc(),{kind:'subd',name:'Warped',cage:warpedCage})};
+  await assertRefused(warped,{},/cage revision.*changed/i);
+  await assertRefused(warped,{cageRevision:await read(warped)},/quad must be planar/);
 });
 
 test('R8.2 shaping: a top face extruded up (its region walled), a loop inserted, an edge creased, vertices moved — each body valid, the result naming what is new', async () => {

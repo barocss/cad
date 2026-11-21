@@ -7,6 +7,7 @@ import { SubdError, type CageValidation } from '@barocss/cad';
 import type { ModelNode, StudioDoc } from '../engine/doc';
 import { featureId } from '../engine/ids';
 import { commitDrag, emptyCageSel, runOp, selectedVertices, selectionCentre, startSession, transformCageSelection, validationOf, type CageOp, type CageSelection, type CageSession, type StudioCage } from '../subd/cageEdit';
+import { cageLocalDirection } from '../subd/cageLocalDirection';
 import type { ToolDefinition } from './api';
 import { digestOf } from '../util/digest';
 import { r6Signed as r6 } from '../util/round';
@@ -139,15 +140,21 @@ export function runCageTool(doc: StudioDoc, name: string, args: Args, partOf?: s
       }
       case 'subd_rotate': {
         const { axis, degrees, pivotVertex } = args;
-        if (axis !== 'x' && axis !== 'y' && axis !== 'z') return { error: 'Choose world axis "x", "y" or "z".' };
+        const local = axis === 'face' || axis === 'face-u' || axis === 'face-v';
+        if (!local && axis !== 'x' && axis !== 'y' && axis !== 'z')
+          return { error: 'Choose world axis "x", "y" or "z", or local axis "face", "face-u" or "face-v".' };
         if (typeof degrees !== 'number' || !Number.isFinite(degrees)) return { error: 'Pass a finite signed angle in degrees.' };
         if (pivotVertex !== undefined && (typeof pivotVertex !== 'number' || !Number.isInteger(pivotVertex) || pivotVertex < 0 || pivotVertex >= nv))
           return { error: 'Pass a current integer cage vertex ID for pivotVertex.' };
         const centre = selectionCentre(s);
         if (!centre) return { error: 'Pass cage "vertices", "edges" or "faces" to rotate.' };
         const pivot = pivotVertex === undefined ? centre : c.positions.slice(3 * pivotVertex, 3 * pivotVertex + 3) as V3;
-        next = transformCageSelection(s, { kind: 'rotate', axis: axis === 'x' ? 0 : axis === 'y' ? 1 : 2, degrees, pivot });
-        did = `rotated ${selectedVertices(s).length} cage vertices by ${degrees}° around world ${axis.toUpperCase()} through ${pivotVertex === undefined ? 'their selection centre' : `cage vertex ${pivotVertex}`}`;
+        const direction = local ? cageLocalDirection({ ...s, mode: 'face' }, axis) : null;
+        next = transformCageSelection(s, direction
+          ? { kind: 'rotate-along', direction, degrees, pivot }
+          : { kind: 'rotate', axis: axis === 'x' ? 0 : axis === 'y' ? 1 : 2, degrees, pivot });
+        const frame = local ? axis === 'face' ? 'the quad normal' : `the quad ${axis.slice(-1).toUpperCase()} axis` : `world ${axis.toUpperCase()}`;
+        did = `rotated ${selectedVertices(s).length} cage vertices by ${degrees}° around ${frame} through ${pivotVertex === undefined ? 'their selection centre' : `cage vertex ${pivotVertex}`}`;
         break;
       }
       case 'subd_extrude': {
@@ -276,9 +283,9 @@ export const CAGE_TOOLS: ToolDefinition[] = [
       vertices: ints('vertex indices'), edges: pairs('edges [a, b]'), faces: ints('face indices') },
     required: ['index', 'cageRevision', 'factor'], additionalProperties: false,
   } },
-  { name: 'subd_rotate', description: 'Rotates selected base-part cage elements by signed degrees about a world axis. Supply a current cage vertex ID or use the selection centre. Copy cageRevision from the selection. Mirror seam points stay on the mirror plane.', input_schema: {
+  { name: 'subd_rotate', description: 'Rotates selected base-part cage elements by signed degrees about world X/Y/Z or a selected planar quad frame. For face (winding normal), face-u or face-v select exactly one planar convex quad. U follows the lowest vertex ID to its winding successor; V = normal × U. Supply a current cage vertex ID or use the selection centre. Copy cageRevision from the selection. Mirror seam points stay on the mirror plane.', input_schema: {
     type: 'object', properties: { index: idx, cageRevision: { type: 'string', pattern: '^[a-f0-9]{64}$' },
-      axis: { type: 'string', enum: ['x', 'y', 'z'] }, degrees: { type: 'number' }, pivotVertex: { type: 'integer', minimum: 0 },
+      axis: { type: 'string', enum: ['x', 'y', 'z', 'face', 'face-u', 'face-v'] }, degrees: { type: 'number' }, pivotVertex: { type: 'integer', minimum: 0 },
       vertices: ints('vertex indices'), edges: pairs('edges [a, b]'), faces: ints('face indices') },
     required: ['index', 'cageRevision', 'axis', 'degrees'], additionalProperties: false,
   } },
