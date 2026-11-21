@@ -10,7 +10,7 @@ type Circle = Extract<SketchShape, { kind: 'circle' }> & { ids: [string] };
 export type PreparedPathGap =
   | { kind: 'line'; shape: Polygon; arc: null }
   | { kind: 'arc'; shape: Polygon; arc: Arc }
-  | { kind: 'polyline'; shape: Polyline }
+  | { kind: 'polyline'; shape: Polyline; arc?: { span: number; geometry: Arc } }
   | { kind: 'circle'; shape: Circle };
 
 type GapGeometry = {
@@ -38,6 +38,13 @@ function boundedCircle(center: P2, radius: number): boolean {
     center.every(value => Math.abs(value) + radius <= coordinateAbs);
 }
 
+function boundedArc(a: P2, b: P2, bulge: number): Arc | null {
+  const arc = arcOf(a, b, bulge);
+  if (!boundedCircle(arc.center, arc.radius) ||
+      Math.abs(distance(b, arc.center) - arc.radius) > CadNumericPolicy.linearTolerance || Math.abs(arc.sweep) >= fullTurn) return null;
+  return arc;
+}
+
 export function preparePathGap(shape: SketchShape, ordinaryDraft = false): PreparedPathGap | null {
   const independentDraft = ordinaryDraft && (shape.kind === 'circle' || shape.kind === 'polygon');
   if (!shape.construction && !independentDraft) return null;
@@ -55,10 +62,21 @@ export function preparePathGap(shape: SketchShape, ordinaryDraft = false): Prepa
 
   if (shape.points.length > 2) {
     const { points } = shape;
-    if (!shape.construction || shape.bulges?.some(bulge => bulge !== 0) ||
+    if (!shape.construction ||
         !points.every((point, i) => inRange(point) && (i === 0 || distance(point, points[i - 1]) > openJoinTolerance)) ||
         distance(points[0], points[points.length - 1]) <= openJoinTolerance) return null;
-    return { kind: 'polyline', shape: shape as Polyline };
+    let arc: { span: number; geometry: Arc } | undefined;
+    for (let i = 0; i < points.length - 1; i++) {
+      const bulge = shape.bulges?.[i] ?? 0;
+      if (!Number.isFinite(bulge)) return null;
+      if (bulge !== 0) {
+        if (arc) return null;
+        const geometry = boundedArc(points[i], points[i + 1], bulge);
+        if (!geometry) return null;
+        arc = { span: i, geometry };
+      }
+    }
+    return { kind: 'polyline', shape: shape as Polyline, ...(arc ? { arc } : {}) };
   }
 
   const [a, b] = shape.points, bulge = shape.bulges?.[0] ?? 0;
@@ -66,9 +84,8 @@ export function preparePathGap(shape: SketchShape, ordinaryDraft = false): Prepa
   if (!Number.isFinite(bulge) || !inRange(a) || !inRange(b) || distance(a, b) <= linearTolerance) return null;
   const identified = shape as Polygon;
   if (bulge === 0) return { kind: 'line', shape: identified, arc: null };
-  const arc = arcOf(a, b, bulge);
-  if (!boundedCircle(arc.center, arc.radius) ||
-      Math.abs(distance(b, arc.center) - arc.radius) > linearTolerance || Math.abs(arc.sweep) >= fullTurn) return null;
+  const arc = boundedArc(a, b, bulge);
+  if (!arc) return null;
   return { kind: 'arc', shape: identified, arc };
 }
 
@@ -98,13 +115,27 @@ function planLineGap(a: P2, b: P2, pointer: P2, gapMm: number): SegmentGap | nul
   return { kind: 'segment', hit: pointAt(travelled), removed: [cutA, cutB], cutA, cutB, bulges: [0, 0] };
 }
 
-function planPolylineGap(points: readonly P2[], pointer: P2, gapMm: number): PathGapPlan | null {
+function arcTravel(arc: Arc, pointer: P2): number {
+  const offset = Math.sign(arc.sweep) * (Math.atan2(pointer[1] - arc.center[1], pointer[0] - arc.center[0]) - arc.start);
+  return offset < 0 ? offset + fullTurn : offset;
+}
+
+function spanDistance(a: P2, b: P2, arc: Arc | null, pointer: P2): number {
+  if (arc) {
+    // The radial projection is on the finite arc only inside its signed sweep.
+    if (arcTravel(arc, pointer) <= Math.abs(arc.sweep)) return Math.abs(distance(pointer, arc.center) - arc.radius);
+    return Math.min(distance(pointer, a), distance(pointer, b));
+  }
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const t = Math.max(0, Math.min(1, ((pointer[0] - a[0]) * dx + (pointer[1] - a[1]) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(pointer[0] - a[0] - t * dx, pointer[1] - a[1] - t * dy);
+}
+
+function planPolylineGap(source: Extract<PreparedPathGap, { kind: 'polyline' }>, pointer: P2, gapMm: number): PathGapPlan | null {
+  const { points } = source.shape;
   let closest = Infinity, next = Infinity, span = -1;
   for (let i = 0; i < points.length - 1; i++) {
-    const [x, y] = points[i];
-    const dx = points[i + 1][0] - x, dy = points[i + 1][1] - y;
-    const t = Math.max(0, Math.min(1, ((pointer[0] - x) * dx + (pointer[1] - y) * dy) / (dx * dx + dy * dy)));
-    const distance = Math.hypot(pointer[0] - x - t * dx, pointer[1] - y - t * dy);
+    const distance = spanDistance(points[i], points[i + 1], source.arc?.span === i ? source.arc.geometry : null, pointer);
     if (distance < closest) {
       next = closest;
       closest = distance;
@@ -113,8 +144,15 @@ function planPolylineGap(points: readonly P2[], pointer: P2, gapMm: number): Pat
   }
   // Locate the picked span before testing whether a gap fits in it.
   if (span < 0 || next - closest <= openJoinTolerance) return null;
-  const gap = planLineGap(points[span], points[span + 1], pointer, gapMm);
+  const arc = source.arc?.span === span ? source.arc.geometry : null;
+  const gap = arc ? planArcGap(points[span], points[span + 1], arc, pointer, gapMm) : planLineGap(points[span], points[span + 1], pointer, gapMm);
   if (!gap || points.some(point => distance(point, gap.cutA) <= openJoinTolerance || distance(point, gap.cutB) <= openJoinTolerance)) return null;
+  if (source.arc && points.some((point, i) => {
+    if (i >= points.length - 1 || i === span) return false;
+    const otherArc = source.arc?.span === i ? source.arc.geometry : null;
+    return spanDistance(point, points[i + 1], otherArc, gap.cutA) <= openJoinTolerance ||
+      spanDistance(point, points[i + 1], otherArc, gap.cutB) <= openJoinTolerance;
+  })) return null;
   return { ...gap, kind: 'polyline', span };
 }
 
@@ -151,21 +189,14 @@ function planCircleGap(shape: Circle, pointer: P2, gapMm: number): PathGapPlan |
   return { kind: 'circle', hit: pointAt(angle), removed: sampleRemovedArc(pointAt, lo, hi, cutA, cutB), cutA, cutB, bulges: [bulge] };
 }
 
-export function planPathGap(source: PreparedPathGap, pointer: P2, gapMm: number): PathGapPlan | null {
-  if (!Number.isFinite(gapMm) || gapMm <= openJoinTolerance) return null;
-  if (source.kind === 'circle') return planCircleGap(source.shape, pointer, gapMm);
-  if (source.kind === 'polyline') return planPolylineGap(source.shape.points, pointer, gapMm);
-  const [a, b] = source.shape.points;
-  if (source.kind === 'line') return planLineGap(a, b, pointer, gapMm);
-  const { arc } = source;
+function planArcGap(a: P2, b: P2, arc: Arc, pointer: P2, gapMm: number): SegmentGap | null {
   const { center, radius, start, sweep } = arc;
   const dx = pointer[0] - center[0], dy = pointer[1] - center[1];
   const pointerRadius = Math.hypot(dx, dy);
   if (!Number.isFinite(pointerRadius) || pointerRadius <= radius / 2) return null;
 
   const direction = Math.sign(sweep), total = Math.abs(sweep);
-  const offset = direction * (Math.atan2(dy, dx) - start);
-  const travelled = offset < 0 ? offset + fullTurn : offset;
+  const travelled = arcTravel(arc, pointer);
   const halfGap = gapMm / (2 * radius), lo = travelled - halfGap, hi = travelled + halfGap;
   if (!(0 < lo && lo < hi && hi < total)) return null;
 
@@ -183,4 +214,12 @@ export function planPathGap(source: PreparedPathGap, pointer: P2, gapMm: number)
   if (head === null || tail === null || Math.abs(head + tail + gapMm - radius * total) > storedPathTolerance) return null;
 
   return { kind: 'segment', hit: pointAt(travelled), removed: sampleRemovedArc(pointAt, lo, hi, cutA, cutB), cutA, cutB, bulges };
+}
+
+export function planPathGap(source: PreparedPathGap, pointer: P2, gapMm: number): PathGapPlan | null {
+  if (!Number.isFinite(gapMm) || gapMm <= openJoinTolerance) return null;
+  if (source.kind === 'circle') return planCircleGap(source.shape, pointer, gapMm);
+  if (source.kind === 'polyline') return planPolylineGap(source, pointer, gapMm);
+  const [a, b] = source.shape.points;
+  return source.kind === 'line' ? planLineGap(a, b, pointer, gapMm) : planArcGap(a, b, source.arc, pointer, gapMm);
 }

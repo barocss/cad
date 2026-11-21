@@ -5,16 +5,19 @@ import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
 const output = process.argv[2], baseline = process.env.D803_BASELINE === '1';
-const polyline = process.argv.includes('--polyline');
+const curved = process.argv.includes('--curved-polyline');
+const polyline = curved || process.argv.includes('--polyline');
+const label = curved ? 'D1607' : polyline ? 'D1602' : 'D803';
 const geometryOnly = polyline || process.argv.includes('--geometry-only');
 const pins = ['apps/cad-studio/test/line-path-gap-browser.mjs', 'apps/cad-studio/src/sketch/usePathGap.ts',
   'apps/cad-studio/src/sketch/pathGap.ts',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts', 'packages/barocss-cad-model/src/sketch/trim.ts'];
 const f = await createFlow({
-  name: 'line-path-gap', output, envFrozen: polyline ? 'D1602_SOURCE_FROZEN' : 'D803_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
-  qualification: polyline ? 'Cut 4 mm within a middle construction span and retain the adjoining spans and IDs.'
+  name: 'line-path-gap', output, envFrozen: label + '_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
+  qualification: polyline ? 'Cut 4 mm along a middle construction span and retain the adjoining spans and IDs.'
     : 'Cut 4 mm along a slanted construction segment and retain both identified ends.',
-  limits: [polyline ? 'One four-point straight construction polyline and one separate closed stock rectangle in XY.'
+  limits: [curved ? 'One quarter arc between two straight spans in a construction polyline and one separate closed rectangle in XY.'
+    : polyline ? 'One four-point straight construction polyline and one separate closed stock rectangle in XY.'
     : 'One 30 mm construction segment and one separate closed stock rectangle in XY.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -26,20 +29,30 @@ console.log(JSON.stringify(evaluateCadPart(toPartDocument(doc)).outputs.map(body
 }))));
 `,
 });
-const line = { kind: 'polygon', points: polyline ? [[16, 20], [20, 20], [44, 38], [44, 42]] : [[20, 20], [44, 38]], closed: false,
-  bulges: polyline ? [0, 0, 0, 0] : [0, 0], pending: false, construction: true,
+const line = {
+  kind: 'polygon', closed: false, pending: false, construction: true,
+  points: curved ? [[16, 20], [20, 20], [35, 35], [35, 39]]
+    : polyline ? [[16, 20], [20, 20], [44, 38], [44, 42]] : [[20, 20], [44, 38]],
+  bulges: polyline ? [0, curved ? Math.tan(-Math.PI / 8) : 0, 0, 0] : [0, 0],
   ids: polyline ? ['e5', 'e6', 'e7', 'e8'] : ['e5', 'e6'] };
 const stock = { kind: 'sketch', profile: 'rectangle', min: [50, 40], max: [55, 45], sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] }, id: 'n0' };
 const initial = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [{ ...stock, construction: [line] }], outputs: {}, nextId: 1 };
 const replacement = { ...initial, nodes: [stock] };
-const pick = [32, 29], nearEnd = [21, 20.75], outside = [33.2, 27.4], cutPoints = [[30.4, 27.8], [33.6, 30.2]];
+const radius = 15, centre = [35, 20], midAngle = 3 * Math.PI / 4;
+const arcPoint = (angle, r = radius) => [centre[0] + r * Math.cos(angle), centre[1] + r * Math.sin(angle)];
+const pick = curved ? arcPoint(midAngle) : [32, 29];
+const nearEnd = curved ? arcPoint(Math.PI - 0.05) : [21, 20.75];
+const outside = curved ? arcPoint(midAngle, radius - 3) : [33.2, 27.4];
+const cutPoints = curved ? [arcPoint(midAngle + 2 / radius), arcPoint(midAngle - 2 / radius)]
+  : [[30.4, 27.8], [33.6, 30.2]];
+const distance = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
 const button = (parent, name) => parent.getByRole('button', { name, exact: true });
 const gap = () => button(f.sketchPanel(), polyline ? 'Cut polyline gap' : 'Cut line gap');
 const length = () => f.sketchPanel().getByLabel('Gap length', { exact: true });
 const preview = () => f.page.locator('.vp-overlay .sk-path-gap');
 const versions = () => f.page.getByRole('complementary', { name: 'Versions panel', exact: true });
-const project = (polyline ? 'D1602 polyline gap ' : 'D803 line gap ') + randomUUID(), name = polyline ? 'polyline-gap.bcad' : 'line-gap.bcad';
+const project = label + ' gap ' + randomUUID(), name = curved ? 'arc-polyline-gap.bcad' : polyline ? 'polyline-gap.bcad' : 'line-gap.bcad';
 async function edit() {
   await button(f.page.getByRole('group', { name: 'History', exact: true }), 'Sketch · rectangle').click();
   await button(f.editor(), 'Edit sketch').click();
@@ -105,7 +118,7 @@ await f.run(async () => {
   await hover(outside);
   assert.equal(await preview().count(), 0);
   await f.worldClick(nearEnd);
-  const endNotice = polyline ? 'Pick one straight span away from a corner, or reduce Gap length.' : 'The gap must fit inside the line.';
+  const endNotice = polyline ? 'Pick one span away from a corner, or reduce Gap length.' : 'The gap must fit inside the line.';
   await f.sketchPanel().getByRole('status').getByText(endNotice).waitFor();
   await f.same(opened);
   if (polyline) await f.snapshot('00-corner-refused');
@@ -137,7 +150,7 @@ await f.run(async () => {
   }
   assert.equal(await gap().getAttribute('aria-pressed'), 'false');
 
-  f.phase = 'cut four millimetres measured along the 3–4–5 direction';
+  f.phase = 'cut four millimetres measured along the picked span';
   await gap().click();
   const hit = await hover(pick);
   await preview().waitFor({ timeout: 5000 });
@@ -160,18 +173,32 @@ await f.run(async () => {
   assert.equal(construction.length, 2);
   assert.deepEqual([...first.points.slice(0, -1), ...second.points.slice(1)], line.points);
   assert.deepEqual([first.ids, second.ids], polyline ? [['e5', 'e6', 'e9'], ['e10', 'e7', 'e8']] : [['e5', 'e7'], ['e8', 'e6']]);
-  const bulges = polyline ? [0, 0, 0] : [0, 0];
-  assert.deepEqual([first.bulges, second.bulges], [bulges, bulges]);
   assert.ok([first, second].every(part => part.construction && !part.closed && !part.pending));
   const cuts = [first.points.at(-1), second.points[0]];
-  const distance = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
   // The mouse lands on the projected sketch. Allow the existing stored-path tolerance for the Zoom and camera state.
   const positionTolerance = geometryOnly ? 1e-5 : 3e-6;
   for (const [index, point] of cutPoints.entries()) assert.ok(distance(cuts[index], point) < positionTolerance, cuts[index]);
-  const removed = distance(...cuts);
+  const chord = distance(...cuts);
+  let removed = chord;
+  if (curved) {
+    removed = 2 * radius * Math.asin(chord / (2 * radius));
+    assert.ok(removed - chord > 0.01);
+    const [before, after] = [first.bulges[1], second.bulges[0]];
+    assert.deepEqual([first.bulges[0], first.bulges[2], ...second.bulges.slice(1)], [0, 0, 0, 0]);
+    assert.ok(before < 0 && after < 0);
+    const remainingSweep = -4 * (Math.atan(before) + Math.atan(after));
+    assert.ok(Math.abs(radius * remainingSweep + removed - radius * Math.PI / 2) < 1e-5);
+    for (const [a, b, bulge] of [[line.points[1], cuts[0], before], [cuts[1], line.points[2], after]]) {
+      const storedRadius = distance(a, b) / (2 * Math.sin(-2 * Math.atan(bulge)));
+      assert.ok(Math.abs(storedRadius - radius) < 1e-5, storedRadius);
+    }
+  } else {
+    const bulges = polyline ? [0, 0, 0] : [0, 0];
+    assert.deepEqual([first.bulges, second.bulges], [bulges, bulges]);
+    const lengthOf = ({ points }) => points.slice(1).reduce((total, point, index) => total + distance(points[index], point), 0);
+    for (const part of [first, second]) assert.ok(Math.abs(lengthOf(part) - (polyline ? 17 : 13)) < 1e-5);
+  }
   assert.ok(Math.abs(removed - 4) < 1e-5, removed);
-  const lengthOf = ({ points }) => points.slice(1).reduce((total, point, index) => total + distance(points[index], point), 0);
-  for (const part of [first, second]) assert.ok(Math.abs(lengthOf(part) - (polyline ? 17 : 13)) < 1e-5);
   assert.deepEqual(stockAfter, stock);
   await f.undo();
   await f.same(opened);
@@ -216,7 +243,7 @@ await f.run(async () => {
     await f.sketchPanel().waitFor({ state: 'hidden' });
     await f.same(solid.doc);
   }
-  f.report.observations.push({ label: 'line-gap', cuts, removedMm: removed, retainedIds: [first.ids, second.ids], volumeMm3: 50,
+  f.report.observations.push({ label: curved ? 'arc-gap' : 'line-gap', cuts, removedMm: removed, chordMm: chord, retainedIds: [first.ids, second.ids], volumeMm3: 50,
     bytes: bytes.length, sha256: sha256(bytes) });
   assert.deepEqual(f.report.downloads, []);
 });

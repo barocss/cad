@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1607: [Cut a fixed-length gap in a construction arc span](notes/construction-polyline-arc-gap-2026-11-22/README.md), #226. Preserve the adjoining spans and source point IDs through project Save and Open.
 - D1606: [Propose an outside wall Offset on a coaxial tube](notes/reviewed-coaxial-tube-outer-wall-offset-2026-11-22/README.md), #322 and #629. Pin the evaluated wall and revision, approve in Studio and preserve the bore through native Open.
 - D1605: [Join a straight span to a quadratic span at an exact endpoint](notes/join-straight-quadratic-native-2026-11-22/README.md), #29. Preserve both shapes and source texts through native Save and Open.
 - D1604: [Propose Extrude to face from the current Agent review](notes/reviewed-extrude-to-face-2026-11-22/README.md), #322 and #222. Pin the sketch and exact native face, approve in Studio and retain associative height after Open.

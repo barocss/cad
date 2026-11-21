@@ -77,7 +77,7 @@ export function usePathGap(doc: StudioDoc, sketch: SketchState | null, docNow: R
       if (!value || value !== expected) return;
       if (!plan) {
         const kind = value.source.kind;
-        const notice = kind === 'polyline' ? 'Pick one straight span away from a corner, or reduce Gap length.'
+        const notice = kind === 'polyline' ? 'Pick one span away from a corner, or reduce Gap length.'
           : `The gap must fit inside the ${kind}. ${kind === 'circle' ? 'Reduce Gap length or pick another point on the circle.' : `Move away from the ${kind} endpoints or reduce Gap length.`}`;
         change({ ...value, notice });
         return;
@@ -93,9 +93,12 @@ export function usePathGap(doc: StudioDoc, sketch: SketchState | null, docNow: R
         fragments = [pathFragment([plan.cutB, plan.cutA], [secondCutId, firstCutId], source.shape.construction, [plan.bulges[0], 0])];
       } else if (source.kind === 'polyline' && plan.kind === 'polyline') {
         const { points, ids } = source.shape, split = plan.span + 1;
+        const bulges = points.map((_, i) => source.shape.bulges?.[i] ?? 0);
         fragments = [
-          pathFragment([...points.slice(0, split), plan.cutA], [...ids.slice(0, split), firstCutId], true),
-          pathFragment([plan.cutB, ...points.slice(split)], [secondCutId, ...ids.slice(split)], true),
+          pathFragment([...points.slice(0, split), plan.cutA], [...ids.slice(0, split), firstCutId], true,
+            [...bulges.slice(0, plan.span), plan.bulges[0], 0]),
+          pathFragment([plan.cutB, ...points.slice(split)], [secondCutId, ...ids.slice(split)], true,
+            [plan.bulges[1], ...bulges.slice(split, -1), 0]),
         ];
       } else if ((source.kind === 'line' || source.kind === 'arc') && plan.kind === 'segment') {
         const [a, b] = source.shape.points, [startId, endId] = source.shape.ids;
