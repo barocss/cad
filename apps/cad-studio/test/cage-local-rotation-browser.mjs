@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 const planeBaseline = process.argv.includes('--expect-no-plane-turn');
 const edgeBaseline = process.argv.includes('--expect-no-edge-turn');
+const facePivotBaseline = process.argv.includes('--expect-no-face-pivot');
+const facePivot = facePivotBaseline || process.argv.includes('--face-pivot');
 const edgeTurn = edgeBaseline || process.argv.includes('--edge-turn');
-const baseline = planeBaseline || edgeBaseline || process.argv.includes('--expect-no-normal-turn');
+const baseline = planeBaseline || edgeBaseline || facePivotBaseline || process.argv.includes('--expect-no-normal-turn');
 const localFrame = edgeTurn ? 'edge' : process.argv.includes('--v-turn') ? 'face-v' : process.argv.includes('--u-turn') || planeBaseline ? 'face-u' : 'face';
-const physical = baseline || localFrame !== 'face' || process.argv.includes('--normal-turn');
+const physical = baseline || localFrame !== 'face' || facePivot || process.argv.includes('--normal-turn');
 const rotationAxis = localFrame === 'face-u' ? 0 : localFrame === 'face-v' || edgeTurn ? 1 : 2;
 const localLabel = edgeTurn ? 'T' : 'UVN'[rotationAxis];
 const pins=['packages/barocss-cad-model/src/subd/cageLocalDirection.ts','packages/barocss-cad-model/src/subd/cageEdit.ts','apps/cad-studio/src/ui/CagePanel.tsx','apps/cad-studio/src/subd/useCageEditor.ts','apps/cad-studio/src/subd/cageTransformDraft.ts','apps/cad-studio/src/ui/CageTransformControls.tsx'];
@@ -43,10 +45,14 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
  const mark=f.page.locator('[data-gizmo="turnAlong"]');
  await tool.selectOption('rotate');
  if (baseline) {
-  if (planeBaseline) assert.equal(await frame.locator('option[value="face-u"],option[value="face-v"]').count(),0);
+  if (facePivotBaseline) {
+   await frame.selectOption(localFrame);
+   assert.equal(await panel().getByLabel('Rotate drag pivot',{exact:true}).count(),0);
+   await mark.waitFor();
+  } else if (planeBaseline) assert.equal(await frame.locator('option[value="face-u"],option[value="face-v"]').count(),0);
   else if (edgeBaseline) assert.equal(await frame.locator('option[value="edge"]').count(),0);
   else assert.equal(await frame.count(),0);
-  assert.equal(await mark.count(),0);
+  if (!facePivotBaseline) assert.equal(await mark.count(),0);
   await f.snapshot('original-world-rotation-only');
   await openLocal();
   await f.page.getByLabel('Selection angle degrees',{exact:true}).fill('15');
@@ -72,6 +78,7 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
  assert.equal(await f.page.locator('[data-gizmo^="turn"]').count(),1);
  const readout=f.page.locator('.gizmo-readout'), undo=()=>button('Undo cage step',panel()).click();
  let pivot=centre, vertexId;
+ const turnAngle=facePivot?15:30;
  const verifyAngle=(after,angle)=>verify(after,angle,pivot);
  async function start(angle) {
   const hit=await mark.locator('polyline').last().evaluate(async (line,{centre,tilt,angle,rotationAxis,edgeSign})=>{
@@ -112,34 +119,50 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
  }
  if (edge) {
   f.phase='verify the centred tangent identity and select an off-edge pivot';
-  await start(30);await f.page.mouse.up();
+  await start(turnAngle);await f.page.mouse.up();
   assert.deepEqual(await state(),tilted);
+ }
+ if (edge || facePivot) {
+  f.phase='reject an invalid vertex and select the original cage pivot';
   await panel().getByLabel('Rotate drag pivot',{exact:true}).selectOption('vertex');
   const vertex=panel().getByRole('spinbutton',{name:'Rotate drag vertex ID',exact:true});
   await vertex.fill('-1');
   await panel().getByRole('status').filter({hasText:'Enter a current cage vertex ID'}).waitFor();
   assert.equal(await mark.count(),0);
   assert.deepEqual(await state(),tilted);
-  vertexId=edge.vertex;
+  vertexId=edge?.vertex??Math.min(...tilted.cage.faces[tilted.sel.faces[0]]);
   pivot=tilted.cage.positions.slice(3*vertexId,3*vertexId+3);
   await vertex.fill(String(vertexId));
   await mark.waitFor();
+  if(facePivot){
+   f.phase='retire a face-local pivot after its vertex moves';
+   await button('Move selection',panel()).click();
+   await f.page.getByLabel('Selection distance mm',{exact:true}).fill('0.5');
+   await apply();
+   const moved=await state();
+   assert.deepEqual(moved.cage.positions.slice(3*vertexId,3*vertexId+3),[pivot[0],pivot[1],pivot[2]+0.5]);
+   await panel().getByRole('status').filter({hasText:'The cage changed. Enter the pivot vertex again.'}).waitFor();
+   assert.equal(await mark.count(),0);
+   await f.snapshot('local-rotation-pivot-retired');
+   await undo();assert.deepEqual(await state(),tilted);
+   await mark.waitFor();
+  }
  }
  f.phase='hold a projected normal rotation and cancel it with Escape';
- const screenSweep=await start(30);
- if (rotationAxis===2) assert.ok(Math.abs(Math.abs(screenSweep)-30)>10,JSON.stringify(screenSweep));
+ const screenSweep=await start(turnAngle);
+ if (rotationAxis===2 && !facePivot) assert.ok(Math.abs(Math.abs(screenSweep)-turnAngle)>10,JSON.stringify(screenSweep));
  assert.deepEqual(await state(),tilted);
  await f.same(base);
  await f.snapshot('face-normal-rotation-preview');
  await f.page.keyboard.press('Escape');await f.page.mouse.up();
  assert.deepEqual(await state(),tilted);
  f.phase='discard local turn when the pointer view changes';
- await start(30);
+ await start(turnAngle);
  await f.page.mouse.wheel(0,200);
  await readout.waitFor({state:'detached'});
  await f.page.mouse.up();
  assert.deepEqual(await state(),tilted);
- await start(30);
+ await start(turnAngle);
  await f.page.setViewportSize({width:1470,height:1000});
  await f.page.mouse.up();
  await readout.waitFor({state:'detached'});
@@ -147,7 +170,7 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
  await f.page.setViewportSize({width:1440,height:1000});
  await f.same(base);
  f.phase='apply both world-plane directions';
- for(const angle of [-30,30]){
+ for(const angle of [-turnAngle,turnAngle]){
   await start(angle);await f.page.mouse.up();
   const rotated=await state();verifyAngle(rotated,angle);
   assert.deepEqual(rotated.sel,tilted.sel);
@@ -155,22 +178,22 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
   assert.equal(rotated.undo,tilted.undo+1);
   await undo();assert.deepEqual(await state(),tilted);
  }
- await start(30);await f.page.mouse.up();
- const rotated=await state();verifyAngle(rotated,30);
+ await start(turnAngle);await f.page.mouse.up();
+ const rotated=await state();verifyAngle(rotated,turnAngle);
  await undo();
  await button('Redo cage step',panel()).click();
  assert.deepEqual(await state(),rotated);
  await undo();
  await openLocal();
- if (edge) {
+ if (vertexId !== undefined) {
   await f.page.getByLabel('Selection pivot',{exact:true}).selectOption('vertex');
   await f.page.getByRole('spinbutton',{name:'Pivot cage vertex',exact:true}).fill(String(vertexId));
  }
- await f.page.getByLabel('Selection angle degrees',{exact:true}).fill('30');
+ await f.page.getByLabel('Selection angle degrees',{exact:true}).fill(String(turnAngle));
  await apply();
  assert.deepEqual(await state(),rotated);
  await undo();
- await start(30);await f.page.mouse.up();
+ await start(turnAngle);await f.page.mouse.up();
  assert.deepEqual(await state(),rotated);
  await done();
  const accepted=await f.doc();
@@ -178,7 +201,7 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
  await f.undo();await f.same(base);await f.redo();await f.same(accepted);
  const saved=await f.save('normal-rotation-drag');
  await f.freshOpen(saved.file,accepted,'normal-rotation-drag-reopened');
- f.report.observations.push({axis:localLabel,tilt:degreesOfTilt,planeSweep:30,screenSweep,independentNumericParity:true,edge,vertexId,pivot});
+ f.report.observations.push({axis:localLabel,tilt:degreesOfTilt,planeSweep:turnAngle,screenSweep,independentNumericParity:true,edge,vertexId,pivot});
 }
 await f.run(async()=>{
  await f.newPage();await f.page.setViewportSize({width:1440,height:1000});await button('New part').click();await f.page.waitForFunction(()=>window.__studioDoc.nodes.length===0);await f.ready();

@@ -69,18 +69,17 @@ export function useCageGizmo(
   const [pivotVertex, setPivotVertex] = useState<PivotVertexInput | null>(null);
   const pivot = useMemo(() => {
     if (tool === 'move' || !session) return null;
-    const mode = localRotate && rotateFrame !== 'edge' ? 'centre' : pivotMode;
     try {
-      const at = cageTransformPivot(session, mode, pivotVertex?.value ?? '');
+      const at = cageTransformPivot(session, pivotMode, pivotVertex?.value ?? '');
       // Cage operations can renumber vertices even when the old number stays in range.
-      if (mode === 'vertex' && pivotVertex && !currentPivotVertex(pivotVertex, session.cage, at)) {
+      if (pivotMode === 'vertex' && pivotVertex && !currentPivotVertex(pivotVertex, session.cage, at)) {
         return { reason: 'The cage changed. Enter the pivot vertex again.' };
       }
       return { at };
     } catch (error) {
       return { reason: error instanceof Error ? error.message : String(error) };
     }
-  }, [tool, session, localRotate, rotateFrame, pivotMode, pivotVertex]);
+  }, [tool, session, pivotMode, pivotVertex]);
   const [dragFrame, setDragFrame] = useState<CageDragFrame>('world');
   const frameMode = tool === 'move' && session?.mode === (dragFrame === 'edge' ? 'edge' : 'face') ? dragFrame : 'world';
   const local = useMemo(() => {

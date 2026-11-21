@@ -76,7 +76,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
       </NativeSelect></label>
       {rotation.reason && <div className="warn" role="status">{rotation.reason}.</div>}
     </>}
-    {!!n && (dragSettings.tool === 'scale' || dragSettings.tool === 'rotate' && (rotation.frame === 'world' || rotation.frame === 'edge')) && <>
+    {!!n && dragSettings.tool !== 'move' && <>
       <label className={FIELD}><span>Pivot</span><NativeSelect className={CONTROL} aria-label={`${pivotTool} drag pivot`} value={pivot.mode} disabled={dragging}
         onChange={event => pivot.setMode(event.target.value === 'vertex' ? 'vertex' : 'centre')}>
         <option value="centre">Selection centre</option><option value="vertex">Cage vertex</option>
