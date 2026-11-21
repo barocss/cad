@@ -1,5 +1,5 @@
 import { CadNumericPolicy, CadPartLimits, ExtrudedProfileLimits, checkOutput, coedgeVertices, evaluateCadPart, faceGeometry, type Brep, type BrepFace, type CadPartFeature, type Point } from '@barocss/cad';
-import { circularCapReplacementFrame } from '@barocss/cad/internal/bored-cap-offset';
+import { annularCapReplacementFrame, circularCapReplacementFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { NODE_EXTRA_FIELDS, type DocPlane, type FaceEndExtrudeNode, type ModelNode, type NodeExtras, type SketchNode, type StudioDoc } from './doc';
 import { refusal } from './refusal';
 import { finiteBinary64Integer as exact } from './binary64';
@@ -16,6 +16,21 @@ function targetDimension(value: unknown, parameters: unknown): number {
   const resolved = record(value) && typeof value.parameter === 'string' && record(parameters)
     && Object.hasOwn(parameters, value.parameter) ? parameters[value.parameter] : value;
   return typeof resolved === 'number' && Number.isFinite(resolved) ? resolved : NaN;
+}
+
+const uniqueIdentity = (nodes: readonly unknown[], id: unknown): id is string => typeof id === 'string' && /^n\d+$/.test(id)
+  && nodes.filter(node => record(node) && node.id === id).length === 1;
+
+/** A direct Hole must still refer to the same authored forward circular stock. */
+function annularSource(nodes: readonly unknown[], index: number) {
+  const hole = nodes[index];
+  if (!record(hole) || hole.kind !== 'hole' || !record(hole.parent) || hole.parent.side !== 'solid'
+    || !previous(hole.parent.node, index)) return;
+  const stock = nodes[hole.parent.node];
+  if (!record(stock) || stock.kind !== 'extrude' || !previous(stock.sketch, hole.parent.node)) return;
+  const circle = nodes[stock.sketch];
+  if (!record(circle) || circle.kind !== 'sketch' || circle.profile !== 'circle') return;
+  return { hole, stock, circle, sketchIndex: stock.sketch };
 }
 
 /** Detaching drops the target and its reference metadata. The feature and source IDs stay in place. */
@@ -44,6 +59,16 @@ function recipeProblem(node: Record<string, unknown>, index: number, nodes: read
   if (node.suppressed !== true && source.kind === 'extrude' && !source.draft
     && target.face === `${target.feature}.bottom` && !(targetDimension(source.height, parameters) > 0)) {
     return 'the target extrusion must stay forward to preserve its authored start cap.';
+  }
+  const annular = annularSource(nodes, body.node);
+  if (annular && target.face.endsWith('.bottom')) {
+    if (!uniqueIdentity(nodes, annular.stock.id) || !uniqueIdentity(nodes, annular.circle.id)) {
+      return 'the target stock or source sketch identity is missing, changed or ambiguous.';
+    }
+    if (target.face !== `${annular.stock.id}.bottom`) return 'the original lower target face identity has changed.';
+    if (node.suppressed !== true && !annular.stock.draft && !(targetDimension(annular.stock.height, parameters) > 0)) {
+      return 'the target extrusion must stay forward to preserve its authored start cap.';
+    }
   }
   return null;
 }
@@ -171,6 +196,51 @@ function circularRectangleTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketc
   };
 }
 
+/** One original lower annulus of a forward upright coaxial circular Extrude and through Hole. */
+function annularRectangleTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
+  brep: Brep, face: BrepFace, axes: EndFrame, min: readonly number[], max: readonly number[]): ReturnType<typeof targetPolygon> | undefined {
+  if (sketch.profile !== 'rectangle' || axes !== XY) return;
+  const source = annularSource(doc.nodes, node.target.body.node);
+  if (!source) return;
+  const { hole, stock, circle } = source;
+  if (hole.suppressed || hole.held || stock.suppressed || stock.held || circle.suppressed || circle.held
+    || (hole.axis !== undefined && hole.axis !== 'z') || hole.depth !== undefined || hole.pattern !== undefined
+    || hole.countersink !== undefined || hole.csk !== undefined || hole.thread !== undefined || hole.face !== undefined
+    || stock.draft || stock.cutDepth !== undefined || circle.plane !== undefined
+    || !(targetDimension(stock.height, doc.parameters) > 0) || face.name !== `${stock.id}.bottom`
+    || !uniqueIdentity(doc.nodes, stock.id) || !uniqueIdentity(doc.nodes, circle.id)) return;
+  const authoredCircle = doc.nodes[source.sketchIndex];
+  if (authoredCircle.kind !== 'sketch' || authoredCircle.profile !== 'circle' || !literalCircle(authoredCircle)
+    || !Array.isArray(hole.center) || hole.center.length !== 2
+    || !hole.center.every((value, i) => targetDimension(value, doc.parameters) === authoredCircle.center[i])) return;
+  const frame = annularCapReplacementFrame(brep, face.name!);
+  if (!frame || frame.normal[0] !== 0 || frame.normal[1] !== 0 || frame.normal[2] !== -1) return;
+  // The kernel certifies the entire annular trim and both pairs of native half cylinders.
+  // Its anchor is a material point: only its Z station is a cap coordinate.
+  const cylinders = brep.faces.map(candidate => faceGeometry(candidate)).filter(support => support.kind === 'cylinder');
+  const outer = cylinders.filter(support => support.out === 1), inner = cylinders.filter(support => support.out === -1);
+  if (cylinders.length !== 4 || outer.length !== 2 || inner.length !== 2) return;
+  const extent = Math.max(1, ...brep.faces.flatMap(candidate => candidate.surface.kind === 'surface'
+    ? candidate.surface.controlPoints.flat().flat().map(Math.abs) : []));
+  const roundoff = 64 * Number.EPSILON * extent, [cx, cy] = outer[0].c, level = frame.anchor[2];
+  if (!cylinders.every(support => support.a[0] === 0 && support.a[1] === 0 && support.a[2] === 1
+    && support.c.every(finiteCoordinate) && finiteCoordinate(support.r)
+    && Math.hypot(support.c[0] - cx, support.c[1] - cy) <= roundoff
+    && Math.hypot(support.c[0] - authoredCircle.center[0], support.c[1] - authoredCircle.center[1]) <= roundoff)) return;
+  const separation = (support: typeof outer[number]) => Math.hypot(support.c[0] - cx, support.c[1] - cy);
+  const radius = Math.min(...outer.map(support => support.r - separation(support))) - roundoff;
+  const bore = Math.max(...inner.map(support => support.r + separation(support))) + roundoff;
+  if (!(bore > roundoff && radius - bore > roundoff)) throw invalid('the annular target radii cannot be certified.');
+  // Clamp the native bore centre to the whole rectangle. Corner tests alone miss
+  // a bore crossing an edge or lying entirely inside the projected footprint.
+  const dx = Math.max(min[0] - cx, 0, cx - max[0]), dy = Math.max(min[1] - cy, 0, cy - max[1]);
+  if (!(Math.hypot(dx, dy) > bore + roundoff)) throw invalid('the target face must contain the entire projected profile clear of its bore.');
+  return {
+    min: [cx - radius, cy - radius], max: [cx + radius, cy + radius], level, rectangle: false,
+    contains: point => Math.hypot(point[0] - cx, point[1] - cy) + roundoff <= radius,
+  };
+}
+
 /** Exact global convexity plus the existing minimum edge/altitude boundary. */
 function admittedPolygon(points: readonly (readonly number[])[]): boolean {
   const n = points.length;
@@ -265,7 +335,9 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const brep = outputs[0].brep;
   const faces = brep.faces.filter(face => face.name === node.target.face);
   if (faces.length !== 1) throw missing('the named target face is missing or ambiguous.');
-  const box = circularRectangleTarget(doc, node, sketch, brep, faces[0], axes) ?? targetPolygon(brep, faces[0], axes);
+  const box = circularRectangleTarget(doc, node, sketch, brep, faces[0], axes)
+    ?? annularRectangleTarget(doc, node, sketch, brep, faces[0], axes, [u0, v0], [u1, v1])
+    ?? targetPolygon(brep, faces[0], axes);
   if (u0 < box.min[0] || v0 < box.min[1] || u1 > box.max[0] || v1 > box.max[1]) throw invalid('the target face must contain the entire projected profile.');
   if (!box.rectangle) {
     // Native circles reconstruct their radius from rounded arc endpoints. Do not

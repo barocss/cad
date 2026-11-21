@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1609: [Extrude a rectangle to an original annular cap](notes/rectangle-to-annular-cap-2026-11-22/README.md), #222. Check the entire footprint against the through bore and preserve the target through History and native Open.
 - D1608: [Start Slot at a calculated two-point snap](notes/calculated-sketch-slot-start-2026-11-22/README.md), #229. Place the exact first centre once and verify the extruded slot after native Open.
 - D1607: [Cut a fixed-length gap in a construction arc span](notes/construction-polyline-arc-gap-2026-11-22/README.md), #226. Preserve the adjoining spans and source point IDs through project Save and Open.
 - D1606: [Propose an outside wall Offset on a coaxial tube](notes/reviewed-coaxial-tube-outer-wall-offset-2026-11-22/README.md), #322 and #629. Pin the evaluated wall and revision, approve in Studio and preserve the bore through native Open.
