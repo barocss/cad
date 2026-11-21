@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
+const tilted = process.argv.includes('--tilted');
 const pins = [
   'apps/cad-studio/test/smooth-turn-browser.mjs', 'apps/cad-studio/src/App.tsx',
   'packages/barocss-cad-model/src/app/profileCommands.ts', 'packages/barocss-cad-model/src/app/ruledTurnCommand.ts',
@@ -12,12 +13,13 @@ const f = await createFlow({
   envFrozen: 'SMOOTH_TURN_SOURCE_FROZEN',
   initialFiles: pins,
   requiredFrozen: pins,
-  qualification: 'Compare the existing ruled turn with a smooth native turn made from the same rectangle.',
+  qualification: tilted ? 'Verify the continuous native Smooth Turn on a tilted source plane.' :
+    'Compare the existing ruled turn with a smooth native turn made from the same rectangle.',
   limits: ['Desktop Studio, equal-section 12 × 8 mm rectangles, sampled smooth C2 approximation.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
-import { brepMassProperties, checkBrep, evaluateCurveD1 } from '@barocss/cad';
+import { brepMassProperties, checkBrep, evaluateCurveD1, faceGeometry } from '@barocss/cad';
 import { digestOf } from '@barocss/cad-model/util/digest';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 console.log(JSON.stringify(partBreps(doc).map(({ brep, key }) => {
@@ -27,6 +29,7 @@ console.log(JSON.stringify(partBreps(doc).map(({ brep, key }) => {
     count: brep.bodies.length, closed: brep.shells.length === 1 && brep.shells[0].closed,
     kind: brep.bodies[0].kind, valid: checkBrep(brep, { strict: true }).valid,
     faces: brep.faces.length, edges: brep.edges.length,
+    planes: brep.faces.map(faceGeometry).filter(g => g.kind === 'plane'),
     rails: rails.map(rail => ({ knots: rail.knots, degree: rail.degree, poles: rail.controlPoints.length,
       samples: parameters.map(parameter => evaluateCurveD1(rail, parameter)) })),
   };
@@ -36,11 +39,19 @@ console.log(JSON.stringify(partBreps(doc).map(({ brep, key }) => {
 
 const min = [1, 2], max = [13, 10], centre = [47, -11], z0 = 3;
 const corners = [[-6, -4], [6, -4], [6, 4], [-6, 4]];
+const frameOrigin = tilted ? [15, -30, 20] : [0, 0, 0];
+const frameAxes = tilted ? [[.6, .8, 0], [-.48, .36, .8], [.64, -.48, .6]] :
+  [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+const [frameU, , frameN] = frameAxes;
+const dot = (a, b) => a.reduce((sum, value, i) => sum + value * b[i], 0);
+const worldPoint = coordinates => frameOrigin.map((origin, k) =>
+  origin + coordinates.reduce((delta, value, i) => delta + value * frameAxes[i][k], 0));
+const localPoint = point => frameAxes.map(axis => dot(axis, point.map((value, i) => value - frameOrigin[i])));
 const source = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, outputs: {}, nextId: 2,
   nodes: [11, 40].map((x, index) => ({
     id: `n${index}`, kind: 'sketch', profile: 'rectangle', min, max,
-    plane: { origin: [x, -17, z0], normal: [0, 0, 1], xAxis: [1, 0, 0] },
+    plane: { origin: worldPoint([x, -17, z0]), normal: frameN, xAxis: frameU },
   })),
 };
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -60,8 +71,14 @@ async function create(previous, sketch, command, height, angle) {
 }
 
 async function frame() {
-  await button('Iso').click();
+  await button(tilted ? 'Front' : 'Iso').click();
+  if (tilted && await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  if (!tilted) return;
+  const ao = button('AO');
+  if (await ao.getAttribute('aria-pressed') === 'true') await ao.click();
+  await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+  assert.equal(await ao.getAttribute('aria-pressed'), 'false');
 }
 
 async function inspect(doc, label, degrees, height) {
@@ -84,6 +101,13 @@ async function inspect(doc, label, degrees, height) {
   assert.ok(Math.abs(ruled.volume - 2560) < 1e-7);
   assert.deepEqual([smooth.faces, smooth.edges, smooth.rails.length], [6, 12, 4]);
   assert.ok(Math.abs(smooth.volume - height * 96) < 0.7);
+  assert.equal(smooth.planes.length, 2);
+  const capStations = smooth.planes.map(plane => {
+    assert.ok(Math.abs(Math.abs(dot(plane.n, frameN)) - 1) < 1e-10);
+    return localPoint(plane.o)[2];
+  }).sort((a, b) => a - b);
+  assert.ok(Math.abs(capStations[0] - z0) < 1e-8);
+  assert.ok(Math.abs(capStations[1] - z0 - height) < 1e-8);
   let maxDeviation = 0;
   for (const [index, rail] of smooth.rails.entries()) {
     const [x, y] = corners[index];
@@ -91,7 +115,9 @@ async function inspect(doc, label, degrees, height) {
     assert.equal(rail.poles, features[1].sections.length);
     const interior = rail.knots.slice(4, -4);
     assert.ok(interior.every((knot, index) => index === 0 || knot > interior[index - 1]));
-    for (const [sample, { point: [px, py, pz], derivative: [dx, dy, dz] }] of rail.samples.entries()) {
+    for (const [sample, { point, derivative }] of rail.samples.entries()) {
+      const [px, py, pz] = localPoint(point);
+      const [dx, dy, dz] = frameAxes.map(axis => dot(axis, derivative));
       const t = sample / (rail.samples.length - 1), angle = degrees * Math.PI / 180 * t;
       const c = Math.cos(angle), s = Math.sin(angle), a = px - centre[0], b = py - centre[1];
       assert.ok((a * dy - b * dx) * Math.sign(degrees) > 0);
@@ -100,7 +126,7 @@ async function inspect(doc, label, degrees, height) {
     }
   }
   assert.ok(maxDeviation < 0.016, JSON.stringify({ degrees, maxDeviation }));
-  f.report.observations.push({ label, degrees, height, maxDeviation, volume: smooth.volume, digest: smooth.digest });
+  f.report.observations.push({ label, degrees, height, maxDeviation, capStations, axis: frameN, volume: smooth.volume, digest: smooth.digest });
   return smooth;
 }
 

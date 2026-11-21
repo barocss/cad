@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1529: [Verify continuous Smooth Turn on a tilted sketch plane](notes/tilted-smooth-turn-2026-11-21/README.md), #630. Verify the signed rotation, world axis, caps and exact native reopening in Studio.
 - D1528: [Verify WebGPU annotation picking across native Save and Open](notes/pmi-native-save-pick-2026-11-21/README.md), #268. Pick from actual current glyph pixels and retain the authored file without restoring the previous selection.
 - D1527: [Keep a regenerated drawing diameter attached to its bore](notes/drawing-bore-regeneration-2026-11-21/README.md), #738 and #202. Verify Ø8 to Ø10 and the missing reference with same-size neighbors in desktop Studio and independently read SVGs.
 - D1526: [Drag a saved tapered lower-cap Offset from its native face](notes/saved-tapered-lower-offset-handle-2026-11-21/README.md), #629. Reopen the saved cap, drag it in the signed direction and verify typed parity and native reopening in Studio.
