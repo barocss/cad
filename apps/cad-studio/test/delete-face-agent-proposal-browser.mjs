@@ -4,8 +4,10 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const [output, input] = process.argv.slice(2);
+const [output, input, mode] = process.argv.slice(2);
 assert.ok(input && output && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
+assert.ok(mode === undefined || mode === '--stale');
+const staleRecovery = mode === '--stale';
 const stockBytes = await readFile(input), stock = JSON.parse(stockBytes);
 const title = 'Restore the sharp upper cap edge', face = 'n2.face', sharp = 'n1.side0|n1.top';
 const roundedVolume = 12000 - 40 * (4 - Math.PI);
@@ -21,7 +23,8 @@ const pins = [
 const f = await createFlow({
   name: 'delete-face-agent-proposal', envFrozen: 'DELETE_FACE_PROPOSAL_FROZEN', output,
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Propose the exact full-span fillet repair via local MCP, then preview, approve, save and reopen in Studio.',
+  qualification: staleRecovery ? 'Block a pending exact repair after a Studio radius edit, then restore the original review with Undo.'
+    : 'Propose the exact full-span fillet repair via local MCP, then preview, approve, save and reopen in Studio.',
   limits: ['One R2 upper front fillet on a 40 × 30 × 10 mm box. Local autonomy L1 and one human approval.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -41,6 +44,50 @@ async function shownVolume(key) {
     return shown?.shownKeys?.length === 1 && shown.shownKeys[0] === key && Number.isFinite(shown.shownVolume);
   }, key);
   return f.page.evaluate(() => window.__studioSection().shownVolume);
+}
+
+async function editSourceAndRecover(pending) {
+  await f.openFeatureEditor(2, 'original R2 fillet');
+  const radius = f.editor().getByLabel('Radius', { exact: true });
+  assert.equal(await radius.inputValue(), '2');
+  await radius.fill('3');
+  await f.applyEditor(pending, 'edited-source-r3');
+  const edited = await f.doc();
+  assert.equal(edited.nodes.length, pending.nodes.length);
+  assert.equal(edited.nodes.at(-1).radius, 3);
+  assert.deepEqual(edited.proposals, pending.proposals);
+  const actual = await f.inspect('edited-r3-native', edited), volume = 12000 - 40 * 9 * (1 - Math.PI / 4);
+  assert.ok(actual.report.valid);
+  verifyNear(actual.mass.volume, volume);
+  verifyNear((await f.bodies()).bodies[0].volume, volume);
+
+  f.phase = 'Refuse the pinned R2 repair on the edited R3 source';
+  await card().locator('.stale').waitFor();
+  assert.equal(await button('Preview', card()).isDisabled(), true);
+  assert.equal(await button('Accept', card()).count(), 0);
+  await f.snapshot('stale-preview-blocked');
+  await button('Rebase & preview', card()).click();
+  await f.waitToast(/part changed since the requested revision/i);
+  await f.same(edited);
+  await f.snapshot('stale-repair-refused');
+
+  const saved = await f.save('stale-cap-heal-r3'), savedBytes = await readFile(saved.file);
+  await mcp(saved.file, 'stale-source', async call => {
+    const list = await call('proposals', { action: 'list', all: true });
+    assert.deepEqual(list.proposals.map(p => [p.id, p.status, p.stale]), [['P1', 'open', true]]);
+    const refused = await call('proposals', { action: 'accept', id: 'P1' }, true);
+    assert.match(refused.error, /P1 is stale\. Its source or requirements changed/);
+    assert.deepEqual(await readFile(saved.file), savedBytes);
+  });
+  await f.undo();
+  await f.same(pending);
+  await card().locator('.stale').waitFor({ state: 'hidden' });
+  await f.page.waitForFunction(() => {
+    const preview = [...document.querySelectorAll('[aria-label="Proposal P1"] button')].find(button => button.textContent === 'Preview');
+    return preview && !preview.disabled;
+  });
+  await f.snapshot('source-undo-restores-review');
+  f.report.observations.push({ label: 'stale-source', volume, revisionStillBlocked: true, savedHash: sha256(savedBytes) });
 }
 
 await f.run(async () => {
@@ -107,6 +154,8 @@ await f.run(async () => {
   await button('Hide', card()).click();
   assert.equal(await shownVolume('b2'), initial);
   assert.deepEqual(await readFile(file), pendingBytes);
+
+  if (staleRecovery) await editSourceAndRecover(pending);
 
   f.phase = 'Accept only in Studio and inspect the native result';
   await button('Preview', card()).click();

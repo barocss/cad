@@ -31,6 +31,15 @@ test('a requirement edit makes an open proposal stale even when the geometry is 
   assert.notDeepEqual(edited.state.doc.requirements, pending.doc.requirements);
   const listed = await runTool(edited.state, 'list_proposals', {}, evaluate);
   assert.equal(parse(listed.content).proposals[0].stale, true);
+  const restricted: ChatState = { ...edited.state, approvalRequired: true };
+  const stale = await runTool(restricted, 'accept_proposal', { id: 'P1' }, evaluate);
+  assert.ok(stale.isError && !stale.changed);
+  assert.equal(stale.state.doc, restricted.doc);
+  assert.match(parse(stale.content).error, /P1 is stale\. Its source or requirements changed/);
+  const fresh = await runTool({ ...pending, approvalRequired: true }, 'accept_proposal', { id: 'P1' }, evaluate);
+  assert.ok(fresh.isError && !fresh.changed);
+  assert.equal(fresh.state.doc, pending.doc);
+  assert.match(parse(fresh.content).error, /tell them P1 is ready/);
   const outcome = await acceptProposal(edited.state, 'P1', evaluate);
   assert.ok('error' in outcome && outcome.stale, 'the author must review the proposal against the changed requirement');
   const rebased = await rebaseProposal(edited.state, 'P1', evaluate);

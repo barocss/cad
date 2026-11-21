@@ -328,10 +328,16 @@ async function acceptProposalTool(state: ChatState, args: Record<string, unknown
   if (hasNestedFaceRepair(p.ops)) return fail(state, 'A nested face repair needs selection and approval by the user in Studio.');
   const env = typeof process !== 'undefined' ? process.env : undefined, by = { agent: 'chat', ...(env?.CAD_MODEL ? { model: env.CAD_MODEL } : {}) };
   const level = autonomy(state);
+  const stale = proposalIsStale(p, requirementEvidenceRevision(state.doc));
   const early = level < 3 || p.risk.approval.length ? agentMayNotAccept(p, level) : null;
-  if (early) return fail(state, early);
+  if (early) {
+    if (level < 3 && stale) return fail(state,
+      `${id} is stale. Its source or requirements changed. Review the current document before making a new proposal. At autonomy L${level} the user accepts proposals in Studio.`,
+      { kept: `${id} stays open` });
+    return fail(state, early);
+  }
   // (Stale: made again on the part as it is, and shown; accepting it is a second call, D41.)
-  if (proposalIsStale(p, requirementEvidenceRevision(state.doc))) {
+  if (stale) {
     const r = await rebaseProposalWith(dispatch, state, id, evaluate, by);
     if ('error' in r) return fail(state, r.error, { kept: `${id} stays open` });
     const q = r.state.doc.proposals!.find(x => x.id === id)!;
