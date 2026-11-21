@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1603 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1604 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1603](notes/coaxial-tube-outer-wall-offset-2026-11-22/README.md), P5 row 31, changes the outside radius of one coaxial tube. Studio verifies the unchanged bore and cap planes, signed edits, bore-contact refusal and exact reopening. See [row 31](roadmap-rows/31.md) and the [decision index](decisions.md).
-- **Next MAIN:** D1604, P1 row 07, [#322](https://github.com/barocss/cad/issues/322) and [#222](https://github.com/barocss/cad/issues/222). Let the local Agent propose an Extrude to face from a named finished sketch and one original target face under the current review revision. Approve it in Studio and verify the retained native relationship.
+- **Current position:** [D1604](notes/reviewed-extrude-to-face-2026-11-22/README.md), P1 row 07, lets the local Agent propose an Extrude to face. The exact revision gate, Studio approval, fresh Open and target-driven height pass. See [row 07](roadmap-rows/07.md) and the [decision index](decisions.md).
+- **Next MAIN:** D1605, P5 row 08, [#29](https://github.com/barocss/cad/issues/29). Join one native straight Bézier span to one native quadratic Bézier span at an exact shared endpoint by raising the straight span to degree two.
 - **Separate follow-ups:** [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Measured progress:** whole CAD and core readiness **NOT_MEASURED**; B01 v1 **12/12 accepted groups**; B02 v1 **11/11 accepted groups**; B04 v1 **26/26 accepted groups**; B07 v1 **6/6 accepted profiles**; B09 v1 **9/9 accepted groups**; initial scenarios **8/10 accepted**; B06 **6/7 qualified groups, PDF held**; B05 **7/7 accepted groups**; B08 **6/6 accepted groups**; B10 **7/7 accepted groups**; B03 **NOT_ADJUDICATED**. The legacy43% is frozen history. P0 has12 acceptance items; R01–R12 have bounded D521–D532 closeouts; D785 demonstrates one R04 native collision; no whole-product acceptance follows. This is backlog state, not a whole-CAD percentage.

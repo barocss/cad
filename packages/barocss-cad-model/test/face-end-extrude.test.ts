@@ -6,10 +6,12 @@ import { editSavedExtrudeEndFaceCommand, canEditSavedExtrudeEndFace } from '../s
 import { extrudeCommand } from '../src/app/profileCommands';
 import { evaluateDoc } from '../src/engine/evaluate';
 import { bodyNodes, deleteFeature, deleteFeatures, duplicateBody, featureDependents, moveFeature, renumber } from '../src/chat/features';
+import { dispatchTool } from '../src/chat/tools';
 import { parentsOf, prefixDoc, usesOf, type ModelNode, type StudioDoc } from '../src/engine/doc';
 import { readStudioDoc } from '../src/engine/migrate';
 import { currentFaceEndDistance, toPartDocument } from '../src/engine/part';
 import { detachFaceEndExtrude } from '../src/engine/faceEndExtrude';
+import { revisionOf } from '../src/util/revision';
 
 const recipe = {
   id: 'n3', kind: 'face-end-extrude', sketch: 2,
@@ -30,6 +32,40 @@ function circularTarget(from = 20, radius = 12): StudioDoc {
   const doc = documentAt(from);
   return { ...doc, nodes: [{ id: 'n0', kind: 'sketch', profile: 'circle', center: [5, 5], radius }, ...doc.nodes.slice(1)] };
 }
+
+test('the local Agent puts one explicit sketch and original cap into the same To face command', async () => {
+  const evaluate = async (doc: StudioDoc) => evaluateDoc(doc, 1);
+  const noEvaluation = async () => assert.fail('Refuse before evaluating a candidate');
+  for (const make of [documentAt, circularTarget]) {
+    const expected = make(20), doc = { ...prefixDoc(expected, 3), nextId: 3 }, stock = evaluateDoc(doc, 0);
+    assert.ok(stock.ok);
+    const state = { doc, bodies: stock.bodies };
+    const request = { action: 'command', command: 'extrude', expectedRevision: revisionOf(doc),
+      values: { depth: 'to-face', sketch: 'n2' }, faces: ['n1.bottom'] };
+    const originalFace = stock.bodies[0].mesh.faces.find(face => face.name === 'n1.bottom');
+    assert.ok(originalFace);
+    for (const [args, detail] of [
+      [{ ...request, expectedRevision: undefined }, /current expectedRevision/],
+      [{ ...request, expectedRevision: revisionOf(prefixDoc(make(30), 3)) }, /part changed/],
+      [{ ...request, values: { ...request.values, h: 20 } }, /only values.depth and values.sketch/],
+      [{ ...request, values: { ...request.values, sketch: 'n9' } }, /active finished sketch/],
+      [{ ...request, faces: ['n1.bottom', 'n1.top'] }, /one exact native face name/],
+      [{ ...request, faces: [originalFace.id + '-unknown'] }, /unique original native face/],
+    ] as const) {
+      const refused = await dispatchTool(state, 'features', args, noEvaluation);
+      assert.ok(refused.isError && !refused.changed);
+      assert.match(refused.content, detail);
+      assert.equal(refused.state.doc, doc);
+    }
+    const wrongCap = await dispatchTool(state, 'features', { ...request, faces: ['n1.top'] }, evaluate);
+    assert.ok(wrongCap.isError && !wrongCap.changed);
+    assert.match(JSON.parse(wrongCap.content).detail, /normal must oppose/);
+    assert.equal(wrongCap.state.doc, doc);
+    const reviewed = await dispatchTool(state, 'features', request, evaluate);
+    assert.ok(!reviewed.isError && reviewed.changed, reviewed.content);
+    assert.deepEqual(reviewed.state.doc, expected);
+  }
+});
 
 test('a literal XY rectangle reaches the current original lower disk of an intact circular Extrude', () => {
   for (const from of [20, 30, 40]) {

@@ -3,7 +3,9 @@
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
 import { updateBoxFootprint } from '../../app/editCommand';
 import { editFields } from '../../app/editFields';
+import { extrudeEndFaceValues } from '../../app/extrudeEndFacePick';
 import { editSavedOffsetFaceCommand } from '../../app/offsetFaceEdit';
+import { extrudeCommand } from '../../app/profileCommands';
 import { smoothScrewAngleField, smoothScrewAngleKey, smoothScrewWindingRule, smoothScrewPitchAdvance, smoothScrewPitchField, smoothScrewPitchKey, smoothScrewTurns, smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '../../app/smoothLoftTurn';
 import { hasLineArcScrewSections, hasLineArcTurnSections } from '../../app/lineArcScrew';
 import { featureLabel, isAnnularReplacementSource, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
@@ -60,7 +62,11 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   text: { selection: 'none: creates a standalone solid', values: { text: 'one scalar run, without shaping or kerning', font: 'JSON FontSource descriptor of an already loaded static TTF, prepared by fontFromBytes or the Studio font chooser', size: 'em height in model units', height: 'positive extrusion height', tolerance: 'explicit quadratic-to-chord deviation', tracking: 'extra spacing between scalars' } },
   'cylindrical-wrap': { selection: 'faces: [one selected merged cylinder wall]; the operation binds its original +Y native half and uses its first quarter', values: { u0: 'native U start, strictly above 0', u1: 'native U end, strictly below 0.5 and above u0', v0: 'native V start, strictly above 0', v1: 'native V end, strictly below 1 and above v0', height: 'positive outward height, must equal the source radius; one rectangle only, no text or holes' } },
   'text-relief': { selection: 'faces: [one uniquely named flat +Z top face of one supported upright solid]', values: { text: 'one scalar run without shaping or kerning', font: 'JSON FontSource of an already loaded static TTF', size: 'em height', depth: 'positive relief depth; engrave keeps a bottom web', tolerance: 'quadratic chord deviation, also added to boundary clearance', tracking: 'extra scalar spacing', x: 'world X of the baseline', y: 'world Y of the baseline', mode: 'emboss | engrave' } },
-  extrude: { selection: 'none: the newest finished sketch no feature uses yet', values: { h: 'distance along the sketch normal', draft: 'wall draft degrees (0: straight)', op: 'join | new | cut (only for a sketch drawn on a body face)', depth: 'distance | through (a cut only)' } },
+  extrude: { selection: 'For To face, give one exact native face name in faces and the current expectedRevision. Otherwise use the newest finished sketch no feature uses yet.', values: {
+    h: 'distance along the sketch normal', draft: 'wall draft degrees (0: straight)', op: 'join | new | cut (only for a sketch drawn on a body face)',
+    depth: 'distance | through (a cut only) | to-face (new body at a named native face)',
+    sketch: 'for to-face only: stable finished sketch ID from query.summary. Send only values.sketch and values.depth.',
+  } },
   revolve: { selection: 'none: the newest finished sketch no feature uses yet', values: { axis: 'y | x: the sketch axis to turn about', deg: 'angle, up to 360', op: 'join | new | cut (sketch on a body face)' } },
   pipe: { selection: 'none: the newest finished sketch no feature uses yet', values: { h: 'straight run before and after the bend', bend: 'bend radius', bendAngle: 'bend angle', toward: 'x | -x | y | -y', op: 'join | new | cut (sketch on a body face)' } },
   'sweep-curve': { selection: 'none: provide the sketch and Direct curve IDs from query.summary', values: {
@@ -184,11 +190,45 @@ function checkFeatureRevision(state: ChatState, expectedRevision: unknown, actio
     });
 }
 
+async function extrudeToReviewedFace(state: ChatState, args: Record<string, unknown>, values: Record<string, unknown>,
+  evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {
+  if (args.expectedRevision === undefined || typeof values.sketch !== 'string' || Object.keys(values).length !== 2
+      || !Array.isArray(args.faces) || args.faces.length !== 1 || typeof args.faces[0] !== 'string' || !args.faces[0].trim()
+      || args.bodies !== undefined || args.edges !== undefined || args.point !== undefined || state.partOf)
+    return fail(state, 'Extrude to face needs the current expectedRevision, one exact native face name, and only values.depth and values.sketch for this base part.',
+      { code: 'COMMAND_INPUT' });
+  const { doc, bodies } = state, sketch = values.sketch, face = args.faces[0];
+  const matches = doc.nodes.flatMap((node, index) => node.id === sketch ? [index] : []);
+  const index = matches[0], source = doc.nodes[index];
+  if (matches.length !== 1 || source?.kind !== 'sketch' || source.suppressed || source.held)
+    return fail(state, 'Extrude to face needs one active finished sketch with the given ID.', { code: 'COMMAND_INPUT' });
+  const { selection, unknown } = resolveNames(bodies, { faces: [face] }, true);
+  if (unknown.length || selection.faces.length !== 1)
+    return fail(state, 'Extrude to face needs one unique original native face on the current part.', { code: 'COMMAND_INPUT' });
+  const [hit] = selection.faces;
+  if (bodies[hit.body].mesh.faces[hit.face].nativePlaneName !== face)
+    return fail(state, 'Extrude to face needs the exact original planar face name.', { code: 'COMMAND_INPUT' });
+  const ctx: Ctx = { doc, bodies, selection: { bodies: [], faces: [], edges: [], sketches: [index] }, viewportEndFace: true };
+  const picked = extrudeEndFaceValues(ctx, { depth: 'to-face' }, hit);
+  if (!picked)
+    return fail(state, 'Extrude to face needs one original planar face of a current solid.', { code: 'COMMAND_INPUT' });
+  let next: StudioDoc;
+  try { next = extrudeCommand.build!(ctx, picked); }
+  catch (error) {
+    if (isRefusal(error, 'VALUE', 'BAD_REFERENCE')) return fail(state, error.message, { code: 'COMMAND_INPUT' });
+    throw error;
+  }
+  return accept(state, next, evaluate, options, 'Extrude to face', { sketch, target: face,
+    added: [`${doc.nodes.length}: Extrude to face`] });
+}
+
 async function runCommandTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {
   const refusal = checkFeatureRevision(state, args.expectedRevision, 'COMMAND');
   if (refusal) return refusal;
   const cmd = commandById(String(args.command));
   if (!cmd?.build) return fail(state, `Unknown command "${String(args.command)}". Commands: ${CHAT_COMMANDS.join(', ')}.`);
+  if (cmd.id === 'extrude' && isObj(args.values) && args.values.depth === 'to-face')
+    return extrudeToReviewedFace(state, args, args.values, evaluate, options);
   const sketchTurn = cmd.id === 'ruled-turn' || cmd.id === 'smooth-turn' || cmd.id === 'smooth-screw';
   if (sketchTurn) {
     if (args.expectedRevision === undefined)
