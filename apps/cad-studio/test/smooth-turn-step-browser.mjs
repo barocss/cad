@@ -3,14 +3,18 @@ import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
-const file = process.argv[3], doc = JSON.parse(await readFile(file));
-const triangular = process.argv.includes("--triangle");
-const screw = process.argv.includes('--screw-positive') || process.argv.includes('--screw-negative');
-assert.ok(!triangular || !screw);
-const faceCounts = screw ? [6] : triangular ? [5] : [18, 6];
+const file = process.argv[3], original = JSON.parse(await readFile(file));
+const variants = ['--triangle', '--screw-positive', '--screw-negative',
+  '--triangular-screw-positive', '--triangular-screw-negative'].filter(option => process.argv.includes(option));
+assert.ok(variants.length <= 1);
+const [variant] = variants;
+const triangularScrew = variant?.startsWith('--triangular-screw-');
+const triangular = variant === '--triangle' || triangularScrew;
+const screw = triangularScrew || variant?.startsWith('--screw-');
+const faceCounts = triangular ? [5] : screw ? [6] : [18, 6];
 const f = await createFlow({
   name: 'smooth-turn-step', output: process.argv[2], envFrozen: 'TURN_STEP_FROZEN',
-  qualification: 'Inspect STEP written by actual Studio from the approved compact Smooth Turn.',
+  qualification: 'Independently read the AP214 bytes Studio writes for the approved compact Turn or Screw.',
   initialFiles: ['apps/cad-studio/test/smooth-turn-step-browser.mjs', 'apps/cad-studio/test/smooth-turn-step-oracle.py',
     'apps/cad-studio/test/part21-prism-check.py', 'apps/cad-studio/src/files/useModelExports.ts', 'apps/cad-studio/src/files/StepExportPanel.tsx', 'packages/barocss-cad-model/src/engine/evaluate.ts'],
   inspectorSource: `
@@ -51,13 +55,24 @@ await f.run(async () => {
     });
     return context;
   };
+  let doc = original;
   await f.freshOpen(file, doc, 'approved-turn-opened');
+  if (variant === '--triangular-screw-positive') {
+    const terminal = doc.nodes.length - 1;
+    await f.openFeatureEditor(terminal, 'reverse the approved triangular Screw before STEP export');
+    const winding = f.editor().getByLabel('Turn angle', { exact: true });
+    assert.equal(Number(await winding.inputValue()), -450);
+    assert.equal(Number(await f.editor().getByLabel('Pitch per revolution', { exact: true }).inputValue()), 40);
+    await winding.fill('450');
+    const reversed = (await f.applyEditor(doc, 'positive-winding-applied')).doc;
+    assert.deepEqual(reversed.nodes[terminal], doc.nodes[terminal]);
+    doc = reversed;
+  }
   await b('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   if (await b('AO').getAttribute('aria-pressed') === 'true') await b('AO').click();
   const nativeDisplay = triangular || screw ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
-  if (triangular) assert.deepEqual(nativeDisplay, { kind: 'smooth-turn', triangles: 690, baseTriangles: 224 });
-  if (screw) assert.ok(nativeDisplay?.kind === 'smooth-turn' && nativeDisplay.triangles > nativeDisplay.baseTriangles);
+  if (triangular || screw) assert.ok(nativeDisplay?.kind === 'smooth-turn' && nativeDisplay.triangles > nativeDisplay.baseTriangles);
   f.phase = 'read STEP preparation and loss disclosure in Studio';
   await b('Export STEP').click();
   const panel = f.page.getByLabel('STEP export', { exact: true });
@@ -65,6 +80,7 @@ await f.run(async () => {
   const report = await panel.innerText();
   assert.match(report, /STEP AP214 · B-rep geometry · mm/);
   assert.match(report, /feature history/i);
+  assert.match(report, /semantic PMI or named datum system transfer/i);
   assert.match(await panel.getByLabel('STEP included bodies').innerText(), new RegExp('^' + faceCounts.length + ' output bod(?:y|ies)'));
   await f.snapshot('approved-turn-step-losses');
   f.phase = 'capture the local STEP bytes actually produced by Studio';
@@ -76,8 +92,7 @@ await f.run(async () => {
   await writeFile(artifact, text);
   await f.same(doc);
   const oracle = ['-BI', join(f.app, 'test/smooth-turn-step-oracle.py'), artifact];
-  if (triangular) oracle.push('--triangle');
-  if (screw) oracle.push(process.argv.includes('--screw-positive') ? '--screw-positive' : '--screw-negative');
+  if (variant) oracle.push(variant);
   const graph = JSON.parse(execFileSync('python3', oracle, { encoding: 'utf8' }));
   const before = await f.inspect('approved-native', doc);
   assert.deepEqual(before.map(body => body.check.counts.faces), faceCounts);
@@ -108,7 +123,7 @@ await f.run(async () => {
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   if (await b('AO').getAttribute('aria-pressed') === 'true') await b('AO').click();
   const reopenedDisplay = triangular || screw ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
-  if (triangular) assert.ok(reopenedDisplay?.kind === 'smooth-turn' && reopenedDisplay.triangles > reopenedDisplay.baseTriangles);
+  if (variant === '--triangle') assert.ok(reopenedDisplay?.kind === 'smooth-turn' && reopenedDisplay.triangles > reopenedDisplay.baseTriangles);
   const shownVertices = screw ? await f.page.evaluate(() => window.__studioSweepCylinderMesh?.()?.length / 3) : undefined;
   if (screw) assert.ok(shownVertices > 0);
   f.report.observations.push({ imported, noNativeFeatureHistory: true, nativeDisplay, reopenedDisplay, shownVertices });

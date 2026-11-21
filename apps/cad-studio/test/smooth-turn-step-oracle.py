@@ -52,13 +52,22 @@ def cubic(poles, knots, t):
     return points[3]
 
 
-def verify(source, triangular=False, screw=None):
-    if screw:
+def verify(source, variant=None):
+    triangular_screw = variant in ('--triangular-screw-positive', '--triangular-screw-negative')
+    rectangular_screw = variant in ('--screw-positive', '--screw-negative')
+    if triangular_screw:
+        turn, expected_counts = 'n18', {'n18': (5, 9, 6)}
+        corners = [(-7, -4), (2, -3), (-4, 1)]
+        angle = 450 if variant == '--triangular-screw-positive' else -450
+        stations, height, cohort_volume = 16, 50, 0
+        origin, axis_v, axis_w = (21, -19.4, 24.8), (0, 0.8, -0.6), (0, 0.6, 0.8)
+    elif rectangular_screw:
         turn, expected_counts = 'n18', {'n18': (6, 12, 8)}
         corners = [(2, 1), (14, 1), (14, 9), (2, 9)]
-        stations, angle, height, cohort_volume = 16, screw, 56, 0
+        angle = 360 if variant == '--screw-positive' else -360
+        stations, height, cohort_volume = 16, 56, 0
         origin, axis_v, axis_w = (10, -16, 3), (0, 1, 0), (0, 0, 1)
-    elif triangular:
+    elif variant == '--triangle':
         turn, expected_counts = 'n17', {'n17': (5, 9, 6)}
         corners = [(-4, -2), (5, -1), (-1, 3)]
         stations, angle, height, cohort_volume = 16, -450, 50, 0
@@ -169,7 +178,7 @@ def verify(source, triangular=False, screw=None):
             t = station / (stations - 1)
             expected = station_point(x, y, t)
             max_error = max(max_error, distance(cubic(poles, knots, t), expected))
-        if screw:
+        if rectangular_screw or triangular_screw:
             # Recover the sign and total turn from the actual serialized curve.
             # Endpoints alone coincide in the sketch plane after a revolution.
             samples = [cubic(poles, knots, i / 240) for i in range(241)]
@@ -216,6 +225,7 @@ def verify(source, triangular=False, screw=None):
 
 if __name__ == '__main__':
     options = sys.argv[2:]
-    assert not ('--screw-positive' in options and '--screw-negative' in options)
-    screw = 360 if '--screw-positive' in options else -360 if '--screw-negative' in options else None
-    print(json.dumps(verify(Path(sys.argv[1]).read_text(encoding='utf-8'), '--triangle' in options, screw)))
+    variants = {'--triangle', '--screw-positive', '--screw-negative',
+                '--triangular-screw-positive', '--triangular-screw-negative'}
+    assert len(options) <= 1 and all(option in variants for option in options)
+    print(json.dumps(verify(Path(sys.argv[1]).read_text(encoding='utf-8'), options[0] if options else None)))
