@@ -450,11 +450,14 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
   const startSketchPrimitiveAt = (owner: SketchState, at: [number, number]) => {
     if (propsRef.current.sketch !== owner || drafting.current) return false;
     const { tool } = owner;
-    if (tool !== 'rectangle' && tool !== 'circle') return false;
+    if (tool !== 'rectangle' && tool !== 'circle' && tool !== 'slot') return false;
     drafting.current = true;
     if (tool === 'circle') {
       clearSketchSnap();
       emit({ kind: 'circle', c: at, r: 1 }, true, 'circle-start');
+    } else if (tool === 'slot') {
+      slotStage.current = 1;
+      emit({ kind: 'slot', a: at, b: at, r: 0 }, true, 'slot-start');
     } else emit({ kind: 'rectangle', a: at, b: at }, true, 'rectangle-start');
     request();
     return true;
@@ -1191,7 +1194,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
           }
         }
       } else if (sk.tool === 'slot') {
-        if (!drafting.current) { drafting.current = true; slotStage.current = 1; emit({ kind: 'slot', a: c, b: c, r: 0 }, true, 'slot-start'); }
+        if (!drafting.current) startSketchPrimitiveAt(sk, c);
         else if (slotStage.current === 1) {
           if (s?.kind === 'slot' && (c[0] !== s.a[0] || c[1] !== s.a[1])) {
             slotStage.current = 2;

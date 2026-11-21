@@ -31,12 +31,12 @@ try {
   ({ useTwoPointSnap } = await import(pathToFileURL(outfile).href));
 } finally { await rm(temporary, { recursive: true, force: true }); }
 
-function rig(run: (r: ReturnType<typeof setup>) => void, tool: 'rectangle' | 'circle' = 'rectangle') {
+function rig(run: (r: ReturnType<typeof setup>) => void, tool: 'rectangle' | 'circle' | 'slot' = 'rectangle') {
   const previous = shared.__twoPointOwnershipHooks;
   const r = setup(tool);
   try { run(r); } finally { shared.__twoPointOwnershipHooks = previous; }
 }
-function setup(tool: 'rectangle' | 'circle') {
+function setup(tool: 'rectangle' | 'circle' | 'slot') {
   const slots: Slot[] = [], effects: (() => void)[] = []; let cursor = 0, writes = 0;
   const same = (a: unknown[] | undefined, b: unknown[]) => !!a && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
   shared.__twoPointOwnershipHooks = {
@@ -89,15 +89,17 @@ test('Cancel retires pending point synchronously and a fresh attempt transfers e
   assert.deepEqual(r.doc, { format: 'barocss-cad-model', schema: 3, units: 'mm', nodes: [], outputs: {}, parameters: {}, nextId: 0 });
 }));
 
-test('Circle transfers the calculated centre once and rejects a replaced sketch', () => rig(r => {
-  const state = r.arm();
-  state.apply(); state.apply();
-  assert.equal(r.calls.length, 1);
-  assert.equal(r.calls[0].owner.tool, 'circle');
-  assert.deepEqual(r.calls[0].at, [3, 0]);
-  const stale = r.arm();
-  r.replaceSketch();
-  stale.apply();
-  assert.equal(r.calls.length, 1);
-  assert.equal(r.render().available, false);
-}, 'circle'));
+for (const tool of ['circle', 'slot'] as const) {
+  test(`${tool} transfers the calculated centre once and rejects a replaced sketch`, () => rig(r => {
+    const state = r.arm();
+    state.apply(); state.apply();
+    assert.equal(r.calls.length, 1);
+    assert.equal(r.calls[0].owner.tool, tool);
+    assert.deepEqual(r.calls[0].at, [3, 0]);
+    const stale = r.arm();
+    r.replaceSketch();
+    stale.apply();
+    assert.equal(r.calls.length, 1);
+    assert.equal(r.render().available, false);
+  }, tool));
+}
