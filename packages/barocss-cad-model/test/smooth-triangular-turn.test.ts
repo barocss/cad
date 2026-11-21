@@ -309,6 +309,8 @@ test('a compact triangular STEP Turn refines only when its side and cap geometry
 
 const screwAxis: Point = [21, -19.4, 24.8];
 const screwCorners: [number, number][] = [[-7, -4], [2, -3], [-4, 1]];
+const screwTrapezoid: [number, number][] = [[-8, -5], [2, -5], [0, -1], [-7, -1]];
+const screwQuadrilateral: [number, number][] = [[-7, -4], [2, -3], [0, -1], [-5, 1]];
 const screwPentagon: [number, number][] = [[-7, -4], [2, -3], [1, -1], [-4, 1], [-6, -1]];
 const screwHexagon: [number, number][] = [[-7, -5], [1, -5], [3, -3], [2, -1], [-3, 1], [-7, -1]];
 function regularScrewCorners(sides: number): [number, number][] {
@@ -393,8 +395,8 @@ test('External-axis triangular Screw uses one compact signed solid on tilted sec
 
 test('Straight convex polygon Screw preserves each authored rail through a full signed revolution', () => {
   const fixtures: { points: [number, number][]; angles: number[]; volume?: number }[] = [
-    { points: [[-8, -5], [2, -5], [0, -1], [-7, -1]], angles: [360, -360], volume: 1360.1749294647923 },
-    { points: [[-7, -4], [2, -3], [0, -1], [-5, 1]], angles: [360, -360], volume: 980.1260521143356 },
+    { points: screwTrapezoid, angles: [360, -360], volume: 1360.1749294647923 },
+    { points: screwQuadrilateral, angles: [360, -360], volume: 980.1260521143356 },
     { points: screwPentagon, angles: [360, -360], volume: 1080.138914574982 },
     { points: screwHexagon, angles: [360, -360], volume: 1840.2366692758953 },
     // Nearest-corner alignment can alias a 30° section interval in these regular profiles.
@@ -464,7 +466,10 @@ test('Polygon Screw refuses concave sections and axes inside or on the boundary'
 
 test('One convex polygon sketch makes a Smooth Screw with editable signed angle and pitch', () => {
   const command = commandById('smooth-screw')!;
-  for (const [points, volume] of [[screwPentagon, 1080.138914574982], [screwHexagon, 1840.2366692758953]] as const) {
+  for (const [points, volume] of [
+    [screwTrapezoid, 1360.1749294647923], [screwQuadrilateral, 980.1260521143356],
+    [screwPentagon, 1080.138914574982], [screwHexagon, 1840.2366692758953],
+  ] as const) {
     const sketch: SketchNode = { ...triangle, points: points.map(([u, v]) => [u + 10, v - 3]) };
     const source = ctx(sketch);
     assert.ok(command.available(source).ok);

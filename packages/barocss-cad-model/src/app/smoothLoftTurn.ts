@@ -70,7 +70,7 @@ function turnSections(nodes: readonly ModelNode[], index: number) {
   if (nodes.slice(0, index).some(node => usesOf(node, nodes).some(ref => ref >= start && ref < index))) return;
   const corners = source.profile === 'polygon' ? source.points.length : 4;
   const triangular = source.profile === 'polygon' && corners === 3;
-  const convexPolygon = source.profile === 'polygon' && corners >= 5 && corners <= ExtrudedProfileLimits.segments;
+  const convexPolygon = source.profile === 'polygon' && corners >= 4 && corners <= ExtrudedProfileLimits.segments;
   if (source.profile === 'polygon' && !triangular && !convexPolygon) return;
   const base = copyGeometry(nodes[start], corners);
   if (!base) return;
@@ -180,11 +180,13 @@ function savedScrewWinding(nodes: readonly ModelNode[], index: number) {
   if (index !== nodes.length - 1) return;
   const turn = turnSections(nodes, index);
   if (!turn?.external || turn.angle === 0) return;
-  if (turn.convexPolygon) return turn;
+  if (turn.convexPolygon && turn.first.length > 4) return turn;
   const [[left, bottom], , [right, top]] = turn.first;
   const tol = turn.triangular ? triangleScrewAxisTolerance(turn.first)
-    : Math.max(CadNumericPolicy.linearTolerance, CadNumericPolicy.relativeLinearTolerance * Math.max(right - left, top - bottom));
-  if (tol === undefined || (!turn.triangular && rectangularAxisClearance(turn.first[0], turn.first[2], [0, 0]) <= tol)) return;
+    : turn.convexPolygon ? convexPolygonScrewAxisTolerance(turn.first)
+      : Math.max(CadNumericPolicy.linearTolerance, CadNumericPolicy.relativeLinearTolerance * Math.max(right - left, top - bottom));
+  if (tol === undefined || (!turn.triangular && !turn.convexPolygon
+    && rectangularAxisClearance(turn.first[0], turn.first[2], [0, 0]) <= tol)) return;
   const centre = turn.triangular ? triangleTurnCentre
     : (row: readonly Point[]) => row.reduce(([x, y], [u, v]): Point => [x + u / 4, y + v / 4], [0, 0] as Point);
   const [x, y] = centre(turn.first);

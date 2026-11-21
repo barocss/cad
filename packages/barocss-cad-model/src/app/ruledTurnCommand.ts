@@ -25,7 +25,7 @@ function turnSource({ doc, selection }: Ctx, smooth: boolean, allowConvexPolygon
     || sketch?.kind !== 'sketch' || sketch.suppressed || sketch.on
     || sketch.association || sketch.pocketFloor || sketch.holes?.length || sketch.regions?.length) return;
   if (sketch.profile !== 'rectangle' && (!smooth || sketch.profile !== 'polygon'
-    || (sketch.points.length !== 3 && (!allowConvexPolygons || sketch.points.length < 5 || sketch.points.length > ExtrudedProfileLimits.segments))
+    || (sketch.points.length !== 3 && (!allowConvexPolygons || sketch.points.length < 4 || sketch.points.length > ExtrudedProfileLimits.segments))
     || sketch.construction?.length || sketch.outline?.bulges?.some(Boolean) || sketch.outline?.circles?.length
     || sketch.outline?.spline || sketch.outline?.ellipse)) return;
   const stored = planeOf(sketch);
