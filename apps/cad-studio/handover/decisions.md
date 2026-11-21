@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1595: [Drag one History radius for two adjacent top fillets](notes/adjacent-top-history-fillet-radius-2026-11-22/README.md), #214. Anchor the shared radius to the original edge and verify the exact targets, end-on drag, typed parity and native reopen.
 - D1594: [Heal the outside fillet of an upright L bracket](notes/heal-convex-l-prism-fillet-2026-11-22/README.md), #17. Restore the selected full-height circular fillet to its sharp native ridge and verify exact Studio reopening.
 - D1593: [Offset the wall of a through bore](notes/through-bore-radial-offset-2026-11-22/README.md), #629 and #17. Add signed bore radius editing while retaining the plate supports and native trim identities.
 - D1592: [Offset the wall of a circular cylinder](notes/circular-cylinder-radial-offset-2026-11-22/README.md), #629 and #17. Add signed radial wall Offset and verify the fixed axis and cap planes, collapse refusal, History and native reopen.

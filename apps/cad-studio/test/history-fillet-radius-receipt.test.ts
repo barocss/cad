@@ -213,10 +213,32 @@ test('opposite original top edges give one stable History frame regardless of th
   assert.equal(ownedHistoryFilletHandle(x.evidence,x.cmd,x.ctx,x.handle,null),x.evidence);
   assert.equal(ownedHistoryFilletHandle(x.evidence,x.cmd,x.ctx,x.handle,x.active),x.evidence);
  }
- const adjacent=evaluatedFixture(rectangle,['n1.side0|n1.top','n1.side1|n1.top'],2);
- assert.ok(adjacent.accepted.bodies[0].nativeFilletPair);
- assert.equal(ordinaryHistoryFillet(adjacent.doc,2),null);
- assert.equal(historyFilletReceipt(adjacent.doc,adjacent.doc,2,adjacent.accepted.bodies,adjacent.reply,3,()=>true),null);
+});
+
+test('adjacent original top edges retain one canonical History frame and require shared native ownership',()=>{
+ const edges=['n1.side0|n1.top','n1.side1|n1.top'];
+ for (const picked of [edges,[...edges].reverse()]) {
+  const x=fixture(rectangle,picked), frame=x.evidence.frame;
+  const [body]=x.accepted.bodies, [stock]=x.reply.bodies, pair=body.nativeFilletPair;
+  assert.ok(pair?.adjacentTop && frame);
+  assert.equal(x.evidence.edge,edges[0]);
+  assert.ok(Math.hypot(frame.at[0]-20,frame.at[1]+2*Math.SQRT1_2,frame.at[2]-10-2*Math.SQRT1_2)<1e-12);
+  assert.ok(Math.hypot(...frame.dir.map((value,i)=>value-[0,-Math.SQRT1_2,Math.SQRT1_2][i]))<1e-12);
+  assert.equal(ownedHistoryFilletHandle(x.evidence,x.cmd,x.ctx,x.handle,null),x.evidence);
+
+  const receipt=(finished=body, source=stock, live=x.current)=>historyFilletReceipt(
+   x.doc,x.doc,2,[finished],{...x.reply,bodies:[source]},3,live);
+  const [first,second]=pair.cylinders;
+  assert.deepEqual(receipt({...body,nativeFilletPair:{...pair,cylinders:[second,first]}})?.frame,frame);
+  const uncertified = {...body,nativeFilletPair:{...pair,adjacentTop:undefined}};
+  assert.equal(ordinaryHistoryFillet(x.doc,2,[uncertified]),null);
+  assert.equal(receipt(uncertified),null);
+  assert.equal(receipt({...body,nativeFilletPair:{...pair,cylinders:[first,first]}}),null);
+  assert.equal(receipt({...body,nativeFilletPair:{...pair,cylinders:[first,{...second,c:[37,0,8]}]}}),null);
+  assert.equal(receipt(body,{...stock,mesh:{...stock.mesh,edges:stock.mesh.edges.map(edge=>edge.names.includes(edges[1])
+   ? {...edge,nativeVertices:['other-a','other-b']} : edge)}}),null);
+  assert.equal(receipt(body,stock,()=>false),null);
+ }
 });
 
 test('paired History rejects the wrong target, cylinder, unmerged source or stored signature',()=>{

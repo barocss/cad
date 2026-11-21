@@ -5,7 +5,7 @@ import type { BodyResult, EvalResult } from '@barocss/cad-model/engine/evaluate'
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { toSig } from '@barocss/cad-model/engine/references';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
-import { add, cross, dot, len, scale, sub, unit } from '@barocss/cad-model/engine/vec3';
+import { add, cross, dot, len, scale, sub, unit, type Vec3 } from '@barocss/cad-model/engine/vec3';
 import type { Active } from '../app/commandState';
 
 type Fillet = Extract<ModelNode,{kind:'fillet'}>;
@@ -35,13 +35,15 @@ function plainQuarterSector(sketch: Extract<SketchNode, { profile: 'loop' }>): b
   return Math.abs(cosine) <= 1e-12 && (arc.direction === 'ccw' ? sine > 0 : arc.direction === 'cw' && sine < 0);
 }
 
-function oppositeTopEdges(doc: StudioDoc, fillet: Fillet): readonly [string, string] | undefined {
-  const id = featureId(doc.nodes, 1);
-  const pair = [`${id}.side0|${id}.top`, `${id}.side2|${id}.top`] as const;
-  if (fillet.edges.length === 2 && pair.every(edge => fillet.edges.includes(edge) && fillet.sigs?.[edge]?.k === 'line')) return pair;
+function historyTopEdges(doc: StudioDoc, fillet: Fillet) {
+  if (fillet.edges.length !== 2) return;
+  const id = featureId(doc.nodes, 1), first = `${id}.side0|${id}.top`;
+  const adjacent = fillet.edges.includes(`${id}.side1|${id}.top`);
+  const pair = [first, `${id}.side${adjacent ? 1 : 2}|${id}.top`] as const;
+  if (pair.every(edge => fillet.edges.includes(edge) && fillet.sigs?.[edge]?.k === 'line')) return { pair, adjacent };
 }
 
-export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null): Fillet | null {
+export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null,bodies?:readonly BodyResult[]): Fillet | null {
   if (index!==2 || doc.schema!==3 || doc.nodes.length!==3 || doc.direct!==undefined ||
       doc.instances?.length || doc.variability || doc.configurations || Object.hasOwn(doc,'routeBundles')) return null;
   const [sketch,stock,fillet]=doc.nodes;
@@ -56,7 +58,9 @@ export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null): Fillet
     && numericPoint(sketch.min) && numericPoint(sketch.max);
   const circular = sketch.profile === 'loop' && stored?.k === 'curve' && plainQuarterSector(sketch);
   if (!plain && !circular) return null;
-  if (fillet.edges.length !== 1 && (!plain || !oppositeTopEdges(doc, fillet))) return null;
+  const pair = historyTopEdges(doc, fillet);
+  if (fillet.edges.length !== 1 && (!plain || !pair)) return null;
+  if (pair?.adjacent && bodies && (bodies.length !== 1 || bodies[0].nativeFilletPair?.adjacentTop !== true)) return null;
   const out=doc.outputs[bodyKeyFor(doc.nodes,index,'solid')];
   return out?.node===index&&out.side==='solid'?fillet:null;
 }
@@ -83,9 +87,11 @@ function closedSolid(body: BodyResult) {
 
 function pairedHistoryFrame(doc: StudioDoc, fillet: Fillet, stock: BodyResult, finished: BodyResult,
   radius: number): HistoryFilletReceipt['frame'] {
-  const pair = oppositeTopEdges(doc, fillet), accepted = finished.nativeFilletPair;
-  if (!pair || !accepted || !closedSolid(stock) || !closedSolid(finished) ||
-    accepted.targets.length !== 2 || !pair.every(edge => accepted.targets.includes(edge)) || accepted.cylinders.length !== 2) return;
+  const spec = historyTopEdges(doc, fillet), accepted = finished.nativeFilletPair;
+  if (!spec || !accepted || !closedSolid(stock) || !closedSolid(finished)) return;
+  const { pair, adjacent } = spec;
+  if ((adjacent && accepted.adjacentTop !== true) || accepted.targets.length !== 2
+    || !pair.every(edge => accepted.targets.includes(edge)) || accepted.cylinders.length !== 2) return;
   const signatures = signaturesOf(stock);
   const rims = pair.map((edge, i) => {
     const match = originalFilletEdge(stock, fillet, edge, signatures);
@@ -94,24 +100,29 @@ function pairedHistoryFrame(doc: StudioDoc, fillet: Fillet, stock: BodyResult, f
     const faces = match.source.nativeJoint.faces.map(id => stock.mesh.faces.find(face => face.id === id));
     const top = faces.find(face => face?.nativePlaneName === topName);
     const wall = faces.find(face => face?.nativePlaneName === wallName);
+    const secondAdjacent = adjacent && i === 1;
+    const wallNormal: Vec3 = secondAdjacent ? [1, 0, 0] : [0, i === 0 ? -1 : 1, 0];
+    const axis = secondAdjacent ? 1 : 0;
     if (top?.exact?.kind !== 'plane' || wall?.exact?.kind !== 'plane' ||
-      !sameVec(top.exact.n, [0, 0, 1]) || !sameVec(wall.exact.n, [0, i === 0 ? -1 : 1, 0])) return;
+      !sameVec(top.exact.n, [0, 0, 1]) || !sameVec(wall.exact.n, wallNormal)) return;
     const { a, b, nativeVertices } = match.source;
-    if (![...a, ...b].every(Number.isFinite) || a[0] === b[0] || a[1] !== b[1] || a[2] !== b[2]) return;
+    if (nativeVertices[0] === nativeVertices[1] || ![...a, ...b].every(Number.isFinite)
+      || a[axis] === b[axis] || a.some((coord, k) => k !== axis && coord !== b[k])) return;
+    const direction: Vec3 = secondAdjacent ? [0, 1, 0] : [1, 0, 0];
     const midpoint = scale(add(a, b), .5), outward = add(top.exact.n, wall.exact.n);
-    return { midpoint, outward, nativeVertices, top: top.id };
+    return { midpoint, outward, direction, nativeVertices, top: top.id };
   });
   const [first, second] = rims;
-  if (!first || !second || first.top !== second.top || new Set([...first.nativeVertices, ...second.nativeVertices]).size !== 4 ||
-    first.midpoint[0] !== second.midpoint[0] || first.midpoint[2] !== second.midpoint[2] ||
-    second.midpoint[1] - first.midpoint[1] <= 2 * radius) return;
+  if (!first || !second || first.top !== second.top || first.midpoint[2] !== second.midpoint[2] ||
+    new Set([...first.nativeVertices, ...second.nativeVertices]).size !== (adjacent ? 3 : 4)) return;
+  if (!adjacent && (first.midpoint[0] !== second.midpoint[0] || second.midpoint[1] - first.midpoint[1] <= 2 * radius)) return;
   const indices = [first, second].map(rim => {
     const center = sub(rim.midpoint, scale(rim.outward, radius));
     return accepted.cylinders.flatMap((cylinder, index) => {
       const { c, a, r } = cylinder, tolerance = Math.max(1e-8, radius * 1e-9);
       return [...c, ...a, r].every(Number.isFinite) && Math.abs(len(a) - 1) <= 1e-9 &&
-        Math.hypot(a[1], a[2]) <= 1e-9 && Math.abs(r - radius) <= tolerance &&
-        Math.hypot(c[1] - center[1], c[2] - center[2]) <= tolerance ? [index] : [];
+        len(cross(a, rim.direction)) <= 1e-9 && Math.abs(r - radius) <= tolerance &&
+        len(cross(sub(c, center), rim.direction)) <= tolerance ? [index] : [];
     });
   });
   if (indices.some(matches => matches.length !== 1) || indices[0][0] === indices[1][0]) return;
@@ -137,7 +148,7 @@ function circularHistoryFrame(source: DisplayEdge, finished: BodyResult, edge: s
 
 export function historyFilletReceipt(doc:StudioDoc,commandDoc:StudioDoc,index:number,bodies:readonly BodyResult[],
   reply:EvalResult,revision:number,isCurrent:()=>boolean):HistoryFilletReceipt|null {
-  const fillet=ordinaryHistoryFillet(doc,index);
+  const fillet=ordinaryHistoryFillet(doc,index,bodies);
   if(!fillet||!isCurrent()||!reply.ok||reply.revision!==revision||reply.bodies.length!==1||
     commandDoc.nodes.length!==3||!commandDoc.nodes.every((n,i)=>n===doc.nodes[i])||bodies.length!==1) return null;
   const [stock]=reply.bodies, [finished]=bodies, edge=fillet.edges[0];
@@ -145,12 +156,15 @@ export function historyFilletReceipt(doc:StudioDoc,commandDoc:StudioDoc,index:nu
     finished.key!==bodyKeyFor(doc.nodes,index,'solid')||finished.ref?.node!==index||finished.ref?.side!=='solid'||
     (stock.pieces??1)!==1||(finished.pieces??1)!==1) return null;
   const name=featureId(doc.nodes,index)+'.face', face=finished.mesh.faces.filter(f=>f.name.startsWith(featureId(doc.nodes,index)+'.'));
-  if(face.length!==fillet.edges.length||face.some(item=>item.name!==name)||!face[0].normal.every(Number.isFinite)||
+  const topPair = historyTopEdges(doc, fillet);
+  // The joined fillet patches share one display face under the feature name.
+  const expectedFaces = topPair?.adjacent ? 1 : fillet.edges.length;
+  if(face.length!==expectedFaces||face.some(item=>item.name!==name)||!face[0].normal.every(Number.isFinite)||
     Math.abs(Math.hypot(...face[0].normal)-1)>1e-8) return null;
   const radius = Number(fillet.radius), sketch = doc.nodes[0];
   if (fillet.edges.length === 2) {
     const frame = pairedHistoryFrame(doc, fillet, stock, finished, radius);
-    return frame ? { document:doc,commandDoc,index,bodies,edge,face:face[0],isCurrent,frame } : null;
+    return frame ? { document:doc,commandDoc,index,bodies,edge:topPair?.adjacent ? topPair.pair[0] : edge,face:face[0],isCurrent,frame } : null;
   }
   const match = originalFilletEdge(stock, fillet, edge, signaturesOf(stock));
   if (!match) return null;

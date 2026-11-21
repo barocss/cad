@@ -3,8 +3,10 @@ import {createFlow} from './flow-helper.mjs';
 const baseline=process.argv.includes('--baseline');
 const nearTransition=process.argv.includes('--near-transition');
 const perspective=process.argv.includes('--perspective');
-const historyBaseline=process.argv.includes('--history-pair-baseline');
-const historyPair=historyBaseline||process.argv.includes('--history-pair');
+const adjacentBaseline=process.argv.includes('--history-adjacent-baseline');
+const historyAdjacent=adjacentBaseline||process.argv.includes('--history-adjacent');
+const historyBaseline=adjacentBaseline||process.argv.includes('--history-pair-baseline');
+const historyPair=historyAdjacent||historyBaseline||process.argv.includes('--history-pair');
 const twoEdges=historyPair||process.argv.includes('--two-edges');
 assert.ok(!perspective || (!baseline && !nearTransition), 'Perspective is a separate run');
 assert.ok(!twoEdges || (!baseline && !nearTransition && !perspective), 'Two edges use an orthographic run');
@@ -12,23 +14,53 @@ const pins=['apps/cad-studio/src/viewport/scalarHandleDrag.ts','apps/cad-studio/
 if(historyPair)pins.push('apps/cad-studio/src/state/historyFilletRadiusReceipt.ts','apps/cad-studio/src/app/useHistoryFilletRadius.ts',
  'packages/barocss-cad-model/src/app/editCommand.ts','packages/barocss-cad-model/src/engine/evaluate.ts');
 if(historyPair&&!historyBaseline)pins.push('packages/barocss-cad-model/src/engine/nativeFilletPair.ts');
-const f=await createFlow({name:'fillet-end-on-handle',output:process.argv[2],envFrozen:'FILLET_END_ON_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:historyPair?'Edit the shared History radius on opposite straight top edges from the original end-on frame':nearTransition?'Observe identical short pointer drags across the near-end-on 4px projection boundary':`Drag a new ${twoEdges?'shared two-edge':'single-edge'} Fillet radius in the ${perspective?'perspective':'orthographic'} view`,limits:['One constant Fillet on a 40×30×10 rectangular solid. Two-edge modes select opposite parallel top edges with the actual mouse. Camera changes use actual right-button orbit. No runtime handler calls or synthetic state writes. Curved and intersecting edges and command replacement are out of scope. The regular creation modes exercise two zooms. --near-transition instead measures 3.8/4.2px orthographic axes and identical upward 8px drags with geometric increase pointing down.'],inspectorSource:`
+const f=await createFlow({name:'fillet-end-on-handle',output:process.argv[2],envFrozen:'FILLET_END_ON_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:historyPair?`Edit the shared History radius on ${historyAdjacent?'adjacent':'opposite'} straight top edges from the original end-on frame`:nearTransition?'Observe identical short pointer drags across the near-end-on 4px projection boundary':`Drag a new ${twoEdges?'shared two-edge':'single-edge'} Fillet radius in the ${perspective?'perspective':'orthographic'} view`,limits:['One constant Fillet on a 40×30×10 rectangular solid. Two-edge modes select a bounded pair of original top edges with the actual mouse. Camera changes use actual right-button orbit. No runtime handler calls or synthetic state writes. Curved original edges and command replacement are out of scope. The regular creation modes exercise two zooms. --near-transition instead measures 3.8/4.2px orthographic axes and identical upward 8px drags with geometric increase pointing down.'],inspectorSource:`
 import {readFileSync} from 'node:fs';
 import {partBreps} from '@barocss/cad-model/engine/evaluate';
 import {digestOf} from '@barocss/cad-model/util/digest';
-import {brepMassProperties,checkBrep,evaluateSurface,surfaceDomain,surfaceEvaluator} from '@barocss/cad';
+import {brepMassProperties,checkBrep,curveDomain,evaluateCurve,evaluateSurface,faceGeometry,surfaceDomain,surfaceEvaluator} from '@barocss/cad';
 const doc=JSON.parse(readFileSync(process.argv[2],'utf8')), [{key,brep}]=partBreps(doc);
 const blends=doc.nodes[2].kind==='chamfer'?[]:brep.faces.filter(f=>f.name?.startsWith('n2.face'));
 const midpoints=blends.map(f=>{const s=f.surface;if(s.kind!=='surface')throw Error('Expected native surface');return evaluateSurface(s,(s.knotsU[s.degreeU]+s.knotsU[s.controlPoints.length])/2,(s.knotsV[s.degreeV]+s.knotsV[s.controlPoints[0].length])/2);});
 const sections=blends.map((face,index)=>{
  const d=surfaceDomain(face.surface), at=surfaceEvaluator(face.surface);
  const trims=new Set(brep.coedges.filter(use=>face.loops.includes(use.loop)).map(use=>use.edge));
- return {trimCount:trims.size,points:d.u.flatMap(u=>d.v.map(v=>at(u,v))).concat([midpoints[index]])};
+ return {trimCount:trims.size,points:d.u.flatMap(u=>d.v.map(v=>at(u,v))).concat([midpoints[index]]),
+   ...(${historyAdjacent} ? { support:faceGeometry(face), trimIds:[...trims] } : {})};
 });
-console.log(JSON.stringify({key,sha:digestOf(brep),midpoints,sections,volume:brepMassProperties(brep,1).volume,check:checkBrep(brep,{strict:true}),vertices:brep.vertices.map(v=>v.point)}));
+const seam=${historyAdjacent} ? brep.edges.filter(edge=>sections.every(section=>section.trimIds.includes(edge.id))).map(edge=>{
+ const [a,b]=curveDomain(edge.curve);
+ return Array.from({length:9},(_,i)=>evaluateCurve(edge.curve,a+(b-a)*i/8));
+}) : [];
+console.log(JSON.stringify({key,sha:digestOf(brep),midpoints,sections,seam,volume:brepMassProperties(brep,1).volume,check:checkBrep(brep,{strict:true}),vertices:brep.vertices.map(v=>v.point)}));
 `,oracleSource:`
 import json,sys,math
 d=json.load(sys.stdin);n=d['native'];w=d['width'];h=d['height'];depth=d['depth'];c=d['radius']
+if d['historyAdjacent']:
+ # Subtract the two exterior strips and add back their intersection.
+ # At z=h-c+t each strip is c-sqrt(c*c-t*t) wide.
+ expected=w*depth*h-(w+depth)*(1-math.pi/4)*c*c+(5/3-math.pi/2)*c**3
+ assert n['check']['valid'],n['check']['issues']
+ assert abs(n['volume']-expected)<1e-7,(n['volume'],expected)
+ assert abs(d['workerVolume']-expected)<1e-7
+ assert len(n['sections'])==2 and all(section['trimCount']==5 for section in n['sections'])
+ for axis, fixed, index in [([1,0,0],c,1),([0,1,0],w-c,0)]:
+  matches=[section['support'] for section in n['sections']
+           if all(abs(abs(value)-basis)<1e-10 for value,basis in zip(section['support']['a'],axis))]
+  assert len(matches)==1
+  support=matches[0]
+  assert support['kind']=='cylinder' and support['out']==1
+  assert abs(support['r']-c)<1e-9 and abs(support['c'][index]-fixed)<1e-9 and abs(support['c'][2]-(h-c))<1e-9
+ assert len(n['seam'])==2
+ seam=[point for chain in n['seam'] for point in chain]
+ for x,y,z in seam:
+  assert abs(x+y-w)<1e-8,(x,y,z)
+  assert abs(math.hypot(y-c,z-(h-c))-c)<1e-7,(x,y,z)
+  assert -1e-8<y<c+1e-8 and h-c-1e-8<z<h+1e-8
+ for end in [(w,0,h-c),(w-c,c,h)]:
+  assert any(math.dist(end,point)<1e-8 for point in seam),end
+ print(json.dumps({'status':'PASS','expectedVolume':expected,'nativeVolume':n['volume'],'workerVolume':d['workerVolume'],'seamSamples':len(seam)}))
+ sys.exit(0)
 targets=[(0,1),(depth,-1)] if d['twoEdges'] else [(0,1)]
 expected=w*depth*h-len(targets)*w*c*c*(.5 if d['chamfer'] else 1-math.pi/4)
 assert n['check']['valid'],n['check']['issues']
@@ -131,7 +163,7 @@ async function pickFilletEdges(){
  await f.page.waitForFunction(()=>window.__studioSelection?.selection?.edges?.length===1);
  if(twoEdges){
   await f.page.keyboard.down('Shift');
-  try{await f.worldClick([20,30,10]);}finally{await f.page.keyboard.up('Shift');}
+  try{await f.worldClick(historyAdjacent?[40,15,10]:[20,30,10]);}finally{await f.page.keyboard.up('Shift');}
   await f.page.waitForFunction(()=>window.__studioSelection?.selection?.edges?.length===2);
   const closeChat=button('Close chat');
   if(await closeChat.isVisible())await closeChat.click();
@@ -217,10 +249,10 @@ async function nearTransitionRun(){
  await cancel();await f.snapshot('near-04-baseline-cancel');
 }
 async function verify(doc,label,value){
- if(twoEdges)assert.deepEqual([...doc.nodes[2].edges].sort(),['n1.side0|n1.top','n1.side2|n1.top']);
+ if(twoEdges)assert.deepEqual([...doc.nodes[2].edges].sort(),['n1.side0|n1.top',historyAdjacent?'n1.side1|n1.top':'n1.side2|n1.top']);
  const native=await f.inspect(label,doc),[body]=(await f.bodies()).bodies;
  assert.equal(native.key,body.key);
- await f.runOracle({native,width:40,depth:30,height:10,chamfer:false,twoEdges,historyPair,radius:value,workerVolume:body.volume},label);
+ await f.runOracle({native,width:40,depth:30,height:10,chamfer:false,twoEdges,historyPair,historyAdjacent,radius:value,workerVolume:body.volume},label);
  return native;
 }
 
@@ -291,7 +323,7 @@ async function editHistoryPair(initial){
  await f.editor().getByLabel('Radius',{exact:true}).fill(String(expectedValue));
  await f.applyEditor(initial,'history-pair-typed');await f.same(dragged);
  assert.equal((await verify(dragged,'history-pair-typed-native',expectedValue)).sha,native.sha);
- const saved=await f.save('opposite-edges-history-fillet');
+ const saved=await f.save(historyAdjacent?'adjacent-edges-history-fillet':'opposite-edges-history-fillet');
  await f.freshOpen(saved.file,dragged,'history-pair-reopened');
  assert.equal((await verify(dragged,'history-pair-reopened-native',expectedValue)).sha,native.sha);
  await button('Iso').click();await f.page.getByTitle('Frame all (F)',{exact:true}).click();

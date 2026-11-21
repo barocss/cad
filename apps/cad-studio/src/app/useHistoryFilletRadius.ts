@@ -17,7 +17,7 @@ export function useHistoryFilletRadius(options:{
   useLayoutEffect(()=>{latest.current={options,source};});
   const [receipt,setReceipt]=useState<HistoryFilletReceipt>();
   const reads=useMemo(()=>createHistoryFilletReads<{result:EvalResult;revision:number}>(),[]);
-  const ordinary=ordinaryHistoryFillet(doc,index);
+  const ordinary=ordinaryHistoryFillet(doc,index,bodies);
   useEffect(()=>{
     if (!enabled||!readIdle||index===null||!ordinary||!options.idle()||!options.liveSourceCurrent()) return;
     let stillReading=true;
