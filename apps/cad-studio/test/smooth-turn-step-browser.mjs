@@ -7,16 +7,19 @@ const file = process.argv[3], original = JSON.parse(await readFile(file));
 const variants = ['--triangle', '--screw-positive', '--screw-negative',
   '--triangular-screw-positive', '--triangular-screw-negative',
   '--pentagon-screw-positive', '--pentagon-screw-negative', '--hexagon-screw-positive', '--hexagon-screw-negative',
-  '--trapezoid-screw-positive', '--trapezoid-screw-negative', '--skew-quadrilateral-screw-positive', '--skew-quadrilateral-screw-negative']
+  '--trapezoid-screw-positive', '--trapezoid-screw-negative', '--skew-quadrilateral-screw-positive', '--skew-quadrilateral-screw-negative',
+  '--line-arc-screw-positive', '--line-arc-screw-negative']
   .filter(option => process.argv.includes(option));
 assert.ok(variants.length <= 1);
 const [variant] = variants;
 const triangularScrew = variant?.startsWith('--triangular-screw-');
+const circularSegment = !!variant?.startsWith('--line-arc-screw-');
 const triangular = variant === '--triangle' || triangularScrew;
 const polygonProfile = variant?.slice(2).split('-screw-')[0];
 const polygonSides = { pentagon: 5, hexagon: 6, trapezoid: 4, 'skew-quadrilateral': 4 }[polygonProfile] ?? 0;
-const screw = triangularScrew || polygonSides > 0 || variant?.startsWith('--screw-');
-const faceCounts = polygonSides ? [polygonSides + 2] : triangular ? [5] : screw ? [6] : [18, 6];
+const screw = circularSegment || triangularScrew || polygonSides > 0 || variant?.startsWith('--screw-');
+const railCount = circularSegment ? 3 : polygonSides;
+const faceCounts = polygonSides ? [polygonSides + 2] : circularSegment || triangular ? [5] : screw ? [6] : [18, 6];
 const f = await createFlow({
   name: 'smooth-turn-step', output: process.argv[2], envFrozen: 'TURN_STEP_FROZEN',
   qualification: 'Independently read the AP214 bytes Studio writes for the approved compact Turn or Screw.',
@@ -24,7 +27,7 @@ const f = await createFlow({
     'apps/cad-studio/test/part21-prism-check.py', 'apps/cad-studio/src/files/useModelExports.ts', 'apps/cad-studio/src/files/StepExportPanel.tsx', 'packages/barocss-cad-model/src/engine/evaluate.ts'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
-import { checkBrep, brepMassProperties, curveDomain, evaluateCurve } from '@barocss/cad';
+import { checkBrep, brepMassProperties, curveDomain, evaluateCurve, evaluateSurface } from '@barocss/cad';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 function rails(brep) {
@@ -35,13 +38,32 @@ function rails(brep) {
     return axial(samples[0]) < axial(samples.at(-1)) ? samples : samples.reverse();
   });
 }
+function rationalSections(brep) {
+  return {
+    walls: brep.faces.filter(({ surface }) => surface.degreeU === 2 && surface.degreeV === 3).map(({ surface }) => ({
+      weights: surface.weights, knotsU: surface.knotsU, knotsV: surface.knotsV,
+      samples: Array.from({ length: 17 }, (_, v) =>
+        Array.from({ length: 9 }, (_, u) => evaluateSurface(surface, u / 8, v / 16))).flat(),
+    })),
+    caps: brep.edges.filter(({ curve }) => curve.degree === 2).map(({ curve }) => ({
+      weights: curve.weights,
+      samples: Array.from({ length: 33 }, (_, i) => evaluateCurve(curve, i / 32)),
+    })),
+  };
+}
 console.log(JSON.stringify(partBreps(doc).map(({ brep }) => ({
   check: checkBrep(brep, { strict: true }), volume: brepMassProperties(brep, 1).volume,
-  faceNames: brep.faces.map(face => face.name), ...(${polygonSides > 0} ? { rails: rails(brep) } : {}),
+  faceNames: brep.faces.map(face => face.name), ...(${railCount > 0} ? { rails: rails(brep) } : {}),
+  ...(${circularSegment} ? rationalSections(brep) : {}),
 }))));
 `,
 });
 const b = name => f.page.getByRole('button', { name, exact: true });
+const distance = (a, b) => Math.hypot(...a.map((x, j) => x - b[j]));
+const maxSampleError = (a, b) => {
+  assert.equal(a.length, b.length);
+  return Math.max(...a.map((point, index) => distance(point, b[index])));
+};
 await f.run(async () => {
   const origin = new URL(f.server.resolvedUrls.local[0]).origin;
   const newContext = f.browser.newContext.bind(f.browser);
@@ -70,7 +92,7 @@ await f.run(async () => {
   };
   let doc = original;
   await f.freshOpen(file, doc, 'approved-turn-opened');
-  if ((triangularScrew || polygonSides) && variant.endsWith('-positive')) {
+  if ((circularSegment || triangularScrew || polygonSides) && variant.endsWith('-positive')) {
     const terminal = doc.nodes.length - 1;
     await f.openFeatureEditor(terminal, 'reverse the approved Screw before STEP export');
     const winding = f.editor().getByLabel('Turn angle', { exact: true });
@@ -86,7 +108,7 @@ await f.run(async () => {
   if (await b('AO').getAttribute('aria-pressed') === 'true') await b('AO').click();
   const nativeDisplay = triangular || screw ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
   if (triangular || screw) assert.ok(nativeDisplay?.kind === 'smooth-turn' && nativeDisplay.triangles > nativeDisplay.baseTriangles);
-  if (polygonSides) await f.snapshot('approved-polygon-screw-native');
+  if (polygonSides || circularSegment) await f.snapshot(circularSegment ? 'approved-screw-native' : 'approved-polygon-screw-native');
   f.phase = 'read STEP preparation and loss disclosure in Studio';
   await b('Export STEP').click();
   const panel = f.page.getByLabel('STEP export', { exact: true });
@@ -108,6 +130,15 @@ await f.run(async () => {
   const oracle = ['-BI', join(f.app, 'test/smooth-turn-step-oracle.py'), artifact];
   if (variant) oracle.push(variant);
   const graph = JSON.parse(execFileSync('python3', oracle, { encoding: 'utf8' }));
+  if (circularSegment) {
+    const winding = variant.endsWith('-positive') ? 450 : -450;
+    assert.deepEqual([graph.cubicRails, graph.rationalWalls, graph.quadraticCapArcs], [3, 2, 4]);
+    assert.equal(graph.signedWindingDegrees.length, 3);
+    assert.ok(graph.signedWindingDegrees.every(angle => Math.abs(angle - winding) < 1e-8));
+    assert.equal(graph.signedAngularDerivativeCertified, true);
+    assert.ok(graph.stationMaxErrorMM < 1e-8);
+    assert.ok(Math.abs(graph.smoothVolumeMM3 - 276.39931201638126) < 1e-7);
+  }
   const before = await f.inspect('approved-native', doc);
   assert.deepEqual(before.map(body => body.check.counts.faces), faceCounts);
   assert.ok(before.every(body => body.check.valid));
@@ -126,26 +157,46 @@ await f.run(async () => {
   assert.equal(imported.length, faceCounts.length);
   const { bodies } = await f.bodies();
   let worstRoundTripRailErrorMM = 0;
+  let wallErrorMM = 0, capErrorMM = 0;
   for (const [i, body] of imported.entries()) {
     assert.ok(body.check.valid);
     assert.deepEqual(body.check.counts, before[i].check.counts);
     assert.deepEqual(body.faceNames, before[i].faceNames.map(name => loaded.nodes[0].id + '.' + name));
     assert.ok(Math.abs(body.volume - before[i].volume) < 1e-7);
     assert.ok(Math.abs(bodies[i].volume - body.volume) < 1e-7);
-    if (polygonSides) {
-      const distance = (a, b) => Math.hypot(...a.map((x, j) => x - b[j]));
-      assert.equal(body.rails.length, polygonSides);
-      assert.equal(before[i].rails.length, polygonSides);
+    if (railCount) {
+      assert.equal(body.rails.length, railCount);
+      assert.equal(before[i].rails.length, railCount);
       const matched = new Set();
       for (const rail of before[i].rails) {
         const index = body.rails.findIndex(samples => distance(rail[0], samples[0]) < 1e-8);
         assert.ok(index >= 0 && !matched.has(index));
         matched.add(index);
-        for (const [j, point] of rail.entries()) {
-          worstRoundTripRailErrorMM = Math.max(worstRoundTripRailErrorMM, distance(point, body.rails[index][j]));
-        }
+        worstRoundTripRailErrorMM = Math.max(worstRoundTripRailErrorMM, maxSampleError(rail, body.rails[index]));
       }
       assert.ok(worstRoundTripRailErrorMM < 1e-8);
+    }
+    if (circularSegment) {
+      assert.deepEqual([body.walls.length, body.caps.length], [2, 4]);
+      assert.deepEqual([before[i].walls.length, before[i].caps.length], [2, 4]);
+      for (const [j, wall] of before[i].walls.entries()) {
+        const other = body.walls[j];
+        assert.deepEqual([wall.weights, wall.knotsU, wall.knotsV], [other.weights, other.knotsU, other.knotsV]);
+        wallErrorMM = Math.max(wallErrorMM, maxSampleError(wall.samples, other.samples));
+      }
+      const matchedCaps = new Set();
+      for (const cap of before[i].caps) {
+        const index = body.caps.findIndex(other => [other.samples[0], other.samples.at(-1)]
+          .some(endpoint => distance(cap.samples[0], endpoint) < 1e-8)
+          && distance(cap.samples[16], other.samples[16]) < 1e-8);
+        assert.ok(index >= 0 && !matchedCaps.has(index));
+        matchedCaps.add(index);
+        const other = body.caps[index];
+        const reverse = distance(cap.samples[0], other.samples[0]) > 1e-8;
+        assert.deepEqual(cap.weights, reverse ? [...other.weights].reverse() : other.weights);
+        capErrorMM = Math.max(capErrorMM, maxSampleError(cap.samples, reverse ? [...other.samples].reverse() : other.samples));
+      }
+      assert.ok(Math.max(wallErrorMM, capErrorMM) < 1e-8);
     }
   }
   assert.deepEqual(f.report.downloads, []);
@@ -157,6 +208,7 @@ await f.run(async () => {
   const shownVertices = screw ? await f.page.evaluate(() => window.__studioSweepCylinderMesh?.()?.length / 3) : undefined;
   if (screw) assert.ok(shownVertices > 0);
   f.report.observations.push({ imported, noNativeFeatureHistory: true, nativeDisplay, reopenedDisplay, shownVertices,
-    ...(polygonSides ? { worstRoundTripRailErrorMM } : {}) });
+    ...(railCount ? { worstRoundTripRailErrorMM } : {}),
+    ...(circularSegment ? { wallErrorMM, capErrorMM } : {}) });
   await f.snapshot('approved-turn-step-reopened');
 });
