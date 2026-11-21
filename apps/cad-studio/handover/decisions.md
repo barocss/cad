@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1580: [Qualify both quadrilateral Screw windings through Studio AP214](notes/quadrilateral-screw-step-roundtrip-2026-11-21/README.md), #630. Verify exact reopened rail samples, signed file geometry and independent volume. Record the viewport faceting.
 - D1579: [Qualify reviewed Agent creation of quadrilateral Screws](notes/quadrilateral-screw-agent-2026-11-21/README.md), #630 and #322. Verify revision-pinned review, Studio approval and native equality with direct creation.
 - D1578: [Author a convex quadrilateral Smooth Screw from one sketch](notes/quadrilateral-screw-command-2026-11-21/README.md), #630. Verify direct creation, signed angle and pitch edits, and exact native reopening.
 - D1577: [Build compact external-axis Screw from convex quadrilateral sections](notes/quadrilateral-external-screw-loft-2026-11-21/README.md), #630. Verify non-rectangular profiles, both signed directions, native closure and desktop Save and Open.

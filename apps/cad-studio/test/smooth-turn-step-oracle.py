@@ -56,10 +56,12 @@ def verify(source, variant=None):
     triangular_screw = variant in ('--triangular-screw-positive', '--triangular-screw-negative')
     rectangular_screw = variant in ('--screw-positive', '--screw-negative')
     polygon_corners = {
+        'trapezoid': [(-8, -5), (2, -5), (0, -1), (-7, -1)],
+        'skew-quadrilateral': [(-7, -4), (2, -3), (0, -1), (-5, 1)],
         'pentagon': [(-7, -4), (2, -3), (1, -1), (-4, 1), (-6, -1)],
         'hexagon': [(-7, -5), (1, -5), (3, -3), (2, -1), (-3, 1), (-7, -1)],
     }
-    polygon = polygon_corners.get(variant[2:].split('-', 1)[0]) if variant else None
+    polygon = polygon_corners.get(variant[2:].split('-screw-', 1)[0]) if variant else None
     if triangular_screw or polygon:
         corners = polygon or [(-7, -4), (2, -3), (-4, 1)]
         n = len(corners)
@@ -234,6 +236,8 @@ if __name__ == '__main__':
     variants = {'--triangle', '--screw-positive', '--screw-negative',
                 '--triangular-screw-positive', '--triangular-screw-negative',
                 '--pentagon-screw-positive', '--pentagon-screw-negative',
-                '--hexagon-screw-positive', '--hexagon-screw-negative'}
+                '--hexagon-screw-positive', '--hexagon-screw-negative',
+                '--trapezoid-screw-positive', '--trapezoid-screw-negative',
+                '--skew-quadrilateral-screw-positive', '--skew-quadrilateral-screw-negative'}
     assert len(options) <= 1 and all(option in variants for option in options)
     print(json.dumps(verify(Path(sys.argv[1]).read_text(encoding='utf-8'), options[0] if options else None)))

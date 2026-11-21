@@ -6,13 +6,15 @@ import { createFlow } from './flow-helper.mjs';
 const file = process.argv[3], original = JSON.parse(await readFile(file));
 const variants = ['--triangle', '--screw-positive', '--screw-negative',
   '--triangular-screw-positive', '--triangular-screw-negative',
-  '--pentagon-screw-positive', '--pentagon-screw-negative', '--hexagon-screw-positive', '--hexagon-screw-negative']
+  '--pentagon-screw-positive', '--pentagon-screw-negative', '--hexagon-screw-positive', '--hexagon-screw-negative',
+  '--trapezoid-screw-positive', '--trapezoid-screw-negative', '--skew-quadrilateral-screw-positive', '--skew-quadrilateral-screw-negative']
   .filter(option => process.argv.includes(option));
 assert.ok(variants.length <= 1);
 const [variant] = variants;
 const triangularScrew = variant?.startsWith('--triangular-screw-');
 const triangular = variant === '--triangle' || triangularScrew;
-const polygonSides = variant?.startsWith('--pentagon-') ? 5 : variant?.startsWith('--hexagon-') ? 6 : 0;
+const polygonProfile = variant?.slice(2).split('-screw-')[0];
+const polygonSides = { pentagon: 5, hexagon: 6, trapezoid: 4, 'skew-quadrilateral': 4 }[polygonProfile] ?? 0;
 const screw = triangularScrew || polygonSides > 0 || variant?.startsWith('--screw-');
 const faceCounts = polygonSides ? [polygonSides + 2] : triangular ? [5] : screw ? [6] : [18, 6];
 const f = await createFlow({
