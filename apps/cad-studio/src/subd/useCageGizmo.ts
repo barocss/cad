@@ -16,7 +16,7 @@ type CageDrag = {
   plan: CageProportionalDragPlan | null;
 };
 const DEFAULT_RADIUS = '10';
-type CageDragFrame = 'world' | 'face';
+type CageDragFrame = 'world' | 'edge' | 'face';
 
 export function useCageGizmo(
   session: CageSession | null, doc: StudioDoc, available: boolean,
@@ -24,15 +24,18 @@ export function useCageGizmo(
   fail: (title: string, hint: string) => void,
 ) {
   const [dragFrame, setDragFrame] = useState<CageDragFrame>('world');
-  const useFaceNormal = dragFrame === 'face' && session?.mode === 'face';
-  const faceNormal = useMemo(() => {
-    if (session?.mode !== 'face') return null;
-    try { return { direction: cageLocalDirection(session, 'face') }; }
+  const frameMode = dragFrame === session?.mode ? dragFrame : 'world';
+  const local = useMemo(() => {
+    if (!session || frameMode === 'world') return null;
+    try {
+      const direction = cageLocalDirection(session, frameMode);
+      return { moveAlong: { direction, label: frameMode === 'edge' ? 'T' : 'N' } };
+    }
     catch (error) { return { reason: error instanceof Error ? error.message.replace(/^SubD: local direction: /, '') : String(error) }; }
-  }, [session]);
-  const owner = useMemo(() => available && session && (!useFaceNormal || faceNormal?.direction)
-    ? { doc, base: session, direction: useFaceNormal ? faceNormal?.direction : undefined }
-    : null, [available, session, doc, useFaceNormal, faceNormal]);
+  }, [session, frameMode]);
+  const owner = useMemo(() => available && session && (frameMode === 'world' || local?.moveAlong)
+    ? { doc, base: session, moveAlong: local?.moveAlong }
+    : null, [available, session, doc, frameMode, local]);
   const ownerNow = useRef(owner);
   const held = useRef<CageDrag | null>(null);
   const [frame, setFrame] = useState<{ gesture: CageDrag; delta: Vec3 | null } | null>(null);
@@ -68,15 +71,15 @@ export function useCageGizmo(
     gizmo = {
       sessionKey: owner,
       cancelOnEscape: true,
-      origin: (active?.gesture.plan || active?.delta && owner.direction) && live ? selectionCentre(live) ?? centre
+      origin: (active?.gesture.plan || active?.delta && owner.moveAlong) && live ? selectionCentre(live) ?? centre
         : [centre[0] + (delta?.[0] ?? 0), centre[1] + (delta?.[1] ?? 0), centre[2] + (delta?.[2] ?? 0)],
-      ...(owner.direction ? { moveAlong: { direction: owner.direction, label: 'N' } } : { move: [0, 1, 2] }),
+      ...(owner.moveAlong ? { moveAlong: owner.moveAlong } : { move: [0, 1, 2] }),
       onStart: (pointerId, shiftKey) => {
         if (ownerNow.current !== owner || held.current) return;
         try {
           const weighted = enabled && owner.base.mode === 'vertex';
           const plan = weighted ? planCageProportionalDrag(owner.base, radiusMM) : null;
-          gesture = { owner, pointerId, extrude: !owner.direction && shiftKey && owner.base.mode !== 'vertex', plan };
+          gesture = { owner, pointerId, extrude: !owner.moveAlong && shiftKey && owner.base.mode !== 'vertex', plan };
           held.current = gesture;
           setFrame({ gesture, delta: null });
         } catch (error) {
@@ -105,7 +108,7 @@ export function useCageGizmo(
     gizmo, live, dragging: !!active, extruding: !!active?.delta && active.gesture.extrude, isDragging, cancel, reset,
     influence: active?.gesture.plan?.weights,
     settings: {
-      enabled, radius, radiusValid, dragFrame, faceNormalReason: faceNormal?.reason,
+      enabled, radius, radiusValid, dragFrame: frameMode, frameReason: local?.reason,
       setDragFrame: (next: CageDragFrame) => { if (!isDragging()) setDragFrame(next); },
       setEnabled: (next: boolean) => { if (!isDragging()) setEnabled(next); },
       setRadius: (next: string) => { if (!isDragging()) setRadius(next); },

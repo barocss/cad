@@ -40,6 +40,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
   const ratioLabel = slide ? 'Slide ratio' : 'Loop ratio';
   const insetLabel = s.sel.faces.length > 1 ? 'Inset region' : 'Inset face';
   const pickedEdges = selectedCageEdges(s), sharpCount = pickedEdges.filter(edge => edge.sharp).length;
+  const localFrame = s.mode === 'edge' ? { value: 'edge', label: 'Edge tangent' } as const : { value: 'face', label: 'Face normal' } as const;
   const what = s.sel.faces.length ? `${s.sel.faces.length} face${s.sel.faces.length === 1 ? '' : 's'}` : s.sel.edges.length ? `${s.sel.edges.length} edge${s.sel.edges.length === 1 ? '' : 's'}` : s.sel.vertices.length ? `${s.sel.vertices.length} vertex${s.sel.vertices.length === 1 ? '' : 'es'}` : 'nothing';
   return <aside className="card props cage-panel" aria-label="Cage editor">
     <div className="card-title">CAGE · {name}</div>
@@ -57,12 +58,12 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
       {dragSettings.enabled && <label className={FIELD}><span>Drag graph radius mm</span><input className={CONTROL} type="number" min="0" step="1" value={dragSettings.radius} disabled={dragging} aria-invalid={!dragSettings.radiusValid} onChange={e => dragSettings.setRadius(e.target.value)} /></label>}
       {dragSettings.enabled && !dragSettings.radiusValid && <div className="warn" role="status">Enter a radius greater than 0 mm.</div>}
     </div>}
-    {s.mode === 'face' && <>
+    {s.mode !== 'vertex' && <>
       <label className={FIELD}><span>Drag frame</span><NativeSelect className={CONTROL} aria-label="Drag frame" value={dragSettings.dragFrame} disabled={dragging}
-        onChange={event => dragSettings.setDragFrame(event.target.value === 'face' ? 'face' : 'world')}>
-        <option value="world">World axes</option><option value="face">Face normal</option>
+        onChange={event => dragSettings.setDragFrame(event.target.value === localFrame.value ? localFrame.value : 'world')}>
+        <option value="world">World axes</option><option value={localFrame.value}>{localFrame.label}</option>
       </NativeSelect></label>
-      {dragSettings.dragFrame === 'face' && dragSettings.faceNormalReason && <div className="warn" role="status">Face normal: {dragSettings.faceNormalReason}.</div>}
+      {dragSettings.frameReason && <div className="warn" role="status">{localFrame.label}: {dragSettings.frameReason}.</div>}
     </>}
     <div className={FIELD}><span>Picked</span> <b aria-label="Picked">{what}</b></div>
     {centre && <div className="muted small" aria-label="Picked cage centre">Picked centre: ({centre.map(value => Number(value.toFixed(3))).join(', ')}) mm</div>}

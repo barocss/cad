@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1488: [Drag one SubD cage edge along its tangent](notes/cage-edge-tangent-drag-2026-11-21/README.md), #625. Verify the stable endpoint direction, exact Done and reopen.
 - D1487: [Drag one SubD cage face along its normal](notes/cage-face-normal-drag-2026-11-21/README.md), #625. Verify the signed physical handle, ownership, exact Done and reopen.
 - D1486: [Preserve an Agent approval during a later manual fixed-span edit](notes/manual-pattern-after-agent-approval-2026-11-21/README.md), #25. Verify the manual reversal, exact Hole, unchanged approval, Undo, Redo and native reopening.
 - D1485: [Share the fixed-span end Hole proof with local Agent review](notes/agent-fixed-span-end-hole-2026-11-21/README.md), #25. Verify the exact pair through local proposal, Studio review and fresh Open.
