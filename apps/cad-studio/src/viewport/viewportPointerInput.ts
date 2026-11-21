@@ -201,6 +201,7 @@ function sameGizmoHit(a: GizmoHit | null, b: GizmoHit | null): boolean {
   if (!a || !b || a.kind !== b.kind) return false;
   if (a.kind === 'handle') return a.index === (b as typeof a).index;
   if (a.kind === 'plane') return a.axes[0] === (b as typeof a).axes[0] && a.axes[1] === (b as typeof a).axes[1];
+  if (a.kind === 'move-along') return true;
   return a.axis === (b as typeof a).axis;
 }
 /** A cap is an instance/body hit, with no native face operation authority. Unknown faces are not caps. */
@@ -733,11 +734,21 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
       return;
     }
     if (!g) return;
-    if (hit.kind === 'move' || hit.kind === 'plane') {
+    if (hit.kind === 'move' || hit.kind === 'plane' || hit.kind === 'move-along') {
       const grid = propsRef.current.snapStep ?? 1, delta: Vec3 = [0, 0, 0], step = shift ? Math.max(0.001, (grid || 1) / 10) : grid || 0.001;
       // (Measured from the gizmo where the drag began: it moves with the selection meanwhile.)
       const o = d.origin ?? g.origin;
       if (hit.kind === 'plane') { const [u, v] = dragPlane(d.from!, [x, y], o, hit.axes, P); delta[hit.axes[0]] = snapTo(u, step); delta[hit.axes[1]] = snapTo(v, step); }
+      else if (hit.kind === 'move-along') {
+        if (!g.moveAlong) return;
+        const { direction } = g.moveAlong;
+        const distance = snapTo(dragAlong(d.from!, [x, y], o, direction, P), step);
+        if (!Number.isFinite(distance)) { cancelGizmo('session-change', d.pointerId); return; }
+        d.value = distance;
+        delta[0] = distance * direction[0];
+        delta[1] = distance * direction[1];
+        delta[2] = distance * direction[2];
+      }
       else { const dir: Vec3 = [0, 0, 0]; dir[hit.axis] = 1; delta[hit.axis] = snapTo(dragAlong(d.from!, [x, y], o, dir, P), step); }
       d.delta = delta; g.onMove?.(delta, done, d.pointerId); return;
     }

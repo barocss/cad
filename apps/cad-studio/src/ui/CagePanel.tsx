@@ -57,6 +57,13 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
       {dragSettings.enabled && <label className={FIELD}><span>Drag graph radius mm</span><input className={CONTROL} type="number" min="0" step="1" value={dragSettings.radius} disabled={dragging} aria-invalid={!dragSettings.radiusValid} onChange={e => dragSettings.setRadius(e.target.value)} /></label>}
       {dragSettings.enabled && !dragSettings.radiusValid && <div className="warn" role="status">Enter a radius greater than 0 mm.</div>}
     </div>}
+    {s.mode === 'face' && <>
+      <label className={FIELD}><span>Drag frame</span><NativeSelect className={CONTROL} aria-label="Drag frame" value={dragSettings.dragFrame} disabled={dragging}
+        onChange={event => dragSettings.setDragFrame(event.target.value === 'face' ? 'face' : 'world')}>
+        <option value="world">World axes</option><option value="face">Face normal</option>
+      </NativeSelect></label>
+      {dragSettings.dragFrame === 'face' && dragSettings.faceNormalReason && <div className="warn" role="status">Face normal: {dragSettings.faceNormalReason}.</div>}
+    </>}
     <div className={FIELD}><span>Picked</span> <b aria-label="Picked">{what}</b></div>
     {centre && <div className="muted small" aria-label="Picked cage centre">Picked centre: ({centre.map(value => Number(value.toFixed(3))).join(', ')}) mm</div>}
     {pickedEdges.length > 0 && <details className="small" aria-label="Picked edge creases">

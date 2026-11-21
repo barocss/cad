@@ -16,6 +16,21 @@ test('gizmo: arrows from a little out to their tips; an axis pointing at the cam
   assert.equal(layout({ origin: [0, 0, 0], move: [0, 1, 2] }, iso).arrows.length, 3);
 });
 
+test('gizmo: one signed oblique translation has one hit and disappears when seen end-on', () => {
+  const origin: Vec3 = [3, 2, 1], direction: Vec3 = [0.6, 0, 0.8];
+  const g: TransformGizmo = { origin, moveAlong: { direction, label: 'N' } };
+  const projected = layout(g, front);
+  assert.deepEqual(projected.along, { from: [542, 474], to: [590, 410], label: 'N' });
+  assert.deepEqual(projected.arrows, []);
+  assert.deepEqual(projected.planes, []);
+  assert.deepEqual(hitTest([590, 410], g, [], front), { kind: 'move-along' });
+  assert.equal(dragAlong([590, 410], [572, 434], origin, direction, front), -3);
+
+  const endOn: TransformGizmo = { origin, moveAlong: { direction: [0, 1, 0], label: 'N' } };
+  assert.equal(layout(endOn, front).along, null);
+  assert.equal(hitTest(front.project(origin), endOn, [], front), null);
+});
+
 test('gizmo: plane squares sit between their two arrows, arcs face the camera', () => {
   const g: TransformGizmo = { origin: [0, 0, 0], move: [0, 1, 2], turn: [0, 1, 2] };
   const L = layout(g, iso);

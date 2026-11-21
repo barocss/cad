@@ -17,6 +17,8 @@ export interface TransformGizmo {
   sessionKey?: string | number | object;
   /** Axes it moves along (with a plane square for each pair of them) and turns about (world X, Y, Z). */
   move?: readonly Axis3[];
+  /** One signed translation along a unit direction in world coordinates. */
+  moveAlong?: { direction: Vec3; label: string };
   turn?: readonly Axis3[];
   /** Degrees a turn snaps to (default 15; Shift: 1), per axis when one axis is held to steps (90). */
   turnSnap?: (axis: Axis3) => number;
@@ -64,7 +66,7 @@ export interface FeatureHandle {
   shiftPick?: true;
   onType?(value: number): void;
 }
-export type GizmoHit = { kind: 'move' | 'turn'; axis: Axis3 } | { kind: 'plane'; axes: [Axis3, Axis3] } | { kind: 'handle'; index: number } | { kind: 'scale'; axis: Axis3 | null };
+export type GizmoHit = { kind: 'move' | 'turn'; axis: Axis3 } | { kind: 'move-along' } | { kind: 'plane'; axes: [Axis3, Axis3] } | { kind: 'handle'; index: number } | { kind: 'scale'; axis: Axis3 | null };
 /** Screen projection, the camera's forward direction, and `size`: world mm that make the gizmo's full size on screen there. */
 export interface Projector { project(p: Vec3): XY; forward: Vec3; size: number }
 
@@ -80,8 +82,11 @@ const PAIRS: [Axis3, Axis3][] = [[0, 1], [1, 2], [0, 2]];
 export function layout(g: TransformGizmo, P: Projector) {
   const o = P.project(g.origin), s = P.size, move = g.move ?? [];
   // An arrow pointing at the camera shrinks to a dot: it is left out (no reliable drag along it).
-  const arrows = move.map(axis => ({ axis, from: P.project(at(g.origin, [[unitAxis(axis), 0.2 * s]])), to: P.project(at(g.origin, [[unitAxis(axis), s]])) }))
-    .filter(a => Math.hypot(a.to[0] - o[0], a.to[1] - o[1]) >= 0.3 * GIZMO_PX);
+  const arrow = (direction: Vec3) => ({ from: P.project(at(g.origin, [[direction, 0.2 * s]])), to: P.project(at(g.origin, [[direction, s]])) });
+  const dragVisible = ({ to }: { to: XY }) => Math.hypot(to[0] - o[0], to[1] - o[1]) >= 0.3 * GIZMO_PX;
+  const arrows = move.map(axis => ({ axis, ...arrow(unitAxis(axis)) })).filter(dragVisible);
+  const directionArrow = g.moveAlong ? { ...arrow(g.moveAlong.direction), label: g.moveAlong.label } : null;
+  const along = directionArrow && dragVisible(directionArrow) ? directionArrow : null;
   const planes = PAIRS.filter(([a, b]) => move.includes(a) && move.includes(b)).map(axes => {
     // Between the two arrows (positive axes), as CAD tools place them.
     const [a, b] = axes, ua = unitAxis(a), ub = unitAxis(b);
@@ -95,7 +100,7 @@ export function layout(g: TransformGizmo, P: Projector) {
   });
   // Scale cubes: one at the centre, one along each axis (all uniform).
   const cubes = g.scale ? [{ axis: null as Axis3 | null, at: o }, ...([0, 1, 2] as Axis3[]).map(axis => ({ axis: axis as Axis3 | null, at: P.project(at(g.origin, [[unitAxis(axis), 0.8 * s]])) }))] : [];
-  return { origin: o, arrows, planes, arcs, cubes };
+  return { origin: o, arrows, along, planes, arcs, cubes };
 }
 /** Rodrigues: v turned by `a` radians about the unit axis k. */
 function turn(v: Vec3, k: Vec3, a: number): Vec3 {
@@ -125,8 +130,10 @@ export function hitTest(p: XY, g: TransformGizmo | null, handles: readonly Featu
   const consider = (hit: GizmoHit, d: number, within: number) => { if (d <= within && d < bestD) { best = hit; bestD = d; } };
   if (g) {
     const L = layout(g, P);
+    const arrowDistance = ({ from, to }: { from: XY; to: XY }) => Math.min(segDist(p, from, to), Math.hypot(p[0] - to[0], p[1] - to[1]) - 4);
     for (const q of L.planes) if (insidePolygon(p, q.points)) consider({ kind: 'plane', axes: q.axes }, 0, 1);
-    for (const a of L.arrows) consider({ kind: 'move', axis: a.axis }, Math.min(segDist(p, a.from, a.to), Math.hypot(p[0] - a.to[0], p[1] - a.to[1]) - 4), 7);
+    for (const a of L.arrows) consider({ kind: 'move', axis: a.axis }, arrowDistance(a), 7);
+    if (L.along) consider({ kind: 'move-along' }, arrowDistance(L.along), 7);
     for (const r of L.arcs) consider({ kind: 'turn', axis: r.axis }, polyDist(p, r.points) + 0.5, 7);
     for (const c of L.cubes) consider({ kind: 'scale', axis: c.axis }, Math.max(Math.abs(p[0] - c.at[0]), Math.abs(p[1] - c.at[1])) - (c.axis === null ? 2 : 0), 8);
   }

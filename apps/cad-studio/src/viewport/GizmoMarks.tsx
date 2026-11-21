@@ -29,6 +29,7 @@ export function gizmoMarks(g: TransformGizmo | null, handles: readonly FeatureHa
       L.planes.some(q => same(drag.hit, { kind: "plane", axes: q.axes }))
       || L.arcs.some(q => same(drag.hit, { kind: "turn", axis: q.axis }))
       || L.arrows.some(q => same(drag.hit, { kind: "move", axis: q.axis }))
+      || !!L.along && drag.hit.kind === 'move-along'
       || L.cubes.some(q => same(drag.hit, { kind: "scale", axis: q.axis }))
     );
     const emphasis = (active: boolean) => dragging && !active ? 0.65 : 1;
@@ -53,16 +54,19 @@ export function gizmoMarks(g: TransformGizmo | null, handles: readonly FeatureHa
         <polyline points={pts(r.points)} fill="none" stroke={color} strokeWidth={active ? 5.5 : on ? 4.5 : 3} strokeLinecap="round" />
         {showTurn && <polygon points={pts(cone(prev, end, 9, 5))} fill={color} stroke={DRAG_EDGE} strokeWidth={2} strokeLinejoin="round" />}</g>);
     }
-    for (const a of L.arrows) {
-      const active = same(drag?.hit ?? null, { kind: 'move', axis: a.axis }), on = active || same(hot, { kind: 'move', axis: a.axis }), color = on ? HOT : AXIS_COLORS[a.axis], head = cone(a.from, a.to, 13, 5.5);
-      const base = head[2], length = Math.hypot(a.to[0] - a.from[0], a.to[1] - a.from[1]);
-      const label: XY = [a.to[0] + (a.to[0] - a.from[0]) / length * 11, a.to[1] + (a.to[1] - a.from[1]) / length * 11];
-      items.push(<g key={'ga' + a.axis} className="gizmo-arrow" opacity={emphasis(active)} data-active={on} data-dragging={active} data-gizmo={'move' + 'XYZ'[a.axis]}>
-        <line x1={a.from[0]} y1={a.from[1]} x2={base[0]} y2={base[1]} stroke={active ? DRAG_EDGE : EDGE} strokeOpacity={active ? 1 : 0.85} strokeWidth={active ? 9 : on ? 6.5 : 5.5} strokeLinecap="round" />
-        <line x1={a.from[0]} y1={a.from[1]} x2={base[0]} y2={base[1]} stroke={color} strokeWidth={active ? 5 : on ? 3.5 : 2.8} strokeLinecap="round" />
+    const moveArrow = ({ from, to }: { from: XY; to: XY }, hit: GizmoHit, id: string, axisLabel: string, idleColor: string) => {
+      const active = same(drag?.hit ?? null, hit), on = active || same(hot, hit);
+      const color = on ? HOT : idleColor, head = cone(from, to, 13, 5.5);
+      const base = head[2], length = Math.hypot(to[0] - from[0], to[1] - from[1]);
+      const label: XY = [to[0] + (to[0] - from[0]) / length * 11, to[1] + (to[1] - from[1]) / length * 11];
+      items.push(<g key={id} className="gizmo-arrow" opacity={emphasis(active)} data-active={on} data-dragging={active} data-gizmo={id}>
+        <line x1={from[0]} y1={from[1]} x2={base[0]} y2={base[1]} stroke={active ? DRAG_EDGE : EDGE} strokeOpacity={active ? 1 : 0.85} strokeWidth={active ? 9 : on ? 6.5 : 5.5} strokeLinecap="round" />
+        <line x1={from[0]} y1={from[1]} x2={base[0]} y2={base[1]} stroke={color} strokeWidth={active ? 5 : on ? 3.5 : 2.8} strokeLinecap="round" />
         <polygon points={pts(head)} fill={color} stroke={active ? DRAG_EDGE : EDGE} strokeWidth={active ? 2.5 : 1} strokeLinejoin="round" />
-        <text x={label[0]} y={label[1]} className="gizmo-axis-label" fill={color} textAnchor="middle" dominantBaseline="central">{'XYZ'[a.axis]}</text></g>);
-    }
+        <text x={label[0]} y={label[1]} className="gizmo-axis-label" fill={color} textAnchor="middle" dominantBaseline="central">{axisLabel}</text></g>);
+    };
+    for (const a of L.arrows) moveArrow(a, { kind: 'move', axis: a.axis }, 'move' + 'XYZ'[a.axis], 'XYZ'[a.axis], AXIS_COLORS[a.axis]);
+    if (L.along) moveArrow(L.along, { kind: 'move-along' }, 'moveAlong', L.along.label, '#e8e9eb');
     for (const c of L.cubes) {
       const active = same(drag?.hit ?? null, { kind: 'scale', axis: c.axis }), on = active || same(hot, { kind: 'scale', axis: c.axis }), half = c.axis === null ? 7 : 5, color = on ? HOT : c.axis === null ? '#e8e9eb' : AXIS_COLORS[c.axis];
       if (c.axis !== null) items.push(<line key={'gsl' + c.axis} opacity={emphasis(active)} x1={L.origin[0]} y1={L.origin[1]} x2={c.at[0]} y2={c.at[1]} stroke={color} strokeOpacity={active ? 1 : 0.6} strokeWidth={active ? 3 : 1.5} strokeDasharray="3 3" />);
