@@ -395,6 +395,10 @@ test('Offset extends the existing walls of authored rectangular taper and edits 
   const shrunk = bodyOf(reduced);
   closed(shrunk);
   near(brepMassProperties(shrunk, 1).volume, volumeAt(10));
+  const inwardEdit = editSavedOffsetFaceCommand(reduced, index);
+  assert.deepEqual(inwardEdit?.handles?.(context(reduced), { d: -2 }),
+    [{ key: 'd', at: [10, 5, 10], dir: [0, 0, 1], step: .5, max: -.1 }]);
+  assert.deepEqual(inwardEdit?.handles?.(context(reduced), { d: -1e-16 }), []);
   const duplicated = duplicateBody(reduced, { node: index, side: 'solid' }, [40, 0, 0]).doc;
   const placed = addPart(rectanglePart(4, 4, 4), { name: 'Tapered part', doc: reduced, position: [40, 0, 0], rotation: [0, 0, 0] }).doc;
   for (const candidate of [duplicated, flattenAssembly(placed)]) {
@@ -464,6 +468,20 @@ test('Offset on a tapered lower cap moves in its outward direction and retains t
     assert.ok('doc' in saved);
     assert.deepEqual(saved.doc, JSON.parse(JSON.stringify(doc)));
   }
+  const inward = edit.build(editCtx, { d: -2 });
+  const inwardEdit = editSavedOffsetFaceCommand(inward, index);
+  const inwardCtx = context(inward, 2, -1);
+  const signedInwardHandle = { key: 'd', at: [10, 5, 2], dir: [0, 0, -1], step: .5, max: -.1 };
+  assert.deepEqual(inwardEdit?.handles?.(inwardCtx, { d: -2 }), [signedInwardHandle]);
+  assert.deepEqual(inwardEdit?.handles?.(inwardCtx, { d: -4 }), [{ ...signedInwardHandle, at: [10, 5, 4] }]);
+  assert.deepEqual(inwardEdit?.handles?.(inwardCtx, { d: -1e-16 }),
+    [{ ...signedInwardHandle, at: [10, 5, 1e-16], max: -1e-16 }]);
+  assert.deepEqual(inwardEdit?.handles?.(inwardCtx, { d: 0 }), []);
+  assert.deepEqual(inwardEdit?.handles?.(inwardCtx, { d: 2 }), []);
+  assert.deepEqual(inwardEdit?.handles?.(inwardCtx, { d: -2, offsetMode: 'to-plane' }), []);
+  const tiny = edit.build(editCtx, { d: -.025 });
+  assert.deepEqual(editSavedOffsetFaceCommand(tiny, index)?.handles?.(context(tiny), { d: -2 }),
+    [{ ...signedInwardHandle, max: -.025 }]);
   const collapse = evaluateDoc(edit.build(editCtx, { d: -12 }), 1);
   assert.ok(!collapse.ok && /cross the opposite cap/.test(collapse.error.detail));
   assert.deepEqual(created.nodes[index], node);

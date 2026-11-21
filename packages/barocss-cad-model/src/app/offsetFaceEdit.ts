@@ -47,7 +47,7 @@ function savedDraftCapHandle(doc: StudioDoc, index: number, ctx: Ctx, values: Va
     !Number.isFinite(stock.draft) || stock.draft <= 0 ||
     saved.kind !== 'offset-face' || !directOffsetAt(doc,index) || saved.target !== undefined ||
     saved.parent.node !== 1 || saved.parent.side !== 'solid' || saved.faces.length !== 1 ||
-    typeof saved.distance !== 'number' || !Number.isFinite(saved.distance) || saved.distance <= 0) return [];
+    typeof saved.distance !== 'number' || !Number.isFinite(saved.distance) || saved.distance === 0) return [];
   const stockId = featureId(doc.nodes,1), [faceName] = saved.faces;
   if (faceName !== stockId + '.top' && faceName !== stockId + '.bottom') return [];
   const sign = faceName === stockId + '.bottom' ? -1 : 1;
@@ -67,13 +67,14 @@ function savedDraftCapHandle(doc: StudioDoc, index: number, ctx: Ctx, values: Va
     body.topology.boundaryEdges !== 0 || body.mesh.faces.length !== 6) return [];
   const matches = body.mesh.faces.filter(face => face.name === faceName);
   const [face] = matches, distance = Number(values.d), z = sourceZ + sign * saved.distance;
+  const draftZ = sourceZ + sign * distance;
   if (matches.length !== 1 || face.nativePlaneName !== faceName || face.nativeAxisPlane?.axis !== 'z' ||
     face.nativeAlignFace?.axis !== 'z' || face.nativeAlignFace.sign !== sign || face.exact?.kind !== 'plane' ||
     face.exact.n.some((v,k) => v !== direction[k]) ||
-    Math.abs(face.nativeAxisPlane.at - z) > 1e-8 || !Number.isFinite(face.nativeAxisPlane.at) ||
-    !Number.isFinite(distance) || distance <= 0) return [];
-  return [{ key:'d', at:[centre[0],centre[1],face.nativeAxisPlane.at + sign * (distance - saved.distance)],
-    dir:direction, step:.5,min:Math.min(.1,distance) }];
+    face.nativeAxisPlane.at !== z || !Number.isFinite(z) || z === sourceZ ||
+    !Number.isFinite(draftZ) || draftZ === sourceZ || Math.sign(distance) !== Math.sign(saved.distance)) return [];
+  const sameSignLimit = distance < 0 ? { max:Math.max(-.1,distance,saved.distance) } : { min:Math.min(.1,distance) };
+  return [{ key:'d', at:[centre[0],centre[1],draftZ], dir:direction, step:.5, ...sameSignLimit }];
 }
 
 const rejected = (hint: string): never => { throw refusal('BAD_REFERENCE', `Offset face: ${hint}`); };

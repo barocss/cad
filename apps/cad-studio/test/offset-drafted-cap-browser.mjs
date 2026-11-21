@@ -4,6 +4,8 @@ import { createFlow } from './flow-helper.mjs';
 const lower = process.argv.includes('--lower');
 const historyBaseline = process.argv.includes('--history-handle-baseline');
 const historyHandle = historyBaseline || process.argv.includes('--history-handle');
+const historyInward = process.argv.includes('--history-inward');
+assert.ok(!historyInward || historyHandle);
 const cap = lower ? 'n1.bottom' : 'n1.top';
 const pins = [
   'apps/cad-studio/src/App.tsx',
@@ -127,11 +129,14 @@ async function edit(index) {
   return panel;
 }
 
-async function verifyHistoryHandle(outward, original, index, outwardDistance) {
+async function verifyHistoryHandle(stored, original, index, savedDistance) {
   f.phase = 'open the terminal saved Offset in a head-on view';
-  if (lower) {
+  const targetDistance = historyInward ? -4 : 4;
+  if (lower || historyInward) {
     const saved = await f.save('saved-offset-before-edit');
-    await f.freshOpen(saved.file, outward, 'saved-offset-before-edit-opened');
+    await f.freshOpen(saved.file, stored, 'saved-offset-before-edit-opened');
+  }
+  if (lower) {
     await button('View cube directions').click();
     await f.page.getByRole('menuitem', { name: 'Bottom', exact: true }).click();
   } else {
@@ -144,21 +149,21 @@ async function verifyHistoryHandle(outward, original, index, outwardDistance) {
   const before = await camera(), panel = await edit(index);
   assert.deepEqual(await camera(), before);
   const group = f.page.locator('g.gizmo-handle[data-handle="d"]');
-  assert.equal(Number(await offsetField(panel).inputValue()), outwardDistance);
+  assert.equal(Number(await offsetField(panel).inputValue()), savedDistance);
   assert.match(await panel.innerText(), lower ? /Bottom end.*Outward −Z/s : /Top end.*Outward \+Z/s);
   if (historyBaseline) {
     assert.equal(await group.count(), 0);
     await f.snapshot('saved-offset-no-handle');
-    await offsetField(panel).fill('4');
+    await offsetField(panel).fill(String(targetDistance));
     await status(panel, 'preview');
-    await button('Apply', panel).click(); await f.changed(outward);
-    await native('saved-offset-baseline-typed', await f.doc(), 4, original);
+    await button('Apply', panel).click(); await f.changed(stored);
+    await native('saved-offset-baseline-typed', await f.doc(), targetDistance, original);
     return;
   }
   const metric = await f.page.evaluate(([z, sign]) => {
     const from = window.__studioScreenOf([10, 5, z]), x = window.__studioScreenOf([11, 5, z]), to = window.__studioScreenOf([10, 5, z + sign]);
     return { from, perMm: Math.hypot(x[0] - from[0], x[1] - from[1]), axisPx: Math.hypot(to[0] - from[0], to[1] - from[1]) };
-  }, lower ? [-outwardDistance, -1] : [height + outwardDistance, 1]);
+  }, lower ? [-savedDistance, -1] : [height + savedDistance, 1]);
   assert.ok(metric.axisPx < .2 && metric.perMm > 3, JSON.stringify(metric));
   const point = async () => {
     const box = await group.locator('circle').boundingBox(); assert.ok(box);
@@ -166,51 +171,63 @@ async function verifyHistoryHandle(outward, original, index, outwardDistance) {
   };
   const [x, y] = await point(), anchorGapPx = Math.hypot(x - metric.from[0], y - metric.from[1]);
   assert.ok(anchorGapPx < .5, JSON.stringify({ anchorGapPx, metric }));
-  const pixels = Math.round(metric.perMm * (4 - outwardDistance));
+  const pixels = Math.round(metric.perMm * (targetDistance - savedDistance));
+  if (historyInward) {
+    await f.page.mouse.move(x, y);
+    await f.page.mouse.down();
+    await f.page.mouse.move(x, y - Math.round(3 * metric.perMm), { steps: 7 });
+    await f.page.mouse.up();
+    assert.equal(Number(await offsetField(panel).inputValue()), -.1);
+    await status(panel, 'preview');
+    await f.same(stored);
+    await f.snapshot('saved-offset-inward-guard');
+    await offsetField(panel).fill(String(savedDistance));
+    await status(panel, 'preview');
+  }
   const drag = async (editor, label) => {
     const origin = await point();
     await f.page.mouse.move(...origin); await f.page.mouse.down();
     await f.page.mouse.move(origin[0], origin[1] - pixels, { steps: 7 });
-    await f.page.locator('.gizmo-readout').filter({ hasText: /Offset 4 mm/ }).waitFor();
-    assert.equal(Number(await offsetField(editor).inputValue()), 4);
-    await status(editor, 'preview'); await f.same(outward);
+    await f.page.locator('.gizmo-readout').filter({ hasText: historyInward ? /Offset [−-]4 mm/ : /Offset 4 mm/ }).waitFor();
+    assert.equal(Number(await offsetField(editor).inputValue()), targetDistance);
+    await status(editor, 'preview'); await f.same(stored);
     await f.snapshot(label); await f.page.mouse.up();
-    assert.equal(Number(await offsetField(editor).inputValue()), 4);
+    assert.equal(Number(await offsetField(editor).inputValue()), targetDistance);
   };
   await drag(panel, 'saved-offset-drag-held');
-  await button('Cancel', panel).click(); await f.same(outward);
+  await button('Cancel', panel).click(); await f.same(stored);
   const second = await edit(index);
   const origin = await point();
   await f.page.mouse.move(...origin); await f.page.mouse.down();
   await f.page.mouse.move(origin[0],origin[1]-pixels,{steps:7});
   await status(second,'preview');
-  assert.equal(Number(await offsetField(second).inputValue()),4);
-  await button('Cancel',second).press('Enter'); await f.same(outward);
+  assert.equal(Number(await offsetField(second).inputValue()),targetDistance);
+  await button('Cancel',second).press('Enter'); await f.same(stored);
   await f.page.locator(`.history .hs[data-node-index="${index}"]`).press('Enter');
   await f.editor().waitFor();
   await button('Edit offset',f.editor()).press('Enter'); await status(second,'preview');
   await f.page.mouse.move(origin[0],origin[1]-pixels*2,{steps:7});
   await f.page.mouse.up();
-  assert.equal(Number(await offsetField(second).inputValue()),outwardDistance);
-  await f.same(outward);
+  assert.equal(Number(await offsetField(second).inputValue()),savedDistance);
+  await f.same(stored);
   await drag(second, 'saved-offset-drag-before-apply');
-  await button('Apply', second).click(); await f.changed(outward);
+  await button('Apply', second).click(); await f.changed(stored);
   const accepted = await f.doc();
-  assert.deepEqual(accepted, { ...outward, nodes: outward.nodes.map((node, i) => i === index ? { ...node, distance: 4 } : node) });
-  await native('saved-offset-handle-applied', accepted, 4, original);
-  await f.undo(); await f.same(outward); await f.redo(); await f.same(accepted);
-  await f.undo(); await f.same(outward);
+  assert.deepEqual(accepted, { ...stored, nodes: stored.nodes.map((node, i) => i === index ? { ...node, distance: targetDistance } : node) });
+  await native('saved-offset-handle-applied', accepted, targetDistance, original);
+  await f.undo(); await f.same(stored); await f.redo(); await f.same(accepted);
+  await f.undo(); await f.same(stored);
   const typed = await edit(index);
-  await offsetField(typed).fill('4'); await status(typed, 'preview');
+  await offsetField(typed).fill(String(targetDistance)); await status(typed, 'preview');
   await button('Apply', typed).click(); await f.same(accepted);
-  await native('saved-offset-handle-typed', await f.doc(), 4, original);
+  await native('saved-offset-handle-typed', await f.doc(), targetDistance, original);
   const saved = await f.save('saved-offset-handle');
   await f.freshOpen(saved.file, accepted, 'saved-offset-handle-opened');
-  await native('saved-offset-handle-reopened', accepted, 4, original);
+  await native('saved-offset-handle-reopened', accepted, targetDistance, original);
   await button('Iso', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('saved-offset-handle-final');
-  f.report.observations.push({label:'saved-offset-head-on',...metric,anchorGapPx,dragPixels:pixels,from:outwardDistance,to:4,retiredPointerRefused:true});
+  f.report.observations.push({label:'saved-offset-head-on',...metric,anchorGapPx,dragPixels:pixels,from:savedDistance,to:targetDistance,retiredPointerRefused:true});
 }
 
 await f.run(async () => {
@@ -253,8 +270,8 @@ await f.run(async () => {
   await status(panel, 'preview');
   await f.same(seed);
   f.report.observations.push({ label: 'offset-distance-handle', lower, before, after, beforePixels, dragPixels, startDistance: 2, endDistance: 3 });
-  const outwardDistance = lower ? 2 : 3;
-  if (lower) await offsetField(panel).fill('2');
+  const outwardDistance = historyInward ? -2 : lower ? 2 : 3;
+  if (lower || historyInward) await offsetField(panel).fill(String(outwardDistance));
   await status(panel, 'preview');
   await f.same(seed);
   await f.snapshot('taper-outward-preview');
