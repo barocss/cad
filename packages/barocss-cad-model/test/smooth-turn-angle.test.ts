@@ -6,6 +6,7 @@ import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
 import { smoothTurnAngleKey, smoothTurnWidthBounds, smoothTurnWidthKey } from '../src/app/smoothLoftTurn';
 import { dispatchTool } from '../src/chat/tools';
+import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { emptyDoc, withNode, type LoopSegment, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, evaluatePart, exportStudioStep, partBreps, placeBody, shareMeshes, type BodyResult } from '../src/engine/evaluate';
 import { revisionOf } from '../src/util/revision';
@@ -19,6 +20,81 @@ const context: Ctx = { doc: source, bodies: [], selection: { faces: [], edges: [
 const create = (angle: number) => commandById('smooth-turn')!.build!(context, { angle, height: 70 });
 const field = (doc: StudioDoc, index = doc.nodes.length - 1) =>
   editFields(doc.nodes, index, doc.parameters).find(field => field.key === smoothTurnAngleKey);
+
+const arcSource = withNode(emptyDoc(), {
+  kind: 'sketch', profile: 'loop',
+  segments: [
+    { kind: 'line', start: [13.5, 3 * Math.sin(Math.PI / 3)] },
+    { kind: 'arc', start: [13.5, -3 * Math.sin(Math.PI / 3)], center: [12, 0], direction: 'ccw' },
+  ],
+  plane: { origin: [21, -19.4, 24.8], normal: [0, .6, .8], xAxis: [1, 0, 0] },
+});
+const arcContext: Ctx = { ...context, doc: arcSource };
+const arcCommand = commandById('smooth-turn')!;
+
+test('Smooth Turn creates and edits one circular segment about its offset area centroid', async () => {
+  assert.ok(arcCommand.available(arcContext).ok);
+  assert.throws(() => arcCommand.build!(arcContext, { angle: 0, height: 40 }));
+  const negative = arcCommand.build!(arcContext, { angle: -360, height: 40 });
+  const positive = arcCommand.build!(arcContext, { angle: 360, height: 40 });
+  const index = negative.nodes.length - 1;
+  const node = negative.nodes[index];
+  assert.ok(node.kind === 'loft' && node.smooth);
+  assert.deepEqual(node.from, [0]);
+  assert.equal(node.sections.length, 13);
+  assert.equal(negative.nodes[0], arcSource.nodes[0]);
+  const fields = editFields(negative.nodes, index, negative.parameters);
+  assert.deepEqual(fields.map(input => input.label), ['Total height', 'Turn angle']);
+  const angle = field(negative);
+  const height = fields.find(input => input.label === 'Total height');
+  assert.ok(angle?.kind === 'number' && height?.kind === 'number');
+  assert.deepEqual([angle.get(negative.nodes), height.get(negative.nodes)], [-360, 40]);
+  for (const invalid of [0, 361, -361, Infinity, NaN])
+    assert.deepEqual(angle.set(negative.nodes, invalid), negative.nodes);
+  assert.deepEqual(angle.set(negative.nodes, 360), positive.nodes);
+  const longer = { ...positive, nodes: height.set(positive.nodes, 48) };
+  assert.equal(height.get(longer.nodes), 48);
+  assert.equal(angle.get(longer.nodes), 360);
+  assert.deepEqual(longer.nodes.slice(0, index), positive.nodes.slice(0, index));
+  const sweep = 2 * Math.PI / 3;
+  const centroidOffset = 4 * 3 * Math.sin(sweep / 2) ** 3 / (3 * (sweep - Math.sin(sweep)));
+  for (const [doc, sign, advance] of [[negative, -1, 40], [positive, 1, 40], [longer, 1, 48]] as const) {
+    const [{ brep }] = partBreps(doc);
+    const result = checkBrep(brep, { strict: true });
+    assert.ok(result.valid, JSON.stringify(result.issues));
+    assert.deepEqual([result.counts.bodies, result.counts.faces, result.counts.edges], [1, 5, 9]);
+    const rail = brep.edges.find(edge => edge.id === 'c2')!.curve;
+    const point = evaluateCurve(rail, .25);
+    const v = sign * (3 - centroidOffset), z = advance / 4;
+    const expected = [33 + centroidOffset, -19.4 + .8 * v + .6 * z, 24.8 - .6 * v + .8 * z];
+    assert.ok(Math.hypot(...point.map((value, axis) => value - expected[axis])) < 1e-8);
+    assert.ok(Math.abs(brepMassProperties(brep, 1).volume - 221.13498549200997 * advance / 40) < 1e-7);
+  }
+  const reopened = await readStudioFile(encodeStudioFile(longer));
+  assert.ok('doc' in reopened);
+  assert.deepEqual(reopened.doc, longer);
+  assert.deepEqual(partBreps(reopened.doc), partBreps(longer));
+});
+
+test('circular-segment Smooth Turn creation and angle edits stay scoped to Studio', async () => {
+  const unevaluated = () => assert.fail('Out-of-scope Agent requests must not evaluate.');
+  const sourceState = { doc: arcSource, bodies: [] };
+  const create = await dispatchTool(sourceState, 'features', {
+    action: 'command', command: 'smooth-turn', values: { sketch: 'n0', height: 40, angle: -360 },
+    expectedRevision: revisionOf(arcSource),
+  }, unevaluated);
+  assert.ok(create.isError && !create.changed, create.content);
+  assert.equal(create.state, sourceState);
+  const doc = arcCommand.build!(arcContext, { angle: -360, height: 40 }), index = doc.nodes.length - 1;
+  const state = { doc, bodies: [] };
+  const discovered = await dispatchTool(state, 'features', { action: 'edit', index }, unevaluated);
+  assert.doesNotMatch(discovered.content, /smoothTurnAngle/);
+  const edited = await dispatchTool(state, 'features', {
+    action: 'edit', index, values: { smoothTurnAngle: 360 }, expectedRevision: revisionOf(doc),
+  }, unevaluated);
+  assert.ok(edited.isError && !edited.changed, edited.content);
+  assert.equal(edited.state, state);
+});
 
 test('an existing Smooth Turn changes signed winding without changing its station count or native identities', () => {
   for (const [beforeAngle, afterAngle] of [[360, -360], [-450, 360], [450, 0], [72, 180]]) {

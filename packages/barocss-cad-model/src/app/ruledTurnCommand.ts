@@ -10,11 +10,11 @@ import { resolveSketchDims } from '../sketch/reopen';
 import type { Command, Ctx } from './commands';
 import { planeOf } from './profiles';
 import { rectangularAxisClearance, rotateTurnCorners, rotateTurnPoints, triangleTurnCentre } from './smoothLoftTurn';
-import { isLineArcSource, lineArcGeometry, nativeLineArcScrew, rotateLineArcSegments } from './lineArcScrew';
+import { isLineArcSource, lineArcGeometry, nativeLineArcScrew, nativeLineArcTurn, rotateLineArcSegments } from './lineArcScrew';
 
 const maximumAngle = 450;
 const selectRectangle = 'Select one standalone rectangular sketch without holes or separate regions.';
-const selectSmoothProfile = 'Select one standalone rectangular or straight triangular sketch without holes or separate regions.';
+const selectSmoothProfile = 'Select one standalone rectangle, straight triangle or closed line-and-arc sketch without holes or separate regions.';
 type TurnProfile = Extract<SketchNode, { profile: 'rectangle' | 'polygon' }>;
 type ScrewProfile = TurnProfile | Extract<SketchNode, { profile: 'loop' }>;
 type Point = [number, number];
@@ -26,7 +26,7 @@ function turnSource({ doc, selection }: Ctx, smooth: boolean, allowConvexPolygon
     || selection.vertices?.length
     || sketch?.kind !== 'sketch' || sketch.suppressed || sketch.on
     || sketch.association || sketch.pocketFloor || sketch.holes?.length || sketch.regions?.length) return;
-  const lineArc = smooth && allowConvexPolygons && isLineArcSource(sketch);
+  const lineArc = smooth && isLineArcSource(sketch);
   if (!lineArc && sketch.profile !== 'rectangle' && (!smooth || sketch.profile !== 'polygon'
     || (sketch.points.length !== 3 && (!allowConvexPolygons || sketch.points.length < 4 || sketch.points.length > ExtrudedProfileLimits.segments))
     || sketch.construction?.length || sketch.outline?.bulges?.some(Boolean) || sketch.outline?.circles?.length
@@ -83,12 +83,38 @@ function smoothLoft(doc: StudioDoc, index: number, plane: SketchPlane, corners: 
   return withNode(doc, { kind: 'loft', sections, from: [index], smooth: true });
 }
 
+function smoothLineArcTurn(doc: StudioDoc, index: number, plane: SketchPlane,
+  sketch: Extract<SketchNode, { profile: 'loop' }>, height: number, angle: number): StudioDoc {
+  if (angle === 0) throw refusal('VALUE', 'Enter a nonzero Turn angle from −450° to +450°.');
+  const segments = lineArcGeometry(sketch);
+  if (!segments) throw refusal('VALUE', 'Use one finite closed line and circular arc within the model range.');
+  const profile = buildProfileLoop(segments), pivot = profile.centroid;
+  const arc = profile.segments.find(segment => segment.kind === 'arc');
+  if (arc?.kind !== 'arc') throw refusal('VALUE', 'Use one closed circular segment.');
+  const reach = Math.hypot(arc.center[0] - pivot[0], arc.center[1] - pivot[1]) + arc.radius;
+  if (pivot.some(value => !Number.isFinite(value) || Math.abs(value) + reach > CadNumericPolicy.coordinateAbs)
+    || plane.origin.length !== 3 || plane.origin.some(value => !Number.isFinite(value) || Math.abs(value) > CadNumericPolicy.coordinateAbs))
+    throw refusal('VALUE', 'Place the complete turning profile and its frame within the finite model range.');
+  const spans = Math.max(6, Math.ceil(Math.abs(angle) / 30));
+  const rows = Array.from({ length: spans + 1 }, (_, station) => station === 0 ? segments
+    : rotateLineArcSegments(segments, angle * (station / spans) * (Math.PI / 180), pivot));
+  const heights = rows.map((_, station) => height * (station / spans));
+  if (!nativeLineArcTurn(rows, heights))
+    throw refusal('VALUE', 'The circular-segment Turn could not be certified about its fixed area centroid.');
+  const sections = rows.map((segments, station) => {
+    const sketch = doc.nodes.length;
+    doc = withNode(doc, { kind: 'sketch', profile: 'loop', segments, plane });
+    return { sketch, z: heights[station] };
+  });
+  return withNode(doc, { kind: 'loft', sections, from: [index], smooth: true });
+}
+
 function turnCommand(smooth: boolean): Command {
   const chooseSource = smooth ? selectSmoothProfile : selectRectangle;
   return {
     id: smooth ? 'smooth-turn' : 'ruled-turn', label: smooth ? 'Smooth Turn' : 'Ruled Turn',
     icon: 'cad-loft', group: 'create', keywords: 'loft twist rotate sections',
-    hint: smooth ? 'Create a smooth Loft from one rectangle or straight triangle.' : 'Create a ruled Loft from rotated copies of one rectangular sketch.',
+    hint: smooth ? 'Create a smooth Loft from one rectangle, straight triangle or circular segment.' : 'Create a ruled Loft from rotated copies of one rectangular sketch.',
     available: ctx => turnSource(ctx, smooth) ? { ok: true } : { ok: false, reason: chooseSource },
     fields: () => [
       { key: 'height', label: 'Height', kind: 'mm', min: 0, max: CadNumericPolicy.coordinateAbs },
@@ -104,7 +130,8 @@ function turnCommand(smooth: boolean): Command {
         throw refusal('VALUE', `Enter a Turn angle from −${maximumAngle}° to ${maximumAngle}°.`);
 
       // Like an ordinary Loft, this snapshots the current sketch dimensions in its own section copies.
-      const sketch = resolveSketchDims(source.sketch, ctx.doc.parameters) as TurnProfile;
+      const sketch = resolveSketchDims(source.sketch, ctx.doc.parameters) as ScrewProfile;
+      if (sketch.profile === 'loop') return smoothLineArcTurn(ctx.doc, source.index, source.plane, sketch, height, angle);
       const corners = sketch.profile === 'rectangle' ? rectangleCorners(sketch) : triangleCorners(sketch);
       const [min, , max] = corners;
       const centre = sketch.profile === 'polygon' ? triangleTurnCentre(corners) : undefined;

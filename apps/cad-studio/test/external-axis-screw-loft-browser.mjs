@@ -7,7 +7,7 @@ const circularSegment = centred || process.argv.includes('--line-arc');
 const triangular = (singleSketch && !circularSegment) || process.argv.includes('--triangle');
 const polygon = ['pentagon', 'hexagon', 'trapezoid', 'skew-quadrilateral']
   .find(name => process.argv.includes('--' + name));
-const command = singleSketch ? 'Smooth Screw' : 'Loft';
+const command = singleSketch ? (centred ? 'Smooth Turn' : 'Smooth Screw') : 'Loft';
 const profile = centred ? 'centred-line-arc' : circularSegment ? 'line-arc' : polygon ?? (triangular ? 'triangular' : 'rectangular');
 const degrees = circularSegment || polygon || triangular ? 360 : 180;
 const height = 40, spans = degrees / 30, samples = spans * 10;
@@ -47,6 +47,7 @@ const frozen = [
     'packages/barocss-cad-model/src/app/lineArcScrew.ts',
     'packages/barocss-cad-model/src/app/editFields.ts',
     'packages/barocss-cad-model/src/chat/part/features.ts',
+    'apps/cad-studio/src/app/featureNumberInput.ts',
     'apps/cad-studio/src/state/historyFeatureApply.ts',
     'apps/cad-studio/src/ui/NodeEditor.tsx',
   ] : []),
@@ -55,7 +56,7 @@ const f = await createFlow({
   name: 'external-axis-screw-loft',
   output: process.argv[2],
   envFrozen: 'SCREW_LOFT_FROZEN',
-  qualification: centred ? 'Create both windings of a compact centred circular-segment Twist with Studio Smooth Loft.'
+  qualification: centred ? 'Create both windings of a compact centred circular-segment Twist with Studio ' + command + '.'
     : 'Create both windings of a compact external-axis ' + profile + ' Screw with Studio ' + command + '.',
   limits: ['Desktop Chrome. Synthetic source sketches in one tilted frame.'],
   initialFiles: frozen,
@@ -139,7 +140,18 @@ async function build(angle) {
   await f.command(command);
   const hud = f.page.getByRole('dialog', { name: command, exact: true });
   const status = value => hud.locator('.status').filter({ hasText: value });
-  if (singleSketch) {
+  if (singleSketch && centred) {
+    const field = name => hud.getByLabel(name, { exact: true });
+    await field('Height').fill(String(height));
+    if (angle > 0) {
+      await field('Turn angle').fill('0');
+      await status(/^refused$/).waitFor();
+      assert.ok(await button('Apply', hud).isDisabled());
+      await f.same(doc);
+      await f.snapshot('centred-single-sketch-zero-refused');
+    }
+    await field('Turn angle').fill(String(angle));
+  } else if (singleSketch) {
     const field = name => hud.getByLabel(name, { exact: true });
     if (angle > 0) {
       await field('Axis X').fill(circularSegment ? '14' : '7');
@@ -281,31 +293,40 @@ await f.run(async () => {
   await frameView('external-axis-reopened-' + degrees);
   if (singleSketch) {
     const index = negative.nodes.length - 1;
-    await f.openFeatureEditor(index, 'reopened single-sketch Screw');
+    const advanceLabel = centred ? 'Total height' : 'Pitch per revolution';
+    const editLabel = centred ? 'single-sketch-height-48' : 'single-sketch-pitch-48';
+    await f.openFeatureEditor(index, 'reopened single-sketch ' + command);
     const field = name => f.editor().getByLabel(name, { exact: true });
     assert.equal(Number(await field('Turn angle').inputValue()), -degrees);
-    assert.equal(Number(await field('Pitch per revolution').inputValue()), height);
+    assert.equal(Number(await field(advanceLabel).inputValue()), height);
+    if (centred) {
+      assert.equal(await field('Pitch per revolution').count(), 0);
+      await field('Turn angle').fill('0');
+      assert.ok(await button('Apply', f.editor()).isDisabled());
+      await f.same(negative);
+      await f.snapshot('centred-history-zero-refused');
+    }
     assert.equal(await field('Turn width').count(), 0);
     await field('Turn angle').fill(String(degrees));
     const reversed = (await f.applyEditor(negative, 'single-sketch-reversed')).doc;
     assert.deepEqual(reversed, positive);
     assert.equal((await inspect(reversed, degrees, 'single-sketch-reversed-native')).digest, right.digest);
 
-    await f.openFeatureEditor(index, 'same Screw pitch');
-    await field('Pitch per revolution').fill('48');
-    const longer = (await f.applyEditor(reversed, 'single-sketch-pitch-48')).doc;
+    await f.openFeatureEditor(index, command + ' ' + advanceLabel);
+    await field(advanceLabel).fill('48');
+    const longer = (await f.applyEditor(reversed, editLabel)).doc;
     assert.deepEqual(longer.nodes.slice(0, -1), reversed.nodes.slice(0, -1));
-    const edited = await inspect(longer, degrees, 'single-sketch-pitch-48-native', 48);
-    await frameView('single-sketch-pitch-48-model');
+    const edited = await inspect(longer, degrees, editLabel + '-native', 48);
+    await frameView(editLabel + '-model');
     if (polygon || circularSegment) {
-      const saved = await f.save('single-sketch-pitch-48');
-      await f.freshOpen(saved.file, longer, 'single-sketch-pitch-48-fresh-open');
-      assert.deepEqual(await inspect(longer, degrees, 'single-sketch-pitch-48-reopened-native', 48), edited);
-      await frameView('single-sketch-pitch-48-reopened');
+      const saved = await f.save(editLabel);
+      await f.freshOpen(saved.file, longer, editLabel + '-fresh-open');
+      assert.deepEqual(await inspect(longer, degrees, editLabel + '-reopened-native', 48), edited);
+      await frameView(editLabel + '-reopened');
       if (circularSegment) {
-        await f.openFeatureEditor(index, 'reopened circular segment Screw at pitch 48');
+        await f.openFeatureEditor(index, 'reopened circular segment ' + command + ' at 48 mm');
         assert.equal(Number(await field('Turn angle').inputValue()), degrees);
-        assert.equal(Number(await field('Pitch per revolution').inputValue()), 48);
+        assert.equal(Number(await field(advanceLabel).inputValue()), 48);
         await f.snapshot('line-arc-history-reopened');
       }
     }

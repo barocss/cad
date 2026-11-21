@@ -5,7 +5,7 @@ import { updateBoxFootprint } from '../../app/editCommand';
 import { editFields } from '../../app/editFields';
 import { editSavedOffsetFaceCommand } from '../../app/offsetFaceEdit';
 import { smoothScrewAngleField, smoothScrewAngleKey, smoothScrewWindingRule, smoothScrewPitchAdvance, smoothScrewPitchField, smoothScrewPitchKey, smoothScrewTurns, smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '../../app/smoothLoftTurn';
-import { hasLineArcScrewSections } from '../../app/lineArcScrew';
+import { hasLineArcScrewSections, hasLineArcTurnSections, isLineArcSource } from '../../app/lineArcScrew';
 import { featureLabel, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
 import { loadPersonRows } from '../rows';
 import { ROWS_NOT_FROM_PERSON } from '../../engine/rowFiles';
@@ -240,6 +240,8 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
     const matches = state.doc.nodes.flatMap((_, index) => featureId(state.doc.nodes, index) === sketch ? [index] : []);
     if (matches.length !== 1)
       return fail(state, `${cmd.label} needs one current sketch with that ID from query.summary.`, { code: 'COMMAND_INPUT' });
+    if (cmd.id === 'smooth-turn' && isLineArcSource(state.doc.nodes[matches[0]]))
+      return fail(state, 'Circular-segment Smooth Turn creation is available in Studio only.', { code: 'COMMAND_INPUT' });
     ctx = { ...ctx, selection: { ...selection, sketches: matches } };
     given = other;
   }
@@ -355,7 +357,9 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
     }
   } else {
     // (O167, F6: a part-scoped edit offers what the bearing command offers — the draft's context and its fit tables.)
-    const fields = editFields(nodes, index, undefined, undefined, { context: bearingContextOf(state.doc), fits: state.doc.fits, doc: state.doc });
+    const circularTurn = hasLineArcTurnSections(nodes, index);
+    const fields = editFields(nodes, index, undefined, undefined, { context: bearingContextOf(state.doc), fits: state.doc.fits, doc: state.doc })
+      .filter(field => !circularTurn || field.key !== smoothTurnAngleKey);
     const circularSegment = hasLineArcScrewSections(nodes, index);
     const screwPitch = circularSegment ? undefined : smoothScrewPitchField(nodes, index);
     const screwAngle = circularSegment ? undefined : smoothScrewAngleField(nodes, index);

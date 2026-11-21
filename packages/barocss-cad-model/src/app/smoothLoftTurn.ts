@@ -5,7 +5,7 @@ import { usesOf, type ModelNode } from '../engine/doc';
 import { canonical } from '../util/revision';
 import type { EditField } from './editFields';
 import { smoothLoftHeightField } from './smoothLoftHeight';
-import { lineArcScrewSections, rotateLineArcSegments } from './lineArcScrew';
+import { lineArcScrewSections, lineArcTurnSections, rotateLineArcSegments } from './lineArcScrew';
 
 type Point = [number, number];
 export const smoothTurnAngleKey = 'smoothTurnAngle';
@@ -115,12 +115,12 @@ function turnSections(nodes: readonly ModelNode[], index: number) {
   return { start, last, first, rows, height, angle, radians, limit, triangular, convexPolygon, external, circularSegment: false as const };
 }
 
-function screwSections(nodes: readonly ModelNode[], index: number) {
-  return turnSections(nodes, index) ?? lineArcScrewSections(nodes, index);
+function generatedTurnSections(nodes: readonly ModelNode[], index: number) {
+  return turnSections(nodes, index) ?? lineArcScrewSections(nodes, index) ?? lineArcTurnSections(nodes, index);
 }
 
 export function hasSmoothTurnSections(nodes: readonly ModelNode[], index: number): boolean {
-  return !!turnSections(nodes, index);
+  return !!turnSections(nodes, index) || !!lineArcTurnSections(nodes, index);
 }
 
 export function hasTriangularTurnSections(nodes: readonly ModelNode[], index: number): boolean {
@@ -134,7 +134,7 @@ export function hasExternalScrewSections(nodes: readonly ModelNode[], index: num
 /** Pitch is editable only on an intact terminal Screw with measurable winding. */
 export function smoothScrewTurns(nodes: readonly ModelNode[], index: number): number | undefined {
   if (index !== nodes.length - 1) return;
-  const turn = screwSections(nodes, index);
+  const turn = generatedTurnSections(nodes, index);
   if (turn?.external && turn.angle !== 0) return Math.abs(turn.angle) / 360;
 }
 
@@ -165,18 +165,18 @@ export function smoothScrewPitchField(nodes: readonly ModelNode[], index: number
 
 function savedTurn(nodes: readonly ModelNode[], index: number) {
   if (index !== nodes.length - 1) return;
-  const turn = turnSections(nodes, index);
+  const turn = generatedTurnSections(nodes, index);
   if (turn && !turn.external) return turn;
 }
 
-function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnType<typeof screwSections>>, first: Point[], rotation: (fraction: number) => number) {
+function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnType<typeof generatedTurnSections>>, first: Point[], rotation: (fraction: number) => number) {
   const centre: Point | undefined = turn.external ? [0, 0] : turn.triangular ? triangleTurnCentre(first) : undefined;
   return nodes.map((node, i) => {
     const station = i - turn.start;
     if (station < 0 || station > turn.last || (station === 0 && first === turn.first)
       || node.kind !== 'sketch' || node.profile !== 'loop') return node;
     const radians = rotation(station / turn.last);
-    if (turn.circularSegment) return { ...node, segments: rotateLineArcSegments(turn.segments, radians) };
+    if (turn.circularSegment) return { ...node, segments: rotateLineArcSegments(turn.segments, radians, turn.external ? undefined : turn.pivot) };
     const points = station === 0 ? first : centre ? rotateTurnPoints(first, centre, radians) : rotateTurnCorners(first, radians);
     return { ...node, segments: points.map(start => ({ kind: 'line' as const, start })) };
   });
@@ -184,7 +184,7 @@ function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnT
 
 function savedScrewWinding(nodes: readonly ModelNode[], index: number) {
   if (index !== nodes.length - 1) return;
-  const turn = screwSections(nodes, index);
+  const turn = generatedTurnSections(nodes, index);
   if (!turn?.external || turn.angle === 0) return;
   if (turn.circularSegment) return turn;
   if (turn.convexPolygon && turn.first.length > 4) return turn;
@@ -249,7 +249,13 @@ export function smoothLoftTurnAngleField(nodes: readonly ModelNode[], index: num
     set: (current, angle) => {
       const turn = savedTurn(current, index);
       if (!turn || !Number.isFinite(angle) || Math.abs(angle) > turn.limit || angle === turn.angle) return [...current];
-      return updateTurnCopies(current, turn, turn.first, fraction => angle * fraction * (Math.PI / 180));
+      if (turn.circularSegment && angle === 0) return [...current];
+      const candidate = updateTurnCopies(current, turn, turn.first, fraction => angle * fraction * (Math.PI / 180));
+      if (turn.circularSegment) {
+        const measured = lineArcTurnSections(candidate, index)?.angle;
+        if (measured === undefined || Math.abs(measured / angle - 1) > 1e-8) return [...current];
+      }
+      return candidate;
     },
   };
 }
@@ -260,16 +266,16 @@ function turnWidth(corners: readonly Point[]): number {
 
 export function smoothLoftTurnWidthField(nodes: readonly ModelNode[], index: number): EditField | undefined {
   const turn = savedTurn(nodes, index);
-  if (!turn || turn.triangular) return;
+  if (!turn || turn.triangular || turn.circularSegment) return;
   return {
     kind: 'number', key: smoothTurnWidthKey, label: 'Turn width', unit: 'mm',
     get: current => {
       const turn = savedTurn(current, index);
-      return turn && !turn.triangular ? turnWidth(turn.first) : NaN;
+      return turn && !turn.triangular && !turn.circularSegment ? turnWidth(turn.first) : NaN;
     },
     set: (current, width) => {
       const turn = savedTurn(current, index);
-      if (!turn || turn.triangular || smoothTurnWidthInvalid(width) || width === turnWidth(turn.first)) return [...current];
+      if (!turn || turn.triangular || turn.circularSegment || smoothTurnWidthInvalid(width) || width === turnWidth(turn.first)) return [...current];
       const [[minX, minY], , [maxX, maxY]] = turn.first;
       const centre = (minX + maxX) / 2;
       const left = centre - width / 2, right = centre + width / 2;
