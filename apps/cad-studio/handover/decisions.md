@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1502: [Require the exact current cage result after a transform drag](notes/cage-transform-exact-reply-ownership-2026-11-21/README.md), #625. Verify stale worker replies cannot enable Done or affect a replacement part in actual Studio.
 - D1501: [Verify SubD transforms on an open boundary and a single vertex](notes/cage-open-boundary-transforms-2026-11-21/README.md), #625. Verify a half-size opening and a single point turn with exact boundary, history and native file retention.
 - D1500: [Verify SubD scale and face-normal rotation at a mirrored seam](notes/cage-mirrored-seam-transforms-2026-11-21/README.md), #625. Verify two constrained coordinates, numeric parity, history and native reopening.
 - D1499: [Share the guarded vertex pivot with all three SubD face rotation axes](notes/cage-local-face-rotation-pivot-2026-11-21/README.md), #625. Verify signed rotation, refusal, pivot retirement and native reopening.
