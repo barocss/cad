@@ -17,7 +17,7 @@ function groupTool(name: string): ToolDefinition {
   const g = GROUPS[name], actions = Object.keys(g.actions);
   if (name === 'model') { const t = handler('run_script'); return { name, description: v2Text(t.description), input_schema: t.input_schema }; }
   if (name === 'describe') return {
-    name, description: 'What this list leaves out, on request: {"tool"} its actions; {"tool", "action"} that action\'s full description and arguments; {"command"} a command\'s selection and values; {"feature"} a feature kind\'s node JSON. Ask before using an action, command or feature kind the first time.',
+    name, description: 'On request: {"tool"} its actions; {"tool", "action"} that action\'s full description and arguments; {"command"} a command\'s selection and values; {"feature"} a feature kind\'s node JSON. Ask before using an action, command or feature kind the first time.',
     input_schema: { type: 'object', properties: { tool: { type: 'string' }, action: { type: 'string' }, command: { type: 'string' }, feature: { type: 'string' } }, additionalProperties: false },
   };
   const extra = name === 'features' ? ` Commands: ${CHAT_COMMANDS.join(', ')}. Feature kinds: ${featureKinds().join(', ')}.` : '';

@@ -47,9 +47,11 @@ export async function runOps(dispatch: PartRun, state: ChatState, input: unknown
 }
 /** A document's feature ids in order. */
 export const idsOf = (nodes: readonly ModelNode[]) => nodes.map((_, i) => featureId(nodes, i));
+// Ruled Turn requires an explicit current document revision in the MCP command call.
+const scriptCommands = CHAT_COMMANDS.filter(command => command !== 'ruled-turn');
 /** The studio side of a script (A5.2): each call through the dispatcher on the working part, a concise result. */
 class ScriptOn implements ScriptHost {
-  readonly commands = CHAT_COMMANDS;
+  readonly commands = scriptCommands;
   constructor(private readonly dispatch: PartRun, public cur: ChatState, private readonly evaluate: Evaluate, private readonly because: string) {}
   indexOf(id: string): number { return nodeIndexOf(this.cur.doc.nodes, id); }
   idAt(index: number): string | null { return Number.isInteger(index) && this.cur.doc.nodes[index] ? featureId(this.cur.doc.nodes, index) : null; }
