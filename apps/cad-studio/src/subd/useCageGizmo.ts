@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
+import { scale, sub, unit } from '@barocss/cad-model/engine/vec3';
 import { cageLocalDirection, type CageLocalFrame } from '@barocss/cad-model/subd/cageLocalDirection';
 import {
   commitCageProportionalDrag, commitDrag, dragged, planCageProportionalDrag, previewCageProportionalDrag,
@@ -19,7 +20,6 @@ type CageDrag = {
 };
 const DEFAULT_RADIUS = '10';
 type CageDragFrame = 'world' | CageLocalFrame;
-type CageRotateFrame = Exclude<CageDragFrame, 'edge'>;
 type CageDragTool = 'move' | 'scale' | 'rotate';
 type CageDragTransform = { kind: 'scale'; factor: number } | { kind: 'rotate'; axis: Axis3; degrees: number }
   | { kind: 'rotate-along'; direction: Vec3; degrees: number };
@@ -27,6 +27,15 @@ const LOCAL_AXIS_LABEL: Record<CageLocalFrame, string> = { edge: 'T', face: 'N',
 // Use the next axis in the right-handed U, V, normal frame as the arc's first radial.
 const ROTATION_RADIAL = { 'face-u': 'face-v', 'face-v': 'face', face: 'face-u' } as const;
 type PivotVertexInput = { value: string; cage: CageSession['cage'] };
+
+/** Project the least aligned world axis onto the plane perpendicular to the tangent. */
+function edgeTurnRadial(tangent: Vec3): Vec3 {
+  const components = tangent.map(Math.abs);
+  const axis = components.indexOf(Math.min(...components));
+  const world: Vec3 = [0, 0, 0];
+  world[axis] = 1;
+  return unit(sub(world, scale(tangent, tangent[axis])));
+}
 
 function currentPivotVertex(input: PivotVertexInput, cage: CageSession['cage'], point: Vec3): boolean {
   if (input.cage === cage) return true;
@@ -44,13 +53,14 @@ export function useCageGizmo(
   fail: (title: string, hint: string) => void,
 ) {
   const [tool, setTool] = useState<CageDragTool>('move');
-  const [rotateFrame, setRotateFrame] = useState<CageRotateFrame>('world');
+  const [rotateFrame, setRotateFrame] = useState<CageDragFrame>('world');
   const localRotate = tool === 'rotate' && rotateFrame !== 'world';
   const localTurn = useMemo(() => {
     if (tool !== 'rotate' || rotateFrame === 'world' || !session) return null;
     try {
-      return { turnAlong: { direction: cageLocalDirection(session, rotateFrame),
-        radial: cageLocalDirection(session, ROTATION_RADIAL[rotateFrame]), label: LOCAL_AXIS_LABEL[rotateFrame] } };
+      const direction = cageLocalDirection(session, rotateFrame);
+      const radial = rotateFrame === 'edge' ? edgeTurnRadial(direction) : cageLocalDirection(session, ROTATION_RADIAL[rotateFrame]);
+      return { turnAlong: { direction, radial, label: LOCAL_AXIS_LABEL[rotateFrame] } };
     } catch (error) {
       return { reason: error instanceof Error ? error.message.replace(/^SubD: local direction: /, '') : String(error) };
     }
@@ -59,7 +69,7 @@ export function useCageGizmo(
   const [pivotVertex, setPivotVertex] = useState<PivotVertexInput | null>(null);
   const pivot = useMemo(() => {
     if (tool === 'move' || !session) return null;
-    const mode = localRotate ? 'centre' : pivotMode;
+    const mode = localRotate && rotateFrame !== 'edge' ? 'centre' : pivotMode;
     try {
       const at = cageTransformPivot(session, mode, pivotVertex?.value ?? '');
       // Cage operations can renumber vertices even when the old number stays in range.
@@ -70,7 +80,7 @@ export function useCageGizmo(
     } catch (error) {
       return { reason: error instanceof Error ? error.message : String(error) };
     }
-  }, [tool, session, localRotate, pivotMode, pivotVertex]);
+  }, [tool, session, localRotate, rotateFrame, pivotMode, pivotVertex]);
   const [dragFrame, setDragFrame] = useState<CageDragFrame>('world');
   const frameMode = tool === 'move' && session?.mode === (dragFrame === 'edge' ? 'edge' : 'face') ? dragFrame : 'world';
   const local = useMemo(() => {
@@ -188,7 +198,7 @@ export function useCageGizmo(
       setTool: (next: CageDragTool) => { if (!isDragging()) setTool(next); },
       rotation: {
         frame: rotateFrame, reason: localTurn?.reason,
-        setFrame: (next: CageRotateFrame) => { if (!isDragging()) setRotateFrame(next); },
+        setFrame: (next: CageDragFrame) => { if (!isDragging()) setRotateFrame(next); },
       },
       pivot: {
         mode: pivotMode, vertex: pivotVertex?.value ?? '', reason: pivot?.reason,

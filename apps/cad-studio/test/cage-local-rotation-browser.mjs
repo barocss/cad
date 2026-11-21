@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 const planeBaseline = process.argv.includes('--expect-no-plane-turn');
-const baseline = planeBaseline || process.argv.includes('--expect-no-normal-turn');
-const localFrame = process.argv.includes('--v-turn') ? 'face-v' : process.argv.includes('--u-turn') || planeBaseline ? 'face-u' : 'face';
+const edgeBaseline = process.argv.includes('--expect-no-edge-turn');
+const edgeTurn = edgeBaseline || process.argv.includes('--edge-turn');
+const baseline = planeBaseline || edgeBaseline || process.argv.includes('--expect-no-normal-turn');
+const localFrame = edgeTurn ? 'edge' : process.argv.includes('--v-turn') ? 'face-v' : process.argv.includes('--u-turn') || planeBaseline ? 'face-u' : 'face';
 const physical = baseline || localFrame !== 'face' || process.argv.includes('--normal-turn');
-const rotationAxis = localFrame === 'face-u' ? 0 : localFrame === 'face-v' ? 1 : 2;
-const localLabel = 'UVN'[rotationAxis];
+const rotationAxis = localFrame === 'face-u' ? 0 : localFrame === 'face-v' || edgeTurn ? 1 : 2;
+const localLabel = edgeTurn ? 'T' : 'UVN'[rotationAxis];
 const pins=['packages/barocss-cad-model/src/subd/cageLocalDirection.ts','packages/barocss-cad-model/src/subd/cageEdit.ts','apps/cad-studio/src/ui/CagePanel.tsx','apps/cad-studio/src/subd/useCageEditor.ts','apps/cad-studio/src/subd/cageTransformDraft.ts','apps/cad-studio/src/ui/CageTransformControls.tsx'];
 if (physical) pins.push('apps/cad-studio/src/subd/useCageGizmo.ts', 'apps/cad-studio/src/viewport/viewportPointerInput.ts',
  'apps/cad-studio/src/viewport/gizmo.ts', 'apps/cad-studio/src/viewport/GizmoMarks.tsx', 'apps/cad-studio/test/cage-local-rotation-browser.mjs');
 const f=await createFlow({name:'cage-local-rotation',output:process.argv[2],envFrozen:'CAGE_LOCAL_ROTATION_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,
- qualification:physical ? `Physical ${localLabel} rotation of one tilted quad in oblique perspective.`
+ qualification:edgeTurn ? 'Physical tangent rotation of one oblique cage edge about a guarded off-edge vertex.'
+   : physical ? `Physical ${localLabel} rotation of one tilted quad in oblique perspective.`
    : 'Numeric rotation about a tilted face normal with independent conjugated planar rotation oracle.',
  limits:['One box, normal rotation on a 15-degree tilted quad. Exact coordinates use a conjugated planar oracle.']});
 const button=(name,scope=f.page)=>scope.getByRole('button',{name,exact:true});
@@ -18,13 +21,30 @@ const panel=()=>f.page.getByRole('complementary',{name:'Cage editor',exact:true}
 const command=async(text)=>{await f.page.getByText('barocss',{exact:true}).click();await f.command(text);};
 const state=()=>f.page.evaluate(()=>window.__studioCage());
 const done=async()=>{await f.page.waitForFunction(()=>document.querySelector('[aria-label="Done editing cage"]')?.getAttribute('aria-disabled')==='false');await button('Done editing cage',panel()).click();await panel().waitFor({state:'detached'});await f.ready();};
-async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal, apply) {
+function rotationOracle(before, ids, centre, degreesOfTilt, sign=1) {
+ return (after,degrees,pivot=centre)=>{
+  const a=degrees*sign*Math.PI/180,c=Math.cos(a),s=Math.sin(a),cx=Math.cos(degreesOfTilt*Math.PI/180),sx=Math.sin(degreesOfTilt*Math.PI/180);
+  const u=(rotationAxis+1)%3,v=(rotationAxis+2)%3;
+  before.cage.positions.forEach((x,i)=>{
+   const id=Math.floor(i/3),k=i%3;
+   if(!ids.includes(id)){assert.equal(after.cage.positions[i],x);return;}
+   const p=before.cage.positions.slice(3*id,3*id+3).map((v,j)=>v-pivot[j]);
+   const local=[p[0],cx*p[1]+sx*p[2],-sx*p[1]+cx*p[2]],q=[...local];
+   q[u]=c*local[u]-s*local[v]; q[v]=s*local[u]+c*local[v];
+   const world=[q[0],cx*q[1]-sx*q[2],sx*q[1]+cx*q[2]];
+   assert.ok(Math.abs(after.cage.positions[i]-(world[k]+pivot[k]))<1e-10);
+  });
+  assert.deepEqual(after.cage.faces,before.cage.faces);
+ };
+}
+async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal, apply, edge) {
  const tool=panel().getByLabel('Cage drag tool',{exact:true});
  const frame=panel().getByLabel('Rotate drag frame',{exact:true});
  const mark=f.page.locator('[data-gizmo="turnAlong"]');
  await tool.selectOption('rotate');
  if (baseline) {
   if (planeBaseline) assert.equal(await frame.locator('option[value="face-u"],option[value="face-v"]').count(),0);
+  else if (edgeBaseline) assert.equal(await frame.locator('option[value="edge"]').count(),0);
   else assert.equal(await frame.count(),0);
   assert.equal(await mark.count(),0);
   await f.snapshot('original-world-rotation-only');
@@ -51,8 +71,10 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
  await mark.waitFor();
  assert.equal(await f.page.locator('[data-gizmo^="turn"]').count(),1);
  const readout=f.page.locator('.gizmo-readout'), undo=()=>button('Undo cage step',panel()).click();
+ let pivot=centre, vertexId;
+ const verifyAngle=(after,angle)=>verify(after,angle,pivot);
  async function start(angle) {
-  const hit=await mark.locator('polyline').last().evaluate(async (line,{centre,tilt,angle,rotationAxis})=>{
+  const hit=await mark.locator('polyline').last().evaluate(async (line,{centre,tilt,angle,rotationAxis,edgeSign})=>{
    let previous='', stable=0;
    for(let i=0;i<160&&stable<8;i++){
     await new Promise(requestAnimationFrame);
@@ -64,7 +86,7 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
    const p=line.points.getItem(Math.floor(last/2));
    const x=rect.x+p.x,y=rect.y+p.y,t=tilt*Math.PI/180, phi=Math.PI/4;
    const basis=[[1,0,0],[0,Math.cos(t),Math.sin(t)],[0,-Math.sin(t),Math.cos(t)]];
-   const u=basis[(rotationAxis+1)%3],v=basis[(rotationAxis+2)%3];
+   const u=edgeSign?basis[0]:basis[(rotationAxis+1)%3],v=edgeSign?basis[2].map(value=>-edgeSign*value):basis[(rotationAxis+2)%3];
    const world=(radius,a)=>centre.map((value,i)=>value+radius*(Math.cos(a)*u[i]+Math.sin(a)*v[i]));
    const worldScreen=(radius,a)=>window.__studioScreenOf(world(radius,a));
    const origin=worldScreen(0,0), len=Math.hypot(x-origin[0],y-origin[1]);
@@ -79,7 +101,7 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
    const sweep=(Math.atan2(end[1]-origin[1],end[0]-origin[0])-Math.atan2(y-origin[1],x-origin[0]))*180/Math.PI;
    return {x,y,end,sweep:((sweep+540)%360)-180,mismatch:Math.hypot(originCheck[0]-x,originCheck[1]-y),
     onCanvas:document.elementFromPoint(x,y)?.matches('canvas.vp-canvas')};
-  },{centre,tilt:degreesOfTilt,angle,rotationAxis});
+  },{centre:pivot,tilt:degreesOfTilt,angle,rotationAxis,edgeSign:edge?.sign});
   assert.ok(hit.onCanvas&&hit.mismatch<0.5,JSON.stringify(hit));
   await f.page.mouse.move(hit.x,hit.y);
   await f.page.locator('[data-gizmo="turnAlong"][data-active="true"]').waitFor();
@@ -87,6 +109,21 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
   await f.page.mouse.move(...hit.end,{steps:16});
   await readout.filter({hasText:`${localLabel} ${angle}°`}).waitFor();
   return hit.sweep;
+ }
+ if (edge) {
+  f.phase='verify the centred tangent identity and select an off-edge pivot';
+  await start(30);await f.page.mouse.up();
+  assert.deepEqual(await state(),tilted);
+  await panel().getByLabel('Rotate drag pivot',{exact:true}).selectOption('vertex');
+  const vertex=panel().getByRole('spinbutton',{name:'Rotate drag vertex ID',exact:true});
+  await vertex.fill('-1');
+  await panel().getByRole('status').filter({hasText:'Enter a current cage vertex ID'}).waitFor();
+  assert.equal(await mark.count(),0);
+  assert.deepEqual(await state(),tilted);
+  vertexId=edge.vertex;
+  pivot=tilted.cage.positions.slice(3*vertexId,3*vertexId+3);
+  await vertex.fill(String(vertexId));
+  await mark.waitFor();
  }
  f.phase='hold a projected normal rotation and cancel it with Escape';
  const screenSweep=await start(30);
@@ -112,19 +149,23 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
  f.phase='apply both world-plane directions';
  for(const angle of [-30,30]){
   await start(angle);await f.page.mouse.up();
-  const rotated=await state();verify(rotated,angle);
+  const rotated=await state();verifyAngle(rotated,angle);
   assert.deepEqual(rotated.sel,tilted.sel);
   assert.deepEqual(rotated.cage.creases,tilted.cage.creases);
   assert.equal(rotated.undo,tilted.undo+1);
   await undo();assert.deepEqual(await state(),tilted);
  }
  await start(30);await f.page.mouse.up();
- const rotated=await state();verify(rotated,30);
+ const rotated=await state();verifyAngle(rotated,30);
  await undo();
  await button('Redo cage step',panel()).click();
  assert.deepEqual(await state(),rotated);
  await undo();
  await openLocal();
+ if (edge) {
+  await f.page.getByLabel('Selection pivot',{exact:true}).selectOption('vertex');
+  await f.page.getByRole('spinbutton',{name:'Pivot cage vertex',exact:true}).fill(String(vertexId));
+ }
  await f.page.getByLabel('Selection angle degrees',{exact:true}).fill('30');
  await apply();
  assert.deepEqual(await state(),rotated);
@@ -137,7 +178,7 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
  await f.undo();await f.same(base);await f.redo();await f.same(accepted);
  const saved=await f.save('normal-rotation-drag');
  await f.freshOpen(saved.file,accepted,'normal-rotation-drag-reopened');
- f.report.observations.push({axis:localLabel,tilt:degreesOfTilt,planeSweep:30,screenSweep,independentNumericParity:true});
+ f.report.observations.push({axis:localLabel,tilt:degreesOfTilt,planeSweep:30,screenSweep,independentNumericParity:true,edge,vertexId,pivot});
 }
 await f.run(async()=>{
  await f.newPage();await f.page.setViewportSize({width:1440,height:1000});await button('New part').click();await f.page.waitForFunction(()=>window.__studioDoc.nodes.length===0);await f.ready();
@@ -152,7 +193,7 @@ await f.run(async()=>{
  };
  const apply=async()=>{await f.page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Apply transform'&&!b.disabled));await button('Apply transform',panel()).click();};
  await begin();const multi=await faces();
- if (physical && !baseline) {
+ if (physical && !edgeTurn && !baseline) {
   const tool=panel().getByLabel('Cage drag tool',{exact:true});
   await tool.selectOption('rotate');
   const frame=panel().getByLabel('Rotate drag frame',{exact:true});
@@ -166,6 +207,19 @@ await f.run(async()=>{
  await button('Move selection',panel()).click();await f.page.getByLabel('Translation frame',{exact:true}).selectOption('face');assert.ok(await button('Apply transform',panel()).isDisabled());assert.deepEqual((await state()).cage,multi.cage);await button('Cancel transform preview',panel()).click();
  const clickPoint=async(p)=>{const q=await f.page.evaluate(p=>window.__studioScreenOf(p),p);assert.ok(q);await f.page.mouse.click(...q);};
  await button('Edge',panel()).click();await clickPoint([23.75,30,26]);const edge=await state();assert.equal(edge.sel.edges.length,1);
+ if(edgeTurn&&!baseline){
+  await f.page.keyboard.down('Shift');await clickPoint([8.75,35,26]);await f.page.keyboard.up('Shift');
+  const twoEdges=await state();assert.equal(twoEdges.sel.edges.length,2);
+  const tool=panel().getByLabel('Cage drag tool',{exact:true});
+  await tool.selectOption('rotate');
+  const frame=panel().getByLabel('Rotate drag frame',{exact:true});
+  await frame.selectOption('edge');
+  await panel().getByRole('status').filter({hasText:'pick exactly one current edge'}).waitFor();
+  assert.equal(await f.page.locator('[data-gizmo^="turn"]').count(),0);
+  assert.deepEqual(await state(),twoEdges);
+  await frame.selectOption('world');await tool.selectOption('move');
+  await clickPoint([23.75,30,26]);assert.deepEqual(await state(),edge);
+ }
  const [a,b]=[...edge.sel.edges[0]].sort((a,b)=>a-b),ep=edge.cage.positions,vector=[0,1,2].map(k=>ep[3*b+k]-ep[3*a+k]),length=Math.hypot(...vector),direction=vector.map(x=>x/length);
  const verify=(before,after,ids,dir,d)=>{before.cage.positions.forEach((x,i)=>assert.ok(Math.abs(after.cage.positions[i]-(x+(ids.includes(Math.floor(i/3))?dir[i%3]*d:0)))<1e-10));assert.deepEqual(after.cage.faces,before.cage.faces);};
  await button('Move selection',panel()).click();await f.page.getByLabel('Translation frame',{exact:true}).selectOption('edge');
@@ -175,25 +229,23 @@ await f.run(async()=>{
  const degreesOfTilt=physical?-15:15;
  await button('Rotate selection',panel()).click();await f.page.getByLabel('Rotation world axis',{exact:true}).selectOption('0');await f.page.getByLabel('Selection angle degrees',{exact:true}).fill(String(degreesOfTilt));await apply();const tilted=await state();
  const faceIds=tilted.cage.faces[tilted.sel.faces[0]],oblique=faceIds.map((v,i)=>[v,faceIds[(i+1)%faceIds.length]]).find(([a,b])=>Math.abs(tilted.cage.positions[3*a+2]-tilted.cage.positions[3*b+2])>.1);assert.ok(oblique);
- await button('Edge',panel()).click();await clickPoint([0,1,2].map(k=>(tilted.cage.positions[3*oblique[0]+k]+tilted.cage.positions[3*oblique[1]+k])/2));assert.equal((await state()).sel.edges.length,1);
+ const edgeCentre=[0,1,2].map(k=>(tilted.cage.positions[3*oblique[0]+k]+tilted.cage.positions[3*oblique[1]+k])/2);
+ await button('Edge',panel()).click();await clickPoint(edgeCentre);assert.equal((await state()).sel.edges.length,1);
+ const openLocal=async()=>{await button('Rotate selection',panel()).click();await f.page.getByLabel('Rotation frame',{exact:true}).selectOption(localFrame);};
+ if(edgeTurn){
+  const picked=await state(),ids=[...oblique].sort((a,b)=>a-b);
+  assert.deepEqual([...picked.sel.edges[0]].sort((a,b)=>a-b),ids);
+  const sign=Math.sign(tilted.cage.positions[3*ids[1]+1]-tilted.cage.positions[3*ids[0]+1]);
+  const vertex=90;
+  assert.ok(!ids.includes(vertex));
+  assert.deepEqual(picked.cage.positions.slice(3*vertex,3*vertex+3),[12.5,30,26]);
+  const verify=rotationOracle(picked,ids,edgeCentre,degreesOfTilt,sign);
+  await dragLocal(base,picked,edgeCentre,degreesOfTilt,verify,openLocal,apply,{ids,sign,vertex});return;
+ }
  await button('Rotate selection',panel()).click();await f.page.getByLabel('Rotation frame',{exact:true}).selectOption('edge');await f.page.getByLabel('Selection angle degrees',{exact:true}).fill('37');assert.deepEqual((await state()).cage,tilted.cage);assert.equal((await state()).undo,1);await apply();assert.equal((await state()).undo,1);
  await button('Face',panel()).click();await clickPoint([23.75,32.5,26]);assert.deepEqual((await state()).sel,tilted.sel);
  const ids=tilted.cage.faces[tilted.sel.faces[0]],centre=[0,1,2].map(k=>ids.reduce((sum,id)=>sum+tilted.cage.positions[3*id+k],0)/ids.length);
- const verifyRotation=(after,degrees,pivot=centre)=>{
-  const a=degrees*Math.PI/180,c=Math.cos(a),s=Math.sin(a),cx=Math.cos(degreesOfTilt*Math.PI/180),sx=Math.sin(degreesOfTilt*Math.PI/180);
-  const u=(rotationAxis+1)%3,v=(rotationAxis+2)%3;
-  tilted.cage.positions.forEach((x,i)=>{
-   const id=Math.floor(i/3),k=i%3;
-   if(!ids.includes(id)){assert.equal(after.cage.positions[i],x);return;}
-   const p=tilted.cage.positions.slice(3*id,3*id+3).map((v,j)=>v-pivot[j]);
-   const local=[p[0],cx*p[1]+sx*p[2],-sx*p[1]+cx*p[2]],q=[...local];
-   q[u]=c*local[u]-s*local[v]; q[v]=s*local[u]+c*local[v];
-   const world=[q[0],cx*q[1]-sx*q[2],sx*q[1]+cx*q[2]];
-   assert.ok(Math.abs(after.cage.positions[i]-(world[k]+pivot[k]))<1e-10);
-  });
-  assert.deepEqual(after.cage.faces,tilted.cage.faces);
- };
- const openLocal=async()=>{await button('Rotate selection',panel()).click();await f.page.getByLabel('Rotation frame',{exact:true}).selectOption(localFrame);};
+ const verifyRotation=rotationOracle(tilted,ids,centre,degreesOfTilt);
  if(physical){await dragLocal(base,tilted,centre,degreesOfTilt,verifyRotation,openLocal,apply);return;}
  await openLocal();assert.equal(await f.page.getByLabel('Rotation world axis',{exact:true}).count(),0);await f.page.getByLabel('Selection angle degrees',{exact:true}).fill('360');assert.deepEqual((await state()).cage,tilted.cage);await apply();assert.equal((await state()).undo,1);
  await openLocal();for(const angle of [-10,5,15]){await f.page.getByLabel('Selection angle degrees',{exact:true}).fill(String(angle));verifyRotation(await state(),angle);assert.equal((await state()).undo,2);await f.same(base);}

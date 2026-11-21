@@ -18,6 +18,7 @@ const FACE_DRAG_FRAMES = [
   { value: 'face-u', label: 'Face U' },
   { value: 'face-v', label: 'Face V' },
 ] as const;
+const ROTATE_DRAG_FRAMES = [...EDGE_DRAG_FRAMES, ...FACE_DRAG_FRAMES];
 
 const OPS: { op: CageOp; label: string; key?: string; tip: string }[] = [
   { op: 'extrude', label: 'Extrude', key: 'E', tip: 'The picked faces (or boundary edges) out as a new region. Move it with the gizmo before Done, or use Cage Undo. Shift-drag also extrudes' },
@@ -69,13 +70,13 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
     </NativeSelect></label>}
     {!!n && dragSettings.tool === 'rotate' && <>
       <label className={FIELD}><span>Rotate frame</span><NativeSelect className={CONTROL} aria-label="Rotate drag frame" value={rotation.frame} disabled={dragging}
-        onChange={event => rotation.setFrame(FACE_DRAG_FRAMES.find(frame => frame.value === event.target.value)?.value ?? 'world')}>
+        onChange={event => rotation.setFrame(ROTATE_DRAG_FRAMES.find(frame => frame.value === event.target.value)?.value ?? 'world')}>
         <option value="world">World axes</option>
-        {FACE_DRAG_FRAMES.map(frame => <option key={frame.value} value={frame.value}>{frame.label}</option>)}
+        {ROTATE_DRAG_FRAMES.map(frame => <option key={frame.value} value={frame.value}>{frame.label}</option>)}
       </NativeSelect></label>
       {rotation.reason && <div className="warn" role="status">{rotation.reason}.</div>}
     </>}
-    {!!n && (dragSettings.tool === 'scale' || dragSettings.tool === 'rotate' && rotation.frame === 'world') && <>
+    {!!n && (dragSettings.tool === 'scale' || dragSettings.tool === 'rotate' && (rotation.frame === 'world' || rotation.frame === 'edge')) && <>
       <label className={FIELD}><span>Pivot</span><NativeSelect className={CONTROL} aria-label={`${pivotTool} drag pivot`} value={pivot.mode} disabled={dragging}
         onChange={event => pivot.setMode(event.target.value === 'vertex' ? 'vertex' : 'centre')}>
         <option value="centre">Selection centre</option><option value="vertex">Cage vertex</option>
