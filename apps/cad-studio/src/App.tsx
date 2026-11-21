@@ -41,7 +41,6 @@ import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { browserRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal';
 import { useBodyBrowserReveal } from './app/useBodyBrowserReveal';
 import { useContinuityLocation } from './app/useContinuityLocation';
-import { annotationCounts, printPreviewSummary } from './app/previewStatus';
 import { commandApplyReadiness, createCommandApplyQueue } from './state/commandApply';
 import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
@@ -180,10 +179,6 @@ import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportIns
 import { NestedPartPanel } from './ui/NestedPartPanel';
 import { offsetFaceLaunchView } from './viewport/offsetFaceLaunchView';
 import { DRAG_TYPE, snapshotInstanceIsolation, type Spot, type SketchShape, type SketchState, type TransformGizmo, type ViewportHandle } from './viewport/Viewport';
-import { ClearancePanel } from './viewport/ClearancePanel';
-import { PrintPanel } from './viewport/PrintPanel';
-import { CamPanel } from './viewport/CamPanel';
-import { AnalysisPanel } from './viewport/AnalysisPanel';
 import { Button } from '@/components/ui/button';
 import { ToolIconButton } from '@/components/ui/tool-button';
 import { countRender, onBlockRender } from './devRenders';
@@ -3142,17 +3137,6 @@ export function App() {
     : !isolationSelection ? 'Select a visible placed instance to isolate.' : undefined;
 
   // (G12a: proposals are in the chat column; while one is open the column shows it, the chat open or not.)
-  // (G12e: the chosen preview's settings in the dock's Preview & analysis section, the switch its enable; the 3D annotations
-  // an overlay toggle at the section's header, their status under the panel.)
-  const previewPanel = previewMode === 'print' ? <PrintPanel resetKey={doc} options={printOptions} onOptions={commitPrintPreview} onDirection={commitPrintDirection} state={printState} reason={printReason} warnings={printWarnings} scopeHint={printScopeHint} />
-    : previewMode === 'cnc' ? <CamPanel options={camOptions} onOptions={patchCam} state={camState} reason={camReason} />
-    : previewMode === 'clearance' ? <ClearancePanel resetKey={doc} near={clearanceNear} onNear={setClearanceNear} display={clearanceDisplay} reason={clearanceReason} labels={clearanceLabels} />
-    : previewMode === 'analysis' ? <AnalysisPanel analysis={analysis} onAnalysis={setAnalysis} map={mapKind} onMap={k => { setMapHover(null); setMouldSpread(0); setMapKind(k); }}
-      printing={!!printing} pull={!!doc.mould?.pull} mapsReason={viewBackend === 'webgl2' ? 'The analysis maps are drawn with WebGPU; this browser draws with WebGL2.' : undefined} />
-    : null;
-  const previewOverlay = <label className="overlay-toggle" title="Drawing annotations in Model view; hidden while editing or showing Print/CNC"><input type="checkbox" checked={pmiEnabled} aria-label="3D annotations" onChange={e => setPmiEnabled(e.target.checked)} /> 3D annotations</label>;
-  const previewOverlayStatus = pmiEnabled && <div role="status" className="overlay-status">{pmiReason ?? pmiSheet.error ?? (pmiSheet.busy || !pmiSheet.annotations ? 'Pending · building the drawing\'s sheet'
-            : `${annotationCounts(pmiItems?.length ?? 0, pmiSheet.annotations.left.length)}${pmiSelected ? ` · ${pmiItems?.find(a => a.id === pmiSelected)?.text.join(' ') ?? ''}` : ''}`)}</div>;
   // (G12b: the right dock — the Browser (its mount movable: browserPlacement), the running command's HUD and the inspector;
   // the HUD floats at the stage's right as before when the dock is a strip.)
   const browserPlacement = BROWSER_PLACEMENT;
@@ -3674,7 +3658,14 @@ export function App() {
           onCreateDraftChange={next => { discardRouteRef.current(); setRouteCreate(next); setRoutePhase('draft'); }} onMoveDraftChange={changeRouteMove}
           onBundleChange={selectRouteBundle} onCreate={createRoute} onPreview={previewRoute} onApply={applyRoute} onCancel={discardRoute}
           onDetach={detachRoute} onClose={() => { discardRouteRef.current(); setRoutePanelOpen(false); }} /> : inspector}
-        <PreviewSection mode={previewMode} onMode={choosePreview} panel={previewPanel} overlay={previewOverlay} overlayStatus={previewOverlayStatus} overlaySuspended={!!pmiReason} summary={previewMode === 'print' ? printPreviewSummary(printReason, printState.stage, printState.error) : undefined} />
+        <PreviewSection mode={previewMode} onMode={choosePreview}
+          print={{ resetKey: doc, options: printOptions, onOptions: commitPrintPreview, onDirection: commitPrintDirection, state: printState, reason: printReason, warnings: printWarnings, scopeHint: printScopeHint }}
+          cam={{ options: camOptions, onOptions: patchCam, state: camState, reason: camReason }}
+          clearance={{ resetKey: doc, near: clearanceNear, onNear: setClearanceNear, display: clearanceDisplay, reason: clearanceReason, labels: clearanceLabels }}
+          analysis={{ analysis, onAnalysis: setAnalysis, map: mapKind, onMap: k => { setMapHover(null); setMouldSpread(0); setMapKind(k); },
+            printing: !!printing, pull: !!doc.mould?.pull, mapsReason: viewBackend === 'webgl2' ? 'The analysis maps are drawn with WebGPU; this browser draws with WebGL2.' : undefined }}
+          annotations={{ enabled: pmiEnabled, onEnabledChange: setPmiEnabled, reason: pmiReason, error: pmiSheet.error,
+            busy: pmiSheet.busy, items: pmiItems, sheetOnly: pmiSheet.annotations?.left.length, selected: pmiSelected }} />
       </Dock>
       {/* (G12a: the chat column, shown at the left (order: -1) and full height; after the stage in the document, so the top bar's
           Chat button stays the first [aria-label="Chat"]. The centre — top bar, viewport and its bars — is the stage.) */}
