@@ -6,8 +6,9 @@ import { withMcpSession } from './mcp-browser-session.mjs';
 
 const [output, input, mode] = process.argv.slice(2);
 assert.ok(input && output && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
-assert.ok(mode === undefined || mode === '--stale');
-const staleRecovery = mode === '--stale';
+assert.ok(mode === undefined || mode === '--stale' || mode === '--notice-ownership');
+const noticeOwnership = mode === '--notice-ownership';
+const staleRecovery = mode === '--stale' || noticeOwnership;
 const stockBytes = await readFile(input), stock = JSON.parse(stockBytes);
 const title = 'Restore the sharp upper cap edge', face = 'n2.face', sharp = 'n1.side0|n1.top';
 const roundedVolume = 12000 - 40 * (4 - Math.PI);
@@ -69,6 +70,8 @@ async function editSourceAndRecover(pending) {
   await button('Rebase & preview', card()).click();
   await f.waitToast(/part changed since the requested revision/i);
   await f.same(edited);
+  const notice = f.page.getByText('P1 could not be rebased', { exact: true });
+  await notice.waitFor();
   await f.snapshot('stale-repair-refused');
 
   const saved = await f.save('stale-cap-heal-r3'), savedBytes = await readFile(saved.file);
@@ -82,6 +85,20 @@ async function editSourceAndRecover(pending) {
   await f.undo();
   await f.same(pending);
   await card().locator('.stale').waitFor({ state: 'hidden' });
+  if (noticeOwnership) {
+    f.phase = 'Retire the notice with its source and keep it retired on Redo';
+    await f.snapshot('undo-restored-source-notice-check');
+    await notice.waitFor({ state: 'hidden', timeout: 2500 });
+    await f.redo();
+    await f.same(edited);
+    await card().locator('.stale').waitFor();
+    await notice.waitFor({ state: 'hidden', timeout: 2500 });
+    await f.snapshot('redo-stale-without-old-notice');
+    await f.undo();
+    await f.same(pending);
+    await card().locator('.stale').waitFor({ state: 'hidden' });
+    await notice.waitFor({ state: 'hidden', timeout: 2500 });
+  }
   await f.page.waitForFunction(() => {
     const preview = [...document.querySelectorAll('[aria-label="Proposal P1"] button')].find(button => button.textContent === 'Preview');
     return preview && !preview.disabled;

@@ -2,13 +2,13 @@ import { useMemo, useState, type Dispatch, type SetStateAction, type RefObject }
 import { placedDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { placementOf } from '@barocss/cad-model/engine/placement';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
-import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { Proposal } from '@barocss/cad-model/engine/schema/proposals';
 import type { ProposalPart } from '@barocss/cad-model/chat/tools';
 import type { PersonRowFiles } from '@barocss/cad-model/engine/rowFiles';
 import { proposalIsStale, rejectProposal } from '@barocss/cad-model/chat/proposals';
 import { modelHash } from '@barocss/cad-model/chat/spec';
 import { requirementEvidenceRevision } from '@barocss/cad-model/util/digest';
+import type { StudioNotice } from '../app/studioNotice';
 import type { EngineClient, ProposalOverlay } from '../engine/client';
 import type { Lanes } from '../engine/lanes';
 import { placedProposalPreview, type PlacedProposalPreview } from '../viewport/instanceEvaluation';
@@ -17,7 +17,7 @@ interface ProposalPreviewOptions {
   worker: { engine: EngineClient; lanes: Lanes; nextRevision(): number };
   changes: { commit(next: StudioDoc): boolean; currentDoc(): StudioDoc; setPreviewBodies: Dispatch<SetStateAction<BodyResult[] | null>> };
   chatRowFiles: RefObject<PersonRowFiles | undefined>;
-  onNotice(notice: FriendlyError): void;
+  onNotice(notice: StudioNotice): void;
 }
 /** Proposal previews and acceptance use the existing tool path and App's central commit. */
 export function useProposalPreview({ model, worker, changes, chatRowFiles, onNotice: setToast }: ProposalPreviewOptions) {
@@ -62,7 +62,11 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, onNot
     setProposalBusy(true);
     const r = await (await import('@barocss/cad-model/chat/tools')).rebaseProposal({ doc, bodies, rowFiles: chatRowFiles.current }, p.id, partEval);
     setProposalBusy(false);
-    if ('error' in r) { setToast({ title: `${p.id} could not be rebased`, hint: r.error, detail: 'Nothing changed; the proposal stays open.' }); return; }
+    if (doc !== currentDoc()) return;
+    if ('error' in r) {
+      setToast({ title: `${p.id} could not be rebased`, hint: r.error, detail: 'Nothing changed; the proposal stays open.', documentSource: { doc } });
+      return;
+    }
     if (!commit(r.state.doc)) return;
     await showProposal(r.state.doc.proposals!.find(q => q.id === p.id)!, r.state.doc);
   };
