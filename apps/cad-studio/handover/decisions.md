@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1618: [Cut a measured gap in one of several construction arcs](notes/construction-polyline-multiple-arc-gap-2026-11-22/README.md), #226. Verify the unchanged other arcs and source IDs through native Studio Save and Open.
 - D1617: [Join a straight span to a cubic Bézier](notes/join-straight-cubic-native-2026-11-22/README.md), #29. Verify native domain mapping, both original spans and source retention after desktop Save and Open.
 - D1616: [Place an Ellipse centre at a calculated sketch point](notes/calculated-sketch-ellipse-centre-2026-11-22/README.md), #229. Verify the off-grid centre, ordinary semi-axis picks and native curve after Save and Open.
 - D1615: [Read the exact Direct Join angle through the local Agent](notes/agent-direct-join-inspection-2026-11-22/README.md), #322 and #29. The Agent and Studio agree at the native knot, and a Direct edit invalidates the read pin.

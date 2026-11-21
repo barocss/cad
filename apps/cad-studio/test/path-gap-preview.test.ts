@@ -52,7 +52,7 @@ test('polyline gap chooses one straight span and refuses a corner or crossing', 
   assert.ok(crossing);
   assert.equal(planPathGap(crossing, [0, 0], 4), null);
   assert.equal(preparePathGap({ ...shape, closed: true }), null);
-  assert.equal(preparePathGap({ ...shape, bulges: [0, 0.5, 0.5, 0] }), null);
+  assert.ok(preparePathGap({ ...shape, bulges: [0, 0.5, 0.5, 0] }));
   assert.equal(preparePathGap({ ...shape, construction: undefined }, true), null);
 });
 
@@ -144,15 +144,87 @@ test('mixed polylines refuse corner, neighboring-span ambiguity and cut-end atta
   assert.equal(planPathGap(attached, [20, 30], 4), null);
 });
 
-test('mixed polyline admission stays bounded to one independent finite circular span', () => {
+test('mixed polyline admission requires independent finite circular spans', () => {
   const shape = polyline([[34, 20], [30, 20], [10, 20], [6, 20]], [0, 1, 0]);
   for (const changed of [
     { closed: true }, { construction: undefined }, { pending: true }, { ids: ['e1', 'e2', 'e3', 'e3'] },
     { lengths: { 0: 4 } }, { radii: { 1: 10 } }, { tangents: [0] }, { fromSpline: true as const },
-    { bulges: [1, 1, 0] }, { bulges: [0, NaN, 0] }, { bulges: [0, Infinity, 0] },
+    { bulges: [1, NaN, 0] }, { bulges: [0, NaN, 0] }, { bulges: [0, Infinity, 0] },
     { bulges: [0, Number.MIN_VALUE, 0] }, { bulges: [0, Number.MAX_VALUE, 0] },
   ]) assert.equal(preparePathGap({ ...shape, ...changed }), null);
   assert.equal(preparePathGap(polyline([[9899, 0], [9999, -100], [9999, -110]], [Math.SQRT2 - 1, 0])), null);
   // The final vertex has no outgoing span in an open path.
   assert.ok(preparePathGap({ ...shape, bulges: [0, 1, 0, 1] }));
+});
+
+test('a gap inside a three-arc chain keeps signed arc length and the untouched source', () => {
+  for (const sign of [1, -1]) {
+    const shape = polyline([[54, 20], [50, 20], [30, 20], [10, 20], [-10, 20], [-14, 20]], [0, -sign, sign, -sign, 0, 0]);
+    const saved = JSON.stringify(shape), source = preparePathGap(shape);
+    assert.ok(source?.kind === 'polyline');
+    // All three original circles have R10. The middle arc has the opposite direction.
+    for (const [span, centerX, direction] of [[1, 40, -sign], [2, 20, sign], [3, 0, -sign]]) {
+      const plan = planPathGap(source, [centerX, 20 + direction * 10], 4);
+      assert.ok(plan?.kind === 'polyline'); assert.equal(plan.span, span);
+      const y = 20 + direction * 10 * Math.cos(0.2);
+      close(plan.cutA[0], centerX + 10 * Math.sin(0.2), 1e-6);
+      close(plan.cutB[0], centerX - 10 * Math.sin(0.2), 1e-6);
+      close(plan.cutA[1], y, 1e-6); close(plan.cutB[1], y, 1e-6);
+      const chord = Math.hypot(plan.cutA[0] - plan.cutB[0], plan.cutA[1] - plan.cutB[1]);
+      close(20 * Math.asin(chord / 20), 4);
+      for (const [i, [a, b]] of ([[shape.points[span], plan.cutA], [plan.cutB, shape.points[span + 1]]] as const).entries()) {
+        const retained = arcOf(a, b, plan.bulges[i]);
+        close(retained.center[0], centerX); close(retained.center[1], 20); close(retained.radius, 10);
+        close(retained.sweep, direction * (Math.PI / 2 - 0.2), 2e-9);
+        close(retained.radius * Math.abs(retained.sweep), 5 * Math.PI - 2);
+      }
+    }
+    for (const pointer of [[30, 20], [10, 20], [29.95, 20 + sign]] as P2[])
+      assert.equal(planPathGap(source, pointer, 4), null);
+    assert.equal(planPathGap(source, [20, 20 + sign * 10], 10 * Math.PI - 0.0004), null);
+    assert.equal(JSON.stringify(shape), saved);
+  }
+});
+
+test('multiple arcs use finite sweeps for span selection and leave straight spans available', () => {
+  const source = preparePathGap(polyline([[10, 0], [-10, 0], [-10, -12], [10, -12], [10, -32], [-10, -32]], [1, 0, 0, 0, -1, 0]));
+  assert.ok(source);
+  // The pointer is nearer the first full circle, but outside that arc's finite sweep.
+  const line = planPathGap(source, [0, -6], 4);
+  assert.ok(line?.kind === 'polyline'); assert.equal(line.span, 2);
+  assert.deepEqual([line.cutA, line.cutB, line.bulges], [[-2, -12], [2, -12], [0, 0]]);
+  const arc = planPathGap(source, [0, -42], 4);
+  assert.ok(arc?.kind === 'polyline'); assert.equal(arc.span, 4);
+  assert.ok(arc.bulges.every(bulge => bulge < 0));
+  assert.equal(planPathGap(source, [0, -6], 24), null);
+});
+
+test('multiple arcs refuse overlapping and near-coincident finite picks', () => {
+  const overlap = preparePathGap(polyline([[10, 0], [-10, 0], [10, 0], [-10, 0], [-14, 0]], [1, -1, 1, 0, 0]));
+  assert.ok(overlap);
+  assert.equal(planPathGap(overlap, [0, 10], 4), null);
+  const neighbor = preparePathGap(polyline([[30, 20], [10, 20], [0, 15], [10, 20.00005], [30, 20.00005], [34, 20.00005]], [1, 0, 0, -1, 0, 0]));
+  assert.ok(neighbor);
+  assert.equal(planPathGap(neighbor, [20, 30], 4), null);
+});
+
+test('a cut end refuses another true arc and ignores its unused circle sector', () => {
+  const points: P2[] = [[30, 20], [10, 20], [16.986693, 34.800666], [26.986693, 34.800666]];
+  // The second lower semicircle touches the first cut end at its interior, away from its chord.
+  const attached = preparePathGap(polyline(points, [1, 0, 1, 0]));
+  assert.ok(attached);
+  assert.equal(planPathGap(attached, [20, 30], 4), null);
+  const clear = preparePathGap(polyline(points, [1, 0, -1, 0]));
+  assert.ok(clear);
+  const plan = planPathGap(clear, [20, 30], 4);
+  assert.ok(plan?.kind === 'polyline'); assert.equal(plan.span, 0);
+});
+
+test('a major arc still crosses the angle seam between other circular spans', () => {
+  const source = preparePathGap(polyline([[-4, 10], [0, 10], [10, 20], [10, 24]], [0.5, 1 + Math.SQRT2, -0.5, 0]));
+  assert.ok(source);
+  const plan = planPathGap(source, [10, 0], 4);
+  assert.ok(plan?.kind === 'polyline'); assert.equal(plan.span, 1);
+  assert.deepEqual([plan.cutA, plan.cutB], [[8.013307, 0.199334], [11.986693, 0.199334]]);
+  assert.ok(plan.bulges.every(bulge => bulge > 0));
 });

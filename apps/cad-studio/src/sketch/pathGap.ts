@@ -10,7 +10,7 @@ type Circle = Extract<SketchShape, { kind: 'circle' }> & { ids: [string] };
 export type PreparedPathGap =
   | { kind: 'line'; shape: Polygon; arc: null }
   | { kind: 'arc'; shape: Polygon; arc: Arc }
-  | { kind: 'polyline'; shape: Polyline; arc?: { span: number; geometry: Arc } }
+  | { kind: 'polyline'; shape: Polyline; arcs?: readonly (Arc | undefined)[] }
   | { kind: 'circle'; shape: Circle };
 
 type GapGeometry = {
@@ -65,18 +65,17 @@ export function preparePathGap(shape: SketchShape, ordinaryDraft = false): Prepa
     if (!shape.construction ||
         !points.every((point, i) => inRange(point) && (i === 0 || distance(point, points[i - 1]) > openJoinTolerance)) ||
         distance(points[0], points[points.length - 1]) <= openJoinTolerance) return null;
-    let arc: { span: number; geometry: Arc } | undefined;
+    let arcs: (Arc | undefined)[] | undefined;
     for (let i = 0; i < points.length - 1; i++) {
       const bulge = shape.bulges?.[i] ?? 0;
       if (!Number.isFinite(bulge)) return null;
       if (bulge !== 0) {
-        if (arc) return null;
         const geometry = boundedArc(points[i], points[i + 1], bulge);
         if (!geometry) return null;
-        arc = { span: i, geometry };
+        (arcs ??= [])[i] = geometry;
       }
     }
-    return { kind: 'polyline', shape: shape as Polyline, ...(arc ? { arc } : {}) };
+    return { kind: 'polyline', shape: shape as Polyline, ...(arcs ? { arcs } : {}) };
   }
 
   const [a, b] = shape.points, bulge = shape.bulges?.[0] ?? 0;
@@ -135,7 +134,7 @@ function planPolylineGap(source: Extract<PreparedPathGap, { kind: 'polyline' }>,
   const { points } = source.shape;
   let closest = Infinity, next = Infinity, span = -1;
   for (let i = 0; i < points.length - 1; i++) {
-    const distance = spanDistance(points[i], points[i + 1], source.arc?.span === i ? source.arc.geometry : null, pointer);
+    const distance = spanDistance(points[i], points[i + 1], source.arcs?.[i] ?? null, pointer);
     if (distance < closest) {
       next = closest;
       closest = distance;
@@ -144,12 +143,12 @@ function planPolylineGap(source: Extract<PreparedPathGap, { kind: 'polyline' }>,
   }
   // Locate the picked span before testing whether a gap fits in it.
   if (span < 0 || next - closest <= openJoinTolerance) return null;
-  const arc = source.arc?.span === span ? source.arc.geometry : null;
+  const arc = source.arcs?.[span];
   const gap = arc ? planArcGap(points[span], points[span + 1], arc, pointer, gapMm) : planLineGap(points[span], points[span + 1], pointer, gapMm);
   if (!gap || points.some(point => distance(point, gap.cutA) <= openJoinTolerance || distance(point, gap.cutB) <= openJoinTolerance)) return null;
-  if (source.arc && points.some((point, i) => {
+  if (source.arcs && points.some((point, i) => {
     if (i >= points.length - 1 || i === span) return false;
-    const otherArc = source.arc?.span === i ? source.arc.geometry : null;
+    const otherArc = source.arcs?.[i] ?? null;
     return spanDistance(point, points[i + 1], otherArc, gap.cutA) <= openJoinTolerance ||
       spanDistance(point, points[i + 1], otherArc, gap.cutB) <= openJoinTolerance;
   })) return null;
