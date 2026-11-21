@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1581: [Restore structured viewport display for quadrilateral Screw STEP imports](notes/quadrilateral-screw-step-display-2026-11-21/README.md), #630. Compare fixed-camera rail error and retain the same native edge selection on all four files in both renderers.
 - D1580: [Qualify both quadrilateral Screw windings through Studio AP214](notes/quadrilateral-screw-step-roundtrip-2026-11-21/README.md), #630. Verify exact reopened rail samples, signed file geometry and independent volume. Record the viewport faceting.
 - D1579: [Qualify reviewed Agent creation of quadrilateral Screws](notes/quadrilateral-screw-agent-2026-11-21/README.md), #630 and #322. Verify revision-pinned review, Studio approval and native equality with direct creation.
 - D1578: [Author a convex quadrilateral Smooth Screw from one sketch](notes/quadrilateral-screw-command-2026-11-21/README.md), #630. Verify direct creation, signed angle and pitch edits, and exact native reopening.
