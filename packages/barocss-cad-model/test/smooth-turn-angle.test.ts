@@ -3,7 +3,7 @@ import test from 'node:test';
 import { brepMassProperties, checkBrep, evaluateCurve } from '@barocss/cad';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
-import { smoothTurnAngleKey } from '../src/app/smoothLoftTurn';
+import { smoothTurnAngleKey, smoothTurnWidthBounds, smoothTurnWidthKey } from '../src/app/smoothLoftTurn';
 import { dispatchTool } from '../src/chat/tools';
 import { emptyDoc, withNode, type LoopSegment, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
@@ -73,6 +73,58 @@ test('only an intact terminal Smooth Turn owns the regenerated section copies', 
   assert.equal(field(withNode(doc, { kind: 'sketch', profile: 'circle', center: [30, 0], radius: 3 }), doc.nodes.length - 1), undefined);
   const shared = withNode(doc, { kind: 'extrude', sketch: 2, height: 2 });
   assert.equal(field(shared, doc.nodes.length - 1), undefined);
+});
+
+test('a Smooth Turn width edit resizes the entire rectangular section around its original axis', () => {
+  const widthField = (doc: StudioDoc, index = doc.nodes.length - 1) =>
+    editFields(doc.nodes, index, doc.parameters).find(candidate => candidate.key === smoothTurnWidthKey);
+  const railKey = (id: string) => /^c[0-3]$/.test(id);
+  for (const angle of [360, -360, 450, -450, 0, 87.123456789123]) {
+    const doc = create(angle), index = doc.nodes.length - 1, width = widthField(doc);
+    assert.ok(width?.kind === 'number');
+    assert.equal(width.get(doc.nodes), 12);
+    assert.equal('bind' in width, false);
+    for (const invalid of [12, 0, -1, smoothTurnWidthBounds.min, smoothTurnWidthBounds.max + 1, NaN, Infinity])
+      assert.deepEqual(width.set(doc.nodes, invalid), doc.nodes);
+    const next = { ...doc, nodes: width.set(doc.nodes, 16) };
+    assert.equal(next.nodes[0], doc.nodes[0]);
+    assert.equal(next.nodes[index], doc.nodes[index]);
+    assert.deepEqual(next.nodes.map(node => node.id), doc.nodes.map(node => node.id));
+    assert.equal(width.get(next.nodes), 16);
+    const editedAngle = field(next);
+    assert.ok(editedAngle?.kind === 'number' && Math.abs(editedAngle.get(next.nodes) - angle) < 1e-9);
+    const [before] = partBreps(doc), [after] = partBreps(next);
+    assert.equal(before.key, after.key);
+    assert.equal(checkBrep(after.brep, { strict: true }).valid, true);
+    assert.ok(after.brep.shells.length === 1 && after.brep.shells[0].closed);
+    assert.deepEqual([after.brep.bodies.length, after.brep.faces.length, after.brep.edges.length], [1, 6, 12]);
+    const ids = (brep: typeof before.brep) => [brep.vertices, brep.edges, brep.coedges, brep.loops, brep.faces, brep.shells, brep.bodies]
+      .map(items => items.map(item => item.id));
+    assert.deepEqual(ids(after.brep), ids(before.brep));
+    const expectedVolume = (16 / 12) * brepMassProperties(before.brep, 1).volume;
+    assert.ok(Math.abs(brepMassProperties(after.brep, 1).volume - expectedVolume) < 1e-7);
+    const last = Math.max(6, Math.ceil(Math.abs(angle) / 30));
+    const rails = after.brep.edges.filter(edge => railKey(edge.id));
+    assert.equal(rails.length, 4);
+    for (const [corner, [x, y]] of [[-8, -4], [8, -4], [8, 4], [-8, 4]].entries()) {
+      const rail = rails.find(edge => edge.id === 'c' + corner)!;
+      if (angle !== 0) {
+        assert.equal(rail.curve.degree, 3);
+        assert.equal(rail.curve.controlPoints.length, last + 1);
+        assert.ok(rail.curve.knots.slice(4, -4).every((knot, i, interior) => !i || knot > interior[i - 1]));
+      }
+      for (let i = 0; i <= last; i++) {
+        const t = i / last, rad = angle * Math.PI / 180 * t;
+        const u = 7 + x * Math.cos(rad) - y * Math.sin(rad);
+        const v = 6 + x * Math.sin(rad) + y * Math.cos(rad);
+        const expected = [11 + u, -17 + 0.8 * v + 42 * t, 23 - 0.6 * v + 56 * t];
+        const point = evaluateCurve(rail.curve, t);
+        assert.ok(Math.hypot(...point.map((value, k) => value - expected[k])) < 1e-8);
+      }
+    }
+    assert.equal(widthField(withNode(doc, { kind: 'extrude', sketch: 2, height: 2 }), index), undefined);
+  }
+  assert.equal(widthField(commandById('ruled-turn')!.build!(context, { angle: 360, height: 70 })), undefined);
 });
 
 test('Agent Smooth Turn angle edits require an exact pin and refuse out-of-range and combined inputs', async () => {

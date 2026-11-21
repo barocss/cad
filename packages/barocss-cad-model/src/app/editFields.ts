@@ -13,7 +13,7 @@ import { ANCHORS } from './frameCommands';
 import { setSplitOutputSide } from '../engine/splitOutput';
 import { loftSectionSourceFields } from './loftSectionEdit';
 import { smoothLoftHeightField, smoothLoftHeightKey } from './smoothLoftHeight';
-import { smoothLoftTurnAngleField, smoothTurnAngleKey } from './smoothLoftTurn';
+import { smoothLoftTurnAngleField, smoothLoftTurnWidthField, smoothTurnAngleKey, smoothTurnWidthKey } from './smoothLoftTurn';
 import { copyLoftGuide } from './loftGuides';
 import { SEW_TOLERANCE_LABEL, sewTolerance } from '../engine/sew';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
@@ -337,7 +337,7 @@ export function editFields(nodes: Nodes, i: number, params?: Record<string, numb
     || ((node?.kind === 'linear-pattern' || node?.kind === 'circular-pattern') && f.key === 'count') // Native counts are number-only; spacing and pivot dimensions remain bindable.
     || (node?.kind === 'circular-pattern' && f.key === 'span')
     || (node?.kind === 'shaft' && (f.key.startsWith('keyseatOffset') || f.key.startsWith('grooveOffset'))) // Saved shaft offsets are number-only.
-    || f.key === smoothLoftHeightKey || f.key === smoothTurnAngleKey || f.key.startsWith('loftGuideControl') || f.key.endsWith('linkedInsetMM') || (nodes[i]?.kind === 'hole' && /^(step|about)[01]$/.test(f.key)) ? f : {
+    || f.key === smoothLoftHeightKey || f.key === smoothTurnAngleKey || f.key === smoothTurnWidthKey || f.key.startsWith('loftGuideControl') || f.key.endsWith('linkedInsetMM') || (nodes[i]?.kind === 'hole' && /^(step|about)[01]$/.test(f.key)) ? f : {
     ...f,
     get: n => within(params, () => f.get(n)).value,
     set: (n, v) => within(params, () => f.set(n, v)).value,
@@ -498,7 +498,11 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       const height = smoothLoftHeightField(node, i);
       if (height) out.push(height);
       const angle = smoothLoftTurnAngleField(nodes, i);
-      if (angle) out.push(angle);
+      if (angle) {
+        out.push(angle);
+        const width = smoothLoftTurnWidthField(nodes, i);
+        if (width) out.push(width);
+      }
       out.push(...loftSectionSourceFields(nodes, i, node, parameters));
       if (!node.guides && !angle) node.sections.forEach((sec, k) => {
         out.push(...sketchFields(nodes, sec.sketch, `Section ${k + 1} · `, parameters));

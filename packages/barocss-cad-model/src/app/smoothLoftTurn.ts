@@ -1,9 +1,14 @@
+import { CadNumericPolicy } from '@barocss/cad';
 import { usesOf, type ModelNode } from '../engine/doc';
 import { canonical } from '../util/revision';
 import type { EditField } from './editFields';
 
 type Point = [number, number];
 export const smoothTurnAngleKey = 'smoothTurnAngle';
+export const smoothTurnWidthKey = 'smoothTurnWidth';
+export const smoothTurnWidthBounds = { min: CadNumericPolicy.linearTolerance, max: CadNumericPolicy.coordinateAbs };
+export const smoothTurnWidthInvalid = (value: number) =>
+  !Number.isFinite(value) || value <= smoothTurnWidthBounds.min || value > smoothTurnWidthBounds.max;
 export const smoothTurnAngleLimit = (sectionCount: number) => 30 * (sectionCount - 1);
 
 export function rotateTurnCorners(corners: readonly Point[], radians: number): Point[] {
@@ -70,7 +75,17 @@ function savedTurn(nodes: readonly ModelNode[], index: number) {
     const expected = rotateTurnCorners(first, radians * (i / last));
     return points.some(([x, y], j) => Math.hypot(x - expected[j][0], y - expected[j][1]) > tolerance);
   })) return;
-  return { start, last, first, angle, limit };
+  return { start, last, first, angle, radians, limit };
+}
+
+function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnType<typeof savedTurn>>, first: Point[], rotation: (fraction: number) => number) {
+  return nodes.map((node, i) => {
+    const station = i - turn.start;
+    if (station < 0 || station > turn.last || (station === 0 && first === turn.first)
+      || node.kind !== 'sketch' || node.profile !== 'loop') return node;
+    const points = station === 0 ? first : rotateTurnCorners(first, rotation(station / turn.last));
+    return { ...node, segments: points.map(start => ({ kind: 'line' as const, start })) };
+  });
 }
 
 export function smoothLoftTurnAngleField(nodes: readonly ModelNode[], index: number): EditField | undefined {
@@ -81,12 +96,31 @@ export function smoothLoftTurnAngleField(nodes: readonly ModelNode[], index: num
     set: (current, angle) => {
       const turn = savedTurn(current, index);
       if (!turn || !Number.isFinite(angle) || Math.abs(angle) > turn.limit || angle === turn.angle) return [...current];
-      return current.map((node, i) => {
-        if (i <= turn.start || i >= index || node.kind !== 'sketch' || node.profile !== 'loop') return node;
-        const radians = angle * ((i - turn.start) / turn.last) * (Math.PI / 180);
-        const segments = rotateTurnCorners(turn.first, radians).map(start => ({ kind: 'line' as const, start }));
-        return { ...node, segments };
-      });
+      return updateTurnCopies(current, turn, turn.first, fraction => angle * fraction * (Math.PI / 180));
+    },
+  };
+}
+
+function turnWidth(corners: readonly Point[]): number {
+  return corners[1][0] - corners[0][0];
+}
+
+export function smoothLoftTurnWidthField(nodes: readonly ModelNode[], index: number): EditField | undefined {
+  if (!savedTurn(nodes, index)) return;
+  return {
+    kind: 'number', key: smoothTurnWidthKey, label: 'Turn width', unit: 'mm',
+    get: current => {
+      const turn = savedTurn(current, index);
+      return turn ? turnWidth(turn.first) : NaN;
+    },
+    set: (current, width) => {
+      const turn = savedTurn(current, index);
+      if (!turn || smoothTurnWidthInvalid(width) || width === turnWidth(turn.first)) return [...current];
+      const [[minX, minY], , [maxX, maxY]] = turn.first;
+      const centre = (minX + maxX) / 2;
+      const left = centre - width / 2, right = centre + width / 2;
+      const first: Point[] = [[left, minY], [right, minY], [right, maxY], [left, maxY]];
+      return updateTurnCopies(current, turn, first, fraction => turn.radians * fraction);
     },
   };
 }

@@ -3,9 +3,13 @@ import { createFlow } from './flow-helper.mjs';
 
 const tilted = process.argv.includes('--tilted');
 const sourceWidth = process.argv.includes('--source-width');
+const editWidth = process.argv.includes('--edit-width');
+assert.ok([tilted, sourceWidth, editWidth].filter(Boolean).length <= 1);
 const pins = [
   'apps/cad-studio/test/smooth-turn-browser.mjs', 'apps/cad-studio/src/App.tsx',
   'packages/barocss-cad-model/src/app/profileCommands.ts', 'packages/barocss-cad-model/src/app/ruledTurnCommand.ts',
+  'packages/barocss-cad-model/src/app/smoothLoftTurn.ts',
+  'apps/cad-studio/src/app/featureNumberInput.ts',
   'packages/barocss-cad/src/features/loft.ts', 'packages/barocss-cad/src/features/loft-rectangular-turn.ts',
 ];
 const f = await createFlow({
@@ -14,7 +18,8 @@ const f = await createFlow({
   envFrozen: 'SMOOTH_TURN_SOURCE_FROZEN',
   initialFiles: pins,
   requiredFrozen: pins,
-  qualification: sourceWidth ? 'Verify how saved Ruled and Smooth Turn sections retain their authored width after a source sketch edit.' :
+  qualification: editWidth ? 'Edit all sections of a saved Smooth Turn about its original centre.' :
+    sourceWidth ? 'Verify how saved Ruled and Smooth Turn sections retain their authored width after a source sketch edit.' :
     tilted ? 'Verify the continuous native Smooth Turn on a tilted source plane.' :
     'Compare the existing ruled turn with a smooth native turn made from the same rectangle.',
   limits: ['Desktop Studio, equal-section 12 × 8 mm rectangles, sampled smooth C2 approximation.'],
@@ -31,6 +36,8 @@ console.log(JSON.stringify(partBreps(doc).map(({ brep, key }) => {
     count: brep.bodies.length, closed: brep.shells.length === 1 && brep.shells[0].closed,
     kind: brep.bodies[0].kind, valid: checkBrep(brep, { strict: true }).valid,
     faces: brep.faces.length, edges: brep.edges.length, vertices: brep.vertices.map(vertex => vertex.point),
+    ids: [brep.vertices, brep.edges, brep.coedges, brep.loops, brep.faces, brep.shells, brep.bodies]
+      .map(items => items.map(item => item.id)),
     planes: brep.faces.map(faceGeometry).filter(g => g.kind === 'plane'),
     rails: rails.map(rail => ({ knots: rail.knots, degree: rail.degree, poles: rail.controlPoints.length,
       samples: parameters.map(parameter => evaluateCurveD1(rail, parameter)) })),
@@ -79,7 +86,7 @@ async function frame() {
   await button(tilted ? 'Front' : 'Iso').click();
   if (tilted && await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  if (!tilted && !sourceWidth) return;
+  if (!tilted && !sourceWidth && !editWidth) return;
   const ao = button('AO');
   if (await ao.getAttribute('aria-pressed') === 'true') await ao.click();
   await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
@@ -180,6 +187,72 @@ async function verifySourceWidth(positive) {
   f.report.observations.push({ label: 'native section widths retained after both root sketch edits', widths });
 }
 
+async function verifyHistoryWidth(original) {
+  const index = original.nodes.length - 1;
+  const loft = original.nodes[index];
+  const before = await f.inspect('before-history-width-native', original);
+  const saved = await f.save('original-smooth-turn-width-12');
+  await f.freshOpen(saved.file, original, 'history-width-original-opened');
+  await frame();
+  await f.openFeatureEditor(index, 'saved Smooth Turn width');
+  const editor = f.editor(), width = editor.getByLabel('Turn width', { exact: true });
+  const apply = button('Apply', editor);
+  assert.equal(Number(await width.inputValue()), 12);
+  assert.equal(await editor.getByLabel('Turn width parameter').count(), 0);
+  await f.snapshot('history-width-before');
+  f.phase = 'refuse widths outside the saved Smooth Turn range';
+  for (const value of ['0', '0.0000001', '10001']) {
+    await width.fill(value);
+    assert.equal(await width.getAttribute('aria-invalid'), 'true');
+    assert.ok(await apply.isDisabled());
+    await f.same(original);
+  }
+  await width.fill('16');
+  const next = (await f.applyEditor(original, 'history-width-applied')).doc;
+  assert.deepEqual(next.outputs, original.outputs);
+  assert.deepEqual(next.nodes.map(node => node.id), original.nodes.map(node => node.id));
+  assert.deepEqual(next.nodes[index], loft);
+
+  const accepted = await f.inspect('history-width-native', next);
+  assert.deepEqual(accepted[0], before[0]);
+  const [prior, changed] = [before[1], accepted[1]];
+  assert.deepEqual([changed.key, changed.count, changed.closed, changed.kind, changed.valid, changed.faces, changed.edges],
+    [prior.key, 1, true, 'solid', true, 6, 12]);
+  assert.deepEqual(changed.ids, prior.ids);
+  assert.notEqual(changed.digest, prior.digest);
+  const volume = prior.volume * (16 / 12);
+  assert.ok(Math.abs(changed.volume - volume) < 1e-7);
+  const body = (await f.bodies()).bodies.find(body => body.key === changed.key);
+  assert.ok(body && Math.abs(body.volume - volume) < 1e-7);
+  for (const [station, section] of loft.sections.entries()) {
+    const fraction = station / (loft.sections.length - 1), radians = 2 * Math.PI * fraction;
+    const [c, s] = [Math.cos(radians), Math.sin(radians)];
+    for (const [corner, [x, y]] of [[-8, -4], [8, -4], [8, 4], [-8, 4]].entries()) {
+      const expected = [centre[0] + x * c - y * s, centre[1] + x * s + y * c, z0 + section.z];
+      const rail = changed.rails[corner];
+      const point = rail.samples[station * 30].point;
+      assert.ok(Math.hypot(...point.map((value, k) => value - expected[k])) < 1e-8);
+      assert.equal(rail.poles, loft.sections.length);
+      assert.equal(rail.degree, 3);
+      assert.deepEqual(rail.knots, prior.rails[corner].knots);
+    }
+  }
+  f.report.observations.push({ label: 'same native turn with wider sections', before: prior.volume, after: changed.volume,
+    volumeRatio: changed.volume / prior.volume, oldDigest: prior.digest, newDigest: changed.digest, sections: loft.sections.length });
+  await f.undo();
+  await f.same(original);
+  await f.redo();
+  await f.same(next);
+  const file = await f.save('smooth-turn-width-16');
+  await f.freshOpen(file.file, next, 'history-width-reopened');
+  assert.deepEqual(await f.inspect('history-width-reopened-native', next), accepted);
+  await frame();
+  await f.openFeatureEditor(index, 'widened Smooth Turn after native Open');
+  for (const [label, value] of [['Turn width', 16], ['Turn angle', 360], ['Total height', 40]])
+    assert.equal(Number(await f.editor().getByLabel(label, { exact: true }).inputValue()), value);
+  await f.snapshot('history-width-reopened-framed');
+}
+
 await f.run(async () => {
   const origin = new URL(f.server.resolvedUrls.local[0]).origin;
   const openContext = f.browser.newContext.bind(f.browser);
@@ -203,6 +276,10 @@ await f.run(async () => {
   const initial = await inspect(positive, 'positive-smooth-native', 360, 40);
   await frame();
   await f.snapshot('ruled-vs-smooth-360');
+  if (editWidth) {
+    await verifyHistoryWidth(positive);
+    return;
+  }
   if (sourceWidth) {
     await verifySourceWidth(positive);
     return;
