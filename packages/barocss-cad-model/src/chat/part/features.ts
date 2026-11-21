@@ -34,13 +34,17 @@ import { preparePairedFixedSpanHoleEdit } from '../../app/patternHoleSpacing';
 /** Commands the chat can run (the ones that build; sketch-mode and measure UI actions are tools of their own). */
 // (Loft takes sketches picked in the studio, Align a face clicked there; chat writes a loft node with
 // add_features, and moves with move or rotate, instead.)
-// (Loft, Smooth Turn, Align, Thicken, Sew and Band Surface need picked-source contexts absent from these tool arguments.
+// (Loft, Align, Thicken, Sew and Band Surface need picked-source contexts absent from these tool arguments.
 // Surface snapshots can be supplied as checked nodes through features.add or through the public Part API.)
-export const CHAT_COMMANDS = commands.filter(c => c.build && c.id !== 'loft' && c.id !== 'smooth-turn' && c.id !== 'align' && c.id !== 'thicken' && c.id !== 'sew' && c.id !== 'band-surface').map(c => c.id);
+export const CHAT_COMMANDS = commands.filter(c => c.build && c.id !== 'loft' && c.id !== 'align' && c.id !== 'thicken' && c.id !== 'sew' && c.id !== 'band-surface').map(c => c.id);
 
 /** What each command needs selected and what its values mean. */
 export const COMMAND_DOCS: Record<string, { selection: string; values: Record<string, string> }> = {
   'ruled-turn': {
+    selection: 'Use features.command with values.sketch and expectedRevision from query.rebuild. Requires one standalone rectangle.',
+    values: { sketch: 'stable sketch ID from query.summary', height: 'positive height in mm', angle: 'signed degrees from −450 to +450' },
+  },
+  'smooth-turn': {
     selection: 'Use features.command with values.sketch and expectedRevision from query.rebuild. Requires one standalone rectangle.',
     values: { sketch: 'stable sketch ID from query.summary', height: 'positive height in mm', angle: 'signed degrees from −450 to +450' },
   },
@@ -177,11 +181,12 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   if (refusal) return refusal;
   const cmd = commandById(String(args.command));
   if (!cmd?.build) return fail(state, `Unknown command "${String(args.command)}". Commands: ${CHAT_COMMANDS.join(', ')}.`);
-  if (cmd.id === 'ruled-turn') {
+  const sketchTurn = cmd.id === 'ruled-turn' || cmd.id === 'smooth-turn';
+  if (sketchTurn) {
     if (args.expectedRevision === undefined)
-      return fail(state, 'Ruled Turn needs expectedRevision from query.rebuild for the same part.', { code: 'COMMAND_INPUT' });
+      return fail(state, `${cmd.label} needs expectedRevision from query.rebuild for the same part.`, { code: 'COMMAND_INPUT' });
     if (args.faces !== undefined || args.edges !== undefined || args.bodies !== undefined || args.point !== undefined)
-      return fail(state, 'Ruled Turn takes one stable sketch ID in values.sketch and no face, edge, body or point selection.', { code: 'COMMAND_INPUT' });
+      return fail(state, `${cmd.label} takes one stable sketch ID in values.sketch and no face, edge, body or point selection.`, { code: 'COMMAND_INPUT' });
   }
   // (Faces and edges by name or by selector, A1.2: each selector resolves to its name, reported back.)
   const sel = resolveSelectors(state.doc.nodes, state.bodies, { faces: list(args.faces), edges: list(args.edges), bodies: list(args.bodies) });
@@ -220,13 +225,13 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
     if (source.revision !== pathRevision) return fail(state, 'The Sweep path geometry changed. Read the current curve and make a new proposal.');
     ctx = { ...ctx, selection: { ...selection, sketches: [index] }, direct: [path] };
     given = { ...other, representation };
-  } else if (cmd.id === 'ruled-turn') {
+  } else if (sketchTurn) {
     const { sketch, ...other } = given;
     if (typeof sketch !== 'string' || !sketch.trim())
-      return fail(state, 'Ruled Turn needs one stable sketch ID in values.sketch.', { code: 'COMMAND_INPUT' });
+      return fail(state, `${cmd.label} needs one stable sketch ID in values.sketch.`, { code: 'COMMAND_INPUT' });
     const matches = state.doc.nodes.flatMap((_, index) => featureId(state.doc.nodes, index) === sketch ? [index] : []);
     if (matches.length !== 1)
-      return fail(state, 'Ruled Turn needs one current sketch with that ID from query.summary.', { code: 'COMMAND_INPUT' });
+      return fail(state, `${cmd.label} needs one current sketch with that ID from query.summary.`, { code: 'COMMAND_INPUT' });
     ctx = { ...ctx, selection: { ...selection, sketches: matches } };
     given = other;
   }
