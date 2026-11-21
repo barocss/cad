@@ -9,7 +9,13 @@ const previousFile = resolve(process.argv[3]), currentFile = resolve(process.arg
 const source = JSON.parse(await readFile(currentFile, 'utf8'));
 const index = source.nodes.length - 1;
 const widthEdit = process.argv.includes('--width');
-const edit = widthEdit ? {
+const triangular = process.argv.includes('--triangle');
+assert.ok(!(widthEdit && triangular));
+const edit = triangular ? {
+  key: 'smoothTurnAngle', value: -450, invalid: 451, refusal: /−450° to \+450°/,
+  title: 'Reverse the reviewed triangular Smooth Turn to −450°', before: { angle: 450 }, after: { angle: -450 },
+  centre: [18, -21, 26], height: 50, stations: 16, bodies: 1,
+} : widthEdit ? {
   key: 'smoothTurnWidth', value: 20, invalid: 0, refusal: /takes a width greater than/,
   title: 'Widen the reviewed Smooth Turn to 20 mm', before: { angle: 360, width: 16 }, after: { angle: 360, width: 20 },
   centre: [47, -11, 3], height: 40, stations: 13, bodies: 2,
@@ -24,7 +30,7 @@ const pins = [
   'packages/barocss-cad-model/src/chat/toolDefinitions.ts', 'packages/barocss-cad-model/src/app/smoothLoftTurn.ts',
 ];
 const f = await createFlow({
-  name: widthEdit ? 'smooth-turn-reviewed-width-edit' : 'smooth-turn-reviewed-angle-edit',
+  name: triangular ? 'triangular-turn-reviewed-angle-edit' : widthEdit ? 'smooth-turn-reviewed-width-edit' : 'smooth-turn-reviewed-angle-edit',
   output: process.argv[2],
   envFrozen: 'SMOOTH_TURN_PIN_FROZEN',
   initialFiles: pins,
@@ -42,6 +48,7 @@ const check = checkBrep(brep, { strict: true });
 console.log(JSON.stringify({ key, controls: outputs.slice(0, -1).map(out => digestOf(out.brep)), sha: digestOf(brep), valid: check.valid, count: check.counts.bodies,
   volume: brepMassProperties(brep, 1).volume, closed: brep.shells.length === 1 && brep.shells[0].closed,
   faces: brep.faces.map(face => face.name), edges: brep.edges.map(edge => edge.name),
+  ids: [brep.vertices, brep.edges, brep.coedges, brep.loops, brep.faces, brep.shells, brep.bodies].map(items => items.map(item => item.id)),
   rails: brep.edges.filter(edge => /^c[0-3]$/.test(edge.id)).map(({ id, curve }) => ({
     id, stations: Array.from({ length: ${edit.stations} }, (_, i) => evaluateCurveD1(curve, i / ${edit.stations - 1})),
   })),
@@ -71,20 +78,25 @@ async function native(label, doc, { angle, width }) {
   assert.deepEqual(doc.nodes.map(node => node.id), source.nodes.map(node => node.id));
   const result = await f.inspect(label, doc);
   assert.deepEqual([result.valid, result.count, result.closed, result.faces.length, result.edges.length, result.rails.length],
-    [true, 1, true, 6, 12, 4]);
+    triangular ? [true, 1, true, 5, 9, 3] : [true, 1, true, 6, 12, 4]);
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, edit.bodies);
   assert.equal(bodies.at(-1).key, result.key);
   assert.ok(Math.abs(bodies.at(-1).volume - result.volume) < 1e-7);
   const [x, y, z] = edit.centre, half = width / 2;
-  const corners = [[-half, -4], [half, -4], [half, 4], [-half, 4]];
+  const corners = triangular ? [[-4, -2], [5, -1], [-1, 3]] : [[-half, -4], [half, -4], [half, 4], [-half, 4]];
   for (const [index, rail] of result.rails.entries()) {
     const [u, v] = corners[index];
     for (const [i, { point, derivative }] of rail.stations.entries()) {
       const t = i / (edit.stations - 1), radians = angle * Math.PI / 180 * t;
       const c = Math.cos(radians), s = Math.sin(radians);
-      assert.ok(near(point, [x + c * u - s * v, y + s * u + c * v, z + edit.height * t]));
-      assert.ok(((point[0] - x) * derivative[1] - (point[1] - y) * derivative[0]) * Math.sign(angle) > 0);
+      const across = c * u - s * v, side = s * u + c * v, height = edit.height * t;
+      const expected = triangular ? [x + across, y + .8 * side + .6 * height, z - .6 * side + .8 * height]
+        : [x + across, y + side, z + height];
+      assert.ok(near(point, expected));
+      const localY = triangular ? .8 * (point[1] - y) - .6 * (point[2] - z) : point[1] - y;
+      const localDY = triangular ? .8 * derivative[1] - .6 * derivative[2] : derivative[1];
+      assert.ok(((point[0] - x) * localDY - localY * derivative[0]) * Math.sign(angle) > 0);
     }
   }
   f.report.observations.push({ label, angle, width, digest: result.sha, volume: result.volume, controls: result.controls });
@@ -170,9 +182,11 @@ await f.run(async () => {
   const approval = accepted.history.at(-1);
   assert.deepEqual([approval.kind, approval.proposal, approval.by.agent], ['accept', proposalId, 'user']);
   const result = await native('agent-approved-native', accepted, edit.after);
-  assert.deepEqual([result.key, result.faces, result.edges, result.controls], [before.key, before.faces, before.edges, before.controls]);
+  assert.deepEqual([result.key, result.faces, result.edges, result.controls, result.ids],
+    [before.key, before.faces, before.edges, before.controls, before.ids]);
   assert.notEqual(result.sha, before.sha);
-  assert.ok(Math.abs(result.volume - (edit.after.width / edit.before.width) * before.volume) < 1e-7);
+  const volumeFactor = widthEdit ? edit.after.width / edit.before.width : 1;
+  assert.ok(Math.abs(result.volume - volumeFactor * before.volume) < 1e-7);
   await f.undo();
   await f.same(pending);
   await f.redo();
@@ -182,7 +196,10 @@ await f.run(async () => {
   assert.equal((await native('agent-approved-reopened-native', accepted, edit.after)).sha, result.sha);
   await frame();
   await f.openFeatureEditor(index, 'approved turn after reopen');
-  for (const [label, value] of [['Turn angle', edit.after.angle], ['Turn width', edit.after.width], ['Total height', edit.height]])
+  for (const [label, value] of [['Turn angle', edit.after.angle], ['Total height', edit.height]])
     assert.equal(Number(await f.editor().getByLabel(label, { exact: true }).inputValue()), value);
+  const width = f.editor().getByLabel('Turn width', { exact: true });
+  if (triangular) assert.equal(await width.count(), 0);
+  else assert.equal(Number(await width.inputValue()), edit.after.width);
   await f.snapshot('approved-turn-reopened-editor');
 });
