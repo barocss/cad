@@ -5,13 +5,16 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 const file = process.argv[3], original = JSON.parse(await readFile(file));
 const variants = ['--triangle', '--screw-positive', '--screw-negative',
-  '--triangular-screw-positive', '--triangular-screw-negative'].filter(option => process.argv.includes(option));
+  '--triangular-screw-positive', '--triangular-screw-negative',
+  '--pentagon-screw-positive', '--pentagon-screw-negative', '--hexagon-screw-positive', '--hexagon-screw-negative']
+  .filter(option => process.argv.includes(option));
 assert.ok(variants.length <= 1);
 const [variant] = variants;
 const triangularScrew = variant?.startsWith('--triangular-screw-');
 const triangular = variant === '--triangle' || triangularScrew;
-const screw = triangularScrew || variant?.startsWith('--screw-');
-const faceCounts = triangular ? [5] : screw ? [6] : [18, 6];
+const polygonSides = variant?.startsWith('--pentagon-') ? 5 : variant?.startsWith('--hexagon-') ? 6 : 0;
+const screw = triangularScrew || polygonSides > 0 || variant?.startsWith('--screw-');
+const faceCounts = polygonSides ? [polygonSides + 2] : triangular ? [5] : screw ? [6] : [18, 6];
 const f = await createFlow({
   name: 'smooth-turn-step', output: process.argv[2], envFrozen: 'TURN_STEP_FROZEN',
   qualification: 'Independently read the AP214 bytes Studio writes for the approved compact Turn or Screw.',
@@ -19,12 +22,20 @@ const f = await createFlow({
     'apps/cad-studio/test/part21-prism-check.py', 'apps/cad-studio/src/files/useModelExports.ts', 'apps/cad-studio/src/files/StepExportPanel.tsx', 'packages/barocss-cad-model/src/engine/evaluate.ts'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
-import { checkBrep, brepMassProperties } from '@barocss/cad';
+import { checkBrep, brepMassProperties, curveDomain, evaluateCurve } from '@barocss/cad';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+function rails(brep) {
+  const axial = ([, y, z]) => .6 * y + .8 * z;
+  return brep.edges.filter(({ curve }) => curve.degree === 3 && curve.controlPoints.length === 16).map(({ curve }) => {
+    const [a, b] = curveDomain(curve);
+    const samples = Array.from({ length: 121 }, (_, i) => evaluateCurve(curve, a + (b - a) * i / 120));
+    return axial(samples[0]) < axial(samples.at(-1)) ? samples : samples.reverse();
+  });
+}
 console.log(JSON.stringify(partBreps(doc).map(({ brep }) => ({
   check: checkBrep(brep, { strict: true }), volume: brepMassProperties(brep, 1).volume,
-  faceNames: brep.faces.map(face => face.name),
+  faceNames: brep.faces.map(face => face.name), ...(${polygonSides > 0} ? { rails: rails(brep) } : {}),
 }))));
 `,
 });
@@ -57,9 +68,9 @@ await f.run(async () => {
   };
   let doc = original;
   await f.freshOpen(file, doc, 'approved-turn-opened');
-  if (variant === '--triangular-screw-positive') {
+  if ((triangularScrew || polygonSides) && variant.endsWith('-positive')) {
     const terminal = doc.nodes.length - 1;
-    await f.openFeatureEditor(terminal, 'reverse the approved triangular Screw before STEP export');
+    await f.openFeatureEditor(terminal, 'reverse the approved Screw before STEP export');
     const winding = f.editor().getByLabel('Turn angle', { exact: true });
     assert.equal(Number(await winding.inputValue()), -450);
     assert.equal(Number(await f.editor().getByLabel('Pitch per revolution', { exact: true }).inputValue()), 40);
@@ -73,6 +84,7 @@ await f.run(async () => {
   if (await b('AO').getAttribute('aria-pressed') === 'true') await b('AO').click();
   const nativeDisplay = triangular || screw ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
   if (triangular || screw) assert.ok(nativeDisplay?.kind === 'smooth-turn' && nativeDisplay.triangles > nativeDisplay.baseTriangles);
+  if (polygonSides) await f.snapshot('approved-polygon-screw-native');
   f.phase = 'read STEP preparation and loss disclosure in Studio';
   await b('Export STEP').click();
   const panel = f.page.getByLabel('STEP export', { exact: true });
@@ -111,12 +123,28 @@ await f.run(async () => {
   const imported = await f.inspect('step-opened-native', loaded);
   assert.equal(imported.length, faceCounts.length);
   const { bodies } = await f.bodies();
+  let worstRoundTripRailErrorMM = 0;
   for (const [i, body] of imported.entries()) {
     assert.ok(body.check.valid);
     assert.deepEqual(body.check.counts, before[i].check.counts);
     assert.deepEqual(body.faceNames, before[i].faceNames.map(name => loaded.nodes[0].id + '.' + name));
     assert.ok(Math.abs(body.volume - before[i].volume) < 1e-7);
     assert.ok(Math.abs(bodies[i].volume - body.volume) < 1e-7);
+    if (polygonSides) {
+      const distance = (a, b) => Math.hypot(...a.map((x, j) => x - b[j]));
+      assert.equal(body.rails.length, polygonSides);
+      assert.equal(before[i].rails.length, polygonSides);
+      const matched = new Set();
+      for (const rail of before[i].rails) {
+        const index = body.rails.findIndex(samples => distance(rail[0], samples[0]) < 1e-8);
+        assert.ok(index >= 0 && !matched.has(index));
+        matched.add(index);
+        for (const [j, point] of rail.entries()) {
+          worstRoundTripRailErrorMM = Math.max(worstRoundTripRailErrorMM, distance(point, body.rails[index][j]));
+        }
+      }
+      assert.ok(worstRoundTripRailErrorMM < 1e-8);
+    }
   }
   assert.deepEqual(f.report.downloads, []);
   await b('Iso').click();
@@ -126,6 +154,7 @@ await f.run(async () => {
   if (variant === '--triangle') assert.ok(reopenedDisplay?.kind === 'smooth-turn' && reopenedDisplay.triangles > reopenedDisplay.baseTriangles);
   const shownVertices = screw ? await f.page.evaluate(() => window.__studioSweepCylinderMesh?.()?.length / 3) : undefined;
   if (screw) assert.ok(shownVertices > 0);
-  f.report.observations.push({ imported, noNativeFeatureHistory: true, nativeDisplay, reopenedDisplay, shownVertices });
+  f.report.observations.push({ imported, noNativeFeatureHistory: true, nativeDisplay, reopenedDisplay, shownVertices,
+    ...(polygonSides ? { worstRoundTripRailErrorMM } : {}) });
   await f.snapshot('approved-turn-step-reopened');
 });

@@ -55,10 +55,16 @@ def cubic(poles, knots, t):
 def verify(source, variant=None):
     triangular_screw = variant in ('--triangular-screw-positive', '--triangular-screw-negative')
     rectangular_screw = variant in ('--screw-positive', '--screw-negative')
-    if triangular_screw:
-        turn, expected_counts = 'n18', {'n18': (5, 9, 6)}
-        corners = [(-7, -4), (2, -3), (-4, 1)]
-        angle = 450 if variant == '--triangular-screw-positive' else -450
+    polygon_corners = {
+        'pentagon': [(-7, -4), (2, -3), (1, -1), (-4, 1), (-6, -1)],
+        'hexagon': [(-7, -5), (1, -5), (3, -3), (2, -1), (-3, 1), (-7, -1)],
+    }
+    polygon = polygon_corners.get(variant[2:].split('-', 1)[0]) if variant else None
+    if triangular_screw or polygon:
+        corners = polygon or [(-7, -4), (2, -3), (-4, 1)]
+        n = len(corners)
+        turn, expected_counts = 'n18', {'n18': (n + 2, 3 * n, 2 * n)}
+        angle = 450 if variant.endswith('-positive') else -450
         stations, height, cohort_volume = 16, 50, 0
         origin, axis_v, axis_w = (21, -19.4, 24.8), (0, 0.8, -0.6), (0, 0.6, 0.8)
     elif rectangular_screw:
@@ -148,7 +154,7 @@ def verify(source, variant=None):
             assert all(pair[1] == ends[(i + 1) % len(ends)][0] for i, pair in enumerate(ends))
             if solid == turn and name.startswith(turn + '.side'):
                 surface, = part21.refs(face_fields[2])
-                supports[int(name[-1])] = of_kind(surface, 'B_SPLINE_SURFACE_WITH_KNOTS')
+                supports[int(name.removeprefix(turn + '.side'))] = of_kind(surface, 'B_SPLINE_SURFACE_WITH_KNOTS')
             elif solid == turn:
                 assert name in {turn + '.bottom', turn + '.top'}
                 surface, = part21.refs(face_fields[2])
@@ -178,7 +184,7 @@ def verify(source, variant=None):
             t = station / (stations - 1)
             expected = station_point(x, y, t)
             max_error = max(max_error, distance(cubic(poles, knots, t), expected))
-        if rectangular_screw or triangular_screw:
+        if rectangular_screw or triangular_screw or polygon:
             # Recover the sign and total turn from the actual serialized curve.
             # Endpoints alone coincide in the sketch plane after a revolution.
             samples = [cubic(poles, knots, i / 240) for i in range(241)]
@@ -226,6 +232,8 @@ def verify(source, variant=None):
 if __name__ == '__main__':
     options = sys.argv[2:]
     variants = {'--triangle', '--screw-positive', '--screw-negative',
-                '--triangular-screw-positive', '--triangular-screw-negative'}
+                '--triangular-screw-positive', '--triangular-screw-negative',
+                '--pentagon-screw-positive', '--pentagon-screw-negative',
+                '--hexagon-screw-positive', '--hexagon-screw-negative'}
     assert len(options) <= 1 and all(option in variants for option in options)
     print(json.dumps(verify(Path(sys.argv[1]).read_text(encoding='utf-8'), options[0] if options else None)))

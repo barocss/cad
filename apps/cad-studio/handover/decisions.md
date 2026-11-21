@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1575: [Qualify both polygon Screw windings through Studio AP214](notes/convex-screw-step-roundtrip-2026-11-21/README.md), #630. Verify independent signed geometry and exact reopened rail samples. Record the reopened viewport faceting.
 - D1574: [Qualify reviewed Agent creation of convex polygon Screws](notes/convex-screw-agent-2026-11-21/README.md), #630 and #322. Verify local discovery, revision-pinned review, Studio approval and native equality with direct creation.
 - D1573: [Author a convex polygon Smooth Screw from one sketch](notes/convex-screw-command-2026-11-21/README.md), #630. Verify both signed directions, axis refusal, editable angle and pitch, and exact native reopening.
 - D1572: [Share viewport samples on convex polygon Screw walls](notes/convex-screw-structured-display-2026-11-21/README.md), #630. Verify fixed-camera rail and wall depth improvements and the same native edge picks.
