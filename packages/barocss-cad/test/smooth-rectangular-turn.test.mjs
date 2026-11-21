@@ -89,3 +89,61 @@ test('compact smooth turn admission preserves the native cap for other long prof
     assert.throws(() => validateSurface(side), /Surface V control point count/);
   }
 });
+
+const offsetRectangle = [[14, -4], [26, -4], [26, 4], [14, 4]];
+
+function externalStations(degrees, profile = offsetRectangle, pivot = [0, 0]) {
+  const spans = Math.max(6, Math.ceil(Math.abs(degrees) / 30));
+  return Array.from({ length: spans + 1 }, (_, i) => {
+    const t = i / spans, a = degrees * Math.PI * t / 180, c = Math.cos(a), s = Math.sin(a);
+    return { z: height * t, profile: profile.map(([x, y]) => {
+      const u = x - pivot[0], v = y - pivot[1];
+      return { kind: 'line', start: [pivot[0] + c * u - s * v, pivot[1] + s * u + c * v] };
+    }) };
+  });
+}
+
+test('external-origin smooth Screw uses continuous rails of the same signed section law', () => {
+  // D1544 integrates the common cubic rotation factor independently. The section areas
+  // scale from 21 to 96 mm². The offset from the axis translates a section within its plane.
+  const references = { 180: 840.4060323005599 * 96 / 21, 360: 840.1080446694306 * 96 / 21 };
+  for (const angle of [180, -180, 360, -360]) {
+    const sections = externalStations(angle);
+    const { brep, mass } = build(sections);
+    const check = checkBrep(brep, { strict: true });
+    assert.ok(check.valid, JSON.stringify(check.issues));
+    assert.deepEqual([brep.bodies.length, brep.shells[0].closed, brep.faces.length, brep.edges.length, brep.vertices.length],
+      [1, true, 6, 12, 8]);
+    const rails = brep.edges.filter(edge => /^c[0-3]$/.test(edge.id)).map(edge => edge.curve);
+    assert.equal(rails.length, 4);
+    for (const [corner, rail] of rails.entries()) {
+      assert.deepEqual([rail.degree, rail.controlPoints.length, rail.knots], [3, sections.length, rails[0].knots]);
+      assert.equal(new Set(rail.knots.slice(4, -4)).size, sections.length - 4);
+      for (const [i, { z, profile }] of sections.entries())
+        assert.ok(Math.hypot(...evaluateCurve(rail, i / (sections.length - 1))
+          .map((value, k) => value - [...profile[corner].start, z][k])) < 1e-8);
+      for (let i = 0; i <= 360; i++) {
+        const t = i / 360, { point: p, derivative: d } = evaluateCurveD1(rail, t);
+        assert.ok(Math.abs(p[2] - height * t) < 1e-9 && Math.abs(d[2] - height) < 1e-8);
+        assert.ok(Math.sign(p[0] * d[1] - p[1] * d[0]) === Math.sign(angle));
+      }
+    }
+    assert.ok(Math.abs(mass(1).volume - references[Math.abs(angle)]) < 1e-7);
+    assert.ok(Math.abs(mass(1).volume - independentVolume(rails)) < 1e-7);
+  }
+});
+
+test('the external compact fit refuses other pivots, axis contact and inexact station rotations', () => {
+  const wrongAxis = externalStations(180, offsetRectangle, [1, 0]);
+  const touches = externalStations(180, [[0, -4], [12, -4], [12, 4], [0, 4]]);
+  const straddles = externalStations(180, [[-2, -1], [10, -1], [10, 7], [-2, 7]]);
+  const translated = externalStations(180), uneven = externalStations(180);
+  for (const line of translated[2].profile) line.start[0] += 0.01;
+  uneven[2].z += 0.1;
+  for (const sections of [wrongAxis, touches, straddles, translated, uneven]) {
+    assert.throws(() => {
+      const face = build(sections).brep.faces.find(face => face.name === 'turn.side0');
+      validateSurface(face.surface);
+    }, /Surface V control point count/);
+  }
+});

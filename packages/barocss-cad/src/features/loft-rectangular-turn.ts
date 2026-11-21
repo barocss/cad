@@ -32,11 +32,7 @@ function followsTurn(fit: PlainFitCurve, sign: number): boolean {
   return true;
 }
 
-/** Use one cubic V basis for all the rails of a constant rectangular turn. */
-export function fitRectangularTurn(
-  rows: readonly (readonly XY[])[], heights: readonly number[], stations: readonly number[],
-): { knots: number[]; rails: Point[][] } | null {
-  const first = rows[0];
+function rectangle(first: readonly XY[]) {
   const centre: XY = [(first[0][0] + first[2][0]) / 2, (first[0][1] + first[2][1]) / 2];
   const u = sub(first[1], first[0]), v = sub(first[3], first[0]);
   const width = Math.hypot(...u), depth = Math.hypot(...v);
@@ -44,8 +40,29 @@ export function fitRectangularTurn(
   if (Math.min(width, depth) <= tol || Math.abs(dot(u, v)) > tol * Math.max(width, depth)
     || Math.hypot(first[1][0] - centre[0] + (first[3][0] - centre[0]),
       first[1][1] - centre[1] + (first[3][1] - centre[1])) > tol) return null;
+  return { centre, u, v, width, depth, tol };
+}
 
-  return fitTurn(rows, heights, stations, centre, u, width, tol);
+/** Use one cubic V basis for all the rails of a constant rectangular turn. */
+export function fitRectangularTurn(
+  rows: readonly (readonly XY[])[], heights: readonly number[], stations: readonly number[],
+): { knots: number[]; rails: Point[][] } | null {
+  const profile = rectangle(rows[0]);
+  return profile && fitTurn(rows, heights, stations, profile.centre, profile.u, profile.width, profile.tol);
+}
+
+/** A rectangle rotating about the external normal through the common sketch origin. */
+export function fitRectangularScrew(
+  rows: readonly (readonly XY[])[], heights: readonly number[], stations: readonly number[],
+): { knots: number[]; rails: Point[][] } | null {
+  const origin: XY = [0, 0], profile = rectangle(rows[0]);
+  if (!profile) return null;
+  const { u, v, width, depth, tol } = profile;
+  const offset = sub(origin, rows[0][0]);
+  const x = dot(offset, u) / width, y = dot(offset, v) / depth;
+  const clearance = Math.hypot(Math.max(-x, 0, x - width), Math.max(-y, 0, y - depth));
+  if (!(clearance > tol)) return null;
+  return fitTurn(rows, heights, stations, origin, u, width, tol);
 }
 
 /** A single convex triangle turning about its centroid. */
