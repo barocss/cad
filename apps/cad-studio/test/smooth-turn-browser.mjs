@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const tilted = process.argv.includes('--tilted');
+const sourceWidth = process.argv.includes('--source-width');
 const pins = [
   'apps/cad-studio/test/smooth-turn-browser.mjs', 'apps/cad-studio/src/App.tsx',
   'packages/barocss-cad-model/src/app/profileCommands.ts', 'packages/barocss-cad-model/src/app/ruledTurnCommand.ts',
@@ -13,7 +14,8 @@ const f = await createFlow({
   envFrozen: 'SMOOTH_TURN_SOURCE_FROZEN',
   initialFiles: pins,
   requiredFrozen: pins,
-  qualification: tilted ? 'Verify the continuous native Smooth Turn on a tilted source plane.' :
+  qualification: sourceWidth ? 'Verify how saved Ruled and Smooth Turn sections retain their authored width after a source sketch edit.' :
+    tilted ? 'Verify the continuous native Smooth Turn on a tilted source plane.' :
     'Compare the existing ruled turn with a smooth native turn made from the same rectangle.',
   limits: ['Desktop Studio, equal-section 12 × 8 mm rectangles, sampled smooth C2 approximation.'],
   inspectorSource: `
@@ -28,7 +30,7 @@ console.log(JSON.stringify(partBreps(doc).map(({ brep, key }) => {
   return { key, digest: digestOf(brep), volume: brepMassProperties(brep, 1).volume,
     count: brep.bodies.length, closed: brep.shells.length === 1 && brep.shells[0].closed,
     kind: brep.bodies[0].kind, valid: checkBrep(brep, { strict: true }).valid,
-    faces: brep.faces.length, edges: brep.edges.length,
+    faces: brep.faces.length, edges: brep.edges.length, vertices: brep.vertices.map(vertex => vertex.point),
     planes: brep.faces.map(faceGeometry).filter(g => g.kind === 'plane'),
     rails: rails.map(rail => ({ knots: rail.knots, degree: rail.degree, poles: rail.controlPoints.length,
       samples: parameters.map(parameter => evaluateCurveD1(rail, parameter)) })),
@@ -38,6 +40,7 @@ console.log(JSON.stringify(partBreps(doc).map(({ brep, key }) => {
 });
 
 const min = [1, 2], max = [13, 10], centre = [47, -11], z0 = 3;
+const widthParameters = ['RuledXEnd', 'SmoothXEnd'];
 const corners = [[-6, -4], [6, -4], [6, 4], [-6, 4]];
 const frameOrigin = tilted ? [15, -30, 20] : [0, 0, 0];
 const frameAxes = tilted ? [[.6, .8, 0], [-.48, .36, .8], [.64, -.48, .6]] :
@@ -48,9 +51,11 @@ const worldPoint = coordinates => frameOrigin.map((origin, k) =>
   origin + coordinates.reduce((delta, value, i) => delta + value * frameAxes[i][k], 0));
 const localPoint = point => frameAxes.map(axis => dot(axis, point.map((value, i) => value - frameOrigin[i])));
 const source = {
-  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, outputs: {}, nextId: 2,
+  format: 'barocss-cad-model', schema: 3, units: 'mm',
+  parameters: sourceWidth ? Object.fromEntries(widthParameters.map(name => [name, max[0]])) : {}, outputs: {}, nextId: 2,
   nodes: [11, 40].map((x, index) => ({
-    id: `n${index}`, kind: 'sketch', profile: 'rectangle', min, max,
+    id: `n${index}`, kind: 'sketch', profile: 'rectangle', min,
+    max: sourceWidth ? [{ parameter: widthParameters[index] }, max[1]] : max,
     plane: { origin: worldPoint([x, -17, z0]), normal: frameN, xAxis: frameU },
   })),
 };
@@ -74,7 +79,7 @@ async function frame() {
   await button(tilted ? 'Front' : 'Iso').click();
   if (tilted && await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  if (!tilted) return;
+  if (!tilted && !sourceWidth) return;
   const ao = button('AO');
   if (await ao.getAttribute('aria-pressed') === 'true') await ao.click();
   await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
@@ -130,6 +135,51 @@ async function inspect(doc, label, degrees, height) {
   return smooth;
 }
 
+async function verifySourceWidth(positive) {
+  const before = await f.inspect('source-width-before-native', positive);
+  const [ruled, smooth] = before;
+  const rail = (body, t) => body.rails.map(edge => edge.samples[t].point);
+  const pairs = points => points.flatMap((a, i) => points.slice(i + 1).map(b => Math.hypot(...a.map((x, k) => x - b[k])))).sort((a, b) => a - b);
+  const stations = [z0, z0 + 20, z0 + 40];
+  const expected = [8, 8, 12, 12, Math.hypot(8, 12), Math.hypot(8, 12)];
+  const widths = stations.map((z, i) => {
+    const ruledPoints = ruled.vertices.filter(point => Math.abs(point[2] - z) < 1e-8);
+    const smoothPoints = rail(smooth, i * 180);
+    assert.equal(ruledPoints.length, 4);
+    assert.equal(smoothPoints.length, 4);
+    for (const [result, tolerance] of [[pairs(ruledPoints), 1e-8], [pairs(smoothPoints), 0.032]]) {
+      assert.equal(result.length, expected.length);
+      assert.ok(result.every((value, j) => Math.abs(value - expected[j]) < tolerance), JSON.stringify({ z, result, tolerance }));
+    }
+    return { z, ruled: pairs(ruledPoints)[2], smooth: pairs(smoothPoints)[2] };
+  });
+  let edited = positive;
+  for (const [index, width] of [[0, 14], [1, 16]]) {
+    const parameter = widthParameters[index];
+    edited = (await f.setParameter(parameter, min[0] + width, 'source-width-' + width)).doc;
+    const sketch = edited.nodes[index];
+    assert.equal(edited.parameters[sketch.max[0].parameter] - sketch.min[0], width);
+    assert.deepEqual(edited.nodes, positive.nodes);
+    assert.deepEqual(await f.inspect('source-width-' + width + '-native', edited), before);
+    const bodies = (await f.bodies()).bodies;
+    assert.deepEqual(bodies.map(body => body.key), before.map(body => body.key));
+    assert.ok(bodies.every((body, i) => Math.abs(body.volume - before[i].volume) < 1e-7));
+  }
+  await f.undo();
+  assert.deepEqual((await f.doc()).parameters, { RuledXEnd: 15, SmoothXEnd: 13 });
+  await f.redo();
+  await f.same(edited);
+  const saved = await f.save('turn-source-widths-edited');
+  await f.freshOpen(saved.file, edited, 'source-widths-reopened');
+  assert.deepEqual(await f.inspect('source-widths-reopened-native', edited), before);
+  await frame();
+  const panel = await f.openParameters();
+  assert.equal(Number(await panel.getByLabel('Value of RuledXEnd').inputValue()), 15);
+  assert.equal(Number(await panel.getByLabel('Value of SmoothXEnd').inputValue()), 17);
+  await f.snapshot('source-widths-reopened-framed');
+  f.report.observations.push({ label: 'native section widths retained after both root sketch edits', widths });
+}
+
 await f.run(async () => {
   const origin = new URL(f.server.resolvedUrls.local[0]).origin;
   const openContext = f.browser.newContext.bind(f.browser);
@@ -153,6 +203,10 @@ await f.run(async () => {
   const initial = await inspect(positive, 'positive-smooth-native', 360, 40);
   await frame();
   await f.snapshot('ruled-vs-smooth-360');
+  if (sourceWidth) {
+    await verifySourceWidth(positive);
+    return;
+  }
   await f.undo();
   await f.same(ruled);
 

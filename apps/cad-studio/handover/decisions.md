@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1537: [Verify that saved Turn sections retain their authored width](notes/turn-source-width-snapshot-2026-11-21/README.md), #630. Edit both source widths in the desktop Parameters panel and verify exact saved section geometry through fresh Open.
 - D1536: [Pin an Agent drafted-wall distance edit to the reviewed revision](notes/review-pinned-drafted-wall-distance-2026-11-21/README.md), #629 and #324. Verify the local MCP refusals, signed Studio approval and exact native reopening.
 - D1535: [Retire a saved-wall gesture across native Open](notes/saved-wall-open-retirement-2026-11-21/README.md), #629. Verify that a late release cannot change an exact same-ID replacement, and the next edit saves and reopens in Studio.
 - D1534: [Move preview panel rendering and annotation status into PreviewSection](notes/studio-preview-section-extraction-2026-11-21/README.md). Verify 25 actual before/after desktop checkpoints and byte-identical native files.
