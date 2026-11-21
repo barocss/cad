@@ -5,6 +5,7 @@ import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
 const triangular = process.argv.includes('--triangle');
+const circularSegment = process.argv.includes('--line-arc');
 const polygon = ['pentagon', 'hexagon', 'trapezoid', 'skew-quadrilateral']
   .find(name => process.argv.includes('--' + name));
 const polygonProfiles = {
@@ -14,14 +15,19 @@ const polygonProfiles = {
   'skew-quadrilateral': { corners: [[-7, -4], [2, -3], [0, -1], [-5, 1]], volume: 1225.0714914738019 },
 };
 const convex = polygon && polygonProfiles[polygon];
-const tilted = triangular || !!convex;
+const tilted = triangular || circularSegment || !!convex;
 const screw = tilted || process.argv.includes('--screw');
 const smooth = screw || process.argv.includes('--smooth');
 const command = screw ? 'smooth-screw' : smooth ? 'smooth-turn' : 'ruled-turn';
 const commandLabel = screw ? 'Smooth Screw' : smooth ? 'Smooth Turn' : 'Ruled Turn';
-const profile = polygon ?? (triangular ? 'triangle' : 'rectangle');
-const screwInput = { axisX: tilted ? 10 : -1, axisY: tilted ? -3 : 1, pitch: 40 };
-const insideAxis = tilted ? { axisX: 7, axisY: -5 } : { axisX: 3, axisY: 4 };
+const profile = circularSegment ? 'circular segment' : polygon ?? (triangular ? 'triangle' : 'rectangle');
+const screwInput = { axisX: circularSegment ? 0 : tilted ? 10 : -1, axisY: circularSegment ? 0 : tilted ? -3 : 1, pitch: 40 };
+const insideAxis = circularSegment ? { axisX: 14, axisY: 0 } : tilted ? { axisX: 7, axisY: -5 } : { axisX: 3, axisY: 4 };
+const arcY = 3 * Math.sin(Math.PI / 3);
+const segment = { profile: 'loop', segments: [
+  { kind: 'line', start: [13.5, arcY] },
+  { kind: 'arc', start: [13.5, -arcY], center: [12, 0], direction: 'ccw' },
+] };
 const pins = [
   'packages/barocss-cad/src/internal/triangular-screw-axis.ts', 'packages/barocss-cad-model/src/engine/evaluate.ts',
   'packages/barocss-cad/src/internal/convex-polygon-screw-axis.ts', 'packages/barocss-cad-model/src/engine/screwDisplay.ts',
@@ -31,6 +37,8 @@ const pins = [
   'apps/cad-studio/server/cadMcp.ts', 'apps/cad-studio/src/App.tsx',
   'packages/barocss-cad-model/src/chat/part/features.ts', 'packages/barocss-cad-model/src/chat/part/proposals.ts',
   'packages/barocss-cad-model/src/chat/toolset.ts', 'packages/barocss-cad-model/src/app/ruledTurnCommand.ts',
+  ...(circularSegment ? ['packages/barocss-cad-model/src/app/lineArcScrew.ts',
+    'packages/barocss-cad/src/features/loft.ts', 'packages/barocss-cad/src/features/loft-rectangular-turn.ts'] : []),
 ];
 const f = await createFlow({
   name: `${command}-agent`,
@@ -62,11 +70,11 @@ console.log(JSON.stringify({ count: outputs.length, key, sha: digestOf(brep), ch
 });
 
 const plane = {
-  origin: tilted ? [11, -17, 23] : [11, -17, 3],
+  origin: circularSegment ? [21, -19.4, 24.8] : tilted ? [11, -17, 23] : [11, -17, 3],
   normal: tilted ? [0, .6, .8] : [0, 0, 1],
   xAxis: [1, 0, 0],
 };
-const target = convex ? { profile: 'polygon', points: convex.corners.map(([u, v]) => [u + 10, v - 3]) }
+const target = circularSegment ? segment : convex ? { profile: 'polygon', points: convex.corners.map(([u, v]) => [u + 10, v - 3]) }
   : triangular ? { profile: 'polygon', points: [[3, -7], [12, -6], [6, -2]] }
   : { profile: 'rectangle', min: [1, 2], max: [13, 10] };
 const source = {
@@ -86,7 +94,7 @@ function cornerAt([x, y], index) {
 }
 
 function checkSmoothRails(result) {
-  const corners = convex?.corners ?? (triangular ? [[-7, -4], [2, -3], [-4, 1]]
+  const corners = circularSegment ? [[13.5, arcY], [13.5, -arcY], [15, 0]] : convex?.corners ?? (triangular ? [[-7, -4], [2, -3], [-4, 1]]
     : screw ? [[2, 1], [14, 1], [14, 9], [2, 9]] : [[-6, -4], [6, -4], [6, 4], [-6, 4]]);
   assert.equal(result.edges.length, corners.length * 3);
   assert.equal(result.rails.length, corners.length);
@@ -121,10 +129,11 @@ async function native(label, doc) {
   assert.equal(loft.smooth, smooth ? true : undefined);
   const result = await f.inspect(label, doc);
   assert.equal(result.count, 1);
-  const faceCount = convex ? convex.corners.length + 2 : triangular ? 5 : smooth ? 6 : 22;
+  const faceCount = circularSegment ? 5 : convex ? convex.corners.length + 2 : triangular ? 5 : smooth ? 6 : 22;
   assert.deepEqual([result.check.valid, result.check.counts.bodies, result.check.counts.faces, result.kind, result.closed],
     [true, 1, faceCount, 'solid', true]);
-  const expectedVolume = convex?.volume ?? (triangular ? 1050.0612784061159 : smooth ? 4800.280129856528 : 3200);
+  const expectedVolume = circularSegment ? 276.39931201638126
+    : convex?.volume ?? (triangular ? 1050.0612784061159 : smooth ? 4800.280129856528 : 3200);
   assert.ok(Math.abs(result.volume - expectedVolume) < 1e-7);
   const rulings = result.edges.filter(([a, , b]) => Math.abs(a[2] - b[2]) > 1e-8);
   if (smooth) {
@@ -183,6 +192,7 @@ await f.run(async () => {
     assert.match(description.selection, /values.sketch and expectedRevision/);
     if (triangular) assert.match(description.selection, /straight triangle/);
     if (convex) assert.match(description.selection, /convex polygon with 4 to 64 straight sides/);
+    if (circularSegment) assert.match(description.selection, /circular segment made from one line and one circular arc.*outside the full supporting disc/);
     const report = await call('query', { action: 'summary' });
     assert.deepEqual(report.features.map(feature => feature.id), ['n0', 'n1']);
     const { revision } = await call('query', { action: 'rebuild' });
@@ -195,7 +205,7 @@ await f.run(async () => {
     assert.match((await call('proposals', propose({ ...args, expectedRevision: revision, values: { ...args.values, sketch: 'n9' } }), true)).error, /current sketch/i);
     if (screw) assert.match((await call('proposals', propose({ ...args, expectedRevision: revision,
       values: { ...args.values, ...insideAxis } }), true)).error,
-      convex ? /axis outside it with clearance/i : new RegExp(`axis outside the ${profile}`, 'i'));
+      circularSegment ? /Screw axis.*outside.*disc/i : convex ? /axis outside it with clearance/i : new RegExp(`axis outside the ${profile}`, 'i'));
     assert.equal(await readFile(file, 'utf8'), original);
     const proposal = await call('proposals', propose({ ...args, expectedRevision: revision }));
     assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);
@@ -208,7 +218,7 @@ await f.run(async () => {
   await f.freshOpen(file, pending, 'pending-native-open');
   await button('Chat').first().click();
   if (tilted) {
-    f.phase = 'change the document before approving the pinned triangle proposal';
+    f.phase = `change the document before approving the pinned ${profile} proposal`;
     await f.page.evaluate(() => document.activeElement?.blur());
     await f.command('Box');
     const box = f.page.getByRole('dialog', { name: 'Box', exact: true });
@@ -236,7 +246,20 @@ await f.run(async () => {
   await f.page.waitForTimeout(200);
   await f.same(pending);
   let previewDetail;
-  if (tilted) {
+  if (circularSegment) {
+    await f.page.waitForFunction(() => window.__studioProposalOverlay?.()?.method === 'boolean');
+    const delta = await card().locator('[aria-label="Volume change"]').innerText();
+    const volume = /^\+([\d.]+) mm³$/.exec(delta);
+    assert.ok(volume && Math.abs(Number(volume[1]) - 276.39931201638126) < 0.05, delta);
+    await button('Show before', card()).click();
+    await button('Show after', card()).waitFor();
+    await f.same(pending);
+    await f.snapshot('circular-screw-proposal-before');
+    await button('Show after', card()).click();
+    await button('Show before', card()).waitFor();
+    await f.same(pending);
+    f.report.observations.push({ label: 'circular proposal volume', delta });
+  } else if (tilted) {
     await f.page.waitForFunction(() => window.__studioLoftDisplay?.(0)?.kind === 'smooth-turn');
     previewDetail = await f.page.evaluate(() => window.__studioLoftDisplay(0));
     await button('Show changes', card()).click();
@@ -267,7 +290,7 @@ await f.run(async () => {
   assert.equal((await native('agent-reopened-native', accepted)).sha, result.sha);
   await frame();
   await showSmoothShading();
-  if (screw) {
+  if (screw && !circularSegment) {
     const detail = await f.page.evaluate(() => window.__studioLoftDisplay?.(0));
     assert.ok(detail?.kind === 'smooth-turn' && detail.triangles > detail.baseTriangles);
     if (tilted) assert.deepEqual(detail, previewDetail);

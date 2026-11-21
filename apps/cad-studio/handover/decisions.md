@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1584: [Review a circular-segment Smooth Screw through the local Agent](notes/line-arc-screw-agent-2026-11-22/README.md), #630 and #322. Verify revision-pinned creation, stale refusal, explicit Studio approval, and exact geometry across direct creation and Save and Open.
 - D1583: [Author a circular-segment Smooth Screw from one sketch](notes/line-arc-smooth-screw-command-2026-11-22/README.md), #630. Verify external-axis refusal, both windings, angle and pitch edits, and exact reopened geometry and History values.
 - D1582: [Build a compact external-axis Screw from a line and circular arc](notes/line-arc-external-screw-loft-2026-11-22/README.md), #630. Verify both signed windings, circular support and shared seam tangents, independent volume, and desktop Save and Open.
 - D1581: [Restore structured viewport display for quadrilateral Screw STEP imports](notes/quadrilateral-screw-step-display-2026-11-21/README.md), #630. Compare fixed-camera rail error and retain the same native edge selection on all four files in both renderers.

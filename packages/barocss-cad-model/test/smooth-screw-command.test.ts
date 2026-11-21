@@ -106,15 +106,28 @@ test('a circular segment Screw moves its local axis on the tilted source plane',
   assert.ok(checkBrep(brep, { strict: true }).valid);
 });
 
-test('single circular segment Screw creation and special History edits stay scoped to Studio', async () => {
+test('Agent creates a circular segment Screw only from an explicit current sketch', async () => {
+  const state = { doc: segmentSource, bodies: [] };
   const unevaluated = () => assert.fail('Out-of-scope Agent requests must not evaluate.');
-  const sourceState = { doc: segmentSource, bodies: [] };
-  const create = await dispatchTool(sourceState, 'features', {
-    action: 'command', command: 'smooth-screw', values: { ...segmentInput, sketch: 'n0' },
-    expectedRevision: revisionOf(segmentSource),
-  }, unevaluated);
-  assert.ok(create.isError && !create.changed, create.content);
-  assert.equal(create.state, sourceState);
+  const revision = revisionOf(segmentSource);
+  const request = { action: 'command', command: 'smooth-screw', values: { ...segmentInput, sketch: 'n0' } };
+  for (const args of [request,
+    { ...request, expectedRevision: '0'.repeat(16) },
+    { ...request, expectedRevision: revision, values: { ...request.values, sketch: 'n9' } },
+    { ...request, expectedRevision: revision, values: { ...request.values, axisX: 14 } },
+  ]) {
+    const rejected = await dispatchTool(state, 'features', args, unevaluated);
+    assert.ok(rejected.isError && !rejected.changed, rejected.content);
+    assert.equal(rejected.state, state);
+  }
+  const result = await dispatchTool(state, 'features', { ...request, expectedRevision: revision },
+    async doc => evaluateDoc(doc, 1));
+  assert.ok(result.changed && !result.isError, result.content);
+  assert.deepEqual(result.state.doc, command.build!(segmentCtx, segmentInput));
+});
+
+test('circular segment Screw special History edits stay scoped to Studio', async () => {
+  const unevaluated = () => assert.fail('Out-of-scope Agent requests must not evaluate.');
   const doc = command.build!(segmentCtx, segmentInput), index = doc.nodes.length - 1;
   const state = { doc, bodies: [] };
   const discovered = await dispatchTool(state, 'features', { action: 'edit', index }, unevaluated);
