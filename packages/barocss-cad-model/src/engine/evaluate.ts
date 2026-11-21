@@ -17,7 +17,8 @@ import { cylinderDisplayMesh } from './cylinderDisplay';
 import { arcSweepDisplayMesh } from './arcSweepDisplay';
 import { arcSweepMixedDisplayMesh, mixedSweepFilletExterior } from './arcSweepMixedDisplay';
 import { bandRailDisplayMesh } from './bandRailDisplay';
-import { loftDisplayMesh } from './loftDisplay';
+import { loftDisplayMesh, smoothTurnDisplayMesh } from './loftDisplay';
+import { hasSmoothTurnSections } from '../app/smoothLoftTurn';
 import { lumpTouches } from './lumps';
 import { friendlyCause, type FriendlyError } from './errors';
 import { bodyKeyOf, partSnapshot } from './part';
@@ -300,6 +301,16 @@ function partResult(doc: StudioDoc, snapshot: CadPartSnapshot, revision: number,
   const faceTable = faceTableFrom(snapshot.outputs); rememberFaceTable(doc, faceTable);
   return { ok: true, revision, bodies, wallTime: (performance.now() - t0) / 1000, faceTable, shopRows };
 }
+function refineSmoothTurns(bodies: BodyResult[], snapshot: CadPartSnapshot, doc: StudioDoc): void {
+  for (const [i, body] of bodies.entries()) {
+    const ref = body.ref;
+    if (!ref) continue;
+    const node = doc.nodes[ref.node];
+    if (node?.kind !== 'loft' || !hasSmoothTurnSections(doc.nodes, ref.node)) continue;
+    const mesh = smoothTurnDisplayMesh(body.mesh, snapshot.outputs[i].brep, node.sections.length);
+    if (mesh !== body.mesh) bodies[i] = { ...body, mesh };
+  }
+}
 function refineLoftBody(bodies: BodyResult[], snapshot: CadPartSnapshot, doc: StudioDoc): void {
   if (bodies.length !== 1 || snapshot.outputs.length !== 1) return;
   const body = bodies[0], node = body.ref && doc.nodes[body.ref.node];
@@ -352,6 +363,7 @@ export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refin
     }
     if (refineDisplay && quality === 8) {
       refineLoftBody(result.bodies, snapshot, doc);
+      refineSmoothTurns(result.bodies, snapshot, doc);
       const band = result.bodies.findIndex(body => body.band?.closed && body.band.exact && body.band.pairs === 2);
       const body = result.bodies[band];
       if (body && snapshot.outputs[band]) {

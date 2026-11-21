@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1540: [Refine the displayed faces and edges of a Smooth Turn](notes/smooth-turn-display-density-2026-11-21/README.md), #630. Verify sampled outline reduction, canonical native ownership and actual Studio selection on both renderers.
 - D1539: [Isolate the raster shadow marks on the widened Smooth Turn](notes/smooth-turn-raster-shadow-2026-11-21/README.md), #630. Keep the same camera and solid and test Edges and the first sun’s Shadow independently in WebGPU Render.
 - D1538: [Edit all saved Smooth Turn section widths from History](notes/smooth-turn-width-history-2026-11-21/README.md), #630. Verify the 12 to 16 mm edit, signed rotation, exact topology and native opening.
 - D1537: [Verify that saved Turn sections retain their authored width](notes/turn-source-width-snapshot-2026-11-21/README.md), #630. Edit both source widths in the desktop Parameters panel and verify exact saved section geometry through fresh Open.

@@ -60,7 +60,7 @@ test('two-guide Loft display retains native mass, canonical pick indices and the
     const original = evaluateDoc(doc, 1), refined = evaluateDoc(doc, 2, 8, true);
     assert.ok(original.ok && refined.ok);
     const [canonical] = original.bodies, [body] = refined.bodies, detail = body.mesh.loftDetail;
-    assert.ok(detail);
+    assert.ok(detail && 'error' in detail);
     assert.equal(body.mesh.positions, canonical.mesh.positions);
     assert.equal(body.mesh.faces, canonical.mesh.faces);
     assert.equal(body.mesh.edges, canonical.mesh.edges);

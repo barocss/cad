@@ -6,8 +6,9 @@ import { editFields } from '../src/app/editFields';
 import { smoothTurnAngleKey, smoothTurnWidthBounds, smoothTurnWidthKey } from '../src/app/smoothLoftTurn';
 import { dispatchTool } from '../src/chat/tools';
 import { emptyDoc, withNode, type LoopSegment, type StudioDoc } from '../src/engine/doc';
-import { evaluatePart, partBreps } from '../src/engine/evaluate';
+import { evaluateDoc, evaluatePart, partBreps, placeBody, shareMeshes, type BodyResult } from '../src/engine/evaluate';
 import { revisionOf } from '../src/util/revision';
+import { MeshReceiver, MeshSender } from '../src/engine/meshWire';
 
 const source = withNode(emptyDoc(), {
   kind: 'sketch', profile: 'rectangle', min: [1, 2], max: [13, 10],
@@ -125,6 +126,42 @@ test('a Smooth Turn width edit resizes the entire rectangular section around its
     assert.equal(widthField(withNode(doc, { kind: 'extrude', sketch: 2, height: 2 }), index), undefined);
   }
   assert.equal(widthField(commandById('ruled-turn')!.build!(context, { angle: 360, height: 70 })), undefined);
+});
+
+test('only the compact Smooth Turn gets a denser display packet with canonical picking in a multi-body part', () => {
+  shareMeshes(true);
+  try {
+    for (const [first, second] of [['smooth-turn', 'ruled-turn'], ['ruled-turn', 'smooth-turn']]) {
+      const built = commandById(first)!.build!(context, { angle: 360, height: 70 });
+      const sketch = built.nodes.length;
+      const next = withNode(built, { kind: 'sketch', profile: 'rectangle', min: [50, 2], max: [62, 10] });
+      const doc = commandById(second)!.build!({ ...context, doc: next, selection: { ...context.selection, sketches: [sketch] } },
+        { angle: -450, height: 50 });
+      const base = evaluateDoc(doc, 1), refined = evaluateDoc(doc, 2, 8, true);
+      assert.ok(base.ok && refined.ok);
+      for (const [b, original] of base.bodies.entries()) {
+        const actual: BodyResult = refined.bodies[b];
+        const expectedTurn = [first, second][b] === 'smooth-turn';
+        const { loftDetail, ...canonical } = actual.mesh;
+        assert.deepEqual({ ...actual, mesh: canonical }, original);
+        if (!expectedTurn) {
+          assert.equal(loftDetail, undefined);
+          continue;
+        }
+        assert.ok(loftDetail && 'kind' in loftDetail && loftDetail.kind === 'smooth-turn');
+        assert.ok(loftDetail.indices.length > original.mesh.indices.length);
+        assert.deepEqual([...new Set(loftDetail.edgeOfSegment)].sort((a, b) => a - b), canonical.edges.map(edge => edge.index));
+        assert.deepEqual([...new Set(loftDetail.faceOfVertex)].sort((a, b) => a - b), canonical.faces.map(face => face.index));
+        assert.equal(placeBody(actual, [1, 0, 0, 0, 1, 0, 0, 0, 1], [1, 2, 3]).mesh.loftDetail, undefined);
+      }
+      const sender = new MeshSender(), receiver = new MeshReceiver();
+      const packed = sender.pack('evaluate', refined);
+      const decoded = receiver.unpack('evaluate', structuredClone(packed.result, { transfer: packed.transfer }));
+      assert.deepEqual(decoded, refined);
+    }
+  } finally {
+    shareMeshes(false);
+  }
 });
 
 test('Agent Smooth Turn angle edits require an exact pin and refuse out-of-range and combined inputs', async () => {

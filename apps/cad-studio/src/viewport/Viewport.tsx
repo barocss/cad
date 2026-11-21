@@ -351,7 +351,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
   const printCamera = useRef<{ original: RenderCamera; summary: number | null } | null>(null);
   const frame = useRef(0);
   const rendererBodies = useRef<BodyResult[]>(NO_BODIES);
-  const uploadedBodies = useRef<{ renderer: ViewRenderer; source: BodyResult[]; bodies: BodyResult[]; index: number; tier: number } | null>(null);
+  const uploadedBodies = useRef<{ renderer: ViewRenderer; source: BodyResult[]; bodies: BodyResult[]; index: number; tier: number; showSmoothTurns: boolean } | null>(null);
   const uploadedDirect = useRef<{ renderer: ViewRenderer; items: DirectDisplay[]; selected: string[] } | null>(null);
   const selectedBandRail = useRef<{ hit: EdgeRef; mesh: BodyResult['mesh']; selection: Props['selection'] } | null>(null);
   const rendererInstances = useRef<{ renderer: ViewRenderer; instances: NonNullable<Props['instances']> } | null>(null);
@@ -445,11 +445,14 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
   const syncDisplayedBodies = (r: ViewRenderer, p = propsRef.current) => {
     const source = p.bodies, view = canvas.current, cam = camera.current;
     let tier = -1, index = -1, packet: CylinderDisplayTier | BoundedDisplayMesh | undefined;
-    const refined = source.length === 1 ? source[0].mesh.loftDetail ?? source[0].mesh.arcSweepDetail : undefined;
+    const loft = source.length === 1 ? source[0].mesh.loftDetail : undefined;
+    const refined = source.length === 1 ? (loft && 'error' in loft ? loft : source[0].mesh.arcSweepDetail) : undefined;
     const exterior = source.length === 1 && !refined && !!source[0].mesh.arcSweepExteriorDetail;
     const cylinder = source.length === 1 ? source[0].mesh.cylinderDetail : undefined;
-    if ((refined || exterior) && !p.render && !p.analysis && !p.scalarMaps?.length && !p.mould && !p.proposal && !p.sketch && !p.cage && !p.tool
-      && !p.clip && !p.ghost.size && !p.instances?.length && !p.offsets?.size && !p.transforms?.size && !p.printActive && !p.camActive) {
+    const ordinarySurfaceView = !p.render && !p.analysis && !p.scalarMaps?.length && !p.mould && !p.proposal && !p.sketch && !p.cage && !p.tool
+      && !p.clip && !p.ghost.size && !p.instances?.length && !p.offsets?.size && !p.transforms?.size && !p.printActive && !p.camActive;
+    const showSmoothTurns = ordinarySurfaceView && source.some(({ mesh }) => mesh.loftDetail && 'kind' in mesh.loftDetail);
+    if ((refined || exterior) && ordinarySurfaceView) {
       index = 0;
       tier = 0;
       packet = refined;
@@ -472,11 +475,13 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       }
     }
     const current = uploadedBodies.current;
-    if (current?.renderer === r && current.source === source && current.index === index && current.tier === tier) {
+    if (current?.renderer === r && current.source === source && current.index === index && current.tier === tier && current.showSmoothTurns === showSmoothTurns) {
       if (selectedBandRail.current && !readSelectedBandRail()) selectedBandRail.current = null;
       return;
     }
-    const bodies = index < 0 ? source : source.map((body, i) => {
+    const bodies = index < 0 && !showSmoothTurns ? source : source.map((body, i) => {
+      const turn = body.mesh.loftDetail;
+      if (showSmoothTurns && turn && 'kind' in turn) return { ...body, mesh: { ...body.mesh, ...turn } };
       if (i !== index) return body;
       const mesh = packet ? { ...body.mesh, ...packet } : composeArcSweepExterior(body.mesh);
       return mesh === body.mesh ? body : { ...body, mesh };
@@ -486,7 +491,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       && current.source[previousEdge.body]?.mesh.bandDetail?.rails[previousEdge.edge];
     r.setBodies(bodies);
     rendererBodies.current = source;
-    uploadedBodies.current = { renderer: r, source, bodies, index, tier };
+    uploadedBodies.current = { renderer: r, source, bodies, index, tier, showSmoothTurns };
     if (selectedBandRail.current && !readSelectedBandRail()) selectedBandRail.current = null;
     if (priorRail && !bandRail(hover.current.edge)) hover.current = { ...hover.current, edge: null };
     r.setState(viewState());
@@ -579,7 +584,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
         const uploaded = uploadedBodies.current, source = propsRef.current.bodies;
         // The surface packets retain canonical selection indices. The sheet-band packet has its own rails.
         const mesh = source[0]?.mesh;
-        if ((mesh?.loftDetail || mesh?.arcSweepDetail || mesh?.arcSweepExteriorDetail) && uploaded?.source === source) return uploaded.bodies;
+        if (uploaded?.source === source && (uploaded.showSmoothTurns || mesh?.loftDetail || mesh?.arcSweepDetail || mesh?.arcSweepExteriorDetail)) return uploaded.bodies;
         return source;
       },
     },
@@ -787,10 +792,12 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       const mesh = uploadedBodies.current?.bodies[0]?.mesh;
       return mesh ? Array.from(mesh.positions) : null;
     };
-    w.__studioLoftDisplay = () => {
-      const upload = uploadedBodies.current, original = upload?.source[0]?.mesh, current = upload?.bodies[0]?.mesh;
-      if (!original?.loftDetail || current?.positions !== original.loftDetail.positions) return null;
-      return { error: original.loftDetail.error, triangles: current.indices.length / 3, baseTriangles: original.indices.length / 3 };
+    w.__studioLoftDisplay = (index = 0) => {
+      const upload = uploadedBodies.current, original = upload?.source[index]?.mesh, current = upload?.bodies[index]?.mesh;
+      const detail = original?.loftDetail;
+      if (!detail || !original || current?.positions !== detail.positions) return null;
+      return { ...('kind' in detail ? { kind: detail.kind } : { error: detail.error }),
+        triangles: current.indices.length / 3, baseTriangles: original.indices.length / 3 };
     };
     w.__studioSurfacePoint = (point: Vec3) => {
       const q = screen(point);

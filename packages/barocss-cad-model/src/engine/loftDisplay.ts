@@ -1,6 +1,6 @@
 import type { Brep } from '@barocss/cad';
 import { tessellateTwoGuideLoftDisplay } from '@barocss/cad/internal/two-guide-loft-display';
-import type { DisplayMesh, LoftDisplayMesh, Vec3 } from './mesh';
+import { bodyMesh, type DisplayMesh, type BoundedDisplayMesh, type SmoothTurnDisplayMesh, type Vec3 } from './mesh';
 
 const cache = new WeakMap<DisplayMesh, DisplayMesh>();
 
@@ -14,7 +14,7 @@ export function loftDisplayMesh(base: DisplayMesh, brep: Brep): DisplayMesh {
   return result;
 }
 
-function buildDetail(base: DisplayMesh, brep: Brep): LoftDisplayMesh | undefined {
+function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefined {
   const refined = tessellateTwoGuideLoftDisplay(brep);
   if (!refined) return;
   const { mesh, error } = refined, { positions, indices } = mesh;
@@ -44,4 +44,43 @@ function buildDetail(base: DisplayMesh, brep: Brep): LoftDisplayMesh | undefined
   }
   return { positions, indices, normals: new Float32Array(mesh.normals), faceOfVertex, edgeLines: new Float64Array(lines),
     edgeOfSegment: new Float32Array(segmentOwners), bounds: { min, max }, error };
+}
+
+const turnCache = new WeakMap<DisplayMesh, DisplayMesh>();
+
+export function smoothTurnDisplayMesh(base: DisplayMesh, brep: Brep, sections: number): DisplayMesh {
+  const cached = turnCache.get(base);
+  if (cached) return cached;
+  const detail = buildTurnDetail(base, brep, sections);
+  const result = detail ? { ...base, loftDetail: detail } : base;
+  turnCache.set(base, result);
+  return result;
+}
+
+function buildTurnDetail(base: DisplayMesh, brep: Brep, sections: number): SmoothTurnDisplayMesh | undefined {
+  const rails = brep.edges.filter(edge => /^c[0-3]$/.test(edge.id));
+  if (brep.source.family !== 'loft' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
+    || brep.shells.length !== 1 || !brep.shells[0].closed || brep.faces.length !== 6 || brep.edges.length !== 12
+    || rails.length !== 4 || !rails.every(({ curve }) => curve.degree === 3 && curve.controlPoints.length === sections
+      && curve.weights.every(weight => weight === 1)
+      && curve.knots.length === rails[0].curve.knots.length
+      && curve.knots.every((knot, i) => knot === rails[0].curve.knots[i]))) return;
+  let refined: DisplayMesh;
+  try {
+    refined = bodyMesh(brep, 0, 24);
+  } catch {
+    // The optional viewport samples must not invalidate an accepted model.
+    return;
+  }
+  if (refined.indices.length <= base.indices.length || refined.faces.length !== base.faces.length
+    || refined.edges.length !== base.edges.length) return;
+  if (!refined.faces.every((f, i) => f.id === base.faces[i].id && f.name === base.faces[i].name && f.index === i)
+    || !refined.edges.every((e, i) => {
+      const owner = base.edges[i];
+      return e.index === i && !!e.nativeJoint && e.nativeJoint.edgeId === owner.nativeJoint?.edgeId
+        && e.faces.every((f, j) => f === owner.faces[j])
+        && e.a.every((v, k) => v === owner.a[k]) && e.b.every((v, k) => v === owner.b[k]);
+    })) return;
+  const { positions, normals, faceOfVertex, indices, edgeLines, edgeOfSegment, bounds } = refined;
+  return { kind: 'smooth-turn', positions, normals, faceOfVertex, indices, edgeLines, edgeOfSegment, bounds };
 }

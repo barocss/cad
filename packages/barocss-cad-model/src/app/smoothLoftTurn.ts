@@ -37,10 +37,10 @@ function copyGeometry(copy: ModelNode | undefined): { points: Point[]; plane: st
 const diagonal = (points: Point[]): Point => [points[2][0] - points[0][0], points[2][1] - points[0][1]];
 const phase = ([x, y]: Point, [u, v]: Point) => Math.atan2(x * v - y * u, x * u + y * v);
 
-/** Recognize a saved generated turn by both its owned copies and their whole ordered geometry. */
-function savedTurn(nodes: readonly ModelNode[], index: number) {
+/** Recognize a generated turn from its section copies and their whole ordered geometry. */
+function turnSections(nodes: readonly ModelNode[], index: number) {
   const loft = nodes[index];
-  if (index !== nodes.length - 1 || loft?.kind !== 'loft' || !loft.smooth || loft.suppressed
+  if (loft?.kind !== 'loft' || !loft.smooth || loft.suppressed
     || loft.guide || loft.guides || loft.from?.length !== 1 || loft.sections.length < 7 || loft.sections.length > 16) return;
   const start = index - loft.sections.length, source = nodes[loft.from[0]], last = loft.sections.length - 1;
   const height = loft.sections[last].z;
@@ -76,6 +76,14 @@ function savedTurn(nodes: readonly ModelNode[], index: number) {
     return points.some(([x, y], j) => Math.hypot(x - expected[j][0], y - expected[j][1]) > tolerance);
   })) return;
   return { start, last, first, angle, radians, limit };
+}
+
+export function hasSmoothTurnSections(nodes: readonly ModelNode[], index: number): boolean {
+  return !!turnSections(nodes, index);
+}
+
+function savedTurn(nodes: readonly ModelNode[], index: number) {
+  if (index === nodes.length - 1) return turnSections(nodes, index);
 }
 
 function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnType<typeof savedTurn>>, first: Point[], rotation: (fraction: number) => number) {
