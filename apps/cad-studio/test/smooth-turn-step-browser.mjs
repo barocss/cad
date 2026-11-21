@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 const file = process.argv[3], doc = JSON.parse(await readFile(file));
 const triangular = process.argv.includes("--triangle");
-const faceCounts = triangular ? [5] : [18, 6];
+const screw = process.argv.includes('--screw-positive') || process.argv.includes('--screw-negative');
+assert.ok(!triangular || !screw);
+const faceCounts = screw ? [6] : triangular ? [5] : [18, 6];
 const f = await createFlow({
   name: 'smooth-turn-step', output: process.argv[2], envFrozen: 'TURN_STEP_FROZEN',
   qualification: 'Inspect STEP written by actual Studio from the approved compact Smooth Turn.',
@@ -53,8 +55,9 @@ await f.run(async () => {
   await b('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   if (await b('AO').getAttribute('aria-pressed') === 'true') await b('AO').click();
-  const nativeDisplay = triangular ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
+  const nativeDisplay = triangular || screw ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
   if (triangular) assert.deepEqual(nativeDisplay, { kind: 'smooth-turn', triangles: 690, baseTriangles: 224 });
+  if (screw) assert.ok(nativeDisplay?.kind === 'smooth-turn' && nativeDisplay.triangles > nativeDisplay.baseTriangles);
   f.phase = 'read STEP preparation and loss disclosure in Studio';
   await b('Export STEP').click();
   const panel = f.page.getByLabel('STEP export', { exact: true });
@@ -74,6 +77,7 @@ await f.run(async () => {
   await f.same(doc);
   const oracle = ['-BI', join(f.app, 'test/smooth-turn-step-oracle.py'), artifact];
   if (triangular) oracle.push('--triangle');
+  if (screw) oracle.push(process.argv.includes('--screw-positive') ? '--screw-positive' : '--screw-negative');
   const graph = JSON.parse(execFileSync('python3', oracle, { encoding: 'utf8' }));
   const before = await f.inspect('approved-native', doc);
   assert.deepEqual(before.map(body => body.check.counts.faces), faceCounts);
@@ -103,8 +107,10 @@ await f.run(async () => {
   await b('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   if (await b('AO').getAttribute('aria-pressed') === 'true') await b('AO').click();
-  const reopenedDisplay = triangular ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
+  const reopenedDisplay = triangular || screw ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
   if (triangular) assert.ok(reopenedDisplay?.kind === 'smooth-turn' && reopenedDisplay.triangles > reopenedDisplay.baseTriangles);
-  f.report.observations.push({ imported, noNativeFeatureHistory: true, nativeDisplay, reopenedDisplay });
+  const shownVertices = screw ? await f.page.evaluate(() => window.__studioSweepCylinderMesh?.()?.length / 3) : undefined;
+  if (screw) assert.ok(shownVertices > 0);
+  f.report.observations.push({ imported, noNativeFeatureHistory: true, nativeDisplay, reopenedDisplay, shownVertices });
   await f.snapshot('approved-turn-step-reopened');
 });

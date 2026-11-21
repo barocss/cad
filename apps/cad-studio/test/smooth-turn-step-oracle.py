@@ -1,4 +1,4 @@
-"""Independent AP214 graph and cubic-spline section reads for the bounded Smooth Turn fixtures."""
+"""Independent AP214 graph and cubic-spline section reads for the bounded Smooth Turn and Screw fixtures."""
 import bisect
 import collections
 import importlib.util
@@ -52,8 +52,13 @@ def cubic(poles, knots, t):
     return points[3]
 
 
-def verify(source, triangular=False):
-    if triangular:
+def verify(source, triangular=False, screw=None):
+    if screw:
+        turn, expected_counts = 'n18', {'n18': (6, 12, 8)}
+        corners = [(2, 1), (14, 1), (14, 9), (2, 9)]
+        stations, angle, height, cohort_volume = 16, screw, 56, 0
+        origin, axis_v, axis_w = (10, -16, 3), (0, 1, 0), (0, 0, 1)
+    elif triangular:
         turn, expected_counts = 'n17', {'n17': (5, 9, 6)}
         corners = [(-4, -2), (5, -1), (-1, 3)]
         stations, angle, height, cohort_volume = 16, -450, 50, 0
@@ -143,7 +148,7 @@ def verify(source, triangular=False):
         assert all(sorted(orientation) == [('enum', '.F.'), ('enum', '.T.')] for orientation in uses.values())
 
     assert len(rails) == len(supports) == sides
-    curves, max_error = [], 0
+    curves, max_error, signed_turns = [], 0, []
     for x, y in corners:
         start = station_point(x, y, 0)
         a, b, args = next(rail for rail in rails.values() if distance(rail[0], start) < 1e-8)
@@ -164,6 +169,17 @@ def verify(source, triangular=False):
             t = station / (stations - 1)
             expected = station_point(x, y, t)
             max_error = max(max_error, distance(cubic(poles, knots, t), expected))
+        if screw:
+            # Recover the sign and total turn from the actual serialized curve.
+            # Endpoints alone coincide in the sketch plane after a revolution.
+            samples = [cubic(poles, knots, i / 240) for i in range(241)]
+            xy = [(p[0] - origin[0], projected(p, axis_v)) for p in samples]
+            angles = [math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1])
+                      for a, b in zip(xy, xy[1:])]
+            assert all(angle * step > 0 for step in angles)
+            total = math.degrees(sum(angles))
+            assert abs(total - angle) < 1e-8
+            signed_turns.append(total)
         curves.append((poles, knots, pole_ids, values))
     assert max_error < 1e-8
     for i, surface in supports.items():
@@ -195,8 +211,11 @@ def verify(source, triangular=False):
             stored, = numbers(item[1])
             assert abs(stored - (volume + cohort_volume)) < 1e-7
     return {'schema': schema, 'solids': expected_counts, 'unit': 'mm', 'cubicRails': len(rails),
-            'stationMaxErrorMM': max_error, 'smoothVolumeMM3': volume}
+            'stationMaxErrorMM': max_error, 'smoothVolumeMM3': volume, 'signedWindingDegrees': signed_turns}
 
 
 if __name__ == '__main__':
-    print(json.dumps(verify(Path(sys.argv[1]).read_text(encoding='utf-8'), '--triangle' in sys.argv[2:])))
+    options = sys.argv[2:]
+    assert not ('--screw-positive' in options and '--screw-negative' in options)
+    screw = 360 if '--screw-positive' in options else -360 if '--screw-negative' in options else None
+    print(json.dumps(verify(Path(sys.argv[1]).read_text(encoding='utf-8'), '--triangle' in options, screw)))
