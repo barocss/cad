@@ -6,9 +6,10 @@ import { withMcpSession } from './mcp-browser-session.mjs';
 
 const [output, input, mode] = process.argv.slice(2);
 assert.ok(input && output && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
-assert.ok(mode === undefined || mode === '--stale' || mode === '--notice-ownership');
+assert.ok(mode === undefined || ['--stale', '--notice-ownership', '--fresh-on-r3'].includes(mode));
 const noticeOwnership = mode === '--notice-ownership';
-const staleRecovery = mode === '--stale' || noticeOwnership;
+const freshRevision = mode === '--fresh-on-r3';
+const staleRecovery = mode === '--stale' || noticeOwnership || freshRevision;
 const stockBytes = await readFile(input), stock = JSON.parse(stockBytes);
 const title = 'Restore the sharp upper cap edge', face = 'n2.face', sharp = 'n1.side0|n1.top';
 const roundedVolume = 12000 - 40 * (4 - Math.PI);
@@ -24,7 +25,8 @@ const pins = [
 const f = await createFlow({
   name: 'delete-face-agent-proposal', envFrozen: 'DELETE_FACE_PROPOSAL_FROZEN', output,
   initialFiles: pins, requiredFrozen: pins,
-  qualification: staleRecovery ? 'Block a pending exact repair after a Studio radius edit, then restore the original review with Undo.'
+  qualification: freshRevision ? 'Propose and approve a new repair on the edited R3 source while the earlier R2 proposal stays stale.'
+    : staleRecovery ? 'Block a pending exact repair after a Studio radius edit, then restore the original review with Undo.'
     : 'Propose the exact full-span fillet repair via local MCP, then preview, approve, save and reopen in Studio.',
   limits: ['One R2 upper front fillet on a 40 × 30 × 10 mm box. Local autonomy L1 and one human approval.'],
   inspectorSource: `
@@ -37,7 +39,8 @@ console.log(JSON.stringify({ brep, report: checkBrep(brep, { strict: true }), ma
 });
 const mcp = (file, label, run) => withMcpSession({ app: f.app, output, clientName: 'delete-face-proposal', autonomy: 1 }, file, label, run);
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
-const card = () => f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+const card = (id = 'P1') => f.page.getByRole('listitem', { name: 'Proposal ' + id, exact: true });
+const recheckNotice = () => f.page.getByText('P1 could not be rebased', { exact: true });
 
 async function shownVolume(key) {
   await f.page.waitForFunction(key => {
@@ -47,7 +50,7 @@ async function shownVolume(key) {
   return f.page.evaluate(() => window.__studioSection().shownVolume);
 }
 
-async function editSourceAndRecover(pending) {
+async function editSource(pending) {
   await f.openFeatureEditor(2, 'original R2 fillet');
   const radius = f.editor().getByLabel('Radius', { exact: true });
   assert.equal(await radius.inputValue(), '2');
@@ -70,8 +73,7 @@ async function editSourceAndRecover(pending) {
   await button('Rebase & preview', card()).click();
   await f.waitToast(/part changed since the requested revision/i);
   await f.same(edited);
-  const notice = f.page.getByText('P1 could not be rebased', { exact: true });
-  await notice.waitFor();
+  await recheckNotice().waitFor();
   await f.snapshot('stale-repair-refused');
 
   const saved = await f.save('stale-cap-heal-r3'), savedBytes = await readFile(saved.file);
@@ -82,6 +84,12 @@ async function editSourceAndRecover(pending) {
     assert.match(refused.error, /P1 is stale\. Its source or requirements changed/);
     assert.deepEqual(await readFile(saved.file), savedBytes);
   });
+  f.report.observations.push({ label: 'stale-source', volume, revisionStillBlocked: true, savedHash: sha256(savedBytes) });
+  return { edited, saved, savedBytes, volume, actual };
+}
+
+async function restoreSource(pending, edited) {
+  const notice = recheckNotice();
   await f.undo();
   await f.same(pending);
   await card().locator('.stale').waitFor({ state: 'hidden' });
@@ -104,7 +112,69 @@ async function editSourceAndRecover(pending) {
     return preview && !preview.disabled;
   });
   await f.snapshot('source-undo-restores-review');
-  f.report.observations.push({ label: 'stale-source', volume, revisionStillBlocked: true, savedHash: sha256(savedBytes) });
+}
+
+async function approveFreshRevision({ edited, saved, savedBytes, volume, actual }, oldRevision) {
+  f.phase = 'Make a new pinned repair from the current R3 file through local MCP';
+  const file = join(output, 'pending-r3-delete-face.bcad');
+  await copyFile(saved.file, file);
+  const newTitle = 'Restore the sharp edge of the R3 source';
+  const revision = await mcp(file, 'fresh-r3', async call => {
+    const pin = await call('query', { action: 'render', highlight: [face] });
+    assert.ok(Object.values(pin.legend).includes(face));
+    assert.notEqual(pin.revision, oldRevision);
+    const args = { action: 'command', command: 'delete-face', faces: [face], expectedRevision: pin.revision };
+    const proposal = await call('proposals', { action: 'propose', title: newTitle, ops: [{ tool: 'features', args }] });
+    assert.deepEqual([proposal.proposal, proposal.applied, proposal.change.volume], ['P2', false, Number((12000 - volume).toFixed(3))]);
+    const list = await call('proposals', { action: 'list', all: true });
+    assert.deepEqual(list.proposals.map(p => [p.id, p.status, p.stale]), [['P1', 'open', true], ['P2', 'open', false]]);
+    return pin.revision;
+  });
+  const bytes = await readFile(file), pending = JSON.parse(bytes);
+  assert.deepEqual(pending.nodes, edited.nodes);
+  assert.deepEqual(pending.proposals[0], edited.proposals[0]);
+  await f.freshOpen(file, pending, 'pending-two-proposals-opened');
+  await button('Chat').first().click();
+  await card('P2').getByText(newTitle, { exact: false }).waitFor();
+  await card().locator('.stale').waitFor();
+  assert.equal(await button('Preview', card()).isDisabled(), true);
+  assert.equal(await button('Accept', card()).count(), 0);
+  f.phase = 'Review and approve only the new R3 proposal';
+  await button('Preview', card('P2')).click();
+  await card('P2').getByLabel('Volume change').getByText('+77.26 mm³ (+0.65%)', { exact: true }).waitFor();
+  verifyNear(await shownVolume('b3'), 12000);
+  await f.same(pending);
+  await f.snapshot('fresh-p2-review-p1-stale');
+  await button('Accept', card('P2')).click();
+  await f.changed(pending);
+  const accepted = await f.doc(), edit = accepted.nodes.at(-1), decision = accepted.history.at(-1);
+  assert.deepEqual(accepted.nodes.slice(0, -1), edited.nodes);
+  assert.deepEqual([edit.kind, edit.faces, edit.sigs[face].r], ['delete-face', [face], 3]);
+  assert.deepEqual([decision.kind, decision.proposal, decision.by.agent], ['accept', 'P2', 'user']);
+  assert.deepEqual(accepted.proposals[0], pending.proposals[0]);
+  assert.deepEqual(accepted.proposals.map(p => [p.id, p.status]), [['P1', 'open'], ['P2', 'accepted']]);
+  const native = await f.inspect('approved-r3', accepted);
+  assert.ok(native.report.valid);
+  verifyNear(native.mass.volume, 12000);
+  assert.deepEqual(native.brep.faces.map(item => [item.name, item.id]).sort(),
+    actual.brep.faces.filter(item => item.name !== face).map(item => [item.name, item.id]).sort());
+  assert.ok(native.brep.edges.some(item => item.name === sharp));
+  await f.snapshot('fresh-p2-approved');
+  await f.undo(); await f.same(pending);
+  await f.redo(); await f.same(accepted);
+
+  const approved = await f.save('approved-r3-cap-heal');
+  await f.freshOpen(approved.file, accepted, 'fresh-open-approved-r3');
+  assert.deepEqual((await f.inspect('reopened-r3', accepted)).brep, native.brep);
+  await mcp(approved.file, 'reopened-r3', async call => {
+    assert.equal((await call('query', { action: 'summary' })).facts.volume, 12000);
+    const list = await call('proposals', { action: 'list', all: true });
+    assert.deepEqual(list.proposals.map(p => [p.id, p.status]), [['P1', 'open'], ['P2', 'accepted']]);
+    assert.equal(list.proposals[0].stale, true);
+  });
+  assert.deepEqual(await readFile(saved.file), savedBytes);
+  assert.deepEqual(await readFile(file), bytes);
+  f.report.observations.push({ label: 'fresh-r3-proposal', oldRevision, revision, volumeBefore: volume, volumeAfter: native.mass.volume });
 }
 
 await f.run(async () => {
@@ -172,7 +242,16 @@ await f.run(async () => {
   assert.equal(await shownVolume('b2'), initial);
   assert.deepEqual(await readFile(file), pendingBytes);
 
-  if (staleRecovery) await editSourceAndRecover(pending);
+  if (staleRecovery) {
+    const revised = await editSource(pending);
+    if (freshRevision) {
+      await approveFreshRevision(revised, revision);
+      assert.deepEqual(await readFile(input), stockBytes);
+      assert.deepEqual(await readFile(file), pendingBytes);
+      return;
+    }
+    await restoreSource(pending, revised.edited);
+  }
 
   f.phase = 'Accept only in Studio and inspect the native result';
   await button('Preview', card()).click();

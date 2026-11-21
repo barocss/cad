@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1472: [Review a fresh repair against the edited R3 source](notes/fresh-r3-cap-fillet-repair-proposal-2026-11-21/README.md), #17. Verify one user approval of P2, retained stale P1 and native Save and Open.
 - D1471: [Retire a failed proposal recheck notice with its source](notes/proposal-recheck-notice-ownership-2026-11-21/README.md), #17. Verify expiry on Undo, no reappearance on Redo and valid approval in actual Studio.
 - D1470: [Report a stale repair to a restricted local agent](notes/stale-cap-fillet-proposal-guidance-2026-11-21/README.md), #17. Verify edited-source refusal, current-revision recovery and exact approval through Studio and MCP.
 - D1469: [Qualify an agent proposal for exact cap-fillet repair](notes/agent-proposal-cap-fillet-heal-2026-11-21/README.md), #17. Verify local MCP L1 refusal, pending preview, explicit Studio approval and fresh Open.
