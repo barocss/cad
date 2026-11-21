@@ -1,10 +1,14 @@
-import { checkBrep, lineCurve, type Brep, type BrepCoedge, type BrepEdge, type BrepLoop } from '../brep/brep-core.js';
+import { BrepError, checkBrep, lineCurve, type Brep, type BrepCoedge, type BrepEdge, type BrepFace, type BrepLoop } from '../brep/brep-core.js';
+import { faceGeometry } from '../brep/analytic-boolean.js';
+import type { CurveSegment2, XY } from '../brep/curved-arrangement.js';
 import { evaluateSurface } from '../core/math.js';
 import { dist, dot, sub } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
-import type { Point } from '../types.js';
+import type { Curve, Point } from '../types.js';
 import { boxCapOffsetFrame } from './drafted-cap-offset.js';
+import { isSharpLAtConvexCorner } from './cardinal-l-section.js';
 import { affineChart, coverAffineTrim, trimFits, uvPoint } from './prism-wall-offset.js';
+import { brepFromPrismatic, type PrismaticSolid } from './prismatic-solid.js';
 
 const byId = <T extends { readonly id: string }>(items: readonly T[]) => new Map(items.map(item => [item.id, item]));
 const samePoint = (a: Point, b: Point) => a.every((value, axis) => value === b[axis]);
@@ -13,6 +17,85 @@ const axes = [0, 1, 2] as const;
 type Axis = typeof axes[number];
 type Neighbor = { edge: BrepEdge; twin: BrepCoedge; loop: BrepLoop };
 type Support = { axis: Axis; at: number; sign: number };
+type SectionLine = Extract<CurveSegment2, { kind: 'line' }>;
+
+function restoredLChamfer(outer: readonly SectionLine[], bevel: SectionLine, sharpEdgeName: string, tolerance: number, roundoff: number): SectionLine[] | undefined {
+  const index = outer.indexOf(bevel), before = outer[(index + outer.length - 1) % outer.length], after = outer[(index + 1) % outer.length];
+  const along = ({ a, b }: SectionLine) => a[1] === b[1] && a[0] !== b[0] ? 0 : a[0] === b[0] && a[1] !== b[1] ? 1 : undefined;
+  const u = along(before), v = along(after);
+  if (u === undefined || v === undefined || u === v || !before.tag || !after.tag
+    || [before.tag, after.tag].sort().join('|') !== sharpEdgeName
+    || !samePoint([...before.b, 0], [...bevel.a, 0]) || !samePoint([...bevel.b, 0], [...after.a, 0])) return;
+  const corner: XY = u === 0 ? [after.a[0], before.b[1]] : [before.b[0], after.a[1]];
+  const first = (corner[u] - before.b[u]) * Math.sign(before.b[u] - before.a[u]);
+  const second = (after.a[v] - corner[v]) * Math.sign(after.b[v] - after.a[v]);
+  if (!(first > 2 * tolerance && second > 2 * tolerance) || Math.abs(first - second) > roundoff) return;
+  const repaired = outer.filter(line => line !== bevel).map(line => line === before ? { ...line, b: corner } : line === after ? { ...line, a: corner } : line);
+  return isSharpLAtConvexCorner(repaired, corner, tolerance) ? repaired : undefined;
+}
+
+function nativeLine(curve: Curve): boolean {
+  return curve.degree === 1 && curve.controlPoints.length === 2 && curve.knots.length === 4
+    && curve.knots.every((value, i) => value === (i < 2 ? 0 : 1)) && curve.weights.length === 2 && curve.weights.every(weight => weight === 1);
+}
+
+function exactBevelTrim(brep: Brep, face: BrepFace, corners: readonly Point[]): boolean {
+  const loop = brep.loops.find(loop => loop.id === face.loops[0]);
+  if (!loop || loop.face !== face.id || loop.kind !== 'outer' || loop.coedges.length !== 4) return false;
+  const uses = byId(brep.coedges), edges = byId(brep.edges), vertices = byId(brep.vertices);
+  const expected = new Set(['0,1', '0,2', '1,3', '2,3']);
+  const uv: Point[] = [[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]];
+  for (const id of loop.coedges) {
+    const use = uses.get(id), edge = use && edges.get(use.edge), trim = use?.pcurve;
+    if (!edge || !trim || !nativeLine(edge.curve) || !nativeLine(trim)) return false;
+    const slots = edge.curve.controlPoints.map(point => corners.findIndex(corner => samePoint(point, corner)));
+    if (slots.some(slot => slot < 0) || !expected.delete([...slots].sort((a, b) => a - b).join(','))) return false;
+    if (!edge.curve.controlPoints.every((point, i) => {
+      const vertex = vertices.get(edge.vertices[i]);
+      return vertex && samePoint(vertex.point, point) && samePoint(trim.controlPoints[i], uv[slots[i]]);
+    })) return false;
+  }
+  return expected.size === 0;
+}
+
+function fullHeightLBevel(brep: Brep, face: BrepFace, bevel: SectionLine, lo: number, hi: number): boolean {
+  const { surface } = face, knots = [0, 0, 1, 1];
+  if (face.sense !== 'forward' || face.loops.length !== 1 || surface.kind !== 'surface' || surface.degreeU !== 1 || surface.degreeV !== 1
+    || surface.controlPoints.length !== 2 || surface.weights.length !== 2
+    || !surface.knotsU.every((value, i) => value === knots[i]) || surface.knotsU.length !== 4
+    || !surface.knotsV.every((value, i) => value === knots[i]) || surface.knotsV.length !== 4) return false;
+  const ends = [bevel.a, bevel.b];
+  if (!surface.controlPoints.every((row, i) => row.length === 2 && row.every((point, j) => samePoint(point, [...ends[i], j === 0 ? lo : hi])))
+    || !surface.weights.every(row => row.length === 2 && row.every(weight => weight === 1))) return false;
+  const support = faceGeometry(face), dx = bevel.b[0] - bevel.a[0], dy = bevel.b[1] - bevel.a[1], length = Math.hypot(dx, dy);
+  return support.kind === 'plane' && support.n.every((value, i) => Math.abs(value - [dy / length, -dx / length, 0][i]) <= 64 * Number.EPSILON)
+    && exactBevelTrim(brep, face, surface.controlPoints.flat());
+}
+
+/** Restore one full-height equal-distance outside bevel on an authored cardinal L prism. Native names survive; IDs are rebuilt. */
+export function healConvexLPrismaticChamferIfAdmitted(solid: PrismaticSolid, brep: Brep, faceName: string, sharpEdgeName: string, resultId: string): Brep | undefined {
+  const [slab] = solid.slabs, [body] = brep.bodies, [shell] = brep.shells;
+  if (solid.slabs.length !== 1 || slab.regions.length !== 1 || slab.regions[0].holes.length || brep.source.family !== 'prismatic-solid'
+    || brep.bodies.length !== 1 || body.kind !== 'solid' || brep.shells.length !== 1 || !shell.closed
+    || brep.faces.length !== 9 || brep.loops.length !== 9 || brep.coedges.length !== 42 || brep.edges.length !== 21 || brep.vertices.length !== 14) return;
+  const region = slab.regions[0], lines = region.outer.filter((segment): segment is SectionLine => segment.kind === 'line');
+  const bevels = lines.filter(line => line.tag === faceName), faces = brep.faces.filter(face => face.name === faceName);
+  if (region.outer.length !== 7 || lines.length !== 7 || bevels.length !== 1 || faces.length !== 1) return;
+  const extent = geometryScaleMM(brep.vertices.map(vertex => vertex.point), lines.flatMap(line => [line.a, line.b]));
+  const tolerance = linearToleranceMM(extent), roundoff = 64 * Number.EPSILON * Math.max(1, extent);
+  if (!(extent <= CadNumericPolicy.coordinateAbs && slab.z1 - slab.z0 > tolerance)
+    || !fullHeightLBevel(brep, faces[0], bevels[0], slab.z0, slab.z1) || !checkBrep(brep, { strict: true }).valid) return;
+  const repaired = restoredLChamfer(lines, bevels[0], sharpEdgeName, tolerance, roundoff);
+  if (!repaired) return;
+  const healed = brepFromPrismatic({ ...solid, slabs: [{ ...slab, regions: [{ ...region, outer: repaired }] }] }, { id: resultId });
+  const report = checkBrep(healed, { strict: true });
+  if (!report.valid) throw new BrepError('GEOMETRY', `Delete face: the healed L-prism is invalid: ${report.issues[0]}`, report);
+  const retainedNames = new Set(healed.faces.map(face => face.name));
+  if (healed.faces.length !== 8 || brep.faces.some(face => face !== faces[0] && !retainedNames.has(face.name))
+    || healed.edges.filter(edge => edge.name === sharpEdgeName).length !== 1)
+    throw new BrepError('TOPOLOGY', 'Delete face: the healed L-prism did not retain its original wall, cap and sharp edge names');
+  return healed;
+}
 
 /** Heal one equal-leg convex bevel along a full-height corner of an upright rectangular box. */
 export function healPrismaticChamferIfAdmitted(brep: Brep, faceName: string, sharpEdgeName: string): Brep | undefined {

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, checkBrep, evaluateCadPart, faceGeometry } from '../dist/index.js';
-import { healAdjacentPrismaticChamferIfAdmitted, healHorizontalChamferIfAdmitted, healOppositePrismaticChamferIfAdmitted, healPrismaticChamferIfAdmitted } from '../dist/features/heal-prismatic-chamfer.js';
+import { brepFromPrismatic, brepMassProperties, checkBrep, evaluateCadPart, faceGeometry, prismaticFromProfile } from '../dist/index.js';
+import { healAdjacentPrismaticChamferIfAdmitted, healConvexLPrismaticChamferIfAdmitted,
+  healHorizontalChamferIfAdmitted, healOppositePrismaticChamferIfAdmitted, healPrismaticChamferIfAdmitted } from '../dist/features/heal-prismatic-chamfer.js';
 
 const doc = features => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features });
 const evaluate = features => evaluateCadPart(doc(features)).outputs[0].brep;
@@ -75,6 +76,90 @@ test('the full-height heal refuses plain stock, a cap edge chamfer and two chamf
   const top = 'b.side0|b.top';
   assert.equal(healPrismaticChamferIfAdmitted(evaluate([...stock, bevel([top])]), faceName, top), undefined);
   assert.equal(healPrismaticChamferIfAdmitted(evaluate([...stock, bevel([corners[0], corners[2]])]), faceName, corners[0]), undefined);
+});
+
+const lPoints = [[0, 0], [3, 0], [3, 27], [40, 27], [40, 30], [0, 30]];
+const lEdge = 'n1.side0|n1.side1';
+const lStock = (points = lPoints, from = 0) => [
+  { id: 'n0', kind: 'sketch', profile: 'polygon', points },
+  { id: 'n1', kind: 'extrude', sketch: 'n0', from, height: 20 },
+];
+const lChamfer = (edges = [lEdge]) => ({ id: 'n2', kind: 'chamfer', target: 'n1', edges, distance: 2 });
+const lHeal = { id: 'heal', kind: 'delete-face', target: 'n2', face: 'n2.face' };
+const profileSection = (points, names, from = 0) => prismaticFromProfile({
+  outer: points.map((point, i) => ({ kind: 'line', start: point, end: points[(i + 1) % points.length] })),
+  height: 20, from, names: { outer: names, bottom: 'n1.bottom', top: 'n1.top' },
+});
+const lSection = (setback = 2, from = 0) => profileSection([[0, 0], [1, 0], [3, setback], ...lPoints.slice(2)],
+  ['n1.side0', 'n2.face', 'n1.side1', 'n1.side2', 'n1.side3', 'n1.side4', 'n1.side5'], from);
+
+for (const from of [0, -3.25]) test(`Delete face restores the full-height outside L bevel from ${from}`, () => {
+  const features = [...lStock(lPoints, from), lChamfer()], source = evaluate(features), saved = structuredClone(source);
+  const selected = source.faces.find(face => face.name === 'n2.face'), support = faceGeometry(selected);
+  assert.equal(support.kind, 'plane');
+  support.n.forEach((value, i) => near(value, [Math.SQRT1_2, -Math.SQRT1_2, 0][i]));
+  assert.ok(checkBrep(source, { strict: true }).valid);
+  near(brepMassProperties(source, 1).volume, 4020 - 20 * 2 ** 2 / 2);
+  const healed = evaluate([...features, lHeal]);
+  const native = healConvexLPrismaticChamferIfAdmitted(lSection(2, from), source, 'n2.face', lEdge, 'heal');
+  assert.deepEqual(healed, native);
+  const report = checkBrep(healed, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 36, edges: 18, vertices: 12 });
+  assert.equal(report.topology[0].genus, 0);
+  assert.ok(report.maximumPcurveGap < 1e-9 && report.maximumEdgeSurfaceGap < 1e-9);
+  const sharpL = evaluate(lStock(lPoints, from));
+  const byName = edges => edges.map(edge => [edge.name, edge.curve.controlPoints]).sort(([a], [b]) => a.localeCompare(b));
+  assert.deepEqual(byName(healed.edges), byName(sharpL.edges));
+  assert.deepEqual(healed.faces.map(face => face.name).sort(), source.faces.filter(face => face !== selected).map(face => face.name).sort());
+  assert.ok(healed.faces.every(face => !source.faces.some(original => original.id === face.id)), 'bounded L reconstruction regenerates B-rep IDs');
+  const uses = source.coedges.filter(use => selected.loops.includes(use.loop));
+  const touched = new Set(source.edges.filter(edge => uses.some(use => use.edge === edge.id)).flatMap(edge => edge.vertices));
+  const untouched = source.edges.filter(edge => !edge.vertices.some(id => touched.has(id)));
+  assert.ok(untouched.length > 0);
+  for (const edge of untouched) {
+    const retained = healed.edges.find(item => item.name === edge.name);
+    assert.deepEqual(retained.curve.controlPoints, edge.curve.controlPoints);
+    assert.deepEqual(retained.curve.knots, edge.curve.knots);
+    assert.deepEqual(retained.curve.weights, edge.curve.weights);
+  }
+  // Independent union-of-rectangles-minus-overlap volume and first moments of the sharp L.
+  const mass = brepMassProperties(healed, 1), area = 40 * 3 + 3 * 30 - 3 * 3;
+  near(mass.volume, area * 20);
+  mass.centroid.forEach((value, i) => near(value, [2521.5 / area, 30 - 1516.5 / area, from + 10][i]));
+  assert.deepEqual(source, saved);
+});
+
+test('outside L chamfer recovery refuses unequal setbacks, wrong source edge and native plane/trim mutations', () => {
+  const section = lSection(), source = brepFromPrismatic(section, { id: 'n2' });
+  assert.ok(checkBrep(source, { strict: true }).valid);
+  assert.ok(healConvexLPrismaticChamferIfAdmitted(section, source, 'n2.face', lEdge, 'heal'));
+  assert.equal(healConvexLPrismaticChamferIfAdmitted(section, source, 'n1.top', lEdge, 'heal'), undefined);
+  assert.equal(healConvexLPrismaticChamferIfAdmitted(section, source, 'n2.face', 'n1.side1|n1.side2', 'heal'), undefined);
+  const unequal = lSection(2 + 1e-9), unequalBrep = brepFromPrismatic(unequal, { id: 'n2' });
+  assert.ok(checkBrep(unequalBrep, { strict: true }).valid);
+  assert.equal(healConvexLPrismaticChamferIfAdmitted(unequal, unequalBrep, 'n2.face', lEdge, 'heal'), undefined);
+  for (const mutation of ['plane', 'trim', 'source', 'sense']) {
+    const changed = structuredClone(source), face = changed.faces.find(face => face.name === 'n2.face');
+    if (mutation === 'plane') face.surface.controlPoints[0][1][0] += 1e-9;
+    if (mutation === 'trim') changed.coedges.find(use => use.loop === face.loops[0]).pcurve.controlPoints[0][0] += 1e-9;
+    if (mutation === 'source') changed.source.family = 'step-import';
+    if (mutation === 'sense') face.sense = 'reversed';
+    assert.equal(healConvexLPrismaticChamferIfAdmitted(section, changed, 'n2.face', lEdge, 'heal'), undefined, mutation);
+  }
+});
+
+test('Delete face keeps concave L bevels, non-cardinal sections and multiple L bevels outside this slice', () => {
+  const nonL = [[0, 0], [40, 0], [40, 10], [30, 20], [0, 20], [-10, 10]];
+  for (const features of [
+    [...lStock(), lChamfer(['n1.side1|n1.side2'])],
+    [...lStock(nonL), lChamfer()],
+    [...lStock(), lChamfer([lEdge, 'n1.side3|n1.side4'])],
+  ]) {
+    const source = evaluate(features), face = source.faces.find(face => face.name.startsWith('n2.face'));
+    assert.ok(face && checkBrep(source, { strict: true }).valid);
+    assert.throws(() => evaluate([...features, { ...lHeal, face: face.name }]), error => error.code === 'CAPABILITY');
+  }
 });
 
 const pairedCorners = [

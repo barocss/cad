@@ -6,6 +6,7 @@ import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric
 import { dist } from '../core/vec3.js';
 import type { Point } from '../types.js';
 import { boxCapOffsetFrame } from './drafted-cap-offset.js';
+import { isSharpL, isSharpLAtConvexCorner } from './cardinal-l-section.js';
 import { readBoxCornerTrim, readHorizontalBoxCorner, rebuildSharpCorner } from './heal-prismatic-chamfer.js';
 import { affineChart } from './prism-wall-offset.js';
 import { brepFromPrismatic, type PrismaticSolid } from './prismatic-solid.js';
@@ -15,24 +16,6 @@ type Arc = Extract<CurveSegment2, { kind: 'arc' }>;
 const samePoint = (a: XY, b: XY) => a[0] === b[0] && a[1] === b[1];
 const closePoint = (a: XY, b: XY, tolerance: number) => Math.hypot(a[0] - b[0], a[1] - b[1]) <= tolerance;
 const axis = ({ a, b }: Line) => a[1] === b[1] && a[0] !== b[0] ? 0 : a[0] === b[0] && a[1] !== b[1] ? 1 : undefined;
-
-/** The six straight walls must enclose one orthogonal L, with the recovered corner its sole reflex vertex. */
-function isSharpL(lines: readonly Line[], corner: XY, tolerance: number): boolean {
-  const vertices = lines.map(line => line.a);
-  const xs = [...new Set(vertices.map(([x]) => x))].sort((a, b) => a - b);
-  const ys = [...new Set(vertices.map(([, y]) => y))].sort((a, b) => a - b);
-  if (xs.length !== 3 || ys.length !== 3 || corner[0] !== xs[1] || corner[1] !== ys[1]
-    || xs[1] - xs[0] <= tolerance || xs[2] - xs[1] <= tolerance
-    || ys[1] - ys[0] <= tolerance || ys[2] - ys[1] <= tolerance
-    || new Set(vertices.map(point => point.join(','))).size !== 6) return false;
-  return lines.every((line, index) => {
-    const next = lines[(index + 1) % lines.length], firstAxis = axis(line), nextAxis = axis(next);
-    if (!samePoint(line.b, next.a) || firstAxis === undefined || nextAxis === undefined || firstAxis === nextAxis) return false;
-    const first = line.b[firstAxis] - line.a[firstAxis], second = next.b[nextAxis] - next.a[nextAxis];
-    const turn = Math.sign(first) * Math.sign(second) * (firstAxis === 0 ? 1 : -1);
-    return turn === (samePoint(line.b, corner) ? -1 : 1);
-  });
-}
 
 function restoreSection(outer: readonly CurveSegment2[], arc: Arc, tolerance: number, exterior: boolean): Line[] | undefined {
   const index = outer.indexOf(arc), before = outer[(index + outer.length - 1) % outer.length], after = outer[(index + 1) % outer.length];
@@ -55,11 +38,7 @@ function restoreSection(outer: readonly CurveSegment2[], arc: Arc, tolerance: nu
     repaired.push(segment === before ? { ...segment, b: corner } : segment === after ? { ...segment, a: corner } : segment);
   }
   if (!exterior) return isSharpL(repaired, corner, tolerance) ? repaired : undefined;
-  const reflex = repaired.find((line, i) => {
-    const next = repaired[(i + 1) % repaired.length];
-    return (line.b[0] - line.a[0]) * (next.b[1] - next.a[1]) - (line.b[1] - line.a[1]) * (next.b[0] - next.a[0]) < 0;
-  })?.b;
-  return reflex && !samePoint(reflex, corner) && isSharpL(repaired, reflex, tolerance) ? repaired : undefined;
+  return isSharpLAtConvexCorner(repaired, corner, tolerance) ? repaired : undefined;
 }
 
 function isFullHeightCarrier(face: BrepFace, arc: Arc, lo: number, hi: number, tolerance: number, out: 1 | -1): boolean {

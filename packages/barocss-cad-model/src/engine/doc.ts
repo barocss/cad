@@ -473,15 +473,16 @@ export function isBoredPlateHealSource(nodes: readonly unknown[], index: number)
   return boredPlate !== undefined && isTwoBorePlate(nodes, boredPlate);
 }
 
-function boxSupportNames(stock: unknown, index: number) {
+function extrusionSupportNames(stock: unknown, index: number, wallCount = 4) {
   const id = textRecord(stock) && typeof stock.id === 'string' ? stock.id : `n${index}`;
-  return { walls: [0, 1, 2, 3].map(side => `${id}.side${side}`), caps: [`${id}.top`, `${id}.bottom`] };
+  return { walls: Array.from({ length: wallCount }, (_, side) => `${id}.side${side}`), caps: [`${id}.top`, `${id}.bottom`] };
 }
 
-function boxCornerEdge(walls: readonly string[], ends: readonly string[]): boolean {
+function adjacentWallEdge(walls: readonly string[], ends: readonly string[]): boolean {
   if (ends.length !== 2) return false;
   const [a, b] = ends.map(side => walls.indexOf(side));
-  return a >= 0 && b >= 0 && (a + b) % 2 === 1;
+  const step = Math.abs(a - b);
+  return a >= 0 && b >= 0 && (step === 1 || step === walls.length - 1);
 }
 
 function boxCapEdge(walls: readonly string[], caps: readonly string[], ends: readonly string[]): boolean {
@@ -506,8 +507,8 @@ export function isDeleteFaceFilletSource(nodes: readonly unknown[], index: numbe
   if (sketch?.profile === 'rectangle') {
     const [edge] = fillet.edges;
     if (typeof edge !== 'string') return false;
-    const { walls, caps } = boxSupportNames(stock, stockIndex), ends = edge.split('|');
-    return boxCornerEdge(walls, ends) || boxCapEdge(walls, caps, ends);
+    const { walls, caps } = extrusionSupportNames(stock, stockIndex), ends = edge.split('|');
+    return adjacentWallEdge(walls, ends) || boxCapEdge(walls, caps, ends);
   }
   return sketch?.profile === 'polygon' &&
     Array.isArray(sketch.points) && sketch.points.length === 6;
@@ -549,18 +550,21 @@ function chamferDeleteFaceTarget(nodes: readonly unknown[], index: number, selec
   if (!textRecord(chamfer) || chamfer.kind !== 'chamfer' || !Array.isArray(chamfer.edges) ||
       (chamfer.edges.length !== 1 && chamfer.edges.length !== 2)) return;
   const parent = precedingSolidParent(chamfer, index);
-  if (parent === undefined || !isBoxReplacementSource(nodes, parent)) return;
-  const { walls, caps } = boxSupportNames(nodes[parent], parent);
+  if (parent === undefined) return;
+  const stock = nodes[parent], box = isBoxReplacementSource(nodes, parent);
+  const singleSectionCorner = chamfer.edges.length === 1 && straightPolygonExtrusionPointCount(nodes, stock) === 6;
+  if (!box && !singleSectionCorner) return;
+  const { walls, caps } = extrusionSupportNames(stock, parent, box ? 4 : 6);
   const joined = chamfer.edges.flatMap(edge => typeof edge === 'string' ? [edge.split('|')] : []);
   if (joined.length !== chamfer.edges.length || joined.some(ends => ends.length !== 2)) return;
   const name = (typeof chamfer.id === 'string' ? chamfer.id : `n${index}`) + '.face';
   if (joined.length === 2) {
-    if (!joined.every(ends => boxCornerEdge(walls, ends)) || new Set(joined.flat()).size < 3 ||
+    if (!joined.every(ends => adjacentWallEdge(walls, ends)) || new Set(joined.flat()).size < 3 ||
         (selected !== name + '#1' && selected !== name + '#2')) return;
     return { name: selected, role: 'chamfer' };
   }
   const [ends] = joined;
-  if (!boxCornerEdge(walls, ends) && !boxCapEdge(walls, caps, ends)) return;
+  if (!adjacentWallEdge(walls, ends) && !(box && boxCapEdge(walls, caps, ends))) return;
   return { name, role: 'chamfer' };
 }
 
@@ -581,7 +585,7 @@ function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly 
   if (typeof name !== 'string' || !name.trim() || /[+\0]/.test(name)) return 'Delete face: one exact native face is required.';
   const plane = planarDeleteFaceTarget(nodes, parent.node, name);
   if (!plane && !isBoredPlateHealSource(nodes, parent.node) && !isDeleteFaceFilletSource(nodes, parent.node))
-    return 'Delete face: a supported through-hole plate, cylindrical boss, chamfered box, filleted box or filleted L-section is required.';
+    return 'Delete face: a supported through-hole plate, cylindrical boss, chamfered box or L-section, or filleted box or L-section is required.';
   if (node.rematched !== undefined && (!textRecord(node.rematched) || Object.keys(node.rematched).length))
     return 'Delete face: the original face name is required.';
   const sig = textRecord(node.sigs) && Object.hasOwn(node.sigs, name) && Object.keys(node.sigs).length === 1 ? node.sigs[name] : undefined;

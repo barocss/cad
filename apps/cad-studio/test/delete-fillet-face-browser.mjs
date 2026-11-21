@@ -9,8 +9,9 @@ assert.ok(output && isAbsolute(output) && relative(resolve(import.meta.dirname, 
 const mode = process.argv[3];
 const cap = mode === '--cap-top' ? 'top' : mode === '--cap-bottom' ? 'bottom' : undefined;
 const convex = mode === '--convex' || cap !== undefined;
-const convexL = mode === '--convex-l';
-const unionFile = convex || convexL ? undefined : mode;
+const convexL = mode === '--convex-l', chamferL = mode === '--chamfer-l';
+const outsideL = convexL || chamferL;
+const unionFile = convex || outsideL ? undefined : mode;
 const input = convex ? process.argv[4] : unionFile;
 assert.ok(!convex || input);
 const sourceBytes = input && await readFile(input);
@@ -19,7 +20,8 @@ const source = sourceBytes ? JSON.parse(sourceBytes) : {
   nodes: [
     { id: 'n0', kind: 'sketch', profile: 'polygon', points: [[0, 0], [3, 0], [3, 27], [40, 27], [40, 30], [0, 30]] },
     { id: 'n1', kind: 'extrude', sketch: 0, height: 20 },
-    { id: 'n2', kind: 'fillet', parent: { node: 1, side: 'solid' }, edges: [convexL ? 'n1.side0|n1.side1' : 'n1.side1|n1.side2'], radius: 2 },
+    chamferL ? { id: 'n2', kind: 'chamfer', parent: { node: 1, side: 'solid' }, edges: ['n1.side0|n1.side1'], distance: 2 }
+      : { id: 'n2', kind: 'fillet', parent: { node: 1, side: 'solid' }, edges: [convexL ? 'n1.side0|n1.side1' : 'n1.side1|n1.side2'], radius: 2 },
   ],
   outputs: { b2: { node: 2, side: 'solid' } }, nextId: 3,
 };
@@ -31,13 +33,14 @@ const pins = [
   'packages/barocss-cad/src/part/part-model.ts', 'packages/barocss-cad/src/part/part-delete-face.ts',
 ];
 if (unionFile) pins.push('packages/barocss-cad/src/features/heal-analytic-l-fillet.ts');
-if (convex) pins.push('packages/barocss-cad/src/features/heal-prismatic-chamfer.ts');
+if (convex || chamferL) pins.push('packages/barocss-cad/src/features/heal-prismatic-chamfer.ts');
+if (outsideL) pins.push('packages/barocss-cad/src/features/cardinal-l-section.ts');
 const f = await createFlow({
   name: 'delete-fillet-face', envFrozen: 'DELETE_FILLET_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: `Heal the picked ${convex ? 'outside fillet of a rectangular box' : convexL ? 'outside fillet of a straight L-section' : 'inside fillet of a straight L-section'}, then save and reopen the sharp solid.`,
+  qualification: `Heal the selected ${chamferL ? 'outside chamfer' : 'fillet'} and reopen the sharp solid.`,
   limits: [cap ? `One full-width R2 outside fillet at the ${cap} front edge of a 40 × 30 × 10 mm box.`
     : convex ? 'One R2 outside fillet spanning the height of a 40 × 30 × 10 mm rectangular box.'
-    : convexL ? 'One constant R2 outside fillet spanning a 20 mm upright extrusion of the 40 × 30 mm L-section.'
+    : outsideL ? `One ${chamferL ? '2 mm outside chamfer' : 'R2 outside fillet'} spanning a 20 mm upright extrusion of the 40 × 30 mm L-section.`
     : unionFile ? 'One R2 inside fillet on the union of a 40 × 20 × 3 mm foot and 3 × 20 × 30 mm upright.'
     : 'One constant R2 internal fillet spanning a 20 mm axis-aligned extrusion of the 40 × 30 mm L-section.'],
   inspectorSource: `
@@ -54,7 +57,7 @@ console.log(JSON.stringify({ solids: solids.length, digest: digestOf(brep), repo
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const sharpVolume = convex ? 12000 : (40 * 3 + 30 * 3 - 3 * 3) * 20;
-const filletVolume = sharpVolume + (cap ? -40 : convex ? -10 : convexL ? -20 : 20) * (4 - Math.PI);
+const sourceVolume = chamferL ? sharpVolume - 40 : sharpVolume + (cap ? -40 : convex ? -10 : convexL ? -20 : 20) * (4 - Math.PI);
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-7, `${actual} != ${expected}`);
 
 async function measure(label, doc, original) {
@@ -62,7 +65,7 @@ async function measure(label, doc, original) {
   assert.equal(native.solids, 1);
   assert.ok(native.report.valid, native.report.issues.join('\n'));
   assert.equal(worker.length, 1);
-  const expected = original ? sharpVolume : filletVolume;
+  const expected = original ? sharpVolume : sourceVolume;
   near(native.mass.volume, expected);
   near(worker[0].volume, expected);
   if (original) {
@@ -84,7 +87,7 @@ async function measure(label, doc, original) {
       assert.ok(native.report.maximumPcurveGap < 1e-9 && native.report.maximumEdgeSurfaceGap < 1e-9);
       native.mass.centroid.forEach((value, i) => near(value, [20, 15, 5][i]));
     }
-    if (convexL) {
+    if (outsideL) {
       const edge = native.edges.find(item => item.name === source.nodes.at(-1).edges[0]);
       assert.ok(edge);
       assert.deepEqual(edge.poles.toSorted((a, b) => a[2] - b[2]), [[3, 0, 0], [3, 0, 20]]);
@@ -134,16 +137,16 @@ await f.run(async () => {
     });
     return context;
   };
-  f.phase = 'Open and measure the R2 fillet';
+  f.phase = chamferL ? 'Open and measure the 2 mm chamfer' : 'Open and measure the R2 fillet';
   const agentFile = convex ? await healAgent() : process.argv[4];
   await f.newPage();
   const [file] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
-  await file.setFiles(input || { name: 'l-section-r2.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
+  await file.setFiles(input || { name: chamferL ? 'l-section-chamfer-2.bcad' : 'l-section-r2.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
   await f.same(source);
   const original = await measure('rounded', source);
   await f.snapshot('fillet-original');
 
-  f.phase = 'Select the native fillet and apply its heal';
+  f.phase = 'Select the native face and apply its heal';
   if (convex) {
     await button('View cube directions').click();
     await f.page.getByRole('menuitem', { name: 'Front', exact: true }).click();
@@ -151,7 +154,7 @@ await f.run(async () => {
     if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
     await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   }
-  if (convexL) {
+  if (outsideL) {
     await button('Iso').click();
     await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   }
@@ -159,13 +162,13 @@ await f.run(async () => {
   if (!(await filter.innerText()).includes('Faces')) await filter.click();
   const point = cap ? [20, 2 - Math.SQRT2, cap === 'top' ? 8 + Math.SQRT2 : 2 - Math.SQRT2]
     : convex ? [2 - Math.SQRT2, 2 - Math.SQRT2, 5]
-    : convexL ? [1 + Math.SQRT2, 2 - Math.SQRT2, 10]
+    : chamferL ? [2, 1, 10] : convexL ? [1 + Math.SQRT2, 2 - Math.SQRT2, 10]
     : unionFile ? [5 - Math.SQRT2, 10, 5 - Math.SQRT2] : [5 - Math.SQRT2, 25 + Math.SQRT2, 10];
   const pixel = await f.page.evaluate(p => window.__studioScreenOf(p), point);
   assert.ok(pixel?.length === 2);
   await f.page.mouse.click(...pixel);
   await f.page.waitForFunction(() => window.__studioSelection.selection.faces.length === 1);
-  if (input || convexL) {
+  if (input || outsideL) {
     const selected = f.page.getByLabel('Face property and colour target');
     await selected.waitFor();
     assert.ok((await selected.innerText()).includes(selectedName));
@@ -187,7 +190,7 @@ await f.run(async () => {
   const saved = await f.save(convex ? 'box-sharp' : 'l-section-sharp');
   await f.freshOpen(saved.file, healed, 'fillet-healed-reopened');
   const reopened = await measure('reopened', healed, original);
-  if (convexL) assert.equal(reopened.digest, repaired.digest);
+  if (outsideL) assert.equal(reopened.digest, repaired.digest);
   if (input) {
     if (agentFile) {
       const agentDoc = JSON.parse(await readFile(agentFile));

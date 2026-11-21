@@ -4,21 +4,26 @@ import { brepMassProperties, checkBrep } from '@barocss/cad';
 import { deleteFaceCommand } from '../src/app/deleteFaceCommand';
 import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
-import { directFaceDocumentProblem, rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
+import { directFaceDocumentProblem, emptyDoc, rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 import { revisionOf } from '../src/util/revision';
 
 const source = (edge = 'n1.side0|n1.side3') => withNode(rectanglePart(40, 30, 10),
   { kind: 'chamfer', parent: { node: 1, side: 'solid' }, edges: [edge], distance: 2 });
 
+const lSketch = withNode(emptyDoc(), { kind: 'sketch', profile: 'polygon',
+  points: [[0, 0], [3, 0], [3, 27], [40, 27], [40, 30], [0, 30]] });
+const lStock = withNode(lSketch, { kind: 'extrude', sketch: 0, height: 20 });
 const chamfers = [
-  ['n1.side0|n1.side3', 2],
-  ['n1.side0|n1.top', 0],
-  ['n1.bottom|n1.side0', 0],
+  ['n1.side0|n1.side3', 2, false],
+  ['n1.side0|n1.top', 0, false],
+  ['n1.bottom|n1.side0', 0, false],
+  ['n1.side0|n1.side1', 2, true],
 ] as const;
 
-for (const [sharpEdge, span] of chamfers) test(`Delete face restores ${sharpEdge} from its exact bevel and reopens`, async () => {
-  const doc = source(sharpEdge), original = structuredClone(doc), before = evaluateDoc(doc, 1), name = 'n2.face';
+for (const [sharpEdge, span, l] of chamfers) test(`Delete face restores ${sharpEdge} from its exact bevel and reopens`, async () => {
+  const doc = l ? withNode(lStock, { kind: 'chamfer', parent: { node: 1, side: 'solid' }, edges: [sharpEdge], distance: 2 }) : source(sharpEdge);
+  const original = structuredClone(doc), before = evaluateDoc(doc, 1), name = 'n2.face';
   assert.ok(before.ok);
   const [body] = before.bodies, selection = { faces: [{ body: 0, face: body.mesh.faces.findIndex(face => face.name === name) }], bodies: [], edges: [] };
   assert.ok(selection.faces[0].face >= 0);
@@ -42,10 +47,10 @@ for (const [sharpEdge, span] of chamfers) test(`Delete face restores ${sharpEdge
   assert.deepEqual(healed.nodes.slice(0, -1), doc.nodes);
   const [{ brep: originalNative }] = partBreps(doc), [{ brep: native }] = partBreps(healed);
   assert.ok(checkBrep(native, { strict: true }).valid);
-  assert.equal(native.faces.length, 6);
-  assert.ok(native.faces.every(face => originalNative.faces.some(original => original.id === face.id && original.name === face.name)));
+  assert.equal(native.faces.length, l ? 8 : 6);
+  assert.ok(native.faces.every(face => originalNative.faces.some(original => original.name === face.name && (l || original.id === face.id))));
   assert.ok(native.edges.some(edge => edge.name === sharpEdge));
-  assert.ok(Math.abs(brepMassProperties(native, 1).volume - 12000) < 1e-7);
+  assert.ok(Math.abs(brepMassProperties(native, 1).volume - (l ? 4020 : 12000)) < 1e-7);
   const opened = await readStudioFile(encodeStudioFile(healed));
   assert.ok('doc' in opened);
   assert.deepEqual(partBreps(opened.doc), partBreps(healed));

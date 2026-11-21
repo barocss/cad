@@ -3,7 +3,7 @@ import { healBoredPlateIfAdmitted, healCylindricalBossIfAdmitted } from '../feat
 import { healAnalyticLFilletIfAdmitted } from '../features/heal-analytic-l-fillet.js';
 import { healConvexLPrismaticFilletIfAdmitted, healConvexPrismaticFilletIfAdmitted,
   healHorizontalPrismaticFilletIfAdmitted, healPrismaticFilletIfAdmitted } from '../features/heal-prismatic-fillet.js';
-import { healAdjacentPrismaticChamferIfAdmitted, healHorizontalChamferIfAdmitted, healOppositePrismaticChamferIfAdmitted,
+import { healAdjacentPrismaticChamferIfAdmitted, healConvexLPrismaticChamferIfAdmitted, healHorizontalChamferIfAdmitted, healOppositePrismaticChamferIfAdmitted,
   healPrismaticChamferIfAdmitted } from '../features/heal-prismatic-chamfer.js';
 import type { Tools } from './part-model.js';
 import type { CadPartFeature, Part, Result, Solid } from './part-types.js';
@@ -74,7 +74,8 @@ export function deleteFaceOperation(f: Extract<CadPartFeature, { kind: 'delete-f
       const { author } = t.ref(f.target, 'target');
       if (author?.kind === 'chamfer' && author.edges.length === 1 && face === `${author.id}.face`) {
         const [sharpEdge] = part.chamferTargets;
-        if (part.solid.kind === 'upright') healed = healPrismaticChamferIfAdmitted(brep, face, sharpEdge);
+        if (part.solid.kind === 'upright') healed = healPrismaticChamferIfAdmitted(brep, face, sharpEdge)
+          ?? (author.edges[0] === sharpEdge ? healConvexLPrismaticChamferIfAdmitted(part.solid.solid, brep, face, sharpEdge, at) : undefined);
         else if (part.history?.finishes.length === 1) {
           const [finish] = part.history.finishes;
           if (finish.kind === 'chamfer' && finish.id === author.id && finish.edges.length === 1 && finish.edges[0] === sharpEdge)
@@ -90,7 +91,7 @@ export function deleteFaceOperation(f: Extract<CadPartFeature, { kind: 'delete-f
           ?? healAdjacentPrismaticChamferIfAdmitted(brep, face, part.chamferTargets);
     }
     if (!healed && remainingEdge) healed = healPrismaticChamferIfAdmitted(brep, face, remainingEdge);
-    if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket, one full-height convex circular fillet on an upright L prism, or one full-height vertical or full-span horizontal convex circular fillet on a straight rectangular box. Select its fillet face. To remove a fully enclosed cylindrical boss from straight rectangular stock, select the top face of the boss. To heal a full-height vertical or full-span horizontal chamfer on a straight rectangular box, select the chamfer face. For one of two full-height chamfers on a straight rectangular box, select its exact numbered face.');
+    if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket, one full-height convex circular fillet on an upright L prism, or one full-height vertical or full-span horizontal convex circular fillet on a straight rectangular box. Select its fillet face. To remove a fully enclosed cylindrical boss from straight rectangular stock, select the top face of the boss. To heal a full-height vertical or full-span horizontal chamfer on a straight rectangular box, or one full-height equal-distance outside chamfer on an upright L prism, select the chamfer face. For one of two full-height chamfers on a straight rectangular box, select its exact numbered face.');
     return one({ kind: 'brep', brep: healed });
   };
 }
