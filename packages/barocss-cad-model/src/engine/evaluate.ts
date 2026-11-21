@@ -306,8 +306,9 @@ function refineSmoothTurns(bodies: BodyResult[], snapshot: CadPartSnapshot, doc:
     const ref = body.ref;
     if (!ref) continue;
     const node = doc.nodes[ref.node];
-    if (node?.kind !== 'loft' || !hasSmoothTurnSections(doc.nodes, ref.node)) continue;
-    const mesh = smoothTurnDisplayMesh(body.mesh, snapshot.outputs[i].brep, node.sections.length);
+    const sections = node?.kind === 'loft' && hasSmoothTurnSections(doc.nodes, ref.node) ? node.sections.length : undefined;
+    if (node?.kind !== 'import' && sections === undefined) continue;
+    const mesh = smoothTurnDisplayMesh(body.mesh, snapshot.outputs[i].brep, sections);
     if (mesh !== body.mesh) bodies[i] = { ...body, mesh };
   }
 }

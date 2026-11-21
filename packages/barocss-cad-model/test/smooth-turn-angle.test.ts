@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, checkBrep, evaluateCurve } from '@barocss/cad';
+import { brepMassProperties, checkBrep, evaluateCurve, type Point } from '@barocss/cad';
+import { isCompactStepTurn } from '@barocss/cad/internal/step-turn-display';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
 import { smoothTurnAngleKey, smoothTurnWidthBounds, smoothTurnWidthKey } from '../src/app/smoothLoftTurn';
 import { dispatchTool } from '../src/chat/tools';
 import { emptyDoc, withNode, type LoopSegment, type StudioDoc } from '../src/engine/doc';
-import { evaluateDoc, evaluatePart, partBreps, placeBody, shareMeshes, type BodyResult } from '../src/engine/evaluate';
+import { evaluateDoc, evaluatePart, exportStudioStep, partBreps, placeBody, shareMeshes, type BodyResult } from '../src/engine/evaluate';
 import { revisionOf } from '../src/util/revision';
 import { MeshReceiver, MeshSender } from '../src/engine/meshWire';
 
@@ -161,6 +162,60 @@ test('only the compact Smooth Turn gets a denser display packet with canonical p
     }
   } finally {
     shareMeshes(false);
+  }
+});
+
+test('STEP turns refine by native controls and ownership without feature history or labels', () => {
+  for (const angle of [360, -450]) {
+    const original = create(angle);
+    const sketch = original.nodes.length;
+    const withControl = withNode(original, { kind: 'sketch', profile: 'rectangle', min: [50, 2], max: [62, 10] });
+    const doc = commandById('ruled-turn')!.build!({ ...context, doc: withControl, selection: { ...context.selection, sketches: [sketch] } },
+      { angle: 360, height: 50 });
+    const step = exportStudioStep(doc, { name: 'Exchange display proof' }).text;
+    const opened = withNode(emptyDoc(), { kind: 'import', name: 'Unrelated title', step, solids: 2 });
+    const baseline = evaluateDoc(opened, 0), refined = evaluateDoc(opened, 1, 8, true);
+    assert.ok(baseline.ok && refined.ok);
+    assert.equal(opened.nodes.length, 1);
+    for (const [i, { brep }] of partBreps(opened).entries()) {
+      const actual: BodyResult = refined.bodies[i];
+      const { loftDetail, ...canonical } = actual.mesh;
+      assert.deepEqual({ ...actual, mesh: canonical }, baseline.bodies[i]);
+      if (brep.faces.length !== 6) {
+        assert.equal(loftDetail, undefined);
+        assert.equal(isCompactStepTurn(brep), false);
+        continue;
+      }
+      assert.ok(loftDetail && 'kind' in loftDetail && loftDetail.kind === 'smooth-turn');
+      assert.ok(loftDetail.indices.length > canonical.indices.length);
+      assert.deepEqual([...new Set(loftDetail.edgeOfSegment)].sort((a, b) => a - b), canonical.edges.map(edge => edge.index));
+      assert.deepEqual([...new Set(loftDetail.faceOfVertex)].sort((a, b) => a - b), canonical.faces.map(face => face.index));
+      const relabelled = { ...brep, faces: brep.faces.map((face, j) => ({ ...face, name: `surface-${j}` })).reverse(),
+        edges: brep.edges.map((edge, j) => ({ ...edge, name: `edge-${j}` })).reverse() };
+      assert.equal(isCompactStepTurn(relabelled), true, 'Reordered and relabelled imported geometry');
+
+      const lifted = structuredClone(brep);
+      const cap = lifted.faces.find(face => face.surface.kind === 'surface' && face.surface.degreeV === 1)!.surface;
+      assert.ok(cap.kind === 'surface');
+      for (const row of cap.controlPoints) for (const point of row) {
+        point[1] += 0.0000006;
+        point[2] += 0.0000008;
+      }
+      assert.equal(isCompactStepTurn(lifted), false, 'A slightly shifted cap support is outside this display profile');
+
+      const displaced = structuredClone(brep);
+      const rail = displaced.edges.find(edge => edge.curve.degree === 3)!.curve;
+      const serialized = JSON.stringify(rail.controlPoints);
+      const [x, y, z] = rail.controlPoints[5];
+      const moved: Point = [x + 0.01, y, z];
+      for (const { surface } of displaced.faces) if (surface.kind === 'surface') {
+        for (const row of surface.controlPoints) if (JSON.stringify(row) === serialized) row[5] = moved;
+      }
+      rail.controlPoints[5] = moved;
+      const displacedCheck = checkBrep(displaced, { strict: true });
+      assert.equal(displacedCheck.valid, true, JSON.stringify(displacedCheck.issues));
+      assert.equal(isCompactStepTurn(displaced), false);
+    }
   }
 });
 

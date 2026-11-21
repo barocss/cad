@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1543: [Refine recognized STEP Smooth Turns in Studio Model](notes/step-smooth-turn-display-2026-11-21/README.md), #630. Verify display fidelity on both desktop backends and retain exact native rail identity.
 - D1542: [Verify AP214 exchange for an approved Smooth Turn](notes/smooth-turn-step-roundtrip-2026-11-21/README.md), #630. Verify actual Studio output and reopening, independent spline rails, section volume and loss disclosure.
 - D1541: [Pin an Agent Smooth Turn width edit to its visual review](notes/review-pinned-smooth-turn-width-2026-11-21/README.md), #630 and #324. Verify the current pin, the signed native station geometry and explicit Studio approval through fresh Open.
 - D1540: [Refine the displayed faces and edges of a Smooth Turn](notes/smooth-turn-display-density-2026-11-21/README.md), #630. Verify sampled outline reduction, canonical native ownership and actual Studio selection on both renderers.

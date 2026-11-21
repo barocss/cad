@@ -3,7 +3,10 @@ import { readFile } from 'node:fs/promises';
 import { createFlow } from './flow-helper.mjs';
 const baseline = process.argv.includes('--baseline');
 const backend = process.argv.includes('--webgl2') ? 'webgl2' : 'webgpu';
-const file = process.argv[3], doc = JSON.parse(await readFile(file, 'utf8'));
+const imported = process.argv.includes('--step');
+const file = process.argv[3];
+const input = JSON.parse(await readFile(imported ? process.argv[4] : file, 'utf8'));
+const doc = imported ? input.doc : input;
 const f = await createFlow({
   name: 'smooth-turn-rail-display', output: process.argv[2], envFrozen: 'TURN_PROJECT_FROZEN',
   qualification: 'Project the native corner rails and the matched display polylines using the actual Model camera.',
@@ -12,6 +15,7 @@ const f = await createFlow({
     'apps/cad-studio/src/viewport/Viewport.tsx', 'apps/cad-studio/src/App.tsx',
     'packages/barocss-cad-model/src/engine/evaluate.ts', 'packages/barocss-cad-model/src/engine/loftDisplay.ts',
     'packages/barocss-cad-model/src/engine/mesh.ts', 'packages/barocss-cad-model/src/engine/meshWire.ts',
+    'packages/barocss-cad/src/internal/step-turn-display.ts',
   ],
   inspectorSource: `
 import assert from 'node:assert/strict';
@@ -25,7 +29,8 @@ const result = partBreps(source).find(body => body.brep.faces.length === 6)!;
 const evaluated = evaluateDoc(source, 1, 8, true);
 assert.ok(evaluated.ok);
 const baseline = evaluated.bodies.find(body => body.key === result.key)!.mesh;
-const native = result.brep.edges.filter(edge => /^c[0-3]$/.test(edge.id));
+const native = result.brep.edges.filter(edge => edge.curve.degree === 3 && edge.curve.controlPoints.length === 13);
+assert.equal(native.length, 4);
 const data = [baseline, bodyMesh(result.brep, 1, 24)].map(mesh => ({
   quality: mesh.quality, triangles: mesh.indices.length / 3, rails: native.map(edge => {
     const index = mesh.edges.find(view => view.nativeJoint?.edgeId === edge.id)!.index;
@@ -78,7 +83,7 @@ await f.run(async () => {
   const detail = await f.page.evaluate(() => window.__studioLoftDisplay?.(1));
   assert.equal(await f.page.evaluate(() => window.__studioLoftDisplay?.(0)), null);
   if (baseline) assert.equal(detail, null);
-  else assert.deepEqual(detail, { triangles: 1292, baseTriangles: 444, kind: 'smooth-turn' });
+  else assert.deepEqual(detail, { triangles: imported ? 1372 : 1292, baseTriangles: imported ? 476 : 444, kind: 'smooth-turn' });
   const projected = await f.page.evaluate(tiers => tiers.map(tier => ({ ...tier, rails: tier.rails.map(rail => ({ id: rail.id,
     lines: rail.lines.map(p => window.__studioScreenOf(p)), samples: rail.samples.map(p => window.__studioScreenOf(p)),
   })) })), read.data);

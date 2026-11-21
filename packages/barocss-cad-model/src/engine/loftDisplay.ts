@@ -1,4 +1,5 @@
 import type { Brep } from '@barocss/cad';
+import { isCompactStepTurn } from '@barocss/cad/internal/step-turn-display';
 import { tessellateTwoGuideLoftDisplay } from '@barocss/cad/internal/two-guide-loft-display';
 import { bodyMesh, type DisplayMesh, type BoundedDisplayMesh, type SmoothTurnDisplayMesh, type Vec3 } from './mesh';
 
@@ -48,7 +49,7 @@ function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefi
 
 const turnCache = new WeakMap<DisplayMesh, DisplayMesh>();
 
-export function smoothTurnDisplayMesh(base: DisplayMesh, brep: Brep, sections: number): DisplayMesh {
+export function smoothTurnDisplayMesh(base: DisplayMesh, brep: Brep, sections?: number): DisplayMesh {
   const cached = turnCache.get(base);
   if (cached) return cached;
   const detail = buildTurnDetail(base, brep, sections);
@@ -57,16 +58,20 @@ export function smoothTurnDisplayMesh(base: DisplayMesh, brep: Brep, sections: n
   return result;
 }
 
-function buildTurnDetail(base: DisplayMesh, brep: Brep, sections: number): SmoothTurnDisplayMesh | undefined {
+function isAuthoredCompactTurn(brep: Brep, sections: number): boolean {
   const rails = brep.edges.filter(edge => /^c[0-3]$/.test(edge.id));
-  if (brep.source.family !== 'loft' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
-    || brep.shells.length !== 1 || !brep.shells[0].closed || brep.faces.length !== 6 || brep.edges.length !== 12
-    || rails.length !== 4 || !rails.every(({ curve }) => curve.degree === 3 && curve.controlPoints.length === sections
+  return brep.source.family === 'loft' && brep.bodies.length === 1 && brep.bodies[0].kind === 'solid'
+    && brep.shells.length === 1 && brep.shells[0].closed && brep.faces.length === 6 && brep.edges.length === 12
+    && rails.length === 4 && rails.every(({ curve }) => curve.degree === 3 && curve.controlPoints.length === sections
       && curve.weights.every(weight => weight === 1)
       && curve.knots.length === rails[0].curve.knots.length
-      && curve.knots.every((knot, i) => knot === rails[0].curve.knots[i]))) return;
+      && curve.knots.every((knot, i) => knot === rails[0].curve.knots[i]));
+}
+
+function buildTurnDetail(base: DisplayMesh, brep: Brep, sections?: number): SmoothTurnDisplayMesh | undefined {
   let refined: DisplayMesh;
   try {
+    if (sections === undefined ? !isCompactStepTurn(brep) : !isAuthoredCompactTurn(brep, sections)) return;
     refined = bodyMesh(brep, 0, 24);
   } catch {
     // The optional viewport samples must not invalidate an accepted model.
