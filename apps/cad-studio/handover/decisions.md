@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1559: [Show the structured Screw shape during proposal review](notes/smooth-screw-proposal-shape-preview-2026-11-21/README.md), #630. Verify the identical preview and approved display grids and the retained Boolean delta.
 - D1558: [Compare the Screw proposal and approved Model display at one camera](notes/smooth-screw-proposal-display-baseline-2026-11-21/README.md), #630. Confirm the two base body packets and retain the separate proposal delta.
 - D1557: [Pin Agent Smooth Screw pitch edits to the reviewed part](notes/review-pinned-smooth-screw-pitch-2026-11-21/README.md), #630 and #322. Verify L1 proposal, explicit user approval, geometry and native round trip. Record the preview display gap.
 - D1556: [Edit Smooth Screw pitch in Studio History](notes/smooth-screw-pitch-history-2026-11-21/README.md), #630. Verify the axial change, preserved native identities, Undo/Redo and fresh Open.

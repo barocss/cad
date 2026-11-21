@@ -7,7 +7,7 @@ import { smoothScrewPitchField } from '../src/app/smoothLoftTurn';
 import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { emptyDoc, withNode } from '../src/engine/doc';
-import { evaluateDoc, partBreps } from '../src/engine/evaluate';
+import { evaluateDoc, evaluatePart, partBreps } from '../src/engine/evaluate';
 import { bodyMesh } from '../src/engine/mesh';
 import { revisionOf } from '../src/util/revision';
 
@@ -73,6 +73,24 @@ test('Smooth Screw keeps its external axis, signed pitch and display through nat
     assert.deepEqual(reopened.doc, doc);
     assert.deepEqual(partBreps(reopened.doc)[0].brep, brep);
   }
+});
+
+test('Only the display evaluation of a sole Screw supplies the proposal grid', () => {
+  const doc = command.build!(ctx, input);
+  const preview = evaluatePart(doc, 2, 8, 'proposal-display');
+  const agent = evaluatePart(doc, 2, 8, 'agent');
+  const accepted = evaluateDoc(doc, 2, 8, true);
+  assert.ok(preview.ok && agent.ok && accepted.ok);
+  const candidate = preview.bodies[0].mesh, base = agent.bodies[0].mesh, detail = candidate.loftDetail;
+  assert.ok(detail && 'kind' in detail && detail.screwGrid);
+  assert.deepEqual(detail, accepted.bodies[0].mesh.loftDetail);
+  assert.deepEqual(candidate.positions, base.positions);
+  assert.deepEqual(candidate.indices, base.indices);
+  assert.equal(base.loftDetail, undefined);
+  const centred = commandById('smooth-turn')!.build!(ctx, { height: 40, angle: -180 });
+  const turnPreview = evaluatePart(centred, 3, 8, 'proposal-display');
+  assert.ok(turnPreview.ok);
+  assert.equal(turnPreview.bodies[0].mesh.loftDetail, undefined);
 });
 
 test('Smooth Screw History changes pitch and preserves the tilted axis, signed winding and section copies', async () => {

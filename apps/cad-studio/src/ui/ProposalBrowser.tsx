@@ -17,7 +17,7 @@ interface ProposalBrowserProps {
 }
 const volumeOf = (list: readonly BodyResult[]) => list.reduce((s, b) => s + (b.volume ?? 0), 0);
 export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel the current edit to review the proposal.', doc, bodies, fresh, massReady, placedPreviewEnabled, decidedShown, setDecidedShown }: ProposalBrowserProps) {
-  const { ghost, proposalBusy, reviewBlocked, isStale, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt } = controller;
+  const { ghost, proposalBusy, reviewBlocked, isStale, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt, screwChangesAvailable, toggleScrewChanges } = controller;
   return <>{!!doc.proposals?.length && <div className="chat-proposals" role="list" aria-label="Proposals"><div className="ol-head req-head">Proposals <span className="muted">{doc.proposals.filter(p => p.status === 'open').length} open</span>
           <ToolIconButton size="tiny" state={decidedShown ? 'on' : 'idle'} data-proposal-history-toggle aria-label={decidedShown ? 'Hide decided proposals' : 'Show decided proposals'} aria-pressed={decidedShown} data-tip={decidedShown ? 'Hide decided proposals' : 'Show accepted and rejected'} onClick={() => setDecidedShown(f => !f)}><Icon name="history" small /></ToolIconButton></div>
         {doc.proposals.filter(p => decidedShown || p.status === 'open').map(p => {
@@ -44,7 +44,12 @@ export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel
               <span className="mono">{q.id}</span> {q.kind === 'added' ? '+' : q.kind === 'changed' ? '~' : '−'} {q.label}</label>)}</div>}
             {p.status === 'open' ? <div className="proposal-actions">
               <button className={'ghost small' + (shown ? ' on' : '')} disabled={proposalBusy || stale || (!shown && reviewBlocked)} aria-describedby={!shown ? blockedDescription : undefined} onClick={() => void showProposal(p)}>{shown ? 'Hide' : 'Preview'}</button>
-              {shown && <button className="ghost small" onClick={flipGhost}>{ghost.after ? 'Show before' : 'Show after'}</button>}
+              {shown && <button className="ghost small" aria-label={screwChangesAvailable ? (ghost.after ? 'Show before' : 'Show after') : undefined} onClick={flipGhost}>
+                {screwChangesAvailable ? (ghost.after ? 'Before' : 'After') : (ghost.after ? 'Show before' : 'Show after')}
+              </button>}
+              {shown && screwChangesAvailable && <button className="ghost small" aria-label={ghost.changesShown ? 'Show shape' : 'Show changes'} onClick={toggleScrewChanges}>
+                {ghost.changesShown ? 'Shape' : 'Changes'}
+              </button>}
               <span className="grow" />
               <button className="ghost small" disabled={proposalBusy} onClick={() => rejectIt(p)}>Reject</button>
               {stale && p.follow_up_repair ? <span className="muted">Attach the saved follow-up again to recheck.</span>

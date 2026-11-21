@@ -85,7 +85,7 @@ export interface DisplayMesh {
 type DisplayBuffers = Pick<DisplayMesh, 'positions' | 'normals' | 'faceOfVertex' | 'indices' | 'edgeLines' | 'edgeOfSegment'>;
 export type CylinderDisplayTier = DisplayBuffers & { chordErrorMM: number };
 export type BoundedDisplayMesh = DisplayBuffers & { error: number; bounds: DisplayMesh['bounds'] };
-export type SmoothTurnDisplayMesh = DisplayBuffers & { bounds: DisplayMesh['bounds']; kind: 'smooth-turn' };
+export type SmoothTurnDisplayMesh = DisplayBuffers & { bounds: DisplayMesh['bounds']; kind: 'smooth-turn'; screwGrid?: true };
 export type LoftDisplayMesh = BoundedDisplayMesh | SmoothTurnDisplayMesh;
 
 const sweepCapSamples = new WeakMap<Brep, ReadonlyMap<string, BrepMeshEdge['points']>>();

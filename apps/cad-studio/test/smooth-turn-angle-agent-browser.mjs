@@ -12,7 +12,10 @@ const widthEdit = process.argv.includes('--width');
 const triangular = process.argv.includes('--triangle');
 const screw = process.argv.includes('--screw');
 const displayBaseline = process.argv.includes('--screw-display-baseline');
-assert.ok(!displayBaseline || screw);
+const displayRefined = process.argv.includes('--screw-display-refined');
+const webgl2 = process.argv.includes('--webgl2');
+assert.ok(screw || !displayBaseline && !displayRefined && !webgl2);
+assert.ok(!(displayBaseline && displayRefined));
 assert.ok([widthEdit, triangular, screw].filter(Boolean).length <= 1);
 const edit = screw ? {
   key: 'smoothScrewPitch', value: 64, invalid: 10000, refusal: /axial advance within the model range/,
@@ -149,6 +152,15 @@ async function frame() {
 
 await f.run(async () => {
   const origin = new URL(f.server.resolvedUrls.local[0]).origin;
+  if (webgl2) {
+    const openWebGpuPage = f.newPage;
+    f.newPage = async options => {
+      await openWebGpuPage(options);
+      await f.page.goto(new URL('?renderer=webgl2', origin).href);
+      await f.page.locator('.viewport[data-renderer="webgl2"]').waitFor();
+      await f.ready();
+    };
+  }
   const openContext = f.browser.newContext.bind(f.browser);
   f.browser.newContext = async options => {
     const context = await openContext({ ...options, serviceWorkers: 'block' });
@@ -218,9 +230,28 @@ await f.run(async () => {
   }
   await f.same(pending);
   await f.snapshot('reviewed-turn-proposal');
-  let previewDisplay;
-  if (displayBaseline) {
-    await f.page.waitForFunction(() => window.__studioProposalOverlay?.() != null);
+  let previewDisplay, deltaDisplay;
+  if (displayBaseline || displayRefined) {
+    if (displayRefined) {
+      await button('Show changes', card).click();
+      await button('Show shape', card).waitFor();
+      assert.equal((await button('Accept', card).boundingBox()).y, (await button('Reject', card).boundingBox()).y);
+      await f.page.waitForFunction(() => window.__studioProposalOverlay?.()?.method === 'boolean');
+      await f.snapshot('same-camera-screw-changes');
+      deltaDisplay = await displayedScrew('changes display');
+      assert.equal(deltaDisplay.detail, null);
+      await f.same(pending);
+      await button('Show shape', card).click();
+      await button('Show changes', card).waitFor();
+      assert.equal((await button('Accept', card).boundingBox()).y, (await button('Reject', card).boundingBox()).y);
+      await button('Show before', card).click();
+      await button('Show after', card).waitFor();
+      await f.snapshot('same-camera-screw-before');
+      const beforeDisplay = await displayedScrew('before display');
+      assert.equal(beforeDisplay.detail?.kind, 'smooth-turn');
+      await f.same(pending);
+      await button('Show after', card).click();
+    } else await f.page.waitForFunction(() => window.__studioProposalOverlay?.() != null);
     await f.snapshot('same-camera-screw-preview');
     previewDisplay = await displayedScrew('preview display');
   }
@@ -242,9 +273,23 @@ await f.run(async () => {
     assert.deepEqual(previewDisplay.camera, approvedDisplay.camera);
     assert.deepEqual(previewDisplay.canvas, approvedDisplay.canvas);
     assert.equal(approvedDisplay.detail.kind, 'smooth-turn');
-    assert.equal(previewDisplay.diff?.method, 'boolean');
-    assert.equal(previewDisplay.detail, null);
-    assert.notEqual(previewDisplay.meshHash, approvedDisplay.meshHash);
+    assert.equal(previewDisplay.renderer, webgl2 ? 'webgl2' : 'webgpu');
+    assert.equal(previewDisplay.renderer, approvedDisplay.renderer);
+    const diff = (deltaDisplay ?? previewDisplay).diff;
+    assert.equal(diff?.method, 'boolean');
+    assert.ok(Math.abs(diff.added - 4632.984810318592) < 1e-7);
+    assert.ok(Math.abs(diff.removed - 3672.928784289509) < 1e-7);
+    if (displayBaseline) {
+      assert.equal(previewDisplay.detail, null);
+      assert.notEqual(previewDisplay.meshHash, approvedDisplay.meshHash);
+    } else {
+      assert.equal(previewDisplay.diff, null);
+      assert.equal(deltaDisplay.renderer, previewDisplay.renderer);
+      assert.deepEqual(deltaDisplay.camera, previewDisplay.camera);
+      assert.deepEqual(deltaDisplay.canvas, previewDisplay.canvas);
+      assert.deepEqual(previewDisplay.detail, approvedDisplay.detail);
+      assert.equal(previewDisplay.meshHash, approvedDisplay.meshHash);
+    }
   }
   await f.undo();
   await f.same(pending);

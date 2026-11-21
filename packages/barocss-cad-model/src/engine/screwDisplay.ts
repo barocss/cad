@@ -105,7 +105,7 @@ export function screwDisplayMesh(mesh: DisplayMesh, brep: Brep): SmoothTurnDispl
       edgeOfSegment.push(edge.index, edge.index);
     }
   }
-  return { kind: 'smooth-turn', positions: new Float64Array(positions), normals: new Float32Array(normals),
+  return { kind: 'smooth-turn', screwGrid: true, positions: new Float64Array(positions), normals: new Float32Array(normals),
     faceOfVertex: new Float32Array(faceOfVertex), indices: new Uint32Array(indices), bounds,
     edgeLines: new Float64Array(edgeLines), edgeOfSegment: new Float32Array(edgeOfSegment) };
 }

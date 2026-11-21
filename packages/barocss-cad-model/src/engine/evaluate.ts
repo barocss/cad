@@ -301,14 +301,15 @@ function partResult(doc: StudioDoc, snapshot: CadPartSnapshot, revision: number,
   const faceTable = faceTableFrom(snapshot.outputs); rememberFaceTable(doc, faceTable);
   return { ok: true, revision, bodies, wallTime: (performance.now() - t0) / 1000, faceTable, shopRows };
 }
-function refineSmoothTurns(bodies: BodyResult[], snapshot: CadPartSnapshot, doc: StudioDoc): void {
+function refineSmoothTurns(bodies: BodyResult[], snapshot: CadPartSnapshot, doc: StudioDoc, screwOnly = false): void {
   for (const [i, body] of bodies.entries()) {
     const ref = body.ref;
     if (!ref) continue;
     const node = doc.nodes[ref.node];
-    const sections = node?.kind === 'loft' && hasSmoothTurnSections(doc.nodes, ref.node) ? node.sections.length : undefined;
+    const structured = node?.kind === 'loft' && hasExternalScrewSections(doc.nodes, ref.node);
+    if (screwOnly && !structured) continue;
+    const sections = node?.kind === 'loft' && (structured || hasSmoothTurnSections(doc.nodes, ref.node)) ? node.sections.length : undefined;
     if (node?.kind !== 'import' && sections === undefined) continue;
-    const structured = sections !== undefined && hasExternalScrewSections(doc.nodes, ref.node);
     const mesh = smoothTurnDisplayMesh(body.mesh, snapshot.outputs[i].brep, sections, structured);
     if (mesh !== body.mesh) bodies[i] = { ...body, mesh };
   }
@@ -492,7 +493,7 @@ export function evaluatePreview(doc: StudioDoc, revision: number, quality = 8, s
  * What another part's evaluation is for: each purpose keeps its own last snapshot (PERF3 B12), so a requirement
  * check, a reference check, an agent's proposal or a file read in between does not throw away what the others reuse.
  */
-export type PartSlot = 'part' | 'check' | 'refs' | 'agent' | 'read' | 'probe';
+export type PartSlot = 'part' | 'check' | 'refs' | 'agent' | 'proposal-display' | 'read' | 'probe';
 /** Another part's bodies on their own (instances: not through the main part's cache). */
 const lastParts = new Map<PartSlot, CadPartSnapshot>();
 export function evaluatePart(doc: StudioDoc, revision: number, quality = 8, slot: PartSlot = 'part'): EvalResult {
@@ -501,7 +502,9 @@ export function evaluatePart(doc: StudioDoc, revision: number, quality = 8, slot
   try {
     doc = skeletonsNow(doc);
     const last = lastParts.get(slot), snapshot = partSnapshot(doc, part => last ? reevaluate(last, { document: part }) : evaluateCadPart(part)); lastParts.set(slot, snapshot);
-    return partResult(doc, snapshot, revision, quality, shopRows, t0);
+    const result = partResult(doc, snapshot, revision, quality, shopRows, t0);
+    if (slot === 'proposal-display' && result.bodies.length === 1) refineSmoothTurns(result.bodies, snapshot, doc, true);
+    return result;
   } catch (cause) {
     return failed(revision, cause, t0, doc);
   }

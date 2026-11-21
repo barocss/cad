@@ -29,11 +29,15 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, onNot
   // before/after toggle and the volume it adds or takes off; accepted (its ops replayed) or rejected (kept).
   // (`full`: the part the whole proposal leaves; `parts`: its features, `leaveOut` those unticked, A4.3.)
   // (`shown`: the part as previewed — the whole proposal's, or without what is left out; G12 diffs it with the part.)
-  const [ghost, setGhost] = useState<{ id: string; bodies: BodyResult[]; placed: PlacedProposalPreview | null; after: boolean; full: StudioDoc; shown: StudioDoc; parts: ProposalPart[]; leaveOut: string[] } | null>(null);
+  const [ghost, setGhost] = useState<{ id: string; bodies: BodyResult[]; placed: PlacedProposalPreview | null; after: boolean; changesShown?: boolean; full: StudioDoc; shown: StudioDoc; parts: ProposalPart[]; leaveOut: string[] } | null>(null);
   /** G12: what the shown proposal adds and takes away (worked out in the engine worker), for the viewport's overlay. */
   const [proposalOverlay, setProposalOverlay] = useState<ProposalOverlay | null>(null);
   const [proposalBusy, setProposalBusy] = useState(false);
+  const detail = ghost?.bodies.length === 1 ? ghost.bodies[0].mesh.loftDetail : undefined;
+  const screwShape = !!detail && 'kind' in detail && !!detail.screwGrid;
+  const toggleScrewChanges = () => setGhost(g => g && { ...g, changesShown: !g.changesShown });
   const partEval = (d: StudioDoc) => engine.part(d, nextRevision(), 'agent');
+  const previewEval = (d: StudioDoc) => engine.part(d, nextRevision(), 'proposal-display');
   const previewPlaced = async (before: StudioDoc, after: StudioDoc): Promise<PlacedProposalPreview | null> => {
     try {
       return await placedProposalPreview(before, after, instances, (inst, base, parent) => engine.placed(placedDoc(inst, parent), base, placementOf(inst), nextRevision()));
@@ -49,12 +53,12 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, onNot
     if (ghost?.id === p.id && from === doc) { setGhost(null); setPreviewBodies(null); return; }
     if (active || sketch || marker !== null) return;
     setProposalBusy(true);
-    const tools = await import('@barocss/cad-model/chat/tools'), r = await tools.previewProposal({ doc: from, bodies, rowFiles: chatRowFiles.current }, p.id, partEval);
+    const tools = await import('@barocss/cad-model/chat/tools'), r = await tools.previewProposal({ doc: from, bodies, rowFiles: chatRowFiles.current }, p.id, previewEval);
     const placed = 'doc' in r && from === currentDoc() ? await previewPlaced(from, r.doc) : null;
     setProposalBusy(false);
     if (from !== currentDoc()) return;
     if ('error' in r) { setToast({ title: `${p.id} does not apply to the part as it is`, hint: r.error, detail: '' }); return; }
-    setGhost({ id: p.id, bodies: r.bodies, placed, after: true, full: r.doc, shown: r.doc, parts: tools.proposalParts(from, r.doc), leaveOut: [] }); setPreviewBodies(r.bodies);
+    setGhost({ id: p.id, bodies: r.bodies, placed, after: true, changesShown: false, full: r.doc, shown: r.doc, parts: tools.proposalParts(from, r.doc), leaveOut: [] }); setPreviewBodies(r.bodies);
   };
   /** A stale proposal made again on the part as it is, then shown (D41): only the rebased one can be accepted. */
   const rebaseIt = async (p: Proposal) => {
@@ -77,7 +81,7 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, onNot
     const partial = tools.partialDoc(doc, ghost.full, ghost.parts, leaveOut, doc.proposals?.find(p => p.id === ghost.id));
     if ('error' in partial) { setToast({ title: 'Cannot leave that out', hint: partial.error, detail: '' }); return; }
     setProposalBusy(true);
-    const r = await partEval(partial.doc);
+    const r = await previewEval(partial.doc);
     const placed = r.ok && doc === currentDoc() ? await previewPlaced(doc, partial.doc) : null;
     setProposalBusy(false);
     if (doc !== currentDoc()) return;
@@ -105,5 +109,7 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, onNot
     setGhost(null); setPreviewBodies(null);
   };
   const rejectIt = (p: Proposal) => { const next = rejectProposal(doc, p.id); if ('error' in next || !commit(next)) return; if (ghost?.id === p.id) { setGhost(null); setPreviewBodies(null); } };
-  return { ghost, proposalOverlay, proposalBusy, reviewBlocked, evidenceRevision, isStale, partEval, resetForModelChange, updateDiff, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt };
+  return { ghost, proposalOverlay: screwShape && !ghost?.changesShown ? null : proposalOverlay,
+    screwChangesAvailable: screwShape && !!proposalOverlay, toggleScrewChanges, proposalBusy, reviewBlocked, evidenceRevision,
+    isStale, partEval, resetForModelChange, updateDiff, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt };
 }
