@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1554: [Compare Smooth Screw triangle depth with the native surface](notes/smooth-screw-native-depth-2026-11-21/README.md), #630. Verify the same-camera depth error and a bounded structured mesh trial before a product change.
 - D1553: [Isolate shading and line contributions on the saved Smooth Screw](notes/smooth-screw-model-display-isolation-2026-11-21/README.md), #630. Verify the individual Model controls at the same view and exact native geometry.
 - D1552: [Author an external-axis Smooth Screw from one rectangular sketch](notes/smooth-screw-command-2026-11-21/README.md), #630 and #322. Verify signed pitch, current Agent revision, Studio approval and equal native geometry through reopen.
 - D1551: [Build a smooth rectangular Screw about the sketch origin](notes/compact-external-axis-screw-2026-11-21/README.md), #630. Verify bounded external-axis fit, signed rails and exact native reopening in Studio.
