@@ -104,7 +104,7 @@ await f.run(async () => {
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   if (await b('AO').getAttribute('aria-pressed') === 'true') await b('AO').click();
   const reopenedDisplay = triangular ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
-  if (triangular) assert.equal(reopenedDisplay, null);
+  if (triangular) assert.ok(reopenedDisplay?.kind === 'smooth-turn' && reopenedDisplay.triangles > reopenedDisplay.baseTriangles);
   f.report.observations.push({ imported, noNativeFeatureHistory: true, nativeDisplay, reopenedDisplay });
   await f.snapshot('approved-turn-step-reopened');
 });

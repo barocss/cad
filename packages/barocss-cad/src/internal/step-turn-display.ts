@@ -2,7 +2,7 @@ import { checkBrep, type Brep, type BrepEdge, type BrepFace } from '../brep/brep
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { evaluateCurve } from '../core/math.js';
 import { add, cross, dist, dot, len, scale, sub, unit } from '../core/vec3.js';
-import { fitRectangularTurn } from '../features/loft-rectangular-turn.js';
+import { fitRectangularTurn, fitTriangularTurn } from '../features/loft-rectangular-turn.js';
 import type { Curve, Point } from '../types.js';
 
 const straightKnots = [0, 0, 1, 1];
@@ -38,13 +38,15 @@ function sideUsesRows(face: BrepFace, edges: readonly BrepEdge[], count: number)
   return matches.every(found => found.length === 1) && new Set(matches.map(found => found[0].id)).size === 4;
 }
 
-/** Recognize only the existing compact rectangular turn construction in a STEP solid, for display sampling. */
+/** Recognize a compact rectangular or triangular turn in a STEP solid for display sampling. */
 export function isCompactStepTurn(brep: Brep): boolean {
+  const sides = brep.faces.length - 2;
   if (brep.source.family !== 'step' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
-    || brep.shells.length !== 1 || !brep.shells[0].closed || brep.faces.length !== 6 || brep.edges.length !== 12
-    || brep.vertices.length !== 8 || brep.loops.length !== 6 || brep.coedges.length !== 24) return false;
+    || brep.shells.length !== 1 || !brep.shells[0].closed || (sides !== 3 && sides !== 4)
+    || brep.edges.length !== 3 * sides || brep.vertices.length !== 2 * sides
+    || brep.loops.length !== sides + 2 || brep.coedges.length !== 6 * sides) return false;
   const rails = brep.edges.filter(edge => edge.curve.degree === 3), count = rails[0]?.curve.controlPoints.length;
-  if (rails.length !== 4 || count === undefined || count < 7 || count > 16) return false;
+  if (rails.length !== sides || count === undefined || count < 7 || count > 16) return false;
   const knots = rails[0].curve.knots;
   if (knots.length !== count + 4 || !knots.slice(0, 4).every(knot => knot === 0)
     || !knots.slice(-4).every(knot => knot === 1)
@@ -66,20 +68,20 @@ export function isCompactStepTurn(brep: Brep): boolean {
   const caps: { ring: string[]; normal: Point }[] = [];
   for (const face of brep.faces) {
     const loop = loops.get(face.loops[0]);
-    if (face.loops.length !== 1 || loop?.kind !== 'outer' || loop.coedges.length !== 4) return false;
+    if (face.loops.length !== 1 || loop?.kind !== 'outer') return false;
     const uses = loop.coedges.map(id => coedges.get(id)!);
     const ring = uses.map(use => edges.get(use.edge)!);
     if (ring.some(edge => edge.curve.degree === 3)) {
-      if (!sideUsesRows(face, ring, count)) return false;
+      if (ring.length !== 4 || !sideUsesRows(face, ring, count)) return false;
     } else {
       const chart = face.surface, support = faceGeometry(face);
-      if (support.kind !== 'plane' || chart.kind !== 'surface' || chart.degreeU !== 1 || chart.degreeV !== 1
+      if (ring.length !== sides || support.kind !== 'plane' || chart.kind !== 'surface' || chart.degreeU !== 1 || chart.degreeV !== 1
         || !same(chart.knotsU, straightKnots) || !same(chart.knotsV, straightKnots)
         || chart.controlPoints.length !== 2 || !chart.controlPoints.every(row => row.length === 2)
         || chart.weights.length !== 2 || !chart.weights.every(row => same(row, [1, 1]))) return false;
       const verticesInRing = ring.map((edge, i) => edge.vertices[uses[i].sense === 'forward' ? 0 : 1]);
       const onPlane = (point: Point) => Math.abs(dot(sub(point, support.o), support.n)) <= tolerance;
-      if (new Set(verticesInRing).size !== 4 || !verticesInRing.every(id => onPlane(vertices.get(id)!))
+      if (new Set(verticesInRing).size !== sides || !verticesInRing.every(id => onPlane(vertices.get(id)!))
         || !chart.controlPoints.every(row => row.every(onPlane))) return false;
       caps.push({ ring: verticesInRing, normal: support.n });
     }
@@ -88,7 +90,7 @@ export function isCompactStepTurn(brep: Brep): boolean {
   const [start, end] = caps.sort((a, b) => rails.filter(rail => b.ring.includes(rail.vertices[0])).length
     - rails.filter(rail => a.ring.includes(rail.vertices[0])).length);
   const ordered = start.ring.map(id => rails.find(edge => edge.vertices.includes(id)));
-  if (ordered.some(edge => !edge) || new Set(ordered).size !== 4
+  if (ordered.some(edge => !edge) || new Set(ordered).size !== sides
     || !end.ring.every(id => ordered.some(edge => edge?.vertices.includes(id)))) return false;
 
   const startPoints = start.ring.map(id => vertices.get(id)!);
@@ -103,7 +105,8 @@ export function isCompactStepTurn(brep: Brep): boolean {
   const curves = ordered.map((edge, i) => edge!.vertices[0] === start.ring[i] ? edge!.curve : reverseCurve(edge!.curve));
   const stations = Array.from({ length: count }, (_, i) => i / (count - 1));
   const rows = stations.map(t => curves.map(curve => local(evaluateCurve(curve, t)).slice(0, 2) as [number, number]));
-  const fit = fitRectangularTurn(rows, stations.map(t => height * t), stations);
+  const fitTurn = sides === 3 ? fitTriangularTurn : fitRectangularTurn;
+  const fit = fitTurn(rows, stations.map(t => height * t), stations);
   return !!fit && curves.every((curve, i) => curve.knots.every((knot, j) => Math.abs(knot - fit.knots[j]) <= 8 * Number.EPSILON)
     && curve.controlPoints.every((point, j) => dist(local(point), fit.rails[i][j]) <= tolerance));
 }

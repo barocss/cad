@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1550: [Refine compact triangular Smooth Turn display after STEP Open](notes/triangular-step-turn-display-2026-11-21/README.md), #630. Verify geometry-bound admission, reduced display rail error and native edge identity on both desktop backends.
 - D1549: [Verify AP214 exchange of the approved triangular Smooth Turn](notes/triangular-turn-step-roundtrip-2026-11-21/README.md), #630. Verify the independent geometry, actual fresh Open and explicit exchange loss.
 - D1548: [Verify a reviewed Agent angle edit on a triangular Smooth Turn](notes/review-pinned-triangular-turn-angle-2026-11-21/README.md), #630 and #324. Verify visual revision refusal, explicit Studio approval and reopened native winding.
 - D1547: [Edit the signed angle of a saved triangular Smooth Turn](notes/triangular-turn-history-angle-2026-11-21/README.md), #630. Verify owned station updates, native IDs, Studio edit and reopen, and the local revision requirement.

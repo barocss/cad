@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1, faceGeometry, type Point } from '@barocss/cad';
+import { isCompactStepTurn } from '@barocss/cad/internal/step-turn-display';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
 import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { emptyDoc, withNode, type SketchNode } from '../src/engine/doc';
-import { evaluateDoc, partBreps } from '../src/engine/evaluate';
+import { evaluateDoc, exportStudioStep, partBreps } from '../src/engine/evaluate';
 import { bodyMesh } from '../src/engine/mesh';
 import { revisionOf } from '../src/util/revision';
 
@@ -230,4 +231,47 @@ test('triangle angle editing retains terminal ownership and requires an exact Ag
   const got = editFields(accepted.state.doc.nodes, index, doc.parameters).find(field => field.key === 'smoothTurnAngle');
   assert.ok(got?.kind === 'number');
   assert.equal(got.get(accepted.state.doc.nodes), 180);
+});
+
+test('a compact triangular STEP Turn refines only when its side and cap geometry agrees', () => {
+  for (const angle of [180, -450]) {
+    const doc = smooth.build!(ctx(), { height: 50, angle });
+    const step = exportStudioStep(doc, { name: 'Triangle exchange' }).text;
+    const opened = withNode(emptyDoc(), { kind: 'import', name: 'Unrelated name', step });
+    const [{ brep }] = partBreps(opened), before = evaluateDoc(opened, 1), after = evaluateDoc(opened, 2, 8, true);
+    assert.ok(before.ok && after.ok && isCompactStepTurn(brep));
+    const { loftDetail, ...canonical } = after.bodies[0].mesh;
+    assert.deepEqual(canonical, before.bodies[0].mesh);
+    assert.ok(loftDetail && 'kind' in loftDetail && loftDetail.kind === 'smooth-turn');
+    const original = bodyMesh(brep, 0, 24);
+    assert.deepEqual(loftDetail.positions, original.positions);
+    assert.deepEqual(loftDetail.edgeOfSegment, original.edgeOfSegment);
+    assert.notDeepEqual(loftDetail.normals, original.normals);
+
+    const renamed = { ...brep,
+      faces: brep.faces.map((face, i) => ({ ...face, name: 'wall-or-cap-' + i })).reverse(),
+      edges: brep.edges.map((edge, i) => ({ ...edge, name: 'rim-or-rail-' + i })).reverse(),
+    };
+    assert.equal(isCompactStepTurn(renamed), true);
+
+    const lifted = structuredClone(brep);
+    const cap = lifted.faces.find(face => face.surface.kind === 'surface' && face.surface.degreeV === 1)?.surface;
+    assert.ok(cap?.kind === 'surface');
+    for (const row of cap.controlPoints) for (const point of row) {
+      point[1] += .6e-6;
+      point[2] += .8e-6;
+    }
+    assert.equal(isCompactStepTurn(lifted), false);
+
+    const deformed = structuredClone(brep);
+    const rail = deformed.edges.find(edge => edge.curve.degree === 3)!.curve;
+    const originalPoles = JSON.stringify(rail.controlPoints);
+    const [x, y, z] = rail.controlPoints[4];
+    const moved: Point = [x + .01, y, z];
+    for (const { surface } of deformed.faces) if (surface.kind === 'surface')
+      for (const row of surface.controlPoints) if (JSON.stringify(row) === originalPoles) row[4] = moved;
+    rail.controlPoints[4] = moved;
+    assert.ok(checkBrep(deformed, { strict: true }).valid);
+    assert.equal(isCompactStepTurn(deformed), false);
+  }
 });

@@ -4,6 +4,8 @@ import { createFlow } from './flow-helper.mjs';
 const baseline = process.argv.includes('--baseline');
 const backend = process.argv.includes('--webgl2') ? 'webgl2' : 'webgpu';
 const imported = process.argv.includes('--step');
+const triangular = process.argv.includes('--triangle');
+const turnIndex = triangular ? 0 : 1;
 const file = process.argv[3];
 const input = JSON.parse(await readFile(imported ? process.argv[4] : file, 'utf8'));
 const doc = imported ? input.doc : input;
@@ -25,12 +27,12 @@ import { bodyMesh } from '@barocss/cad-model/engine/mesh';
 import { evaluateCurve, curveDomain, checkBrep, brepMassProperties } from '@barocss/cad';
 import { digestOf } from '@barocss/cad-model/util/digest';
 const source = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-const result = partBreps(source).find(body => body.brep.faces.length === 6)!;
+const result = partBreps(source).find(body => body.brep.faces.length === ${triangular ? 5 : 6})!;
 const evaluated = evaluateDoc(source, 1, 8, true);
 assert.ok(evaluated.ok);
 const baseline = evaluated.bodies.find(body => body.key === result.key)!.mesh;
-const native = result.brep.edges.filter(edge => edge.curve.degree === 3 && edge.curve.controlPoints.length === 13);
-assert.equal(native.length, 4);
+const native = result.brep.edges.filter(edge => edge.curve.degree === 3 && edge.curve.controlPoints.length === ${triangular ? 16 : 13});
+assert.equal(native.length, ${triangular ? 3 : 4});
 const data = [baseline, bodyMesh(result.brep, 1, 24)].map(mesh => ({
   quality: mesh.quality, triangles: mesh.indices.length / 3, rails: native.map(edge => {
     const index = mesh.edges.find(view => view.nativeJoint?.edgeId === edge.id)!.index;
@@ -80,10 +82,12 @@ await f.run(async () => {
   const camera = await f.page.evaluate(() => window.__studioCamera());
   f.report.observations.push({ camera, backend, baseline });
   const read = await f.inspect('rails-and-tiers', doc);
-  const detail = await f.page.evaluate(() => window.__studioLoftDisplay?.(1));
-  assert.equal(await f.page.evaluate(() => window.__studioLoftDisplay?.(0)), null);
+  const detail = await f.page.evaluate(index => window.__studioLoftDisplay?.(index), turnIndex);
+  if (!triangular) assert.equal(await f.page.evaluate(() => window.__studioLoftDisplay?.(0)), null);
   if (baseline) assert.equal(detail, null);
-  else assert.deepEqual(detail, { triangles: imported ? 1372 : 1292, baseTriangles: imported ? 476 : 444, kind: 'smooth-turn' });
+  else assert.deepEqual(detail, {
+    triangles: read.data[1].triangles, baseTriangles: read.data[0].triangles, kind: 'smooth-turn',
+  });
   const projected = await f.page.evaluate(tiers => tiers.map(tier => ({ ...tier, rails: tier.rails.map(rail => ({ id: rail.id,
     lines: rail.lines.map(p => window.__studioScreenOf(p)), samples: rail.samples.map(p => window.__studioScreenOf(p)),
   })) })), read.data);
@@ -105,18 +109,18 @@ await f.run(async () => {
   assert.deepEqual(await f.page.evaluate(() => window.__studioCamera()), camera);
   await f.snapshot('turn-wireframe-measured-view');
 
-  const hit = await f.page.evaluate(rails => {
+  const hit = await f.page.evaluate(({ rails, turnIndex, canonical }) => {
     for (const rail of rails) {
       for (const point of rail.samples.filter((_, i) => i % 10 === 0).slice(5, -5)) {
         const hit = window.__studioEdgeAt(point, 3);
-        if (hit?.body === 1 && hit.segments.length) {
+        if (hit?.body === turnIndex && hit.segments.length && canonical[hit.edge] === rail.id) {
           const pixel = window.__studioScreenOf(point);
           if (document.elementFromPoint(...pixel)?.matches('canvas.vp-canvas')) return { rail: rail.id, hit, pixel };
         }
       }
     }
     return null;
-  }, read.data[0].rails);
+  }, { rails: read.data[0].rails, turnIndex, canonical: read.canonical });
   assert.ok(hit, 'A native Smooth Turn rail is pickable in the actual renderer');
   assert.equal(read.canonical[hit.hit.edge], hit.rail);
   const expected = read.data[baseline ? 0 : 1].rails.find(rail => rail.id === hit.rail).lines;
@@ -129,7 +133,7 @@ await f.run(async () => {
     edge.body === pick.body && edge.edge === pick.edge), { body: hit.hit.body, edge: hit.hit.edge });
   await f.same(doc);
   const bodies = (await f.bodies()).bodies;
-  assert.ok(Math.abs(bodies[1].volume - read.volume) < 1e-7);
+  assert.ok(Math.abs(bodies[turnIndex].volume - read.volume) < 1e-7);
   const { digest, counts, volume } = read;
   f.report.observations.push({ body: hit.hit.body, edge: hit.hit.edge, rail: hit.rail, segments: hit.hit.segments.length,
     detail, native: { digest, counts, volume } });
