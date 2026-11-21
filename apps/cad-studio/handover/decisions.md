@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1542: [Verify AP214 exchange for an approved Smooth Turn](notes/smooth-turn-step-roundtrip-2026-11-21/README.md), #630. Verify actual Studio output and reopening, independent spline rails, section volume and loss disclosure.
 - D1541: [Pin an Agent Smooth Turn width edit to its visual review](notes/review-pinned-smooth-turn-width-2026-11-21/README.md), #630 and #324. Verify the current pin, the signed native station geometry and explicit Studio approval through fresh Open.
 - D1540: [Refine the displayed faces and edges of a Smooth Turn](notes/smooth-turn-display-density-2026-11-21/README.md), #630. Verify sampled outline reduction, canonical native ownership and actual Studio selection on both renderers.
 - D1539: [Isolate the raster shadow marks on the widened Smooth Turn](notes/smooth-turn-raster-shadow-2026-11-21/README.md), #630. Keep the same camera and solid and test Edges and the first sun’s Shadow independently in WebGPU Render.
