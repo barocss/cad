@@ -123,6 +123,16 @@ function rebuildVerticalCorner(brep: Brep, edit: NonNullable<ReturnType<typeof r
 }
 
 function readChamfer(brep: Brep, faceName: string, sharpEdges: readonly string[]) {
+  const corner = readBoxCornerTrim(brep, faceName, sharpEdges);
+  if (!corner) return undefined;
+  const bevel = corner.chartByFace.get(corner.selected.id);
+  if (!bevel || !bevel.normal.every(Number.isFinite)
+    || corner.neighbors.some(({ edge }) => edge.curve.controlPoints.some(point => !trimFits(bevel, point, corner.roundoff)))) return undefined;
+  return { ...corner, bevel };
+}
+
+/** Read the closed trim of a bounded box-corner finish. Each caller proves its removed face geometry. */
+export function readBoxCornerTrim(brep: Brep, faceName: string, sharpEdges: readonly string[], curvedRails = false) {
   const [body] = brep.bodies, [shell] = brep.shells;
   const count = sharpEdges.length;
   if (brep.bodies.length !== 1 || body.kind !== 'solid' || body.shells.length !== 1
@@ -136,24 +146,24 @@ function readChamfer(brep: Brep, faceName: string, sharpEdges: readonly string[]
   if (!selected) return undefined;
   const loops = byId(brep.loops), uses = byId(brep.coedges), edges = byId(brep.edges), vertices = byId(brep.vertices);
   const chartByFace = new Map(brep.faces.map(face => [face.id, affineChart(face.surface, face.sense)]));
-  const bevel = chartByFace.get(selected.id);
   const extent = geometryScaleMM(brep.vertices.map(vertex => vertex.point));
-  if (!bevel || !(extent <= CadNumericPolicy.coordinateAbs) || !bevel.normal.every(Number.isFinite)) return undefined;
+  if (!(extent <= CadNumericPolicy.coordinateAbs)) return undefined;
   const linear = linearToleranceMM(extent), roundoff = 64 * Number.EPSILON * Math.max(1, extent);
-  if (brep.edges.some(({ curve, vertices: ends }) => curve.degree !== 1 || curve.controlPoints.length !== 2
-    || curve.weights.length !== 2 || curve.weights.some(weight => weight !== 1)
-    || curve.knots.length !== 4 || curve.knots.some((knot, i) => knot !== (i < 2 ? 0 : 1))
-    || ends.some((id, i) => !samePoint(vertices.get(id)!.point, curve.controlPoints[i])))) return undefined;
-
   const selectedLoop = loops.get(selected.loops[0])!;
   if (selectedLoop.coedges.length !== 4) return undefined;
   const neighbors: Neighbor[] = selectedLoop.coedges.map(id => {
     const use = uses.get(id)!, twin = uses.get(use.twin!)!;
     return { edge: edges.get(use.edge)!, twin, loop: loops.get(twin.loop)! };
   });
-  if (new Set(neighbors.map(item => item.loop.face)).size !== 4
-    || neighbors.some(({ edge }) => edge.curve.controlPoints.some(point => !trimFits(bevel, point, roundoff)))) return undefined;
-  return { shell, selected, loops, uses, edges, vertices, chartByFace, bevel, neighbors, linear, roundoff };
+  if (new Set(neighbors.map(item => item.loop.face)).size !== 4) return undefined;
+  for (const edge of brep.edges) {
+    const { curve } = edge, poles = curve.controlPoints;
+    if (!samePoint(vertices.get(edge.vertices[0])!.point, poles[0]) || !samePoint(vertices.get(edge.vertices[1])!.point, poles.at(-1)!)) return undefined;
+    if (curvedRails && curve.degree === 2 && neighbors.some(neighbor => neighbor.edge === edge)) continue;
+    if (curve.degree !== 1 || poles.length !== 2 || curve.weights.length !== 2 || curve.weights.some(weight => weight !== 1)
+      || curve.knots.length !== 4 || curve.knots.some((knot, i) => knot !== (i < 2 ? 0 : 1))) return undefined;
+  }
+  return { shell, selected, loops, uses, edges, vertices, chartByFace, neighbors, linear, roundoff };
 }
 
 type Chamfer = NonNullable<ReturnType<typeof readChamfer>>;
@@ -251,7 +261,7 @@ export function healHorizontalChamferIfAdmitted(brep: Brep, faceName: string, sh
   return healed && boxCapOffsetFrame(healed, capName) ? healed : undefined;
 }
 
-function rebuildSharpCorner(brep: Brep, source: Chamfer, keepSeam: Neighbor, discardSeam: Neighbor, rails: readonly Neighbor[],
+export function rebuildSharpCorner(brep: Brep, source: NonNullable<ReturnType<typeof readBoxCornerTrim>>, keepSeam: Neighbor, discardSeam: Neighbor, rails: readonly Neighbor[],
   points: ReadonlyMap<string, Point>, remap: ReadonlyMap<string, string>, sharpEdgeName: string, remaining: 0 | 1): Brep | undefined {
   const { shell, selected, loops, uses, edges, chartByFace, roundoff } = source;
   const kept = keepSeam.edge, removed = discardSeam.edge;
@@ -285,11 +295,12 @@ function rebuildSharpCorner(brep: Brep, source: Chamfer, keepSeam: Neighbor, dis
     const points = cycle.map(use => pointById.get(startOf(edgeById.get(use.edge)!, use))!.point);
     const extended = coverAffineTrim(chart, face.sense, points, roundoff);
     if (!extended || !points.every(point => trimFits(extended, point, roundoff))) return undefined;
-    nextFaces.push(extended === chart ? face : { ...face, surface: extended.surface });
+    const sameChart = extended.surface === face.surface;
+    nextFaces.push(sameChart ? face : { ...face, surface: extended.surface });
     nextLoops.push(cycle.length === loop.coedges.length ? loop : { ...loop, coedges: cycle.map(use => use.id) });
     for (const [i, use] of cycle.entries()) {
       const edge = edgeById.get(use.edge)!;
-      const pcurve = !use.pcurve || (extended === chart && edge === edges.get(uses.get(use.id)!.edge)) ? use.pcurve
+      const pcurve = !use.pcurve || (sameChart && edge === edges.get(uses.get(use.id)!.edge)) ? use.pcurve
         : lineCurve(use.pcurve.id, uvPoint(extended, edge.curve.controlPoints[0]), uvPoint(extended, edge.curve.controlPoints[1]));
       nextUses.push({ ...use, pcurve, next: cycle[(i + 1) % cycle.length].id, prev: cycle[(i + cycle.length - 1) % cycle.length].id });
     }

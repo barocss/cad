@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { commandById } from '../src/app/commands';
 import { dispatchTool } from '../src/chat/tools';
-import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
+import { emptyDoc, isDeleteFaceFilletSource, rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
 import { readStudioDoc } from '../src/engine/migrate';
 import { revisionOf } from '../src/util/revision';
@@ -98,6 +98,44 @@ test('Delete face reopens the two-bore plate after filling each bore in either o
     assert.equal(finished.bodies[0].volume, 12000);
     assert.equal(partBreps(doc)[0].brep.faces.length, 6);
   }
+});
+
+test('Delete face restores a sharp box corner from its exact outside fillet', async () => {
+  const stock = rectanglePart(40, 30, 10), edge = 'n1.side0|n1.side3', name = 'n2.face';
+  const fillet = { kind: 'fillet', parent: { node: 1, side: 'solid' }, radius: 2 } as const;
+  const doc = withNode(stock, { ...fillet, edges: [edge] }), pristine = structuredClone(doc);
+  const before = await evaluate(doc);
+  assert.ok(before.ok && before.bodies[0].volume !== null);
+  assert.ok(Math.abs(before.bodies[0].volume - (12000 - 10 * (4 - Math.PI))) < 1e-7);
+  const { bodies } = before;
+  const index = bodies[0].mesh.faces.findIndex(face => face.name === name);
+  assert.ok(index >= 0);
+  const ctx = { doc, bodies, selection: { ...emptySel, faces: [{ body: 0, face: index }] } };
+  assert.equal(command.available(ctx).ok, true);
+  const held = withNode(stock, { ...fillet, edges: ['n1.side0|n1.top'] });
+  assert.equal(isDeleteFaceFilletSource(held.nodes, 2), false);
+  const run = (face: string) => dispatchTool({ doc, bodies }, 'features',
+    { action: 'command', command: 'delete-face', faces: [face], expectedRevision: revisionOf(doc) }, evaluate);
+  const unrelated = await run('n1.top');
+  assert.ok(unrelated.isError && !unrelated.changed);
+  assert.equal(unrelated.state.doc, doc);
+  const reply = await run(name);
+  assert.ok(reply.changed && !reply.isError, reply.content);
+  const healed = reply.state.doc, edit = healed.nodes.at(-1);
+  assert.deepEqual(command.build!(ctx, {}), healed);
+  assert.deepEqual(healed.nodes.slice(0, -1), doc.nodes);
+  assert.ok(edit?.kind === 'delete-face' && edit.sigs?.[name]);
+  assert.deepEqual(edit.faces, [name]);
+  assert.equal(edit.sigs[name].r, 2);
+  const reopened = readStudioDoc(JSON.stringify(healed));
+  assert.ok('doc' in reopened);
+  const after = await evaluate(reopened.doc);
+  assert.ok(after.ok && after.bodies[0].volume !== null && Math.abs(after.bodies[0].volume - 12000) < 1e-7);
+  const [{ brep: original }] = partBreps(doc), [{ brep: result }] = partBreps(reopened.doc);
+  assert.deepEqual(result.faces.map(face => [face.name, face.id]).sort(),
+    original.faces.filter(face => face.name !== name).map(face => [face.name, face.id]).sort());
+  assert.ok(result.edges.some(item => item.name === edge));
+  assert.deepEqual(doc, pristine);
 });
 
 test('Delete face heals the exact inside fillet of a straight L-section', async () => {

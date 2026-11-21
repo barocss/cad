@@ -470,7 +470,18 @@ export function isBoredPlateHealSource(nodes: readonly unknown[], index: number)
   return boredPlate !== undefined && isTwoBorePlate(nodes, boredPlate);
 }
 
-/** Identify the authored fillet. The kernel proves the current solid and its concave arc. */
+function boxWallNames(stock: unknown, index: number): string[] {
+  const id = textRecord(stock) && typeof stock.id === 'string' ? stock.id : `n${index}`;
+  return [0, 1, 2, 3].map(side => `${id}.side${side}`);
+}
+
+function boxCornerEdge(walls: readonly string[], ends: readonly string[]): boolean {
+  if (ends.length !== 2) return false;
+  const [a, b] = ends.map(side => walls.indexOf(side));
+  return a >= 0 && b >= 0 && (a + b) % 2 === 1;
+}
+
+/** Identify a single authored fillet. The kernel proves the current solid and its arc. */
 export function isDeleteFaceFilletSource(nodes: readonly unknown[], index: number): boolean {
   const fillet = nodes[index];
   if (!textRecord(fillet) || fillet.kind !== 'fillet' || fillet.radii !== undefined || fillet.section !== undefined ||
@@ -485,6 +496,10 @@ export function isDeleteFaceFilletSource(nodes: readonly unknown[], index: numbe
       straightExtrudeSketch(nodes, right)?.profile === 'rectangle';
   }
   const sketch = straightExtrudeSketch(nodes, stockIndex);
+  if (sketch?.profile === 'rectangle') {
+    const [edge] = fillet.edges;
+    return typeof edge === 'string' && boxCornerEdge(boxWallNames(stock, stockIndex), edge.split('|'));
+  }
   return sketch?.profile === 'polygon' &&
     Array.isArray(sketch.points) && sketch.points.length === 6;
 }
@@ -527,23 +542,19 @@ function chamferDeleteFaceTarget(nodes: readonly unknown[], index: number, selec
   const parent = precedingSolidParent(chamfer, index);
   if (parent === undefined || !isBoxReplacementSource(nodes, parent)) return;
   const stock = nodes[parent], id = textRecord(stock) && typeof stock.id === 'string' ? stock.id : `n${parent}`;
-  const walls = [0, 1, 2, 3].map(side => `${id}.side${side}`);
+  const walls = boxWallNames(stock, parent);
   const joined = chamfer.edges.flatMap(edge => typeof edge === 'string' ? [edge.split('|')] : []);
   if (joined.length !== chamfer.edges.length || joined.some(ends => ends.length !== 2)) return;
   const name = (typeof chamfer.id === 'string' ? chamfer.id : `n${index}`) + '.face';
-  const sideEdge = (ends: string[]) => {
-    const [a, b] = ends.map(side => walls.indexOf(side));
-    return a >= 0 && b >= 0 && (a + b) % 2 === 1;
-  };
   if (joined.length === 2) {
-    if (!joined.every(sideEdge) || new Set(joined.flat()).size < 3 ||
+    if (!joined.every(ends => boxCornerEdge(walls, ends)) || new Set(joined.flat()).size < 3 ||
         (selected !== name + '#1' && selected !== name + '#2')) return;
     return { name: selected, role: 'chamfer' };
   }
   const [ends] = joined;
   const [a, b] = ends.map(name => walls.indexOf(name));
   const capEdge = (a >= 0 || b >= 0) && ends.some(name => name === id + '.top' || name === id + '.bottom');
-  if (!sideEdge(ends) && !capEdge) return;
+  if (!boxCornerEdge(walls, ends) && !capEdge) return;
   return { name, role: 'chamfer' };
 }
 
@@ -564,7 +575,7 @@ function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly 
   if (typeof name !== 'string' || !name.trim() || /[+\0]/.test(name)) return 'Delete face: one exact native face is required.';
   const plane = planarDeleteFaceTarget(nodes, parent.node, name);
   if (!plane && !isBoredPlateHealSource(nodes, parent.node) && !isDeleteFaceFilletSource(nodes, parent.node))
-    return 'Delete face: a supported through-hole plate, cylindrical boss, chamfered box or filleted L-section is required.';
+    return 'Delete face: a supported through-hole plate, cylindrical boss, chamfered box, filleted box or filleted L-section is required.';
   if (node.rematched !== undefined && (!textRecord(node.rematched) || Object.keys(node.rematched).length))
     return 'Delete face: the original face name is required.';
   const sig = textRecord(node.sigs) && Object.hasOwn(node.sigs, name) && Object.keys(node.sigs).length === 1 ? node.sigs[name] : undefined;

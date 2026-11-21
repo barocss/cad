@@ -1,7 +1,13 @@
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { BrepError, checkBrep, type Brep, type BrepFace } from '../brep/brep-core.js';
+import { circleOf } from '../brep/brep-tessellate.js';
 import { segEnd, segStart, type CurveSegment2, type XY } from '../brep/curved-arrangement.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
+import { dist } from '../core/vec3.js';
+import type { Point } from '../types.js';
+import { boxCapOffsetFrame } from './drafted-cap-offset.js';
+import { readBoxCornerTrim, rebuildSharpCorner } from './heal-prismatic-chamfer.js';
+import { affineChart } from './prism-wall-offset.js';
 import { brepFromPrismatic, type PrismaticSolid } from './prismatic-solid.js';
 
 type Line = Extract<CurveSegment2, { kind: 'line' }>;
@@ -88,4 +94,97 @@ export function healPrismaticFilletIfAdmitted(solid: PrismaticSolid, brep: Brep,
   if (result.faces.length !== 8 || brep.faces.some(original => original !== face && !retainedNames.has(original.name)))
     throw new BrepError('TOPOLOGY', 'Delete face: the healed L-prism did not retain the original wall and cap names');
   return result;
+}
+
+type CornerTrim = NonNullable<ReturnType<typeof readBoxCornerTrim>>;
+type Neighbor = CornerTrim['neighbors'][number];
+const angularRoundoff = 64 * Number.EPSILON;
+
+function filletWall(source: CornerTrim, seam: Neighbor, axis: 0 | 1) {
+  const chart = source.chartByFace.get(seam.loop.face);
+  if (!chart || Math.abs(chart.normal[axis]) < 1 - angularRoundoff
+    || chart.normal.some((value, i) => i !== axis && Math.abs(value) > angularRoundoff)) return undefined;
+  const ids = new Set(seam.loop.coedges.flatMap(id => source.edges.get(source.uses.get(id)!.edge)!.vertices));
+  const far = [...ids].filter(id => !seam.edge.vertices.includes(id)).map(id => source.vertices.get(id)!.point);
+  if (far.length !== 2 || far[0][2] === far[1][2] || far[0][0] !== far[1][0] || far[0][1] !== far[1][1]) return undefined;
+  // The untrimmed vertical edge still carries the exact original wall coordinate.
+  const at = far[0][axis], sign = Math.sign(chart.normal[axis]);
+  const [a, b] = seam.edge.curve.controlPoints;
+  if (a[2] === b[2] || a[0] !== b[0] || a[1] !== b[1] || Math.abs(a[axis] - at) > source.roundoff
+    || chart.surface.controlPoints.flat().some(point => Math.abs(point[axis] - at) > source.roundoff)) return undefined;
+  return { seam, chart, axis, at, sign };
+}
+
+function fullQuarterCylinder(source: CornerTrim, rails: readonly Neighbor[], lo: number, hi: number, corner: XY, centre: XY, radius: number): boolean {
+  const { selected, roundoff } = source, { surface } = selected;
+  const quarterKnots = (knots: readonly number[]) => knots.length === 6 && knots.every((knot, i) => knot === (i < 3 ? 0 : 1));
+  if (surface.kind !== 'surface' || surface.degreeU !== 2 || !quarterKnots(surface.knotsU) || surface.degreeV !== 1
+    || surface.knotsV.length !== 4 || surface.knotsV.some((knot, i) => knot !== (i < 2 ? 0 : 1))
+    || surface.controlPoints.length !== 3 || surface.controlPoints.some(row => row.length !== 2 || row[0][2] !== lo || row[1][2] !== hi
+      || row[0][0] !== row[1][0] || row[0][1] !== row[1][1])) return false;
+  for (const { edge } of rails) {
+    const { curve } = edge, [a, mid, b] = curve.controlPoints;
+    if (curve.degree !== 2 || !mid || !b || curve.controlPoints.length !== 3 || !quarterKnots(curve.knots)
+      || !closePoint([mid[0], mid[1]], corner, roundoff) || a[2] !== mid[2] || a[2] !== b[2]) return false;
+    const atEnd = a[2] === lo ? 0 : a[2] === hi ? 1 : undefined;
+    if (atEnd === undefined) return false;
+    const matches = (reverse: boolean) => surface.controlPoints.every((row, i) => {
+      const j = reverse ? 2 - i : i;
+      return dist(row[atEnd], curve.controlPoints[j]) <= roundoff && surface.weights[i][atEnd] === curve.weights[j];
+    });
+    if (!matches(false) && !matches(true)) return false;
+    const circle = circleOf(curve);
+    if (!circle || circle.spans.length !== 1 || Math.abs(circle.spans[0].phi - Math.PI / 2) > CadNumericPolicy.parameterWidth
+      || Math.abs(circle.r - radius) > roundoff || !closePoint([circle.c[0], circle.c[1]], centre, roundoff)) return false;
+  }
+  const cylinder = faceGeometry(selected);
+  return cylinder.kind === 'cylinder' && cylinder.out === 1 && cylinder.a[0] === 0 && cylinder.a[1] === 0
+    && Math.abs(cylinder.a[2]) === 1 && Math.abs(cylinder.r - radius) <= roundoff && closePoint([cylinder.c[0], cylinder.c[1]], centre, roundoff);
+}
+
+/** Restore one full-height convex circular fillet to the sharp corner of its original rectangular stock. */
+export function healConvexPrismaticFilletIfAdmitted(brep: Brep, faceName: string, sharpEdgeName: string): Brep | undefined {
+  if (brep.source.family !== 'prismatic-solid' || brep.coedges.some(use => !use.pcurve)) return undefined;
+  const source = readBoxCornerTrim(brep, faceName, [sharpEdgeName], true);
+  if (!source) return undefined;
+  const { chartByFace, neighbors, vertices, linear, roundoff } = source;
+  const levels = [...new Set(brep.vertices.map(({ point }) => point[2]))].sort((a, b) => a - b), [lo, hi] = levels;
+  if (levels.length !== 2 || hi - lo <= linear) return undefined;
+  const rails = neighbors.filter(({ edge }) => edge.curve.degree === 2);
+  const seams = neighbors.filter(({ edge }) => edge.curve.degree === 1);
+  if (rails.length !== 2 || seams.length !== 2 || rails[0].edge.curve.controlPoints[0][2] === rails[1].edge.curve.controlPoints[0][2]
+    || rails.some(({ loop, edge }) => loop.coedges.length !== 5 || seams.some(seam => seam.edge.vertices.filter(id => edge.vertices.includes(id)).length !== 1))
+    || seams.some(({ loop }) => loop.coedges.length !== 4)
+    || seams.map(({ loop }) => brep.faces.find(face => face.id === loop.face)!.name).sort().join('|') !== sharpEdgeName) return undefined;
+
+  const x = filletWall(source, seams[0], 0) ?? filletWall(source, seams[1], 0);
+  const y = filletWall(source, seams[0], 1) ?? filletWall(source, seams[1], 1);
+  if (!x || !y) return undefined;
+  const corner: XY = [x.at, y.at];
+  const [a] = x.seam.edge.curve.controlPoints, [b] = y.seam.edge.curve.controlPoints;
+  const rx = x.sign * (x.at - b[0]), ry = y.sign * (y.at - a[1]);
+  if (!(rx > 2 * linear && ry > 2 * linear) || Math.abs(rx - ry) > roundoff) return undefined;
+  const centre: XY = [b[0], a[1]];
+  if (!fullQuarterCylinder(source, rails, lo, hi, corner, centre, rx)) return undefined;
+
+  // Circle endpoint trigonometry can put a tangent wall a few ulps off its original support.
+  // Recover only the fixed coordinate of the two certified walls, then continue their affine trims.
+  for (const wall of [x, y]) {
+    const { axis, at, chart } = wall;
+    if (chart.surface.controlPoints.flat().every(point => point[axis] === at)) continue;
+    const face = brep.faces.find(face => face.id === wall.seam.loop.face)!;
+    const controlPoints = chart.surface.controlPoints.map(row => row.map(point => {
+      const exact: Point = [...point];
+      exact[axis] = at;
+      return exact;
+    }));
+    const exact = affineChart({ ...chart.surface, controlPoints }, face.sense);
+    if (!exact) return undefined;
+    chartByFace.set(face.id, exact);
+  }
+  const points = new Map(x.seam.edge.vertices.map(id => [id, [x.at, y.at, vertices.get(id)!.point[2]] as Point]));
+  const remap = new Map(y.seam.edge.vertices.map(id => [id, x.seam.edge.vertices.find(keep => vertices.get(keep)!.point[2] === vertices.get(id)!.point[2])!]));
+  const healed = rebuildSharpCorner(brep, source, x.seam, y.seam, rails, points, remap, sharpEdgeName, 0);
+  const cap = brep.faces.find(face => face.id === rails[0].loop.face)!.name!;
+  return healed && boxCapOffsetFrame(healed, cap) ? healed : undefined;
 }
