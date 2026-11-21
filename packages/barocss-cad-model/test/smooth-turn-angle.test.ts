@@ -193,3 +193,30 @@ test('Agent Smooth Turn angle edits require an exact pin and refuse out-of-range
   assert.equal(angle.get(result.state.doc.nodes), -360);
   assert.deepEqual(result.state.doc.nodes.at(-1), doc.nodes.at(-1));
 });
+
+test('Agent Smooth Turn width edits require the current revision and one bounded width value', async () => {
+  const doc = create(-360), index = doc.nodes.length - 1;
+  const evaluated = evaluateDoc(doc, 1);
+  assert.ok(evaluated.ok);
+  const state = { doc, bodies: evaluated.bodies }, expectedRevision = revisionOf(doc);
+  const args = { action: 'edit', index, values: { [smoothTurnWidthKey]: 20 } };
+  for (const [request, code] of [
+    [args, 'EDIT_INPUT'],
+    [{ ...args, expectedRevision: revisionOf(create(360)) }, 'EDIT_STALE'],
+    [{ ...args, expectedRevision, values: { ...args.values, [smoothTurnAngleKey]: 360 } }, 'EDIT_INPUT'],
+    [{ ...args, expectedRevision, feature: doc.nodes[index] }, 'EDIT_INPUT'],
+    ...[0, 12, smoothTurnWidthBounds.min, smoothTurnWidthBounds.max + 1, '20', Infinity].map(width =>
+      [{ ...args, expectedRevision, values: { [smoothTurnWidthKey]: width } }, 'EDIT_INPUT'] as const),
+  ] as const) {
+    const result = await dispatchTool(state, 'features', request, () => assert.fail('Refuse before native evaluation'));
+    assert.ok(result.isError && !result.changed, result.content);
+    assert.equal(result.state, state);
+    assert.equal(JSON.parse(result.content).code, code);
+  }
+  const result = await dispatchTool(state, 'features', { ...args, expectedRevision }, async candidate => evaluatePart(candidate, 0));
+  assert.ok(result.changed && !result.isError, result.content);
+  const width = editFields(doc.nodes, index).find(field => field.key === smoothTurnWidthKey);
+  assert.ok(width?.kind === 'number');
+  assert.deepEqual(result.state.doc, { ...doc, nodes: width.set(doc.nodes, 20) });
+  assert.equal(width.get(result.state.doc.nodes), 20);
+});

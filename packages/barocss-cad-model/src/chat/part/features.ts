@@ -4,7 +4,7 @@ import { commandById, commands, givenValues, shownFields, type Ctx, type Values 
 import { updateBoxFootprint } from '../../app/editCommand';
 import { editFields } from '../../app/editFields';
 import { editSavedOffsetFaceCommand } from '../../app/offsetFaceEdit';
-import { smoothTurnAngleKey, smoothTurnAngleLimit } from '../../app/smoothLoftTurn';
+import { smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '../../app/smoothLoftTurn';
 import { featureLabel, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
 import { loadPersonRows } from '../rows';
 import { ROWS_NOT_FROM_PERSON } from '../../engine/rowFiles';
@@ -318,9 +318,9 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   const refusal = checkFeatureRevision(state, args.expectedRevision, 'EDIT');
   if (refusal) return refusal;
   const given = isObj(args.values) ? args.values : {};
-  const editTurnAngle = Object.hasOwn(given, smoothTurnAngleKey);
-  if (editTurnAngle && (args.expectedRevision === undefined || args.feature !== undefined || Object.keys(given).length !== 1))
-    return fail(state, 'Edit a Smooth Turn with only values.smoothTurnAngle and the current expectedRevision from query.render or query.rebuild.',
+  const turnField = [smoothTurnAngleKey, smoothTurnWidthKey].find(key => Object.hasOwn(given, key));
+  if (turnField && (args.expectedRevision === undefined || args.feature !== undefined || Object.keys(given).length !== 1))
+    return fail(state, `Edit a Smooth Turn with only values.${turnField} and the current expectedRevision from query.render or query.rebuild.`,
       { code: 'EDIT_INPUT' });
   const editWallDistance = Object.hasOwn(given, savedWallDistanceKey);
   if (editWallDistance && (args.expectedRevision === undefined || args.feature !== undefined || Object.keys(given).length !== 1))
@@ -356,9 +356,14 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
       const f = fields.find(x => x.key === key);
       if (!f) return fail(state, `Feature ${index} has no value "${key}"; its values are ${fields.map(x => `${x.key} (${x.label})`).join(', ') || 'none'}.`);
       if (f.kind === 'number') {
+        if (key === smoothTurnWidthKey && (typeof v !== 'number' || smoothTurnWidthInvalid(v)))
+          return fail(state, `The existing Smooth Turn takes a width greater than ${smoothTurnWidthBounds.min} mm and at most ${smoothTurnWidthBounds.max} mm.`,
+            { code: 'EDIT_INPUT' });
         if (typeof v !== 'number' || !Number.isFinite(v)) return fail(state, `"${key}" must be a number.`);
+        if (key === smoothTurnWidthKey && v === f.get(nodes))
+          return fail(state, 'The saved Smooth Turn already has this width.', { code: 'EDIT_INPUT' });
         const node = nodes[index];
-        if (editTurnAngle && node.kind === 'loft') {
+        if (key === smoothTurnAngleKey && node.kind === 'loft') {
           const limit = smoothTurnAngleLimit(node.sections.length);
           if (Math.abs(v) > limit)
             return fail(state, `The existing Smooth Turn takes an angle from −${limit}° to +${limit}°.`, { code: 'EDIT_INPUT' });
