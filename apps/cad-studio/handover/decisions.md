@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1631: [Through Cut on an exact planar Thicken solid](notes/exact-thicken-through-cut-2026-11-22/README.md), #175 and #11. Verify the existing native cut, independently reconstructed cap loops and persistent operands through Studio edit and Open.
 - D1630: [Exact planar Thicken for convex quadrilateral sheets](notes/exact-planar-trapezoid-thicken-2026-11-22/README.md), #11. Verify exact corner admission, a tilted native trapezoid, warped refusal, retained affine identity and Studio edit and Open.
 - D1629: [Exact planar Thicken for an affine sheet](notes/exact-planar-thicken-2026-11-22/README.md), #11. Verify the six native faces, independent mass and thickness, preserved sampled names, and Studio edit and native Open.
 - D1628: [Propose Thicken from a visible Direct surface](notes/agent-direct-thicken-proposal-2026-11-22/README.md), #322 and #11. Verify an independently measured solid from a revision-pinned planar Ruled sheet through Studio approval and native Open.
