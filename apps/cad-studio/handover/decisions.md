@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1531: [Compare Smooth Turn ambient occlusion on both Studio renderers](notes/smooth-turn-ao-backends-2026-11-21/README.md), #630. Verify fixed-camera AO dependence with exact unchanged native geometry.
 - D1530: [Prefer Smooth Turn for the general Twist search](notes/twist-smooth-palette-2026-11-21/README.md), #630. Verify the keyboard result, explicit Ruled control and native reopening in Studio.
 - D1529: [Verify continuous Smooth Turn on a tilted sketch plane](notes/tilted-smooth-turn-2026-11-21/README.md), #630. Verify the signed rotation, world axis, caps and exact native reopening in Studio.
 - D1528: [Verify WebGPU annotation picking across native Save and Open](notes/pmi-native-save-pick-2026-11-21/README.md), #268. Pick from actual current glyph pixels and retain the authored file without restoring the previous selection.
