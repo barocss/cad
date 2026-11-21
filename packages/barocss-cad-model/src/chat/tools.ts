@@ -261,7 +261,7 @@ async function runPartTool(state: ChatState, name: string, args: Record<string, 
   }
   // (R8.2: the SubD cage tools, D83.)
   if (CAGE_TOOL_NAMES.has(name)) {
-    const r = runCageTool(state.doc, name, args);
+    const r = runCageTool(state.doc, name, args, state.partOf);
     if ('error' in r) return fail(state, r.error, { kept: 'the part is unchanged' });
     if ('read' in r) return { state, content: json({ ok: true, ...r.read }), isError: false, changed: false, summary: `${name}: read` };
     return accept(state, r.doc, evaluate, options, r.did, r.extra);

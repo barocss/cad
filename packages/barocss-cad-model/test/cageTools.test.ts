@@ -27,11 +27,13 @@ function sound(s: ChatState): number {
 }
 
 test('R8.2 the tools listed for the agent; subd_cage and subd_select read without changing the part', async () => {
-  for (const n of ['subd_cage', 'subd_select', 'subd_move', 'subd_extrude', 'subd_insert_loop', 'subd_bridge', 'subd_fill', 'subd_weld', 'subd_crease', 'subd_delete']) assert.ok(TOOLS.some(t => t.name === n), n);
+  for (const n of ['subd_cage', 'subd_select', 'subd_move', 'subd_scale', 'subd_extrude', 'subd_insert_loop', 'subd_bridge', 'subd_fill', 'subd_weld', 'subd_crease', 'subd_delete']) assert.ok(TOOLS.some(t => t.name === n), n);
   const s = await boxState(), i = subdIndex(s);
   const info = await dispatchTool(s, 'subd_cage', { index: i }, evaluate), c = parse(info.content);
   assert.ok(!info.isError && !info.changed); assert.equal(c.faces, 24); assert.equal(c.vertices, 26); assert.equal(c.validation.valid, true); assert.equal(c.validation.poles, 8);
   const top = parse((await dispatchTool(s, 'subd_select', { index: i, what: 'faces', normal: [0, 0, 1] }, evaluate)).content);
+  assert.match(top.cageRevision, /^[a-f0-9]{64}$/);
+  assert.equal(top.cageRevision, c.cageRevision);
   assert.equal(top.count, 4); assert.ok(top.faces.every((f: any) => f.normal[2] > 0.99 && Math.abs(f.centre[2] - 16) < 1e-9));
   const corner = parse((await dispatchTool(s, 'subd_select', { index: i, what: 'faces', normal: [0, 0, 1], box: { min: [0, 0, 0] } }, evaluate)).content);
   assert.equal(corner.count, 1);
@@ -46,7 +48,7 @@ test('R8.2 the tools listed for the agent; subd_cage and subd_select read withou
     assert.deepEqual(parse(defaultTilt.content), top); assert.equal(defaultTilt.state.doc, s.doc);
     const narrowTilt = await dispatchTool(s, tool, { ...args, normal: tilted, withinAngle: 5 }, evaluate);
     assert.ok(!narrowTilt.isError && !narrowTilt.changed, narrowTilt.content);
-    assert.deepEqual(parse(narrowTilt.content), { ok: true, faces: [], count: 0 }); assert.equal(narrowTilt.state.doc, s.doc);
+    assert.deepEqual(parse(narrowTilt.content), { ok: true, faces: [], count: 0, cageRevision: top.cageRevision }); assert.equal(narrowTilt.state.doc, s.doc);
     const refused = await dispatchTool(s, tool, { ...args, within_deg: 5 }, evaluate);
     assert.ok(refused.isError && !refused.changed, refused.content);
     assert.match(parse(refused.content).error, /\[UNKNOWN_ARGUMENT\].*"within_deg"/);
@@ -54,6 +56,58 @@ test('R8.2 the tools listed for the agent; subd_cage and subd_select read withou
   }
   assert.equal(JSON.stringify(s.doc), before);
   assert.match(parse((await dispatchTool(s, 'subd_cage', { index: 5 }, evaluate)).content).error, new RegExp(`no feature 5; the SubD features are ${i}`));
+});
+
+test('scale uses the exact selected cage revision and changes each selected point once', async () => {
+  const state = await boxState(), index = subdIndex(state);
+  const query = { action: 'select', index, what: 'faces', normal: [0, 0, 1], box: { min: [0, 0, 0] } };
+  const selected = parse((await dispatchTool(state, 'subd', query, evaluate)).content);
+  assert.equal(selected.count, 1);
+  const [{ face, centre }] = selected.faces;
+  const args = { action: 'scale', index, cageRevision: selected.cageRevision, factor: 1.1, faces: [face, face] };
+  const before = cageOf(state), vertices = new Set(before.faces[face]);
+  const scaled = await dispatchTool(state, 'subd', args, evaluate);
+  assert.ok(!scaled.isError && scaled.changed, scaled.content);
+  assert.equal(parse(scaled.content).cage.new, undefined);
+  const after = cageOf(scaled.state);
+  before.positions.forEach((original, i) => {
+    const pivot = centre[i % 3];
+    if (vertices.has(Math.floor(i / 3))) assert.ok(Math.abs(after.positions[i] - (pivot + 1.1 * (original - pivot))) < 1e-12);
+    else assert.equal(after.positions[i], original);
+  });
+  assert.deepEqual(after.faces, before.faces);
+  assert.deepEqual(after.creases, before.creases);
+  assert.ok(sound(scaled.state) > 0);
+  const readBack = parse((await dispatchTool(scaled.state, 'subd', query, evaluate)).content);
+  assert.notEqual(readBack.cageRevision, selected.cageRevision);
+  const neverEvaluate = async () => { throw new Error('An invalid scale must stop before native evaluation'); };
+  for (const [source, input] of [
+    [scaled.state, args],
+    [state, { ...args, factor: 0 }],
+    [state, { ...args, factor: -1 }],
+    [state, { ...args, factor: 1 }],
+    [state, { ...args, faces: [] }],
+    [state, { ...args, cageRevision: undefined }],
+    [state, { ...args, index: null }],
+    [state, { ...args, index: false }],
+    [state, { ...args, index: '0' }],
+  ] as const) {
+    const refused = await dispatchTool(source, 'subd', input, neverEvaluate);
+    assert.ok(refused.isError && !refused.changed, refused.content);
+    assert.equal(refused.state.doc, source.doc);
+  }
+  const stale = await dispatchTool(scaled.state, 'subd', args, neverEvaluate);
+  assert.match(parse(stale.content).error, /cage revision.*changed/i);
+  const placedState = { ...state, partOf: 'p1' };
+  const placedPick = await dispatchTool(placedState, 'subd', query, neverEvaluate);
+  assert.ok(!placedPick.isError && !placedPick.changed);
+  assert.equal(parse(placedPick.content).cageRevision, undefined);
+  const placedScale = await dispatchTool(placedState, 'subd', args, neverEvaluate);
+  assert.match(parse(placedScale.content).error, /available on the base part/i);
+  assert.equal(placedScale.state.doc, state.doc);
+  const partArg = await dispatchTool(state, 'subd', { ...args, part: 'p1' }, neverEvaluate);
+  assert.match(parse(partArg.content).error, /UNKNOWN_ARGUMENT.*"part"/);
+  assert.equal(partArg.state.doc, state.doc);
 });
 
 test('R8.2 shaping: a top face extruded up (its region walled), a loop inserted, an edge creased, vertices moved — each body valid, the result naming what is new', async () => {

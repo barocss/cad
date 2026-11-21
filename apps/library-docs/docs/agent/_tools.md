@@ -193,6 +193,7 @@ A SubD cage (features.command subd-box, subd-torus or subd-tube makes one), by i
 | `subd.cage` | `subd_cage` | index |
 | `subd.select` | `subd_select` | index, what, normal?, withinAngle?, box?, edge?, limit? |
 | `subd.move` | `subd_move` | index, delta, vertices?, edges?, faces? |
+| `subd.scale` | `subd_scale` | index, cageRevision, factor, vertices?, edges?, faces? |
 | `subd.extrude` | `subd_extrude` | index, faces? \| edges?, offset? \| distance? |
 | `subd.insert_loop` | `subd_insert_loop` | index, edge, t? |
 | `subd.bridge` | `subd_bridge` | index, edges |

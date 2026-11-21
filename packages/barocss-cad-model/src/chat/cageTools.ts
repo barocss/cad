@@ -5,8 +5,10 @@
 // change is a change of topology, which L2 proposes.
 import { SubdError, type CageValidation } from '@barocss/cad';
 import type { ModelNode, StudioDoc } from '../engine/doc';
-import { commitDrag, emptyCageSel, runOp, selectedVertices, startSession, validationOf, type CageOp, type CageSelection, type CageSession, type StudioCage } from '../subd/cageEdit';
+import { featureId } from '../engine/ids';
+import { commitDrag, emptyCageSel, runOp, selectedVertices, selectionCentre, startSession, transformCageSelection, validationOf, type CageOp, type CageSelection, type CageSession, type StudioCage } from '../subd/cageEdit';
 import type { ToolDefinition } from './api';
+import { digestOf } from '../util/digest';
 import { r6Signed as r6 } from '../util/round';
 import { isObj, isVec3 } from '../util/guards';
 import { updateSubdCage } from '../subd/cageProvenance';
@@ -14,9 +16,9 @@ import { updateSubdCage } from '../subd/cageProvenance';
 type SubdNode = Extract<ModelNode, { kind: 'subd' }>;
 type V3 = [number, number, number];
 type Args = Record<string, unknown>;
-export const CAGE_TOOL_NAMES = new Set(['subd_cage', 'subd_select', 'subd_move', 'subd_extrude', 'subd_insert_loop', 'subd_bridge', 'subd_fill', 'subd_weld', 'subd_crease', 'subd_delete']);
+export const CAGE_TOOL_NAMES = new Set(['subd_cage', 'subd_select', 'subd_move', 'subd_scale', 'subd_extrude', 'subd_insert_loop', 'subd_bridge', 'subd_fill', 'subd_weld', 'subd_crease', 'subd_delete']);
 /** The ones that change the part. */
-export const CAGE_MUTATORS = new Set(['subd_move', 'subd_extrude', 'subd_insert_loop', 'subd_bridge', 'subd_fill', 'subd_weld', 'subd_crease', 'subd_delete']);
+export const CAGE_MUTATORS = new Set(['subd_move', 'subd_scale', 'subd_extrude', 'subd_insert_loop', 'subd_bridge', 'subd_fill', 'subd_weld', 'subd_crease', 'subd_delete']);
 
 /** A tool's answer: the next document and what it did, a read-only result, or why not. */
 export type CageToolResult = { doc: StudioDoc; did: string; extra: Record<string, unknown> } | { read: Record<string, unknown> } | { error: string };
@@ -78,14 +80,31 @@ function withCage(doc: StudioDoc, s: CageSession): StudioDoc {
   }) };
 }
 
+/** Cage indices belong to this feature and this exact indexed geometry. */
+function cageRevision(doc: StudioDoc, index: number, node: SubdNode): string {
+  return digestOf({ feature: featureId(doc.nodes, index), cage: node.cage, mirror: node.mirror });
+}
+
 /** Runs one cage tool. Read-only tools answer `read`; the others the document they make (not yet evaluated). */
-export function runCageTool(doc: StudioDoc, name: string, args: Args): CageToolResult {
+export function runCageTool(doc: StudioDoc, name: string, args: Args, partOf?: string): CageToolResult {
+  if (name === 'subd_scale') {
+    if (partOf !== undefined) return { error: 'Scale is available on the base part. Open a placed part definition before scaling its cage.' };
+    if (typeof args.index !== 'number' || !Number.isInteger(args.index)) return { error: 'Pass the current cage feature index as an integer.' };
+  }
   const at = nodeAt(doc, args.index);
   if ('error' in at) return at;
   const { node, index } = at, c = node.cage, s0 = startSession(index, c, node.mirror), nv = c.positions.length / 3;
   try {
-    if (name === 'subd_cage') return { read: { index, ...cageSummary(node, s0) } };
-    if (name === 'subd_select') return { read: select(c, args) };
+    if (name === 'subd_cage') return { read: { index, ...cageSummary(node, s0),
+      ...(partOf === undefined ? { cageRevision: cageRevision(doc, index, node) } : {}) } };
+    if (name === 'subd_select') {
+      const picked = select(c, args);
+      return { read: 'error' in picked || partOf !== undefined ? picked : { ...picked, cageRevision: cageRevision(doc, index, node) } };
+    }
+    if (name === 'subd_scale') {
+      if (node.suppressed || node.held) return { error: 'Restore the active SubD feature before scaling its cage.' };
+      if (args.cageRevision !== cageRevision(doc, index, node)) return { error: 'The cage revision is missing or has changed. Read this cage and select its elements again.' };
+    }
     const sel = selectionOf(c, args);
     if (typeof sel === 'string') return { error: sel };
     const s = { ...s0, sel };
@@ -95,6 +114,15 @@ export function runCageTool(doc: StudioDoc, name: string, args: Args): CageToolR
         const d = vec(args.delta); if (!d) return { error: 'Pass "delta": [dx, dy, dz] in mm.' };
         if (!selectedVertices(s).length) return { error: 'Pass what to move: "vertices", "edges" or "faces".' };
         next = commitDrag(s, d, false); did = `moved ${selectedVertices(s).length} cage vertices by [${d.join(', ')}]`; break;
+      }
+      case 'subd_scale': {
+        const factor = args.factor;
+        if (typeof factor !== 'number' || !Number.isFinite(factor) || factor <= 0) return { error: 'Pass a finite scale factor greater than zero.' };
+        const pivot = selectionCentre(s);
+        if (!pivot) return { error: 'Pass cage "vertices", "edges" or "faces" to scale.' };
+        next = transformCageSelection(s, { kind: 'scale', factor, pivot });
+        did = `scaled ${selectedVertices(s).length} cage vertices by ${factor} about their selection centre`;
+        break;
       }
       case 'subd_extrude': {
         if (!sel.faces.length && !sel.edges.length) return { error: 'Pass "faces" to extrude, or open "edges" (a boundary) to pull out.' };
@@ -128,7 +156,8 @@ export function runCageTool(doc: StudioDoc, name: string, args: Args): CageToolR
     const v = validationOf(next);
     if (!v.valid) return { error: `That would leave the cage not a manifold (${v.nonManifoldEdges.length} edges and ${v.nonManifoldVertices.length} vertices).` };
     const out = next.cage, made = { vertices: out.positions.length / 3, faces: out.faces.length };
-    return { doc: withCage(doc, next), did: `${did} (feature ${index})`, extra: { cage: { before: { vertices: nv, faces: c.faces.length }, after: made, ...(next.sel.faces.length || next.sel.edges.length ? { new: { faces: next.sel.faces, edges: next.sel.edges } } : {}) }, validation: validationSummary(v) } };
+    const newElements = name !== 'subd_scale' && (next.sel.faces.length || next.sel.edges.length) ? { faces: next.sel.faces, edges: next.sel.edges } : null;
+    return { doc: withCage(doc, next), did: `${did} (feature ${index})`, extra: { cage: { before: { vertices: nv, faces: c.faces.length }, after: made, ...(newElements ? { new: newElements } : {}) }, validation: validationSummary(v) } };
   } catch (e) {
     if (e instanceof SubdError) return { error: e.message.replace(/^SubD: /, '') };
     throw e;
@@ -185,6 +214,12 @@ export const CAGE_TOOLS: ToolDefinition[] = [
   { name: 'subd_cage', description: 'A SubD feature\'s cage: vertex and face counts, creases, mirror plane, bounds and its validation (poles, n-gons, open edges, non-manifold). Read only.', input_schema: { type: 'object', properties: { index: idx }, required: ['index'], additionalProperties: false } },
   { name: 'subd_select', description: 'Finds cage indices to pass to the other subd_ tools (changes nothing): faces by outward "normal" (within "withinAngle", default 30) and/or a "box" {min, max} on their centres; vertices in a "box"; the edge "loop" or "ring" through an "edge" [a, b]; or the "boundary" (open edges; with "box", those with both ends in it). Indices are of the cage as the node keeps it (the half when mirrored).', input_schema: { type: 'object', properties: { index: idx, what: { type: 'string', enum: ['faces', 'vertices', 'loop', 'ring', 'boundary'] }, normal: v3('faces: the direction they face'), withinAngle: { type: 'number' }, box: { type: 'object', description: '{min: [x, y, z], max: [x, y, z]} (either may be left out)' }, edge: { type: 'array', items: { type: 'integer' }, minItems: 2, maxItems: 2 }, limit: { type: 'integer' } }, required: ['index', 'what'], additionalProperties: false } },
   { name: 'subd_move', description: 'Moves cage vertices (or those of the given edges or faces) by "delta" mm. Faces and creases stay: a value edit of the feature (applies directly at autonomy L2). On a mirrored cage the plane\'s vertices stay on the plane.', input_schema: { type: 'object', properties: { index: idx, vertices: ints('vertex indices'), edges: pairs('edges [a, b]'), faces: ints('face indices'), delta: v3('[dx, dy, dz] mm') }, required: ['index', 'delta'], additionalProperties: false } },
+  { name: 'subd_scale', description: 'Uniformly scales selected base-part cage elements about their selection centre. Copy cageRevision from cage or select for the current base feature. Original mirror seam points stay on the mirror plane.', input_schema: {
+    type: 'object', properties: { index: idx, cageRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The exact cage revision returned by cage or select.' },
+      factor: { type: 'number', exclusiveMinimum: 0, description: 'Positive dimensionless scale ratio.' },
+      vertices: ints('vertex indices'), edges: pairs('edges [a, b]'), faces: ints('face indices') },
+    required: ['index', 'cageRevision', 'factor'], additionalProperties: false,
+  } },
   { name: 'subd_extrude', description: 'Extrudes cage "faces" as one region (side quads round it) by "offset" [dx, dy, dz] or "distance" along their mean normal; or pulls open boundary "edges" out by "offset". Changes topology (a proposal at L2). The result names the new faces or edges.', input_schema: { type: 'object', properties: { index: idx, faces: ints('face indices'), edges: pairs('open edges [a, b]'), offset: v3('[dx, dy, dz] mm'), distance: { type: 'number', description: 'mm along the faces\' mean normal' } }, required: ['index'], additionalProperties: false } },
   { name: 'subd_insert_loop', description: 'Inserts an edge loop across the ring of faces through "edge" [a, b], at "t" along each ring edge from the side of a (default 0.5, the middle; near 0 or 1 a holding loop that tightens the rounding there). Changes topology.', input_schema: { type: 'object', properties: { index: idx, edge: { type: 'array', items: { type: 'integer' }, minItems: 2, maxItems: 2 }, t: { type: 'number', description: 'fraction along the edge from a, between 0 and 1' } }, required: ['index', 'edge'], additionalProperties: false } },
   { name: 'subd_bridge', description: 'Bridges two open loops of equal length with a band of quads: "edges" holds both loops\' edges. Changes topology.', input_schema: { type: 'object', properties: { index: idx, edges: pairs('the open edges of both loops') }, required: ['index', 'edges'], additionalProperties: false } },

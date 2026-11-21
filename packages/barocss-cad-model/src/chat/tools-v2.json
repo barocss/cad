@@ -429,6 +429,7 @@
        "cage",
        "select",
        "move",
+       "scale",
        "extrude",
        "insert_loop",
        "bridge",
