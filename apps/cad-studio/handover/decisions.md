@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1478: [Put mesh badges with their Body Browser rows](notes/studio-mesh-body-badges-2026-11-21/README.md). Preserve the repair dialog, selected fill and crossing markers in matching actual Studio flows.
 - D1477: [Anchor the Constant Fillet handle to the selected circular arc](notes/circular-fillet-arc-handle-2026-11-21/README.md), #214. Correct the chord offset for one exact outward circular prism rim and verify a native R1.5 through fresh Open.
 - D1476: [Drag one radius for two opposite Fillet edges](notes/two-edge-fillet-radius-drag-2026-11-21/README.md), #214. Verify a single control, two exact native edge references, typed equivalence and fresh Open.
 - D1475: [Drag a new Fillet radius end-on in perspective](notes/perspective-fillet-radius-drag-2026-11-21/README.md), #214. Verify two zooms, typed equivalence and strict native geometry after fresh Open.

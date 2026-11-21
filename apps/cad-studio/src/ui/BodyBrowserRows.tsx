@@ -1,4 +1,4 @@
-import { Fragment, type Dispatch, type SetStateAction, type ReactNode, type MouseEvent, type PointerEventHandler } from 'react';
+import { Fragment, type Dispatch, type SetStateAction, type MouseEvent, type PointerEventHandler } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { featureLabel } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
@@ -14,14 +14,28 @@ interface BodyBrowserRowsProps {
   rows: { expanded: string[]; setExpanded: Dispatch<SetStateAction<string[]>>; renaming: string | null; setRenaming: Dispatch<SetStateAction<string | null>>; editNode: number | null; setRowHover: Dispatch<SetStateAction<number | null>> };
   changes: { commit(next: StudioDoc): boolean; commitVisibility(next: StudioDoc): boolean; setSelection: Dispatch<SetStateAction<Selection>>; setDirectSel: Dispatch<SetStateAction<string[]>>; setInstanceSel: Dispatch<SetStateAction<string[]>>;
     editFeature(index: number, body: number, event: MouseEvent<HTMLButtonElement>): void;
-    rememberFocus: PointerEventHandler<HTMLButtonElement> };
-  meshBadges(index: number, body: BodyResult, steps: readonly number[]): ReactNode;
+    rememberFocus: PointerEventHandler<HTMLButtonElement>; editRepair(index: number): Promise<void> };
 }
 /** Body rows and their feature lists; row state survives Browser visibility changes in App. */
-export function BodyBrowserRows({ model, selection, rows, changes, meshBadges, registerBodyRow }: BodyBrowserRowsProps) {
+export function BodyBrowserRows({ model, selection, rows, changes, registerBodyRow }: BodyBrowserRowsProps) {
   const { doc, evaluated, namesDoc, bodies, fresh, busy } = model;
   const { expanded, setExpanded, renaming, setRenaming, editNode, setRowHover } = rows;
-  const { commit, commitVisibility, setSelection, setDirectSel, setInstanceSel, editFeature, rememberFocus } = changes;
+  const { commit, commitVisibility, setSelection, setDirectSel, setInstanceSel, editFeature, rememberFocus, editRepair } = changes;
+  const meshBadges = (bodyIndex: number, body: BodyResult, steps: readonly number[]) => {
+    const index = [refOf(body).node, ...steps].find(step => evaluated.nodes[step]?.kind === 'mesh');
+    if (index === undefined) return null;
+    const node = evaluated.nodes[index];
+    if (node?.kind !== 'mesh' || (!node.repair && !node.crossings)) return null;
+    const repair = node.repair?.report, crossings = node.crossings;
+    const fills = body.mesh.faces.flatMap((face, index) => /\.fill\d+\.region\d+/.test(face.name) ? [{ body: bodyIndex, face: index }] : []);
+    return <span className="ol-badges">
+      {repair && <button className="ol-badge" aria-label="Mesh repair" title={`Repaired: ${repair.holesFilled} hole${repair.holesFilled === 1 ? '' : 's'} filled (${Math.round(repair.filledArea)} mm² guessed), ${repair.flipped} turned, ${repair.degenerateRemoved + repair.duplicatesRemoved} degenerate, ${repair.finsRemoved} fins, ${repair.floatersRemoved} tiny pieces dropped. Click: show the filled faces and change the repair.`}
+        onClick={() => { if (fills.length) setSelection({ faces: fills, edges: [], bodies: [] }); void editRepair(index); }}>repaired{repair.holesFilled ? ` · ${Math.round(repair.filledArea)} mm² filled` : ''}</button>}
+      {repair && !repair.closed && <span className="ol-badge warn" title="Not closed after repair: an open sheet — no volume, no Booleans">open sheet</span>}
+      {crossings && <button className="ol-badge warn" aria-label="Mesh crossings" title={`It crosses itself in ${crossings.count} place${crossings.count > 1 ? 's' : ''}: Booleans refuse it (repair does not fix that). Click: mark where.`}
+        onClick={() => setSelection({ faces: [], edges: [], bodies: [], vertices: crossings.at.map(at => ({ body: bodyIndex, at })) })}>crosses itself · {crossings.count}</button>}
+    </span>;
+  };
   return <>
         {bodies.length > 0 && <div className="ol-head">Bodies</div>}
         {!fresh && bodies.map(b => <div key={b.key} className="ol-row stale" aria-busy="true" title={busy ? 'Evaluating the part: this is the body before the change' : 'The part did not evaluate: this is the last good body'}>

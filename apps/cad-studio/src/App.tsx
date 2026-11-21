@@ -2469,23 +2469,6 @@ export function App() {
     onNotice: setToast,
   });
   const { meshAsk, setMeshAsk, stage, repairAsk, setRepairAsk, stopStage } = meshImport;
-  /**
-   * A mesh body's badges (M3, D47): repaired (its filled area; shows the fill faces and opens the repair again), an
-   * open sheet (no volume, no Booleans), and where it crosses itself (marked in the viewport).
-   */
-  const meshBadges = (i: number, b: BodyResult, steps: readonly number[]) => {
-    const at = [refOf(b).node, ...steps].find(k => evaluated.nodes[k]?.kind === 'mesh');
-    const n = at === undefined ? undefined : evaluated.nodes[at];
-    if (!n || n.kind !== 'mesh' || (!n.repair && !n.crossings)) return null;
-    const r = n.repair?.report, fills = b.mesh.faces.flatMap((f, k) => /\.fill\d+\.region\d+/.test(f.name) ? [{ body: i, face: k }] : []);
-    return <span className="ol-badges">
-      {r && <button className="ol-badge" aria-label="Mesh repair" title={`Repaired: ${r.holesFilled} hole${r.holesFilled === 1 ? '' : 's'} filled (${Math.round(r.filledArea)} mm² guessed), ${r.flipped} turned, ${r.degenerateRemoved + r.duplicatesRemoved} degenerate, ${r.finsRemoved} fins, ${r.floatersRemoved} tiny pieces dropped. Click: show the filled faces and change the repair.`}
-        onClick={() => { if (fills.length) setSelection({ faces: fills, edges: [], bodies: [] }); void editRepair(at!); }}>repaired{r.holesFilled ? ` · ${Math.round(r.filledArea)} mm² filled` : ''}</button>}
-      {r && !r.closed && <span className="ol-badge warn" title="Not closed after repair: an open sheet — no volume, no Booleans">open sheet</span>}
-      {n.crossings && <button className="ol-badge warn" aria-label="Mesh crossings" title={`It crosses itself in ${n.crossings.count} place${n.crossings.count > 1 ? 's' : ''}: Booleans refuse it (repair does not fix that). Click: mark where.`}
-        onClick={() => setSelection({ faces: [], edges: [], bodies: [], vertices: n.crossings!.at.map(p => ({ body: i, at: p })) })}>crosses itself · {n.crossings.count}</button>}
-    </span>;
-  };
   // (PERF3 B13, O135: the mesh blobs no step reaches dropped at an idle point — two seconds after the last change, no
   // repair asked; a chat turn holds sweeps while it runs. The roots: the document, every undo and redo step. DEV: the
   // bytes each sweep freed, window.__studioBlobs.)
@@ -3394,14 +3377,14 @@ export function App() {
           }} />
         <BodyBrowserRows registerBodyRow={bodyReveal.register} model={{ doc, evaluated, namesDoc, bodies, fresh, busy }} selection={selection}
           rows={{ expanded, setExpanded, renaming, setRenaming, editNode, setRowHover }} changes={{ commit, commitVisibility: commitBodyVisibility, setSelection, setDirectSel, setInstanceSel,
-            rememberFocus: workspaceModeExit.rememberFocus,
+            rememberFocus: workspaceModeExit.rememberFocus, editRepair,
             editFeature: (index, body, event) => workspaceModeExit.switchWhenReady(() => {
               const picked: Selection = { faces: [], edges: [], bodies: [body] };
               cutSourceIntent.current = doc.nodes[index]?.kind === 'difference' ? { doc, selection: picked, index } : null;
               setEditNode(index);
               setSelection(picked);
             }, { event, readFeature: readFeatureTransitionDraft }),
-          }} meshBadges={meshBadges} />
+          }} />
         {freeSketches.length > 0 && <div className="ol-head">Sketches</div>}
         {freeSketches.map(k => <div key={'s' + k} className={'ol-row' + (selection.sketches?.includes(k) ? ' sel' : '')}>
           <span className="ol-eye"><Icon name="cad-sketch" small /></span>
