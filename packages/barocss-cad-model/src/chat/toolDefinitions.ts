@@ -17,8 +17,10 @@ import { REFERENCE_TOOLS } from './references';
 import { ASSEMBLY_TOOLS } from './assembly';
 import { CHAT_COMMANDS, COMMAND_DOCS } from './part/features';
 import { DIRECT_RULED_COMMAND } from './directRuledProposal';
+import { DIRECT_THICKEN_COMMAND } from './directThickenProposal';
 
-export const FEATURE_COMMANDS = [...CHAT_COMMANDS, DIRECT_RULED_COMMAND.command];
+const directCommands = [DIRECT_RULED_COMMAND, DIRECT_THICKEN_COMMAND];
+export const FEATURE_COMMANDS = [...CHAT_COMMANDS, ...directCommands.map(command => command.command)];
 
 /** The tools a batch may hold (those changing the base part, one at a time). */
 // (The drawing tools that change it ride in ops: an agent proposes a drawing change, R14.5.)
@@ -38,7 +40,7 @@ const commandDoc = CHAT_COMMANDS.map(id => {
   const c = commandById(id)!, d = COMMAND_DOCS[id];
   const values = Object.entries(d.values).map(([k, v]) => `${k}: ${v}`).join('; ');
   return `- ${id} (${c.label}) — select ${d.selection}${values ? `; values: ${values}` : ''}`;
-}).concat(`- ${DIRECT_RULED_COMMAND.command} (${DIRECT_RULED_COMMAND.label}) — ${DIRECT_RULED_COMMAND.hint} ${DIRECT_RULED_COMMAND.selection} See describe for values.`).join('\n');
+}).concat(directCommands.map(command => `- ${command.command} (${command.label}) — ${command.hint} ${command.selection} See describe for values.`)).join('\n');
 
 /**
  * `describe` (A5.3): what the consolidated list leaves out, on request — a tool's actions, an action's full v1
@@ -47,7 +49,8 @@ const commandDoc = CHAT_COMMANDS.map(id => {
 export function describe(args: Record<string, unknown>): Record<string, unknown> | { error: string } {
   if (typeof args.command === 'string') {
     const command = args.command.replace(/_/g, '-');
-    if (command === DIRECT_RULED_COMMAND.command) return DIRECT_RULED_COMMAND;
+    const direct = directCommands.find(entry => entry.command === command);
+    if (direct) return direct;
     const c = commandById(command), d = c && COMMAND_DOCS[c.id];
     if (!c || !d || !CHAT_COMMANDS.includes(c.id)) return { error: `No command "${args.command}"; commands: ${FEATURE_COMMANDS.join(', ')}.` };
     return { command: c.id, label: c.label, hint: c.hint, selection: d.selection, values: d.values };
@@ -91,7 +94,7 @@ const PART_TOOLS: ToolDefinition[] = [
         edges: selectorList('Edges to select'),
         bodies: { ...nameList, description: 'Body keys to select (e.g. "b1").' },
         point: { type: 'array', items: { type: 'number' }, description: 'Optional picked point [x, y, z] on the face (hole default centre).' },
-        expectedRevision: { type: 'string', description: 'Revision from query.render or query.rebuild in the same part scope. For direct-ruled only, use direct_revision from query.summary. Refuses before selecting any geometry if the part has changed.' },
+        expectedRevision: { type: 'string', description: 'Revision from query.render or query.rebuild in the same part scope. For direct-ruled and direct-thicken, use direct_revision from query.summary. Refuses before selecting any geometry if the part has changed.' },
       },
       required: ['command'], additionalProperties: false,
     },

@@ -10,6 +10,7 @@ import { factsOf } from '../observe';
 import { treeDiff } from '../transactions';
 import { approvalOf, diffLine, DIRECT_GEOMETRY_APPROVAL, nextProposalId, PLAN_CHARS, PROMPT_CHARS, proposalIsStale, riskOf, riskRank, withHistory } from '../proposals';
 import { directReviewRevision, isDirectRuledOperation } from '../directRuledProposal';
+import { DIRECT_SNAPSHOT_APPROVAL, isDirectThickenOperation } from '../directThickenProposal';
 import type { ChecksDelta, FollowUpRepairSource, Proposal, Risk } from '../../engine/schema/proposals';
 import { checkSpec, modelHash } from '../spec';
 import { MUTATORS } from '../toolDefinitions';
@@ -128,6 +129,7 @@ export async function proposalOfWith(dispatch: PartRun, state: ChatState, ops: u
   }
   const local = nested === undefined ? undefined : await nestedParameterChecks(state.doc, cur.doc, nested, evaluate);
   const risk = riskOf(state.doc, cur.doc, diff, broken.length, [...hardChanged, ...(local?.hardChanged ?? [])]);
+  if (run.ops.some(isDirectThickenOperation)) risk.approval.push(DIRECT_SNAPSHOT_APPROVAL);
   if (local?.needsReview || faceRepair) risk.level = 'high';
   const changes = nested !== undefined || faceRepair ? String(run.results[0]?.did ?? nested) : diffLine(diff);
   // run.results also contains skipped opIds; run.ops retains only executed operations.
@@ -164,6 +166,8 @@ export async function acceptProposalWith(dispatch: PartRun, state: ChatState, id
   if (proposalIsStale(p, before)) return { error: nested !== undefined || faceRepair ? staleNested(p) : `${id} has no current proposal revision: rebase it and look at the result before accepting.`, stale: true };
   const run = await runOps(faceRepair ? replayNestedFaceRepair : dispatch, { ...state, policy: undefined }, p.ops, evaluate);
   if ('fail' in run) return { error: errorOf(run.fail) };
+  if (by.agent !== 'user' && run.ops.some(isDirectThickenOperation))
+    return { error: 'A Direct Thicken proposal needs approval by the user in Studio.' };
   if (by.agent !== 'user' && approvalOf(state.doc, run.cur.doc).includes(DIRECT_GEOMETRY_APPROVAL))
     return { error: 'A Direct geometry proposal needs approval by the user in Studio.' };
   if ((nested !== undefined || faceRepair) && run.ops.length !== 1) return { error: 'The nested operation was already applied.' };
