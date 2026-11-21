@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dragAlong, dragPlane, dragTurn, handleLayout, hitTest, layout, snapTo, type FeatureHandle, type Projector, type TransformGizmo } from '../src/viewport/gizmo';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
+import { turnPlaneRadial, turnPlaneStep } from '../src/viewport/localTurnDrag';
 
 // A camera straight above, looking down −Z: screen x = world x, screen y = −world y (10 px per mm, origin at 500, 500).
 const top: Projector = { project: (p: Vec3) => [500 + p[0] * 10, 500 - p[1] * 10], forward: [0, 0, -1], size: 10 };
@@ -29,6 +30,34 @@ test('gizmo: one signed oblique translation has one hit and disappears when seen
   const endOn: TransformGizmo = { origin, moveAlong: { direction: [0, 1, 0], label: 'N' } };
   assert.equal(layout(endOn, front).along, null);
   assert.equal(hitTest(front.project(origin), endOn, [], front), null);
+});
+
+test('gizmo: an oblique turn measures the ray intersections and hides its edge-on arc', () => {
+  const origin: Vec3 = [14, 24.5, 36], direction: Vec3 = [0, -0.8, 0.6], radial: Vec3 = [1, 0, 0];
+  const g: TransformGizmo = { origin, turnAlong: { direction, radial, label: 'N' } };
+  const right: Projector = { project: p => [p[1] * 10, -p[2] * 10], forward: [-1, 0, 0], size: 10 };
+  const visible = layout(g, front).localArc;
+  assert.ok(visible);
+  assert.deepEqual(hitTest(visible.points[9], g, [], front), { kind: 'turn-along' });
+  assert.equal(layout(g, right).localArc, null);
+  assert.equal(hitTest(right.project(origin), g, [], right), null);
+
+  const eye: Vec3 = [24, 10, 80];
+  const intersection = (angle: number) => {
+    const a = angle * Math.PI / 180;
+    const point = [14 + 4 * Math.cos(a), 24.5 + 2.4 * Math.sin(a), 36 + 3.2 * Math.sin(a)];
+    const vector = point.map((value, i) => value - eye[i]);
+    const dir = vector.map(value => value / Math.hypot(...vector)) as Vec3;
+    const result = turnPlaneRadial({ origin: eye, dir }, origin, direction);
+    assert.ok(result);
+    return result;
+  };
+  const a = intersection(17), b = intersection(59);
+  assert.ok(Math.abs(turnPlaneStep(a, b, direction) - 42) < 1e-10);
+  assert.ok(Math.abs(turnPlaneStep(b, a, direction) + 42) < 1e-10);
+  assert.equal(turnPlaneRadial({ origin: eye, dir: [1, 0, 0] }, origin, direction), null);
+  assert.equal(turnPlaneRadial({ origin: eye, dir: direction }, origin, direction), null);
+  assert.equal(turnPlaneRadial({ origin: [0, 0, 1], dir: [0, 0, -1] }, [0, 0, 0], [0, 0, 1]), null);
 });
 
 test('gizmo: plane squares sit between their two arrows, arcs face the camera', () => {

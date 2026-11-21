@@ -1,4 +1,5 @@
 import { captureScalarHandleDrag, historyFilletPendingPress, scalarHandleDragValue, type ScalarHandleDrag } from './scalarHandleDrag';
+import { turnPlaneRadial, turnPlaneStep } from './localTurnDrag';
 import { wheelZoomFactor } from './wheelZoomPreference';
 import { useCallback, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type RefObject, type WheelEvent } from 'react';
 import { CadPartLimits, ExtrudedProfileLimits } from '@barocss/cad';
@@ -182,6 +183,7 @@ interface PointerDrag {
   shiftPickHandle?: FeatureHandle;
   handleToValue?: FeatureHandle['toValue'];
   scalarHandleDrag?: ScalarHandleDrag | null;
+  turnPlane?: { frame: string; radial: Vec3 };
   factor?: number;
   gizmo?: TransformGizmo;
   sessionKey?: TransformGizmo['sessionKey'];
@@ -201,7 +203,7 @@ function sameGizmoHit(a: GizmoHit | null, b: GizmoHit | null): boolean {
   if (!a || !b || a.kind !== b.kind) return false;
   if (a.kind === 'handle') return a.index === (b as typeof a).index;
   if (a.kind === 'plane') return a.axes[0] === (b as typeof a).axes[0] && a.axes[1] === (b as typeof a).axes[1];
-  if (a.kind === 'move-along') return true;
+  if (a.kind === 'move-along' || a.kind === 'turn-along') return true;
   return a.axis === (b as typeof a).axis;
 }
 /** A cap is an instance/body hit, with no native face operation authority. Unknown faces are not caps. */
@@ -707,6 +709,12 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     return edge ?? fill;
   };
   const gizmoHit = (x: number, y: number) => { const p = propsRef.current; return (p.gizmo || p.handles?.length) && canvas.current ? hitTest([x, y], p.gizmo, p.handles ?? [], projector()) : null; };
+  const localTurnRadial = (x: number, y: number, pivot: Vec3, normal: Vec3) => {
+    const w = canvas.current!.clientWidth, h = canvas.current!.clientHeight, cam = camera.current;
+    const [cx, cy] = cam.project(pivot, w, h);
+    if (Math.hypot(x - cx, y - cy) < 4) return null;
+    return turnPlaneRadial(cam.ray(x / w * 2 - 1, 1 - y / h * 2), pivot, normal);
+  };
   /** A gizmo drag from its start to (x, y): calls the handler with the whole move, turn or value so far. */
   const gizmoDrag = (x: number, y: number, shift: boolean, done: boolean, d = drag.current) => {
     const p = propsRef.current, g = d.gizmo ?? p.gizmo, P = projector(), hit = d.hit!;
@@ -734,6 +742,22 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
       return;
     }
     if (!g) return;
+    if (hit.kind === 'turn-along') {
+      const plane = d.turnPlane, axis = g.turnAlong?.direction;
+      const radial = plane && axis && plane.frame === pointerFrame()
+        ? localTurnRadial(x, y, d.origin ?? g.origin, axis) : null;
+      if (!plane || !axis || !radial) {
+        // Pointer-up has already detached this drag from drag.current.
+        if (done && d.pointerId !== undefined) g.onCancel?.(d.pointerId, 'invalid-projection');
+        else cancelGizmo('invalid-projection', d.pointerId);
+        return;
+      }
+      d.turned = (d.turned ?? 0) + turnPlaneStep(plane.radial, radial, axis);
+      plane.radial = radial;
+      d.degrees = snapTo(d.turned, shift ? 1 : 15);
+      g.onTurnAlong?.(d.degrees, done, d.pointerId);
+      return;
+    }
     if (hit.kind === 'move' || hit.kind === 'plane' || hit.kind === 'move-along') {
       const grid = propsRef.current.snapStep ?? 1, delta: Vec3 = [0, 0, 0], step = shift ? Math.max(0.001, (grid || 1) / 10) : grid || 0.001;
       // (Measured from the gizmo where the drag began: it moves with the selection meanwhile.)
@@ -838,7 +862,16 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
         drag.current={mode:null,x,y,moved:true};
         return;
       }
-      drag.current = { mode: 'gizmo', x, y, moved: false, hit, shiftPickHandle, from: [x, y], last: [x, y], turned: 0, start: hd?.value, start2: hd?.plane?.value2,
+      let turnPlane: PointerDrag['turnPlane'];
+      if (hit.kind === 'turn-along') {
+        const radial = g?.turnAlong && localTurnRadial(x, y, g.origin, g.turnAlong.direction);
+        if (!radial) {
+          drag.current = { mode: null, x, y, moved: true };
+          return;
+        }
+        turnPlane = { frame: pointerFrame(), radial };
+      }
+      drag.current = { mode: 'gizmo', x, y, moved: false, hit, shiftPickHandle, from: [x, y], last: [x, y], turned: 0, turnPlane, start: hd?.value, start2: hd?.plane?.value2,
         handleAt: hd ? [...hd.at] as Vec3 : undefined, handleToValue: hd?.toValue,
         // The existing Shift release remains a pick; movement past its threshold gets a canceled scalar frame.
         scalarHandleDrag: historyPress === 'shift-pick-only' ? null : hd?.scalarDragSession ? captureScalarHandleDrag(hd, projector()) : undefined,
@@ -1254,6 +1287,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
   const onWheel = (e: WheelEvent<HTMLCanvasElement>) => {
     propsRef.current.onHoverScalar?.(null);
     cancelDragTrim();
+    if (drag.current.hit?.kind === 'turn-along') cancelGizmo('invalid-projection');
     if (drag.current.circleChord) drag.current.moved = true;
     const { x, y, w, h } = local(e);
     camera.current.zoom(wheelZoomFactor(e, propsRef.current.reverseWheelZoom), (x / w) * 2 - 1, 1 - (y / h) * 2); moving.current(); request();

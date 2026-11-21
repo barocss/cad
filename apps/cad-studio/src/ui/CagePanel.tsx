@@ -50,6 +50,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
   const chosenFrame = localFrames.find(frame => frame.value === dragSettings.dragFrame);
   const pivot = dragSettings.pivot;
   const pivotTool = dragSettings.tool === 'rotate' ? 'Rotate' : 'Scale';
+  const rotation = dragSettings.rotation;
   const what = s.sel.faces.length ? `${s.sel.faces.length} face${s.sel.faces.length === 1 ? '' : 's'}` : s.sel.edges.length ? `${s.sel.edges.length} edge${s.sel.edges.length === 1 ? '' : 's'}` : s.sel.vertices.length ? `${s.sel.vertices.length} vertex${s.sel.vertices.length === 1 ? '' : 'es'}` : 'nothing';
   return <aside className="card props cage-panel" aria-label="Cage editor">
     <div className="card-title">CAGE · {name}</div>
@@ -66,7 +67,14 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
       onChange={event => dragSettings.setTool(event.target.value === 'scale' ? 'scale' : event.target.value === 'rotate' ? 'rotate' : 'move')}>
       <option value="move">Move</option><option value="rotate">Rotate</option><option value="scale">Uniform scale</option>
     </NativeSelect></label>}
-    {!!n && dragSettings.tool !== 'move' && <>
+    {!!n && dragSettings.tool === 'rotate' && <>
+      <label className={FIELD}><span>Rotate frame</span><NativeSelect className={CONTROL} aria-label="Rotate drag frame" value={rotation.frame} disabled={dragging}
+        onChange={event => rotation.setFrame(event.target.value === 'face' ? 'face' : 'world')}>
+        <option value="world">World axes</option><option value="face">Face normal</option>
+      </NativeSelect></label>
+      {rotation.reason && <div className="warn" role="status">Face normal: {rotation.reason}.</div>}
+    </>}
+    {!!n && (dragSettings.tool === 'scale' || dragSettings.tool === 'rotate' && rotation.frame === 'world') && <>
       <label className={FIELD}><span>Pivot</span><NativeSelect className={CONTROL} aria-label={`${pivotTool} drag pivot`} value={pivot.mode} disabled={dragging}
         onChange={event => pivot.setMode(event.target.value === 'vertex' ? 'vertex' : 'centre')}>
         <option value="centre">Selection centre</option><option value="vertex">Cage vertex</option>

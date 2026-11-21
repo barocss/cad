@@ -5,11 +5,12 @@
 // The viewport draws and dispatches; callers apply the values.
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { segmentDistance as segDist, insideRing as insidePolygon } from '@barocss/cad-model/engine/geom2';
+import { cross } from '@barocss/cad-model/engine/vec3';
 
 export type { Axis3 } from '@barocss/cad-model/engine/vec3';
 import type { Axis3 } from '@barocss/cad-model/engine/vec3';
 type XY = [number, number];
-export type GizmoCancelReason = 'pointercancel' | 'lostpointercapture' | 'session-change' | 'unmount' | 'escape';
+export type GizmoCancelReason = 'pointercancel' | 'lostpointercapture' | 'session-change' | 'unmount' | 'escape' | 'invalid-projection';
 export interface TransformGizmo {
   /** Where the handles sit (world, mm). */
   origin: Vec3;
@@ -20,6 +21,8 @@ export interface TransformGizmo {
   /** One signed translation along a unit direction in world coordinates. */
   moveAlong?: { direction: Vec3; label: string };
   turn?: readonly Axis3[];
+  /** One rotation about a unit world direction, with an in-plane unit radial to draw its arc. */
+  turnAlong?: { direction: Vec3; radial: Vec3; label: string };
   /** Degrees a turn snaps to (default 15; Shift: 1), per axis when one axis is held to steps (90). */
   turnSnap?: (axis: Axis3) => number;
   /** The pointer and modifier state at the start of this drag. */
@@ -32,6 +35,7 @@ export interface TransformGizmo {
   onMove?(delta: Vec3, done: boolean, pointerId?: number): void;
   /** The whole turn from the drag's start (degrees, right-handed about the axis). */
   onTurn?(axis: Axis3, degrees: number, done: boolean, pointerId?: number): void;
+  onTurnAlong?(degrees: number, done: boolean, pointerId?: number): void;
   /** Uniform scale: a cube at the centre and one along each axis; `onScale` gets the factor from the drag's start (×, 0.05 steps; Shift: 0.01). */
   scale?: boolean;
   onScale?(factor: number, done: boolean, pointerId?: number): void;
@@ -66,7 +70,7 @@ export interface FeatureHandle {
   shiftPick?: true;
   onType?(value: number): void;
 }
-export type GizmoHit = { kind: 'move' | 'turn'; axis: Axis3 } | { kind: 'move-along' } | { kind: 'plane'; axes: [Axis3, Axis3] } | { kind: 'handle'; index: number } | { kind: 'scale'; axis: Axis3 | null };
+export type GizmoHit = { kind: 'move' | 'turn'; axis: Axis3 } | { kind: 'move-along' } | { kind: 'turn-along' } | { kind: 'plane'; axes: [Axis3, Axis3] } | { kind: 'handle'; index: number } | { kind: 'scale'; axis: Axis3 | null };
 /** Screen projection, the camera's forward direction, and `size`: world mm that make the gizmo's full size on screen there. */
 export interface Projector { project(p: Vec3): XY; forward: Vec3; size: number }
 
@@ -77,6 +81,19 @@ const at = (o: Vec3, terms: [Vec3, number][]): Vec3 => [0, 1, 2].map(k => terms.
 /** +1 or −1: which way along an axis faces the camera (handles sit on the near side). */
 const toward = (P: Projector, k: Axis3) => P.forward[k] > 0 ? -1 : 1;
 const PAIRS: [Axis3, Axis3][] = [[0, 1], [1, 2], [0, 2]];
+
+function localTurnArc(g: TransformGizmo, P: Projector, origin: XY) {
+  if (!g.turnAlong) return null;
+  const { direction, radial, label } = g.turnAlong, v = cross(direction, radial), r = 0.82 * P.size;
+  const project = (angle: number) => P.project(at(g.origin, [[radial, r * Math.cos(angle)], [v, r * Math.sin(angle)]]));
+  const a = project(0), b = project(Math.PI / 2);
+  const ax = a[0] - origin[0], ay = a[1] - origin[1], bx = b[0] - origin[0], by = b[1] - origin[1];
+  // Hide an arc whose projected plane is too narrow to pick the angle reliably.
+  const width = Math.abs(ax * by - ay * bx) / Math.max(Math.hypot(ax, ay), Math.hypot(bx, by));
+  if (!Number.isFinite(width) || width < 12) return null;
+  const points = Array.from({ length: 19 }, (_, i) => project((0.06 + 0.88 * i / 18) * Math.PI / 2));
+  return points.every(point => point.every(Number.isFinite)) ? { points, label } : null;
+}
 
 /** The gizmo in screen space: arrows (shaft start and tip), plane squares and turn arcs (polylines). */
 export function layout(g: TransformGizmo, P: Projector) {
@@ -100,7 +117,7 @@ export function layout(g: TransformGizmo, P: Projector) {
   });
   // Scale cubes: one at the centre, one along each axis (all uniform).
   const cubes = g.scale ? [{ axis: null as Axis3 | null, at: o }, ...([0, 1, 2] as Axis3[]).map(axis => ({ axis: axis as Axis3 | null, at: P.project(at(g.origin, [[unitAxis(axis), 0.8 * s]])) }))] : [];
-  return { origin: o, arrows, along, planes, arcs, cubes };
+  return { origin: o, arrows, along, planes, arcs, localArc: localTurnArc(g, P, o), cubes };
 }
 /** Rodrigues: v turned by `a` radians about the unit axis k. */
 function turn(v: Vec3, k: Vec3, a: number): Vec3 {
@@ -135,6 +152,7 @@ export function hitTest(p: XY, g: TransformGizmo | null, handles: readonly Featu
     for (const a of L.arrows) consider({ kind: 'move', axis: a.axis }, arrowDistance(a), 7);
     if (L.along) consider({ kind: 'move-along' }, arrowDistance(L.along), 7);
     for (const r of L.arcs) consider({ kind: 'turn', axis: r.axis }, polyDist(p, r.points) + 0.5, 7);
+    if (L.localArc) consider({ kind: 'turn-along' }, polyDist(p, L.localArc.points) + 0.5, 7);
     for (const c of L.cubes) consider({ kind: 'scale', axis: c.axis }, Math.max(Math.abs(p[0] - c.at[0]), Math.abs(p[1] - c.at[1])) - (c.axis === null ? 2 : 0), 8);
   }
   handles.forEach((h, index) => { const l = handleLayout(h, P); if (h.plane) { consider({ kind: 'handle', index }, Math.hypot(p[0] - l.to[0], p[1] - l.to[1]) - 6, 8); return; } consider({ kind: 'handle', index }, Math.min(l.points ? polyDist(p, l.points) : segDist(p, l.from, l.to), Math.hypot(p[0] - l.to[0], p[1] - l.to[1]) - 4), 8); });

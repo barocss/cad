@@ -1177,6 +1177,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       const readout = !g || !hit ? null : { at: [g.x, g.y] as [number, number], text: hit.kind === 'handle' ? (props.handles?.[hit.index] ? `${props.handles[hit.index].label} ${props.handles[hit.index].format(g.value ?? g.start ?? 0)}${props.handles[hit.index].plane ? ', ' + props.handles[hit.index].format(g.value2 ?? g.start2 ?? 0) : ''}` : '')
         : hit.kind === 'move' ? `Δ${'XYZ'[hit.axis]} ${fmtLen(g.delta?.[hit.axis] ?? 0)} mm`
         : hit.kind === 'move-along' ? `Δ${g.gizmo?.moveAlong?.label ?? ''} ${fmtLen(g.value ?? 0)} mm`
+        : hit.kind === 'turn-along' ? `${g.gizmo?.turnAlong?.label ?? ''} ${fmtLen(g.degrees ?? 0)}°`
         : hit.kind === 'plane' ? hit.axes.map(a => `Δ${'XYZ'[a]} ${fmtLen(g.delta?.[a] ?? 0)}`).join('  ') + ' mm'
         : hit.kind === 'scale' ? `relative × ${String(Math.round((g.factor ?? 1) * 100) / 100)}` : `${'XYZ'[hit.axis]} ${fmtLen(g.degrees ?? 0)}°` };
       items.push(...gizmoMarks(props.gizmo, props.handles ?? [], projector(), g ? hit ?? null : gizmoHot.current, readout, g?.hit ? { hit: g.hit, degrees: g.degrees } : null));

@@ -20,7 +20,8 @@ type CageDrag = {
 const DEFAULT_RADIUS = '10';
 type CageDragFrame = 'world' | CageLocalFrame;
 type CageDragTool = 'move' | 'scale' | 'rotate';
-type CageDragTransform = { kind: 'scale'; factor: number } | { kind: 'rotate'; axis: Axis3; degrees: number };
+type CageDragTransform = { kind: 'scale'; factor: number } | { kind: 'rotate'; axis: Axis3; degrees: number }
+  | { kind: 'rotate-along'; direction: Vec3; degrees: number };
 const LOCAL_AXIS_LABEL: Record<CageLocalFrame, string> = { edge: 'T', face: 'N', 'face-u': 'U', 'face-v': 'V' };
 type PivotVertexInput = { value: string; cage: CageSession['cage'] };
 
@@ -40,21 +41,32 @@ export function useCageGizmo(
   fail: (title: string, hint: string) => void,
 ) {
   const [tool, setTool] = useState<CageDragTool>('move');
+  const [rotateFrame, setRotateFrame] = useState<'world' | 'face'>('world');
+  const localRotate = tool === 'rotate' && rotateFrame === 'face';
+  const localTurn = useMemo(() => {
+    if (!localRotate || !session) return null;
+    try {
+      return { turnAlong: { direction: cageLocalDirection(session, 'face'), radial: cageLocalDirection(session, 'face-u'), label: 'N' } };
+    } catch (error) {
+      return { reason: error instanceof Error ? error.message.replace(/^SubD: local direction: /, '') : String(error) };
+    }
+  }, [localRotate, session]);
   const [pivotMode, setPivotMode] = useState<CagePivotMode>('centre');
   const [pivotVertex, setPivotVertex] = useState<PivotVertexInput | null>(null);
   const pivot = useMemo(() => {
     if (tool === 'move' || !session) return null;
+    const mode = localRotate ? 'centre' : pivotMode;
     try {
-      const at = cageTransformPivot(session, pivotMode, pivotVertex?.value ?? '');
+      const at = cageTransformPivot(session, mode, pivotVertex?.value ?? '');
       // Cage operations can renumber vertices even when the old number stays in range.
-      if (pivotMode === 'vertex' && pivotVertex && !currentPivotVertex(pivotVertex, session.cage, at)) {
+      if (mode === 'vertex' && pivotVertex && !currentPivotVertex(pivotVertex, session.cage, at)) {
         return { reason: 'The cage changed. Enter the pivot vertex again.' };
       }
       return { at };
     } catch (error) {
       return { reason: error instanceof Error ? error.message : String(error) };
     }
-  }, [tool, session, pivotMode, pivotVertex]);
+  }, [tool, session, localRotate, pivotMode, pivotVertex]);
   const [dragFrame, setDragFrame] = useState<CageDragFrame>('world');
   const frameMode = tool === 'move' && session?.mode === (dragFrame === 'edge' ? 'edge' : 'face') ? dragFrame : 'world';
   const local = useMemo(() => {
@@ -66,9 +78,10 @@ export function useCageGizmo(
       return { reason: error instanceof Error ? error.message.replace(/^SubD: local direction: /, '') : String(error) };
     }
   }, [session, frameMode]);
-  const owner = useMemo(() => available && session && (tool === 'move' || pivot?.at) && (frameMode === 'world' || local?.moveAlong)
-    ? { doc, base: session, moveAlong: local?.moveAlong, pivot: pivot?.at ?? null, tool }
-    : null, [available, session, doc, frameMode, local, tool, pivot]);
+  const owner = useMemo(() => available && session && (tool === 'move' || pivot?.at)
+    && (frameMode === 'world' || local?.moveAlong) && (!localRotate || localTurn?.turnAlong)
+    ? { doc, base: session, moveAlong: local?.moveAlong, turnAlong: localTurn?.turnAlong, pivot: pivot?.at ?? null, tool }
+    : null, [available, session, doc, frameMode, local, localRotate, localTurn, tool, pivot]);
   const ownerNow = useRef(owner);
   const held = useRef<CageDrag | null>(null);
   const [frame, setFrame] = useState<{ gesture: CageDrag; delta?: Vec3; transform?: CageDragTransform } | null>(null);
@@ -81,7 +94,7 @@ export function useCageGizmo(
   const cancel = useCallback(() => { held.current = null; setFrame(null); }, []);
   const reset = useCallback(() => {
     cancel();
-    setTool('move'); setPivotMode('centre'); setPivotVertex(null);
+    setTool('move'); setRotateFrame('world'); setPivotMode('centre'); setPivotVertex(null);
     setDragFrame('world'); setEnabled(false); setRadius(DEFAULT_RADIUS);
   }, [cancel]);
   useLayoutEffect(() => {
@@ -108,7 +121,7 @@ export function useCageGizmo(
     let gesture: CageDrag | null = null;
     const delta = active?.delta;
     const updateTransform = (transform: CageDragTransform, done: boolean, pointerId?: number) => {
-      if (transform.kind !== owner.tool || !gesture?.pivot || held.current !== gesture
+      if (transform.kind !== (owner.turnAlong ? 'rotate-along' : owner.tool) || !gesture?.pivot || held.current !== gesture
         || gesture.pointerId !== pointerId || ownerNow.current !== owner) return;
       if (!done) { setFrame({ gesture, transform }); return; }
       const { pivot } = gesture;
@@ -125,7 +138,7 @@ export function useCageGizmo(
       cancelOnEscape: true,
       origin: owner.pivot ?? ((active?.gesture.plan || active?.delta && owner.moveAlong) && live ? selectionCentre(live) ?? centre
         : [centre[0] + (delta?.[0] ?? 0), centre[1] + (delta?.[1] ?? 0), centre[2] + (delta?.[2] ?? 0)]),
-      ...(owner.tool === 'rotate' ? { turn: [0, 1, 2] } : owner.tool === 'scale' ? { scale: true }
+      ...(owner.turnAlong ? { turnAlong: owner.turnAlong } : owner.tool === 'rotate' ? { turn: [0, 1, 2] } : owner.tool === 'scale' ? { scale: true }
         : owner.moveAlong ? { moveAlong: owner.moveAlong } : { move: [0, 1, 2] }),
       onStart: (pointerId, shiftKey) => {
         if (ownerNow.current !== owner || held.current) return;
@@ -157,6 +170,9 @@ export function useCageGizmo(
       },
       onScale: (factor, done, pointerId) => updateTransform({ kind: 'scale', factor }, done, pointerId),
       onTurn: (axis, degrees, done, pointerId) => updateTransform({ kind: 'rotate', axis, degrees }, done, pointerId),
+      onTurnAlong: (degrees, done, pointerId) => {
+        if (owner.turnAlong) updateTransform({ kind: 'rotate-along', direction: owner.turnAlong.direction, degrees }, done, pointerId);
+      },
     };
   }
 
@@ -166,6 +182,10 @@ export function useCageGizmo(
     settings: {
       enabled, radius, radiusValid, tool, dragFrame: frameMode, frameReason: local?.reason,
       setTool: (next: CageDragTool) => { if (!isDragging()) setTool(next); },
+      rotation: {
+        frame: rotateFrame, reason: localTurn?.reason,
+        setFrame: (next: 'world' | 'face') => { if (!isDragging()) setRotateFrame(next); },
+      },
       pivot: {
         mode: pivotMode, vertex: pivotVertex?.value ?? '', reason: pivot?.reason,
         setMode: (next: CagePivotMode) => { if (!isDragging()) setPivotMode(next); },

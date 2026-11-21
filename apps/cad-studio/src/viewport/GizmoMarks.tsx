@@ -30,6 +30,7 @@ export function gizmoMarks(g: TransformGizmo | null, handles: readonly FeatureHa
       || L.arcs.some(q => same(drag.hit, { kind: "turn", axis: q.axis }))
       || L.arrows.some(q => same(drag.hit, { kind: "move", axis: q.axis }))
       || !!L.along && drag.hit.kind === 'move-along'
+      || !!L.localArc && drag.hit.kind === 'turn-along'
       || L.cubes.some(q => same(drag.hit, { kind: "scale", axis: q.axis }))
     );
     const emphasis = (active: boolean) => dragging && !active ? 0.65 : 1;
@@ -53,6 +54,17 @@ export function gizmoMarks(g: TransformGizmo | null, handles: readonly FeatureHa
         <polyline points={pts(r.points)} fill="none" stroke={active ? DRAG_EDGE : EDGE} strokeOpacity={active ? 1 : 0.85} strokeWidth={active ? 9 : on ? 7 : 5.5} strokeLinecap="round" />
         <polyline points={pts(r.points)} fill="none" stroke={color} strokeWidth={active ? 5.5 : on ? 4.5 : 3} strokeLinecap="round" />
         {showTurn && <polygon points={pts(cone(prev, end, 9, 5))} fill={color} stroke={DRAG_EDGE} strokeWidth={2} strokeLinejoin="round" />}</g>);
+    }
+    if (L.localArc) {
+      const { points, label } = L.localArc;
+      const active = drag?.hit.kind === 'turn-along', on = active || hot?.kind === 'turn-along';
+      const color = on ? HOT : '#e8e9eb', forward = (drag?.degrees ?? 0) > 0;
+      const end = points[forward ? points.length - 1 : 0], prev = points[forward ? points.length - 3 : 2];
+      items.push(<g key="turnAlong" className="gizmo-arc" opacity={emphasis(active)} data-active={on} data-dragging={active} data-gizmo="turnAlong" aria-label={`Rotate about ${label}`}>
+        <polyline points={pts(points)} fill="none" stroke={active ? DRAG_EDGE : EDGE} strokeWidth={active ? 9 : 5.5} strokeLinecap="round" />
+        <polyline points={pts(points)} fill="none" stroke={color} strokeWidth={active ? 5.5 : on ? 4.5 : 3} strokeLinecap="round" />
+        {active && drag.degrees !== undefined && drag.degrees !== 0 && <polygon points={pts(cone(prev, end, 9, 5))} fill={color} stroke={DRAG_EDGE} strokeWidth={2} strokeLinejoin="round" />}
+      </g>);
     }
     const moveArrow = ({ from, to }: { from: XY; to: XY }, hit: GizmoHit, id: string, axisLabel: string, idleColor: string) => {
       const active = same(drag?.hit ?? null, hit), on = active || same(hot, hit);
