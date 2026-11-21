@@ -2,9 +2,10 @@ import { checkBrep, type Brep, type BrepEdge, type BrepFace } from '../brep/brep
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { evaluateCurve } from '../core/math.js';
 import { add, cross, dist, dot, len, scale, sub, unit } from '../core/vec3.js';
-import { fitRectangularScrew, fitRectangularTurn, fitTriangularTurn } from '../features/loft-rectangular-turn.js';
+import { fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from '../features/loft-rectangular-turn.js';
 import type { Curve, Point } from '../types.js';
 import { linearToleranceMM } from '../numeric-policy.js';
+import { triangleScrewAxisTolerance } from './triangular-screw-axis.js';
 
 const straightKnots = [0, 0, 1, 1];
 const same = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((value, i) => value === b[i]);
@@ -43,11 +44,18 @@ type XY = [number, number];
 
 function externalScrewPivot(poles: readonly Point[][], tolerance: number): XY | undefined {
   const first = poles.map(rail => rail[0]);
-  const [a, b, c, d] = first, u = sub(b, a), v = sub(d, a);
-  const width = len(u), depth = len(v), span = Math.max(width, depth);
-  // Use the display proof's tighter tolerance for the original cap rectangle.
-  if (Math.min(width, depth) <= tolerance || Math.abs(dot(u, v)) > tolerance * span
-    || dist(add(a, c), add(b, d)) > 2 * tolerance) return;
+  const [a, b, c, d] = first, u = sub(b, a), width = len(u);
+  if (first.length === 3) {
+    // This frame starts at the cap centroid; only shape, not origin clearance, is known yet.
+    if (triangleScrewAxisTolerance(first.map(([x, y]): XY => [x, y])) === undefined) return;
+    const v = sub(c, a), span = Math.max(width, len(v), len(sub(c, b)));
+    if (width <= tolerance || Math.abs(u[0] * v[1] - u[1] * v[0]) <= tolerance * span) return;
+  } else {
+    const v = sub(d, a), depth = len(v), span = Math.max(width, depth);
+    // Use the display proof's tighter tolerance for the original cap rectangle.
+    if (Math.min(width, depth) <= tolerance || Math.abs(dot(u, v)) > tolerance * span
+      || dist(add(a, c), add(b, d)) > 2 * tolerance) return;
+  }
   const [x0, y0] = centre(first);
   let determinant = 0, pivot: XY | undefined;
   for (let j = 1; j < poles[0].length; j++) {
@@ -146,7 +154,6 @@ export function compactStepTurnKind(brep: Brep): 'turn' | 'screw' | undefined {
   const centered = frame(unit(delta), len(delta));
   const fitTurn = sides === 3 ? fitTriangularTurn : fitRectangularTurn;
   if (centered?.matches(fitTurn(centered.rows, centered.heights, stations))) return 'turn';
-  if (sides !== 4) return;
 
   // Cap planes determine axial advance even if the end cap's center moved sideways.
   const normalAdvance = dot(delta, start.normal);
@@ -155,12 +162,25 @@ export function compactStepTurnKind(brep: Brep): 'turn' | 'screw' | undefined {
   const pivot = externalScrewPivot(screw.poles, tolerance);
   if (!pivot) return;
   const [u, v] = pivot;
+  const relative = screw.rows.map(row => row.map(([a, b]): XY => [a - u, b - v]));
+  if (sides === 3) {
+    const fitTolerance = triangleScrewAxisTolerance(relative[0]);
+    if (fitTolerance === undefined) return;
+    const centroid = (row: readonly XY[]): XY => row.reduce(([x, y], [a, b]): XY =>
+      [x + a / 3, y + b / 3], [0, 0] as XY);
+    const [x, y] = centroid(screw.rows[0]);
+    if (!screw.rows.some(row => {
+      const [a, b] = centroid(row);
+      return Math.hypot(a - x, b - y) > 4 * Math.max(fitTolerance, tolerance);
+    })) return;
+    if (screw.matches(fitTriangularScrew(relative, screw.heights, stations), pivot)) return 'screw';
+    return;
+  }
   const cap = screw.rows[0];
   const fitTolerance = linearToleranceMM(Math.max(Math.hypot(cap[1][0] - cap[0][0], cap[1][1] - cap[0][1]),
     Math.hypot(cap[3][0] - cap[0][0], cap[3][1] - cap[0][1])));
   if (!screw.rows.some(row => Math.hypot(row.reduce((sum, p) => sum + p[0] / 4, 0),
     row.reduce((sum, p) => sum + p[1] / 4, 0)) > 4 * fitTolerance)) return;
-  const relative = screw.rows.map(row => row.map(([a, b]): XY => [a - u, b - v]));
   if (screw.matches(fitRectangularScrew(relative, screw.heights, stations), pivot)) return 'screw';
 }
 

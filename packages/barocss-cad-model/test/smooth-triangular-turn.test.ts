@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1, faceGeometry, type BrepFace, type Point } from '@barocss/cad';
-import { isCompactStepTurn } from '@barocss/cad/internal/step-turn-display';
+import { brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1, faceGeometry, type Brep, type BrepFace, type Point } from '@barocss/cad';
+import { compactStepTurnKind, isCompactStepTurn } from '@barocss/cad/internal/step-turn-display';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
 import { smoothLoftTurnWidthField, smoothScrewAngleField, smoothScrewPitchField } from '../src/app/smoothLoftTurn';
@@ -9,7 +9,8 @@ import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { emptyDoc, withNode, type SketchNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, exportStudioStep, partBreps } from '../src/engine/evaluate';
-import { bodyMesh } from '../src/engine/mesh';
+import { smoothTurnDisplayMesh } from '../src/engine/loftDisplay';
+import { bodyMesh, type DisplayMesh } from '../src/engine/mesh';
 import { revisionOf } from '../src/util/revision';
 
 const triangle = {
@@ -276,7 +277,7 @@ test('a compact triangular STEP Turn refines only when its side and cap geometry
       faces: brep.faces.map((face, i) => ({ ...face, name: 'wall-or-cap-' + i })).reverse(),
       edges: brep.edges.map((edge, i) => ({ ...edge, name: 'rim-or-rail-' + i })).reverse(),
     };
-    assert.equal(isCompactStepTurn(renamed), true);
+    assert.equal(compactStepTurnKind(renamed), 'turn');
 
     const lifted = structuredClone(brep);
     const cap = lifted.faces.find(face => face.surface.kind === 'surface' && face.surface.degreeV === 1)?.surface;
@@ -456,4 +457,85 @@ test('triangular Screw refuses touching axes and shares exterior admission with 
     async doc => evaluateDoc(doc, 1));
   assert.ok(accepted.changed && !accepted.isError, accepted.content);
   assert.deepEqual(accepted.state.doc, command.build!(source, values));
+});
+
+
+function moveRailColumns(brep: Brep, offsets: readonly Point[]): Brep {
+  const shifted = structuredClone(brep);
+  for (const { curve } of shifted.edges) {
+    if (curve.degree !== 3) continue;
+    const original = JSON.stringify(curve.controlPoints);
+    const poles = curve.controlPoints.map(([x, y, z], i): Point => {
+      const [dx, dy, dz] = offsets[i];
+      return [x + dx, y + dy, z + dz];
+    });
+    for (const { surface } of shifted.faces) if (surface.kind === 'surface')
+      for (const row of surface.controlPoints) if (JSON.stringify(row) === original) row.splice(0, row.length, ...poles);
+    curve.controlPoints.splice(0, curve.controlPoints.length, ...poles);
+  }
+  assert.ok(checkBrep(shifted, { strict: true }).valid);
+  return shifted;
+}
+
+test('AP214 triangular Screws restore the structured packet with canonical owners', () => {
+  const screw = commandById('smooth-screw')!;
+  const rotated: SketchNode = {
+    ...triangle, points: [triangle.points[0], triangle.points[2], triangle.points[1]],
+    plane: { origin: [111, -33, 55], normal: [.6, 0, .8], xAxis: [.8, 0, -.6] },
+  };
+  for (const [angle, sketch] of [[-450, triangle], [450, rotated]] as const) {
+    const authored: StudioDoc = screw.build!(ctx(sketch), { axisX: 10, axisY: -3, pitch: 40, angle });
+    const extra = withNode(authored, { kind: 'sketch', profile: 'rectangle', min: [300, 300], max: [304, 304] });
+    const separate = withNode(extra, { kind: 'extrude', sketch: authored.nodes.length, height: 4 });
+    const step = exportStudioStep(separate, { name: 'Two bodies' }).text;
+    const opened = withNode(emptyDoc(), { kind: 'import', name: 'Disparate bodies', step, solids: 2 });
+    const ordinary = evaluateDoc(opened, 1), display = evaluateDoc(opened, 2, 8, true);
+    assert.ok(ordinary.ok && display.ok);
+    for (const [i, { brep }] of partBreps(opened).entries()) {
+      const { loftDetail, ...canonical }: DisplayMesh = display.bodies[i].mesh;
+      assert.deepEqual(canonical, ordinary.bodies[i].mesh);
+      assert.equal(display.bodies[i].volume, ordinary.bodies[i].volume);
+      if (brep.faces.length !== 5) {
+        assert.equal(loftDetail, undefined);
+        continue;
+      }
+      assert.ok(checkBrep(brep, { strict: true }).valid);
+      assert.equal(compactStepTurnKind(brep), 'screw');
+      assert.ok(loftDetail && 'kind' in loftDetail && loftDetail.screwGrid);
+      assert.equal(loftDetail.indices.length / 3, 1284);
+      assert.deepEqual([...new Set(loftDetail.edgeOfSegment)].sort((a, b) => a - b), canonical.edges.map(edge => edge.index));
+      assert.deepEqual([...new Set(loftDetail.faceOfVertex)].sort((a, b) => a - b), canonical.faces.map(face => face.index));
+
+      const renamed = { ...brep, faces: brep.faces.map((face, j) => ({ ...face, name: `surface-${j}` })).reverse(),
+        edges: brep.edges.map((edge, j) => ({ ...edge, name: `edge-${j}` })).reverse() };
+      assert.equal(compactStepTurnKind(renamed), 'screw');
+      const nonlinearHeight = moveRailColumns(brep, Array.from({ length: 16 },
+        (_, column) => column === 3 ? [0, .006, .008] : [0, 0, 0]));
+      assert.equal(compactStepTurnKind(nonlinearHeight), undefined);
+      const base = bodyMesh(nonlinearHeight, 0, 8);
+      assert.equal(smoothTurnDisplayMesh(base, nonlinearHeight), base);
+    }
+  }
+});
+
+test('a strictly valid STEP triangle turning around an interior axis stays outside the Screw grid', () => {
+  const native = smooth.build!(ctx(), { height: 40, angle: 360 });
+  const step = exportStudioStep(native, { name: 'Centered control' }).text;
+  const opened = withNode(emptyDoc(), { kind: 'import', name: 'Centered control', step });
+  const [{ brep }] = partBreps(opened);
+  assert.equal(compactStepTurnKind(brep), 'turn');
+  const [a, b] = brep.edges.filter(edge => edge.curve.degree === 3).map(edge => edge.curve.controlPoints);
+  const yAxis: Point = [0, .8, -.6], first = minus(b[0], a[0]);
+  const u = first[0], v = scalar(first, yAxis), square = u * u + v * v;
+  // Move the rotation axis a quarter millimetre from the centroid toward the interior.
+  const offsets = a.map((_, i): Point => {
+    if (i === 0 || i === a.length - 1) return [0, 0, 0];
+    const edge = minus(b[i], a[i]), x = edge[0], y = scalar(edge, yAxis);
+    const real = (u * x + v * y) / square, imag = (u * y - v * x) / square;
+    return [0.25 * (1 - real), -.2 * imag, .15 * imag];
+  });
+  const interior = moveRailColumns(brep, offsets);
+  assert.equal(compactStepTurnKind(interior), undefined);
+  const base = bodyMesh(interior, 0, 8);
+  assert.equal(smoothTurnDisplayMesh(base, interior), base);
 });
