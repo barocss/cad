@@ -4,9 +4,11 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 const file = process.argv[3], doc = JSON.parse(await readFile(file));
+const triangular = process.argv.includes("--triangle");
+const faceCounts = triangular ? [5] : [18, 6];
 const f = await createFlow({
   name: 'smooth-turn-step', output: process.argv[2], envFrozen: 'TURN_STEP_FROZEN',
-  qualification: 'Inspect STEP written by actual Studio from the approved Smooth Turn and its Ruled control.',
+  qualification: 'Inspect STEP written by actual Studio from the approved compact Smooth Turn.',
   initialFiles: ['apps/cad-studio/test/smooth-turn-step-browser.mjs', 'apps/cad-studio/test/smooth-turn-step-oracle.py',
     'apps/cad-studio/test/part21-prism-check.py', 'apps/cad-studio/src/files/useModelExports.ts', 'apps/cad-studio/src/files/StepExportPanel.tsx', 'packages/barocss-cad-model/src/engine/evaluate.ts'],
   inspectorSource: `
@@ -51,6 +53,8 @@ await f.run(async () => {
   await b('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   if (await b('AO').getAttribute('aria-pressed') === 'true') await b('AO').click();
+  const nativeDisplay = triangular ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
+  if (triangular) assert.deepEqual(nativeDisplay, { kind: 'smooth-turn', triangles: 690, baseTriangles: 224 });
   f.phase = 'read STEP preparation and loss disclosure in Studio';
   await b('Export STEP').click();
   const panel = f.page.getByLabel('STEP export', { exact: true });
@@ -58,7 +62,7 @@ await f.run(async () => {
   const report = await panel.innerText();
   assert.match(report, /STEP AP214 · B-rep geometry · mm/);
   assert.match(report, /feature history/i);
-  assert.match(await panel.getByLabel('STEP included bodies').innerText(), /2 output bodies/);
+  assert.match(await panel.getByLabel('STEP included bodies').innerText(), new RegExp('^' + faceCounts.length + ' output bod(?:y|ies)'));
   await f.snapshot('approved-turn-step-losses');
   f.phase = 'capture the local STEP bytes actually produced by Studio';
   await panel.getByRole('button', { name: 'Export', exact: true }).click();
@@ -68,12 +72,13 @@ await f.run(async () => {
   const artifact = join(f.output, 'approved-turn-from-studio.step');
   await writeFile(artifact, text);
   await f.same(doc);
-  const graph = JSON.parse(execFileSync('python3', ['-BI', join(f.app, 'test/smooth-turn-step-oracle.py'), artifact], { encoding: 'utf8' }));
+  const oracle = ['-BI', join(f.app, 'test/smooth-turn-step-oracle.py'), artifact];
+  if (triangular) oracle.push('--triangle');
+  const graph = JSON.parse(execFileSync('python3', oracle, { encoding: 'utf8' }));
   const before = await f.inspect('approved-native', doc);
-  assert.equal(before.length, 2);
-  assert.deepEqual(before.map(body => body.check.counts.faces), [18, 6]);
+  assert.deepEqual(before.map(body => body.check.counts.faces), faceCounts);
   assert.ok(before.every(body => body.check.valid));
-  assert.ok(Math.abs(before[1].volume - graph.smoothVolumeMM3) < 1e-7);
+  assert.ok(Math.abs(before.at(-1).volume - graph.smoothVolumeMM3) < 1e-7);
   f.report.observations.push({ report, graph, before });
 
   f.phase = 'fresh Open the exact AP214 bytes in Studio';
@@ -81,11 +86,11 @@ await f.run(async () => {
   await f.openFile(artifact, 1);
   const loaded = await f.doc();
   assert.equal(loaded.nodes[0].kind, 'import');
-  assert.equal(loaded.nodes[0].solids, 2);
+  assert.equal(loaded.nodes[0].solids ?? 1, faceCounts.length);
   assert.equal(loaded.nodes[0].step, text);
   assert.ok(!loaded.proposals?.length && !loaded.history?.length);
   const imported = await f.inspect('step-opened-native', loaded);
-  assert.equal(imported.length, 2);
+  assert.equal(imported.length, faceCounts.length);
   const { bodies } = await f.bodies();
   for (const [i, body] of imported.entries()) {
     assert.ok(body.check.valid);
@@ -98,6 +103,8 @@ await f.run(async () => {
   await b('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   if (await b('AO').getAttribute('aria-pressed') === 'true') await b('AO').click();
-  f.report.observations.push({ imported, noNativeFeatureHistory: true });
+  const reopenedDisplay = triangular ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
+  if (triangular) assert.equal(reopenedDisplay, null);
+  f.report.observations.push({ imported, noNativeFeatureHistory: true, nativeDisplay, reopenedDisplay });
   await f.snapshot('approved-turn-step-reopened');
 });
