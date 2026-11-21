@@ -8,7 +8,8 @@ import { changesFixedSpanCountAndLength } from '../../app/patternHoleSpacing';
 import { deleteFeatures, featureDependents, renumber } from '../features';
 import { factsOf } from '../observe';
 import { treeDiff } from '../transactions';
-import { diffLine, nextProposalId, PLAN_CHARS, PROMPT_CHARS, proposalIsStale, riskOf, riskRank, withHistory } from '../proposals';
+import { approvalOf, diffLine, DIRECT_GEOMETRY_APPROVAL, nextProposalId, PLAN_CHARS, PROMPT_CHARS, proposalIsStale, riskOf, riskRank, withHistory } from '../proposals';
+import { DIRECT_RULED_COMMAND } from '../directRuledProposal';
 import type { ChecksDelta, FollowUpRepairSource, Proposal, Risk } from '../../engine/schema/proposals';
 import { checkSpec, modelHash } from '../spec';
 import { MUTATORS } from '../toolDefinitions';
@@ -128,13 +129,16 @@ export async function proposalOfWith(dispatch: PartRun, state: ChatState, ops: u
   const local = nested === undefined ? undefined : await nestedParameterChecks(state.doc, cur.doc, nested, evaluate);
   const risk = riskOf(state.doc, cur.doc, diff, broken.length, [...hardChanged, ...(local?.hardChanged ?? [])]);
   if (local?.needsReview || faceRepair) risk.level = 'high';
-  const changes = nested !== undefined || faceRepair ? String(run.results[0]?.did ?? nested) : diffLine(diff) || (risk.approval.length ? `${risk.approval.join(', ')} change` : '');
+  const changes = nested !== undefined || faceRepair ? String(run.results[0]?.did ?? nested) : diffLine(diff);
   // run.results also contains skipped opIds; run.ops retains only executed operations.
   const executedResults = run.results.filter(result => result.skipped === undefined);
   const stepChanges = run.ops.flatMap((op, index) => op.tool === 'add_assembly_step' && typeof executedResults[index]?.did === 'string' ? [executedResults[index].did as string] : []);
+  const sheets = run.ops.flatMap((op, index) => op.tool === 'run_command' && op.args?.command === DIRECT_RULED_COMMAND.command
+    && typeof executedResults[index]?.did === 'string' ? [executedResults[index].did as string] : []);
   const checkLabel = nested !== undefined ? 'root checks' : 'checks';
   const rootChecks = checks && `${checkLabel} ${checks.before.pass}/${checks.before.fail}/${checks.before.unknown} → ${checks.after.pass}/${checks.after.fail}/${checks.after.unknown}`;
-  const summary = [changes, ...stepChanges, rootChecks, local?.summary].filter(Boolean).join(', ') || 'no change';
+  const approvalChange = !changes && !sheets.length && risk.approval.length ? `${risk.approval.join(', ')} change` : '';
+  const summary = [changes || approvalChange, ...stepChanges, ...sheets, rootChecks, local?.summary].filter(Boolean).join(', ') || 'no change';
   return { ...run, checks, risk, summary };
 }
 export const countsOf = (s: { pass: number; fail: number; unknown: number }) => ({ pass: s.pass, fail: s.fail, unknown: s.unknown });
@@ -160,6 +164,8 @@ export async function acceptProposalWith(dispatch: PartRun, state: ChatState, id
   if (proposalIsStale(p, before)) return { error: nested !== undefined || faceRepair ? staleNested(p) : `${id} has no current proposal revision: rebase it and look at the result before accepting.`, stale: true };
   const run = await runOps(faceRepair ? replayNestedFaceRepair : dispatch, { ...state, policy: undefined }, p.ops, evaluate);
   if ('fail' in run) return { error: errorOf(run.fail) };
+  if (by.agent !== 'user' && approvalOf(state.doc, run.cur.doc).includes(DIRECT_GEOMETRY_APPROVAL))
+    return { error: 'A Direct geometry proposal needs approval by the user in Studio.' };
   if ((nested !== undefined || faceRepair) && run.ops.length !== 1) return { error: 'The nested operation was already applied.' };
   let cur = run.cur, leftOut: string[] = [];
   if (o.leaveOut?.length) {

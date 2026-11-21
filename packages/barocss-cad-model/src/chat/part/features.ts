@@ -9,6 +9,7 @@ import { extrudeCommand } from '../../app/profileCommands';
 import { smoothScrewAngleField, smoothScrewAngleKey, smoothScrewWindingRule, smoothScrewPitchAdvance, smoothScrewPitchField, smoothScrewPitchKey, smoothScrewTurns, smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '../../app/smoothLoftTurn';
 import { hasLineArcScrewSections, hasLineArcTurnSections } from '../../app/lineArcScrew';
 import { featureLabel, isAnnularReplacementSource, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
+import { DIRECT_RULED_COMMAND, proposeDirectRuledCommand } from '../directRuledProposal';
 import { loadPersonRows } from '../rows';
 import { ROWS_NOT_FROM_PERSON } from '../../engine/rowFiles';
 import type { RowKind } from '../../engine/rowDefinitions';
@@ -223,6 +224,7 @@ async function extrudeToReviewedFace(state: ChatState, args: Record<string, unkn
 }
 
 async function runCommandTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {
+  if (args.command === DIRECT_RULED_COMMAND.command) return proposeDirectRuledCommand(state, args, evaluate, options);
   const refusal = checkFeatureRevision(state, args.expectedRevision, 'COMMAND');
   if (refusal) return refusal;
   const cmd = commandById(String(args.command));

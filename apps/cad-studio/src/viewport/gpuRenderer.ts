@@ -468,6 +468,9 @@ export class GpuRenderer implements ViewRenderer {
       this.proposalMeshes.push(this.viewer.add({ positions: m.positions, normals: m.normals, indices: m.indices }, { name: 'proposal:' + side, material: { color, opacity: 0.5, doubleSided: true, decal: true, roughness: 0.6 }, castShadow: false, pickable: false }));
       if (m.edgeLines.length) this.proposalMeshes.push(this.viewer.add({ positions: m.edgeLines, topology: 'lines' }, { material: { color, unlit: true, lineWidth: 1.6, opacity: 0.9, lineHidden: 0.35 }, castShadow: false, pickable: false }));
     }
+    for (const sheet of view?.directSheets ?? []) {
+      this.proposalMeshes.push(this.viewer.add(sheet, { name: 'proposal:direct-sheet', material: { color: PROPOSAL_ADDED, opacity: 0.5, doubleSided: true, roughness: 0.6 }, castShadow: false, pickable: false }));
+    }
     // (Their volumes over the scene as the readouts are drawn, G15-D2: stacked over the two boxes' top, so they never meet.)
     if (view) for (const c of proposalChips(view)) {
       const color = c.side === 'added' ? PROPOSAL_ADDED : PROPOSAL_REMOVED;

@@ -20,6 +20,7 @@ import { isObj } from '../util/guards';
 export interface CallOptions {
   readonly responseFormat: 'auto' | 'concise' | 'detailed';
   readonly because: string;
+  readonly proposal?: true;
 }
 /** The tools' own runner, passed to a handler that calls tools again (a batch, a script, a proposal) — no module imports tools.ts. */
 export type PartRun = (state: ChatState, name: string, input: unknown, evaluate: Evaluate) => Promise<ToolOutcome>;

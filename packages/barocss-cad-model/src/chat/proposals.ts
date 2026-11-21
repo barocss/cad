@@ -12,6 +12,8 @@ import type { StudioDoc } from '../engine/doc';
 import type { TreeDiff } from './transactions';
 import type { Risk, HistoryEntry, Proposal } from '../engine/schema/proposals';
 
+export const DIRECT_GEOMETRY_APPROVAL = 'Direct geometry';
+
 /** Older or unworked proposals must be rebased to evaluate their risk against known inputs. */
 export const proposalIsStale = (proposal: Proposal, revision: string) => proposal.status === 'open' && proposal.base_evidence_revision !== revision;
 
@@ -73,6 +75,7 @@ export function approvalOf(a: StudioDoc, b: StudioDoc): string[] {
   if (!same(a.assemblySteps, b.assemblySteps)) out.push('assembly steps');
   if (!same(a.mates, b.mates)) out.push('mates');
   if (!same(a.drawing, b.drawing)) out.push('drawing');
+  if (!same(a.direct, b.direct)) out.push(DIRECT_GEOMETRY_APPROVAL);
   if (!same(a.robot, b.robot)) out.push('robot');
   const was = new Map((a.instances ?? []).map(i => [i.id, i]));
   if ([...(b.instances ?? []), ...(a.instances ?? [])].some(i => (i.part?.source || was.get(i.id)?.part?.source) && !same(was.get(i.id), (b.instances ?? []).find(x => x.id === i.id)))) out.push('locked part');

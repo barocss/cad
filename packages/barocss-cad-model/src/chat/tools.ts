@@ -150,6 +150,7 @@ async function runToolUnchecked(state: ChatState, name: string, input: unknown, 
   const options: CallOptions = {
     responseFormat: format === 'concise' || format === 'detailed' ? format : 'auto',
     because: typeof reason === 'string' ? reason : '',
+    ...(proposal ? { proposal: true } : {}),
   };
   if (OUTPUT_TOOL_NAMES.has(name)) {
     const { runOutputTool } = await (outputsModule ??= import('./outputs'));

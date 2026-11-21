@@ -7,7 +7,8 @@
 import type { ToolDefinition } from './api';
 import { annotationsOf, outputSchemaOf, TOOL_CONTRACT_V2, type JsonSchema } from './contract';
 import { GROUPS, v2Text } from './groups';
-import { CHAT_COMMANDS, featureKinds, SYSTEM_PROMPT, TOOLS } from './tools';
+import { featureKinds, SYSTEM_PROMPT, TOOLS } from './tools';
+import { FEATURE_COMMANDS } from './toolDefinitions';
 
 /** A handler's own definition (its name, description and input schema): what describe and the model tool read. */
 const handler = (name: string) => TOOLS.find(t => t.name === name)!;
@@ -20,7 +21,7 @@ function groupTool(name: string): ToolDefinition {
     name, description: 'On request: {"tool"} its actions; {"tool", "action"} that action\'s full description and arguments; {"command"} a command\'s selection and values; {"feature"} a feature kind\'s node JSON. Ask before using an action, command or feature kind the first time.',
     input_schema: { type: 'object', properties: { tool: { type: 'string' }, action: { type: 'string' }, command: { type: 'string' }, feature: { type: 'string' } }, additionalProperties: false },
   };
-  const extra = name === 'features' ? ` Commands: ${CHAT_COMMANDS.join(', ')}. Feature kinds: ${featureKinds().join(', ')}.` : '';
+  const extra = name === 'features' ? ` Commands: ${FEATURE_COMMANDS.join(', ')}. Feature kinds: ${featureKinds().join(', ')}.` : '';
   return { name, description: `${g.about} Pass "action" and its arguments. Actions: ${actionList(name)}.${extra}`, input_schema: { type: 'object', properties: { action: { type: 'string', enum: actions } }, required: ['action'] } };
 }
 /** The consolidated tools. */

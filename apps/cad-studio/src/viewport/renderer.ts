@@ -754,6 +754,9 @@ export class Renderer implements ViewRenderer {
       const m = s.mesh;
       this.proposal.push({ color: hexRgb(side === 'added' ? PROPOSAL_ADDED : PROPOSAL_REMOVED), tri: this.plainMesh(m.positions, m.normals, m.indices), line: m.edgeLines.length ? this.plainLines(m.edgeLines) : null });
     }
+    for (const sheet of view?.directSheets ?? []) {
+      this.proposal.push({ color: hexRgb(PROPOSAL_ADDED), tri: this.plainMesh(sheet.positions, sheet.normals, sheet.indices), line: null });
+    }
     if (this.view) this.resolveDisplayMode(this.view);
   }
 

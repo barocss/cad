@@ -12,6 +12,7 @@ export interface ProposalOverlay {
   changedFaces: { name: string; kind: 'added' | 'removed' | 'changed' }[];
   method: 'boolean' | 'faces';
   why: string | null;
+  directSheets?: { positions: Float32Array; normals: Float32Array; indices: Uint32Array }[];
 }
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { PlanarFaceOutlineInsetAssociation, SketchNode, StudioDoc } from '@barocss/cad-model/engine/doc';

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1625: [Propose a native Direct Ruled surface through the local Agent](notes/agent-direct-ruled-proposal-2026-11-22/README.md), #29 and #322. Verify the pinned source, Studio preview, human approval and exact native Open.
 - D1624: [Inspect a Direct surface point and normal through the local Agent](notes/agent-direct-surface-inspection-2026-11-22/README.md), #29 and #322. Verify exact revision and U,V against the native Studio inspector after Open.
 - D1623: [Build a ruled surface from a straight span and cubic Bézier](notes/exact-ruled-straight-cubic-2026-11-22/README.md), #29. Verify both unchanged rails, the midpoint normal and exact native Open in Studio.
 - D1622: [Extrude a circular source to an original lower circular cap](notes/circular-source-to-circular-cap-2026-11-22/README.md), #222. Prove full native disk coverage, reject contact and retain the end reference through Studio edits and Open.

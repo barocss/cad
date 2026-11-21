@@ -2,6 +2,7 @@ import { useMemo, useState, type Dispatch, type SetStateAction, type RefObject }
 import { placedDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { placementOf } from '@barocss/cad-model/engine/placement';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
+import type { directDisplay } from '@barocss/cad-model/engine/direct';
 import type { Proposal } from '@barocss/cad-model/engine/schema/proposals';
 import type { ProposalPart } from '@barocss/cad-model/chat/tools';
 import type { PersonRowFiles } from '@barocss/cad-model/engine/rowFiles';
@@ -17,10 +18,11 @@ interface ProposalPreviewOptions {
   worker: { engine: EngineClient; lanes: Lanes; nextRevision(): number };
   changes: { commit(next: StudioDoc): boolean; currentDoc(): StudioDoc; setPreviewBodies: Dispatch<SetStateAction<BodyResult[] | null>> };
   chatRowFiles: RefObject<PersonRowFiles | undefined>;
+  displayDirect?: typeof directDisplay;
   onNotice(notice: StudioNotice): void;
 }
 /** Proposal previews and acceptance use the existing tool path and App's central commit. */
-export function useProposalPreview({ model, worker, changes, chatRowFiles, onNotice: setToast }: ProposalPreviewOptions) {
+export function useProposalPreview({ model, worker, changes, chatRowFiles, displayDirect, onNotice: setToast }: ProposalPreviewOptions) {
   const { doc, bodies, instances, marker, active, sketch } = model;
   const reviewBlocked = active || sketch || marker !== null;
   const { engine, lanes, nextRevision } = worker;
@@ -49,6 +51,16 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, onNot
   // (Only wanted to show an open proposal stale.)
   const evidenceRevision = useMemo(() => doc.proposals?.some(p => p.status === 'open') ? requirementEvidenceRevision(doc) : '', [doc]);
   const isStale = (p: Proposal) => proposalIsStale(p, evidenceRevision);
+  const currentProposal = doc.proposals?.find(p => p.id === ghost?.id && p.status === 'open');
+  const shownDirect = ghost?.after && !reviewBlocked && currentProposal && !isStale(currentProposal) ? ghost.shown.direct : undefined;
+  const directSheets = useMemo(() => {
+    if (!displayDirect || !shownDirect || shownDirect === doc.direct) return [];
+    const existing = new Set(doc.direct?.objects.map(object => object.id));
+    const objects = shownDirect.objects.filter(object => !existing.has(object.id));
+    if (!objects.length) return [];
+    return displayDirect({ sources: shownDirect.sources, objects }).flatMap(({ kind, positions, normals, indices }) =>
+      kind === 'surface' && normals && indices ? [{ positions, normals, indices }] : []);
+  }, [displayDirect, doc.direct, shownDirect]);
   const showProposal = async (p: Proposal, from: StudioDoc = doc) => {
     if (ghost?.id === p.id && from === doc) { setGhost(null); setPreviewBodies(null); return; }
     if (active || sketch || marker !== null) return;
@@ -104,12 +116,17 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, onNot
     const leaveOut = ghost?.id === p.id ? ghost.leaveOut : [];
     const r = await (await import('@barocss/cad-model/chat/tools')).acceptProposal({ doc, bodies, rowFiles: chatRowFiles.current }, p.id, partEval, { leaveOut });
     setProposalBusy(false);
+    if (doc !== currentDoc()) return;
     if ('error' in r) { setToast({ title: `${p.id} could not be applied`, hint: r.error, detail: 'Nothing changed; the proposal stays open.' }); return; }
     if (!commit(r.state.doc)) return;
     setGhost(null); setPreviewBodies(null);
   };
   const rejectIt = (p: Proposal) => { const next = rejectProposal(doc, p.id); if ('error' in next || !commit(next)) return; if (ghost?.id === p.id) { setGhost(null); setPreviewBodies(null); } };
-  return { ghost, proposalOverlay: screwShape && !ghost?.changesShown ? null : proposalOverlay,
+  const overlay = useMemo<ProposalOverlay | null>(() => {
+    const diff = screwShape && !ghost?.changesShown ? null : proposalOverlay;
+    return directSheets.length ? { ...(diff ?? { added: null, removed: null, changedFaces: [], method: 'faces', why: null }), directSheets } : diff;
+  }, [directSheets, ghost?.changesShown, proposalOverlay, screwShape]);
+  return { ghost, proposalOverlay: overlay,
     screwChangesAvailable: screwShape && !!proposalOverlay, toggleScrewChanges, proposalBusy, reviewBlocked, evidenceRevision,
     isStale, partEval, resetForModelChange, updateDiff, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt };
 }

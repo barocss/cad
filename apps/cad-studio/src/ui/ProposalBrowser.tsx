@@ -22,6 +22,7 @@ export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel
           <ToolIconButton size="tiny" state={decidedShown ? 'on' : 'idle'} data-proposal-history-toggle aria-label={decidedShown ? 'Hide decided proposals' : 'Show decided proposals'} aria-pressed={decidedShown} data-tip={decidedShown ? 'Hide decided proposals' : 'Show accepted and rejected'} onClick={() => setDecidedShown(f => !f)}><Icon name="history" small /></ToolIconButton></div>
         {doc.proposals.filter(p => decidedShown || p.status === 'open').map(p => {
           const shown = ghost?.id === p.id, stale = isStale(p), base = volumeOf(bodies);
+          const sheetOnly = shown && !ghost.parts.length && ghost.shown.direct !== doc.direct;
           // Historical scope comes from the saved decision, never from replaying
           // its operations against today's model or guessing missing labels.
           const leftOut = p.status === 'accepted' ? [...new Set(p.decided?.left_out ?? [])] : [];
@@ -36,7 +37,7 @@ export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel
             <div className="proposal-title"><b>{p.id}</b> {p.title} <span className={'risk-badge ' + p.risk.level} title={`${p.risk.features_touched} features touched · ${p.risk.references_broken} references broken${p.risk.hard_requirements_changed.length ? ` · hard requirements ${p.risk.hard_requirements_changed.join(', ')}` : ''}${p.risk.approval.length ? ` · always needs approval: ${p.risk.approval.join(', ')}` : ''}`}>{p.risk.level} risk</span></div>
             <div className="muted">{stale ? <b className="stale">stale · </b> : p.rebased ? 'rebased · ' : ''}{partial ? 'Original proposal: ' : ''}{p.summary}{p.risk.references_broken ? ` · ${p.risk.references_broken} reference${p.risk.references_broken > 1 ? 's' : ''} broken` : ''}{p.risk.hard_requirements_changed.length ? ` · hard ${p.risk.hard_requirements_changed.join(', ')}` : ''}{p.risk.approval.length ? ` · needs you (${p.risk.approval.join(', ')})` : ''} · {p.by.agent}{p.by.model ? ` (${p.by.model})` : ''}</div>
             {p.plan && <div className="proposal-plan">{p.plan}</div>}
-            {shown && fresh && (problem ? <div className="muted proposal-dv">{problem}</div>
+            {shown && fresh && !sheetOnly && (problem ? <div className="muted proposal-dv">{problem}</div>
               : <div className="mono proposal-dv">{ghost.after ? 'after' : 'before'} · Volume change <span aria-label="Volume change">{!massReady ? '…' : dv === null ? 'unavailable'
                 : `${dv >= 0 ? '+' : '−'}${fmt(Math.abs(dv))} mm³${!placed && base ? ` (${dv >= 0 ? '+' : '−'}${fmt(Math.abs(dv) / base * 100)}%)` : ''}`}</span></div>)}
             {shown && ghost.parts.length > 1 && <div className="proposal-parts" role="group" aria-label={`${p.id} features`}>{ghost.parts.map(q => <label key={q.id} className={'proposal-part ' + q.kind}>

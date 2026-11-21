@@ -2382,7 +2382,7 @@ export function App() {
     worker: { engine, nextRevision: () => revision.current++ }, onNotice: setToast });
   const [failingOnly, setFailingOnly] = useState(false);
   const proposals = useProposalPreview({ model: { doc, bodies, instances: instanceBodies, marker, active: !!active, sketch: !!sketch }, worker: { engine, lanes, nextRevision: () => revision.current++ },
-    changes: { commit: next => commit(next, false, false, true), currentDoc: () => docNow.current, setPreviewBodies }, chatRowFiles, onNotice: setToast });
+    changes: { commit: next => commit(next, false, false, true), currentDoc: () => docNow.current, setPreviewBodies }, chatRowFiles, displayDirect: D?.directDisplay, onNotice: setToast });
   const { ghost, proposalOverlay, proposalBusy, evidenceRevision, isStale, partEval, acceptIt, rejectIt } = proposals;
   const heldDraftPreviewClear = heldDraftFacePreviewClear({ proposal: ghost, proposalBusy, comparison: workingComparison,
     comparisonOverlay: compareOverlay, candidateShown: candidateReview?.shown });
@@ -2756,7 +2756,7 @@ export function App() {
     (window as unknown as { __studioOverlayLines: () => Record<string, number> }).__studioOverlayLines = () => viewport.current?.overlayLines() ?? {};
     (window as unknown as { __studioOverlayTexts: () => Record<string, string[]> }).__studioOverlayTexts = () => viewport.current?.overlayTexts() ?? {};
     // (G12: the shown proposal's diff, as the overlay has it.)
-    (window as unknown as { __studioProposalOverlay: () => unknown }).__studioProposalOverlay = () => proposalOverlay && { added: proposalOverlay.added?.volume ?? null, removed: proposalOverlay.removed?.volume ?? null, method: proposalOverlay.method, faces: proposalOverlay.changedFaces.length, tinted: !!proposalTint };
+    (window as unknown as { __studioProposalOverlay: () => unknown }).__studioProposalOverlay = () => proposalOverlay && { added: proposalOverlay.added?.volume ?? null, removed: proposalOverlay.removed?.volume ?? null, method: proposalOverlay.method, faces: proposalOverlay.changedFaces.length, tinted: !!proposalTint, directSheets: proposalOverlay.directSheets?.length ?? 0 };
     // (CG6: the compared version's diff, the same way.)
     (window as unknown as { __studioCompareOverlay: () => unknown }).__studioCompareOverlay = () => compareOverlay && { added: compareOverlay.added?.volume ?? null, removed: compareOverlay.removed?.volume ?? null, method: compareOverlay.method, faces: compareOverlay.changedFaces.length, tinted: !!proposalTint };
     // (n points spread through a box, coloured by height; 0: none.)
