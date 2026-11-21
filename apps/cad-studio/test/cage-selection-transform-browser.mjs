@@ -6,11 +6,14 @@ const stalePivot = process.argv.includes('--expect-stale-pivot');
 const pivotTopology = stalePivot || process.argv.includes('--pivot-topology');
 const vertexScale = pivotBaseline || pivotTopology || process.argv.includes('--vertex-scale');
 const scaleDrag = scaleBaseline || vertexScale || process.argv.includes('--scale-drag');
+const rotateBaseline = process.argv.includes('--expect-no-rotate-drag');
+const rotateDrag = rotateBaseline || process.argv.includes('--rotate-drag');
 const pins=['packages/barocss-cad-model/src/subd/cageEdit.ts','apps/cad-studio/src/ui/CagePanel.tsx','apps/cad-studio/src/subd/useCageEditor.ts','apps/cad-studio/src/subd/cageTransformDraft.ts','apps/cad-studio/src/ui/CageTransformControls.tsx'];
-if (scaleDrag) pins.push('apps/cad-studio/src/subd/useCageGizmo.ts', 'apps/cad-studio/src/viewport/gizmo.ts',
+if (scaleDrag || rotateDrag) pins.push('apps/cad-studio/src/subd/useCageGizmo.ts', 'apps/cad-studio/src/viewport/gizmo.ts',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts', 'apps/cad-studio/test/cage-selection-transform-browser.mjs');
 const f=await createFlow({name:'cage-selection-transform',output:process.argv[2],envFrozen:'CAGE_TRANSFORM_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,
- qualification: vertexScale ? 'Physical uniform scaling of two connected cage faces about one exact cage vertex.'
+ qualification: rotateDrag ? 'Physical signed Z rotation of two connected cage faces about their original centre.'
+   : vertexScale ? 'Physical uniform scaling of two connected cage faces about one exact cage vertex.'
    : scaleDrag ? 'Physical uniform scaling of two connected cage faces about the original centre, compared with numeric Scale.'
    : 'Numeric world-axis rotation and uniform scale on selected faces, explicit pivot, no-op/cancel/history and native persistence.',
  limits:['One box and two connected top faces. No arbitrary cage or mirror claims.']});
@@ -226,6 +229,130 @@ async function scaleSelection(seed, base, verify, apply) {
  await f.freshOpen(saved.file,accepted,'selection-scale-drag-reopened');
  f.report.observations.push({factors:[0.8,1.1,1.12],numericParity:true,selectedFaces:seed.sel.faces,vertexId,pivot});
 }
+
+async function rotateSelection(seed, base, verify, apply) {
+ const tool = panel().getByLabel('Cage drag tool',{exact:true});
+ const arc = f.page.locator('[data-gizmo="turnZ"]');
+ if (rotateBaseline) {
+  assert.equal(await tool.locator('option[value="rotate"]').count(),0);
+  assert.equal(await arc.count(),0);
+  await button('Rotate selection',panel()).click();
+  await f.page.getByRole('spinbutton',{name:'Selection angle degrees',exact:true}).waitFor();
+  await f.snapshot('original-numeric-rotation');
+  await f.same(base);
+  return;
+ }
+ await tool.selectOption('rotate');
+ await arc.waitFor();
+ assert.equal(await f.page.locator('[data-gizmo^="move"],[data-gizmo^="scale"]').count(),0);
+ const readout = f.page.locator('.gizmo-readout');
+ async function start(angle, steps = 12, fine = false) {
+  const point = await arc.locator('polyline').last().evaluate(polyline => {
+   const svg = polyline.closest('svg'), r = svg.getBoundingClientRect();
+   const mark = svg.querySelector('circle.gizmo-origin');
+   const centre = [r.x+Number(mark.getAttribute('cx')),r.y+Number(mark.getAttribute('cy'))];
+   const p = polyline.points.getItem(9);
+   return {centre,x:Math.round(r.x+p.x),y:Math.round(r.y+p.y)};
+  });
+  const {centre:[cx,cy],x,y} = point;
+  const dx = x-cx, dy = y-cy, radians = angle*Math.PI/180;
+  const cos = Math.cos(radians), sin = Math.sin(radians);
+  await f.page.mouse.move(x,y);
+  await f.page.locator('[data-gizmo="turnZ"][data-active="true"]').waitFor();
+  await f.page.mouse.down();
+  if (angle) {
+   const to = [Math.round(cx+cos*dx+sin*dy),Math.round(cy-sin*dx+cos*dy)];
+   const screenDegrees = (Math.atan2(-dy,dx)-Math.atan2(cy-to[1],to[0]-cx))*-180/Math.PI;
+   const snapped = fine ? Math.round(((screenDegrees+540)%360)-180) : angle;
+   await f.page.mouse.move(...to,{steps});
+   await readout.filter({hasText:`Z ${snapped}°`}).waitFor();
+   return snapped;
+  }
+  return 0;
+ }
+ const undo = () => button('Undo cage step',panel()).click();
+ f.phase = 'identity, held rotation, and Escape';
+ await start(0);
+ await f.page.mouse.up();
+ assert.deepEqual(await state(),seed);
+ await start(15);
+ assert.deepEqual(await state(),seed);
+ await f.same(base);
+ await f.snapshot('selection-rotate-drag-preview');
+ await f.page.keyboard.press('Escape');
+ await f.page.mouse.up();
+ await readout.waitFor({state:'detached'});
+ assert.deepEqual(await state(),seed);
+
+ f.phase = 'discard the rotation when the pointer loses capture';
+ const canvas = f.page.locator('canvas.vp-canvas');
+ await canvas.evaluate(element => element.addEventListener('pointerdown', event => {
+  element.dataset.testRotatePointer = String(event.pointerId);
+ }, {once:true}));
+ await start(15);
+ await canvas.evaluate(element => {
+  const pointerId = Number(element.dataset.testRotatePointer);
+  if (!element.hasPointerCapture(pointerId)) throw Error('The rotate drag did not capture its pointer');
+  element.releasePointerCapture(pointerId);
+  delete element.dataset.testRotatePointer;
+ });
+ await f.page.mouse.move(500,385);
+ await readout.waitFor({state:'detached'});
+ await f.page.mouse.up();
+ assert.deepEqual(await state(),seed);
+
+ f.phase = 'verify the finer Shift rotation step';
+ await f.page.keyboard.down('Shift');
+ const fineAngle = await start(8,12,true);
+ await f.page.mouse.up();
+ await f.page.keyboard.up('Shift');
+ assert.ok(Math.abs(fineAngle-8)<=1);
+ const fine = await state();
+ verify(seed,fine,'rotate',fineAngle);
+ assert.equal(fine.undo,1);
+ await undo();
+ assert.deepEqual(await state(),seed);
+
+ f.phase = 'release a negative rotation and compare the selected positions';
+ await start(-15);
+ await f.page.mouse.up();
+ const negative = await state();
+ verify(seed,negative,'rotate',-15);
+ assert.deepEqual(negative.cage.creases,seed.cage.creases);
+ assert.equal(negative.undo,1);
+ await undo();
+ assert.deepEqual(await state(),seed);
+
+ f.phase = 'compare a positive rotation with numerical Rotate, then save a fresh drag';
+ await start(15,24);
+ await f.page.mouse.up();
+ const positive = await state();
+ verify(seed,positive,'rotate',15);
+ assert.equal(positive.undo,1);
+ await undo();
+ assert.deepEqual(await state(),seed);
+ await button('Redo cage step',panel()).click();
+ assert.deepEqual(await state(),positive);
+ await undo();
+ await button('Rotate selection',panel()).click();
+ await f.page.getByLabel('Rotation world axis',{exact:true}).selectOption('2');
+ await f.page.getByRole('spinbutton',{name:'Selection angle degrees',exact:true}).fill('15');
+ await apply();
+ assert.deepEqual(await state(),positive);
+ await undo();
+ await start(15);
+ await f.page.mouse.up();
+ assert.deepEqual(await state(),positive);
+ await done();
+ const accepted = await f.doc();
+ assert.deepEqual(accepted.nodes.find(node=>node.kind==='subd').cage,positive.cage);
+ await f.undo(); await f.same(base);
+ await f.redo(); await f.same(accepted);
+ const saved = await f.save('selection-rotate-drag');
+ await f.freshOpen(saved.file,accepted,'selection-rotate-drag-reopened');
+ f.report.observations.push({angles:[-15,15],fineAngle,numericParity:true,selectedFaces:seed.sel.faces});
+}
+
 await f.run(async()=>{
  await f.newPage();await f.page.setViewportSize({width:1440,height:1000});await button('New part').click();await f.page.waitForFunction(()=>window.__studioDoc.nodes.length===0);await f.ready();
  await command('subd box');const hud=f.page.getByRole('dialog',{name:'SubD box',exact:true});
@@ -249,6 +376,7 @@ await f.run(async()=>{
  };
  const apply=async()=>{await f.page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Apply transform'&&!b.disabled));await button('Apply transform',panel()).click();};
  await begin();const seed=await faces();
+ if (rotateDrag) { await rotateSelection(seed, base, verify, apply); return; }
  if (scaleDrag) { await scaleSelection(seed, base, verify, apply); return; }
  await button('Rotate selection',panel()).click();assert.equal((await state()).undo,0);await apply();assert.equal((await state()).undo,0);
  await button('Rotate selection',panel()).click();

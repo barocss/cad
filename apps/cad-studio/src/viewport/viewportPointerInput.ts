@@ -759,7 +759,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     // A turn adds up the sweep step by step, so it can go past half a turn.
     d.turned = (d.turned ?? 0) + dragTurn(d.last!, [x, y], g.origin, hit.axis, P); d.last = [x, y];
     const step = shift ? 1 : g.turnSnap?.(hit.axis) ?? 15;
-    d.degrees = snapTo(d.turned, step); g.onTurn?.(hit.axis, d.degrees, done);
+    d.degrees = snapTo(d.turned, step); g.onTurn?.(hit.axis, d.degrees, done, d.pointerId);
   };
 
   /** A spline drag at the pointer: the valid definition previews live (no history step); an unbuildable one keeps the last valid preview. */

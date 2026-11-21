@@ -31,7 +31,7 @@ export interface TransformGizmo {
   /** The whole move from the drag's start (mm, snapped to 1 mm; Shift: 0.1), live and once more at the end. */
   onMove?(delta: Vec3, done: boolean, pointerId?: number): void;
   /** The whole turn from the drag's start (degrees, right-handed about the axis). */
-  onTurn?(axis: Axis3, degrees: number, done: boolean): void;
+  onTurn?(axis: Axis3, degrees: number, done: boolean, pointerId?: number): void;
   /** Uniform scale: a cube at the centre and one along each axis; `onScale` gets the factor from the drag's start (×, 0.05 steps; Shift: 0.01). */
   scale?: boolean;
   onScale?(factor: number, done: boolean, pointerId?: number): void;

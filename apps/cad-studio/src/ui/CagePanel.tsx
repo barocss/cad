@@ -62,8 +62,8 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
       <button className={focusClass} style={!s.smooth ? activeStyle : undefined} aria-pressed={!s.smooth} data-tip="Box" data-tip-desc="The cage as it is (Tab)" onClick={() => s.smooth && editor.toggleSmooth()}>Box</button>
       <button className={focusClass} style={s.smooth ? activeStyle : undefined} aria-pressed={s.smooth} data-tip="Smooth" data-tip-desc="The limit surface (Tab)" onClick={() => !s.smooth && editor.toggleSmooth()}>Smooth</button></div>
     {!!n && <label className={FIELD}><span>Drag tool</span><NativeSelect className={CONTROL} aria-label="Cage drag tool" value={dragSettings.tool} disabled={dragging}
-      onChange={event => dragSettings.setTool(event.target.value === 'scale' ? 'scale' : 'move')}>
-      <option value="move">Move</option><option value="scale">Uniform scale</option>
+      onChange={event => dragSettings.setTool(event.target.value === 'scale' ? 'scale' : event.target.value === 'rotate' ? 'rotate' : 'move')}>
+      <option value="move">Move</option><option value="rotate">Rotate</option><option value="scale">Uniform scale</option>
     </NativeSelect></label>}
     {!!n && dragSettings.tool === 'scale' && <>
       <label className={FIELD}><span>Pivot</span><NativeSelect className={CONTROL} aria-label="Scale drag pivot" value={scalePivot.mode} disabled={dragging}

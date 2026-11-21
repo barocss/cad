@@ -6,7 +6,7 @@ import {
   commitCageProportionalDrag, commitDrag, dragged, planCageProportionalDrag, previewCageProportionalDrag,
   selectionCentre, transformCageSelection, type CageProportionalDragPlan, type CageSession,
 } from '@barocss/cad-model/subd/cageEdit';
-import type { TransformGizmo } from '../viewport/gizmo';
+import type { Axis3, TransformGizmo } from '../viewport/gizmo';
 import { cageTransformPivot, type CagePivotMode } from './cageTransformDraft';
 
 type CageDragOwner = { doc: StudioDoc; base: CageSession };
@@ -19,7 +19,8 @@ type CageDrag = {
 };
 const DEFAULT_RADIUS = '10';
 type CageDragFrame = 'world' | CageLocalFrame;
-type CageDragTool = 'move' | 'scale';
+type CageDragTool = 'move' | 'scale' | 'rotate';
+type CageDragTransform = { kind: 'scale'; factor: number } | { kind: 'rotate'; axis: Axis3; degrees: number };
 const LOCAL_AXIS_LABEL: Record<CageLocalFrame, string> = { edge: 'T', face: 'N', 'face-u': 'U', 'face-v': 'V' };
 type PivotVertexInput = { value: string; cage: CageSession['cage'] };
 
@@ -39,24 +40,24 @@ export function useCageGizmo(
   fail: (title: string, hint: string) => void,
 ) {
   const [tool, setTool] = useState<CageDragTool>('move');
-  const scale = tool === 'scale';
   const [pivotMode, setPivotMode] = useState<CagePivotMode>('centre');
   const [pivotVertex, setPivotVertex] = useState<PivotVertexInput | null>(null);
-  const scalePivot = useMemo(() => {
-    if (!scale || !session) return null;
+  const pivot = useMemo(() => {
+    if (tool === 'move' || !session) return null;
+    const mode = tool === 'scale' ? pivotMode : 'centre';
     try {
-      const at = cageTransformPivot(session, pivotMode, pivotVertex?.value ?? '');
+      const at = cageTransformPivot(session, mode, pivotVertex?.value ?? '');
       // Cage operations can renumber vertices even when the old number stays in range.
-      if (pivotMode === 'vertex' && pivotVertex && !currentPivotVertex(pivotVertex, session.cage, at)) {
+      if (mode === 'vertex' && pivotVertex && !currentPivotVertex(pivotVertex, session.cage, at)) {
         return { reason: 'The cage changed. Enter the pivot vertex again.' };
       }
       return { at };
     } catch (error) {
       return { reason: error instanceof Error ? error.message : String(error) };
     }
-  }, [scale, session, pivotMode, pivotVertex]);
+  }, [tool, session, pivotMode, pivotVertex]);
   const [dragFrame, setDragFrame] = useState<CageDragFrame>('world');
-  const frameMode = !scale && session?.mode === (dragFrame === 'edge' ? 'edge' : 'face') ? dragFrame : 'world';
+  const frameMode = tool === 'move' && session?.mode === (dragFrame === 'edge' ? 'edge' : 'face') ? dragFrame : 'world';
   const local = useMemo(() => {
     if (!session || frameMode === 'world') return null;
     try {
@@ -66,12 +67,12 @@ export function useCageGizmo(
       return { reason: error instanceof Error ? error.message.replace(/^SubD: local direction: /, '') : String(error) };
     }
   }, [session, frameMode]);
-  const owner = useMemo(() => available && session && (!scale || scalePivot?.at) && (frameMode === 'world' || local?.moveAlong)
-    ? { doc, base: session, moveAlong: local?.moveAlong, pivot: scalePivot?.at ?? null }
-    : null, [available, session, doc, frameMode, local, scale, scalePivot]);
+  const owner = useMemo(() => available && session && (tool === 'move' || pivot?.at) && (frameMode === 'world' || local?.moveAlong)
+    ? { doc, base: session, moveAlong: local?.moveAlong, pivot: pivot?.at ?? null, tool }
+    : null, [available, session, doc, frameMode, local, tool, pivot]);
   const ownerNow = useRef(owner);
   const held = useRef<CageDrag | null>(null);
-  const [frame, setFrame] = useState<{ gesture: CageDrag; delta?: Vec3; factor?: number } | null>(null);
+  const [frame, setFrame] = useState<{ gesture: CageDrag; delta?: Vec3; transform?: CageDragTransform } | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [radius, setRadius] = useState(DEFAULT_RADIUS);
   const radiusMM = radius.trim() ? Number(radius) : NaN;
@@ -95,7 +96,7 @@ export function useCageGizmo(
     if (!active) return session;
     const { plan, extrude, pivot, owner: { base } } = active.gesture;
     try {
-      if (pivot && active.factor !== undefined) return transformCageSelection(base, { kind: 'scale', factor: active.factor, pivot });
+      if (pivot && active.transform) return transformCageSelection(base, { ...active.transform, pivot });
       if (!active.delta) return session;
       return plan ? previewCageProportionalDrag(plan, active.delta) : { ...base, ...dragged(base, active.delta, extrude) };
     } catch { return base; }
@@ -107,12 +108,26 @@ export function useCageGizmo(
     // Viewport retains this gizmo's callbacks from the press through release.
     let gesture: CageDrag | null = null;
     const delta = active?.delta;
+    const updateTransform = (transform: CageDragTransform, done: boolean, pointerId?: number) => {
+      if (transform.kind !== owner.tool || !gesture?.pivot || held.current !== gesture
+        || gesture.pointerId !== pointerId || ownerNow.current !== owner) return;
+      if (!done) { setFrame({ gesture, transform }); return; }
+      const { pivot } = gesture;
+      cancel();
+      try {
+        const next = transformCageSelection(owner.base, { ...transform, pivot });
+        setSession(current => current === owner.base ? next : current);
+      } catch (error) {
+        fail('Not done', error instanceof Error ? error.message.replace(/^SubD: /, '') : String(error));
+      }
+    };
     gizmo = {
       sessionKey: owner,
       cancelOnEscape: true,
       origin: owner.pivot ?? ((active?.gesture.plan || active?.delta && owner.moveAlong) && live ? selectionCentre(live) ?? centre
         : [centre[0] + (delta?.[0] ?? 0), centre[1] + (delta?.[1] ?? 0), centre[2] + (delta?.[2] ?? 0)]),
-      ...(owner.pivot ? { scale: true } : owner.moveAlong ? { moveAlong: owner.moveAlong } : { move: [0, 1, 2] }),
+      ...(owner.tool === 'rotate' ? { turn: [0, 1, 2] } : owner.tool === 'scale' ? { scale: true }
+        : owner.moveAlong ? { moveAlong: owner.moveAlong } : { move: [0, 1, 2] }),
       onStart: (pointerId, shiftKey) => {
         if (ownerNow.current !== owner || held.current) return;
         try {
@@ -141,18 +156,8 @@ export function useCageGizmo(
           fail('Not done', error instanceof Error ? error.message.replace(/^SubD: /, '') : String(error));
         }
       },
-      onScale: (factor, done, pointerId) => {
-        if (!gesture?.pivot || held.current !== gesture || gesture.pointerId !== pointerId || ownerNow.current !== owner) return;
-        if (!done) { setFrame({ gesture, factor }); return; }
-        const { pivot } = gesture;
-        cancel();
-        try {
-          const next = transformCageSelection(owner.base, { kind: 'scale', factor, pivot });
-          setSession(current => current === owner.base ? next : current);
-        } catch (error) {
-          fail('Not done', error instanceof Error ? error.message.replace(/^SubD: /, '') : String(error));
-        }
-      },
+      onScale: (factor, done, pointerId) => updateTransform({ kind: 'scale', factor }, done, pointerId),
+      onTurn: (axis, degrees, done, pointerId) => updateTransform({ kind: 'rotate', axis, degrees }, done, pointerId),
     };
   }
 
@@ -163,7 +168,7 @@ export function useCageGizmo(
       enabled, radius, radiusValid, tool, dragFrame: frameMode, frameReason: local?.reason,
       setTool: (next: CageDragTool) => { if (!isDragging()) setTool(next); },
       scalePivot: {
-        mode: pivotMode, vertex: pivotVertex?.value ?? '', reason: scalePivot?.reason,
+        mode: pivotMode, vertex: pivotVertex?.value ?? '', reason: tool === 'scale' ? pivot?.reason : undefined,
         setMode: (next: CagePivotMode) => { if (!isDragging()) setPivotMode(next); },
         setVertex: (next: string) => { if (!isDragging() && session) setPivotVertex({ value: next, cage: session.cage }); },
       },
