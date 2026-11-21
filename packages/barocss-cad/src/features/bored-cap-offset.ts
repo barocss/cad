@@ -363,6 +363,80 @@ export function offsetCircularWallIfAdmitted(brep: Brep, faceName: string, dista
   return candidate;
 }
 
+function admittedBoreWall(brep: Brep, faceName: string) {
+  if (brep.source.family !== 'prismatic-solid') return;
+  const matches = brep.faces.filter(face => face.name === faceName);
+  if (matches.length !== 1) return;
+  const stock = admittedAxialStock(brep, 'bored'), walls = stock?.borePairs?.[0];
+  if (!stock || stock.borePairs?.length !== 1 || !walls?.includes(matches[0])) return;
+  const faces = walls.map(face => face.name), extent = geometryScaleMM(brep.vertices.map(vertex => vertex.point));
+  const round = cylinderPair(walls, extent, -1);
+  if (!round || faces.some(name => !name) || new Set(faces).size !== 2) return;
+  const wallLoops = new Set(walls.flatMap(wall => wall.loops));
+  const edges = new Set(brep.coedges.filter(use => wallLoops.has(use.loop)).map(use => use.edge));
+  const vertices = new Set(brep.edges.filter(edge => edges.has(edge.id)).flatMap(edge => edge.vertices));
+  const capLoops = new Set(brep.loops.filter(loop => loop.kind === 'inner'
+    && (loop.face === stock.bottom.id || loop.face === stock.top.id)).map(loop => loop.id));
+  if (edges.size !== 6 || vertices.size !== 4 || capLoops.size !== 2) return;
+  return { stock, wall: matches[0], walls, round, faces: faces as string[], edges, vertices, capLoops };
+}
+
+/** Both inward native patches of one through bore, with a handle pointing out of the material. */
+export function boreWallOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point; faces: string[] } | undefined {
+  const admitted = admittedBoreWall(brep, faceName);
+  if (!admitted) return;
+  const { stock, round, faces } = admitted, surface = admitted.wall.surface;
+  if (surface.kind !== 'surface') return;
+  const point = surface.controlPoints[2][0];
+  const anchor: Point = [point[0], point[1], stock.lo + (stock.hi - stock.lo) / 2];
+  return { anchor, normal: [(round.center[0] - point[0]) / round.radius, (round.center[1] - point[1]) / round.radius, 0], faces };
+}
+
+/** Change one through-bore radius while keeping the plate supports and native boundary ownership. */
+export function offsetBoreWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
+  const admitted = admittedBoreWall(brep, faceName);
+  if (!admitted) return;
+  if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
+    throw new BrepError('INPUT', 'bore wall offset: distance must be nonzero and within the modeling range');
+  const { stock, walls, round, edges, vertices, capLoops } = admitted, radius = round.radius - distance;
+  const extent = Math.max(Math.abs(radius), geometryScaleMM(brep.vertices.map(vertex => vertex.point))), tolerance = linearToleranceMM(extent);
+  if (!(radius > tolerance)) throw new BrepError('GEOMETRY', 'bore wall offset: the offset would reach or cross the bore axis');
+  if (!diskClearsRectangle(round.center, radius, stock.min, stock.max, tolerance))
+    throw new BrepError('GEOMETRY', 'bore wall offset: the offset would reach or cross an outer plate wall');
+  if (radius === round.radius) throw new BrepError('GEOMETRY', 'bore wall offset: distance is too small to move the wall');
+  const factor = radius / round.radius, [cx, cy] = round.center;
+  const moved = ([x, y, z]: Point): Point => [cx + (x - cx) * factor, cy + (y - cy) * factor, z];
+  const nextEdges = brep.edges.map(edge => edges.has(edge.id)
+    ? { ...edge, curve: { ...edge.curve, controlPoints: edge.curve.controlPoints.map(moved) } } : edge);
+  const edgeById = byId(nextEdges);
+  const capTrims = new Map<string, (point: Point) => Point>();
+  for (const cap of [stock.bottom, stock.top]) {
+    for (const id of cap.loops) if (capLoops.has(id)) capTrims.set(id, capProjection(stock.min, stock.max, cap === stock.top));
+  }
+  const candidate: Brep = {
+    ...brep, edges: nextEdges,
+    vertices: brep.vertices.map(vertex => vertices.has(vertex.id) ? { ...vertex, point: moved(vertex.point) } : vertex),
+    faces: brep.faces.map(face => walls.includes(face) && face.surface.kind === 'surface'
+      ? { ...face, surface: { ...face.surface, controlPoints: face.surface.controlPoints.map(row => row.map(moved)) } } : face),
+    coedges: brep.coedges.map(use => {
+      const project = capTrims.get(use.loop);
+      return project && use.pcurve ? { ...use, pcurve: { ...use.pcurve, controlPoints: edgeById.get(use.edge)!.curve.controlPoints.map(project) } } : use;
+    }),
+  };
+  const poles = [...candidate.vertices.map(vertex => vertex.point), ...nextEdges.flatMap(edge => edge.curve.controlPoints),
+    ...candidate.faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints.flat() : [])];
+  const nextExtent = geometryScaleMM(poles);
+  if (!poles.every(point => point.every(Number.isFinite)) || !(nextExtent <= CadNumericPolicy.coordinateAbs))
+    throw new BrepError('GEOMETRY', 'bore wall offset: the bore leaves the modeling range');
+  const nextRound = cylinderPair(candidate.faces.filter(face => walls.some(wall => wall.id === face.id)), nextExtent, -1);
+  const roundoff = 64 * Number.EPSILON * Math.max(1, nextExtent);
+  if (!nextRound || Math.abs(nextRound.radius - radius) > roundoff || dist(nextRound.center, round.center) > roundoff)
+    throw new BrepError('GEOMETRY', 'bore wall offset: the circular support could not be preserved');
+  const report = checkBrep(candidate, { strict: true });
+  if (!report.valid) throw new BrepError('GEOMETRY', `bore wall offset: the offset solid is invalid: ${report.issues[0]}`, report);
+  return candidate;
+}
+
 /** A point on the annular cap material and its outward direction. */
 export function annularCapReplacementFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
   const cap = admittedCap(brep, faceName, 'annular');

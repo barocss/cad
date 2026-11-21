@@ -7,7 +7,7 @@ import type { BodyResult, VolumeEvaluation } from '../engine/evaluate';
 // (a picked profile pulled along its normal), Revolve (turned about a sketch axis), Pipe (carried along
 // runs and bends) and Loft (through two or more picked sections). A profile drawn on a body's face joins
 // that body by default; Operation can make a new body or cut it instead.
-import { featureLabel, offsetFaceEndLabel, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
+import { featureLabel, offsetFaceEndLabel, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
 import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle, twoGuideLoftSections } from './profiles';
@@ -354,7 +354,7 @@ export function offsetFaceDescription(ctx: Ctx, fallback = ''): string {
   const pick = ctx.selection.faces.length === 1 ? ctx.selection.faces[0] : undefined;
   const face = pick && ctx.bodies[pick.body]?.mesh.faces[pick.face];
   if (!face) return fallback;
-  if (face.exact?.kind === 'cylinder') return 'Cylindrical wall · Radial';
+  if (face.exact?.kind === 'cylinder') return face.nativeBoreDiameter !== undefined ? 'Cylindrical bore · Radial' : 'Cylindrical wall · Radial';
   const end = offsetFaceEndLabel(face.name), normal = face.normal;
   const axis = normal.findIndex((n, i) => Math.abs(Math.abs(n) - 1) < 1e-9 && normal.every((v, j) => i === j || Math.abs(v) < 1e-9));
   const direction = axis >= 0 ? `${normal[axis] > 0 ? '+' : '−'}${'XYZ'[axis]}` : `[${normal.map(n => Number(n.toFixed(6))).join(', ')}]`;
@@ -364,14 +364,15 @@ export function offsetFaceDescription(ctx: Ctx, fallback = ''): string {
 /** Move an admitted native face along its signed normal. */
 export const offsetFaceCommand: Command = {
   id: 'offset-face', label: 'Offset face', icon: 'cad-extrude', group: 'modify', keywords: 'move face push pull offset direct edit press',
-  hint: 'Move a supported face or change the radius of an uncut upright cylinder. Drag or enter a signed distance.',
+  hint: 'Move a supported planar face, cylinder wall or through-bore wall. Drag or enter a signed distance.',
   available: ctx => {
     const selection = ctx.selection;
-    const unsupportedFace = 'Pick a supported planar face or the wall of an upright circular extrusion.';
+    const unsupportedFace = 'Pick a supported planar face, cylinder wall or through-bore wall.';
     if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length || selection.vertices?.length || ctx.direct?.length) return no(unsupportedFace);
     const picked = selection.faces[0], body = ctx.bodies[picked.body], face = body?.mesh.faces[picked.face];
     if (!Number.isInteger(picked.body) || !Number.isInteger(picked.face) || !body || !face || face.facet || !face.name) return no(unsupportedFace);
-    const cylinder = face.exact?.kind === 'cylinder' && body.ref?.side === 'solid' && isCylinderReplacementSource(ctx.doc.nodes, body.ref.node);
+    const cylinder = face.exact?.kind === 'cylinder' && body.ref?.side === 'solid'
+      && (isCylinderReplacementSource(ctx.doc.nodes, body.ref.node) || isBoredPlateHole(ctx.doc.nodes, body.ref.node));
     if (!cylinder && face.kind !== 'plane' && face.exact?.kind !== 'plane') return no(unsupportedFace);
     let matches = 0;
     for (const candidate of ctx.bodies) if (candidate.key === body.key) matches++;

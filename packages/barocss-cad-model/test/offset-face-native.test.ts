@@ -609,29 +609,38 @@ test('legacy Offset chain refuses an upstream edit before a downstream absolute 
   assert.ok(lastEdit.build!(context(chain), { d: -3 }));
 });
 
-test('radial Offset uses the original cylinder wall signature through native Open and History', async () => {
-  const source = cylinderPart(5, 20), evaluated = evaluateDoc(source, 0);
-  assert.ok(evaluated.ok);
-  const [body] = evaluated.bodies, face = body.mesh.faces.findIndex(face => face.exact?.kind === 'cylinder');
-  assert.ok(face >= 0);
-  const ctx: Ctx = { doc: source, bodies: [body], selection: { faces: [{ body: 0, face }], edges: [], bodies: [] } };
-  assert.ok(offsetFaceCommand.available(ctx).ok);
-  const applied = offsetFaceCommand.build!(ctx, { d: 2 });
-  const node = applied.nodes.at(-1);
-  assert.ok(node?.kind === 'offset-face' && node.sigs?.[node.faces[0]]?.k === 'curved');
-  assert.equal(node.sigs[node.faces[0]].r, 5);
-  assert.deepEqual(applied.nodes.slice(0, -1), source.nodes);
-  assert.ok(evaluateDoc(applied, 0).ok);
-  const opened = await readStudioFile(encodeStudioFile(applied));
-  assert.ok('doc' in opened);
-  assert.deepEqual(opened.doc, applied);
+for (const bore of [false, true]) {
+  const label = bore ? 'through bore' : 'cylinder wall';
+  test(`radial Offset uses the original ${label} signature through native Open and History`, async () => {
+    const radius = bore ? 3 : 5, height = bore ? 10 : 20;
+    const source = bore ? withNode(rectanglePart(40, 30, height), {
+      kind: 'hole', parent: { node: 1, side: 'solid' }, center: [11, 9], radius,
+    }) : cylinderPart(radius, height);
+    const evaluated = evaluateDoc(source, 0);
+    assert.ok(evaluated.ok);
+    const [body] = evaluated.bodies, face = body.mesh.faces.findIndex(face => face.exact?.kind === 'cylinder');
+    assert.ok(face >= 0);
+    const ctx: Ctx = { doc: source, bodies: [body], selection: { faces: [{ body: 0, face }], edges: [], bodies: [] } };
+    assert.ok(offsetFaceCommand.available(ctx).ok);
+    const applied = offsetFaceCommand.build!(ctx, { d: 2 });
+    const node = applied.nodes.at(-1);
+    assert.ok(node?.kind === 'offset-face' && node.sigs?.[node.faces[0]]?.k === 'curved');
+    assert.equal(node.sigs[node.faces[0]].r, radius);
+    assert.deepEqual(applied.nodes.slice(0, -1), source.nodes);
+    assert.ok(evaluateDoc(applied, 0).ok);
+    const opened = await readStudioFile(encodeStudioFile(applied));
+    assert.ok('doc' in opened);
+    assert.deepEqual(opened.doc, applied);
 
-  const command = editSavedOffsetFaceCommand(opened.doc, 2)!;
-  const editedCtx = { ...ctx, doc: opened.doc };
-  assert.deepEqual(command.fields?.(editedCtx).map(field => field.label), ['Offset']);
-  const reduced = command.build!(editedCtx, { d: -1 });
-  assert.deepEqual(reduced.nodes.at(-1), { ...node, distance: -1 });
-  near(brepMassProperties(bodyOf(reduced), 1).volume, Math.PI * 4 ** 2 * 20);
-  const collapsed = command.build!(editedCtx, { d: -5 });
-  assert.equal(evaluateDoc(collapsed, 0).ok, false);
-});
+    const command = editSavedOffsetFaceCommand(opened.doc, source.nodes.length)!;
+    const editedCtx = { ...ctx, doc: opened.doc };
+    assert.deepEqual(command.fields?.(editedCtx).map(field => field.label), ['Offset']);
+    const reduced = command.build!(editedCtx, { d: -1 });
+    assert.deepEqual(reduced.nodes.at(-1), { ...node, distance: -1 });
+    const disk = Math.PI * (radius + (bore ? 1 : -1)) ** 2;
+    near(brepMassProperties(bodyOf(reduced), 1).volume, (bore ? 40 * 30 - disk : disk) * height);
+    const collapsed = command.build!(editedCtx, { d: bore ? radius : -radius });
+    assert.equal(evaluateDoc(collapsed, 0).ok, false);
+    if (bore) assert.equal(evaluateDoc(command.build!(editedCtx, { d: -6 }), 0).ok, false);
+  });
+}

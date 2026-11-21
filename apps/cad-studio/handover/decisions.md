@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1593: [Offset the wall of a through bore](notes/through-bore-radial-offset-2026-11-22/README.md), #629 and #17. Add signed bore radius editing while retaining the plate supports and native trim identities.
 - D1592: [Offset the wall of a circular cylinder](notes/circular-cylinder-radial-offset-2026-11-22/README.md), #629 and #17. Add signed radial wall Offset and verify the fixed axis and cap planes, collapse refusal, History and native reopen.
 - D1591: [Refine centred circular Twist STEP display](notes/centred-circular-twist-step-display-2026-11-22/README.md), #630. Reinstate the refined mesh for both signed imports and verify lower rail error and the same native pick.
 - D1590: [Qualify centred circular-segment Twist AP214 exchange](notes/centred-circular-twist-step-roundtrip-2026-11-22/README.md), #630. Verify the signed rational geometry, fixed centroid path, independent volume, loss disclosure and fresh Studio Open.
