@@ -4,7 +4,7 @@ import { commandById, commands, givenValues, shownFields, type Ctx, type Values 
 import { updateBoxFootprint } from '../../app/editCommand';
 import { editFields } from '../../app/editFields';
 import { editSavedOffsetFaceCommand } from '../../app/offsetFaceEdit';
-import { smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '../../app/smoothLoftTurn';
+import { smoothScrewPitchAdvance, smoothScrewPitchField, smoothScrewPitchKey, smoothScrewTurns, smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '../../app/smoothLoftTurn';
 import { featureLabel, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
 import { loadPersonRows } from '../rows';
 import { ROWS_NOT_FROM_PERSON } from '../../engine/rowFiles';
@@ -327,6 +327,10 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   if (turnField && (args.expectedRevision === undefined || args.feature !== undefined || Object.keys(given).length !== 1))
     return fail(state, `Edit a Smooth Turn with only values.${turnField} and the current expectedRevision from query.render or query.rebuild.`,
       { code: 'EDIT_INPUT' });
+  const editScrewPitch = Object.hasOwn(given, smoothScrewPitchKey);
+  if (editScrewPitch && (args.expectedRevision === undefined || args.feature !== undefined || Object.keys(given).length !== 1))
+    return fail(state, 'Edit a Smooth Screw with only values.smoothScrewPitch and the current expectedRevision from query.render or query.rebuild.',
+      { code: 'EDIT_INPUT' });
   const editWallDistance = Object.hasOwn(given, savedWallDistanceKey);
   if (editWallDistance && (args.expectedRevision === undefined || args.feature !== undefined || Object.keys(given).length !== 1))
     return fail(state, 'Edit a saved right wall Offset with only values.offsetDistance and the current expectedRevision from query.render or query.rebuild.',
@@ -351,6 +355,8 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   } else {
     // (O167, F6: a part-scoped edit offers what the bearing command offers — the draft's context and its fit tables.)
     const fields = editFields(nodes, index, undefined, undefined, { context: bearingContextOf(state.doc), fits: state.doc.fits, doc: state.doc });
+    const screwPitch = smoothScrewPitchField(nodes, index);
+    if (screwPitch) fields.push(screwPitch);
     if (!Object.keys(given).length) {
       const wall = reviewedWallDistance(state, index);
       if (wall) return fail(state, `Pass only values.offsetDistance (signed mm, current value ${wall.distance}) and the current expectedRevision.`);
@@ -367,6 +373,13 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
         if (typeof v !== 'number' || !Number.isFinite(v)) return fail(state, `"${key}" must be a number.`);
         if (key === smoothTurnWidthKey && v === f.get(nodes))
           return fail(state, 'The saved Smooth Turn already has this width.', { code: 'EDIT_INPUT' });
+        if (key === smoothScrewPitchKey) {
+          const turns = smoothScrewTurns(nodes, index);
+          if (!turns || smoothScrewPitchAdvance(v, turns) === undefined)
+            return fail(state, 'Enter a positive pitch that keeps the axial advance within the model range.', { code: 'EDIT_INPUT' });
+          if (v === f.get(nodes))
+            return fail(state, 'The saved Smooth Screw already has this pitch.', { code: 'EDIT_INPUT' });
+        }
         const node = nodes[index];
         if (key === smoothTurnAngleKey && node.kind === 'loft') {
           const limit = smoothTurnAngleLimit(node.sections.length);

@@ -136,3 +136,31 @@ test('Agent Smooth Screw uses an explicit current sketch and revision', async ()
   assert.ok(accepted.changed && !accepted.isError, accepted.content);
   assert.deepEqual(accepted.state.doc, command.build!(ctx, input));
 });
+
+test('Agent Smooth Screw pitch requires one current, valid change on the terminal Screw', async () => {
+  const doc = command.build!(ctx, input), index = doc.nodes.length - 1;
+  const initial = evaluateDoc(doc, 1);
+  assert.ok(initial.ok);
+  const state = { doc, bodies: initial.bodies };
+  const revision = revisionOf(doc);
+  const pitch = 56;
+  const request = { action: 'edit', index, values: { smoothScrewPitch: pitch }, expectedRevision: revision };
+  const unevaluated = () => assert.fail('Rejected pitch requests must not evaluate.');
+  for (const args of [
+    { ...request, expectedRevision: undefined }, { ...request, expectedRevision: '0'.repeat(16) },
+    { ...request, values: { ...request.values, smoothLoftHeight: 99 } },
+    { ...request, feature: doc.nodes[index] }, { ...request, index: 0 },
+    ...[input.pitch, 0, -56, '56', Infinity, 1e-10, 10001].map(value => ({ ...request, values: { smoothScrewPitch: value } })),
+  ]) {
+    const rejected = await dispatchTool(state, 'features', args, unevaluated);
+    assert.ok(rejected.isError && !rejected.changed, rejected.content);
+    assert.equal(rejected.state, state);
+  }
+  const discovery = await dispatchTool(state, 'features', { action: 'edit', index }, unevaluated);
+  assert.match(discovery.content, /smoothScrewPitch.*Pitch per revolution = 80/);
+  const expected = smoothScrewPitchField(doc.nodes, index);
+  assert.ok(expected?.kind === 'number');
+  const accepted = await dispatchTool(state, 'features', request, async next => evaluateDoc(next, 2));
+  assert.ok(accepted.changed && !accepted.isError, accepted.content);
+  assert.deepEqual(accepted.state.doc.nodes, expected.set(doc.nodes, pitch));
+});

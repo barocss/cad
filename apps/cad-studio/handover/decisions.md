@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1557: [Pin Agent Smooth Screw pitch edits to the reviewed part](notes/review-pinned-smooth-screw-pitch-2026-11-21/README.md), #630 and #322. Verify L1 proposal, explicit user approval, geometry and native round trip. Record the preview display gap.
 - D1556: [Edit Smooth Screw pitch in Studio History](notes/smooth-screw-pitch-history-2026-11-21/README.md), #630. Verify the axial change, preserved native identities, Undo/Redo and fresh Open.
 - D1555: [Use a shared display grid on the external-axis Smooth Screw](notes/smooth-screw-structured-display-2026-11-21/README.md), #630. Measure the lower native depth error and retain actual rail picks on both desktop backends.
 - D1554: [Compare Smooth Screw triangle depth with the native surface](notes/smooth-screw-native-depth-2026-11-21/README.md), #630. Verify the same-camera depth error and a bounded structured mesh trial before a product change.

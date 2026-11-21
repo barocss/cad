@@ -10,8 +10,14 @@ const source = JSON.parse(await readFile(currentFile, 'utf8'));
 const index = source.nodes.length - 1;
 const widthEdit = process.argv.includes('--width');
 const triangular = process.argv.includes('--triangle');
-assert.ok(!(widthEdit && triangular));
-const edit = triangular ? {
+const screw = process.argv.includes('--screw');
+assert.ok([widthEdit, triangular, screw].filter(Boolean).length <= 1);
+const edit = screw ? {
+  key: 'smoothScrewPitch', value: 64, invalid: 10000, refusal: /axial advance within the model range/,
+  title: 'Change reviewed Smooth Screw pitch to 64 mm per revolution',
+  before: { angle: -450, pitch: 56 }, after: { angle: -450, pitch: 64 },
+  centre: [10, -16, 3], height: 70, stations: 16, bodies: 1,
+} : triangular ? {
   key: 'smoothTurnAngle', value: -450, invalid: 451, refusal: /−450° to \+450°/,
   title: 'Reverse the reviewed triangular Smooth Turn to −450°', before: { angle: 450 }, after: { angle: -450 },
   centre: [18, -21, 26], height: 50, stations: 16, bodies: 1,
@@ -30,13 +36,13 @@ const pins = [
   'packages/barocss-cad-model/src/chat/toolDefinitions.ts', 'packages/barocss-cad-model/src/app/smoothLoftTurn.ts',
 ];
 const f = await createFlow({
-  name: triangular ? 'triangular-turn-reviewed-angle-edit' : widthEdit ? 'smooth-turn-reviewed-width-edit' : 'smooth-turn-reviewed-angle-edit',
+  name: screw ? 'smooth-screw-reviewed-pitch-edit' : triangular ? 'triangular-turn-reviewed-angle-edit' : widthEdit ? 'smooth-turn-reviewed-width-edit' : 'smooth-turn-reviewed-angle-edit',
   output: process.argv[2],
   envFrozen: 'SMOOTH_TURN_PIN_FROZEN',
   initialFiles: pins,
   requiredFrozen: pins,
-  qualification: 'Pin a local Agent edit to the currently reviewed native Smooth Turn.',
-  limits: [`Local MCP and desktop Studio. A saved ${edit.stations}-station Smooth Turn at ${edit.height} mm.`],
+  qualification: 'Pin a local Agent edit to the currently reviewed native Smooth Turn or Screw.',
+  limits: [`Local MCP and desktop Studio. A saved ${edit.stations}-station feature at ${edit.height} mm.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
@@ -71,9 +77,21 @@ async function review(request, label) {
   return { revision: data.revision, sha };
 }
 
-async function native(label, doc, { angle, width }) {
-  const sections = new Set(source.nodes[index].sections.map(section => section.sketch));
-  assert.deepEqual(doc.nodes.filter((_, i) => !sections.has(i)), source.nodes.filter((_, i) => !sections.has(i)));
+async function native(label, doc, { angle, width, pitch }) {
+  const height = screw ? pitch * Math.abs(angle) / 360 : edit.height;
+  if (screw) {
+    assert.deepEqual(doc.nodes.slice(0, index), source.nodes.slice(0, index));
+    assert.deepEqual(doc.nodes[index], {
+      ...source.nodes[index], sections: source.nodes[index].sections.map((section, i) => {
+        const z = doc.nodes[index].sections[i].z;
+        assert.ok(Math.abs(z - height * (i / (edit.stations - 1))) < 1e-12);
+        return { ...section, z };
+      }),
+    });
+  } else {
+    const sections = new Set(source.nodes[index].sections.map(section => section.sketch));
+    assert.deepEqual(doc.nodes.filter((_, i) => !sections.has(i)), source.nodes.filter((_, i) => !sections.has(i)));
+  }
   assert.deepEqual(doc.outputs, source.outputs);
   assert.deepEqual(doc.nodes.map(node => node.id), source.nodes.map(node => node.id));
   const result = await f.inspect(label, doc);
@@ -84,22 +102,22 @@ async function native(label, doc, { angle, width }) {
   assert.equal(bodies.at(-1).key, result.key);
   assert.ok(Math.abs(bodies.at(-1).volume - result.volume) < 1e-7);
   const [x, y, z] = edit.centre, half = width / 2;
-  const corners = triangular ? [[-4, -2], [5, -1], [-1, 3]] : [[-half, -4], [half, -4], [half, 4], [-half, 4]];
+  const corners = screw ? [[2, 1], [14, 1], [14, 9], [2, 9]] : triangular ? [[-4, -2], [5, -1], [-1, 3]] : [[-half, -4], [half, -4], [half, 4], [-half, 4]];
   for (const [index, rail] of result.rails.entries()) {
     const [u, v] = corners[index];
     for (const [i, { point, derivative }] of rail.stations.entries()) {
       const t = i / (edit.stations - 1), radians = angle * Math.PI / 180 * t;
       const c = Math.cos(radians), s = Math.sin(radians);
-      const across = c * u - s * v, side = s * u + c * v, height = edit.height * t;
-      const expected = triangular ? [x + across, y + .8 * side + .6 * height, z - .6 * side + .8 * height]
-        : [x + across, y + side, z + height];
+      const across = c * u - s * v, side = s * u + c * v, advance = height * t;
+      const expected = triangular ? [x + across, y + .8 * side + .6 * advance, z - .6 * side + .8 * advance]
+        : [x + across, y + side, z + advance];
       assert.ok(near(point, expected));
       const localY = triangular ? .8 * (point[1] - y) - .6 * (point[2] - z) : point[1] - y;
       const localDY = triangular ? .8 * derivative[1] - .6 * derivative[2] : derivative[1];
       assert.ok(((point[0] - x) * localDY - localY * derivative[0]) * Math.sign(angle) > 0);
     }
   }
-  f.report.observations.push({ label, angle, width, digest: result.sha, volume: result.volume, controls: result.controls });
+  f.report.observations.push({ label, angle, width, pitch, height, digest: result.sha, volume: result.volume, controls: result.controls });
   return result;
 }
 
@@ -128,7 +146,7 @@ await f.run(async () => {
   assert.deepEqual(previous.nodes.map(node => node.id), source.nodes.map(node => node.id));
   await writeFile(older, olderBytes);
   await writeFile(current, currentBytes);
-  const session = { app: f.app, output: f.output, clientName: 'smooth-turn-review', autonomy: 1 };
+  const session = { app: f.app, output: f.output, clientName: screw ? 'smooth-screw-review' : 'smooth-turn-review', autonomy: 1 };
   const stale = await withMcpSession(session, older, 'older', (_, request) => review(request, 'older-review'));
   assert.deepEqual(await readFile(older), olderBytes);
 
@@ -146,6 +164,10 @@ await f.run(async () => {
     assert.match((await call('proposals', proposed({ ...args, expectedRevision: stale.revision }), true)).error, /part changed/i);
     const pinned = { ...args, expectedRevision: fresh.revision };
     assert.match((await call('proposals', proposed({ ...pinned, values: { [edit.key]: edit.invalid } }), true)).error, edit.refusal);
+    if (screw) {
+      assert.match((await call('proposals', proposed({ ...pinned, values: { ...args.values, smoothLoftHeight: 90 } }), true)).error, /only values[.]smoothScrewPitch/);
+      assert.match((await call('proposals', proposed({ ...pinned, values: { [edit.key]: edit.before.pitch } }), true)).error, /already has this pitch/);
+    }
     if (widthEdit) {
       assert.match((await call('proposals', proposed({ ...pinned, values: { ...args.values, smoothTurnAngle: -360 } }), true)).error, /only values[.]smoothTurn/);
       assert.match((await call('proposals', proposed({ ...pinned, values: { [edit.key]: edit.before.width } }), true)).error, /already has this width/);
@@ -185,21 +207,25 @@ await f.run(async () => {
   assert.deepEqual([result.key, result.faces, result.edges, result.controls, result.ids],
     [before.key, before.faces, before.edges, before.controls, before.ids]);
   assert.notEqual(result.sha, before.sha);
-  const volumeFactor = widthEdit ? edit.after.width / edit.before.width : 1;
+  const volumeFactor = screw ? edit.after.pitch / edit.before.pitch : widthEdit ? edit.after.width / edit.before.width : 1;
   assert.ok(Math.abs(result.volume - volumeFactor * before.volume) < 1e-7);
   await f.undo();
   await f.same(pending);
   await f.redo();
   await f.same(accepted);
-  const saved = await f.save(widthEdit ? 'reviewed-smooth-turn-widened' : 'reviewed-smooth-turn-reversed');
+  const saved = await f.save(screw ? 'reviewed-smooth-screw-pitch-64' : widthEdit ? 'reviewed-smooth-turn-widened' : 'reviewed-smooth-turn-reversed');
   await f.freshOpen(saved.file, accepted, 'approved-turn-reopened');
   assert.equal((await native('agent-approved-reopened-native', accepted, edit.after)).sha, result.sha);
   await frame();
   await f.openFeatureEditor(index, 'approved turn after reopen');
-  for (const [label, value] of [['Turn angle', edit.after.angle], ['Total height', edit.height]])
-    assert.equal(Number(await f.editor().getByLabel(label, { exact: true }).inputValue()), value);
-  const width = f.editor().getByLabel('Turn width', { exact: true });
-  if (triangular) assert.equal(await width.count(), 0);
-  else assert.equal(Number(await width.inputValue()), edit.after.width);
+  if (screw)
+    assert.equal(Number(await f.editor().getByLabel('Pitch per revolution', { exact: true }).inputValue()), edit.after.pitch);
+  else {
+    for (const [label, value] of [['Turn angle', edit.after.angle], ['Total height', edit.height]])
+      assert.equal(Number(await f.editor().getByLabel(label, { exact: true }).inputValue()), value);
+    const width = f.editor().getByLabel('Turn width', { exact: true });
+    if (triangular) assert.equal(await width.count(), 0);
+    else assert.equal(Number(await width.inputValue()), edit.after.width);
+  }
   await f.snapshot('approved-turn-reopened-editor');
 });
