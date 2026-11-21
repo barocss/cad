@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1577: [Build compact external-axis Screw from convex quadrilateral sections](notes/quadrilateral-external-screw-loft-2026-11-21/README.md), #630. Verify non-rectangular profiles, both signed directions, native closure and desktop Save and Open.
 - D1576: [Restore structured viewport display for polygon Screw STEP imports](notes/convex-screw-step-display-2026-11-21/README.md), #630. Compare all four D1575 files at fixed cameras and retain native edge picks in both desktop renderers.
 - D1575: [Qualify both polygon Screw windings through Studio AP214](notes/convex-screw-step-roundtrip-2026-11-21/README.md), #630. Verify independent signed geometry and exact reopened rail samples. Record the reopened viewport faceting.
 - D1574: [Qualify reviewed Agent creation of convex polygon Screws](notes/convex-screw-agent-2026-11-21/README.md), #630 and #322. Verify local discovery, revision-pinned review, Studio approval and native equality with direct creation.

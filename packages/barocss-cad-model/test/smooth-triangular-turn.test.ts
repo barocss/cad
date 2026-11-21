@@ -393,6 +393,8 @@ test('External-axis triangular Screw uses one compact signed solid on tilted sec
 
 test('Straight convex polygon Screw preserves each authored rail through a full signed revolution', () => {
   const fixtures: { points: [number, number][]; angles: number[]; volume?: number }[] = [
+    { points: [[-8, -5], [2, -5], [0, -1], [-7, -1]], angles: [360, -360], volume: 1360.1749294647923 },
+    { points: [[-7, -4], [2, -3], [0, -1], [-5, 1]], angles: [360, -360], volume: 980.1260521143356 },
     { points: screwPentagon, angles: [360, -360], volume: 1080.138914574982 },
     { points: screwHexagon, angles: [360, -360], volume: 1840.2366692758953 },
     // Nearest-corner alignment can alias a 30° section interval in these regular profiles.
@@ -444,6 +446,9 @@ test('Straight convex polygon Screw preserves each authored rail through a full 
 
 test('Polygon Screw refuses concave sections and axes inside or on the boundary', () => {
   const outlines: [number, number][][] = [
+    [[-7, -5], [2, -5], [-4, -3], [-5, 1]],
+    [[-4, -2], [4, -2], [3, 3], [-3, 3]],
+    [[-4, 0], [4, 0], [3, 3], [-3, 3]],
     [[-7, -5], [1, -5], [-4, -3], [-3, 1], [-7, -1]],
     [[-4, -2], [4, -2], [3, 2], [0, 4], [-3, 2]],
     [[-4, 0], [4, 0], [3, 3], [0, 5], [-3, 3]],

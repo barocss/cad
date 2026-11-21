@@ -97,8 +97,9 @@ export function fitConvexPolygonScrew(
 ): { knots: number[]; rails: Point[][] } | null {
   if (rows.length < 7 || rows.length > 16 || heights.length !== rows.length || stations.length !== rows.length) return null;
   const first = rows[0], count = first.length, last = rows.length - 1;
-  // Three- and four-sided profiles retain their existing specialized admission paths.
-  if (count < 5 || count > ExtrudedProfileLimits.segments || rows.some(row => row.length !== count)) return null;
+  // Triangles and rectangles retain their existing specialized admission paths.
+  if (count < 4 || count > ExtrudedProfileLimits.segments || rows.some(row => row.length !== count)
+    || (count === 4 && rectangle(first))) return null;
   const base = heights[0], height = heights[last] - base;
   if (!Number.isFinite(height) || height <= 0 || heights.some((z, i) => !Number.isFinite(z) || (i > 0 && z <= heights[i - 1]))
     || stations.some((t, i) => !Number.isFinite(t) || Math.abs(t - i / last) > 1e-9

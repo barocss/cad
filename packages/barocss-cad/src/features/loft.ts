@@ -134,7 +134,7 @@ function legacyLoft(input: LoftInput, guideFactory?: LoftGuideFactory, nurbsGuid
   const K = sections.length - 1, z = S.map(s => s.z), id = input.id, nm = input.name;
   // A proved polygon Screw owns the authored corner order. Nearest cyclic matching can reverse
   // its winding once a polygon's half-sector is smaller than an admitted 30-degree station step.
-  const authoredScrew = input.smooth && !guideFactory && !nurbsGuide && n > 4
+  const authoredScrew = input.smooth && !guideFactory && !nurbsGuide && n >= 4
     && sections.every(row => row.length === n && row.every(piece => piece.kind === 'line'))
     ? fitConvexPolygonScrew(sections.map(row => row.map(startOf)), z, z.map(value => (value - z[0]) / (z[K] - z[0]))) : null;
   for (const p of sections) while (p.length < n) { let i = 0; p.forEach((q, j) => { if (lengthOf(q) > lengthOf(p[i])) i = j; }); p.splice(i, 1, ...half(p[i])); if (p === sections[0]) src0.splice(i, 1, src0[i], src0[i]); }

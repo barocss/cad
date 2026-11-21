@@ -3,7 +3,8 @@ import { createFlow } from './flow-helper.mjs';
 
 const singleSketch = process.argv.includes('--single-sketch');
 const triangular = singleSketch || process.argv.includes('--triangle');
-const polygon = process.argv.includes('--pentagon') ? 'pentagon' : process.argv.includes('--hexagon') ? 'hexagon' : null;
+const polygon = ['pentagon', 'hexagon', 'trapezoid', 'skew-quadrilateral']
+  .find(name => process.argv.includes('--' + name));
 const command = singleSketch ? 'Smooth Screw' : 'Loft';
 const profile = polygon ?? (triangular ? 'triangular' : 'rectangular');
 const degrees = polygon || triangular ? 360 : 180;
@@ -11,6 +12,8 @@ const height = 40, spans = degrees / 30, samples = spans * 10;
 const profiles = {
   pentagon: { corners: [[-7, -4], [2, -3], [1, -1], [-4, 1], [-6, -1]], volume: 1080.138914574982 },
   hexagon: { corners: [[-7, -5], [1, -5], [3, -3], [2, -1], [-3, 1], [-7, -1]], volume: 1840.2366692758953 },
+  trapezoid: { corners: [[-8, -5], [2, -5], [0, -1], [-7, -1]], volume: 1360.1749294647923 },
+  'skew-quadrilateral': { corners: [[-7, -4], [2, -3], [0, -1], [-5, 1]], volume: 980.1260521143356 },
   triangular: { corners: [[-7, -4], [2, -3], [-4, 1]], volume: 840.1080446694306 },
   rectangular: { corners: [[14, -4], [26, -4], [26, 4], [14, 4]], volume: 840.4060323005599 * 96 / 21 },
 };
