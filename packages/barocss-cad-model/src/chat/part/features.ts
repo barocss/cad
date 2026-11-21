@@ -6,7 +6,7 @@ import { editFields } from '../../app/editFields';
 import { editSavedOffsetFaceCommand } from '../../app/offsetFaceEdit';
 import { smoothScrewAngleField, smoothScrewAngleKey, smoothScrewWindingRule, smoothScrewPitchAdvance, smoothScrewPitchField, smoothScrewPitchKey, smoothScrewTurns, smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '../../app/smoothLoftTurn';
 import { hasLineArcScrewSections, hasLineArcTurnSections } from '../../app/lineArcScrew';
-import { featureLabel, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
+import { featureLabel, isAnnularReplacementSource, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
 import { loadPersonRows } from '../rows';
 import { ROWS_NOT_FROM_PERSON } from '../../engine/rowFiles';
 import type { RowKind } from '../../engine/rowDefinitions';
@@ -294,14 +294,27 @@ async function addFeaturesTool(state: ChatState, args: Record<string, unknown>, 
 }
 const savedWallDistanceKey = 'offsetDistance';
 
+function isReviewedTubeBore(state: ChatState, index: number, node: Extract<ModelNode, { kind: 'offset-face' }>) {
+  const { doc, bodies } = state, [face] = node.faces, [body] = bodies;
+  if (index !== doc.nodes.length - 1 || node.target !== undefined || node.parent.side !== 'solid' ||
+    node.sigs?.[face]?.k !== 'curved' || !isAnnularReplacementSource(doc.nodes, node.parent.node) ||
+    doc.instances?.length || doc.variability || doc.configurations ||
+    bodies.length !== 1 || Object.keys(doc.outputs).length !== 1 || body.ref?.node !== index || body.ref.side !== 'solid' ||
+    doc.outputs[body.key]?.node !== index || doc.outputs[body.key]?.side !== 'solid') return false;
+  // A curved signature alone also describes an outside wall. Use the current evaluated native bore.
+  return body.mesh.faces.some(candidate => candidate.nativeBoreDiameter !== undefined &&
+    candidate.nativeFaces?.some(native => native.name === face));
+}
+
 function reviewedWallDistance(state: ChatState, index: number) {
   const { doc, bodies } = state, node = doc.nodes[index];
-  if (state.partOf || node?.kind !== 'offset-face' || node.faces.length !== 1 ||
-    node.faces[0] !== featureId(doc.nodes, node.parent.node) + '.side1' ||
-    typeof node.distance !== 'number') return;
+  if (state.partOf || node?.kind !== 'offset-face' || node.faces.length !== 1 || typeof node.distance !== 'number') return;
+  const rightTaperWall = node.faces[0] === featureId(doc.nodes, node.parent.node) + '.side1';
+  const tubeBore = isReviewedTubeBore(state, index, node);
+  if (!rightTaperWall && !tubeBore) return;
   const ctx: Ctx = { doc, bodies, selection: { bodies: [], faces: [], edges: [] } };
   const cmd = editSavedOffsetFaceCommand(doc, index);
-  if (!cmd?.build || cmd.handles?.(ctx, { d: node.distance })?.length !== 1) return;
+  if (!cmd?.build || (!tubeBore && cmd.handles?.(ctx, { d: node.distance })?.length !== 1)) return;
   return { ctx, build: cmd.build, distance: node.distance };
 }
 
@@ -309,7 +322,7 @@ async function editReviewedWallDistance(state: ChatState, index: number, distanc
   if (typeof distance !== 'number' || !Number.isFinite(distance))
     return fail(state, 'Set values.offsetDistance to a finite signed distance in mm.', { code: 'EDIT_INPUT' });
   const edit = reviewedWallDistance(state, index);
-  if (!edit) return fail(state, 'This edit needs the current terminal right wall Offset of an ordinary rectangular taper.', { code: 'EDIT_INPUT' });
+  if (!edit) return fail(state, 'This edit needs the current terminal right wall Offset of an ordinary rectangular taper or the inner wall Offset of a coaxial tube.', { code: 'EDIT_INPUT' });
   let next: StudioDoc;
   try { next = edit.build(edit.ctx, { d: distance }); }
   catch (error) {
@@ -334,7 +347,7 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
       { code: 'EDIT_INPUT' });
   const editWallDistance = Object.hasOwn(given, savedWallDistanceKey);
   if (editWallDistance && (args.expectedRevision === undefined || args.feature !== undefined || Object.keys(given).length !== 1))
-    return fail(state, 'Edit a saved right wall Offset with only values.offsetDistance and the current expectedRevision from query.render or query.rebuild.',
+    return fail(state, 'Edit a supported saved wall Offset with only values.offsetDistance and the current expectedRevision from query.render or query.rebuild.',
       { code: 'EDIT_INPUT' });
   const index = Number(args.index), nodes = state.doc.nodes;
   if (!Number.isInteger(index) || !nodes[index]) return fail(state, `There is no feature ${String(args.index)} (features 0–${nodes.length - 1}).`);

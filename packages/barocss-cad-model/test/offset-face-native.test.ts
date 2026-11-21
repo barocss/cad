@@ -650,5 +650,32 @@ for (const kind of ['cylinder wall', 'through bore', 'tube inner wall'] as const
     const collapsed = command.build!(editedCtx, { d: bore ? radius : -radius });
     assert.equal(evaluateDoc(collapsed, 0).ok, false);
     if (bore) assert.equal(evaluateDoc(command.build!(editedCtx, { d: tube ? -5 : -6 }), 0).ok, false);
+
+    const index = source.nodes.length;
+    const state = { doc: opened.doc, bodies: context(opened.doc).bodies };
+    const request = { action: 'edit', index, expectedRevision: revisionOf(opened.doc), values: { offsetDistance: -1 } };
+    const noEvaluation = async () => assert.fail('Refuse this request before evaluating a candidate');
+    const discovery = await dispatchTool(state, 'features', { action: 'edit', index }, noEvaluation);
+    if (!tube) {
+      assert.doesNotMatch(discovery.content, /values\.offsetDistance/);
+      const refusal = await dispatchTool(state, 'features', request, noEvaluation);
+      assert.ok(refusal.isError && !refusal.changed);
+      return;
+    }
+    assert.match(discovery.content, /values\.offsetDistance .*current value 2/);
+    const evaluate = async (candidate: StudioDoc) => evaluateDoc(candidate, 1);
+    for (const [distance, detail] of [[radius, /bore axis/], [-5, /outer tube wall/]] as const) {
+      const refused = await dispatchTool(state, 'features', { ...request, values: { offsetDistance: distance } }, evaluate);
+      assert.ok(refused.isError && !refused.changed);
+      assert.match(JSON.parse(refused.content).detail, detail);
+      assert.equal(refused.state.doc, state.doc);
+    }
+    const result = await dispatchTool(state, 'features', request, evaluate);
+    assert.ok(!result.isError && result.changed, result.content);
+    assert.deepEqual(result.state.doc, reduced);
+    const translated = withNode(opened.doc, { kind: 'translate', parent: { node: index, side: 'solid' }, offset: [5, 0, 0] });
+    const nonterminal = await dispatchTool({ doc: translated, bodies: context(translated).bodies }, 'features',
+      { ...request, expectedRevision: revisionOf(translated) }, noEvaluation);
+    assert.ok(nonterminal.isError && !nonterminal.changed);
   });
 }

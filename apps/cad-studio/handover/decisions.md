@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1599: [Propose a reviewed inner wall Offset on a coaxial tube](notes/reviewed-coaxial-tube-wall-offset-2026-11-22/README.md), #322 and #629. Pin the Agent request to the current revision and verify explicit Studio approval and exact native reopening.
 - D1598: [Use a calculated point as a sketch circle centre](notes/calculated-sketch-circle-centre-2026-11-22/README.md), #229. Pass the point to the ordinary circle tool once and verify the independent cylinder through native Save and Open.
 - D1597: [Offset the inner wall of an upright coaxial tube](notes/coaxial-tube-inner-wall-offset-2026-11-22/README.md), #629 and #17. Change the tube wall thickness with signed Offset and verify the original outside diameter, native identities and exact saved geometry in Studio.
 - D1596: [Heal the outside chamfer of an upright L bracket](notes/heal-convex-l-prism-chamfer-2026-11-22/README.md), #17. Restore the original sharp ridge and validate the independent stock shape through desktop Save and Open.

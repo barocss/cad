@@ -8,10 +8,13 @@ import { withMcpSession } from './mcp-browser-session.mjs';
 const olderBytes = await readFile(resolve(process.argv[3]));
 const currentBytes = await readFile(resolve(process.argv[4]));
 const source = JSON.parse(currentBytes), index = source.nodes.length - 1;
-const wall = source.nodes[index], face = 'n1.side1';
-assert.deepEqual([wall.kind, wall.faces, wall.distance], ['offset-face', [face], 4]);
+const tube = process.argv.includes('--tube');
+const wall = source.nodes[index], face = tube ? 'n2.side0#1' : 'n1.side1';
+const currentDistance = tube ? 1 : 4, olderDistance = tube ? -1 : 3;
+const subject = tube ? 'coaxial tube inner wall' : 'right drafted wall';
+assert.deepEqual([wall.kind, wall.faces, wall.distance], ['offset-face', [face], currentDistance]);
 const at = distance => [...source.nodes.slice(0, index), { ...wall, distance }];
-assert.deepEqual(JSON.parse(olderBytes).nodes, at(3));
+assert.deepEqual(JSON.parse(olderBytes).nodes, at(olderDistance));
 
 const pins = [
   'apps/cad-studio/test/saved-wall-agent-browser.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs',
@@ -21,8 +24,9 @@ const pins = [
 const f = await createFlow({
   name: 'saved-wall-agent', output: process.argv[2], envFrozen: 'SAVED_WALL_AGENT_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Local MCP proposes a revision-pinned distance change for one supported saved right drafted wall.',
-  limits: ['Desktop WebGPU Studio and autonomy 1 MCP. One 40 × 30 × 10 mm rectangular taper with 10° draft.'],
+  qualification: 'Local MCP proposes a revision-pinned distance change for one saved ' + subject + '.',
+  limits: ['Desktop WebGPU Studio and autonomy 1 MCP.', tube ? 'One Ø18 mm tube with a coaxial Ø8 mm source bore and 16 mm height.'
+    : 'One 40 × 30 × 10 mm rectangular taper with 10° draft.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
@@ -39,7 +43,7 @@ console.log(JSON.stringify({ key, ids, digest: digestOf(brep), closed: brep.shel
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const radians = Math.PI / 18, t = Math.tan(radians), sec = 1 / Math.cos(radians);
 const area = (z, d) => (40 - 2 * z * t + d * sec) * (30 - 2 * z * t);
-const volume = d => (area(0, d) + 4 * area(5, d) + area(10, d)) * 10 / 6;
+const volume = d => tube ? Math.PI * (81 - (4 - d) ** 2) * 16 : (area(0, d) + 4 * area(5, d) + area(10, d)) * 10 / 6;
 const near = (a, b, tolerance = 1e-9) => Math.abs(a - b) <= tolerance;
 const vectorNear = (a, b) => a.every((value, i) => near(value, b[i]));
 
@@ -55,12 +59,20 @@ async function review(request, label) {
   return { revision: data.revision, sha };
 }
 
-async function native(label, doc, distance) {
-  assert.deepEqual(doc.nodes, at(distance));
-  const read = await f.inspect(label, doc), bodies = (await f.bodies()).bodies;
-  assert.ok(read.check.valid && read.closed);
-  assert.deepEqual(read.check.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
-  assert.deepEqual(bodies.map(body => body.key), [read.key]);
+function checkTube(read, distance) {
+  const planes = read.planes.map(([, geometry]) => geometry).filter(geometry => geometry.kind === 'plane');
+  assert.deepEqual(planes.map(plane => plane.o[2]).sort((a, b) => a - b), [0, 16]);
+  const walls = read.planes.filter(([, geometry]) => geometry.kind === 'cylinder');
+  assert.equal(walls.length, 4);
+  assert.equal(walls.filter(([, geometry]) => geometry.out === -1).length, 2);
+  assert.ok(walls.some(([name, geometry]) => face === name && geometry.out === -1));
+  for (const [, geometry] of walls) {
+    assert.ok(near(geometry.r, geometry.out === -1 ? 4 - distance : 9));
+    assert.ok(near(geometry.c[0], 14) && near(geometry.c[1], 9) && near(Math.abs(geometry.a[2]), 1));
+  }
+}
+
+function checkTaper(read, distance) {
   const planes = [
     [[-1 / sec, 0, t / sec], 0], [[1 / sec, 0, t / sec], 40 / sec + distance],
     [[0, -1 / sec, t / sec], 0], [[0, 1 / sec, t / sec], 30 / sec],
@@ -78,6 +90,15 @@ async function native(label, doc, distance) {
       for (const y of [t * z, 30 - t * z]) assert.equal(read.points.filter(p => vectorNear(p, [x, y, z])).length, 1);
     }
   }
+}
+
+async function native(label, doc, distance) {
+  assert.deepEqual(doc.nodes, at(distance));
+  const read = await f.inspect(label, doc), bodies = (await f.bodies()).bodies;
+  assert.ok(read.check.valid && read.closed);
+  assert.deepEqual(read.check.counts, { bodies: 1, shells: 1, faces: 6, loops: tube ? 8 : 6, coedges: 24, edges: 12, vertices: 8 });
+  assert.deepEqual(bodies.map(body => body.key), [read.key]);
+  if (tube) checkTube(read, distance); else checkTaper(read, distance);
   const expected = volume(distance);
   assert.ok(near(read.volume, expected, 1e-7));
   assert.ok(near(bodies[0].volume, expected, 1e-7));
@@ -108,7 +129,7 @@ await f.run(async () => {
   await writeFile(older, olderBytes);
   await writeFile(current, currentBytes);
   const session = { app: f.app, output: f.output, clientName: 'saved-wall-review', autonomy: 1 };
-  f.phase = 'review the older +3 mm wall through local MCP';
+  f.phase = 'review the older saved wall through local MCP';
   const stale = await withMcpSession(session, older, 'older', (_, request) => review(request, 'older-review'));
   assert.deepEqual(await readFile(older), olderBytes);
 
@@ -119,7 +140,7 @@ await f.run(async () => {
     assert.notEqual(fresh.sha, stale.sha);
     const edit = { action: 'edit', index, values: { offsetDistance: -2 } };
     const pinned = { ...edit, expectedRevision: fresh.revision };
-    const proposed = args => ({ action: 'propose', title: 'Change the reviewed right wall Offset to −2 mm', ops: [{ tool: 'features', args }] });
+    const proposed = args => ({ action: 'propose', title: 'Change the reviewed ' + subject + ' Offset to −2 mm', ops: [{ tool: 'features', args }] });
     const denied = async (args, reason) => {
       const result = await call('proposals', proposed(args), true);
       assert.match(JSON.stringify(result), reason);
@@ -132,7 +153,11 @@ await f.run(async () => {
     await denied({ ...pinned, expectedRevision: stale.revision }, /part changed/i);
     await denied({ ...pinned, values: { offsetDistance: -2, d: 4 } }, /only values\.offsetDistance/);
     await denied({ ...pinned, values: { offsetDistance: 0 } }, /nonzero signed distance/i);
-    await denied({ ...pinned, values: { offsetDistance: -40 } }, /could not build|close a section/i);
+    if (tube) {
+      // Proposal preview reports the standard evaluator refusal. The Model test checks each native limit.
+      await denied({ ...pinned, values: { offsetDistance: 4 } }, /could not build.*nothing was applied/i);
+      await denied({ ...pinned, values: { offsetDistance: -5 } }, /could not build.*nothing was applied/i);
+    } else await denied({ ...pinned, values: { offsetDistance: -40 } }, /could not build|close a section/i);
     const proposal = await call('proposals', proposed(pinned));
     assert.equal(proposal.applied, false);
     const pendingBytes = await readFile(current);
@@ -145,19 +170,19 @@ await f.run(async () => {
   assert.deepEqual(pending.nodes, source.nodes);
   assert.deepEqual(pending.outputs, source.outputs);
   await f.freshOpen(current, pending, 'proposal-pending');
-  const before = await native('reviewed-plus-four-native', pending, 4);
+  const before = await native('reviewed-wall-native', pending, currentDistance);
   await frame();
   await button('Chat').first().click();
   const card = f.page.getByRole('listitem', { name: `Proposal ${proposalId}`, exact: true });
   await card.waitFor();
-  await f.snapshot('reviewed-plus-four-wall');
+  await f.snapshot(tube ? 'reviewed-plus-one-tube-wall' : 'reviewed-plus-four-wall');
 
   f.phase = 'preview the signed distance and accept it through desktop Studio';
   await button('Preview', card).click();
   await button('Hide', card).waitFor();
   const change = await card.locator('[aria-label="Volume change"]').innerText();
   const mm3 = /^−([\d,.]+) mm³/.exec(change)?.[1];
-  assert.ok(mm3 && near(Number(mm3.replaceAll(',', '')), volume(4) - volume(-2), 0.6), change);
+  assert.ok(mm3 && near(Number(mm3.replaceAll(',', '')), volume(currentDistance) - volume(-2), 0.6), change);
   await f.same(pending);
   await f.snapshot('proposed-minus-two-wall');
   await button('Accept', card).click();
@@ -173,14 +198,14 @@ await f.run(async () => {
   f.phase = 'Undo, Redo, Save, and fresh Open the approved native edit';
   await f.undo();
   await f.same(pending);
-  await native('undo-plus-four-native', pending, 4);
+  await native('undo-wall-native', pending, currentDistance);
   await f.redo();
   await f.same(accepted);
-  const saved = await f.save('approved-right-wall-minus-two');
+  const saved = await f.save(tube ? 'approved-tube-wall-minus-two' : 'approved-right-wall-minus-two');
   await f.freshOpen(saved.file, accepted, 'reopened-approved-wall');
   assert.equal((await native('reopened-minus-two-native', accepted, -2)).digest, after.digest);
   await frame();
-  await f.openFeatureEditor(index, 'approved saved right wall');
+  await f.openFeatureEditor(index, 'approved saved wall');
   await button('Edit offset', f.editor()).click();
   const editor = f.page.getByRole('dialog', { name: 'Edit Offset face', exact: true });
   await editor.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
