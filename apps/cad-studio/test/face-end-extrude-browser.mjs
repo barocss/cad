@@ -6,6 +6,8 @@ import { createFlow, sha256 } from './flow-helper.mjs';
 
 const baseline = process.argv[3] === '--baseline', create = process.argv[3] === '--create', detach = process.argv[3] === '--detach', bind = process.argv[3] === '--bind';
 const circularTarget = create && process.argv.includes('--circular-target');
+const circularSource = circularTarget && process.argv.includes('--circular-source');
+const sourceRadius = 9;
 const pins = [
   'apps/cad-studio/test/face-end-extrude-browser.mjs',
   'apps/cad-studio/src/ui/NodeEditor.tsx',
@@ -17,7 +19,7 @@ const pins = [
   'packages/barocss-cad-model/src/engine/migrate.ts',
   'packages/barocss-cad-model/src/engine/part.ts',
 ];
-const decision = circularTarget ? 'D1601' : bind ? 'D848' : detach ? 'D842' : create ? 'D841' : 'D840';
+const decision = circularSource ? 'D1622' : circularTarget ? 'D1601' : bind ? 'D848' : detach ? 'D842' : create ? 'D841' : 'D840';
 const f = await createFlow({
   name: 'face-end-extrude', output: process.argv[2], envFrozen: decision + '_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
@@ -26,7 +28,7 @@ const f = await createFlow({
     : bind ? 'Convert one saved Distance extrusion to a picked earlier end face and verify its identity, Undo and project Open.'
     : detach ? 'Detach a saved end face at the exact current distance, preserve History and verify independence after project Open.'
     : 'Resolve a fixed XY rectangle to a preceding native cap and retain its two output bodies through target edits and Open.',
-  limits: [circularTarget ? 'One XY rectangle extruded in positive Z to the lower cap of one upright cylinder.'
+  limits: [circularTarget ? `One XY ${circularSource ? 'circle' : 'rectangle'} extruded in positive Z to the lower cap of one upright cylinder.`
     : 'Two rectangular prisms in the same desktop document. Positive Z. One native rectangle cap.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -59,7 +61,8 @@ const documentAt = (from, fixed, distance = 20) => ({
     circularTarget ? { id: 'n0', kind: 'sketch', profile: 'circle', center: [5, 5], radius: 12 }
       : { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [-5, -5], max: [15, 15] },
     { id: 'n1', kind: 'extrude', sketch: 0, from, height: 5 },
-    { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, 10] },
+    circularSource ? { id: 'n2', kind: 'sketch', profile: 'circle', center: [5, 5], radius: sourceRadius }
+      : { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, 10] },
     fixed ? recipe : { id: 'n3', kind: 'extrude', sketch: 2, height: distance },
   ],
   outputs: { b1: { node: 1, side: 'solid' }, b3: { node: 3, side: 'solid' } }, nextId: 4,
@@ -104,6 +107,20 @@ async function geometry(label, from, cap, fixed) {
       assert.ok(result.centroid.every((value, i) => near(value, [5, 5, from + 2.5][i])));
     }
   }
+  if (circularSource) {
+    prisms.pop();
+    const source = native.outputs.find(output => output.id === 'n3');
+    assert.ok(source?.valid && source.count === 1);
+    const walls = source.supports.filter(({ geometry }) => geometry.kind === 'cylinder');
+    assert.equal(walls.length, 2);
+    assert.ok(walls.every(({ geometry }) => near(geometry.r, sourceRadius) && near(geometry.c[0], 5) && near(geometry.c[1], 5)));
+    const top = source.supports.find(({ name }) => name === 'n3.top')?.geometry;
+    assert.ok(top?.kind === 'plane' && top.n[2] === 1 && near(top.o[2], cap));
+    for (const result of [source.mass, bodies[1]]) {
+      assert.ok(near(result.volume, Math.PI * sourceRadius ** 2 * cap));
+      assert.ok(result.centroid.every((value, i) => near(value, [5, 5, cap / 2][i])));
+    }
+  }
   for (const [key, range, lo, hi, volume, center, face, faceZ] of prisms) {
     const output = native.outputs.find(output => output.id === key);
     assert.ok(output?.valid && output.count === 1);
@@ -118,7 +135,7 @@ async function geometry(label, from, cap, fixed) {
       assert.ok(result.centroid.every((v, i) => near(v, center[i])));
     }
   }
-  f.report.observations.push({ label, targetCap: from, extrudeCap: cap, volume: 100 * cap,
+  f.report.observations.push({ label, targetCap: from, extrudeCap: cap, volume: circularSource ? Math.PI * sourceRadius ** 2 * cap : 100 * cap,
     corners: native.outputs.reduce((total, output) => total + output.corners.length, 0), outputs: ['b1', 'b3'] });
 }
 
@@ -160,7 +177,8 @@ async function authorFaceEnd() {
   await open(name, initial);
   await f.same(initial);
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await button(f.page.getByRole('group', { name: 'History', exact: true }), 'Sketch · rectangle').click();
+  const history = f.page.getByRole('group', { name: 'History', exact: true });
+  await button(history, circularSource ? 'Sketch · circle' : 'Sketch · rectangle').click();
   await f.editor().waitFor();
   await f.closeEditor();
   await f.page.waitForFunction(() => window.__studioSelection?.selection?.sketches?.includes(2));

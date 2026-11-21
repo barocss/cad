@@ -1,6 +1,7 @@
 import { CadNumericPolicy, CadPartLimits, ExtrudedProfileLimits, checkOutput, coedgeVertices, evaluateCadPart, faceGeometry, type Brep, type BrepFace, type CadPartFeature, type Point } from '@barocss/cad';
 import { annularCapReplacementFrame, circularCapReplacementFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { NODE_EXTRA_FIELDS, type DocPlane, type FaceEndExtrudeNode, type ModelNode, type NodeExtras, type SketchNode, type StudioDoc } from './doc';
+import { featureId } from './ids';
 import { refusal } from './refusal';
 import { finiteBinary64Integer as exact } from './binary64';
 
@@ -191,10 +192,10 @@ function literalCircle(sketch: Extract<SketchNode, { profile: 'circle' }>): sket
 }
 
 /** Only a current original lower disk of an intact upright circular Extrude reaches this branch. */
-function circularRectangleTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
-  brep: Brep, face: BrepFace, axes: EndFrame): ReturnType<typeof targetPolygon> | undefined {
+function circularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
+  brep: Brep, face: BrepFace, axes: EndFrame): (ReturnType<typeof targetPolygon> & { centre: readonly [number, number]; radius: number; roundoff: number }) | undefined {
   const target = doc.nodes[node.target.body.node];
-  if (sketch.profile !== 'rectangle' || axes !== XY || target?.kind !== 'extrude' || target.held || target.cutDepth !== undefined
+  if ((sketch.profile !== 'rectangle' && sketch.profile !== 'circle') || axes !== XY || target?.kind !== 'extrude' || target.held || target.cutDepth !== undefined
     || target.draft || face.name !== `${node.target.feature}.bottom`) return;
   const circle = doc.nodes[target.sketch];
   if (circle?.kind !== 'sketch' || circle.profile !== 'circle' || circle.suppressed || circle.held || circle.plane || !literalCircle(circle)) return;
@@ -210,11 +211,36 @@ function circularRectangleTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketc
   const radius = Math.min(...cylinders.map(support => support.r - Math.hypot(support.c[0] - cx, support.c[1] - cy))) - roundoff;
   if (!(radius > roundoff)) throw invalid('the circular target radius cannot be certified.');
   return {
-    min: [cx - radius, cy - radius], max: [cx + radius, cy + radius], level, rectangle: false,
+    min: [cx - radius, cy - radius], max: [cx + radius, cy + radius], level, rectangle: false, centre: [cx, cy], radius, roundoff,
     // A rectangle is convex and distance to a fixed centre attains its maximum at a corner.
     // The extra roundoff margin also bounds subtraction and hypot, so tangency is not silently widened.
     contains: point => Math.hypot(point[0] - cx, point[1] - cy) + roundoff <= radius,
   };
+}
+
+/** Certify the represented source disk, including native radius normalization and XY placement. */
+function circleFitsDisk(doc: StudioDoc, node: FaceEndExtrudeNode, prefix: readonly CadPartFeature[],
+  target: NonNullable<ReturnType<typeof circularProfileTarget>>, height: number): boolean {
+  const sourceId = featureId(doc.nodes, node.sketch), sources = prefix.filter(feature => feature.id === sourceId);
+  if (sources.length !== 1 || sources[0].kind !== 'sketch' || sources[0].profile !== 'circle') throw missing('the original circular source is missing or ambiguous.');
+  // A two-feature probe uses the same compiled sketch and actual depth, without changing the document.
+  const probe = evaluateCadPart({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: doc.parameters,
+    features: [{ ...sources[0], id: 'source' }, { id: 'probe', kind: 'extrude', sketch: 'source', height }] });
+  const [output] = probe.outputs;
+  if (probe.outputs.length !== 1 || !checkOutput(output).valid) throw invalid('the circular source needs one current exact solid.');
+  const brep = output.brep, frame = circularCapReplacementFrame(brep, 'probe.bottom');
+  const cylinders = brep.faces.map(face => faceGeometry(face)).filter(support => support.kind === 'cylinder');
+  if (!frame || frame.normal[2] !== -1 || cylinders.length !== 2) throw invalid('the circular source supports cannot be certified.');
+  const extent = Math.max(1, ...brep.faces.flatMap(face => face.surface.kind === 'surface'
+    ? face.surface.controlPoints.flat().flat().map(Math.abs) : []));
+  const roundoff = Math.max(target.roundoff, 64 * Number.EPSILON * extent);
+  return cylinders.every(support => {
+    if (support.out !== 1 || support.a[0] !== 0 || support.a[1] !== 0 || support.a[2] !== 1
+      || !support.c.every(finiteCoordinate) || !finiteCoordinate(support.r) || support.r <= 0) return false;
+    const room = exact(target.radius) - exact(support.r) - exact(roundoff);
+    const dx = exact(support.c[0]) - exact(target.centre[0]), dy = exact(support.c[1]) - exact(target.centre[1]);
+    return room > 0n && dx * dx + dy * dy < room * room;
+  });
 }
 
 /** One original lower annulus of a forward upright coaxial circular Extrude and through Hole. */
@@ -364,20 +390,23 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const brep = outputs[0].brep;
   const faces = brep.faces.filter(face => face.name === node.target.face);
   if (faces.length !== 1) throw missing('the named target face is missing or ambiguous.');
-  const box = circularRectangleTarget(doc, node, sketch, brep, faces[0], axes)
+  const disk = circularProfileTarget(doc, node, sketch, brep, faces[0], axes);
+  const box = disk
     ?? annularProfileTarget(doc, node, sketch, brep, faces[0], axes, [u0, v0], [u1, v1])
     ?? targetPolygon(brep, faces[0], axes);
-  if (u0 < box.min[0] || v0 < box.min[1] || u1 > box.max[0] || v1 > box.max[1]) throw invalid('the target face must contain the entire projected profile.');
-  if (!box.rectangle) {
-    // Native circles reconstruct their radius from rounded arc endpoints. Do not
-    // claim a disk proof from the authored radius; retain only the previous target scope.
-    if (sketch.profile === 'circle') throw invalid('a circle source currently needs an axis-aligned rectangle target.');
-    const projected = sketch.profile === 'rectangle' ? [[u0,v0],[u1,v0],[u1,v1],[u0,v1]]
-      : sketch.points.map(p => [origin[u]+p[0],origin[v]+p[1]]);
-    if (!projected.every(box.contains)) throw invalid('the target face must contain the entire projected profile.');
+  if (!(sketch.profile === 'circle' && disk)) {
+    if (u0 < box.min[0] || v0 < box.min[1] || u1 > box.max[0] || v1 > box.max[1]) throw invalid('the target face must contain the entire projected profile.');
+    if (!box.rectangle) {
+      if (sketch.profile === 'circle') throw invalid('a circle source currently needs an axis-aligned rectangle target or an original lower circular disk.');
+      const projected = sketch.profile === 'rectangle' ? [[u0,v0],[u1,v0],[u1,v1],[u0,v1]]
+        : sketch.points.map(p => [origin[u]+p[0],origin[v]+p[1]]);
+      if (!projected.every(box.contains)) throw invalid('the target face must contain the entire projected profile.');
+    }
   }
   const height = sign * (box.level - origin[w]);
   if (height <= CadNumericPolicy.linearTolerance || height > CadPartLimits.length) throw invalid('the target must be ahead of the source in the positive extrusion direction.');
   if (!withinTolerance(origin[w] + sign * height, box.level)) throw invalid('the reconstructed end is outside the native linear tolerance.');
+  if (sketch.profile === 'circle' && disk && !circleFitsDisk(doc, node, prefix, disk, height))
+    throw invalid('the target face must contain the entire projected profile.');
   return height;
 }

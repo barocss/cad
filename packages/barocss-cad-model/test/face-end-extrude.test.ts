@@ -52,6 +52,10 @@ const replaceNode = (doc: StudioDoc, index: number, next: ModelNode): StudioDoc 
   ...doc, nodes: doc.nodes.map((node, i) => i === index ? next : node),
 });
 
+function circleSourceTarget(center: [number, number] = [5, 5], radius = 9, from = 20): StudioDoc {
+  return replaceNode(circularTarget(from), 2, { id: 'n2', kind: 'sketch', profile: 'circle', center, radius });
+}
+
 function annularPolygonTarget(points: [number, number][], from = 20, origin: [number, number, number] = [0, 0, 0]): StudioDoc {
   const doc = annularTarget(from);
   return { ...doc, nodes: doc.nodes.map((node, i): ModelNode => {
@@ -324,6 +328,102 @@ test('circular target containment checks the farthest rectangle corner rather th
   assert.throws(() => toPartDocument(behind), /positive extrusion direction/i);
 });
 
+test('a represented R9 circle reaches an original R12 disk although its bounding square does not fit', () => {
+  assert.ok(Math.hypot(9, 9) > 12);
+  for (const from of [20, 28]) {
+    const doc = circleSourceTarget([5, 5], 9, from), saved = structuredClone(doc), opened = readStudioDoc(JSON.stringify(doc));
+    assert.ok('doc' in opened); assert.deepEqual(opened.doc, saved);
+    const part = toPartDocument(opened.doc);
+    assert.deepEqual(part.features[3], { id: 'n3', kind: 'extrude', sketch: 'n2', height: from });
+    assert.equal(part.features.length, 4);
+    assert.equal(currentFaceEndDistance(doc, 3), from);
+    const { outputs } = evaluateCadPart(part), [target, post] = outputs;
+    assert.deepEqual(outputs.map(output => output.id), ['n1', 'n3']);
+    assert.ok(outputs.every(output => checkOutput(output).valid));
+    const mass = massPropertiesOf(post);
+    assert.ok(Math.abs(mass.volume - Math.PI * 81 * from) < 1e-7);
+    mass.centroid.forEach((value, axis) => assert.ok(Math.abs(value - [5, 5, from / 2][axis]) < 1e-8));
+    assert.equal(post.brep.faces.length, 4);
+    const end = faceGeometry(target.brep.faces.find(face => face.name === 'n1.bottom')!);
+    const reached = faceGeometry(post.brep.faces.find(face => face.name === 'n3.top')!);
+    assert.ok(end.kind === 'plane' && reached.kind === 'plane');
+    assert.equal(end.o[2], from); assert.equal(reached.o[2], from);
+    assert.deepEqual(end.n, [0, 0, -1]); assert.deepEqual(reached.n, [0, 0, 1]);
+    assert.deepEqual(target.brep, evaluateCadPart(toPartDocument(prefixDoc(doc, 3))).outputs[0].brep);
+    assert.deepEqual(evaluateCadPart(toPartDocument(doc)).outputs, outputs);
+    assert.deepEqual(doc, saved);
+  }
+  const legacy = circleSourceTarget();
+  legacy.nodes[2] = { kind: 'sketch', profile: 'circle', center: [5, 5], radius: 9 };
+  assert.equal(currentFaceEndDistance(legacy, 3), 20);
+});
+
+test('circle-to-disk containment accepts a shifted interior and strictly refuses tangency and outside material', () => {
+  for (const [x, radius] of [[7, 9], [8 - 1e-6, 9], [5, 12 - 1e-6]])
+    assert.equal(currentFaceEndDistance(circleSourceTarget([x, 5], radius), 3), 20);
+  for (const [x, radius] of [[8, 9], [8 + 1e-6, 9], [5, 12], [5, 12 + 1e-6], [5, 12 - 1e-14]]) {
+    const doc = circleSourceTarget([x, 5], radius), saved = structuredClone(doc);
+    assert.throws(() => toPartDocument(doc), /entire projected profile/i);
+    assert.deepEqual(doc, saved);
+  }
+});
+
+test('circle-to-disk proof uses native endpoint radius normalization and translated source and target supports', () => {
+  const local: [number, number] = [0.1, 0.2], radius = 0.2, representedRadius = (local[0] + radius) - local[0];
+  assert.notEqual(representedRadius, radius);
+  for (const origin of [[0, 0, 0], [50, -20, 5], [-50.25, 20.125, -2]] as [number, number, number][]) {
+    let doc = circleSourceTarget(local, radius);
+    doc = replaceNode(doc, 0, { id: 'n0', kind: 'sketch', profile: 'circle', center: [origin[0] + local[0], origin[1] + local[1]], radius: 1 });
+    doc = replaceNode(doc, 2, { id: 'n2', kind: 'sketch', profile: 'circle', center: local, radius,
+      plane: { origin, normal: [0, 0, 1], xAxis: [1, 0, 0] } });
+    const saved = structuredClone(doc), opened = readStudioDoc(JSON.stringify(doc));
+    assert.ok('doc' in opened); assert.deepEqual(opened.doc, saved);
+    const part = toPartDocument(opened.doc), height = 20 - origin[2], { outputs } = evaluateCadPart(part), post = outputs[1];
+    assert.deepEqual(part.features[3], { id: 'n3', kind: 'extrude', sketch: 'n2', height });
+    assert.ok(outputs.every(output => checkOutput(output).valid));
+    const cylinders = post.brep.faces.map(face => faceGeometry(face)).filter(face => face.kind === 'cylinder');
+    assert.equal(cylinders.length, 2);
+    for (const cylinder of cylinders) {
+      assert.ok(Math.abs(cylinder.r - representedRadius) < 1e-12);
+      assert.ok(Math.abs(cylinder.c[0] - (origin[0] + local[0])) < 1e-12);
+      assert.ok(Math.abs(cylinder.c[1] - (origin[1] + local[1])) < 1e-12);
+    }
+    const mass = massPropertiesOf(post), centre = [origin[0] + local[0], origin[1] + local[1], (origin[2] + 20) / 2];
+    assert.ok(Math.abs(mass.volume - Math.PI * representedRadius ** 2 * height) < 1e-9);
+    mass.centroid.forEach((value, axis) => assert.ok(Math.abs(value - centre[axis]) < 1e-8));
+    assert.deepEqual(outputs[0].brep, evaluateCadPart(toPartDocument(prefixDoc(doc, 3))).outputs[0].brep);
+    assert.deepEqual(doc, saved);
+  }
+  // An arbitrary 1 mm probe would exceed the coordinate limit; the actual short depth is valid.
+  let nearLimit = circleSourceTarget([5, 5], 9, 9999.875);
+  nearLimit = replaceNode(nearLimit, 1, { id: 'n1', kind: 'extrude', sketch: 0, from: 9999.875, height: 0.0625 });
+  nearLimit = replaceNode(nearLimit, 2, { id: 'n2', kind: 'sketch', profile: 'circle', center: [5, 5], radius: 9,
+    plane: { origin: [0, 0, 9999.75], normal: [0, 0, 1], xAxis: [1, 0, 0] } });
+  assert.equal(currentFaceEndDistance(nearLimit, 3), 0.125);
+  assert.ok(evaluateCadPart(toPartDocument(nearLimit)).outputs.every(output => checkOutput(output).valid));
+});
+
+test('circle-to-disk support retains original target and source limits and circle-to-rectangle behavior', () => {
+  const doc = circleSourceTarget(), source = doc.nodes[2], target = doc.nodes[1];
+  assert.ok(source.kind === 'sketch' && source.profile === 'circle' && target.kind === 'extrude');
+  for (const candidate of [
+    replaceNode(doc, 1, { ...target, id: 'n9' }), replaceNode(doc, 1, { ...target, height: -5 }),
+    replaceNode(doc, 1, { ...target, held: 'old target' }),
+    replaceNode(doc, 0, { id: 'n0', kind: 'sketch', profile: 'circle', center: [5, 5], radius: 12,
+      plane: { origin: [0, 0, 0], normal: [0, 0, 1], xAxis: [1, 0, 0] } }),
+    replaceNode(doc, 2, { ...source, outline: { points: [] } }),
+    replaceNode(doc, 2, { ...source, plane: { origin: [0, 0, 0], normal: [1, 0, 0], xAxis: [0, 1, 0] } }),
+    replaceNode(doc, 2, { ...source, plane: { origin: [0, 0, 0], normal: [0, -1, 0], xAxis: [1, 0, 0] } }),
+  ]) assert.throws(() => toPartDocument(candidate));
+  assert.throws(() => toPartDocument(circleSourceTarget([5, 5], 9, 0)), /positive extrusion direction/i);
+  const flat = replaceNode(documentAt(20), 2, { id: 'n2', kind: 'sketch', profile: 'circle', center: [5, 5], radius: 4 });
+  const flatPost = evaluateCadPart(toPartDocument(flat)).outputs[1];
+  assert.ok(checkOutput(flatPost).valid);
+  assert.ok(Math.abs(massPropertiesOf(flatPost).volume - Math.PI * 16 * 20) < 1e-7);
+  const annular = replaceNode(annularTarget(), 3, { id: 'n3', kind: 'sketch', profile: 'circle', center: [6, 0], radius: 1 });
+  assert.throws(() => toPartDocument(annular), /convex straight trim.*without holes/i);
+});
+
 test('circular target admission keeps the direction, authored identity and saved-format guards', () => {
   const doc = circularTarget(), target = doc.nodes[1];
   const edit = (index: number, next: ModelNode): StudioDoc => ({ ...doc, nodes: doc.nodes.map((node, i) => i === index ? next : node) });
@@ -357,7 +457,6 @@ test('circular target scope excludes annular, oblique and transformed caps and o
   ], outputs: { b2: { node: 2, side: 'solid' }, b4: { node: 4, side: 'solid' } }, nextId: 5 };
   assert.throws(() => toPartDocument(transformed), /convex straight trim|named target face/i);
   for (const source of [
-    { id: 'n2', kind: 'sketch', profile: 'circle', center: [5, 5], radius: 1 },
     { id: 'n2', kind: 'sketch', profile: 'polygon', points: [[0, 0], [10, 0], [5, 10]] },
   ] as ModelNode[]) {
     assert.throws(() => toPartDocument({ ...doc, nodes: [...doc.nodes.slice(0, 2), source, recipe] }), /convex straight trim/i);
