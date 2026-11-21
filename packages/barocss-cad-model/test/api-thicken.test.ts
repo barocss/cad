@@ -78,7 +78,7 @@ test('creation preserves a separate stock body and its focus', () => {
 
 test('raw context discovery and chat admission use the strict public snapshot validator', () => {
   const ctx = { ...context(), thickenSnapshot: { surface: surface(), name: 'Raw snapshot' } };
-  assert.deepEqual(command().available(ctx), { ok: true }); assert.deepEqual(command().fields!(ctx).map(f => f.key), ['t', 'side']);
+  assert.deepEqual(command().available(ctx), { ok: true }); assert.deepEqual(command().fields!(ctx).map(f => f.key), ['t', 'side', 'mode']);
   const doc = command().build!(ctx, { t: 2, side: 'reverse' }); assert.equal(checkNode(doc.nodes[0], [], {}), null);
   for (const extra of [{ trims: [] }, { objectId: 'surface' }, { kind: 'surface' }]) {
     const raw = { ...surface(), ...extra } as RawNurbsSurface;
@@ -87,6 +87,24 @@ test('raw context discovery and chat admission use the strict public snapshot va
   }
   assert.match(checkNode({ ...doc.nodes[0], thickness: 0 }, [], {})!, /VALUE|positive/i);
   assert.match(checkNode({ ...doc.nodes[0], side: 'left' }, [], {})!, /normal|reverse|both/);
+  assert.match(checkNode({ ...doc.nodes[0], mode: 'curved' }, [], {})!, /sampled, exact-planar/);
+});
+
+test('exact planar Studio facade and native file preserve the chosen recipe and its six face names', async () => {
+  const plate = part('Exact planar').thicken(surface(), { t: 2, side: 'both', mode: 'exact-planar' });
+  const doc = plate.doc, node = doc.nodes[0];
+  assert.equal(node.kind, 'thicken');
+  assert.equal(node.mode, 'exact-planar');
+  assert.equal(checkNode(node, [], {}), null);
+  mass(plate, 2400, 3);
+  const [{ brep }] = partBreps(doc);
+  assert.equal(checkBrep(brep, { strict: true }).valid, true);
+  const names = brep.faces.map(face => face.name).sort();
+  assert.deepEqual(names, ['normal', 'reverse', 'u-max', 'u-min', 'v-max', 'v-min'].map(face => `${node.id}.${face}`));
+  const reopened = await readStudioFile(encodeStudioFile(doc));
+  assert.ok('doc' in reopened, JSON.stringify(reopened));
+  assert.deepEqual(reopened.doc, doc);
+  assert.deepEqual(partBreps(reopened.doc)[0].brep, brep);
 });
 
 test('selected direct capture checks trims and identity before copying, and keeps independent history', async () => {

@@ -40,6 +40,7 @@ import type { GussetPlaced, MemberPlaced } from './part-frame.js';
 import type { CadPartNameSignature } from './part-expect.js';
 
 export type CadPartDim = number | { readonly parameter: string };
+export type ThickenMode = 'sampled' | 'exact-planar';
 export type CadPartAxis = 'x' | 'y' | 'z';
 export type CadPartPoint2 = readonly [CadPartDim, CadPartDim];
 export type CadPartPoint3 = readonly [CadPartDim, CadPartDim, CadPartDim];
@@ -214,7 +215,7 @@ export type CadPartFeature = Base & (
    */
   | { readonly kind: 'split-face'; readonly target: string; readonly face: string; readonly curves?: readonly { readonly degree: number; readonly knots: readonly number[]; readonly controlPoints: readonly (readonly [number, number, number])[]; readonly weights: readonly number[] }[]; readonly pull?: CadPartPoint3; readonly names?: readonly string[] }
   /** An open NURBS surface thickened into a solid: `thickness` along its normal (or against it, or half each way). Faceted. */
-  | { readonly kind: 'thicken'; readonly surface: { readonly degreeU: number; readonly degreeV: number; readonly knotsU: readonly number[]; readonly knotsV: readonly number[]; readonly controlPoints: readonly (readonly (readonly [number, number, number])[])[]; readonly weights: readonly (readonly number[])[] }; readonly thickness: CadPartDim; readonly side?: 'normal' | 'reverse' | 'both' }
+  | { readonly kind: 'thicken'; readonly surface: { readonly degreeU: number; readonly degreeV: number; readonly knotsU: readonly number[]; readonly knotsV: readonly number[]; readonly controlPoints: readonly (readonly (readonly [number, number, number])[])[]; readonly weights: readonly (readonly number[])[] }; readonly thickness: CadPartDim; readonly side?: 'normal' | 'reverse' | 'both'; readonly mode?: ThickenMode }
   /**
    * B2: a ruled band surface between two edge chains of earlier bodies (read, never consumed): `a` and `b` each name a body (`target`,
    * `id` or `id/k`) and its edges by name (up to 32, pick order). One open chain or one closed loop on each side, paired piece by

@@ -219,7 +219,7 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
     case 'frame-member': return { ...at, kind: 'frame-member', section: kernelSection(node.section, id), start: node.start, end: node.end,
       ...(node.anchor ? { anchor: node.anchor } : {}), ...(node.offset ? { offset: node.offset } : {}), ...(node.roll ? { roll: node.roll } : {}), ...(node.up ? { up: node.up } : {}) };
     case 'sheet-contour': return { ...at, kind: 'sheet-contour', path: node.path, ...(node.plane ? { plane: node.plane } : {}), side: node.side, width: node.width, thickness: node.thickness, bendRadius: node.bendRadius, ...sheetK(node) };
-    case 'thicken': return { ...at, kind: 'thicken', surface: node.surface, thickness: node.thickness, ...(node.side ? { side: node.side } : {}) };
+    case 'thicken': return { ...at, kind: 'thicken', surface: node.surface, thickness: node.thickness, ...(node.side ? { side: node.side } : {}), ...(node.mode !== undefined ? { mode: node.mode } : {}) };
     case 'subd': return { ...at, kind: 'subd', cage: node.mirror ? mirrorCage(node.cage, node.mirror) as typeof node.cage : node.cage };
     // (A library part's own feature: its output passed on under the node's id; its features come before it, featuresOf.)
     case 'library': {

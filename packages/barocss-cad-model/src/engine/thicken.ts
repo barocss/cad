@@ -34,13 +34,14 @@ export function thickenNodeProblem(node: Record<string, unknown>, parameters: Re
   try {
     const dim = node.thickness;
     const t = typeof dim === 'number' ? dim : dim && typeof dim === 'object' && 'parameter' in dim ? parameters[String(dim.parameter)] : NaN;
-    thickenSpec(node.surface as RawNurbsSurface, { t, ...(node.side !== undefined ? { side: node.side as ThickenOptions['side'] } : {}) });
+    thickenSpec(node.surface as RawNurbsSurface, { t, side: node.side as ThickenOptions['side'], mode: node.mode as ThickenOptions['mode'] });
     return null;
   } catch (error) { return error instanceof Error ? error.message : String(error); }
 }
 
-export function thickenNode(snapshot: ThickenSnapshot, t: number, side: string): Extract<ModelNode, { kind: 'thicken' }> {
-  const spec = thickenSpec(snapshot.surface, { t, side: side as ThickenOptions['side'] });
+export function thickenNode(snapshot: ThickenSnapshot, t: number, side: string, mode?: string): Extract<ModelNode, { kind: 'thicken' }> {
+  const spec = thickenSpec(snapshot.surface, { t, side: side as ThickenOptions['side'], mode: mode as ThickenOptions['mode'] });
   // The spec owns these arrays. The native node stores that independent snapshot.
-  return { kind: 'thicken', name: snapshot.name, surface: spec.surface as Extract<ModelNode, { kind: 'thicken' }>['surface'], thickness: spec.values.t, ...(spec.values.side ? { side: spec.values.side } : {}) };
+  return { kind: 'thicken', name: snapshot.name, surface: spec.surface as Extract<ModelNode, { kind: 'thicken' }>['surface'], thickness: spec.values.t,
+    ...(spec.values.side ? { side: spec.values.side } : {}), ...(spec.values.mode ? { mode: spec.values.mode } : {}) };
 }

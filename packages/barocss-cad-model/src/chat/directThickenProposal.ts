@@ -10,7 +10,7 @@ export const DIRECT_THICKEN_COMMAND = {
   label: 'Thicken',
   hint: 'Use features.command inside proposals.propose for Studio approval. The body copies the source at the reviewed revision.',
   selection: 'Use the ID of one visible whole Direct surface in values and pass direct_revision from query.summary as expectedRevision.',
-  values: { surface: 'Direct surface ID', t: 'positive thickness in mm', side: 'normal (default), reverse, or both' },
+  values: { surface: 'Direct surface ID', t: 'positive thickness in mm', side: 'normal (default), reverse, or both', mode: 'sampled (default) or exact-planar for a whole affine sheet' },
 };
 
 export const DIRECT_SNAPSHOT_APPROVAL = 'Direct surface snapshot';
@@ -22,14 +22,15 @@ export async function proposeDirectThickenCommand(state: ChatState, args: Record
 
   const { expectedRevision, values } = args;
   if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{64}$/.test(expectedRevision)
-    || !isObj(values) || Object.keys(values).some(key => key !== 'surface' && key !== 't' && key !== 'side')
+    || !isObj(values) || Object.keys(values).some(key => !['surface', 't', 'side', 'mode'].includes(key))
     || typeof values.surface !== 'string' || !values.surface || typeof values.t !== 'number' || !Number.isFinite(values.t)
     || values.t <= 0 || values.t > 10000
     || (values.side !== undefined && values.side !== 'normal' && values.side !== 'reverse' && values.side !== 'both')
+    || (values.mode !== undefined && values.mode !== 'sampled' && values.mode !== 'exact-planar')
     || args.faces !== undefined || args.edges !== undefined || args.bodies !== undefined || args.point !== undefined)
-    return fail(state, 'Use values.surface, positive thickness values.t in mm, optional values.side, and direct_revision from query.summary as expectedRevision.', { code: 'DIRECT_THICKEN_INPUT' });
+    return fail(state, 'Use values.surface, positive thickness values.t in mm, optional values.side and values.mode, and direct_revision from query.summary as expectedRevision.', { code: 'DIRECT_THICKEN_INPUT' });
 
-  const { doc, bodies } = state, { surface, t, side } = values;
+  const { doc, bodies } = state, { surface, t, side = 'normal', mode = 'sampled' } = values;
   const revision = directInspectionRevision(doc);
   if (revision !== expectedRevision)
     return fail(state, 'The Direct inputs changed. Read query.summary again and make a new proposal.', { code: 'DIRECT_THICKEN_STALE', revision });
@@ -42,9 +43,9 @@ export async function proposeDirectThickenCommand(state: ChatState, args: Record
   let next;
   try {
     next = thickenCommand.build!({ doc, bodies, direct: [surface], selection: { bodies: [], faces: [], edges: [] } },
-      { t, side: side ?? 'normal' });
+      { t, side, mode });
   } catch (error) {
     return fail(state, error instanceof Error ? error.message : 'The source surface could not be copied.', { code: 'DIRECT_THICKEN_SOURCE' });
   }
-  return accept(state, next, evaluate, options, `Thicken ${matches[0].name}`, { source: surface, thickness: t, side: side ?? 'normal' });
+  return accept(state, next, evaluate, options, `Thicken ${matches[0].name}`, { source: surface, thickness: t, side, mode });
 }

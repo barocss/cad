@@ -12,8 +12,9 @@ export const thickenCommand: Command = {
   fields: () => [
     { key: 't', label: 'Thickness', kind: 'mm', min: 0, max: 10000 },
     { key: 'side', label: 'Side', kind: 'choice', options: [{ value: 'normal', label: 'Normal' }, { value: 'reverse', label: 'Reverse' }, { value: 'both', label: 'Both' }] },
+    { key: 'mode', label: 'Geometry', kind: 'choice', options: [{ value: 'sampled', label: 'Sampled' }, { value: 'exact-planar', label: 'Exact planar' }] },
   ],
-  defaults: () => ({ t: 2, side: 'normal' }),
+  defaults: () => ({ t: 2, side: 'normal', mode: 'sampled' }),
   steps: ctx => [{ label: 'Copied source', text: thickenSnapshot(ctx).name, done: true }],
-  build: (ctx, values) => withNode(ctx.doc, thickenNode(thickenSnapshot(ctx), Number(values.t), String(values.side ?? 'normal'))),
+  build: (ctx, values) => withNode(ctx.doc, thickenNode(thickenSnapshot(ctx), Number(values.t), String(values.side ?? 'normal'), String(values.mode ?? 'sampled'))),
 };

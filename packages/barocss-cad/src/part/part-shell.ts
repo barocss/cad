@@ -22,6 +22,7 @@ import { type MassProperties } from '../brep/solid-mass.js';
 import { cross, dot, len, sub, unit } from '../core/vec3.js';
 import { type Point } from '../types.js';
 import { thickenSolid } from '../brep/thicken-solid.js';
+import { isThickenPlanarError, thickenPlanarSolid } from '../brep/thicken-planar.js';
 import { validateSurface } from '../core/math.js';
 import type { CadPartDim, Solid, CadPartFeature, Result, Tools, PartHelpers, Part, Finish, SweepStep } from './part-model.js';
 import { CadPartError, CadPartLimits, affine, boolean, brepOf, facetTriangles, movedMass, profiling, sweepBrep } from './part-model.js';
@@ -35,14 +36,19 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
   const one = (s: Solid): Result => ({ kind: 'solid', parts: [{ solid: s }] });
   switch (f.kind) {
     case 'thicken': {
-      const g = f.surface as Record<string, unknown>, t = dim(f.thickness as CadPartDim, 'thickness', true), side = f.side ?? 'normal';
+      const g = f.surface as Record<string, unknown>, t = dim(f.thickness as CadPartDim, 'thickness', true), side = f.side ?? 'normal', mode = f.mode === undefined ? 'sampled' : f.mode;
       if (!isRecord(g)) fail('INPUT', 'surface must be a NURBS surface { degreeU, degreeV, knotsU, knotsV, controlPoints, weights }');
       if (side !== 'normal' && side !== 'reverse' && side !== 'both') fail('INPUT', 'side must be normal, reverse or both');
+      if (mode !== 'sampled' && mode !== 'exact-planar') fail('INPUT', 'Thicken mode must be sampled or exact-planar');
       const surface = { kind: 'surface' as const, id: 'surface', degreeU: g.degreeU as number, degreeV: g.degreeV as number, knotsU: g.knotsU as number[], knotsV: g.knotsV as number[], controlPoints: g.controlPoints as Point[][], weights: g.weights as number[][] };
       try { validateSurface(surface); } catch (cause) { fail('INPUT', `surface: ${cause instanceof Error ? cause.message : String(cause)}`); }
       return () => {
-        try { return one({ kind: 'brep', brep: thickenSolid({ id: at, surface, thickness: t, side: side as 'normal' }) }); }
+        try {
+          const request = { id: at, surface, thickness: t, side: side as 'normal' | 'reverse' | 'both' };
+          return one({ kind: 'brep', brep: mode === 'exact-planar' ? thickenPlanarSolid(request) : thickenSolid(request) });
+        }
         catch (cause) {
+          if (isThickenPlanarError(cause)) fail('CAPABILITY', cause.message);
           const m = cause instanceof BrepError ? /CAPABILITY: shell: (.*)$/s.exec(cause.message) : null;
           if (m) fail('CAPABILITY', m[1]);
           if (cause instanceof RangeError || isMeshBrepError(cause)) fail('GEOMETRY', cause.message);

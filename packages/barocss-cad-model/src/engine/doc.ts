@@ -1,7 +1,7 @@
 import type { RevolveAxisRef } from './revolveAxis';
 import { splitOutputNodesProblem } from './splitOutput';
 import type { PocketFloorBinding } from './pocketFloor';
-import type { FillFeaturePatternRegion, CurveFeaturePatternPath } from '@barocss/cad/api';
+import type { FillFeaturePatternRegion, CurveFeaturePatternPath, ThickenOptions } from '@barocss/cad/api';
 import { flattenShopView, resolveShopTree } from './shopRows';
 import { refusal } from './refusal';
 import { CadNumericPolicy, CadPartLimits } from '@barocss/cad';
@@ -992,7 +992,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
    * or hold, never retarget (references.ts). Thickening waits on exact thicken (#2258), so none is stored.
    */
   | { kind: 'band-surface'; version: 1; a: BandSide; b: BandSide; flip?: true }
-  | { kind: 'thicken'; name: string; surface: { degreeU: number; degreeV: number; knotsU: number[]; knotsV: number[]; controlPoints: [number, number, number][][]; weights: number[][] }; thickness: Dim; side?: 'normal' | 'reverse' | 'both' }
+  | { kind: 'thicken'; name: string; surface: { degreeU: number; degreeV: number; knotsU: number[]; knotsV: number[]; controlPoints: [number, number, number][][]; weights: number[][] }; thickness: Dim; side?: 'normal' | 'reverse' | 'both'; mode?: ThickenOptions['mode'] }
   /**
    * An involute spur gear (R6a, issue #2167, D53–D54): module, teeth and face width, standing on z `from` about
    * `center`, turned `rotation` degrees; 20°, profile shift x from −0.5 to 1 (R6a.5a, D57). `generator` the version that made it
@@ -1733,7 +1733,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'full-round': return `Full round × ${node.faces.length}`;
     case 'face-fillet': return `Face fillet ${n(node.radius)}`;
     case 'face-thread': return (node.diameter !== undefined ? `Thread M${n(node.diameter)}×${n(node.pitch)}` : `Thread ×${n(node.pitch)}`) + (node.hand === 'left' ? ' LH' : '');
-    case 'thicken': return `Thicken ${node.name} ${n(node.thickness)}`;
+    case 'thicken': return `${node.mode === 'exact-planar' ? 'Exact planar Thicken' : 'Thicken'} ${node.name} ${n(node.thickness)}`;
     case 'sheet-base': return `Sheet plate T${n(node.thickness)}`;
     case 'sheet-flange': return `Flange ${n(node.length)} · ${fmt(node.angle ?? 90)}°`;
     case 'frame-member': return `Member ${sectionLabel(node.section, n)} · ${memberLength(node)}`;

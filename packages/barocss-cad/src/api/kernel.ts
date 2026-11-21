@@ -49,7 +49,7 @@ function featuresOf(doc: CadPartDocument, spec: FeatureSpec, body: string | null
     case 'sew':
       return [{ id: nextId(doc, 'sew'), kind: 'sew', surfaces: spec.surfaces, ...(spec.values.tol ? { tolerance: spec.values.tol } : {}) }];
     case 'thicken':
-      return [{ id: nextId(doc, 'thicken'), kind: 'thicken', surface: spec.surface, thickness: spec.values.t, ...(spec.values.side ? { side: spec.values.side } : {}) }];
+      return [{ id: nextId(doc, 'thicken'), kind: 'thicken', surface: spec.surface, thickness: spec.values.t, ...(spec.values.side ? { side: spec.values.side } : {}), ...(spec.values.mode ? { mode: spec.values.mode } : {}) }];
     case 'revolve': {
       const sketch = nextId(doc, 'sketch'), { axis, deg } = spec.values;
       return [{ id: sketch, kind: 'sketch', ...spec.sketch } as CadPartFeature, { id: nextId(doc, 'revolve'), kind: 'revolve', sketch, axis: { origin: [0, 0], direction: axis }, angle: deg }];

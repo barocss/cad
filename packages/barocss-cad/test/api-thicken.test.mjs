@@ -37,6 +37,39 @@ test('public thicken: three sides make one valid planar body with independent ma
     assert.deepEqual(accepted.doc.features[0], feature);
   }
   assert.deepEqual(thickenSpec(plane(), { t: 2 }), thickenSpec(plane(), { t: 2, side: 'normal' }));
+  assert.deepEqual(thickenSpec(plane(), { t: 2 }), thickenSpec(plane(), { t: 2, mode: 'sampled' }));
+});
+
+test('opt-in exact planar Thicken keeps six native faces on a tilted and skew affine sheet', () => {
+  const raw = { ...plane(), controlPoints: [[[10, -6, 3], [16, 24, 11]], [[34, -6, 35], [40, 24, 43]]], weights: [[2, 2], [2, 2]] };
+  const normal = [-0.8, 0, 0.6], t = 4;
+  for (const [side, lo, hi] of [['normal', 0, 4], ['reverse', -4, 0], ['both', -2, 2]]) {
+    const made = part().thicken(raw, { t, side, mode: 'exact-planar' });
+    const doc = made.doc, { brep } = outputOf(evaluateCadPart(doc), 'thicken1');
+    assert.equal(doc.features[0].mode, 'exact-planar');
+    assert.equal(checkBrep(brep, { strict: true }).valid, true);
+    assert.deepEqual([brep.bodies[0].kind, brep.vertices.length, brep.edges.length, brep.faces.length], ['solid', 8, 12, 6]);
+    assert.deepEqual(brep.faces.map(face => face.name).sort(), ['normal', 'reverse', 'u-max', 'u-min', 'v-max', 'v-min'].map(face => 'thicken1.' + face));
+    assert.ok(brep.faces.every(face => face.surface.kind === 'surface' && face.surface.degreeU === 1 && face.surface.degreeV === 1));
+    const mass = made.mass({ density: 1 });
+    assert.ok(Math.abs(mass.volume - 40 * 30 * t) < 1e-8);
+    const offset = (lo + hi) / 2;
+    for (const [axis, expected] of [25, 9, 23].entries())
+      assert.ok(Math.abs(mass.centroid[axis] - expected - offset * normal[axis]) < 1e-8);
+    for (const point of raw.controlPoints.flat()) for (const distance of [lo, hi]) {
+      const expected = point.map((value, axis) => value + normal[axis] * distance);
+      assert.ok(brep.vertices.some(vertex => vertex.point.every((value, axis) => Math.abs(value - expected[axis]) < 1e-10)));
+    }
+  }
+});
+
+test('exact planar admission refuses a real non-affine coefficient and unequal weights', () => {
+  const small = plane();
+  small.controlPoints[1][1][2] = 3 + Number.EPSILON * 2;
+  refused(() => part().thicken(small, { t: 2, mode: 'exact-planar' }), 'CAPABILITY', 'evaluate');
+  const rational = plane();
+  rational.weights[1][1] = 2;
+  refused(() => part().thicken(rational, { t: 2, mode: 'exact-planar' }), 'CAPABILITY', 'evaluate');
 });
 
 test('public thicken: exact six-field plain dense snapshot refuses metadata, accessors, wrappers and malformed geometry', () => {

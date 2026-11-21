@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1629: [Exact planar Thicken for an affine sheet](notes/exact-planar-thicken-2026-11-22/README.md), #11. Verify the six native faces, independent mass and thickness, preserved sampled names, and Studio edit and native Open.
 - D1628: [Propose Thicken from a visible Direct surface](notes/agent-direct-thicken-proposal-2026-11-22/README.md), #322 and #11. Verify an independently measured solid from a revision-pinned planar Ruled sheet through Studio approval and native Open.
 - D1627: [Review a pending Direct Ruled proposal as an image](notes/agent-direct-proposal-image-2026-11-22/README.md), #324 and #322. Verify the private candidate, stale refusal and byte-identical image after Studio approval and native Open.
 - D1626: [Review Direct geometry visually through the local Agent](notes/agent-direct-visual-review-2026-11-22/README.md), #324 and #322. Match the shared geometry in Studio and the pinned MCP image, then refuse an older pin after a live rail edit.
