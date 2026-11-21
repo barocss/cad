@@ -186,7 +186,7 @@ export class EngineClient {
 
   latest<T>(lane: string, asked: { revision: number; source: string }, request: () => Promise<T>): Promise<LaneReply<T>> { return this.state === 'disposed' ? Promise.resolve({ stale: true, lane, revision: asked.revision }) : this.lanes.run(lane, asked, request); }
 
-  evaluate(doc: StudioDoc, revision: number): Promise<EvalResult | null> {
+  evaluate(doc: StudioDoc, revision: number, screwWinding?: number): Promise<EvalResult | null> {
     const id = this.next++; this.latestEval = id;
     return new Promise(resolve => {
       this.pending.set(id, data => { const r = (data as { result: EvalResult }).result; remembered(doc, r); resolve(id === this.latestEval || (data as { cancelledEvaluation?: number }).cancelledEvaluation === id ? r : null); });
@@ -194,7 +194,7 @@ export class EngineClient {
       this.post(id, () => {
         const nativeSource = { epoch: this.epoch, requestId: id, revision, slot: 'evaluate' };
         this.nativeSources.set(id, nativeSource); this.massSource = nativeSource;
-        return { type: 'evaluate', id, doc: this.wire!.pack(doc), revision, nativeSource };
+        return { type: 'evaluate', id, doc: this.wire!.pack(doc), revision, nativeSource, screwWinding };
       });
     });
   }

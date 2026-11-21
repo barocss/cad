@@ -13,6 +13,7 @@ import { canonical } from '@barocss/cad-model/util/revision';
 import { isFilletRadiusModeChange, proveFilletRadiusModeChange } from './filletRadiusModeHistory';
 import { isFilletSectionChange, proveFilletSectionChange } from './filletSectionHistory';
 import { isShellOpeningChange, proveShellOpeningChange } from './shellOpeningHistory';
+import { smoothScrewAngleField } from '@barocss/cad-model/app/smoothLoftTurn';
 import { holeResultPieces } from '../app/holeResultPieces';
 import type { StudioNotice } from '../app/studioNotice';
 import type { ComponentProps } from 'react';
@@ -316,8 +317,10 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
           request = nextRevision();
         } catch { if (current()) return failure; return; }
       }
-      const reply = await engine.evaluate(next, request);
-      if (!reply || !current() || (pairedPatternHoleChanged || heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeRadiusSourceChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged || flangeSourceSizeChanged) && reply.revision !== request) return;
+      const windingField = smoothScrewAngleField(doc.nodes, editNode);
+      const windingChanged = windingField && windingField.get(doc.nodes) !== windingField.get(next.nodes);
+      const reply = windingChanged ? await engine.evaluate(next, request, editNode) : await engine.evaluate(next, request);
+      if (!reply || !current() || (windingChanged || pairedPatternHoleChanged || heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeRadiusSourceChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged || flangeSourceSizeChanged) && reply.revision !== request) return;
       if (reply.ok) {
         if (!resize) {
           const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated

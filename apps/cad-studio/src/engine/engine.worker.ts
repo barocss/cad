@@ -29,7 +29,7 @@ function stepReply(doc: StudioDoc, name: string, meshes?: 'auto' | 'tessellated'
 }
 
 export type WorkerRequest =
-  | { type: 'evaluate'; id: number; doc: WireDoc; revision: number; nativeSource: NativeMassSource }
+  | { type: 'evaluate'; id: number; doc: WireDoc; revision: number; nativeSource: NativeMassSource; screwWinding?: number }
   | { type: 'part'; id: number; doc: WireDoc; revision: number; slot?: PartSlot; nativeSource: NativeMassSource }
   /** A part's bodies' volumes, no meshes (a clash probe, PERF3 B12). */
   | { type: 'volumes'; id: number; doc: WireDoc; intersection: number }
@@ -202,7 +202,7 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
       else if (request.type === 'part') result = evaluatePart(request.doc, request.revision, 8, request.slot);
       else if (request.type === 'preview' || request.type === 'section') {
         result = evaluatePreview(request.doc, request.revision, 8, request.type, request.type === 'preview' ? request.cutFeature : undefined, request.type === 'preview' ? request.flangeFeature : undefined);
-      } else result = evaluateDoc(request.doc, request.revision, 8, true);
+      } else result = evaluateDoc(request.doc, request.revision, 8, true, request.screwWinding);
     } finally { deferMasses(false); }
     const out = meshesOut.pack(replySlot(request), result);
     const nativeMass = 'nativeSource' in request && result.ok ? result.bodies.map(b => nativeMassEnvelope(request.nativeSource, b)) : [];

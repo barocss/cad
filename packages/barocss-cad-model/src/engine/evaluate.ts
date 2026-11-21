@@ -11,14 +11,14 @@ import { faceTableFrom, rememberFaceTable } from '../assembly/faces';
 import { fitNotes } from './fits';
 import { boughtOf, elementOf, type BodyElement } from './elements';
 import type { FaceTable } from '../assembly/mates';
-import { BarocssError, massPropertiesOf, reevaluate, exportStl, type CadPartOutput, brepSurfaceArea, cutPiece, evaluateCadPart, transformBrep, FACET_PREVIEW_TRIANGLES, type Brep, type CadPartFeatureProfile, type CadPartSnapshot, type FlatPattern, type GearPlacement, type RackPlacement, type SubdSummary, type CutPiece, exportStep } from '@barocss/cad';
+import { BarocssError, checkOutput, massPropertiesOf, reevaluate, exportStl, type CadPartOutput, brepSurfaceArea, cutPiece, evaluateCadPart, transformBrep, FACET_PREVIEW_TRIANGLES, type Brep, type CadPartFeatureProfile, type CadPartSnapshot, type FlatPattern, type GearPlacement, type RackPlacement, type SubdSummary, type CutPiece, exportStep } from '@barocss/cad';
 import { bodyMesh, canonicalSweepCapSamples, withoutNativeFaces, type DisplayEdge, type DisplayMesh } from './mesh';
 import { cylinderDisplayMesh } from './cylinderDisplay';
 import { arcSweepDisplayMesh } from './arcSweepDisplay';
 import { arcSweepMixedDisplayMesh, mixedSweepFilletExterior } from './arcSweepMixedDisplay';
 import { bandRailDisplayMesh } from './bandRailDisplay';
 import { loftDisplayMesh, smoothTurnDisplayMesh } from './loftDisplay';
-import { hasExternalScrewSections, hasSmoothTurnSections } from '../app/smoothLoftTurn';
+import { hasExternalScrewSections, hasSmoothTurnSections, smoothScrewWindingRule } from '../app/smoothLoftTurn';
 import { lumpTouches } from './lumps';
 import { friendlyCause, type FriendlyError } from './errors';
 import { bodyKeyOf, partSnapshot } from './part';
@@ -341,12 +341,20 @@ function refineSweepFillet(base: DisplayMesh, output: CadPartOutput, doc: Studio
 }
 /** The document with its parameter-bound skeletons solved for its parameters now (O140; the same document when none moved); their refusal thrown. */
 function skeletonsNow(doc: StudioDoc): StudioDoc { return resolveSkeletons(doc).doc; }
-export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refineDisplay = false): EvalResult {
+export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refineDisplay = false, screwWinding?: number): EvalResult {
   const shopRows = provenanceOfTree(doc);
   const t0 = performance.now();
   try {
     doc = skeletonsNow(doc);
-    const snapshot = snapshotOf(doc); last = snapshot;
+    const snapshot = snapshotOf(doc);
+    if (screwWinding !== undefined) {
+      const feature = featureId(doc.nodes, screwWinding);
+      const output = snapshot.outputs.find(candidate => candidate.feature === feature && candidate.brep.bodies.length === 1
+        && candidate.brep.bodies[0].kind === 'solid' && candidate.brep.shells.length === 1 && candidate.brep.shells[0].closed);
+      if (!smoothScrewWindingRule(doc.nodes, screwWinding) || !output || !checkOutput(output).valid)
+        throw new BarocssError('GEOMETRY', `The Screw winding did not produce a valid external-axis solid for ${feature}.`, 'evaluate', { feature });
+    }
+    last = snapshot;
     const result = partResult(doc, snapshot, revision, quality, shopRows, t0);
     if (refineDisplay && quality === 8 && result.bodies.length === 1 && snapshot.outputs.length === 1) {
       const body = result.bodies[0], node = body.ref && doc.nodes[body.ref.node];

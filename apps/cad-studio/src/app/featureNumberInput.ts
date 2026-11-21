@@ -4,10 +4,10 @@ import type { ModelNode } from '@barocss/cad-model/engine/doc';
 import { CadNumericPolicy, CadPartLimits } from '@barocss/cad';
 import { isSketchAnchoredCut } from '@barocss/cad-model/app/editFields';
 import { smoothLoftHeightKey } from '@barocss/cad-model/app/smoothLoftHeight';
-import { smoothScrewPitchAdvance, smoothScrewPitchKey, smoothScrewTurns, smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '@barocss/cad-model/app/smoothLoftTurn';
+import { smoothScrewAngleKey, smoothScrewWindingRule, smoothScrewPitchAdvance, smoothScrewPitchKey, smoothScrewTurns, smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '@barocss/cad-model/app/smoothLoftTurn';
 
 export type FeatureNumberRule = 'pipe-angle' | 'nonzero' | 'thread-length' | 'nonnegative-mm' | 'nonnegative' | 'positive'
-  | 'align-gap' | 'open-unit' | 'smooth-turn-width' | 'draft-angle' | 'scale-factor' | { signedAngleLimit: number } | { screwTurns: number };
+  | 'align-gap' | 'open-unit' | 'smooth-turn-width' | 'draft-angle' | 'scale-factor' | { signedAngleLimit: number } | { screwTurns: number } | { screwWinding: NonNullable<ReturnType<typeof smoothScrewWindingRule>> };
 
 export function commandNumberRule(command: string, key: string, operation?: unknown): FeatureNumberRule | undefined {
   if (command === 'face-thread') {
@@ -35,6 +35,10 @@ export function historyNumberRule(nodes: readonly ModelNode[], index: number, ke
     const screwTurns = smoothScrewTurns(nodes, index);
     if (screwTurns) return { screwTurns };
   }
+  if (node?.kind === 'loft' && key === smoothScrewAngleKey) {
+    const screwWinding = smoothScrewWindingRule(nodes, index);
+    if (screwWinding) return { screwWinding };
+  }
   if (node?.kind === 'loft' && key === smoothLoftHeightKey) return 'positive';
   if (node?.kind === 'loft' && key === smoothTurnWidthKey) return 'smooth-turn-width';
   if (node?.kind === 'loft' && key === smoothTurnAngleKey) return { signedAngleLimit: smoothTurnAngleLimit(node.sections.length) };
@@ -55,9 +59,11 @@ export function historyNumberRule(nodes: readonly ModelNode[], index: number, ke
 export function featureNumberInvalid(value: string | number, rule: FeatureNumberRule): boolean {
   const number = Number(value);
   if (!Number.isFinite(number)) return true;
-  if (typeof rule === 'object') return 'screwTurns' in rule
-    ? smoothScrewPitchAdvance(number, rule.screwTurns) === undefined
-    : Math.abs(number) > rule.signedAngleLimit;
+  if (typeof rule === 'object') {
+    if ('screwTurns' in rule) return smoothScrewPitchAdvance(number, rule.screwTurns) === undefined;
+    if ('screwWinding' in rule) return !rule.screwWinding.accepts(number);
+    return Math.abs(number) > rule.signedAngleLimit;
+  }
   if (rule === 'pipe-angle') return number <= 0 || number > 180;
   if (rule === 'scale-factor') return number <= 0 || number > 1000;
   if (rule === 'draft-angle') return number === 0 || Math.abs(number) >= 45;
@@ -69,9 +75,11 @@ export function featureNumberInvalid(value: string | number, rule: FeatureNumber
 }
 
 export function featureNumberRange(rule: FeatureNumberRule): string {
-  if (typeof rule === 'object') return 'screwTurns' in rule
-    ? `Positive pitch within the model range, with an axial advance above ${CadNumericPolicy.linearTolerance} mm`
-    : `From −${rule.signedAngleLimit}° to +${rule.signedAngleLimit}°`;
+  if (typeof rule === 'object') {
+    if ('screwWinding' in rule) return `Nonzero turn from −${rule.screwWinding.limit}° to +${rule.screwWinding.limit}° within the model range`;
+    if ('screwTurns' in rule) return `Positive pitch within the model range, with an axial advance above ${CadNumericPolicy.linearTolerance} mm`;
+    return `From −${rule.signedAngleLimit}° to +${rule.signedAngleLimit}°`;
+  }
   if (rule === 'pipe-angle') return 'Greater than 0° and at most 180°';
   if (rule === 'scale-factor') return 'Unitless factor · greater than 0 and at most 1000';
   if (rule === 'draft-angle') return 'Greater than −45° and less than 45°, excluding 0°';
@@ -90,7 +98,8 @@ export function featureNumberBounds(rule: FeatureNumberRule | undefined): { min?
       min: CadNumericPolicy.linearTolerance / rule.screwTurns,
       max: CadNumericPolicy.coordinateAbs / Math.max(1, rule.screwTurns),
     };
-    return { min: -rule.signedAngleLimit, max: rule.signedAngleLimit };
+    const limit = 'screwWinding' in rule ? rule.screwWinding.limit : rule.signedAngleLimit;
+    return { min: -limit, max: limit };
   }
   if (rule === 'pipe-angle') return { min: 0, max: 180 };
   if (rule === 'scale-factor') return { min: 0, max: 1000 };

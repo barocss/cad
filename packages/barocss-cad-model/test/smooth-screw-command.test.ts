@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { CadNumericPolicy, brepMassProperties, checkBrep, evaluateCurve } from '@barocss/cad';
+import { CadNumericPolicy, brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1 } from '@barocss/cad';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
-import { smoothScrewPitchField } from '../src/app/smoothLoftTurn';
+import { smoothScrewAngleField, smoothScrewPitchField, smoothScrewWindingRule } from '../src/app/smoothLoftTurn';
 import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { emptyDoc, withNode } from '../src/engine/doc';
@@ -130,6 +130,87 @@ test('Smooth Screw History changes pitch and preserves the tilted axis, signed w
     assert.equal(smoothScrewPitchField(followed.nodes, index), undefined);
     assert.deepEqual(pitch.set(followed.nodes, 56), followed.nodes);
   }
+});
+
+test('Screw winding edits keep pitch, tilted axis, section count and native identities', async () => {
+  for (const [initialAngle, angle] of [[450, -360], [-180, 180]]) {
+    const doc = command.build!(ctx, { ...input, angle: initialAngle }), index = doc.nodes.length - 1;
+    const loft = doc.nodes[index];
+    assert.ok(loft.kind === 'loft');
+    const winding = smoothScrewAngleField(doc.nodes, index);
+    assert.ok(winding?.kind === 'number');
+    assert.equal(winding.get(doc.nodes), initialAngle);
+    const rule = smoothScrewWindingRule(doc.nodes, index);
+    assert.ok(rule);
+    assert.ok(rule.accepts(angle));
+    for (const value of [NaN, Infinity, 0, 1e-9, Math.abs(initialAngle) + 1])
+      assert.ok(!rule.accepts(value) && winding.set(doc.nodes, value).every((node, i) => node === doc.nodes[i]));
+    const edited = { ...doc, nodes: winding.set(doc.nodes, angle) };
+    const editedLoft = edited.nodes[index];
+    assert.ok(editedLoft.kind === 'loft');
+    assert.equal(winding.get(edited.nodes), angle);
+    const pitch = smoothScrewPitchField(edited.nodes, index);
+    assert.ok(pitch?.kind === 'number');
+    assert.ok(Math.abs(pitch.get(edited.nodes) - input.pitch) < 1e-9);
+    assert.deepEqual(edited.nodes.map(node => node.id), doc.nodes.map(node => node.id));
+    assert.deepEqual(editedLoft.sections.map(section => section.sketch), loft.sections.map(section => section.sketch));
+    assert.equal(editedLoft.sections.at(-1)?.z, input.pitch * Math.abs(angle) / 360);
+    assert.ok(evaluateDoc(edited, 2, 8, true, index).ok);
+    const [{ brep, key }] = partBreps(edited), [before] = partBreps(doc);
+    assert.equal(key, before.key);
+    assert.ok(checkBrep(brep, { strict: true }).valid);
+    for (const kind of ['bodies', 'shells', 'faces', 'loops', 'coedges', 'edges', 'vertices'] as const)
+      assert.deepEqual(brep[kind].map(item => item.id), before.brep[kind].map(item => item.id));
+    const rails = brep.edges.filter(edge => /^c[0-3]$/.test(edge.id));
+    const localCorners = [[12, -3], [24, -3], [24, 5], [12, 5]];
+    for (const [rail, { curve }] of rails.entries()) {
+      const [u0, v0] = localCorners[rail];
+      const u = (x: number) => x - 13;
+      const v = (y: number, z: number) => .8 * (y + 17.8) - .6 * (z - 23.6);
+      let cumulative = 0, previous = [u0, v0];
+      for (let i = 0; i <= 120; i++) {
+        const { point: [x, y, z], derivative: [dx, dy, dz] } = evaluateCurveD1(curve, i / 120);
+        const a = u(x), b = v(y, z), dv = .8 * dy - .6 * dz;
+        assert.ok(Math.sign(angle) * (a * dv - b * dx) > 0);
+        cumulative += Math.atan2(previous[0] * b - previous[1] * a, previous[0] * a + previous[1] * b);
+        previous = [a, b];
+      }
+      assert.ok(Math.abs(cumulative * 180 / Math.PI - angle) < 1e-8);
+    }
+    const reopened = await readStudioFile(encodeStudioFile(edited));
+    assert.ok('doc' in reopened);
+    assert.deepEqual(reopened.doc, edited);
+    assert.deepEqual(partBreps(reopened.doc)[0].brep, brep);
+  }
+});
+
+test('One Screw draft accepts pitch and non-integer winding edits in either order', () => {
+  const doc = command.build!(ctx, { ...input, angle: 450 });
+  const index = doc.nodes.length - 1;
+  const pitch = smoothScrewPitchField(doc.nodes, index), winding = smoothScrewAngleField(doc.nodes, index);
+  assert.ok(pitch?.kind === 'number' && winding?.kind === 'number');
+  const angle = -271.234567890123;
+  for (const nodes of [
+    pitch.set(winding.set(doc.nodes, angle), 56),
+    winding.set(pitch.set(doc.nodes, 56), angle),
+  ]) {
+    assert.ok(Math.abs(winding.get(nodes) - angle) < 1e-9);
+    assert.ok(Math.abs(pitch.get(nodes) - 56) < 1e-9);
+    assert.ok(evaluateDoc({ ...doc, nodes }, 2, 8, true, index).ok);
+  }
+});
+
+test('Screw winding rejects legacy angles whose centroid shift cannot prove the external axis', () => {
+  const ambiguous = command.build!(ctx, { ...input, pitch: 10000, angle: 1e-8 });
+  const index = ambiguous.nodes.length - 1;
+  assert.equal(smoothScrewAngleField(ambiguous.nodes, index), undefined);
+  assert.equal(evaluateDoc(ambiguous, 1, 8, false, index).ok, false);
+  const measurable = command.build!(ctx, { ...input, pitch: 10000, angle: 0.001 });
+  const field = smoothScrewAngleField(measurable.nodes, index);
+  assert.ok(field?.kind === 'number');
+  const edited = { ...measurable, nodes: field.set(measurable.nodes, -.001) };
+  assert.ok(field.get(edited.nodes) < 0);
+  assert.ok(evaluateDoc(edited, 2, 8, false, index).ok);
 });
 
 test('Smooth Screw rejects nonexterior axes, malformed values and ambiguous source selection', () => {

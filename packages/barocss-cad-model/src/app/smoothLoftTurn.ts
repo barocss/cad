@@ -8,6 +8,7 @@ type Point = [number, number];
 export const smoothTurnAngleKey = 'smoothTurnAngle';
 export const smoothTurnWidthKey = 'smoothTurnWidth';
 export const smoothScrewPitchKey = 'smoothScrewPitch';
+export const smoothScrewAngleKey = 'smoothScrewAngle';
 export const smoothTurnWidthBounds = { min: CadNumericPolicy.linearTolerance, max: CadNumericPolicy.coordinateAbs };
 export const smoothTurnWidthInvalid = (value: number) =>
   !Number.isFinite(value) || value <= smoothTurnWidthBounds.min || value > smoothTurnWidthBounds.max;
@@ -99,7 +100,7 @@ function turnSections(nodes: readonly ModelNode[], index: number) {
   const external = !matches(centre);
   if (external && (triangular || rectangularAxisClearance(first[0], first[2], externalAxis) <= CadNumericPolicy.linearTolerance
     || !matches(externalAxis))) return;
-  return { start, last, first, angle, radians, limit, triangular, external };
+  return { start, last, first, rows, height, angle, radians, limit, triangular, external };
 }
 
 export function hasSmoothTurnSections(nodes: readonly ModelNode[], index: number): boolean {
@@ -152,8 +153,8 @@ function savedTurn(nodes: readonly ModelNode[], index: number) {
   if (turn && !turn.external) return turn;
 }
 
-function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnType<typeof savedTurn>>, first: Point[], rotation: (fraction: number) => number) {
-  const centre = turn.triangular ? triangleTurnCentre(first) : undefined;
+function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnType<typeof turnSections>>, first: Point[], rotation: (fraction: number) => number) {
+  const centre: Point | undefined = turn.external ? [0, 0] : turn.triangular ? triangleTurnCentre(first) : undefined;
   return nodes.map((node, i) => {
     const station = i - turn.start;
     if (station < 0 || station > turn.last || (station === 0 && first === turn.first)
@@ -162,6 +163,60 @@ function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnT
     const points = station === 0 ? first : centre ? rotateTurnPoints(first, centre, radians) : rotateTurnCorners(first, radians);
     return { ...node, segments: points.map(start => ({ kind: 'line' as const, start })) };
   });
+}
+
+function savedScrewWinding(nodes: readonly ModelNode[], index: number) {
+  if (index !== nodes.length - 1) return;
+  const turn = turnSections(nodes, index);
+  if (!turn?.external || turn.angle === 0) return;
+  const [[left, bottom], , [right, top]] = turn.first;
+  const tol = Math.max(CadNumericPolicy.linearTolerance,
+    CadNumericPolicy.relativeLinearTolerance * Math.max(right - left, top - bottom));
+  if (rectangularAxisClearance(turn.first[0], turn.first[2], [0, 0]) <= tol) return;
+  const centre = (row: readonly Point[]) => row.reduce(([x, y], [u, v]): Point => [x + u / 4, y + v / 4], [0, 0] as Point);
+  const [x, y] = centre(turn.first);
+  // The native fitter tries the centered turn first. A centered turn cannot
+  // move its section centroid by more than its per-corner fit tolerance.
+  if (turn.rows.some(row => {
+    const [u, v] = centre(row);
+    return Math.hypot(u - x, v - y) > 4 * tol;
+  })) return turn;
+}
+
+function screwWindingNodes(nodes: readonly ModelNode[], index: number, turn: NonNullable<ReturnType<typeof savedScrewWinding>>, angle: number) {
+  const magnitude = Math.abs(angle);
+  if (!(magnitude > 0 && magnitude <= turn.limit)) return;
+  const loft = nodes[index];
+  if (loft?.kind !== 'loft') return;
+  const heightField = smoothLoftHeightField(loft, index);
+  const originalMagnitude = Math.abs(turn.angle);
+  const height = turn.height * (magnitude / originalMagnitude);
+  // The recovered angle is rounded for History. Keep a roundoff margin only
+  // when inferring the existing pitch. Candidate height still uses hard limits.
+  if (turn.height > CadNumericPolicy.coordinateAbs * (originalMagnitude / 360) * (1 + 1e-11)
+    || height <= CadNumericPolicy.linearTolerance || height > CadNumericPolicy.coordinateAbs
+    || heightField?.kind !== 'number') return;
+  const advanced = magnitude === originalMagnitude ? nodes : heightField.set(nodes, height);
+  const candidate = updateTurnCopies(advanced, turn, turn.first, fraction => angle * fraction * (Math.PI / 180));
+  const measured = savedScrewWinding(candidate, index)?.angle;
+  if (measured !== undefined && Math.abs(measured / angle - 1) <= 1e-8) return candidate;
+}
+
+export function smoothScrewWindingRule(nodes: readonly ModelNode[], index: number) {
+  const turn = savedScrewWinding(nodes, index);
+  if (turn) return { limit: turn.limit, accepts: (angle: number) => angle === turn.angle || !!screwWindingNodes(nodes, index, turn, angle) };
+}
+
+export function smoothScrewAngleField(nodes: readonly ModelNode[], index: number): EditField | undefined {
+  if (!savedScrewWinding(nodes, index)) return;
+  return {
+    kind: 'number', key: smoothScrewAngleKey, label: 'Turn angle', unit: '°',
+    get: current => savedScrewWinding(current, index)?.angle ?? NaN,
+    set: (current, angle) => {
+      const turn = savedScrewWinding(current, index);
+      return (turn && angle !== turn.angle && screwWindingNodes(current, index, turn, angle)) || [...current];
+    },
+  };
 }
 
 export function smoothLoftTurnAngleField(nodes: readonly ModelNode[], index: number): EditField | undefined {

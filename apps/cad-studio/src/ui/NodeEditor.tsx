@@ -22,7 +22,7 @@ import { convertLinearPatternDistance, type LinearPatternDistanceMode } from '@b
 import type { BearingAssemblyInput } from '@barocss/cad-model/engine/bearingContext';
 import { editFields, isSketchAnchoredCut, type BindableField } from '@barocss/cad-model/app/editFields';
 import { smoothLoftHeightKey } from '@barocss/cad-model/app/smoothLoftHeight';
-import { smoothScrewPitchField } from '@barocss/cad-model/app/smoothLoftTurn';
+import { smoothScrewAngleField, smoothScrewAngleKey, smoothScrewPitchField } from '@barocss/cad-model/app/smoothLoftTurn';
 import { ToolIconButton } from '@/components/ui/tool-button';
 import { Icon } from './atoms';
 import { FillPatternHints } from './FillPatternHints';
@@ -89,10 +89,10 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
   const original = nodes[index], originalLoft = original?.kind === 'loft' ? original : undefined;
   const sharedHolePair = onEditSharedHoleLayout ? sharedHoleLayoutPair(nodes, index) : null;
   const ownRadiusField = oppositeRadiusPreview?.enabled && sameDraftScope ? oppositeFlangeOwnRadiusField(doc, draft, index) : null;
-  const screwPitch = smoothScrewPitchField(draft, index);
+  const screwPitch = smoothScrewPitchField(draft, index), screwAngle = smoothScrewAngleField(draft, index);
   const editable = editFields(draft, index, parameters, bearingAssembly, { doc, originalLoft });
   const fields = [...editable.map(field => screwPitch && field.key === smoothLoftHeightKey ? screwPitch : field),
-    ...(ownRadiusField ? [ownRadiusField] : [])].filter(f => f.kind !== 'number' || !Number.isNaN(f.get(draft)));
+    ...(screwAngle ? [screwAngle] : []), ...(ownRadiusField ? [ownRadiusField] : [])].filter(f => f.kind !== 'number' || !Number.isNaN(f.get(draft)));
   const changeNumber = (field: Extract<(typeof fields)[number], { kind: 'number' }>, text: string) => {
     retireEvaluation();
     setTyped(values => ({ ...values, [field.key]: text }));
@@ -116,7 +116,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
         delete next[clear];
         return next;
       });
-      setDraft(current => field.set(current, value));
+      setDraft(current => field.key === smoothScrewAngleKey && value === field.get(current) ? current : field.set(current, value));
     }
   };
   const node = draft[index];
