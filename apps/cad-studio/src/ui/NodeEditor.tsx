@@ -21,6 +21,8 @@ import type { FaceEndDistanceReply } from '../engine/client';
 import { convertLinearPatternDistance, type LinearPatternDistanceMode } from '@barocss/cad-model/engine/linearSpanPattern';
 import type { BearingAssemblyInput } from '@barocss/cad-model/engine/bearingContext';
 import { editFields, isSketchAnchoredCut, type BindableField } from '@barocss/cad-model/app/editFields';
+import { smoothLoftHeightKey } from '@barocss/cad-model/app/smoothLoftHeight';
+import { smoothScrewPitchField } from '@barocss/cad-model/app/smoothLoftTurn';
 import { ToolIconButton } from '@/components/ui/tool-button';
 import { Icon } from './atoms';
 import { FillPatternHints } from './FillPatternHints';
@@ -87,7 +89,10 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
   const original = nodes[index], originalLoft = original?.kind === 'loft' ? original : undefined;
   const sharedHolePair = onEditSharedHoleLayout ? sharedHoleLayoutPair(nodes, index) : null;
   const ownRadiusField = oppositeRadiusPreview?.enabled && sameDraftScope ? oppositeFlangeOwnRadiusField(doc, draft, index) : null;
-  const fields = [...editFields(draft, index, parameters, bearingAssembly, { doc, originalLoft }), ...(ownRadiusField ? [ownRadiusField] : [])].filter(f => f.kind !== 'number' || !Number.isNaN(f.get(draft)));
+  const screwPitch = smoothScrewPitchField(draft, index);
+  const editable = editFields(draft, index, parameters, bearingAssembly, { doc, originalLoft });
+  const fields = [...editable.map(field => screwPitch && field.key === smoothLoftHeightKey ? screwPitch : field),
+    ...(ownRadiusField ? [ownRadiusField] : [])].filter(f => f.kind !== 'number' || !Number.isNaN(f.get(draft)));
   const changeNumber = (field: Extract<(typeof fields)[number], { kind: 'number' }>, text: string) => {
     retireEvaluation();
     setTyped(values => ({ ...values, [field.key]: text }));

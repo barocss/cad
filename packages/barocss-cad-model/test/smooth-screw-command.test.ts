@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, checkBrep, evaluateCurve } from '@barocss/cad';
+import { CadNumericPolicy, brepMassProperties, checkBrep, evaluateCurve } from '@barocss/cad';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
+import { smoothScrewPitchField } from '../src/app/smoothLoftTurn';
 import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { emptyDoc, withNode } from '../src/engine/doc';
@@ -71,6 +72,45 @@ test('Smooth Screw keeps its external axis, signed pitch and display through nat
     assert.ok('doc' in reopened);
     assert.deepEqual(reopened.doc, doc);
     assert.deepEqual(partBreps(reopened.doc)[0].brep, brep);
+  }
+});
+
+test('Smooth Screw History changes pitch and preserves the tilted axis, signed winding and section copies', async () => {
+  for (const angle of [450, -180]) {
+    const doc = command.build!(ctx, { ...input, angle });
+    const index = doc.nodes.length - 1;
+    const pitch = smoothScrewPitchField(doc.nodes, index);
+    assert.ok(pitch?.kind === 'number');
+    assert.equal(pitch.get(doc.nodes), input.pitch);
+    assert.equal(pitch.label, 'Pitch per revolution');
+    const turns = Math.abs(angle) / 360;
+    for (const value of [0, -1, Infinity, NaN, CadNumericPolicy.linearTolerance / (2 * turns),
+      CadNumericPolicy.coordinateAbs + 1, CadNumericPolicy.coordinateAbs / turns + 1, input.pitch]) {
+      assert.deepEqual(pitch.set(doc.nodes, value), doc.nodes);
+    }
+    const edited = { ...doc, nodes: pitch.set(doc.nodes, 56) };
+    assert.deepEqual(edited.nodes.slice(0, index), doc.nodes.slice(0, index));
+    assert.equal(pitch.get(edited.nodes), 56);
+    assert.equal(edited.nodes[index].id, doc.nodes[index].id);
+    const authored = command.build!(ctx, { ...input, angle, pitch: 56 });
+    const [{ brep }] = partBreps(edited), expected = partBreps(authored)[0].brep;
+    assert.ok(checkBrep(brep, { strict: true }).valid);
+    assert.deepEqual(brep.faces.map(face => face.id), expected.faces.map(face => face.id));
+    assert.deepEqual(brep.edges.map(edge => edge.id), expected.edges.map(edge => edge.id));
+    for (const [i, { curve }] of brep.edges.entries()) {
+      for (let j = 0; j <= 30; j++) {
+        const t = j / 30, want = evaluateCurve(expected.edges[i].curve, t);
+        assert.ok(Math.hypot(...evaluateCurve(curve, t).map((value, axis) => value - want[axis])) < 1e-8);
+      }
+    }
+    const reopened = await readStudioFile(encodeStudioFile(edited));
+    assert.ok('doc' in reopened);
+    assert.deepEqual(reopened.doc, edited);
+    assert.equal(pitch.get(reopened.doc.nodes), 56);
+    assert.deepEqual(partBreps(reopened.doc)[0].brep, brep);
+    const followed = withNode(doc, { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [1, 1] });
+    assert.equal(smoothScrewPitchField(followed.nodes, index), undefined);
+    assert.deepEqual(pitch.set(followed.nodes, 56), followed.nodes);
   }
 });
 

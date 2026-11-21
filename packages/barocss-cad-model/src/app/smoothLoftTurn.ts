@@ -2,10 +2,12 @@ import { CadNumericPolicy } from '@barocss/cad';
 import { usesOf, type ModelNode } from '../engine/doc';
 import { canonical } from '../util/revision';
 import type { EditField } from './editFields';
+import { smoothLoftHeightField } from './smoothLoftHeight';
 
 type Point = [number, number];
 export const smoothTurnAngleKey = 'smoothTurnAngle';
 export const smoothTurnWidthKey = 'smoothTurnWidth';
+export const smoothScrewPitchKey = 'smoothScrewPitch';
 export const smoothTurnWidthBounds = { min: CadNumericPolicy.linearTolerance, max: CadNumericPolicy.coordinateAbs };
 export const smoothTurnWidthInvalid = (value: number) =>
   !Number.isFinite(value) || value <= smoothTurnWidthBounds.min || value > smoothTurnWidthBounds.max;
@@ -110,6 +112,38 @@ export function hasTriangularTurnSections(nodes: readonly ModelNode[], index: nu
 
 export function hasExternalScrewSections(nodes: readonly ModelNode[], index: number): boolean {
   return turnSections(nodes, index)?.external === true;
+}
+
+/** Pitch is editable only on an intact terminal Screw with measurable winding. */
+export function smoothScrewTurns(nodes: readonly ModelNode[], index: number): number | undefined {
+  if (index !== nodes.length - 1) return;
+  const turn = turnSections(nodes, index);
+  if (turn?.external && turn.angle !== 0) return Math.abs(turn.angle) / 360;
+}
+
+export function smoothScrewPitchAdvance(pitch: number, turns: number): number | undefined {
+  const height = pitch * turns;
+  if (Number.isFinite(pitch) && pitch > 0 && pitch <= CadNumericPolicy.coordinateAbs
+    && height > CadNumericPolicy.linearTolerance && height <= CadNumericPolicy.coordinateAbs) return height;
+}
+
+export function smoothScrewPitchField(nodes: readonly ModelNode[], index: number): EditField | undefined {
+  const node = nodes[index];
+  if (node?.kind !== 'loft' || !smoothScrewTurns(nodes, index)) return;
+  const heightField = smoothLoftHeightField(node, index);
+  if (heightField?.kind !== 'number') return;
+  return {
+    kind: 'number', key: smoothScrewPitchKey, label: 'Pitch per revolution', unit: 'mm',
+    get: current => {
+      const turns = smoothScrewTurns(current, index);
+      return turns ? heightField.get(current) / turns : NaN;
+    },
+    set: (current, pitch) => {
+      const turns = smoothScrewTurns(current, index);
+      const height = turns && smoothScrewPitchAdvance(pitch, turns);
+      return height ? heightField.set(current, height) : [...current];
+    },
+  };
 }
 
 function savedTurn(nodes: readonly ModelNode[], index: number) {

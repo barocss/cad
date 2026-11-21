@@ -14,7 +14,7 @@ Use Node 22.19.0 and installed desktop Chrome and Playwright. Run each heavy ope
 
 ```sh
 pnpm exec eslint packages/barocss-cad-model/src/engine/{evaluate,loftDisplay,screwDisplay}.ts packages/barocss-cad-model/test/smooth-screw-command.test.ts apps/cad-studio/test/{smooth-screw-depth,smooth-turn-rail-display}-browser.mjs
-pnpm --dir packages/barocss-cad-model test smooth-screw-command api-loft-guide smooth-turn-angle
+pnpm --dir packages/barocss-cad-model test smooth-screw-command api-loft-guide smooth-turn-angle smooth-triangular-turn
 pnpm --dir packages/barocss-cad-model type-check
 pnpm --dir apps/cad-studio test viewport display-mode step-export-preparation
 pnpm --dir apps/cad-studio build
