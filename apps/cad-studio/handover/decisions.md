@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1533: [Drag a saved right tapered wall Offset from its native plane](notes/saved-right-tapered-wall-offset-2026-11-21/README.md), #629. Verify the native signed plane, fixed supports and reopened Studio result.
 - D1532: [Drag saved inward tapered cap offsets in History](notes/saved-inward-tapered-offset-2026-11-21/README.md), #629. Verify both caps, same-sign gesture, typed parity and native reopening in desktop Studio.
 - D1531: [Compare Smooth Turn ambient occlusion on both Studio renderers](notes/smooth-turn-ao-backends-2026-11-21/README.md), #630. Verify fixed-camera AO dependence with exact unchanged native geometry.
 - D1530: [Prefer Smooth Turn for the general Twist search](notes/twist-smooth-palette-2026-11-21/README.md), #630. Verify the keyboard result, explicit Ruled control and native reopening in Studio.

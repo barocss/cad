@@ -489,6 +489,42 @@ test('Offset on a tapered lower cap moves in its outward direction and retains t
 });
 
 
+test('saved right taper wall preserves mid-height and the signed native support', () => {
+  const base = rectanglePart(40, 30, 10);
+  const source: StudioDoc = { ...base, nodes: base.nodes.map(node => node.kind === 'extrude' ? { ...node, draft: 15 } : node) };
+  const sourceCtx = context(source), body = sourceCtx.bodies[0];
+  const face = body.mesh.faces.findIndex(face => face.name === 'n1.side1');
+  assert.ok(face >= 0);
+  const pick = { ...sourceCtx, selection: { faces: [{ body: 0, face }], edges: [], bodies: [] } };
+  const slope = Math.tan(Math.PI / 12), secant = Math.hypot(1, slope);
+  for (const distance of [3, -20, 20]) {
+    const saved = offsetFaceCommand.build!(pick, { d: distance });
+    const edit = editSavedOffsetFaceCommand(saved, 2)!;
+    const ctx = context(saved);
+    const [handle] = edit.handles?.(ctx, { d: distance }) ?? [];
+    assert.ok(handle);
+    near(handle.at[0], 40 - 5 * slope + distance * secant, 1e-12);
+    near(handle.at[1], 15, 1e-12);
+    near(handle.at[2], 5, 1e-12);
+    near(handle.dir[0], 1 / secant, 1e-12);
+    near(handle.dir[1], 0, 1e-12);
+    near(handle.dir[2], slope / secant, 1e-12);
+    assert.deepEqual(edit.handles?.(ctx, { d: -distance }), []);
+    assert.deepEqual(edit.handles?.(ctx, { d: distance, offsetMode: 'to-plane' }), []);
+    const draft = edit.handles?.(ctx, { d: distance * 1.05 })?.[0];
+    assert.ok(draft);
+    near(draft.at[0] - handle.at[0], distance * .05 * secant, 1e-12);
+    const [accepted] = ctx.bodies;
+    const faces = accepted.mesh.faces.map(face => {
+      if (face.name !== 'n1.side1' || face.exact?.kind !== 'plane') return face;
+      const [x, y, z] = face.exact.o, o: [number, number, number] = [x - 1, y, z];
+      return { ...face, exact: { ...face.exact, o } };
+    });
+    const wrong = { ...accepted, mesh: { ...accepted.mesh, faces } };
+    assert.deepEqual(edit.handles?.({ ...ctx, bodies: [wrong] }, { d: distance }), []);
+  }
+});
+
 test('legacy Offset chain refuses an upstream edit before a downstream absolute tool can go stale', async () => {
   const seed = rectanglePart(40, 30, 10);
   const legacy = (doc: StudioDoc, d: number): StudioDoc => {

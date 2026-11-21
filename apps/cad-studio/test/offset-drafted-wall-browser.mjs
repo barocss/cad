@@ -3,6 +3,8 @@ import { relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
 const output = process.argv[2];
+const savedBaseline = process.argv.includes('--saved-handle-baseline');
+const savedHandle = savedBaseline || process.argv.includes('--saved-handle');
 assert.ok(output && relative(resolve(import.meta.dirname, '../../..'), resolve(output)).startsWith('../'));
 const pins = [
   'apps/cad-studio/test/flow-helper.mjs',
@@ -139,6 +141,79 @@ async function measure(label, doc, face, distance, source) {
   return native;
 }
 
+async function verifySavedHandle(outward, index, wall, stock) {
+  const saved = await f.save('saved-wall-before-edit');
+  await f.freshOpen(saved.file, outward, 'saved-wall-before-edit-opened');
+  await button('Iso', f.page.locator('.views')).click();
+  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+  const view = await f.page.evaluate(() => window.__studioCamera());
+  const openHistory = async () => {
+    await f.openFeatureEditor(index, 'saved inclined wall');
+    await button('Edit offset', f.editor()).click();
+    const panel = hud('Edit Offset face');
+    await status(panel, 'preview');
+    assert.equal(await offset(panel).inputValue(), '3');
+    return panel;
+  };
+  const panel = await openHistory();
+  assert.deepEqual(await f.page.evaluate(() => window.__studioCamera()), view);
+  const group = f.page.locator('g.gizmo-handle[data-handle="d"]');
+  if (savedBaseline) {
+    assert.equal(await group.count(), 0);
+    await f.snapshot('saved-wall-before-no-handle');
+    await offset(panel).fill('4');
+    await status(panel, 'preview');
+  } else {
+    const anchor = [width - height / 2 * slope + 3 * unit, depth / 2, height / 2];
+    const normal = [1 / unit, 0, slope / unit];
+    const [from, to] = await f.page.evaluate(([p, d]) =>
+      [window.__studioScreenOf(p), window.__studioScreenOf(p.map((value, i) => value + d[i]))], [anchor, normal]);
+    const origin = await group.locator('circle').boundingBox();
+    assert.ok(origin);
+    const gap = Math.hypot(origin.x + origin.width / 2 - from[0], origin.y + origin.height / 2 - from[1]);
+    assert.ok(gap < .5, JSON.stringify({ gap, from, origin }));
+    const delta = to.map((value, i) => value - from[i]);
+    assert.ok(Math.hypot(...delta) > 6);
+    const arrow = await group.locator('polygon').boundingBox();
+    assert.ok(arrow);
+    const [x, y] = [arrow.x + arrow.width / 2, arrow.y + arrow.height / 2];
+    await f.page.mouse.move(x, y);
+    await f.page.mouse.down();
+    await f.page.mouse.move(x + delta[0], y + delta[1], { steps: 6 });
+    await status(panel, 'preview');
+    assert.equal(await offset(panel).inputValue(), '4');
+    await f.same(outward);
+    await f.snapshot('saved-wall-drag-preview');
+    await f.page.mouse.up();
+    f.report.observations.push({ label: 'saved-wall-gizmo', camera: view, gap, delta });
+  }
+  await button('Apply', panel).click();
+  await f.changed(outward);
+  const accepted = await f.doc();
+  assert.deepEqual(accepted, { ...outward, nodes: outward.nodes.map((node, i) => i === index ? { ...node, distance: 4 } : node) });
+  const measured = await measure('saved-wall-accepted', accepted, wall, 4, stock);
+  if (savedBaseline) return;
+  await f.undo();
+  await f.same(outward);
+  await f.redo();
+  await f.same(accepted);
+  await f.undo();
+  await f.same(outward);
+  const typed = await openHistory();
+  await offset(typed).fill('4');
+  await status(typed, 'preview');
+  await button('Apply', typed).click();
+  await f.same(accepted);
+  const file = await f.save('saved-wall-after-drag');
+  await f.freshOpen(file.file, accepted, 'saved-wall-reopened');
+  assert.equal((await measure('saved-wall-reopened', accepted, wall, 4, stock)).sha256, measured.sha256);
+  await button('Iso', f.page.locator('.views')).click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await f.snapshot('saved-wall-reopened-framed');
+}
+
 await f.run(async () => {
   const origin = new URL(f.server.resolvedUrls.local[0]).origin;
   const newContext = f.browser.newContext.bind(f.browser);
@@ -154,7 +229,7 @@ await f.run(async () => {
 
   f.phase = 'Open the authored taper and select the inclined +X wall';
   await f.newPage();
-  await f.page.setViewportSize({ width: Number(process.argv[3] ?? 1440), height: 900 });
+  await f.page.setViewportSize({ width: Number(process.argv.find(value => /^(1024|1440)$/.test(value)) ?? 1440), height: 900 });
   const [open] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await open.setFiles({ name: 'drafted-wall.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
@@ -198,6 +273,10 @@ await f.run(async () => {
   assert.ok(node.sigs?.[wall.name]);
   await measure('outward-oracle', outward, wall.name, 3, stock);
   await f.snapshot('wall-outward');
+  if (savedHandle) {
+    await verifySavedHandle(outward, index, wall.name, stock);
+    return;
+  }
 
   f.phase = 'Refuse a topology change, then edit the same wall inwards';
   await f.openFeatureEditor(index, 'inclined wall');
