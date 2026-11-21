@@ -81,18 +81,27 @@ export function useFeatureHistory({ model, worker, suppression, changes, onNotic
         const failedNode = next.nodes[failedIndex];
         const dependent = !n.suppressed && failed && failedIndex > i;
         let hint = dependent ? `The edit would break ${failed}. Update or suppress that feature first.` : result.error.hint;
+        let reason = result.error.title;
         const isPattern = (node: ModelNode | undefined) => node?.kind === 'linear-pattern' || node?.kind === 'linear-span-pattern';
         if (dependent && isPattern(n) && failedNode?.kind === 'hole' && failedNode.parent.node === i && /@\d+$/.test(failedNode.face ?? '')) {
           hint = `Suppress ${failed} before suppressing ${label} (${featureId(doc.nodes, i)}).`;
-        } else if (n.suppressed && failedIndex === i && n.kind === 'hole' && /@\d+$/.test(n.face ?? '')) {
+        } else if (n.suppressed && failedIndex === i && n.kind === 'hole') {
+          const match = /@(\d+)$/.exec(n.face ?? '');
           const parent = doc.nodes[n.parent.node];
-          if (parent?.suppressed && isPattern(parent)) {
+          if (match && parent?.suppressed && isPattern(parent)) {
             const source = featureLabel(parent, n.parent.node, doc.nodes);
             hint = `Unsuppress ${source} (${featureId(doc.nodes, n.parent.node)}) before unsuppressing ${label} (${featureId(doc.nodes, i)}).`;
+          } else if (match && parent?.kind === 'linear-pattern' && !parent.held && n.parent.side === 'solid') {
+            const copy = Number(match[1]) + 1;
+            if (Number.isSafeInteger(copy) && copy <= 64 && Number.isSafeInteger(parent.count) && parent.count >= 1 && copy > parent.count) {
+              reason = `Pattern copy ${copy} is missing`;
+              const source = featureLabel(parent, n.parent.node, doc.nodes);
+              hint = `Set Count to at least ${copy} on ${source} (${featureId(doc.nodes, n.parent.node)}). Then unsuppress ${label} (${featureId(doc.nodes, i)}). Its entry face is ${n.face}.`;
+            }
           }
         }
         setToast({
-          ...result.error, title: `${title}: ${result.error.title}`, hint,
+          ...result.error, title: `${title}: ${reason}`, hint,
         }, { acceptedDocument: true });
         return;
       }

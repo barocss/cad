@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
+const countRecovery = process.argv.includes('--count-recovery');
 const pins = [
   'apps/cad-studio/test/linear-authored-hole-signed-browser.mjs',
   'apps/cad-studio/test/flow-helper.mjs',
   'apps/cad-studio/src/App.tsx',
   'apps/cad-studio/src/ui/Hud.tsx',
   'apps/cad-studio/src/app/patternHoleSpacing.ts',
+  'apps/cad-studio/src/state/useFeatureHistory.ts',
   'apps/cad-studio/src/ui/NodeEditor.tsx',
   'packages/barocss-cad-model/src/app/editFields.ts',
   'packages/barocss-cad-model/src/engine/part.ts',
@@ -14,7 +16,9 @@ const pins = [
 ];
 const f = await createFlow({
   name: 'linear-authored-hole-signed', output: process.argv[2], envFrozen: 'LINEAR_AUTHORED_HOLE_SIGNED_SOURCE_FROZEN',
-  qualification: 'Author a terminal through Hole by picking its copy, reverse Linear pattern spacing, then Save and freshly Open.',
+  qualification: countRecovery ?
+    'Author a Hole on copy 3, suppress it to reduce Count, then restore the same copy and Hole through fresh Open.' :
+    'Author a terminal through Hole by picking its copy, reverse Linear pattern spacing, then Save and freshly Open.',
   limits: ['One-body X Linear pattern with three separate rectangular pieces and a terminal simple through Hole created by desktop Studio.'],
   snapshotExtra: () => ({
     undoRedo: ['Undo', 'Redo'].map(name => document.querySelector(`button[aria-label="${name}"]`)?.disabled),
@@ -53,14 +57,16 @@ async function open(name, model) {
   await f.same(model);
 }
 
-async function verify(label, model, spacing, holeX) {
+async function verify(label, model, spacing, holeX, count = 3) {
   const native = await f.inspect(label, model);
   f.report.observations.push({ label, native });
   await f.persist();
   assert.equal(native.valid, true);
   assert.equal(native.strict, true);
-  assert.deepEqual(native.tops, [['n1.top', 1], ['n1.top@1', 1], ['n1.top@2', 2]]);
-  for (const index of [0, 1, 2]) {
+  const cut = holeX !== null;
+  const tops = Array.from({ length: count }, (_, index) => [index ? `n1.top@${index}` : 'n1.top', cut && index === 2 ? 2 : 1]);
+  assert.deepEqual(native.tops, tops);
+  for (let index = 0; index < count; index++) {
     for (const x of [50, 54]) {
       for (const y of [10, 16]) {
         for (const z of [0, 8]) {
@@ -71,21 +77,92 @@ async function verify(label, model, spacing, holeX) {
       }
     }
   }
-  assert.equal(native.walls.length, 2);
+  assert.equal(native.walls.length, cut ? 2 : 0);
   for (const wall of native.walls) {
     assert.equal(wall.kind, 'cylinder');
     near(wall.c[0], holeX);
     near(wall.c[1], 13);
     near(wall.r, 1);
   }
-  near(native.volume, 576 - 8 * Math.PI);
+  near(native.volume, count * 192 - (cut ? 8 * Math.PI : 0));
+}
+
+async function toggleHole(action) {
+  await f.page.locator('.history .hs[data-node-index="3"]').click({ button: 'right' });
+  await f.page.getByRole('menuitem', { name: action, exact: true }).click();
+}
+async function setCount(value) {
+  await f.openFeatureEditor(2, 'Linear pattern');
+  await f.editor().getByRole('spinbutton', { name: 'Count', exact: true }).fill(String(value));
+}
+function keepState(before, after) {
+  for (const key of ['doc', 'bodies', 'history', 'undoRedo', 'dirty', 'selection']) {
+    assert.deepEqual(after[key], before[key], key);
+  }
+}
+async function refuseMissingCopy(label, expected) {
+  const before = await f.snapshot(`${label}-before`);
+  await toggleHole('Unsuppress');
+  const message = await f.waitToast(/Cannot unsuppress Hole/);
+  assert.match(message, /Pattern copy 3 is missing/);
+  assert.match(message, /Set Count to at least 3 on Pattern ×2.*\(n2\)/);
+  assert.match(message, /Then unsuppress Hole Ø2 \(n3\)\. Its entry face is n1\.top@2\./);
+  keepState(before, await f.snapshot(label));
+  await f.same(expected);
+  await f.dismissToasts();
+}
+async function verifyCountRecovery(authored) {
+  f.phase = 'refuse Count 2 while the authored Hole is active';
+  await setCount(2);
+  const before = await f.snapshot('before-count-two');
+  await f.editor().getByRole('button', { name: 'Apply', exact: true }).click();
+  const error = f.editor().locator('.hud-error');
+  await error.waitFor();
+  assert.match(await error.innerText(), /Count 2 removes copy 3.*Hole Ø2 \(n3\).*n1\.top@2/s);
+  keepState(before, await f.snapshot('active-hole-count-two-refused'));
+  await f.closeEditor();
+
+  f.phase = 'suppress Hole and reduce the pattern to two copies';
+  const holeOff = { ...authored, nodes: authored.nodes.map((node, index) => index === 3 ? { ...node, suppressed: true } : node) };
+  const reduced = { ...holeOff, nodes: holeOff.nodes.map((node, index) => index === 2 ? { ...node, count: 2 } : node) };
+  await toggleHole('Suppress');
+  await f.same(holeOff);
+  await verify('suppressed-three-native', holeOff, 16, null);
+  await setCount(2);
+  await f.applyEditor(holeOff, 'count-two-applied-with-hole-suppressed');
+  await f.same(reduced);
+  await verify('reduced-two-native', reduced, 16, null, 2);
+  await f.undo(); await f.same(holeOff);
+  await f.redo(); await f.same(reduced);
+  await refuseMissingCopy('reduced-unsuppress-refused', reduced);
+
+  f.phase = 'fresh Open of the two-copy file and refusal on its missing copy';
+  const saved = await f.save('linear-two-copies-hole-suppressed');
+  await f.freshOpen(saved.file, saved.doc, 'reduced-reopened');
+  await f.same(reduced);
+  await verify('reduced-reopened-native', reduced, 16, null, 2);
+  await refuseMissingCopy('reopened-unsuppress-refused', reduced);
+
+  f.phase = 'restore Count 3 and then reactivate the same original Hole';
+  await setCount(3);
+  await f.applyEditor(reduced, 'count-three-restored-hole-still-suppressed');
+  await f.same(holeOff);
+  await toggleHole('Unsuppress');
+  await f.same(authored);
+  await verify('same-hole-restored-native', authored, 16, 84);
+  await f.snapshot('same-hole-restored');
+  await f.undo(); await f.same(holeOff);
+  await f.redo(); await f.same(authored);
+  const restored = await f.save('linear-three-copies-hole-restored');
+  await f.freshOpen(restored.file, restored.doc, 'restored-reopened');
+  await verify('restored-reopened-native', authored, 16, 84);
 }
 
 await f.run(async () => {
   const origin = new URL(f.server.resolvedUrls.local[0]).origin;
   const newContext = f.browser.newContext.bind(f.browser);
   f.browser.newContext = async options => {
-    const context = await newContext({ ...options, acceptDownloads: false, serviceWorkers: 'block' });
+    const context = await newContext({ ...options, acceptDownloads: countRecovery, serviceWorkers: 'block' });
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
       if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
@@ -138,6 +215,7 @@ await f.run(async () => {
   assert.equal(created.doc.nodes[3].face, 'n1.top@2');
   assert.deepEqual(created.doc.nodes[3].center, [84, 13]);
   await verify('positive-native', created.doc, 16, 84);
+  if (countRecovery) { await verifyCountRecovery(created.doc); return; }
 
   f.phase = 'refuse zero and recover in the same History editor';
   await f.openFeatureEditor(2, 'Linear pattern');
