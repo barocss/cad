@@ -8,16 +8,18 @@ const variants = ['--triangle', '--screw-positive', '--screw-negative',
   '--triangular-screw-positive', '--triangular-screw-negative',
   '--pentagon-screw-positive', '--pentagon-screw-negative', '--hexagon-screw-positive', '--hexagon-screw-negative',
   '--trapezoid-screw-positive', '--trapezoid-screw-negative', '--skew-quadrilateral-screw-positive', '--skew-quadrilateral-screw-negative',
-  '--line-arc-screw-positive', '--line-arc-screw-negative']
+  '--line-arc-screw-positive', '--line-arc-screw-negative', '--centred-line-arc-positive', '--centred-line-arc-negative']
   .filter(option => process.argv.includes(option));
 assert.ok(variants.length <= 1);
 const [variant] = variants;
 const triangularScrew = variant?.startsWith('--triangular-screw-');
-const circularSegment = !!variant?.startsWith('--line-arc-screw-');
+const centred = !!variant?.startsWith('--centred-line-arc-');
+const circularSegment = centred || !!variant?.startsWith('--line-arc-screw-');
 const triangular = variant === '--triangle' || triangularScrew;
 const polygonProfile = variant?.slice(2).split('-screw-')[0];
 const polygonSides = { pentagon: 5, hexagon: 6, trapezoid: 4, 'skew-quadrilateral': 4 }[polygonProfile] ?? 0;
-const screw = circularSegment || triangularScrew || polygonSides > 0 || variant?.startsWith('--screw-');
+const screw = !centred && (circularSegment || triangularScrew || polygonSides > 0 || variant?.startsWith('--screw-'));
+const hasRefinedSource = triangular || screw || centred;
 const railCount = circularSegment ? 3 : polygonSides;
 const faceCounts = polygonSides ? [polygonSides + 2] : circularSegment || triangular ? [5] : screw ? [6] : [18, 6];
 const f = await createFlow({
@@ -94,10 +96,11 @@ await f.run(async () => {
   await f.freshOpen(file, doc, 'approved-turn-opened');
   if ((circularSegment || triangularScrew || polygonSides) && variant.endsWith('-positive')) {
     const terminal = doc.nodes.length - 1;
-    await f.openFeatureEditor(terminal, 'reverse the approved Screw before STEP export');
+    await f.openFeatureEditor(terminal, 'reverse the approved ' + (centred ? 'Twist' : 'Screw') + ' before STEP export');
     const winding = f.editor().getByLabel('Turn angle', { exact: true });
     assert.equal(Number(await winding.inputValue()), -450);
-    assert.equal(Number(await f.editor().getByLabel('Pitch per revolution', { exact: true }).inputValue()), 40);
+    const advanceLabel = centred ? 'Total height' : 'Pitch per revolution';
+    assert.equal(Number(await f.editor().getByLabel(advanceLabel, { exact: true }).inputValue()), centred ? 50 : 40);
     await winding.fill('450');
     const reversed = (await f.applyEditor(doc, 'positive-winding-applied')).doc;
     assert.deepEqual(reversed.nodes[terminal], doc.nodes[terminal]);
@@ -106,9 +109,11 @@ await f.run(async () => {
   await b('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   if (await b('AO').getAttribute('aria-pressed') === 'true') await b('AO').click();
-  const nativeDisplay = triangular || screw ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
-  if (triangular || screw) assert.ok(nativeDisplay?.kind === 'smooth-turn' && nativeDisplay.triangles > nativeDisplay.baseTriangles);
-  if (polygonSides || circularSegment) await f.snapshot(circularSegment ? 'approved-screw-native' : 'approved-polygon-screw-native');
+  const nativeDisplay = hasRefinedSource ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
+  if (hasRefinedSource) assert.ok(nativeDisplay?.kind === 'smooth-turn' && nativeDisplay.triangles > nativeDisplay.baseTriangles);
+  if (polygonSides || circularSegment) {
+    await f.snapshot(centred ? 'approved-centred-turn-native' : circularSegment ? 'approved-screw-native' : 'approved-polygon-screw-native');
+  }
   f.phase = 'read STEP preparation and loss disclosure in Studio';
   await b('Export STEP').click();
   const panel = f.page.getByLabel('STEP export', { exact: true });
@@ -138,6 +143,7 @@ await f.run(async () => {
     assert.equal(graph.signedAngularDerivativeCertified, true);
     assert.ok(graph.stationMaxErrorMM < 1e-8);
     assert.ok(Math.abs(graph.smoothVolumeMM3 - 276.39931201638126) < 1e-7);
+    if (centred) assert.ok(graph.centroidPathMaxErrorMM < 1e-8);
   }
   const before = await f.inspect('approved-native', doc);
   assert.deepEqual(before.map(body => body.check.counts.faces), faceCounts);
@@ -203,10 +209,10 @@ await f.run(async () => {
   await b('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   if (await b('AO').getAttribute('aria-pressed') === 'true') await b('AO').click();
-  const reopenedDisplay = triangular || screw ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
+  const reopenedDisplay = hasRefinedSource ? await f.page.evaluate(() => window.__studioLoftDisplay?.(0)) : null;
   if (variant === '--triangle') assert.ok(reopenedDisplay?.kind === 'smooth-turn' && reopenedDisplay.triangles > reopenedDisplay.baseTriangles);
-  const shownVertices = screw ? await f.page.evaluate(() => window.__studioSweepCylinderMesh?.()?.length / 3) : undefined;
-  if (screw) assert.ok(shownVertices > 0);
+  const shownVertices = screw || centred ? await f.page.evaluate(() => window.__studioSweepCylinderMesh?.()?.length / 3) : undefined;
+  if (screw || centred) assert.ok(shownVertices > 0);
   f.report.observations.push({ imported, noNativeFeatureHistory: true, nativeDisplay, reopenedDisplay, shownVertices,
     ...(railCount ? { worstRoundTripRailErrorMM } : {}),
     ...(circularSegment ? { wallErrorMM, capErrorMM } : {}) });

@@ -167,14 +167,78 @@ def certify_signed_factor(factors, knots, values, sign):
     return float(minimum)
 
 
+def centred_centroid_path(supports, knots, values, height, local):
+    """Recover the area centroid from actual rational circles, independently of the factor law."""
+    left, right = supports['n18.side1'], supports['n18.side2']
+
+    def at(surface, u, t):
+        columns = [cubic([[p[k] * w for k in range(3)] + [w] for p, w in zip(row, weights)], knots, t)
+                   for row, weights in zip(surface['poles'], surface['weights'])]
+        basis = [(1 - u) ** 2, 2 * u * (1 - u), u * u]
+        hom = [sum(b * p[k] for b, p in zip(basis, columns)) for k in range(4)]
+        assert hom[3] > 0
+        return local([value / hom[3] for value in hom[:3]])
+
+    def recover(a, middle, b):
+        # Circumcircle of three measured arc points; no prescribed centre or rotation factor.
+        u, v = middle - a, b - a
+        determinant = 2 * (u.real * v.imag - u.imag * v.real)
+        assert abs(determinant) > 1e-12
+        centre = a + complex((abs(u) ** 2 * v.imag - abs(v) ** 2 * u.imag) / determinant,
+                             (u.real * abs(v) ** 2 - v.real * abs(u) ** 2) / determinant)
+        first, seam, last = a - centre, middle - centre, b - centre
+        angles = [math.atan2((q / p).imag, (q / p).real) for p, q in ((first, seam), (seam, last))]
+        assert all(0 < angle < math.pi / 2 for angle in angles)
+        assert abs(angles[0] - angles[1]) < 1e-10
+        sweep = sum(angles)
+        ratio = 4 * math.sin(sweep / 2) ** 3 / (3 * (sweep - math.sin(sweep)))
+        return centre + ratio * seam, ratio
+
+    samples = sorted(set([i / 120 for i in range(121)] + values + [(a + b) / 2 for a, b in zip(values, values[1:])]))
+    sample_error, cap_error, ratio = 0, 0, None
+    for t in samples:
+        a, middle, b = at(left, 0, t), at(left, 1, t), at(right, 1, t)
+        centroid, current_ratio = recover(complex(*a[:2]), complex(*middle[:2]), complex(*b[:2]))
+        if t == 0:
+            ratio = current_ratio
+        error = math.hypot(abs(centroid), a[2] - height * t, middle[2] - height * t, b[2] - height * t)
+        sample_error = max(sample_error, error)
+        if t in (0, 1):
+            # These endpoint rows were already bound by exact IDs and weights to the cap arcs.
+            cap_error = max(cap_error, error)
+    assert ratio is not None
+    control_bound = 0
+    for surface in (left, right):
+        weight = surface['weights'][1][0]
+        for k in range(16):
+            a, tangent, b = [local(row[k]) for row in surface['poles']]
+            seam = local(left['poles'][-1][k])
+            centre = [((x + y) / 2 - weight ** 2 * z) / (1 - weight ** 2) for x, y, z in zip(a, b, tangent)]
+            centroid = [c + ratio * (m - c) for c, m in zip(centre, seam)]
+            axial = height * sum(knots[k + 1:k + 4]) / 3
+            control_bound = max(control_bound, math.hypot(centroid[0], centroid[1], centroid[2] - axial))
+    # Nonnegative B-spline basis coefficients bound the full V path by its centroid poles.
+    maximum = max(sample_error, control_bound)
+    assert maximum < 1e-8, 'independent centroid path moved by ' + str(maximum) + ' mm'
+    return {'centroidPathMaxErrorMM': maximum, 'centroidControlBoundMM': control_bound,
+            'centroidPathSampleMaxErrorMM': sample_error, 'centroidPathSamples': len(samples),
+            'capCentroidMaxErrorMM': cap_error,
+            'centroidProof': 'measured circumcircles and sweeps; actual rational-control centroid poles bound the full V path'}
+
+
 def verify_line_arc(source, variant):
     """Bounded fixture proof from AP214 bytes, without product geometry or imported volume."""
     angle, height, turn = (-450 if variant.endswith('-negative') else 450), 50, 'n18'
     origin, axis_v, axis_w = (21, -19.4, 24.8), (0, .8, -.6), (0, .6, .8)
     y, weight = 3 * math.sin(math.pi / 3), math.cos(math.pi / 6)
-    corners = [(13.5, y), (13.5, -y), (15, 0)]
-    base_rows = [[corners[0], corners[1]], [corners[1], (15, -math.sqrt(3)), corners[2]],
-                 [corners[2], (15, math.sqrt(3)), corners[0]]]
+    centred = variant.startswith('--centred-line-arc-')
+    sweep = 2 * math.pi / 3
+    offset = 4 * 3 * math.sin(math.pi / 3) ** 3 / (3 * (sweep - math.sin(sweep)))
+    circle_x = -offset if centred else 12
+    seam_x = circle_x + 3
+    corners = [(circle_x + 1.5, y), (circle_x + 1.5, -y), (seam_x, 0)]
+    base_rows = [[corners[0], corners[1]], [corners[1], (seam_x, -math.sqrt(3)), corners[2]],
+                 [corners[2], (seam_x, math.sqrt(3)), corners[0]]]
     entities, schema = part21.records(source)
     assert len(schema) == 1 and schema[0].startswith('AUTOMOTIVE_DESIGN')
     assert all(target in entities for record in entities.values() for target in part21.refs(record))
@@ -285,7 +349,7 @@ def verify_line_arc(source, variant):
         curves.append(curve)
     knots, values = curves[0]['knots'][0], curves[0]['values'][0]
     assert all(curve['knots'][0] == knots for curve in curves)
-    factors = [complex(*local(p)[:2]) / 15 for p in curves[2]['poles'][0]]
+    factors = [complex(*local(p)[:2]) / seam_x for p in curves[2]['poles'][0]]
     factor = lambda t: complex(*cubic([[z.real, z.imag] for z in factors], knots, t))
     angular_bound = certify_signed_factor(factors, knots, values, 1 if angle > 0 else -1)
     station_error, axial_error, winding = 0, 0, []
@@ -334,7 +398,7 @@ def verify_line_arc(source, variant):
                     cap_error = max(cap_error, distance(p, world(factors[end] * complex(*q), height * end / 15)))
             for station in range(31):
                 t = station / 30
-                centre = 12 * factor(t)
+                centre = circle_x * factor(t)
                 for across in range(9):
                     p = evaluate_surface(support, across / 8, t)
                     x, y, z = local(p)
@@ -345,6 +409,7 @@ def verify_line_arc(source, variant):
         a = [2 * weight * (x - y) for x, y in zip(left['poles'][-1][k], left['poles'][-2][k])]
         b = [2 * weight * (x - y) for x, y in zip(right['poles'][1][k], right['poles'][0][k])]
         tangent_error = max(tangent_error, distance(a, b))
+    centroid_path = centred_centroid_path(supports, knots, values, height, local) if centred else {}
     assert max(station_error, axial_error, wall_error, cap_error, circle_error, join_error, tangent_error) < 1e-8
     assert weight_error < 1e-12
     quadrature = ((-.8611363115940526, .3478548451374539), (-.3399810435848563, .6521451548625461),
@@ -371,7 +436,8 @@ def verify_line_arc(source, variant):
             'arcJoinMaxErrorMM': join_error, 'arcTangentMaxErrorMM': tangent_error,
             'supportSamples': 2 * 31 * 9, 'sectionAreaMM2': area, 'serializedVolumeMM3': stored,
             'signedAngularDerivativeCertified': True, 'minimumSignedAngularBernsteinCoefficient': angular_bound,
-            'volumeErrorMM3': abs(stored - volume), 'volumeProof': 'circular-segment area times squared serialized cubic complex factor; four Gauss points per knot span'}
+            'volumeErrorMM3': abs(stored - volume), 'volumeProof': 'circular-segment area times squared serialized cubic complex factor; four Gauss points per knot span',
+            **centroid_path}
 
 
 def line_arc_mutations(source, variant):
@@ -382,10 +448,10 @@ def line_arc_mutations(source, variant):
     curve_id, = [ident for ident, record in entities.items()
                   if ('word', 'RATIONAL_B_SPLINE_CURVE') in record][:1]
 
-    def replace(ident, record):
-        lines = [line for line in source.splitlines(keepends=True) if line.startswith('#' + str(ident) + '=')]
+    def replace(ident, record, text=source):
+        lines = [line for line in text.splitlines(keepends=True) if line.startswith('#' + str(ident) + '=')]
         assert len(lines) == 1
-        return source.replace(lines[0], '#' + str(ident) + '=' + ''.join(value for _, value in record) + ';\n', 1)
+        return text.replace(lines[0], '#' + str(ident) + '=' + ''.join(value for _, value in record) + ';\n', 1)
 
     def number_changed(record, predicate, update):
         result = list(record)
@@ -416,26 +482,48 @@ def line_arc_mutations(source, variant):
         'length-unit': unit,
         'stored-volume': replace(volume, number_changed(entities[volume], lambda _: True, lambda x: 2 * x)),
     }
-    rejected = {}
+    if variant.startswith('--centred-line-arc-'):
+        # A common interior V-column translation preserves cap endpoints, circle shape,
+        # constant weights and exact shared boundaries, but moves the centroid off its axis.
+        moved, column_points = source, set()
+        for record in entities.values():
+            if ('word', 'B_SPLINE_SURFACE') in record:
+                base = fields(components(record)['B_SPLINE_SURFACE'])
+                controls = base[2] if numbers(base[1]) == [3] else None
+            elif part21.name(record) == 'B_SPLINE_SURFACE_WITH_KNOTS':
+                base = fields(record)
+                controls = base[3] if numbers(base[2]) == [3] else None
+            else:
+                controls = None
+            if controls:
+                column_points.update(scalar_list(row, 'ref')[8] for row in members(controls))
+        assert len(column_points) == 5
+        for ident in sorted(column_points):
+            moved = replace(ident, number_changed(entities[ident], lambda _: True, lambda x: x + .01), moved)
+        changes['interior-centroid-path'] = moved
+    rejected, reasons = {}, {}
     for name, changed in changes.items():
         try:
             verify_line_arc(changed, variant)
-        except (AssertionError, ValueError, KeyError, IndexError, StopIteration):
+        except (AssertionError, ValueError, KeyError, IndexError, StopIteration) as error:
+            if name == 'interior-centroid-path':
+                assert 'independent centroid path' in str(error), 'centroid-specific negative control failed another check'
+                reasons[name] = str(error)
             rejected[name] = True
         else:
             raise AssertionError('negative control survived: ' + name)
-    opposite = '--line-arc-screw-positive' if variant.endswith('-negative') else '--line-arc-screw-negative'
+    opposite = variant.rsplit('-', 1)[0] + ('-positive' if variant.endswith('-negative') else '-negative')
     try:
         verify_line_arc(source, opposite)
     except AssertionError:
         rejected['opposite-winding'] = True
     else:
         raise AssertionError('negative control survived: opposite-winding')
-    return {'detected': len(rejected), 'results': rejected, 'productImports': 0}
+    return {'detected': len(rejected), 'results': rejected, 'productImports': 0, **({'reasons': reasons} if reasons else {})}
 
 
 def verify(source, variant=None):
-    if variant in ('--line-arc-screw-positive', '--line-arc-screw-negative'):
+    if variant in ('--line-arc-screw-positive', '--line-arc-screw-negative', '--centred-line-arc-positive', '--centred-line-arc-negative'):
         return verify_line_arc(source, variant)
     triangular_screw = variant in ('--triangular-screw-positive', '--triangular-screw-negative')
     rectangular_screw = variant in ('--screw-positive', '--screw-negative')
@@ -621,6 +709,7 @@ if __name__ == '__main__':
     options = [option for option in options if option != '--selftest']
     variants = {'--triangle', '--screw-positive', '--screw-negative',
                 '--line-arc-screw-positive', '--line-arc-screw-negative',
+                '--centred-line-arc-positive', '--centred-line-arc-negative',
                 '--triangular-screw-positive', '--triangular-screw-negative',
                 '--pentagon-screw-positive', '--pentagon-screw-negative',
                 '--hexagon-screw-positive', '--hexagon-screw-negative',
@@ -630,6 +719,6 @@ if __name__ == '__main__':
     source, variant = Path(sys.argv[1]).read_text(encoding='utf-8'), options[0] if options else None
     result = verify(source, variant)
     if selftest:
-        assert variant in ('--line-arc-screw-positive', '--line-arc-screw-negative')
+        assert variant in ('--line-arc-screw-positive', '--line-arc-screw-negative', '--centred-line-arc-positive', '--centred-line-arc-negative')
         result['mutationControls'] = line_arc_mutations(source, variant)
     print(json.dumps(result))
