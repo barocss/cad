@@ -294,7 +294,8 @@ import { useHistoryFilletRadius } from './app/useHistoryFilletRadius';
 import { useHeldFinishEdge } from './state/useHeldFinishEdge';
 import { flattenAssembly } from '@barocss/cad-model/engine/flatten';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
-import { elsewhereOf, openAccepted, beginInPlace, editInPlaceRefusal, finishInPlace, inPlaceBlock, sessionChanged, stacksAfter, type InPlaceSession } from './app/editInPlace';
+import { openAccepted, type InPlaceSession } from './app/editInPlace';
+import { editInPlaceActions } from './app/editInPlaceActions';
 import { freshPartId, revisionOf } from '@barocss/cad-model/assembly/definitions';
 import { BASE, type Mate } from '@barocss/cad-model/assembly/mates';
 import type { DirectGeometry } from '@barocss/cad-model/engine/direct';
@@ -2308,55 +2309,19 @@ export function App() {
       return true;
     } finally { replacement.current = null; }
   };
-  // Roadmap 10 ⑧: a part edited in place. The session swaps the working document for the part's own and back; the other parts are drawn around it
-  // (inPlace.context). Begin: the assembly's undo and redo stacks are set aside and the session's own start empty. Finish: one commit of the assembly
-  // (one undo step, the whole previous assembly), or none when nothing changed. Cancel: the assembly exactly as it was.
-  const sessionBlocked = (doing: string) => {
-    const why = inPlaceBlock(inPlaceNow.current, doing);
-    if (why) setToast({ title: 'A part is being edited', hint: why, detail: '' });
-    return !!why;
-  };
-  const toolOpen = () => !!active || !!sketch || rendering || drawing || !!measure || !!assembly.draft || !!cageEd.session || !!skel.session || !!parameterEdit || !!shownVariant.current || !!ghost, toolRunning = () => busy || toolOpen();
-  const startInPlace = (owner: string) => {
-    const elsewhere = elsewhereOf({ chat: chatRunning, importing: stage !== null || !!meshAsk || !!repairAsk, projectOpening: project.opening() });
-    const why = editInPlaceRefusal(doc, owner, { session: !!inPlace, working: toolRunning(), fresh, elsewhere });
-    if (why) { setToast({ title: 'Can’t edit this part now', hint: why, detail: '' }); return; }
-    const session = beginInPlace(doc, owner, bodies, instanceBodies, { undo, redo, marker, dirty });
-    if (!session) return;
-    beginOpenIntent();
-    replaceDoc(session.base, 'in-place'); if (docNow.current !== session.base) return;
-    setUndo([]); setRedo([]); setInPlace(session); setAskDiscard(false); setCompareBase(null); setVersionsOpen(false);
-    setTimeout(() => viewport.current?.fit(), 300);
-  };
-  const leaveInPlace = (s: InPlaceSession, next: StudioDoc, changed: boolean) => {
-    beginOpenIntent();
-    replaceDoc(next, 'in-place'); if (docNow.current !== next) return false;
-    const stacks = stacksAfter(s, changed);
-    setUndo(stacks.undo); setRedo(stacks.redo); setMarker(changed ? null : s.saved.marker); setDirty(changed || s.saved.dirty);
-    setInPlace(null); setAskDiscard(false); setInstanceSel([s.owner]);
-    return true;
-  };
-  const finishInPlaceSession = () => {
-    const s = inPlaceNow.current; if (!s) return;
-    const why = editInPlaceRefusal(s.assembly, s.owner, { session: false, working: toolOpen(), fresh });
-    if (why) { setToast({ title: 'Can’t finish yet', hint: why, detail: '' }); return; }
-    const r = finishInPlace(s, docNow.current);
-    if ('error' in r) { setToast({ title: 'The part was not taken', hint: r.error, detail: 'You are still editing it.' }); return; }
-    if (!leaveInPlace(s, r.doc, r.changed)) return;
-    if (r.held.length) setToast({ title: `${r.held.length} look${r.held.length > 1 ? 's' : ''} held`, hint: r.held.map(h => h.problem).join(' '), detail: '' });
-    else if (r.changed) setToast({ title: `${s.name} updated`, hint: s.shared > 1 ? `All ${s.shared} instances share it. Undo restores the assembly as it was.` : 'Undo restores the assembly as it was.', detail: '' });
-  };
-  const cancelInPlaceSession = (event: React.MouseEvent<HTMLButtonElement>) => {
-    const s = inPlaceNow.current; if (!s) return;
-    if (!askDiscard && workspaceModeExit.hasDraft()) {
-      workspaceModeExit.switchWhenReady(() => {
-        if (inPlaceNow.current === s) leaveInPlace(s, s.assembly, false);
-      }, { event, title: 'Discard changes to this part?' });
-      return;
-    }
-    if (!askDiscard && sessionChanged(s, docNow.current)) { setAskDiscard(true); return; }
-    leaveInPlace(s, s.assembly, false);
-  };
+  const { sessionBlocked, startInPlace, finishInPlaceSession, cancelInPlaceSession } = editInPlaceActions({
+    model: { doc, bodies, instanceBodies, fresh },
+    document: { read: () => docNow.current, beginOpen: beginOpenIntent, replace: next => replaceDoc(next, 'in-place') },
+    session: { current: inPlace, read: () => inPlaceNow.current, set: setInPlace, askDiscard, setAskDiscard },
+    history: { current: { undo, redo, marker, dirty },
+      setStacks: stacks => { setUndo(stacks.undo); setRedo(stacks.redo); },
+      setStatus: (marker, dirty) => { setMarker(marker); setDirty(dirty); } },
+    work: { busy,
+      toolOpen: () => !!active || !!sketch || rendering || drawing || !!measure || !!assembly.draft || !!cageEd.session || !!skel.session || !!parameterEdit || !!shownVariant.current || !!ghost,
+      elsewhere: () => ({ chat: chatRunning, importing: stage !== null || !!meshAsk || !!repairAsk, projectOpening: project.opening() }) },
+    ui: { notice: setToast, entered: () => { setCompareBase(null); setVersionsOpen(false); setTimeout(() => viewport.current?.fit(), 300); },
+      returned: owner => setInstanceSel([owner]), workspaceExit: workspaceModeExit },
+  });
   // Evaluate a bend table against the current part before accepting it into history.
   const bendTableRequest = useRef<object | null>(null);
   const loadBendTable = async (b: BodyResult, file?: File) => {
