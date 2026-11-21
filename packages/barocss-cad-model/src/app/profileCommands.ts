@@ -12,6 +12,7 @@ import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
 import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle, twoGuideLoftSections } from './profiles';
 import { copyLoftGuide } from './loftGuides';
+import { ruledTurnCommand } from './ruledTurnCommand';
 import { faceProfile } from './faceProfile';
 import { nativeExtrudeFace } from './nativeExtrudeFace';
 import { resolveDirectOffsetFace, resolveNativeOffsetFace, validateNativeOffsetDistance, validateNativeOffsetResult } from './nativeOffsetFace';
@@ -710,4 +711,4 @@ export const sweepCurveCommand: Command = {
   },
 };
 
-export const profileCommands = [extrudeCommand, offsetFaceCommand, revolveCommand, pipeCommand, sweepCurveCommand, loftCommand];
+export const profileCommands = [extrudeCommand, offsetFaceCommand, revolveCommand, pipeCommand, sweepCurveCommand, loftCommand, ruledTurnCommand];

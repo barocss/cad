@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1518: [Create a ruled turn from one rectangular sketch](notes/ruled-turn-command-2026-11-21/README.md), #630. Generate stations and a corner guide, then verify signed turns and native History editing in Studio.
 - D1517: [Refuse a copied Loft guide that collapses a four-sided span](notes/loft-refuse-collapsed-guided-span-2026-11-21/README.md), #630. Fix a reproduced invalid half-turn in creation and History. Preserve the valid straight, 179° and full-turn controls.
 - D1516: [Qualify a full ruled turn with copied Loft guides](notes/loft-guided-full-ruled-turn-2026-11-21/README.md), #630. Verify signed corner paths through History and native reopening with unchanged authored sections.
 - D1515: [Rotate one SubD quad around a local frame through MCP](notes/agent-subd-quad-frame-rotation-2026-11-21/README.md), #322. Verify the normal, U and V directions in Studio with the same exact cage revision and user approval as world-axis rotation.
