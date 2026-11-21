@@ -17,7 +17,7 @@ import { admitNurbsGuide, type LoftNurbsGuideInput, type LoftNurbsGuideSpan } fr
 import { orientedLoftSolid } from './oriented-loft.js';
 import { patchLoftGuideSides } from './loft-guide-patches.js';
 import { twoGuideLoftSolid } from './loft-two-guides.js';
-import { fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from './loft-rectangular-turn.js';
+import { fitConvexPolygonScrew, fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from './loft-rectangular-turn.js';
 
 type XY = [number, number];
 type Piece = { readonly kind: 'line'; readonly a: XY; readonly b: XY } | { readonly kind: 'arc'; readonly c: XY; readonly r: number; readonly t0: number; readonly dt: number };
@@ -131,18 +131,23 @@ function legacyLoft(input: LoftInput, guideFactory?: LoftGuideFactory, nurbsGuid
     return Array.from({ length: n }, (_, k) => ({ kind: 'arc' as const, c: g.center, r: g.radius, t0: g.startAngle + g.sweep * k / n, dt: g.sweep / n }));
   }); });
   const n = Math.max(...sections.map(p => p.length));
+  const K = sections.length - 1, z = S.map(s => s.z), id = input.id, nm = input.name;
+  // A proved polygon Screw owns the authored corner order. Nearest cyclic matching can reverse
+  // its winding once a polygon's half-sector is smaller than an admitted 30-degree station step.
+  const authoredScrew = input.smooth && !guideFactory && !nurbsGuide && n > 4
+    && sections.every(row => row.length === n && row.every(piece => piece.kind === 'line'))
+    ? fitConvexPolygonScrew(sections.map(row => row.map(startOf)), z, z.map(value => (value - z[0]) / (z[K] - z[0]))) : null;
   for (const p of sections) while (p.length < n) { let i = 0; p.forEach((q, j) => { if (lengthOf(q) > lengthOf(p[i])) i = j; }); p.splice(i, 1, ...half(p[i])); if (p === sections[0]) src0.splice(i, 1, src0[i], src0[i]); }
   const tagged = taggedSides(src0, input.sideTags);
   // Turn each section to start nearest the previous one's start (directions about the centroids).
   const shape = (p: Piece[]) => { const pts = p.map(startOf), c = pts.reduce((m, q) => [m[0] + q[0] / n, m[1] + q[1] / n], [0, 0]), rms = Math.sqrt(pts.reduce((m, q) => m + (q[0] - c[0]) ** 2 + (q[1] - c[1]) ** 2, 0) / n) || 1; return pts.map(q => [(q[0] - c[0]) / rms, (q[1] - c[1]) / rms]); };
-  for (let k = 1; !guideFactory && !nurbsGuide && k < sections.length; k++) {
+  for (let k = 1; !authoredScrew && !guideFactory && !nurbsGuide && k < sections.length; k++) {
     const a = shape(sections[k - 1]), b = shape(sections[k]);
     let best = 0, cost = Infinity;
     for (let sh = 0; sh < n; sh++) { const c = a.reduce((m, q, i) => m + (q[0] - b[(i + sh) % n][0]) ** 2 + (q[1] - b[(i + sh) % n][1]) ** 2, 0); if (c < cost - 1e-12) { cost = c; best = sh; } }
     sections[k] = [...sections[k].slice(best), ...sections[k].slice(0, best)];
   }
 
-  const K = sections.length - 1, z = S.map(s => s.z), id = input.id, nm = input.name;
   const scale = Math.max(1, ...sections.flat().map(q => Math.max(...startOf(q).map(Math.abs))), ...z.map(Math.abs)), tol = 1e-9 * scale;
   // Each piece as a Bézier ending exactly where the next one starts (its vertex).
   // CG1.3: each section turned to start at the vertex the guide passes through (it runs along the first edge's start).
@@ -163,7 +168,7 @@ function legacyLoft(input: LoftInput, guideFactory?: LoftGuideFactory, nurbsGuid
     nurbsSpans = spans;
   }
   const piece = (k: number, i: number): Bezier => { const b = bezier(sections[k][i]); return { p: [...b.p.slice(0, -1), startOf(sections[k][(i + 1) % n])], w: b.w }; };
-  if (input.smooth && K >= 2) return smoothLoft(sections.map((p, k) => p.map((_, i) => piece(k, i))), z, id, nm, tagged);
+  if (input.smooth && K >= 2) return smoothLoft(sections.map((p, k) => p.map((_, i) => piece(k, i))), z, id, nm, tagged, authoredScrew);
   const sideName = (k: number, i: number) => K === 1 ? `${nm}.${tagged ? tagged[i] : `side${i}`}` : `${nm}.s${k}.${tagged ? tagged[i] : `side${i}`}`;
   const vid = (k: number, i: number) => `v${k}_${i % n}`, rid = (k: number, i: number) => `r${k}_${i % n}`, lid = (k: number, i: number) => `l${k}_${i % n}`;
   const vertices = sections.flatMap((p, k) => p.map((q, i) => ({ id: vid(k, i), point: [...startOf(q), z[k]] as Point })));
@@ -264,18 +269,20 @@ function taggedSides(src0: readonly number[], tags: readonly string[] | undefine
   for (const g of src0) count.set(g, (count.get(g) ?? 0) + 1);
   return src0.map(g => { const k = (seen.get(g) ?? 0) + 1; seen.set(g, k); return count.get(g)! > 1 ? `side[${tags[g]}]#${k}` : `side[${tags[g]}]`; });
 }
-function smoothLoft(rows: Bezier[][], z: number[], id: string, nm: string, tagged: string[] | null = null): { brep: Brep; mass: (density: number) => MassProperties } {
+function smoothLoft(rows: Bezier[][], z: number[], id: string, nm: string, tagged: string[] | null = null,
+  authoredScrew: ReturnType<typeof fitConvexPolygonScrew> = null): { brep: Brep; mass: (density: number) => MassProperties } {
   const K = rows.length - 1, n = rows[0].length, v = z.map(x => (x - z[0]) / (z[K] - z[0]));
-  if (K >= 6 && K <= 15 && (n === 3 || n === 4) && rows.every(row => row.every(piece => piece.p.length === 2))) {
+  let fit = authoredScrew;
+  if (!fit && K >= 6 && K <= 15 && (n === 3 || n === 4) && rows.every(row => row.every(piece => piece.p.length === 2))) {
     const corners = rows.map(row => row.map(piece => piece.p[0]));
-    const fit = n === 3 ? fitTriangularTurn(corners, z, v) ?? fitTriangularScrew(corners, z, v)
+    fit = n === 3 ? fitTriangularTurn(corners, z, v) ?? fitTriangularScrew(corners, z, v)
       : fitRectangularTurn(corners, z, v) ?? fitRectangularScrew(corners, z, v);
-    if (fit) {
-      const rails = fit.rails.map(rail => rail.map(([x, y, zz]): H => [x, y, zz, 1]));
-      const nets = rails.map((rail, i) => [rail, rails[(i + 1) % n]]);
-      const brep = smoothLoftBoundary(rows, z, id, nm, tagged, nets, fit.knots);
-      return { brep, mass: density => brepMassProperties(brep, density) };
-    }
+  }
+  if (fit) {
+    const rails = fit.rails.map(rail => rail.map(([x, y, zz]): H => [x, y, zz, 1]));
+    const nets = rails.map((rail, i) => [rail, rails[(i + 1) % n]]);
+    const brep = smoothLoftBoundary(rows, z, id, nm, tagged, nets, fit.knots);
+    return { brep, mass: density => brepMassProperties(brep, density) };
   }
   const hom = (p: XY, zz: number, w: number): H => [p[0] * w, p[1] * w, zz * w, w];
   // Per edge i: its pieces raised to one degree (a line among arcs becomes quadratic, straight still).

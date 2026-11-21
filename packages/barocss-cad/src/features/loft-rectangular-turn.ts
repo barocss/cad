@@ -1,8 +1,10 @@
 import { evaluateCurveD1 } from '../core/derivatives.js';
 import { linearToleranceMM } from '../numeric-policy.js';
 import { triangleClearsScrewAxis, triangleScrewAxisTolerance } from '../internal/triangular-screw-axis.js';
+import { convexPolygonScrewAxisTolerance } from '../internal/convex-polygon-screw-axis.js';
 import type { Curve, Point } from '../types.js';
 import { interpolateCurvePlain, type PlainFitCurve } from './fit-plain.js';
+import { ExtrudedProfileLimits } from './extruded-profile-solid.js';
 
 type XY = readonly [number, number];
 const maximumStep = Math.PI / 6;
@@ -89,9 +91,36 @@ export function fitTriangularScrew(
   return fitTurn(rows, heights, stations, [0, 0], u, width, tol);
 }
 
+/** Preserve authored corner correspondence for an external-axis strictly convex polygon Screw. */
+export function fitConvexPolygonScrew(
+  rows: readonly (readonly XY[])[], heights: readonly number[], stations: readonly number[],
+): { knots: number[]; rails: Point[][] } | null {
+  if (rows.length < 7 || rows.length > 16 || heights.length !== rows.length || stations.length !== rows.length) return null;
+  const first = rows[0], count = first.length, last = rows.length - 1;
+  // Three- and four-sided profiles retain their existing specialized admission paths.
+  if (count < 5 || count > ExtrudedProfileLimits.segments || rows.some(row => row.length !== count)) return null;
+  const base = heights[0], height = heights[last] - base;
+  if (!Number.isFinite(height) || height <= 0 || heights.some((z, i) => !Number.isFinite(z) || (i > 0 && z <= heights[i - 1]))
+    || stations.some((t, i) => !Number.isFinite(t) || Math.abs(t - i / last) > 1e-9
+      || Math.abs((heights[i] - base) / height - t) > 1e-9)) return null;
+  let tolerance = 0;
+  for (const row of rows) {
+    const tol = convexPolygonScrewAxisTolerance(row);
+    if (tol === undefined || row.some((point, i) => Math.hypot(point[0] - row[(i + 1) % count][0],
+      point[1] - row[(i + 1) % count][1]) < ExtrudedProfileLimits.minimumLengthMM)) return null;
+    if (!tolerance) tolerance = tol;
+  }
+  // Model's section projection rounds coordinates. A short polygon edge amplifies that rounding
+  // into the rotation factor; the longest origin radius supplies the same law with a longer lever.
+  const reference = first.reduce((best, point, i) => dot(point, point) > dot(first[best], first[best]) ? i : best, 0);
+  const u = first[reference], direction = rows[1][reference];
+  if (Math.atan2(cross(u, direction), dot(u, direction)) === 0) return null;
+  return fitTurn(rows, heights, stations, [0, 0], u, Math.hypot(...u), tolerance, reference);
+}
+
 function fitTurn(
   rows: readonly (readonly XY[])[], heights: readonly number[], stations: readonly number[],
-  centre: XY, u: XY, width: number, tol: number,
+  centre: XY, u: XY, width: number, tol: number, referenceCorner?: number,
 ): { knots: number[]; rails: Point[][] } | null {
   const last = rows.length - 1;
   // The compact basis uses one pole per station and stays within the native surface limit.
@@ -99,7 +128,8 @@ function fitTurn(
   const offsets = rows[0].map(point => sub(point, centre));
   const factors: XY[] = [];
   for (const row of rows) {
-    const edge = sub(row[1], row[0]), length = Math.hypot(...edge);
+    const edge = referenceCorner === undefined ? sub(row[1], row[0]) : sub(row[referenceCorner], centre);
+    const length = Math.hypot(...edge);
     if (Math.abs(length - width) > tol) return null;
     const factor: XY = [dot(u, edge) / (width * length), cross(u, edge) / (width * length)];
     if (row.some((point, i) => Math.hypot(...sub(sub(point, centre), rotated(factor, offsets[i]))) > tol)) return null;

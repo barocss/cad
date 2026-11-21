@@ -3,12 +3,19 @@ import { createFlow } from './flow-helper.mjs';
 
 const singleSketch = process.argv.includes('--single-sketch');
 const triangular = singleSketch || process.argv.includes('--triangle');
+const polygon = process.argv.includes('--pentagon') ? 'pentagon' : process.argv.includes('--hexagon') ? 'hexagon' : null;
 const command = singleSketch ? 'Smooth Screw' : 'Loft';
-const profile = triangular ? 'triangular' : 'rectangular';
-const degrees = triangular ? 360 : 180;
+const profile = polygon ?? (triangular ? 'triangular' : 'rectangular');
+const degrees = polygon || triangular ? 360 : 180;
 const height = 40, spans = degrees / 30, samples = spans * 10;
-const corners = triangular ? [[-7, -4], [2, -3], [-4, 1]] : [[14, -4], [26, -4], [26, 4], [14, 4]];
-const frame = { origin: triangular ? [21, -19.4, 24.8] : [11, -17, 23], normal: [0, .6, .8], xAxis: [1, 0, 0] };
+const profiles = {
+  pentagon: { corners: [[-7, -4], [2, -3], [1, -1], [-4, 1], [-6, -1]], volume: 1080.138914574982 },
+  hexagon: { corners: [[-7, -5], [1, -5], [3, -3], [2, -1], [-3, 1], [-7, -1]], volume: 1840.2366692758953 },
+  triangular: { corners: [[-7, -4], [2, -3], [-4, 1]], volume: 840.1080446694306 },
+  rectangular: { corners: [[14, -4], [26, -4], [26, 4], [14, 4]], volume: 840.4060323005599 * 96 / 21 },
+};
+const { corners, volume } = profiles[profile];
+const frame = { origin: profile === 'rectangular' ? [11, -17, 23] : [21, -19.4, 24.8], normal: [0, .6, .8], xAxis: [1, 0, 0] };
 const [x, y, z] = frame.origin;
 const ontoPlane = (u, v, h) => [x + u, y + .8 * v + .6 * h, z - .6 * v + .8 * h];
 
@@ -18,6 +25,7 @@ const frozen = [
   'packages/barocss-cad-model/src/app/profiles.ts',
   'packages/barocss-cad-model/src/app/ruledTurnCommand.ts',
   'packages/barocss-cad-model/src/app/smoothLoftTurn.ts',
+  'packages/barocss-cad/src/internal/convex-polygon-screw-axis.ts',
   'packages/barocss-cad/src/internal/triangular-screw-axis.ts',
   'packages/barocss-cad/src/part/part-profile-solid.ts',
   'packages/barocss-cad/src/features/loft.ts',
@@ -38,10 +46,10 @@ import { partBreps } from '@barocss/cad-model/engine/evaluate';
 import { digestOf } from '@barocss/cad-model/util/digest';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 console.log(JSON.stringify(partBreps(doc).map(({ key, brep }) => ({
-  key, digest: digestOf(brep), counts: checkBrep(brep, { strict: true }).counts,
+  key, digest: digestOf(brep), counts: checkBrep(brep, { strict: true }).counts, coedges: brep.coedges.length,
   closed: brep.shells.length === 1 && brep.shells[0].closed,
   valid: checkBrep(brep, { strict: true }).valid, volume: brepMassProperties(brep, 1).volume,
-  rails: brep.edges.filter(edge => /^c[0-3]$/.test(edge.id)).map(({ curve }) => ({
+  rails: brep.edges.filter(edge => /^c[0-9]+$/.test(edge.id)).map(({ curve }) => ({
     degree: curve.degree, poles: curve.controlPoints.length, knots: curve.knots,
     steps: Array.from({ length: ${samples + 1} }, (_, i) => evaluateCurveD1(curve, i / ${samples})),
   })),
@@ -121,15 +129,20 @@ async function inspect(doc, angle, label, advance = height) {
   assert.equal(others.length, 0);
   assert.deepEqual([part.valid, part.closed, part.counts.bodies, part.counts.faces, part.counts.edges, part.counts.vertices],
     [true, true, 1, corners.length + 2, 3 * corners.length, 2 * corners.length]);
+  assert.equal(part.coedges, 6 * corners.length);
   assert.deepEqual(bodies.map(body => body.key), [part.key]);
-  const expectedVolume = triangular ? 840.1080446694306 : 840.4060323005599 * 96 / 21;
-  assert.ok(Math.abs(part.volume - expectedVolume * advance / height) < 1e-7);
+  assert.ok(Math.abs(part.volume - volume * advance / height) < 1e-7);
   assert.ok(Math.abs(bodies[0].volume - part.volume) < 1e-7);
   assert.equal(part.rails.length, corners.length);
   let maxStationError = 0, minimumWinding = Infinity;
-  for (const [corner, rail] of part.rails.entries()) {
+  const seen = new Set();
+  for (const rail of part.rails) {
     assert.deepEqual([rail.degree, rail.poles, rail.knots], [3, spans + 1, part.rails[0].knots]);
     assert.equal(new Set(rail.knots.slice(4, -4)).size, spans - 3);
+    const start = rail.steps[0].point;
+    const corner = corners.findIndex(([u, v]) => Math.hypot(start[0] - x - u, .8 * (start[1] - y) - .6 * (start[2] - z) - v) < 1e-8);
+    assert.ok(corner >= 0 && !seen.has(corner));
+    seen.add(corner);
     for (const [i, { point: p, derivative: d }] of rail.steps.entries()) {
       const t = i / samples;
       assert.ok(Math.abs(.6 * d[1] + .8 * d[2] - advance) < 1e-8);
@@ -146,7 +159,7 @@ async function inspect(doc, angle, label, advance = height) {
     }
   }
   f.report.observations.push({
-    label, angle, advance, digest: part.digest, counts: part.counts, volume: part.volume,
+    label, angle, advance, digest: part.digest, counts: part.counts, coedges: part.coedges, volume: part.volume,
     rails: part.rails.length, maxStationError, minimumWinding,
   });
   return part;

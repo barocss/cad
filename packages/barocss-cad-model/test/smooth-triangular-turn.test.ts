@@ -307,7 +307,7 @@ const screwCorners: [number, number][] = [[-7, -4], [2, -3], [-4, 1]];
 function screwSections(angle: number, points = screwCorners, reverse = false) {
   const last = Math.max(6, Math.ceil(Math.abs(angle) / 30));
   let doc = emptyDoc();
-  const ordered = reverse ? [points[0], points[2], points[1]] : points;
+  const ordered = reverse ? [points[0], ...points.slice(1).reverse()] : points;
   for (let i = 0; i <= last; i++) {
     const t = i / last, phase = angle * (Math.PI / 180) * t;
     const c = Math.cos(phase), s = Math.sin(phase);
@@ -374,6 +374,76 @@ test('External-axis triangular Screw uses one compact signed solid on tilted sec
     assert.ok('doc' in reopened);
     assert.deepEqual(reopened.doc, doc);
     assert.deepEqual(partBreps(reopened.doc)[0].brep, brep);
+  }
+});
+
+test('Straight convex polygon Screw preserves each authored rail through a full signed revolution', () => {
+  const regular = (sides: number): [number, number][] => Array.from({ length: sides }, (_, i) => {
+    const phase = 2 * Math.PI * i / sides;
+    return [10 + 3 * Math.cos(phase), 3 * Math.sin(phase)];
+  });
+  const fixtures: { points: [number, number][]; angles: number[]; volume?: number }[] = [
+    { points: [[-7, -4], [2, -3], [1, -1], [-4, 1], [-6, -1]], angles: [360, -360], volume: 1080.138914574982 },
+    { points: [[-7, -5], [1, -5], [3, -3], [2, -1], [-3, 1], [-7, -1]], angles: [360, -360], volume: 1840.2366692758953 },
+    // Nearest-corner alignment can alias a 30° section interval in these regular profiles.
+    { points: regular(7), angles: [360, -360] },
+    { points: regular(64), angles: [360] },
+  ];
+  for (const { points, angles, volume } of fixtures) for (const angle of angles) {
+    const { doc, last } = screwSections(angle, points, angle < 0);
+    const [{ brep }, ...others] = partBreps(doc);
+    const n = points.length;
+    assert.equal(others.length, 0);
+    const rails = brep.edges.filter(edge => /^c[0-9]+$/.test(edge.id)).map(edge => edge.curve);
+    assert.equal(rails.length, n);
+    for (const rail of rails) assert.deepEqual([rail.degree, rail.controlPoints.length], [3, last + 1], `${n} sides at ${angle}°`);
+    const { valid, counts } = checkBrep(brep, { strict: true });
+    assert.deepEqual([valid, counts.bodies, counts.faces, counts.edges, counts.vertices, brep.coedges.length],
+      [true, 1, n + 2, 3 * n, 2 * n, 6 * n]);
+    assert.equal(brep.shells.length, 1);
+    assert.ok(brep.shells[0].closed);
+    if (volume !== undefined) close([brepMassProperties(brep, 1).volume], [volume], 1e-7);
+    const local = (p: Point): [number, number] => [
+      p[0] - screwAxis[0], .8 * (p[1] - screwAxis[1]) - .6 * (p[2] - screwAxis[2]),
+    ];
+    const matched = new Set<number>();
+    for (const rail of rails) {
+      let prior = local(evaluateCurve(rail, 0)), winding = 0;
+      const corner = points.findIndex(([u, v]) => Math.hypot(u - prior[0], v - prior[1]) < 1e-8);
+      assert.ok(corner >= 0 && !matched.has(corner));
+      matched.add(corner);
+      for (let i = 1; i <= last * 10; i++) {
+        const t = i / (last * 10);
+        const { point, derivative } = evaluateCurveD1(rail, t);
+        const [u, v] = local(point);
+        const increment = Math.atan2(prior[0] * v - prior[1] * u, prior[0] * u + prior[1] * v);
+        assert.ok(Math.sign(angle) * increment > 0);
+        winding += increment;
+        prior = [u, v];
+        close([.6 * derivative[1] + .8 * derivative[2]], [40]);
+        if (i % 10 === 0) {
+          const phase = angle * (Math.PI / 180) * t;
+          const [x, y] = points[corner];
+          close([u, v], [x * Math.cos(phase) - y * Math.sin(phase), x * Math.sin(phase) + y * Math.cos(phase)]);
+        }
+      }
+      close([winding], [angle * (Math.PI / 180)]);
+    }
+  }
+});
+
+test('Polygon Screw refuses concave sections and axes inside or on the boundary', () => {
+  const outlines: [number, number][][] = [
+    [[-7, -5], [1, -5], [-4, -3], [-3, 1], [-7, -1]],
+    [[-4, -2], [4, -2], [3, 2], [0, 4], [-3, 2]],
+    [[-4, 0], [4, 0], [3, 3], [0, 5], [-3, 3]],
+    [[0, 0], [4, 1], [5, 3], [2, 5], [0, 3]],
+  ];
+  for (const points of outlines) {
+    const { doc } = screwSections(360, points);
+    const evaluated = evaluateDoc(doc, 1);
+    assert.ok(!evaluated.ok, JSON.stringify(points));
+    assert.match(evaluated.error.detail, /Surface V control point count/);
   }
 });
 
