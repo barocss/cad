@@ -1,14 +1,19 @@
 import assert from 'node:assert/strict';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { withMcpSession } from './mcp-browser-session.mjs';
 
 const cubic = process.argv.includes('--cubic');
+const agentInspect = process.argv.includes('--agent-inspect');
+assert.ok(!agentInspect || cubic, 'Use the cubic fixture for the Agent inspection comparison');
 const straight = [[10, 10, 0], [40, 10, cubic ? 6 : 0]];
 const crown = cubic ? [[10, 30, 3], [18, 37, 12], [32, 25, -3], [40, 30, 9]]
   : [[10, 30, 0], [25, 37, 8], [40, 30, 0]];
 const degree = crown.length - 1, profile = cubic ? 'cubic' : 'quadratic';
 const [start, end] = cubic ? [2, 4] : [0, 1], span = end - start;
+const cubicPoint = [25, 20.375, 3.9375], cubicCross = [-.328125, -29.53125, 326.8125];
+const cubicNormal = cubicCross.map(component => component / Math.hypot(...cubicCross));
 function curveSource(id, points, from) {
   const count = points.length;
   return `@model ruled_input {version:0;length-unit:mm;@curve #${id} {type:nurbs;degree:${count - 1};knots:[${Array(count).fill(from)},${Array(count).fill(from + span)}];control-points:${JSON.stringify(points)};weights:[${Array(count).fill(1)}];}}`;
@@ -25,10 +30,13 @@ const pins = [
   'apps/cad-studio/test/direct-ruled-line-quadratic-browser.mjs',
   'apps/cad-studio/src/ui/DirectPanel.tsx', 'apps/cad-studio/src/ui/ruledMidpointNormal.ts',
   'packages/barocss-cad-model/src/engine/direct.ts',
+  ...(agentInspect ? ['packages/barocss-cad-model/src/chat/part/views.ts', 'packages/barocss-cad-model/src/chat/part/query.ts',
+    'packages/barocss-cad-model/src/chat/sweepSource.ts', 'packages/barocss-cad-model/src/chat/contract.ts',
+    'apps/cad-studio/scripts/cad-mcp.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs'] : []),
 ];
 const f = await createFlow({
   name: `direct-ruled-line-${profile}`, output: process.argv[2],
-  envFrozen: cubic ? 'D1623_SOURCE_FROZEN' : 'D1611_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
+  envFrozen: agentInspect ? 'D1624_SOURCE_FROZEN' : cubic ? 'D1623_SOURCE_FROZEN' : 'D1611_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
   qualification: `Build the native ruled sheet with a straight and a ${profile} boundary. Verify its source curves, midpoint normal and exact reopen.`,
   limits: [`One unit-weight straight span and one unit-weight ${profile} span, in the same direction and on the same parameter domain.`],
   inspectorSource: `
@@ -127,12 +135,9 @@ await f.run(async () => {
     });
   }));
   assert.ok(error <= 1e-10, error);
-  const midpoint = cubic ? [25, 20.375, 3.9375] : [25, 21.75, 2];
+  const midpoint = cubic ? cubicPoint : [25, 21.75, 2];
   assert.ok(native.samples[8][4].every((coordinate, axis) => Math.abs(coordinate - midpoint[axis]) < 1e-10));
-  if (cubic) {
-    const cross = [-.328125, -29.53125, 326.8125], length = Math.hypot(...cross);
-    assert.ok(native.normal.every((coordinate, axis) => Math.abs(coordinate - cross[axis] / length) < 1e-10));
-  }
+  if (cubic) assert.ok(native.normal.every((coordinate, axis) => Math.abs(coordinate - cubicNormal[axis]) < 1e-10));
   f.report.observations.push({ samples: 153, maxErrorMm: error, midpoint: native.samples[8][4], normal: native.normal });
   await f.snapshot('05-ruled-surface');
   await f.undo();
@@ -146,4 +151,58 @@ await f.run(async () => {
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await row('Ruled surface').click();
   await f.snapshot('07-reopened-surface-selection');
+  if (agentInspect) await compareAgent(saved.file, result);
 });
+
+async function compareAgent(file, doc) {
+  f.phase = 'compare the local Agent and Studio point at the same native UV';
+  const uv = { u: 3, v: .5 };
+  const point = panel().locator('.kv').filter({ hasText: /^Point/ });
+  const normal = panel().locator('.kv').filter({ hasText: /^Normal/ });
+  const display = (values, digits) => values.map(value => String(Math.round(value * 10 ** digits) / 10 ** digits)).join(', ');
+  await panel().getByLabel('u', { exact: true }).fill('2');
+  await panel().getByLabel('v', { exact: true }).fill('0');
+  await point.getByText('10, 10, 0', { exact: true }).waitFor();
+  await panel().getByLabel('u', { exact: true }).fill(String(uv.u));
+  await panel().getByLabel('v', { exact: true }).fill(String(uv.v));
+  await point.getByText(display(cubicPoint, 3), { exact: true }).waitFor();
+  await normal.getByText(display(cubicNormal, 4), { exact: true }).waitFor();
+  await point.scrollIntoViewIfNeeded();
+
+  const bytes = await readFile(file), surface = doc.direct.objects.at(-1).id;
+  const options = { app: f.app, output: f.output, clientName: 'barocss-direct-surface-inspection' };
+  const request = { action: 'inspect', surface, ...uv };
+  const measurement = await withMcpSession(options, file, 'agent-reopened-surface', async call => {
+    const summary = await call('query', { action: 'summary' });
+    const row = summary.direct_surfaces.find(candidate => candidate.id === surface);
+    assert.deepEqual(row, { id: surface, name: 'Ruled surface', u: [2, 4], v: [0, 1] });
+    assert.match(summary.direct_revision, /^[a-f0-9]{64}$/);
+    const pinned = { ...request, expectedDirectRevision: summary.direct_revision };
+    const { surfacePoint } = await call('query', pinned);
+    const { normal: worldNormal, ...at } = surfacePoint;
+    assert.deepEqual(at, { surfaceId: surface, ...uv, point: cubicPoint, unit: 'mm', revision: summary.direct_revision });
+    assert.ok(worldNormal.every((component, axis) => Math.abs(component - cubicNormal[axis]) < 1e-12));
+    assert.equal(await normal.locator('b').innerText(), display(worldNormal, 4));
+    assert.equal((await call('query', request, true)).code, 'DIRECT_SURFACE_INPUT');
+    assert.equal((await call('query', { ...pinned, v: 1.25 }, true)).code, 'DIRECT_SURFACE_DOMAIN');
+    return surfacePoint;
+  });
+
+  const changed = structuredClone(doc);
+  changed.direct.objects.at(-1).name = 'Renamed after review';
+  const changedFile = join(f.output, 'renamed-ruled-surface.bcad');
+  await writeFile(changedFile, JSON.stringify(changed));
+  await withMcpSession(options, changedFile, 'agent-refuses-stale-surface', async call => {
+    const summary = await call('query', { action: 'summary' });
+    assert.notEqual(summary.direct_revision, measurement.revision);
+    const stale = await call('query', { ...request, expectedDirectRevision: measurement.revision }, true);
+    assert.equal(stale.code, 'DIRECT_SURFACE_STALE');
+    const current = await call('query', { ...request, expectedDirectRevision: summary.direct_revision });
+    assert.deepEqual(current.surfacePoint, { ...measurement, revision: summary.direct_revision });
+  });
+
+  assert.deepEqual(await readFile(file), bytes);
+  await f.same(doc);
+  f.report.observations.push({ surfacePoint: measurement, nativeFileUnchanged: true });
+  await f.snapshot('08-studio-surface-confirmed-by-agent');
+}

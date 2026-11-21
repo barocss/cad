@@ -8,7 +8,7 @@ import { isObj } from '../../util/guards';
 import { revisionOf } from '../../util/revision';
 import { loadDirect } from '../../engine/directModule';
 import { directInspectionRevision } from '../sweepSource';
-import { evaluateCurve } from '@barocss/cad';
+import { evaluateCurve, surfaceDomain } from '@barocss/cad';
 
 async function renderViewsTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate): Promise<ToolOutcome> {
   if (args.expectedRevision !== undefined && (typeof args.expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(args.expectedRevision)))
@@ -53,7 +53,42 @@ async function inspectCurveJoin(state: ChatState, args: Record<string, unknown>)
   }
   return fail(state, 'The parameter has no supported exact Direct join angle.', { code: 'DIRECT_JOIN_UNAVAILABLE' });
 }
+async function inspectSurfacePoint(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
+  const { surface, u, v, expectedDirectRevision } = args;
+  if (args.faces !== undefined || args.edges !== undefined || args.curve !== undefined || args.parameter !== undefined
+    || typeof surface !== 'string' || !surface || typeof u !== 'number' || typeof v !== 'number'
+    || !Number.isFinite(u) || !Number.isFinite(v)
+    || typeof expectedDirectRevision !== 'string' || !/^[a-f0-9]{64}$/.test(expectedDirectRevision))
+    return fail(state, 'Use one surface ID, finite native u and v, and the direct_revision from query.summary.', { code: 'DIRECT_SURFACE_INPUT' });
+  if (state.partOf) return fail(state, 'Inspect a Direct surface in the base part.', { code: 'DIRECT_SURFACE_SCOPE' });
+  const revision = directInspectionRevision(state.doc);
+  if (revision !== expectedDirectRevision)
+    return fail(state, 'The Direct inputs changed. Read query.summary again.', { code: 'DIRECT_SURFACE_STALE', revision });
+  const direct = state.doc.direct, matches = direct?.objects.filter(object => object.id === surface) ?? [];
+  const unavailable = () => fail(state, 'Use the ID of a unique visible untrimmed Direct surface from query.summary.', { code: 'DIRECT_SURFACE_SOURCE' });
+  if (!direct || matches.length !== 1 || matches[0].hidden || matches[0].trims?.length) return unavailable();
+
+  const { geometryOf, analyzeSurface } = await loadDirect();
+  let domain: ReturnType<typeof surfaceDomain>;
+  try {
+    const geometry = geometryOf(direct, matches[0]);
+    if (geometry.kind !== 'surface') return unavailable();
+    domain = surfaceDomain(geometry);
+  } catch { return unavailable(); }
+  if (u < domain.u[0] || u > domain.u[1] || v < domain.v[0] || v > domain.v[1])
+    return fail(state, 'Choose u and v inside the native surface domain.', { code: 'DIRECT_SURFACE_DOMAIN', domain });
+  try {
+    const { point, normal } = analyzeSurface(direct, surface, u, v);
+    return { state, content: json({ surfacePoint: { surfaceId: surface, u, v, point, normal, unit: 'mm', revision } }),
+      isError: false, changed: false, summary: 'Direct surface point and normal' };
+  } catch {
+    return fail(state, 'The native surface normal is unavailable at this parameter pair.', { code: 'DIRECT_SURFACE_NORMAL' });
+  }
+}
+
 async function inspectTool(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
+  if (args.surface !== undefined || args.u !== undefined || args.v !== undefined)
+    return inspectSurfacePoint(state, args);
   if (args.curve !== undefined || args.parameter !== undefined || args.expectedDirectRevision !== undefined)
     return inspectCurveJoin(state, args);
   const r = resolveSelectors(state.doc.nodes, state.bodies, { faces: list(args.faces), edges: list(args.edges) });

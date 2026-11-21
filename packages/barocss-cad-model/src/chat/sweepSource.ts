@@ -1,4 +1,4 @@
-import type { Curve } from '@barocss/cad';
+import { surfaceDomain, type Curve } from '@barocss/cad';
 import { sweepPath } from '../app/profileCommands';
 import type { StudioDoc } from '../engine/doc';
 import type { DirectGeometry, DirectObject } from '../engine/direct';
@@ -14,17 +14,22 @@ function curveRevision(geometry: Pick<Curve, 'degree' | 'knots' | 'controlPoints
   return digestOf({ degree, knots, controlPoints, weights });
 }
 
-export async function visibleSweepCurves(direct: DirectGeometry | undefined) {
-  if (!direct?.objects.length) return [];
+export async function visibleDirectGeometry(direct: DirectGeometry | undefined) {
+  const curves: { id: string; name: string; revision: string }[] = [];
+  const surfaces: { id: string; name: string; u: [number, number]; v: [number, number] }[] = [];
+  if (!direct?.objects.length) return { curves, surfaces };
   const { geometryOf } = await loadDirect(), unique = new Map<string, DirectObject | null>();
   for (const object of direct.objects) unique.set(object.id, unique.has(object.id) ? null : object);
-  return [...unique.values()].flatMap(object => {
-    if (!object || object.hidden) return [];
+  for (const object of unique.values()) {
+    if (!object || object.hidden) continue;
+    const { id, name } = object;
     try {
       const geometry = geometryOf(direct, object);
-      return geometry.kind === 'curve' ? [{ id: object.id, name: object.name, revision: curveRevision(geometry) }] : [];
-    } catch { return []; }
-  });
+      if (geometry.kind === 'curve') curves.push({ id, name, revision: curveRevision(geometry) });
+      else if (!object.trims?.length) surfaces.push({ id, name, ...surfaceDomain(geometry) });
+    } catch { /* An unreadable source cannot be offered as a target. */ }
+  }
+  return { curves, surfaces };
 }
 
 export async function sweepSourceRevision(doc: StudioDoc, id: string): Promise<{ error: string } | { revision: string }> {

@@ -41,7 +41,7 @@ export const GROUPS: Record<string, Group> = {
     about: 'Reads the part without changing it.',
     actions: {
       summary: ['get_part_summary', 'body?, page? — features, parameters, bodies, faces and edges by name'],
-      inspect: ['inspect', 'faces?, edges?, curve? — native detail'],
+      inspect: ['inspect', 'faces?, edges?, curve?, surface? — native detail'],
       measure: ['measure', 'a, b? — a face or edge, or the distance and angle between two'],
       mass: ['mass_properties', 'bodies?'],
       interference: ['interference', 'bodies? — overlap and clearance'],
@@ -207,11 +207,12 @@ export function v2Result(text: string, handler?: string): string {
   try { parsed = JSON.parse(text); } catch { return v2Text(text); }
   // These records carry literal IDs, names and refusal codes.
   if (handler === 'get_drawing_dimensions' || handler === 'calculate_drawing_tolerance_stack'
-    || (handler === 'inspect' && isRecord(parsed) && 'curveJoin' in parsed)
+    || (handler === 'inspect' && isRecord(parsed) && ('curveJoin' in parsed || 'surfacePoint' in parsed))
     || handler === 'list_native_joints' || handler === 'measure_edge_continuity' || handler === 'measure_edge_curvature') return text;
-  if (handler === 'get_part_summary' && isRecord(parsed) && Array.isArray(parsed.direct_curves)) {
-    const { direct_curves, ...summary } = parsed;
-    return JSON.stringify({ ...(v2Value(summary) as Record<string, unknown>), direct_curves });
+  if (handler === 'get_part_summary' && isRecord(parsed)) {
+    const { direct_curves, direct_surfaces, ...summary } = parsed;
+    return JSON.stringify({ ...(v2Value(summary) as Record<string, unknown>),
+      ...(Array.isArray(direct_curves) ? { direct_curves } : {}), ...(Array.isArray(direct_surfaces) ? { direct_surfaces } : {}) });
   }
   if (handler === 'get_assembly') {
     // A refusal names literal occurrences too. Argument diagnostics already name the public action.
