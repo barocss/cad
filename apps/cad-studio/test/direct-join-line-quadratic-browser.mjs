@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { withMcpSession } from './mcp-browser-session.mjs';
 
-const inspectAngle = process.argv.includes('--inspect-angle');
+const agentInspect = process.argv.includes('--agent-inspect');
+const inspectAngle = agentInspect || process.argv.includes('--inspect-angle');
 const line = [[10, 10, 0], [25, 10, 0]], quadratic = [[25, 10, 0], [35, 24, 0], [50, 18, 0]];
 function source(points) {
   const count = points.length;
@@ -22,7 +24,9 @@ const pins = [
   'apps/cad-studio/src/ui/joinEndpointGuidance.ts', 'packages/barocss-cad-model/src/engine/direct.ts',
 ];
 const f = await createFlow({
-  name: 'join-line-quadratic', output: process.argv[2], envFrozen: inspectAngle ? 'D1614_SOURCE_FROZEN' : 'D1605_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
+  name: 'join-line-quadratic', output: process.argv[2],
+  envFrozen: agentInspect ? 'D1615_SOURCE_FROZEN' : inspectAngle ? 'D1614_SOURCE_FROZEN' : 'D1605_SOURCE_FROZEN',
+  initialFiles: pins, requiredFrozen: pins,
   qualification: 'Join the exact line end to the quadratic start, preserve both spans and reopen the single native curve.',
   limits: ['One unit-weight line and one unit-weight quadratic Bézier with an exact shared endpoint.'],
   inspectorSource: `
@@ -127,7 +131,9 @@ await f.run(async () => {
     await at.fill('1');
     await expectAngle();
     await f.same(joined);
-    f.report.observations.push({ expectedAngleDeg: expected, displayedAngle: await angle.locator('b').innerText() });
+    const displayedAngle = await angle.locator('b').innerText();
+    f.report.observations.push({ expectedAngleDeg: expected, displayedAngle });
+    if (agentInspect) await compareAgent(saved.file, joined, expected, displayedAngle);
 
     async function expectAngle() {
       await radius.getByText(/Unavailable at join/).waitFor();
@@ -135,3 +141,45 @@ await f.run(async () => {
     }
   }
 });
+
+async function compareAgent(file, doc, expected, displayedAngle) {
+  f.phase = 'compare the local Agent with the reopened Studio inspector';
+  const bytes = await readFile(file);
+  const session = { app: f.app, output: f.output, clientName: 'barocss-direct-join-inspection' };
+  const [visible] = doc.direct.objects.filter(object => !object.hidden);
+  const args = { action: 'inspect', curve: visible.id, parameter: 1 };
+  const measurement = await withMcpSession(session, file, 'agent-reopened-join', async call => {
+    const described = await call('describe', { tool: 'query', action: 'inspect' });
+    assert.equal(described.input.properties.expectedDirectRevision.pattern, '^[a-f0-9]{64}$');
+    const summary = await call('query', { action: 'summary' });
+    assert.match(summary.direct_revision, /^[a-f0-9]{64}$/);
+    assert.equal(summary.direct_curves[0].id, visible.id);
+    const pinned = { ...args, expectedDirectRevision: summary.direct_revision };
+    const { curveJoin } = await call('query', pinned);
+    assert.deepEqual(curveJoin.point, [25, 10, 0]);
+    assert.equal(curveJoin.curveId, visible.id);
+    assert.equal(curveJoin.revision, summary.direct_revision);
+    assert.equal(curveJoin.unit, 'degrees');
+    assert.ok(Math.abs(curveJoin.angleDegrees - expected) < 1e-12);
+    assert.equal(displayedAngle, Math.round(curveJoin.angleDegrees * 1000) / 1000 + '°');
+    assert.equal((await call('query', args, true)).code, 'DIRECT_JOIN_INPUT');
+    assert.equal((await call('query', { ...pinned, parameter: .75 }, true)).code, 'DIRECT_JOIN_UNAVAILABLE');
+    assert.deepEqual(await call('query', pinned), { curveJoin });
+    return curveJoin;
+  });
+
+  const edited = structuredClone(doc);
+  edited.direct.objects.find(object => object.id === visible.id).name = 'Renamed joined curve';
+  const editedFile = join(f.output, 'renamed-join.bcad');
+  await writeFile(editedFile, JSON.stringify(edited));
+  await withMcpSession(session, editedFile, 'agent-refuses-stale-join', async call => {
+    const summary = await call('query', { action: 'summary' });
+    assert.notEqual(summary.direct_revision, measurement.revision);
+    assert.equal((await call('query', { ...args, expectedDirectRevision: measurement.revision }, true)).code, 'DIRECT_JOIN_STALE');
+    assert.equal((await call('query', { ...args, expectedDirectRevision: summary.direct_revision })).curveJoin.angleDegrees, measurement.angleDegrees);
+  });
+  assert.deepEqual(await readFile(file), bytes);
+  await f.same(doc);
+  f.report.observations.push({ curveJoin: measurement, displayedAngle, nativeFileUnchanged: true });
+  await f.snapshot('08-studio-angle-confirmed-by-agent');
+}

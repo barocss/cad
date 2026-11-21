@@ -304,8 +304,13 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'inspect',
-    description: 'Detail of faces and edges: a face\'s kind, area, normal or axis, radius, centre, the faces next to it and the feature that made it; an edge\'s ends, chord, line or curve, its two faces and the feature that made it.',
-    input_schema: { type: 'object', properties: { faces: selectorList('Faces'), edges: selectorList('Edges') }, additionalProperties: false },
+    description: 'Detail of faces and edges: a face\'s kind, area, normal or axis, radius, centre, the faces next to it and the feature that made it; an edge\'s ends, chord, line or curve, its two faces and the feature that made it. For a supported exact Direct join in the base part, pass curve, parameter and expectedDirectRevision together. The result gives the point in model units and the angle in degrees.',
+    input_schema: { type: 'object', properties: {
+      faces: selectorList('Faces'), edges: selectorList('Edges'),
+      curve: { type: 'string', description: 'A visible Direct curve ID from query.summary.' },
+      parameter: { type: 'number', description: 'The exact native parameter of the join.' },
+      expectedDirectRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The direct_revision from query.summary.' },
+    }, additionalProperties: false },
   },
   {
     name: 'select',

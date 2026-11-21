@@ -6,6 +6,9 @@ import { renderViews } from '../views';
 import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, json, fail, strings, list } from '../toolKit';
 import { isObj } from '../../util/guards';
 import { revisionOf } from '../../util/revision';
+import { loadDirect } from '../../engine/directModule';
+import { directInspectionRevision } from '../sweepSource';
+import { evaluateCurve } from '@barocss/cad';
 
 async function renderViewsTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate): Promise<ToolOutcome> {
   if (args.expectedRevision !== undefined && (typeof args.expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(args.expectedRevision)))
@@ -20,7 +23,39 @@ async function renderViewsTool(state: ChatState, args: Record<string, unknown>, 
   const { image, ...rest } = r;
   return { state, content: json({ revision, ...rest }), isError: false, changed: false, summary: `views (${Object.keys(r.legend).length} faces labelled)`, images: [{ data: image, mediaType: 'image/png' }] };
 }
+async function inspectCurveJoin(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
+  const { curve, parameter, expectedDirectRevision } = args;
+  if (args.faces !== undefined || args.edges !== undefined || typeof curve !== 'string' || !curve
+    || typeof parameter !== 'number' || !Number.isFinite(parameter)
+    || typeof expectedDirectRevision !== 'string' || !/^[a-f0-9]{64}$/.test(expectedDirectRevision))
+    return fail(state, 'Use a curve ID, a finite parameter and the direct_revision from query.summary, without faces or edges.', { code: 'DIRECT_JOIN_INPUT' });
+  if (state.partOf) return fail(state, 'Inspect a Direct join in the base part.', { code: 'DIRECT_JOIN_SCOPE' });
+  const revision = directInspectionRevision(state.doc);
+  if (revision !== expectedDirectRevision)
+    return fail(state, 'The Direct inputs changed. Read query.summary again.', { code: 'DIRECT_JOIN_STALE', revision });
+  const direct = state.doc.direct;
+  const matches = direct?.objects.filter(object => object.id === curve) ?? [];
+  if (!direct || matches.length !== 1 || matches[0].hidden)
+    return fail(state, 'Use the ID of a unique visible Direct curve from query.summary.', { code: 'DIRECT_JOIN_CURVE' });
+
+  const { geometryOf, directJoinTangentAngle } = await loadDirect();
+  try {
+    const geometry = geometryOf(direct, matches[0]);
+    if (geometry.kind === 'curve') {
+      const angleDegrees = directJoinTangentAngle(geometry, parameter);
+      if (angleDegrees !== null) {
+        const curveJoin = { curveId: curve, parameter, point: evaluateCurve(geometry, parameter), angleDegrees, unit: 'degrees', revision };
+        return { state, content: json({ curveJoin }), isError: false, changed: false, summary: 'Direct join tangent angle' };
+      }
+    }
+  } catch {
+    return fail(state, 'The Direct curve could not be read.', { code: 'DIRECT_JOIN_CURVE' });
+  }
+  return fail(state, 'The parameter has no supported exact Direct join angle.', { code: 'DIRECT_JOIN_UNAVAILABLE' });
+}
 async function inspectTool(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
+  if (args.curve !== undefined || args.parameter !== undefined || args.expectedDirectRevision !== undefined)
+    return inspectCurveJoin(state, args);
   const r = resolveSelectors(state.doc.nodes, state.bodies, { faces: list(args.faces), edges: list(args.edges) });
   if (r.error) return fail(state, r.error);
   const faces = r.names.faces.map(n => faceDetail(state.doc, state.bodies, n) ?? { name: n, error: 'no such face' });

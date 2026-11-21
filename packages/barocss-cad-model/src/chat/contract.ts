@@ -83,7 +83,7 @@ const READ: Record<string, JsonSchema | null> = {
   output_cam_package: o({ revision: str, files: arr }, ['revision', 'files']),
   output_print_layers: o({ revision: str, files: arr }, ['revision', 'files']),
   output_bundle: o({ revision: str, files: arr }, ['revision', 'files']),
-  get_part_summary: o({ feature_count: num, facts: obj, parameters: obj, features: arr, bodies: arr, direct_curves: arr, note: str, followed_changed: arr, variability: obj }, ['feature_count', 'facts', 'parameters', 'features', 'bodies']),
+  get_part_summary: o({ feature_count: num, facts: obj, parameters: obj, features: arr, bodies: arr, direct_curves: arr, direct_revision: str, note: str, followed_changed: arr, variability: obj }, ['feature_count', 'facts', 'parameters', 'features', 'bodies']),
   get_image_layers: null,
   measure: o({ label: str, area: num, length: num, radius: num, distance: num, from: arr, to: arr, angle: num, normalDistance: num, resolved: arr }),
   mass_properties: o({ bodies: arr, note: str }, ['bodies']),
@@ -102,7 +102,8 @@ const READ: Record<string, JsonSchema | null> = {
   diff: o({ from: str, to: str, diff: obj }, ['diff']),
   list_proposals: o({ proposals: arr }, ['proposals']),
   render_views: o({ revision: str, imageSha256: str, legend: obj, views: obj, layout: str, notes: arr }, ['views', 'revision', 'imageSha256']),
-  inspect: o({ faces: arr, edges: arr }),
+  inspect: o({ faces: arr, edges: arr, curveJoin: o({ curveId: str, parameter: num, point: nativePoint, angleDegrees: num, unit: { type: 'string', const: 'degrees' }, revision: str },
+    ['curveId', 'parameter', 'point', 'angleDegrees', 'unit', 'revision']) }),
   select: o({ ok: bool, selected: obj }, ['ok']),
   checkpoint: o({ ok: bool, checkpoint: str, model_hash: str, checkpoints: arr }, ['ok', 'checkpoint']),
   // (CG6, DA-8: a version and a branch change the version log, not the document, as a checkpoint keeps a snapshot.)

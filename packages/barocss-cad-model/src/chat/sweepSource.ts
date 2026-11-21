@@ -4,6 +4,10 @@ import type { StudioDoc } from '../engine/doc';
 import type { DirectGeometry, DirectObject } from '../engine/direct';
 import { loadDirect } from '../engine/directModule';
 import { digestOf } from '../util/digest';
+import { revisionContent } from '../util/revision';
+
+/** The read pin covers authored Direct sources and objects in addition to the usual part revision fields. */
+export const directInspectionRevision = (doc: StudioDoc) => digestOf({ part: revisionContent(doc), direct: doc.direct });
 
 function curveRevision(geometry: Pick<Curve, 'degree' | 'knots' | 'controlPoints' | 'weights'>) {
   const { degree, knots, controlPoints, weights } = geometry;

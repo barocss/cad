@@ -18,7 +18,7 @@ import { r3Signed as r3 } from '../../util/round';
 import { isObj } from '../../util/guards';
 import { variabilityView } from '../variability';
 import { featureId } from '../../engine/ids';
-import { visibleSweepCurves } from '../sweepSource';
+import { directInspectionRevision, visibleSweepCurves } from '../sweepSource';
 
 /** D155: a fit's limits as a result shows them (each row's deviations, sizes, table and row, estimate and source). */
 export const fitView = (l: FitLimits) => ({ kind: l.kind, clearanceMin: l.clearanceMin, clearanceMax: l.clearanceMax, estimate: l.estimate,
@@ -39,7 +39,7 @@ async function getPartSummaryTool(state: ChatState, args: Record<string, unknown
       ...(f.node.kind === 'sketch' ? { id: featureId(state.doc.nodes, f.index) } : {}),
       ...(responseFormat === 'concise' ? {} : { node: f.node.kind === 'sketch' ? { kind: 'sketch', profile: f.node.profile } : f.node }),
     })),
-    ...(directCurves.length ? { direct_curves: directCurves } : {}),
+    ...(directCurves.length ? { direct_curves: directCurves, ...(!state.partOf ? { direct_revision: directInspectionRevision(state.doc) } : {}) } : {}),
     bodies: list, ...(many && !only ? { note: 'Faces and edges are listed per body: call again with {"body": key}.' } : {}),
     // (FRf2, O125: frames following a placed part's sketch that changed since linked — current geometry, to relink.)
     ...(stale.length ? { followed_changed: stale.map(x => ({ frame: x.frame, part: x.part, sketch: x.sketch, was: x.was, now: x.now, message: staleText(x) })) } : {}),
