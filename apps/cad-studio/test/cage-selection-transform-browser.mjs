@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 const scaleBaseline = process.argv.includes('--expect-no-scale-drag');
-const scaleDrag = scaleBaseline || process.argv.includes('--scale-drag');
+const pivotBaseline = process.argv.includes('--expect-no-vertex-pivot');
+const stalePivot = process.argv.includes('--expect-stale-pivot');
+const pivotTopology = stalePivot || process.argv.includes('--pivot-topology');
+const vertexScale = pivotBaseline || pivotTopology || process.argv.includes('--vertex-scale');
+const scaleDrag = scaleBaseline || vertexScale || process.argv.includes('--scale-drag');
 const pins=['packages/barocss-cad-model/src/subd/cageEdit.ts','apps/cad-studio/src/ui/CagePanel.tsx','apps/cad-studio/src/subd/useCageEditor.ts','apps/cad-studio/src/subd/cageTransformDraft.ts','apps/cad-studio/src/ui/CageTransformControls.tsx'];
 if (scaleDrag) pins.push('apps/cad-studio/src/subd/useCageGizmo.ts', 'apps/cad-studio/src/viewport/gizmo.ts',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts', 'apps/cad-studio/test/cage-selection-transform-browser.mjs');
 const f=await createFlow({name:'cage-selection-transform',output:process.argv[2],envFrozen:'CAGE_TRANSFORM_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,
- qualification: scaleDrag ? 'Physical uniform scaling of two connected cage faces about the original centre, compared with numeric Scale.'
+ qualification: vertexScale ? 'Physical uniform scaling of two connected cage faces about one exact cage vertex.'
+   : scaleDrag ? 'Physical uniform scaling of two connected cage faces about the original centre, compared with numeric Scale.'
    : 'Numeric world-axis rotation and uniform scale on selected faces, explicit pivot, no-op/cancel/history and native persistence.',
  limits:['One box and two connected top faces. No arbitrary cage or mirror claims.']});
 const button=(name,scope=f.page)=>scope.getByRole('button',{name,exact:true});
@@ -21,6 +26,15 @@ const done=async()=>{await f.page.waitForFunction(()=>document.querySelector('[a
 async function scaleSelection(seed, base, verify, apply) {
  const tool = panel().getByLabel('Cage drag tool', {exact:true});
  const centre = f.page.locator('[data-gizmo="scale"]');
+ const pivotMode = panel().getByLabel('Scale drag pivot', {exact:true});
+ const vertex = panel().getByRole('spinbutton', {name:'Scale drag vertex ID',exact:true});
+ const expectPivot = async pivot => f.page.waitForFunction(pivot=>{
+  const mark=document.querySelector('[data-gizmo="scale"]');
+  if(!mark)return false;
+  const box=mark.getBoundingClientRect();
+  const [x,y]=window.__studioScreenOf(pivot);
+  return Math.hypot(box.x+box.width/2-x,box.y+box.height/2-y)<0.5;
+ },pivot);
  if (scaleBaseline) {
   assert.equal(await centre.count(),0);
   assert.equal(await tool.count(),0);
@@ -34,6 +48,34 @@ async function scaleSelection(seed, base, verify, apply) {
  await tool.selectOption('scale');
  await centre.waitFor();
  assert.equal(await f.page.locator('[data-gizmo^="move"]').count(),0);
+ if (pivotBaseline) {
+  assert.equal(await pivotMode.count(),0);
+  await f.snapshot('original-centre-scale');
+  await f.same(base);
+  return;
+ }
+ let vertexId, pivot;
+ if (vertexScale) {
+  assert.equal(await pivotMode.inputValue(),'centre');
+  await pivotMode.selectOption('vertex');
+  const unavailable = panel().getByRole('status').filter({hasText:'Enter a current cage vertex ID'});
+  for (const invalid of ['', '-1', '2.5', String(seed.cage.positions.length / 3)]) {
+   await vertex.fill(invalid);
+   await unavailable.waitFor();
+   assert.equal(await centre.count(),0);
+   assert.deepEqual(await state(),seed);
+   await f.same(base);
+  }
+  vertexId = Math.min(...seed.sel.faces.flatMap(face=>seed.cage.faces[face]));
+  pivot = seed.cage.positions.slice(3*vertexId,3*vertexId+3);
+  await vertex.fill(String(vertexId));
+  await centre.waitFor();
+  await expectPivot(pivot);
+ }
+ const verifyScale = (after, factor) => {
+  verify(seed, after, 'scale', factor, pivot);
+  if (vertexId !== undefined) assert.deepEqual(after.cage.positions.slice(3*vertexId,3*vertexId+3),pivot);
+ };
  const readout = f.page.locator('.gizmo-readout');
  async function start(factor, steps = 8) {
   const {x,y} = await centre.evaluate(mark => {
@@ -47,6 +89,59 @@ async function scaleSelection(seed, base, verify, apply) {
    await f.page.mouse.move(x+Math.round((factor-1)*84),y,{steps});
    await readout.filter({hasText:`relative × ${factor}`}).waitFor();
   }
+ }
+ if (pivotTopology) {
+  f.phase = 'delete two faces and compare the current owner of their old vertex number';
+  for (const [index, point] of [[8.75,22.5,26],[8.75,27.5,26]].entries()) {
+   const pixel = await f.page.evaluate(point=>window.__studioScreenOf(point),point);
+   assert.ok(pixel);
+   if (index) await f.page.keyboard.down('Shift');
+   await f.page.mouse.click(...pixel);
+   if (index) await f.page.keyboard.up('Shift');
+  }
+  const deleting = await state();
+  assert.deepEqual(deleting.sel.faces,[80,81]);
+  const survivors = seed.cage.faces.filter((_,id)=>!deleting.sel.faces.includes(id));
+  const order = [...new Set(survivors.flat())];
+  const remappedId = order.indexOf(vertexId);
+  const alias = order[vertexId];
+  assert.ok(remappedId >= 0 && alias !== undefined);
+  assert.notEqual(alias,vertexId);
+  const otherPivot = seed.cage.positions.slice(alias*3,alias*3+3);
+  assert.notDeepEqual(otherPivot,pivot);
+  await button('Delete',panel()).click();
+  const pixel = await f.page.evaluate(()=>window.__studioScreenOf([23.75,37.5,26]));
+  assert.ok(pixel);
+  await f.page.mouse.click(...pixel);
+  await f.page.waitForFunction(()=>window.__studioCage()?.sel.faces.length===1);
+  const changed = await state();
+  assert.equal(changed.cage.faces.length,seed.cage.faces.length-2);
+  assert.equal(await vertex.inputValue(),String(vertexId));
+  assert.deepEqual(changed.cage.positions.slice(vertexId*3,vertexId*3+3),otherPivot);
+  assert.deepEqual(changed.cage.positions.slice(remappedId*3,remappedId*3+3),pivot);
+  if (stalePivot) {
+   await expectPivot(otherPivot);
+   await start(1.1);
+   await f.snapshot('old-number-alias-preview');
+   await f.page.mouse.up();
+   verify(changed,await state(),'scale',1.1,otherPivot);
+  } else {
+   await panel().getByRole('status').filter({hasText:'The cage changed. Enter the pivot vertex again.'}).waitFor();
+   assert.equal(await centre.count(),0);
+   assert.deepEqual(await state(),changed);
+   await f.snapshot('old-number-refused');
+   await vertex.fill(String(remappedId));
+   await expectPivot(pivot);
+   await start(1.1);
+   await f.snapshot('confirmed-current-pivot');
+   await f.page.mouse.up();
+   verify(changed,await state(),'scale',1.1,pivot);
+   await button('Undo cage step',panel()).click();
+   assert.deepEqual(await state(),changed);
+  }
+  await f.same(base);
+  f.report.observations.push({oldId:vertexId,remappedId,pivot,otherPivot,oldNumberOwnedWrongPoint:stalePivot});
+  return;
  }
  f.phase = 'identity, held scale and Escape';
  await start(1);
@@ -85,7 +180,7 @@ async function scaleSelection(seed, base, verify, apply) {
  await f.page.mouse.up();
  await f.page.keyboard.up('Shift');
  const fine = await state();
- verify(seed,fine,'scale',1.12);
+ verifyScale(fine,1.12);
  assert.deepEqual(fine.cage.creases, seed.cage.creases);
  assert.equal(fine.undo,1);
  await button('Undo cage step',panel()).click();
@@ -93,7 +188,7 @@ async function scaleSelection(seed, base, verify, apply) {
  await start(0.8);
  await f.page.mouse.up();
  const smaller = await state();
- verify(seed,smaller,'scale',0.8);
+ verifyScale(smaller,0.8);
  assert.equal(smaller.undo,1);
  await button('Undo cage step',panel()).click();
  assert.deepEqual(await state(),seed);
@@ -101,7 +196,7 @@ async function scaleSelection(seed, base, verify, apply) {
  await start(1.1, 20);
  await f.page.mouse.up();
  const larger = await state();
- verify(seed,larger,'scale',1.1);
+ verifyScale(larger,1.1);
  assert.equal(larger.undo,1);
  await button('Undo cage step',panel()).click();
  assert.deepEqual(await state(),seed);
@@ -109,6 +204,10 @@ async function scaleSelection(seed, base, verify, apply) {
  assert.deepEqual(await state(),larger);
  await button('Undo cage step',panel()).click();
  await button('Scale selection',panel()).click();
+ if (vertexId !== undefined) {
+  await f.page.getByLabel('Selection pivot', {exact:true}).selectOption('vertex');
+  await f.page.getByRole('spinbutton', {name:'Pivot cage vertex',exact:true}).fill(String(vertexId));
+ }
  await f.page.getByRole('spinbutton',{name:'Selection scale ratio',exact:true}).fill('1.1');
  await apply();
  assert.deepEqual(await state(),larger);
@@ -125,7 +224,7 @@ async function scaleSelection(seed, base, verify, apply) {
  await f.redo(); await f.same(accepted);
  const saved = await f.save('selection-scale-drag');
  await f.freshOpen(saved.file,accepted,'selection-scale-drag-reopened');
- f.report.observations.push({factors:[0.8,1.1,1.12],numericParity:true,selectedFaces:seed.sel.faces});
+ f.report.observations.push({factors:[0.8,1.1,1.12],numericParity:true,selectedFaces:seed.sel.faces,vertexId,pivot});
 }
 await f.run(async()=>{
  await f.newPage();await f.page.setViewportSize({width:1440,height:1000});await button('New part').click();await f.page.waitForFunction(()=>window.__studioDoc.nodes.length===0);await f.ready();
