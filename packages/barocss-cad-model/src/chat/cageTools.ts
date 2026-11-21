@@ -88,23 +88,35 @@ function cageRevision(doc: StudioDoc, index: number, node: SubdNode): string {
 /** Runs one cage tool. Read-only tools answer `read`; the others the document they make (not yet evaluated). */
 export function runCageTool(doc: StudioDoc, name: string, args: Args, partOf?: string): CageToolResult {
   const selectionTransform = name === 'subd_scale' || name === 'subd_rotate';
-  if (selectionTransform) {
-    if (partOf !== undefined) return { error: 'This transform is available on the base part. Open a placed part definition before transforming its cage.' };
+  const creaseSelection = name === 'subd_select' && args.what === 'linked-within-creases';
+  if (selectionTransform || creaseSelection) {
+    if (partOf !== undefined) return { error: creaseSelection
+      ? 'Read linked faces on the base part. Open the placed part definition to read its linked faces.'
+      : 'This transform is available on the base part. Open a placed part definition before transforming its cage.' };
     if (typeof args.index !== 'number' || !Number.isInteger(args.index)) return { error: 'Pass the current cage feature index as an integer.' };
   }
   const at = nodeAt(doc, args.index);
   if ('error' in at) return at;
   const { node, index } = at, c = node.cage, s0 = startSession(index, c, node.mirror), nv = c.positions.length / 3;
   try {
+    const revision = selectionTransform || creaseSelection ? cageRevision(doc, index, node) : undefined;
+    if (revision !== undefined) {
+      if (node.suppressed || node.held) return { error: creaseSelection
+        ? 'Restore the active SubD feature before reading its linked faces.'
+        : 'Restore the active SubD feature before transforming its cage.' };
+      if (args.cageRevision !== revision) return { error: 'The cage revision is missing or has changed. Read this cage and select its elements again.' };
+    }
     if (name === 'subd_cage') return { read: { index, ...cageSummary(node, s0),
       ...(partOf === undefined ? { cageRevision: cageRevision(doc, index, node) } : {}) } };
     if (name === 'subd_select') {
+      if (creaseSelection) {
+        const result = linkedCageFaces(s0, args);
+        return 'error' in result ? result : { read: { ...result, cageRevision: revision } };
+      }
+      if (args.seedFaces !== undefined || args.cageRevision !== undefined)
+        return { error: 'Use seedFaces and cageRevision with what: linked-within-creases.' };
       const picked = select(c, args);
       return { read: 'error' in picked || partOf !== undefined ? picked : { ...picked, cageRevision: cageRevision(doc, index, node) } };
-    }
-    if (selectionTransform) {
-      if (node.suppressed || node.held) return { error: 'Restore the active SubD feature before transforming its cage.' };
-      if (args.cageRevision !== cageRevision(doc, index, node)) return { error: 'The cage revision is missing or has changed. Read this cage and select its elements again.' };
     }
     const sel = selectionOf(c, args);
     if (typeof sel === 'string') return { error: sel };
@@ -187,6 +199,27 @@ function selectionOf(c: StudioCage, args: Args): CageSelection | string {
   const edge = args.edge === undefined ? [] : edgeList([args.edge], c); if (typeof edge === 'string') return edge;
   return { ...emptyCageSel, vertices: v, faces: f, edges: [...edge, ...e] };
 }
+
+function faceFacts(cage: StudioCage, face: number, frame = faceFrame(cage, face)) {
+  return { face, centre: frame.centre.map(r6), normal: frame.normal.map(r6), sides: cage.faces[face].length };
+}
+
+function linkedCageFaces(s: CageSession, args: Args): {error: string} | {faces: ReturnType<typeof faceFacts>[]; count: number} {
+  if (['normal', 'withinAngle', 'box', 'edge'].some(key => args[key] !== undefined))
+    return { error: 'Find seedFaces with a separate select call before selecting linked faces.' };
+  const picks = indices(args.seedFaces, 'seedFaces', s.cage.faces.length);
+  if (typeof picks === 'string') return { error: picks };
+  if (!picks.length) return { error: 'Pass one or more current face IDs as seedFaces.' };
+  const limit = args.limit === undefined ? 200 : args.limit;
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > 500)
+    return { error: 'Pass a limit from 1 to 500.' };
+  const linked = runOp({ ...s, mode: 'face', sel: { ...emptyCageSel, faces: picks } }, 'select-linked-within-creases');
+  const count = linked.sel.faces.length;
+  if (count > 500) return { error: `The linked region has ${count} faces, above the maximum of 500. Choose a smaller region in the cage editor.` };
+  if (count > limit) return { error: `The linked region has ${count} faces, above the limit of ${limit}. Raise the limit to get the full region (maximum 500).` };
+  return { faces: [...linked.sel.faces].sort((a, b) => a - b).map(face => faceFacts(s.cage, face)), count };
+}
+
 /** The query: faces by direction and place, vertices by place, edges as a loop or ring through one edge. */
 function select(c: StudioCage, args: Args): Record<string, unknown> {
   const what = args.what, limit = Math.max(1, Math.min(500, Number(args.limit) || 200));
@@ -196,7 +229,7 @@ function select(c: StudioCage, args: Args): Record<string, unknown> {
     for (let f = 0; f < c.faces.length; f++) {
       const fr = faceFrame(c, f); if (!inBox(fr.centre, args.box)) continue;
       if (dir) { const l = Math.hypot(...dir) || 1; if ((fr.normal[0] * dir[0] + fr.normal[1] * dir[1] + fr.normal[2] * dir[2]) / l < within) continue; }
-      all++; if (out.length < limit) out.push({ face: f, centre: fr.centre.map(r6), normal: fr.normal.map(r6), sides: c.faces[f].length });
+      all++; if (out.length < limit) out.push(faceFacts(c, f, fr));
     }
     return { faces: out, count: all, ...(all > out.length ? { note: `${all - out.length} more: narrow by "box" or "normal", or raise "limit"` } : {}) };
   }
@@ -217,7 +250,7 @@ function select(c: StudioCage, args: Args): Record<string, unknown> {
     const open = validationOf(startSession(0, c)).boundaryEdges.filter(([a, b]) => inBox(at(a), args.box) && inBox(at(b), args.box));
     return { open_edges: open.slice(0, limit), count: open.length };
   }
-  return { error: 'Pass "what": faces (by "normal", "withinAngle", "box"), vertices (by "box"), loop or ring (through "edge"), or boundary (the open edges).' };
+  return { error: 'Pass "what": faces (by "normal", "withinAngle", "box"), vertices (by "box"), loop or ring (through "edge"), boundary (the open edges), or linked-within-creases.' };
 }
 
 const idx = { type: 'integer', description: 'The SubD feature\'s index (get_part_summary lists them; run_command subd-box, subd-torus or subd-tube makes one).' };
@@ -226,7 +259,16 @@ const pairs = (what: string) => ({ type: 'array', items: { type: 'array', items:
 const v3 = (what: string) => ({ type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 3, description: what });
 export const CAGE_TOOLS: ToolDefinition[] = [
   { name: 'subd_cage', description: 'A SubD feature\'s cage: vertex and face counts, creases, mirror plane, bounds and its validation (poles, n-gons, open edges, non-manifold). Read only.', input_schema: { type: 'object', properties: { index: idx }, required: ['index'], additionalProperties: false } },
-  { name: 'subd_select', description: 'Finds cage indices to pass to the other subd_ tools (changes nothing): faces by outward "normal" (within "withinAngle", default 30) and/or a "box" {min, max} on their centres; vertices in a "box"; the edge "loop" or "ring" through an "edge" [a, b]; or the "boundary" (open edges; with "box", those with both ends in it). Indices are of the cage as the node keeps it (the half when mirrored).', input_schema: { type: 'object', properties: { index: idx, what: { type: 'string', enum: ['faces', 'vertices', 'loop', 'ring', 'boundary'] }, normal: v3('faces: the direction they face'), withinAngle: { type: 'number' }, box: { type: 'object', description: '{min: [x, y, z], max: [x, y, z]} (either may be left out)' }, edge: { type: 'array', items: { type: 'integer' }, minItems: 2, maxItems: 2 }, limit: { type: 'integer' } }, required: ['index', 'what'], additionalProperties: false } },
+  { name: 'subd_select', description: 'Find cage indices without editing. Filter faces by box and/or outward normal (withinAngle, default 30°), vertices by box, loop/ring by edge, or open boundary edges by both ends in the box. For linked-within-creases pass seedFaces and their cageRevision from a current base-cage read. It returns the full face region joined by uncreased edges, or refuses when it exceeds limit (200 by default, 500 maximum). Indices use the stored cage (the half when mirrored).', input_schema: {
+    type: 'object', properties: {
+      index: idx, what: { type: 'string', enum: ['faces', 'vertices', 'loop', 'ring', 'boundary', 'linked-within-creases'] },
+      normal: v3('faces: the direction they face'), withinAngle: { type: 'number' },
+      box: { type: 'object', description: '{min: [x, y, z], max: [x, y, z]} (either may be left out)' },
+      edge: { type: 'array', items: { type: 'integer' }, minItems: 2, maxItems: 2 }, limit: { type: 'integer' },
+      seedFaces: { type: 'array', items: { type: 'integer' }, minItems: 1, description: 'Current base-cage face IDs for linked-within-creases.' },
+      cageRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'Required with seedFaces for linked-within-creases.' },
+    }, required: ['index', 'what'], additionalProperties: false,
+  } },
   { name: 'subd_move', description: 'Moves cage vertices (or those of the given edges or faces) by "delta" mm. Faces and creases stay: a value edit of the feature (applies directly at autonomy L2). On a mirrored cage the plane\'s vertices stay on the plane.', input_schema: { type: 'object', properties: { index: idx, vertices: ints('vertex indices'), edges: pairs('edges [a, b]'), faces: ints('face indices'), delta: v3('[dx, dy, dz] mm') }, required: ['index', 'delta'], additionalProperties: false } },
   { name: 'subd_scale', description: 'Uniformly scales selected base-part cage elements about their selection centre. Copy cageRevision from cage or select for the current base feature. Original mirror seam points stay on the mirror plane.', input_schema: {
     type: 'object', properties: { index: idx, cageRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The exact cage revision returned by cage or select.' },

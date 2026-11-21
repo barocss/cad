@@ -89,11 +89,15 @@ test('describe: the tools, a tool\'s actions, an action\'s handler schema, a com
   assert.deepEqual(Object.keys(all.tools).sort(), Object.keys(GROUPS).filter(n => n !== 'describe').sort());
   assert.equal(all.changed, false);
   assert.equal((await d({ tool: 'subd' })).actions.insert_loop, 'index, edge, t?');
-  assert.equal((await d({ tool: 'subd' })).actions.select, 'index, what, normal?, withinAngle?, box?, edge?, limit?');
+  assert.equal((await d({ tool: 'subd' })).actions.select, 'index, what, normal?, withinAngle?, box?, edge?, limit?, seedFaces?, cageRevision?');
   const select = await d({ tool: 'subd', action: 'select' });
   assert.deepEqual(select.input.properties.withinAngle, { type: 'number' });
   assert.ok(!('within_deg' in select.input.properties));
   assert.match(select.description, /withinAngle.*default 30/);
+  assert.ok(select.input.properties.what.enum.includes('linked-within-creases'));
+  assert.equal(select.input.properties.seedFaces.minItems, 1);
+  assert.equal(select.input.properties.cageRevision.pattern, '^[a-f0-9]{64}$');
+  assert.deepEqual(select.input.required, ['index', 'what']);
   const m = await d({ tool: 'query', action: 'measure' });
   assert.deepEqual([m.description, m.input], [TOOLS.find(t => t.name === 'measure')!.description, TOOLS.find(t => t.name === 'measure')!.input_schema]);
   const hole = await d({ command: 'hole' });

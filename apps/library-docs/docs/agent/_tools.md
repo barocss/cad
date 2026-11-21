@@ -191,7 +191,7 @@ Edit a SubD cage by feature index.
 | Action | Handler | Arguments and notes |
 |---|---|---|
 | `subd.cage` | `subd_cage` | index |
-| `subd.select` | `subd_select` | index, what, normal?, withinAngle?, box?, edge?, limit? |
+| `subd.select` | `subd_select` | index, what, normal?, withinAngle?, box?, edge?, limit?, seedFaces?, cageRevision? |
 | `subd.move` | `subd_move` | index, delta, vertices?, edges?, faces? |
 | `subd.scale` | `subd_scale` | index, cageRevision, factor, vertices?, edges?, faces? |
 | `subd.rotate` | `subd_rotate` | index, cageRevision, axis, degrees, pivotVertex?, vertices?, edges?, faces? |

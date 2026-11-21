@@ -58,6 +58,58 @@ test('R8.2 the tools listed for the agent; subd_cage and subd_select read withou
   assert.match(parse((await dispatchTool(s, 'subd_cage', { index: 5 }, evaluate)).content).error, new RegExp(`no feature 5; the SubD features are ${i}`));
 });
 
+test('read the whole region within explicit creases from current face seeds', async () => {
+  const initial = await boxState(), index = subdIndex(initial), cage = cageOf(initial);
+  const upper = cage.faces.flatMap((face, id) => face.every(v => cage.positions[v * 3 + 2] === 16) ? [id] : []);
+  assert.equal(upper.length, 4);
+  const perimeter = new Map<string, [number, number]>();
+  for (const id of upper) {
+    const face = cage.faces[id];
+    face.forEach((a, i) => {
+      const b = face[(i + 1) % face.length], key = [a, b].sort((x, y) => x - y).join(':');
+      if (!perimeter.delete(key)) perimeter.set(key, [a, b]);
+    });
+  }
+  assert.equal(perimeter.size, 8);
+  const creased = await dispatchTool(initial, 'subd_crease', { index, edges: [...perimeter.values()] }, evaluate);
+  assert.ok(!creased.isError && creased.changed, creased.content);
+  const state = creased.state;
+  const info = parse((await dispatchTool(state, 'subd', { action: 'cage', index }, evaluate)).content);
+  const args = { action: 'select', what: 'linked-within-creases', index, cageRevision: info.cageRevision,
+    seedFaces: [upper.at(-1), upper[0], upper[0]], limit: 4 };
+  for (const name of ['subd', 'subd_select']) {
+    const { action, ...inputs } = args;
+    const found = await dispatchTool(state, name, name === 'subd' ? {action,...inputs} : inputs, evaluate);
+    assert.ok(!found.isError && !found.changed, found.content);
+    const result = parse(found.content);
+    assert.equal(result.cageRevision, info.cageRevision);
+    assert.equal(result.count, 4);
+    assert.deepEqual(result.faces.map((face: {face:number}) => face.face), upper);
+    assert.equal(found.state.doc, state.doc);
+  }
+  const reject = async (nextState: ChatState, nextArgs: Record<string, unknown>, match: RegExp) => {
+    const reply = await dispatchTool(nextState, 'subd', { ...args, ...nextArgs }, evaluate);
+    assert.ok(reply.isError && !reply.changed, reply.content);
+    assert.match(parse(reply.content).error, match);
+    assert.equal(reply.state.doc, nextState.doc);
+    assert.equal(parse(reply.content).faces, undefined);
+  };
+  await reject(state, { cageRevision: undefined }, /cage revision.*changed/i);
+  await reject(initial, {}, /cage revision.*changed/i);
+  await reject(state, { seedFaces: [] }, /seedFaces/);
+  await reject(state, { seedFaces: [24] }, /seedFaces/);
+  await reject(state, { limit: 3 }, /region has 4 faces.*limit of 3/);
+  await reject(state, { limit: 501 }, /limit from 1 to 500/);
+  await reject(state, { box: { min: [-1,-1,0] } }, /separate select/);
+  await reject(state, { what: 'faces' }, /Use seedFaces and cageRevision/);
+  await reject(state, { index: String(index) }, /index as an integer/);
+  for (const feature of [{suppressed:true}, {held:'test'}] as const) {
+    const doc = {...state.doc,nodes:state.doc.nodes.map((node,i)=>i===index?{...node,...feature}:node)};
+    await reject({...state,doc}, {}, /Restore the active/);
+  }
+  await reject({ ...state, partOf: 'occurrence' }, {}, /base part/);
+});
+
 test('scale uses the exact selected cage revision and changes each selected point once', async () => {
   const state = await boxState(), index = subdIndex(state);
   const query = { action: 'select', index, what: 'faces', normal: [0, 0, 1], box: { min: [0, 0, 0] } };
