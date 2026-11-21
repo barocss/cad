@@ -5,10 +5,13 @@ import {createRequire} from 'node:module';
 import {join} from 'node:path';
 import {createFlow} from './flow-helper.mjs';
 const {PNG}=createRequire(join(process.env.PW_DIR,'package.json'))('playwright-core/lib/utilsBundle');
+const saveReopen = process.argv.includes('--save-reopen');
 const pins=['apps/cad-studio/test/pmi-gpu-hit-browser.mjs','apps/cad-studio/src/viewport/Viewport.tsx','apps/cad-studio/src/viewport/viewportPointerInput.ts','apps/cad-studio/src/viewport/pmiGeometry.ts','apps/cad-studio/src/viewport/useWorkspacePreviews.ts'];
 const f=await createFlow({name:'pmi-gpu-hit',output:process.argv[2],envFrozen:'PMI_GPU_HIT_FROZEN',initialFiles:pins,requiredFrozen:pins,
- qualification:'Actual WebGPU authored label glyph clicks, independently located from on/off PNG differences in the visually reviewed synthetic label region.',
- limits:['One synthetic bracket label 4× 30 ±0.1234, Front planar and Top facing, DPR 1/2 and two public zoom-out steps. Raster segmentation is scoped to the manually reviewed isolated label region, not general OCR.', 'Unclassifiable raster or unavailable WebGPU is NOT_RUN, never fallback PASS. GPU-provider internals and product pick formulas are not used as the selection oracle.', 'No native Save or geometry edits; fresh file Open checks accepted document equality. General fonts, arbitrary camera/coordinates, overlapping labels and multi-line actual UI are NOT_RUN.'],
+ qualification: saveReopen ? 'Actual WebGPU glyph selection around native Save and fresh Open.' :
+ 'Actual WebGPU authored label glyph clicks, independently located from on/off PNG differences in the visually reviewed synthetic label region.',
+ limits:['One synthetic bracket label 4× 30 ±0.1234, Front planar and Top facing, DPR 1/2 and two public zoom-out steps. Raster segmentation is scoped to the manually reviewed isolated label region, not general OCR.', 'Unclassifiable raster or unavailable WebGPU is NOT_RUN, never fallback PASS. GPU-provider internals and product pick formulas are not used as the selection oracle.', saveReopen ? 'Native Save and fresh Open at DPR1 in the Top facing view. Other cameras and general label layouts are outside this route.' :
+ 'No native Save or geometry edits; fresh file Open checks accepted document equality. General fonts, arbitrary camera/coordinates, overlapping labels and multi-line actual UI are NOT_RUN.'],
  snapshotExtra:()=>({pmi:window.__studioPmi?.(),camera:window.__studioCamera?.(),dirty:!!document.querySelector('[aria-label="Unsaved changes"]'),dpr:devicePixelRatio})});
 const seed=JSON.parse(await readFile('apps/cad-studio/test/fixtures/bracket.bcad','utf8'));
 const end=x=>({edge:'n1.side0|n1.top',at:'end',near:[x,0,6]});
@@ -73,7 +76,61 @@ async function raster(label,view,dpr){
  record.hiddenAtOldGlyphNoHit=true;record.backgroundNoHit=true;await f.persist();return last.css;
 }
 async function open(value){await f.openFile({name:'pmi-gpu-hit.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))},value.nodes.length);accepted=await f.doc();assert.deepEqual(accepted.nodes,value.nodes);assert.deepEqual(accepted.drawing.dimensions,value.drawing.dimensions);await f.same(accepted);}
+async function topOrtho() {
+ await button('Top').click();
+ if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+ await settle();
+}
+
+async function pickVisibleGlyph(pixel, label) {
+ await enable();
+ await f.page.mouse.click(...pixel);
+ await settle();
+ const state = await read();
+ assert.equal(state.pmi.selected, 'frontwidth');
+ assert.equal(state.dirty, false);
+ await f.same(accepted);
+ const { bodies } = await f.bodies();
+ assert.equal(bodies.length, 1);
+ assert.ok(Math.abs(bodies[0].volume - 30 * 12 * 6) < 1e-8);
+ await f.snapshot(label);
+}
+
+async function verifyNativeSave() {
+ await f.newPage();
+ await open(doc);
+ await topOrtho();
+ const original = accepted;
+ const glyph = await raster('before-native-save', 'Top', 1);
+ await pickVisibleGlyph(glyph, 'selected-annotation-before-save');
+ const saved = await f.save('selected-annotation');
+ assert.deepEqual(saved.doc, original);
+
+ f.phase = 'Open saved native part without a carried annotation selection';
+ await f.newPage();
+ await f.openFile(saved.file, original.nodes.length);
+ accepted = await f.doc();
+ assert.deepEqual(accepted, original);
+ await topOrtho();
+ assert.equal(await toggle().isChecked(), false);
+ await f.page.mouse.click(...glyph);
+ await settle();
+ const hidden = await read();
+ assert.equal(hidden.pmi.selected, null);
+ assert.equal(hidden.dirty, false);
+ await f.same(accepted);
+ await f.snapshot('reopened-annotation-hidden');
+
+ f.phase = 'Pick a current raster glyph on the reopened native part';
+ const currentGlyph = await raster('after-native-reopen', 'Top', 1);
+ await pickVisibleGlyph(currentGlyph, 'selected-annotation-after-reopen');
+ assert.equal(f.report.downloads.length, 1);
+ f.report.observations.push({ label: 'native-annotation-roundtrip', originalGlyph: glyph, currentGlyph,
+  savedExact: true, selectionSessionOnly: true, selectedAfterReopen: 'frontwidth', volume: 2160 });
+}
+
 await f.run(async()=>{
+ if (saveReopen) { await verifyNativeSave(); return; }
  for(const dpr of [1,2]){
   f.phase='actual WebGPU DPR '+dpr;try{await f.newPage({deviceScaleFactor:dpr});await f.page.locator('.viewport[data-renderer="webgpu"]').waitFor();}catch(error){f.report.observations.push({qualification:'NOT_RUN',dpr,reason:'Actual WebGPU unavailable; fallback forbidden'});throw error;}
   assert.equal(await f.page.evaluate(()=>devicePixelRatio),dpr);await open(doc);const original=structuredClone(accepted);
