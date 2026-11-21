@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1, faceGeometry } from '@barocss/cad';
+import { brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1, faceGeometry, type Point } from '@barocss/cad';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { emptyDoc, withNode, type SketchNode } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
+import { bodyMesh } from '../src/engine/mesh';
 
 const triangle = {
   kind: 'sketch', profile: 'polygon', points: [[3, -7], [12, -6], [6, -2]],
@@ -110,4 +111,67 @@ test('Triangle admission leaves Ruled Turn and non-triangular or invalid profile
   ] satisfies SketchNode[]) assert.throws(() => smooth.build!(ctx(sketch), { height: 40, angle: 180 }));
   for (const [height, angle] of [[0, 180], [NaN, 180], [40, Infinity], [40, 451]])
     assert.throws(() => smooth.build!(ctx(), { height, angle }));
+});
+
+/** Independent polynomial de Boor evaluation for a unit-weight rail. */
+function sampleRail(poles: readonly Point[], knots: readonly number[], degree: number, t: number): Point {
+  const span = t === 1 ? poles.length - 1 : knots.findIndex((knot, i) => i >= degree && knot <= t && t < knots[i + 1]);
+  const values = poles.slice(span - degree, span + 1).map(point => [...point]);
+  for (let r = 1; r <= degree; r++) for (let j = degree; j >= r; j--) {
+    const i = span - degree + j;
+    const a = (t - knots[i]) / (knots[i + degree + 1 - r] - knots[i]);
+    values[j] = values[j].map((n, k) => (1 - a) * values[j - 1][k] + a * n);
+  }
+  return values[degree] as Point;
+}
+
+const minus = (a: readonly number[], b: readonly number[]): Point => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const scalar = (a: readonly number[], b: readonly number[]) => a.reduce((sum, value, i) => sum + value * b[i], 0);
+const vector = ([x, y, z]: Point, [u, v, w]: Point): Point => [y * w - z * v, z * u - x * w, x * v - y * u];
+
+test('compact Turn packets use native side normals and retain positions, creases and selection IDs', () => {
+  const doc = smooth.build!(ctx(), { height: 50, angle: -450 });
+  const [{ brep }] = partBreps(doc);
+  const averaged = bodyMesh(brep, 0, 24);
+  const refined = evaluateDoc(doc, 2, 8, true);
+  assert.ok(refined.ok);
+  const mesh = refined.bodies[0].mesh, detail = mesh.loftDetail;
+  assert.ok(detail && 'kind' in detail && detail.kind === 'smooth-turn');
+  for (const key of ['positions', 'indices', 'faceOfVertex', 'edgeLines', 'edgeOfSegment'] as const)
+    assert.deepEqual(detail[key], averaged[key]);
+  assert.deepEqual(mesh.edges.map(edge => edge.nativeJoint?.edgeId), averaged.edges.map(edge => edge.nativeJoint?.edgeId));
+  let worstOld = 0, worstNew = 0, worstResidual = 0, vertices = 0;
+  for (const [vertex, owner] of detail.faceOfVertex.entries()) {
+    const k = vertex * 3;
+    const face = brep.faces.find(face => face.id === averaged.faces[owner].id);
+    assert.ok(face);
+    const surface = face.surface;
+    assert.equal(surface.kind, 'surface');
+    const newNormal = detail.normals.slice(k, k + 3), oldNormal = averaged.normals.slice(k, k + 3);
+    if (surface.degreeV !== 3) {
+      assert.deepEqual(newNormal, oldNormal);
+      continue;
+    }
+    const point = [...detail.positions.slice(k, k + 3)] as Point;
+    const [a, b] = surface.controlPoints, knots = surface.knotsV;
+    const t = Math.max(0, Math.min(1, scalar(minus(point, a[0]), [0, .6, .8]) / 50));
+    const left = sampleRail(a, knots, 3, t), right = sampleRail(b, knots, 3, t), across = minus(right, left);
+    const u = scalar(minus(point, left), across) / scalar(across, across);
+    const projected = left.map((value, i) => value + u * across[i]);
+    const derivative = (row: readonly Point[]) => sampleRail(row.slice(1).map((next, i) =>
+      minus(next, row[i]).map(value => value * 3 / (knots[i + 4] - knots[i + 1])) as Point), knots.slice(1, -1), 2, t);
+    const da = derivative(a), db = derivative(b), tangent = da.map((value, i) => (1 - u) * value + u * db[i]) as Point;
+    const normal = vector(across, tangent);
+    const angle = (actual: Float32Array) => {
+      const p = [...actual] as Point;
+      return Math.atan2(Math.hypot(...vector(normal, p)), scalar(normal, p)) * 180 / Math.PI;
+    };
+    worstResidual = Math.max(worstResidual, Math.hypot(...minus(projected, point)));
+    worstOld = Math.max(worstOld, angle(oldNormal));
+    worstNew = Math.max(worstNew, angle(newNormal));
+    vertices++;
+  }
+  assert.ok(vertices > 300 && worstResidual < 1e-8 && worstOld > 1 && worstNew < 1e-5,
+    JSON.stringify({ vertices, worstResidual, worstOld, worstNew }));
+  if (process.env.TURN_NORMAL_METRICS === '1') console.log(JSON.stringify({ vertices, worstResidual, worstOld, worstNew }));
 });

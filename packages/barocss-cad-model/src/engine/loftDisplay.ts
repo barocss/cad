@@ -1,7 +1,8 @@
-import type { Brep } from '@barocss/cad';
+import { CadNumericPolicy, faceGeometry, surfaceD1Evaluator, surfaceDomain, type Brep, type BrepFace } from '@barocss/cad';
 import { isCompactStepTurn } from '@barocss/cad/internal/step-turn-display';
 import { tessellateTwoGuideLoftDisplay } from '@barocss/cad/internal/two-guide-loft-display';
 import { bodyMesh, type DisplayMesh, type BoundedDisplayMesh, type SmoothTurnDisplayMesh, type Vec3 } from './mesh';
+import { cross, dot, len, scale, sub } from './vec3';
 
 const cache = new WeakMap<DisplayMesh, DisplayMesh>();
 
@@ -71,11 +72,63 @@ function isAuthoredCompactTurn(brep: Brep, sections: number): boolean {
       && curve.knots.every((knot, i) => knot === rails[0].curve.knots[i]));
 }
 
+/** The compact turn charts run linearly across each section and in height along the turn. */
+function turnSurfaceNormal(face: BrepFace, axis: Vec3, tolerance: number) {
+  const { surface, sense } = face;
+  if (surface.kind !== 'surface' || surface.degreeU !== 1 || surface.degreeV !== 3
+    || surface.controlPoints.length !== 2 || surface.weights.some(row => row.some(weight => weight !== 1))) return;
+  const { u: [u0, u1], v: [v0, v1] } = surfaceDomain(surface);
+  const at = surfaceD1Evaluator(surface);
+  const start = at(u0, v0).point;
+  const height = dot(sub(at(u0, v1).point, start), axis);
+  if (Math.abs(height) <= tolerance) return;
+  const clamp = (t: number) => Math.max(0, Math.min(1, t));
+  return (point: Vec3): Vec3 | undefined => {
+    const v = v0 + (v1 - v0) * clamp(dot(sub(point, start), axis) / height);
+    const left = at(u0, v).point, span = sub(at(u1, v).point, left);
+    const width2 = dot(span, span);
+    if (width2 <= tolerance * tolerance) return;
+    const u = u0 + (u1 - u0) * clamp(dot(sub(point, left), span) / width2);
+    const d = at(u, v);
+    if (len(sub(point, d.point)) > tolerance) return;
+    const normal = cross(d.du, d.dv), magnitude = len(normal);
+    if (!(magnitude > 0) || !Number.isFinite(magnitude)) return;
+    return scale(normal, (sense === 'forward' ? 1 : -1) / magnitude);
+  };
+}
+
+function exactTurnNormals(mesh: DisplayMesh, brep: Brep): Float32Array | undefined {
+  const caps = brep.faces.filter(({ surface }) => surface.kind === 'surface' && surface.degreeU === 1 && surface.degreeV === 1);
+  if (caps.length !== 2) return;
+  const cap = faceGeometry(caps[0]);
+  if (cap.kind !== 'plane') return;
+  const reach = Math.max(...mesh.bounds.min.map(Math.abs), ...mesh.bounds.max.map(Math.abs));
+  const tolerance = Math.max(CadNumericPolicy.linearTolerance, CadNumericPolicy.relativeLinearTolerance * reach);
+  const faces = new Map(brep.faces.map(face => [face.id, face]));
+  const onFace = mesh.faces.map(({ id }) => {
+    const face = faces.get(id);
+    return face && !caps.includes(face) ? turnSurfaceNormal(face, cap.n, tolerance) : undefined;
+  });
+  if (onFace.filter(Boolean).length !== mesh.faces.length - caps.length) return;
+  const normals = mesh.normals.slice();
+  for (const [i, face] of mesh.faceOfVertex.entries()) {
+    const normalAt = onFace[face];
+    if (!normalAt) continue;
+    const k = 3 * i;
+    const n = normalAt([mesh.positions[k], mesh.positions[k + 1], mesh.positions[k + 2]]);
+    if (!n) return;
+    normals.set(n, k);
+  }
+  return normals;
+}
+
 function buildTurnDetail(base: DisplayMesh, brep: Brep, sections?: number): SmoothTurnDisplayMesh | undefined {
   let refined: DisplayMesh;
+  let normals: Float32Array;
   try {
     if (sections === undefined ? !isCompactStepTurn(brep) : !isAuthoredCompactTurn(brep, sections)) return;
     refined = bodyMesh(brep, 0, 24);
+    normals = exactTurnNormals(refined, brep) ?? refined.normals;
   } catch {
     // The optional viewport samples must not invalidate an accepted model.
     return;
@@ -89,6 +142,6 @@ function buildTurnDetail(base: DisplayMesh, brep: Brep, sections?: number): Smoo
         && e.faces.every((f, j) => f === owner.faces[j])
         && e.a.every((v, k) => v === owner.a[k]) && e.b.every((v, k) => v === owner.b[k]);
     })) return;
-  const { positions, normals, faceOfVertex, indices, edgeLines, edgeOfSegment, bounds } = refined;
+  const { positions, faceOfVertex, indices, edgeLines, edgeOfSegment, bounds } = refined;
   return { kind: 'smooth-turn', positions, normals, faceOfVertex, indices, edgeLines, edgeOfSegment, bounds };
 }
