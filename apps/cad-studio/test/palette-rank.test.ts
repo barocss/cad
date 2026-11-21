@@ -29,3 +29,9 @@ test('a keyword never beats a label: "fillet" gives Fillet before any command on
   assert.deepEqual([rankOf(fake, 'shaft'), rankOf(fake, 'sha'), rankOf({ id: 'x', label: 'Linear pattern' }, 'pat'), rankOf(fake, 'keyway')], [0, 1, 2, 4]);
   assert.equal(rankOf(fake, 'nothing'), null);
 });
+
+test('Twist prefers Smooth Turn and both exact names remain direct choices', () => {
+  assert.deepEqual(paletteOrder(all(), 'Twist').map(({ c }) => c.id), ['smooth-turn', 'ruled-turn']);
+  assert.equal(paletteOrder(all(), 'Ruled Turn')[0]?.c.id, 'ruled-turn');
+  assert.equal(paletteOrder(all(), 'Smooth Turn')[0]?.c.id, 'smooth-turn');
+});

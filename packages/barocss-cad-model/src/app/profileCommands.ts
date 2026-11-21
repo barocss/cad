@@ -711,4 +711,4 @@ export const sweepCurveCommand: Command = {
   },
 };
 
-export const profileCommands = [extrudeCommand, offsetFaceCommand, revolveCommand, pipeCommand, sweepCurveCommand, loftCommand, ruledTurnCommand, smoothTurnCommand];
+export const profileCommands = [extrudeCommand, offsetFaceCommand, revolveCommand, pipeCommand, sweepCurveCommand, loftCommand, smoothTurnCommand, ruledTurnCommand];
