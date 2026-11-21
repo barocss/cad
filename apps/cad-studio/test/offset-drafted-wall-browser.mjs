@@ -4,13 +4,18 @@ import { createFlow } from './flow-helper.mjs';
 
 const output = process.argv[2];
 const savedBaseline = process.argv.includes('--saved-handle-baseline');
-const savedHandle = savedBaseline || process.argv.includes('--saved-handle');
+const replaceHeld = process.argv.includes('--replace-held');
+const savedHandle = savedBaseline || replaceHeld || process.argv.includes('--saved-handle');
 assert.ok(output && relative(resolve(import.meta.dirname, '../../..'), resolve(output)).startsWith('../'));
 const pins = [
   'apps/cad-studio/test/flow-helper.mjs',
   'apps/cad-studio/src/app/offsetCollapseFeedback.ts',
   'apps/cad-studio/src/App.tsx',
   'apps/cad-studio/src/ui/NodeEditor.tsx',
+  'apps/cad-studio/src/ui/useWorkspaceModeExit.tsx',
+  'apps/cad-studio/src/ui/HistoryFeatureEditor.tsx',
+  'apps/cad-studio/src/files/useStudioDocumentFiles.ts',
+  'apps/cad-studio/src/viewport/useCommandGizmos.ts',
   'apps/cad-studio/src/files/documentFile.ts',
   'packages/barocss-cad-model/src/app/nativeOffsetFace.ts',
   'packages/barocss-cad-model/src/app/offsetFaceEdit.ts',
@@ -149,12 +154,12 @@ async function verifySavedHandle(outward, index, wall, stock) {
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
   const view = await f.page.evaluate(() => window.__studioCamera());
-  const openHistory = async () => {
+  const openHistory = async (distance = 3) => {
     await f.openFeatureEditor(index, 'saved inclined wall');
     await button('Edit offset', f.editor()).click();
     const panel = hud('Edit Offset face');
     await status(panel, 'preview');
-    assert.equal(await offset(panel).inputValue(), '3');
+    assert.equal(await offset(panel).inputValue(), String(distance));
     return panel;
   };
   const panel = await openHistory();
@@ -186,6 +191,53 @@ async function verifySavedHandle(outward, index, wall, stock) {
     assert.equal(await offset(panel).inputValue(), '4');
     await f.same(outward);
     await f.snapshot('saved-wall-drag-preview');
+    if (replaceHeld) {
+      f.phase = 'Open a distinct file while the first wall drag is held';
+      const replacement = { ...outward, nodes: outward.nodes.map((node, i) => i === index ? { ...node, distance: 2 } : node) };
+      const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').press('Enter')]);
+      await chooser.setFiles({ name: 'same-ids-other-wall.bcad', mimeType: 'application/json',
+        buffer: Buffer.from(JSON.stringify(replacement)) });
+      await f.same(replacement);
+      await panel.waitFor({ state: 'hidden' });
+      await group.waitFor({ state: 'hidden' });
+      const reopened = await measure('replacement-wall-native', replacement, wall, 2, stock);
+      await f.snapshot('replacement-open-with-pointer-held');
+      const current = await openHistory(2);
+      const editorState = () => f.page.evaluate(() => ({
+        selection: window.__studioSelection,
+        dirty: !!document.querySelector('[aria-label="Unsaved changes"]'),
+        history: ['Undo', 'Redo'].map(name => {
+          const control = document.querySelector(`button[aria-label="${name}"]`);
+          return [control?.disabled, control?.getAttribute('data-tip')];
+        }),
+      }));
+      const beforeRelease = await editorState();
+      assert.equal(beforeRelease.dirty, false);
+      await f.page.mouse.move(x + 6 * delta[0], y + 6 * delta[1], { steps: 6 });
+      await f.page.mouse.up();
+      await status(current, 'preview');
+      assert.equal(await offset(current).inputValue(), '2');
+      await f.same(replacement);
+      assert.deepEqual(await editorState(), beforeRelease);
+      await f.snapshot('late-wall-release-retired');
+      await offset(current).fill('3');
+      await status(current, 'preview');
+      await button('Apply', current).click();
+      await f.changed(replacement);
+      const next = await f.doc();
+      assert.deepEqual(next, outward);
+      const accepted = await measure('next-wall-edit-native', next, wall, 3, stock);
+      assert.notEqual(accepted.sha256, reopened.sha256);
+      await f.undo();
+      await f.same(replacement);
+      assert.equal(await f.page.locator('.doc-tab input').inputValue(), 'same-ids-other-wall');
+      await f.redo();
+      await f.same(next);
+      const savedEdit = await f.save('next-wall-edit-after-open');
+      await f.freshOpen(savedEdit.file, next, 'next-wall-edit-reopened');
+      assert.equal((await measure('next-wall-edit-reopened-native', next, wall, 3, stock)).sha256, accepted.sha256);
+      return;
+    }
     await f.page.mouse.up();
     f.report.observations.push({ label: 'saved-wall-gizmo', camera: view, gap, delta });
   }
