@@ -28,6 +28,11 @@ export function triangleTurnCentre([a, b, c]: readonly Point[]): Point {
   return [a[0] + ((b[0] - a[0]) + (c[0] - a[0])) / 3, a[1] + ((b[1] - a[1]) + (c[1] - a[1])) / 3];
 }
 
+export function rectangularAxisClearance(min: Point, max: Point, axis: Point): number {
+  return Math.hypot(Math.max(min[0] - axis[0], 0, axis[0] - max[0]),
+    Math.max(min[1] - axis[1], 0, axis[1] - max[1]));
+}
+
 function copyGeometry(copy: ModelNode | undefined, corners: number): { points: Point[]; plane: string } | undefined {
   if (copy?.kind !== 'sketch' || copy.profile !== 'loop' || copy.suppressed || !copy.plane
     || copy.on || copy.association || copy.pocketFloor || copy.outline || copy.regions?.length || copy.holes?.length
@@ -83,12 +88,16 @@ function turnSections(nodes: readonly ModelNode[], index: number) {
   if (Math.abs(angle) > limit) return;
   const scale = Math.max(1, ...first.flat().map(Math.abs));
   const tolerance = 64 * Number.EPSILON * scale;
-  if (rows.some((points, i) => {
+  const matches = (pivot: Point | undefined) => rows.every((points, i) => {
     const rotation = radians * (i / last);
-    const expected = centre ? rotateTurnPoints(first, centre, rotation) : rotateTurnCorners(first, rotation);
-    return points.some(([x, y], j) => Math.hypot(x - expected[j][0], y - expected[j][1]) > tolerance);
-  })) return;
-  return { start, last, first, angle, radians, limit, triangular };
+    const expected = pivot ? rotateTurnPoints(first, pivot, rotation) : rotateTurnCorners(first, rotation);
+    return points.every(([x, y], j) => Math.hypot(x - expected[j][0], y - expected[j][1]) <= tolerance);
+  });
+  const externalAxis: Point = [0, 0];
+  const external = !matches(centre);
+  if (external && (triangular || rectangularAxisClearance(first[0], first[2], externalAxis) <= CadNumericPolicy.linearTolerance
+    || !matches(externalAxis))) return;
+  return { start, last, first, angle, radians, limit, triangular, external };
 }
 
 export function hasSmoothTurnSections(nodes: readonly ModelNode[], index: number): boolean {
@@ -99,8 +108,14 @@ export function hasTriangularTurnSections(nodes: readonly ModelNode[], index: nu
   return turnSections(nodes, index)?.triangular === true;
 }
 
+export function hasExternalScrewSections(nodes: readonly ModelNode[], index: number): boolean {
+  return turnSections(nodes, index)?.external === true;
+}
+
 function savedTurn(nodes: readonly ModelNode[], index: number) {
-  if (index === nodes.length - 1) return turnSections(nodes, index);
+  if (index !== nodes.length - 1) return;
+  const turn = turnSections(nodes, index);
+  if (turn && !turn.external) return turn;
 }
 
 function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnType<typeof savedTurn>>, first: Point[], rotation: (fraction: number) => number) {

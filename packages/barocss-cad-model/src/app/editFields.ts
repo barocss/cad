@@ -13,7 +13,7 @@ import { ANCHORS } from './frameCommands';
 import { setSplitOutputSide } from '../engine/splitOutput';
 import { loftSectionSourceFields } from './loftSectionEdit';
 import { smoothLoftHeightField, smoothLoftHeightKey } from './smoothLoftHeight';
-import { hasTriangularTurnSections, smoothLoftTurnAngleField, smoothLoftTurnWidthField, smoothTurnAngleKey, smoothTurnWidthKey } from './smoothLoftTurn';
+import { hasExternalScrewSections, hasTriangularTurnSections, smoothLoftTurnAngleField, smoothLoftTurnWidthField, smoothTurnAngleKey, smoothTurnWidthKey } from './smoothLoftTurn';
 import { copyLoftGuide } from './loftGuides';
 import { SEW_TOLERANCE_LABEL, sewTolerance } from '../engine/sew';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
@@ -503,7 +503,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
         const width = smoothLoftTurnWidthField(nodes, i);
         if (width) out.push(width);
       }
-      if (hasTriangularTurnSections(nodes, i)) break;
+      if (hasTriangularTurnSections(nodes, i) || hasExternalScrewSections(nodes, i)) break;
       out.push(...loftSectionSourceFields(nodes, i, node, parameters));
       if (!node.guides && !angle) node.sections.forEach((sec, k) => {
         out.push(...sketchFields(nodes, sec.sketch, `Section ${k + 1} · `, parameters));

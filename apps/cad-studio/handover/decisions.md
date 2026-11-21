@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1552: [Author an external-axis Smooth Screw from one rectangular sketch](notes/smooth-screw-command-2026-11-21/README.md), #630 and #322. Verify signed pitch, current Agent revision, Studio approval and equal native geometry through reopen.
 - D1551: [Build a smooth rectangular Screw about the sketch origin](notes/compact-external-axis-screw-2026-11-21/README.md), #630. Verify bounded external-axis fit, signed rails and exact native reopening in Studio.
 - D1550: [Refine compact triangular Smooth Turn display after STEP Open](notes/triangular-step-turn-display-2026-11-21/README.md), #630. Verify geometry-bound admission, reduced display rail error and native edge identity on both desktop backends.
 - D1549: [Verify AP214 exchange of the approved triangular Smooth Turn](notes/triangular-turn-step-roundtrip-2026-11-21/README.md), #630. Verify the independent geometry, actual fresh Open and explicit exchange loss.

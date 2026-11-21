@@ -1,5 +1,5 @@
 import { CadNumericPolicy } from '@barocss/cad';
-import { withNode, type SketchNode } from '../engine/doc';
+import { withNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { refusal } from '../engine/refusal';
 import { add, cross, dot, len, scale, sub, unit } from '../engine/vec3';
@@ -7,7 +7,7 @@ import type { SketchPlane } from '../sketch/plane';
 import { resolveSketchDims } from '../sketch/reopen';
 import type { Command, Ctx } from './commands';
 import { planeOf } from './profiles';
-import { rotateTurnCorners, rotateTurnPoints, triangleTurnCentre } from './smoothLoftTurn';
+import { rectangularAxisClearance, rotateTurnCorners, rotateTurnPoints, triangleTurnCentre } from './smoothLoftTurn';
 
 const maximumAngle = 450;
 const selectRectangle = 'Select one standalone rectangular sketch without holes or separate regions.';
@@ -59,6 +59,19 @@ function rectangleCorners(sketch: Extract<SketchNode, { profile: 'rectangle' }>)
   return [min, [max[0], min[1]], max, [min[0], max[1]]];
 }
 
+function smoothLoft(doc: StudioDoc, index: number, plane: SketchPlane, corners: Point[], centre: Point | undefined,
+  height: number, angle: number): StudioDoc {
+  const spans = Math.max(6, Math.ceil(Math.abs(angle) / 30)), sections = [];
+  for (let station = 0; station <= spans; station++) {
+    const fraction = station / spans;
+    const radians = angle * fraction * (Math.PI / 180);
+    const points = station === 0 ? corners : centre ? rotateTurnPoints(corners, centre, radians) : rotateTurnCorners(corners, radians);
+    sections.push({ sketch: doc.nodes.length, z: height * fraction });
+    doc = withNode(doc, { kind: 'sketch', profile: 'loop', segments: points.map(start => ({ kind: 'line', start })), plane });
+  }
+  return withNode(doc, { kind: 'loft', sections, from: [index], smooth: true });
+}
+
 function turnCommand(smooth: boolean): Command {
   const chooseSource = smooth ? selectSmoothProfile : selectRectangle;
   return {
@@ -84,26 +97,25 @@ function turnCommand(smooth: boolean): Command {
       const corners = sketch.profile === 'rectangle' ? rectangleCorners(sketch) : triangleCorners(sketch);
       const [min, , max] = corners;
       const centre = sketch.profile === 'polygon' ? triangleTurnCentre(corners) : undefined;
-      const { plane } = source, yAxis = cross(plane.normal, plane.xAxis);
-      const spans = Math.max(smooth ? 6 : 1, Math.ceil(Math.abs(angle) / (smooth ? 30 : 90)));
+      const { plane } = source;
+      if (smooth) return smoothLoft(ctx.doc, source.index, plane, corners, centre, height, angle);
+      const yAxis = cross(plane.normal, plane.xAxis);
+      const spans = Math.max(1, Math.ceil(Math.abs(angle) / 90));
       const sections = [], controlPoints: Vec3[] = [];
       let doc = ctx.doc;
       for (let station = 0; station <= spans; station++) {
         const fraction = station / spans, z = height * fraction;
         const radians = angle * fraction * (Math.PI / 180);
-        const points = station === 0 ? corners : centre ? rotateTurnPoints(corners, centre, radians) : rotateTurnCorners(corners, radians);
-        if (!smooth) {
-          const [u, v] = points[0];
-          const point = add(plane.origin, add(scale(plane.xAxis, u), scale(yAxis, v)));
-          controlPoints.push(add(point, scale(plane.normal, z)));
-        }
+        const points = station === 0 ? corners : rotateTurnCorners(corners, radians);
+        const [u, v] = points[0];
+        const point = add(plane.origin, add(scale(plane.xAxis, u), scale(yAxis, v)));
+        controlPoints.push(add(point, scale(plane.normal, z)));
         sections.push({ sketch: doc.nodes.length, z });
-        doc = withNode(doc, station === 0 && !smooth
+        doc = withNode(doc, station === 0
           ? { kind: 'sketch', profile: 'rectangle', min, max, plane }
           : { kind: 'sketch', profile: 'loop', segments: points.map(start => ({ kind: 'line', start })), plane });
       }
       const loft = { kind: 'loft' as const, sections, from: [source.index] };
-      if (smooth) return withNode(doc, { ...loft, smooth: true });
       const knots = [0, ...sections.map((_, index) => index), spans];
       return withNode(doc, { ...loft, guide: { kind: 'nurbs', degree: 1, knots, controlPoints } });
     },
@@ -112,3 +124,52 @@ function turnCommand(smooth: boolean): Command {
 
 export const ruledTurnCommand = turnCommand(false);
 export const smoothTurnCommand = turnCommand(true);
+
+const selectScrewProfile = 'Select one standalone straight rectangular sketch without holes or separate regions.';
+
+function screwSource(ctx: Ctx) {
+  const source = turnSource(ctx, false);
+  const sketch = source?.sketch;
+  if (!source || sketch?.profile !== 'rectangle' || sketch.construction?.length
+    || sketch.outline?.bulges?.some(Boolean) || sketch.outline?.circles?.length
+    || sketch.outline?.spline || sketch.outline?.ellipse || !source.plane.origin.every(Number.isFinite)) return;
+  return { ...source, sketch };
+}
+
+export const smoothScrewCommand: Command = {
+  id: 'smooth-screw', label: 'Smooth Screw', icon: 'cad-loft', group: 'create', keywords: 'screw helix helical pitch external axis',
+  hint: 'Rotate one rectangular sketch about an external axis normal to its plane.',
+  available: ctx => screwSource(ctx) ? { ok: true } : { ok: false, reason: selectScrewProfile },
+  fields: () => [
+    { key: 'axisX', label: 'Axis X', kind: 'mm', min: -CadNumericPolicy.coordinateAbs, max: CadNumericPolicy.coordinateAbs },
+    { key: 'axisY', label: 'Axis Y', kind: 'mm', min: -CadNumericPolicy.coordinateAbs, max: CadNumericPolicy.coordinateAbs },
+    { key: 'pitch', label: 'Pitch per revolution', kind: 'mm', min: 0, max: CadNumericPolicy.coordinateAbs },
+    { key: 'angle', label: 'Turn angle', kind: 'deg', min: -maximumAngle, max: maximumAngle },
+  ],
+  defaults: () => ({ axisX: 0, axisY: 0, pitch: 40, angle: 360 }),
+  build: (ctx, { axisX, axisY, pitch, angle }) => {
+    const source = screwSource(ctx);
+    if (!source) throw refusal('VALUE', selectScrewProfile);
+    const limit = CadNumericPolicy.coordinateAbs;
+    if (typeof axisX !== 'number' || typeof axisY !== 'number' || !Number.isFinite(axisX) || !Number.isFinite(axisY)
+      || Math.abs(axisX) > limit || Math.abs(axisY) > limit)
+      throw refusal('VALUE', 'Enter finite Axis X and Axis Y coordinates within the model range.');
+    if (typeof pitch !== 'number' || !Number.isFinite(pitch) || pitch <= 0 || pitch > limit)
+      throw refusal('VALUE', 'Enter a positive pitch within the model range.');
+    if (typeof angle !== 'number' || !Number.isFinite(angle) || angle === 0 || Math.abs(angle) > maximumAngle)
+      throw refusal('VALUE', 'Enter a nonzero Turn angle from −450° to +450°.');
+    const height = Math.abs(angle) / 360 * pitch;
+    if (height <= CadNumericPolicy.linearTolerance || height > limit)
+      throw refusal('VALUE', 'Pitch and Turn angle must give an axial height within the model range.');
+    const sketch = resolveSketchDims(source.sketch, ctx.doc.parameters) as Extract<SketchNode, { profile: 'rectangle' }>;
+    const corners = rectangleCorners(sketch);
+    if (rectangularAxisClearance(corners[0], corners[2], [axisX, axisY]) <= CadNumericPolicy.linearTolerance)
+      throw refusal('VALUE', 'Place the Screw axis outside the rectangle.');
+    const local = corners.map(([x, y]): Point => [x - axisX, y - axisY]);
+    if (local.some(point => Math.hypot(...point) > limit))
+      throw refusal('VALUE', 'Move the Screw axis closer to the rectangle.');
+    const { plane } = source, yAxis = cross(plane.normal, plane.xAxis);
+    const origin = add(plane.origin, add(scale(plane.xAxis, axisX), scale(yAxis, axisY)));
+    return smoothLoft(ctx.doc, source.index, { ...plane, origin }, local, [0, 0], height, angle);
+  },
+};

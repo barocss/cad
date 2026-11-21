@@ -50,6 +50,11 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
     selection: 'Use features.command with values.sketch and expectedRevision from query.rebuild. Requires one standalone rectangle.',
     values: { sketch: 'stable sketch ID from query.summary', height: 'positive height in mm', angle: 'signed degrees from −450 to +450' },
   },
+  'smooth-screw': {
+    selection: 'Use values.sketch and expectedRevision from query.rebuild. Requires one straight rectangle.',
+    values: { sketch: 'stable sketch ID from query.summary', axisX: 'axis point X in sketch mm', axisY: 'axis point Y in sketch mm',
+      pitch: 'positive mm per revolution', angle: 'nonzero signed degrees from −450 to +450' },
+  },
   'delete-face': { selection: 'Select one straight bore wall, cylindrical boss top, full-span box chamfer or fillet, or inside L-bracket fillet. Use the exact native_name when shown.', values: {} },
   text: { selection: 'none: creates a standalone solid', values: { text: 'one scalar run, without shaping or kerning', font: 'JSON FontSource descriptor of an already loaded static TTF, prepared by fontFromBytes or the Studio font chooser', size: 'em height in model units', height: 'positive extrusion height', tolerance: 'explicit quadratic-to-chord deviation', tracking: 'extra spacing between scalars' } },
   'cylindrical-wrap': { selection: 'faces: [one selected merged cylinder wall]; the operation binds its original +Y native half and uses its first quarter', values: { u0: 'native U start, strictly above 0', u1: 'native U end, strictly below 0.5 and above u0', v0: 'native V start, strictly above 0', v1: 'native V end, strictly below 1 and above v0', height: 'positive outward height, must equal the source radius; one rectangle only, no text or holes' } },
@@ -183,7 +188,7 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   if (refusal) return refusal;
   const cmd = commandById(String(args.command));
   if (!cmd?.build) return fail(state, `Unknown command "${String(args.command)}". Commands: ${CHAT_COMMANDS.join(', ')}.`);
-  const sketchTurn = cmd.id === 'ruled-turn' || cmd.id === 'smooth-turn';
+  const sketchTurn = cmd.id === 'ruled-turn' || cmd.id === 'smooth-turn' || cmd.id === 'smooth-screw';
   if (sketchTurn) {
     if (args.expectedRevision === undefined)
       return fail(state, `${cmd.label} needs expectedRevision from query.rebuild for the same part.`, { code: 'COMMAND_INPUT' });

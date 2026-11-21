@@ -4,10 +4,12 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const smooth = process.argv.includes('--smooth');
-const command = smooth ? 'smooth-turn' : 'ruled-turn';
-const commandLabel = smooth ? 'Smooth Turn' : 'Ruled Turn';
+const screw = process.argv.includes('--screw');
+const smooth = screw || process.argv.includes('--smooth');
+const command = screw ? 'smooth-screw' : smooth ? 'smooth-turn' : 'ruled-turn';
+const commandLabel = screw ? 'Smooth Screw' : smooth ? 'Smooth Turn' : 'Ruled Turn';
 const pins = [
+  'packages/barocss-cad-model/src/app/smoothLoftTurn.ts', 'packages/barocss-cad-model/src/app/profileCommands.ts',
   'apps/cad-studio/test/ruled-turn-agent-browser.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs',
   'apps/cad-studio/server/cadMcp.ts', 'apps/cad-studio/src/App.tsx',
   'packages/barocss-cad-model/src/chat/part/features.ts', 'packages/barocss-cad-model/src/chat/part/proposals.ts',
@@ -62,7 +64,8 @@ function cornerAt([x, y], index) {
 function checkSmoothRails(result) {
   assert.equal(result.edges.length, 12);
   assert.equal(result.rails.length, 4);
-  const corners = [[-6, -4], [6, -4], [6, 4], [-6, 4]];
+  const pivot = screw ? [10, -16] : [18, -11];
+  const corners = screw ? [[2, 1], [14, 1], [14, 9], [2, 9]] : [[-6, -4], [6, -4], [6, 4], [-6, 4]];
   for (const [index, rail] of result.rails.entries()) {
     assert.deepEqual([rail.degree, rail.poles], [3, 16]);
     const knots = rail.knots.slice(4, -4);
@@ -71,8 +74,10 @@ function checkSmoothRails(result) {
     for (const [i, { point, derivative }] of rail.samples.entries()) {
       const t = i / (rail.samples.length - 1), angle = -450 * Math.PI / 180 * t;
       const c = Math.cos(angle), s = Math.sin(angle);
-      const x = point[0] - 18, y = point[1] + 11;
-      assert.ok(Math.hypot(x - (c * u - s * v), y - (s * u + c * v)) < 0.016);
+      const x = point[0] - pivot[0], y = point[1] - pivot[1];
+      const error = Math.hypot(x - (c * u - s * v), y - (s * u + c * v));
+      assert.ok(error < (screw ? 0.04 : 0.016));
+      if (i % 8 === 0) assert.ok(error < 1e-8);
       assert.ok(Math.abs(point[2] - (3 + 50 * t)) < 1e-8);
       assert.ok(x * derivative[1] - y * derivative[0] < 0);
     }
@@ -151,12 +156,14 @@ await f.run(async () => {
     assert.deepEqual(report.features.map(feature => feature.id), ['n0', 'n1']);
     const { revision } = await call('query', { action: 'rebuild' });
     assert.match(revision, /^[a-f0-9]{16}$/);
-    const args = { action: 'command', command, values: { sketch: report.features[0].id, height: 50, angle: -450 } };
+    const args = { action: 'command', command, values: { sketch: report.features[0].id, ...(screw ? { axisX: -1, axisY: 1, pitch: 40 } : { height: 50 }), angle: -450 } };
     const propose = (args) => ({ action: 'propose', title: `Create a −450° ${commandLabel} from Sketch 1`, ops: [{ tool: 'features', args }] });
     assert.match((await call('features', { ...args, expectedRevision: revision }, true)).error, /propos/i);
     assert.match((await call('proposals', propose(args), true)).error, /needs expectedRevision/i);
     assert.match((await call('proposals', propose({ ...args, expectedRevision: '0'.repeat(16) }), true)).error, /part changed/i);
     assert.match((await call('proposals', propose({ ...args, expectedRevision: revision, values: { ...args.values, sketch: 'n9' } }), true)).error, /current sketch/i);
+    if (screw) assert.match((await call('proposals', propose({ ...args, expectedRevision: revision,
+      values: { ...args.values, axisX: 3, axisY: 4 } }), true)).error, /axis outside the rectangle/i);
     assert.equal(await readFile(file, 'utf8'), original);
     const proposal = await call('proposals', propose({ ...args, expectedRevision: revision }));
     assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);
@@ -192,6 +199,11 @@ await f.run(async () => {
   assert.equal((await native('agent-reopened-native', accepted)).sha, result.sha);
   await frame();
   await showSmoothShading();
+  if (screw) {
+    const detail = await f.page.evaluate(() => window.__studioLoftDisplay?.(0));
+    assert.ok(detail?.kind === 'smooth-turn' && detail.triangles > detail.baseTriangles);
+    f.report.observations.push({ label: 'reopened-display', detail });
+  }
   await f.snapshot('agent-turn-reopened-framed');
 
   f.phase = 'compare with direct Studio authoring of the same earlier rectangle';
@@ -200,7 +212,11 @@ await f.run(async () => {
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command(commandLabel);
   const hud = f.page.getByRole('dialog', { name: commandLabel, exact: true });
-  await hud.getByLabel('Height', { exact: true }).fill('50');
+  if (screw) {
+    await hud.getByLabel('Axis X', { exact: true }).fill('-1');
+    await hud.getByLabel('Axis Y', { exact: true }).fill('1');
+    await hud.getByLabel('Pitch per revolution', { exact: true }).fill('40');
+  } else await hud.getByLabel('Height', { exact: true }).fill('50');
   await hud.getByLabel('Turn angle', { exact: true }).fill('-450');
   await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
   await button('Apply', hud).click();
