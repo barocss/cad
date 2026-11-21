@@ -110,11 +110,61 @@ for (const [form, source, edge, reflected, from] of [
   });
 }
 
-test('Delete face refuses an upright chamfer, convex round and multiple rounds', () => {
+for (const [form, source, edge, reflected, from] of [
+  ['foot down', unmirrored, 'n1.side0|n1.side1', false, 0],
+  ['foot up', mirrored, 'n1.side0|n1.side1', true, -3.25],
+]) {
+  test(`Delete face restores the full-height outside R2 L corner with ${form}`, () => {
+    const rounded = [...source, round(edge)], before = output(rounded).brep, saved = structuredClone(before);
+    const face = before.faces.find(item => item.name === 'n2.face'), cylinder = faceGeometry(face);
+    assert.equal(cylinder.kind, 'cylinder');
+    assert.equal(cylinder.out, 1);
+    assert.deepEqual(cylinder.a, [0, 0, 1]);
+    close(cylinder.r, 2, 1e-9);
+    // The sharp L is two rectangles minus their 3 by 3 overlap. An outside R2 removes a square minus a quarter disc.
+    const sharpVolume = (40 * 3 + 3 * 30 - 3 * 3) * 20;
+    close(brepMassProperties(before, 1).volume, sharpVolume - 20 * (4 - Math.PI), 1e-8);
+    const selectedSignature = { ...faceSignatures(before).get('n2.face'), size: 20 * Math.PI };
+    const after = output([...rounded, heal('n2.face', 'n2', { 'n2.face': selectedSignature })]).brep;
+    const report = checkBrep(after, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 36, edges: 18, vertices: 12 });
+    assert.equal(report.topology[0].genus, 0);
+    assert.ok(report.maximumPcurveGap < 1e-9 && report.maximumEdgeSurfaceGap < 1e-9);
+    assert.deepEqual(after.faces.map(item => item.name).sort(), before.faces.filter(item => item !== face).map(item => item.name).sort());
+    assert.deepEqual(after.edges.map(item => item.name).sort(), [edge,
+      ...before.edges.filter(item => !item.name.split('|').includes('n2.face')).map(item => item.name)].sort());
+    assert.ok(after.faces.every(item => !before.faces.some(original => original.id === item.id)), 'the L reconstruction creates new B-rep IDs');
+
+    const sharp = output(source).brep;
+    const geometryByName = items => items.map(item => [item.name, item.curve.controlPoints]).sort(([a], [b]) => a.localeCompare(b));
+    assert.deepEqual(geometryByName(after.edges), geometryByName(sharp.edges));
+    const uses = before.coedges.filter(use => face.loops.includes(use.loop));
+    const tangentVertices = new Set(before.edges.filter(item => uses.some(use => use.edge === item.id)).flatMap(item => item.vertices));
+    const untouched = before.edges.filter(item => !item.vertices.some(vertex => tangentVertices.has(vertex)));
+    assert.ok(untouched.length > 0);
+    for (const item of untouched) {
+      const retained = after.edges.find(candidate => candidate.name === item.name);
+      assert.deepEqual(retained.curve.controlPoints, item.curve.controlPoints);
+      assert.deepEqual(retained.curve.weights, item.curve.weights);
+      assert.deepEqual(retained.curve.knots, item.curve.knots);
+    }
+    const mass = brepMassProperties(after, 1);
+    assert.equal(mass.method, 'planar-exact');
+    close(mass.volume, sharpVolume, 1e-8);
+    const centroidY = 1516.5 / 201;
+    [2521.5 / 201, reflected ? 30 - centroidY : centroidY, from + 10].forEach((value, i) => close(mass.centroid[i], value, 1e-9));
+    assert.throws(() => output([...rounded, heal('n2.face', 'n2', { 'n2.face': { ...selectedSignature, radius: 3 } })]),
+      error => error instanceof CadPartError && error.code === 'REFERENCE_MOVED');
+    assert.deepEqual(before, saved);
+  });
+}
+
+test('Delete face refuses an upright chamfer, non-L outside round and multiple rounds', () => {
   const edge = 'n1.side2|n1.side3';
   const cases = [
     [...unmirrored, { id: 'n2', kind: 'chamfer', target: 'n1', edges: [edge], distance: 2 }],
-    [...unmirrored, round('n1.side0|n1.side1')],
+    [...stock([[0, 0], [40, 0], [40, 10], [30, 20], [0, 20], [-10, 10]]), round('n1.side0|n1.side1')],
     [...unmirrored, { ...round(edge), edges: [edge, 'n1.side0|n1.side1'] }],
   ];
   for (const features of cases) {

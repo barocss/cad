@@ -34,7 +34,7 @@ function isSharpL(lines: readonly Line[], corner: XY, tolerance: number): boolea
   });
 }
 
-function restoreSection(outer: readonly CurveSegment2[], arc: Arc, tolerance: number): Line[] | undefined {
+function restoreSection(outer: readonly CurveSegment2[], arc: Arc, tolerance: number, exterior: boolean): Line[] | undefined {
   const index = outer.indexOf(arc), before = outer[(index + outer.length - 1) % outer.length], after = outer[(index + 1) % outer.length];
   if (before.kind !== 'line' || after.kind !== 'line') return undefined;
   const u = axis(before), v = axis(after);
@@ -54,20 +54,34 @@ function restoreSection(outer: readonly CurveSegment2[], arc: Arc, tolerance: nu
     if (segment.kind !== 'line') continue;
     repaired.push(segment === before ? { ...segment, b: corner } : segment === after ? { ...segment, a: corner } : segment);
   }
-  return isSharpL(repaired, corner, tolerance) ? repaired : undefined;
+  if (!exterior) return isSharpL(repaired, corner, tolerance) ? repaired : undefined;
+  const reflex = repaired.find((line, i) => {
+    const next = repaired[(i + 1) % repaired.length];
+    return (line.b[0] - line.a[0]) * (next.b[1] - next.a[1]) - (line.b[1] - line.a[1]) * (next.b[0] - next.a[0]) < 0;
+  })?.b;
+  return reflex && !samePoint(reflex, corner) && isSharpL(repaired, reflex, tolerance) ? repaired : undefined;
 }
 
-function isFullHeightCarrier(face: BrepFace, arc: Arc, lo: number, hi: number, tolerance: number): boolean {
+function isFullHeightCarrier(face: BrepFace, arc: Arc, lo: number, hi: number, tolerance: number, out: 1 | -1): boolean {
   const { surface } = face;
   if (face.loops.length !== 1 || surface.kind !== 'surface' || surface.degreeU !== 2 || surface.degreeV !== 1
     || surface.controlPoints.length !== 3 || surface.controlPoints.some(row => row.length !== 2 || row[0][2] !== lo || row[1][2] !== hi)) return false;
   const cylinder = faceGeometry(face);
-  return cylinder.kind === 'cylinder' && cylinder.out === -1 && cylinder.a[0] === 0 && cylinder.a[1] === 0
+  return cylinder.kind === 'cylinder' && cylinder.out === out && cylinder.a[0] === 0 && cylinder.a[1] === 0
     && Math.abs(cylinder.r - arc.r) <= tolerance && closePoint([cylinder.c[0], cylinder.c[1]], arc.c, tolerance);
 }
 
 /** Extend the two walls through the sole concave quarter-cylinder of a one-slab L prism. */
 export function healPrismaticFilletIfAdmitted(solid: PrismaticSolid, brep: Brep, faceName: string, resultId: string): Brep | undefined {
+  return healLPrismaticFillet(solid, brep, faceName, resultId, -1);
+}
+
+/** Restore one full-height outside quarter-cylinder on a cardinal L section. Native names survive the reconstruction. */
+export function healConvexLPrismaticFilletIfAdmitted(solid: PrismaticSolid, brep: Brep, faceName: string, resultId: string): Brep | undefined {
+  return healLPrismaticFillet(solid, brep, faceName, resultId, 1);
+}
+
+function healLPrismaticFillet(solid: PrismaticSolid, brep: Brep, faceName: string, resultId: string, out: 1 | -1): Brep | undefined {
   const [slab] = solid.slabs;
   if (solid.slabs.length !== 1 || slab.regions.length !== 1) return undefined;
   const [region] = slab.regions, { outer } = region;
@@ -82,9 +96,9 @@ export function healPrismaticFilletIfAdmitted(solid: PrismaticSolid, brep: Brep,
   const scale = geometryScaleMM(brep.vertices.map(vertex => vertex.point)), tolerance = linearToleranceMM(scale);
   if (!(scale <= CadNumericPolicy.coordinateAbs && slab.z1 - slab.z0 > tolerance
     && Number.isFinite(arc.r) && arc.r > 2 * tolerance
-    && Math.abs(arc.sweep + Math.PI / 2) <= CadNumericPolicy.parameterWidth)) return undefined;
-  if (!checkBrep(brep, { strict: true }).valid || !isFullHeightCarrier(face, arc, slab.z0, slab.z1, tolerance)) return undefined;
-  const repaired = restoreSection(outer, arc, tolerance);
+    && Math.abs(arc.sweep - out * Math.PI / 2) <= CadNumericPolicy.parameterWidth)) return undefined;
+  if (!checkBrep(brep, { strict: true }).valid || !isFullHeightCarrier(face, arc, slab.z0, slab.z1, tolerance, out)) return undefined;
+  const repaired = restoreSection(outer, arc, tolerance, out === 1);
   if (!repaired) return undefined;
 
   const result = brepFromPrismatic({ ...solid, slabs: [{ ...slab, regions: [{ ...region, outer: repaired }] }] }, { id: resultId });
