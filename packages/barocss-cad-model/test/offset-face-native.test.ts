@@ -436,6 +436,18 @@ test('Offset on a tapered lower cap moves in its outward direction and retains t
   const edit = editSavedOffsetFaceCommand(created, index);
   assert.ok(edit?.build);
   const editCtx = context(created, 2, -1);
+  const expectedHandle = { key: 'd', at: [10, 5, -2], dir: [0, 0, -1], step: .5, min: .1 };
+  assert.deepEqual(edit.handles?.(editCtx, { d: 2 }), [expectedHandle]);
+  assert.deepEqual(edit.handles?.(editCtx, { d: 4 }), [{ ...expectedHandle, at: [10, 5, -4] }]);
+  assert.deepEqual(edit.handles?.(editCtx, { d: -2 }), []);
+  assert.deepEqual(edit.handles?.(editCtx, { d: 2, offsetMode: 'to-plane' }), []);
+  const [acceptedBody] = editCtx.bodies;
+  const wrongSign = { ...acceptedBody, mesh: { ...acceptedBody.mesh, faces: acceptedBody.mesh.faces.map(face =>
+    face.name === 'n1.bottom' ? { ...face, nativeAlignFace: { axis: 'z' as const, sign: 1 as const } } : face) } };
+  assert.deepEqual(edit.handles?.({ ...editCtx, bodies: [wrongSign] }, { d: 2 }), []);
+  const reopened = await readStudioFile(encodeStudioFile(created));
+  assert.ok('doc' in reopened);
+  assert.deepEqual(editSavedOffsetFaceCommand(reopened.doc, index)?.handles?.(context(reopened.doc), { d: 2 }), [expectedHandle]);
   const s = Math.tan(Math.PI / 12);
   const sectionVolume = (z: number) => 200 * z - 30 * s * z ** 2 + 4 * s ** 2 * z ** 3 / 3;
   for (const distance of [2, -2]) {

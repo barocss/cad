@@ -4,7 +4,6 @@ import { createFlow } from './flow-helper.mjs';
 const lower = process.argv.includes('--lower');
 const historyBaseline = process.argv.includes('--history-handle-baseline');
 const historyHandle = historyBaseline || process.argv.includes('--history-handle');
-assert.ok(!lower || !historyHandle);
 const cap = lower ? 'n1.bottom' : 'n1.top';
 const pins = [
   'apps/cad-studio/src/App.tsx',
@@ -25,7 +24,7 @@ if (historyHandle) pins.push('apps/cad-studio/test/offset-drafted-cap-browser.mj
 const f = await createFlow({
   name: 'offset-drafted-cap', output: process.argv[2], envFrozen: lower ? 'D1255_SOURCE_FROZEN' : 'D1254_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: historyHandle ? 'Drag the saved terminal upper Offset face from its current native cap.' :
+  qualification: historyHandle ? `Drag the saved terminal ${lower ? 'lower' : 'upper'} Offset face from its current native cap.` :
     'Move a tapered cap and retain its wall planes, references, History and native file.',
   limits: ['One authored rectangular Draft Extrude and one straight rectangular legacy control. Desktop Chrome WebGPU.'],
   inspectorSource: `
@@ -130,14 +129,23 @@ async function edit(index) {
 
 async function verifyHistoryHandle(outward, original, index, outwardDistance) {
   f.phase = 'open the terminal saved Offset in a head-on view';
-  await button('Top', f.page.locator('.views')).click();
+  if (lower) {
+    const saved = await f.save('saved-offset-before-edit');
+    await f.freshOpen(saved.file, outward, 'saved-offset-before-edit-opened');
+    await button('View cube directions').click();
+    await f.page.getByRole('menuitem', { name: 'Bottom', exact: true }).click();
+  } else {
+    await button('Top', f.page.locator('.views')).click();
+  }
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  if (lower) await f.page.waitForFunction(() => Math.abs(window.__studioCamera().pitch + Math.PI / 2 - .0002) < 1e-12);
   const camera = () => f.page.evaluate(() => window.__studioCamera());
   const before = await camera(), panel = await edit(index);
   assert.deepEqual(await camera(), before);
   const group = f.page.locator('g.gizmo-handle[data-handle="d"]');
   assert.equal(Number(await offsetField(panel).inputValue()), outwardDistance);
+  assert.match(await panel.innerText(), lower ? /Bottom end.*Outward −Z/s : /Top end.*Outward \+Z/s);
   if (historyBaseline) {
     assert.equal(await group.count(), 0);
     await f.snapshot('saved-offset-no-handle');
@@ -147,10 +155,10 @@ async function verifyHistoryHandle(outward, original, index, outwardDistance) {
     await native('saved-offset-baseline-typed', await f.doc(), 4, original);
     return;
   }
-  const metric = await f.page.evaluate(z => {
-    const from = window.__studioScreenOf([10, 5, z]), x = window.__studioScreenOf([11, 5, z]), to = window.__studioScreenOf([10, 5, z + 1]);
+  const metric = await f.page.evaluate(([z, sign]) => {
+    const from = window.__studioScreenOf([10, 5, z]), x = window.__studioScreenOf([11, 5, z]), to = window.__studioScreenOf([10, 5, z + sign]);
     return { from, perMm: Math.hypot(x[0] - from[0], x[1] - from[1]), axisPx: Math.hypot(to[0] - from[0], to[1] - from[1]) };
-  }, height + outwardDistance);
+  }, lower ? [-outwardDistance, -1] : [height + outwardDistance, 1]);
   assert.ok(metric.axisPx < .2 && metric.perMm > 3, JSON.stringify(metric));
   const point = async () => {
     const box = await group.locator('circle').boundingBox(); assert.ok(box);
@@ -158,8 +166,9 @@ async function verifyHistoryHandle(outward, original, index, outwardDistance) {
   };
   const [x, y] = await point(), anchorGapPx = Math.hypot(x - metric.from[0], y - metric.from[1]);
   assert.ok(anchorGapPx < .5, JSON.stringify({ anchorGapPx, metric }));
+  const pixels = Math.round(metric.perMm * (4 - outwardDistance));
   const drag = async (editor, label) => {
-    const origin = await point(), pixels = Math.round(metric.perMm);
+    const origin = await point();
     await f.page.mouse.move(...origin); await f.page.mouse.down();
     await f.page.mouse.move(origin[0], origin[1] - pixels, { steps: 7 });
     await f.page.locator('.gizmo-readout').filter({ hasText: /Offset 4 mm/ }).waitFor();
@@ -171,7 +180,7 @@ async function verifyHistoryHandle(outward, original, index, outwardDistance) {
   await drag(panel, 'saved-offset-drag-held');
   await button('Cancel', panel).click(); await f.same(outward);
   const second = await edit(index);
-  const origin = await point(), pixels = Math.round(metric.perMm);
+  const origin = await point();
   await f.page.mouse.move(...origin); await f.page.mouse.down();
   await f.page.mouse.move(origin[0],origin[1]-pixels,{steps:7});
   await status(second,'preview');

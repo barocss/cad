@@ -48,14 +48,17 @@ function savedDraftCapHandle(doc: StudioDoc, index: number, ctx: Ctx, values: Va
     saved.kind !== 'offset-face' || !directOffsetAt(doc,index) || saved.target !== undefined ||
     saved.parent.node !== 1 || saved.parent.side !== 'solid' || saved.faces.length !== 1 ||
     typeof saved.distance !== 'number' || !Number.isFinite(saved.distance) || saved.distance <= 0) return [];
-  const faceName = featureId(doc.nodes,1) + '.top';
+  const stockId = featureId(doc.nodes,1), [faceName] = saved.faces;
+  if (faceName !== stockId + '.top' && faceName !== stockId + '.bottom') return [];
+  const sign = faceName === stockId + '.bottom' ? -1 : 1;
+  const sourceZ = sign < 0 ? 0 : stock.height;
   const signature = saved.sigs?.[faceName];
   const centre = [(Number(sketch.min[0]) + Number(sketch.max[0])) / 2, (Number(sketch.min[1]) + Number(sketch.max[1])) / 2];
-  const direction: [number,number,number] = [0,0,1];
-  if (saved.faces[0] !== faceName || signature?.k !== 'plane' || signature.n !== undefined ||
+  const direction: [number,number,number] = [0,0,sign];
+  if (signature?.k !== 'plane' || signature.n !== undefined ||
     !Number.isFinite(signature.s) || signature.s <= 0 ||
     !signature.d || signature.d.length !== 3 || signature.d.some((v,k) => v !== direction[k])) return [];
-  const original = toSig({kind:'plane',at:[centre[0],centre[1],stock.height],dir:direction,size:signature.s});
+  const original = toSig({kind:'plane',at:[centre[0],centre[1],sourceZ],dir:direction,size:signature.s});
   if (signature.p.length !== 3 || signature.p.some((v,k) => v !== original.p[k])) return [];
   const [body] = ctx.bodies, key = bodyKeyFor(doc.nodes,index,'solid');
   if (doc.outputs[key]?.node !== index || doc.outputs[key]?.side !== 'solid' ||
@@ -63,13 +66,13 @@ function savedDraftCapHandle(doc: StudioDoc, index: number, ctx: Ctx, values: Va
     body.topology?.kind !== 'solid' || body.topology.bodyCount !== 1 || body.topology.openShells !== 0 ||
     body.topology.boundaryEdges !== 0 || body.mesh.faces.length !== 6) return [];
   const matches = body.mesh.faces.filter(face => face.name === faceName);
-  const [face] = matches, distance = Number(values.d), z = stock.height + saved.distance;
+  const [face] = matches, distance = Number(values.d), z = sourceZ + sign * saved.distance;
   if (matches.length !== 1 || face.nativePlaneName !== faceName || face.nativeAxisPlane?.axis !== 'z' ||
-    face.nativeAlignFace?.axis !== 'z' || face.nativeAlignFace.sign !== 1 || face.exact?.kind !== 'plane' ||
+    face.nativeAlignFace?.axis !== 'z' || face.nativeAlignFace.sign !== sign || face.exact?.kind !== 'plane' ||
     face.exact.n.some((v,k) => v !== direction[k]) ||
     Math.abs(face.nativeAxisPlane.at - z) > 1e-8 || !Number.isFinite(face.nativeAxisPlane.at) ||
     !Number.isFinite(distance) || distance <= 0) return [];
-  return [{ key:'d', at:[centre[0],centre[1],face.nativeAxisPlane.at + (distance - saved.distance)],
+  return [{ key:'d', at:[centre[0],centre[1],face.nativeAxisPlane.at + sign * (distance - saved.distance)],
     dir:direction, step:.5,min:Math.min(.1,distance) }];
 }
 
