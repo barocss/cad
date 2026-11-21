@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1481: [Keep an explicit Flange radius during a rectangular Sheet resize](notes/flange-own-radius-source-extents-2026-11-21/README.md), #20. Verify Own R2.5 distinct from Sheet R1.5, the same signed rim, exact return and fresh Open.
 - D1480: [Resize both Sheet extents with the same inherited-radius Flange](notes/flange-combined-source-extents-2026-11-21/README.md), #20. Prove the same original rim, exact folded and flat geometry, one History edit and fresh Open.
 - D1479: [Explain how to restore a Hole on a missing Linear Pattern copy](notes/linear-count-hole-suppression-recovery-2026-11-21/README.md), #25. Name the missing copy and restore the exact authored Hole through fresh Open.
 - D1478: [Put mesh badges with their Body Browser rows](notes/studio-mesh-body-badges-2026-11-21/README.md). Preserve the repair dialog, selected fill and crossing markers in matching actual Studio flows.

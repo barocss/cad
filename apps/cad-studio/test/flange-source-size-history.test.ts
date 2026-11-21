@@ -44,6 +44,20 @@ test('inherited whole-parent native proof refreshes only the signed top rim afte
   assert.deepEqual(before,saved);before=result;
  }
 });
+test('the same source resize retains a different explicit Flange radius and reverses exactly', () => {
+  const name = 'n1.side1|n1.top';
+  const before = flangePatch(fixture(name).doc, { bendRadius: 2.5 });
+  const next = patch(before, { max: [100, 60] });
+  const a = native(prefixDoc(before, 2)), b = native(prefixDoc(next, 2));
+  const updated = proveFlangeSourceSizeChange(before, next, a, b);
+  assert.ok(updated);
+  assert.deepEqual(updated, flangePatch(next, { sigs: { [name]: { k: 'line', p: [100, 30, 1.5], d: [0, 1, 0], s: 60 } } }));
+  const [body] = native(updated);
+  assert.ok(Math.abs(body.volume! - (10080 + 146.25 * Math.PI)) < 1e-7);
+  assert.deepEqual(proveFlangeSourceSizeChange(updated, patch(updated, { max: [80, 50] }), b, a), before);
+  assert.equal(admitFlangeSourceSizeChange(before, flangePatch(next, { bendRadius: undefined }), 1), false);
+  assert.equal(admitFlangeSourceSizeChange(before, flangePatch(next, { bendRadius: 3 }), 1), false);
+});
 test('ordinary sheet and an unrelated later sheet flange do not enter this adapter',()=>{
  const doc=fixture().doc,plain=prefixDoc(doc,2);
  assert.equal(isFlangeSourceSizeChange(plain,patch(plain,{max:[100,50]}),1),false);
@@ -59,7 +73,7 @@ test('ordinary sheet keeps its existing direct full-evaluation commit path',asyn
 test('mixed, dependent, unsupported source and invalid extents fail admission without mutation',()=>{
  const {doc}=fixture(),saved=structuredClone(doc),next=patch(doc,{max:[100,50]});
  for(const candidate of [doc,patch(doc,{max:[0,50]}),patch(doc,{max:[-1,50]}),patch(doc,{max:[NaN,60]}),patch(doc,{max:[Infinity,60]}),patch(doc,{max:[{parameter:'W'},60]}),patch(doc,{min:[1,0],max:[100,60]}),basePatch(next,{bendRadius:2}),basePatch(next,{thickness:3}),basePatch(next,{kFactor:.5}),flangePatch(next,{length:21}),flangePatch(next,{measure:'inner'}),flangePatch(next,{bendRadius:1.5})])assert.equal(admitFlangeSourceSizeChange(doc,candidate,1),false);
- for(const raw of [flangePatch(doc,{held:'test'}),flangePatch(doc,{suppressed:true}),flangePatch(doc,{measure:'inner'}),flangePatch(doc,{position:'material-outside'}),flangePatch(doc,{angle:45}),flangePatch(doc,{offsets:[0,0]}),flangePatch(doc,{bendRadius:2}),flangePatch(doc,{bendRadius:{parameter:'R'}}),flangePatch(doc,{bendRadius:0}),basePatch(doc,{bendRadius:{parameter:'R'}}),basePatch(doc,{thickness:{parameter:'T'}}),{...doc,direct:[]},{...doc,nodes:[...doc.nodes,doc.nodes[2]]}]){
+ for(const raw of [flangePatch(doc,{held:'test'}),flangePatch(doc,{suppressed:true}),flangePatch(doc,{measure:'inner'}),flangePatch(doc,{position:'material-outside'}),flangePatch(doc,{angle:45}),flangePatch(doc,{offsets:[0,0]}),flangePatch(doc,{bendRadius:{parameter:'R'}}),flangePatch(doc,{bendRadius:NaN}),flangePatch(doc,{bendRadius:-1}),flangePatch(doc,{bendRadius:0}),basePatch(doc,{bendRadius:{parameter:'R'}}),basePatch(doc,{thickness:{parameter:'T'}}),{...doc,direct:[]},{...doc,nodes:[...doc.nodes,doc.nodes[2]]}]){
   const source=raw as unknown as StudioDoc;assert.equal(admitFlangeSourceSizeChange(source,patch(source,{max:[100,50]}),1),false);
  }
  assert.deepEqual(doc,saved);

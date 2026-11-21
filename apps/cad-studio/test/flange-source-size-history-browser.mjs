@@ -6,16 +6,18 @@ const baseline=process.argv.includes('--baseline');
 const both=process.argv.includes('--both');
 const expectRefused=process.argv.includes('--expect-refused');
 const depth=process.argv.includes('--depth');
+const explicitRadius=process.argv.includes('--own-radius')?2.5:undefined;
 assert.ok(!both||(!depth&&!baseline),'Combined extent has its own runtime baseline');
 assert.ok(!expectRefused||both,'The current refusal is only expected for the combined edit');
+assert.ok(explicitRadius===undefined||both,'Explicit radius uses the combined resize');
 const edits=both?[['Width',80,100],['Depth',50,60]]:[depth?['Depth',50,60]:['Width',80,100]];
-const measure=both?'width-depth':depth?'depth':'width';
+const measure=explicitRadius!==undefined?'own-radius-width-depth':both?'width-depth':depth?'depth':'width';
 const nextMax=[depth?80:100,depth||both?60:50];
 const pins=['apps/cad-studio/test/flange-source-size-history-browser.mjs','apps/cad-studio/test/flow-helper.mjs','apps/cad-studio/test/model-rail-helper.mjs','packages/barocss-cad/src/part/part-sheet.ts','packages/barocss-cad-model/src/app/sheetCommands.ts','packages/barocss-cad-model/src/app/flangeRadiusEdit.ts','packages/barocss-cad-model/src/app/flangePositionEdit.ts','packages/barocss-cad-model/src/app/editFields.ts','packages/barocss-cad-model/src/engine/part.ts','apps/cad-studio/src/ui/NodeEditor.tsx','apps/cad-studio/src/app/featureNumberInput.ts','apps/cad-studio/src/state/historyFeatureApply.ts'];
 pins.push('apps/cad-studio/src/state/rectangleFinishResize.ts','packages/barocss-cad-model/src/app/flangeMeasureEdit.ts','apps/cad-studio/src/state/flangeMeasureHistory.ts','packages/barocss-cad-model/src/engine/references.ts','packages/barocss-cad-model/src/engine/rematch.ts','apps/cad-studio/src/App.tsx');
 pins.push('apps/cad-studio/src/state/flangeSourceThicknessHistory.ts','packages/barocss-cad-model/src/app/flangeRadiusSourceEdit.ts');
 if(!baseline)pins.push('apps/cad-studio/src/state/flangeSourceSizeHistory.ts');
-const f=await createFlow({name:'flange-source-size-history',output:process.argv[2],envFrozen:'FLANGE_SOURCE_SIZE_HISTORY_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:'Observe source rectangle extent edits with an inherited-radius Flange.',limits:['Actual signed Flange creation on a synthetic plain XY sheet. Single full-width inside flange, omitted own radius inheriting sheet R1.5, L20, 90 degrees. No general signature repair.'],snapshotExtra:()=>({dirty:!!document.querySelector('[aria-label="Unsaved changes"]')}),inspectorSource:`
+const f=await createFlow({name:'flange-source-size-history',output:process.argv[2],envFrozen:'FLANGE_SOURCE_SIZE_HISTORY_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:'Observe source rectangle extent edits with a signed Flange.',limits:['Actual signed Flange creation on a synthetic plain XY sheet. Single full-width inside flange, sheet R1.5, optional distinct Flange R2.5, L20, 90 degrees. No general signature repair.'],snapshotExtra:()=>({dirty:!!document.querySelector('[aria-label="Unsaved changes"]')}),inspectorSource:`
 import {readFileSync} from 'node:fs';
 import {evaluateCadPart,massPropertiesOf,flatPatternOf,checkBrep,faceGeometry} from '@barocss/cad';
 import {toPartDocument} from '@barocss/cad-model/engine/part';
@@ -69,6 +71,10 @@ async function history(label,doc){
  f.report.observations.push({label,fields,choices,historyMeasureOffered:offered.length>0,savedMeasure:doc.nodes[2].measure??'outer'});
  assert.equal(Number(await f.editor().getByLabel('Length',{exact:true}).inputValue()),20);
  assert.equal(Number(await f.editor().getByLabel('Angle',{exact:true}).inputValue()),90);
+ if(explicitRadius!==undefined){
+  assert.equal(await f.editor().getByRole('combobox',{name:'Radius source',exact:true}).inputValue(),'own');
+  assert.equal(Number(await f.editor().getByRole('spinbutton',{name:'Bend radius',exact:true}).inputValue()),explicitRadius);
+ }
  await f.snapshot(label);await f.closeEditor();await f.same(doc);
 }
 async function signatures(label,doc){
@@ -88,7 +94,16 @@ await f.run(async()=>{
  await f.newPage();await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'flange-position-source.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(source))});await f.same(source);
  const [native]=await f.inspect(measure+'-01-sheet-native',source);assert.ok(native.check.valid);near(native.mass.volume,6000,1e-7);const edge=native.edges.filter(e=>e.straight&&e.a[0]===80&&e.b[0]===80&&e.a[2]===T&&e.b[2]===T);assert.equal(edge.length,1);assert.deepEqual(edge[0].names,['n1.side1|n1.top']);near(Math.hypot(...edge[0].a.map((v,i)=>v-edge[0].b[i])),50);
  await button('Iso').click();await f.page.getByTitle('Frame all (F)',{exact:true}).click();const filter=button('Selection filter');for(let i=0;i<6&&!(await filter.innerText()).includes('Edges');i++)await filter.click();await f.worldClick([80,25,T]);await f.page.waitForFunction(()=>window.__studioSelection?.selection.edges.length===1);
- await clickModelCommand(f.page,'Modify','Flange');const hud=f.page.getByRole('dialog',{name:'Flange',exact:true});assert.equal(Number(await hud.getByLabel('Bend radius (0: the sheet’s)',{exact:true}).inputValue()),0);assert.equal(await hud.getByLabel('Position',{exact:true}).inputValue(),'material-inside');assert.equal(await hud.getByLabel('Length to',{exact:true}).inputValue(),'outer');await hud.getByLabel('Length to',{exact:true}).selectOption('outer');await hud.locator('.status').filter({hasText:/^preview$/}).waitFor();await button('Apply',hud).click();await f.changed(source);await f.ready();const doc=await f.doc();assert.equal(doc.nodes.length,3);assert.deepEqual(doc.nodes.slice(0,2),source.nodes);assert.equal(doc.nodes[2].kind,'sheet-flange');assert.equal(Object.hasOwn(doc.nodes[2],'bendRadius'),false,'Actual default r0 must retain inheritance by omission');assert.equal(doc.nodes[2].length,20);assert.equal(doc.nodes[2].position??'material-inside','material-inside');assert.equal(doc.nodes[2].measure??'outer','outer');assert.equal(doc.nodes[2].angle??90,90);assert.deepEqual(doc.nodes[2].edges,edge[0].names);
+ await clickModelCommand(f.page,'Modify','Flange');
+ const hud=f.page.getByRole('dialog',{name:'Flange',exact:true});
+ const radiusField=hud.getByLabel('Bend radius (0: the sheet’s)',{exact:true});
+ assert.equal(Number(await radiusField.inputValue()),0);
+ if(explicitRadius!==undefined)await radiusField.fill(String(explicitRadius));
+ assert.equal(await hud.getByLabel('Position',{exact:true}).inputValue(),'material-inside');assert.equal(await hud.getByLabel('Length to',{exact:true}).inputValue(),'outer');await hud.getByLabel('Length to',{exact:true}).selectOption('outer');await hud.locator('.status').filter({hasText:/^preview$/}).waitFor();await button('Apply',hud).click();await f.changed(source);await f.ready();
+ const doc=await f.doc();assert.equal(doc.nodes.length,3);assert.deepEqual(doc.nodes.slice(0,2),source.nodes);assert.equal(doc.nodes[2].kind,'sheet-flange');
+ assert.equal(Object.hasOwn(doc.nodes[2],'bendRadius'),explicitRadius!==undefined);
+ assert.equal(doc.nodes[2].bendRadius,explicitRadius);
+ assert.equal(doc.nodes[2].length,20);assert.equal(doc.nodes[2].position??'material-inside','material-inside');assert.equal(doc.nodes[2].measure??'outer','outer');assert.equal(doc.nodes[2].angle??90,90);assert.deepEqual(doc.nodes[2].edges,edge[0].names);
  await geometry(measure+'-02-flange-native',doc);await history(measure+'-03-history-measure-observation',doc);await f.undo();await f.same(source);await f.redo();await f.same(doc);await geometry(measure+'-04-redo-native',doc);
  assert.equal(await signatures('05-original-parent',doc),true,'Actual creation must capture its original native top-rim signature');
  await f.openFeatureEditor(1,'Sheet base');
@@ -103,7 +118,7 @@ await f.run(async()=>{
  if(change.accepted){
   const expected={...doc,nodes:doc.nodes.map((n,i)=>i===0?{...n,max:nextMax}:n)};
   assert.deepEqual(stripSigs(current),stripSigs(expected),'Only the requested rectangle extent may change apart from observed flange signatures');
-  assert.equal(Object.hasOwn(current.nodes[2],'bendRadius'),false);const matched=await signatures('07-resized-parent',current);if(!baseline)assert.equal(matched,true,'Accepted extent must retain current native rim evidence');
+  assert.equal(Object.hasOwn(current.nodes[2],'bendRadius'),explicitRadius!==undefined);const matched=await signatures('07-resized-parent',current);if(!baseline)assert.equal(matched,true,'Accepted extent must retain current native rim evidence');
  }
  await geometry('08-observed-native',current);
  if(change.accepted){await f.undo();await f.same(doc);await geometry('09-size-undo',doc);await f.redo();await f.same(current);await geometry('10-size-redo',current);}
@@ -112,6 +127,7 @@ await f.run(async()=>{
  if(!baseline)assert.equal(preserved,true,'Accepted size and repaired signature must survive fresh Open');
  if(!preserved){f.report.observations.push({label:'continuation',status:'NOT_RUN',reason:'Open changed accepted document; held/rematched/suppressed state is preserved in the snapshot'});await f.persist();return;}
  await geometry('12-reopened-native',reopened);await signatures('13-reopened-parent',reopened);
+ if(explicitRadius!==undefined)await history('13b-reopened-radius-source',reopened);
  f.report.observations.push({label:'continuation',status:'NOT_RUN',reason:'This baseline covers source size and saved replay only; no subsequent Flange editing support is claimed.'});await f.persist();
  if(change.accepted&&!baseline){
   await f.openFeatureEditor(1,'Sheet base');

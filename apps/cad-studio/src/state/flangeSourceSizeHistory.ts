@@ -34,9 +34,8 @@ export function admitFlangeSourceSizeChange(before: StudioDoc, next: StudioDoc, 
   if(index!==1 || !isFlangeSourceSizeChange(before,next,index))return false;
   // These field factories only inspect metadata; no synchronous native evaluation is invoked.
   if(!flangeRadiusSourceEdit(before,before.nodes,2)||!flangeRadiusSourceEdit(next,next.nodes,2))return false;
-  const a=before.nodes[0],b=next.nodes[0],flange=before.nodes[2];
-  if(a.kind!=='sketch'||b.kind!=='sketch'||a.profile!=='rectangle'||b.profile!=='rectangle'
-    ||flange.kind!=='sheet-flange'||flange.bendRadius!==undefined)return false;
+  const a=before.nodes[0],b=next.nodes[0];
+  if(a.kind!=='sketch'||b.kind!=='sketch'||a.profile!=='rectangle'||b.profile!=='rectangle')return false;
   if(!a.max.some((v,i)=>v!==b.max[i]))return false;
   return canonical({...before,nodes:before.nodes.map((n,i)=>i===0?{...a,max:b.max}:n)})===canonical(next);
 }
