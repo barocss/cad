@@ -1,4 +1,5 @@
 import { CadNumericPolicy } from '@barocss/cad';
+import { triangleClearsScrewAxis, triangleScrewAxisTolerance } from '@barocss/cad/internal/triangular-screw-axis';
 import { usesOf, type ModelNode } from '../engine/doc';
 import { canonical } from '../util/revision';
 import type { EditField } from './editFields';
@@ -98,8 +99,8 @@ function turnSections(nodes: readonly ModelNode[], index: number) {
   });
   const externalAxis: Point = [0, 0];
   const external = !matches(centre);
-  if (external && (triangular || rectangularAxisClearance(first[0], first[2], externalAxis) <= CadNumericPolicy.linearTolerance
-    || !matches(externalAxis))) return;
+  if (external && (!matches(externalAxis) || (triangular ? !triangleClearsScrewAxis(first)
+    : rectangularAxisClearance(first[0], first[2], externalAxis) <= CadNumericPolicy.linearTolerance))) return;
   return { start, last, first, rows, height, angle, radians, limit, triangular, external };
 }
 
@@ -170,10 +171,11 @@ function savedScrewWinding(nodes: readonly ModelNode[], index: number) {
   const turn = turnSections(nodes, index);
   if (!turn?.external || turn.angle === 0) return;
   const [[left, bottom], , [right, top]] = turn.first;
-  const tol = Math.max(CadNumericPolicy.linearTolerance,
-    CadNumericPolicy.relativeLinearTolerance * Math.max(right - left, top - bottom));
-  if (rectangularAxisClearance(turn.first[0], turn.first[2], [0, 0]) <= tol) return;
-  const centre = (row: readonly Point[]) => row.reduce(([x, y], [u, v]): Point => [x + u / 4, y + v / 4], [0, 0] as Point);
+  const tol = turn.triangular ? triangleScrewAxisTolerance(turn.first)
+    : Math.max(CadNumericPolicy.linearTolerance, CadNumericPolicy.relativeLinearTolerance * Math.max(right - left, top - bottom));
+  if (tol === undefined || (!turn.triangular && rectangularAxisClearance(turn.first[0], turn.first[2], [0, 0]) <= tol)) return;
+  const centre = turn.triangular ? triangleTurnCentre
+    : (row: readonly Point[]) => row.reduce(([x, y], [u, v]): Point => [x + u / 4, y + v / 4], [0, 0] as Point);
   const [x, y] = centre(turn.first);
   // The native fitter tries the centered turn first. A centered turn cannot
   // move its section centroid by more than its per-corner fit tolerance.

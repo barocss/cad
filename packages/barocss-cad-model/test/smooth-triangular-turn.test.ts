@@ -4,9 +4,10 @@ import { brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1, faceGeom
 import { isCompactStepTurn } from '@barocss/cad/internal/step-turn-display';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
+import { smoothLoftTurnWidthField, smoothScrewAngleField, smoothScrewPitchField } from '../src/app/smoothLoftTurn';
 import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
-import { emptyDoc, withNode, type SketchNode } from '../src/engine/doc';
+import { emptyDoc, withNode, type SketchNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, exportStudioStep, partBreps } from '../src/engine/evaluate';
 import { bodyMesh } from '../src/engine/mesh';
 import { revisionOf } from '../src/util/revision';
@@ -389,4 +390,70 @@ test('External triangle Screw admission uses the actual triangle and its vertex 
     assert.ok(!result.ok, JSON.stringify(pivot));
     assert.match(result.error.detail, /Surface V control point count/);
   }
+});
+
+
+test('one tilted triangular sketch authors both external-axis Screw windings and retains its History', async () => {
+  const command = commandById('smooth-screw')!;
+  for (const angle of [360, -360, 450, -450]) {
+    const sketch = angle > 0 ? triangle : { ...triangle, points: [triangle.points[0], triangle.points[2], triangle.points[1]] };
+    const source = ctx(sketch);
+    const input = { axisX: 10, axisY: -3, pitch: 40, angle };
+    assert.deepEqual(command.available(source), { ok: true });
+    const doc: StudioDoc = command.build!(source, input);
+    const index = doc.nodes.length - 1, loft = doc.nodes[index];
+    assert.ok(loft.kind === 'loft' && loft.smooth);
+    assert.deepEqual(loft.from, [0]);
+    assert.equal(doc.nodes[0], source.doc.nodes[0]);
+    assert.equal(loft.sections.length, Math.abs(angle) / 30 + 1);
+    assert.equal(loft.sections.at(-1)?.z, 40 * Math.abs(angle) / 360);
+    const copied = doc.nodes[loft.sections[0].sketch];
+    assert.ok(copied.kind === 'sketch' && copied.profile === 'loop' && copied.plane);
+    close(copied.plane.origin, screwAxis);
+    const [{ brep }] = partBreps(doc);
+    const checked = checkBrep(brep, { strict: true });
+    assert.ok(checked.valid && brep.shells[0].closed);
+    assert.deepEqual(checked.counts, { bodies: 1, shells: 1, faces: 5, loops: 5, coedges: 18, edges: 9, vertices: 6 });
+    assert.ok(Math.abs(brepMassProperties(brep, 1).volume - vols.get(Math.abs(angle))! * Math.abs(angle) / 360) < 1e-7);
+    assert.equal(smoothLoftTurnWidthField(doc.nodes, index), undefined);
+
+    const pitch = smoothScrewPitchField(doc.nodes, index), winding = smoothScrewAngleField(doc.nodes, index);
+    assert.ok(pitch?.kind === 'number' && winding?.kind === 'number');
+    assert.equal(pitch.get(doc.nodes), 40);
+    assert.equal(winding.get(doc.nodes), angle);
+    const changed: StudioDoc = { ...doc, nodes: pitch.set(winding.set(doc.nodes, -angle), 48) };
+    assert.equal(winding.get(changed.nodes), -angle);
+    assert.equal(pitch.get(changed.nodes), 48);
+    const [output] = partBreps(changed);
+    assert.deepEqual(output.brep.edges.map(edge => edge.id), brep.edges.map(edge => edge.id));
+    assert.ok(Math.abs(brepMassProperties(output.brep, 1).volume - vols.get(Math.abs(angle))! * Math.abs(angle) / 360 * 1.2) < 1e-7);
+    const reopened = await readStudioFile(encodeStudioFile(changed));
+    assert.ok('doc' in reopened);
+    assert.deepEqual(reopened.doc, changed);
+    assert.deepEqual(partBreps(reopened.doc)[0].brep, output.brep);
+  }
+});
+
+test('triangular Screw refuses touching axes and shares exterior admission with the Agent command', async () => {
+  const command = commandById('smooth-screw')!;
+  const source = ctx();
+  const values = { axisX: 10, axisY: -3, pitch: 40, angle: -360 };
+  for (const [axisX, axisY] of [[7, -5], [9, -4], [6, -2]]) {
+    assert.throws(() => command.build!(source, { ...values, axisX, axisY }), /outside the triangle/);
+  }
+  const near = ctx({ ...triangle, points: [[0, 0], [12, 0], [0, 6]] });
+  assert.throws(() => command.build!(near, { ...values, axisX: -6.5e-8, axisY: -6.5e-8 }), /outside the triangle/);
+  const admitted = command.build!(near, { ...values, axisX: -8e-8, axisY: -8e-8 });
+  assert.ok(checkBrep(partBreps(admitted)[0].brep, { strict: true }).valid);
+
+  const state = { doc: source.doc, bodies: [] };
+  const args = { action: 'command', command: 'smooth-screw', values: { ...values, sketch: source.doc.nodes[0].id } };
+  const stale = await dispatchTool(state, 'features', { ...args, expectedRevision: '0'.repeat(16) },
+    () => assert.fail('A stale command must not evaluate.'));
+  assert.ok(stale.isError && !stale.changed, stale.content);
+  assert.equal(stale.state, state);
+  const accepted = await dispatchTool(state, 'features', { ...args, expectedRevision: revisionOf(source.doc) },
+    async doc => evaluateDoc(doc, 1));
+  assert.ok(accepted.changed && !accepted.isError, accepted.content);
+  assert.deepEqual(accepted.state.doc, command.build!(source, values));
 });

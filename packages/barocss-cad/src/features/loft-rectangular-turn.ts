@@ -1,6 +1,6 @@
 import { evaluateCurveD1 } from '../core/derivatives.js';
 import { linearToleranceMM } from '../numeric-policy.js';
-import { SectionRationalContext, type SectionRational } from '../section-rational-internal.js';
+import { triangleClearsScrewAxis, triangleScrewAxisTolerance } from '../internal/triangular-screw-axis.js';
 import type { Curve, Point } from '../types.js';
 import { interpolateCurvePlain, type PlainFitCurve } from './fit-plain.js';
 
@@ -79,48 +79,13 @@ export function fitTriangularTurn(
   return fitTurn(rows, heights, stations, centre, u, width, tol);
 }
 
-/** Exact outside and closed-segment clearance tests for the represented first triangle. */
-function triangleClearsOrigin(first: readonly XY[], tolerance: number): boolean {
-  const unavailable = new Error('Triangle axis clearance arithmetic is unavailable.');
-  const q = new SectionRationalContext(() => { throw unavailable; });
-  type ExactXY = readonly [SectionRational, SectionRational];
-  const difference = (a: ExactXY, b: ExactXY): ExactXY => [q.sub(a[0], b[0]), q.sub(a[1], b[1])];
-  const product = (a: ExactXY, b: ExactXY) => q.add(q.mul(a[0], b[0]), q.mul(a[1], b[1]));
-  const determinant = (a: ExactXY, b: ExactXY) => q.sub(q.mul(a[0], b[1]), q.mul(a[1], b[0]));
-  try {
-    const points = first.map(([x, y]): ExactXY => [q.from(x), q.from(y)]);
-    const zero = q.rat(0n);
-    const winding = q.compare(determinant(difference(points[1], points[0]), difference(points[2], points[0])), zero);
-    if (!winding) return false;
-    const edges = points.map((a, i) => {
-      const b = points[(i + 1) % points.length], edge = difference(b, a);
-      const offset: ExactXY = [q.neg(a[0]), q.neg(a[1])];
-      return { a, b, edge, offset, side: determinant(edge, offset) };
-    });
-    // A convex triangle contains the origin iff every signed edge half-space contains it.
-    if (!edges.some(({ side }) => q.compare(side, zero) * winding < 0)) return false;
-    const tol = q.from(tolerance), squaredTolerance = q.mul(tol, tol);
-    return edges.every(({ a, b, edge, offset, side }) => {
-      const squaredLength = product(edge, edge), projection = product(offset, edge);
-      if (q.compare(projection, zero) <= 0) return q.compare(product(a, a), squaredTolerance) > 0;
-      if (q.compare(projection, squaredLength) >= 0) return q.compare(product(b, b), squaredTolerance) > 0;
-      return q.compare(q.mul(side, side), q.mul(squaredTolerance, squaredLength)) > 0;
-    });
-  } catch (error) {
-    if (error === unavailable) return false;
-    throw error;
-  }
-}
-
 /** A straight triangle rotating about the external normal through the common sketch origin. */
 export function fitTriangularScrew(
   rows: readonly (readonly XY[])[], heights: readonly number[], stations: readonly number[],
 ): { knots: number[]; rails: Point[][] } | null {
-  const [a, b, c] = rows[0];
-  const u = sub(b, a), v = sub(c, a);
-  const width = Math.hypot(...u), span = Math.max(width, Math.hypot(...v), Math.hypot(...sub(c, b)));
-  const tol = linearToleranceMM(span);
-  if (Math.abs(cross(u, v)) <= tol * span || !triangleClearsOrigin(rows[0], tol)) return null;
+  const tol = triangleScrewAxisTolerance(rows[0]);
+  if (tol === undefined || !triangleClearsScrewAxis(rows[0])) return null;
+  const u = sub(rows[0][1], rows[0][0]), width = Math.hypot(...u);
   return fitTurn(rows, heights, stations, [0, 0], u, width, tol);
 }
 

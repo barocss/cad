@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
-const triangular = process.argv.includes('--triangle');
+const singleSketch = process.argv.includes('--single-sketch');
+const triangular = singleSketch || process.argv.includes('--triangle');
+const command = singleSketch ? 'Smooth Screw' : 'Loft';
 const profile = triangular ? 'triangular' : 'rectangular';
 const degrees = triangular ? 360 : 180;
 const height = 40, spans = degrees / 30, samples = spans * 10;
@@ -14,6 +16,9 @@ const frozen = [
   'apps/cad-studio/test/external-axis-screw-loft-browser.mjs',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
   'packages/barocss-cad-model/src/app/profiles.ts',
+  'packages/barocss-cad-model/src/app/ruledTurnCommand.ts',
+  'packages/barocss-cad-model/src/app/smoothLoftTurn.ts',
+  'packages/barocss-cad/src/internal/triangular-screw-axis.ts',
   'packages/barocss-cad/src/part/part-profile-solid.ts',
   'packages/barocss-cad/src/features/loft.ts',
   'packages/barocss-cad/src/features/loft-rectangular-turn.ts',
@@ -22,7 +27,7 @@ const f = await createFlow({
   name: 'external-axis-screw-loft',
   output: process.argv[2],
   envFrozen: 'SCREW_LOFT_FROZEN',
-  qualification: 'Create both windings of a compact external-axis ' + profile + ' Screw with Studio Smooth Loft.',
+  qualification: 'Create both windings of a compact external-axis ' + profile + ' Screw with Studio ' + command + '.',
   limits: ['Desktop Chrome. Synthetic source sketches in one tilted frame.'],
   initialFiles: frozen,
   requiredFrozen: frozen,
@@ -50,6 +55,13 @@ const spin = ([x, y], angle, t) => {
   return [c * x - s * y, s * x + c * y];
 };
 function source(angle) {
+  if (singleSketch) return {
+    format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, outputs: {}, nextId: 1,
+    nodes: [{
+      id: 'n0', kind: 'sketch', profile: 'polygon', points: corners.map(([u, v]) => [u + 10, v - 3]),
+      plane: { ...frame, origin: [11, -17, 23] },
+    }],
+  };
   return {
     format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, outputs: {}, nextId: spans + 1,
     nodes: Array.from({ length: spans + 1 }, (_, i) => {
@@ -71,21 +83,39 @@ async function build(angle) {
   await f.same(doc);
   for (let i = 0; i < doc.nodes.length; i++) await button('Sketch ' + (i + 1)).click(i ? { modifiers: ['Shift'] } : {});
   await f.page.evaluate(() => document.activeElement?.blur());
-  await f.command('Loft');
-  const hud = f.page.getByRole('dialog', { name: 'Loft', exact: true });
-  await hud.getByLabel('Smooth (through the middle sections)', { exact: true }).selectOption('yes');
-  await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
+  await f.command(command);
+  const hud = f.page.getByRole('dialog', { name: command, exact: true });
+  const status = value => hud.locator('.status').filter({ hasText: value });
+  if (singleSketch) {
+    const field = name => hud.getByLabel(name, { exact: true });
+    if (angle > 0) {
+      await field('Axis X').fill('7');
+      await field('Axis Y').fill('-5');
+      await status(/^refused$/).waitFor();
+      await hud.locator('.hud-error').filter({ hasText: /Place the Screw axis outside the triangle with clearance\./ }).waitFor();
+      assert.ok(await button('Apply', hud).isDisabled());
+      await f.same(doc);
+      await f.snapshot('single-sketch-interior-axis-refused');
+    }
+    await field('Axis X').fill('10');
+    await field('Axis Y').fill('-3');
+    await field('Pitch per revolution').fill(String(height));
+    await field('Turn angle').fill(String(angle));
+  } else await hud.getByLabel('Smooth (through the middle sections)', { exact: true }).selectOption('yes');
+  await status(/^preview$/).waitFor();
   await f.same(doc);
+  if (singleSketch) await f.snapshot('single-sketch-preview-' + angle);
   await button('Apply', hud).click();
   await f.changed(doc);
   const accepted = await f.doc();
-  assert.deepEqual(accepted.nodes.slice(0, spans + 1), doc.nodes);
+  assert.deepEqual(accepted.nodes.slice(0, doc.nodes.length), doc.nodes);
   const loft = accepted.nodes.at(-1);
   assert.deepEqual([loft.kind, loft.smooth, loft.sections.length], ['loft', true, spans + 1]);
+  if (singleSketch) assert.deepEqual(loft.from, [0]);
   return accepted;
 }
 
-async function inspect(doc, angle, label) {
+async function inspect(doc, angle, label, advance = height) {
   const [part, ...others] = await f.inspect(label, doc);
   const { bodies } = await f.bodies();
   assert.equal(others.length, 0);
@@ -93,7 +123,7 @@ async function inspect(doc, angle, label) {
     [true, true, 1, corners.length + 2, 3 * corners.length, 2 * corners.length]);
   assert.deepEqual(bodies.map(body => body.key), [part.key]);
   const expectedVolume = triangular ? 840.1080446694306 : 840.4060323005599 * 96 / 21;
-  assert.ok(Math.abs(part.volume - expectedVolume) < 1e-7);
+  assert.ok(Math.abs(part.volume - expectedVolume * advance / height) < 1e-7);
   assert.ok(Math.abs(bodies[0].volume - part.volume) < 1e-7);
   assert.equal(part.rails.length, corners.length);
   let maxStationError = 0, minimumWinding = Infinity;
@@ -102,13 +132,13 @@ async function inspect(doc, angle, label) {
     assert.equal(new Set(rail.knots.slice(4, -4)).size, spans - 3);
     for (const [i, { point: p, derivative: d }] of rail.steps.entries()) {
       const t = i / samples;
-      assert.ok(Math.abs(.6 * d[1] + .8 * d[2] - height) < 1e-8);
+      assert.ok(Math.abs(.6 * d[1] + .8 * d[2] - advance) < 1e-8);
       const v = .8 * (p[1] - y) - .6 * (p[2] - z), dv = .8 * d[1] - .6 * d[2];
       const winding = Math.sign(angle) * ((p[0] - x) * dv - v * d[0]);
       minimumWinding = Math.min(minimumWinding, winding);
       assert.ok(winding > 0);
       if (i % 10 === 0) {
-        const expected = ontoPlane(...spin(corners[corner], angle, t), height * t);
+        const expected = ontoPlane(...spin(corners[corner], angle, t), advance * t);
         const error = Math.hypot(...p.map((value, k) => value - expected[k]));
         maxStationError = Math.max(maxStationError, error);
         assert.ok(error < 1e-8);
@@ -116,7 +146,7 @@ async function inspect(doc, angle, label) {
     }
   }
   f.report.observations.push({
-    label, angle, digest: part.digest, counts: part.counts, volume: part.volume,
+    label, angle, advance, digest: part.digest, counts: part.counts, volume: part.volume,
     rails: part.rails.length, maxStationError, minimumWinding,
   });
   return part;
@@ -155,4 +185,23 @@ await f.run(async () => {
   await f.freshOpen(saved.file, negative, 'external-axis-fresh-open');
   assert.deepEqual(await inspect(negative, -degrees, 'external-axis-reopened-native'), left);
   await frameView('external-axis-reopened-' + degrees);
+  if (singleSketch) {
+    const index = negative.nodes.length - 1;
+    await f.openFeatureEditor(index, 'reopened single-sketch Screw');
+    const field = name => f.editor().getByLabel(name, { exact: true });
+    assert.equal(Number(await field('Turn angle').inputValue()), -degrees);
+    assert.equal(Number(await field('Pitch per revolution').inputValue()), height);
+    assert.equal(await field('Turn width').count(), 0);
+    await field('Turn angle').fill(String(degrees));
+    const reversed = (await f.applyEditor(negative, 'single-sketch-reversed')).doc;
+    assert.deepEqual(reversed, positive);
+    assert.equal((await inspect(reversed, degrees, 'single-sketch-reversed-native')).digest, right.digest);
+
+    await f.openFeatureEditor(index, 'same Screw pitch');
+    await field('Pitch per revolution').fill('48');
+    const longer = (await f.applyEditor(reversed, 'single-sketch-pitch-48')).doc;
+    assert.deepEqual(longer.nodes.slice(0, -1), reversed.nodes.slice(0, -1));
+    await inspect(longer, degrees, 'single-sketch-pitch-48-native', 48);
+    await frameView('single-sketch-pitch-48-model');
+  }
 });

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1566: [Author triangular Smooth Screw from one sketch](notes/triangular-screw-command-2026-11-21/README.md), #630. Verify shared exact axis clearance, both windings, saved native geometry and History edits.
 - D1565: [Share viewport rail samples across compact Twist walls](notes/compact-twist-shared-display-2026-11-21/README.md), #630. Verify projected tolerance, closed display seams and matching native picks in both desktop renderers.
 - D1564: [Build a compact external-axis triangular Screw](notes/triangular-external-screw-loft-2026-11-21/README.md), #630. Verify the axis clearance, signed continuous walls and native Studio round trip.
 - D1563: [Restore structured display on imported AP214 Screws](notes/external-axis-screw-step-display-2026-11-21/README.md), #630. Prove the imported rotational family and preserve desktop owner selection.

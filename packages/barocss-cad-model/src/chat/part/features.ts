@@ -51,7 +51,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
     values: { sketch: 'stable sketch ID from query.summary', height: 'positive height in mm', angle: 'signed degrees from −450 to +450' },
   },
   'smooth-screw': {
-    selection: 'Use values.sketch and expectedRevision from query.rebuild. Requires one straight rectangle.',
+    selection: 'Use values.sketch and expectedRevision from query.rebuild. Requires one standalone rectangle or straight triangle and an external axis.',
     values: { sketch: 'stable sketch ID from query.summary', axisX: 'axis point X in sketch mm', axisY: 'axis point Y in sketch mm',
       pitch: 'positive mm per revolution', angle: 'nonzero signed degrees from −450 to +450' },
   },

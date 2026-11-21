@@ -1,4 +1,5 @@
 import { CadNumericPolicy } from '@barocss/cad';
+import { triangleClearsScrewAxis } from '@barocss/cad/internal/triangular-screw-axis';
 import { withNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { refusal } from '../engine/refusal';
@@ -125,20 +126,20 @@ function turnCommand(smooth: boolean): Command {
 export const ruledTurnCommand = turnCommand(false);
 export const smoothTurnCommand = turnCommand(true);
 
-const selectScrewProfile = 'Select one standalone straight rectangular sketch without holes or separate regions.';
+const selectScrewProfile = 'Select one standalone rectangle or straight triangle without holes or separate regions.';
 
 function screwSource(ctx: Ctx) {
-  const source = turnSource(ctx, false);
+  const source = turnSource(ctx, true);
   const sketch = source?.sketch;
-  if (!source || sketch?.profile !== 'rectangle' || sketch.construction?.length
+  if (!source || !sketch || sketch.construction?.length
     || sketch.outline?.bulges?.some(Boolean) || sketch.outline?.circles?.length
     || sketch.outline?.spline || sketch.outline?.ellipse || !source.plane.origin.every(Number.isFinite)) return;
-  return { ...source, sketch };
+  return source;
 }
 
 export const smoothScrewCommand: Command = {
   id: 'smooth-screw', label: 'Smooth Screw', icon: 'cad-loft', group: 'create', keywords: 'screw helix helical pitch external axis',
-  hint: 'Rotate one rectangular sketch about an external axis normal to its plane.',
+  hint: 'Rotate one rectangle or straight triangle about an external axis normal to its plane.',
   available: ctx => screwSource(ctx) ? { ok: true } : { ok: false, reason: selectScrewProfile },
   fields: () => [
     { key: 'axisX', label: 'Axis X', kind: 'mm', min: -CadNumericPolicy.coordinateAbs, max: CadNumericPolicy.coordinateAbs },
@@ -161,13 +162,15 @@ export const smoothScrewCommand: Command = {
     const height = Math.abs(angle) / 360 * pitch;
     if (height <= CadNumericPolicy.linearTolerance || height > limit)
       throw refusal('VALUE', 'Pitch and Turn angle must give an axial height within the model range.');
-    const sketch = resolveSketchDims(source.sketch, ctx.doc.parameters) as Extract<SketchNode, { profile: 'rectangle' }>;
-    const corners = rectangleCorners(sketch);
-    if (rectangularAxisClearance(corners[0], corners[2], [axisX, axisY]) <= CadNumericPolicy.linearTolerance)
-      throw refusal('VALUE', 'Place the Screw axis outside the rectangle.');
+    const sketch = resolveSketchDims(source.sketch, ctx.doc.parameters) as TurnProfile;
+    const triangular = sketch.profile === 'polygon';
+    const corners = triangular ? triangleCorners(sketch) : rectangleCorners(sketch);
     const local = corners.map(([x, y]): Point => [x - axisX, y - axisY]);
+    if (triangular ? !triangleClearsScrewAxis(local)
+      : rectangularAxisClearance(corners[0], corners[2], [axisX, axisY]) <= CadNumericPolicy.linearTolerance)
+      throw refusal('VALUE', triangular ? 'Place the Screw axis outside the triangle with clearance.' : 'Place the Screw axis outside the rectangle.');
     if (local.some(point => Math.hypot(...point) > limit))
-      throw refusal('VALUE', 'Move the Screw axis closer to the rectangle.');
+      throw refusal('VALUE', 'Move the Screw axis closer to the profile.');
     const { plane } = source, yAxis = cross(plane.normal, plane.xAxis);
     const origin = add(plane.origin, add(scale(plane.xAxis, axisX), scale(yAxis, axisY)));
     return smoothLoft(ctx.doc, source.index, { ...plane, origin }, local, [0, 0], height, angle);
