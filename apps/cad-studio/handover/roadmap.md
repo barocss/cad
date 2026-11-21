@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1585 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1586 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1585](notes/line-arc-screw-step-roundtrip-2026-11-22/README.md), P2 row 13, verifies both signed circular-segment Screw AP214 files with independent rational geometry and volume, explicit losses and fresh Studio Open. It records the reopened display gap. See [row 13](roadmap-rows/13.md) and the [decision index](decisions.md).
-- **Next MAIN:** D1586, P4 row 06, [#630](https://github.com/barocss/cad/issues/630). Measure the coarser circular-segment STEP display at fixed cameras. Restore display quality for the proved rational family and retain the same native edge selection in both desktop renderers.
+- **Current position:** [D1586](notes/line-arc-screw-step-display-2026-11-22/README.md), P4 row 06, restores the refined viewport display on the two signed circular-segment Screw STEP files. Both desktop renderers verify lower rail error and the same native edge pick. See [row 06](roadmap-rows/06.md) and the [decision index](decisions.md).
+- **Next MAIN:** D1587, P5 row 07, [#630](https://github.com/barocss/cad/issues/630). Qualify a centered straight-path Twist with one line and one circular arc. Start with a circular segment rotating about its area centroid and verify both windings, native curved supports, volume and desktop Save and Open.
 - **Separate follow-ups:** [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Measured progress:** whole CAD and core readiness **NOT_MEASURED**; B01 v1 **12/12 accepted groups**; B02 v1 **11/11 accepted groups**; B04 v1 **26/26 accepted groups**; B07 v1 **6/6 accepted profiles**; B09 v1 **9/9 accepted groups**; initial scenarios **8/10 accepted**; B06 **6/7 qualified groups, PDF held**; B05 **7/7 accepted groups**; B08 **6/6 accepted groups**; B10 **7/7 accepted groups**; B03 **NOT_ADJUDICATED**. The legacy43% is frozen history. P0 has12 acceptance items; R01–R12 have bounded D521–D532 closeouts; D785 demonstrates one R04 native collision; no whole-product acceptance follows. This is backlog state, not a whole-CAD percentage.

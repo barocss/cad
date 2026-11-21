@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1586: [Refine viewport display for circular-segment Screw STEP imports](notes/line-arc-screw-step-display-2026-11-22/README.md), #630. Certify the rational family and verify lower rail error and the same native pick in both desktop renderers.
 - D1585: [Qualify circular-segment Screw AP214 exchange](notes/line-arc-screw-step-roundtrip-2026-11-22/README.md), #630. Verify signed rational geometry, independent volume, exact file Open and the observed viewport gap.
 - D1584: [Review a circular-segment Smooth Screw through the local Agent](notes/line-arc-screw-agent-2026-11-22/README.md), #630 and #322. Verify revision-pinned creation, stale refusal, explicit Studio approval, and exact geometry across direct creation and Save and Open.
 - D1583: [Author a circular-segment Smooth Screw from one sketch](notes/line-arc-smooth-screw-command-2026-11-22/README.md), #630. Verify external-axis refusal, both windings, angle and pitch edits, and exact reopened geometry and History values.

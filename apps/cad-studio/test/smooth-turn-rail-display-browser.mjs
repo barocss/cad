@@ -6,6 +6,7 @@ const backend = process.argv.includes('--webgl2') ? 'webgl2' : 'webgpu';
 const imported = process.argv.includes('--step');
 const triangular = process.argv.includes('--triangle');
 const screw = process.argv.includes('--screw');
+const curvedScrew = process.argv.includes('--curved-screw');
 const polygon = process.argv.find(arg => arg.startsWith('--polygon='));
 const sides = polygon ? Number(polygon.slice('--polygon='.length)) : triangular ? 3 : 4;
 assert.ok(Number.isInteger(sides) && sides >= 3 && sides <= 64);
@@ -47,8 +48,11 @@ const canonical = baseline.edges.map(edge => edge.nativeJoint?.edgeId);
 const native = ${!!polygon} ? allRails.filter(edge => canonical.includes(edge.id)) : allRails;
 const hiddenRails = allRails.filter(edge => !native.includes(edge)).map(edge => edge.id);
 assert.ok(native.length, 'The viewport has at least one canonical corner rail');
-if (${screw && !baseline}) assert.ok(baseline.loftDetail?.screwGrid === true);
 const detail = baseline.loftDetail;
+if (${screw && !baseline}) {
+  assert.ok(detail);
+  assert.equal(Boolean(detail.screwGrid), ${!curvedScrew});
+}
 const dense = ${!baseline || screw || compactGrid}
   ? { ...baseline, ...detail, quality: detail ? 'display-detail' : 'display-base' } : bodyMesh(result.brep, 1, 24);
 const data = [baseline, dense].map(mesh => ({

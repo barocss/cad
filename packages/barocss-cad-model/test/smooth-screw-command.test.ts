@@ -453,6 +453,88 @@ test('Agent Screw winding requires the current revision and a verified native ed
   assert.deepEqual(accepted.state.doc.nodes, expected.set(doc.nodes, -360));
 });
 
+test('Imported circular segment Screws refine the native view and keep canonical STEP owners', () => {
+  for (const angle of [-450, 450]) {
+    const native = command.build!(segmentCtx, { ...segmentInput, angle });
+    const withControl = withNode(native, { kind: 'sketch', profile: 'rectangle', min: [100, 100], max: [104, 104] });
+    const twoBodies = withNode(withControl, { kind: 'extrude', sketch: native.nodes.length, height: 4 });
+    const step = exportStudioStep(twoBodies, { name: 'Untitled geometry' }).text;
+    const opened = withNode(emptyDoc(), { kind: 'import', name: 'Arbitrary source', step, solids: 2 });
+    const base = evaluateDoc(opened, 1);
+    const display = evaluateDoc(opened, 1, 8, true);
+    assert.ok(base.ok && display.ok);
+    const outputs = partBreps(opened);
+    for (const [i, { brep }] of outputs.entries()) {
+      const actual: BodyResult = display.bodies[i];
+      const { loftDetail, ...canonical } = actual.mesh;
+      assert.deepEqual({ ...actual, mesh: canonical }, base.bodies[i]);
+      if (brep.faces.length !== 5) {
+        assert.equal(compactStepTurnKind(brep), undefined);
+        assert.equal(loftDetail, undefined);
+        continue;
+      }
+      assert.equal(compactStepTurnKind(brep), 'curved-screw');
+      assert.ok(loftDetail && 'kind' in loftDetail);
+      assert.equal(loftDetail.screwGrid, undefined);
+      assert.ok(loftDetail.indices.length > canonical.indices.length);
+      assert.deepEqual([...new Set(loftDetail.edgeOfSegment)].sort((a, b) => a - b), canonical.edges.map(edge => edge.index));
+      assert.deepEqual([...new Set(loftDetail.faceOfVertex)].sort((a, b) => a - b), canonical.faces.map(face => face.index));
+      const renamed = { ...brep,
+        faces: brep.faces.map((face, j) => ({ ...face, name: `surface-${j}` })).reverse(),
+        edges: brep.edges.map((edge, j) => ({ ...edge, name: `edge-${j}` })).reverse() };
+      assert.equal(compactStepTurnKind(renamed), 'curved-screw');
+
+      // This interior weight changes the wall without changing any of its four edge curves.
+      const changed = structuredClone(brep);
+      const curved = changed.faces.find(face => face.surface.kind === 'surface'
+        && face.surface.degreeU === 2 && face.surface.degreeV === 3)?.surface;
+      assert.ok(curved?.kind === 'surface');
+      curved.weights[1][7] *= 0.999;
+      const check = checkBrep(changed, { strict: true });
+      assert.ok(check.valid, JSON.stringify(check.issues));
+      assert.equal(compactStepTurnKind(changed), undefined);
+      const baseMesh = bodyMesh(changed, 0, 8);
+      assert.equal(smoothTurnDisplayMesh(baseMesh, changed), baseMesh);
+
+      // Move both recovered circle centres by 2e-9 mm radially. Keep each cap bound
+      // to its wall and carry the changed middle controls through the same V law.
+      const pseudoArc = structuredClone(brep);
+      const local = ([x, y, z]: [number, number, number]): [number, number] =>
+        [x - 21, .8 * (y + 19.4) - .6 * (z - 24.8)];
+      const isSeam = (point: [number, number, number]) => {
+        const [u, v] = local(point);
+        return Math.abs(u - 15) < 1e-8 && Math.abs(v) < 1e-8;
+      };
+      const seam = pseudoArc.edges.find(({ curve }) => curve.degree === 3 && isSeam(curve.controlPoints[0]))?.curve;
+      assert.ok(seam);
+      for (const { surface } of pseudoArc.faces) {
+        if (surface.kind !== 'surface' || surface.degreeU !== 2 || surface.degreeV !== 3) continue;
+        const [left, middle, right] = surface.controlPoints;
+        const [x0, y0] = local(left[0]), [x1, y1] = local(right[0]), [oldX, oldY] = local(middle[0]);
+        const centre = 12 + 2e-9;
+        const dx = (x0 + x1) / 2 - centre, dy = (y0 + y1) / 2;
+        const reach = 3 / (surface.weights[1][0] * Math.hypot(dx, dy));
+        const deltaX = centre + reach * dx - oldX, deltaY = reach * dy - oldY;
+        const altered = middle.map(([x, y, z], j): [number, number, number] => {
+          const [u, v] = local(seam.controlPoints[j]);
+          const east = (u * deltaX - v * deltaY) / 15, north = (v * deltaX + u * deltaY) / 15;
+          return [x + east, y + .8 * north, z - .6 * north];
+        });
+        for (const end of [0, middle.length - 1]) {
+          const cap = pseudoArc.edges.find(({ curve }) => curve.degree === 2
+            && curve.controlPoints[1].every((value, axis) => value === middle[end][axis]));
+          assert.ok(cap);
+          cap.curve.controlPoints[1] = altered[end];
+        }
+        surface.controlPoints[1] = altered;
+      }
+      const pseudoArcCheck = checkBrep(pseudoArc, { strict: true });
+      assert.ok(pseudoArcCheck.valid, JSON.stringify(pseudoArcCheck.issues));
+      assert.equal(compactStepTurnKind(pseudoArc), undefined);
+    }
+  }
+});
+
 test('Imported compact Screws get the structured grid under the native STEP owners', () => {
   for (const angle of [180, -360, 450]) {
     const native = command.build!(ctx, { ...input, angle });

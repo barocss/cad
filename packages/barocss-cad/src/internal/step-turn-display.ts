@@ -1,15 +1,17 @@
 import { checkBrep, type Brep, type BrepEdge, type BrepFace } from '../brep/brep-core.js';
 import { faceGeometry } from '../brep/analytic-boolean.js';
+import { circleOf } from '../brep/brep-tessellate.js';
 import { evaluateCurve } from '../core/math.js';
 import { add, cross, dist, dot, len, scale, sub, unit } from '../core/vec3.js';
-import { fitConvexPolygonScrew, fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from '../features/loft-rectangular-turn.js';
+import { fitConvexPolygonScrew, fitLineArcScrew, fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from '../features/loft-rectangular-turn.js';
 import type { Curve, Point } from '../types.js';
 import { linearToleranceMM } from '../numeric-policy.js';
 import { triangleScrewAxisTolerance } from './triangular-screw-axis.js';
 import { convexPolygonScrewAxisTolerance } from './convex-polygon-screw-axis.js';
-import { ExtrudedProfileLimits } from '../features/extruded-profile-solid.js';
+import { buildProfileLoop, ExtrudedProfileLimits } from '../features/extruded-profile-solid.js';
 
 const straightKnots = [0, 0, 1, 1];
+const quadraticKnots = [0, 0, 0, 1, 1, 1];
 const same = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((value, i) => value === b[i]);
 const centre = (corners: readonly Point[]) => scale(corners.reduce((sum, point) => add(sum, point), [0, 0, 0]), 1 / corners.length);
 
@@ -86,8 +88,174 @@ function externalScrewPivot(poles: readonly Point[][], tolerance: number, polygo
   return pivot?.every(Number.isFinite) ? pivot : undefined;
 }
 
-/** Recognize the compact polynomial families in a STEP solid for display sampling. */
-export function compactStepTurnKind(brep: Brep): 'turn' | 'screw' | undefined {
+const matchingKnots = (a: readonly number[], b: readonly number[]) => a.length === b.length
+  && a.every((knot, i) => Math.abs(knot - b[i]) <= 8 * Number.EPSILON);
+
+function rationalSideBindings(face: BrepFace, edges: readonly BrepEdge[], count: number): boolean {
+  const s = face.surface;
+  if (s.kind !== 'surface' || (s.degreeU !== 1 && s.degreeU !== 2) || s.degreeV !== 3
+    || !same(s.knotsU, s.degreeU === 1 ? straightKnots : quadraticKnots)
+    || s.controlPoints.length !== s.degreeU + 1 || s.weights.length !== s.controlPoints.length
+    || s.controlPoints.some(row => row.length !== count || row.some(point => !point.every(Number.isFinite)))
+    || s.weights.some(row => row.length !== count || !(row[0] > 0 && row[0] <= 1) || row.some(w => w !== row[0]))
+    || s.weights[0][0] !== 1 || s.weights.at(-1)![0] !== 1) return false;
+  const first = s.controlPoints[0], last = s.controlPoints.at(-1)!;
+  const boundaries = [
+    { poles: first, knots: s.knotsV, weights: s.weights[0], degree: 3 },
+    { poles: last, knots: s.knotsV, weights: s.weights.at(-1)!, degree: 3 },
+    ...[0, count - 1].map(k => ({ poles: s.controlPoints.map(row => row[k]), knots: s.knotsU,
+      weights: s.weights.map(row => row[k]), degree: s.degreeU })),
+  ];
+  const matches = boundaries.map(boundary => edges.filter(({ curve }) => {
+    const match = (c: Curve) => c.degree === boundary.degree && matchingKnots(c.knots, boundary.knots)
+      && same(c.weights, boundary.weights) && c.controlPoints.length === boundary.poles.length
+      && c.controlPoints.every((point, i) => same(point, boundary.poles[i]));
+    return match(curve) || match(reverseCurve(curve));
+  }));
+  return matches.every(found => found.length === 1) && new Set(matches.map(found => found[0])).size === 4;
+}
+
+/** Only one chord and two equal circular-arc pieces, all governed by the native signed fit. */
+function curvedStepScrew(brep: Brep): boolean {
+  if (brep.source.family !== 'step' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
+    || brep.shells.length !== 1 || !brep.shells[0].closed || brep.faces.length !== 5
+    || brep.edges.length !== 9 || brep.vertices.length !== 6 || brep.loops.length !== 5 || brep.coedges.length !== 18) return false;
+  const rails = brep.edges.filter(edge => edge.curve.degree === 3), count = rails[0]?.curve.controlPoints.length;
+  if (rails.length !== 3 || count === undefined || count < 7 || count > 16) return false;
+  const rawKnots = rails[0].curve.knots;
+  if (rawKnots.length !== count + 4 || !rawKnots.slice(0, 4).every(k => k === 0)
+    || !rawKnots.slice(-4).every(k => k === 1)
+    || !rawKnots.slice(4, -4).every((k, i) => rawKnots[i + 3] < k && k < 1)
+    || !rails.every(({ curve }) => unitCurve(curve, 3, count)
+      && (matchingKnots(curve.knots, rawKnots) || matchingKnots(reverseCurve(curve).knots, rawKnots)))) return false;
+  const lines = brep.edges.filter(({ curve }) => unitCurve(curve, 1, 2) && same(curve.knots, straightKnots));
+  const arcs = brep.edges.filter(({ curve }) => curve.degree === 2 && curve.controlPoints.length === 3
+    && curve.controlPoints.every(point => point.every(Number.isFinite)) && same(curve.knots, quadraticKnots)
+    && curve.weights.length === 3 && curve.weights[0] === 1 && curve.weights[2] === 1
+    && curve.weights[1] > 0 && curve.weights[1] < 1);
+  if (lines.length !== 2 || arcs.length !== 4 || !checkBrep(brep, { strict: true }).valid) return false;
+  const byEdge = new Map(brep.edges.map(edge => [edge.id, edge]));
+  const byLoop = new Map(brep.loops.map(loop => [loop.id, loop]));
+  const byUse = new Map(brep.coedges.map(use => [use.id, use]));
+  const vertices = new Map(brep.vertices.map(vertex => [vertex.id, vertex.point]));
+  if (!brep.edges.every(({ curve, vertices: [a, b] }) => same(vertices.get(a)!, curve.controlPoints[0])
+    && same(vertices.get(b)!, curve.controlPoints.at(-1)!))) return false;
+  const coordinateScale = Math.max(1, ...brep.edges.flatMap(({ curve }) => curve.controlPoints.flat().map(Math.abs)));
+  const tolerance = Math.max(1e-9, 256 * Number.EPSILON * coordinateScale);
+  const caps: { vertices: string[]; edges: BrepEdge[]; normal: Point }[] = [];
+  const walls: { face: BrepFace; edges: BrepEdge[] }[] = [];
+  for (const face of brep.faces) {
+    const loop = byLoop.get(face.loops[0]);
+    if (face.loops.length !== 1 || loop?.kind !== 'outer') return false;
+    const uses = loop.coedges.map(id => byUse.get(id)!);
+    const edges = uses.map(use => byEdge.get(use.edge)!);
+    if (edges.some(edge => edge.curve.degree === 3)) {
+      if (edges.length !== 4 || !rationalSideBindings(face, edges, count)) return false;
+      walls.push({ face, edges });
+    } else {
+      const support = faceGeometry(face), s = face.surface;
+      if (edges.length !== 3 || edges.filter(edge => lines.includes(edge)).length !== 1
+        || edges.filter(edge => arcs.includes(edge)).length !== 2 || support.kind !== 'plane'
+        || s.kind !== 'surface' || s.degreeU !== 1 || s.degreeV !== 1
+        || !same(s.knotsU, straightKnots) || !same(s.knotsV, straightKnots)
+        || s.controlPoints.length !== 2 || s.controlPoints.some(row => row.length !== 2)
+        || s.weights.length !== 2 || s.weights.some(row => !same(row, [1, 1]))) return false;
+      const ring = edges.map((edge, i) => edge.vertices[uses[i].sense === 'forward' ? 0 : 1]);
+      const onPlane = (point: Point) => Math.abs(dot(sub(point, support.o), support.n)) <= tolerance;
+      if (new Set(ring).size !== 3 || !ring.every(id => onPlane(vertices.get(id)!))
+        || s.controlPoints.some(row => row.some(point => !onPlane(point)))) return false;
+      caps.push({ vertices: ring, edges, normal: support.n });
+    }
+  }
+  if (caps.length !== 2 || walls.length !== 3 || walls.filter(({ face }) => face.surface.kind === 'surface' && face.surface.degreeU === 1).length !== 1) return false;
+  const [start, end] = caps.sort((a, b) => rails.filter(rail => b.vertices.includes(rail.vertices[0])).length
+    - rails.filter(rail => a.vertices.includes(rail.vertices[0])).length);
+  const origin = centre(start.vertices.map(id => vertices.get(id)!));
+  const delta = sub(centre(end.vertices.map(id => vertices.get(id)!)), origin), advance = dot(delta, start.normal);
+  const height = Math.abs(advance), axis = scale(start.normal, Math.sign(advance));
+  if (!(height > tolerance) || Math.abs(Math.abs(dot(end.normal, axis)) - 1) > 1e-10) return false;
+  const chord = start.edges.find(edge => lines.includes(edge))!;
+  const seam = start.vertices.find(id => !chord.vertices.includes(id))!;
+  const endpoints = chord.vertices.slice();
+  if (dot(cross(sub(vertices.get(endpoints[1])!, vertices.get(endpoints[0])!), sub(vertices.get(seam)!, vertices.get(endpoints[0])!)), axis) < 0) endpoints.reverse();
+  const orderedVertices = [...endpoints, seam];
+  const first = orderedVertices.map(id => vertices.get(id)!);
+  const [a, b] = longestChord(first), x = unit(sub(first[b], first[a])), y = cross(axis, x);
+  const local = (p: Point): Point => { const d = sub(p, origin); return [dot(d, x), dot(d, y), dot(d, axis)]; };
+  const orderedRails = orderedVertices.map(id => rails.find(edge => edge.vertices.includes(id)));
+  if (orderedRails.some(edge => !edge) || new Set(orderedRails).size !== 3
+    || !end.vertices.every(id => orderedRails.some(edge => edge!.vertices.includes(id)))) return false;
+  const curves = orderedRails.map((edge, i) => edge!.vertices[0] === orderedVertices[i] ? edge!.curve : reverseCurve(edge!.curve));
+  const knots = curves[0].knots;
+  if (!curves.every(curve => matchingKnots(curve.knots, knots))) return false;
+  const pivot = externalScrewPivot(curves.map(curve => curve.controlPoints.map(local)), tolerance, true);
+  if (!pivot) return false;
+  const pieces: { poles: Point[][]; weights: number[][] }[] = [];
+  for (let i = 0; i < 3; i++) {
+    const boundary = start.edges.find(edge => edge.vertices.includes(orderedVertices[i]) && edge.vertices.includes(orderedVertices[(i + 1) % 3]));
+    const found = walls.filter(wall => wall.edges.includes(boundary!));
+    if (!boundary || found.length !== 1) return false;
+    const s = found[0].face.surface;
+    if (s.kind !== 'surface' || s.degreeU !== (i === 0 ? 1 : 2)) return false;
+    let poles = s.controlPoints.map(row => row.map(local)), weights = s.weights.map(row => row.slice());
+    const near = (p: Point, q: Point) => dist(p, q) <= tolerance;
+    let forward = true;
+    if (!near(poles[0][0], local(vertices.get(orderedVertices[i])!)) && !near(poles.at(-1)![0], local(vertices.get(orderedVertices[i])!))) {
+      forward = false;
+      poles = poles.map(row => row.slice().reverse()); weights = weights.map(row => row.slice().reverse());
+    }
+    if (!matchingKnots(forward ? s.knotsV : s.knotsV.slice().reverse().map(k => 1 - k), knots)) return false;
+    if (!near(poles[0][0], local(vertices.get(orderedVertices[i])!))) { poles.reverse(); weights.reverse(); }
+    if (!near(poles[0][0], local(vertices.get(orderedVertices[i])!))
+      || !near(poles.at(-1)![0], local(vertices.get(orderedVertices[(i + 1) % 3])!))) return false;
+    pieces.push({ poles, weights });
+  }
+  const stations = Array.from({ length: count }, (_, i) => i / (count - 1));
+  const rows = stations.map(t => pieces.map(piece => ({
+    p: piece.poles.map((controlPoints): XY => {
+      const [u, v] = evaluateCurve({ kind: 'curve', id: 'control', degree: 3, knots, controlPoints, weights: Array(count).fill(1) }, t);
+      return [u - pivot[0], v - pivot[1]];
+    }), w: piece.weights.map(row => row[0]),
+  })));
+  const profiles = [];
+  for (const row of rows) {
+    if (row[1].w[1] !== row[2].w[1]) return false;
+    const circles = row.slice(1).map(piece => {
+      const controlPoints = piece.p.map(([u, v]): Point => [u, v, 0]);
+      const circle = circleOf({ kind: 'curve', id: 'arc', degree: 2, knots: quadraticKnots, controlPoints, weights: piece.w });
+      if (!circle) return null;
+      const [a, middle, b] = controlPoints, w = piece.w[1];
+      // circleOf supplies a support candidate. Prove its rational tangent intersection separately:
+      // endpoint-radius agreement alone also admits the opposite middle-control branch.
+      const expected = add(circle.c, scale(sub(scale(add(a, b), .5), circle.c), 1 / (w * w)));
+      const start = sub(a, circle.c), end = sub(b, circle.c);
+      if (dist(middle, expected) > tolerance || !(start[0] * end[1] - start[1] * end[0] > 0)) return null;
+      return circle;
+    });
+    if (circles.some(circle => !circle || circle.spans[0].phi > Math.PI / 2 + 1e-12)) return false;
+    const circle = circles[0]!;
+    if (dist(circle.c, circles[1]!.c) > tolerance || Math.abs(circle.r - circles[1]!.r) > tolerance) return false;
+    profiles.push(buildProfileLoop([{ kind: 'line', start: row[0].p[0] },
+      { kind: 'arc', start: row[1].p[0], center: [circle.c[0], circle.c[1]], direction: 'ccw' }]));
+  }
+  const originalArc = profiles[0].segments.find(segment => segment.kind === 'arc');
+  if (originalArc?.kind !== 'arc') return false;
+  const movement = Math.max(tolerance, linearToleranceMM(2 * originalArc.radius));
+  const centroid = (row: typeof rows[number]): Point => centre(row.map(piece => [...piece.p[0], 0] as Point));
+  if (!rows.some(row => dist(centroid(row), centroid(rows[0])) > 4 * movement)) return false;
+  const fit = fitLineArcScrew(profiles, rows, stations.map(t => height * t), stations);
+  return !!fit && matchingKnots(fit.knots, knots) && fit.nets.length === 3 && pieces.every((piece, i) => piece.poles.every((column, j) =>
+    column.every(([u, v, z], k) => {
+      const [a, b, c, w] = fit.nets[i][j][k];
+      return piece.weights[j][k] === w && dist([u - pivot[0], v - pivot[1], z], [a / w, b / w, c / w]) <= tolerance;
+    })));
+}
+
+/** Recognize compact turn and Screw families in a STEP solid for display sampling. */
+export function compactStepTurnKind(brep: Brep): 'turn' | 'screw' | 'curved-screw' | undefined {
+  if (brep.edges.some(edge => edge.curve.degree === 2)) {
+    try { return curvedStepScrew(brep) ? 'curved-screw' : undefined; } catch { return; }
+  }
   const sides = brep.faces.length - 2;
   if (brep.source.family !== 'step' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
     || brep.shells.length !== 1 || !brep.shells[0].closed || sides < 3 || sides > ExtrudedProfileLimits.segments
