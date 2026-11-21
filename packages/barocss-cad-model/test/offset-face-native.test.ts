@@ -609,26 +609,22 @@ test('legacy Offset chain refuses an upstream edit before a downstream absolute 
   assert.ok(lastEdit.build!(context(chain), { d: -3 }));
 });
 
-for (const kind of ['cylinder wall', 'through bore', 'tube inner wall'] as const) {
-  const tube = kind === 'tube inner wall', bore = kind !== 'cylinder wall';
+for (const kind of ['cylinder wall', 'through bore', 'tube inner wall', 'tube outer wall'] as const) {
+  const tubeOuter = kind === 'tube outer wall', tube = kind === 'tube inner wall' || tubeOuter;
+  const bore = kind === 'through bore' || kind === 'tube inner wall';
   test(`radial Offset uses the original ${kind} signature through native Open and History`, async () => {
-    const radius = tube ? 4 : bore ? 3 : 5, height = tube ? 16 : bore ? 10 : 20;
+    const radius = tubeOuter ? 9 : tube ? 4 : bore ? 3 : 5, height = tube ? 16 : bore ? 10 : 20;
     const centre: [number, number] = tube ? [14, 9] : [11, 9];
     const stock = tube ? withNode(withNode(emptyDoc(), { kind: 'sketch', profile: 'circle', center: centre, radius: 9 }),
       { kind: 'extrude', sketch: 0, height }) : bore ? rectanglePart(40, 30, height) : cylinderPart(radius, height);
-    const source = bore ? withNode(stock, { kind: 'hole', parent: { node: 1, side: 'solid' }, center: centre, radius }) : stock;
+    const source = bore || tube ? withNode(stock, { kind: 'hole', parent: { node: 1, side: 'solid' }, center: centre, radius: tube ? 4 : radius }) : stock;
     const evaluated = evaluateDoc(source, 0);
     assert.ok(evaluated.ok);
     const [body] = evaluated.bodies, face = body.mesh.faces.findIndex(face =>
-      face.exact?.kind === 'cylinder' && (!bore || face.nativeBoreDiameter !== undefined));
+      face.exact?.kind === 'cylinder' && (face.nativeBoreDiameter !== undefined) === bore);
     assert.ok(face >= 0);
     const ctx: Ctx = { doc: source, bodies: [body], selection: { faces: [{ body: 0, face }], edges: [], bodies: [] } };
     assert.ok(offsetFaceCommand.available(ctx).ok);
-    if (tube) {
-      const outer = body.mesh.faces.findIndex(face => face.exact?.kind === 'cylinder' && face.nativeBoreDiameter === undefined);
-      assert.ok(outer >= 0);
-      assert.equal(offsetFaceCommand.available({ ...ctx, selection: { ...ctx.selection, faces: [{ body: 0, face: outer }] } }).ok, false);
-    }
     const applied = offsetFaceCommand.build!(ctx, { d: 2 });
     const node = applied.nodes.at(-1);
     assert.ok(node?.kind === 'offset-face' && node.sigs?.[node.faces[0]]?.k === 'curved');
@@ -642,13 +638,16 @@ for (const kind of ['cylinder wall', 'through bore', 'tube inner wall'] as const
     const command = editSavedOffsetFaceCommand(opened.doc, source.nodes.length)!;
     const editedCtx = { ...ctx, doc: opened.doc };
     assert.deepEqual(command.fields?.(editedCtx).map(field => field.label), ['Offset']);
+    assert.equal(command.steps?.(editedCtx, { d: 2 })?.[0].text, bore ? 'Cylindrical bore · Radial' : 'Cylindrical wall · Radial');
     const reduced = command.build!(editedCtx, { d: -1 });
     assert.deepEqual(reduced.nodes.at(-1), { ...node, distance: -1 });
     const disk = Math.PI * (radius + (bore ? 1 : -1)) ** 2;
     const stockArea = tube ? Math.PI * 9 ** 2 : 40 * 30;
-    near(brepMassProperties(bodyOf(reduced), 1).volume, (bore ? stockArea - disk : disk) * height);
-    const collapsed = command.build!(editedCtx, { d: bore ? radius : -radius });
-    assert.equal(evaluateDoc(collapsed, 0).ok, false);
+    near(brepMassProperties(bodyOf(reduced), 1).volume, (tubeOuter ? disk - 16 * Math.PI : bore ? stockArea - disk : disk) * height);
+    const collapsed = command.build!(editedCtx, { d: tubeOuter ? -5 : bore ? radius : -radius });
+    const refusal = evaluateDoc(collapsed, 0);
+    assert.equal(refusal.ok, false);
+    if (tubeOuter && !refusal.ok) assert.match(refusal.error.detail, /retained bore/);
     if (bore) assert.equal(evaluateDoc(command.build!(editedCtx, { d: tube ? -5 : -6 }), 0).ok, false);
 
     const index = source.nodes.length;
@@ -656,7 +655,7 @@ for (const kind of ['cylinder wall', 'through bore', 'tube inner wall'] as const
     const request = { action: 'edit', index, expectedRevision: revisionOf(opened.doc), values: { offsetDistance: -1 } };
     const noEvaluation = async () => assert.fail('Refuse this request before evaluating a candidate');
     const discovery = await dispatchTool(state, 'features', { action: 'edit', index }, noEvaluation);
-    if (!tube) {
+    if (kind !== 'tube inner wall') {
       assert.doesNotMatch(discovery.content, /values\.offsetDistance/);
       const refusal = await dispatchTool(state, 'features', request, noEvaluation);
       assert.ok(refusal.isError && !refusal.changed);

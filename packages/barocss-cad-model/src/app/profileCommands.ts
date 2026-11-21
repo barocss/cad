@@ -373,7 +373,7 @@ export const offsetFaceCommand: Command = {
     if (!Number.isInteger(picked.body) || !Number.isInteger(picked.face) || !body || !face || face.facet || !face.name) return no(unsupportedFace);
     const cylinder = face.exact?.kind === 'cylinder' && body.ref?.side === 'solid'
       && (isCylinderReplacementSource(ctx.doc.nodes, body.ref.node) || isBoredPlateHole(ctx.doc.nodes, body.ref.node)
-        || (face.nativeBoreDiameter !== undefined && isAnnularReplacementSource(ctx.doc.nodes, body.ref.node)));
+        || isAnnularReplacementSource(ctx.doc.nodes, body.ref.node));
     if (!cylinder && face.kind !== 'plane' && face.exact?.kind !== 'plane') return no(unsupportedFace);
     let matches = 0;
     for (const candidate of ctx.bodies) if (candidate.key === body.key) matches++;

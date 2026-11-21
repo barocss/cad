@@ -3,7 +3,8 @@ import test from 'node:test';
 import { checkBrep, createCylindricalBoreCheck, evaluateCadPart, evaluateCurve, evaluateSurface, faceGeometry } from '../dist/index.js';
 import { transformBrep, quarterTurn } from '../dist/brep/brep-transform.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
-import { annularCapReplacementFrame, boreWallOffsetFrame, boredCapOffsetFrame, offsetBoreWallIfAdmitted } from '../dist/features/bored-cap-offset.js';
+import { annularCapReplacementFrame, boreWallOffsetFrame, boredCapOffsetFrame, circularWallOffsetFrame,
+  offsetBoreWallIfAdmitted, offsetCircularWallIfAdmitted } from '../dist/features/bored-cap-offset.js';
 
 const plate = ({ min = [0, 0], max = [40, 30], center = [11, 9], radius = 3, from = -2, height = 10, ...hole } = {}) => ({
   format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
@@ -234,5 +235,107 @@ test('coaxial tube radial admission rejects genuine eccentricity without narrowi
     assert.ok(annularCapReplacementFrame(source, 'n1.top'), 'the existing eccentric annular cap family is unchanged');
     assert.equal(boreWallOffsetFrame(source, name), undefined);
     assert.equal(offsetBoreWallIfAdmitted(source, name, 1), undefined);
+  }
+});
+
+const outerWalls = brep => walls(brep).filter(face => faceGeometry(face).out === 1);
+
+for (const distance of [2, -1]) {
+  test(`coaxial tube outer-wall offset ${distance} retains the complete native bore and reprojects both cap loops`, () => {
+    const doc = tube(), source = freeze(solid(doc)), saved = structuredClone(source), names = outerWalls(source).map(face => face.name);
+    const radius = 9 + distance, boreFaces = innerWalls(source), boreLoops = new Set(boreFaces.flatMap(face => face.loops));
+    const boreEdges = new Set(source.coedges.filter(use => boreLoops.has(use.loop)).map(use => use.edge));
+    const boreVertices = new Set(source.edges.filter(edge => boreEdges.has(edge.id)).flatMap(edge => edge.vertices));
+    assert.equal(boreEdges.size, 6); assert.equal(boreVertices.size, 4);
+    for (const name of names) {
+      const frame = circularWallOffsetFrame(source, name);
+      assert.deepEqual(frame.faces, names);
+      close(frame.anchor[2], 8);
+      close(Math.hypot(frame.anchor[0] - 14, frame.anchor[1] - 9), 9);
+      pointClose(frame.normal, [(frame.anchor[0] - 14) / 9, (frame.anchor[1] - 9) / 9, 0]);
+      const result = offsetCircularWallIfAdmitted(source, name, distance), report = checkBrep(result, { strict: true });
+      assert.ok(report.valid, report.issues.join('\n'));
+      assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 8, coedges: 24, edges: 12, vertices: 8 });
+      assert.equal(report.topology[0].genus, 1);
+      assert.ok(report.maximumEdgeSurfaceGap < 1e-9 && report.maximumPcurveGap < 1e-9);
+      assert.deepEqual(identity(result), identity(source));
+      for (const [index, face] of source.faces.entries()) if (boreFaces.includes(face)) assert.equal(result.faces[index], face);
+      for (const [index, edge] of source.edges.entries()) if (boreEdges.has(edge.id)) assert.equal(result.edges[index], edge);
+      for (const [index, vertex] of source.vertices.entries()) if (boreVertices.has(vertex.id)) assert.equal(result.vertices[index], vertex);
+      for (const [index, use] of source.coedges.entries()) if (boreLoops.has(use.loop)) assert.equal(result.coedges[index], use);
+      assert.ok(boreWallOffsetFrame(result, boreFaces[0].name), 'the retained bore still passes the existing native proof');
+      assert.ok(annularCapReplacementFrame(result, 'n1.top'), 'both new cap charts retain exact native trim bindings');
+      const edgeById = new Map(result.edges.map(edge => [edge.id, edge]));
+      let reversedUses = 0, changedInnerUV = 0;
+      for (const capName of ['n1.bottom', 'n1.top']) {
+        const cap = result.faces.find(face => face.name === capName), support = faceGeometry(cap), up = capName === 'n1.top';
+        assert.equal(support.kind, 'plane');
+        pointClose(support.n, [0, 0, up ? 1 : -1]);
+        close(support.o[2], up ? 16 : 0);
+        const poles = cap.surface.controlPoints.flat(), xs = poles.map(point => point[0]), ys = poles.map(point => point[1]);
+        const min = [Math.min(...xs), Math.min(...ys)], max = [Math.max(...xs), Math.max(...ys)];
+        pointClose([...min, 0], [14 - radius, 9 - radius, 0]);
+        pointClose([...max, 0], [14 + radius, 9 + radius, 0]);
+        for (const use of result.coedges.filter(use => cap.loops.includes(use.loop))) {
+          const previous = source.coedges.find(original => original.id === use.id), edge = edgeById.get(use.edge);
+          const projected = edge.curve.controlPoints.map(([x, y]) => {
+            const u = (x - min[0]) / (max[0] - min[0]), v = (y - min[1]) / (max[1] - min[1]);
+            return up ? [u, v, 0] : [v, u, 0];
+          });
+          assert.deepEqual(use.pcurve.controlPoints, projected, 'UV poles follow the stored edge, including reversed coedges');
+          assert.equal(use.pcurve.id, previous.pcurve.id);
+          assert.equal(use.pcurve.weights, previous.pcurve.weights);
+          assert.equal(use.pcurve.knots, previous.pcurve.knots);
+          if (use.sense === 'reversed') reversedUses++;
+          if (boreEdges.has(use.edge) && JSON.stringify(use.pcurve.controlPoints) !== JSON.stringify(previous.pcurve.controlPoints)) changedInnerUV++;
+        }
+      }
+      assert.ok(reversedUses > 0 && changedInnerUV === 4, 'both stationary bore rims need new cap UV coordinates');
+      for (const wall of outerWalls(result)) {
+        close(faceGeometry(wall).r, radius);
+        for (const u of [0, .17, .5, .81, 1]) {
+          const point = evaluateSurface(wall.surface, u, .37);
+          close(Math.hypot(point[0] - 14, point[1] - 9), radius);
+          close(point[2], 16 * .37);
+        }
+      }
+      const mass = brepMassProperties(result, 1);
+      close(mass.volume, Math.PI * (radius ** 2 - 16) * 16, 1e-7);
+      pointClose(mass.centroid, [14, 9, 8]);
+      const edit = { id: 'offset', kind: 'offset-face', target: 'n2', face: name, distance };
+      assert.deepEqual(solid({ ...doc, features: [...doc.features, edit] }), result);
+    }
+    assert.deepEqual(source, saved);
+  });
+}
+
+test('tube outer-wall offset refuses bore contact, unsupported selection, distance and deep range overflow', () => {
+  const source = freeze(solid(tube())), saved = structuredClone(source), name = outerWalls(source)[0].name;
+  for (const distance of [-5, -6, -9, -5 + 5e-8])
+    assert.throws(() => offsetCircularWallIfAdmitted(source, name, distance), /reach or cross the retained bore/);
+  for (const distance of [0, NaN, Infinity, -Infinity, 10001])
+    assert.throws(() => offsetCircularWallIfAdmitted(source, name, distance), /distance/);
+  assert.throws(() => offsetCircularWallIfAdmitted(source, name, 10000), /modeling range/);
+  assert.throws(() => offsetCircularWallIfAdmitted(source, name, Number.MIN_VALUE), /too small/);
+  for (const face of source.faces.filter(face => !outerWalls(source).includes(face))) {
+    assert.equal(circularWallOffsetFrame(source, face.name), undefined);
+    assert.equal(offsetCircularWallIfAdmitted(source, face.name, 1), undefined);
+  }
+  assert.deepEqual(source, saved);
+});
+
+test('tube outside admission tolerates native rounding but refuses genuine eccentric axes', () => {
+  for (const center of [[0, 0], [.125, -.25], [-14, -9]]) {
+    const source = solid(tube({ center, from: -2 })), name = outerWalls(source)[0].name;
+    const result = offsetCircularWallIfAdmitted(source, name, 2);
+    close(brepMassProperties(result, 1).volume, 1680 * Math.PI, 1e-7);
+    pointClose(brepMassProperties(result, 1).centroid, [...center, 6]);
+    for (const face of innerWalls(source)) assert.equal(result.faces.find(item => item.id === face.id), face);
+  }
+  for (const offset of [1e-9, 1]) {
+    const source = solid(tube({ bore: [14 + offset, 9] })), name = outerWalls(source)[0].name;
+    assert.ok(annularCapReplacementFrame(source, 'n1.top'));
+    assert.equal(circularWallOffsetFrame(source, name), undefined);
+    assert.equal(offsetCircularWallIfAdmitted(source, name, 2), undefined);
   }
 });

@@ -3,14 +3,16 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
-const tube = process.argv.includes('--tube');
-const bore = tube || process.argv.includes('--bore');
+const tubeOuter = process.argv.includes('--tube-outer');
+const tube = tubeOuter || process.argv.includes('--tube');
+const bore = (tube && !tubeOuter) || process.argv.includes('--bore');
+const hasHole = bore || tube;
 const centre = tube ? [14, 9] : bore ? [11, 9] : [7, -4];
-const radius = tube ? 4 : bore ? 3 : 5, height = tube ? 16 : bore ? 10 : 20;
+const radius = tubeOuter ? 9 : tube ? 4 : bore ? 3 : 5, height = tube ? 16 : bore ? 10 : 20;
 const plate = [40, 30], outerRadius = 9;
 const area = tube ? Math.PI * outerRadius ** 2 : plate[0] * plate[1];
 const first = bore ? 1 : 2, second = bore ? -2 : -1;
-const feature = tube ? 'tube' : bore ? 'bore' : 'cylinder';
+const feature = tubeOuter ? 'tube-outer' : tube ? 'tube' : bore ? 'bore' : 'cylinder';
 const name = bore ? 'Cylindrical bore · Radial' : 'Cylindrical wall · Radial';
 const source = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
@@ -18,9 +20,9 @@ const source = {
     bore && !tube ? { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: plate }
       : { id: 'n0', kind: 'sketch', profile: 'circle', center: centre, radius: tube ? outerRadius : radius },
     { id: 'n1', kind: 'extrude', sketch: 0, height },
-    ...(bore ? [{ id: 'n2', kind: 'hole', center: centre, radius, parent: { node: 1, side: 'solid' } }] : []),
+    ...(hasHole ? [{ id: 'n2', kind: 'hole', center: centre, radius: tube ? 4 : radius, parent: { node: 1, side: 'solid' } }] : []),
   ],
-  outputs: bore ? { b2: { node: 2, side: 'solid' } } : { b1: { node: 1, side: 'solid' } }, nextId: bore ? 3 : 2,
+  outputs: hasHole ? { b2: { node: 2, side: 'solid' } } : { b1: { node: 1, side: 'solid' } }, nextId: hasHole ? 3 : 2,
 };
 const f = await createFlow({
   name: 'circular-wall-offset', envFrozen: 'CIRCULAR_WALL_FROZEN', output: process.argv[2],
@@ -56,6 +58,17 @@ const dialog = name => f.page.getByRole('dialog', { name, exact: true });
 const status = (panel, expected) => panel.locator('.status').filter({ hasText: new RegExp('^' + expected + '$') }).waitFor();
 const near = (measured, expected, tolerance = 1e-8) => assert.ok(Math.abs(measured - expected) < tolerance, measured + ' != ' + expected);
 
+function boreGeometry(result) {
+  const { brep, supports } = result;
+  const names = new Set(supports.filter(({ geometry }) => geometry.kind === 'cylinder' && geometry.out === -1).map(face => face.name));
+  const faces = brep.faces.filter(face => names.has(face.name)), loops = new Set(faces.flatMap(face => face.loops));
+  const uses = brep.coedges.filter(use => loops.has(use.loop)), ids = new Set(uses.map(use => use.edge));
+  const edges = brep.edges.filter(edge => ids.has(edge.id)), vertexIds = new Set(edges.flatMap(edge => edge.vertices));
+  const vertices = brep.vertices.filter(vertex => vertexIds.has(vertex.id));
+  assert.deepEqual([faces.length, edges.length, vertices.length], [2, 6, 4]);
+  return { faces, uses, edges, vertices };
+}
+
 async function measure(label, doc, radialOffset, original) {
   const native = await f.inspect(label, doc), expectedRadius = radius + (bore ? -radialOffset : radialOffset);
   assert.ok(native.check.valid, native.check.issues.join(', '));
@@ -67,11 +80,11 @@ async function measure(label, doc, radialOffset, original) {
   const planes = native.supports.filter(face => face.geometry.kind === 'plane');
   assert.equal(cylinders.length, 2);
   assert.equal(planes.length, bore && !tube ? 6 : 2);
-  const outer = tube ? native.supports.filter(face => face.geometry.kind === 'cylinder' && face.geometry.out === 1) : [];
+  const fixedWall = tube ? native.supports.filter(face => face.geometry.kind === 'cylinder' && face.geometry.out === (tubeOuter ? -1 : 1)) : [];
   if (tube) {
-    assert.equal(outer.length, 2);
-    for (const { geometry } of outer) {
-      near(geometry.r, outerRadius);
+    assert.equal(fixedWall.length, 2);
+    for (const { geometry } of fixedWall) {
+      near(geometry.r, tubeOuter ? 4 : outerRadius);
       near(geometry.c[0], centre[0]); near(geometry.c[1], centre[1]);
     }
   }
@@ -84,15 +97,16 @@ async function measure(label, doc, radialOffset, original) {
     .map(({ geometry }) => geometry.o[2]).sort((a, b) => a - b);
   assert.deepEqual(capLevels, [0, height]);
   const circularArea = Math.PI * expectedRadius ** 2;
-  const volume = (bore ? area - circularArea : circularArea) * height;
+  const volume = (tubeOuter ? circularArea - 16 * Math.PI : bore ? area - circularArea : circularArea) * height;
   near(native.mass.volume, volume);
   near((await f.bodies()).bodies[0].volume, volume);
   const centroid = bore && !tube ? plate.map((side, i) => (area * side / 2 - circularArea * centre[i]) / (area - circularArea)) : centre;
   native.mass.centroid.forEach((value, axis) => near(value, [...centroid, height / 2][axis]));
   if (original) {
     assert.deepEqual(native.owners, original.owners);
-    if (bore) {
-      const fixedNames = new Set([...planes, ...outer].map(face => face.name));
+    if (tubeOuter) assert.deepEqual(boreGeometry(native), boreGeometry(original));
+    else if (bore) {
+      const fixedNames = new Set([...planes, ...fixedWall].map(face => face.name));
       const fixedFaces = result => result.brep.faces.filter(face => fixedNames.has(face.name));
       assert.deepEqual(fixedFaces(native), fixedFaces(original));
     } else assert.deepEqual(native.brep.coedges, original.brep.coedges);
@@ -120,17 +134,18 @@ await f.run(async () => {
   const original = await measure('original-native', source, 0);
 
   f.phase = 'select the cylindrical wall and apply a positive radial offset';
-  await button(bore ? 'Iso' : 'Front').click();
+  await button(bore || tubeOuter ? 'Iso' : 'Front').click();
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const filter = button('Selection filter');
   for (let i = 0; i < 5 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
-  const pixel = await f.page.evaluate(({ bore, centre, radius, height }) => {
-    if (!bore) return window.__studioScreenOf([centre[0], centre[1] - radius, height / 2]);
+  const pixel = await f.page.evaluate(({ bore, tubeOuter, centre, radius, height }) => {
+    if (!bore && !tubeOuter) return window.__studioScreenOf([centre[0], centre[1] - radius, height / 2]);
     const { yaw } = window.__studioCamera();
-    return window.__studioScreenOf([centre[0] - radius * Math.cos(yaw), centre[1] - radius * Math.sin(yaw), height - 1]);
-  }, { bore, centre, radius, height });
+    const sign = tubeOuter ? 1 : -1;
+    return window.__studioScreenOf([centre[0] + sign * radius * Math.cos(yaw), centre[1] + sign * radius * Math.sin(yaw), tubeOuter ? height / 2 : height - 1]);
+  }, { bore, tubeOuter, centre, radius, height });
   assert.ok(pixel?.length === 2);
   await f.page.mouse.click(...pixel);
   await f.page.waitForFunction(() => window.__studioSelection?.selection.faces.length === 1);
@@ -156,6 +171,7 @@ await f.run(async () => {
   await f.openFeatureEditor(source.nodes.length, 'radial Offset face');
   await button('Edit offset', f.editor()).click();
   const history = dialog('Edit Offset face'), distance = history.getByLabel('Offset', { exact: true });
+  await history.getByText(name, { exact: true }).waitFor();
   assert.equal(await history.getByLabel('Mode', { exact: true }).count(), 0);
   async function refuse(value, reason, label) {
     await distance.fill(String(value));
@@ -169,8 +185,11 @@ await f.run(async () => {
     await f.same(expanded);
     await f.snapshot(feature + '-' + label);
   }
-  await refuse(bore ? radius : -radius, bore ? /bore axis/i : /reach or cross the cylinder axis/i, 'radial-collapse-refused');
-  if (bore) await refuse(radius - (tube ? outerRadius : Math.min(...centre)), /outer (?:plate|tube) wall/i, 'wall-contact-refused');
+  if (tubeOuter) await refuse(4 - radius, /retained bore/i, 'bore-contact-refused');
+  else {
+    await refuse(bore ? radius : -radius, bore ? /bore axis/i : /reach or cross the cylinder axis/i, 'radial-collapse-refused');
+    if (bore) await refuse(radius - (tube ? outerRadius : Math.min(...centre)), /outer (?:plate|tube) wall/i, 'wall-contact-refused');
+  }
   await distance.fill(String(second));
   await status(history, 'preview');
   await button('Apply', history).click();

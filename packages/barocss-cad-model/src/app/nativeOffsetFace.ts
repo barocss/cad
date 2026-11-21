@@ -350,15 +350,17 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   const { body, display, ref } = offsetPick(ctx, true);
   if (ref.side !== 'solid') return undefined;
   if (display.exact?.kind === 'cylinder') {
-    const bore = isBoredPlateHole(ctx.doc.nodes, ref.node) || isAnnularReplacementSource(ctx.doc.nodes, ref.node);
-    if (!bore && !isCylinderReplacementSource(ctx.doc.nodes, ref.node))
-      return unsupported('select an uncut cylinder wall or one straight through bore in an upright plate or tube.');
+    const plate = isBoredPlateHole(ctx.doc.nodes, ref.node), tube = isAnnularReplacementSource(ctx.doc.nodes, ref.node);
+    if (!plate && !tube && !isCylinderReplacementSource(ctx.doc.nodes, ref.node))
+      return unsupported('select a complete cylindrical wall on an uncut cylinder or upright tube, or a straight through bore in an upright plate.');
     const current = currentOffsetBody(ctx, body);
-    const members = current.mesh.faces[ctx.selection.faces[0].face].nativeFaces?.map(face => face.name).sort();
+    const acceptedFace = current.mesh.faces[ctx.selection.faces[0].face];
+    const members = acceptedFace.nativeFaces?.map(face => face.name).sort();
     const natives = partBreps(ctx.doc).filter(candidate => candidate.key === body.key);
     if (members?.length !== 2 || new Set(members).size !== 2 || natives.length !== 1)
       return missing('the cylindrical wall must resolve to both native wall faces.');
     const [face] = members;
+    const bore = plate || (tube && acceptedFace.nativeBoreDiameter !== undefined);
     const frame = (bore ? boreWallOffsetFrame : circularWallOffsetFrame)(natives[0].brep, face);
     const signature = signaturesOf(current, 'individual').faces.get(face);
     if (!frame || frame.faces.length !== members.length || !frame.faces.every(name => members.includes(name))

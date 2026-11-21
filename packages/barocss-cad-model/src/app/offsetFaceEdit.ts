@@ -112,15 +112,17 @@ function savedDraftOffsetHandle(doc: StudioDoc, index: number, ctx: Ctx, values:
 
 const rejected = (hint: string): never => { throw refusal('BAD_REFERENCE', `Offset face: ${hint}`); };
 
-function capContext(doc: StudioDoc, parent: BodyRef, face: string): Ctx {
+function originalOffsetContext(doc: StudioDoc, parent: BodyRef, face: string, radial = false): Ctx {
   const key = bodyKeyFor(doc.nodes, parent.node, parent.side);
   const result = evaluateDoc(doc, 0);
   if (!result.ok) return rejected('the original History prefix cannot be evaluated.');
   const bodies = result.bodies, match = bodies.flatMap((body, i) => body.key === key
     && body.ref?.node === parent.node && body.ref.side === parent.side ? [i] : []);
   if (match.length !== 1) return rejected('the original stock is missing or ambiguous.');
-  const [body] = match, faces = bodies[body].mesh.faces.filter(candidate => candidate.name === face && (candidate.kind === 'plane' || candidate.exact?.kind === 'plane') && !candidate.facet);
-  if (faces.length !== 1) return rejected('the named original cap is unavailable.');
+  const [body] = match, faces = bodies[body].mesh.faces.filter(candidate => radial
+    ? candidate.exact?.kind === 'cylinder' && candidate.nativeFaces?.some(native => native.name === face)
+    : candidate.name === face && (candidate.kind === 'plane' || candidate.exact?.kind === 'plane') && !candidate.facet);
+  if (faces.length !== 1) return rejected(radial ? 'the named original cylindrical wall is unavailable.' : 'the named original cap is unavailable.');
   return { doc, bodies, selection: { faces: [{ body, face: faces[0].index }], edges: [], bodies: [] } };
 }
 
@@ -142,7 +144,7 @@ function preserveFollowingOffsetRecipes(doc: StudioDoc, index: number): StudioDo
     if (!group || group.operation.suppressed || group.operation.held || !dependsOnEdit(group.target.node)) continue;
     const hint = `downstream Offset face ${featureId(doc.nodes, later)} depends on the original cap. Cancel this edit, remove that downstream Offset, then edit this Offset and recreate the downstream Offset on the current cap.`;
     try {
-      const source = capContext(prefixDoc(doc, group.start), group.target, group.face);
+      const source = originalOffsetContext(prefixDoc(doc, group.start), group.target, group.face);
       const ids = doc.nodes.slice(group.start, later + 1).map((_, i) => featureId(doc.nodes, group.start + i));
       const original = doc.nodes.slice(group.start, later + 1).map((node, i) => {
         if (i !== 2) return node;
@@ -159,14 +161,15 @@ function preserveFollowingOffsetRecipes(doc: StudioDoc, index: number): StudioDo
 /** Edit the direct native operation or rebuild the legacy cap recipe at its original History slot. */
 export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Command | null {
   const direct = directOffsetAt(doc, index);
-  const radialLabel = direct?.sigs?.[direct.faces[0]]?.k === 'curved'
-    ? (isBoredPlateHole(doc.nodes, direct.parent.node) || isAnnularReplacementSource(doc.nodes, direct.parent.node))
-      ? 'Cylindrical bore · Radial' : 'Cylindrical wall · Radial'
+  const radial = direct?.sigs?.[direct.faces[0]]?.k === 'curved';
+  const tube = radial && isAnnularReplacementSource(doc.nodes, direct.parent.node);
+  const radialLabel = radial && !tube
+    ? isBoredPlateHole(doc.nodes, direct.parent.node) ? 'Cylindrical bore · Radial' : 'Cylindrical wall · Radial'
     : undefined;
-  const allowPlane = !!direct && !radialLabel && !isBoredPlateOffsetSource(doc.nodes, direct.parent.node) && !isBoxCapOffsetSource(doc.nodes, direct.parent.node);
+  const allowPlane = !!direct && !radial && !isBoredPlateOffsetSource(doc.nodes, direct.parent.node) && !isBoxCapOffsetSource(doc.nodes, direct.parent.node);
   let directSource: Ctx | undefined;
   const getDirectSource = (node: NonNullable<typeof direct>) =>
-    directSource ??= capContext(prefixDoc(doc, index), node.parent, node.faces[0]);
+    directSource ??= originalOffsetContext(prefixDoc(doc, index), node.parent, node.faces[0], tube);
   const wallFrames = new WeakMap<DisplayFace, SavedWallFrame | null>();
   const describe = (getSource: () => Ctx, face: string) => {
     try { return offsetFaceDescription(getSource(), face); } catch { return face; }
@@ -215,7 +218,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
   const { start, target } = saved, key = featureId(doc.nodes, index);
   let prefix: StudioDoc | undefined;
   let source: Ctx | undefined;
-  const getSource = () => source ??= capContext(prefix ??= prefixDoc(doc, start), target, saved.face);
+  const getSource = () => source ??= originalOffsetContext(prefix ??= prefixDoc(doc, start), target, saved.face);
   const ids = doc.nodes.slice(start, index + 1).map((_, i) => featureId(doc.nodes, start + i));
   const existing = doc.nodes.slice(start, index + 1).map((node, i) => {
     if (i !== 2) return node;

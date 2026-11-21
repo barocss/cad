@@ -99,14 +99,14 @@ test('circular wall offset rejects collapse, deep range overflow and invalid dis
   assert.deepEqual(source, saved);
 });
 
-test('circular wall admission excludes caps, bores, altered supports and non-upright or unauthored stock', () => {
+test('circular wall admission excludes caps, eccentric bores, altered supports and non-upright or unauthored stock', () => {
   const doc = cylinder(), source = solid(doc), face = walls(source)[0].name;
   for (const name of ['c.top', 'c.bottom', 'missing', 'c.side0', `${face}+c.top`]) {
     assert.equal(circularWallOffsetFrame(source, name), undefined);
     assert.equal(offsetCircularWallIfAdmitted(source, name, 1), undefined);
   }
   const bored = solid({ ...doc, features: [...doc.features,
-    { id: 'h', kind: 'hole', target: 'c', face: 'c.top', center: [14, 12], radius: 3 }] });
+    { id: 'h', kind: 'hole', target: 'c', face: 'c.top', center: [15, 12], radius: 3 }] });
   const altered = structuredClone(source);
   altered.faces.find(item => item.name === face).surface.controlPoints[1][0][0] += 0.01;
   const duplicate = structuredClone(source);

@@ -309,15 +309,30 @@ function admittedCircularWall(brep: Brep, faceName: string) {
   if (brep.source.family !== 'prismatic-solid') return;
   const matches = brep.faces.filter(face => face.name === faceName);
   if (matches.length !== 1) return;
-  const stock = admittedAxialStock(brep, 'circular');
+  const annular = brep.faces.length === stockCounts.annular[0];
+  const stock = admittedAxialStock(brep, annular ? 'annular' : 'circular');
   if (!stock) return;
-  const walls = brep.faces.filter(face => face !== stock.bottom && face !== stock.top);
+  let bore: BoreDisk | undefined;
+  if (annular) {
+    const extent = geometryScaleMM(brep.vertices.map(vertex => vertex.point));
+    bore = cylinderPair(brep.faces.filter(face => {
+      const support = faceGeometry(face);
+      return support.kind === 'cylinder' && support.out === -1;
+    }), extent, -1);
+    if (!bore || dist(bore.center, [stock.center[0], stock.center[1], stock.lo]) > 64 * Number.EPSILON * Math.max(1, extent)) return;
+  }
+  const walls = brep.faces.filter(face => {
+    if (face === stock.bottom || face === stock.top) return false;
+    if (!annular) return true;
+    const support = faceGeometry(face);
+    return support.kind === 'cylinder' && support.out === 1;
+  });
   const faces = walls.map(face => face.name);
   if (!walls.includes(matches[0]) || faces.some(name => !name) || new Set(faces).size !== 2) return;
-  return { stock, wall: matches[0], walls, faces: faces as string[] };
+  return { stock, wall: matches[0], walls, faces: faces as string[], bore };
 }
 
-/** The radial handle and both native patches of an uncut upright circular wall. */
+/** The radial handle and both outer native patches of an upright cylinder or coaxial tube. */
 export function circularWallOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point; faces: string[] } | undefined {
   const admitted = admittedCircularWall(brep, faceName);
   if (!admitted) return;
@@ -329,6 +344,40 @@ export function circularWallOffsetFrame(brep: Brep, faceName: string): { anchor:
   return { anchor, normal: [(point[0] - stock.center[0]) / stock.radius, (point[1] - stock.center[1]) / stock.radius, 0], faces };
 }
 
+function resizeAnnularOutside(brep: Brep, { stock, walls }: NonNullable<ReturnType<typeof admittedCircularWall>>, radius: number): Brep {
+  const wallLoops = new Set(walls.flatMap(wall => wall.loops));
+  const movedEdges = new Set(brep.coedges.filter(use => wallLoops.has(use.loop)).map(use => use.edge));
+  const movedVertices = new Set(brep.edges.filter(edge => movedEdges.has(edge.id)).flatMap(edge => edge.vertices));
+  const factor = radius / stock.radius, [cx, cy] = stock.center;
+  const moved = ([x, y, z]: Point): Point => [cx + (x - cx) * factor, cy + (y - cy) * factor, z];
+  const edges = brep.edges.map(edge => movedEdges.has(edge.id)
+    ? { ...edge, curve: { ...edge.curve, controlPoints: edge.curve.controlPoints.map(moved) } } : edge);
+  const rimPoles = edges.filter(edge => edge.curve.degree === 2).flatMap(edge => edge.curve.controlPoints);
+  const min: XY = [Math.min(...rimPoles.map(point => point[0])), Math.min(...rimPoles.map(point => point[1]))];
+  const max: XY = [Math.max(...rimPoles.map(point => point[0])), Math.max(...rimPoles.map(point => point[1]))];
+  const edgeById = byId(edges), capTrims = new Map<string, (point: Point) => Point>();
+  for (const cap of [stock.bottom, stock.top]) {
+    for (const id of cap.loops) capTrims.set(id, capProjection(min, max, cap === stock.top));
+  }
+  return {
+    ...brep, edges,
+    vertices: brep.vertices.map(vertex => movedVertices.has(vertex.id) ? { ...vertex, point: moved(vertex.point) } : vertex),
+    faces: brep.faces.map(face => {
+      const surface = face.surface;
+      if (surface.kind !== 'surface') return face;
+      if (walls.includes(face)) return { ...face, surface: { ...surface, controlPoints: surface.controlPoints.map(row => row.map(moved)) } };
+      if (face !== stock.bottom && face !== stock.top) return face;
+      const chart = capSurface({ min, max }, face === stock.top ? stock.hi : stock.lo, surface.id, face === stock.top);
+      return { ...face, surface: { ...surface, controlPoints: chart.controlPoints } };
+    }),
+    coedges: brep.coedges.map(use => {
+      const project = capTrims.get(use.loop);
+      // Pcurves follow the stored edge direction. The coedge sense only orients the loop walk.
+      return project && use.pcurve ? { ...use, pcurve: { ...use.pcurve, controlPoints: edgeById.get(use.edge)!.curve.controlPoints.map(project) } } : use;
+    }),
+  };
+}
+
 /** Continue both patches of one certified circular support without changing native trim identities. */
 export function offsetCircularWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
   const admitted = admittedCircularWall(brep, faceName);
@@ -337,11 +386,13 @@ export function offsetCircularWallIfAdmitted(brep: Brep, faceName: string, dista
     throw new BrepError('INPUT', 'circular wall offset: distance must be nonzero and within the modeling range');
   const { stock, walls } = admitted, radius = stock.radius + distance;
   const extent = Math.max(geometryScaleMM(brep.vertices.map(vertex => vertex.point)), Math.abs(radius));
+  if (admitted.bore && !(radius - admitted.bore.radius > dist(admitted.bore.center, [stock.center[0], stock.center[1], stock.lo]) + linearToleranceMM(extent)))
+    throw new BrepError('GEOMETRY', 'circular wall offset: the offset would reach or cross the retained bore');
   if (!(radius > linearToleranceMM(extent)))
     throw new BrepError('GEOMETRY', 'circular wall offset: the offset would reach or cross the cylinder axis');
   if (radius === stock.radius) throw new BrepError('GEOMETRY', 'circular wall offset: distance is too small to move the wall');
   const factor = radius / stock.radius;
-  const candidate = transformBrep(brep, { matrix: [factor, 0, 0, 0, factor, 0, 0, 0, 1],
+  const candidate = admitted.bore ? resizeAnnularOutside(brep, admitted, radius) : transformBrep(brep, { matrix: [factor, 0, 0, 0, factor, 0, 0, 0, 1],
     offset: [stock.center[0] * (1 - factor), stock.center[1] * (1 - factor), 0] });
   const poles = [...candidate.vertices.map(vertex => vertex.point), ...candidate.edges.flatMap(edge => edge.curve.controlPoints),
     ...candidate.faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints.flat() : [])];

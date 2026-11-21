@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1603: [Offset the outside wall of an upright coaxial tube](notes/coaxial-tube-outer-wall-offset-2026-11-22/README.md), #629. Keep the fit bore and native owners exact through both signs and native reopening.
 - D1602: [Cut one straight span of a construction polyline](notes/construction-polyline-path-gap-2026-11-22/README.md), #226. Preserve the adjoining spans and original point IDs through the typed gap, History and project reopen.
 - D1601: [Extrude a rectangle to an upright circular cap](notes/rectangle-to-circular-cap-2026-11-22/README.md), #222. Keep the original native start cap, reject incomplete coverage, and verify the derived height in desktop Studio through project Open.
 - D1600: [Refine the circular rims of a coaxial tube in Top Ortho](notes/coaxial-tube-top-display-2026-11-22/README.md), #629. Improve both displayed rims and verify the same pointer targets and exact native geometry at matched scale and after Open.
