@@ -136,8 +136,13 @@ for (const first of ['line', 'cubic'] as const) for (const nonUnitDomain of [fal
       assert.deepEqual(curveOf(result, object.id), curveOf(original, object.id), 'original native IDs, domains, degrees and coefficients remain');
     }
     assert.deepEqual(original, saved);
-    assert.throws(() => directOps.ruledSurface(original, ids[0], ids[1]), /Original section degrees must be equal/, 'Ruled retains its line/quadratic scope');
-    assert.throws(() => directOps.ruledSurface(original, ids[1], ids[0]), /Original section degrees must be equal/);
+    for (const [a, b] of [ids, [...ids].reverse()]) {
+      if (nonUnitDomain) assert.throws(() => directOps.ruledSurface(original, a, b), /domain endpoint bits must agree/, 'Ruled still requires the original common domain');
+      else {
+        const ruled = directOps.ruledSurface(original, a, b), surface = geometryOf(ruled, ruled.objects.at(-1)!);
+        assert.ok(surface.kind === 'surface'); assert.equal(surface.degreeU, 3);
+      }
+    }
   });
 }
 

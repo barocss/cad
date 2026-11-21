@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1623: [Build a ruled surface from a straight span and cubic Bézier](notes/exact-ruled-straight-cubic-2026-11-22/README.md), #29. Verify both unchanged rails, the midpoint normal and exact native Open in Studio.
 - D1622: [Extrude a circular source to an original lower circular cap](notes/circular-source-to-circular-cap-2026-11-22/README.md), #222. Prove full native disk coverage, reject contact and retain the end reference through Studio edits and Open.
 - D1621: [Extrude a convex polygon to the original lower annular cap](notes/convex-polygon-to-annular-cap-2026-11-22/README.md), #222. Verify full bore clearance, associative target movement and exact Studio Save and Open.
 - D1620: [Measure the tangent angle at a straight-to-cubic Direct Join](notes/direct-cubic-join-tangent-angle-2026-11-22/README.md), #29. Studio and the revision-pinned local Agent agree with the independent 3D angle after native Open.

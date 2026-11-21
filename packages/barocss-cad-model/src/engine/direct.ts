@@ -85,15 +85,15 @@ function singlePolynomialSpan(curve: Curve): boolean {
     && curve.controlPoints.every(point => point.length === 3 && point.every(value => Number.isFinite(value) && Math.abs(value) <= CadNumericPolicy.coordinateAbs));
 }
 
-function mixedPolynomialDegreeCompatible(a: Curve, b: Curve, maximumDegree: 2 | 3): boolean {
+function mixedPolynomialDegreeCompatible(a: Curve, b: Curve): boolean {
   const lower = Math.min(a.degree, b.degree), higher = Math.max(a.degree, b.degree);
-  return lower === 1 && (higher === 2 || maximumDegree === 3 && higher === 3)
+  return lower === 1 && (higher === 2 || higher === 3)
     && singlePolynomialSpan(a) && singlePolynomialSpan(b);
 }
 
 /** Degree compatibility only. The native Join still checks the ordered shared endpoint and every other admission rule. */
 export function directJoinDegreeCompatible(a: Curve, b: Curve): boolean {
-  return a.degree === b.degree || mixedPolynomialDegreeCompatible(a, b, 3);
+  return a.degree === b.degree || mixedPolynomialDegreeCompatible(a, b);
 }
 
 /** The angle between the one-sided tangents of the bounded line/quadratic or line/cubic Join. */
@@ -145,8 +145,8 @@ export function directJoinTangentAngle(curve: Curve, parameter: number): number 
 }
 
 /** Match an admitted polynomial line pair in scratch sources; retain order and native IDs. */
-function degreeMatchedPair(d: DirectGeometry, a: string, b: string, maximumDegree: 2 | 3, first = curveOf(d, a), second = curveOf(d, b)): [Curve, Curve] {
-  if (mixedPolynomialDegreeCompatible(first, second, maximumDegree)) {
+function degreeMatchedPair(d: DirectGeometry, a: string, b: string, first = curveOf(d, a), second = curveOf(d, b)): [Curve, Curve] {
+  if (mixedPolynomialDegreeCompatible(first, second)) {
     const line = first.degree === 1 ? a : b, targetDegree = Math.max(first.degree, second.degree);
     let elevated = directOps.elevateCurveDegree(d, line);
     if (targetDegree === 3) elevated = directOps.elevateCurveDegree(elevated, line);
@@ -348,7 +348,7 @@ export const directOps = {
     return add(d, [id], r.source, [{ geometry: r.lower.id, name: `${nameOf(d, id)} · lower` }, { geometry: r.upper.id, name: `${nameOf(d, id)} · upper` }]);
   },
   joinCurves(d: DirectGeometry, a: string, b: string) {
-    const [left, right] = degreeMatchedPair(d, a, b, 3);
+    const [left, right] = degreeMatchedPair(d, a, b);
     const r = joinCurves(left, right, { curveId: fresh(usedIds(d), 'joined') });
     return add(d, [a, b], r.source, [{ geometry: r.curve.id, name: 'Joined curve' }]);
   },
@@ -467,13 +467,13 @@ export const directOps = {
   },
   ruledSurface(d: DirectGeometry, a: string, b: string) {
     const originalFirst = curveOf(d, a), originalSecond = curveOf(d, b);
-    if (mixedPolynomialDegreeCompatible(originalFirst, originalSecond, 2)) {
+    if (mixedPolynomialDegreeCompatible(originalFirst, originalSecond)) {
       const domain = curveDomain(originalFirst), other = curveDomain(originalSecond);
       if (!domain.every((value, axis) => Object.is(value, other[axis]))
         || ![originalFirst, originalSecond].every(curve => curve.knots.every((knot, i) => Object.is(knot, domain[i <= curve.degree ? 0 : 1]))))
         throw refusal('DIRECT_RANGE', 'Original domain endpoint bits must agree, including every clamp slot.');
     }
-    const used = usedIds(d), [first, second] = degreeMatchedPair(d, a, b, 2, originalFirst, originalSecond), surfaceId = fresh(used, 'ruled'), resultIdPrefix = freshPrefix(used, 'er', 8);
+    const used = usedIds(d), [first, second] = degreeMatchedPair(d, a, b, originalFirst, originalSecond), surfaceId = fresh(used, 'ruled'), resultIdPrefix = freshPrefix(used, 'er', 8);
     const ra = fresh(used, 'ra'), rb = fresh(used, 'rb');
     // A section that needs no knots aligned keeps its id; one that does gets a new one: try each pairing.
     let last: unknown;
