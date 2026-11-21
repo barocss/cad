@@ -28,7 +28,7 @@ const pins = [
   'packages/barocss-cad-model/src/chat/names.ts', 'packages/barocss-cad-model/src/chat/views.ts',
   'packages/barocss-cad-model/src/chat/toolKit.ts',
   'packages/barocss-cad/src/features/bored-cap-offset.ts', 'packages/barocss-cad/src/features/heal-prismatic-chamfer.ts',
-  'packages/barocss-cad/src/part/part-model.ts',
+  'packages/barocss-cad/src/part/part-model.ts', 'packages/barocss-cad/src/part/part-delete-face.ts',
 ];
 const f = await createFlow({
   name: 'delete-planar-face', envFrozen: 'DELETE_PLANAR_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,

@@ -27,7 +27,7 @@ const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/files/documentFile.ts', 'apps/cad-studio/test/delete-fillet-face-browser.mjs',
   'packages/barocss-cad-model/src/app/deleteFaceCommand.ts',
   'packages/barocss-cad-model/src/engine/doc.ts', 'packages/barocss-cad/src/features/heal-prismatic-fillet.ts',
-  'packages/barocss-cad/src/part/part-model.ts',
+  'packages/barocss-cad/src/part/part-model.ts', 'packages/barocss-cad/src/part/part-delete-face.ts',
 ];
 if (unionFile) pins.push('packages/barocss-cad/src/features/heal-analytic-l-fillet.ts');
 if (convex) pins.push('packages/barocss-cad/src/features/heal-prismatic-chamfer.ts');

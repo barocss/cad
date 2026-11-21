@@ -35,6 +35,7 @@ const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/files/documentFile.ts', 'apps/cad-studio/src/state/commandApply.ts',
   'packages/barocss-cad-model/src/app/deleteFaceCommand.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
   'packages/barocss-cad/src/features/bored-cap-offset.ts',
+  'packages/barocss-cad/src/part/part-model.ts', 'packages/barocss-cad/src/part/part-delete-face.ts',
 ];
 const f = await createFlow({
   name: 'delete-bore-face', envFrozen: 'DELETE_BORE_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,

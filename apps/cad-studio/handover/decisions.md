@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1468: [Give Delete face planning and dispatch a private module](notes/part-delete-face-extraction-2026-11-21/README.md). Verify the moved source and the four named repair flows through actual Studio and MCP.
 - D1467: [Restore a box cap edge by deleting its outside fillet](notes/heal-full-span-box-cap-fillet-2026-11-21/README.md), #17. Verify both cap orientations, exact sharp axes, six face IDs and fresh Open.
 - D1466: [Restore a box corner by deleting its outside fillet](notes/heal-convex-box-corner-fillet-2026-11-21/README.md), #17. Verify the original sharp edge, six face IDs and 12000 mm³ through Studio and MCP.
 - D1465: [Heal either of two box chamfers that share a wall](notes/heal-neighboring-box-chamfers-2026-11-21/README.md), #17. Verify the exact peer boundary, both one-edit choices and the two-step restoration through Studio and MCP.
