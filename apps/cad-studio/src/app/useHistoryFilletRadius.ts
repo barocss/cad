@@ -29,11 +29,13 @@ export function useHistoryFilletRadius(options:{
       if(!stillReading||!current()||!latest.current.options.idle()) return;
       const next=historyFilletReceipt(doc,commandDoc,index,bodies,result,revision,current);
       if(next) setReceipt(previous=>previous?.isCurrent()?previous:next);
-    }).catch(()=>{/* No proof: the normal projected/typed handle still works. */});
+    }).catch(()=>{/* History still accepts a typed radius when source proof is unavailable. */});
     return ()=>{stillReading=false;};
   },[source,enabled,readIdle,ordinary,reads,doc,index,engine,commandDoc,bodies]);
   const ready=enabled&&receipt?.document===doc&&receipt.commandDoc===commandDoc&&receipt.bodies===bodies&&receipt.index===index&&receipt.isCurrent()
     ?receipt:undefined;
   const sketch = doc.nodes[0];
-  return { receipt:ready, eligible:!!ordinary, circular:!!ordinary&&sketch.kind==='sketch'&&sketch.profile==='loop' };
+  const pending = ordinary?.edges.length === 2 ? 'pair'
+    : ordinary && sketch.kind === 'sketch' && sketch.profile === 'loop' ? 'circular' : undefined;
+  return { receipt:ready, eligible:!!ordinary, pending } as const;
 }

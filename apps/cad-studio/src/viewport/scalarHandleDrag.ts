@@ -37,10 +37,10 @@ export function scalarHandleDragValue(frame: ScalarHandleDrag | null, handle: Fe
   return Number.isFinite(value) ? value : null;
 }
 
-/** Until its own proof is ready, block History Fillet for screen-up and blended scalar conversion. */
+/** Block a new History frame until its source proof arrives. */
 export function historyFilletEndOnBlocked(handle:FeatureHandle|undefined,projector:Projector):boolean {
   if(!handle?.historyFilletProofPending || handle.scalarDragSession) return false;
-  if(handle.historyFilletProofPending === 'circular') return true;
+  if(handle.historyFilletProofPending !== true) return true;
   return captureScalarHandleDrag({...handle,scalarDragSession:handle},projector)?.fallback!==false;
 }
 

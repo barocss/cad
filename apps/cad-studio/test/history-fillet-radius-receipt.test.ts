@@ -14,22 +14,30 @@ const rectangle: SketchNode = {kind:'sketch',profile:'rectangle',min:[0,0],max:[
 const quarterSector: SketchNode = {kind:'sketch',profile:'loop',segments:[
   {kind:'line',start:[0,0]},{kind:'arc',start:[8,0],center:[0,0],direction:'ccw'},{kind:'line',start:[0,8]},
 ]};
-function fixture(sketch: SketchNode = rectangle, edgeName = 'n1.side0|n1.top', radius = 2){
+function evaluatedFixture(sketch: SketchNode, edges: string | string[], radius: number) {
  const base=withNode(withNode(emptyDoc(),sketch),{kind:'extrude',sketch:0,height:10});
  const initial=evaluateDoc(base,1);assert.ok(initial.ok);
- const edge=initial.bodies[0].mesh.edges.find(e=>e.names[0]===edgeName);assert.ok(edge);
- const root={doc:base,bodies:initial.bodies,selection:{faces:[],edges:[{body:0,edge:edge.index}],bodies:[]}};
+ const picked=[edges].flat().map(name=>{
+  const edge=initial.bodies[0].mesh.edges.find(e=>e.names[0]===name);assert.ok(edge);
+  return {body:0,edge:edge.index};
+ });
+ const root={doc:base,bodies:initial.bodies,selection:{faces:[],edges:picked,bodies:[]}};
  const newFillet=commandById('fillet');assert.ok(newFillet?.build);
  const doc=captureSignatures(newFillet.build(root,{...newFillet.defaults?.(root),radius}),initial.bodies);
  const accepted=evaluateDoc(doc,2);assert.ok(accepted.ok);
  const prefix=prefixDoc(doc,2),reply=evaluatePart(prefix,3,8,'refs');assert.ok(reply.ok);
+ return {doc,accepted,reply};
+}
+function fixture(sketch: SketchNode = rectangle, edges: string | string[] = 'n1.side0|n1.top', radius = 2) {
+ const {doc,accepted,reply}=evaluatedFixture(sketch,edges,radius);
  let live=true;const current=()=>live;
- const evidence=historyFilletReceipt(doc,doc,2,accepted.bodies,reply,3,current);assert.ok(evidence);
+ const evidence=historyFilletReceipt(doc,doc,2,accepted.bodies,reply,3,current);
+ assert.ok(evidence);
  const ctx={doc,bodies:accepted.bodies,selection:{faces:[],edges:[],bodies:[0]}};
  const cmd=editCommand(2,doc.nodes,doc);assert.ok(cmd?.defaults&&cmd.handles);
  const values=cmd.defaults(ctx);
  const [handle]=cmd.handles(ctx,values);
- const active:Active={cmd,ctx,values,preview:'busy',historyFilletRadius:true,ownsSource:evidence.isCurrent};
+ const active:Active={cmd,ctx,values,preview:'busy',historyFilletRadius:true,ownsSource:current};
  return {doc,accepted,reply,ctx,cmd,handle,evidence,active,current,revoke:()=>{live=false;}};
 }
 const plane:Projector={project:p=>[p[0]*15,(p[1]+p[2])*15],size:5.6,forward:[0,1,-1]};
@@ -191,4 +199,52 @@ test('curved History candidates outside the plain sector and pending pointer pro
   assert.equal(historyFilletPendingPress(h,side,false),'consume');
   assert.equal(historyFilletPendingPress(h,side,true),'shift-pick-only');
   assert.equal(historyFilletPendingPress({...h,scalarDragSession:x.evidence},side,false),undefined);
+});
+
+test('opposite original top edges give one stable History frame regardless of the input and native face order',()=>{
+ const edges=['n1.side0|n1.top','n1.side2|n1.top'];
+ for (const picked of [edges,[...edges].reverse()]) {
+  const x=fixture(rectangle,picked);
+  const frame=x.evidence.frame;
+  const norm=Math.SQRT1_2;
+  assert.ok(frame && Math.hypot(frame.at[0]-20,frame.at[1]+2*norm,frame.at[2]-10-2*norm)<1e-12);
+  assert.ok(Math.hypot(...frame.dir.map((value,i)=>value-[0,-norm,norm][i]))<1e-12);
+  assert.equal(ownedHistoryFilletHandle(x.evidence,x.cmd,x.ctx,x.handle,null),x.evidence);
+  assert.equal(ownedHistoryFilletHandle(x.evidence,x.cmd,x.ctx,x.handle,x.active),x.evidence);
+ }
+ const adjacent=evaluatedFixture(rectangle,['n1.side0|n1.top','n1.side1|n1.top'],2);
+ assert.ok(adjacent.accepted.bodies[0].nativeFilletPair);
+ assert.equal(ordinaryHistoryFillet(adjacent.doc,2),null);
+ assert.equal(historyFilletReceipt(adjacent.doc,adjacent.doc,2,adjacent.accepted.bodies,adjacent.reply,3,()=>true),null);
+});
+
+test('paired History rejects the wrong target, cylinder, unmerged source or stored signature',()=>{
+ const x=fixture(rectangle,['n1.side0|n1.top','n1.side2|n1.top']);
+ const [body]=x.accepted.bodies, [stock]=x.reply.bodies, pair=body.nativeFilletPair;
+ assert.ok(pair);
+ const [first,second]=pair.cylinders;
+ const reject=(finished=body, source=stock, doc=x.doc)=>assert.equal(
+  historyFilletReceipt(doc,doc,2,[finished],{...x.reply,bodies:[source]},3,x.current),null);
+ reject({...body,nativeFilletPair:undefined});
+ reject({...body,nativeFilletPair:{...pair,targets:[pair.targets[0],'other']}});
+ reject({...body,nativeFilletPair:{...pair,cylinders:[first,first]}});
+ reject({...body,nativeFilletPair:{...pair,cylinders:[first,{...second,r:3}]}});
+ reject({...body,nativeFilletPair:{...pair,cylinders:[first,{...second,c:[0,28,7]}]}});
+ reject({...body,nativeFilletPair:{...pair,cylinders:[{...first,a:[0,1,0]},second]}});
+ reject({...body,mesh:{...body.mesh,faces:body.mesh.faces.filter(face=>face.id!==x.evidence.face.id)}});
+ const placed=placeBody(structuredClone(body),[1,0,0,0,1,0,0,0,1],[2,0,0]);
+ assert.equal(placed.nativeFilletPair,undefined);
+ reject(placed);
+ reject(body,{...stock,mesh:{...stock.mesh,edges:stock.mesh.edges.map(edge=>edge.names.includes(pair.targets[1])
+  ? {...edge,nativeJoint:undefined} : edge)}});
+ const fillet=ordinaryHistoryFillet(x.doc,2);
+ assert.ok(fillet?.sigs);
+ reject(body,stock,{...x.doc,nodes:[...x.doc.nodes.slice(0,2),{...fillet,sigs:{
+  ...fillet.sigs, [pair.targets[1]]:{...fillet.sigs[pair.targets[1]],p:[0,0,10]},
+ }}]});
+ const handle:FeatureHandle={id:'r',at:x.handle.at,dir:x.handle.dir,label:'Radius',value:2,format:String,owner:x.cmd,
+  onDrag:()=>{},historyFilletProofPending:'pair',toValue:(value,mm)=>value+mm};
+ const side:Projector={...plane,project:p=>[p[0]*15,-p[2]*15]};
+ assert.equal(historyFilletPendingPress(handle,side,false),'consume');
+ assert.equal(historyFilletPendingPress({...handle,scalarDragSession:x.evidence},side,false),undefined);
 });

@@ -5,7 +5,7 @@ import type { BodyResult, EvalResult } from '@barocss/cad-model/engine/evaluate'
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { toSig } from '@barocss/cad-model/engine/references';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
-import { add, cross, dot, len, scale, sub } from '@barocss/cad-model/engine/vec3';
+import { add, cross, dot, len, scale, sub, unit } from '@barocss/cad-model/engine/vec3';
 import type { Active } from '../app/commandState';
 
 type Fillet = Extract<ModelNode,{kind:'fillet'}>;
@@ -35,6 +35,12 @@ function plainQuarterSector(sketch: Extract<SketchNode, { profile: 'loop' }>): b
   return Math.abs(cosine) <= 1e-12 && (arc.direction === 'ccw' ? sine > 0 : arc.direction === 'cw' && sine < 0);
 }
 
+function oppositeTopEdges(doc: StudioDoc, fillet: Fillet): readonly [string, string] | undefined {
+  const id = featureId(doc.nodes, 1);
+  const pair = [`${id}.side0|${id}.top`, `${id}.side2|${id}.top`] as const;
+  if (fillet.edges.length === 2 && pair.every(edge => fillet.edges.includes(edge) && fillet.sigs?.[edge]?.k === 'line')) return pair;
+}
+
 export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null): Fillet | null {
   if (index!==2 || doc.schema!==3 || doc.nodes.length!==3 || doc.direct!==undefined ||
       doc.instances?.length || doc.variability || doc.configurations || Object.hasOwn(doc,'routeBundles')) return null;
@@ -42,25 +48,82 @@ export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null): Fillet
   if(sketch.kind!=='sketch'||stock.kind!=='extrude'||stock.sketch!==0||stock.suppressed||stock.held!==undefined||stock.cutDepth!==undefined||
     stock.draft!==undefined||stock.from!==undefined||typeof stock.height!=='number'||!Number.isFinite(stock.height)||stock.height<=0||
     fillet.kind!=='fillet'||fillet.suppressed||fillet.held||fillet.rematched!==undefined||fillet.radii!==undefined||
-    fillet.section!==undefined||fillet.edges.length!==1||typeof fillet.radius!=='number'||!Number.isFinite(fillet.radius)||fillet.radius<=0||
+    fillet.section!==undefined||typeof fillet.radius!=='number'||!Number.isFinite(fillet.radius)||fillet.radius<=0||
     fillet.parent.node!==1||fillet.parent.side!=='solid'||Object.keys(doc.outputs).length!==1||!fillet.sigs ||
-    Object.keys(fillet.sigs).length!==1) return null;
+    Object.keys(fillet.sigs).length!==fillet.edges.length) return null;
   const stored = fillet.sigs[fillet.edges[0]];
   const plain = sketch.profile === 'rectangle' && Object.keys(sketch).every(k => ['id','kind','profile','min','max'].includes(k))
     && numericPoint(sketch.min) && numericPoint(sketch.max);
   const circular = sketch.profile === 'loop' && stored?.k === 'curve' && plainQuarterSector(sketch);
   if (!plain && !circular) return null;
+  if (fillet.edges.length !== 1 && (!plain || !oppositeTopEdges(doc, fillet))) return null;
   const out=doc.outputs[bodyKeyFor(doc.nodes,index,'solid')];
   return out?.node===index&&out.side==='solid'?fillet:null;
 }
 const sameVec=(a:readonly number[],b:readonly number[])=>a.length===3&&b.length===3&&a.every((v,k)=>Number.isFinite(v)&&v===b[k]);
 
+function originalFilletEdge(stock: BodyResult, fillet: Fillet, edge: string, signatures: ReturnType<typeof signaturesOf>) {
+  const sources = stock.mesh.edges.filter(source => source.names.includes(edge));
+  const [source] = sources, sig = signatures.edges.get(edge), stored = fillet.sigs?.[edge];
+  if (sources.length !== 1 || source.names.length !== 1 || !source.nativeJoint ||
+    !sig || sig.shared || !stored || stored.k !== sig.kind || stored.n !== undefined) return;
+  const native = toSig(sig);
+  if (stored.s === native.s && sameVec(stored.p, native.p)) return { source, sig, stored, native };
+}
+
+function exactStraightEdge(match: NonNullable<ReturnType<typeof originalFilletEdge>>) {
+  const { sig, source, stored, native } = match;
+  return sig.kind === 'line' && source.straight && source.nativeLine && stored.d && native.d && sameVec(stored.d, native.d);
+}
+
+function closedSolid(body: BodyResult) {
+  return body.topology?.kind === 'solid' && body.topology.bodyCount === 1 &&
+    body.topology.openShells === 0 && body.topology.boundaryEdges === 0;
+}
+
+function pairedHistoryFrame(doc: StudioDoc, fillet: Fillet, stock: BodyResult, finished: BodyResult,
+  radius: number): HistoryFilletReceipt['frame'] {
+  const pair = oppositeTopEdges(doc, fillet), accepted = finished.nativeFilletPair;
+  if (!pair || !accepted || !closedSolid(stock) || !closedSolid(finished) ||
+    accepted.targets.length !== 2 || !pair.every(edge => accepted.targets.includes(edge)) || accepted.cylinders.length !== 2) return;
+  const signatures = signaturesOf(stock);
+  const rims = pair.map((edge, i) => {
+    const match = originalFilletEdge(stock, fillet, edge, signatures);
+    if (!match || !exactStraightEdge(match) || !match.source.nativeVertices || !match.source.nativeJoint) return;
+    const [wallName, topName] = edge.split('|');
+    const faces = match.source.nativeJoint.faces.map(id => stock.mesh.faces.find(face => face.id === id));
+    const top = faces.find(face => face?.nativePlaneName === topName);
+    const wall = faces.find(face => face?.nativePlaneName === wallName);
+    if (top?.exact?.kind !== 'plane' || wall?.exact?.kind !== 'plane' ||
+      !sameVec(top.exact.n, [0, 0, 1]) || !sameVec(wall.exact.n, [0, i === 0 ? -1 : 1, 0])) return;
+    const { a, b, nativeVertices } = match.source;
+    if (![...a, ...b].every(Number.isFinite) || a[0] === b[0] || a[1] !== b[1] || a[2] !== b[2]) return;
+    const midpoint = scale(add(a, b), .5), outward = add(top.exact.n, wall.exact.n);
+    return { midpoint, outward, nativeVertices, top: top.id };
+  });
+  const [first, second] = rims;
+  if (!first || !second || first.top !== second.top || new Set([...first.nativeVertices, ...second.nativeVertices]).size !== 4 ||
+    first.midpoint[0] !== second.midpoint[0] || first.midpoint[2] !== second.midpoint[2] ||
+    second.midpoint[1] - first.midpoint[1] <= 2 * radius) return;
+  const indices = [first, second].map(rim => {
+    const center = sub(rim.midpoint, scale(rim.outward, radius));
+    return accepted.cylinders.flatMap((cylinder, index) => {
+      const { c, a, r } = cylinder, tolerance = Math.max(1e-8, radius * 1e-9);
+      return [...c, ...a, r].every(Number.isFinite) && Math.abs(len(a) - 1) <= 1e-9 &&
+        Math.hypot(a[1], a[2]) <= 1e-9 && Math.abs(r - radius) <= tolerance &&
+        Math.hypot(c[1] - center[1], c[2] - center[2]) <= tolerance ? [index] : [];
+    });
+  });
+  if (indices.some(matches => matches.length !== 1) || indices[0][0] === indices[1][0]) return;
+  const dir = unit(first.outward);
+  return { at: add(first.midpoint, scale(dir, radius)), dir };
+}
+
 function circularHistoryFrame(source: DisplayEdge, finished: BodyResult, edge: string, face: string, radius: number):
   HistoryFilletReceipt['frame'] {
   const rim = source.nativeFilletRim, circle = source.nativeCircle, torus = finished.nativeFilletTorus;
   if (source.straight || !rim?.quarter || !circle || !torus || torus.edge !== edge || torus.face !== face
-    || finished.topology?.kind !== 'solid' || finished.topology.bodyCount !== 1
-    || finished.topology.openShells !== 0 || finished.topology.boundaryEdges !== 0) return;
+    || !closedSolid(finished)) return;
   if (![...rim.midpoint, ...rim.direction, ...circle.centre, ...circle.normal, circle.radius,
     ...torus.centre, ...torus.axis, torus.radius, torus.majorRadius].every(Number.isFinite)
     || Math.abs(len(torus.axis) - 1) > 1e-9 || Math.abs(len(rim.direction) - 1) > 1e-9) return;
@@ -81,23 +144,22 @@ export function historyFilletReceipt(doc:StudioDoc,commandDoc:StudioDoc,index:nu
   if(stock.key!==bodyKeyFor(doc.nodes,1,'solid')||stock.ref?.node!==1||stock.ref?.side!=='solid'||
     finished.key!==bodyKeyFor(doc.nodes,index,'solid')||finished.ref?.node!==index||finished.ref?.side!=='solid'||
     (stock.pieces??1)!==1||(finished.pieces??1)!==1) return null;
-  const source=stock.mesh.edges.filter(e=>e.names.includes(edge));
-  if(source.length!==1||source[0].names.length!==1||!source[0].nativeJoint) return null;
-  const sig=signaturesOf(stock).edges.get(edge), stored=fillet.sigs?.[edge];
-  if(!sig||sig.shared||!stored||stored.k!==sig.kind||stored.n!==undefined) return null;
-  const native=toSig(sig);
-  if(stored.s!==native.s||!sameVec(stored.p,native.p)) return null;
   const name=featureId(doc.nodes,index)+'.face', face=finished.mesh.faces.filter(f=>f.name.startsWith(featureId(doc.nodes,index)+'.'));
-  if(face.length!==1||face[0].name!==name||!face[0].normal.every(Number.isFinite)||
+  if(face.length!==fillet.edges.length||face.some(item=>item.name!==name)||!face[0].normal.every(Number.isFinite)||
     Math.abs(Math.hypot(...face[0].normal)-1)>1e-8) return null;
   const radius = Number(fillet.radius), sketch = doc.nodes[0];
+  if (fillet.edges.length === 2) {
+    const frame = pairedHistoryFrame(doc, fillet, stock, finished, radius);
+    return frame ? { document:doc,commandDoc,index,bodies,edge,face:face[0],isCurrent,frame } : null;
+  }
+  const match = originalFilletEdge(stock, fillet, edge, signaturesOf(stock));
+  if (!match) return null;
   let frame: HistoryFilletReceipt['frame'];
   if (sketch.kind === 'sketch' && sketch.profile === 'loop') {
-    if (sig.kind !== 'curve' || stored.d !== undefined || stored.r !== undefined) return null;
-    frame = circularHistoryFrame(source[0], finished, edge, name, radius);
+    if (match.sig.kind !== 'curve' || match.stored.d !== undefined || match.stored.r !== undefined) return null;
+    frame = circularHistoryFrame(match.source, finished, edge, name, radius);
     if (!frame) return null;
-  } else if (sig.kind !== 'line' || !source[0].straight || !source[0].nativeLine || !stored.d || !native.d ||
-    !sameVec(stored.d,native.d) || face[0].exact?.kind !== 'cylinder' || Math.abs(face[0].exact.r - radius) > 1e-8) return null;
+  } else if (!exactStraightEdge(match) || face[0].exact?.kind !== 'cylinder' || Math.abs(face[0].exact.r - radius) > 1e-8) return null;
   return {document:doc,commandDoc,index,bodies,edge,face:face[0],isCurrent,...(frame?{frame}:{})};
 }
 

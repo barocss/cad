@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1509: [Edit one History Fillet radius on opposite original top edges](notes/opposite-straight-history-fillet-2026-11-21/README.md), #214. Reproduce the inert end-on edit and verify the shared original-edge frame, typed parity and native reopening.
 - D1508: [Propose a world rotation around a current SubD cage vertex](notes/agent-subd-cage-world-rotation-2026-11-21/README.md), #322. Verify exact coordinates around an off-face pivot, user approval and the editable native result in actual Studio.
 - D1507: [Propose uniform scaling of a revision-bound SubD cage selection](notes/agent-subd-cage-scale-2026-11-21/README.md), #322. Share the Model transform and verify local MCP, Studio approval, editable cage coordinates and native reopening.
 - D1506: [Separate Studio's edit-in-place session actions](notes/studio-in-place-session-actions-2026-11-21/README.md). Compare shared-definition finish, discard, history and clipboard ownership in actual Studio before and after.
