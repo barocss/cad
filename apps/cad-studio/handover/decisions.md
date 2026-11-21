@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1525: [Pin an Agent Smooth Turn angle edit to the reviewed revision](notes/review-pinned-smooth-turn-angle-2026-11-21/README.md), #630 and #324. Refuse an older visual revision and reopen the explicitly approved native turn in Studio.
 - D1524: [Edit a saved Smooth Turn angle within its existing stations](notes/smooth-turn-angle-history-2026-11-21/README.md), #630. Reverse the winding with fixed IDs, reject an out-of-range edit and reopen the accepted native part in Studio.
 - D1523: [Edit the total height of an existing Smooth Loft](notes/smooth-turn-total-height-2026-11-21/README.md), #630. Verify a 50 to 70 mm axial edit, exact native identities and the reopened History input.
 - D1522: [Propose Smooth Turn through local MCP](notes/agent-smooth-turn-proposal-2026-11-21/README.md), #630 and #322. Verify explicit sketch and revision input, Studio approval and exact native parity with manual authoring.

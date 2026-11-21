@@ -3,6 +3,7 @@
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
 import { updateBoxFootprint } from '../../app/editCommand';
 import { editFields } from '../../app/editFields';
+import { smoothTurnAngleKey, smoothTurnAngleLimit } from '../../app/smoothLoftTurn';
 import { featureLabel, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
 import { loadPersonRows } from '../rows';
 import { ROWS_NOT_FROM_PERSON } from '../../engine/rowFiles';
@@ -287,6 +288,11 @@ async function addFeaturesTool(state: ChatState, args: Record<string, unknown>, 
 async function editFeatureTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {
   const refusal = checkFeatureRevision(state, args.expectedRevision, 'EDIT');
   if (refusal) return refusal;
+  const given = isObj(args.values) ? args.values : {};
+  const editTurnAngle = Object.hasOwn(given, smoothTurnAngleKey);
+  if (editTurnAngle && (args.expectedRevision === undefined || args.feature !== undefined || Object.keys(given).length !== 1))
+    return fail(state, 'Edit a Smooth Turn with only values.smoothTurnAngle and the current expectedRevision from query.render or query.rebuild.',
+      { code: 'EDIT_INPUT' });
   const index = Number(args.index), nodes = state.doc.nodes;
   if (!Number.isInteger(index) || !nodes[index]) return fail(state, `There is no feature ${String(args.index)} (features 0–${nodes.length - 1}).`);
   const retainBox = args.retainBoxCommand === true;
@@ -305,13 +311,22 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
     }
   } else {
     // (O167, F6: a part-scoped edit offers what the bearing command offers — the draft's context and its fit tables.)
-    const fields = editFields(nodes, index, undefined, undefined, { context: bearingContextOf(state.doc), fits: state.doc.fits, doc: state.doc }), given = isObj(args.values) ? args.values : {};
+    const fields = editFields(nodes, index, undefined, undefined, { context: bearingContextOf(state.doc), fits: state.doc.fits, doc: state.doc });
     if (!Object.keys(given).length) return fail(state, `Pass "values" or a whole "feature". Feature ${index}'s values: ${fields.map(f => `${f.key} (${f.label} = ${String(f.get(nodes))})`).join(', ') || 'none — replace it with "feature"'}.`);
     next = [...nodes];
     for (const [key, v] of Object.entries(given)) {
       const f = fields.find(x => x.key === key);
       if (!f) return fail(state, `Feature ${index} has no value "${key}"; its values are ${fields.map(x => `${x.key} (${x.label})`).join(', ') || 'none'}.`);
-      if (f.kind === 'number') { if (typeof v !== 'number' || !Number.isFinite(v)) return fail(state, `"${key}" must be a number.`); next = f.set(next, v); }
+      if (f.kind === 'number') {
+        if (typeof v !== 'number' || !Number.isFinite(v)) return fail(state, `"${key}" must be a number.`);
+        const node = nodes[index];
+        if (editTurnAngle && node.kind === 'loft') {
+          const limit = smoothTurnAngleLimit(node.sections.length);
+          if (Math.abs(v) > limit)
+            return fail(state, `The existing Smooth Turn takes an angle from −${limit}° to +${limit}°.`, { code: 'EDIT_INPUT' });
+        }
+        next = f.set(next, v);
+      }
       else if (f.kind === 'choice') { if (!f.options.some(o => o.value === v)) return fail(state, `"${key}" is one of ${f.options.map(o => o.value).join(', ')}.`); next = f.set(next, String(v)); }
       else next = f.set(next, Boolean(v));
     }

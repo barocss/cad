@@ -4,8 +4,10 @@ import { brepMassProperties, checkBrep, evaluateCurve } from '@barocss/cad';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
 import { smoothTurnAngleKey } from '../src/app/smoothLoftTurn';
+import { dispatchTool } from '../src/chat/tools';
 import { emptyDoc, withNode, type LoopSegment, type StudioDoc } from '../src/engine/doc';
-import { partBreps } from '../src/engine/evaluate';
+import { evaluatePart, partBreps } from '../src/engine/evaluate';
+import { revisionOf } from '../src/util/revision';
 
 const source = withNode(emptyDoc(), {
   kind: 'sketch', profile: 'rectangle', min: [1, 2], max: [13, 10],
@@ -69,4 +71,36 @@ test('only an intact terminal Smooth Turn owns the regenerated section copies', 
   const ruled = commandById('ruled-turn')!.build!(context, { angle: 450, height: 70 });
   assert.equal(field(ruled), undefined);
   assert.equal(field(withNode(doc, { kind: 'sketch', profile: 'circle', center: [30, 0], radius: 3 }), doc.nodes.length - 1), undefined);
+  const shared = withNode(doc, { kind: 'extrude', sketch: 2, height: 2 });
+  assert.equal(field(shared, doc.nodes.length - 1), undefined);
+});
+
+test('Agent Smooth Turn angle edits require an exact pin and refuse out-of-range and combined inputs', async () => {
+  const doc = create(450), index = doc.nodes.length - 1;
+  const evaluate = async (document: StudioDoc) => evaluatePart(document, 0);
+  const evaluated = await evaluate(doc);
+  assert.ok(evaluated.ok);
+  const state = { doc, bodies: evaluated.bodies };
+  const args = { action: 'edit', index, values: { [smoothTurnAngleKey]: -360 } };
+  const expectedRevision = revisionOf(doc);
+  for (const [request, code] of [
+    [args, 'EDIT_INPUT'],
+    [{ ...args, expectedRevision: revisionOf(create(-450)) }, 'EDIT_STALE'],
+    [{ ...args, expectedRevision, values: { [smoothTurnAngleKey]: 451 } }, 'EDIT_INPUT'],
+    [{ ...args, expectedRevision, values: { ...args.values, smoothLoftHeight: 60 } }, 'EDIT_INPUT'],
+    [{ ...args, expectedRevision, feature: doc.nodes[index] }, 'EDIT_INPUT'],
+  ] as const) {
+    const result = await dispatchTool(state, 'features', request, () => {
+      assert.fail('A refused angle edit must remain outside candidate evaluation');
+    });
+    assert.ok(result.isError && !result.changed, result.content);
+    assert.equal(result.state, state);
+    assert.equal(JSON.parse(result.content).code, code);
+  }
+  const result = await dispatchTool(state, 'features', { ...args, expectedRevision }, evaluate);
+  assert.ok(result.changed && !result.isError, result.content);
+  const angle = field(result.state.doc);
+  assert.ok(angle?.kind === 'number');
+  assert.equal(angle.get(result.state.doc.nodes), -360);
+  assert.deepEqual(result.state.doc.nodes.at(-1), doc.nodes.at(-1));
 });
