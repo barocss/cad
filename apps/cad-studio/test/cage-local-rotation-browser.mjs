@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { createFlow } from './flow-helper.mjs';
 const planeBaseline = process.argv.includes('--expect-no-plane-turn');
 const edgeBaseline = process.argv.includes('--expect-no-edge-turn');
@@ -8,13 +10,17 @@ const edgeTurn = edgeBaseline || process.argv.includes('--edge-turn');
 const baseline = planeBaseline || edgeBaseline || facePivotBaseline || process.argv.includes('--expect-no-normal-turn');
 const localFrame = edgeTurn ? 'edge' : process.argv.includes('--v-turn') ? 'face-v' : process.argv.includes('--u-turn') || planeBaseline ? 'face-u' : 'face';
 const physical = baseline || localFrame !== 'face' || facePivot || process.argv.includes('--normal-turn');
+const ownership = process.argv.includes('--ownership');
+const replacementFile = 'apps/cad-studio/test/fixtures/d1339-closed-subd.bcad';
 const rotationAxis = localFrame === 'face-u' ? 0 : localFrame === 'face-v' || edgeTurn ? 1 : 2;
 const localLabel = edgeTurn ? 'T' : 'UVN'[rotationAxis];
 const pins=['packages/barocss-cad-model/src/subd/cageLocalDirection.ts','packages/barocss-cad-model/src/subd/cageEdit.ts','apps/cad-studio/src/ui/CagePanel.tsx','apps/cad-studio/src/subd/useCageEditor.ts','apps/cad-studio/src/subd/cageTransformDraft.ts','apps/cad-studio/src/ui/CageTransformControls.tsx'];
 if (physical) pins.push('apps/cad-studio/src/subd/useCageGizmo.ts', 'apps/cad-studio/src/viewport/viewportPointerInput.ts',
  'apps/cad-studio/src/viewport/gizmo.ts', 'apps/cad-studio/src/viewport/GizmoMarks.tsx', 'apps/cad-studio/test/cage-local-rotation-browser.mjs');
+if (ownership) pins.push(replacementFile, 'apps/cad-studio/src/files/useStudioDocumentFiles.ts', 'apps/cad-studio/src/ui/useWorkspaceModeExit.tsx');
 const f=await createFlow({name:'cage-local-rotation',output:process.argv[2],envFrozen:'CAGE_LOCAL_ROTATION_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,
- qualification:edgeTurn ? 'Physical tangent rotation of one oblique cage edge about a guarded off-edge vertex.'
+ qualification:ownership ? 'A held vertex-pivot face-normal turn loses ownership on pointer interruption, selection change and native Open.'
+   : edgeTurn ? 'Physical tangent rotation of one oblique cage edge about a guarded off-edge vertex.'
    : physical ? `Physical ${localLabel} rotation of one tilted quad in oblique perspective.`
    : 'Numeric rotation about a tilted face normal with independent conjugated planar rotation oracle.',
  limits:['One box, normal rotation on a 15-degree tilted quad. Exact coordinates use a conjugated planar oracle.']});
@@ -147,6 +153,78 @@ async function dragLocal(base, tilted, centre, degreesOfTilt, verify, openLocal,
    await undo();assert.deepEqual(await state(),tilted);
    await mark.waitFor();
   }
+ }
+ if (ownership) {
+  assert.ok(facePivot && localFrame === 'face');
+  const canvas=f.page.locator('canvas.vp-canvas');
+  for (const interruption of ['pointercancel', 'lostpointercapture']) {
+   f.phase=`discard a held local turn on ${interruption}`;
+   await canvas.evaluate(el=>el.addEventListener('pointerdown', event=>{
+    el.dataset.testLocalTurnPointer=String(event.pointerId);
+   }, {once:true}));
+   await start(turnAngle);
+   await canvas.evaluate((el, interruption)=>{
+    const pointerId=Number(el.dataset.testLocalTurnPointer);
+    if (!el.hasPointerCapture(pointerId)) throw Error('Local rotation must own pointer capture.');
+    if (interruption === 'pointercancel') {
+     el.dispatchEvent(new PointerEvent('pointercancel', {pointerId, pointerType:'mouse', bubbles:true}));
+    } else {
+     el.releasePointerCapture(pointerId);
+    }
+    delete el.dataset.testLocalTurnPointer;
+   }, interruption);
+   await f.page.mouse.move(570,390);
+   await readout.waitFor({state:'detached'});
+   await f.page.mouse.up();
+   assert.deepEqual(await state(),tilted);
+   await f.same(base);
+  }
+  f.phase='replace the face selection while the local turn is held';
+  await start(turnAngle);
+  await f.page.keyboard.press('2');
+  await mark.waitFor({state:'detached'});
+  await f.page.mouse.up();
+  const switched=await state();
+  assert.equal(switched.mode,'edge');
+  assert.deepEqual(switched.sel,{ vertices:[],edges:[],faces:[] });
+  assert.deepEqual(switched.cage,tilted.cage);
+  assert.equal(switched.undo,tilted.undo);
+  await f.same(base);
+  await f.snapshot('selection-change-discards-local-turn');
+  await button('Face',panel()).click();
+  const pixel=await f.page.evaluate(centre=>window.__studioScreenOf(centre),centre);
+  await f.page.mouse.click(...pixel);
+  assert.deepEqual(await state(),tilted);
+  await start(turnAngle);
+  await f.page.mouse.up();
+  const moved=await state();
+  verifyAngle(moved, turnAngle);
+  assert.equal(moved.undo,tilted.undo+1);
+  await undo();
+  assert.deepEqual(await state(),tilted);
+
+  f.phase='replace the document while the local turn is held';
+  const file=fileURLToPath(new URL('../../../'+replacementFile,import.meta.url));
+  const replacement=JSON.parse(await readFile(file,'utf8'));
+  assert.notDeepEqual(replacement,base);
+  await start(turnAngle);
+  await f.snapshot('held-turn-before-native-open');
+  await f.page.setInputFiles('input[aria-label="Model file"]',file);
+  const discard=button('Discard draft');
+  await f.page.waitForFunction(expected=>JSON.stringify(window.__studioDoc)===expected
+   || [...document.querySelectorAll('button')].some(b=>b.textContent==='Discard draft'),JSON.stringify(replacement));
+  if (await discard.isVisible()) await discard.press('Enter');
+  await f.same(replacement);
+  await f.page.mouse.up();
+  await mark.waitFor({state:'detached'});
+  await panel().waitFor({state:'detached'});
+  assert.equal(await state(),null);
+  await f.same(replacement);
+  const saved=await f.save('replacement-after-late-turn-release');
+  await f.freshOpen(saved.file,replacement,'replacement-after-late-turn-reopened');
+  f.report.observations.push({pointercancel:'injected event',lostpointercapture:'native releasePointerCapture',
+   selectionMode:'edge',nativeOpenWhileHeld:true,obsoleteCageUnchanged:true,pivot:vertexId});
+  return;
  }
  f.phase='hold a projected normal rotation and cancel it with Escape';
  const screenSweep=await start(turnAngle);
