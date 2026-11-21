@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 const file = process.argv[3], doc = JSON.parse(await readFile(file, 'utf8'));
 const grid = process.argv.includes('--grid');
+const polygon = process.argv.find(arg => arg.startsWith('--polygon='));
+const sides = polygon ? Number(polygon.slice('--polygon='.length)) : 4;
+assert.ok(Number.isInteger(sides) && sides >= 4 && sides <= 64);
 const viewFile = process.argv.find(arg => arg.startsWith('--camera='));
 const camera = viewFile ? JSON.parse(await readFile(viewFile.slice('--camera='.length), 'utf8')).camera : null;
 const pins = [
@@ -11,7 +14,7 @@ const pins = [
   'apps/cad-studio/src/viewport/Viewport.tsx',
   'apps/cad-studio/src/viewport/camera.ts',
   'packages/barocss-cad-model/src/engine/loftDisplay.ts',
-  ...(grid ? ['packages/barocss-cad-model/src/engine/screwDisplay.ts'] : []),
+  ...(grid || polygon ? ['packages/barocss-cad-model/src/engine/screwDisplay.ts'] : []),
   'packages/barocss-cad/src/brep/brep-tessellate.ts',
 ];
 const f = await createFlow({
@@ -26,13 +29,16 @@ import { bodyMesh } from '@barocss/cad-model/engine/mesh';
 import { digestOf } from '@barocss/cad-model/util/digest';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const [{ brep }] = partBreps(doc);
-const live = evaluateDoc(doc, 1, 8, true).bodies[0].mesh.loftDetail;
+const base = evaluateDoc(doc, 1, 8, true).bodies[0].mesh, detail = base.loftDetail;
 const canonical = bodyMesh(brep, 0, 24);
-if (!${grid} && JSON.stringify([...canonical.positions]) !== JSON.stringify([...live.positions])) throw new Error('Geometry packet differs');
-if (!${grid} && JSON.stringify([...canonical.indices]) !== JSON.stringify([...live.indices])) throw new Error('Triangle packet differs');
+if (!${grid || !!polygon} && JSON.stringify([...canonical.positions]) !== JSON.stringify([...detail.positions])) throw new Error('Geometry packet differs');
+if (!${grid || !!polygon} && JSON.stringify([...canonical.indices]) !== JSON.stringify([...detail.indices])) throw new Error('Triangle packet differs');
 const packet = mesh => ({ positions: [...mesh.positions], indices: [...mesh.indices], owners: [...mesh.faceOfVertex], faces: mesh.faces.map(face => face.id) });
+const live = ${!!polygon} ? { ...base, ...detail } : { ...canonical, ...detail };
+const meshes = { q24: packet(canonical), live: packet(live) };
+if (!${!!polygon}) meshes.q48 = packet(bodyMesh(brep, 0, 48));
 console.log(JSON.stringify({ digest: digestOf(brep), valid: checkBrep(brep, { strict: true }).valid, faces: brep.faces,
-  meshes: { q24: packet(canonical), q48: packet(bodyMesh(brep, 0, 48)), live: packet({ ...canonical, ...live }) } }));
+  meshes, baseTriangles: base.indices.length / 3, axis: doc.nodes[0]?.plane?.normal ?? [0, 0, 1] }));
 `,
 });
 const button = name => f.page.getByRole('button', { name, exact: true });
@@ -54,6 +60,7 @@ await f.run(async () => {
     return context;
   };
   await f.newPage();
+  if (polygon) await f.page.locator('.viewport[data-renderer="webgpu"]').waitFor();
   await f.openFile(file, doc.nodes.length);
   await f.same(doc);
   await button('Iso').click();
@@ -72,8 +79,10 @@ await f.run(async () => {
     canvas: document.querySelector('canvas.vp-canvas').getBoundingClientRect().toJSON(),
     packet: window.__studioLoftDisplay?.(0), devicePixelRatio: window.devicePixelRatio,
   }));
-  if (grid) assert.ok(view.packet.triangles > 1092 && view.packet.triangles <= 1876);
-  else assert.equal(view.packet.triangles, 1092);
+  if (!polygon) {
+    if (grid) assert.ok(view.packet.triangles > 1092 && view.packet.triangles <= 1876);
+    else assert.equal(view.packet.triangles, 1092);
+  }
   if (camera) assert.deepEqual(view.camera, camera);
   assert.equal(view.devicePixelRatio, 1);
   f.report.observations.push(view);
@@ -81,5 +90,14 @@ await f.run(async () => {
   await f.snapshot('exact-camera');
   const geometry = await f.inspect('geometry', doc);
   assert.ok(geometry.valid);
-  assert.equal(geometry.digest, 'c91e769225d1c08554ca7556ca23ed70b32cbac73530d0f4ee1278889f02a661');
+  if (polygon) {
+    assert.equal(geometry.faces.length, sides + 2);
+    if (grid) {
+      assert.ok(view.packet.triangles > geometry.baseTriangles);
+      assert.equal(view.packet.triangles, geometry.meshes.live.indices.length / 3);
+    } else {
+      assert.equal(view.packet, null);
+      assert.equal(geometry.meshes.live.indices.length / 3, geometry.baseTriangles);
+    }
+  } else assert.equal(geometry.digest, 'c91e769225d1c08554ca7556ca23ed70b32cbac73530d0f4ee1278889f02a661');
 });

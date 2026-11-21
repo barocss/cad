@@ -1,4 +1,4 @@
-import { curveEvaluator, faceGeometry, surfaceD1Evaluator, type Brep } from '@barocss/cad';
+import { curveEvaluator, ExtrudedProfileLimits, faceGeometry, surfaceD1Evaluator, type Brep } from '@barocss/cad';
 import type { DisplayMesh, SmoothTurnDisplayMesh, Vec3 } from './mesh';
 import { add, cross, dot, len, scale, sub } from './vec3';
 
@@ -14,7 +14,9 @@ export function compactTurnDisplayGrid(mesh: DisplayMesh, brep: Brep): SmoothTur
   const uses = new Map(brep.coedges.map(use => [use.id, use]));
   const rails = brep.edges.filter(edge => edge.curve.degree === 3);
   const sideCount = rails.length;
-  if (sideCount !== 3 && sideCount !== 4) return;
+  if (sideCount < 3 || sideCount > ExtrudedProfileLimits.segments || brep.faces.length !== sideCount + 2
+    || mesh.faces.length !== brep.faces.length || new Set(mesh.faces.map(face => face.id)).size !== mesh.faces.length
+    || mesh.faces.some((face, i) => face.index !== i)) return;
   const knots = rails[0].curve.knots;
   if (knots[0] !== 0 || knots.at(-1) !== 1 || rails.some(edge => !same(edge.curve.knots, knots))) return;
   const stations = [...new Set(knots)];
@@ -72,7 +74,8 @@ export function compactTurnDisplayGrid(mesh: DisplayMesh, brep: Brep): SmoothTur
       }
       continue;
     }
-    if (coedges.length !== 4 || surface.degreeU !== 1 || surface.degreeV !== 3 || !same(surface.knotsU, [0, 0, 1, 1]) || !same(surface.knotsV, knots)) return;
+    if (coedges.length !== 4 || surface.degreeU !== 1 || surface.degreeV !== 3 || !same(surface.knotsU, [0, 0, 1, 1])
+      || !same(surface.knotsV, knots) || surface.weights.some(row => row.some(weight => weight !== 1))) return;
     const sideRails = coedges.map(use => byEdge.get(use.edge)!).filter(edge => edge.curve.degree === 3);
     const sides = surface.controlPoints.map(row => sideRails.find(edge => {
       const poles = edge.curve.controlPoints;

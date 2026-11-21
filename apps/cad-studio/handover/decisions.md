@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1572: [Share viewport samples on convex polygon Screw walls](notes/convex-screw-structured-display-2026-11-21/README.md), #630. Verify fixed-camera rail and wall depth improvements and the same native edge picks.
 - D1571: [Build compact external-axis Screw from convex polygon sections](notes/convex-external-screw-loft-2026-11-21/README.md), #630. Preserve authored signed winding and verify closed native geometry, independent volume and desktop Save and Open.
 - D1570: [Restore structured display for triangular Screw STEP imports](notes/triangular-screw-step-display-2026-11-21/README.md), #630. Verify lower projected rail error and the same imported edge owner in both desktop renderers.
 - D1569: [Verify signed triangular Screw AP214 exchange](notes/triangular-screw-step-roundtrip-2026-11-21/README.md), #630. Match independent winding and volume to both native reopens and record the display gap.

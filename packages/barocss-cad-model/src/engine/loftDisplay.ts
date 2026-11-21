@@ -1,4 +1,4 @@
-import { CadNumericPolicy, faceGeometry, surfaceD1Evaluator, surfaceDomain, type Brep, type BrepFace } from '@barocss/cad';
+import { CadNumericPolicy, ExtrudedProfileLimits, faceGeometry, surfaceD1Evaluator, surfaceDomain, type Brep, type BrepFace } from '@barocss/cad';
 import { compactStepTurnKind } from '@barocss/cad/internal/step-turn-display';
 import { tessellateTwoGuideLoftDisplay } from '@barocss/cad/internal/two-guide-loft-display';
 import { bodyMesh, type DisplayMesh, type BoundedDisplayMesh, type SmoothTurnDisplayMesh, type Vec3 } from './mesh';
@@ -62,15 +62,16 @@ export function smoothTurnDisplayMesh(base: DisplayMesh, brep: Brep, sections?: 
 
 function isAuthoredCompactTurn(brep: Brep, sections: number): boolean {
   const sides = brep.faces.length - 2;
-  const rails = sides === 3 ? brep.edges.filter(edge => /^c[0-2]$/.test(edge.id))
-    : brep.edges.filter(edge => /^c[0-3]$/.test(edge.id));
-  return brep.source.family === 'loft' && brep.bodies.length === 1 && brep.bodies[0].kind === 'solid'
-    && brep.shells.length === 1 && brep.shells[0].closed
-    && (sides === 3 || sides === 4) && brep.edges.length === 3 * sides && brep.vertices.length === 2 * sides && sections >= 7 && sections <= 16
-    && rails.length === sides && rails.every(({ curve }) => curve.degree === 3 && curve.controlPoints.length === sections
+  if (brep.source.family !== 'loft' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
+    || brep.shells.length !== 1 || !brep.shells[0].closed || sides < 3 || sides > ExtrudedProfileLimits.segments
+    || brep.edges.length !== 3 * sides || brep.vertices.length !== 2 * sides || sections < 7 || sections > 16) return false;
+  // This pole count distinguishes the compact fit from the generic piecewise cubic Loft.
+  const byId = new Map(brep.edges.map(edge => [edge.id, edge.curve]));
+  const knots = byId.get('c0')?.knots;
+  return !!knots && Array.from({ length: sides }, (_, i) => byId.get('c' + i))
+    .every(curve => !!curve && curve.degree === 3 && curve.controlPoints.length === sections
       && curve.weights.every(weight => weight === 1)
-      && curve.knots.length === rails[0].curve.knots.length
-      && curve.knots.every((knot, i) => knot === rails[0].curve.knots[i]));
+      && curve.knots.length === knots.length && curve.knots.every((knot, i) => knot === knots[i]));
 }
 
 /** The compact turn charts run linearly across each section and in height along the turn. */
@@ -130,7 +131,15 @@ function buildTurnDetail(base: DisplayMesh, brep: Brep, sections: number | undef
       const family = compactStepTurnKind(brep);
       if (!family) return;
       screw = family === 'screw';
-    } else if (!isAuthoredCompactTurn(brep, sections)) return;
+    } else {
+      if (!isAuthoredCompactTurn(brep, sections)) return;
+      if (brep.faces.length > 6) {
+        // The grid samples every wall. Keep the visible edges from the canonical packet.
+        const grid = compactTurnDisplayGrid(base, brep);
+        if (!grid || grid.indices.length <= base.indices.length) return;
+        return screw ? { ...grid, screwGrid: true } : grid;
+      }
+    }
     refined = bodyMesh(brep, 0, 24);
   } catch {
     // The optional viewport samples must not invalidate an accepted model.

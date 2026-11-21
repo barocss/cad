@@ -163,12 +163,17 @@ const minus = (a: readonly number[], b: readonly number[]): Point => [a[0] - b[0
 const scalar = (a: readonly number[], b: readonly number[]) => a.reduce((sum, value, i) => sum + value * b[i], 0);
 const vector = ([x, y, z]: Point, [u, v, w]: Point): Point => [y * w - z * v, z * u - x * w, x * v - y * u];
 
-test('compact triangular Turn and Screw display walls share closed seams and native normals', () => {
+test('compact Turn and Screw display walls share closed seams and native normals', () => {
   for (const [doc, height] of [
     [smooth.build!(ctx(), { height: 50, angle: -450 }), 50],
     [screwSections(180).doc, 40],
     [screwSections(-360, screwCorners, true).doc, 40],
     [screwSections(450).doc, 40],
+    [screwSections(-360, screwPentagon, true).doc, 40],
+    [screwSections(360, screwHexagon).doc, 40],
+    [screwSections(-360, regularScrewCorners(7), true).doc, 40],
+    [screwSections(360, regularScrewCorners(64)).doc, 40],
+    [screwSections(-360, regularScrewCorners(64), true).doc, 40],
   ] as const) {
     const [{ brep }] = partBreps(doc);
     const plain = evaluateDoc(doc, 2, 8);
@@ -178,6 +183,7 @@ test('compact triangular Turn and Screw display walls share closed seams and nat
     assert.ok(detail && 'kind' in detail && detail.kind === 'smooth-turn');
     assert.equal(detail.screwGrid, undefined);
     assert.deepEqual(mesh, plain.bodies[0].mesh);
+    assert.deepEqual(new Set(detail.edgeOfSegment), new Set(mesh.edgeOfSegment));
 
     const directed = new Map<string, number>();
     const point = (vertex: number): Point => [
@@ -303,6 +309,14 @@ test('a compact triangular STEP Turn refines only when its side and cap geometry
 
 const screwAxis: Point = [21, -19.4, 24.8];
 const screwCorners: [number, number][] = [[-7, -4], [2, -3], [-4, 1]];
+const screwPentagon: [number, number][] = [[-7, -4], [2, -3], [1, -1], [-4, 1], [-6, -1]];
+const screwHexagon: [number, number][] = [[-7, -5], [1, -5], [3, -3], [2, -1], [-3, 1], [-7, -1]];
+function regularScrewCorners(sides: number): [number, number][] {
+  return Array.from({ length: sides }, (_, i) => {
+    const phase = 2 * Math.PI * i / sides;
+    return [10 + 3 * Math.cos(phase), 3 * Math.sin(phase)];
+  });
+}
 
 function screwSections(angle: number, points = screwCorners, reverse = false) {
   const last = Math.max(6, Math.ceil(Math.abs(angle) / 30));
@@ -378,16 +392,12 @@ test('External-axis triangular Screw uses one compact signed solid on tilted sec
 });
 
 test('Straight convex polygon Screw preserves each authored rail through a full signed revolution', () => {
-  const regular = (sides: number): [number, number][] => Array.from({ length: sides }, (_, i) => {
-    const phase = 2 * Math.PI * i / sides;
-    return [10 + 3 * Math.cos(phase), 3 * Math.sin(phase)];
-  });
   const fixtures: { points: [number, number][]; angles: number[]; volume?: number }[] = [
-    { points: [[-7, -4], [2, -3], [1, -1], [-4, 1], [-6, -1]], angles: [360, -360], volume: 1080.138914574982 },
-    { points: [[-7, -5], [1, -5], [3, -3], [2, -1], [-3, 1], [-7, -1]], angles: [360, -360], volume: 1840.2366692758953 },
+    { points: screwPentagon, angles: [360, -360], volume: 1080.138914574982 },
+    { points: screwHexagon, angles: [360, -360], volume: 1840.2366692758953 },
     // Nearest-corner alignment can alias a 30° section interval in these regular profiles.
-    { points: regular(7), angles: [360, -360] },
-    { points: regular(64), angles: [360] },
+    { points: regularScrewCorners(7), angles: [360, -360] },
+    { points: regularScrewCorners(64), angles: [360] },
   ];
   for (const { points, angles, volume } of fixtures) for (const angle of angles) {
     const { doc, last } = screwSections(angle, points, angle < 0);

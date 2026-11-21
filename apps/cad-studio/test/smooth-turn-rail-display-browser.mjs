@@ -6,7 +6,10 @@ const backend = process.argv.includes('--webgl2') ? 'webgl2' : 'webgpu';
 const imported = process.argv.includes('--step');
 const triangular = process.argv.includes('--triangle');
 const screw = process.argv.includes('--screw');
-const compactGrid = process.argv.includes('--compact-grid');
+const polygon = process.argv.find(arg => arg.startsWith('--polygon='));
+const sides = polygon ? Number(polygon.slice('--polygon='.length)) : triangular ? 3 : 4;
+assert.ok(Number.isInteger(sides) && sides >= 3 && sides <= 64);
+const compactGrid = !!polygon || process.argv.includes('--compact-grid');
 const compareFile = process.argv.find(arg => arg.startsWith('--compare='))?.slice('--compare='.length);
 const comparison = compareFile && JSON.parse(await readFile(compareFile, 'utf8'));
 const turnIndex = triangular || screw || compactGrid ? 0 : 1;
@@ -34,12 +37,16 @@ import { bodyMesh } from '@barocss/cad-model/engine/mesh';
 import { evaluateCurve, curveDomain, checkBrep, brepMassProperties } from '@barocss/cad';
 import { digestOf } from '@barocss/cad-model/util/digest';
 const source = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-const result = partBreps(source).find(body => body.brep.faces.length === ${triangular ? 5 : 6})!;
+const result = partBreps(source).find(body => body.brep.faces.length === ${sides + 2})!;
 const evaluated = evaluateDoc(source, 1, 8, true);
 assert.ok(evaluated.ok);
 const baseline = evaluated.bodies.find(body => body.key === result.key)!.mesh;
-const native = result.brep.edges.filter(edge => edge.curve.degree === 3 && edge.curve.controlPoints.length === ${poles});
-assert.equal(native.length, ${triangular ? 3 : 4});
+const allRails = result.brep.edges.filter(edge => edge.curve.degree === 3 && edge.curve.controlPoints.length === ${poles});
+assert.equal(allRails.length, ${sides});
+const canonical = baseline.edges.map(edge => edge.nativeJoint?.edgeId);
+const native = ${!!polygon} ? allRails.filter(edge => canonical.includes(edge.id)) : allRails;
+const hiddenRails = allRails.filter(edge => !native.includes(edge)).map(edge => edge.id);
+assert.ok(native.length, 'The viewport has at least one canonical corner rail');
 if (${screw && !baseline}) assert.ok(baseline.loftDetail?.screwGrid === true);
 const detail = baseline.loftDetail;
 const dense = ${!baseline || screw || compactGrid}
@@ -60,7 +67,7 @@ const data = [baseline, dense].map(mesh => ({
 const check = checkBrep(result.brep, { strict: true });
 assert.ok(check.valid);
 console.log(JSON.stringify({ data, digest: digestOf(result.brep), counts: check.counts,
-  volume: brepMassProperties(result.brep, 1).volume, detail: !!detail, canonical: baseline.edges.map(edge => edge.nativeJoint?.edgeId) }));
+  volume: brepMassProperties(result.brep, 1).volume, detail: !!detail, canonical, hiddenRails }));
 `,
 });
 const button = name => f.page.getByRole('button', { name, exact: true });
@@ -114,6 +121,7 @@ await f.run(async () => {
   f.report.observations.push({ camera, backend, baseline });
   const read = await f.inspect('rails-and-tiers', doc);
   const detail = await f.page.evaluate(index => window.__studioLoftDisplay?.(index), turnIndex);
+  if (polygon) assert.equal(read.detail, !baseline);
   if (!triangular && !screw && !compactGrid) assert.equal(await f.page.evaluate(() => window.__studioLoftDisplay?.(0)), null);
   if (compactGrid ? !read.detail : baseline) assert.equal(detail, null);
   else assert.deepEqual(detail, {
@@ -140,18 +148,26 @@ await f.run(async () => {
   assert.deepEqual(await f.page.evaluate(() => window.__studioCamera()), camera);
   await f.snapshot('turn-wireframe-measured-view');
 
-  const hit = await f.page.evaluate(({ rails, turnIndex, canonical }) => {
+  const hit = await f.page.evaluate(({ rails, turnIndex, canonical, prior }) => {
+    if (prior) {
+      const hit = window.__studioEdgeAt(prior.point, 3);
+      const pixel = window.__studioScreenOf(prior.point);
+      return hit?.body === turnIndex && hit.segments.length && canonical[hit.edge] === prior.rail
+        && document.elementFromPoint(...pixel)?.matches('canvas.vp-canvas')
+        ? { rail: prior.rail, hit, pixel, point: prior.point } : null;
+    }
     for (const rail of rails) {
       for (const point of rail.samples.filter((_, i) => i % 10 === 0).slice(5, -5)) {
         const hit = window.__studioEdgeAt(point, 3);
         if (hit?.body === turnIndex && hit.segments.length && canonical[hit.edge] === rail.id) {
           const pixel = window.__studioScreenOf(point);
-          if (document.elementFromPoint(...pixel)?.matches('canvas.vp-canvas')) return { rail: rail.id, hit, pixel };
+          if (document.elementFromPoint(...pixel)?.matches('canvas.vp-canvas')) return { rail: rail.id, hit, pixel, point };
         }
       }
     }
     return null;
-  }, { rails: read.data[0].rails, turnIndex, canonical: read.canonical });
+  }, { rails: read.data[0].rails, turnIndex, canonical: read.canonical,
+    prior: polygon && comparison?.observations[3] });
   assert.ok(hit, 'A native Smooth Turn rail is pickable in the actual renderer');
   assert.equal(read.canonical[hit.hit.edge], hit.rail);
   const expected = read.data[baseline && !compactGrid ? 0 : 1].rails.find(rail => rail.id === hit.rail).lines;
@@ -167,13 +183,16 @@ await f.run(async () => {
   assert.ok(Math.abs(bodies[turnIndex].volume - read.volume) < 1e-7);
   const { digest, counts, volume } = read;
   f.report.observations.push({ body: hit.hit.body, edge: hit.hit.edge, rail: hit.rail, segments: hit.hit.segments.length,
-    detail, native: { digest, counts, volume } });
+    detail, native: { digest, counts, volume },
+    ...(polygon ? { point: hit.point, pixel: hit.pixel, hiddenRails: read.hiddenRails } : {}) });
   await f.snapshot('turn-rail-picked');
   if (comparison) {
     assert.equal(comparison.status, 'PASS');
     const [beforeView, , beforeDisplay, beforePick] = comparison.observations;
     assert.deepEqual({ camera, backend }, { camera: beforeView.camera, backend: beforeView.backend });
     assert.deepEqual({ digest, counts, volume }, beforePick.native);
+    if (polygon) assert.deepEqual([hit.rail, hit.hit.edge, hit.pixel, read.hiddenRails],
+      [beforePick.rail, beforePick.edge, beforePick.pixel, beforePick.hiddenRails]);
     const display = f.report.observations[2];
     assert.ok(display.maxima.every(({ id, maximumPixels }) => maximumPixels < 0.25
       && maximumPixels < beforeDisplay.maxima.find(rail => rail.id === id).maximumPixels));

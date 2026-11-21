@@ -113,7 +113,7 @@ def depth_summary(results, kind):
     }
 
 
-def measure(geometry, view, require_live_grid=False):
+def measure(geometry, view, require_live_grid=False, polygon_sides=None):
     eye, camera, canvas = view['eye'], view['camera'], view['canvas']
     assert not camera['ortho'] and view['devicePixelRatio'] == 1
     forward = unit(difference(camera['target'], eye))
@@ -135,9 +135,9 @@ def measure(geometry, view, require_live_grid=False):
     faces = {face['id']: face['surface'] for face in geometry['faces']}
     walls = {face: ([list(map(camera_point, row)) for row in s['controlPoints']], s['knotsV'])
              for face, s in faces.items() if s['degreeV'] == 3}
-    assert len(walls) == 4
+    assert len(walls) == (polygon_sides or 4)
     meshes = dict(geometry['meshes'])
-    if not require_live_grid:
+    if not require_live_grid and polygon_sides is None:
         meshes.pop('live', None)
     meshes['structured'] = structured(meshes['q24'], faces, walls)
     triangles = {}
@@ -197,11 +197,13 @@ def measure(geometry, view, require_live_grid=False):
 
     stats = []
     coarse, fine = sample(2048), sample(4096)
-    for region in [(794, 369, 35, 19), (711, 685, 44, 23)]:
+    regions = [(670, 336, 91, 70), (597, 560, 119, 92)] if polygon_sides else [(794, 369, 35, 19), (711, 685, 44, 23)]
+    stride = 8 if polygon_sides else 2
+    for region in regions:
         x, y, w, h = region
         results, rays = [], 0
-        for py in range(y, y + h, 2):
-            for px in range(x, x + w, 2):
+        for py in range(y, y + h, stride):
+            for px in range(x, x + w, stride):
                 rays += 1
                 pixel = px + .5, py + .5
                 first = native_hits(*pixel, coarse, 2048)
@@ -218,16 +220,23 @@ def measure(geometry, view, require_live_grid=False):
             'region': region, 'rays': rays, 'bracketAgreement': len(results),
             **{kind: {'triangles': len(mesh), **depth_summary(results, kind)} for kind, mesh in triangles.items()},
         }
-        assert len(results) == rays
-        assert stat['q24']['maxDepthMM'] > 9 and stat['q48']['maxDepthMM'] > 9
-        assert stat['structured']['maxDepthMM'] < .75
-        assert stat['structured']['missingOrSpurious'] == stat['structured']['wrongFace'] == 0
-        if require_live_grid:
-            assert stat['live']['maxDepthMM'] < .75
-            assert stat['live']['missingOrSpurious'] == stat['live']['wrongFace'] == 0
+        if polygon_sides:
+            assert len(results) == rays and stat['live']['sameFace'] > 0
+            if require_live_grid:
+                assert stat['live']['maxDepthMM'] < .75
+                assert stat['live']['missingOrSpurious'] == stat['live']['wrongFace'] == 0
+        else:
+            assert len(results) == rays
+            assert stat['q24']['maxDepthMM'] > 9 and stat['q48']['maxDepthMM'] > 9
+            assert stat['structured']['maxDepthMM'] < .75
+            assert stat['structured']['missingOrSpurious'] == stat['structured']['wrongFace'] == 0
+            if require_live_grid:
+                assert stat['live']['maxDepthMM'] < .75
+                assert stat['live']['missingOrSpurious'] == stat['live']['wrongFace'] == 0
         stats.append(stat)
 
     interior = {}
+    axis = geometry.get('axis', [0, 0, 1])
     for kind, mesh in meshes.items():
         counts = {face: [0, 0] for face in walls}
         for i, p in enumerate(triples(mesh['positions'])):
@@ -235,7 +244,8 @@ def measure(geometry, view, require_live_grid=False):
             if face not in walls:
                 continue
             surface = faces[face]
-            t = min(1, max(0, (p[2] - 3) / 50))
+            first, last = surface['controlPoints'][0][0], surface['controlPoints'][0][-1]
+            t = min(1, max(0, dot(difference(p, first), axis) / dot(difference(last, first), axis)))
             a, b = (cubic(row, surface['knotsV'], t) for row in surface['controlPoints'])
             side = difference(b, a)
             u = dot(difference(p, a), side) / dot(side, side)
@@ -243,7 +253,8 @@ def measure(geometry, view, require_live_grid=False):
             if 1e-7 < u < 1 - 1e-7 and 1e-7 < t < 1 - 1e-7:
                 counts[face][1] += 1
         interior[kind] = counts
-    assert all(c[1] == 0 for kind in ('q24', 'q48') for c in interior[kind].values())
+    if polygon_sides is None:
+        assert all(c[1] == 0 for kind in ('q24', 'q48') for c in interior[kind].values())
     if require_live_grid:
         assert all(count[1] > 0 for count in interior['live'].values())
     return {'regions': stats, 'sidePointsAndInterior': interior}
@@ -253,4 +264,5 @@ if __name__ == '__main__':
     root = Path(sys.argv[1])
     solid = json.loads((root / 'geometry.stdout.json').read_text())
     camera_view = json.loads((root / 'view.json').read_text())
-    print(json.dumps(measure(solid, camera_view, '--grid' in sys.argv[2:])))
+    sides = next((int(arg.split('=', 1)[1]) for arg in sys.argv[2:] if arg.startswith('--polygon=')), None)
+    print(json.dumps(measure(solid, camera_view, '--grid' in sys.argv[2:], sides)))
