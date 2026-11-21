@@ -3,9 +3,11 @@ import {createFlow} from './flow-helper.mjs';
 const baseline=process.argv.includes('--baseline');
 const nearTransition=process.argv.includes('--near-transition');
 const perspective=process.argv.includes('--perspective');
+const twoEdges=process.argv.includes('--two-edges');
 assert.ok(!perspective || (!baseline && !nearTransition), 'Perspective is a separate run');
+assert.ok(!twoEdges || (!baseline && !nearTransition && !perspective), 'Two edges use an orthographic run');
 const pins=['apps/cad-studio/src/viewport/scalarHandleDrag.ts','apps/cad-studio/src/viewport/useCommandGizmos.ts','apps/cad-studio/test/fillet-end-on-handle-browser.mjs','apps/cad-studio/src/viewport/gizmo.ts','apps/cad-studio/src/viewport/viewportPointerInput.ts','packages/barocss-cad-model/src/app/commands.ts'];
-const f=await createFlow({name:'fillet-end-on-handle',output:process.argv[2],envFrozen:'FILLET_END_ON_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:nearTransition?'Observe identical short pointer drags of a new straight Fillet across the near-end-on 4px projection boundary':`Observe a real pointer drag of a new Fillet radius handle aligned with the ${perspective?'perspective':'orthographic'} camera`,limits:['Single new Fillet on a 40×30×10 rectangle top edge. Camera changes use actual right-button orbit. No runtime handler calls or synthetic state writes. History, curved edges, multiple edges and command replacement during a held pointer are outside this run. The regular modes exercise two zooms. --near-transition instead measures 3.8/4.2px orthographic axes and identical upward 8px drags with geometric increase pointing down.'],inspectorSource:`
+const f=await createFlow({name:'fillet-end-on-handle',output:process.argv[2],envFrozen:'FILLET_END_ON_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:nearTransition?'Observe identical short pointer drags across the near-end-on 4px projection boundary':`Drag a new ${twoEdges?'shared two-edge':'single-edge'} Fillet radius in the ${perspective?'perspective':'orthographic'} view`,limits:['One new Fillet on a 40×30×10 rectangular solid. Two-edge mode selects two opposite parallel top edges with the actual mouse. Camera changes use actual right-button orbit. No runtime handler calls or synthetic state writes. History, curved and intersecting edges, and command replacement during a held pointer are outside these runs. The regular modes exercise two zooms. --near-transition instead measures 3.8/4.2px orthographic axes and identical upward 8px drags with geometric increase pointing down.'],inspectorSource:`
 import {readFileSync} from 'node:fs';
 import {partBreps} from '@barocss/cad-model/engine/evaluate';
 import {brepMassProperties,checkBrep,evaluateSurface} from '@barocss/cad';
@@ -15,16 +17,18 @@ console.log(JSON.stringify({key,midpoints,volume:brepMassProperties(brep,1).volu
 `,oracleSource:`
 import json,sys,math
 d=json.load(sys.stdin);n=d['native'];w=d['width'];h=d['height'];depth=d['depth'];c=d['radius']
-expected=w*depth*h-w*c*c*(.5 if d['chamfer'] else 1-math.pi/4)
+targets=[(0,1),(depth,-1)] if d['twoEdges'] else [(0,1)]
+expected=w*depth*h-len(targets)*w*c*c*(.5 if d['chamfer'] else 1-math.pi/4)
 assert n['check']['valid'],n['check']['issues']
 assert abs(n['volume']-expected)<1e-7,(n['volume'],expected)
 assert abs(d['workerVolume']-expected)<1e-7
-for x in [0,w]:
- for p in [(x,0,h-c),(x,c,h)]:
-  assert any(math.dist(p,q)<1e-9 for q in n['vertices']),p
- assert not any(math.dist((x,0,h),q)<1e-9 for q in n['vertices'])
-q=c*(1-1/math.sqrt(2))
-if not d['chamfer']: assert any(math.dist((w/2,q,h-q),p)<1e-7 for p in n['midpoints']),n['midpoints']
+for y,sign in targets:
+ for x in [0,w]:
+  for p in [(x,y,h-c),(x,y+sign*c,h)]:
+   assert any(math.dist(p,q)<1e-9 for q in n['vertices']),p
+  assert not any(math.dist((x,y,h),q)<1e-9 for q in n['vertices'])
+ q=c*(1-1/math.sqrt(2))
+ if not d['chamfer']: assert any(math.dist((w/2,y+sign*q,h-q),p)<1e-7 for p in n['midpoints']),n['midpoints']
 print(json.dumps({'status':'PASS','expectedVolume':expected,'nativeVolume':n['volume'],'workerVolume':d['workerVolume']}))
 `});
 const source={format:'barocss-cad-model',schema:3,units:'mm',parameters:{},nodes:[{id:'n0',kind:'sketch',profile:'rectangle',min:[0,0],max:[40,30]},{id:'n1',kind:'extrude',sketch:0,height:10}],outputs:{b1:{node:1,side:'solid'}},nextId:2};
@@ -91,7 +95,7 @@ async function dragUp(pixels,zoomWhileHeld=false){
  assert.ok(Math.abs(value-expected)<1e-9,JSON.stringify({value,expected,metric,pixels}));
  f.report.observations.push({label:'independent-screen-scale-oracle',value,expected,metric,pixels});
  if(zoomWhileHeld){
-  if(perspective)await f.snapshot('perspective-radius-held');
+  if(perspective || twoEdges)await f.snapshot(twoEdges?'two-edges-radius-held':'perspective-radius-held');
   await f.page.mouse.wheel(0,-120);await f.page.waitForTimeout(200);
   assert.equal(Number(await radius().inputValue()),value,'wheel during pointer hold does not alter captured value');
   await f.page.mouse.move(h.root[0],h.root[1]-pixels-1);
@@ -103,12 +107,33 @@ async function dragUp(pixels,zoomWhileHeld=false){
  assert.equal(Number(await radius().inputValue()),value,'release preserves captured value');
  await f.same(source);return value;
 }
-async function freshFillet(){
- await frameSource();
+async function pickFilletEdges(){
  const canvas=await f.page.locator('.vp-canvas').boundingBox();await f.page.mouse.click(canvas.x+8,canvas.y+8);
  const filter=button('Selection filter');for(let i=0;i<6&&!(await filter.innerText()).includes('Edges');i++)await filter.click();
- const point=await f.page.evaluate(()=>window.__studioScreenOf([20,0,10]));assert.ok(point);await f.page.mouse.click(...point);await f.page.waitForFunction(()=>window.__studioSelection?.selection?.edges?.length===1);
- await f.command('Fillet');await radius().waitFor();await radius().fill('2');await preview();await aimEndOn();await endOnProjection();
+ assert.match(await filter.innerText(),/Edges/);
+ await f.worldClick([20,0,10]);
+ await f.page.waitForFunction(()=>window.__studioSelection?.selection?.edges?.length===1);
+ if(twoEdges){
+  await f.page.keyboard.down('Shift');
+  try{await f.worldClick([20,30,10]);}finally{await f.page.keyboard.up('Shift');}
+  await f.page.waitForFunction(()=>window.__studioSelection?.selection?.edges?.length===2);
+  const closeChat=button('Close chat');
+  if(await closeChat.isVisible())await closeChat.click();
+  await f.page.waitForFunction(()=>window.__studioSelection?.selection?.edges?.length===2);
+ }
+}
+async function startFillet(){
+ await pickFilletEdges();
+ await f.command('Fillet');await radius().waitFor();await radius().fill('2');await preview();
+ if(twoEdges){
+  await dialog().getByText('Picked native edges',{exact:true}).waitFor();
+  assert.match(await dialog().innerText(),/Picked native edges\s+2\b/);
+  assert.equal(await f.page.locator('g.gizmo-handle[data-handle="radius"]').count(),1);
+ }
+}
+async function freshFillet(){
+ await frameSource();
+ await startFillet();await aimEndOn();await endOnProjection();
 }
 // Independent orthographic metric for this source's straight top edge. The radius
 // increases along [0,-1,1]/sqrt(2); X is perpendicular to the end-on view and
@@ -175,11 +200,16 @@ async function nearTransitionRun(){
  }
  await cancel();await f.snapshot('near-04-baseline-cancel');
 }
-async function verify(doc,label,value){const native=await f.inspect(label,doc),[body]=(await f.bodies()).bodies;assert.equal(native.key,body.key);await f.runOracle({native,width:40,depth:30,height:10,chamfer:false,radius:value,workerVolume:body.volume},label);}
+async function verify(doc,label,value){
+ if(twoEdges)assert.deepEqual([...doc.nodes[2].edges].sort(),['n1.side0|n1.top','n1.side2|n1.top']);
+ const native=await f.inspect(label,doc),[body]=(await f.bodies()).bodies;
+ assert.equal(native.key,body.key);
+ await f.runOracle({native,width:40,depth:30,height:10,chamfer:false,twoEdges,radius:value,workerVolume:body.volume},label);
+}
 await f.run(async()=>{
  await f.newPage();await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'end-on-box.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(source))});await f.same(source);await frameSource();
  // Pick through the actual viewport, never through the selection hook.
- const filter=button('Selection filter');for(let i=0;i<6&&!(await filter.innerText()).includes('Edges');i++)await filter.click();assert.ok((await filter.innerText()).includes('Edges'));const point=await f.page.evaluate(()=>window.__studioScreenOf([20,0,10]));assert.ok(point);await f.page.mouse.click(...point);await f.page.waitForFunction(()=>window.__studioSelection?.selection?.edges?.length===1);await f.command('Fillet');await radius().waitFor();await radius().fill('2');await f.page.locator('.hud .status').filter({hasText:/^preview$/}).waitFor();
+ await startFillet();
  const camera=await aimEndOn();
  if(nearTransition){await nearTransitionRun();return;}
  const projection=await endOnProjection();
@@ -208,7 +238,14 @@ await f.run(async()=>{
  f.report.observations.push({label:'two-zoom-fresh-gestures',delta,first,second,beforeZoom,afterZoom});
  await cancel();await f.snapshot('03-cancel-preserves-source');
  // Explicit viewport reselection starts a fresh command; apply the pointer-produced value.
- await freshFillet();const appliedRadius=await dragUp(delta);await preview();await apply();const dragged=await f.doc();
+ await freshFillet();const appliedRadius=await dragUp(delta);await preview();
+ if(twoEdges){
+  await button('Iso').click();
+  await f.page.getByTitle('Frame all (F)',{exact:true}).click();
+  assert.equal(Number(await radius().inputValue()),appliedRadius);
+  await f.same(source);await f.snapshot('two-edges-dragged-preview');
+ }
+ await apply();const dragged=await f.doc();
  assert.equal(dragged.nodes[2].radius,appliedRadius);assert.deepEqual(dragged.nodes.slice(0,2),source.nodes);await verify(dragged,'04-drag-applied',appliedRadius);
  await f.undo();await f.same(source);await f.redo();await f.same(dragged);await verify(dragged,'05-redo',appliedRadius);
  // The typed scalar must create precisely the same recipe, not merely similar geometry.

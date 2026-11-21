@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1476: [Drag one radius for two opposite Fillet edges](notes/two-edge-fillet-radius-drag-2026-11-21/README.md), #214. Verify a single control, two exact native edge references, typed equivalence and fresh Open.
 - D1475: [Drag a new Fillet radius end-on in perspective](notes/perspective-fillet-radius-drag-2026-11-21/README.md), #214. Verify two zooms, typed equivalence and strict native geometry after fresh Open.
 - D1474: [Approve a fresh repair of the remaining chamfer](notes/second-current-chamfer-proposal-2026-11-21/README.md), #17. Verify both independent approvals, stale P2, exact second Undo and native reopening at 12000 mm³.
 - D1473: [Approve one of two chamfer repairs on a common source](notes/two-neighboring-chamfer-proposals-2026-11-21/README.md), #17. Verify both previews, only one approval, the held bevel and stale second proposal through Open.
