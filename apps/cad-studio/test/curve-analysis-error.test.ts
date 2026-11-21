@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NativeCurvatureError, NativeSecondDerivativeError } from '@barocss/cad';
-import { analyzeCurve, importSource } from '@barocss/cad-model/engine/direct';
+import { analyzeCurve, directOps, importSource } from '@barocss/cad-model/engine/direct';
 import { curvesSource } from '@barocss/cad-model/engine/curveSource';
 import { curveAnalysisError, inspectCurvePoint } from '../src/ui/curveAnalysisError';
 
@@ -55,4 +55,24 @@ test('issue 498: joined line Point survives radius refusal without altering the 
   }
   assert.throws(() => inspectCurvePoint(direct, id, NaN));
   assert.equal(JSON.stringify(direct), before);
+});
+
+test('the exact cubic Join reports the 3D tangent angle and keeps the existing radius refusal', () => {
+  const line = [[19, 1, -18], [25, 10, 0]] as [number, number, number][];
+  const direct = importSource({ sources: {}, objects: [] }, curvesSource('cubic-join-input', [
+    { degree: 1, knots: [2, 2, 4, 4], points: line, weights: [1, 1] },
+    { degree: 3, knots: [10, 10, 10, 10, 14, 14, 14, 14],
+      points: [line[1], [43, -2, 6], [47, 7, 5], [55, 21, 0]], weights: [1, 1, 1, 1] },
+  ]), 'Join source');
+  const joined = directOps.joinCurves(direct, direct.objects[0].id, direct.objects[1].id);
+  const id = joined.objects.at(-1)!.id, before = structuredClone(joined);
+  const atJoin = inspectCurvePoint(joined, id, 4);
+  assert.deepEqual(atJoin.point, line[1]);
+  assert.equal(atJoin.radius, null);
+  assert.match(atJoin.radiusNote!, /Unavailable at join/);
+  assert.ok(Math.abs(atJoin.tangentAngle! - 76.7570237801765) < 1e-12);
+  const inside = inspectCurvePoint(joined, id, 5);
+  assert.equal(inside.tangentAngle, null);
+  assert.ok(inside.radius! > 0);
+  assert.deepEqual(joined, before);
 });

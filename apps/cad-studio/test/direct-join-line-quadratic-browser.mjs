@@ -7,14 +7,15 @@ import { withMcpSession } from './mcp-browser-session.mjs';
 const cubicJoin = process.argv.includes('--cubic');
 const agentInspect = process.argv.includes('--agent-inspect');
 const inspectAngle = agentInspect || process.argv.includes('--inspect-angle');
-assert.ok(!cubicJoin || !inspectAngle, 'The tangent inspector path is scoped to the quadratic join');
-const line = [[10, 10, 0], [25, 10, 0]];
+const cubicInspection = cubicJoin && inspectAngle;
+const line = cubicInspection ? [[19, 1, -18], [25, 10, 0]] : [[10, 10, 0], [25, 10, 0]];
 const other = cubicJoin
-  ? [[25, 10, 0], [35, 24, 0], [47, 7, 5], [55, 21, 0]]
+  ? [[25, 10, 0], cubicInspection ? [43, -2, 6] : [35, 24, 0], [47, 7, 5], [55, 21, 0]]
   : [[25, 10, 0], [35, 24, 0], [50, 18, 0]];
 const degree = other.length - 1, label = cubicJoin ? 'Cubic' : 'Quadratic';
 const firstDomain = cubicJoin ? [2, 4] : [0, 1], secondDomain = cubicJoin ? [10, 14] : [0, 1];
 const [start, knot] = firstDomain, end = knot + secondDomain[1] - secondDomain[0];
+const insideLine = start + (knot - start) * .75, insideCurve = knot + (end - knot) * .25;
 function source(points, [from, to]) {
   const count = points.length;
   return `@model join_input {version:0;length-unit:mm;@curve #path {type:nurbs;degree:${count - 1};knots:[${Array(count).fill(from)},${Array(count).fill(to)}];control-points:${JSON.stringify(points)};weights:[${Array(count).fill(1)}];}}`;
@@ -36,10 +37,12 @@ const doc = {
 const pins = [
   'apps/cad-studio/test/direct-join-line-quadratic-browser.mjs', 'apps/cad-studio/src/ui/TwoCurveRoles.tsx',
   'apps/cad-studio/src/ui/joinEndpointGuidance.ts', 'packages/barocss-cad-model/src/engine/direct.ts',
+  ...(agentInspect ? ['packages/barocss-cad-model/src/chat/part/views.ts', 'packages/barocss-cad-model/src/chat/sweepSource.ts',
+    'apps/cad-studio/scripts/cad-mcp.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs'] : []),
 ];
 const f = await createFlow({
   name: 'join-line-' + label.toLowerCase(), output: process.argv[2],
-  envFrozen: cubicJoin ? 'D1617_SOURCE_FROZEN' : agentInspect ? 'D1615_SOURCE_FROZEN' : inspectAngle ? 'D1614_SOURCE_FROZEN' : 'D1605_SOURCE_FROZEN',
+  envFrozen: cubicInspection ? 'D1620_SOURCE_FROZEN' : cubicJoin ? 'D1617_SOURCE_FROZEN' : agentInspect ? 'D1615_SOURCE_FROZEN' : inspectAngle ? 'D1614_SOURCE_FROZEN' : 'D1605_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: `Join the exact line end to the ${label.toLowerCase()} start, preserve both spans and reopen the single native curve.`,
   limits: [`One unit-weight line and one unit-weight ${label.toLowerCase()} Bézier with an exact shared endpoint.`],
@@ -130,21 +133,22 @@ await f.run(async () => {
     const at = panel().getByLabel('At t', { exact: true });
     const angle = panel().locator('.kv').filter({ hasText: /^Tangent angle/ });
     const radius = panel().locator('.kv').filter({ hasText: /^Radius/ });
-    const expected = Math.atan2(14, 10) * 180 / Math.PI;
-    await at.fill('1');
+    // For the 3D fixture the original endpoint directions have dot 108 and cross (270, 288, -234).
+    const expected = (cubicInspection ? Math.atan2(Math.sqrt(210600), 108) : Math.atan2(14, 10)) * 180 / Math.PI;
+    await at.fill(String(knot));
     await angle.waitFor();
     await expectAngle();
     await angle.scrollIntoViewIfNeeded();
     await f.snapshot('06-tangent-angle-at-join');
 
-    await at.fill('0.75');
+    await at.fill(String(insideLine));
     await angle.waitFor({ state: 'hidden' });
     await radius.getByText('straight', { exact: true }).waitFor();
     await f.snapshot('07-radius-inside-straight-span');
-    await at.fill('1.25');
+    await at.fill(String(insideCurve));
     await angle.waitFor({ state: 'hidden' });
     await radius.getByText(/^\d+(?:\.\d+)? mm$/).waitFor();
-    await at.fill('1');
+    await at.fill(String(knot));
     await expectAngle();
     await f.same(joined);
     const displayedAngle = await angle.locator('b').innerText();
@@ -163,7 +167,7 @@ async function compareAgent(file, doc, expected, displayedAngle) {
   const bytes = await readFile(file);
   const session = { app: f.app, output: f.output, clientName: 'barocss-direct-join-inspection' };
   const [visible] = doc.direct.objects.filter(object => !object.hidden);
-  const args = { action: 'inspect', curve: visible.id, parameter: 1 };
+  const args = { action: 'inspect', curve: visible.id, parameter: knot };
   const measurement = await withMcpSession(session, file, 'agent-reopened-join', async call => {
     const described = await call('describe', { tool: 'query', action: 'inspect' });
     assert.equal(described.input.properties.expectedDirectRevision.pattern, '^[a-f0-9]{64}$');
@@ -172,14 +176,14 @@ async function compareAgent(file, doc, expected, displayedAngle) {
     assert.equal(summary.direct_curves[0].id, visible.id);
     const pinned = { ...args, expectedDirectRevision: summary.direct_revision };
     const { curveJoin } = await call('query', pinned);
-    assert.deepEqual(curveJoin.point, [25, 10, 0]);
+    assert.deepEqual(curveJoin.point, line[1]);
     assert.equal(curveJoin.curveId, visible.id);
     assert.equal(curveJoin.revision, summary.direct_revision);
     assert.equal(curveJoin.unit, 'degrees');
     assert.ok(Math.abs(curveJoin.angleDegrees - expected) < 1e-12);
     assert.equal(displayedAngle, Math.round(curveJoin.angleDegrees * 1000) / 1000 + '°');
     assert.equal((await call('query', args, true)).code, 'DIRECT_JOIN_INPUT');
-    assert.equal((await call('query', { ...pinned, parameter: .75 }, true)).code, 'DIRECT_JOIN_UNAVAILABLE');
+    assert.equal((await call('query', { ...pinned, parameter: insideLine }, true)).code, 'DIRECT_JOIN_UNAVAILABLE');
     assert.deepEqual(await call('query', pinned), { curveJoin });
     return curveJoin;
   });

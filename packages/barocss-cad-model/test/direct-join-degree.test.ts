@@ -117,7 +117,17 @@ for (const first of ['line', 'cubic'] as const) for (const nonUnitDomain of [fal
       near(evaluateCurveD1(joined, cubicStart + cubicSpan * t).derivative, cubicDerivativeAt(cubic, t, cubicSpan));
     }
     assert.throws(() => evaluateCurveD1(joined, join), /exact C0 interior knot/);
-    assert.equal(directJoinTangentAngle(joined, join), null, 'the bounded quadratic tangent-angle scope does not expand');
+    const leftDirection = first === 'line'
+      ? line[0].map((value, axis) => line[1][axis] - value)
+      : cubic[2].map((value, axis) => cubic[3][axis] - value);
+    const rightDirection = first === 'cubic'
+      ? line[0].map((value, axis) => line[1][axis] - value)
+      : cubic[0].map((value, axis) => cubic[1][axis] - value);
+    const cosine = leftDirection.reduce((sum, value, axis) => sum + value * rightDirection[axis], 0)
+      / (Math.hypot(...leftDirection) * Math.hypot(...rightDirection));
+    const angle = directJoinTangentAngle(joined, join);
+    assert.notEqual(angle, null);
+    assert.ok(Math.abs(angle! - Math.acos(cosine) * 180 / Math.PI) < 1e-10, 'the angle agrees with the original endpoint tangents');
     assert.equal(Object.keys(result.sources).length, Object.keys(original.sources).length + 1, 'neither scratch source is published');
     assert.equal(result.objects.length, original.objects.length + 1);
     for (const object of original.objects) {

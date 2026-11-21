@@ -96,32 +96,45 @@ export function directJoinDegreeCompatible(a: Curve, b: Curve): boolean {
   return a.degree === b.degree || mixedPolynomialDegreeCompatible(a, b, 3);
 }
 
-/** The angle between the original one-sided tangents of the bounded line/quadratic Join. */
+/** The angle between the one-sided tangents of the bounded line/quadratic or line/cubic Join. */
 export function directJoinTangentAngle(curve: Curve, parameter: number): number | null {
-  if (!curve || curve.kind !== 'curve' || curve.degree !== 2 || typeof curve.id !== 'string'
+  if (!curve || curve.kind !== 'curve' || (curve.degree !== 2 && curve.degree !== 3) || typeof curve.id !== 'string'
     || curve.id.length > 48 || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(curve.id)
-    || !Array.isArray(curve.controlPoints) || curve.controlPoints.length !== 5
-    || !Array.isArray(curve.weights) || curve.weights.length !== 5
-    || !Array.isArray(curve.knots) || curve.knots.length !== 8 || !Number.isFinite(parameter)) return null;
-  const points = curve.controlPoints, knots = curve.knots;
-  for (let i = 0; i < 5; i++) {
+    || !Array.isArray(curve.controlPoints) || curve.controlPoints.length !== 2 * curve.degree + 1
+    || !Array.isArray(curve.weights) || curve.weights.length !== 2 * curve.degree + 1
+    || !Array.isArray(curve.knots) || curve.knots.length !== 3 * curve.degree + 2 || !Number.isFinite(parameter)) return null;
+  const points = curve.controlPoints, knots = curve.knots, degree = curve.degree;
+  for (let i = 0; i < points.length; i++) {
     const point = points[i];
     if (curve.weights[i] !== 1 || !Array.isArray(point) || point.length !== 3
       || ![0, 1, 2].every(axis => typeof point[axis] === 'number' && Number.isFinite(point[axis])
         && Math.abs(point[axis]) <= CadNumericPolicy.coordinateAbs)) return null;
   }
-  const start = knots[0], join = knots[3], end = knots[5];
+  const start = knots[0], join = knots[degree + 1], end = knots[2 * degree + 1];
   if (![start, join, end].every(Number.isFinite) || !Object.is(parameter, join) || !(start < join && join < end)
     || !Number.isFinite(join - start) || !Number.isFinite(end - join) || !Number.isFinite(end - start)) return null;
-  for (let i = 0; i < 8; i++) if (!Object.is(knots[i], i < 3 ? start : i < 5 ? join : end)) return null;
-  // A degree-elevated affine span retains its middle pole at the endpoint mean.
-  // Do not replace this coefficient test with sampled or tolerance-based straightness.
-  const affine = (offset: number) => points[offset + 1].every((value, axis) => value === (points[offset][axis] + points[offset + 2][axis]) / 2);
-  if (!affine(0) && !affine(2)) return null;
-  // Both factors 2/span are positive. Omitting them preserves direction and avoids
+  for (let i = 0; i < knots.length; i++) if (!Object.is(knots[i], i <= degree ? start : i <= 2 * degree ? join : end)) return null;
+  // Keep the quadratic coefficient test unchanged. A cubic must reproduce both
+  // native elevation steps in one complete direction, including a native Reverse.
+  // Do not replace these tests with sampled or tolerance-based straightness.
+  const affine = (offset: number) => {
+    if (degree === 2) return points[offset + 1].every((value, axis) => value === (points[offset][axis] + points[offset + 2][axis]) / 2);
+    const matches = (reverse: boolean) => {
+      const a = points[offset + (reverse ? 3 : 0)], b = points[offset + (reverse ? 0 : 3)];
+      const first = points[offset + (reverse ? 2 : 1)], second = points[offset + (reverse ? 1 : 2)];
+      return a.every((value, axis) => {
+        const middle = .5 * value + .5 * b[axis];
+        return first[axis] === (1 / 3) * value + (1 - 1 / 3) * middle
+          && second[axis] === (2 / 3) * middle + (1 - 2 / 3) * b[axis];
+      });
+    };
+    return matches(false) || matches(true);
+  };
+  if (!affine(0) && !affine(degree)) return null;
+  // Both factors degree/span are positive. Omitting them preserves direction and avoids
   // overflow from a small parameter interval without invoking a knot derivative.
-  const left = points[2].map((value, axis) => value - points[1][axis]);
-  const right = points[3].map((value, axis) => value - points[2][axis]);
+  const left = points[degree].map((value, axis) => value - points[degree - 1][axis]);
+  const right = points[degree + 1].map((value, axis) => value - points[degree][axis]);
   const leftLength = Math.hypot(...left), rightLength = Math.hypot(...right);
   if (!(leftLength > CadNumericPolicy.linearTolerance && rightLength > CadNumericPolicy.linearTolerance)
     || !Number.isFinite(leftLength) || !Number.isFinite(rightLength)) return null;
