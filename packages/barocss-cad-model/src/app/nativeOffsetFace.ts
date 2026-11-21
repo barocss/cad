@@ -1,14 +1,16 @@
 // Offset face owns a native cap snapshot. Display data identifies the pick only; it never authors a profile.
 import { CadNumericPolicy, CadPartLimits, brepFromPrismatic, checkBrep, prismaticFromProfile, prismaticMassProperties, transformBrep, type Brep, type BrepFace, type Curve, type Surface } from '@barocss/cad';
 import { boxCapOffsetFrame, draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
-import { boredCapOffsetFrame, boredPlateWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
+import { boredCapOffsetFrame, boredPlateWallOffsetFrame, circularWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
-import { isBoredPlateOffsetSource, isBoxCapOffsetSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
+import { isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, massOfRef, partBreps, type BodyResult } from '../engine/evaluate';
 import { bodyKeyFor, withIds } from '../engine/ids';
 import { refusal } from '../engine/refusal';
+import { toSig, type Sig } from '../engine/references';
+import { signaturesOf } from '../engine/rematch';
 import { canonical, modelContent } from '../util/revision';
 import { refOf } from './bodyRef';
 import type { Ctx } from './commands';
@@ -308,13 +310,15 @@ function owned(profile: NativeOffsetFaceProfile, bound: bigint, target: TargetWi
 }
 const cache = new WeakMap<StudioDoc, Cached>();
 /** Require one exact display pick bound to the current body reference. */
-function offsetPick(ctx: Ctx) {
+function offsetPick(ctx: Ctx, allowCylinder = false) {
   const selection = ctx.selection;
   if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length || selection.vertices?.length || ctx.direct?.length) return missing('pick exactly one current face.');
   const picked = selection.faces[0];
   if (!Number.isSafeInteger(picked.body) || !Number.isSafeInteger(picked.face) || picked.body < 0 || picked.face < 0) return missing('the picked face index is invalid.');
   const body = ctx.bodies[picked.body], display = body?.mesh.faces[picked.face];
-  if (!body || !display || (display.kind !== 'plane' && display.exact?.kind !== 'plane') || display.facet || !display.name || display.name.includes('+')) return missing('pick one unambiguous native planar face.');
+  if (!body || !display || display.facet || !display.name) return missing('pick one unambiguous native planar face.');
+  const planar = (display.kind === 'plane' || display.exact?.kind === 'plane') && !display.name.includes('+');
+  if (!planar && !(allowCylinder && display.exact?.kind === 'cylinder')) return missing('pick one unambiguous native planar face.');
   let sameKeys = 0; for (const candidate of ctx.bodies) if (candidate.key === body.key) sameKeys++;
   if (sameKeys !== 1) return missing('the selected body identity is ambiguous.');
   const ref = refOf(body);
@@ -340,11 +344,30 @@ function nativeOffsetBody(ctx: Ctx, body: BodyResult, display: ReturnType<typeof
 }
 
 /** Check the same native profile the direct offset evaluates. The old snapshot recipe remains separate. */
-export function resolveDirectOffsetFace(ctx: Ctx): { parent: ReturnType<typeof refOf>; face: string; anchor: XYZ; normal: XYZ; allowsPlane: boolean } | undefined {
-  const { body, display, ref } = offsetPick(ctx);
+export function resolveDirectOffsetFace(ctx: Ctx): {
+  parent: ReturnType<typeof refOf>; face: string; anchor: XYZ; normal: XYZ; allowsPlane: boolean; signature?: Sig;
+} | undefined {
+  const { body, display, ref } = offsetPick(ctx, true);
+  if (ref.side !== 'solid') return undefined;
+  if (display.exact?.kind === 'cylinder') {
+    if (!isCylinderReplacementSource(ctx.doc.nodes, ref.node)) return unsupported('select the wall of a straight circular extrusion.');
+    const current = currentOffsetBody(ctx, body);
+    const members = current.mesh.faces[ctx.selection.faces[0].face].nativeFaces?.map(face => face.name).sort();
+    const natives = partBreps(ctx.doc).filter(candidate => candidate.key === body.key);
+    if (members?.length !== 2 || new Set(members).size !== 2 || natives.length !== 1)
+      return missing('the cylindrical wall must resolve to both native wall faces.');
+    const [face] = members;
+    const frame = circularWallOffsetFrame(natives[0].brep, face);
+    const signature = signaturesOf(current, 'individual').faces.get(face);
+    if (!frame || frame.faces.length !== members.length || !frame.faces.every(name => members.includes(name))
+      || signature?.kind !== 'curved' || !(signature.radius && signature.radius > 0))
+      return unsupported('the radial offset needs the complete wall of an uncut upright cylinder.');
+    const { anchor, normal } = frame;
+    const stored = toSig(signature), [x, y, z] = stored.p;
+    return { parent: ref, face, anchor, normal, allowsPlane: false, signature: { ...stored, p: [zero(x), zero(y), zero(z)] } };
+  }
   if (display.exact?.kind !== 'plane') return undefined;
   const node = ctx.doc.nodes[ref.node];
-  if (ref.side !== 'solid') return undefined;
   const boredPlate = isBoredPlateOffsetSource(ctx.doc.nodes, ref.node);
   const box = isBoxCapOffsetSource(ctx.doc.nodes, ref.node);
   const boxCap = box && display.nativeAxisPlane?.axis === 'z';

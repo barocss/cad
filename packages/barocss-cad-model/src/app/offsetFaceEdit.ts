@@ -159,7 +159,8 @@ function preserveFollowingOffsetRecipes(doc: StudioDoc, index: number): StudioDo
 /** Edit the direct native operation or rebuild the legacy cap recipe at its original History slot. */
 export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Command | null {
   const direct = directOffsetAt(doc, index);
-  const allowPlane = !!direct && !isBoredPlateOffsetSource(doc.nodes, direct.parent.node) && !isBoxCapOffsetSource(doc.nodes, direct.parent.node);
+  const circularWall = direct?.sigs?.[direct.faces[0]]?.k === 'curved';
+  const allowPlane = !!direct && !circularWall && !isBoredPlateOffsetSource(doc.nodes, direct.parent.node) && !isBoxCapOffsetSource(doc.nodes, direct.parent.node);
   let directSource: Ctx | undefined;
   const getDirectSource = (node: NonNullable<typeof direct>) =>
     directSource ??= capContext(prefixDoc(doc, index), node.parent, node.faces[0]);
@@ -177,7 +178,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
       return direct.target && ctx.doc === doc ? restoreOffsetPlaneValues(ctx, values, direct.target) : values;
     },
     derive: resetOffsetPlane,
-    steps: (ctx, values) => [{ label: 'Face', text: describe(() => getDirectSource(direct), direct.faces[0]), done: true },
+    steps: (ctx, values) => [{ label: 'Face', text: circularWall ? 'Cylindrical wall · Radial' : describe(() => getDirectSource(direct), direct.faces[0]), done: true },
       ...(values.offsetMode === 'to-plane' ? [offsetPlaneStep(values, direct.target, ctx)] : offsetFaceCommand.steps?.(ctx, values).filter(step => step.label !== 'Face') ?? [])],
     onPick: allowPlane ? (ctx, values, hit) => pickOffsetPlane(ctx, values, hit.face, direct.parent, index) : undefined,
     handles: (ctx, values) => savedDraftOffsetHandle(doc,index,ctx,values,face => {

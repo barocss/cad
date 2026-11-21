@@ -1,6 +1,7 @@
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { BrepError, checkBrep, type Brep, type BrepEdge, type BrepFace, type BrepLoop } from '../brep/brep-core.js';
 import { createCylindricalBoreCheck, readTiltedRectangularPlateBore } from '../brep/cylindrical-bore.js';
+import { transformBrep } from '../brep/brep-transform.js';
 import { add, dist, dot, len, scale, sub } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Curve, Point } from '../types.js';
@@ -302,6 +303,64 @@ export function boredCapReplacementFrame(brep: Brep, faceName: string): { anchor
 export function circularCapReplacementFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
   const cap = admittedCap(brep, faceName, 'circular');
   return cap && { anchor: cap.point, normal: [0, 0, cap.sign] };
+}
+
+function admittedCircularWall(brep: Brep, faceName: string) {
+  if (brep.source.family !== 'prismatic-solid') return;
+  const matches = brep.faces.filter(face => face.name === faceName);
+  if (matches.length !== 1) return;
+  const stock = admittedAxialStock(brep, 'circular');
+  if (!stock) return;
+  const walls = brep.faces.filter(face => face !== stock.bottom && face !== stock.top);
+  const faces = walls.map(face => face.name);
+  if (!walls.includes(matches[0]) || faces.some(name => !name) || new Set(faces).size !== 2) return;
+  return { stock, wall: matches[0], walls, faces: faces as string[] };
+}
+
+/** The radial handle and both native patches of an uncut upright circular wall. */
+export function circularWallOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point; faces: string[] } | undefined {
+  const admitted = admittedCircularWall(brep, faceName);
+  if (!admitted) return;
+  const { stock, faces } = admitted, surface = admitted.wall.surface;
+  if (surface.kind !== 'surface') return;
+  // The middle pole of a native half circle has unit weight and lies on the circle.
+  const point = surface.controlPoints[2][0];
+  const anchor: Point = [point[0], point[1], stock.lo + (stock.hi - stock.lo) / 2];
+  return { anchor, normal: [(point[0] - stock.center[0]) / stock.radius, (point[1] - stock.center[1]) / stock.radius, 0], faces };
+}
+
+/** Continue both patches of one certified circular support without changing native trim identities. */
+export function offsetCircularWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
+  const admitted = admittedCircularWall(brep, faceName);
+  if (!admitted) return;
+  if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
+    throw new BrepError('INPUT', 'circular wall offset: distance must be nonzero and within the modeling range');
+  const { stock, walls } = admitted, radius = stock.radius + distance;
+  const extent = Math.max(geometryScaleMM(brep.vertices.map(vertex => vertex.point)), Math.abs(radius));
+  if (!(radius > linearToleranceMM(extent)))
+    throw new BrepError('GEOMETRY', 'circular wall offset: the offset would reach or cross the cylinder axis');
+  if (radius === stock.radius) throw new BrepError('GEOMETRY', 'circular wall offset: distance is too small to move the wall');
+  const factor = radius / stock.radius;
+  const candidate = transformBrep(brep, { matrix: [factor, 0, 0, 0, factor, 0, 0, 0, 1],
+    offset: [stock.center[0] * (1 - factor), stock.center[1] * (1 - factor), 0] });
+  const poles = [...candidate.vertices.map(vertex => vertex.point), ...candidate.edges.flatMap(edge => edge.curve.controlPoints),
+    ...candidate.faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints.flat() : [])];
+  const nextExtent = geometryScaleMM(poles);
+  if (!poles.every(point => point.every(Number.isFinite)) || !(nextExtent <= CadNumericPolicy.coordinateAbs))
+    throw new BrepError('GEOMETRY', 'circular wall offset: the wall leaves the modeling range');
+  const round = cylinderPair(candidate.faces.filter(face => walls.some(wall => wall.id === face.id)), nextExtent, 1);
+  const roundoff = 64 * Number.EPSILON * Math.max(1, nextExtent);
+  const capsUnchanged = [stock.bottom, stock.top].every((cap, index) => {
+    const face = candidate.faces.find(item => item.id === cap.id)!, support = faceGeometry(face, nextExtent);
+    return support.kind === 'plane' && support.o[2] === (index === 0 ? stock.lo : stock.hi)
+      && same(support.n, [0, 0, index === 0 ? -1 : 1]);
+  });
+  if (!round || Math.abs(round.radius - radius) > roundoff
+    || dist(round.center, [stock.center[0], stock.center[1], stock.lo]) > roundoff || !capsUnchanged)
+    throw new BrepError('GEOMETRY', 'circular wall offset: the circular support or fixed caps could not be preserved');
+  const report = checkBrep(candidate, { strict: true });
+  if (!report.valid) throw new BrepError('GEOMETRY', `circular wall offset: the offset solid is invalid: ${report.issues[0]}`, report);
+  return candidate;
 }
 
 /** A point on the annular cap material and its outward direction. */

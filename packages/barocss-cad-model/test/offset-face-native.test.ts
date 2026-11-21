@@ -608,3 +608,30 @@ test('legacy Offset chain refuses an upstream edit before a downstream absolute 
   const lastEdit = editSavedOffsetFaceCommand(chain, 7)!;
   assert.ok(lastEdit.build!(context(chain), { d: -3 }));
 });
+
+test('radial Offset uses the original cylinder wall signature through native Open and History', async () => {
+  const source = cylinderPart(5, 20), evaluated = evaluateDoc(source, 0);
+  assert.ok(evaluated.ok);
+  const [body] = evaluated.bodies, face = body.mesh.faces.findIndex(face => face.exact?.kind === 'cylinder');
+  assert.ok(face >= 0);
+  const ctx: Ctx = { doc: source, bodies: [body], selection: { faces: [{ body: 0, face }], edges: [], bodies: [] } };
+  assert.ok(offsetFaceCommand.available(ctx).ok);
+  const applied = offsetFaceCommand.build!(ctx, { d: 2 });
+  const node = applied.nodes.at(-1);
+  assert.ok(node?.kind === 'offset-face' && node.sigs?.[node.faces[0]]?.k === 'curved');
+  assert.equal(node.sigs[node.faces[0]].r, 5);
+  assert.deepEqual(applied.nodes.slice(0, -1), source.nodes);
+  assert.ok(evaluateDoc(applied, 0).ok);
+  const opened = await readStudioFile(encodeStudioFile(applied));
+  assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, applied);
+
+  const command = editSavedOffsetFaceCommand(opened.doc, 2)!;
+  const editedCtx = { ...ctx, doc: opened.doc };
+  assert.deepEqual(command.fields?.(editedCtx).map(field => field.label), ['Offset']);
+  const reduced = command.build!(editedCtx, { d: -1 });
+  assert.deepEqual(reduced.nodes.at(-1), { ...node, distance: -1 });
+  near(brepMassProperties(bodyOf(reduced), 1).volume, Math.PI * 4 ** 2 * 20);
+  const collapsed = command.build!(editedCtx, { d: -5 });
+  assert.equal(evaluateDoc(collapsed, 0).ok, false);
+});

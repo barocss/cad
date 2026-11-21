@@ -7,7 +7,7 @@ import type { BodyResult, VolumeEvaluation } from '../engine/evaluate';
 // (a picked profile pulled along its normal), Revolve (turned about a sketch axis), Pipe (carried along
 // runs and bends) and Loft (through two or more picked sections). A profile drawn on a body's face joins
 // that body by default; Operation can make a new body or cut it instead.
-import { featureLabel, offsetFaceEndLabel, isBoredPlateOffsetSource, isBoxCapOffsetSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
+import { featureLabel, offsetFaceEndLabel, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
 import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle, twoGuideLoftSections } from './profiles';
@@ -354,6 +354,7 @@ export function offsetFaceDescription(ctx: Ctx, fallback = ''): string {
   const pick = ctx.selection.faces.length === 1 ? ctx.selection.faces[0] : undefined;
   const face = pick && ctx.bodies[pick.body]?.mesh.faces[pick.face];
   if (!face) return fallback;
+  if (face.exact?.kind === 'cylinder') return 'Cylindrical wall · Radial';
   const end = offsetFaceEndLabel(face.name), normal = face.normal;
   const axis = normal.findIndex((n, i) => Math.abs(Math.abs(n) - 1) < 1e-9 && normal.every((v, j) => i === j || Math.abs(v) < 1e-9));
   const direction = axis >= 0 ? `${normal[axis] > 0 ? '+' : '−'}${'XYZ'[axis]}` : `[${normal.map(n => Number(n.toFixed(6))).join(', ')}]`;
@@ -363,15 +364,18 @@ export function offsetFaceDescription(ctx: Ctx, fallback = ''): string {
 /** Move an admitted native face along its signed normal. */
 export const offsetFaceCommand: Command = {
   id: 'offset-face', label: 'Offset face', icon: 'cad-extrude', group: 'modify', keywords: 'move face push pull offset direct edit press',
-  hint: 'Move a prism or cylinder cap, a one-bore plate cap, a wall on a one- or two-bore rectangular plate, a rectangular taper face, or an upright hexagonal prism wall. Drag or enter a signed distance.',
+  hint: 'Move a supported face or change the radius of an uncut upright cylinder. Drag or enter a signed distance.',
   available: ctx => {
     const selection = ctx.selection;
-    if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length || selection.vertices?.length || ctx.direct?.length) return no('Pick a supported planar face.');
+    const unsupportedFace = 'Pick a supported planar face or the wall of an upright circular extrusion.';
+    if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length || selection.vertices?.length || ctx.direct?.length) return no(unsupportedFace);
     const picked = selection.faces[0], body = ctx.bodies[picked.body], face = body?.mesh.faces[picked.face];
-    if (!Number.isInteger(picked.body) || !Number.isInteger(picked.face) || !body || !face || (face.kind !== 'plane' && face.exact?.kind !== 'plane') || face.facet || !face.name) return no('Pick a supported planar face.');
+    if (!Number.isInteger(picked.body) || !Number.isInteger(picked.face) || !body || !face || face.facet || !face.name) return no(unsupportedFace);
+    const cylinder = face.exact?.kind === 'cylinder' && body.ref?.side === 'solid' && isCylinderReplacementSource(ctx.doc.nodes, body.ref.node);
+    if (!cylinder && face.kind !== 'plane' && face.exact?.kind !== 'plane') return no(unsupportedFace);
     let matches = 0;
     for (const candidate of ctx.bodies) if (candidate.key === body.key) matches++;
-    return matches === 1 ? ok : no('Pick a supported planar face.');
+    return matches === 1 ? ok : no(unsupportedFace);
   },
   fields: ctx => offsetFields(offsetPlaneAvailable(ctx)),
   defaults: ctx => ({ d: 2, ...(offsetPlaneAvailable(ctx) ? { offsetMode: 'distance' } : {}) }),
@@ -390,7 +394,8 @@ export const offsetFaceCommand: Command = {
     }
     if (direct) {
       checkDirectOffsetDistance(d);
-      const candidate = withNode(ctx.doc, { kind: 'offset-face', parent: direct.parent, faces: [direct.face], distance: d });
+      const candidate = withNode(ctx.doc, { kind: 'offset-face', parent: direct.parent, faces: [direct.face], distance: d,
+        ...(direct.signature ? { sigs: { [direct.face]: direct.signature } } : {}) });
       return captureSignatures(candidate, ctx.bodies);
     }
     const candidate = buildNativeOffsetFace(ctx, d);
