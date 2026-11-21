@@ -3,7 +3,7 @@ import { faceGeometry } from '../brep/analytic-boolean.js';
 import { circleOf } from '../brep/brep-tessellate.js';
 import { evaluateCurve } from '../core/math.js';
 import { add, cross, dist, dot, len, scale, sub, unit } from '../core/vec3.js';
-import { fitConvexPolygonScrew, fitLineArcScrew, fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from '../features/loft-rectangular-turn.js';
+import { fitConvexPolygonScrew, fitLineArcScrew, fitLineArcTurn, fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from '../features/loft-rectangular-turn.js';
 import type { Curve, Point } from '../types.js';
 import { linearToleranceMM } from '../numeric-policy.js';
 import { triangleScrewAxisTolerance } from './triangular-screw-axis.js';
@@ -116,7 +116,7 @@ function rationalSideBindings(face: BrepFace, edges: readonly BrepEdge[], count:
 }
 
 /** Only one chord and two equal circular-arc pieces, all governed by the native signed fit. */
-function curvedStepScrew(brep: Brep): boolean {
+function curvedStepFamily(brep: Brep): 'curved-screw' | 'curved-turn' | false {
   if (brep.source.family !== 'step' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
     || brep.shells.length !== 1 || !brep.shells[0].closed || brep.faces.length !== 5
     || brep.edges.length !== 9 || brep.vertices.length !== 6 || brep.loops.length !== 5 || brep.coedges.length !== 18) return false;
@@ -243,18 +243,24 @@ function curvedStepScrew(brep: Brep): boolean {
   const movement = Math.max(tolerance, linearToleranceMM(2 * originalArc.radius));
   const centroid = (row: typeof rows[number]): Point => centre(row.map(piece => [...piece.p[0], 0] as Point));
   if (!rows.some(row => dist(centroid(row), centroid(rows[0])) > 4 * movement)) return false;
-  const fit = fitLineArcScrew(profiles, rows, stations.map(t => height * t), stations);
-  return !!fit && matchingKnots(fit.knots, knots) && fit.nets.length === 3 && pieces.every((piece, i) => piece.poles.every((column, j) =>
-    column.every(([u, v, z], k) => {
-      const [a, b, c, w] = fit.nets[i][j][k];
-      return piece.weights[j][k] === w && dist([u - pivot[0], v - pivot[1], z], [a / w, b / w, c / w]) <= tolerance;
-    })));
+  const heights = stations.map(t => height * t);
+  const matches = (fit: ReturnType<typeof fitLineArcScrew>) => !!fit && matchingKnots(fit.knots, knots) && fit.nets.length === 3
+    && pieces.every((piece, i) => piece.poles.every((column, j) =>
+      column.every(([u, v, z], k) => {
+        const [a, b, c, w] = fit.nets[i][j][k];
+        return piece.weights[j][k] === w && dist([u - pivot[0], v - pivot[1], z], [a / w, b / w, c / w]) <= tolerance;
+      })));
+  if (matches(fitLineArcScrew(profiles, rows, heights, stations))) return 'curved-screw';
+  // The recovered rotation axis must coincide with every section's area centroid at the
+  // display proof's tight tolerance, independently of the wider authored feature admission.
+  if (profiles.some(profile => Math.hypot(...profile.centroid) > tolerance)) return false;
+  return matches(fitLineArcTurn(profiles, rows, heights, stations)) ? 'curved-turn' : false;
 }
 
 /** Recognize compact turn and Screw families in a STEP solid for display sampling. */
-export function compactStepTurnKind(brep: Brep): 'turn' | 'screw' | 'curved-screw' | undefined {
+export function compactStepTurnKind(brep: Brep): 'turn' | 'screw' | 'curved-screw' | 'curved-turn' | undefined {
   if (brep.edges.some(edge => edge.curve.degree === 2)) {
-    try { return curvedStepScrew(brep) ? 'curved-screw' : undefined; } catch { return; }
+    try { return curvedStepFamily(brep) || undefined; } catch { return; }
   }
   const sides = brep.faces.length - 2;
   if (brep.source.family !== 'step' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'

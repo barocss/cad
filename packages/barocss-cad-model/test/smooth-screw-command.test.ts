@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { CadNumericPolicy, brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1 } from '@barocss/cad';
+import { CadNumericPolicy, brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1, type Brep } from '@barocss/cad';
 import { compactStepTurnKind } from '@barocss/cad/internal/step-turn-display';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
@@ -611,6 +611,75 @@ test('Imported compact Screws get the structured grid under the native STEP owne
       assert.equal(compactStepTurnKind(shifted), undefined);
       const shiftedMesh = bodyMesh(shifted, 0, 8);
       assert.equal(smoothTurnDisplayMesh(shiftedMesh, shifted), shiftedMesh);
+    }
+  }
+});
+
+test('Imported centred circular Twists retain canonical owners and reject off-centroid or altered families', () => {
+  const sweep = 2 * Math.PI / 3;
+  const offset = 4 * 3 * Math.sin(sweep / 2) ** 3 / (3 * (sweep - Math.sin(sweep)));
+  const ordinate = 3 * Math.sin(Math.PI / 3);
+  const doc = withNode(emptyDoc(), { ...segmentSketch, profile: 'loop', segments: [
+    { kind: 'line', start: [1.5 - offset, ordinate] },
+    { kind: 'arc', start: [1.5 - offset, -ordinate], center: [-offset, 0], direction: 'ccw' },
+  ] });
+  const local = ([x, y, z]: [number, number, number]): [number, number] =>
+    [x - 21, .8 * (y + 19.4) - .6 * (z - 24.8)];
+
+  function changedFamily(original: Brep, mode: 'radius' | 'offset' | 'control'): Brep {
+    const changed = structuredClone(original), rails = original.edges.filter(edge => edge.curve.degree === 3);
+    const difference = (j: number) => {
+      const a = local(rails[0].curve.controlPoints[j]), b = local(rails[1].curve.controlPoints[j]);
+      return [b[0] - a[0], b[1] - a[1]];
+    };
+    const reference = difference(0), squared = reference[0] ** 2 + reference[1] ** 2;
+    const factors = rails[0].curve.controlPoints.map((_, j) => {
+      const q = difference(j);
+      return [(reference[0] * q[0] + reference[1] * q[1]) / squared,
+        (reference[0] * q[1] - reference[1] * q[0]) / squared];
+    });
+    const stage = ([, y, z]: [number, number, number]) => .6 * (y + 19.4) + .8 * (z - 24.8) < 25 ? 0 : 15;
+    const move = (p: [number, number, number], j: number): [number, number, number] => {
+      const [c, s] = factors[j], [x, y] = local(p);
+      const dx = mode === 'radius' ? .01 * (x + offset * c) : mode === 'offset' ? 2e-9 * (1 - c) : j === 7 ? .01 : 0;
+      const dy = mode === 'radius' ? .01 * (y + offset * s) : mode === 'offset' ? -2e-9 * s : 0;
+      return [p[0] + dx, p[1] + .8 * dy, p[2] - .6 * dy];
+    };
+    for (const { curve } of changed.edges) curve.controlPoints = curve.controlPoints.map((p, j) => move(p, curve.degree === 3 ? j : stage(p)));
+    for (const { surface } of changed.faces) if (surface.kind === 'surface')
+      surface.controlPoints = surface.controlPoints.map(row => row.map((p, j) => move(p, surface.degreeV === 3 ? j : stage(p))));
+    return { ...changed, vertices: changed.vertices.map(vertex => ({ ...vertex, point: move(vertex.point, stage(vertex.point)) })) };
+  }
+
+  for (const angle of [-450, 450]) {
+    const native = commandById('smooth-turn')!.build!({ ...segmentCtx, doc }, { angle, height: 50 });
+    const step = exportStudioStep(native, { name: 'Unrelated title' }).text;
+    const opened = withNode(emptyDoc(), { kind: 'import', name: 'Unknown history', step });
+    const [{ brep }] = partBreps(opened), exact = structuredClone(brep);
+    assert.equal(compactStepTurnKind(brep), 'curved-turn');
+    const base = evaluateDoc(opened, 1), display = evaluateDoc(opened, 1, 8, true);
+    assert.ok(base.ok && display.ok);
+    const { loftDetail, ...canonical } = display.bodies[0].mesh;
+    assert.deepEqual({ ...display.bodies[0], mesh: canonical }, base.bodies[0]);
+    assert.deepEqual(brep, exact);
+    assert.ok(loftDetail && 'kind' in loftDetail && loftDetail.kind === 'smooth-turn');
+    assert.equal(loftDetail.screwGrid, undefined);
+    assert.ok(loftDetail.indices.length > canonical.indices.length);
+    assert.deepEqual([...new Set(loftDetail.edgeOfSegment)].sort((a, b) => a - b), canonical.edges.map(edge => edge.index));
+    assert.deepEqual([...new Set(loftDetail.faceOfVertex)].sort((a, b) => a - b), canonical.faces.map(face => face.index));
+    const visible = new Set(canonical.edges.map(edge => edge.nativeJoint?.edgeId));
+    const hidden = brep.edges.filter(edge => edge.curve.degree === 3 && !visible.has(edge.id));
+    assert.equal(hidden.length, 1, 'the native tangent seam remains hidden in the canonical edge table');
+    const renamed = { ...brep, faces: brep.faces.map((face, i) => ({ ...face, name: `unrelated-${i}` })).reverse(),
+      edges: brep.edges.map((edge, i) => ({ ...edge, name: `boundary-${i}` })).reverse() };
+    assert.equal(compactStepTurnKind(renamed), 'curved-turn');
+
+    for (const mode of ['radius', 'offset', 'control'] as const) {
+      const changed = changedFamily(brep, mode), check = checkBrep(changed, { strict: true });
+      assert.ok(check.valid, `${mode}: ${JSON.stringify(check.issues)}`);
+      assert.equal(compactStepTurnKind(changed), undefined, mode);
+      const mesh = bodyMesh(changed, 0, 8);
+      assert.equal(smoothTurnDisplayMesh(mesh, changed), mesh, mode);
     }
   }
 });
