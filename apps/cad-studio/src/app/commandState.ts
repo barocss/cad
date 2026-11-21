@@ -27,8 +27,17 @@ export type JoinedRevolvePick = { union: number; stock: import('@barocss/cad-mod
 export interface ExtrudeJoinReceipt { scope: object; evidence: ExtrudeJoinEvidence }
 export interface Active { ownsSource?(): boolean; historyFilletRadius?: true; offsetCollapse?: { cmd: Command; ctx: Ctx; values: Values; error: FeatureFailure }; offsetPlanePickIssue?: { cmd: Command; ctx: Ctx; values: Values; hint: string }; joinedRevolvePick?: JoinedRevolvePick; cmd: Command; values: Values; preview: 'busy' | 'ok' | 'error' | 'input'; error?: FeatureFailure; ctx: Ctx; placing?: boolean; upload?: 'busy' | 'error'; fillet?: { type: import('./filletFamily').FilletType; radiusMode: import('./filletFamily').RadiusMode; varyingDraft?: Values }; extrudeResult?: { target: string; pieces: number; solid: boolean }; filletScope?: FilletScope; chamferScope?: ChamferScope; flangeFlatWarning?: { ctx: Ctx; values: Values; reason: string };
   independentExtrude?: { ownsModel(): boolean; joinScope(): object | null };
+  historyOffsetDistance?: true;
   extrudeJoinReceipt?: ExtrudeJoinReceipt;
   independentExtrudePreview?: { receipt?: ExtrudeJoinReceipt; values: Values; doc: StudioDoc; bodies: BodyResult[] };
+}
+
+export function historyPreviewNeedsOwner(active: Active): boolean {
+  return active.historyFilletRadius === true || active.historyOffsetDistance === true;
+}
+
+export function historyHandleIsCurrent(active: Active): boolean {
+  return !historyPreviewNeedsOwner(active) || active.ownsSource?.() === true;
 }
 
 export function selectedExtrudeJoin(active: Active): boolean {

@@ -33,7 +33,8 @@ interface Props {
   model: { doc: StudioDoc; evaluated: StudioDoc; commandDoc: StudioDoc; editNode: number;
     fresh: boolean; busy: boolean; workerSession: number };
   owner: { document(): StudioDoc; evaluated(): StudioDoc; marker(): number | null;
-    variant(): string | null; worker(): number; hasDraft(): boolean; ownsEvaluatedSource(): boolean };
+    variant(): string | null; worker(): number; hasDraft(): boolean; ownsEvaluatedSource(): boolean;
+    bodies?(): Ctx['bodies']; open?(): object };
   commands: { ctx: Ctx; discardFeatureDraft(): void; closeForCommand(): void;
     setActive: Dispatch<SetStateAction<Active | null>>; editSketch(index: number): void; replaceAxis?(): void };
   inset: { roundedPending: boolean; detach(): void; problem?: string; relink: Editor['onRelinkInset'] };
@@ -109,9 +110,16 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
       if (!ownsEvaluatedSource() || owner.marker() !== null || owner.variant() || !fresh || busy || !canChangeDocument()) return;
       const cmd = editSavedOffsetFaceCommand(commandDoc, editNode);
       if (!cmd) return;
+      const values = cmd.defaults?.(ctx) ?? {};
+      const open = owner.open?.();
+      const current = () => open !== undefined && owner.open?.() === open && owner.document() === doc && owner.evaluated() === evaluated &&
+        owner.bodies?.() === ctx.bodies && owner.worker() === workerSession && owner.marker() === null &&
+        !owner.variant() && ownsEvaluatedSource();
+      const handle = current() && cmd.handles?.(ctx, values)?.length === 1;
       discardFeatureDraft();
       closeForCommand();
-      setActive({ cmd, ctx, values: cmd.defaults?.(ctx) ?? {}, preview: 'busy' });
+      setActive({ cmd, ctx, values, preview: 'busy',
+        ...(handle ? { historyOffsetDistance:true as const, ownsSource:current } : {}) });
     } : undefined}
     onPickEndFace={canEditSavedExtrudeEndFace(doc, editNode) ? () => {
       if (owner.document() !== doc || owner.evaluated() !== evaluated || owner.marker() !== null || owner.variant()

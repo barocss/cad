@@ -7,6 +7,7 @@ import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { patchValues, refOf, selectedBodies, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
 import { editCommand, featureOfPick } from '@barocss/cad-model/app/editCommand';
+import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
 import type { Active } from '../app/commandState';
 import type { FeatureHandle, TransformGizmo } from './Viewport';
 import { alignMove, previewMatrix } from '@barocss/cad-model/assembly/drag';
@@ -88,23 +89,31 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
     const step = h.arc || h.unit !== undefined ? h.step ?? 1 : Math.max(0.001, (h.step ?? 1) * (snapStep || 0.01)), snap = (start: number, mm: number) => Math.min(h.max ?? Infinity, Math.max(h.min ?? -Infinity, Math.round((start + mm * (h.scale ?? 1)) / step) * step));
     const pair = h.pair, value2 = pair ? Number(handleValues[pair.key]) : NaN;
     const label = commandFieldLabel(handleCmd.id, active?.fillet, field.key, field.label);
+    const savedOffset = handleCmd.id === OFFSET_FACE_EDIT;
+    if (savedOffset && (!active?.historyOffsetDistance || !readActive)) return [];
     const history = readActive ? ownedHistoryFilletHandle(historyFillet?.receipt, handleCmd, handleCtx, h, active) : undefined;
     if (active?.historyFilletRadius && !history) return [];
     const waitForHistoryProof = !active && historyFillet?.eligible && !history && handleCmd.id==='edit' && h.key==='r' && !h.arc && !h.pair;
-    const canWrite=()=>canUseHandle() && (!history || (!!readActive && historyFilletCanPatch(history,handleCmd,handleCtx,readActive(),active)));
+    const canPatch = (now: Active | null) => {
+      if (history) return historyFilletCanPatch(history, handleCmd, handleCtx, now, active);
+      if (savedOffset) return now?.cmd === handleCmd && now.ctx === handleCtx && now.historyOffsetDistance === true &&
+        now.ownsSource === active?.ownsSource && now.ownsSource?.() === true && now.values.offsetMode !== 'to-plane';
+      return true;
+    };
+    const canWrite = () => canUseHandle() && (!(history || savedOffset) || (!!readActive && canPatch(readActive())));
     if (pair && !Number.isFinite(value2)) return [];
     const frame = history?.frame ?? h;
     return [{ id: pair ? `${h.key}+${pair.key}` : h.key, at: frame.at, dir: frame.dir, label: pair ? label.replace(/ \w$/, '') : label, value, screenOffset: h.screenOffset, ...(h.arc ? { arc: h.arc } : {}),
       ...(pair ? { plane: { dir2: pair.dir, value2, toValue2: snap } } : {}),
       ...(history ? { scalarDragSession: history } :
-        active && handleCmd.id === 'fillet' && h.key === 'radius' && !h.arc && !pair ? { scalarDragSession: active.ctx } : {}),
+        active && (savedOffset || handleCmd.id === 'fillet' && h.key === 'radius' && !h.arc && !pair) ? { scalarDragSession: active.ctx } : {}),
       ...(waitForHistoryProof ? { historyFilletProofPending: historyFillet?.pending ?? true as const } : {}),
       toValue: snap,
       format: (v: number) => h.arc ? `${fmt(v)}°` : h.unit !== undefined ? `${fmt(v)}${h.unit ? ' ' + h.unit : ''}` : `${fmt(v)} mm`,
       unit: h.arc ? '°' : h.unit ?? 'mm', owner: handleCmd, editing: !!active, ...(!active ? { shiftPick: true as const } : {}),
       // (A typed value, as the HUD's: no drag bound, the preview follows.)
       onType: (v: number) => { if (!canWrite()) return; handleDrag.current = null;
-        setActive(a => a && (!history || historyFilletCanPatch(history,handleCmd,handleCtx,a,active))
+        setActive(a => a && canPatch(a)
           ? { ...a, values: patchValues(a.cmd, a.ctx, a.values, { [h.key]: v }), preview: 'busy' } : a);
       },
       onDrag: (v: number, done: boolean, v2?: number) => {
@@ -128,7 +137,7 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
         if (done) hd.dragging = false;
         // An idle handle opens its feature's edit as the drag starts.
         setActive(a => {
-          if (history && !historyFilletCanPatch(history,handleCmd,handleCtx,a,active)) return a;
+          if (!canPatch(a)) return a;
           return a ? (a.values[h.key] !== v ? { ...a, values: patchValues(a.cmd, a.ctx, a.values, { [h.key]: v }), preview: 'busy' } : a)
             : { cmd: handleCmd, values: patchValues(handleCmd, handleCtx, handleValues, { [h.key]: v }), preview: 'busy',
               ctx: history ? handleCtx : { ...handleCtx }, ...(history ? {historyFilletRadius:true as const,ownsSource:history.isCurrent} : evidence ? { ownsSource: evidence.isCurrent } : {}) };

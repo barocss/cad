@@ -323,6 +323,16 @@ test('Offset History retains a later body reference and preserves private group 
 });
 
 
+test('a saved tapered cap with a decimal centre uses the same position quantization as its authored signature',()=>{
+  const base=rectanglePart(20,10,12);
+  const source:StudioDoc={...base,nodes:base.nodes.map(node=>node.kind==='sketch'&&node.profile==='rectangle'
+    ? {...node,min:[-9.9,-5],max:[10.1,5]} : node.kind==='extrude'?{...node,draft:15}:node)};
+  const saved=offsetFaceCommand.build!(context(source),{d:2});
+  const handle=editSavedOffsetFaceCommand(saved,2)?.handles?.(context(saved),{d:2})?.[0];
+  assert.ok(handle);
+  near(handle.at[0],.1,1e-12);near(handle.at[1],0,1e-12);near(handle.at[2],14,1e-12);
+});
+
 test('Offset extends the existing walls of authored rectangular taper and edits one native recipe', async () => {
   const origin = rectanglePart(20, 10, 12);
   const source = { ...origin, nodes: origin.nodes.map(node => node.kind === 'extrude' ? { ...node, draft: 15 } : node) };
@@ -363,6 +373,17 @@ test('Offset extends the existing walls of authored rectangular taper and edits 
   const edit = editSavedOffsetFaceCommand(saved.doc, index);
   assert.ok(edit?.build);
   const historyCtx = context(saved.doc);
+  assert.deepEqual(edit.handles?.(historyCtx,{d:2}),[{key:'d',at:[10,5,14],dir:[0,0,1],step:.5,min:.1}]);
+  assert.deepEqual(edit.handles?.(historyCtx,{d:3})?.[0].at,[10,5,15]);
+  assert.deepEqual(edit.handles?.(historyCtx,{d:2,offsetMode:'to-plane'}),[]);
+  assert.deepEqual(edit.handles?.(historyCtx,{d:-2}),[]);
+  assert.deepEqual(edit.handles?.(context(source),{d:2}),[]);
+  const accepted = historyCtx.bodies[0];
+  const legacyTag = {...accepted,mesh:{...accepted.mesh,faces:accepted.mesh.faces.map(face=>({...face,nativePlaneName:undefined}))}};
+  assert.deepEqual(edit.handles?.({...historyCtx,bodies:[legacyTag]},{d:2}),[]);
+  const wrongElevation = {...accepted,mesh:{...accepted.mesh,faces:accepted.mesh.faces.map(face=>face.name==='n1.top'
+    ? {...face,nativeAxisPlane:{axis:'z' as const,at:13}} : face)}};
+  assert.deepEqual(edit.handles?.({...historyCtx,bodies:[wrongElevation]},{d:2}),[]);
   assert.throws(() => edit.build!({ ...historyCtx, doc: { ...saved.doc } }, { d: -2 }), /open the current Offset face/i);
   assert.throws(() => edit.build!(historyCtx, { d: 0 }), /nonzero signed distance/);
   const collapse = edit.build(historyCtx, { d: 8 });

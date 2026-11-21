@@ -177,10 +177,6 @@ export function historyFilletCanPatch(receipt:HistoryFilletReceipt,cmd:Command,c
     current.cmd===cmd && current.ctx===ctx && current.historyFilletRadius===true && current.ownsSource===receipt.isCurrent);
 }
 
-/** No change to the eligibility of untagged legacy preview commands. */
-export const historyFilletPreviewCurrent = (active: Active): boolean =>
-  active.historyFilletRadius!==true || active.ownsSource?.()===true;
-
 /** One uncancelable exact refs request per current source, even if the editor briefly leaves idle. */
 export function createHistoryFilletReads<T>() {
   let key:object|undefined, pending:Promise<T>|undefined;

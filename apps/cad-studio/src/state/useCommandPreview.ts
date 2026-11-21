@@ -1,4 +1,3 @@
-import { historyFilletPreviewCurrent } from './historyFilletRadiusReceipt';
 import { openingShellFailure } from './openingShellFailure';
 import { filletInteriorProblems } from '../app/filletInteriorInput';
 import { offsetCollapseFailure } from '../app/offsetCollapseFeedback';
@@ -17,7 +16,7 @@ import { awaitingRevolveAxis } from '@barocss/cad-model/app/revolveAxisEdit';
 import { awaitingAlignTarget } from '@barocss/cad-model/app/alignCommand';
 import { flattenAssembly } from '@barocss/cad-model/engine/flatten';
 import { currentExtrudeJoin, prepareExtrudeJoin, resolveExtrudeJoin } from '@barocss/cad-model/app/profileCommands';
-import { awaitingMirrorPlane, extrudeJoinContext, missingCommandField, selectedExtrudeJoin, type Active, type ExtrudeJoinReceipt } from '../app/commandState';
+import { awaitingMirrorPlane, extrudeJoinContext, historyHandleIsCurrent, historyPreviewNeedsOwner, missingCommandField, selectedExtrudeJoin, type Active, type ExtrudeJoinReceipt } from '../app/commandState';
 import { commandNumberRule, featureNumberInvalid, featureNumberRange, filletSectionNumberProblem } from '../app/featureNumberInput';
 import { edgeFinishFailure, failedFeatureText } from '../app/failedFeature';
 import type { EngineClient } from '../engine/client';
@@ -72,7 +71,7 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
     // into the HUD or placed by the pointer.)
     let seen: Values | undefined, stop: (() => void) | undefined;
     const evaluate = (active: Active | null): (() => void) | undefined => {
-      if (!active?.cmd.build || active.upload || !historyFilletPreviewCurrent(active)) return;
+      if (!active?.cmd.build || active.upload || !historyHandleIsCurrent(active)) return;
       if (!bearingRootCurrent) {
         setPreviewBodies(null);
         setActive(a => a && { ...a, preview: 'error', error: { title: 'Assembly changed', hint: 'Start Bearing again to use the current housing geometry.', detail: '' } });
@@ -140,7 +139,7 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
         return evidence ? { scope: joinScope, evidence } : undefined;
       };
       const job = async (full = false) => {
-        if (!live || !historyFilletPreviewCurrent(active) || (independent && !ownsJoin())) return;
+        if (!live || !historyHandleIsCurrent(active) || (independent && !ownsJoin())) return;
         const buildContext = joinReceipt ? { ...ctx, extrudeJoin: joinReceipt.evidence } : ctx;
         let candidate: StudioDoc;
         try { candidate = cmd.build!(buildContext, values); } catch (e) {
@@ -169,10 +168,10 @@ export function useCommandPreview({ command, worker, result }: CommandPreviewOpt
         const flangeFeature = shown === candidate && !rolled && cmd.id === 'sheet-flange'
           && candidate.nodes.length === ctx.doc.nodes.length + 1 && terminal?.kind === 'sheet-flange' ? terminal.id : undefined;
         const reply = await ownedPreview(lifetime.current, ticket, () => engine.preview(shown, revision, cutFeature, flangeFeature));
-        if (reply.stale || !historyFilletPreviewCurrent(active) || (independent && !ownsJoin())) return;
-        if (active.historyFilletRadius) {
+        if (reply.stale || !historyHandleIsCurrent(active) || (independent && !ownsJoin())) return;
+        if (historyPreviewNeedsOwner(active)) {
           const now=activeStore.get();
-          if (!now || now.cmd!==cmd || now.ctx!==ctx || now.ownsSource!==active.ownsSource || !historyFilletPreviewCurrent(now)) return;
+          if (!now || now.cmd!==cmd || now.ctx!==ctx || now.ownsSource!==active.ownsSource || !historyHandleIsCurrent(now)) return;
         }
         const result = reply.result;
         if (!rolled) wholeCost.current = { doc: ctx.doc, ms: performance.now() - t0 };

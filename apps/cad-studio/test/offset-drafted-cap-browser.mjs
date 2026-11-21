@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const lower = process.argv.includes('--lower');
+const historyBaseline = process.argv.includes('--history-handle-baseline');
+const historyHandle = historyBaseline || process.argv.includes('--history-handle');
+assert.ok(!lower || !historyHandle);
 const cap = lower ? 'n1.bottom' : 'n1.top';
 const pins = [
   'apps/cad-studio/src/App.tsx',
@@ -15,10 +18,15 @@ const pins = [
   'packages/barocss-cad-model/src/engine/migrate.ts',
   'packages/barocss-cad/src/features/drafted-cap-offset.ts',
 ];
+if (historyHandle) pins.push('apps/cad-studio/test/offset-drafted-cap-browser.mjs',
+  'apps/cad-studio/src/ui/HistoryFeatureEditor.tsx', 'apps/cad-studio/src/viewport/useCommandGizmos.ts',
+  'apps/cad-studio/src/viewport/scalarHandleDrag.ts', 'apps/cad-studio/src/state/useCommandPreview.ts',
+  'apps/cad-studio/src/app/commandState.ts');
 const f = await createFlow({
   name: 'offset-drafted-cap', output: process.argv[2], envFrozen: lower ? 'D1255_SOURCE_FROZEN' : 'D1254_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Move a tapered cap and retain its wall planes, references, History and native file.',
+  qualification: historyHandle ? 'Drag the saved terminal upper Offset face from its current native cap.' :
+    'Move a tapered cap and retain its wall planes, references, History and native file.',
   limits: ['One authored rectangular Draft Extrude and one straight rectangular legacy control. Desktop Chrome WebGPU.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -120,6 +128,82 @@ async function edit(index) {
   return panel;
 }
 
+async function verifyHistoryHandle(outward, original, index, outwardDistance) {
+  f.phase = 'open the terminal saved Offset in a head-on view';
+  await button('Top', f.page.locator('.views')).click();
+  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  const camera = () => f.page.evaluate(() => window.__studioCamera());
+  const before = await camera(), panel = await edit(index);
+  assert.deepEqual(await camera(), before);
+  const group = f.page.locator('g.gizmo-handle[data-handle="d"]');
+  assert.equal(Number(await offsetField(panel).inputValue()), outwardDistance);
+  if (historyBaseline) {
+    assert.equal(await group.count(), 0);
+    await f.snapshot('saved-offset-no-handle');
+    await offsetField(panel).fill('4');
+    await status(panel, 'preview');
+    await button('Apply', panel).click(); await f.changed(outward);
+    await native('saved-offset-baseline-typed', await f.doc(), 4, original);
+    return;
+  }
+  const metric = await f.page.evaluate(z => {
+    const from = window.__studioScreenOf([10, 5, z]), x = window.__studioScreenOf([11, 5, z]), to = window.__studioScreenOf([10, 5, z + 1]);
+    return { from, perMm: Math.hypot(x[0] - from[0], x[1] - from[1]), axisPx: Math.hypot(to[0] - from[0], to[1] - from[1]) };
+  }, height + outwardDistance);
+  assert.ok(metric.axisPx < .2 && metric.perMm > 3, JSON.stringify(metric));
+  const point = async () => {
+    const box = await group.locator('circle').boundingBox(); assert.ok(box);
+    return [box.x + box.width / 2, box.y + box.height / 2];
+  };
+  const [x, y] = await point(), anchorGapPx = Math.hypot(x - metric.from[0], y - metric.from[1]);
+  assert.ok(anchorGapPx < .5, JSON.stringify({ anchorGapPx, metric }));
+  const drag = async (editor, label) => {
+    const origin = await point(), pixels = Math.round(metric.perMm);
+    await f.page.mouse.move(...origin); await f.page.mouse.down();
+    await f.page.mouse.move(origin[0], origin[1] - pixels, { steps: 7 });
+    await f.page.locator('.gizmo-readout').filter({ hasText: /Offset 4 mm/ }).waitFor();
+    assert.equal(Number(await offsetField(editor).inputValue()), 4);
+    await status(editor, 'preview'); await f.same(outward);
+    await f.snapshot(label); await f.page.mouse.up();
+    assert.equal(Number(await offsetField(editor).inputValue()), 4);
+  };
+  await drag(panel, 'saved-offset-drag-held');
+  await button('Cancel', panel).click(); await f.same(outward);
+  const second = await edit(index);
+  const origin = await point(), pixels = Math.round(metric.perMm);
+  await f.page.mouse.move(...origin); await f.page.mouse.down();
+  await f.page.mouse.move(origin[0],origin[1]-pixels,{steps:7});
+  await status(second,'preview');
+  assert.equal(Number(await offsetField(second).inputValue()),4);
+  await button('Cancel',second).press('Enter'); await f.same(outward);
+  await f.page.locator(`.history .hs[data-node-index="${index}"]`).press('Enter');
+  await f.editor().waitFor();
+  await button('Edit offset',f.editor()).press('Enter'); await status(second,'preview');
+  await f.page.mouse.move(origin[0],origin[1]-pixels*2,{steps:7});
+  await f.page.mouse.up();
+  assert.equal(Number(await offsetField(second).inputValue()),outwardDistance);
+  await f.same(outward);
+  await drag(second, 'saved-offset-drag-before-apply');
+  await button('Apply', second).click(); await f.changed(outward);
+  const accepted = await f.doc();
+  assert.deepEqual(accepted, { ...outward, nodes: outward.nodes.map((node, i) => i === index ? { ...node, distance: 4 } : node) });
+  await native('saved-offset-handle-applied', accepted, 4, original);
+  await f.undo(); await f.same(outward); await f.redo(); await f.same(accepted);
+  await f.undo(); await f.same(outward);
+  const typed = await edit(index);
+  await offsetField(typed).fill('4'); await status(typed, 'preview');
+  await button('Apply', typed).click(); await f.same(accepted);
+  await native('saved-offset-handle-typed', await f.doc(), 4, original);
+  const saved = await f.save('saved-offset-handle');
+  await f.freshOpen(saved.file, accepted, 'saved-offset-handle-opened');
+  await native('saved-offset-handle-reopened', accepted, 4, original);
+  await button('Iso', f.page.locator('.views')).click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await f.snapshot('saved-offset-handle-final');
+  f.report.observations.push({label:'saved-offset-head-on',...metric,anchorGapPx,dragPixels:pixels,from:outwardDistance,to:4,retiredPointerRefused:true});
+}
+
 await f.run(async () => {
   f.phase = `Open tapered rectangular stock and pick its ${lower ? 'lower' : 'upper'} cap`;
   await open(seed, 'tapered-box');
@@ -178,6 +262,7 @@ await f.run(async () => {
   await button('Iso', f.page.locator('.views')).click();
   await f.snapshot('taper-outward-applied');
   await native('outward-shape', outward, outwardDistance, original);
+  if (historyHandle) { await verifyHistoryHandle(outward, original, index, outwardDistance); return; }
   if (!lower) {
     await f.undo(); await f.same(seed);
     await f.redo(); await f.same(outward);
@@ -227,21 +312,27 @@ await f.run(async () => {
   await f.snapshot('invalid-file-retains-part');
   await f.dismissToasts();
 
-  f.phase = 'Verify the straight-right-prism route still creates the existing recipe';
+  f.phase = 'Verify the straight-right-prism native Offset route';
   const { draft: _draft, ...extrude } = seed.nodes[1];
   const straight = { ...seed, nodes: [seed.nodes[0], extrude] };
   await open(straight, 'straight-box');
   await pickCap();
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Offset face');
-  const legacyPanel = hud('Offset face');
-  await offsetField(legacyPanel).fill('2');
-  await status(legacyPanel, 'preview');
-  await button('Apply', legacyPanel).click();
+  const straightPanel = hud('Offset face');
+  await offsetField(straightPanel).fill('2');
+  await status(straightPanel, 'preview');
+  await button('Apply', straightPanel).click();
   await f.changed(straight);
-  const legacy = (await f.snapshot('legacy-offset-applied')).doc;
-  assert.deepEqual(legacy.nodes.slice(index).map(node => node.kind), ['sketch', 'extrude', 'union']);
-  assert.equal(legacy.nodes.at(-1).made.command, 'offset-face');
+  const straightOffset = (await f.snapshot('straight-native-offset-applied')).doc;
+  assert.deepEqual(straightOffset.nodes.slice(0,index),straight.nodes);
+  assert.equal(straightOffset.nodes.length,index+1);
+  const straightNode=straightOffset.nodes[index];
+  assert.equal(straightNode.kind,'offset-face');
+  assert.deepEqual(straightNode.parent,{node:1,side:'solid'});
+  assert.deepEqual(straightNode.faces,['n1.top']);
+  assert.ok(straightNode.sigs?.['n1.top']);
+  assert.equal(straightNode.distance,2);
   assert.ok(near((await f.bodies()).bodies[0].volume, width * depth * (height + 2)));
   f.phase = 'mixed equal offsets keep original cap identity and direction';
   await open(seed, 'mixed-source');

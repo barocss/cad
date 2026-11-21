@@ -142,7 +142,7 @@ import { activateDraftBezier, activateDraftOutline, draftShapeOrder, sketchCutIn
 import { ellipseError } from '@barocss/cad-model/sketch/ellipse';
 import { detachRoundedInsetRecipe, resizeRoundedInsetSource, roundedInsetSourceWidth, validateRoundedInsetDocument } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
 import { roundedInsetMinimumSpan } from '@barocss/cad-model/sketch/internal/roundedRectangleInset';
-import { activeKey, type Active } from './app/commandState';
+import { activeKey, historyHandleIsCurrent, type Active } from './app/commandState';
 import { emptySel, NO_CUTS, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
 import { routeMessage } from './app/routeSession';
 import { CursorReadout } from './ui/CursorReadout';
@@ -2922,7 +2922,7 @@ export function App() {
   });
   useLayoutEffect(() => {
     const running=activeStore.get();
-    if (!running?.historyFilletRadius || running.ownsSource?.()===true) return;
+    if (!running || historyHandleIsCurrent(running)) return;
     commandPreview.retire();
     commandApply.clearApply();
     setActive(current=>current===running?null:current);
@@ -3446,7 +3446,8 @@ export function App() {
         {editNode !== null && <HistoryFeatureEditor
           model={{ doc, evaluated, commandDoc, editNode, fresh, busy, workerSession }}
           owner={{ document: () => docNow.current, evaluated: () => evaluatedRef.current, marker: () => markerNow.current,
-            variant: () => shownVariant.current, worker: () => workerSessionNow.current, hasDraft: () => !!nodeEditorDraft.current, ownsEvaluatedSource }}
+            variant: () => shownVariant.current, worker: () => workerSessionNow.current, hasDraft: () => !!nodeEditorDraft.current,
+            bodies: () => bodiesRef.current, open: () => openIntent.current, ownsEvaluatedSource }}
           commands={{ ctx, discardFeatureDraft, closeForCommand: () => setEditNode(null), setActive, editSketch,
             replaceAxis: replaceRevolveAxis ? () => void startRevolveAxisReplacement() : undefined }}
           inset={{ roundedPending: !!parameterEdit?.roundedInset, detach: () => applyRoundedInsetEdit(), problem: insetSource.problem,

@@ -5,10 +5,10 @@ import { editCommand } from '@barocss/cad-model/app/editCommand';
 import { emptyDoc,prefixDoc,withNode,type SketchNode,type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { evaluateDoc,evaluatePart,placeBody } from '@barocss/cad-model/engine/evaluate';
 import { captureSignatures } from '@barocss/cad-model/engine/references';
-import { createHistoryFilletReads,historyFilletCanPatch,historyFilletPreviewCurrent,historyFilletReceipt,ordinaryHistoryFillet,ownedHistoryFilletHandle } from '../src/state/historyFilletRadiusReceipt';
+import { createHistoryFilletReads,historyFilletCanPatch,historyFilletReceipt,ordinaryHistoryFillet,ownedHistoryFilletHandle } from '../src/state/historyFilletRadiusReceipt';
 import { captureScalarHandleDrag,historyFilletEndOnBlocked,historyFilletPendingPress,scalarHandleDragValue } from '../src/viewport/scalarHandleDrag';
 import type { FeatureHandle,Projector } from '../src/viewport/gizmo';
-import type { Active } from '../src/app/commandState';
+import { historyHandleIsCurrent, type Active } from '../src/app/commandState';
 
 const rectangle: SketchNode = {kind:'sketch',profile:'rectangle',min:[0,0],max:[40,30]};
 const quarterSector: SketchNode = {kind:'sketch',profile:'loop',segments:[
@@ -81,10 +81,11 @@ test('wrong active context, replacement command, revoked owner or Cancel cannot 
   assert.equal(historyFilletCanPatch(x.evidence,x.cmd,x.ctx,active,x.active),false);
  }
  assert.equal(historyFilletCanPatch(x.evidence,x.cmd,x.ctx,null,x.active),false);
- assert.equal(historyFilletPreviewCurrent(x.active),true);
+ assert.equal(historyHandleIsCurrent(x.active),true);
  x.revoke();
- assert.equal(historyFilletPreviewCurrent(x.active),false);
- assert.equal(historyFilletPreviewCurrent({...x.active,historyFilletRadius:undefined}),true);
+ assert.equal(historyHandleIsCurrent(x.active),false);
+ assert.equal(historyHandleIsCurrent({...x.active,historyFilletRadius:undefined,historyOffsetDistance:true}),false);
+ assert.equal(historyHandleIsCurrent({...x.active,historyFilletRadius:undefined}),true);
  assert.equal(ownedHistoryFilletHandle(x.evidence,x.cmd,x.ctx,x.handle,null),undefined);
  assert.equal(historyFilletCanPatch(x.evidence,x.cmd,x.ctx,null,null),false);
 });

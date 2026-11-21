@@ -1,9 +1,10 @@
 import { isBoredPlateOffsetSource, isBoxCapOffsetSource, offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc } from '../engine/evaluate';
 import { bodyKeyFor, featureId } from '../engine/ids';
+import { toSig } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import { canonical } from '../util/revision';
-import type { Command, Ctx } from './commands';
+import type { Command, Ctx, HandleSpec, Values } from './commands';
 import { captureOffsetPlane, offsetFields, offsetPlaneStep, pickOffsetPlane, resetOffsetPlane, restoreOffsetPlaneValues } from './offsetPlanePick';
 import { buildNativeOffsetFace, checkDirectOffsetDistance, offsetFaceDescription, offsetFaceCommand } from './profileCommands';
 
@@ -29,6 +30,47 @@ function directOffsetAt(doc: StudioDoc, index: number) {
 
 export function canEditSavedOffsetFace(doc: StudioDoc, index: number): boolean {
   return !!(directOffsetAt(doc, index) ?? offsetHistory(doc, index));
+}
+
+/** Frame from the evaluated terminal cap. The typed editor also supports other Offset profiles. */
+function savedDraftCapHandle(doc: StudioDoc, index: number, ctx: Ctx, values: Values): HandleSpec[] {
+  if (ctx.doc !== doc || doc.schema !== 3 || index !== 2 || doc.nodes.length !== 3 || doc.direct !== undefined ||
+    doc.instances?.length || doc.variability || doc.configurations || Object.hasOwn(doc,'routeBundles') ||
+    values.offsetMode === 'to-plane' || ctx.bodies.length !== 1 || Object.keys(doc.outputs).length !== 1) return [];
+  const [sketch,stock,saved] = doc.nodes;
+  if (sketch.kind !== 'sketch' || sketch.profile !== 'rectangle' ||
+    Object.keys(sketch).some(k => !['id','kind','profile','min','max'].includes(k)) ||
+    sketch.min.length !== 2 || sketch.max.length !== 2 || ![...sketch.min,...sketch.max].every(Number.isFinite) ||
+    stock.kind !== 'extrude' || stock.sketch !== 0 || stock.suppressed || stock.held !== undefined ||
+    stock.from !== undefined || stock.cutDepth !== undefined || typeof stock.height !== 'number' ||
+    !Number.isFinite(stock.height) || stock.height <= 0 || typeof stock.draft !== 'number' ||
+    !Number.isFinite(stock.draft) || stock.draft <= 0 ||
+    saved.kind !== 'offset-face' || !directOffsetAt(doc,index) || saved.target !== undefined ||
+    saved.parent.node !== 1 || saved.parent.side !== 'solid' || saved.faces.length !== 1 ||
+    typeof saved.distance !== 'number' || !Number.isFinite(saved.distance) || saved.distance <= 0) return [];
+  const faceName = featureId(doc.nodes,1) + '.top';
+  const signature = saved.sigs?.[faceName];
+  const centre = [(Number(sketch.min[0]) + Number(sketch.max[0])) / 2, (Number(sketch.min[1]) + Number(sketch.max[1])) / 2];
+  const direction: [number,number,number] = [0,0,1];
+  if (saved.faces[0] !== faceName || signature?.k !== 'plane' || signature.n !== undefined ||
+    !Number.isFinite(signature.s) || signature.s <= 0 ||
+    !signature.d || signature.d.length !== 3 || signature.d.some((v,k) => v !== direction[k])) return [];
+  const original = toSig({kind:'plane',at:[centre[0],centre[1],stock.height],dir:direction,size:signature.s});
+  if (signature.p.length !== 3 || signature.p.some((v,k) => v !== original.p[k])) return [];
+  const [body] = ctx.bodies, key = bodyKeyFor(doc.nodes,index,'solid');
+  if (doc.outputs[key]?.node !== index || doc.outputs[key]?.side !== 'solid' ||
+    body.key !== key || body.ref?.node !== index || body.ref.side !== 'solid' || (body.pieces ?? 1) !== 1 ||
+    body.topology?.kind !== 'solid' || body.topology.bodyCount !== 1 || body.topology.openShells !== 0 ||
+    body.topology.boundaryEdges !== 0 || body.mesh.faces.length !== 6) return [];
+  const matches = body.mesh.faces.filter(face => face.name === faceName);
+  const [face] = matches, distance = Number(values.d), z = stock.height + saved.distance;
+  if (matches.length !== 1 || face.nativePlaneName !== faceName || face.nativeAxisPlane?.axis !== 'z' ||
+    face.nativeAlignFace?.axis !== 'z' || face.nativeAlignFace.sign !== 1 || face.exact?.kind !== 'plane' ||
+    face.exact.n.some((v,k) => v !== direction[k]) ||
+    Math.abs(face.nativeAxisPlane.at - z) > 1e-8 || !Number.isFinite(face.nativeAxisPlane.at) ||
+    !Number.isFinite(distance) || distance <= 0) return [];
+  return [{ key:'d', at:[centre[0],centre[1],face.nativeAxisPlane.at + (distance - saved.distance)],
+    dir:direction, step:.5,min:Math.min(.1,distance) }];
 }
 
 const rejected = (hint: string): never => { throw refusal('BAD_REFERENCE', `Offset face: ${hint}`); };
@@ -98,6 +140,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
     steps: (ctx, values) => [{ label: 'Face', text: describe(() => directSource ??= capContext(prefixDoc(doc, index), direct.parent, direct.faces[0]), direct.faces[0]), done: true },
       ...(values.offsetMode === 'to-plane' ? [offsetPlaneStep(values, direct.target, ctx)] : offsetFaceCommand.steps?.(ctx, values).filter(step => step.label !== 'Face') ?? [])],
     onPick: allowPlane ? (ctx, values, hit) => pickOffsetPlane(ctx, values, hit.face, direct.parent, index) : undefined,
+    handles: (ctx, values) => savedDraftCapHandle(doc,index,ctx,values),
     build: (ctx, values) => {
       if (ctx.doc !== doc || ctx.doc.nodes[index] !== direct) return rejected('open the current Offset face in History again.');
       const { target: priorTarget, distance: priorDistance, ...recipe } = direct;
