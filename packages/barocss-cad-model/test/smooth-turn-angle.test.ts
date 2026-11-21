@@ -129,7 +129,7 @@ test('a Smooth Turn width edit resizes the entire rectangular section around its
   assert.equal(widthField(commandById('ruled-turn')!.build!(context, { angle: 360, height: 70 })), undefined);
 });
 
-test('only the compact Smooth Turn gets a denser display packet with canonical picking in a multi-body part', () => {
+test('only the compact Smooth Turn gets a shared display grid with canonical picking in a multi-body part', () => {
   shareMeshes(true);
   try {
     for (const [first, second] of [['smooth-turn', 'ruled-turn'], ['ruled-turn', 'smooth-turn']]) {
@@ -150,7 +150,8 @@ test('only the compact Smooth Turn gets a denser display packet with canonical p
           continue;
         }
         assert.ok(loftDetail && 'kind' in loftDetail && loftDetail.kind === 'smooth-turn');
-        assert.ok(loftDetail.indices.length > original.mesh.indices.length);
+        assert.ok(loftDetail.indices.length > 0);
+        assert.notDeepEqual(loftDetail.indices, original.mesh.indices);
         assert.deepEqual([...new Set(loftDetail.edgeOfSegment)].sort((a, b) => a - b), canonical.edges.map(edge => edge.index));
         assert.deepEqual([...new Set(loftDetail.faceOfVertex)].sort((a, b) => a - b), canonical.faces.map(face => face.index));
         assert.equal(placeBody(actual, [1, 0, 0, 0, 1, 0, 0, 0, 1], [1, 2, 3]).mesh.loftDetail, undefined);

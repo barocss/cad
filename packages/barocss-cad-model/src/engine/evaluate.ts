@@ -18,7 +18,7 @@ import { arcSweepDisplayMesh } from './arcSweepDisplay';
 import { arcSweepMixedDisplayMesh, mixedSweepFilletExterior } from './arcSweepMixedDisplay';
 import { bandRailDisplayMesh } from './bandRailDisplay';
 import { loftDisplayMesh, smoothTurnDisplayMesh } from './loftDisplay';
-import { hasExternalScrewSections, hasSmoothTurnSections, smoothScrewWindingRule } from '../app/smoothLoftTurn';
+import { hasExternalScrewSections, smoothScrewWindingRule } from '../app/smoothLoftTurn';
 import { lumpTouches } from './lumps';
 import { friendlyCause, type FriendlyError } from './errors';
 import { bodyKeyOf, partSnapshot } from './part';
@@ -308,7 +308,8 @@ function refineSmoothTurns(bodies: BodyResult[], snapshot: CadPartSnapshot, doc:
     const node = doc.nodes[ref.node];
     const structured = node?.kind === 'loft' && hasExternalScrewSections(doc.nodes, ref.node);
     if (screwOnly && !structured) continue;
-    const sections = node?.kind === 'loft' && (structured || hasSmoothTurnSections(doc.nodes, ref.node)) ? node.sections.length : undefined;
+    const sections = node?.kind === 'loft' && node.smooth && !node.guide && !node.guides
+      && node.sections.every(section => !section.frame) ? node.sections.length : undefined;
     if (node?.kind !== 'import' && sections === undefined) continue;
     const mesh = smoothTurnDisplayMesh(body.mesh, snapshot.outputs[i].brep, sections, structured);
     if (mesh !== body.mesh) bodies[i] = { ...body, mesh };

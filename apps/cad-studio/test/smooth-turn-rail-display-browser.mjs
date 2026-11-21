@@ -6,10 +6,15 @@ const backend = process.argv.includes('--webgl2') ? 'webgl2' : 'webgpu';
 const imported = process.argv.includes('--step');
 const triangular = process.argv.includes('--triangle');
 const screw = process.argv.includes('--screw');
-const turnIndex = triangular || screw ? 0 : 1;
+const compactGrid = process.argv.includes('--compact-grid');
+const compareFile = process.argv.find(arg => arg.startsWith('--compare='))?.slice('--compare='.length);
+const comparison = compareFile && JSON.parse(await readFile(compareFile, 'utf8'));
+const turnIndex = triangular || screw || compactGrid ? 0 : 1;
 const file = process.argv[3];
 const input = JSON.parse(await readFile(imported ? process.argv[4] : file, 'utf8'));
 const doc = imported ? input.doc : input;
+const poles = compactGrid ? doc.nodes.findLast(node => node.kind === 'loft' && node.smooth).sections.length
+  : (triangular || screw) ? 16 : 13;
 const f = await createFlow({
   name: 'smooth-turn-rail-display', output: process.argv[2], envFrozen: 'TURN_PROJECT_FROZEN',
   qualification: 'Project the native corner rails and the matched display polylines using the actual Model camera.',
@@ -33,10 +38,12 @@ const result = partBreps(source).find(body => body.brep.faces.length === ${trian
 const evaluated = evaluateDoc(source, 1, 8, true);
 assert.ok(evaluated.ok);
 const baseline = evaluated.bodies.find(body => body.key === result.key)!.mesh;
-const native = result.brep.edges.filter(edge => edge.curve.degree === 3 && edge.curve.controlPoints.length === ${(triangular || screw) ? 16 : 13});
+const native = result.brep.edges.filter(edge => edge.curve.degree === 3 && edge.curve.controlPoints.length === ${poles});
 assert.equal(native.length, ${triangular ? 3 : 4});
 if (${screw && !baseline}) assert.ok(baseline.loftDetail?.screwGrid === true);
-const dense = ${screw} ? { ...baseline, ...baseline.loftDetail, quality: 'structured' } : bodyMesh(result.brep, 1, 24);
+const detail = baseline.loftDetail;
+const dense = ${!baseline || screw || compactGrid}
+  ? { ...baseline, ...detail, quality: detail ? 'display-detail' : 'display-base' } : bodyMesh(result.brep, 1, 24);
 const data = [baseline, dense].map(mesh => ({
   quality: mesh.quality, triangles: mesh.indices.length / 3, rails: native.map(edge => {
     const index = mesh.edges.find(view => view.nativeJoint?.edgeId === edge.id)!.index;
@@ -53,7 +60,7 @@ const data = [baseline, dense].map(mesh => ({
 const check = checkBrep(result.brep, { strict: true });
 assert.ok(check.valid);
 console.log(JSON.stringify({ data, digest: digestOf(result.brep), counts: check.counts,
-  volume: brepMassProperties(result.brep, 1).volume, canonical: baseline.edges.map(edge => edge.nativeJoint?.edgeId) }));
+  volume: brepMassProperties(result.brep, 1).volume, detail: !!detail, canonical: baseline.edges.map(edge => edge.nativeJoint?.edgeId) }));
 `,
 });
 const button = name => f.page.getByRole('button', { name, exact: true });
@@ -67,10 +74,17 @@ await f.run(async () => {
   const newContext = f.browser.newContext.bind(f.browser);
   f.browser.newContext = async options => {
     const context = await newContext({ ...options, serviceWorkers: 'block' });
-    await context.route('**/*', route => {
+    await context.route('**/*', async route => {
       const url = new URL(route.request().url());
       if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
-      return url.origin === origin ? route.continue() : route.abort();
+      if (url.origin !== origin) return route.abort();
+      if (!comparison || !url.pathname.endsWith('/Viewport.tsx')) return route.continue();
+      const response = await route.fetch({ headers: { ...route.request().headers(), 'if-none-match': '' } });
+      const source = await response.text();
+      const hook = 'w.__studioCamera = () =>';
+      assert.equal(source.split(hook).length, 2);
+      const setCamera = 'w.__studioSetTurnTestCamera = state => { Object.assign(camera.current, state); requestRef.current(); }; ';
+      return route.fulfill({ response, body: source.replace(hook, setCamera + hook) });
     });
     return context;
   };
@@ -81,14 +95,27 @@ await f.run(async () => {
   await f.same(doc);
   await button('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  if (await button('AO').getAttribute('aria-pressed') === 'true') await button('AO').click();
+  if (comparison) {
+    await f.page.waitForFunction(() => typeof window.__studioSetTurnTestCamera === 'function');
+    await f.page.evaluate(value => window.__studioSetTurnTestCamera(value), comparison.observations[0].camera);
+  }
+  const ao = button('AO');
+  if (compactGrid) {
+    if (await ao.getAttribute('aria-pressed') !== 'true') await ao.click();
+    await f.page.mouse.move(1030, 900);
+    await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+    await f.snapshot('turn-model-with-ao');
+  }
+  if (await ao.getAttribute('aria-pressed') === 'true') await ao.click();
+  await f.page.mouse.move(1030, 900);
+  await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
   await f.snapshot('turn-model-measured-view');
   const camera = await f.page.evaluate(() => window.__studioCamera());
   f.report.observations.push({ camera, backend, baseline });
   const read = await f.inspect('rails-and-tiers', doc);
   const detail = await f.page.evaluate(index => window.__studioLoftDisplay?.(index), turnIndex);
-  if (!triangular && !screw) assert.equal(await f.page.evaluate(() => window.__studioLoftDisplay?.(0)), null);
-  if (baseline) assert.equal(detail, null);
+  if (!triangular && !screw && !compactGrid) assert.equal(await f.page.evaluate(() => window.__studioLoftDisplay?.(0)), null);
+  if (compactGrid ? !read.detail : baseline) assert.equal(detail, null);
   else assert.deepEqual(detail, {
     triangles: read.data[1].triangles, baseTriangles: read.data[0].triangles, kind: 'smooth-turn',
   });
@@ -127,7 +154,7 @@ await f.run(async () => {
   }, { rails: read.data[0].rails, turnIndex, canonical: read.canonical });
   assert.ok(hit, 'A native Smooth Turn rail is pickable in the actual renderer');
   assert.equal(read.canonical[hit.hit.edge], hit.rail);
-  const expected = read.data[baseline ? 0 : 1].rails.find(rail => rail.id === hit.rail).lines;
+  const expected = read.data[baseline && !compactGrid ? 0 : 1].rails.find(rail => rail.id === hit.rail).lines;
   assert.deepEqual(hit.hit.segments.flat(), expected.flat());
   const filter = button('Selection filter');
   for (let i = 0; i < 5 && !(await filter.innerText()).includes('Edges'); i++) await filter.click();
@@ -142,4 +169,13 @@ await f.run(async () => {
   f.report.observations.push({ body: hit.hit.body, edge: hit.hit.edge, rail: hit.rail, segments: hit.hit.segments.length,
     detail, native: { digest, counts, volume } });
   await f.snapshot('turn-rail-picked');
+  if (comparison) {
+    assert.equal(comparison.status, 'PASS');
+    const [beforeView, , beforeDisplay, beforePick] = comparison.observations;
+    assert.deepEqual({ camera, backend }, { camera: beforeView.camera, backend: beforeView.backend });
+    assert.deepEqual({ digest, counts, volume }, beforePick.native);
+    const display = f.report.observations[2];
+    assert.ok(display.maxima.every(({ id, maximumPixels }) => maximumPixels < 0.25
+      && maximumPixels < beforeDisplay.maxima.find(rail => rail.id === id).maximumPixels));
+  }
 });

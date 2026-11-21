@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1, faceGeometry, type Point } from '@barocss/cad';
+import { brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1, faceGeometry, type BrepFace, type Point } from '@barocss/cad';
 import { isCompactStepTurn } from '@barocss/cad/internal/step-turn-display';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
@@ -161,51 +161,74 @@ const minus = (a: readonly number[], b: readonly number[]): Point => [a[0] - b[0
 const scalar = (a: readonly number[], b: readonly number[]) => a.reduce((sum, value, i) => sum + value * b[i], 0);
 const vector = ([x, y, z]: Point, [u, v, w]: Point): Point => [y * w - z * v, z * u - x * w, x * v - y * u];
 
-test('compact Turn packets use native side normals and retain positions, creases and selection IDs', () => {
-  const doc = smooth.build!(ctx(), { height: 50, angle: -450 });
-  const [{ brep }] = partBreps(doc);
-  const averaged = bodyMesh(brep, 0, 24);
-  const refined = evaluateDoc(doc, 2, 8, true);
-  assert.ok(refined.ok);
-  const mesh = refined.bodies[0].mesh, detail = mesh.loftDetail;
-  assert.ok(detail && 'kind' in detail && detail.kind === 'smooth-turn');
-  for (const key of ['positions', 'indices', 'faceOfVertex', 'edgeLines', 'edgeOfSegment'] as const)
-    assert.deepEqual(detail[key], averaged[key]);
-  assert.deepEqual(mesh.edges.map(edge => edge.nativeJoint?.edgeId), averaged.edges.map(edge => edge.nativeJoint?.edgeId));
-  let worstOld = 0, worstNew = 0, worstResidual = 0, vertices = 0;
-  for (const [vertex, owner] of detail.faceOfVertex.entries()) {
-    const k = vertex * 3;
-    const face = brep.faces.find(face => face.id === averaged.faces[owner].id);
-    assert.ok(face);
-    const surface = face.surface;
-    assert.equal(surface.kind, 'surface');
-    const newNormal = detail.normals.slice(k, k + 3), oldNormal = averaged.normals.slice(k, k + 3);
-    if (surface.degreeV !== 3) {
-      assert.deepEqual(newNormal, oldNormal);
-      continue;
+test('compact triangular Turn and Screw display walls share closed seams and native normals', () => {
+  for (const [doc, height] of [
+    [smooth.build!(ctx(), { height: 50, angle: -450 }), 50],
+    [screwSections(180).doc, 40],
+    [screwSections(-360, screwCorners, true).doc, 40],
+    [screwSections(450).doc, 40],
+  ] as const) {
+    const [{ brep }] = partBreps(doc);
+    const plain = evaluateDoc(doc, 2, 8);
+    const refined = evaluateDoc(doc, 2, 8, true);
+    assert.ok(plain.ok && refined.ok);
+    const { loftDetail: detail, ...mesh } = refined.bodies[0].mesh;
+    assert.ok(detail && 'kind' in detail && detail.kind === 'smooth-turn');
+    assert.equal(detail.screwGrid, undefined);
+    assert.deepEqual(mesh, plain.bodies[0].mesh);
+
+    const directed = new Map<string, number>();
+    const point = (vertex: number): Point => [
+      detail.positions[3 * vertex], detail.positions[3 * vertex + 1], detail.positions[3 * vertex + 2],
+    ];
+    for (let i = 0; i < detail.indices.length; i += 3) {
+      const a: Point = point(detail.indices[i]);
+      const b: Point = point(detail.indices[i + 1]);
+      const c: Point = point(detail.indices[i + 2]);
+      assert.ok(Math.hypot(...vector(minus(b, a), minus(c, a))) > 0);
+      for (const key of [a + '/' + b, b + '/' + c, c + '/' + a]) {
+        directed.set(key, (directed.get(key) ?? 0) + 1);
+      }
     }
-    const point = [...detail.positions.slice(k, k + 3)] as Point;
-    const [a, b] = surface.controlPoints, knots = surface.knotsV;
-    const t = Math.max(0, Math.min(1, scalar(minus(point, a[0]), [0, .6, .8]) / 50));
-    const left = sampleRail(a, knots, 3, t), right = sampleRail(b, knots, 3, t), across = minus(right, left);
-    const u = scalar(minus(point, left), across) / scalar(across, across);
-    const projected = left.map((value, i) => value + u * across[i]);
-    const derivative = (row: readonly Point[]) => sampleRail(row.slice(1).map((next, i) =>
-      minus(next, row[i]).map(value => value * 3 / (knots[i + 4] - knots[i + 1])) as Point), knots.slice(1, -1), 2, t);
-    const da = derivative(a), db = derivative(b), tangent = da.map((value, i) => (1 - u) * value + u * db[i]) as Point;
-    const normal = vector(across, tangent);
-    const angle = (actual: Float32Array) => {
-      const p = [...actual] as Point;
-      return Math.atan2(Math.hypot(...vector(normal, p)), scalar(normal, p)) * 180 / Math.PI;
-    };
-    worstResidual = Math.max(worstResidual, Math.hypot(...minus(projected, point)));
-    worstOld = Math.max(worstOld, angle(oldNormal));
-    worstNew = Math.max(worstNew, angle(newNormal));
-    vertices++;
+    assert.ok(directed.size > 0);
+    for (const [edge, count] of directed) {
+      const [a, b] = edge.split('/');
+      assert.equal(count, 1);
+      assert.equal(directed.get(b + '/' + a), 1);
+    }
+
+    let worstNormal = 0, worstResidual = 0, vertices = 0;
+    for (const [vertex, owner] of detail.faceOfVertex.entries()) {
+      const face: BrepFace | undefined = brep.faces.find(face => face.id === mesh.faces[owner].id);
+      assert.ok(face);
+      const surface = face.surface;
+      assert.equal(surface.kind, 'surface');
+      const actual = [...detail.normals.slice(3 * vertex, 3 * vertex + 3)] as Point;
+      if (surface.degreeV !== 3) {
+        const cap = faceGeometry(face);
+        assert.equal(cap.kind, 'plane');
+        close(actual, cap.n, 1e-7);
+        continue;
+      }
+      const p = point(vertex);
+      const [a, b] = surface.controlPoints, knots = surface.knotsV;
+      const t = Math.max(0, Math.min(1, scalar(minus(p, a[0]), [0, .6, .8]) / height));
+      const left = sampleRail(a, knots, 3, t), right = sampleRail(b, knots, 3, t), across = minus(right, left);
+      const u = scalar(minus(p, left), across) / scalar(across, across);
+      const projected = left.map((value, i) => value + u * across[i]);
+      const derivative = (row: readonly Point[]) => sampleRail(row.slice(1).map((next, i) =>
+        minus(next, row[i]).map(value => value * 3 / (knots[i + 4] - knots[i + 1])) as Point), knots.slice(1, -1), 2, t);
+      const da = derivative(a), db = derivative(b), tangent = da.map((value, i) => (1 - u) * value + u * db[i]) as Point;
+      const sense = face.sense === 'forward' ? 1 : -1;
+      const normal = vector(across, tangent).map(value => value * sense) as Point;
+      const angle = Math.atan2(Math.hypot(...vector(normal, actual)), scalar(normal, actual)) * 180 / Math.PI;
+      worstResidual = Math.max(worstResidual, Math.hypot(...minus(projected, p)));
+      worstNormal = Math.max(worstNormal, angle);
+      vertices++;
+    }
+    assert.ok(vertices > 800 && worstResidual < 1e-8 && worstNormal < 1e-5,
+      JSON.stringify({ vertices, worstResidual, worstNormal }));
   }
-  assert.ok(vertices > 300 && worstResidual < 1e-8 && worstOld > 1 && worstNew < 1e-5,
-    JSON.stringify({ vertices, worstResidual, worstOld, worstNew }));
-  if (process.env.TURN_NORMAL_METRICS === '1') console.log(JSON.stringify({ vertices, worstResidual, worstOld, worstNew }));
 });
 
 test('triangle angle editing retains terminal ownership and requires an exact Agent revision', async () => {

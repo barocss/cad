@@ -2,7 +2,7 @@ import { CadNumericPolicy, faceGeometry, surfaceD1Evaluator, surfaceDomain, type
 import { compactStepTurnKind } from '@barocss/cad/internal/step-turn-display';
 import { tessellateTwoGuideLoftDisplay } from '@barocss/cad/internal/two-guide-loft-display';
 import { bodyMesh, type DisplayMesh, type BoundedDisplayMesh, type SmoothTurnDisplayMesh, type Vec3 } from './mesh';
-import { screwDisplayMesh } from './screwDisplay';
+import { compactTurnDisplayGrid } from './screwDisplay';
 import { cross, dot, len, scale, sub } from './vec3';
 
 const cache = new WeakMap<DisplayMesh, DisplayMesh>();
@@ -66,7 +66,7 @@ function isAuthoredCompactTurn(brep: Brep, sections: number): boolean {
     : brep.edges.filter(edge => /^c[0-3]$/.test(edge.id));
   return brep.source.family === 'loft' && brep.bodies.length === 1 && brep.bodies[0].kind === 'solid'
     && brep.shells.length === 1 && brep.shells[0].closed
-    && (sides === 3 || sides === 4) && brep.edges.length === 3 * sides && sections >= 7 && sections <= 16
+    && (sides === 3 || sides === 4) && brep.edges.length === 3 * sides && brep.vertices.length === 2 * sides && sections >= 7 && sections <= 16
     && rails.length === sides && rails.every(({ curve }) => curve.degree === 3 && curve.controlPoints.length === sections
       && curve.weights.every(weight => weight === 1)
       && curve.knots.length === rails[0].curve.knots.length
@@ -145,10 +145,10 @@ function buildTurnDetail(base: DisplayMesh, brep: Brep, sections: number | undef
         && e.faces.every((f, j) => f === owner.faces[j])
         && e.a.every((v, k) => v === owner.a[k]) && e.b.every((v, k) => v === owner.b[k]);
     })) return;
-  if (screw) {
+  if (sections !== undefined || screw) {
     try {
-      const grid = screwDisplayMesh(refined, brep);
-      if (grid) return grid;
+      const grid = compactTurnDisplayGrid(refined, brep);
+      if (grid) return screw ? { ...grid, screwGrid: true } : grid;
     } catch {
       // The original refined packet is the fallback for a failed grid evaluation.
     }

@@ -6,14 +6,15 @@ const along = 96;
 const same = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 const mid = (a: Vec3, b: Vec3) => scale(add(a, b), .5);
 
-/** Replace only the display of an admitted external-axis Screw. The mesh still indexes the native owners. */
-export function screwDisplayMesh(mesh: DisplayMesh, brep: Brep): SmoothTurnDisplayMesh | undefined {
+/** Sample compact turn walls on shared rail stations, retaining the native owners. */
+export function compactTurnDisplayGrid(mesh: DisplayMesh, brep: Brep): SmoothTurnDisplayMesh | undefined {
   const byEdge = new Map(brep.edges.map(edge => [edge.id, edge]));
   const byFace = new Map(brep.faces.map(face => [face.id, face]));
   const loops = new Map(brep.loops.map(loop => [loop.id, loop]));
   const uses = new Map(brep.coedges.map(use => [use.id, use]));
   const rails = brep.edges.filter(edge => edge.curve.degree === 3);
-  if (rails.length !== 4) return;
+  const sideCount = rails.length;
+  if (sideCount !== 3 && sideCount !== 4) return;
   const knots = rails[0].curve.knots;
   if (knots[0] !== 0 || knots.at(-1) !== 1 || rails.some(edge => !same(edge.curve.knots, knots))) return;
   const stations = [...new Set(knots)];
@@ -50,13 +51,13 @@ export function screwDisplayMesh(mesh: DisplayMesh, brep: Brep): SmoothTurnDispl
     const face = byFace.get(id);
     if (!face || face.surface.kind !== 'surface' || face.loops.length !== 1) return;
     const loop = loops.get(face.loops[0]);
-    if (!loop || loop.kind !== 'outer' || loop.coedges.length !== 4) return;
+    if (!loop || loop.kind !== 'outer') return;
     const coedges = loop.coedges.map(id => uses.get(id)!);
     const start = positions.length / 3;
     const { surface } = face;
     if (surface.degreeV === 1) {
       const support = faceGeometry(face);
-      if (support.kind !== 'plane' || coedges.some(use => byEdge.get(use.edge)?.curve.degree !== 1)) return;
+      if (support.kind !== 'plane' || coedges.length !== sideCount || coedges.some(use => byEdge.get(use.edge)?.curve.degree !== 1)) return;
       const rim = coedges.flatMap(({ edge, sense }) => {
         const [a, m, b] = samples.get(edge)!;
         return [sense === 'forward' ? a : b, m];
@@ -71,7 +72,7 @@ export function screwDisplayMesh(mesh: DisplayMesh, brep: Brep): SmoothTurnDispl
       }
       continue;
     }
-    if (surface.degreeU !== 1 || surface.degreeV !== 3 || !same(surface.knotsU, [0, 0, 1, 1]) || !same(surface.knotsV, knots)) return;
+    if (coedges.length !== 4 || surface.degreeU !== 1 || surface.degreeV !== 3 || !same(surface.knotsU, [0, 0, 1, 1]) || !same(surface.knotsV, knots)) return;
     const sideRails = coedges.map(use => byEdge.get(use.edge)!).filter(edge => edge.curve.degree === 3);
     const sides = surface.controlPoints.map(row => sideRails.find(edge => {
       const poles = edge.curve.controlPoints;
@@ -105,7 +106,7 @@ export function screwDisplayMesh(mesh: DisplayMesh, brep: Brep): SmoothTurnDispl
       edgeOfSegment.push(edge.index, edge.index);
     }
   }
-  return { kind: 'smooth-turn', screwGrid: true, positions: new Float64Array(positions), normals: new Float32Array(normals),
+  return { kind: 'smooth-turn', positions: new Float64Array(positions), normals: new Float32Array(normals),
     faceOfVertex: new Float32Array(faceOfVertex), indices: new Uint32Array(indices), bounds,
     edgeLines: new Float64Array(edgeLines), edgeOfSegment: new Float32Array(edgeOfSegment) };
 }
