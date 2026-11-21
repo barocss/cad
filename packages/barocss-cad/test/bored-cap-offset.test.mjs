@@ -53,7 +53,7 @@ const tiltedCentroid = [
 const incidence = brep => ({
   bodies: brep.bodies, shells: brep.shells, loops: brep.loops,
   faces: brep.faces.map(({ surface, ...f }) => [f, surface.id]),
-  vertices: brep.vertices.map(({ point, ...v }) => v),
+  vertices: brep.vertices.map(({ point: _point, ...v }) => v),
   edges: brep.edges.map(({ curve, ...e }) => [e, curve.id]),
   coedges: brep.coedges.map(({ pcurve, ...c }) => [c, pcurve?.id]),
 });
@@ -68,6 +68,70 @@ const tube = (center = [14, 12]) => {
   doc.features.push({ id: 'h', kind: 'hole', target: 'c', face: 'c.top', center, radius: 4 });
   return doc;
 };
+
+for (const distance of [3.25, -3.5]) {
+  test(`signed upper annular cap offset ${distance} preserves native supports and trim ownership`, () => {
+    const doc = tube(), source = freeze(solid(doc)), saved = structuredClone(source), height = 10 + distance;
+    const result = offsetBoredCapIfAdmitted(source, 'c.top', distance), report = checkBrep(result, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 8, coedges: 24, edges: 12, vertices: 8 });
+    assert.equal(report.topology[0].genus, 1);
+    assert.ok(report.maximumPcurveGap < 1e-9 && report.maximumEdgeSurfaceGap < 1e-9);
+    assert.deepEqual(incidence(result), incidence(source));
+    assert.deepEqual(result.coedges, source.coedges, 'the unchanged UV charts retain every pcurve and twin');
+    assert.equal(result.faces.find(face => face.name === 'c.bottom'), source.faces.find(face => face.name === 'c.bottom'));
+    const mass = brepMassProperties(result, 1), area = Math.PI * (12 ** 2 - 4 ** 2);
+    close(mass.volume, area * height, 1e-7);
+    close(mass.volume - brepMassProperties(source, 1).volume, area * distance, 1e-7);
+    mass.centroid.forEach((value, axis) => close(value, [14, 12, height / 2][axis]));
+    for (const face of result.faces) {
+      const support = faceGeometry(face), before = faceGeometry(source.faces.find(original => original.id === face.id));
+      assert.equal(support.kind, before.kind);
+      if (support.kind === 'cylinder') {
+        close(support.r, before.r); assert.deepEqual(support.a, before.a); assert.equal(support.out, before.out);
+        support.c.forEach((value, axis) => close(value, before.c[axis]));
+        for (const u of [0, 0.13, 0.5, 0.81, 1]) for (const v of [0, 0.37, 1]) {
+          const [x, y, z] = evaluateSurface(face.surface, u, v);
+          close(Math.hypot(x - 14, y - 12), support.out === 1 ? 12 : 4);
+          close(z, height * v);
+        }
+      } else {
+        assert.deepEqual(support.n, before.n);
+        close(support.o[2], face.name === 'c.top' ? height : 0);
+      }
+    }
+    const authored = solid({ ...doc, features: [...doc.features, { id: 'offset', kind: 'offset-face', target: 'h', face: 'c.top', distance }] });
+    assert.deepEqual(authored, result);
+    assert.deepEqual(offsetBoredCapIfAdmitted(result, 'c.top', -distance), source);
+    assert.deepEqual(source, saved);
+  });
+}
+
+test('annular cap offset refuses contact, eccentric support, bottom cap and nonoriginal author chains', () => {
+  const doc = tube(), source = freeze(solid(doc)), saved = structuredClone(source);
+  for (const distance of [-10, -11, -10 + 1e-8])
+    assert.throws(() => offsetBoredCapIfAdmitted(source, 'c.top', distance), /reach or cross the opposite cap/);
+  for (const distance of [0, NaN, Infinity, 10001])
+    assert.throws(() => offsetBoredCapIfAdmitted(source, 'c.top', distance), /distance/);
+  assert.throws(() => offsetBoredCapIfAdmitted(source, 'c.top', 10000), /modeling range/);
+  assert.throws(() => offsetBoredCapIfAdmitted(source, 'c.top', Number.MIN_VALUE), /too small/);
+  assert.equal(offsetBoredCapIfAdmitted(source, 'c.bottom', 2), undefined);
+  assert.equal(offsetBoredCapIfAdmitted(solid(tube([16, 12])), 'c.top', 2), undefined);
+  const malformed = structuredClone(source); malformed.coedges[0].pcurve.controlPoints[0][0] += 1e-10;
+  assert.equal(offsetBoredCapIfAdmitted(malformed, 'c.top', 2), undefined);
+  const edit = { id: 'offset', kind: 'offset-face', target: 'h', face: 'c.top', distance: 2 };
+  assert.throws(() => solid({ ...doc, features: [...doc.features, { ...edit, face: 'c.bottom' }] }), /original upper cap/);
+  const reversed = structuredClone(doc); reversed.features[1].height = -10;
+  assert.throws(() => solid({ ...reversed, features: [...reversed.features, edit] }), /forward circular Extrude/);
+  const chained = { ...doc, features: [...doc.features, edit, { ...edit, id: 'offset2', target: 'offset' }] };
+  assert.throws(() => solid(chained), /original through Hole/);
+  const transformed = { ...doc, features: [...doc.features,
+    { id: 'copy', kind: 'translate', target: 'h', offset: [0, 0, 0] }, { ...edit, target: 'copy' }] };
+  assert.throws(() => solid(transformed), /original through Hole/);
+  const tilted = replaceAnnularCapIfAdmitted(source, 'c.top', { origin: [0, 0, 12], normal: [-1, -2, 10] });
+  assert.equal(offsetBoredCapIfAdmitted(tilted, 'c.top', 2), undefined);
+  assert.deepEqual(source, saved);
+});
 
 const twoBorePlate = () => {
   const doc = plate();

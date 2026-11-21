@@ -393,6 +393,27 @@ export function isAnnularReplacementSource(nodes: readonly unknown[], index: num
   return throughHoleStockProfile(nodes, index) === 'circle';
 }
 
+/** One original upright coaxial tube; the native annular proof remains the geometry authority. */
+export function isAnnularCapOffsetSource(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>> = {}): boolean {
+  if (!isAnnularReplacementSource(nodes, index)) return false;
+  const stockIndex = throughHoleStockIndex(nodes, index)!, hole = nodes[index], stock = nodes[stockIndex];
+  if (!textRecord(hole) || !textRecord(stock) || hole.suppressed || hole.held || stock.suppressed || stock.held
+    || stock.cutDepth !== undefined || typeof stock.sketch !== 'number') return false;
+  const circle = nodes[stock.sketch], height = textDimension(stock.height, parameters);
+  if (!textRecord(circle) || circle.kind !== 'sketch' || circle.profile !== 'circle' || circle.suppressed || circle.held
+    || circle.plane !== undefined || circle.on !== undefined || circle.association !== undefined
+    || circle.holes !== undefined || circle.regions !== undefined || height === null || height <= 0
+    || ![hole, stock, circle].every(source => typeof source.id === 'string'
+      && nodes.filter(candidate => textRecord(candidate) && candidate.id === source.id).length === 1)
+    || (hole.face !== undefined && hole.face !== `${stock.id}.top`)
+    || !Array.isArray(hole.center) || hole.center.length !== 2 || !Array.isArray(circle.center) || circle.center.length !== 2) return false;
+  const circleCenter = circle.center;
+  return hole.center.every((value, axis) => {
+    const bore = textDimension(value, parameters), centre = textDimension(circleCenter[axis], parameters);
+    return bore !== null && centre !== null && bore === centre;
+  });
+}
+
 function offsetSourceBase(nodes: readonly unknown[], index: number): number | undefined {
   for (;;) {
     const node = nodes[index];
@@ -649,6 +670,18 @@ export function directFaceDocumentProblem(input: unknown): string | null {
           return 'Offset face: radial offset needs a straight circular extrusion or one straight through bore in an upright plate or tube.';
         continue;
       }
+      if (isAnnularReplacementSource(value.nodes, parentIndex)) {
+        const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
+        if (!isAnnularCapOffsetSource(value.nodes, parentIndex, parameters))
+          return 'Offset face: the annular cap needs one original upright coaxial through Hole in a forward circular Extrude.';
+        const stock = value.nodes[throughHoleStockIndex(value.nodes, parentIndex)!] as Record<string, unknown>;
+        if (node.target !== undefined || face !== `${stock.id}.top`)
+          return 'Offset face: the original upper annular cap needs a signed distance.';
+        continue;
+      }
+      const offsetBase = offsetSourceBase(value.nodes, parentIndex);
+      if (parent.kind === 'offset-face' && offsetBase !== undefined && isAnnularReplacementSource(value.nodes, offsetBase))
+        return 'Offset face: an annular cap offset needs the original Hole parent; chained cap offsets are unsupported.';
       if (boredPlateOffsets.has(parentIndex) || isBoredPlateOffsetBase(value.nodes, parentIndex)) {
         if (node.target !== undefined) return 'Offset face: this through-hole plate face needs a signed distance.';
         boredPlateOffsets.add(index);

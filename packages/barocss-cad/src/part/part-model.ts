@@ -68,7 +68,7 @@ import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
 import { offsetBoxCapIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
 import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallIfAdmitted } from '../features/prism-wall-offset.js';
-import { offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted, offsetBoreWallIfAdmitted, offsetCircularWallIfAdmitted,
+import { annularCapReplacementFrame, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted, offsetBoreWallIfAdmitted, offsetCircularWallIfAdmitted,
   replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
 import { boundaryBindingRefusal } from './part-boundary-refusal-internal.js';
 import { refusalCodeOf, type CadRefusalCode } from '../core/error-codes.js';
@@ -640,8 +640,22 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         return fail('INPUT', 'Offset face needs one exact native face name.');
       if (typeof distance !== 'number' || !Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadPartLimits.length)
         return fail('PARAMETER', 'Offset face needs a nonzero signed distance within the modeling range.');
+      // Register authored dependencies before the evaluator captures cache inputs.
+      const hole = ref(f.target, 'target').author;
+      const stock = hole?.kind === 'hole' ? ref(hole.target, 'tube stock').author : undefined;
+      const circle = stock?.kind === 'extrude' ? ref(stock.sketch, 'tube sketch').author : undefined;
       return () => {
         const brep = namedFaceTargetBrep(t, f.target, target[0]);
+        if (annularCapReplacementFrame(brep, face)) {
+          if (hole?.kind !== 'hole' || (hole.axis !== undefined && hole.axis !== 'z') || hole.depth !== undefined || hole.countersink !== undefined)
+            return fail('CAPABILITY', 'Annular cap offset needs one original through Hole in a forward circular Extrude.');
+          if (stock?.kind !== 'extrude' || stock.draft || dim(stock.height, 'tube height') <= 0 || face !== `${stock.id}.top`
+            || (hole.face !== undefined && hole.face !== `${stock.id}.top`))
+            return fail('CAPABILITY', 'Annular cap offset needs the original upper cap of a forward circular Extrude.');
+          if (circle?.kind !== 'sketch' || circle.profile !== 'circle' || circle.plane !== undefined || circle.holes !== undefined || circle.regions !== undefined
+            || !xy(hole.center, 'bore centre').every((value, axis) => value === xy(circle.center, 'tube centre')[axis]))
+            return fail('CAPABILITY', 'Annular cap offset needs one upright coaxial circular stock and bore.');
+        }
         const offset = offsetBoredCapIfAdmitted(brep, face, distance) ?? offsetBoredPlateWallIfAdmitted(brep, face, distance)
           ?? offsetCircularWallIfAdmitted(brep, face, distance)
           ?? offsetBoreWallIfAdmitted(brep, face, distance)

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { brepMassProperties, checkBrep, exportStep, type Brep } from '@barocss/cad';
+import { brepMassProperties, checkBrep, exportStep, faceGeometry, type Brep } from '@barocss/cad';
 import { buildNativeOffsetFace, offsetFaceCommand } from '../src/app/profileCommands';
 import { editSavedOffsetFaceCommand } from '../src/app/offsetFaceEdit';
 import { deleteFeature, duplicateBody } from '../src/chat/features';
@@ -9,7 +9,7 @@ import { addPart } from '../src/assembly/edit';
 import { flattenAssembly } from '../src/engine/flatten';
 import { editCommand } from '../src/app/editCommand';
 import type { Ctx } from '../src/app/commands';
-import { cylinderPart, emptyDoc, offsetFaceGroup, rectanglePart, shapeLabel, withNode, type StudioDoc } from '../src/engine/doc';
+import { cylinderPart, emptyDoc, offsetFaceGroup, rectanglePart, shapeLabel, withNode, type ModelNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { isRefusal } from '../src/engine/refusal';
@@ -69,6 +69,89 @@ function assertBoxNative(doc: StudioDoc, target: ReturnType<typeof boxOracle>, a
   }
 }
 const translated = (): StudioDoc => withNode(rectanglePart(20.00003, 10.00007, 5.00009), { kind: 'translate', parent: { node: 1, side: 'solid' }, offset: [0.1234567, -0.2345678, 0.3456789] });
+
+const annularStock = (): StudioDoc => withNode(withNode(withNode(emptyDoc(),
+  { kind: 'sketch', profile: 'circle', center: [14, 9], radius: 12 }),
+{ kind: 'extrude', sketch: 0, height: 16 }),
+{ kind: 'hole', parent: { node: 1, side: 'solid' }, center: [14, 9], radius: 4, face: 'n1.top' });
+
+test('one original upper annular cap has signed native Offset, distance-only History and exact Open', async () => {
+  const source = annularStock(), saved = structuredClone(source), original = bodyOf(source), ctx = context(source);
+  freezeDoc(source);
+  const identity = (brep: Brep) => ({ bodies: brep.bodies, shells: brep.shells, loops: brep.loops, coedges: brep.coedges,
+    faces: brep.faces.map(({ surface, ...face }) => [face, surface.id]),
+    edges: brep.edges.map(({ curve, ...edge }) => [edge, curve.id]), vertices: brep.vertices.map(({ point: _point, ...vertex }) => vertex) });
+  const check = (doc: StudioDoc, distance: number) => {
+    const native = bodyOf(doc), mass = brepMassProperties(native, 1), area = Math.PI * (12 ** 2 - 4 ** 2);
+    closed(native); assert.deepEqual(identity(native), identity(original));
+    near(mass.volume, area * (16 + distance)); near(mass.volume - brepMassProperties(original, 1).volume, area * distance);
+    mass.centroid.forEach((value, axis) => near(value, [14, 9, (16 + distance) / 2][axis]));
+    assert.deepEqual(native.faces.find(face => face.name === 'n1.bottom'), original.faces.find(face => face.name === 'n1.bottom'));
+    for (const face of native.faces) {
+      const support = faceGeometry(face), before = faceGeometry(original.faces.find(candidate => candidate.id === face.id)!);
+      if (support.kind === 'cylinder' && before.kind === 'cylinder') {
+        near(support.r, before.r); assert.deepEqual(support.a, before.a); assert.equal(support.out, before.out);
+        support.c.forEach((value, axis) => near(value, before.c[axis]));
+      }
+    }
+  };
+  assert.deepEqual(offsetFaceCommand.fields!(ctx).map(field => field.key), ['d']);
+  const handles = offsetFaceCommand.handles!(ctx, { d: 3 });
+  assert.equal(handles.length, 1); assert.deepEqual(handles[0].dir, [0, 0, 1]); near(handles[0].at[2], 16);
+  assert.ok(Math.hypot(handles[0].at[0] - 14, handles[0].at[1] - 9) > 4, 'the handle lies on material, away from the bore');
+  for (const distance of [3, -5]) {
+    const applied = offsetFaceCommand.build!(ctx, { d: distance });
+    const node = applied.nodes[3]; assert.ok(node.kind === 'offset-face');
+    assert.deepEqual(node.parent, { node: 2, side: 'solid' }); assert.deepEqual(node.faces, ['n1.top']);
+    assert.equal(node.distance, distance); assert.equal(node.target, undefined); assert.ok(node.sigs?.['n1.top']);
+    assert.deepEqual(applied.nodes.slice(0, 3), source.nodes); check(applied, distance);
+    const opened = await readStudioFile(encodeStudioFile(applied)); assert.ok('doc' in opened); assert.deepEqual(opened.doc, applied);
+    check(opened.doc, distance);
+    const edit = editSavedOffsetFaceCommand(opened.doc, 3); assert.ok(edit?.build);
+    const editedCtx = context(opened.doc);
+    assert.deepEqual(edit.fields!(editedCtx).map(field => field.key), ['d']);
+    assert.equal(edit.onPick, undefined);
+    const build = edit.build;
+    const reversed = build(editedCtx, { d: -distance });
+    assert.deepEqual(reversed.nodes[3], { ...node, distance: -distance }); check(reversed, -distance);
+    assert.throws(() => build(editedCtx, { d: 2, offsetMode: 'to-plane' }), /signed distance/);
+  }
+  const evaluate = async (doc: StudioDoc) => evaluateDoc(doc, 1);
+  const reply = await dispatchTool({ doc: source, bodies: ctx.bodies }, 'features',
+    { action: 'command', command: 'offset-face', faces: ['n1.top'], values: { d: 3 } }, evaluate);
+  assert.ok(!reply.isError && reply.changed, reply.content); check(reply.state.doc, 3);
+  assert.deepEqual(source, saved);
+});
+
+test('annular cap Offset refuses collapse, wrong end, stale source, plane modes and chains', async () => {
+  const source = annularStock(), ctx = context(source), saved = structuredClone(source);
+  const evaluate = async (doc: StudioDoc) => evaluateDoc(doc, 1), state = { doc: source, bodies: ctx.bodies };
+  for (const distance of [-16, -17, -16 + 1e-8, 10000]) {
+    const refused = await dispatchTool(state, 'features',
+      { action: 'command', command: 'offset-face', faces: ['n1.top'], values: { d: distance } }, evaluate);
+    assert.ok(refused.isError && !refused.changed); assert.equal(refused.state.doc, source);
+  }
+  assert.throws(() => offsetFaceCommand.build!(context(source, 2, -1), { d: 2 }), /original upper annular cap/);
+  assert.throws(() => offsetFaceCommand.build!(ctx, { d: 2, offsetMode: 'to-plane' }), /does not support.*reference plane/);
+  const replace = (index: number, next: ModelNode): StudioDoc => ({ ...source, nodes: source.nodes.map((node, i) => i === index ? next : node) });
+  const stock = source.nodes[1], hole = source.nodes[2], circle = source.nodes[0];
+  assert.ok(stock.kind === 'extrude' && hole.kind === 'hole' && circle.kind === 'sketch' && circle.profile === 'circle');
+  for (const candidate of [replace(1, { ...stock, height: -16 }), replace(2, { ...hole, center: [14.01, 9] }),
+    replace(2, { ...hole, depth: 4 }), replace(0, { ...circle, plane: { origin: [0, 0, 0], normal: [0, 0, 1], xAxis: [1, 0, 0] } }),
+    replace(1, { ...stock, held: 'old stock' }), replace(0, { ...circle, held: 'old sketch' })]) {
+    assert.throws(() => offsetFaceCommand.build!(context(candidate), { d: 2 }));
+  }
+  assert.throws(() => offsetFaceCommand.build!({ ...ctx, doc: replace(1, { ...stock, height: 20 }) }, { d: 2 }), /no longer agrees/);
+  const applied = offsetFaceCommand.build!(ctx, { d: 3 });
+  assert.throws(() => offsetFaceCommand.build!(context(applied), { d: 2 }));
+  const transformed = withNode(source, { kind: 'translate', parent: { node: 2, side: 'solid' }, offset: [0, 0, 0] });
+  assert.throws(() => offsetFaceCommand.build!(context(transformed), { d: 2 }));
+  const forged = withNode(applied, { kind: 'offset-face', parent: { node: 3, side: 'solid' }, faces: ['n1.top'], distance: 2,
+    sigs: (applied.nodes[3] as Extract<ModelNode, { kind: 'offset-face' }>).sigs });
+  assert.equal(evaluateDoc(forged, 0).ok, false);
+  const opened = await readStudioFile(encodeStudioFile(forged)); assert.ok('error' in opened); assert.match(opened.error, /original Hole parent|chained cap/);
+  assert.deepEqual(source, saved);
+});
 
 test('Offset on a plain 10 × 20 × 30 mm box keeps its six face identities through tool, History and Open', async () => {
   const source = rectanglePart(10, 20, 30), ctx = context(source), sourceCopy = structuredClone(source), original = bodyOf(source);

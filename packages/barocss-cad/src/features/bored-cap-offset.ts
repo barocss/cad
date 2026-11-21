@@ -521,7 +521,14 @@ function mapCapStation(brep: Brep, station: number, height: (x: number, y: numbe
 }
 
 export function offsetBoredCapIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
-  const cap = admittedCap(brep, faceName);
+  // The annular extension is the upper cap of a coaxial upright tube only.
+  // The circular-wall admission proves both complete native supports are coaxial.
+  const annular = admittedCap(brep, faceName, 'annular');
+  const outer = annular?.sign === 1 ? brep.faces.find(face => {
+    const support = faceGeometry(face);
+    return support.kind === 'cylinder' && support.out === 1;
+  }) : undefined;
+  const cap = admittedCap(brep, faceName) ?? (outer?.name && admittedCircularWall(brep, outer.name) ? annular : undefined);
   if (!cap) return undefined;
   if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs) {
     throw new BrepError('INPUT', 'bored cap offset: distance must be nonzero and within the modeling range');

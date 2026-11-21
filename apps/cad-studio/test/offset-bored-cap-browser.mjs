@@ -5,19 +5,23 @@ import { createFlow } from './flow-helper.mjs';
 
 const output = process.argv[2];
 assert.ok(output && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
-const lower = process.argv.includes('--lower');
+const lower = process.argv.includes('--lower'), tube = process.argv.includes('--tube');
+assert.ok(!tube || !lower);
 const cap = lower ? 'n1.bottom' : 'n1.top';
-const sign = lower ? -1 : 1;
-const level = lower ? 0 : 10;
-const area = 40 * 30 - 9 * Math.PI;
-const input = process.argv[3] && process.argv[3] !== '--lower' ? process.argv[3] : undefined;
+const sign = lower ? -1 : 1, originalHeight = tube ? 16 : 10;
+const level = lower ? 0 : originalHeight;
+const centre = tube ? [14, 9] : [11, 9], bore = tube ? 4 : 3;
+const area = tube ? Math.PI * (12 ** 2 - bore ** 2) : 40 * 30 - Math.PI * bore ** 2;
+const pick = tube ? [22, 9] : [24, 20];
+const input = process.argv[3] && !process.argv[3].startsWith('--') ? process.argv[3] : undefined;
 const inputBytes = input && await readFile(input);
 const source = inputBytes ? JSON.parse(inputBytes) : {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
-    { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 30] },
-    { id: 'n1', kind: 'extrude', sketch: 0, height: 10 },
-    { id: 'n2', kind: 'hole', parent: { node: 1, side: 'solid' }, center: [11, 9], radius: 3 },
+    tube ? { id: 'n0', kind: 'sketch', profile: 'circle', center: centre, radius: 12 }
+      : { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 30] },
+    { id: 'n1', kind: 'extrude', sketch: 0, height: originalHeight },
+    { id: 'n2', kind: 'hole', parent: { node: 1, side: 'solid' }, center: centre, radius: bore },
   ],
   outputs: { b2: { node: 2, side: 'solid' } }, nextId: 3,
 };
@@ -27,11 +31,13 @@ const pins = [
   'packages/barocss-cad-model/src/app/nativeOffsetFace.ts', 'packages/barocss-cad-model/src/app/profileCommands.ts',
   'packages/barocss-cad-model/src/app/offsetFaceEdit.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
   'packages/barocss-cad/src/features/bored-cap-offset.ts',
+  'packages/barocss-cad/src/part/part-model.ts',
 ];
 const f = await createFlow({
-  name: 'offset-bored-cap', envFrozen: 'BORE_CAP_OFFSET_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Drag one native cap of a rectangular plate with a straight circular through hole, edit its distance, and reopen it.',
-  limits: ['One 40 × 30 × 10 mm straight plate, one off-centre 6 mm Z bore, one selected top or bottom cap.'],
+  name: 'offset-bored-cap', envFrozen: tube ? 'D1610_SOURCE_FROZEN' : 'BORE_CAP_OFFSET_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
+  qualification: 'Drag one native cap surrounding a straight circular through hole, edit its distance, and reopen it.',
+  limits: [tube ? 'One 24 mm OD × 8 mm ID × 16 mm upright coaxial tube with its original top annulus.'
+    : 'One 40 × 30 × 10 mm straight plate, one off-centre 6 mm Z bore, one selected top or bottom cap.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkBrep, brepMassProperties, faceGeometry } from '@barocss/cad';
@@ -59,12 +65,15 @@ const near = (actual, expected, tolerance = 1e-8) => assert.ok(Math.abs(actual -
 const move = (point, distance) => [point[0], point[1], point[2] === level ? level + sign * distance : point[2]];
 async function measure(label, doc, d, before) {
   const z = level + sign * d;
-  const height = 10 + d;
-  const centroid = [(1200 * 20 - 9 * Math.PI * 11) / area, (1200 * 15 - 9 * Math.PI * 9) / area, (10 + sign * d) / 2];
+  const height = originalHeight + d;
+  const centroidXY = tube ? centre : [(1200 * 20 - 9 * Math.PI * 11) / area, (1200 * 15 - 9 * Math.PI * 9) / area];
+  const centroid = [...centroidXY, (originalHeight + sign * d) / 2];
   const native = await f.inspect(label, doc);
   assert.equal(native.count, 1);
   assert.ok(native.check.valid, native.check.issues.join('\n'));
-  assert.deepEqual(native.check.counts, { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 });
+  const topology = tube ? { faces: 6, loops: 8, coedges: 24, edges: 12, vertices: 8 }
+    : { faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 };
+  assert.deepEqual(native.check.counts, { bodies: 1, shells: 1, ...topology });
   near(native.mass.volume, area * height, 1e-7);
   native.mass.centroid.forEach((value, i) => near(value, centroid[i]));
   const worker = (await f.bodies()).bodies;
@@ -72,9 +81,10 @@ async function measure(label, doc, d, before) {
   near(worker[0].volume, area * height, 1e-7);
   worker[0].centroid.forEach((value, i) => near(value, centroid[i]));
   const cylinders = native.faces.filter(face => face.geometry.kind === 'cylinder');
-  assert.equal(cylinders.length, 2);
+  assert.deepEqual(cylinders.map(face => face.geometry.out).sort(), tube ? [-1, -1, 1, 1] : [-1, -1]);
   for (const { geometry } of cylinders) {
-    near(geometry.r, 3); near(geometry.c[0], 11); near(geometry.c[1], 9);
+    near(geometry.r, geometry.out < 0 ? bore : 12);
+    near(geometry.c[0], centre[0]); near(geometry.c[1], centre[1]);
     near(Math.abs(geometry.a[2]), 1);
   }
   const moved = native.faces.find(face => face.name === cap);
@@ -101,11 +111,11 @@ await f.run(async () => {
     });
     return context;
   };
-  f.phase = 'Open the plate and pick the original cap';
+  f.phase = 'Open the solid and pick the original cap';
   await f.newPage();
   await f.page.setViewportSize({ width: lower ? 1024 : 1440, height: 900 });
   const [file] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
-  await file.setFiles(input ?? { name: 'bored-plate.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
+  await file.setFiles(input ?? { name: tube ? 'coaxial-tube.bcad' : 'bored-plate.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
   await f.same(source);
   const original = await measure('source-shape', source, 0);
   if (input) await f.snapshot('mcp-bored-plate-opened');
@@ -119,7 +129,7 @@ await f.run(async () => {
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   if (lower) await f.page.waitForFunction(() => window.__studioCamera().pitch < -1.3);
   await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
-  const pixel = await f.page.evaluate(level => window.__studioScreenOf([24, 20, level]), level);
+  const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [...pick, level]);
   assert.ok(pixel && await f.page.evaluate(p => document.elementFromPoint(...p)?.matches('canvas.vp-canvas'), pixel));
   await f.page.mouse.click(...pixel);
   await f.page.waitForFunction(index => window.__studioSelection.selection.faces.length === 1 &&
@@ -136,10 +146,10 @@ await f.run(async () => {
     // The older cube turn must not reclaim the camera after the Offset face launch.
     await f.page.waitForFunction(start => performance.now() - start >= 300, bottomTurnStarted);
   }
-  const translation = await f.page.evaluate(({ level, sign }) => {
-    const a = window.__studioScreenOf([24, 20, level]), b = window.__studioScreenOf([24, 20, level + sign]);
+  const translation = await f.page.evaluate(({ pick, level, sign }) => {
+    const a = window.__studioScreenOf([...pick, level]), b = window.__studioScreenOf([...pick, level + sign]);
     return [b[0] - a[0], b[1] - a[1]];
-  }, { level, sign });
+  }, { pick, level, sign });
   assert.ok(Math.hypot(...translation) > 8, translation);
   const launchCamera = await f.page.evaluate(() => window.__studioCamera());
   assert.ok(launchCamera.pitch > 0, JSON.stringify(launchCamera));
@@ -153,6 +163,11 @@ await f.run(async () => {
   await f.page.mouse.move(...handle.map((value, i) => value + translation[i]), { steps: 6 });
   await f.page.mouse.up();
   assert.equal(await offset(panel).inputValue(), '3');
+  if (tube) {
+    await status(panel, 'preview');
+    await f.same(source);
+    await f.snapshot('annular-cap-dragged-preview');
+  }
   f.report.observations.push({ label: 'offset-handle', cap, pitch: launchCamera.pitch,
     pixelsPerMM: Math.hypot(...translation), startDistance: 2, endDistance: 3 });
   await offset(panel).fill('2');
@@ -176,10 +191,16 @@ await f.run(async () => {
   const edit = hud('Edit Offset face');
   assert.equal(await edit.getByLabel('Mode', { exact: true }).count(), 0);
   assert.equal(await offset(edit).inputValue(), '2');
-  await offset(edit).fill('-10');
+  await offset(edit).fill(String(-originalHeight));
   await status(edit, 'refused');
   assert.ok(await button('Apply', edit).isDisabled());
   await f.same(outward);
+  if (tube) {
+    const error = edit.locator('.hud-error');
+    const detail = error.locator('details:not([open]) > summary');
+    if (await detail.count()) await detail.click();
+    assert.match(await error.innerText(), /opposite cap/i);
+  }
   await f.snapshot('bored-cap-collapse-refused');
   await offset(edit).fill('-2');
   await status(edit, 'preview');
@@ -189,7 +210,7 @@ await f.run(async () => {
   assert.deepEqual(inward.nodes[3], { ...node, distance: -2 });
   await measure('inward-shape', inward, -2, original);
   await f.undo(); await f.same(outward); await f.redo(); await f.same(inward);
-  const saved = await f.save('bored-cap-offset');
+  const saved = await f.save(tube ? 'annular-cap-offset' : 'bored-cap-offset');
   await f.freshOpen(saved.file, inward, 'bored-cap-reopened');
   await measure('reopened-shape', inward, -2, original);
   await f.openFeatureEditor(3, 'reopened bored cap');
