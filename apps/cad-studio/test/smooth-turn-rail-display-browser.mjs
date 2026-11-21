@@ -16,8 +16,8 @@ const turnIndex = triangular || screw || compactGrid ? 0 : 1;
 const file = process.argv[3];
 const input = JSON.parse(await readFile(imported ? process.argv[4] : file, 'utf8'));
 const doc = imported ? input.doc : input;
-const poles = compactGrid ? doc.nodes.findLast(node => node.kind === 'loft' && node.smooth).sections.length
-  : (triangular || screw) ? 16 : 13;
+const poles = compactGrid && !imported ? doc.nodes.findLast(node => node.kind === 'loft' && node.smooth).sections.length
+  : (triangular || screw || polygon) ? 16 : 13;
 const f = await createFlow({
   name: 'smooth-turn-rail-display', output: process.argv[2], envFrozen: 'TURN_PROJECT_FROZEN',
   qualification: 'Project the native corner rails and the matched display polylines using the actual Model camera.',

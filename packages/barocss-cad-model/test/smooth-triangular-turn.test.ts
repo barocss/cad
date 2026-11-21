@@ -588,13 +588,22 @@ function moveRailColumns(brep: Brep, offsets: readonly Point[]): Brep {
   return shifted;
 }
 
-test('AP214 triangular Screws restore the structured packet with canonical owners', () => {
+const tiltedPolygonSketch = (corners: readonly [number, number][]): SketchNode => ({
+  ...triangle, points: corners.map(([u, v]) => [u + 10, v - 3]),
+});
+
+test('AP214 compact Screws restore the structured packet with canonical owners', () => {
   const screw = commandById('smooth-screw')!;
   const rotated: SketchNode = {
     ...triangle, points: [triangle.points[0], triangle.points[2], triangle.points[1]],
     plane: { origin: [111, -33, 55], normal: [.6, 0, .8], xAxis: [.8, 0, -.6] },
   };
-  for (const [angle, sketch] of [[-450, triangle], [450, rotated]] as const) {
+  for (const [angle, sketch] of [
+    [-450, triangle], [450, rotated],
+    [-450, tiltedPolygonSketch(screwPentagon)], [450, tiltedPolygonSketch(screwPentagon)],
+    [-450, tiltedPolygonSketch(screwHexagon)], [450, tiltedPolygonSketch(screwHexagon)],
+    [-360, tiltedPolygonSketch(regularScrewCorners(7))], [360, tiltedPolygonSketch(regularScrewCorners(64))],
+  ] as const) {
     const authored: StudioDoc = screw.build!(ctx(sketch), { axisX: 10, axisY: -3, pitch: 40, angle });
     const extra = withNode(authored, { kind: 'sketch', profile: 'rectangle', min: [300, 300], max: [304, 304] });
     const separate = withNode(extra, { kind: 'extrude', sketch: authored.nodes.length, height: 4 });
@@ -606,14 +615,15 @@ test('AP214 triangular Screws restore the structured packet with canonical owner
       const { loftDetail, ...canonical }: DisplayMesh = display.bodies[i].mesh;
       assert.deepEqual(canonical, ordinary.bodies[i].mesh);
       assert.equal(display.bodies[i].volume, ordinary.bodies[i].volume);
-      if (brep.faces.length !== 5) {
+      if (brep.faces.length === 6) {
         assert.equal(loftDetail, undefined);
         continue;
       }
       assert.ok(checkBrep(brep, { strict: true }).valid);
       assert.equal(compactStepTurnKind(brep), 'screw');
       assert.ok(loftDetail && 'kind' in loftDetail && loftDetail.screwGrid);
-      assert.equal(loftDetail.indices.length / 3, 1284);
+      if (brep.faces.length === 5) assert.equal(loftDetail.indices.length / 3, 1284);
+      else assert.ok(loftDetail.indices.length > canonical.indices.length);
       assert.deepEqual([...new Set(loftDetail.edgeOfSegment)].sort((a, b) => a - b), canonical.edges.map(edge => edge.index));
       assert.deepEqual([...new Set(loftDetail.faceOfVertex)].sort((a, b) => a - b), canonical.faces.map(face => face.index));
 
@@ -627,6 +637,31 @@ test('AP214 triangular Screws restore the structured packet with canonical owner
       assert.equal(smoothTurnDisplayMesh(base, nonlinearHeight), base);
     }
   }
+});
+
+test('An imported convex polygon turning around an interior axis stays outside the Screw grid', () => {
+  const command = commandById('smooth-screw')!;
+  const native = command.build!(ctx(tiltedPolygonSketch(screwPentagon)), { axisX: 10, axisY: -3, pitch: 40, angle: 360 });
+  const step = exportStudioStep(native, { name: 'External polygon control' }).text;
+  const opened = withNode(emptyDoc(), { kind: 'import', name: 'External polygon control', step });
+  const [{ brep }] = partBreps(opened);
+  assert.equal(compactStepTurnKind(brep), 'screw');
+  const [a, b] = brep.edges.filter(edge => edge.curve.degree === 3).map(edge => edge.curve.controlPoints);
+  const yAxis: Point = [0, .8, -.6], first = minus(b[0], a[0]);
+  const u = first[0], v = scalar(first, yAxis), square = u * u + v * v;
+  const [px, py] = [-3, -2];
+  // Translate each station from external-axis rotation to rotation about the interior pivot.
+  const offsets = a.map((_, i): Point => {
+    if (i === 0 || i === a.length - 1) return [0, 0, 0];
+    const edge = minus(b[i], a[i]), x = edge[0], y = scalar(edge, yAxis);
+    const c = (u * x + v * y) / square, s = (u * y - v * x) / square;
+    const dy = py - s * px - c * py;
+    return [px - c * px + s * py, .8 * dy, -.6 * dy];
+  });
+  const interior = moveRailColumns(brep, offsets);
+  assert.equal(compactStepTurnKind(interior), undefined);
+  const base = bodyMesh(interior, 0, 8);
+  assert.equal(smoothTurnDisplayMesh(base, interior), base);
 });
 
 test('a strictly valid STEP triangle turning around an interior axis stays outside the Screw grid', () => {

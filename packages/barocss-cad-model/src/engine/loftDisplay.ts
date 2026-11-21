@@ -131,14 +131,12 @@ function buildTurnDetail(base: DisplayMesh, brep: Brep, sections: number | undef
       const family = compactStepTurnKind(brep);
       if (!family) return;
       screw = family === 'screw';
-    } else {
-      if (!isAuthoredCompactTurn(brep, sections)) return;
-      if (brep.faces.length > 6) {
-        // The grid samples every wall. Keep the visible edges from the canonical packet.
-        const grid = compactTurnDisplayGrid(base, brep);
-        if (!grid || grid.indices.length <= base.indices.length) return;
-        return screw ? { ...grid, screwGrid: true } : grid;
-      }
+    } else if (!isAuthoredCompactTurn(brep, sections)) return;
+    if (brep.faces.length > 6) {
+      // The grid samples every wall. Keep the visible edges from the canonical packet.
+      const grid = compactTurnDisplayGrid(base, brep);
+      if (!grid || grid.indices.length <= base.indices.length) return;
+      return screw ? { ...grid, screwGrid: true } : grid;
     }
     refined = bodyMesh(brep, 0, 24);
   } catch {

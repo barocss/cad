@@ -2,14 +2,26 @@ import { checkBrep, type Brep, type BrepEdge, type BrepFace } from '../brep/brep
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { evaluateCurve } from '../core/math.js';
 import { add, cross, dist, dot, len, scale, sub, unit } from '../core/vec3.js';
-import { fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from '../features/loft-rectangular-turn.js';
+import { fitConvexPolygonScrew, fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from '../features/loft-rectangular-turn.js';
 import type { Curve, Point } from '../types.js';
 import { linearToleranceMM } from '../numeric-policy.js';
 import { triangleScrewAxisTolerance } from './triangular-screw-axis.js';
+import { convexPolygonScrewAxisTolerance } from './convex-polygon-screw-axis.js';
+import { ExtrudedProfileLimits } from '../features/extruded-profile-solid.js';
 
 const straightKnots = [0, 0, 1, 1];
 const same = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((value, i) => value === b[i]);
 const centre = (corners: readonly Point[]) => scale(corners.reduce((sum, point) => add(sum, point), [0, 0, 0]), 1 / corners.length);
+
+/** Use a long cap lever so short polygon edges cannot amplify exchange roundoff. */
+function longestChord(corners: readonly Point[]): [number, number] {
+  let pair: [number, number] = [0, 1], longest = 0;
+  for (let i = 0; i < corners.length; i++) for (let j = i + 1; j < corners.length; j++) {
+    const length = dist(corners[i], corners[j]);
+    if (length > longest) { longest = length; pair = [i, j]; }
+  }
+  return pair;
+}
 
 function reverseCurve(curve: Curve): Curve {
   return { ...curve, knots: curve.knots.slice().reverse().map(knot => 1 - knot),
@@ -44,22 +56,23 @@ type XY = [number, number];
 
 function externalScrewPivot(poles: readonly Point[][], tolerance: number): XY | undefined {
   const first = poles.map(rail => rail[0]);
-  const [a, b, c, d] = first, u = sub(b, a), width = len(u);
+  const reference = first.length > 4 ? longestChord(first) : [0, 1];
+  const [a, b, c, d] = first, u = sub(first[reference[1]], first[reference[0]]), width = len(u);
   if (first.length === 3) {
     // This frame starts at the cap centroid; only shape, not origin clearance, is known yet.
     if (triangleScrewAxisTolerance(first.map(([x, y]): XY => [x, y])) === undefined) return;
     const v = sub(c, a), span = Math.max(width, len(v), len(sub(c, b)));
     if (width <= tolerance || Math.abs(u[0] * v[1] - u[1] * v[0]) <= tolerance * span) return;
-  } else {
+  } else if (first.length === 4) {
     const v = sub(d, a), depth = len(v), span = Math.max(width, depth);
     // Use the display proof's tighter tolerance for the original cap rectangle.
     if (Math.min(width, depth) <= tolerance || Math.abs(dot(u, v)) > tolerance * span
       || dist(add(a, c), add(b, d)) > 2 * tolerance) return;
-  }
+  } else if (width <= tolerance) return;
   const [x0, y0] = centre(first);
   let determinant = 0, pivot: XY | undefined;
   for (let j = 1; j < poles[0].length; j++) {
-    const edge = sub(poles[1][j], poles[0][j]);
+    const edge = sub(poles[reference[1]][j], poles[reference[0]][j]);
     // The cubic control factor is complex-valued, and need not have unit length.
     const real = 1 - (u[0] * edge[0] + u[1] * edge[1]) / (width * width);
     const imag = (u[0] * edge[1] - u[1] * edge[0]) / (width * width);
@@ -77,7 +90,7 @@ function externalScrewPivot(poles: readonly Point[][], tolerance: number): XY | 
 export function compactStepTurnKind(brep: Brep): 'turn' | 'screw' | undefined {
   const sides = brep.faces.length - 2;
   if (brep.source.family !== 'step' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
-    || brep.shells.length !== 1 || !brep.shells[0].closed || (sides !== 3 && sides !== 4)
+    || brep.shells.length !== 1 || !brep.shells[0].closed || sides < 3 || sides > ExtrudedProfileLimits.segments
     || brep.edges.length !== 3 * sides || brep.vertices.length !== 2 * sides
     || brep.loops.length !== sides + 2 || brep.coedges.length !== 6 * sides) return;
   const rails = brep.edges.filter(edge => edge.curve.degree === 3), count = rails[0]?.curve.controlPoints.length;
@@ -131,7 +144,8 @@ export function compactStepTurnKind(brep: Brep): 'turn' | 'screw' | undefined {
   const startPoints = start.ring.map(id => vertices.get(id)!);
   const endPoints = end.ring.map(id => vertices.get(id)!);
   const origin = centre(startPoints), delta = sub(centre(endPoints), origin);
-  const x = unit(sub(startPoints[1], startPoints[0]));
+  const [left, right] = sides > 4 ? longestChord(startPoints) : [0, 1];
+  const x = unit(sub(startPoints[right], startPoints[left]));
   const curves = ordered.map((edge, i) => edge!.vertices[0] === start.ring[i] ? edge!.curve : reverseCurve(edge!.curve));
   const stations = Array.from({ length: count }, (_, i) => i / (count - 1));
   const samplePoints = stations.map(t => curves.map(curve => evaluateCurve(curve, t)));
@@ -151,9 +165,11 @@ export function compactStepTurnKind(brep: Brep): 'turn' | 'screw' | undefined {
     return { rows, poles, heights, matches };
   }
 
-  const centered = frame(unit(delta), len(delta));
-  const fitTurn = sides === 3 ? fitTriangularTurn : fitRectangularTurn;
-  if (centered?.matches(fitTurn(centered.rows, centered.heights, stations))) return 'turn';
+  if (sides <= 4) {
+    const centered = frame(unit(delta), len(delta));
+    const fitTurn = sides === 3 ? fitTriangularTurn : fitRectangularTurn;
+    if (centered?.matches(fitTurn(centered.rows, centered.heights, stations))) return 'turn';
+  }
 
   // Cap planes determine axial advance even if the end cap's center moved sideways.
   const normalAdvance = dot(delta, start.normal);
@@ -163,6 +179,21 @@ export function compactStepTurnKind(brep: Brep): 'turn' | 'screw' | undefined {
   if (!pivot) return;
   const [u, v] = pivot;
   const relative = screw.rows.map(row => row.map(([a, b]): XY => [a - u, b - v]));
+  if (sides > 4) {
+    const fitTolerance = convexPolygonScrewAxisTolerance(relative[0]);
+    if (fitTolerance === undefined) return;
+    const centroid = (row: readonly XY[]): XY => row.reduce(([x, y], [a, b]): XY =>
+      [x + a / sides, y + b / sides], [0, 0] as XY);
+    const [x, y] = centroid(screw.rows[0]);
+    if (!screw.rows.some(row => {
+      const [a, b] = centroid(row);
+      return Math.hypot(a - x, b - y) > 4 * Math.max(fitTolerance, tolerance);
+    })) return;
+    // The native fitter proves all ordered sections and signed winding; the pole match proves
+    // the imported charts between those sections, including linear axial advance.
+    if (screw.matches(fitConvexPolygonScrew(relative, screw.heights, stations), pivot)) return 'screw';
+    return;
+  }
   if (sides === 3) {
     const fitTolerance = triangleScrewAxisTolerance(relative[0]);
     if (fitTolerance === undefined) return;
