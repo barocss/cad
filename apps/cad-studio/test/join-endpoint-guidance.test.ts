@@ -104,10 +104,17 @@ test('endpoint match makes no guarantee about other native admission gates; unav
   assert.deepEqual(direct, before);
 });
 
-test('a straight and quadratic span use the existing Swap guidance when the endpoints run in the opposite order', () => {
-  const direct = importSource(pair(), '@model degree {version:0;length-unit:mm; @curve #quadratic {type:nurbs;degree:2;knots:[0,0,0,1,1,1];control-points:[[25,10,0],[30,16,0],[40,10,0]];weights:[1,1,1];}}', 'Degree');
-  const ids: [string, string] = [direct.objects[0].id, direct.objects[2].id];
-  assert.equal(joinEndpointGuidance(direct, ids)?.degreeCompatible, true);
-  assert.doesNotMatch(text(roles(direct, ids).group), /same native degree/);
-  assert.match(text(roles(direct, [ids[1], ids[0]]).group), /endpoints match in the opposite order/);
-});
+for (const [span, poles] of [
+  ['quadratic', [[25, 10, 0], [30, 16, 0], [40, 10, 0]]],
+  ['cubic', [[25, 10, 0], [30, 16, 0], [35, 15, 0], [40, 10, 0]]],
+] as const) {
+  test(`a straight and ${span} span use the existing Swap guidance in the opposite order`, () => {
+    const count = poles.length, knots = [...Array(count).fill(0), ...Array(count).fill(1)];
+    const source = `@model degree {version:0;length-unit:mm;@curve #path {type:nurbs;degree:${count - 1};knots:${JSON.stringify(knots)};control-points:${JSON.stringify(poles)};weights:[${Array(count).fill(1)}];}}`;
+    const direct = importSource(pair(), source, 'Degree');
+    const ids: [string, string] = [direct.objects[0].id, direct.objects[2].id];
+    assert.equal(joinEndpointGuidance(direct, ids)?.degreeCompatible, true);
+    assert.doesNotMatch(text(roles(direct, ids).group), /same native degree/);
+    assert.match(text(roles(direct, [ids[1], ids[0]]).group), /endpoints match in the opposite order/);
+  });
+}

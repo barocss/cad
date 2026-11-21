@@ -4,19 +4,33 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
+const cubicJoin = process.argv.includes('--cubic');
 const agentInspect = process.argv.includes('--agent-inspect');
 const inspectAngle = agentInspect || process.argv.includes('--inspect-angle');
-const line = [[10, 10, 0], [25, 10, 0]], quadratic = [[25, 10, 0], [35, 24, 0], [50, 18, 0]];
-function source(points) {
+assert.ok(!cubicJoin || !inspectAngle, 'The tangent inspector path is scoped to the quadratic join');
+const line = [[10, 10, 0], [25, 10, 0]];
+const other = cubicJoin
+  ? [[25, 10, 0], [35, 24, 0], [47, 7, 5], [55, 21, 0]]
+  : [[25, 10, 0], [35, 24, 0], [50, 18, 0]];
+const degree = other.length - 1, label = cubicJoin ? 'Cubic' : 'Quadratic';
+const firstDomain = cubicJoin ? [2, 4] : [0, 1], secondDomain = cubicJoin ? [10, 14] : [0, 1];
+const [start, knot] = firstDomain, end = knot + secondDomain[1] - secondDomain[0];
+function source(points, [from, to]) {
   const count = points.length;
-  return `@model join_input {version:0;length-unit:mm;@curve #path {type:nurbs;degree:${count - 1};knots:[${Array(count).fill(0)},${Array(count).fill(1)}];control-points:${JSON.stringify(points)};weights:[${Array(count).fill(1)}];}}`;
+  return `@model join_input {version:0;length-unit:mm;@curve #path {type:nurbs;degree:${count - 1};knots:[${Array(count).fill(from)},${Array(count).fill(to)}];control-points:${JSON.stringify(points)};weights:[${Array(count).fill(1)}];}}`;
+}
+function bezier(points, t) {
+  // Independent de Casteljau interpolation from the authored control points.
+  while (points.length > 1)
+    points = points.slice(1).map((right, index) => right.map((value, axis) => (1 - t) * points[index][axis] + t * value));
+  return points[0];
 }
 const doc = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nodes: [], outputs: {}, nextId: 0,
   direct: {
-    sources: { a: source(line), b: source(quadratic) },
+    sources: { a: source(line, firstDomain), b: source(other, secondDomain) },
     objects: [{ id: 'a', name: 'Straight reference', source: 'a', geometry: 'path' },
-      { id: 'b', name: 'Quadratic reference', source: 'b', geometry: 'path' }],
+      { id: 'b', name: label + ' reference', source: 'b', geometry: 'path' }],
   },
 };
 const pins = [
@@ -24,11 +38,11 @@ const pins = [
   'apps/cad-studio/src/ui/joinEndpointGuidance.ts', 'packages/barocss-cad-model/src/engine/direct.ts',
 ];
 const f = await createFlow({
-  name: 'join-line-quadratic', output: process.argv[2],
-  envFrozen: agentInspect ? 'D1615_SOURCE_FROZEN' : inspectAngle ? 'D1614_SOURCE_FROZEN' : 'D1605_SOURCE_FROZEN',
+  name: 'join-line-' + label.toLowerCase(), output: process.argv[2],
+  envFrozen: cubicJoin ? 'D1617_SOURCE_FROZEN' : agentInspect ? 'D1615_SOURCE_FROZEN' : inspectAngle ? 'D1614_SOURCE_FROZEN' : 'D1605_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Join the exact line end to the quadratic start, preserve both spans and reopen the single native curve.',
-  limits: ['One unit-weight line and one unit-weight quadratic Bézier with an exact shared endpoint.'],
+  qualification: `Join the exact line end to the ${label.toLowerCase()} start, preserve both spans and reopen the single native curve.`,
+  limits: [`One unit-weight line and one unit-weight ${label.toLowerCase()} Bézier with an exact shared endpoint.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { evaluateCurve } from '@barocss/cad';
@@ -38,7 +52,9 @@ const [item] = value.objects.filter(item => !item.hidden);
 const curve = geometryOf(value, item);
 if (curve.kind !== 'curve') throw Error('Expected one visible native curve');
 console.log(JSON.stringify({ item: item.id, degree: curve.degree, knots: curve.knots, weights: curve.weights,
-  samples: Array.from({ length: 65 }, (_, i) => evaluateCurve(curve, i / 32)) }));
+  samples: Array.from({ length: 65 }, (_, i) =>
+    evaluateCurve(curve, i <= 32 ? ${start} + (${knot} - ${start}) * i / 32 : ${knot} + (${end} - ${knot}) * (i - 32) / 32)) }));
+
 `,
 });
 const panel = () => f.page.getByRole('complementary', { name: 'Direct geometry' });
@@ -58,12 +74,12 @@ await f.run(async () => {
     });
     return context;
   };
-  const file = join(f.output, 'line-and-quadratic.bcad');
+  const file = join(f.output, `line-and-${label.toLowerCase()}.bcad`);
   await writeFile(file, JSON.stringify(doc));
   await f.freshOpen(file, doc, '01-two-native-curves');
   await button(f.page, 'Top').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await row('Quadratic reference').click();
+  await row(label + ' reference').click();
   await row('Straight reference').click({ modifiers: ['Shift'] });
   f.phase = 'refuse the opposite order and keep both selected source curves';
   const before = await f.page.locator('.ol.direct.sel').allTextContents();
@@ -85,24 +101,24 @@ await f.run(async () => {
   assert.equal(joined.direct.sources.a, doc.direct.sources.a);
   assert.equal(joined.direct.sources.b, doc.direct.sources.b);
   const native = await f.inspect('joined-native', joined);
-  assert.equal(native.degree, 2);
-  assert.deepEqual(native.knots, [0, 0, 0, 1, 1, 2, 2, 2]);
-  assert.deepEqual(native.weights, [1, 1, 1, 1, 1]);
+  assert.equal(Object.keys(joined.direct.sources).length, 3);
+  assert.equal(native.degree, degree);
+  assert.deepEqual(native.knots, [...Array(degree + 1).fill(start), ...Array(degree).fill(knot), ...Array(degree + 1).fill(end)]);
+  assert.deepEqual(native.weights, Array(2 * degree + 1).fill(1));
   const error = Math.max(...native.samples.map((point, i) => {
     const t = i <= 32 ? i / 32 : i / 32 - 1;
-    const predicted = i <= 32 ? line[0].map((p, j) => (1 - t) * p + t * line[1][j])
-      : quadratic[0].map((p, j) => (1 - t) ** 2 * p + 2 * t * (1 - t) * quadratic[1][j] + t ** 2 * quadratic[2][j]);
+    const predicted = bezier(i <= 32 ? line : other, t);
     return Math.hypot(...point.map((value, j) => value - predicted[j]));
   }));
   assert.ok(error < 1e-10);
   assert.deepEqual(native.samples[32], line[1]);
-  f.report.observations.push({ errorMm: error, joinPoint: native.samples[32], degree: native.degree });
+  f.report.observations.push({ errorMm: error, joinPoint: native.samples[32], degree: native.degree, domains: [[start, knot], [knot, end]] });
   await f.snapshot('03-joined-curve');
   await f.undo();
   await f.same(doc);
   await f.redo();
   await f.same(joined);
-  const saved = await f.save('joined-line-quadratic');
+  const saved = await f.save(`joined-line-${label.toLowerCase()}`);
   await f.freshOpen(saved.file, joined, '04-reopened-joined-curve');
   assert.deepEqual(await f.inspect('reopened-native', joined), native);
   await button(f.page, 'Top').click();
