@@ -188,7 +188,20 @@ export function healHorizontalChamferIfAdmitted(brep: Brep, faceName: string, sh
   if (brep.source.family !== 'polyhedral-boolean' || brep.coedges.some(use => use.pcurve !== null)) return undefined;
   const source = readChamfer(brep, faceName, [sharpEdgeName]);
   if (!source) return undefined;
-  const { selected, chartByFace, neighbors, vertices, loops, uses, edges, bevel, linear, roundoff } = source;
+  const corner = readHorizontalBoxCorner(brep, source, sharpEdgeName);
+  if (!corner) return undefined;
+  const { cap, wall, spanAxis, wallSeam, capSeam, rails, points, remap, capName } = corner;
+  const { bevel } = source;
+  const normalSlack = 64 * Number.EPSILON;
+  if (Math.abs(bevel.normal[spanAxis]) > normalSlack || Math.abs(bevel.normal[cap.axis] - cap.sign * Math.SQRT1_2) > normalSlack
+    || Math.abs(bevel.normal[wall.axis] - wall.sign * Math.SQRT1_2) > normalSlack || !clearsBevel(brep, source, [wallSeam, capSeam])) return undefined;
+  const healed = rebuildSharpCorner(brep, source, wallSeam, capSeam, rails, points, remap, sharpEdgeName, 0);
+  return healed && boxCapOffsetFrame(healed, capName) ? healed : undefined;
+}
+
+/** Prove six original cardinal supports and the mate topology for one horizontal box corner. */
+export function readHorizontalBoxCorner(brep: Brep, source: NonNullable<ReturnType<typeof readBoxCornerTrim>>, sharpEdgeName: string) {
+  const { selected, chartByFace, neighbors, vertices, loops, uses, edges, linear, roundoff } = source;
   const remaining = brep.faces.filter(face => face !== selected);
   const supports = new Map<string, Support>();
   for (const face of remaining) {
@@ -204,15 +217,12 @@ export function healHorizontalChamferIfAdmitted(brep: Brep, faceName: string, sh
 
   const seams = neighbors.filter(({ loop }) => loop.coedges.length === 4);
   const rails = neighbors.filter(({ loop }) => loop.coedges.length === 5);
-  if (seams.length !== 2 || rails.length !== 2 || sharpName(brep, seams) !== sharpEdgeName || !clearsBevel(brep, source, seams)) return undefined;
+  if (seams.length !== 2 || rails.length !== 2 || sharpName(brep, seams) !== sharpEdgeName) return undefined;
   const capSeam = seams.find(({ loop }) => supports.get(loop.face)!.axis === 2);
   const wallSeam = seams.find(({ loop }) => supports.get(loop.face)!.axis !== 2);
   if (!capSeam || !wallSeam) return undefined;
   const cap = supports.get(capSeam.loop.face)!, wall = supports.get(wallSeam.loop.face)!;
-  const spanAxis = wall.axis === 0 ? 1 : 0;
-  const normalSlack = 64 * Number.EPSILON;
-  if (Math.abs(bevel.normal[spanAxis]) > normalSlack || Math.abs(bevel.normal[cap.axis] - cap.sign * Math.SQRT1_2) > normalSlack
-    || Math.abs(bevel.normal[wall.axis] - wall.sign * Math.SQRT1_2) > normalSlack) return undefined;
+  const spanAxis: 0 | 1 = wall.axis === 0 ? 1 : 0;
 
   const remap = new Map<string, string>(), points = new Map<string, Point>();
   const seamIds = new Set(seams.flatMap(({ edge }) => edge.vertices));
@@ -237,7 +247,7 @@ export function healHorizontalChamferIfAdmitted(brep: Brep, faceName: string, sh
     points.set(wallId, sharp);
   }
 
-  // Polyhedral intersections can leave machine rounding at a vertex. Use only its actual incident
+  // Native intersections can leave machine rounding at a vertex. Use only its actual incident
   // supports to recover the exact corner, and reject a larger gap instead of moving the stock.
   const supportsByVertex = new Map<string, Support[]>(brep.vertices.map(vertex => [vertex.id, []]));
   for (const face of remaining) {
@@ -257,8 +267,8 @@ export function healHorizontalChamferIfAdmitted(brep: Brep, faceName: string, sh
   }
 
   const capName = brep.faces.find(face => face.id === capSeam.loop.face)!.name!;
-  const healed = rebuildSharpCorner(brep, source, wallSeam, capSeam, rails, points, remap, sharpEdgeName, 0);
-  return healed && boxCapOffsetFrame(healed, capName) ? healed : undefined;
+  const [lo, hi] = [...exactSpanEnds].sort((a, b) => a - b);
+  return { cap, wall, spanAxis, wallSeam, capSeam, rails, points, remap, capName, lo, hi, leg: firstLeg! };
 }
 
 export function rebuildSharpCorner(brep: Brep, source: NonNullable<ReturnType<typeof readBoxCornerTrim>>, keepSeam: Neighbor, discardSeam: Neighbor, rails: readonly Neighbor[],

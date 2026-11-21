@@ -6,7 +6,7 @@ import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric
 import { dist } from '../core/vec3.js';
 import type { Point } from '../types.js';
 import { boxCapOffsetFrame } from './drafted-cap-offset.js';
-import { readBoxCornerTrim, rebuildSharpCorner } from './heal-prismatic-chamfer.js';
+import { readBoxCornerTrim, readHorizontalBoxCorner, rebuildSharpCorner } from './heal-prismatic-chamfer.js';
 import { affineChart } from './prism-wall-offset.js';
 import { brepFromPrismatic, type PrismaticSolid } from './prismatic-solid.js';
 
@@ -115,31 +115,39 @@ function filletWall(source: CornerTrim, seam: Neighbor, axis: 0 | 1) {
   return { seam, chart, axis, at, sign };
 }
 
-function fullQuarterCylinder(source: CornerTrim, rails: readonly Neighbor[], lo: number, hi: number, corner: XY, centre: XY, radius: number): boolean {
+function fullQuarterCylinder(source: CornerTrim, rails: readonly Neighbor[], lo: number, hi: number, corner: XY, centre: XY, radius: number,
+  spanAxis: 0 | 1 | 2 = 2): boolean {
   const { selected, roundoff } = source, { surface } = selected;
   const quarterKnots = (knots: readonly number[]) => knots.length === 6 && knots.every((knot, i) => knot === (i < 3 ? 0 : 1));
+  const transverse = [0, 1, 2].filter(axis => axis !== spanAxis);
+  const section = (p: Point): XY => [p[transverse[0]], p[transverse[1]]];
   if (surface.kind !== 'surface' || surface.degreeU !== 2 || !quarterKnots(surface.knotsU) || surface.degreeV !== 1
     || surface.knotsV.length !== 4 || surface.knotsV.some((knot, i) => knot !== (i < 2 ? 0 : 1))
-    || surface.controlPoints.length !== 3 || surface.controlPoints.some(row => row.length !== 2 || row[0][2] !== lo || row[1][2] !== hi
-      || row[0][0] !== row[1][0] || row[0][1] !== row[1][1])) return false;
+    || surface.controlPoints.length !== 3 || surface.controlPoints.some(row => row.length !== 2 || !samePoint(section(row[0]), section(row[1])))
+    || surface.weights.some(row => row[0] !== row[1])) return false;
+  const stations = surface.controlPoints[0].map(point => point[spanAxis]);
+  if (!(stations[0] === lo && stations[1] === hi) && !(spanAxis !== 2 && stations[0] === hi && stations[1] === lo)) return false;
+  if (surface.controlPoints.some(row => row.some((point, i) => point[spanAxis] !== stations[i]))) return false;
+  // Analytic Boolean end rails are independently generated from the same circle.
+  const weightRoundoff = spanAxis === 2 ? 0 : angularRoundoff;
   for (const { edge } of rails) {
     const { curve } = edge, [a, mid, b] = curve.controlPoints;
     if (curve.degree !== 2 || !mid || !b || curve.controlPoints.length !== 3 || !quarterKnots(curve.knots)
-      || !closePoint([mid[0], mid[1]], corner, roundoff) || a[2] !== mid[2] || a[2] !== b[2]) return false;
-    const atEnd = a[2] === lo ? 0 : a[2] === hi ? 1 : undefined;
-    if (atEnd === undefined) return false;
+      || !closePoint(section(mid), corner, roundoff) || a[spanAxis] !== mid[spanAxis] || a[spanAxis] !== b[spanAxis]) return false;
+    const atEnd = stations.indexOf(a[spanAxis]);
+    if (atEnd < 0) return false;
     const matches = (reverse: boolean) => surface.controlPoints.every((row, i) => {
       const j = reverse ? 2 - i : i;
-      return dist(row[atEnd], curve.controlPoints[j]) <= roundoff && surface.weights[i][atEnd] === curve.weights[j];
+      return dist(row[atEnd], curve.controlPoints[j]) <= roundoff && Math.abs(surface.weights[i][atEnd] - curve.weights[j]) <= weightRoundoff;
     });
     if (!matches(false) && !matches(true)) return false;
     const circle = circleOf(curve);
     if (!circle || circle.spans.length !== 1 || Math.abs(circle.spans[0].phi - Math.PI / 2) > CadNumericPolicy.parameterWidth
-      || Math.abs(circle.r - radius) > roundoff || !closePoint([circle.c[0], circle.c[1]], centre, roundoff)) return false;
+      || Math.abs(circle.r - radius) > roundoff || !closePoint(section(circle.c), centre, roundoff)) return false;
   }
   const cylinder = faceGeometry(selected);
-  return cylinder.kind === 'cylinder' && cylinder.out === 1 && cylinder.a[0] === 0 && cylinder.a[1] === 0
-    && Math.abs(cylinder.a[2]) === 1 && Math.abs(cylinder.r - radius) <= roundoff && closePoint([cylinder.c[0], cylinder.c[1]], centre, roundoff);
+  return cylinder.kind === 'cylinder' && cylinder.out === 1 && Math.abs(cylinder.a[spanAxis]) === 1
+    && transverse.every(axis => cylinder.a[axis] === 0) && Math.abs(cylinder.r - radius) <= roundoff && closePoint(section(cylinder.c), centre, roundoff);
 }
 
 /** Restore one full-height convex circular fillet to the sharp corner of its original rectangular stock. */
@@ -187,4 +195,19 @@ export function healConvexPrismaticFilletIfAdmitted(brep: Brep, faceName: string
   const healed = rebuildSharpCorner(brep, source, x.seam, y.seam, rails, points, remap, sharpEdgeName, 0);
   const cap = brep.faces.find(face => face.id === rails[0].loop.face)!.name!;
   return healed && boxCapOffsetFrame(healed, cap) ? healed : undefined;
+}
+
+/** Restore one full-span outside circular fillet between a cap and a side of a straight rectangular box. */
+export function healHorizontalPrismaticFilletIfAdmitted(brep: Brep, faceName: string, sharpEdgeName: string): Brep | undefined {
+  if (brep.source.family !== 'analytic-boolean' || brep.coedges.some(use => use.pcurve !== null)) return undefined;
+  const source = readBoxCornerTrim(brep, faceName, [sharpEdgeName], true);
+  if (!source) return undefined;
+  const corner = readHorizontalBoxCorner(brep, source, sharpEdgeName);
+  if (!corner) return undefined;
+  const { cap, wall, spanAxis, lo, hi, leg, wallSeam, capSeam, rails, points, remap, capName } = corner;
+  if (leg <= 2 * source.linear || wallSeam.edge.curve.degree !== 1 || capSeam.edge.curve.degree !== 1) return undefined;
+  const centre: XY = [wall.at - wall.sign * leg, cap.at - cap.sign * leg];
+  if (!fullQuarterCylinder(source, rails, lo, hi, [wall.at, cap.at], centre, leg, spanAxis)) return undefined;
+  const healed = rebuildSharpCorner(brep, source, wallSeam, capSeam, rails, points, remap, sharpEdgeName, 0);
+  return healed && boxCapOffsetFrame(healed, capName) ? healed : undefined;
 }

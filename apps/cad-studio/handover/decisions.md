@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1467: [Restore a box cap edge by deleting its outside fillet](notes/heal-full-span-box-cap-fillet-2026-11-21/README.md), #17. Verify both cap orientations, exact sharp axes, six face IDs and fresh Open.
 - D1466: [Restore a box corner by deleting its outside fillet](notes/heal-convex-box-corner-fillet-2026-11-21/README.md), #17. Verify the original sharp edge, six face IDs and 12000 mm³ through Studio and MCP.
 - D1465: [Heal either of two box chamfers that share a wall](notes/heal-neighboring-box-chamfers-2026-11-21/README.md), #17. Verify the exact peer boundary, both one-edit choices and the two-step restoration through Studio and MCP.
 - D1464: [Give Linked Inset source review one owner](notes/studio-linked-inset-source-review-2026-11-21/README.md). Extract its preview, stale-result checks, apply and focus handling and verify them in desktop Studio.

@@ -100,19 +100,21 @@ test('Delete face reopens the two-bore plate after filling each bore in either o
   }
 });
 
-test('Delete face restores a sharp box corner from its exact outside fillet', async () => {
-  const stock = rectanglePart(40, 30, 10), edge = 'n1.side0|n1.side3', name = 'n2.face';
+for (const [edge, span] of [
+  ['n1.side0|n1.side3', 10], ['n1.side0|n1.top', 40], ['n1.bottom|n1.side0', 40],
+] as const) test(`Delete face restores sharp box edge ${edge} from its exact outside fillet`, async () => {
+  const stock = rectanglePart(40, 30, 10), name = 'n2.face';
   const fillet = { kind: 'fillet', parent: { node: 1, side: 'solid' }, radius: 2 } as const;
   const doc = withNode(stock, { ...fillet, edges: [edge] }), pristine = structuredClone(doc);
   const before = await evaluate(doc);
   assert.ok(before.ok && before.bodies[0].volume !== null);
-  assert.ok(Math.abs(before.bodies[0].volume - (12000 - 10 * (4 - Math.PI))) < 1e-7);
+  assert.ok(Math.abs(before.bodies[0].volume - (12000 - span * (4 - Math.PI))) < 1e-7);
   const { bodies } = before;
   const index = bodies[0].mesh.faces.findIndex(face => face.name === name);
   assert.ok(index >= 0);
   const ctx = { doc, bodies, selection: { ...emptySel, faces: [{ body: 0, face: index }] } };
   assert.equal(command.available(ctx).ok, true);
-  const held = withNode(stock, { ...fillet, edges: ['n1.side0|n1.top'] });
+  const held = withNode(stock, { ...fillet, edges: [edge], section: { kind: 'conic', rho: 0.6 } });
   assert.equal(isDeleteFaceFilletSource(held.nodes, 2), false);
   const run = (face: string) => dispatchTool({ doc, bodies }, 'features',
     { action: 'command', command: 'delete-face', faces: [face], expectedRevision: revisionOf(doc) }, evaluate);

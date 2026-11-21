@@ -23,10 +23,18 @@ const reference = [
 const refVolume = 40 * 20 * 3 + 3 * 20 * 30 - 3 * 20 * 3;
 const close = (actual, expected, tolerance) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} differs from ${expected}`);
 
-for (const [edge, x, y] of [
+const verticalEdges = [
   ['n1.side0|n1.side3', 0, 0], ['n1.side0|n1.side1', 40, 0],
   ['n1.side1|n1.side2', 40, 30], ['n1.side2|n1.side3', 0, 30],
-]) test(`Delete face restores the outside R2 round at ${edge}`, () => {
+].map(([edge, x, y]) => [edge, [x, y, 0], [x, y, 10], 2]);
+const capEdges = ['top', 'bottom'].flatMap(cap => [
+  ['n1.side0', [0, 0], [40, 0], 0], ['n1.side1', [40, 0], [40, 30], 1],
+  ['n1.side2', [0, 30], [40, 30], 0], ['n1.side3', [0, 0], [0, 30], 1],
+].map(([wall, a, b, axis]) => {
+  const z = cap === 'top' ? 10 : 0;
+  return [[wall, 'n1.' + cap].sort().join('|'), [...a, z], [...b, z], axis];
+}));
+for (const [edge, a, b, axis] of [...verticalEdges, ...capEdges]) test(`Delete face restores the outside R2 round at ${edge}`, () => {
   const stock = [
     { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 30] },
     { id: 'n1', kind: 'extrude', sketch: 'n0', height: 10 },
@@ -36,9 +44,11 @@ for (const [edge, x, y] of [
   const cylinder = faceGeometry(face);
   assert.equal(cylinder.kind, 'cylinder');
   assert.equal(cylinder.out, 1);
+  assert.equal(Math.abs(cylinder.a[axis]), 1);
   close(cylinder.r, 2, 1e-9);
-  close(brepMassProperties(before, 1).volume, 12000 - 10 * (4 - Math.PI), 1e-7);
-  const signature = { ...faceSignatures(before).get('n2.face'), size: 10 * Math.PI };
+  const span = b[axis] - a[axis];
+  close(brepMassProperties(before, 1).volume, 12000 - span * (4 - Math.PI), 1e-7);
+  const signature = { ...faceSignatures(before).get('n2.face'), size: span * Math.PI };
   const after = output([...rounded, heal('n2.face', 'n2', { 'n2.face': signature })]).brep;
   const report = checkBrep(after, { strict: true });
   assert.ok(report.valid, report.issues.join('\n'));
@@ -51,7 +61,7 @@ for (const [edge, x, y] of [
   assert.deepEqual(after.faces.map(item => [item.name, item.id]).sort(),
     before.faces.filter(item => item !== face).map(item => [item.name, item.id]).sort());
   const unrounded = after.edges.find(item => item.name === edge);
-  assert.deepEqual(unrounded.curve.controlPoints.toSorted((a, b) => a[2] - b[2]), [[x, y, 0], [x, y, 10]]);
+  assert.deepEqual(unrounded.curve.controlPoints.toSorted((p, q) => p[axis] - q[axis]), [a, b]);
   const uses = before.coedges.filter(item => face.loops.includes(item.loop));
   const tangentVertices = new Set(before.edges.filter(item => uses.some(use => use.edge === item.id)).flatMap(item => item.vertices));
   const unaffected = before.edges.filter(item => !item.vertices.some(vertex => tangentVertices.has(vertex)));

@@ -6,8 +6,10 @@ import { withMcpSession } from './mcp-browser-session.mjs';
 
 const output = process.argv[2];
 assert.ok(output && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
-const convex = process.argv[3] === '--convex';
-const unionFile = convex ? undefined : process.argv[3];
+const mode = process.argv[3];
+const cap = mode === '--cap-top' ? 'top' : mode === '--cap-bottom' ? 'bottom' : undefined;
+const convex = mode === '--convex' || cap !== undefined;
+const unionFile = convex ? undefined : mode;
 const input = convex ? process.argv[4] : unionFile;
 assert.ok(!convex || input);
 const sourceBytes = input && await readFile(input);
@@ -32,7 +34,8 @@ if (convex) pins.push('packages/barocss-cad/src/features/heal-prismatic-chamfer.
 const f = await createFlow({
   name: 'delete-fillet-face', envFrozen: 'DELETE_FILLET_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: `Heal the picked ${convex ? 'outside fillet of a rectangular box' : 'inside fillet of a straight L-section'}, then save and reopen the sharp solid.`,
-  limits: [convex ? 'One R2 outside fillet spanning the height of a 40 × 30 × 10 mm rectangular box.'
+  limits: [cap ? `One full-width R2 outside fillet at the ${cap} front edge of a 40 × 30 × 10 mm box.`
+    : convex ? 'One R2 outside fillet spanning the height of a 40 × 30 × 10 mm rectangular box.'
     : unionFile ? 'One R2 inside fillet on the union of a 40 × 20 × 3 mm foot and 3 × 20 × 30 mm upright.'
     : 'One constant R2 internal fillet spanning a 20 mm axis-aligned extrusion of the 40 × 30 mm L-section.'],
   inspectorSource: `
@@ -43,12 +46,12 @@ const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const solids = partBreps(doc), brep = solids[0].brep;
 console.log(JSON.stringify({ solids: solids.length, report: checkBrep(brep, { strict: true }),
   mass: brepMassProperties(brep, 1), faces: brep.faces.map(({ id, name }) => ({ id, name })),
-  edges: brep.edges.map(({ id, name }) => ({ id, name })) }));
+  edges: brep.edges.map(({ id, name, curve }) => ({ id, name, poles: curve.controlPoints })) }));
 `,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const sharpVolume = convex ? 12000 : (40 * 3 + 30 * 3 - 3 * 3) * 20;
-const filletVolume = sharpVolume + (convex ? -10 : 20) * (4 - Math.PI);
+const filletVolume = sharpVolume + (cap ? -40 : convex ? -10 : 20) * (4 - Math.PI);
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-7, `${actual} != ${expected}`);
 
 async function measure(label, doc, original) {
@@ -67,7 +70,13 @@ async function measure(label, doc, original) {
     assert.deepEqual(native.faces.map(face => face.name).sort(), survivingFaces.map(face => face.name).sort());
     if (convex) {
       for (const face of survivingFaces) assert.deepEqual(native.faces.find(candidate => candidate.id === face.id), face);
-      assert.ok(native.edges.some(edge => edge.name === source.nodes.at(-1).edges[0]));
+      const edge = native.edges.find(item => item.name === source.nodes.at(-1).edges[0]);
+      assert.ok(edge);
+      const z = cap === 'top' ? 10 : 0, axis = cap ? 0 : 2;
+      const ends = cap ? [[0, 0, z], [40, 0, z]] : [[0, 0, 0], [0, 0, 10]];
+      assert.equal(edge.poles.length, 2);
+      edge.poles.toSorted((a, b) => a[axis] - b[axis]).forEach((point, i) =>
+        point.forEach((value, k) => near(value, ends[i][k])));
       assert.equal(native.report.topology[0].genus, 0);
       assert.ok(native.report.maximumPcurveGap < 1e-9 && native.report.maximumEdgeSurfaceGap < 1e-9);
       native.mass.centroid.forEach((value, i) => near(value, [20, 15, 5][i]));
@@ -134,7 +143,8 @@ await f.run(async () => {
   }
   const filter = button('Selection filter');
   if (!(await filter.innerText()).includes('Faces')) await filter.click();
-  const point = convex ? [2 - Math.SQRT2, 2 - Math.SQRT2, 5]
+  const point = cap ? [20, 2 - Math.SQRT2, cap === 'top' ? 8 + Math.SQRT2 : 2 - Math.SQRT2]
+    : convex ? [2 - Math.SQRT2, 2 - Math.SQRT2, 5]
     : unionFile ? [5 - Math.SQRT2, 10, 5 - Math.SQRT2] : [5 - Math.SQRT2, 25 + Math.SQRT2, 10];
   const pixel = await f.page.evaluate(p => window.__studioScreenOf(p), point);
   assert.ok(pixel?.length === 2);

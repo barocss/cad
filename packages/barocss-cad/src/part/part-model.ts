@@ -70,7 +70,7 @@ import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallI
 import { healBoredPlateIfAdmitted, healCylindricalBossIfAdmitted, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted,
   replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
 import { healAnalyticLFilletIfAdmitted } from '../features/heal-analytic-l-fillet.js';
-import { healConvexPrismaticFilletIfAdmitted, healPrismaticFilletIfAdmitted } from '../features/heal-prismatic-fillet.js';
+import { healConvexPrismaticFilletIfAdmitted, healHorizontalPrismaticFilletIfAdmitted, healPrismaticFilletIfAdmitted } from '../features/heal-prismatic-fillet.js';
 import { healAdjacentPrismaticChamferIfAdmitted, healHorizontalChamferIfAdmitted, healOppositePrismaticChamferIfAdmitted,
   healPrismaticChamferIfAdmitted } from '../features/heal-prismatic-chamfer.js';
 import { boundaryBindingRefusal } from './part-boundary-refusal-internal.js';
@@ -713,8 +713,15 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
             }
           } else if (part.history?.finishes.length === 1) {
             const [finish] = part.history.finishes, [sharpEdge] = part.filletTargets;
-            if (finish.kind === 'fillet' && !finish.radii && finish.edges.length === 1 && finish.edges[0] === sharpEdge && face === `${finish.id}.face`)
+            if (finish.kind === 'fillet' && !finish.radii && finish.edges.length === 1 && finish.edges[0] === sharpEdge && face === `${finish.id}.face`) {
               healed = healAnalyticLFilletIfAdmitted(brep, face, sharpEdge, at);
+              if (!healed && brep.faces.length === 7) {
+                const { author } = t.ref(f.target, 'target');
+                if (author?.kind === 'fillet' && author.id === finish.id && author.id === brep.source.id && !author.radii
+                  && (!author.section || author.section.kind === 'circular') && author.edges.length === 1 && author.edges[0] === sharpEdge)
+                  healed = healHorizontalPrismaticFilletIfAdmitted(brep, face, sharpEdge);
+              }
+            }
           }
         }
         if (!healed && part.chamferTargets?.length === 1) {
@@ -737,7 +744,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
               ?? healAdjacentPrismaticChamferIfAdmitted(brep, face, part.chamferTargets);
         }
         if (!healed && remainingEdge) healed = healPrismaticChamferIfAdmitted(brep, face, remainingEdge);
-        if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket, or one full-height convex circular fillet on a straight rectangular box. Select its fillet face. To remove a fully enclosed cylindrical boss from straight rectangular stock, select the top face of the boss. To heal a full-height vertical or full-span horizontal chamfer on a straight rectangular box, select the chamfer face. For one of two full-height chamfers on a straight rectangular box, select its exact numbered face.');
+        if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket, or one full-height vertical or full-span horizontal convex circular fillet on a straight rectangular box. Select its fillet face. To remove a fully enclosed cylindrical boss from straight rectangular stock, select the top face of the boss. To heal a full-height vertical or full-span horizontal chamfer on a straight rectangular box, select the chamfer face. For one of two full-height chamfers on a straight rectangular box, select its exact numbered face.');
         return one({ kind: 'brep', brep: healed });
       };
     }
