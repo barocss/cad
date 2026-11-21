@@ -7,18 +7,28 @@ import { withMcpSession } from './mcp-browser-session.mjs';
 const baseline = process.argv.includes('--baseline');
 const near = baseline || process.argv.includes('--near');
 const span = near ? 32.5 : 42;
+const manualAt = process.argv.indexOf('--manual-after');
+const approvedPath = manualAt === -1 ? null : process.argv[manualAt + 1];
+const expectManualRefusal = process.argv.includes('--expect-manual-refusal');
+assert.ok(manualAt === -1 || approvedPath, 'An approved .bcad file is required');
+assert.ok(!expectManualRefusal || approvedPath);
 const pins = [
   'apps/cad-studio/src/App.tsx',
+  'apps/cad-studio/src/app/patternHoleSpacing.ts',
+  'apps/cad-studio/src/state/historyFeatureApply.ts',
   'apps/cad-studio/test/fixed-span-hole-proposal-browser.mjs',
   'apps/cad-studio/test/mcp-browser-session.mjs',
   'apps/cad-studio/server/cadMcp.ts',
+  'packages/barocss-cad-model/src/app/patternHoleSpacing.ts',
   'packages/barocss-cad-model/src/chat/part/features.ts',
   'packages/barocss-cad-model/src/chat/part/proposals.ts',
 ];
 const f = await createFlow({
   name: 'fixed-span-hole-proposal', output: process.argv[2], envFrozen: 'FIXED_SPAN_HOLE_PROPOSAL_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Bind the local fixed-span edit proposal to the exact current terminal Hole and one Studio approval.',
+  qualification: approvedPath
+    ? 'Manually edit a previously approved fixed-span pattern while preserving its recorded Agent decision.'
+    : 'Bind the local fixed-span edit proposal to the exact current terminal Hole and one Studio approval.',
   limits: ['One rectangular linked through Hole, base document, real stdio MCP at level 1 and desktop Studio. No live provider.'],
   inspectorSource: `
 import {readFileSync} from 'node:fs';
@@ -46,11 +56,12 @@ const card = () => f.page.getByRole('listitem', { name: 'Proposal P1', exact: tr
 const mcp = (file, label, run) => withMcpSession({ app: f.app, output: f.output, clientName: 'fixed-span-hole-proposal', autonomy: 1 }, file, label, run);
 async function geometry(label, doc, centre) {
   const native = await f.inspect(label, doc);
-  const expected = 768 - 8 * Math.PI;
+  const count = doc.nodes[2].count;
+  const expected = count * 192 - 8 * Math.PI;
   assert.ok(native.check.valid, JSON.stringify(native.check.issues));
   assert.ok(Math.abs(native.volume - expected) < 1e-7);
   assert.ok(Math.abs((await f.bodies()).bodies[0].volume - expected) < 1e-7);
-  assert.deepEqual(native.tops, [['n1.top', 1], ['n1.top@1', 1], ['n1.top@2', 1], ['n1.top@3', 2]]);
+  assert.deepEqual(native.tops, Array.from({ length: count }, (_, i) => [i ? `n1.top@${i}` : 'n1.top', i === count - 1 ? 2 : 1]));
   assert.equal(native.walls.length, 2);
   for (const wall of native.walls) {
     assert.equal(wall.kind, 'cylinder');
@@ -59,7 +70,50 @@ async function geometry(label, doc, centre) {
   f.report.observations.push({ label, centre, reference: doc.nodes[3].face, expected, native });
   await f.persist();
 }
+
+async function manuallyEditApprovedPattern() {
+  const approvedBytes = await readFile(approvedPath);
+  const approved = JSON.parse(approvedBytes);
+  assert.deepEqual(approved.nodes, [...source.nodes.slice(0, 2), { ...source.nodes[2], count: 4, span: 42 },
+    { ...source.nodes[3], center: [94, 13], face: 'n1.top@3' }]);
+  assert.deepEqual(approved.outputs, source.outputs);
+  assert.deepEqual(approved.proposals.map(proposal => [proposal.id, proposal.status]), [['P1', 'accepted']]);
+  const decision = approved.history.at(-1);
+  assert.deepEqual([decision.kind, decision.proposal, decision.by.agent], ['accept', 'P1', 'user']);
+  await f.freshOpen(approvedPath, approved, 'approved-start');
+  await geometry('approved-start-native', approved, 94);
+  await f.openFeatureEditor(2, 'Fixed span Linear pattern');
+  const field = name => f.editor().getByRole('spinbutton', { name, exact: true });
+  assert.equal(await field('Count').inputValue(), '4');
+  assert.equal(await field('Total span').inputValue(), '42');
+  await field('Count').fill('3');
+  await field('Total span').fill('32');
+  await f.same(approved);
+  if (expectManualRefusal) {
+    const before = await f.snapshot('approved-before-refusal');
+    await button('Apply', f.editor()).click();
+    const error = f.editor().locator('.hud-error');
+    await error.waitFor();
+    assert.match(await error.innerText(), /numbered Hole cannot safely follow Total span/);
+    const refused = await f.snapshot('approved-manual-refused');
+    for (const key of ['doc', 'bodies', 'selection', 'history', 'undoRedo']) assert.deepEqual(refused[key], before[key], key);
+    await f.same(approved);
+  } else {
+    const expected = { ...approved, nodes: source.nodes };
+    await f.applyEditor(approved, 'approved-manual-applied');
+    await f.same(expected);
+    await geometry('approved-manual-native', expected, 84);
+    await f.undo(); await f.same(approved); await geometry('approved-manual-undo-native', approved, 94);
+    await f.redo(); await f.same(expected);
+    const saved = await f.save('approved-pattern-manually-restored');
+    await f.freshOpen(saved.file, expected, 'approved-manual-reopened');
+    await geometry('approved-manual-reopened-native', saved.doc, 84);
+  }
+  assert.deepEqual(await readFile(approvedPath), approvedBytes);
+}
+
 await f.run(async () => {
+  if (approvedPath) { await manuallyEditApprovedPattern(); return; }
   const path = join(f.output, 'local-pattern-proposal.bcad');
   await writeFile(path, JSON.stringify(source));
   f.phase = 'read the current revision and make a local level-one proposal';

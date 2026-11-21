@@ -21,7 +21,7 @@ import { holePatternEditProblem } from '@barocss/cad-model/app/holePatternInput'
 import type { NodeEditor } from '../ui/NodeEditor';
 import type { EngineClient } from '../engine/client';
 import { prepareLinearPatternHoleEdit } from '../app/patternHoleSpacing';
-import { changesFixedSpanCountAndLength } from '@barocss/cad-model/app/patternHoleSpacing';
+import { changesFixedSpanCountAndLength, preparePairedFixedSpanHoleEdit } from '@barocss/cad-model/app/patternHoleSpacing';
 import { rectangularCutEditProblem } from '../app/rectangularCutEdit';
 import { preparePatternNodeCandidate } from '../app/directCurveCandidate';
 import { linkedInsetHistoryFailure, failedFeatureText, loftHistoryFailure, splitDependentHoleFailure, holeDepthContactFailure } from '../app/failedFeature';
@@ -121,9 +121,11 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
       return canonical(doc.nodes) === canonical(originDraft);
     };
     if (equalCircularHoleDraft()) return;
-    const patternEdit = prepareLinearPatternHoleEdit(doc, nodes, editNode);
-    if ('error' in patternEdit) return Promise.resolve(patternEdit.error);
     const pairedSpanEdit = changesFixedSpanCountAndLength(oldPattern, newPattern);
+    const patternEdit = pairedSpanEdit
+      ? preparePairedFixedSpanHoleEdit(doc, nodes, editNode)
+      : prepareLinearPatternHoleEdit(doc, nodes, editNode);
+    if ('error' in patternEdit) return Promise.resolve(patternEdit.error);
     // A coupled pattern and Hole rewrite requires the exact evaluated owner and reply revision.
     const pairedPatternHoleChanged = (dependentCircularHole || pairedSpanEdit)
       && patternEdit.nodes.some((node, index) => index !== editNode && node !== nodes[index]);

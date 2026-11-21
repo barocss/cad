@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1486: [Preserve an Agent approval during a later manual fixed-span edit](notes/manual-pattern-after-agent-approval-2026-11-21/README.md), #25. Verify the manual reversal, exact Hole, unchanged approval, Undo, Redo and native reopening.
 - D1485: [Share the fixed-span end Hole proof with local Agent review](notes/agent-fixed-span-end-hole-2026-11-21/README.md), #25. Verify the exact pair through local proposal, Studio review and fresh Open.
 - D1484: [Resize Count and Total span together with an active end Hole](notes/fixed-span-count-paired-hole-2026-11-21/README.md), #25. Verify the exact new terminal face, owned native commit and fresh Open.
 - D1483: [Extract Studio reference preview routing from App](notes/studio-reference-preview-routing-2026-11-21/README.md). Verify matching Model and Drawing state and retire previews after sheet and file changes.

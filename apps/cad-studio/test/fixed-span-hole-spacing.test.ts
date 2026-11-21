@@ -83,9 +83,11 @@ test('paired Count and span validate the old and final layouts without requiring
  assert.ok('error' in prepare(seed,patch(seed.nodes,2,{count:4,span:42,axis:'y'}),2));
 });
 
-test('paired span and Count commit once with an owned native reply and never after replacement', async () => {
- for(const retirement of ['current','evaluated','draft','revision'] as const){
-  const doc=fixture(), draft=patch(doc.nodes,2,{count:4,span:42});
+test('paired span and Count preserve Agent records and require an owned native reply', async () => {
+ for(const retirement of ['current','evaluated','draft','revision','decision'] as const){
+  const at = '2026-11-21T00:00:00.000Z';
+  const doc:StudioDoc = {...fixture(), proposals: [], history: [{id:'h1', at, kind:'accept', by:{agent:'user'}, proposal:'P1'}]};
+  const draft=patch(doc.nodes,2,{count:4,span:42});
   const expected={...doc,nodes:patch(draft,3,{center:[-6,13],face:'n1.top@3'})};
   const scope={},open={},commits:StudioDoc[]=[];
   const requests:{doc:StudioDoc;revision:number;resolve(reply:EvalResult):void}[]=[];
@@ -106,6 +108,7 @@ test('paired span and Count commit once with an owned native reply and never aft
   assert.deepEqual(commits,[]);
   if(retirement==='evaluated')evaluated={...doc};
   if(retirement==='draft')currentDraft=false;
+  if(retirement==='decision')doc.history=[...doc.history!,{id:'h2', at, kind:'accept', by:{agent:'user'}, proposal:'P2'}];
   const request=requests[0];
   const reply=evaluateDoc(request.doc,request.revision+(retirement==='revision'?1:0));
   assert.ok(reply.ok);

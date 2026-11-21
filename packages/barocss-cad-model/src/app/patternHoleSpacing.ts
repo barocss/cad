@@ -25,7 +25,7 @@ export function changesFixedSpanCountAndLength(before: ModelNode | undefined, af
     && before.count !== after.count && before.span !== after.span;
 }
 
-/** An Agent replay runs against a document that also carries its proposal and decision records. */
+/** Prove the paired edit against the modeling recipe apart from its proposal and decision records. */
 export function preparePairedFixedSpanHoleEdit(doc: StudioDoc, draft: ModelNode[], index: number): Result {
   if (!changesFixedSpanCountAndLength(doc.nodes[index], draft[index])) return { nodes: draft };
   const recipe = { ...doc };
