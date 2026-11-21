@@ -22,6 +22,112 @@ const source = withNode(emptyDoc(), {
 const ctx: Ctx = { doc: source, bodies: [], selection: { faces: [], edges: [], bodies: [], sketches: [0] } };
 const input = { axisX: 2, axisY: -1, pitch: 80, angle: -180 };
 
+const segmentSketch: SketchNode = {
+  kind: 'sketch', profile: 'loop',
+  segments: [
+    { kind: 'line', start: [13.5, 3 * Math.sin(Math.PI / 3)] },
+    { kind: 'arc', start: [13.5, -3 * Math.sin(Math.PI / 3)], center: [12, 0], direction: 'ccw' },
+  ],
+  plane: { origin: [21, -19.4, 24.8], normal: [0, .6, .8], xAxis: [1, 0, 0] },
+};
+const segmentSource = withNode(emptyDoc(), segmentSketch);
+const segmentCtx: Ctx = { ...ctx, doc: segmentSource };
+const segmentInput = { axisX: 0, axisY: 0, pitch: 40, angle: -360 };
+
+test('a single circular segment Screw retains the arc and axis through History and native Open', async () => {
+  assert.ok(command.available(segmentCtx).ok);
+  const prior = command.build!(segmentCtx, segmentInput);
+  const index = prior.nodes.length - 1;
+  const loft = prior.nodes[index];
+  assert.ok(loft.kind === 'loft' && loft.smooth);
+  assert.deepEqual(loft.from, [0]);
+  assert.equal(loft.sections.length, 13);
+  assert.deepEqual(prior.nodes[0], { ...segmentSketch, id: 'n0' });
+  assert.deepEqual(editFields(prior.nodes, index, prior.parameters).map(field => field.label), ['Total height']);
+  for (const section of loft.sections) {
+    const copy = prior.nodes[section.sketch];
+    assert.ok(copy.kind === 'sketch' && copy.profile === 'loop');
+    assert.deepEqual(copy.plane, segmentSketch.plane);
+    assert.deepEqual(copy.segments.map(segment => segment.kind), ['line', 'arc']);
+  }
+  const angle = smoothScrewAngleField(prior.nodes, index);
+  const pitch = smoothScrewPitchField(prior.nodes, index);
+  assert.ok(angle?.kind === 'number' && pitch?.kind === 'number');
+  assert.equal(angle.get(prior.nodes), -360);
+  assert.equal(pitch.get(prior.nodes), 40);
+  const reversed = { ...prior, nodes: angle.set(prior.nodes, 360) };
+  assert.deepEqual(reversed, command.build!(segmentCtx, { ...segmentInput, angle: 360 }));
+  const advanced = { ...reversed, nodes: pitch.set(reversed.nodes, 48) };
+  assert.equal(angle.get(advanced.nodes), 360);
+  assert.equal(pitch.get(advanced.nodes), 48);
+  assert.deepEqual(advanced.nodes.slice(0, index), reversed.nodes.slice(0, index));
+  for (const [doc, scale] of [[prior, 1], [reversed, 1], [advanced, 1.2]] as const) {
+    const [{ brep }] = partBreps(doc);
+    const check = checkBrep(brep, { strict: true });
+    assert.ok(check.valid, JSON.stringify(check.issues));
+    assert.deepEqual([check.counts.bodies, check.counts.faces, check.counts.edges], [1, 5, 9]);
+    assert.ok(Math.abs(brepMassProperties(brep, 1).volume - 221.13498549200997 * scale) < 1e-7);
+  }
+  const reopened = await readStudioFile(encodeStudioFile(advanced));
+  assert.ok('doc' in reopened);
+  assert.deepEqual(reopened.doc, advanced);
+  assert.deepEqual(partBreps(reopened.doc), partBreps(advanced));
+});
+
+test('a circular segment Screw rejects axes inside the supporting disc and guards History copies', () => {
+  assert.equal(command.available({ ...segmentCtx, selection: { ...segmentCtx.selection, sketches: [0, 0] } }).ok, false);
+  for (const axisX of [10, 14]) {
+    assert.throws(() => command.build!(segmentCtx, { ...segmentInput, axisX }), /Screw axis.*outside.*disc/i);
+  }
+  assert.deepEqual(segmentCtx.doc, withNode(emptyDoc(), segmentSketch));
+  const accepted = command.build!(segmentCtx, segmentInput);
+  const index = accepted.nodes.length - 1;
+  const copy = accepted.nodes[2];
+  assert.ok(copy.kind === 'sketch' && copy.profile === 'loop');
+  const arc = copy.segments[1];
+  assert.ok(arc.kind === 'arc');
+  const changed = [...accepted.nodes];
+  changed[2] = { ...copy, segments: [copy.segments[0], { ...arc, center: [99, 11] }] };
+  assert.equal(smoothScrewAngleField(changed, index), undefined);
+  assert.equal(smoothScrewPitchField(changed, index), undefined);
+});
+
+test('a circular segment Screw moves its local axis on the tilted source plane', () => {
+  const doc = command.build!(segmentCtx, { ...segmentInput, axisX: 2, axisY: -1 });
+  const first = doc.nodes[1];
+  assert.ok(first.kind === 'sketch' && first.profile === 'loop');
+  assert.ok(first.plane);
+  const origin = [23, -20.2, 25.4];
+  assert.ok(Math.hypot(...first.plane.origin.map((value, i) => value - origin[i])) < 1e-12);
+  assert.deepEqual(first.segments[1], {
+    kind: 'arc', start: [11.5, 1 - 3 * Math.sin(Math.PI / 3)], center: [10, 1], direction: 'ccw',
+  });
+  const [{ brep }] = partBreps(doc);
+  assert.ok(checkBrep(brep, { strict: true }).valid);
+});
+
+test('single circular segment Screw creation and special History edits stay scoped to Studio', async () => {
+  const unevaluated = () => assert.fail('Out-of-scope Agent requests must not evaluate.');
+  const sourceState = { doc: segmentSource, bodies: [] };
+  const create = await dispatchTool(sourceState, 'features', {
+    action: 'command', command: 'smooth-screw', values: { ...segmentInput, sketch: 'n0' },
+    expectedRevision: revisionOf(segmentSource),
+  }, unevaluated);
+  assert.ok(create.isError && !create.changed, create.content);
+  assert.equal(create.state, sourceState);
+  const doc = command.build!(segmentCtx, segmentInput), index = doc.nodes.length - 1;
+  const state = { doc, bodies: [] };
+  const discovered = await dispatchTool(state, 'features', { action: 'edit', index }, unevaluated);
+  assert.doesNotMatch(discovered.content, /smoothScrewPitch|smoothScrewAngle/);
+  for (const values of [{ smoothScrewPitch: 48 }, { smoothScrewAngle: 360 }]) {
+    const edited = await dispatchTool(state, 'features', {
+      action: 'edit', index, values, expectedRevision: revisionOf(doc),
+    }, unevaluated);
+    assert.ok(edited.isError && !edited.changed, edited.content);
+    assert.equal(edited.state, state);
+  }
+});
+
 test('Smooth Screw keeps its external axis, signed pitch and display through native Open', async () => {
   for (const angle of [180, -180]) {
     const doc = command.build!(ctx, { ...input, angle });

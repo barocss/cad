@@ -3,7 +3,7 @@ import { createFlow } from './flow-helper.mjs';
 
 const singleSketch = process.argv.includes('--single-sketch');
 const circularSegment = process.argv.includes('--line-arc');
-const triangular = singleSketch || process.argv.includes('--triangle');
+const triangular = (singleSketch && !circularSegment) || process.argv.includes('--triangle');
 const polygon = ['pentagon', 'hexagon', 'trapezoid', 'skew-quadrilateral']
   .find(name => process.argv.includes('--' + name));
 const command = singleSketch ? 'Smooth Screw' : 'Loft';
@@ -37,6 +37,13 @@ const frozen = [
   'packages/barocss-cad/src/part/part-profile-solid.ts',
   'packages/barocss-cad/src/features/loft.ts',
   'packages/barocss-cad/src/features/loft-rectangular-turn.ts',
+  ...(circularSegment && singleSketch ? [
+    'packages/barocss-cad-model/src/app/lineArcScrew.ts',
+    'packages/barocss-cad-model/src/app/editFields.ts',
+    'packages/barocss-cad-model/src/chat/part/features.ts',
+    'apps/cad-studio/src/state/historyFeatureApply.ts',
+    'apps/cad-studio/src/ui/NodeEditor.tsx',
+  ] : []),
 ];
 const f = await createFlow({
   name: 'external-axis-screw-loft',
@@ -75,10 +82,16 @@ const spin = ([x, y], angle, t) => {
   const a = angle * Math.PI / 180 * t, c = Math.cos(a), s = Math.sin(a);
   return [c * x - s * y, s * x + c * y];
 };
+const lineArcSegments = rotate => [
+  { kind: 'line', start: rotate(corners[0]) },
+  { kind: 'arc', start: rotate(corners[1]), center: rotate([12, 0]), direction: 'ccw' },
+];
 function source(angle) {
   if (singleSketch) return {
     format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, outputs: {}, nextId: 1,
-    nodes: [{
+    nodes: [circularSegment ? {
+      id: 'n0', kind: 'sketch', profile: 'loop', segments: lineArcSegments(point => point), plane: frame,
+    } : {
       id: 'n0', kind: 'sketch', profile: 'polygon', points: corners.map(([u, v]) => [u + 10, v - 3]),
       plane: { ...frame, origin: [11, -17, 23] },
     }],
@@ -92,10 +105,7 @@ function source(angle) {
         const rotate = ([u, v]) => [c * u - s * v, s * u + c * v];
         return {
           id: 'n' + i, kind: 'sketch', profile: 'loop',
-          segments: [
-            { kind: 'line', start: rotate(corners[0]) },
-            { kind: 'arc', start: rotate(corners[1]), center: rotate([12, 0]), direction: 'ccw' },
-          ],
+          segments: lineArcSegments(rotate),
           plane: { ...frame, origin: [x, y + 24 * t, z + 32 * t] },
         };
       }
@@ -122,17 +132,18 @@ async function build(angle) {
   if (singleSketch) {
     const field = name => hud.getByLabel(name, { exact: true });
     if (angle > 0) {
-      await field('Axis X').fill('7');
-      await field('Axis Y').fill('-5');
+      await field('Axis X').fill(circularSegment ? '14' : '7');
+      await field('Axis Y').fill(circularSegment ? '0' : '-5');
       await status(/^refused$/).waitFor();
-      const reason = polygon ? /place the Screw axis outside it with clearance\./ : /Place the Screw axis outside the triangle with clearance\./;
+      const reason = circularSegment ? /Screw axis.*outside.*disc/i
+        : polygon ? /place the Screw axis outside it with clearance\./ : /Place the Screw axis outside the triangle with clearance\./;
       await hud.locator('.hud-error').filter({ hasText: reason }).waitFor();
       assert.ok(await button('Apply', hud).isDisabled());
       await f.same(doc);
       await f.snapshot('single-sketch-interior-axis-refused');
     }
-    await field('Axis X').fill('10');
-    await field('Axis Y').fill('-3');
+    await field('Axis X').fill(circularSegment ? '0' : '10');
+    await field('Axis Y').fill(circularSegment ? '0' : '-3');
     await field('Pitch per revolution').fill(String(height));
     await field('Turn angle').fill(String(angle));
   } else await hud.getByLabel('Smooth (through the middle sections)', { exact: true }).selectOption('yes');
@@ -270,11 +281,17 @@ await f.run(async () => {
     assert.deepEqual(longer.nodes.slice(0, -1), reversed.nodes.slice(0, -1));
     const edited = await inspect(longer, degrees, 'single-sketch-pitch-48-native', 48);
     await frameView('single-sketch-pitch-48-model');
-    if (polygon) {
+    if (polygon || circularSegment) {
       const saved = await f.save('single-sketch-pitch-48');
       await f.freshOpen(saved.file, longer, 'single-sketch-pitch-48-fresh-open');
       assert.deepEqual(await inspect(longer, degrees, 'single-sketch-pitch-48-reopened-native', 48), edited);
       await frameView('single-sketch-pitch-48-reopened');
+      if (circularSegment) {
+        await f.openFeatureEditor(index, 'reopened circular segment Screw at pitch 48');
+        assert.equal(Number(await field('Turn angle').inputValue()), degrees);
+        assert.equal(Number(await field('Pitch per revolution').inputValue()), 48);
+        await f.snapshot('line-arc-history-reopened');
+      }
     }
   }
 });

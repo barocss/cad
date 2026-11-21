@@ -5,6 +5,7 @@ import { usesOf, type ModelNode } from '../engine/doc';
 import { canonical } from '../util/revision';
 import type { EditField } from './editFields';
 import { smoothLoftHeightField } from './smoothLoftHeight';
+import { lineArcScrewSections, rotateLineArcSegments } from './lineArcScrew';
 
 type Point = [number, number];
 export const smoothTurnAngleKey = 'smoothTurnAngle';
@@ -111,7 +112,11 @@ function turnSections(nodes: readonly ModelNode[], index: number) {
     if (angle === 0 || convexPolygonScrewAxisTolerance(first) === undefined) return;
   } else if (external && (triangular ? !triangleClearsScrewAxis(first)
     : rectangularAxisClearance(first[0], first[2], externalAxis) <= CadNumericPolicy.linearTolerance)) return;
-  return { start, last, first, rows, height, angle, radians, limit, triangular, convexPolygon, external };
+  return { start, last, first, rows, height, angle, radians, limit, triangular, convexPolygon, external, circularSegment: false as const };
+}
+
+function screwSections(nodes: readonly ModelNode[], index: number) {
+  return turnSections(nodes, index) ?? lineArcScrewSections(nodes, index);
 }
 
 export function hasSmoothTurnSections(nodes: readonly ModelNode[], index: number): boolean {
@@ -129,7 +134,7 @@ export function hasExternalScrewSections(nodes: readonly ModelNode[], index: num
 /** Pitch is editable only on an intact terminal Screw with measurable winding. */
 export function smoothScrewTurns(nodes: readonly ModelNode[], index: number): number | undefined {
   if (index !== nodes.length - 1) return;
-  const turn = turnSections(nodes, index);
+  const turn = screwSections(nodes, index);
   if (turn?.external && turn.angle !== 0) return Math.abs(turn.angle) / 360;
 }
 
@@ -164,13 +169,14 @@ function savedTurn(nodes: readonly ModelNode[], index: number) {
   if (turn && !turn.external) return turn;
 }
 
-function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnType<typeof turnSections>>, first: Point[], rotation: (fraction: number) => number) {
+function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnType<typeof screwSections>>, first: Point[], rotation: (fraction: number) => number) {
   const centre: Point | undefined = turn.external ? [0, 0] : turn.triangular ? triangleTurnCentre(first) : undefined;
   return nodes.map((node, i) => {
     const station = i - turn.start;
     if (station < 0 || station > turn.last || (station === 0 && first === turn.first)
       || node.kind !== 'sketch' || node.profile !== 'loop') return node;
     const radians = rotation(station / turn.last);
+    if (turn.circularSegment) return { ...node, segments: rotateLineArcSegments(turn.segments, radians) };
     const points = station === 0 ? first : centre ? rotateTurnPoints(first, centre, radians) : rotateTurnCorners(first, radians);
     return { ...node, segments: points.map(start => ({ kind: 'line' as const, start })) };
   });
@@ -178,8 +184,9 @@ function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnT
 
 function savedScrewWinding(nodes: readonly ModelNode[], index: number) {
   if (index !== nodes.length - 1) return;
-  const turn = turnSections(nodes, index);
+  const turn = screwSections(nodes, index);
   if (!turn?.external || turn.angle === 0) return;
+  if (turn.circularSegment) return turn;
   if (turn.convexPolygon && turn.first.length > 4) return turn;
   const [[left, bottom], , [right, top]] = turn.first;
   const tol = turn.triangular ? triangleScrewAxisTolerance(turn.first)

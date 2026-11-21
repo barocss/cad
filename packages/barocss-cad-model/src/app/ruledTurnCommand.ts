@@ -1,4 +1,4 @@
-import { CadNumericPolicy, ExtrudedProfileLimits } from '@barocss/cad';
+import { buildProfileLoop, CadNumericPolicy, ExtrudedProfileLimits } from '@barocss/cad';
 import { convexPolygonScrewAxisTolerance } from '@barocss/cad/internal/convex-polygon-screw-axis';
 import { triangleClearsScrewAxis } from '@barocss/cad/internal/triangular-screw-axis';
 import { withNode, type SketchNode, type StudioDoc } from '../engine/doc';
@@ -10,33 +10,36 @@ import { resolveSketchDims } from '../sketch/reopen';
 import type { Command, Ctx } from './commands';
 import { planeOf } from './profiles';
 import { rectangularAxisClearance, rotateTurnCorners, rotateTurnPoints, triangleTurnCentre } from './smoothLoftTurn';
+import { isLineArcSource, lineArcGeometry, nativeLineArcScrew, rotateLineArcSegments } from './lineArcScrew';
 
 const maximumAngle = 450;
 const selectRectangle = 'Select one standalone rectangular sketch without holes or separate regions.';
 const selectSmoothProfile = 'Select one standalone rectangular or straight triangular sketch without holes or separate regions.';
 type TurnProfile = Extract<SketchNode, { profile: 'rectangle' | 'polygon' }>;
+type ScrewProfile = TurnProfile | Extract<SketchNode, { profile: 'loop' }>;
 type Point = [number, number];
 
-function turnSource({ doc, selection }: Ctx, smooth: boolean, allowConvexPolygons = false): { index: number; sketch: TurnProfile; plane: SketchPlane } | undefined {
+function turnSource({ doc, selection }: Ctx, smooth: boolean, allowConvexPolygons = false): { index: number; sketch: ScrewProfile; plane: SketchPlane } | undefined {
   const [index, ...others] = selection.sketches ?? [];
   const sketch = doc.nodes[index];
   if (others.length || selection.bodies.length || selection.faces.length || selection.edges.length || selection.profileRegions
     || selection.vertices?.length
     || sketch?.kind !== 'sketch' || sketch.suppressed || sketch.on
     || sketch.association || sketch.pocketFloor || sketch.holes?.length || sketch.regions?.length) return;
-  if (sketch.profile !== 'rectangle' && (!smooth || sketch.profile !== 'polygon'
+  const lineArc = smooth && allowConvexPolygons && isLineArcSource(sketch);
+  if (!lineArc && sketch.profile !== 'rectangle' && (!smooth || sketch.profile !== 'polygon'
     || (sketch.points.length !== 3 && (!allowConvexPolygons || sketch.points.length < 4 || sketch.points.length > ExtrudedProfileLimits.segments))
     || sketch.construction?.length || sketch.outline?.bulges?.some(Boolean) || sketch.outline?.circles?.length
     || sketch.outline?.spline || sketch.outline?.ellipse)) return;
   const stored = planeOf(sketch);
-  if (sketch.profile === 'polygon' && !stored.origin.every(Number.isFinite)) return;
+  if (sketch.profile !== 'rectangle' && !stored.origin.every(Number.isFinite)) return;
   const normalLength = len(stored.normal), xLength = len(stored.xAxis);
   if (!Number.isFinite(normalLength) || !Number.isFinite(xLength) || normalLength <= 1e-12 || xLength <= 1e-12) return;
   // Saved sketch directions can carry scale. The native sketch frame uses unit axes.
   const normal = unit(stored.normal), x = unit(stored.xAxis), projection = dot(normal, x);
   if (Math.abs(projection) > 1e-9) return;
   const plane = { origin: stored.origin, normal, xAxis: unit(sub(x, scale(normal, projection))) };
-  return { index, sketch, plane };
+  return { index, sketch: sketch as ScrewProfile, plane };
 }
 
 function straightCorners(sketch: Extract<SketchNode, { profile: 'polygon' }>, reason: string): Point[] {
@@ -133,7 +136,7 @@ function turnCommand(smooth: boolean): Command {
 export const ruledTurnCommand = turnCommand(false);
 export const smoothTurnCommand = turnCommand(true);
 
-const selectScrewProfile = 'Select one standalone rectangle, triangle or convex polygon with straight edges and no holes.';
+const selectScrewProfile = 'Select one standalone straight convex profile or a closed line-and-arc profile without holes.';
 
 function screwSource(ctx: Ctx) {
   const source = turnSource(ctx, true, true);
@@ -146,7 +149,7 @@ function screwSource(ctx: Ctx) {
 
 export const smoothScrewCommand: Command = {
   id: 'smooth-screw', label: 'Smooth Screw', icon: 'cad-loft', group: 'create', keywords: 'screw helix helical pitch external axis',
-  hint: 'Rotate one straight convex outline about an external axis normal to its plane.',
+  hint: 'Rotate one straight convex or circular-segment outline about an external axis normal to its plane.',
   available: ctx => screwSource(ctx) ? { ok: true } : { ok: false, reason: selectScrewProfile },
   fields: () => [
     { key: 'axisX', label: 'Axis X', kind: 'mm', min: -CadNumericPolicy.coordinateAbs, max: CadNumericPolicy.coordinateAbs },
@@ -169,7 +172,38 @@ export const smoothScrewCommand: Command = {
     const height = Math.abs(angle) / 360 * pitch;
     if (height <= CadNumericPolicy.linearTolerance || height > limit)
       throw refusal('VALUE', 'Pitch and Turn angle must give an axial height within the model range.');
-    const sketch = resolveSketchDims(source.sketch, ctx.doc.parameters) as TurnProfile;
+    const sketch = resolveSketchDims(source.sketch, ctx.doc.parameters) as ScrewProfile;
+    if (sketch.profile === 'loop') {
+      const segments = lineArcGeometry(sketch);
+      if (!segments) throw refusal('VALUE', 'Use one finite closed line and circular arc within the model range.');
+      const local = segments.map(segment => segment.kind === 'line'
+        ? { ...segment, start: [segment.start[0] - axisX, segment.start[1] - axisY] as Point }
+        : { ...segment, start: [segment.start[0] - axisX, segment.start[1] - axisY] as Point,
+          center: [segment.center[0] - axisX, segment.center[1] - axisY] as Point });
+      const arc = buildProfileLoop(local).segments.find(segment => segment.kind === 'arc');
+      if (arc?.kind !== 'arc' || Math.hypot(...arc.center) + arc.radius > limit)
+        throw refusal('VALUE', 'Move the Screw axis closer to the complete circular profile.');
+      const { plane } = source, yAxis = cross(plane.normal, plane.xAxis);
+      const origin = add(plane.origin, add(scale(plane.xAxis, axisX), scale(yAxis, axisY)));
+      if (origin.length !== 3 || origin.some(value => !Number.isFinite(value) || Math.abs(value) > limit))
+        throw refusal('VALUE', 'Place the Screw frame within the finite model range.');
+      const spans = Math.max(6, Math.ceil(Math.abs(angle) / 30));
+      const rows = Array.from({ length: spans + 1 }, (_, station) => station === 0 ? local
+        : rotateLineArcSegments(local, angle * (station / spans) * (Math.PI / 180)));
+      const heights = rows.map((_, station) => height * (station / spans));
+      if (!nativeLineArcScrew(rows, heights)) {
+        if (Math.hypot(...arc.center) <= arc.radius)
+          throw refusal('VALUE', 'Place the Screw axis outside the complete supporting disc.');
+        throw refusal('VALUE', 'The circular-segment Screw could not be certified. Use consistent circle geometry, clear disc separation and a measurable signed rotation.');
+      }
+      let doc = ctx.doc;
+      const sections = rows.map((segments, station) => {
+        const sketch = doc.nodes.length;
+        doc = withNode(doc, { kind: 'sketch', profile: 'loop', segments, plane: { ...plane, origin } });
+        return { sketch, z: heights[station] };
+      });
+      return withNode(doc, { kind: 'loft', sections, from: [source.index], smooth: true });
+    }
     const triangular = sketch.profile === 'polygon' && sketch.points.length === 3;
     const corners = sketch.profile === 'rectangle' ? rectangleCorners(sketch)
       : triangular ? triangleCorners(sketch) : straightCorners(sketch, 'Use finite straight corners that match the sketch outline.');

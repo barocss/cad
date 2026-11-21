@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1582 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1583 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1582](notes/line-arc-external-screw-loft-2026-11-22/README.md), P5 row 07, adds compact external-axis Screw from closed line-and-circular-arc sections. Both desktop windings pass native circular and seam checks, independent volume, and Save and Open. See [row 07](roadmap-rows/07.md) and the [decision index](decisions.md).
-- **Next MAIN:** D1583, P5 row 07, [#630](https://github.com/barocss/cad/issues/630). Create the same circular segment with one sketch through Smooth Screw. Qualify external-axis input, signed angle and pitch edits, and desktop Save and Open.
+- **Current position:** [D1583](notes/line-arc-smooth-screw-command-2026-11-22/README.md), P5 row 07, creates the circular-segment Screw from one sketch and verifies exterior-axis admission, both windings, editable angle and pitch, and exact desktop Save and Open. See [row 07](roadmap-rows/07.md) and the [decision index](decisions.md).
+- **Next MAIN:** D1584, P5 row 07, [#630](https://github.com/barocss/cad/issues/630) and [#322](https://github.com/barocss/cad/issues/322). Qualify a local revision-pinned Agent proposal for the same circular segment with explicit Studio review, approval and native Save and Open.
 - **Separate follow-ups:** [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Measured progress:** whole CAD and core readiness **NOT_MEASURED**; B01 v1 **12/12 accepted groups**; B02 v1 **11/11 accepted groups**; B04 v1 **26/26 accepted groups**; B07 v1 **6/6 accepted profiles**; B09 v1 **9/9 accepted groups**; initial scenarios **8/10 accepted**; B06 **6/7 qualified groups, PDF held**; B05 **7/7 accepted groups**; B08 **6/6 accepted groups**; B10 **7/7 accepted groups**; B03 **NOT_ADJUDICATED**. The legacy43% is frozen history. P0 has12 acceptance items; R01–R12 have bounded D521–D532 closeouts; D785 demonstrates one R04 native collision; no whole-product acceptance follows. This is backlog state, not a whole-CAD percentage.
