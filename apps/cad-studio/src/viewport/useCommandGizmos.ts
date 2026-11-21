@@ -15,7 +15,7 @@ interface CommandGizmoOptions {
   model: { doc: StudioDoc; evaluated: StudioDoc; bodies: BodyResult[]; selection: Selection; marker: number | null; editNode: number | null };
   command: { active: Active | null; readActive?():Active|null; ctx: Ctx; setActive: Dispatch<SetStateAction<Active | null>>; handleDrag: RefObject<{ key: string; lastOk: number; wall: number; bad: number | null; want: number; step: number; dragging: boolean } | null>; previewFor: RefObject<string | null> };
   context: { sketch: object | null; rendering: boolean; drawing: boolean; measure: readonly unknown[] | null; assemblyDraft: object | null; instanceCount: number; snapStep: number };
-  historyFillet?: {receipt?:HistoryFilletReceipt;eligible:boolean};
+  historyFillet?: {receipt?:HistoryFilletReceipt;eligible:boolean;circular?:boolean};
   splitSource?: { evidence: Ctx['splitSourceBounds']; canStart(evidence: Ctx['splitSourceBounds']): boolean };
   drag: { bodyDrag: BodyDrag; setBodyDrag: Dispatch<SetStateAction<BodyDrag>> };
 }
@@ -93,11 +93,12 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
     const waitForHistoryProof = !active && historyFillet?.eligible && !history && handleCmd.id==='edit' && h.key==='r' && !h.arc && !h.pair;
     const canWrite=()=>canUseHandle() && (!history || (!!readActive && historyFilletCanPatch(history,handleCmd,handleCtx,readActive(),active)));
     if (pair && !Number.isFinite(value2)) return [];
-    return [{ id: pair ? `${h.key}+${pair.key}` : h.key, at: h.at, dir: h.dir, label: pair ? label.replace(/ \w$/, '') : label, value, screenOffset: h.screenOffset, ...(h.arc ? { arc: h.arc } : {}),
+    const frame = history?.frame ?? h;
+    return [{ id: pair ? `${h.key}+${pair.key}` : h.key, at: frame.at, dir: frame.dir, label: pair ? label.replace(/ \w$/, '') : label, value, screenOffset: h.screenOffset, ...(h.arc ? { arc: h.arc } : {}),
       ...(pair ? { plane: { dir2: pair.dir, value2, toValue2: snap } } : {}),
       ...(history ? { scalarDragSession: history } :
         active && handleCmd.id === 'fillet' && h.key === 'radius' && !h.arc && !pair ? { scalarDragSession: active.ctx } : {}),
-      ...(waitForHistoryProof ? { historyFilletProofPending: true as const } : {}),
+      ...(waitForHistoryProof ? { historyFilletProofPending: historyFillet?.circular ? 'circular' as const : true as const } : {}),
       toValue: snap,
       format: (v: number) => h.arc ? `${fmt(v)}°` : h.unit !== undefined ? `${fmt(v)}${h.unit ? ' ' + h.unit : ''}` : `${fmt(v)} mm`,
       unit: h.arc ? '°' : h.unit ?? 'mm', owner: handleCmd, editing: !!active, ...(!active ? { shiftPick: true as const } : {}),

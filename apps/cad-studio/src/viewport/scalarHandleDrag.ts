@@ -40,6 +40,7 @@ export function scalarHandleDragValue(frame: ScalarHandleDrag | null, handle: Fe
 /** Until its own proof is ready, block History Fillet for screen-up and blended scalar conversion. */
 export function historyFilletEndOnBlocked(handle:FeatureHandle|undefined,projector:Projector):boolean {
   if(!handle?.historyFilletProofPending || handle.scalarDragSession) return false;
+  if(handle.historyFilletProofPending === 'circular') return true;
   return captureScalarHandleDrag({...handle,scalarDragSession:handle},projector)?.fallback!==false;
 }
 

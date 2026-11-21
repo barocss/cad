@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1505: [Drag a History Fillet radius from the original circular rim](notes/circular-history-fillet-radius-drag-2026-11-21/README.md), #214. Verify exact native source, end-on scalar drag, pending press refusal, typed parity and native reopening.
 - D1504: [Accept the bounded SubD cage transform workflow](notes/subd-transform-acceptance-2026-11-21/README.md), #625. Map the original issue conditions and verify whole-body Move, Rotate and Scale in actual Studio.
 - D1503: [Cancel a held local SubD turn when its pointer or source changes](notes/cage-local-turn-interruptions-2026-11-21/README.md), #625. Verify pointer cancellation, capture loss, selection and file replacement in actual Studio.
 - D1502: [Require the exact current cage result after a transform drag](notes/cage-transform-exact-reply-ownership-2026-11-21/README.md), #625. Verify stale worker replies cannot enable Done or affect a replacement part in actual Studio.

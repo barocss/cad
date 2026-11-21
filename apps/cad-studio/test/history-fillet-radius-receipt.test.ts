@@ -2,21 +2,25 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { commandById } from '@barocss/cad-model/app/commands';
 import { editCommand } from '@barocss/cad-model/app/editCommand';
-import { emptyDoc,prefixDoc,withNode,type StudioDoc } from '@barocss/cad-model/engine/doc';
-import { evaluateDoc,evaluatePart } from '@barocss/cad-model/engine/evaluate';
+import { emptyDoc,prefixDoc,withNode,type SketchNode,type StudioDoc } from '@barocss/cad-model/engine/doc';
+import { evaluateDoc,evaluatePart,placeBody } from '@barocss/cad-model/engine/evaluate';
 import { captureSignatures } from '@barocss/cad-model/engine/references';
 import { createHistoryFilletReads,historyFilletCanPatch,historyFilletPreviewCurrent,historyFilletReceipt,ordinaryHistoryFillet,ownedHistoryFilletHandle } from '../src/state/historyFilletRadiusReceipt';
 import { captureScalarHandleDrag,historyFilletEndOnBlocked,historyFilletPendingPress,scalarHandleDragValue } from '../src/viewport/scalarHandleDrag';
 import type { FeatureHandle,Projector } from '../src/viewport/gizmo';
 import type { Active } from '../src/app/commandState';
 
-function fixture(){
- const base=withNode(withNode(emptyDoc(),{kind:'sketch',profile:'rectangle',min:[0,0],max:[40,30]}),{kind:'extrude',sketch:0,height:10});
+const rectangle: SketchNode = {kind:'sketch',profile:'rectangle',min:[0,0],max:[40,30]};
+const quarterSector: SketchNode = {kind:'sketch',profile:'loop',segments:[
+  {kind:'line',start:[0,0]},{kind:'arc',start:[8,0],center:[0,0],direction:'ccw'},{kind:'line',start:[0,8]},
+]};
+function fixture(sketch: SketchNode = rectangle, edgeName = 'n1.side0|n1.top', radius = 2){
+ const base=withNode(withNode(emptyDoc(),sketch),{kind:'extrude',sketch:0,height:10});
  const initial=evaluateDoc(base,1);assert.ok(initial.ok);
- const edge=initial.bodies[0].mesh.edges.find(e=>e.names[0]==='n1.side0|n1.top');assert.ok(edge);
+ const edge=initial.bodies[0].mesh.edges.find(e=>e.names[0]===edgeName);assert.ok(edge);
  const root={doc:base,bodies:initial.bodies,selection:{faces:[],edges:[{body:0,edge:edge.index}],bodies:[]}};
  const newFillet=commandById('fillet');assert.ok(newFillet?.build);
- const doc=captureSignatures(newFillet.build(root,{...newFillet.defaults?.(root),radius:2}),initial.bodies);
+ const doc=captureSignatures(newFillet.build(root,{...newFillet.defaults?.(root),radius}),initial.bodies);
  const accepted=evaluateDoc(doc,2);assert.ok(accepted.ok);
  const prefix=prefixDoc(doc,2),reply=evaluatePart(prefix,3,8,'refs');assert.ok(reply.ok);
  let live=true;const current=()=>live;
@@ -130,4 +134,61 @@ test('single-flight exact source reads survive reentry and old delayed source ca
   await Promise.resolve();newDone(x.reply);
   assert.ok(await newer);assert.equal(reads(newSource,()=>{throw Error('should reuse exact completed read');}),b);
   oldDone(x.reply);assert.equal(await old,null);assert.equal(calls,2);
+});
+
+test('the circular History frame uses the verified original quarter rim and the exact accepted toroidal result',()=>{
+  const x=fixture(quarterSector,'n1.side1|n1.top',.6);
+  const frame=x.evidence.frame;
+  assert.ok(frame);
+  const expected=[8*Math.SQRT1_2+.3,8*Math.SQRT1_2+.3,10+.6*Math.SQRT1_2];
+  assert.ok(frame.at.every((value,axis)=>Math.abs(value-expected[axis])<1e-12));
+  assert.ok(frame.dir.every((value,axis)=>Math.abs(value-[.5,.5,Math.SQRT1_2][axis])<1e-12));
+  assert.equal(ownedHistoryFilletHandle(x.evidence,x.cmd,x.ctx,x.handle,null),x.evidence);
+  assert.equal(ownedHistoryFilletHandle(x.evidence,x.cmd,x.ctx,x.handle,x.active),x.evidence);
+  const [accepted]=x.accepted.bodies, [stock]=x.reply.bodies;
+  const torus=accepted.nativeFilletTorus;
+  assert.ok(torus && torus.edge===x.evidence.edge);
+  const reject=(body=accepted,source=stock)=>assert.equal(
+    historyFilletReceipt(x.doc,x.doc,2,[body],{...x.reply,bodies:[source]},3,x.current),null);
+  reject({...accepted,nativeFilletTorus:undefined});
+  reject({...accepted,nativeFilletTorus:{...torus,edge:'n1.bottom|n1.side1'}});
+  reject({...accepted,nativeFilletTorus:{...torus,radius:.5}});
+  reject({...accepted,nativeFilletTorus:{...torus,majorRadius:8}});
+  reject({...accepted,nativeFilletTorus:{...torus,axis:[1,0,0]}});
+  reject({...accepted,nativeFilletTorus:{...torus,centre:[0,0,10]}});
+  reject({...accepted,nativeFilletTorus:{...torus,centre:[NaN,0,0]}});
+  reject({...accepted,topology:{kind:'sheet',bodyCount:1,openShells:1,boundaryEdges:4}});
+  const edges=stock.mesh.edges.map(edge=>edge.names.includes(x.evidence.edge)
+    ? {...edge,nativeFilletRim:undefined} : edge);
+  reject(accepted,{...stock,mesh:{...stock.mesh,edges}});
+  const placed=placeBody(structuredClone(accepted),[1,0,0,0,1,0,0,0,1],[2,0,0]);
+  assert.equal(placed.nativeFilletTorus,undefined);
+  reject(placed);
+});
+
+test('curved History candidates outside the plain sector and pending pointer proof refuse exactly',()=>{
+  const x=fixture(quarterSector,'n1.side1|n1.top',.6);
+  const [sketch,stock,fillet]=x.doc.nodes;
+  assert.ok(sketch.kind==='sketch' && sketch.profile==='loop' && fillet.kind==='fillet');
+  const [first,arc,last]=sketch.segments;
+  assert.ok(arc.kind==='arc');
+  const modified: SketchNode[]=[
+    {...sketch,segments:[first,arc,{...last,start:[4,4]}]},
+    {...sketch,segments:[first,{...arc,direction:'cw'},last]},
+    {...sketch,segments:[first,arc,last,{kind:'line',start:[-1,0]}]},
+    {...sketch,plane:{origin:[0,0,1],normal:[0,0,1],xAxis:[1,0,0]}},
+  ];
+  for (const variant of modified) {
+    assert.equal(ordinaryHistoryFillet({...x.doc,nodes:[variant,stock,fillet]},2),null);
+  }
+  const edge=x.evidence.edge, sig=fillet.sigs?.[edge];
+  assert.ok(sig);
+  const forged:StudioDoc={...x.doc,nodes:[sketch,stock,{...fillet,sigs:{[edge]:{...sig,p:[4,5,10]}}}]};
+  assert.equal(historyFilletReceipt(forged,forged,2,x.accepted.bodies,x.reply,3,x.current),null);
+  const h:FeatureHandle={id:'r',at:x.handle.at,dir:x.handle.dir,label:'Radius',value:.6,format:String,owner:x.cmd,onDrag:()=>{},
+    historyFilletProofPending:'circular',toValue:(value,mm)=>value+mm};
+  const side:Projector={...plane,project:p=>[p[0]*15,-p[2]*15]};
+  assert.equal(historyFilletPendingPress(h,side,false),'consume');
+  assert.equal(historyFilletPendingPress(h,side,true),'shift-pick-only');
+  assert.equal(historyFilletPendingPress({...h,scalarDragSession:x.evidence},side,false),undefined);
 });

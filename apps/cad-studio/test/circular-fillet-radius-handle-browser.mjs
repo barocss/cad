@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const historyBaseline = process.argv.includes('--history-baseline');
+const history = historyBaseline || process.argv.includes('--history');
 const pins = [
   'apps/cad-studio/test/circular-fillet-radius-handle-browser.mjs',
   'apps/cad-studio/src/viewport/useCommandGizmos.ts',
@@ -11,6 +13,8 @@ const pins = [
   'packages/barocss-cad-model/src/engine/nativeCircle.ts',
   'packages/barocss-cad-model/src/engine/evaluate.ts',
 ];
+if (history) pins.push('apps/cad-studio/src/state/historyFilletRadiusReceipt.ts', 'apps/cad-studio/src/app/useHistoryFilletRadius.ts',
+  'packages/barocss-cad-model/src/app/editCommand.ts');
 const inspectorSource = `
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -46,7 +50,8 @@ const f = await createFlow({
   output: process.argv[2],
   envFrozen: 'CIRCULAR_FILLET_HANDLE_FROZEN',
   initialFiles: pins, requiredFrozen: pins, inspectorSource,
-  qualification: 'Measure the new Constant Fillet handle against the original quarter-circle and drag it in Studio.',
+  qualification: history ? 'Verify the History handle against the original circular edge, including exact source ownership.'
+    : 'Measure the new Constant Fillet handle against the original quarter-circle and drag it in Studio.',
   limits: ['One unplaced R8 quarter-sector extruded 10 mm, single open quarter-circle top edge, circular constant radius and orthographic desktop views. No synthetic selection or state writes.'],
 });
 const source = {
@@ -68,6 +73,41 @@ const hud = () => f.page.getByRole('dialog', { name: 'Fillet', exact: true });
 const radiusInput = () => hud().getByLabel('Radius', { exact: true });
 const handle = () => f.page.locator('g.gizmo-handle[data-handle="radius"] circle');
 const screen = point => f.page.evaluate(p => window.__studioScreenOf(p), point);
+const historyGroup = () => f.page.locator('g.gizmo-handle[data-handle="r"]');
+
+function holdOriginalRefs() {
+  const proto = Worker.prototype, post = proto.postMessage;
+  const handler = Object.getOwnPropertyDescriptor(proto, 'onmessage');
+  let armed = false, target, pending;
+  proto.postMessage = function (request, ...rest) {
+    if (armed && request?.type === 'part' && request.slot === 'refs') {
+      armed = false;
+      target = { worker: this, id: request.id, revision: request.revision };
+    }
+    return post.call(this, request, ...rest);
+  };
+  Object.defineProperty(proto, 'onmessage', {
+    configurable: true, get: handler.get,
+    set(callback) {
+      handler.set.call(this, typeof callback === 'function' ? function (event) {
+        if (target?.worker === this && event.data?.id === target.id && event.data.result) {
+          pending = { result: event.data.result, revision: target.revision, release: () => callback.call(this, event) };
+          target = undefined;
+          return;
+        }
+        return callback.call(this, event);
+      } : callback);
+    },
+  });
+  window.__quarterHistoryRefs = {
+    arm() { if (armed || target || pending) throw Error('Already holding original refs'); armed = true; },
+    read() {
+      return pending && { ok: pending.result.ok, revision: pending.revision, resultRevision: pending.result.revision,
+        key: pending.result.bodies?.[0]?.key };
+    },
+    release() { if (!pending) throw Error('Expected a real refs reply'); pending.release(); pending = undefined; },
+  };
+}
 
 async function frame(view) {
   await button(view, f.page.locator('.views')).click();
@@ -154,12 +194,133 @@ async function verify(doc, label, radius) {
   return native.sha;
 }
 
+async function orbitEndOn() {
+  for (let i = 0; i < 3; i++) {
+    const camera = await f.page.evaluate(() => window.__studioCamera());
+    const dx = (camera.yaw - Math.PI / 4) / .008, dy = (Math.PI / 4 - camera.pitch) / .008;
+    if (Math.hypot(dx, dy) < .05) break;
+    const rect = await f.page.locator('.vp-canvas').boundingBox();
+    const x = rect.x + rect.width * .55, y = rect.y + rect.height * .55;
+    await f.page.mouse.move(x, y);
+    await f.page.mouse.down({ button: 'right' });
+    await f.page.mouse.move(x + dx, y + dy, { steps: 12 });
+    await f.page.mouse.up({ button: 'right' });
+  }
+  const [a, b, tangent] = await Promise.all([screen(anchor(.6)), screen(anchor(2)),
+    screen(anchor(.6).map((value, axis) => value + [Math.SQRT1_2, -Math.SQRT1_2, 0][axis]))]);
+  const axisPx = Math.hypot(b[0] - a[0], b[1] - a[1]), perMm = Math.hypot(tangent[0] - a[0], tangent[1] - a[1]);
+  assert.ok(axisPx < .2 && perMm > 3, JSON.stringify({ axisPx, perMm }));
+  return { axisPx, perMm };
+}
+async function historyAnchor(radius) {
+  const box = await historyGroup().locator('circle').boundingBox();
+  assert.ok(box);
+  const actual = [box.x + box.width / 2, box.y + box.height / 2];
+  const expected = await screen(anchor(radius));
+  return { actual, expected, gapPx: Math.hypot(actual[0] - expected[0], actual[1] - expected[1]) };
+}
+async function editHistory(initial) {
+  f.phase = 'measure the original arc frame and refuse the press waiting for source evidence';
+  await frame('Top');
+  await f.page.evaluate(() => window.__quarterHistoryRefs.arm());
+  await f.openFeatureEditor(2);
+  const reply = await (await f.page.waitForFunction(() => window.__quarterHistoryRefs.read())).jsonValue();
+  assert.deepEqual(reply, { ok: true, revision: reply.revision, resultRevision: reply.revision, key: 'b1' });
+  assert.equal(await historyGroup().getAttribute('aria-disabled'), 'true');
+  const { actual: pendingPoint } = await historyAnchor(.6);
+  await f.page.mouse.move(...pendingPoint);
+  await f.page.mouse.down();
+  await f.snapshot('history-arc-original-refs-pending');
+  await f.page.evaluate(() => window.__quarterHistoryRefs.release());
+  await historyGroup().locator('title').filter({ hasText: /when viewed end-on/ }).waitFor({ state: 'attached' });
+  await f.page.mouse.move(pendingPoint[0], pendingPoint[1] - 30, { steps: 6 });
+  await f.page.mouse.up();
+  assert.equal(await f.page.locator('.gizmo-readout').count(), 0);
+  await f.same(initial);
+  const top = await historyAnchor(.6);
+  assert.ok(top.gapPx < .75, JSON.stringify(top));
+  await f.snapshot('history-arc-top-native-anchor');
+
+  f.phase = 'drag the exact History radius end-on';
+  const legacyHud = f.page.locator('.hud');
+  const field = legacyHud.getByLabel('Radius', { exact: true });
+  async function drag(metric) {
+    const frame = await historyAnchor(.6), pixels = Math.round(.9 * metric.perMm);
+    assert.ok(frame.gapPx < .75, JSON.stringify(frame));
+    await f.page.mouse.move(...frame.actual);
+    await f.page.mouse.down();
+    await f.page.mouse.move(frame.actual[0], frame.actual[1] - pixels, { steps: 8 });
+    await f.page.locator('.gizmo-readout').filter({ hasText: /Radius 1\.5 mm/ }).waitFor();
+    await legacyHud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
+    assert.equal(Number(await field.inputValue()), 1.5);
+    await f.same(initial);
+    await f.snapshot('history-arc-end-on-held');
+    await f.page.mouse.up();
+    assert.equal(Number(await field.inputValue()), 1.5);
+  }
+  const metric = await orbitEndOn();
+  await drag(metric);
+  await button('Cancel', legacyHud).click();
+  await f.same(initial);
+  if (!(await f.editor().isVisible())) await f.openFeatureEditor(2);
+  await historyGroup().locator('title').filter({ hasText: /when viewed end-on/ }).waitFor({ state: 'attached' });
+  await drag(await orbitEndOn());
+  await button('Apply', legacyHud).click();
+  await f.changed(initial);
+  const dragged = await f.doc();
+  const nativeHash = await verify(dragged, 'history-arc-drag-applied', 1.5);
+  await f.undo(); await f.same(initial);
+  await f.redo(); await f.same(dragged);
+  await f.undo(); await f.same(initial);
+  if (!(await f.editor().isVisible())) await f.openFeatureEditor(2);
+  await f.editor().getByLabel('Radius', { exact: true }).fill('1.5');
+  const typed = (await f.applyEditor(initial, 'history-arc-typed-radius')).doc;
+  await f.same(dragged);
+  assert.equal(await verify(typed, 'history-arc-typed-native', 1.5), nativeHash);
+  const saved = await f.save('quarter-sector-history-fillet');
+  await f.freshOpen(saved.file, dragged, 'history-arc-reopened');
+  assert.equal(await verify(dragged, 'history-arc-reopened-native', 1.5), nativeHash);
+  f.report.observations.push({ arcTopErrorPx: top.gapPx, endOnAxisPx: metric.axisPx, perMm: metric.perMm, heldOldPressRefused: true });
+}
+
 await f.run(async () => {
+  if (history && !historyBaseline) {
+    const newContext = f.browser.newContext.bind(f.browser);
+    f.browser.newContext = async options => {
+      const context = await newContext(options);
+      await context.addInitScript(holdOriginalRefs);
+      return context;
+    };
+  }
   await f.newPage();
   await f.page.locator('input[aria-label="Model file"]').setInputFiles({
     name: 'quarter-sector.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),
   });
   await f.same(source);
+  if (history) {
+    await start();
+    const initial = await applyAndRead();
+    await verify(initial, 'history-original-native', .6);
+    if (!historyBaseline) { await editHistory(initial); return; }
+    await frame('Top');
+    await f.openFeatureEditor(2);
+    const group = f.page.locator('g.gizmo-handle[data-handle="r"]');
+    const box = await group.locator('circle').boundingBox();
+    assert.ok(box);
+    const actual = [box.x + box.width / 2, box.y + box.height / 2];
+    const expected = await screen(anchor(.6));
+    const gapPx = Math.hypot(actual[0] - expected[0], actual[1] - expected[1]);
+    assert.ok(gapPx > 5, JSON.stringify({ actual, expected, gapPx }));
+    assert.equal(await group.locator('title').count(), 0);
+    await f.snapshot('history-circular-handle-original');
+    await f.editor().getByLabel('Radius', { exact: true }).fill('1.5');
+    const typed = (await f.applyEditor(initial, 'history-typed-radius-applied')).doc;
+    await verify(typed, 'history-typed-native', 1.5);
+    await f.undo(); await f.same(initial);
+    await f.redo(); await f.same(typed);
+    f.report.observations.push({ actual, expected, gapPx, endOnProofOffered: false, typedRadius: 1.5 });
+    return;
+  }
   f.phase = 'native arc anchor in Top and Iso';
   await start();
   const top = await measure('Top', .6);

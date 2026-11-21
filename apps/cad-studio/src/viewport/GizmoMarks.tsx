@@ -111,7 +111,9 @@ export function gizmoMarks(g: TransformGizmo | null, handles: readonly FeatureHa
     const head = cone(from, to, on ? 13 : 11, on ? 5 : 4);
     const waiting = historyFilletEndOnBlocked(h,P);
     items.push(<g key={'gh' + h.id} className={'gizmo-handle' + (on && !waiting ? ' hot' : '')} data-handle={h.id} aria-disabled={waiting||undefined}>
-      {waiting ? <title>{h.label}: end-on drag needs a verified original edge. Turn the view to drag, or type Radius in History.</title>
+      {waiting ? <title>{h.label}: {h.historyFilletProofPending === 'circular'
+        ? 'Drag needs a verified original circular edge. You can type Radius in History.'
+        : 'End-on drag needs a verified original edge. Turn the view to drag, or type Radius in History.'}</title>
         : h.scalarDragSession && <title>{h.label}: when viewed end-on, drag up to increase or down to decrease. Sensitivity is fixed when the drag starts.</title>}
       <line x1={from[0]} y1={from[1]} x2={head[2][0]} y2={head[2][1]} stroke={EDGE} strokeOpacity={0.85} strokeWidth={on ? 6.5 : 5.5} strokeLinecap="round" />
       <line x1={from[0]} y1={from[1]} x2={head[2][0]} y2={head[2][1]} strokeWidth={on ? 3.5 : 2.8} strokeLinecap="round" />

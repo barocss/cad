@@ -4,6 +4,7 @@
 // seams and smooth (tangent) joints, with connected pieces between the same two faces joined. Faces and
 // edges carry their persistent B-rep names, which features use to refer to them.
 import { closestPointOnSurface, createCylindricalBoreCheck, faceGeometry, pointTriangleDistance2, revolutionOf, surfaceDomain, surfaceEvaluator, surfaceSeedGrid, tessellateBrep, type Brep, type BrepFace, type BrepMesh, type BrepMeshEdge, type SurfaceSeedGrid } from '@barocss/cad';
+import { supportsQuarterRimFillet } from '@barocss/cad/internal/quarter-rim-fillet';
 export { sub, cross, dot, len, unit as norm } from './vec3';
 import { sub, cross, dot, len, unit as norm } from './vec3';
 import { nativeStraightEdgeMatches } from './nativeStraightEdge';
@@ -61,7 +62,7 @@ export interface DisplayEdge { index: number; faces: [number, number]; a: Vec3; 
   /** Circular support shared by every native curve in this display edge. */
   nativeCircle?: NativeCircle;
   /** Radius handle frame for one original convex circular prism rim. */
-  nativeFilletRim?: { midpoint: Vec3; direction: Vec3 };
+  nativeFilletRim?: { midpoint: Vec3; direction: Vec3; quarter?: true };
 }
 export interface DisplayMesh {
   /** World XYZ millimetres: native bodyMesh retains doubles; legacy display generators can retain floats. */
@@ -354,7 +355,12 @@ export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundar
       const wallIndex = 1 - capIndex;
       if (cap?.kind === 'plane' && b.faces[made.faces[wallIndex]].exact?.kind === 'cylinder') {
         const frame = nativeCircularFilletFrame(source.curve, nativeCircle, cap, faceById.get(fs[wallIndex])!);
-        if (frame) made.nativeFilletRim = frame;
+        if (frame) {
+          const weights = source.curve.weights;
+          const quarter = Math.abs(weights[1] / weights[0] - Math.SQRT1_2) < 1e-12
+            && supportsQuarterRimFillet(brep, name, a, z);
+          made.nativeFilletRim = quarter ? { ...frame, quarter: true } : frame;
+        }
       }
     }
     if (meshPoints && straight && source.vertices[0] !== source.vertices[1]) {

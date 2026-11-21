@@ -34,5 +34,6 @@ export function useHistoryFilletRadius(options:{
   },[source,enabled,readIdle,ordinary,reads,doc,index,engine,commandDoc,bodies]);
   const ready=enabled&&receipt?.document===doc&&receipt.commandDoc===commandDoc&&receipt.bodies===bodies&&receipt.index===index&&receipt.isCurrent()
     ?receipt:undefined;
-  return { receipt:ready, eligible:!!ordinary };
+  const sketch = doc.nodes[0];
+  return { receipt:ready, eligible:!!ordinary, circular:!!ordinary&&sketch.kind==='sketch'&&sketch.profile==='loop' };
 }
