@@ -127,7 +127,7 @@ import { editSavedRevolveAxisCommand, joinedRevolveStock } from '@barocss/cad-mo
 import { filletLaunchAvailability, filletType, newFilletActive, pickedFilletSelection, prepareFilletPick, replaceFilletSelection, replaceFillet, type FilletType, type RadiusMode } from './app/filletFamily';
 import { alignFaceBinding } from '@barocss/cad-model/app/alignCommand';
 import { currentNativePlanePick, SKETCH_AT_MIDPOINT } from './app/midpointSketch';
-import { insetRelinkReadiness } from '@barocss/cad-model/app/associativeInsetRelink';
+import { createInsetSourceReview } from './sketch/insetSourceReview';
 import { PROJECT_TO_SKETCH } from './app/materialFootprint';
 import { launchDerivedSketch } from './app/launchDerivedSketch';
 import { useModelExports } from './files/useModelExports';
@@ -161,7 +161,7 @@ import { supportsPlacedBoxSnapRotation } from './viewport/placedBoxSnap';
 import { contentKey, evaluationKey } from '@barocss/cad-model/engine/evalMemo';
 import { bearingEditCurrent, bearingFaceInput, captureBearingEditSession, prepareBearingEdit, type BearingEditSession } from './app/bearingEdit';
 import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skeleton';
-import { offsetFaceGroup, carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
+import { offsetFaceGroup, carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, withNode, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { bodyKeyFor, cutAfter, featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
 import { candidatesFor, captureSignatures, confirmReference, markedReferences, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
@@ -278,7 +278,6 @@ import { joinOpen } from '@barocss/cad-model/sketch/trim';
 import type { SectionOutlineMode } from '@barocss/cad-model/app/sectionSketchProfile';
 import { sectionSketch } from './app/sectionSketch';
 import { bodyName, describeChange, lookOf, rootOf } from '@barocss/cad-model/app/bodies';
-import { bodyLookRef } from '@barocss/cad-model/app/lookKey';
 import { readBrief } from '@barocss/cad-model/chat/brief';
 import { BriefPanel } from './ui/BriefPanel';
 import { SpecifyPanel } from './ui/SpecifyPanel';
@@ -3435,69 +3434,14 @@ export function App() {
         </>}
       </aside></Profiler>
   );
-  const editFeature = editNode === null ? undefined : doc.nodes[editNode];
-  const insetSketchIndex = editFeature?.kind === 'sketch' ? editNode : editFeature?.kind === 'extrude' ? editFeature.sketch : null;
-  const insetSketch = insetSketchIndex === null ? undefined : doc.nodes[insetSketchIndex];
-  const insetRelinkReadinessHere = insetSketchIndex !== null && insetSketch?.kind === 'sketch' && insetSketch.association
-    ? insetRelinkReadiness(doc, insetSketchIndex) : undefined;
-  const reviewInsetSource = (opener: HTMLButtonElement) => {
-    if (insetSketchIndex === null || insetSketch?.kind !== 'sketch' || !insetSketch.association || !insetSketch.on) return;
-    const refuse = (hint: string) => setToast({ title: 'Inset source not replaced', hint, detail: '' });
-    if (!footprintState.current.insetReady || docNow.current !== doc || !canChangeDocument()) {
-      refuse('Return to the current part and wait for the model to finish.');
-      return;
-    }
-    const { faces, edges, bodies: pickedBodies, sketches, vertices } = selection;
-    const pick = faces.length === 1 && !edges.length && !pickedBodies.length && !sketches?.length && !vertices?.length && !directSel.length
-      ? currentNativePlanePick(ctx, faces[0], doc) : null;
-    if (!pick) { refuse('Select one visible native planar face from an earlier solid.'); return; }
-    const open = openIntent.current, worker = workerSessionNow.current, work = workOwnership.current;
-    const current = () => openIntent.current === open && workerSessionNow.current === worker
-      && workOwnership.current.generation === work.generation && workOwnership.current.scope === work.scope
-      && docNow.current === doc && evaluatedRef.current === evaluated && footprintState.current.selection === selection
-      && footprintState.current.editor === editNode && footprintState.current.insetReady && !activeStore.get();
-    const referenceLabel = (key: string, id: string, ref?: BodyRef) => {
-      const body = bodies.find(candidate => candidate.key === key);
-      if (body) return `${bodyName(doc, body)} · ${id}`;
-      const step = ref && doc.nodes[ref.node];
-      if (!ref || !step) return id;
-      const look = bodyLookRef(doc.nodes, ref);
-      const name = doc.bodies?.[bodyKeyFor(doc.nodes, look.node, look.side)]?.name;
-      const earlier = `Earlier History · ${featureLabel(step, ref.node, doc.nodes)}`;
-      return name ? `${name} · ${id} · ${earlier}` : `${id} · ${earlier}`;
-    };
-    const source = insetSketch.association.source, target = insetSketch.on;
-    cancelNativeReview();
-    insetRelink.start({
-      labels: {
-        before: referenceLabel(bodyKeyFor(doc.nodes, source.node, source.side), insetSketch.association.face, source),
-        after: referenceLabel(pick.bodyKey, pick.face.name),
-        target: referenceLabel(bodyKeyFor(doc.nodes, target.node, target.side), featureId(doc.nodes, target.node), target),
-      },
-      current,
-      read: () => engine.previewInsetRelink(doc, insetSketchIndex,
-        { bodyKey: pick.bodyKey, faceId: pick.face.id, faceName: pick.face.name }, revision.current++),
-      refuse: reply => {
-        if (reply.field === 'insetMM') {
-          setToast({ title: 'Inset source not replaced', hint: 'The inset closes on this face. Select a wider planar face and retry.', detail: reply.error });
-        } else refuse(reply.error);
-      },
-      returnFocus: () => requestAnimationFrame(() => {
-        if (current() && opener.isConnected && !opener.disabled && document.activeElement === document.body)
-          opener.focus();
-      }),
-      apply: ({ association }) => {
-        if (!current() || !canChangeDocument()) return;
-        const nodes = doc.nodes.map((node, index) => index === insetSketchIndex ? { ...insetSketch, association } : node);
-        const next = { ...doc, nodes };
-        if (!commit(next, false, false, true)) return;
-        requestAnimationFrame(() => {
-          if (docNow.current !== next || document.activeElement !== document.body) return;
-          historyLayout.focusStep(editNode);
-        });
-      },
-    });
-  };
+  const insetSource = createInsetSourceReview({
+    model: { doc, evaluated, ctx, editNode },
+    owner: { doc: docNow, evaluated: evaluatedRef, open: openIntent, worker: workerSessionNow,
+      work: workOwnership, footprint: footprintState, commandRunning: () => !!activeStore.get() },
+    preview: { engine, nextRevision: () => revision.current++, start: insetRelink.start, cancelNativeReview },
+    changes: { canChangeDocument, commit: next => commit(next, false, false, true),
+      onNotice: setToast, focusHistory: historyLayout.focusStep },
+  });
   const inspector = (
       <Profiler id="right-col" onRender={onBlockRender}><div className="right-col">
 
@@ -3661,8 +3605,8 @@ export function App() {
             variant: () => shownVariant.current, worker: () => workerSessionNow.current, hasDraft: () => !!nodeEditorDraft.current, ownsEvaluatedSource }}
           commands={{ ctx, discardFeatureDraft, closeForCommand: () => setEditNode(null), setActive, editSketch,
             replaceAxis: replaceRevolveAxis ? () => void startRevolveAxisReplacement() : undefined }}
-          inset={{ roundedPending: !!parameterEdit?.roundedInset, detach: () => applyRoundedInsetEdit(), problem: insetRelinkReadinessHere?.problem,
-            relink: insetRelinkReadinessHere && !insetRelinkReadinessHere.problem ? { start: reviewInsetSource, cancel: insetRelink.cancel, reviewing: !!insetReview } : undefined }}
+          inset={{ roundedPending: !!parameterEdit?.roundedInset, detach: () => applyRoundedInsetEdit(), problem: insetSource.problem,
+            relink: insetSource.start ? { start: insetSource.start, cancel: insetRelink.cancel, reviewing: !!insetReview } : undefined }}
           worker={engine} canChangeDocument={canChangeDocument} onNotice={setToast}
           editor={{ onFilletStations: publishFilletStations, filletEndpoints: replacementEndpointLocations ?? historyEndpointLocations,
             alignPreview: historyAlign, oppositeRadiusPreview, readAlignTargets: readAlignHistoryTargets,

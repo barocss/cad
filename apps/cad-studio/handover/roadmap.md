@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-21 · Priority authority: D520 · Latest delivery: D1463 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-21 · Priority authority: D520 · Latest delivery: D1464 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1463](notes/heal-two-opposite-chamfers-in-sequence-2026-11-21/README.md), P5 row 31, heals both opposite box chamfers in separate edits. Studio and MCP verify both orders, independent Undo and the restored 12000 mm³ box after fresh Open. See the [decision index](decisions.md), [row 31](roadmap-rows/31.md), and the [previous status snapshot](https://github.com/barocss/cad/blob/9125361c42d9e7a4f5fec6382d99263bd056fa55/apps/cad-studio/handover/roadmap.md#now-and-next) for earlier deliveries.
-- **Next MAIN:** D1464, row 22, Studio structure. Move the Linked Inset source review action out of App and verify the existing preview, guarded apply and focus behavior in desktop Studio.
+- **Current position:** [D1464](notes/studio-linked-inset-source-review-2026-11-21/README.md), P4 row 22, extracts the Linked Inset review action from App. Desktop Studio verifies the named preview, stale response retirement, keyboard focus, history and fresh Open. See the [decision index](decisions.md), [row 22](roadmap-rows/22.md), and the [previous status snapshot](https://github.com/barocss/cad/blob/b867b922becd28a6a5585250235406e8e779c56b/apps/cad-studio/handover/roadmap.md#now-and-next) for earlier deliveries.
+- **Next MAIN:** D1465, P5 row 31, [#17](https://github.com/barocss/cad/issues/17). Reproduce Delete face on two full-height bevels that share one stock wall. Verify restoration of the selected corner and the exact remaining bevel through desktop Studio and MCP.
 - **Separate follow-ups:** #126 Shell G2 face-kind guidance, #613 four unresolved overlaps, #608 Rendering HOLD, #152 legacy provenance, #22, and API inventory drift remain open.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Measured progress:** whole CAD and core readiness **NOT_MEASURED**; B01 v1 **12/12 accepted groups**; B02 v1 **11/11 accepted groups**; B04 v1 **26/26 accepted groups**; B07 v1 **6/6 accepted profiles**; B09 v1 **9/9 accepted groups**; initial scenarios **8/10 accepted**; B06 **6/7 qualified groups, PDF held**; B05 **7/7 accepted groups**; B08 **6/6 accepted groups**; B10 **7/7 accepted groups**; B03 **NOT_ADJUDICATED**. The legacy43% is frozen history. P0 has12 acceptance items; R01–R12 have bounded D521–D532 closeouts; D785 demonstrates one R04 native collision; no whole-product acceptance follows. This is backlog state, not a whole-CAD percentage.

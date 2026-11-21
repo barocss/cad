@@ -20,7 +20,7 @@ const appliedDistance = process.argv.includes('--applied-distance');
 const historicalNames = process.argv.includes('--historical-names');
 const duplicateNames = process.argv.includes('--duplicate-names');
 const reviewNames = process.argv.includes('--review-names') || historicalNames || duplicateNames;
-const pins = ['apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/sketch/useInsetRelink.ts',
+const pins = ['apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/sketch/insetSourceReview.ts', 'apps/cad-studio/src/sketch/useInsetRelink.ts',
   'apps/cad-studio/src/ui/InsetSourceReview.tsx', 'apps/cad-studio/src/ui/NodeEditor.tsx',
   'apps/cad-studio/src/engine/engine.worker.ts', 'apps/cad-studio/src/engine/client.ts',
   'packages/barocss-cad-model/src/app/associativeInsetRelink.ts',

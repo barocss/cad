@@ -16,7 +16,7 @@ const pins = [
   ...(fixed || relink ? ['apps/cad-studio/src/files/documentFile.ts', 'apps/cad-studio/src/files/useStudioDocumentFiles.ts',
     'apps/cad-studio/src/storage/useProject.ts', 'apps/cad-studio/src/engine/engine.worker.ts', 'apps/cad-studio/src/engine/client.ts'] : []),
   ...(relink ? [
-    'apps/cad-studio/src/sketch/useInsetRelink.ts', 'apps/cad-studio/src/ui/InsetSourceReview.tsx',
+    'apps/cad-studio/src/sketch/insetSourceReview.ts', 'apps/cad-studio/src/sketch/useInsetRelink.ts', 'apps/cad-studio/src/ui/InsetSourceReview.tsx',
     'apps/cad-studio/src/app/midpointSketch.ts', 'apps/cad-studio/src/viewport/useViewportPicking.ts',
     'packages/barocss-cad-model/src/app/associativeInsetRelink.ts',
   ] : []),
