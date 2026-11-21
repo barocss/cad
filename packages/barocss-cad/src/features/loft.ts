@@ -17,7 +17,7 @@ import { admitNurbsGuide, type LoftNurbsGuideInput, type LoftNurbsGuideSpan } fr
 import { orientedLoftSolid } from './oriented-loft.js';
 import { patchLoftGuideSides } from './loft-guide-patches.js';
 import { twoGuideLoftSolid } from './loft-two-guides.js';
-import { fitRectangularScrew, fitRectangularTurn, fitTriangularTurn } from './loft-rectangular-turn.js';
+import { fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from './loft-rectangular-turn.js';
 
 type XY = [number, number];
 type Piece = { readonly kind: 'line'; readonly a: XY; readonly b: XY } | { readonly kind: 'arc'; readonly c: XY; readonly r: number; readonly t0: number; readonly dt: number };
@@ -268,7 +268,7 @@ function smoothLoft(rows: Bezier[][], z: number[], id: string, nm: string, tagge
   const K = rows.length - 1, n = rows[0].length, v = z.map(x => (x - z[0]) / (z[K] - z[0]));
   if (K >= 6 && K <= 15 && (n === 3 || n === 4) && rows.every(row => row.every(piece => piece.p.length === 2))) {
     const corners = rows.map(row => row.map(piece => piece.p[0]));
-    const fit = n === 3 ? fitTriangularTurn(corners, z, v)
+    const fit = n === 3 ? fitTriangularTurn(corners, z, v) ?? fitTriangularScrew(corners, z, v)
       : fitRectangularTurn(corners, z, v) ?? fitRectangularScrew(corners, z, v);
     if (fit) {
       const rails = fit.rails.map(rail => rail.map(([x, y, zz]): H => [x, y, zz, 1]));

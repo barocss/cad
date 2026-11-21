@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
+const triangular = process.argv.includes('--triangle');
+const profile = triangular ? 'triangular' : 'rectangular';
+const degrees = triangular ? 360 : 180;
+const height = 40, spans = degrees / 30, samples = spans * 10;
+const corners = triangular ? [[-7, -4], [2, -3], [-4, 1]] : [[14, -4], [26, -4], [26, 4], [14, 4]];
+const frame = { origin: triangular ? [21, -19.4, 24.8] : [11, -17, 23], normal: [0, .6, .8], xAxis: [1, 0, 0] };
+const [x, y, z] = frame.origin;
+const ontoPlane = (u, v, h) => [x + u, y + .8 * v + .6 * h, z - .6 * v + .8 * h];
+
 const frozen = [
   'apps/cad-studio/test/external-axis-screw-loft-browser.mjs',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
@@ -13,7 +22,7 @@ const f = await createFlow({
   name: 'external-axis-screw-loft',
   output: process.argv[2],
   envFrozen: 'SCREW_LOFT_FROZEN',
-  qualification: 'Create both windings of a compact external-axis rectangular Screw with Studio Smooth Loft.',
+  qualification: 'Create both windings of a compact external-axis ' + profile + ' Screw with Studio Smooth Loft.',
   limits: ['Desktop Chrome. Synthetic source sketches in one tilted frame.'],
   initialFiles: frozen,
   requiredFrozen: frozen,
@@ -29,17 +38,13 @@ console.log(JSON.stringify(partBreps(doc).map(({ key, brep }) => ({
   valid: checkBrep(brep, { strict: true }).valid, volume: brepMassProperties(brep, 1).volume,
   rails: brep.edges.filter(edge => /^c[0-3]$/.test(edge.id)).map(({ curve }) => ({
     degree: curve.degree, poles: curve.controlPoints.length, knots: curve.knots,
-    steps: Array.from({ length: 61 }, (_, i) => evaluateCurveD1(curve, i / 60)),
+    steps: Array.from({ length: ${samples + 1} }, (_, i) => evaluateCurveD1(curve, i / ${samples})),
   })),
 }))));
 `,
 });
 
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
-const corners = [[14, -4], [26, -4], [26, 4], [14, 4]];
-const height = 40, spans = 6;
-const frame = { origin: [11, -17, 23], normal: [0, .6, .8], xAxis: [1, 0, 0] };
-const ontoPlane = (u, v, z) => [11 + u, -17 + .8 * v + .6 * z, 23 - .6 * v + .8 * z];
 const spin = ([x, y], angle, t) => {
   const a = angle * Math.PI / 180 * t, c = Math.cos(a), s = Math.sin(a);
   return [c * x - s * y, s * x + c * y];
@@ -85,25 +90,35 @@ async function inspect(doc, angle, label) {
   const { bodies } = await f.bodies();
   assert.equal(others.length, 0);
   assert.deepEqual([part.valid, part.closed, part.counts.bodies, part.counts.faces, part.counts.edges, part.counts.vertices],
-    [true, true, 1, 6, 12, 8]);
+    [true, true, 1, corners.length + 2, 3 * corners.length, 2 * corners.length]);
   assert.deepEqual(bodies.map(body => body.key), [part.key]);
-  assert.ok(Math.abs(part.volume - (840.4060323005599 * 96 / 21)) < 1e-7);
+  const expectedVolume = triangular ? 840.1080446694306 : 840.4060323005599 * 96 / 21;
+  assert.ok(Math.abs(part.volume - expectedVolume) < 1e-7);
   assert.ok(Math.abs(bodies[0].volume - part.volume) < 1e-7);
-  assert.equal(part.rails.length, 4);
+  assert.equal(part.rails.length, corners.length);
+  let maxStationError = 0, minimumWinding = Infinity;
   for (const [corner, rail] of part.rails.entries()) {
     assert.deepEqual([rail.degree, rail.poles, rail.knots], [3, spans + 1, part.rails[0].knots]);
     assert.equal(new Set(rail.knots.slice(4, -4)).size, spans - 3);
     for (const [i, { point: p, derivative: d }] of rail.steps.entries()) {
-      const t = i / 60;
+      const t = i / samples;
       assert.ok(Math.abs(.6 * d[1] + .8 * d[2] - height) < 1e-8);
-      const v = .8 * (p[1] + 17) - .6 * (p[2] - 23), dv = .8 * d[1] - .6 * d[2];
-      assert.equal(Math.sign((p[0] - 11) * dv - v * d[0]), Math.sign(angle));
+      const v = .8 * (p[1] - y) - .6 * (p[2] - z), dv = .8 * d[1] - .6 * d[2];
+      const winding = Math.sign(angle) * ((p[0] - x) * dv - v * d[0]);
+      minimumWinding = Math.min(minimumWinding, winding);
+      assert.ok(winding > 0);
       if (i % 10 === 0) {
         const expected = ontoPlane(...spin(corners[corner], angle, t), height * t);
-        assert.ok(Math.hypot(...p.map((value, k) => value - expected[k])) < 1e-8);
+        const error = Math.hypot(...p.map((value, k) => value - expected[k]));
+        maxStationError = Math.max(maxStationError, error);
+        assert.ok(error < 1e-8);
       }
     }
   }
+  f.report.observations.push({
+    label, angle, digest: part.digest, counts: part.counts, volume: part.volume,
+    rails: part.rails.length, maxStationError, minimumWinding,
+  });
   return part;
 }
 
@@ -128,16 +143,16 @@ await f.run(async () => {
     });
     return context;
   };
-  const positive = await build(180);
-  const right = await inspect(positive, 180, 'external-axis-positive-native');
-  await frameView('external-axis-positive-180');
+  const positive = await build(degrees);
+  const right = await inspect(positive, degrees, 'external-axis-positive-native');
+  await frameView('external-axis-positive-' + degrees);
 
-  const negative = await build(-180);
-  const left = await inspect(negative, -180, 'external-axis-negative-native');
+  const negative = await build(-degrees);
+  const left = await inspect(negative, -degrees, 'external-axis-negative-native');
   assert.notEqual(left.digest, right.digest);
-  await frameView('external-axis-negative-180');
-  const saved = await f.save('external-axis-rectangular-screw');
+  await frameView('external-axis-negative-' + degrees);
+  const saved = await f.save('external-axis-' + profile + '-screw');
   await f.freshOpen(saved.file, negative, 'external-axis-fresh-open');
-  assert.deepEqual(await inspect(negative, -180, 'external-axis-reopened-native'), left);
-  await frameView('external-axis-reopened-180');
+  assert.deepEqual(await inspect(negative, -degrees, 'external-axis-reopened-native'), left);
+  await frameView('external-axis-reopened-' + degrees);
 });

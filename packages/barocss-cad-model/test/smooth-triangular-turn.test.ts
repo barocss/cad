@@ -275,3 +275,95 @@ test('a compact triangular STEP Turn refines only when its side and cap geometry
     assert.equal(isCompactStepTurn(deformed), false);
   }
 });
+
+const screwAxis: Point = [21, -19.4, 24.8];
+const screwCorners: [number, number][] = [[-7, -4], [2, -3], [-4, 1]];
+
+function screwSections(angle: number, points = screwCorners, reverse = false) {
+  const last = Math.max(6, Math.ceil(Math.abs(angle) / 30));
+  let doc = emptyDoc();
+  const ordered = reverse ? [points[0], points[2], points[1]] : points;
+  for (let i = 0; i <= last; i++) {
+    const t = i / last, phase = angle * (Math.PI / 180) * t;
+    const c = Math.cos(phase), s = Math.sin(phase);
+    doc = withNode(doc, {
+      kind: 'sketch', profile: 'polygon',
+      points: ordered.map(([u, v]) => [u * c - v * s, u * s + v * c]),
+      plane: { ...triangle.plane, origin: [screwAxis[0], screwAxis[1] + 24 * t, screwAxis[2] + 32 * t] },
+    });
+  }
+  const loft = commandById('loft')!;
+  return {
+    doc: loft.build!({
+      doc, bodies: [], selection: {
+        faces: [], edges: [], bodies: [], sketches: Array.from({ length: last + 1 }, (_, index) => index),
+      },
+    }, { smooth: 'yes' }),
+    last,
+  };
+}
+
+test('External-axis triangular Screw uses one compact signed solid on tilted section planes', async () => {
+  for (const angle of [180, -180, 360, -360, 450, -450]) {
+    const { doc, last } = screwSections(angle, screwCorners, angle < 0);
+    const [output, ...others] = partBreps(doc);
+    assert.equal(others.length, 0);
+    const { brep } = output;
+    const checked = checkBrep(brep, { strict: true });
+    assert.ok(checked.valid, JSON.stringify(checked.issues));
+    assert.deepEqual(checked.counts, { bodies: 1, shells: 1, faces: 5, loops: 5, coedges: 18, edges: 9, vertices: 6 });
+    assert.ok(brep.bodies[0].kind === 'solid' && brep.shells[0].closed);
+    const caps = brep.faces.flatMap(face => {
+      const geometry = faceGeometry(face);
+      return geometry.kind === 'plane' ? [geometry.n] : [];
+    });
+    assert.equal(caps.length, 2);
+    for (const sign of [-1, 1])
+      assert.ok(caps.some(normal => Math.hypot(normal[0], normal[1] - .6 * sign, normal[2] - .8 * sign) < 1e-9));
+
+    const rails = brep.edges.filter(edge => /^c[0-2]$/.test(edge.id)).map(edge => edge.curve);
+    assert.equal(rails.length, 3);
+    const seen = new Set<number>();
+    for (const rail of rails) {
+      assert.deepEqual([rail.degree, rail.controlPoints.length, rail.knots], [3, last + 1, rails[0].knots]);
+      const start = evaluateCurve(rail, 0), x = start[0] - screwAxis[0];
+      const v = .8 * (start[1] - screwAxis[1]) - .6 * (start[2] - screwAxis[2]);
+      const corner = screwCorners.findIndex(([u0, v0]) => Math.hypot(x - u0, v - v0) < 1e-8);
+      assert.ok(corner >= 0 && !seen.has(corner));
+      seen.add(corner);
+      for (let i = 0; i <= last; i++) {
+        const t = i / last, phase = angle * Math.PI / 180 * t;
+        const [u0, v0] = screwCorners[corner], cx = Math.cos(phase) * u0 - Math.sin(phase) * v0;
+        const cy = Math.sin(phase) * u0 + Math.cos(phase) * v0;
+        close(evaluateCurve(rail, t), [screwAxis[0] + cx, screwAxis[1] + .8 * cy + 24 * t, screwAxis[2] - .6 * cy + 32 * t]);
+      }
+      for (let i = 0; i <= 240; i++) {
+        const { point, derivative } = evaluateCurveD1(rail, i / 240);
+        const a = point[0] - screwAxis[0], b = .8 * (point[1] - screwAxis[1]) - .6 * (point[2] - screwAxis[2]);
+        close([.6 * derivative[1] + .8 * derivative[2]], [40]);
+        assert.ok(Math.sign(angle) * (a * (.8 * derivative[1] - .6 * derivative[2]) - b * derivative[0]) > 0);
+      }
+    }
+    assert.ok(Math.abs(brepMassProperties(brep, 1).volume - vols.get(Math.abs(angle))!) < 1e-7);
+    const reopened = await readStudioFile(encodeStudioFile(doc));
+    assert.ok('doc' in reopened);
+    assert.deepEqual(reopened.doc, doc);
+    assert.deepEqual(partBreps(reopened.doc)[0].brep, brep);
+  }
+});
+
+test('External triangle Screw admission uses the actual triangle and its vertex clearance', () => {
+  const corners = [[0, 0], [12, 0], [0, 6]];
+  const fromPivot = ([x, y]: readonly number[]): [number, number][] => corners.map(([u, v]) => [u - x, v - y]);
+  const diagonalOutside = screwSections(360, fromPivot([-8e-8, -8e-8])).doc;
+  const [{ brep }] = partBreps(diagonalOutside);
+  assert.ok(checkBrep(brep, { strict: true }).valid);
+  assert.ok(brep.edges.filter(edge => edge.curve.degree === 3).every(edge => edge.curve.controlPoints.length === 13));
+
+  for (const pivot of [[-6.5e-8, -6.5e-8], [0, 0], [6, 0], [1, 1]]) {
+    const { doc } = screwSections(360, fromPivot(pivot));
+    const result = evaluateDoc(doc, 1);
+    assert.ok(!result.ok, JSON.stringify(pivot));
+    assert.match(result.error.detail, /Surface V control point count/);
+  }
+});

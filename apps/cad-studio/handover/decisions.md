@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1564: [Build a compact external-axis triangular Screw](notes/triangular-external-screw-loft-2026-11-21/README.md), #630. Verify the axis clearance, signed continuous walls and native Studio round trip.
 - D1563: [Restore structured display on imported AP214 Screws](notes/external-axis-screw-step-display-2026-11-21/README.md), #630. Prove the imported rotational family and preserve desktop owner selection.
 - D1562: [Measure external-axis Screw AP214 round trip](notes/external-axis-screw-step-roundtrip-2026-11-21/README.md), #630. Verify independent signed rails and native volume, and record the reopened display gap.
 - D1561: [Review signed Screw winding through the local Agent](notes/review-pinned-smooth-screw-winding-2026-11-21/README.md), #630 and #322. Verify native validation through proposal evaluation, memo isolation, explicit approval and round trip.
