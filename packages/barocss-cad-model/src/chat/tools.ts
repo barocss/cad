@@ -76,9 +76,9 @@ export function previewProposal(state: ChatState, id: string, evaluate: Evaluate
  *  restores the part's own rows first, and its bodies (R3e: written once for both of the dispatcher's paths). */
 async function placedPart(state: ChatState, inst: PartInstance, evaluate: Evaluate) {
   const shop = { ...resolveShopRows(inst.doc, state.doc), doc: resolveShopTree(inst.doc, state.doc, inst.id) };
-  const partEvaluate: Evaluate = async d => {
+  const partEvaluate: Evaluate = async (d, screwWinding) => {
     const authored = restoreAuthoredShopRows(d, shop.doc);
-    return 'error' in authored ? { ok: false, revision: 0, error: friendly(authored.error), wallTime: 0 } : evaluate(resolveShopTree(authored.doc, state.doc, inst.id));
+    return 'error' in authored ? { ok: false, revision: 0, error: friendly(authored.error), wallTime: 0 } : evaluate(resolveShopTree(authored.doc, state.doc, inst.id), screwWinding);
   };
   const r = await partEvaluate(shop.doc);
   return { shop, partEvaluate, bodies: r?.ok ? r.bodies : [] };

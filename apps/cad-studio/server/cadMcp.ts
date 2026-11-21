@@ -41,7 +41,7 @@ const v1Name = (name: string, args: unknown) => { const v = v1Call(name, args); 
 const structuredOf = (text: string): Record<string, unknown> | undefined => { try { const v = JSON.parse(text); return v && typeof v === 'object' && !Array.isArray(v) ? v : undefined; } catch { return undefined; } };
 
 let revision = 1;
-const evaluate = async (doc: StudioDoc) => evaluateDoc(doc, revision++);
+const evaluate = async (doc: StudioDoc, screwWinding?: number) => evaluateDoc(doc, revision++, 8, false, screwWinding);
 
 /**
  * Where the server's part lives: the chat server's per-turn state file, or a .bcad document (A5.4, `cad-mcp --doc`).

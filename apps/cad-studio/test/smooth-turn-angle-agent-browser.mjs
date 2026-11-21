@@ -10,14 +10,20 @@ const source = JSON.parse(await readFile(currentFile, 'utf8'));
 const index = source.nodes.length - 1;
 const widthEdit = process.argv.includes('--width');
 const triangular = process.argv.includes('--triangle');
-const screw = process.argv.includes('--screw');
+const screwWinding = process.argv.includes('--screw-winding');
+const screw = screwWinding || process.argv.includes('--screw');
 const displayBaseline = process.argv.includes('--screw-display-baseline');
 const displayRefined = process.argv.includes('--screw-display-refined');
 const webgl2 = process.argv.includes('--webgl2');
 assert.ok(screw || !displayBaseline && !displayRefined && !webgl2);
 assert.ok(!(displayBaseline && displayRefined));
 assert.ok([widthEdit, triangular, screw].filter(Boolean).length <= 1);
-const edit = screw ? {
+const edit = screwWinding ? {
+  key: 'smoothScrewAngle', value: 360, invalid: 451, refusal: /nonzero Screw angle/,
+  title: 'Reverse reviewed Smooth Screw winding to +360°',
+  before: { angle: -360, pitch: 56 }, after: { angle: 360, pitch: 56 },
+  centre: [10, -16, 3], height: 56, stations: 16, bodies: 1,
+} : screw ? {
   key: 'smoothScrewPitch', value: 64, invalid: 10000, refusal: /axial advance within the model range/,
   title: 'Change reviewed Smooth Screw pitch to 64 mm per revolution',
   before: { angle: -450, pitch: 56 }, after: { angle: -450, pitch: 64 },
@@ -42,7 +48,7 @@ const pins = [
   ...(screw ? ['apps/cad-studio/src/viewport/Viewport.tsx', 'apps/cad-studio/src/state/useProposalPreview.ts'] : []),
 ];
 const f = await createFlow({
-  name: screw ? 'smooth-screw-reviewed-pitch-edit' : triangular ? 'triangular-turn-reviewed-angle-edit' : widthEdit ? 'smooth-turn-reviewed-width-edit' : 'smooth-turn-reviewed-angle-edit',
+  name: screwWinding ? 'smooth-screw-reviewed-winding-edit' : screw ? 'smooth-screw-reviewed-pitch-edit' : triangular ? 'triangular-turn-reviewed-angle-edit' : widthEdit ? 'smooth-turn-reviewed-width-edit' : 'smooth-turn-reviewed-angle-edit',
   output: process.argv[2],
   envFrozen: 'SMOOTH_TURN_PIN_FROZEN',
   initialFiles: pins,
@@ -86,7 +92,20 @@ async function review(request, label) {
 async function native(label, doc, { angle, width, pitch }) {
   const height = screw ? pitch * Math.abs(angle) / 360 : edit.height;
   if (screw) {
-    assert.deepEqual(doc.nodes.slice(0, index), source.nodes.slice(0, index));
+    if (screwWinding) {
+      const first = source.nodes[index].sections[0].sketch;
+      assert.deepEqual(doc.nodes.slice(0, first + 1), source.nodes.slice(0, first + 1));
+      for (const [i, section] of source.nodes[index].sections.entries()) {
+        const old = source.nodes[section.sketch], current = doc.nodes[section.sketch];
+        const theta = angle * (i / (edit.stations - 1)) * Math.PI / 180;
+        assert.deepEqual({ ...current, segments: old.segments }, old);
+        for (const [j, { start }] of current.segments.entries()) {
+          const [u, v] = [[2, 1], [14, 1], [14, 9], [2, 9]][j];
+          assert.ok(near(start, [Math.cos(theta) * u - Math.sin(theta) * v,
+            Math.sin(theta) * u + Math.cos(theta) * v]));
+        }
+      }
+    } else assert.deepEqual(doc.nodes.slice(0, index), source.nodes.slice(0, index));
     assert.deepEqual(doc.nodes[index], {
       ...source.nodes[index], sections: source.nodes[index].sections.map((section, i) => {
         const z = doc.nodes[index].sections[i].z;
@@ -197,8 +216,13 @@ await f.run(async () => {
     const pinned = { ...args, expectedRevision: fresh.revision };
     assert.match((await call('proposals', proposed({ ...pinned, values: { [edit.key]: edit.invalid } }), true)).error, edit.refusal);
     if (screw) {
-      assert.match((await call('proposals', proposed({ ...pinned, values: { ...args.values, smoothLoftHeight: 90 } }), true)).error, /only values[.]smoothScrewPitch/);
-      assert.match((await call('proposals', proposed({ ...pinned, values: { [edit.key]: edit.before.pitch } }), true)).error, /already has this pitch/);
+      const otherKey = screwWinding ? 'smoothScrewPitch' : 'smoothScrewAngle';
+      assert.match((await call('proposals', proposed({ ...pinned, values: { ...args.values, [otherKey]: 90 } }), true)).error,
+        /only values[.]smoothScrew(?:Angle|Pitch)/);
+      const unchanged = screwWinding ? edit.before.angle : edit.before.pitch;
+      assert.match((await call('proposals', proposed({ ...pinned, values: { [edit.key]: unchanged } }), true)).error, /already has this (angle|pitch)/);
+      if (screwWinding)
+        assert.match((await call('proposals', proposed({ ...pinned, values: { [edit.key]: 0 } }), true)).error, edit.refusal);
     }
     if (widthEdit) {
       assert.match((await call('proposals', proposed({ ...pinned, values: { ...args.values, smoothTurnAngle: -360 } }), true)).error, /only values[.]smoothTurn/);
@@ -231,7 +255,7 @@ await f.run(async () => {
   await f.same(pending);
   await f.snapshot('reviewed-turn-proposal');
   let previewDisplay, deltaDisplay;
-  if (displayBaseline || displayRefined) {
+  if (displayBaseline || displayRefined || screwWinding) {
     if (displayRefined) {
       await button('Show changes', card).click();
       await button('Show shape', card).waitFor();
@@ -251,7 +275,9 @@ await f.run(async () => {
       assert.equal(beforeDisplay.detail?.kind, 'smooth-turn');
       await f.same(pending);
       await button('Show after', card).click();
-    } else await f.page.waitForFunction(() => window.__studioProposalOverlay?.() != null);
+    } else if (screwWinding)
+      await f.page.waitForFunction(() => window.__studioLoftDisplay?.()?.kind === 'smooth-turn');
+    else await f.page.waitForFunction(() => window.__studioProposalOverlay?.() != null);
     await f.snapshot('same-camera-screw-preview');
     previewDisplay = await displayedScrew('preview display');
   }
@@ -264,6 +290,11 @@ await f.run(async () => {
   assert.deepEqual([result.key, result.faces, result.edges, result.controls, result.ids],
     [before.key, before.faces, before.edges, before.controls, before.ids]);
   assert.notEqual(result.sha, before.sha);
+  if (screwWinding) {
+    const manual = await f.inspect('manual-winding-native', previous);
+    assert.equal(result.sha, manual.sha);
+    assert.deepEqual(accepted.nodes, previous.nodes);
+  }
   const volumeFactor = screw ? edit.after.pitch / edit.before.pitch : widthEdit ? edit.after.width / edit.before.width : 1;
   assert.ok(Math.abs(result.volume - volumeFactor * before.volume) < 1e-7);
   if (previewDisplay) {
@@ -275,18 +306,22 @@ await f.run(async () => {
     assert.equal(approvedDisplay.detail.kind, 'smooth-turn');
     assert.equal(previewDisplay.renderer, webgl2 ? 'webgl2' : 'webgpu');
     assert.equal(previewDisplay.renderer, approvedDisplay.renderer);
-    const diff = (deltaDisplay ?? previewDisplay).diff;
-    assert.equal(diff?.method, 'boolean');
-    assert.ok(Math.abs(diff.added - 4632.984810318592) < 1e-7);
-    assert.ok(Math.abs(diff.removed - 3672.928784289509) < 1e-7);
+    if (!screwWinding) {
+      const diff = (deltaDisplay ?? previewDisplay).diff;
+      assert.equal(diff?.method, 'boolean');
+      assert.ok(Math.abs(diff.added - 4632.984810318592) < 1e-7);
+      assert.ok(Math.abs(diff.removed - 3672.928784289509) < 1e-7);
+    }
     if (displayBaseline) {
       assert.equal(previewDisplay.detail, null);
       assert.notEqual(previewDisplay.meshHash, approvedDisplay.meshHash);
     } else {
       assert.equal(previewDisplay.diff, null);
-      assert.equal(deltaDisplay.renderer, previewDisplay.renderer);
-      assert.deepEqual(deltaDisplay.camera, previewDisplay.camera);
-      assert.deepEqual(deltaDisplay.canvas, previewDisplay.canvas);
+      if (deltaDisplay) {
+        assert.equal(deltaDisplay.renderer, previewDisplay.renderer);
+        assert.deepEqual(deltaDisplay.camera, previewDisplay.camera);
+        assert.deepEqual(deltaDisplay.canvas, previewDisplay.canvas);
+      }
       assert.deepEqual(previewDisplay.detail, approvedDisplay.detail);
       assert.equal(previewDisplay.meshHash, approvedDisplay.meshHash);
     }
@@ -295,14 +330,16 @@ await f.run(async () => {
   await f.same(pending);
   await f.redo();
   await f.same(accepted);
-  const saved = await f.save(screw ? 'reviewed-smooth-screw-pitch-64' : widthEdit ? 'reviewed-smooth-turn-widened' : 'reviewed-smooth-turn-reversed');
+  const saved = await f.save(screwWinding ? 'reviewed-smooth-screw-positive360' : screw ? 'reviewed-smooth-screw-pitch-64' : widthEdit ? 'reviewed-smooth-turn-widened' : 'reviewed-smooth-turn-reversed');
   await f.freshOpen(saved.file, accepted, 'approved-turn-reopened');
   assert.equal((await native('agent-approved-reopened-native', accepted, edit.after)).sha, result.sha);
   await frame();
   await f.openFeatureEditor(index, 'approved turn after reopen');
-  if (screw)
+  if (screw) {
     assert.equal(Number(await f.editor().getByLabel('Pitch per revolution', { exact: true }).inputValue()), edit.after.pitch);
-  else {
+    if (screwWinding)
+      assert.equal(Number(await f.editor().getByLabel('Turn angle', { exact: true }).inputValue()), edit.after.angle);
+  } else {
     for (const [label, value] of [['Turn angle', edit.after.angle], ['Total height', edit.height]])
       assert.equal(Number(await f.editor().getByLabel(label, { exact: true }).inputValue()), value);
     const width = f.editor().getByLabel('Turn width', { exact: true });

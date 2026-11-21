@@ -105,3 +105,19 @@ test('another evaluator filling its own LRU cannot evict this evaluator successf
   for (let index = 1; index <= 17; index++) await b(document(32, index));
   assert.equal(a(structuredClone(doc)), first); assert.equal(callsA, 1);
 });
+
+test('ordinary evaluation and winding validations have distinct memo entries', async () => {
+  const doc = document(33), checks: (number | undefined)[] = [];
+  const memo = rememberedEvaluate(async (_doc, check) => {
+    checks.push(check);
+    return { ok: true, revision: checks.length, bodies: [], wallTime: 0, checkedScrewWinding: check };
+  });
+  const plain = await memo(doc), first = await memo(doc, 7), second = await memo(doc, 8);
+  assert.ok(plain?.ok && first?.ok && second?.ok);
+  assert.equal(plain.checkedScrewWinding, undefined);
+  assert.equal(first.checkedScrewWinding, 7);
+  assert.equal(second.checkedScrewWinding, 8);
+  assert.equal(await memo(structuredClone(doc), 7), first);
+  assert.equal(await memo(doc), plain);
+  assert.deepEqual(checks, [undefined, 7, 8]);
+});

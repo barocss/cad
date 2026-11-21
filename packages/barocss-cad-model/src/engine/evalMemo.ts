@@ -12,7 +12,7 @@ import type { EvalResult } from './evaluate';
 import { evaluatedPart } from './wireDoc';
 import { bearingDependencyKey } from './bearingContext';
 
-export type Evaluate = (doc: StudioDoc) => Promise<EvalResult | null>;
+export type Evaluate = (doc: StudioDoc, screwWinding?: number) => Promise<EvalResult | null>;
 const KEEP = 16;
 const memos = new WeakMap<Evaluate, Evaluate>();
 
@@ -22,7 +22,7 @@ export function rememberedEvaluate(evaluate: Evaluate): Evaluate {
   if (!m) {
     // KEEP is per evaluator. Fresh callbacks deliberately share no cached work.
     const kept = new Map<string, Promise<EvalResult | null>>();
-    m = (doc: StudioDoc) => evaluateKept(doc, evaluate, kept); memos.set(evaluate, m); memos.set(m, m);
+    m = (doc: StudioDoc, screwWinding?: number) => evaluateKept(doc, evaluate, kept, screwWinding); memos.set(evaluate, m); memos.set(m, m);
   }
   return m;
 }
@@ -73,10 +73,12 @@ export function evaluationKey(doc: StudioDoc): string {
   const part = evaluatedPart(doc);
   return `${doc.nodes.map(nodeKey).join('\u0001')}\u0002${JSON.stringify({ ...part, nodes: [], shopRows: provenanceOfTree(doc), bearingDependencies: bearingDependencyKey(part) }, shortened)}`;
 }
-function evaluateKept(doc: StudioDoc, evaluate: Evaluate, kept: Map<string, Promise<EvalResult | null>>): Promise<EvalResult | null> {
-  const key = evaluationKey(doc), have = kept.get(key);
+function evaluateKept(doc: StudioDoc, evaluate: Evaluate, kept: Map<string, Promise<EvalResult | null>>, screwWinding?: number): Promise<EvalResult | null> {
+  const modelKey = evaluationKey(doc);
+  const key = screwWinding === undefined ? modelKey : `screw-winding:${screwWinding}:${modelKey}`;
+  const have = kept.get(key);
   if (have) { kept.delete(key); kept.set(key, have); return have; }
-  const result = evaluate(doc);
+  const result = evaluate(doc, screwWinding);
   kept.set(key, result); if (kept.size > KEEP) kept.delete(kept.keys().next().value!);
   void result.then(r => forgetUnless(kept, key, result, !!r?.ok), () => forgetUnless(kept, key, result, false));
   return result;

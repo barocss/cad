@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1561: [Review signed Screw winding through the local Agent](notes/review-pinned-smooth-screw-winding-2026-11-21/README.md), #630 and #322. Verify native validation through proposal evaluation, memo isolation, explicit approval and round trip.
 - D1560: [Edit signed Smooth Screw winding in Studio History](notes/smooth-screw-winding-history-2026-11-21/README.md), #630. Qualify direction and magnitude, native identity, coupled pitch drafts and round trip.
 - D1559: [Show the structured Screw shape during proposal review](notes/smooth-screw-proposal-shape-preview-2026-11-21/README.md), #630. Verify the identical preview and approved display grids and the retained Boolean delta.
 - D1558: [Compare the Screw proposal and approved Model display at one camera](notes/smooth-screw-proposal-display-baseline-2026-11-21/README.md), #630. Confirm the two base body packets and retain the separate proposal delta.

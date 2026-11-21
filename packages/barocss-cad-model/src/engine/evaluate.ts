@@ -138,7 +138,7 @@ export type EvalResult =
   // (`faceTable`: the part's flat and round faces from the B-rep just built — the face table the requirement checks,
   // print rules and mates read, kept so they do not evaluate the part again; PERF3 A1.)
   // (`rebuild`: the part's own evaluation as the kernel profiled it — evaluateDoc only; O10.)
-  | { ok: true; revision: number; bodies: BodyResult[]; wallTime: number; faceTable?: FaceTable; shopRows?: readonly ShopTreeProvenance[]; rebuild?: RebuildData }
+  | { ok: true; revision: number; bodies: BodyResult[]; wallTime: number; faceTable?: FaceTable; shopRows?: readonly ShopTreeProvenance[]; rebuild?: RebuildData; checkedScrewWinding?: number }
   | { ok: false; revision: number; error: FriendlyError; wallTime: number };
 
 /** The main evaluation's rebuild (O10): the features built again and those reused, and each one's own cost (D228). */
@@ -341,19 +341,21 @@ function refineSweepFillet(base: DisplayMesh, output: CadPartOutput, doc: Studio
 }
 /** The document with its parameter-bound skeletons solved for its parameters now (O140; the same document when none moved); their refusal thrown. */
 function skeletonsNow(doc: StudioDoc): StudioDoc { return resolveSkeletons(doc).doc; }
+function requireScrewWindingOutput(doc: StudioDoc, snapshot: CadPartSnapshot, index: number): void {
+  const feature = featureId(doc.nodes, index);
+  const output = snapshot.outputs.find(candidate => candidate.feature === feature && candidate.brep.bodies.length === 1
+    && candidate.brep.bodies[0].kind === 'solid' && candidate.brep.shells.length === 1 && candidate.brep.shells[0].closed);
+  if (!smoothScrewWindingRule(doc.nodes, index) || !output || !checkOutput(output).valid)
+    throw new BarocssError('GEOMETRY', `The Screw winding did not produce a valid external-axis solid for ${feature}.`, 'evaluate', { feature });
+}
+
 export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refineDisplay = false, screwWinding?: number): EvalResult {
   const shopRows = provenanceOfTree(doc);
   const t0 = performance.now();
   try {
     doc = skeletonsNow(doc);
     const snapshot = snapshotOf(doc);
-    if (screwWinding !== undefined) {
-      const feature = featureId(doc.nodes, screwWinding);
-      const output = snapshot.outputs.find(candidate => candidate.feature === feature && candidate.brep.bodies.length === 1
-        && candidate.brep.bodies[0].kind === 'solid' && candidate.brep.shells.length === 1 && candidate.brep.shells[0].closed);
-      if (!smoothScrewWindingRule(doc.nodes, screwWinding) || !output || !checkOutput(output).valid)
-        throw new BarocssError('GEOMETRY', `The Screw winding did not produce a valid external-axis solid for ${feature}.`, 'evaluate', { feature });
-    }
+    if (screwWinding !== undefined) requireScrewWindingOutput(doc, snapshot, screwWinding);
     last = snapshot;
     const result = partResult(doc, snapshot, revision, quality, shopRows, t0);
     if (refineDisplay && quality === 8 && result.bodies.length === 1 && snapshot.outputs.length === 1) {
@@ -382,7 +384,7 @@ export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refin
         if (mesh !== body.mesh) result.bodies[band] = { ...body, mesh };
       }
     }
-    return { ...result, rebuild: rebuildOf(snapshot) };
+    return { ...result, rebuild: rebuildOf(snapshot), ...(screwWinding === undefined ? {} : { checkedScrewWinding: screwWinding }) };
   } catch (cause) {
     return failed(revision, cause, t0, doc);
   }
@@ -504,13 +506,16 @@ export function evaluatePreview(doc: StudioDoc, revision: number, quality = 8, s
 export type PartSlot = 'part' | 'check' | 'refs' | 'agent' | 'proposal-display' | 'read' | 'probe';
 /** Another part's bodies on their own (instances: not through the main part's cache). */
 const lastParts = new Map<PartSlot, CadPartSnapshot>();
-export function evaluatePart(doc: StudioDoc, revision: number, quality = 8, slot: PartSlot = 'part'): EvalResult {
+export function evaluatePart(doc: StudioDoc, revision: number, quality = 8, slot: PartSlot = 'part', screwWinding?: number): EvalResult {
   const shopRows = provenanceOfTree(doc);
   const t0 = performance.now();
   try {
     doc = skeletonsNow(doc);
-    const last = lastParts.get(slot), snapshot = partSnapshot(doc, part => last ? reevaluate(last, { document: part }) : evaluateCadPart(part)); lastParts.set(slot, snapshot);
+    const last = lastParts.get(slot), snapshot = partSnapshot(doc, part => last ? reevaluate(last, { document: part }) : evaluateCadPart(part));
+    if (screwWinding !== undefined) requireScrewWindingOutput(doc, snapshot, screwWinding);
+    lastParts.set(slot, snapshot);
     const result = partResult(doc, snapshot, revision, quality, shopRows, t0);
+    if (screwWinding !== undefined) result.checkedScrewWinding = screwWinding;
     if (slot === 'proposal-display' && result.bodies.length === 1) refineSmoothTurns(result.bodies, snapshot, doc, true);
     return result;
   } catch (cause) {

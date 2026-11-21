@@ -2,7 +2,8 @@
 // flags, and the helpers every handler uses — accept (evaluate a candidate, or refuse it) and fail (a refusal).
 import { refOf, shownFields, type Field, type Values } from '../app/commands';
 import { featureLabel, type StudioDoc } from '../engine/doc';
-import type { BodyResult, EvalResult } from '../engine/evaluate';
+import type { BodyResult } from '../engine/evaluate';
+import type { Evaluate } from '../engine/evalMemo';
 import type { PersonRowFiles } from '../engine/rowFiles';
 import type { ImageTrace } from './trace';
 import type { NameSelection } from './names';
@@ -36,7 +37,7 @@ export interface ChatState {
   /** Host-owned requirement for the current turn. This can only reduce autonomy. */
   readonly approvalRequired?: true;
   doc: StudioDoc; bodies: BodyResult[]; /** FRf2: a part-scoped call's placed part (its document the state's). */ partOf?: string; selection?: NameSelection; images?: ImageTrace[]; policy?: Policy; tx?: Transactions; turnBase?: StudioDoc; turns?: readonly string[]; rowFiles?: PersonRowFiles; /** CG6: the document's versions and branches — the studio's open project, else this session's (versions/tools.ts). */ versions?: import('../versions/log').VersionLog; /** Versions whose documents a call needed and the turn did not carry: the host sends them with the next turn. */ versionsWanted?: string[] }
-export type Evaluate = (doc: StudioDoc) => Promise<EvalResult | null>;
+export type { Evaluate } from '../engine/evalMemo';
 /** `images`: PNGs to show the model along with the text (base64). */
 export interface ToolOutcome { state: ChatState; content: string; isError: boolean; changed: boolean; summary: string; images?: { data: string; mediaType: 'image/png' }[] }
 

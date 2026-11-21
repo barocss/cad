@@ -36,8 +36,8 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, onNot
   const detail = ghost?.bodies.length === 1 ? ghost.bodies[0].mesh.loftDetail : undefined;
   const screwShape = !!detail && 'kind' in detail && !!detail.screwGrid;
   const toggleScrewChanges = () => setGhost(g => g && { ...g, changesShown: !g.changesShown });
-  const partEval = (d: StudioDoc) => engine.part(d, nextRevision(), 'agent');
-  const previewEval = (d: StudioDoc) => engine.part(d, nextRevision(), 'proposal-display');
+  const partEval = (d: StudioDoc, screwWinding?: number) => engine.part(d, nextRevision(), 'agent', screwWinding);
+  const previewEval = (d: StudioDoc, screwWinding?: number) => engine.part(d, nextRevision(), 'proposal-display', screwWinding);
   const previewPlaced = async (before: StudioDoc, after: StudioDoc): Promise<PlacedProposalPreview | null> => {
     try {
       return await placedProposalPreview(before, after, instances, (inst, base, parent) => engine.placed(placedDoc(inst, parent), base, placementOf(inst), nextRevision()));

@@ -298,7 +298,7 @@ export class EngineClient {
    * Another part on its own (an instance, or a check's, an agent's or a reference's version of this one): never
    * dropped as stale. `slot`: what it is for — each keeps its own last snapshot in the worker (PERF3 B12).
    */
-  part(doc: StudioDoc, revision: number, slot: PartSlot = 'part'): Promise<EvalResult> {
+  part(doc: StudioDoc, revision: number, slot: PartSlot = 'part', screwWinding?: number): Promise<EvalResult> {
     const id = this.next++;
     return new Promise(resolve => {
       this.pending.set(id, data => { const r = (data as { result: EvalResult }).result; remembered(doc, r); resolve(r); });
@@ -306,7 +306,7 @@ export class EngineClient {
       this.post(id, () => {
         const nativeSource = { epoch: this.epoch, requestId: id, revision, slot: `part:${slot}` };
         this.nativeSources.set(id, nativeSource);
-        return { type: 'part', id, doc: this.wire!.pack(doc), revision, slot, nativeSource };
+        return { type: 'part', id, doc: this.wire!.pack(doc), revision, slot, nativeSource, screwWinding };
       });
     });
   }
