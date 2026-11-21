@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 const edgeDrag = process.argv.includes('--edge-drag') || process.argv.includes('--expect-no-edge-drag');
-const drag = edgeDrag || process.argv.includes('--drag') || process.argv.includes('--expect-no-drag');
-const baseline = process.argv.includes('--expect-no-drag') || process.argv.includes('--expect-no-edge-drag');
+const planeBaseline = process.argv.includes('--expect-no-plane-drag');
+const facePlane = process.argv.includes('--v-drag') ? 'face-v' : process.argv.includes('--u-drag') || planeBaseline ? 'face-u' : null;
+const drag = edgeDrag || !!facePlane || process.argv.includes('--drag') || process.argv.includes('--expect-no-drag');
+const baseline = planeBaseline || process.argv.includes('--expect-no-drag') || process.argv.includes('--expect-no-edge-drag');
 const pins=['packages/barocss-cad-model/src/subd/cageLocalDirection.ts','packages/barocss-cad-model/src/subd/cageEdit.ts','apps/cad-studio/src/ui/CagePanel.tsx','apps/cad-studio/src/subd/useCageEditor.ts','apps/cad-studio/src/subd/cageTransformDraft.ts','apps/cad-studio/src/ui/CageTransformControls.tsx'];
 if (drag) pins.push('apps/cad-studio/src/subd/useCageGizmo.ts', 'apps/cad-studio/src/viewport/gizmo.ts',
   'apps/cad-studio/src/viewport/GizmoMarks.tsx', 'apps/cad-studio/src/viewport/Viewport.tsx',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts', 'apps/cad-studio/test/cage-local-move-browser.mjs');
 const f=await createFlow({name:'cage-local-move',output:process.argv[2],envFrozen:'CAGE_LOCAL_MOVE_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,
  qualification: edgeDrag ? 'Use an actual viewport handle to move one oblique cage edge along its original tangent.'
+   : facePlane ? 'Use an actual viewport handle to move one tilted cage quad along its original in-plane axis.'
    : drag ? 'Use an actual viewport handle to move one tilted cage face along its original normal.'
    : 'Single-edge tangent and tilted single-quad normal numeric movement.',
  limits:['One box, single edge and a 15-degree tilted quad. Multi-selection refusal covered. Arbitrary faces unsupported.']});
@@ -20,10 +23,14 @@ const done=async()=>{await f.page.waitForFunction(()=>document.querySelector('[a
 async function dragLocal(tilted, base, ids, direction, verify) {
  const frame = panel().getByLabel('Drag frame', {exact:true});
  const arrow = f.page.locator('.gizmo-arrow[data-gizmo="moveAlong"]');
- const axisLabel = edgeDrag ? 'T' : 'N';
- const name = edgeDrag ? 'edge-tangent' : 'face-normal';
+ const dragFrame = edgeDrag ? 'edge' : facePlane ?? 'face';
+ const axisLabel = {edge:'T', face:'N', 'face-u':'U', 'face-v':'V'}[dragFrame];
+ const name = {edge:'edge-tangent', face:'face-normal', 'face-u':'quad-u', 'face-v':'quad-v'}[dragFrame];
  if (baseline) {
-  assert.equal(await frame.count(), 0);
+  if (planeBaseline) {
+   assert.equal(await frame.inputValue(), 'world');
+   assert.equal(await frame.locator('option[value="face-u"],option[value="face-v"]').count(),0);
+  } else assert.equal(await frame.count(), 0);
   assert.equal(await arrow.count(), 0);
   assert.ok(await f.page.locator('.gizmo-arrow[data-gizmo="moveY"]').count());
   await f.snapshot('original-world-handles');
@@ -31,7 +38,7 @@ async function dragLocal(tilted, base, ids, direction, verify) {
   return;
  }
  assert.equal(await frame.inputValue(), 'world');
- await frame.selectOption(edgeDrag ? 'edge' : 'face');
+ await frame.selectOption(dragFrame);
  await button('Iso').click();
  const points = ids.map(id => tilted.cage.positions.slice(id * 3, id * 3 + 3));
  const centre = points[0].map((_, axis) => points.reduce((sum, point) => sum + point[axis], 0) / points.length);
@@ -149,7 +156,7 @@ await f.run(async()=>{
  await begin();const multi=await faces();
  if (drag && !edgeDrag && !baseline) {
   const frame = panel().getByLabel('Drag frame', {exact:true});
-  await frame.selectOption('face');
+  await frame.selectOption(facePlane ?? 'face');
   await panel().getByRole('status').filter({hasText:'pick exactly one planar convex quad face'}).waitFor();
   assert.equal(await f.page.locator('[data-gizmo^="move"]').count(),0);
   assert.deepEqual(await state(),multi);
@@ -206,7 +213,22 @@ await f.run(async()=>{
   await dragLocal(picked, base, endpoints, tangent, verify);
   return;
  }
- if (drag) { await dragLocal(tilted, base, ids, normal, verify); return; }
+ if (drag) {
+  let direction = normal;
+  if (facePlane) {
+   // Find U in the unrotated rectangle and rotate that independent unit vector with the fixture.
+   const start = ids.indexOf(Math.min(...ids));
+   const a = ids[start], b = ids[(start + 1) % ids.length];
+   const dx = seed.cage.positions[b * 3] - seed.cage.positions[a * 3];
+   const dy = seed.cage.positions[b * 3 + 1] - seed.cage.positions[a * 3 + 1];
+   assert.ok((dx === 0) !== (dy === 0));
+   const length = Math.hypot(dx,dy);
+   const [x,y] = facePlane === 'face-u' ? [dx/length,dy/length] : [-dy/length,dx/length];
+   direction = [x,y*Math.cos(Math.PI/12),y*Math.sin(Math.PI/12)];
+  }
+  await dragLocal(tilted, base, ids, direction, verify);
+  return;
+ }
  await button('Move selection',panel()).click();await f.page.getByLabel('Translation frame',{exact:true}).selectOption('face');assert.equal(await f.page.getByLabel('Translation world axis',{exact:true}).count(),0);
  for(const d of [-1,.5,2]) {await f.page.getByLabel('Selection distance mm',{exact:true}).fill(String(d));verify(tilted,await state(),ids,normal,d);assert.equal((await state()).undo,2);await f.same(base);}
  await f.page.getByLabel('Selection distance mm',{exact:true}).fill('');assert.deepEqual((await state()).cage,tilted.cage);assert.ok(await button('Apply transform',panel()).isDisabled());

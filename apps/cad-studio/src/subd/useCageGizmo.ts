@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
-import { cageLocalDirection } from '@barocss/cad-model/subd/cageLocalDirection';
+import { cageLocalDirection, type CageLocalFrame } from '@barocss/cad-model/subd/cageLocalDirection';
 import {
   commitCageProportionalDrag, commitDrag, dragged, planCageProportionalDrag, previewCageProportionalDrag,
   selectionCentre, type CageProportionalDragPlan, type CageSession,
@@ -16,7 +16,8 @@ type CageDrag = {
   plan: CageProportionalDragPlan | null;
 };
 const DEFAULT_RADIUS = '10';
-type CageDragFrame = 'world' | 'edge' | 'face';
+type CageDragFrame = 'world' | CageLocalFrame;
+const LOCAL_AXIS_LABEL: Record<CageLocalFrame, string> = { edge: 'T', face: 'N', 'face-u': 'U', 'face-v': 'V' };
 
 export function useCageGizmo(
   session: CageSession | null, doc: StudioDoc, available: boolean,
@@ -24,14 +25,15 @@ export function useCageGizmo(
   fail: (title: string, hint: string) => void,
 ) {
   const [dragFrame, setDragFrame] = useState<CageDragFrame>('world');
-  const frameMode = dragFrame === session?.mode ? dragFrame : 'world';
+  const frameMode = session?.mode === (dragFrame === 'edge' ? 'edge' : 'face') ? dragFrame : 'world';
   const local = useMemo(() => {
     if (!session || frameMode === 'world') return null;
     try {
       const direction = cageLocalDirection(session, frameMode);
-      return { moveAlong: { direction, label: frameMode === 'edge' ? 'T' : 'N' } };
+      return { moveAlong: { direction, label: LOCAL_AXIS_LABEL[frameMode] } };
+    } catch (error) {
+      return { reason: error instanceof Error ? error.message.replace(/^SubD: local direction: /, '') : String(error) };
     }
-    catch (error) { return { reason: error instanceof Error ? error.message.replace(/^SubD: local direction: /, '') : String(error) }; }
   }, [session, frameMode]);
   const owner = useMemo(() => available && session && (frameMode === 'world' || local?.moveAlong)
     ? { doc, base: session, moveAlong: local?.moveAlong }

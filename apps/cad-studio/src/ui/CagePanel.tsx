@@ -12,6 +12,12 @@ import { NativeSelect } from '@/components/ui/native-select';
 const activeStyle = { background: 'var(--accent)', color: 'var(--accent-ink)' };
 const focusClass = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text)]';
 const focusSlideRatio = (input: HTMLInputElement | null) => { input?.focus(); };
+const EDGE_DRAG_FRAMES = [{ value: 'edge', label: 'Edge tangent' }] as const;
+const FACE_DRAG_FRAMES = [
+  { value: 'face', label: 'Face normal' },
+  { value: 'face-u', label: 'Face U' },
+  { value: 'face-v', label: 'Face V' },
+] as const;
 
 const OPS: { op: CageOp; label: string; key?: string; tip: string }[] = [
   { op: 'extrude', label: 'Extrude', key: 'E', tip: 'The picked faces (or boundary edges) out as a new region. Move it with the gizmo before Done, or use Cage Undo. Shift-drag also extrudes' },
@@ -40,7 +46,8 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
   const ratioLabel = slide ? 'Slide ratio' : 'Loop ratio';
   const insetLabel = s.sel.faces.length > 1 ? 'Inset region' : 'Inset face';
   const pickedEdges = selectedCageEdges(s), sharpCount = pickedEdges.filter(edge => edge.sharp).length;
-  const localFrame = s.mode === 'edge' ? { value: 'edge', label: 'Edge tangent' } as const : { value: 'face', label: 'Face normal' } as const;
+  const localFrames = s.mode === 'edge' ? EDGE_DRAG_FRAMES : FACE_DRAG_FRAMES;
+  const chosenFrame = localFrames.find(frame => frame.value === dragSettings.dragFrame);
   const what = s.sel.faces.length ? `${s.sel.faces.length} face${s.sel.faces.length === 1 ? '' : 's'}` : s.sel.edges.length ? `${s.sel.edges.length} edge${s.sel.edges.length === 1 ? '' : 's'}` : s.sel.vertices.length ? `${s.sel.vertices.length} vertex${s.sel.vertices.length === 1 ? '' : 'es'}` : 'nothing';
   return <aside className="card props cage-panel" aria-label="Cage editor">
     <div className="card-title">CAGE · {name}</div>
@@ -60,10 +67,11 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
     </div>}
     {s.mode !== 'vertex' && <>
       <label className={FIELD}><span>Drag frame</span><NativeSelect className={CONTROL} aria-label="Drag frame" value={dragSettings.dragFrame} disabled={dragging}
-        onChange={event => dragSettings.setDragFrame(event.target.value === localFrame.value ? localFrame.value : 'world')}>
-        <option value="world">World axes</option><option value={localFrame.value}>{localFrame.label}</option>
+        onChange={event => dragSettings.setDragFrame(localFrames.find(frame => frame.value === event.target.value)?.value ?? 'world')}>
+        <option value="world">World axes</option>
+        {localFrames.map(frame => <option key={frame.value} value={frame.value}>{frame.label}</option>)}
       </NativeSelect></label>
-      {dragSettings.frameReason && <div className="warn" role="status">{localFrame.label}: {dragSettings.frameReason}.</div>}
+      {chosenFrame && dragSettings.frameReason && <div className="warn" role="status">{chosenFrame.label}: {dragSettings.frameReason}.</div>}
     </>}
     <div className={FIELD}><span>Picked</span> <b aria-label="Picked">{what}</b></div>
     {centre && <div className="muted small" aria-label="Picked cage centre">Picked centre: ({centre.map(value => Number(value.toFixed(3))).join(', ')}) mm</div>}

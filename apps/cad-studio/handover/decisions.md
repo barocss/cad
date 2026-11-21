@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1489: [Drag a SubD cage quad along its in-plane U and V directions](notes/cage-quad-plane-drag-2026-11-21/README.md), #625. Verify both signed local axes, history and native files.
 - D1488: [Drag one SubD cage edge along its tangent](notes/cage-edge-tangent-drag-2026-11-21/README.md), #625. Verify the stable endpoint direction, exact Done and reopen.
 - D1487: [Drag one SubD cage face along its normal](notes/cage-face-normal-drag-2026-11-21/README.md), #625. Verify the signed physical handle, ownership, exact Done and reopen.
 - D1486: [Preserve an Agent approval during a later manual fixed-span edit](notes/manual-pattern-after-agent-approval-2026-11-21/README.md), #25. Verify the manual reversal, exact Hole, unchanged approval, Undo, Redo and native reopening.
