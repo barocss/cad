@@ -77,6 +77,21 @@ export function importIGESFile(d: DirectGeometry, text: string, label: string): 
 
 const object = (d: DirectGeometry, id: string) => { const o = d.objects.find(x => x.id === id); if (!o) throw refusal('DIRECT_PICK', 'No such object.'); return o; };
 const curveOf = (d: DirectGeometry, id: string) => { const g = geometryOf(d, object(d, id)); if (g.kind !== 'curve') throw refusal('DIRECT_PICK', 'Pick a curve.'); return g; };
+function singlePolynomialSpan(curve: Curve): boolean {
+  const count = curve.degree + 1, start = curve.knots[0], end = curve.knots.at(-1)!;
+  return curve.controlPoints.length === count && curve.weights.length === count && curve.weights.every(weight => weight === 1)
+    && curve.knots.length === 2 * count && Number.isFinite(start) && Number.isFinite(end) && end > start && Number.isFinite(end - start)
+    && curve.knots.every((knot, i) => knot === (i < count ? start : end))
+    && curve.controlPoints.every(point => point.length === 3 && point.every(value => Number.isFinite(value) && Math.abs(value) <= CadNumericPolicy.coordinateAbs));
+}
+
+/** Degree compatibility only. The native Join still checks the ordered shared endpoint and every other admission rule. */
+export function directJoinDegreeCompatible(a: Curve, b: Curve): boolean {
+  if (a.degree === b.degree) return true;
+  return ((a.degree === 1 && b.degree === 2) || (a.degree === 2 && b.degree === 1))
+    && singlePolynomialSpan(a) && singlePolynomialSpan(b);
+}
+
 const selectedSurface = (d: DirectGeometry, id: string) => {
   const o = object(d, id), surface = geometryOf(d, o);
   if (surface.kind !== 'surface') throw refusal('DIRECT_PICK', 'Pick a surface.');
@@ -269,7 +284,13 @@ export const directOps = {
     return add(d, [id], r.source, [{ geometry: r.lower.id, name: `${nameOf(d, id)} · lower` }, { geometry: r.upper.id, name: `${nameOf(d, id)} · upper` }]);
   },
   joinCurves(d: DirectGeometry, a: string, b: string) {
-    const r = joinCurves(curveOf(d, a), curveOf(d, b), { curveId: fresh(usedIds(d), 'joined') });
+    let left = curveOf(d, a), right = curveOf(d, b);
+    if (left.degree !== right.degree && directJoinDegreeCompatible(left, right)) {
+      const line = left.degree === 1 ? a : b, elevated = directOps.elevateCurveDegree(d, line);
+      if (left.degree === 1) left = curveOf(elevated, a);
+      else right = curveOf(elevated, b);
+    }
+    const r = joinCurves(left, right, { curveId: fresh(usedIds(d), 'joined') });
     return add(d, [a, b], r.source, [{ geometry: r.curve.id, name: 'Joined curve' }]);
   },
   reverseCurve(d: DirectGeometry, id: string) {

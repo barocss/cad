@@ -1,5 +1,5 @@
 import { validateCurve } from '@barocss/cad';
-import { geometryOf, type DirectGeometry } from '@barocss/cad-model/engine/direct';
+import { directJoinDegreeCompatible, geometryOf, type DirectGeometry } from '@barocss/cad-model/engine/direct';
 
 /** Read the exact authored endpoints compared by native Join, not an admission test. */
 export function joinEndpointGuidance(direct: DirectGeometry, ids: [string, string]) {
@@ -18,7 +18,8 @@ export function joinEndpointGuidance(direct: DirectGeometry, ids: [string, strin
     const gap = Math.hypot(...firstEnd.map((value, axis) => value - secondStart[axis]));
     if (!Number.isFinite(gap)) return null;
     const same = (a: readonly number[], b: readonly number[]) => a.every((value, axis) => value === b[axis]);
-    return { firstDegree: first.degree, secondDegree: second.degree, firstEnd, secondStart, gap, matches: same(firstEnd, secondStart),
+    return { firstDegree: first.degree, secondDegree: second.degree, degreeCompatible: directJoinDegreeCompatible(first, second),
+      firstEnd, secondStart, gap, matches: same(firstEnd, secondStart),
       reverseMatches: same(second.controlPoints.at(-1)!, first.controlPoints[0]) };
   } catch { return null; }
 }
