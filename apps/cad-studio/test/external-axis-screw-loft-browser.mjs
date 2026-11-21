@@ -2,14 +2,17 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const singleSketch = process.argv.includes('--single-sketch');
+const circularSegment = process.argv.includes('--line-arc');
 const triangular = singleSketch || process.argv.includes('--triangle');
 const polygon = ['pentagon', 'hexagon', 'trapezoid', 'skew-quadrilateral']
   .find(name => process.argv.includes('--' + name));
 const command = singleSketch ? 'Smooth Screw' : 'Loft';
-const profile = polygon ?? (triangular ? 'triangular' : 'rectangular');
-const degrees = polygon || triangular ? 360 : 180;
+const profile = circularSegment ? 'line-arc' : polygon ?? (triangular ? 'triangular' : 'rectangular');
+const degrees = circularSegment || polygon || triangular ? 360 : 180;
 const height = 40, spans = degrees / 30, samples = spans * 10;
+const chordY = 3 * Math.sin(Math.PI / 3);
 const profiles = {
+  'line-arc': { corners: [[13.5, chordY], [13.5, -chordY], [15, 0]], volume: 221.13498549200997 },
   pentagon: { corners: [[-7, -4], [2, -3], [1, -1], [-4, 1], [-6, -1]], volume: 1080.138914574982 },
   hexagon: { corners: [[-7, -5], [1, -5], [3, -3], [2, -1], [-3, 1], [-7, -1]], volume: 1840.2366692758953 },
   trapezoid: { corners: [[-8, -5], [2, -5], [0, -1], [-7, -1]], volume: 1360.1749294647923 },
@@ -45,7 +48,7 @@ const f = await createFlow({
   requiredFrozen: frozen,
   inspectorSource: `
 import { readFileSync } from 'node:fs';
-import { brepMassProperties, checkBrep, evaluateCurveD1 } from '@barocss/cad';
+import { brepMassProperties, checkBrep, evaluateCurveD1, evaluateSurfaceD2 } from '@barocss/cad';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 import { digestOf } from '@barocss/cad-model/util/digest';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
@@ -53,6 +56,12 @@ console.log(JSON.stringify(partBreps(doc).map(({ key, brep }) => ({
   key, digest: digestOf(brep), counts: checkBrep(brep, { strict: true }).counts, coedges: brep.coedges.length,
   closed: brep.shells.length === 1 && brep.shells[0].closed,
   valid: checkBrep(brep, { strict: true }).valid, volume: brepMassProperties(brep, 1).volume,
+  arcs: ${circularSegment} ? brep.faces.filter(face => face.surface.degreeU === 2 && face.surface.degreeV === 3)
+    .map(({ surface }) => Array.from({ length: ${spans} + 1 }, (_, i) =>
+      [0, .25, .5, .75, 1].map(u => {
+        const { point, du, dv } = evaluateSurfaceD2(surface, u, i / ${spans});
+        return { point, du, dv };
+      }))) : [],
   rails: brep.edges.filter(edge => /^c[0-9]+$/.test(edge.id)).map(({ curve }) => ({
     degree: curve.degree, poles: curve.controlPoints.length, knots: curve.knots,
     steps: Array.from({ length: ${samples + 1} }, (_, i) => evaluateCurveD1(curve, i / ${samples})),
@@ -78,6 +87,18 @@ function source(angle) {
     format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, outputs: {}, nextId: spans + 1,
     nodes: Array.from({ length: spans + 1 }, (_, i) => {
       const t = i / spans;
+      if (circularSegment) {
+        const a = angle * t * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+        const rotate = ([u, v]) => [c * u - s * v, s * u + c * v];
+        return {
+          id: 'n' + i, kind: 'sketch', profile: 'loop',
+          segments: [
+            { kind: 'line', start: rotate(corners[0]) },
+            { kind: 'arc', start: rotate(corners[1]), center: rotate([12, 0]), direction: 'ccw' },
+          ],
+          plane: { ...frame, origin: [x, y + 24 * t, z + 32 * t] },
+        };
+      }
       return {
         id: 'n' + i, kind: 'sketch', profile: 'polygon', points: corners.map(p => spin(p, angle, t)),
         plane: { ...frame, origin: ontoPlane(0, 0, height * t) },
@@ -118,6 +139,7 @@ async function build(angle) {
   await status(/^preview$/).waitFor();
   await f.same(doc);
   if (singleSketch) await f.snapshot('single-sketch-preview-' + angle);
+  if (circularSegment) await frameView('line-arc-preview-' + angle);
   await button('Apply', hud).click();
   await f.changed(doc);
   const accepted = await f.doc();
@@ -163,9 +185,30 @@ async function inspect(doc, angle, label, advance = height) {
       }
     }
   }
+  let arcError;
+  if (circularSegment) {
+    assert.equal(part.arcs.length, 2);
+    let circleError = 0, seamError = 0, tangentError = 0;
+    const unit = v => v.map(c => c / Math.hypot(...v));
+    const distance = (a, b) => Math.hypot(...a.map((c, axis) => c - b[axis]));
+    const [first, second] = part.arcs;
+    for (let i = 0; i <= spans; i++) {
+      const t = i / spans;
+      const centre = ontoPlane(...spin([12, 0], angle, t), advance * t);
+      for (const { point } of [...first[i], ...second[i]]) {
+        const axialError = Math.abs(.6 * (point[1] - centre[1]) + .8 * (point[2] - centre[2]));
+        circleError = Math.max(circleError, axialError, Math.abs(distance(point, centre) - 3));
+      }
+      const left = first[i].at(-1), right = second[i][0];
+      seamError = Math.max(seamError, distance(left.point, right.point));
+      tangentError = Math.max(tangentError, distance(unit(left.du), unit(right.du)), distance(unit(left.dv), unit(right.dv)));
+    }
+    assert.ok(Math.max(circleError, seamError, tangentError) < 1e-8);
+    arcError = { circleError, seamError, tangentError };
+  }
   f.report.observations.push({
     label, angle, advance, digest: part.digest, counts: part.counts, coedges: part.coedges, volume: part.volume,
-    rails: part.rails.length, maxStationError, minimumWinding,
+    rails: part.rails.length, maxStationError, minimumWinding, arcError,
   });
   return part;
 }
@@ -194,6 +237,12 @@ await f.run(async () => {
   const positive = await build(degrees);
   const right = await inspect(positive, degrees, 'external-axis-positive-native');
   await frameView('external-axis-positive-' + degrees);
+  if (circularSegment) {
+    const saved = await f.save('external-axis-line-arc-positive');
+    await f.freshOpen(saved.file, positive, 'external-axis-line-arc-positive-open');
+    assert.deepEqual(await inspect(positive, degrees, 'line-arc-positive-reopened-native'), right);
+    await frameView('line-arc-positive-reopened');
+  }
 
   const negative = await build(-degrees);
   const left = await inspect(negative, -degrees, 'external-axis-negative-native');

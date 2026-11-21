@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkBrep, evaluateCurve, evaluateCurveD1, validateSurface } from '../dist/index.js';
+import { checkBrep, evaluateCurve, evaluateCurveD1, evaluateSurfaceD2, validateSurface } from '../dist/index.js';
 import { loftSolid } from '../dist/features/loft.js';
 
 const corners = [[-6, -4], [6, -4], [6, 4], [-6, 4]];
@@ -102,6 +102,96 @@ function externalStations(degrees, profile = offsetRectangle, pivot = [0, 0]) {
     }) };
   });
 }
+
+function lineArcStations(degrees, centreX = 12, arcDegrees = 120) {
+  const half = arcDegrees * Math.PI / 360;
+  const chordX = centreX + 3 * Math.cos(half), chordY = 3 * Math.sin(half);
+  return Array.from({ length: 13 }, (_, i) => {
+    const t = i / 12, a = degrees * Math.PI / 180 * t;
+    const c = Math.cos(a), s = Math.sin(a);
+    const spin = (x, y) => [c * x - s * y, s * x + c * y];
+    return { z: height * t, profile: [
+      { kind: 'line', start: spin(chordX, chordY) },
+      { kind: 'arc', start: spin(chordX, -chordY), center: spin(centreX, 0), direction: 'ccw' },
+    ] };
+  });
+}
+
+test('compact line-and-arc Screws keep a circular section, paired wall tangents and signed winding', () => {
+  // Integrate the squared magnitude of the cubic interpolation of 13 unit rotation
+  // samples, with independent piecewise polynomial quadrature. The segment area
+  // is r²/2 times (angle - sin(angle)).
+  const arcAngle = 2 * Math.PI / 3;
+  const area = 9 / 2 * (arcAngle - Math.sin(arcAngle));
+  const expectedVolume = area * height * 1.000128624606465;
+  const gap = (a, b) => Math.hypot(...a.map((v, i) => v - b[i]));
+  const unit = vector => vector.map(v => v / Math.hypot(...vector));
+  for (const degrees of [360, -360]) {
+    const { brep, mass } = build(lineArcStations(degrees));
+    const check = checkBrep(brep, { strict: true });
+    assert.ok(check.valid, JSON.stringify(check.issues));
+    assert.deepEqual([brep.bodies.length, brep.shells[0].closed, brep.faces.length, brep.edges.length,
+      brep.vertices.length, brep.coedges.length], [1, true, 5, 9, 6, 18]);
+    const walls = brep.faces.map(face => face.surface).filter(surface => surface.degreeV === 3);
+    const arcs = walls.filter(surface => surface.degreeU === 2);
+    assert.equal(arcs.length, 2);
+    assert.equal(walls.length, 3);
+    for (const wall of walls) {
+      validateSurface(wall);
+      assert.equal(wall.controlPoints[0].length, 13);
+      assert.deepEqual(wall.knotsV, walls[0].knotsV);
+    }
+    const [first, second] = arcs.map(surface => (u, v) => evaluateSurfaceD2(surface, u, v));
+    for (let i = 0; i <= 120; i++) {
+      const t = i / 120;
+      const left = first(1, t), right = second(0, t);
+      assert.ok(gap(left.point, right.point) < 1e-9);
+      assert.ok(gap(unit(left.du), unit(right.du)) < 1e-9);
+      assert.ok(gap(left.dv, right.dv) < 1e-9);
+      assert.ok(Math.sign(degrees) * (left.point[0] * left.dv[1] - left.point[1] * left.dv[0]) > 0);
+      // The arc midpoint starts at [15, 0]. Its current radial vector gives the
+      // common similarity transform for the circle centre and radius.
+      const centre = [left.point[0] * 12 / 15, left.point[1] * 12 / 15, left.point[2]];
+      const radius = Math.hypot(left.point[0], left.point[1]) / 5;
+      for (const side of [first, second]) for (const u of [0, .3, .7, 1]) {
+        const { point } = side(u, t);
+        assert.ok(Math.abs(gap(point, centre) - radius) < 1e-9);
+        assert.ok(Math.abs(point[2] - height * t) < 1e-9);
+      }
+    }
+    assert.ok(Math.abs(mass(1).volume - expectedVolume) < 1e-7,
+      JSON.stringify({ degrees, volume: mass(1).volume, expectedVolume }));
+  }
+});
+
+test('both longitudinal rails have distinct native names when the circular arc is not split', () => {
+  for (const degrees of [360, -360]) {
+    const { brep } = build(lineArcStations(degrees, 12, 60));
+    const check = checkBrep(brep, { strict: true });
+    assert.ok(check.valid, JSON.stringify(check.issues));
+    const rails = brep.edges.filter(edge => /^c[01]$/.test(edge.id));
+    assert.equal(brep.faces.length, 4);
+    assert.equal(rails.length, 2);
+    assert.ok(rails.every(edge => edge.name));
+    assert.notEqual(rails[0].name, rails[1].name);
+  }
+});
+
+test('compact line-and-arc admission leaves irregular curved lofts outside the native pole limit', () => {
+  // With this centre the axis pierces the circular segment (the chord is at x=-0.5).
+  const interior = lineArcStations(360, -2);
+  const irregularHeight = lineArcStations(360);
+  irregularHeight[1].z += 0.2;
+  const irregularRotation = lineArcStations(360);
+  irregularRotation[1].profile = lineArcStations(355)[1].profile;
+  const irregularArc = lineArcStations(360);
+  irregularArc[1].profile[1].center = [12.1 * Math.cos(Math.PI / 6), 12.1 * Math.sin(Math.PI / 6)];
+  for (const sections of [interior, irregularHeight, irregularRotation, irregularArc]) {
+    const surface = build(sections).brep.faces.find(face => face.surface.degreeV === 3)?.surface;
+    assert.ok(surface);
+    assert.throws(() => validateSurface(surface), /Surface V control point count/);
+  }
+});
 
 test('external-origin smooth Screw uses continuous rails of the same signed section law', () => {
   // D1544 integrates the common cubic rotation factor independently. The section areas

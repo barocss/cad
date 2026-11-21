@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1582: [Build a compact external-axis Screw from a line and circular arc](notes/line-arc-external-screw-loft-2026-11-22/README.md), #630. Verify both signed windings, circular support and shared seam tangents, independent volume, and desktop Save and Open.
 - D1581: [Restore structured viewport display for quadrilateral Screw STEP imports](notes/quadrilateral-screw-step-display-2026-11-21/README.md), #630. Compare fixed-camera rail error and retain the same native edge selection on all four files in both renderers.
 - D1580: [Qualify both quadrilateral Screw windings through Studio AP214](notes/quadrilateral-screw-step-roundtrip-2026-11-21/README.md), #630. Verify exact reopened rail samples, signed file geometry and independent volume. Record the viewport faceting.
 - D1579: [Qualify reviewed Agent creation of quadrilateral Screws](notes/quadrilateral-screw-agent-2026-11-21/README.md), #630 and #322. Verify revision-pinned review, Studio approval and native equality with direct creation.

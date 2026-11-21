@@ -4,7 +4,8 @@ import { triangleClearsScrewAxis, triangleScrewAxisTolerance } from '../internal
 import { convexPolygonScrewAxisTolerance } from '../internal/convex-polygon-screw-axis.js';
 import type { Curve, Point } from '../types.js';
 import { interpolateCurvePlain, type PlainFitCurve } from './fit-plain.js';
-import { ExtrudedProfileLimits } from './extruded-profile-solid.js';
+import { ExtrudedProfileLimits, type ProfileLoop } from './extruded-profile-solid.js';
+import { SectionRationalContext } from '../section-rational-internal.js';
 
 type XY = readonly [number, number];
 const maximumStep = Math.PI / 6;
@@ -12,6 +13,21 @@ const dot = (a: XY, b: XY) => a[0] * b[0] + a[1] * b[1];
 const cross = (a: XY, b: XY) => a[0] * b[1] - a[1] * b[0];
 const sub = (a: XY, b: XY): XY => [a[0] - b[0], a[1] - b[1]];
 const rotated = ([c, s]: XY, [x, y]: XY): XY => [c * x - s * y, s * x + c * y];
+type RationalPiece = { readonly p: readonly XY[]; readonly w: readonly number[] };
+type CapPiece = { p: [number, number][]; w: number[] };
+type HomogeneousPoint = [number, number, number, number];
+
+function discClearsOrigin(centre: XY, radius: number, tolerance: number): boolean {
+  const unavailable = new Error('Circular segment axis clearance arithmetic is unavailable.');
+  const q = new SectionRationalContext(() => { throw unavailable; });
+  try {
+    const x = q.from(centre[0]), y = q.from(centre[1]), reach = q.add(q.from(radius), q.from(tolerance));
+    return q.compare(q.add(q.mul(x, x), q.mul(y, y)), q.mul(reach, reach)) > 0;
+  } catch (error) {
+    if (error === unavailable) return false;
+    throw error;
+  }
+}
 
 /** Prove the sign of the angular derivative on each cubic knot interval. */
 function followsTurn(fit: PlainFitCurve, sign: number): boolean {
@@ -119,9 +135,66 @@ export function fitConvexPolygonScrew(
   return fitTurn(rows, heights, stations, [0, 0], u, Math.hypot(...u), tolerance, reference);
 }
 
+/** One closed circular segment rotating about a normal outside its entire supporting disc. */
+export function fitLineArcScrew(
+  loops: readonly ProfileLoop[], rows: readonly (readonly RationalPiece[])[],
+  heights: readonly number[], stations: readonly number[],
+): { knots: number[]; nets: HomogeneousPoint[][][]; caps: [CapPiece[], CapPiece[]] } | null {
+  const last = loops.length - 1;
+  if (last < 6 || last > 15 || rows.length !== loops.length || heights.length !== loops.length || stations.length !== loops.length) return null;
+  const first = loops[0], pieces = rows[0];
+  if (first.segments.length !== 2 || first.segments.filter(segment => segment.kind === 'line').length !== 1) return null;
+  const arcIndex = first.segments.findIndex(segment => segment.kind === 'arc'), arc = first.segments[arcIndex];
+  if (arc.kind !== 'arc' || !(arc.sweep > 0 && arc.sweep < 2 * Math.PI)) return null;
+  const tolerance = linearToleranceMM(2 * arc.radius), height = heights[last] - heights[0];
+  if (!(height > 0) || !Number.isFinite(height) || heights.some((z, i) => !Number.isFinite(z) || (i > 0 && z <= heights[i - 1]))
+    || stations.some((t, i) => !Number.isFinite(t) || Math.abs(t - i / last) > 1e-9
+      || Math.abs((heights[i] - heights[0]) / height - t) > 1e-9)) return null;
+  const weightTolerance = Math.min(1e-9, tolerance / Math.max(1, 4 * arc.radius));
+  const arcs = loops.map(loop => loop.segments[arcIndex]);
+  if (pieces.filter(piece => piece.p.length === 2).length !== 1 || pieces.length < 2 || pieces.length > 5
+    || loops.some((loop, k) => {
+      const current = arcs[k], row = rows[k];
+      return loop.reversed !== first.reversed || loop.segments.length !== 2
+        || loop.segments.some((segment, i) => segment.kind !== first.segments[i].kind)
+        || current.kind !== 'arc' || Math.abs(current.radius - arc.radius) > tolerance
+        || Math.abs(current.sweep - arc.sweep) * arc.radius > tolerance
+        || !discClearsOrigin(current.center, current.radius, tolerance)
+        || row.length !== pieces.length || row.some((piece, i) => {
+          const base = pieces[i], count = piece.p.length;
+          return (count !== 2 && count !== 3) || count !== base.p.length || piece.w.length !== count
+            || piece.w[0] !== 1 || piece.w[count - 1] !== 1
+            || piece.p.some(point => !point.every(Number.isFinite))
+            || piece.w.some((weight, j) => !(weight > 0 && weight <= 1) || Math.abs(weight - base.w[j]) > weightTolerance);
+        });
+    })) return null;
+
+  // Check the centre as well as every rational U control: all must share the same signed law.
+  const controls = rows.map((row, k) => {
+    const current = arcs[k];
+    return [...row.flatMap(piece => piece.p), current.kind === 'arc' ? current.center : [0, 0] as XY];
+  });
+  const reference = controls[0].reduce((best, point, i) => dot(point, point) > dot(controls[0][best], controls[0][best]) ? i : best, 0);
+  const u = controls[0][reference], direction = controls[1][reference];
+  if (Math.atan2(cross(u, direction), dot(u, direction)) === 0) return null;
+  const fit = fitTurn(controls, heights, stations, [0, 0], u, Math.hypot(...u), tolerance, reference, false);
+  if (!fit) return null;
+  let column = 0;
+  const nets = pieces.map(piece => piece.p.map((_, j) => {
+    const rail = fit.rails[column++], weight = piece.w[j];
+    return rail.map(([x, y, z]): HomogeneousPoint => [x * weight, y * weight, z * weight, weight]);
+  }));
+  // Caps and walls use identical stored controls and weights, including the split-arc seams.
+  const cap = (at: number): CapPiece[] => nets.map(net => ({
+    p: net.map(col => [col[at][0] / col[at][3], col[at][1] / col[at][3]]),
+    w: net.map(col => col[at][3]),
+  }));
+  return { knots: fit.knots, nets, caps: [cap(0), cap(last)] };
+}
+
 function fitTurn(
   rows: readonly (readonly XY[])[], heights: readonly number[], stations: readonly number[],
-  centre: XY, u: XY, width: number, tol: number, referenceCorner?: number,
+  centre: XY, u: XY, width: number, tol: number, referenceCorner?: number, preserveEnds = true,
 ): { knots: number[]; rails: Point[][] } | null {
   const last = rows.length - 1;
   // The compact basis uses one pole per station and stays within the native surface limit.
@@ -146,11 +219,11 @@ function fitTurn(
   if (step !== 0 && !followsTurn(fit, Math.sign(step))) return null;
   const height = heights[last] - heights[0];
   const rails = offsets.map((offset, corner): Point[] => fit.points.map(([c, s], index) => {
-    if (index === 0 || index === last) return [...rows[index][corner], heights[index]];
+    if (preserveEnds && (index === 0 || index === last)) return [...rows[index][corner], heights[index]];
     const xy = rotated([c, s], offset);
     // Cubic Greville abscissae reproduce linear height over the shared V basis.
     const t = (fit.knots[index + 1] + fit.knots[index + 2] + fit.knots[index + 3]) / 3;
-    return [centre[0] + xy[0], centre[1] + xy[1], heights[0] + height * t];
+    return [centre[0] + xy[0], centre[1] + xy[1], index === 0 || index === last ? heights[index] : heights[0] + height * t];
   }));
   return { knots: fit.knots, rails };
 }

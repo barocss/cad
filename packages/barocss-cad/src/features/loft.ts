@@ -17,7 +17,7 @@ import { admitNurbsGuide, type LoftNurbsGuideInput, type LoftNurbsGuideSpan } fr
 import { orientedLoftSolid } from './oriented-loft.js';
 import { patchLoftGuideSides } from './loft-guide-patches.js';
 import { twoGuideLoftSolid } from './loft-two-guides.js';
-import { fitConvexPolygonScrew, fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from './loft-rectangular-turn.js';
+import { fitConvexPolygonScrew, fitLineArcScrew, fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from './loft-rectangular-turn.js';
 
 type XY = [number, number];
 type Piece = { readonly kind: 'line'; readonly a: XY; readonly b: XY } | { readonly kind: 'arc'; readonly c: XY; readonly r: number; readonly t0: number; readonly dt: number };
@@ -90,6 +90,10 @@ const bezier = (q: Piece): Bezier => {
   const t1 = q.t0 + q.dt, tm = q.t0 + q.dt / 2, w = Math.cos(Math.abs(q.dt) / 2), rm = q.r / w;
   return { p: [startOf(q), [q.c[0] + rm * Math.cos(tm), q.c[1] + rm * Math.sin(tm)], [q.c[0] + q.r * Math.cos(t1), q.c[1] + q.r * Math.sin(t1)]], w: [1, w, 1] };
 };
+const pieceBezier = (row: readonly Piece[], i: number): Bezier => {
+  const b = bezier(row[i]);
+  return { p: [...b.p.slice(0, -1), startOf(row[(i + 1) % row.length])], w: b.w };
+};
 /** Degree 2 with the given middle weight (a line stays straight). */
 const quadratic = (b: Bezier, w: number): Bezier => b.p.length === 3 ? b : { p: [b.p[0], [(b.p[0][0] + b.p[1][0]) / 2, (b.p[0][1] + b.p[1][1]) / 2], b.p[1]], w: [1, w, 1] };
 const curve3 = (b: Bezier, z: number, id: string): Curve => ({ kind: 'curve', id, degree: b.p.length - 1, knots: b.p.length === 2 ? [0, 0, 1, 1] : [0, 0, 0, 1, 1, 1], controlPoints: b.p.map(p => [p[0], p[1], z] as Point), weights: [...b.w] });
@@ -123,7 +127,8 @@ function legacyLoft(input: LoftInput, guideFactory?: LoftGuideFactory, nurbsGuid
   // Each section's pieces (arcs in spans of at most 90°), counter-clockwise.
   // (The first section's pieces each keep the authored segment they come from, for tagged names.)
   const src0: number[] = [];
-  const sections = S.map((s, si) => { const loop = buildProfileLoop(s.profile), m = loop.segments.length; return loop.segments.flatMap((g, gi): Piece[] => {
+  const loops = S.map(s => buildProfileLoop(s.profile));
+  const sections = loops.map((loop, si) => { const m = loop.segments.length; return loop.segments.flatMap((g, gi): Piece[] => {
     const from = loop.reversed ? m - 1 - gi : gi;
     if (g.kind === 'line') { if (si === 0) src0.push(from); return [{ kind: 'line', a: g.start, b: g.end }]; }
     const n = Math.max(1, Math.ceil(Math.abs(g.sweep) / (Math.PI / 2) - 1e-9));
@@ -137,11 +142,15 @@ function legacyLoft(input: LoftInput, guideFactory?: LoftGuideFactory, nurbsGuid
   const authoredScrew = input.smooth && !guideFactory && !nurbsGuide && n >= 4
     && sections.every(row => row.length === n && row.every(piece => piece.kind === 'line'))
     ? fitConvexPolygonScrew(sections.map(row => row.map(startOf)), z, z.map(value => (value - z[0]) / (z[K] - z[0]))) : null;
+  const authoredLineArc = input.smooth && !guideFactory && !nurbsGuide && K >= 6 && K <= 15
+    && loops[0].segments.length === 2 && loops[0].segments.filter(segment => segment.kind === 'line').length === 1
+    ? fitLineArcScrew(loops, sections.map(row => row.map((_, i) => pieceBezier(row, i))), z,
+      z.map(value => (value - z[0]) / (z[K] - z[0]))) : null;
   for (const p of sections) while (p.length < n) { let i = 0; p.forEach((q, j) => { if (lengthOf(q) > lengthOf(p[i])) i = j; }); p.splice(i, 1, ...half(p[i])); if (p === sections[0]) src0.splice(i, 1, src0[i], src0[i]); }
   const tagged = taggedSides(src0, input.sideTags);
   // Turn each section to start nearest the previous one's start (directions about the centroids).
   const shape = (p: Piece[]) => { const pts = p.map(startOf), c = pts.reduce((m, q) => [m[0] + q[0] / n, m[1] + q[1] / n], [0, 0]), rms = Math.sqrt(pts.reduce((m, q) => m + (q[0] - c[0]) ** 2 + (q[1] - c[1]) ** 2, 0) / n) || 1; return pts.map(q => [(q[0] - c[0]) / rms, (q[1] - c[1]) / rms]); };
-  for (let k = 1; !authoredScrew && !guideFactory && !nurbsGuide && k < sections.length; k++) {
+  for (let k = 1; !authoredScrew && !authoredLineArc && !guideFactory && !nurbsGuide && k < sections.length; k++) {
     const a = shape(sections[k - 1]), b = shape(sections[k]);
     let best = 0, cost = Infinity;
     for (let sh = 0; sh < n; sh++) { const c = a.reduce((m, q, i) => m + (q[0] - b[(i + sh) % n][0]) ** 2 + (q[1] - b[(i + sh) % n][1]) ** 2, 0); if (c < cost - 1e-12) { cost = c; best = sh; } }
@@ -167,8 +176,8 @@ function legacyLoft(input: LoftInput, guideFactory?: LoftGuideFactory, nurbsGuid
     }
     nurbsSpans = spans;
   }
-  const piece = (k: number, i: number): Bezier => { const b = bezier(sections[k][i]); return { p: [...b.p.slice(0, -1), startOf(sections[k][(i + 1) % n])], w: b.w }; };
-  if (input.smooth && K >= 2) return smoothLoft(sections.map((p, k) => p.map((_, i) => piece(k, i))), z, id, nm, tagged, authoredScrew);
+  const piece = (k: number, i: number): Bezier => pieceBezier(sections[k], i);
+  if (input.smooth && K >= 2) return smoothLoft(sections.map((p, k) => p.map((_, i) => piece(k, i))), z, id, nm, tagged, authoredScrew, authoredLineArc);
   const sideName = (k: number, i: number) => K === 1 ? `${nm}.${tagged ? tagged[i] : `side${i}`}` : `${nm}.s${k}.${tagged ? tagged[i] : `side${i}`}`;
   const vid = (k: number, i: number) => `v${k}_${i % n}`, rid = (k: number, i: number) => `r${k}_${i % n}`, lid = (k: number, i: number) => `l${k}_${i % n}`;
   const vertices = sections.flatMap((p, k) => p.map((q, i) => ({ id: vid(k, i), point: [...startOf(q), z[k]] as Point })));
@@ -270,8 +279,16 @@ function taggedSides(src0: readonly number[], tags: readonly string[] | undefine
   return src0.map(g => { const k = (seen.get(g) ?? 0) + 1; seen.set(g, k); return count.get(g)! > 1 ? `side[${tags[g]}]#${k}` : `side[${tags[g]}]`; });
 }
 function smoothLoft(rows: Bezier[][], z: number[], id: string, nm: string, tagged: string[] | null = null,
-  authoredScrew: ReturnType<typeof fitConvexPolygonScrew> = null): { brep: Brep; mass: (density: number) => MassProperties } {
+  authoredScrew: ReturnType<typeof fitConvexPolygonScrew> = null,
+  authoredLineArc: ReturnType<typeof fitLineArcScrew> = null): { brep: Brep; mass: (density: number) => MassProperties } {
   const K = rows.length - 1, n = rows[0].length, v = z.map(x => (x - z[0]) / (z[K] - z[0]));
+  if (authoredLineArc) {
+    const caps = rows.slice();
+    caps[0] = authoredLineArc.caps[0];
+    caps[K] = authoredLineArc.caps[1];
+    const brep = smoothLoftBoundary(caps, z, id, nm, tagged, authoredLineArc.nets, authoredLineArc.knots, n === 2);
+    return { brep, mass: density => brepMassProperties(brep, density) };
+  }
   let fit = authoredScrew;
   if (!fit && K >= 6 && K <= 15 && (n === 3 || n === 4) && rows.every(row => row.every(piece => piece.p.length === 2))) {
     const corners = rows.map(row => row.map(piece => piece.p[0]));
@@ -328,7 +345,7 @@ function smoothLoft(rows: Bezier[][], z: number[], id: string, nm: string, tagge
 
 
 function smoothLoftBoundary(rows: Bezier[][], z: number[], id: string, nm: string, tagged: string[] | null,
-  nets: H[][][], knotsV: number[]): Brep {
+  nets: H[][][], knotsV: number[], uniqueRailNames = false): Brep {
   const K = rows.length - 1, n = rows[0].length;
   const point = (h: H): Point => [h[0] / h[3], h[1] / h[3], h[2] / h[3]];
   const curveOf = (col: H[], cid: string): Curve => ({ kind: 'curve', id: cid, degree: 3, knots: [...knotsV], controlPoints: col.map(point), weights: col.map(h => h[3]) });
@@ -336,7 +353,7 @@ function smoothLoftBoundary(rows: Bezier[][], z: number[], id: string, nm: strin
   const vertices = rows.flatMap((r, k) => k === 0 || k === K ? r.map((b, i) => ({ id: `v${k}_${i}`, point: [b.p[0][0], b.p[0][1], z[k]] as Point })) : []);
   const edges: { id: string; curve: Curve; vertices: [string, string]; name?: string }[] = [];
   for (const k of [0, K]) rows[k].forEach((b, i) => edges.push({ id: `r${k}_${i}`, curve: curve3(b, z[k], `r${k}_${i}`), vertices: [`v${k}_${i}`, `v${k}_${(i + 1) % n}`], name: [k ? `${nm}.top` : `${nm}.bottom`, side(i)].sort().join('|') }));
-  nets.forEach((net, i) => edges.push({ id: `c${i}`, curve: curveOf(net[0], `c${i}`), vertices: [`v0_${i}`, `v${K}_${i}`], name: [side((i + n - 1) % n), side(i)].sort().join('|') }));
+  nets.forEach((net, i) => edges.push({ id: `c${i}`, curve: curveOf(net[0], `c${i}`), vertices: [`v0_${i}`, `v${K}_${i}`], name: [side((i + n - 1) % n), side(i)].sort().join('|') + (uniqueRailNames ? `#c${i}` : '') }));
   const faces: BrepFaceInput[] = nets.map((net, i) => ({ id: `f${i}`, sense: 'forward' as const, name: side(i),
     surface: { kind: 'surface' as const, id: `f${i}`, degreeU: net.length - 1, degreeV: 3, knotsU: net.length === 2 ? [0, 0, 1, 1] : [0, 0, 0, 1, 1, 1], knotsV: [...knotsV], controlPoints: net.map(col => col.map(point)), weights: net.map(col => col.map(h => h[3])) },
     loops: [{ kind: 'outer' as const, uses: [{ edge: `r0_${i}`, sense: 'forward' as const }, { edge: `c${(i + 1) % n}`, sense: 'forward' as const }, { edge: `r${K}_${i}`, sense: 'reversed' as const }, { edge: `c${i}`, sense: 'reversed' as const }] }] }));
