@@ -536,7 +536,7 @@ function chamferDeleteFaceTarget(nodes: readonly unknown[], index: number, selec
     return a >= 0 && b >= 0 && (a + b) % 2 === 1;
   };
   if (joined.length === 2) {
-    if (!joined.every(sideEdge) || new Set(joined.flat()).size !== 4 ||
+    if (!joined.every(sideEdge) || new Set(joined.flat()).size < 3 ||
         (selected !== name + '#1' && selected !== name + '#2')) return;
     return { name: selected, role: 'chamfer' };
   }

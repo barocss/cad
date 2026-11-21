@@ -6,18 +6,20 @@ import { withMcpSession } from './mcp-browser-session.mjs';
 
 const [output, input, kind, mode] = process.argv.slice(2), app = resolve(import.meta.dirname, '..');
 assert.ok(output && input && isAbsolute(output) && relative(resolve(app, '../..'), output).startsWith('../'));
-assert.ok(['boss', 'chamfer', 'chamfer-top', 'chamfer-bottom', 'double-sw', 'double-ne'].includes(kind));
+assert.ok(['boss', 'chamfer', 'chamfer-top', 'chamfer-bottom', 'double-sw', 'double-ne', 'adjacent-sw', 'adjacent-se'].includes(kind));
 const sourceBytes = await readFile(input), source = JSON.parse(sourceBytes);
-const boss = kind === 'boss', double = kind === 'double-sw' || kind === 'double-ne', north = kind === 'double-ne';
+const adjacent = kind === 'adjacent-sw' || kind === 'adjacent-se';
+const boss = kind === 'boss', double = kind === 'double-sw' || kind === 'double-ne' || adjacent;
+const north = kind === 'double-ne', east = north || kind === 'adjacent-se';
 const sequence = mode === 'sequence';
 assert.ok(mode === undefined || (sequence && double));
-const picked = north ? 1 : 0, bevelNames = ['n2.face#1', 'n2.face#2'];
+const picked = east ? 1 : 0, bevelNames = ['n2.face#1', 'n2.face#2'];
 const selectedFace = boss ? 'n3.top' : double ? bevelNames[picked] : 'n2.face';
 const peer = double ? bevelNames[1 - picked] : undefined, unrelated = boss ? 'n1.top' : north ? 'n1.side2' : 'n1.side0';
 const horizontal = kind === 'chamfer-top' || kind === 'chamfer-bottom', upper = kind === 'chamfer-top';
 const view = boss ? 'Top' : north ? 'Back' : 'Front', stockVolume = 12000, healedVolume = double ? 11980 : stockVolume;
 const sourceVolume = boss ? stockVolume + 54 * Math.PI : double ? 11960 : horizontal ? 11920 : 11980;
-const bevelPick = north ? [39, 29, 5] : horizontal ? [20, 1, upper ? 9 : 1] : [1, 1, 5];
+const bevelPick = east ? [39, north ? 29 : 1, 5] : horizontal ? [20, 1, upper ? 9 : 1] : [1, 1, 5];
 const reason = boss ? /cylindrical boss top/i : /box chamfer/i;
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/ui/SelectionInspector.tsx',
@@ -30,9 +32,10 @@ const pins = [
 ];
 const f = await createFlow({
   name: 'delete-planar-face', envFrozen: 'DELETE_PLANAR_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: sequence ? `Heal both opposite bevels in two separate edits starting with ${kind}.`
+  qualification: sequence ? `Heal both bevels in two separate edits starting with ${kind}.`
     : `Heal the stock by deleting the original planar face of the ${kind}.`,
   limits: [boss ? 'One cylindrical boss fully within the top of a straight rectangular plate.'
+    : adjacent ? 'Two separate full-height chamfers that share one wall of a rectangular box.'
     : double ? 'Two separate full-height chamfers at opposite corners of one rectangular box.' : 'One constant full-span box chamfer.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -60,7 +63,7 @@ async function inspect(label, doc, expected, before) {
   if (before) {
     assert.deepEqual(native.report.counts, double ? { bodies: 1, shells: 1, faces: 7, loops: 7, coedges: 30, edges: 15, vertices: 10 }
       : { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
-    const cutCentre = north ? [2 / 3, 2 / 3, 5] : [40 - 2 / 3, 30 - 2 / 3, 5];
+    const cutCentre = [east ? 2 / 3 : 40 - 2 / 3, north || adjacent ? 2 / 3 : 30 - 2 / 3, 5];
     const centroid = double ? [20, 15, 5].map((value, k) => (value * stockVolume - 20 * cutCentre[k]) / healedVolume) : [20, 15, 5];
     native.mass.centroid.forEach((value, k) => near(value, centroid[k]));
     const names = ['n1.bottom', 'n1.side0', 'n1.side1', 'n1.side2', 'n1.side3', 'n1.top'];
@@ -95,11 +98,23 @@ function assertChamferSurvivors(healed, before) {
   const edge = healed.brep.edges.find(item => item.name === source.nodes.at(-1).edges[picked]);
   assert.ok(edge);
   const axis = horizontal ? 0 : 2, z = upper ? 10 : 0;
-  const ends = horizontal ? [[0, 0, z], [40, 0, z]] : north ? [[40, 30, 0], [40, 30, 10]] : [[0, 0, 0], [0, 0, 10]];
+  const corner = [east ? 40 : 0, north ? 30 : 0];
+  const ends = horizontal ? [[0, 0, z], [40, 0, z]] : [[...corner, 0], [...corner, 10]];
   assert.equal(edge.curve.controlPoints.length, 2);
   edge.curve.controlPoints.toSorted((a, b) => a[axis] - b[axis]).forEach((point, i) =>
     point.forEach((value, k) => near(value, ends[i][k])));
-  if (peer) assert.deepEqual(healed.brep.faces.find(face => face.name === peer), before.brep.faces.find(face => face.name === peer));
+  if (peer) {
+    const face = before.brep.faces.find(item => item.name === peer);
+    assert.deepEqual(healed.brep.faces.find(item => item.name === peer), face);
+    const loop = before.brep.loops.find(item => item.id === face.loops[0]);
+    assert.deepEqual(healed.brep.loops.find(item => item.id === loop.id), loop);
+    for (const id of loop.coedges) {
+      const use = before.brep.coedges.find(item => item.id === id);
+      const edge = before.brep.edges.find(item => item.id === use.edge);
+      assert.deepEqual(healed.brep.coedges.find(item => item.id === id), use);
+      assert.deepEqual(healed.brep.edges.find(item => item.id === edge.id), edge);
+    }
+  }
 }
 
 async function pickFace(point, name) {
@@ -171,8 +186,8 @@ async function finishSequence(original, partial, partialNative, agent) {
     return JSON.parse(finalBytes);
   });
   f.phase = 'Remove the second chamfer in a separate history entry';
-  await faceView(north ? 'Front' : 'Back');
-  await pickFace(north ? [1, 1, 5] : [39, 29, 5], peer);
+  await faceView(north || adjacent ? 'Front' : 'Back');
+  await pickFace(east ? [1, 1, 5] : [39, adjacent ? 1 : 29, 5], peer);
   await f.snapshot('remaining-chamfer-selected');
   await f.command('Delete face');
   const panel = f.page.getByRole('dialog', { name: 'Delete face', exact: true });

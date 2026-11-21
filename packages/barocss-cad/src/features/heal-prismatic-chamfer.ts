@@ -1,5 +1,6 @@
 import { checkBrep, lineCurve, type Brep, type BrepCoedge, type BrepEdge, type BrepLoop } from '../brep/brep-core.js';
-import { dot, sub } from '../core/vec3.js';
+import { evaluateSurface } from '../core/math.js';
+import { dist, dot, sub } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Point } from '../types.js';
 import { boxCapOffsetFrame } from './drafted-cap-offset.js';
@@ -23,30 +24,60 @@ export function healPrismaticChamferIfAdmitted(brep: Brep, faceName: string, sha
 
 /** Heal one selected full-height bevel from a single pair of opposite corners of an upright box. */
 export function healOppositePrismaticChamferIfAdmitted(brep: Brep, faceName: string, sharpEdges: readonly string[]): Brep | undefined {
+  return healChamferPair(brep, faceName, sharpEdges, 'opposite');
+}
+
+/** Heal one selected full-height bevel from a single pair sharing an intact wall of an upright box. */
+export function healAdjacentPrismaticChamferIfAdmitted(brep: Brep, faceName: string, sharpEdges: readonly string[]): Brep | undefined {
+  return healChamferPair(brep, faceName, sharpEdges, 'adjacent');
+}
+
+function healChamferPair(brep: Brep, faceName: string, sharpEdges: readonly string[], arrangement: 'opposite' | 'adjacent'): Brep | undefined {
   if (sharpEdges.length !== 2 || new Set(sharpEdges).size !== 2) return undefined;
   const bevels = [`${brep.source.id}.face#1`, `${brep.source.id}.face#2`];
   if (!bevels.includes(faceName)) return undefined;
   const peerName = bevels.find(name => name !== faceName)!;
   const edit = readVerticalChamfer(brep, faceName, sharpEdges), peer = readVerticalChamfer(brep, peerName, sharpEdges);
-  if (!edit || !peer || edit.sharpEdgeName === peer.sharpEdgeName || edit.sx !== -peer.sx || edit.sy !== -peer.sy
+  if (!edit || !peer || edit.sharpEdgeName === peer.sharpEdgeName
     || Math.abs(edit.leg - peer.leg) > edit.source.roundoff
-    || edit.rails.some(rail => !peer.rails.some(other => other.loop === rail.loop))
-    || [edit.xSeam, edit.ySeam].some(seam => [peer.xSeam, peer.ySeam].some(other => other.loop === seam.loop))) return undefined;
+    || edit.rails.some(rail => !peer.rails.some(other => other.loop === rail.loop))) return undefined;
+  const sharedX = edit.xSeam.loop === peer.xSeam.loop, sharedY = edit.ySeam.loop === peer.ySeam.loop;
+  let sharedWall: BrepLoop | undefined;
+  if (arrangement === 'opposite') {
+    if (sharedX || sharedY || edit.sx !== -peer.sx || edit.sy !== -peer.sy) return undefined;
+  } else {
+    if (sharedX === sharedY) return undefined;
+    const spanAxis = sharedX ? 1 : 0;
+    const seam = sharedX ? edit.xSeam : edit.ySeam, other = sharedX ? peer.xSeam : peer.ySeam;
+    const sign = sharedX ? edit.sy : edit.sx, otherSign = sharedX ? peer.sy : peer.sx;
+    const web = sign * (seam.edge.curve.controlPoints[0][spanAxis] - other.edge.curve.controlPoints[0][spanAxis]);
+    if (sign !== -otherSign || web <= edit.source.linear || seam.twin.next === other.twin.id || seam.twin.prev === other.twin.id) return undefined;
+    sharedWall = seam.loop;
+  }
 
   const healed = rebuildVerticalCorner(brep, edit, 1);
-  if (!healed || !keepsPeerBevel(healed, peer.source)) return undefined;
+  if (!healed || !keepsPeerBevel(healed, peer.source, sharedWall)) return undefined;
   // Certify the remaining shape as the existing one-bevel rectangular stock. Publish only the first repair.
   return healPrismaticChamferIfAdmitted(healed, peerName, peer.sharpEdgeName) ? healed : undefined;
 }
 
-function keepsPeerBevel(brep: Brep, { selected, loops, neighbors, uses, vertices }: Chamfer): boolean {
+const sameIncidence = (a: BrepCoedge, b: BrepCoedge) => a.edge === b.edge && a.loop === b.loop && a.sense === b.sense
+  && a.next === b.next && a.prev === b.prev && a.twin === b.twin;
+
+function keepsPeerBevel(brep: Brep, { selected, loops, neighbors, uses, vertices, roundoff }: Chamfer, sharedWall?: BrepLoop): boolean {
   const nextLoops = byId(brep.loops), nextUses = byId(brep.coedges), nextEdges = byId(brep.edges), nextVertices = byId(brep.vertices);
+  const chart = brep.faces.find(face => face.id === sharedWall?.face)?.surface;
   return brep.faces.includes(selected) && nextLoops.get(selected.loops[0]) === loops.get(selected.loops[0])
-    && neighbors.every(({ edge, twin }) => {
+    && neighbors.every(({ edge, twin, loop }) => {
       const own = uses.get(twin.twin!)!, nextTwin = nextUses.get(twin.id), nextOwn = nextUses.get(own.id);
-      return !!nextTwin && !!nextOwn && nextEdges.get(edge.id) === edge && edge.vertices.every(id => nextVertices.get(id) === vertices.get(id))
-        && nextTwin.pcurve === twin.pcurve && nextOwn.pcurve === own.pcurve
-        && nextTwin.next === twin.next && nextTwin.prev === twin.prev && nextOwn.next === own.next && nextOwn.prev === own.prev;
+      if (!nextTwin || !nextOwn || nextEdges.get(edge.id) !== edge || edge.vertices.some(id => nextVertices.get(id) !== vertices.get(id))
+        || !sameIncidence(nextTwin, twin) || !sameIncidence(nextOwn, own) || nextOwn.pcurve !== own.pcurve) return false;
+      if (loop !== sharedWall) return nextTwin.pcurve === twin.pcurve;
+      // Only the wall chart spans more of its plane. Its affine UV line must lift to the same two world poles.
+      const trim = nextTwin.pcurve;
+      return chart?.kind === 'surface' && !!trim && trim.id === twin.pcurve?.id && trim.degree === 1 && trim.controlPoints.length === 2
+        && trim.weights.length === 2 && trim.weights.every(weight => weight === 1)
+        && trim.controlPoints.every(([u, v], i) => dist(evaluateSurface(chart, u, v), edge.curve.controlPoints[i]) <= roundoff);
     });
 }
 

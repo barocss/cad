@@ -56,9 +56,10 @@ for (const [sharpEdge, span] of chamfers) test(`Delete face restores ${sharpEdge
   assert.deepEqual(doc, original);
 });
 
-test('Delete face does not admit adjacent chamfers', () => {
+test('Delete face does not admit three authored chamfers', () => {
   const doc = withNode(rectanglePart(40, 30, 10),
-    { kind: 'chamfer', parent: { node: 1, side: 'solid' }, edges: ['n1.side0|n1.side3', 'n1.side0|n1.side1'], distance: 2 });
+    { kind: 'chamfer', parent: { node: 1, side: 'solid' },
+      edges: ['n1.side0|n1.side3', 'n1.side0|n1.side1', 'n1.side1|n1.side2'], distance: 2 });
   const evaluated = evaluateDoc(doc, 1);
   assert.ok(evaluated.ok);
   const [body] = evaluated.bodies, face = body.mesh.faces.findIndex(item => item.name.startsWith('n2.face'));
@@ -67,9 +68,14 @@ test('Delete face does not admit adjacent chamfers', () => {
   assert.equal(deleteFaceCommand.available({ doc, bodies: evaluated.bodies, selection }).ok, false);
 });
 
-test('Delete face binds either exact opposite chamfer and refuses their shared display alias', async () => {
+const pairCases = [
+  ['opposite', 'n1.side1|n1.side2'],
+  ['neighboring', 'n1.side0|n1.side1'],
+] as const;
+
+for (const [layout, secondEdge] of pairCases) test(`Delete face binds either exact ${layout} chamfer and refuses their shared display alias`, async () => {
   const doc = withNode(rectanglePart(40, 30, 10),
-    { kind: 'chamfer', parent: { node: 1, side: 'solid' }, edges: ['n1.side0|n1.side3', 'n1.side1|n1.side2'], distance: 2 });
+    { kind: 'chamfer', parent: { node: 1, side: 'solid' }, edges: ['n1.side0|n1.side3', secondEdge], distance: 2 });
   const original = structuredClone(doc), before = evaluateDoc(doc, 1);
   assert.ok(before.ok);
   const state = { doc, bodies: before.bodies }, expected = ['n2.face#1', 'n2.face#2'];

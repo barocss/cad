@@ -71,7 +71,8 @@ import { healBoredPlateIfAdmitted, healCylindricalBossIfAdmitted, offsetBoredCap
   replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
 import { healAnalyticLFilletIfAdmitted } from '../features/heal-analytic-l-fillet.js';
 import { healPrismaticFilletIfAdmitted } from '../features/heal-prismatic-fillet.js';
-import { healHorizontalChamferIfAdmitted, healOppositePrismaticChamferIfAdmitted, healPrismaticChamferIfAdmitted } from '../features/heal-prismatic-chamfer.js';
+import { healAdjacentPrismaticChamferIfAdmitted, healHorizontalChamferIfAdmitted, healOppositePrismaticChamferIfAdmitted,
+  healPrismaticChamferIfAdmitted } from '../features/heal-prismatic-chamfer.js';
 import { boundaryBindingRefusal } from './part-boundary-refusal-internal.js';
 import { refusalCodeOf, type CadRefusalCode } from '../core/error-codes.js';
 
@@ -181,7 +182,7 @@ function namedFaceTargetBrep(t: Tools, target: unknown, part: Part): Brep {
 }
 
 /** Find the original sharp edge of the numbered bevel left by the first certified Delete face. */
-function remainingOppositeChamferEdge(t: Tools, target: string, brep: Brep, face: string): string | undefined {
+function remainingPairedChamferEdge(t: Tools, target: string, brep: Brep, face: string): string | undefined {
   if (brep.source.family !== 'prismatic-solid' || brep.faces.length !== 7) return undefined;
   const numbered = [`${brep.source.id}.face#1`, `${brep.source.id}.face#2`];
   if (!numbered.includes(face)) return undefined;
@@ -693,7 +694,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       if (typeof face !== 'string' || !face.trim() || face.includes('+'))
         return fail('INPUT', 'Delete face needs one exact native face name.');
       const [part] = target;
-      const remainingEdge = part.solid.kind === 'brep' ? remainingOppositeChamferEdge(t, f.target, part.solid.brep, face) : undefined;
+      const remainingEdge = part.solid.kind === 'brep' ? remainingPairedChamferEdge(t, f.target, part.solid.brep, face) : undefined;
       return () => {
         const brep = namedFaceTargetBrep(t, f.target, part);
         if (brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid')
@@ -725,10 +726,11 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
           const { author } = t.ref(f.target, 'target');
           if (author?.kind === 'chamfer' && author.edges.length === 2 && part.chamferTargets.every(edge => author.edges.includes(edge))
             && (face === `${author.id}.face#1` || face === `${author.id}.face#2`))
-            healed = healOppositePrismaticChamferIfAdmitted(brep, face, part.chamferTargets);
+            healed = healOppositePrismaticChamferIfAdmitted(brep, face, part.chamferTargets)
+              ?? healAdjacentPrismaticChamferIfAdmitted(brep, face, part.chamferTargets);
         }
         if (!healed && remainingEdge) healed = healPrismaticChamferIfAdmitted(brep, face, remainingEdge);
-        if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket. Select its fillet face. To remove a fully enclosed cylindrical boss from straight rectangular stock, select the top face of the boss. To heal a full-height vertical or full-span horizontal chamfer on a straight rectangular box, select the chamfer face. For one of two opposite full-height chamfers, select its exact numbered face.');
+        if (!healed) return fail('CAPABILITY', 'Delete face supports one or two straight through bores in a rectangular plate with flat caps or one tilted cap. Select its cylindrical wall. It also supports one full-height concave circular fillet on an L prism or a two-plate L bracket. Select its fillet face. To remove a fully enclosed cylindrical boss from straight rectangular stock, select the top face of the boss. To heal a full-height vertical or full-span horizontal chamfer on a straight rectangular box, select the chamfer face. For one of two full-height chamfers on a straight rectangular box, select its exact numbered face.');
         return one({ kind: 'brep', brep: healed });
       };
     }
