@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1511: [Select linked SubD faces within explicit creases](notes/subd-linked-within-creases-2026-11-21/README.md), #626. Verify the bounded face selection, one region move, history and exact native reopening in actual Studio.
 - D1510: [Separate Studio document history actions](notes/studio-document-history-actions-2026-11-21/README.md). Compare project Save destinations and clipboard ownership in four actual desktop runs.
 - D1509: [Edit one History Fillet radius on opposite original top edges](notes/opposite-straight-history-fillet-2026-11-21/README.md), #214. Reproduce the inert end-on edit and verify the shared original-edge frame, typed parity and native reopening.
 - D1508: [Propose a world rotation around a current SubD cage vertex](notes/agent-subd-cage-world-rotation-2026-11-21/README.md), #322. Verify exact coordinates around an off-face pivot, user approval and the editable native result in actual Studio.

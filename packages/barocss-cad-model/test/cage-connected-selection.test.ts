@@ -29,6 +29,30 @@ test('face growth uses shared edges, linked crosses creases but never spatially 
   assert.deepEqual(runOp(select(cornerOnly,{kind:'face',f:0},false),'select-linked').sel.faces,[0]);
 });
 
+test('Linked within creases only floods from face seeds across smooth shared edges', () => {
+  const s = startSession(0, {...cage, creases: [[5,1]]});
+  const first = select(s,{kind:'face',f:0},false);
+  assert.equal(runOp(first,'select-linked-within-creases'),first);
+  const middle = select(s,{kind:'face',f:1},false);
+  const picked = runOp(middle,'select-linked-within-creases');
+  assert.deepEqual(picked.sel.faces,[1,2]);
+  assert.deepEqual(runOp(middle,'select-linked').sel.faces,[0,1,2]);
+  assert.equal(picked.cage,middle.cage);
+  assert.equal(picked.undo,middle.undo);
+  assert.equal(picked.redo,middle.redo);
+  const both = select(middle,{kind:'face',f:0},true);
+  assert.deepEqual(runOp(both,'select-linked-within-creases').sel.faces,[0,1,2]);
+  const detached = select(middle,{kind:'face',f:3},true);
+  assert.deepEqual(runOp(detached,'select-linked-within-creases').sel.faces,[1,2,3]);
+  const smooth = select(startSession(0,{...cage,creases:[]}),{kind:'face',f:0},false);
+  assert.deepEqual(runOp(smooth,'select-linked-within-creases').sel.faces,[0,1,2]);
+  const empty = {...s, mode:'face' as const};
+  assert.equal(runOp(empty,'select-linked-within-creases'),empty);
+  const edge = select(s,{kind:'edge',a:1,b:5},false);
+  assert.throws(()=>runOp(edge,'select-linked-within-creases'),/pick faces/);
+  assert.throws(()=>runOp({...middle,sel:{...emptyCageSel,faces:[4]}},'select-linked-within-creases'),/pick current cage/);
+});
+
 test('edge growth uses shared vertices and canonicalizes reverse seed orientation', () => {
   const s=select(session(),{kind:'edge',a:5,b:1},false);
   assert.deepEqual(edgeKeys(runOp(s,'select-grow')),['0:1','1:2','1:5','4:5','5:6']);

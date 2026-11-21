@@ -177,9 +177,12 @@ export function select(s: CageSession, hit: CageHit | null, additive: boolean, g
 }
 /** Selection adjacency is topological: vertices share an edge, edges a vertex, faces an edge.
  * Shrink removes picked elements touching an unpicked neighbour; open borders are not imaginary neighbours.
- * Linked floods through creases too. No geometry, document history or cage Undo entry is changed.
+ * Linked crosses creases. Linked within creases only follows face neighbours across uncreased edges.
+ * Selection alone changes no geometry, document history or cage Undo entry.
  */
-export function connectedSelection(s: CageSession, action: 'grow' | 'shrink' | 'linked'): CageSession {
+export function connectedSelection(s: CageSession, action: 'grow' | 'shrink' | 'linked' | 'linked-within-creases'): CageSession {
+  const stopAtCreases = action === 'linked-within-creases';
+  if (stopAtCreases && s.mode !== 'face') throw new SubdError('INPUT', 'selection: pick faces for Linked within creases');
   const c = s.cage, nv = c.positions.length / 3;
   if (!Number.isInteger(nv) || c.faces.some(f => f.length < 3 || f.some(v => !Number.isInteger(v) || v < 0 || v >= nv))) {
     throw new SubdError('INPUT', 'selection: invalid cage topology');
@@ -194,7 +197,13 @@ export function connectedSelection(s: CageSession, action: 'grow' | 'shrink' | '
     const incident = Array.from({ length: nv }, () => [] as number[]);
     edges.forEach((e, i) => { incident[e.a].push(i); incident[e.b].push(i); });
     incident.forEach(list => list.forEach((a, i) => list.slice(i + 1).forEach(b => connect(a, b))));
-  } else edges.forEach(e => e.faces.forEach((a, i) => e.faces.slice(i + 1).forEach(b => connect(a, b))));
+  } else {
+    const creases = stopAtCreases ? new Set((c.creases ?? []).map(([a, b]) => ek(a, b))) : undefined;
+    for (const edge of edges) {
+      if (creases?.has(ek(edge.a, edge.b))) continue;
+      edge.faces.forEach((a, i) => edge.faces.slice(i + 1).forEach(b => connect(a, b)));
+    }
+  }
   const picked = s.mode === 'vertex' ? s.sel.vertices : s.mode === 'face' ? s.sel.faces : s.sel.edges.map(([a, b]) => edgeIndex.get(ek(a, b)) ?? -1);
   if (picked.some(i => !Number.isInteger(i) || i < 0 || i >= count)) throw new SubdError('INPUT', 'selection: pick current cage elements again');
   const selected = new Set(picked);
@@ -205,7 +214,7 @@ export function connectedSelection(s: CageSession, action: 'grow' | 'shrink' | '
   } else {
     const queue = [...selected];
     for (let at = 0; at < queue.length; at++) {
-      for (const j of neighbours[queue[at]]) if (!next.has(j)) { next.add(j); if (action === 'linked') queue.push(j); }
+      for (const j of neighbours[queue[at]]) if (!next.has(j)) { next.add(j); if (action !== 'grow') queue.push(j); }
     }
   }
   if (next.size === selected.size && [...next].every(i => selected.has(i))) return s;
@@ -442,7 +451,7 @@ export function transformCageSelection(s: CageSession, transform: CageSelectionT
   return step(s, result, s.sel);
 }
 
-export type CageOp = 'extrude' | 'insert-loop' | 'bridge' | 'fill' | 'weld' | 'weld-near' | 'crease' | 'uncrease' | 'delete' | 'select-loop' | 'select-ring' | 'select-grow' | 'select-shrink' | 'select-linked' | 'select-path' | 'mirror-x' | 'mirror-y' | 'mirror-z' | 'mirror-off';
+export type CageOp = 'extrude' | 'insert-loop' | 'bridge' | 'fill' | 'weld' | 'weld-near' | 'crease' | 'uncrease' | 'delete' | 'select-loop' | 'select-ring' | 'select-grow' | 'select-shrink' | 'select-linked' | 'select-linked-within-creases' | 'select-path' | 'mirror-x' | 'mirror-y' | 'mirror-z' | 'mirror-off';
 /** Two boundary edge sets from one selection: its edges split into connected chains. */
 function twoBoundaries(c: StudioCage, edges: readonly (readonly [number, number])[]): [(readonly [number, number])[], (readonly [number, number])[]] {
   const groups: (readonly [number, number])[][] = [];
@@ -493,6 +502,7 @@ export function runOp(s: CageSession, op: CageOp, tolerance = 0.01, t = 0.5): Ca
     case 'select-grow': return connectedSelection(s, 'grow');
     case 'select-shrink': return connectedSelection(s, 'shrink');
     case 'select-linked': return connectedSelection(s, 'linked');
+    case 'select-linked-within-creases': return connectedSelection(s, 'linked-within-creases');
     case 'select-loop': case 'select-ring': {
       const e = sel.edges[0]; if (!e) throw new SubdError('INPUT', 'pick an edge first');
       return select(s, { kind: 'edge', a: e[0], b: e[1] }, false, op === 'select-loop' ? 'loop' : 'ring');

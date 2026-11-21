@@ -27,6 +27,7 @@ const OPS: { op: CageOp; label: string; key?: string; tip: string }[] = [
   { op: 'select-grow', label: 'Grow', tip: 'Add one topological neighbour step in the current pick mode' },
   { op: 'select-shrink', label: 'Shrink', tip: 'Remove picked elements touching unpicked neighbours. Open borders do not count as unpicked neighbours; fully selected components stay selected' },
   { op: 'select-linked', label: 'Linked', tip: 'Select each connected component containing a picked element, including across creases' },
+  { op: 'select-linked-within-creases', label: 'Linked within creases', tip: 'Select faces connected to the picked faces through uncreased cage edges' },
   { op: 'select-path', label: 'Shortest path', tip: 'Pick two vertices (Shift-click the second). Select their minimum edge-count path in Edge mode. Ties follow lower vertex IDs; crosses creases' },
   { op: 'select-ring', label: 'Ring', tip: 'The picked edge’s ring (Alt-double-click an edge)' },
   { op: 'bridge', label: 'Bridge', key: 'B', tip: 'Quads between two picked boundary loops (or chains) of as many edges' },
@@ -107,6 +108,7 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
         <li key={edge.join(':')}>Edge {edge.join('–')}: <b>{sharp ? 'Sharp' : 'Smooth'}</b> · ({midpoint.map(value => Number(value.toFixed(3))).join(', ')}) mm</li>)}</ul>
     </details>}
     <div className="cage-ops">{OPS.map(o => {
+      if (o.op === 'select-linked-within-creases' && s.mode !== 'face') return null;
       const readiness = o.op === 'select-path' ? { ok: s.mode === 'vertex' && s.sel.vertices.length === 2, reason: 'Pick exactly two vertices (Shift-click the second). Select the fewest-edge path, not the shortest distance.' } : o.op === 'fill' || o.op === 'bridge' ? cageBoundaryReadiness(s, o.op) : o.op === 'weld-near' ? { ok: selectedVertices(s).length >= 2, reason: selectedVertices(s).length < 2 ? 'Pick at least two vertices (or edges/faces containing them) before Weld near.' : 'Merge picked vertices within 0.01 mm.' } : null;
       const blocked = readiness ? !readiness.ok : !n && o.op !== 'weld-near';
       return <Button key={o.op} variant="ghost" aria-label={o.label} data-tip={o.label + (o.key ? ` (${o.key})` : '')} data-tip-desc={o.tip}
