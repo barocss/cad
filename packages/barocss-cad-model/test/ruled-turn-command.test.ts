@@ -93,6 +93,25 @@ test('Ruled Turn keeps legacy scaled frame directions and uses the native unit d
   assert.ok(Math.abs(brepMassProperties(brep, 1).volume - 2560) < 1e-7);
 });
 
+test('Smooth Turn stores the signed station sequence in a native six-face Loft', async () => {
+  const smooth = commandById('smooth-turn')!.build!;
+  for (const [angle, count] of [[0, 7], [72, 7], [-311, 12], [360, 13], [-450, 16]]) {
+    const accepted = smooth(context(), { height: 40, angle });
+    const loft = accepted.nodes.at(-1);
+    assert.ok(loft?.kind === 'loft' && loft.smooth);
+    assert.equal(loft.guide, undefined);
+    assert.equal(loft.sections.length, count);
+    assert.deepEqual(loft.from, [0]);
+    assert.equal(accepted.nodes[0], doc.nodes[0]);
+    const result = await readStudioFile(encodeStudioFile(accepted));
+    assert.ok('doc' in result);
+    const [{ brep }] = partBreps(result.doc);
+    assert.equal(checkBrep(brep, { strict: true }).valid, true);
+    assert.deepEqual([brep.bodies.length, brep.faces.length, brep.edges.length], [1, 6, 12]);
+    assert.ok(Math.abs(brepMassProperties(brep, 1).volume - 3840) < 1);
+  }
+});
+
 test('Ruled Turn refuses incomplete and out-of-range inputs without creating sections', () => {
   const original = JSON.stringify(doc);
   const ctx = context();

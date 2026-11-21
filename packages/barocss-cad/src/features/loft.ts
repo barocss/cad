@@ -8,7 +8,7 @@
 // Gauss quadrature across, and to rounding along the (rational) edges by 24-point quadrature.
 import { buildBrep, lineCurve, BrepError, type Brep, type BrepFaceInput } from '../brep/brep-core.js';
 import { buildProfileLoop, capSurface, type ProfileSegmentInput } from './extruded-profile-solid.js';
-import { solidMassFromIntegrals, type MassProperties } from '../brep/solid-mass.js';
+import { brepMassProperties, solidMassFromIntegrals, type MassProperties } from '../brep/solid-mass.js';
 import type { Curve, Point, Surface } from '../types.js';
 import { gauss } from '../core/quadrature.js';
 import { linearToleranceMM } from '../numeric-policy.js';
@@ -17,11 +17,13 @@ import { admitNurbsGuide, type LoftNurbsGuideInput, type LoftNurbsGuideSpan } fr
 import { orientedLoftSolid } from './oriented-loft.js';
 import { patchLoftGuideSides } from './loft-guide-patches.js';
 import { twoGuideLoftSolid } from './loft-two-guides.js';
+import { fitRectangularTurn } from './loft-rectangular-turn.js';
 
 type XY = [number, number];
 type Piece = { readonly kind: 'line'; readonly a: XY; readonly b: XY } | { readonly kind: 'arc'; readonly c: XY; readonly r: number; readonly t0: number; readonly dt: number };
 /** One span of a piece as a Bézier curve in the plane: control points and weights. */
 interface Bezier { readonly p: readonly XY[]; readonly w: readonly number[] }
+type H = [number, number, number, number];
 
 /** Explicit world-space section frame. Coordinates are mm; the perpendicular unit axes include twist. */
 export interface LoftSectionFrame {
@@ -264,7 +266,15 @@ function taggedSides(src0: readonly number[], tags: readonly string[] | undefine
 }
 function smoothLoft(rows: Bezier[][], z: number[], id: string, nm: string, tagged: string[] | null = null): { brep: Brep; mass: (density: number) => MassProperties } {
   const K = rows.length - 1, n = rows[0].length, v = z.map(x => (x - z[0]) / (z[K] - z[0]));
-  type H = [number, number, number, number];
+  if (K >= 6 && K <= 15 && n === 4 && rows.every(row => row.every(piece => piece.p.length === 2))) {
+    const fit = fitRectangularTurn(rows.map(row => row.map(piece => piece.p[0])), z, v);
+    if (fit) {
+      const rails = fit.rails.map(rail => rail.map(([x, y, zz]): H => [x, y, zz, 1]));
+      const nets = rails.map((rail, i) => [rail, rails[(i + 1) % n]]);
+      const brep = smoothLoftBoundary(rows, z, id, nm, tagged, nets, fit.knots);
+      return { brep, mass: density => brepMassProperties(brep, density) };
+    }
+  }
   const hom = (p: XY, zz: number, w: number): H => [p[0] * w, p[1] * w, zz * w, w];
   // Per edge i: its pieces raised to one degree (a line among arcs becomes quadratic, straight still).
   const columns = Array.from({ length: n }, (_, i) => {
@@ -281,20 +291,7 @@ function smoothLoft(rows: Bezier[][], z: number[], id: string, nm: string, tagge
   const knotsV = [0, 0, 0, 0, ...v.slice(1, K).flatMap(x => [x, x, x]), 1, 1, 1, 1];
   const nets = columns.map(cols => cols.map(spline));
   for (const net of nets) for (const col of net) for (const h of col) if (!(h[3] > 0)) throw new BrepError('GEOMETRY', 'loft: the sections are too far apart for a smooth side (a weight turned negative)');
-  const point = (h: H): Point => [h[0] / h[3], h[1] / h[3], h[2] / h[3]];
-  const curveOf = (col: H[], cid: string): Curve => ({ kind: 'curve', id: cid, degree: 3, knots: [...knotsV], controlPoints: col.map(point), weights: col.map(h => h[3]) });
-  const side = (i: number) => `${nm}.${tagged ? tagged[i] : `side${i}`}`;
-  const vertices = rows.flatMap((r, k) => k === 0 || k === K ? r.map((b, i) => ({ id: `v${k}_${i}`, point: [b.p[0][0], b.p[0][1], z[k]] as Point })) : []);
-  const edges: { id: string; curve: Curve; vertices: [string, string]; name?: string }[] = [];
-  for (const k of [0, K]) rows[k].forEach((b, i) => edges.push({ id: `r${k}_${i}`, curve: curve3(b, z[k], `r${k}_${i}`), vertices: [`v${k}_${i}`, `v${k}_${(i + 1) % n}`], name: [k ? `${nm}.top` : `${nm}.bottom`, side(i)].sort().join('|') }));
-  nets.forEach((net, i) => edges.push({ id: `c${i}`, curve: curveOf(net[0], `c${i}`), vertices: [`v0_${i}`, `v${K}_${i}`], name: [side((i + n - 1) % n), side(i)].sort().join('|') }));
-  const faces: BrepFaceInput[] = nets.map((net, i) => ({ id: `f${i}`, sense: 'forward' as const, name: side(i),
-    surface: { kind: 'surface' as const, id: `f${i}`, degreeU: net.length - 1, degreeV: 3, knotsU: net.length === 2 ? [0, 0, 1, 1] : [0, 0, 0, 1, 1, 1], knotsV: [...knotsV], controlPoints: net.map(col => col.map(point)), weights: net.map(col => col.map(h => h[3])) },
-    loops: [{ kind: 'outer' as const, uses: [{ edge: `r0_${i}`, sense: 'forward' as const }, { edge: `c${(i + 1) % n}`, sense: 'forward' as const }, { edge: `r${K}_${i}`, sense: 'reversed' as const }, { edge: `c${i}`, sense: 'reversed' as const }] }] }));
-  const bounds = (r: Bezier[]) => { const pts = r.flatMap(b => b.p); return { min: [Math.min(...pts.map(q => q[0])) - 1, Math.min(...pts.map(q => q[1])) - 1] as XY, max: [Math.max(...pts.map(q => q[0])) + 1, Math.max(...pts.map(q => q[1])) + 1] as XY }; };
-  faces.push({ id: 'bottom', surface: capSurface(bounds(rows[0]), z[0], 'bottom', false), sense: 'forward', name: `${nm}.bottom`, loops: [{ kind: 'outer', uses: Array.from({ length: n }, (_, j) => ({ edge: `r0_${n - 1 - j}`, sense: 'reversed' as const })) }] });
-  faces.push({ id: 'top', surface: capSurface(bounds(rows[K]), z[K], 'top', true), sense: 'forward', name: `${nm}.top`, loops: [{ kind: 'outer', uses: Array.from({ length: n }, (_, j) => ({ edge: `r${K}_${j}`, sense: 'forward' as const })) }] });
-  const brep = buildBrep({ source: { family: 'loft', id }, vertices, edges, bodies: [{ id, kind: 'solid', shells: [{ id: `${id}.shell`, faces, closed: true }] }] });
+  const brep = smoothLoftBoundary(rows, z, id, nm, tagged, nets, knotsV);
 
   // ∫f dV = ∮ g n_z dA with ∂g/∂z = f, for f in [1, x, y, z, x², y², z², xy, xz, yz].
   const gOf = (x: number, y: number, zz: number) => [zz, x * zz, y * zz, zz * zz / 2, x * x * zz, y * y * zz, zz ** 3 / 3, x * y * zz, x * zz * zz / 2, y * zz * zz / 2];
@@ -318,4 +315,24 @@ function smoothLoft(rows: Bezier[][], z: number[], id: string, nm: string, tagge
     for (let q = 0; q < 10; q++) I[q] += sign * m[q];
   }
   return { brep, mass: density => solidMassFromIntegrals(I, density, 'quadrature') };
+}
+
+
+function smoothLoftBoundary(rows: Bezier[][], z: number[], id: string, nm: string, tagged: string[] | null,
+  nets: H[][][], knotsV: number[]): Brep {
+  const K = rows.length - 1, n = rows[0].length;
+  const point = (h: H): Point => [h[0] / h[3], h[1] / h[3], h[2] / h[3]];
+  const curveOf = (col: H[], cid: string): Curve => ({ kind: 'curve', id: cid, degree: 3, knots: [...knotsV], controlPoints: col.map(point), weights: col.map(h => h[3]) });
+  const side = (i: number) => `${nm}.${tagged ? tagged[i] : `side${i}`}`;
+  const vertices = rows.flatMap((r, k) => k === 0 || k === K ? r.map((b, i) => ({ id: `v${k}_${i}`, point: [b.p[0][0], b.p[0][1], z[k]] as Point })) : []);
+  const edges: { id: string; curve: Curve; vertices: [string, string]; name?: string }[] = [];
+  for (const k of [0, K]) rows[k].forEach((b, i) => edges.push({ id: `r${k}_${i}`, curve: curve3(b, z[k], `r${k}_${i}`), vertices: [`v${k}_${i}`, `v${k}_${(i + 1) % n}`], name: [k ? `${nm}.top` : `${nm}.bottom`, side(i)].sort().join('|') }));
+  nets.forEach((net, i) => edges.push({ id: `c${i}`, curve: curveOf(net[0], `c${i}`), vertices: [`v0_${i}`, `v${K}_${i}`], name: [side((i + n - 1) % n), side(i)].sort().join('|') }));
+  const faces: BrepFaceInput[] = nets.map((net, i) => ({ id: `f${i}`, sense: 'forward' as const, name: side(i),
+    surface: { kind: 'surface' as const, id: `f${i}`, degreeU: net.length - 1, degreeV: 3, knotsU: net.length === 2 ? [0, 0, 1, 1] : [0, 0, 0, 1, 1, 1], knotsV: [...knotsV], controlPoints: net.map(col => col.map(point)), weights: net.map(col => col.map(h => h[3])) },
+    loops: [{ kind: 'outer' as const, uses: [{ edge: `r0_${i}`, sense: 'forward' as const }, { edge: `c${(i + 1) % n}`, sense: 'forward' as const }, { edge: `r${K}_${i}`, sense: 'reversed' as const }, { edge: `c${i}`, sense: 'reversed' as const }] }] }));
+  const bounds = (r: Bezier[]) => { const pts = r.flatMap(b => b.p); return { min: [Math.min(...pts.map(q => q[0])) - 1, Math.min(...pts.map(q => q[1])) - 1] as XY, max: [Math.max(...pts.map(q => q[0])) + 1, Math.max(...pts.map(q => q[1])) + 1] as XY }; };
+  faces.push({ id: 'bottom', surface: capSurface(bounds(rows[0]), z[0], 'bottom', false), sense: 'forward', name: `${nm}.bottom`, loops: [{ kind: 'outer', uses: Array.from({ length: n }, (_, j) => ({ edge: `r0_${n - 1 - j}`, sense: 'reversed' as const })) }] });
+  faces.push({ id: 'top', surface: capSurface(bounds(rows[K]), z[K], 'top', true), sense: 'forward', name: `${nm}.top`, loops: [{ kind: 'outer', uses: Array.from({ length: n }, (_, j) => ({ edge: `r${K}_${j}`, sense: 'forward' as const })) }] });
+  return buildBrep({ source: { family: 'loft', id }, vertices, edges, bodies: [{ id, kind: 'solid', shells: [{ id: `${id}.shell`, faces, closed: true }] }] });
 }

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1520: [Create a Smooth Turn with continuous full-height sides](notes/smooth-rectangular-turn-2026-11-21/README.md), #630. Compare the ruled and smooth solids in desktop Studio, including signed rotation and native reopening.
 - D1519: [Propose Ruled Turn through local MCP](notes/agent-ruled-turn-proposal-2026-11-21/README.md), #630 and #322. Confirm the current sketch ID and revision, explicit Studio approval and native parity with the manual command.
 - D1518: [Create a ruled turn from one rectangular sketch](notes/ruled-turn-command-2026-11-21/README.md), #630. Generate stations and a corner guide, then verify signed turns and native History editing in Studio.
 - D1517: [Refuse a copied Loft guide that collapses a four-sided span](notes/loft-refuse-collapsed-guided-span-2026-11-21/README.md), #630. Fix a reproduced invalid half-turn in creation and History. Preserve the valid straight, 179° and full-turn controls.
