@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1612: [Offset the original lower cap of a coaxial tube](notes/coaxial-tube-lower-cap-offset-2026-11-22/README.md), #629. Keep the original upper station and both wall radii through signed native edits and Studio Open.
 - D1611: [Build an exact ruled surface between a line and quadratic curve](notes/exact-ruled-straight-quadratic-2026-11-22/README.md), #29. Preserve both source curves and verify an independent parameter grid through native Open.
 - D1610: [Offset the original top cap of a coaxial tube](notes/coaxial-tube-upper-cap-offset-2026-11-22/README.md), #629. Move the upper station while retaining both cylindrical supports, original owners and distance-only History.
 - D1609: [Extrude a rectangle to an original annular cap](notes/rectangle-to-annular-cap-2026-11-22/README.md), #222. Check the entire footprint against the through bore and preserve the target through History and native Open.

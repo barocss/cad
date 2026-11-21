@@ -675,8 +675,8 @@ export function directFaceDocumentProblem(input: unknown): string | null {
         if (!isAnnularCapOffsetSource(value.nodes, parentIndex, parameters))
           return 'Offset face: the annular cap needs one original upright coaxial through Hole in a forward circular Extrude.';
         const stock = value.nodes[throughHoleStockIndex(value.nodes, parentIndex)!] as Record<string, unknown>;
-        if (node.target !== undefined || face !== `${stock.id}.top`)
-          return 'Offset face: the original upper annular cap needs a signed distance.';
+        if (node.target !== undefined || (face !== `${stock.id}.top` && face !== `${stock.id}.bottom`))
+          return 'Offset face: an original annular cap needs a signed distance.';
         continue;
       }
       const offsetBase = offsetSourceBase(value.nodes, parentIndex);

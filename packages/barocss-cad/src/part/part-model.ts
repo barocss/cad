@@ -649,9 +649,10 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         if (annularCapReplacementFrame(brep, face)) {
           if (hole?.kind !== 'hole' || (hole.axis !== undefined && hole.axis !== 'z') || hole.depth !== undefined || hole.countersink !== undefined)
             return fail('CAPABILITY', 'Annular cap offset needs one original through Hole in a forward circular Extrude.');
-          if (stock?.kind !== 'extrude' || stock.draft || dim(stock.height, 'tube height') <= 0 || face !== `${stock.id}.top`
+          if (stock?.kind !== 'extrude' || stock.draft || dim(stock.height, 'tube height') <= 0
+            || (face !== `${stock.id}.top` && face !== `${stock.id}.bottom`)
             || (hole.face !== undefined && hole.face !== `${stock.id}.top`))
-            return fail('CAPABILITY', 'Annular cap offset needs the original upper cap of a forward circular Extrude.');
+            return fail('CAPABILITY', 'Annular cap offset needs an original cap of a forward circular Extrude.');
           if (circle?.kind !== 'sketch' || circle.profile !== 'circle' || circle.plane !== undefined || circle.holes !== undefined || circle.regions !== undefined
             || !xy(hole.center, 'bore centre').every((value, axis) => value === xy(circle.center, 'tube centre')[axis]))
             return fail('CAPABILITY', 'Annular cap offset needs one upright coaxial circular stock and bore.');

@@ -376,10 +376,11 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
     if (!isAnnularCapOffsetSource(ctx.doc.nodes, ref.node, ctx.doc.parameters) || node.kind !== 'hole')
       return unsupported('the annular cap needs one original upright coaxial through Hole in a forward circular Extrude.');
     const stock = ctx.doc.nodes[node.parent.node];
-    if (display.name !== `${stock.id}.top`) return unsupported('only the original upper annular cap supports a signed offset.');
+    const sign = display.name === `${stock.id}.top` ? 1 : display.name === `${stock.id}.bottom` ? -1 : undefined;
+    if (sign === undefined) return unsupported('only an original annular cap supports a signed offset.');
     currentOffsetBody(ctx, body);
     const { brep } = nativeOffsetBody(ctx, body, display), frame = annularCapReplacementFrame(brep, display.name);
-    if (!frame || !samePoint(frame.normal, [0, 0, 1])) return unsupported('the complete native upper annulus could not be certified.');
+    if (!frame || !samePoint(frame.normal, [0, 0, sign])) return unsupported('the complete native annulus could not be certified.');
     return { parent: ref, face: display.name, ...frame, allowsPlane: false };
   }
   const boredPlate = isBoredPlateOffsetSource(ctx.doc.nodes, ref.node);

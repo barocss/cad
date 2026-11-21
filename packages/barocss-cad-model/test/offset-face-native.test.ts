@@ -75,40 +75,44 @@ const annularStock = (): StudioDoc => withNode(withNode(withNode(emptyDoc(),
 { kind: 'extrude', sketch: 0, height: 16 }),
 { kind: 'hole', parent: { node: 1, side: 'solid' }, center: [14, 9], radius: 4, face: 'n1.top' });
 
-test('one original upper annular cap has signed native Offset, distance-only History and exact Open', async () => {
-  const source = annularStock(), saved = structuredClone(source), original = bodyOf(source), ctx = context(source);
+for (const sign of [1, -1]) test(`one original ${sign === 1 ? 'upper' : 'lower'} annular cap has signed native Offset, distance-only History and exact Open`, async () => {
+  const faceName = sign === 1 ? 'n1.top' : 'n1.bottom', fixedName = sign === 1 ? 'n1.bottom' : 'n1.top';
+  const source = annularStock(), saved = structuredClone(source), original = bodyOf(source), ctx = context(source, 2, sign);
   freezeDoc(source);
   const identity = (brep: Brep) => ({ bodies: brep.bodies, shells: brep.shells, loops: brep.loops, coedges: brep.coedges,
     faces: brep.faces.map(({ surface, ...face }) => [face, surface.id]),
     edges: brep.edges.map(({ curve, ...edge }) => [edge, curve.id]), vertices: brep.vertices.map(({ point: _point, ...vertex }) => vertex) });
   const check = (doc: StudioDoc, distance: number) => {
     const native = bodyOf(doc), mass = brepMassProperties(native, 1), area = Math.PI * (12 ** 2 - 4 ** 2);
+    const lo = sign === 1 ? 0 : -distance, hi = sign === 1 ? 16 + distance : 16;
     closed(native); assert.deepEqual(identity(native), identity(original));
     near(mass.volume, area * (16 + distance)); near(mass.volume - brepMassProperties(original, 1).volume, area * distance);
-    mass.centroid.forEach((value, axis) => near(value, [14, 9, (16 + distance) / 2][axis]));
-    assert.deepEqual(native.faces.find(face => face.name === 'n1.bottom'), original.faces.find(face => face.name === 'n1.bottom'));
+    mass.centroid.forEach((value, axis) => near(value, [14, 9, (lo + hi) / 2][axis]));
+    assert.deepEqual(native.faces.find(face => face.name === fixedName), original.faces.find(face => face.name === fixedName));
+    const moved = faceGeometry(native.faces.find(face => face.name === faceName)!);
+    assert.ok(moved.kind === 'plane'); assert.deepEqual(moved.n, [0, 0, sign]); assert.equal(moved.o[2], sign === 1 ? hi : lo);
     for (const face of native.faces) {
       const support = faceGeometry(face), before = faceGeometry(original.faces.find(candidate => candidate.id === face.id)!);
       if (support.kind === 'cylinder' && before.kind === 'cylinder') {
         near(support.r, before.r); assert.deepEqual(support.a, before.a); assert.equal(support.out, before.out);
-        support.c.forEach((value, axis) => near(value, before.c[axis]));
+        support.c.forEach((value, axis) => near(value, axis === 2 ? lo : before.c[axis]));
       }
     }
   };
   assert.deepEqual(offsetFaceCommand.fields!(ctx).map(field => field.key), ['d']);
   const handles = offsetFaceCommand.handles!(ctx, { d: 3 });
-  assert.equal(handles.length, 1); assert.deepEqual(handles[0].dir, [0, 0, 1]); near(handles[0].at[2], 16);
+  assert.equal(handles.length, 1); assert.deepEqual(handles[0].dir, [0, 0, sign]); near(handles[0].at[2], sign === 1 ? 16 : 0);
   assert.ok(Math.hypot(handles[0].at[0] - 14, handles[0].at[1] - 9) > 4, 'the handle lies on material, away from the bore');
   for (const distance of [3, -5]) {
     const applied = offsetFaceCommand.build!(ctx, { d: distance });
     const node = applied.nodes[3]; assert.ok(node.kind === 'offset-face');
-    assert.deepEqual(node.parent, { node: 2, side: 'solid' }); assert.deepEqual(node.faces, ['n1.top']);
-    assert.equal(node.distance, distance); assert.equal(node.target, undefined); assert.ok(node.sigs?.['n1.top']);
+    assert.deepEqual(node.parent, { node: 2, side: 'solid' }); assert.deepEqual(node.faces, [faceName]);
+    assert.equal(node.distance, distance); assert.equal(node.target, undefined); assert.ok(node.sigs?.[faceName]);
     assert.deepEqual(applied.nodes.slice(0, 3), source.nodes); check(applied, distance);
     const opened = await readStudioFile(encodeStudioFile(applied)); assert.ok('doc' in opened); assert.deepEqual(opened.doc, applied);
     check(opened.doc, distance);
     const edit = editSavedOffsetFaceCommand(opened.doc, 3); assert.ok(edit?.build);
-    const editedCtx = context(opened.doc);
+    const editedCtx = context(opened.doc, 2, sign);
     assert.deepEqual(edit.fields!(editedCtx).map(field => field.key), ['d']);
     assert.equal(edit.onPick, undefined);
     const build = edit.build;
@@ -118,28 +122,27 @@ test('one original upper annular cap has signed native Offset, distance-only His
   }
   const evaluate = async (doc: StudioDoc) => evaluateDoc(doc, 1);
   const reply = await dispatchTool({ doc: source, bodies: ctx.bodies }, 'features',
-    { action: 'command', command: 'offset-face', faces: ['n1.top'], values: { d: 3 } }, evaluate);
+    { action: 'command', command: 'offset-face', faces: [faceName], values: { d: 3 } }, evaluate);
   assert.ok(!reply.isError && reply.changed, reply.content); check(reply.state.doc, 3);
   assert.deepEqual(source, saved);
 });
 
-test('annular cap Offset refuses collapse, wrong end, stale source, plane modes and chains', async () => {
+test('annular cap Offset refuses collapse, wrong original face, stale source, plane modes and chains at either end', async () => {
   const source = annularStock(), ctx = context(source), saved = structuredClone(source);
   const evaluate = async (doc: StudioDoc) => evaluateDoc(doc, 1), state = { doc: source, bodies: ctx.bodies };
-  for (const distance of [-16, -17, -16 + 1e-8, 10000]) {
+  for (const distance of [-16, -17, -16 + 1e-8, 10001]) for (const faceName of ['n1.top', 'n1.bottom']) {
     const refused = await dispatchTool(state, 'features',
-      { action: 'command', command: 'offset-face', faces: ['n1.top'], values: { d: distance } }, evaluate);
-    assert.ok(refused.isError && !refused.changed); assert.equal(refused.state.doc, source);
+      { action: 'command', command: 'offset-face', faces: [faceName], values: { d: distance } }, evaluate);
+    assert.ok(refused.isError && !refused.changed, `${faceName}: ${distance}`); assert.equal(refused.state.doc, source);
   }
-  assert.throws(() => offsetFaceCommand.build!(context(source, 2, -1), { d: 2 }), /original upper annular cap/);
-  assert.throws(() => offsetFaceCommand.build!(ctx, { d: 2, offsetMode: 'to-plane' }), /does not support.*reference plane/);
+  for (const sign of [1, -1]) assert.throws(() => offsetFaceCommand.build!(context(source, 2, sign), { d: 2, offsetMode: 'to-plane' }), /does not support.*reference plane/);
   const replace = (index: number, next: ModelNode): StudioDoc => ({ ...source, nodes: source.nodes.map((node, i) => i === index ? next : node) });
   const stock = source.nodes[1], hole = source.nodes[2], circle = source.nodes[0];
   assert.ok(stock.kind === 'extrude' && hole.kind === 'hole' && circle.kind === 'sketch' && circle.profile === 'circle');
   for (const candidate of [replace(1, { ...stock, height: -16 }), replace(2, { ...hole, center: [14.01, 9] }),
     replace(2, { ...hole, depth: 4 }), replace(0, { ...circle, plane: { origin: [0, 0, 0], normal: [0, 0, 1], xAxis: [1, 0, 0] } }),
     replace(1, { ...stock, held: 'old stock' }), replace(0, { ...circle, held: 'old sketch' })]) {
-    assert.throws(() => offsetFaceCommand.build!(context(candidate), { d: 2 }));
+    for (const sign of [1, -1]) assert.throws(() => offsetFaceCommand.build!(context(candidate, 2, sign), { d: 2 }));
   }
   assert.throws(() => offsetFaceCommand.build!({ ...ctx, doc: replace(1, { ...stock, height: 20 }) }, { d: 2 }), /no longer agrees/);
   const applied = offsetFaceCommand.build!(ctx, { d: 3 });
@@ -150,6 +153,16 @@ test('annular cap Offset refuses collapse, wrong end, stale source, plane modes 
     sigs: (applied.nodes[3] as Extract<ModelNode, { kind: 'offset-face' }>).sigs });
   assert.equal(evaluateDoc(forged, 0).ok, false);
   const opened = await readStudioFile(encodeStudioFile(forged)); assert.ok('error' in opened); assert.match(opened.error, /original Hole parent|chained cap/);
+  const lower = offsetFaceCommand.build!(context(source, 2, -1), { d: 3 });
+  assert.throws(() => offsetFaceCommand.build!(context(lower, 2, -1), { d: 2 }));
+  const lowerNode = lower.nodes[3]; assert.ok(lowerNode.kind === 'offset-face');
+  const malformedCases: [number, ModelNode][] = [[1, { ...stock, id: 'n9' }], [1, { ...stock, height: -16 }],
+    [3, { ...lowerNode, faces: ['n9.bottom'] }], [3, { ...lowerNode, faces: ['n1.bottom#1'] }]];
+  for (const [index, node] of malformedCases) {
+    const malformed: StudioDoc = { ...lower, nodes: lower.nodes.map((prior, i) => i === index ? node : prior) };
+    assert.equal(evaluateDoc(malformed, 0).ok, false);
+    const read = await readStudioFile(encodeStudioFile(malformed)); assert.ok('error' in read);
+  }
   assert.deepEqual(source, saved);
 });
 

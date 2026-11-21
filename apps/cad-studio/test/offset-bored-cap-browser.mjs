@@ -6,7 +6,6 @@ import { createFlow } from './flow-helper.mjs';
 const output = process.argv[2];
 assert.ok(output && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
 const lower = process.argv.includes('--lower'), tube = process.argv.includes('--tube');
-assert.ok(!tube || !lower);
 const cap = lower ? 'n1.bottom' : 'n1.top';
 const sign = lower ? -1 : 1, originalHeight = tube ? 16 : 10;
 const level = lower ? 0 : originalHeight;
@@ -34,9 +33,9 @@ const pins = [
   'packages/barocss-cad/src/part/part-model.ts',
 ];
 const f = await createFlow({
-  name: 'offset-bored-cap', envFrozen: tube ? 'D1610_SOURCE_FROZEN' : 'BORE_CAP_OFFSET_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
+  name: 'offset-bored-cap', envFrozen: tube ? (lower ? 'D1612_SOURCE_FROZEN' : 'D1610_SOURCE_FROZEN') : 'BORE_CAP_OFFSET_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: 'Drag one native cap surrounding a straight circular through hole, edit its distance, and reopen it.',
-  limits: [tube ? 'One 24 mm OD × 8 mm ID × 16 mm upright coaxial tube with its original top annulus.'
+  limits: [tube ? `One 24 mm OD × 8 mm ID × 16 mm upright coaxial tube with its original ${lower ? 'lower' : 'upper'} annulus.`
     : 'One 40 × 30 × 10 mm straight plate, one off-centre 6 mm Z bore, one selected top or bottom cap.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -113,7 +112,7 @@ await f.run(async () => {
   };
   f.phase = 'Open the solid and pick the original cap';
   await f.newPage();
-  await f.page.setViewportSize({ width: lower ? 1024 : 1440, height: 900 });
+  await f.page.setViewportSize({ width: lower && !tube ? 1024 : 1440, height: 900 });
   const [file] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await file.setFiles(input ?? { name: tube ? 'coaxial-tube.bcad' : 'bored-plate.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
   await f.same(source);
@@ -210,7 +209,7 @@ await f.run(async () => {
   assert.deepEqual(inward.nodes[3], { ...node, distance: -2 });
   await measure('inward-shape', inward, -2, original);
   await f.undo(); await f.same(outward); await f.redo(); await f.same(inward);
-  const saved = await f.save(tube ? 'annular-cap-offset' : 'bored-cap-offset');
+  const saved = await f.save(tube ? (lower ? 'lower-annular-cap-offset' : 'annular-cap-offset') : 'bored-cap-offset');
   await f.freshOpen(saved.file, inward, 'bored-cap-reopened');
   await measure('reopened-shape', inward, -2, original);
   await f.openFeatureEditor(3, 'reopened bored cap');

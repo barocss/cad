@@ -521,10 +521,10 @@ function mapCapStation(brep: Brep, station: number, height: (x: number, y: numbe
 }
 
 export function offsetBoredCapIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
-  // The annular extension is the upper cap of a coaxial upright tube only.
+  // The annular extension admits either cap of a coaxial upright tube only.
   // The circular-wall admission proves both complete native supports are coaxial.
   const annular = admittedCap(brep, faceName, 'annular');
-  const outer = annular?.sign === 1 ? brep.faces.find(face => {
+  const outer = annular ? brep.faces.find(face => {
     const support = faceGeometry(face);
     return support.kind === 'cylinder' && support.out === 1;
   }) : undefined;
