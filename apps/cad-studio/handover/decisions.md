@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1544: [Create a continuous Smooth Turn from a triangular sketch](notes/smooth-triangular-turn-2026-11-21/README.md), #630. Verify common cubic rails, editable total height and exact native Studio reopening.
 - D1543: [Refine recognized STEP Smooth Turns in Studio Model](notes/step-smooth-turn-display-2026-11-21/README.md), #630. Verify display fidelity on both desktop backends and retain exact native rail identity.
 - D1542: [Verify AP214 exchange for an approved Smooth Turn](notes/smooth-turn-step-roundtrip-2026-11-21/README.md), #630. Verify actual Studio output and reopening, independent spline rails, section volume and loss disclosure.
 - D1541: [Pin an Agent Smooth Turn width edit to its visual review](notes/review-pinned-smooth-turn-width-2026-11-21/README.md), #630 and #324. Verify the current pin, the signed native station geometry and explicit Studio approval through fresh Open.

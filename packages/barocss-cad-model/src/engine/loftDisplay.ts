@@ -59,10 +59,13 @@ export function smoothTurnDisplayMesh(base: DisplayMesh, brep: Brep, sections?: 
 }
 
 function isAuthoredCompactTurn(brep: Brep, sections: number): boolean {
-  const rails = brep.edges.filter(edge => /^c[0-3]$/.test(edge.id));
+  const sides = brep.faces.length - 2;
+  const rails = sides === 3 ? brep.edges.filter(edge => /^c[0-2]$/.test(edge.id))
+    : brep.edges.filter(edge => /^c[0-3]$/.test(edge.id));
   return brep.source.family === 'loft' && brep.bodies.length === 1 && brep.bodies[0].kind === 'solid'
-    && brep.shells.length === 1 && brep.shells[0].closed && brep.faces.length === 6 && brep.edges.length === 12
-    && rails.length === 4 && rails.every(({ curve }) => curve.degree === 3 && curve.controlPoints.length === sections
+    && brep.shells.length === 1 && brep.shells[0].closed
+    && (sides === 3 || sides === 4) && brep.edges.length === 3 * sides && sections >= 7 && sections <= 16
+    && rails.length === sides && rails.every(({ curve }) => curve.degree === 3 && curve.controlPoints.length === sections
       && curve.weights.every(weight => weight === 1)
       && curve.knots.length === rails[0].curve.knots.length
       && curve.knots.every((knot, i) => knot === rails[0].curve.knots[i]));

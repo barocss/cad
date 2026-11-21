@@ -13,6 +13,10 @@ export const smoothTurnAngleLimit = (sectionCount: number) => 30 * (sectionCount
 
 export function rotateTurnCorners(corners: readonly Point[], radians: number): Point[] {
   const cx = (corners[0][0] + corners[2][0]) / 2, cy = (corners[0][1] + corners[2][1]) / 2;
+  return rotateTurnPoints(corners, [cx, cy], radians);
+}
+
+export function rotateTurnPoints(corners: readonly Point[], [cx, cy]: Point, radians: number): Point[] {
   const c = Math.cos(radians), s = Math.sin(radians);
   return corners.map(([px, py]) => {
     const x = px - cx, y = py - cy;
@@ -20,10 +24,14 @@ export function rotateTurnCorners(corners: readonly Point[], radians: number): P
   });
 }
 
-function copyGeometry(copy: ModelNode | undefined): { points: Point[]; plane: string } | undefined {
+export function triangleTurnCentre([a, b, c]: readonly Point[]): Point {
+  return [a[0] + ((b[0] - a[0]) + (c[0] - a[0])) / 3, a[1] + ((b[1] - a[1]) + (c[1] - a[1])) / 3];
+}
+
+function copyGeometry(copy: ModelNode | undefined, corners: number): { points: Point[]; plane: string } | undefined {
   if (copy?.kind !== 'sketch' || copy.profile !== 'loop' || copy.suppressed || !copy.plane
     || copy.on || copy.association || copy.pocketFloor || copy.outline || copy.regions?.length || copy.holes?.length
-    || copy.construction?.length || copy.segments.length !== 4) return;
+    || copy.construction?.length || copy.segments.length !== corners) return;
   const points: Point[] = [];
   for (const segment of copy.segments) {
     const [x, y] = segment.start;
@@ -44,21 +52,25 @@ function turnSections(nodes: readonly ModelNode[], index: number) {
     || loft.guide || loft.guides || loft.from?.length !== 1 || loft.sections.length < 7 || loft.sections.length > 16) return;
   const start = index - loft.sections.length, source = nodes[loft.from[0]], last = loft.sections.length - 1;
   const height = loft.sections[last].z;
-  if (loft.from[0] >= start || source?.kind !== 'sketch' || source.profile !== 'rectangle'
+  if (loft.from[0] >= start || source?.kind !== 'sketch'
+    || (source.profile !== 'rectangle' && (source.profile !== 'polygon' || source.points.length !== 3))
     || typeof height !== 'number' || !Number.isFinite(height) || height <= 0 || loft.sections[0].z !== 0
     || loft.sections.some((section, i) => section.sketch !== start + i || Object.hasOwn(section, 'frame')
       || typeof section.z !== 'number' || !Number.isFinite(section.z) || Math.abs(section.z / height - i / last) > 1e-9)) return;
   if (nodes.slice(0, index).some(node => usesOf(node, nodes).some(ref => ref >= start && ref < index))) return;
-  const base = copyGeometry(nodes[start]);
+  const triangular = source.profile === 'polygon';
+  const corners = triangular ? 3 : 4;
+  const base = copyGeometry(nodes[start], corners);
   if (!base) return;
   const { points: first, plane } = base;
-  if (first[1][0] <= first[0][0] || first[2][1] <= first[0][1]
+  if (!triangular && (first[1][0] <= first[0][0] || first[2][1] <= first[0][1]
     || first[1][1] !== first[0][1] || first[3][0] !== first[0][0]
-    || first[1][0] !== first[2][0] || first[3][1] !== first[2][1]) return;
+    || first[1][0] !== first[2][0] || first[3][1] !== first[2][1])) return;
+  const centre = triangular ? triangleTurnCentre(first) : undefined;
 
   const rows: Point[][] = [];
   for (const section of loft.sections) {
-    const copy = copyGeometry(nodes[section.sketch]);
+    const copy = copyGeometry(nodes[section.sketch], corners);
     if (!copy || copy.plane !== plane) return;
     rows.push(copy.points);
   }
@@ -72,18 +84,25 @@ function turnSections(nodes: readonly ModelNode[], index: number) {
   const scale = Math.max(1, ...first.flat().map(Math.abs));
   const tolerance = 64 * Number.EPSILON * scale;
   if (rows.some((points, i) => {
-    const expected = rotateTurnCorners(first, radians * (i / last));
+    const rotation = radians * (i / last);
+    const expected = centre ? rotateTurnPoints(first, centre, rotation) : rotateTurnCorners(first, rotation);
     return points.some(([x, y], j) => Math.hypot(x - expected[j][0], y - expected[j][1]) > tolerance);
   })) return;
-  return { start, last, first, angle, radians, limit };
+  return { start, last, first, angle, radians, limit, triangular };
 }
 
 export function hasSmoothTurnSections(nodes: readonly ModelNode[], index: number): boolean {
   return !!turnSections(nodes, index);
 }
 
+export function hasTriangularTurnSections(nodes: readonly ModelNode[], index: number): boolean {
+  return turnSections(nodes, index)?.triangular === true;
+}
+
 function savedTurn(nodes: readonly ModelNode[], index: number) {
-  if (index === nodes.length - 1) return turnSections(nodes, index);
+  if (index !== nodes.length - 1) return;
+  const turn = turnSections(nodes, index);
+  if (turn && !turn.triangular) return turn;
 }
 
 function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnType<typeof savedTurn>>, first: Point[], rotation: (fraction: number) => number) {

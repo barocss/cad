@@ -13,7 +13,7 @@ import { ANCHORS } from './frameCommands';
 import { setSplitOutputSide } from '../engine/splitOutput';
 import { loftSectionSourceFields } from './loftSectionEdit';
 import { smoothLoftHeightField, smoothLoftHeightKey } from './smoothLoftHeight';
-import { smoothLoftTurnAngleField, smoothLoftTurnWidthField, smoothTurnAngleKey, smoothTurnWidthKey } from './smoothLoftTurn';
+import { hasTriangularTurnSections, smoothLoftTurnAngleField, smoothLoftTurnWidthField, smoothTurnAngleKey, smoothTurnWidthKey } from './smoothLoftTurn';
 import { copyLoftGuide } from './loftGuides';
 import { SEW_TOLERANCE_LABEL, sewTolerance } from '../engine/sew';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
@@ -497,6 +497,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
     case 'loft': {
       const height = smoothLoftHeightField(node, i);
       if (height) out.push(height);
+      if (hasTriangularTurnSections(nodes, i)) break;
       const angle = smoothLoftTurnAngleField(nodes, i);
       if (angle) {
         out.push(angle);

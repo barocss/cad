@@ -36,18 +36,39 @@ function followsTurn(fit: PlainFitCurve, sign: number): boolean {
 export function fitRectangularTurn(
   rows: readonly (readonly XY[])[], heights: readonly number[], stations: readonly number[],
 ): { knots: number[]; rails: Point[][] } | null {
-  const last = rows.length - 1;
-  // The compact basis uses one pole per station and stays within the native surface limit.
-  if (last < 6 || last > 15 || stations.some((t, i) => Math.abs(t - i / last) > 1e-9)) return null;
   const first = rows[0];
   const centre: XY = [(first[0][0] + first[2][0]) / 2, (first[0][1] + first[2][1]) / 2];
-  const offsets = first.map(point => sub(point, centre));
   const u = sub(first[1], first[0]), v = sub(first[3], first[0]);
   const width = Math.hypot(...u), depth = Math.hypot(...v);
   const tol = linearToleranceMM(Math.max(width, depth));
   if (Math.min(width, depth) <= tol || Math.abs(dot(u, v)) > tol * Math.max(width, depth)
-    || Math.hypot(offsets[1][0] + offsets[3][0], offsets[1][1] + offsets[3][1]) > tol) return null;
+    || Math.hypot(first[1][0] - centre[0] + (first[3][0] - centre[0]),
+      first[1][1] - centre[1] + (first[3][1] - centre[1])) > tol) return null;
 
+  return fitTurn(rows, heights, stations, centre, u, width, tol);
+}
+
+/** A single convex triangle turning about its centroid. */
+export function fitTriangularTurn(
+  rows: readonly (readonly XY[])[], heights: readonly number[], stations: readonly number[],
+): { knots: number[]; rails: Point[][] } | null {
+  const [a, b, c] = rows[0];
+  const u = sub(b, a), v = sub(c, a);
+  const width = Math.hypot(...u), span = Math.max(width, Math.hypot(...v), Math.hypot(...sub(c, b)));
+  const tol = linearToleranceMM(span);
+  if (Math.abs(cross(u, v)) <= tol * span) return null;
+  const centre: XY = [a[0] + (u[0] + v[0]) / 3, a[1] + (u[1] + v[1]) / 3];
+  return fitTurn(rows, heights, stations, centre, u, width, tol);
+}
+
+function fitTurn(
+  rows: readonly (readonly XY[])[], heights: readonly number[], stations: readonly number[],
+  centre: XY, u: XY, width: number, tol: number,
+): { knots: number[]; rails: Point[][] } | null {
+  const last = rows.length - 1;
+  // The compact basis uses one pole per station and stays within the native surface limit.
+  if (last < 6 || last > 15 || stations.some((t, i) => Math.abs(t - i / last) > 1e-9)) return null;
+  const offsets = rows[0].map(point => sub(point, centre));
   const factors: XY[] = [];
   for (const row of rows) {
     const edge = sub(row[1], row[0]), length = Math.hypot(...edge);
@@ -60,7 +81,7 @@ export function fitRectangularTurn(
   if (Math.abs(step) > maximumStep + 1e-9 || factors.some((factor, i) => Math.hypot(...sub(factor,
     [Math.cos(step * i), Math.sin(step * i)])) > 1e-9)) return null;
 
-  // Interpolate the rotation factors once so each section keeps its rectangular proportions.
+  // Interpolate the rotation factors once so each section keeps its proportions.
   const fit = interpolateCurvePlain(factors.map(([c, s]) => [c, s, 0]), 3, stations);
   // A nonzero signed angular derivative also keeps the section away from a point collapse.
   if (step !== 0 && !followsTurn(fit, Math.sign(step))) return null;
