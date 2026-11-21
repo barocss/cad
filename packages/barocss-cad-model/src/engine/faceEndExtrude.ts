@@ -99,6 +99,27 @@ const FRONT: EndFrame = { axes: [0, 2, 1], sign: -1 };
 
 type ExactPoint = readonly [bigint, bigint];
 const turn = (a: ExactPoint, b: ExactPoint, c: ExactPoint) => (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+
+/** An admitted convex polygon must exclude the disk's centre and clear every boundary segment. */
+function polygonClearsDisk(polygon: readonly ExactPoint[], centre: ExactPoint, radius: bigint): boolean {
+  const winding = turn(polygon[0], polygon[1], polygon[2]) > 0n ? 1n : -1n;
+  if (polygon.every((a, i) => winding * turn(a, polygon[(i + 1) % polygon.length], centre) >= 0n)) return false;
+  const radius2 = radius * radius;
+  return polygon.every((a, i) => {
+    const b = polygon[(i + 1) % polygon.length];
+    const x = b[0] - a[0], y = b[1] - a[1], dx = centre[0] - a[0], dy = centre[1] - a[1];
+    const length2 = x * x + y * y, dot = dx * x + dy * y;
+    if (length2 === 0n) return false;
+    if (dot <= 0n) return dx * dx + dy * dy > radius2;
+    if (dot >= length2) {
+      const ex = centre[0] - b[0], ey = centre[1] - b[1];
+      return ex * ex + ey * ey > radius2;
+    }
+    const cross = x * dy - y * dx;
+    return cross * cross > radius2 * length2;
+  });
+}
+
 /** A complete native convex straight trim whose outward normal opposes the extrusion. */
 function targetPolygon(brep: Brep, face: BrepFace, { axes: [u, v, w], sign }: EndFrame) {
   const surface = face.surface;
@@ -197,9 +218,9 @@ function circularRectangleTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketc
 }
 
 /** One original lower annulus of a forward upright coaxial circular Extrude and through Hole. */
-function annularRectangleTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
+function annularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
   brep: Brep, face: BrepFace, axes: EndFrame, min: readonly number[], max: readonly number[]): ReturnType<typeof targetPolygon> | undefined {
-  if (sketch.profile !== 'rectangle' || axes !== XY) return;
+  if ((sketch.profile !== 'rectangle' && sketch.profile !== 'polygon') || axes !== XY) return;
   const source = annularSource(doc.nodes, node.target.body.node);
   if (!source) return;
   const { hole, stock, circle } = source;
@@ -231,10 +252,18 @@ function annularRectangleTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch
   const radius = Math.min(...outer.map(support => support.r - separation(support))) - roundoff;
   const bore = Math.max(...inner.map(support => support.r + separation(support))) + roundoff;
   if (!(bore > roundoff && radius - bore > roundoff)) throw invalid('the annular target radii cannot be certified.');
-  // Clamp the native bore centre to the whole rectangle. Corner tests alone miss
-  // a bore crossing an edge or lying entirely inside the projected footprint.
-  const dx = Math.max(min[0] - cx, 0, cx - max[0]), dy = Math.max(min[1] - cy, 0, cy - max[1]);
-  if (!(Math.hypot(dx, dy) > bore + roundoff)) throw invalid('the target face must contain the entire projected profile clear of its bore.');
+  let clearsBore: boolean;
+  if (sketch.profile === 'rectangle') {
+    // Clamp to the whole rectangle, including its edges and interior.
+    const dx = Math.max(min[0] - cx, 0, cx - max[0]), dy = Math.max(min[1] - cy, 0, cy - max[1]);
+    clearsBore = Math.hypot(dx, dy) > bore + roundoff;
+  } else {
+    const origin = sketch.plane?.origin ?? [0, 0, 0];
+    const polygon: ExactPoint[] = sketch.points.map(p => [exact(origin[0] + p[0]), exact(origin[1] + p[1])]);
+    // Keep the existing native radius margin without rounding its final addition down.
+    clearsBore = polygonClearsDisk(polygon, [exact(cx), exact(cy)], exact(bore) + exact(roundoff));
+  }
+  if (!clearsBore) throw invalid('the target face must contain the entire projected profile clear of its bore.');
   return {
     min: [cx - radius, cy - radius], max: [cx + radius, cy + radius], level, rectangle: false,
     contains: point => Math.hypot(point[0] - cx, point[1] - cy) + roundoff <= radius,
@@ -336,7 +365,7 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const faces = brep.faces.filter(face => face.name === node.target.face);
   if (faces.length !== 1) throw missing('the named target face is missing or ambiguous.');
   const box = circularRectangleTarget(doc, node, sketch, brep, faces[0], axes)
-    ?? annularRectangleTarget(doc, node, sketch, brep, faces[0], axes, [u0, v0], [u1, v1])
+    ?? annularProfileTarget(doc, node, sketch, brep, faces[0], axes, [u0, v0], [u1, v1])
     ?? targetPolygon(brep, faces[0], axes);
   if (u0 < box.min[0] || v0 < box.min[1] || u1 > box.max[0] || v1 > box.max[1]) throw invalid('the target face must contain the entire projected profile.');
   if (!box.rectangle) {

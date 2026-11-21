@@ -52,6 +52,16 @@ const replaceNode = (doc: StudioDoc, index: number, next: ModelNode): StudioDoc 
   ...doc, nodes: doc.nodes.map((node, i) => i === index ? next : node),
 });
 
+function annularPolygonTarget(points: [number, number][], from = 20, origin: [number, number, number] = [0, 0, 0]): StudioDoc {
+  const doc = annularTarget(from);
+  return { ...doc, nodes: doc.nodes.map((node, i): ModelNode => {
+    if (node.kind === 'sketch' && node.profile === 'circle') return { ...node, center: [origin[0], origin[1]] };
+    if (node.kind === 'hole') return { ...node, center: [origin[0], origin[1]], radius: 4 };
+    return i === 3 ? { id: 'n3', kind: 'sketch', profile: 'polygon', points,
+      ...(origin.every(value => value === 0) ? {} : { plane: { origin, normal: [0, 0, 1], xAxis: [1, 0, 0] } }) } : node;
+  }) };
+}
+
 test('a literal XY rectangle reaches the original lower annulus of one current coaxial through Hole', () => {
   const original = annularTarget(), saved = structuredClone(original);
   for (const from of [20, 30, 40]) {
@@ -110,6 +120,85 @@ test('annular containment proves the entire rectangle, including edge and interi
   assert.equal(currentFaceEndDistance(planeSource, 4), 15);
 });
 
+test('an annular target contains the entire convex triangle although its bounding box covers the bore', () => {
+  const points: [number, number][] = [[0, 7], [7, 0], [8, 8]];
+  for (const reverse of [false, true]) for (const from of [20, 28]) for (const origin of [[0, 0, 0], [50, -20, 5], [-50.25, 20.125, -2]] as [number, number, number][]) {
+    const doc = annularPolygonTarget(reverse ? [...points].reverse() : points, from, origin), saved = structuredClone(doc);
+    const opened = readStudioDoc(JSON.stringify(doc));
+    assert.ok('doc' in opened);
+    assert.deepEqual(opened.doc, saved);
+    const part = toPartDocument(opened.doc), height = from - origin[2];
+    assert.deepEqual(part.features[4], { id: 'n4', kind: 'extrude', sketch: 'n3', height });
+    assert.equal(currentFaceEndDistance(doc, 4), height);
+    const { outputs } = evaluateCadPart(part), [tube, post] = outputs;
+    assert.deepEqual(outputs.map(output => output.id), ['n2', 'n4']);
+    assert.ok(outputs.every(output => checkOutput(output).valid));
+    // The authored triangle has area 31.5 and centroid (5,5), independently of its winding.
+    const mass = massPropertiesOf(post), expectedCentre = [origin[0] + 5, origin[1] + 5, (origin[2] + from) / 2];
+    assert.ok(Math.abs(mass.volume - 31.5 * height) < 1e-7);
+    mass.centroid.forEach((value, axis) => assert.ok(Math.abs(value - expectedCentre[axis]) < 1e-8));
+    assert.ok(Math.abs(massPropertiesOf(tube).volume - Math.PI * (12 ** 2 - 4 ** 2) * 5) < 1e-7);
+    assert.deepEqual(tube.brep, evaluateCadPart(toPartDocument(prefixDoc(doc, 4))).outputs[0].brep);
+    const end = faceGeometry(tube.brep.faces.find(face => face.name === 'n1.bottom')!);
+    const reached = faceGeometry(post.brep.faces.find(face => face.name === 'n4.top')!);
+    assert.ok(end.kind === 'plane' && reached.kind === 'plane');
+    assert.equal(end.o[2], from); assert.equal(reached.o[2], from);
+    assert.deepEqual(end.n, [0, 0, -1]); assert.deepEqual(reached.n, [0, 0, 1]);
+    assert.deepEqual(doc, saved);
+  }
+});
+
+test('annular polygon containment refuses edge crossings, an enclosed bore and strict boundary contact', () => {
+  const cases: [number, number][][] = [
+    [[0, 5], [5, 0], [8, 8]], // Every vertex is on material; the first edge crosses R4.
+    [[-8, -6], [8, -6], [0, 10]], // Even every edge clears R4, but the interior encloses it.
+    [[-6, 0], [6, 0], [0, 10]], // The bore centre is exactly on the polygon boundary.
+    [[4, -1], [6, 0], [4, 1]], // Edge tangent to the bore.
+    [[4, 0], [6, -1], [6, 1]], // Vertex tangent to the bore; nearest point is an endpoint.
+    [[4 + 1e-14, -1], [6, 0], [4 + 1e-14, 1]], // Below the retained native support margin.
+  ];
+  for (const points of cases) for (const reverse of [false, true]) for (const origin of [[0, 0, 0], [50, -20, 5]] as [number, number, number][]) {
+    const doc = annularPolygonTarget(reverse ? [...points].reverse() : points, 20, origin), saved = structuredClone(doc);
+    assert.throws(() => toPartDocument(doc), /entire projected profile clear of its bore/i);
+    assert.deepEqual(doc, saved);
+  }
+  assert.equal(currentFaceEndDistance(annularPolygonTarget([[4 + 1e-6, -1], [6, 0], [4 + 1e-6, 1]]), 4), 20);
+  assert.throws(() => toPartDocument(annularPolygonTarget([[0, 7], [7, 0], [9, 9]])), /entire projected profile/i);
+});
+
+test('annular targets retain admitted convex four, six and eight point sources and endpoint clearance', () => {
+  const cases: { points: [number, number][]; area: number }[] = [
+    { points: [[6, -1], [8, -1], [8, 1], [6, 1]], area: 4 },
+    { points: [[5, 0], [6, -2], [8, -2], [9, 0], [8, 2], [6, 2]], area: 12 },
+    { points: [[5, -1], [6, -2], [8, -2], [9, -1], [9, 1], [8, 2], [6, 2], [5, 1]], area: 14 },
+    { points: [[5, 0], [7, 0], [5, 2]], area: 2 },
+  ];
+  for (const { points, area } of cases) for (const reverse of [false, true]) {
+    const doc = annularPolygonTarget(reverse ? [...points].reverse() : points), opened = readStudioDoc(JSON.stringify(doc));
+    assert.ok('doc' in opened); assert.deepEqual(opened.doc, doc);
+    const post = evaluateCadPart(toPartDocument(opened.doc)).outputs[1];
+    assert.ok(checkOutput(post).valid);
+    assert.ok(Math.abs(massPropertiesOf(post).volume - area * 20) < 1e-7);
+    assert.equal(post.brep.faces.length, points.length + 2);
+  }
+  // Previously excluded solely because it was a polygon; this footprint clears the existing R3 fixture.
+  const old = replaceNode(annularTarget(), 3, { id: 'n3', kind: 'sketch', profile: 'polygon', points: [[4, -2], [8, -2], [6, 2]] });
+  assert.equal(currentFaceEndDistance(old, 4), 20);
+});
+
+test('annular polygon support preserves original target identity, forward distance and XY-only admission', () => {
+  const doc = annularPolygonTarget([[0, 7], [7, 0], [8, 8]]), stock = doc.nodes[1], hole = doc.nodes[2], source = doc.nodes[3];
+  assert.ok(stock.kind === 'extrude' && hole.kind === 'hole' && source.kind === 'sketch' && source.profile === 'polygon');
+  for (const candidate of [
+    replaceNode(doc, 1, { ...stock, id: 'n9' }), replaceNode(doc, 1, { ...stock, height: -5 }),
+    replaceNode(doc, 2, { ...hole, id: 'n9' }), replaceNode(doc, 2, { ...hole, depth: 2 }),
+    replaceNode(doc, 2, { ...hole, center: [0.01, 0] }),
+    replaceNode(doc, 3, { ...source, plane: { origin: [0, 0, 0], normal: [1, 0, 0], xAxis: [0, 1, 0] } }),
+    replaceNode(doc, 3, { ...source, plane: { origin: [0, 0, 0], normal: [0, -1, 0], xAxis: [1, 0, 0] } }),
+  ]) assert.throws(() => toPartDocument(candidate));
+  assert.throws(() => toPartDocument(annularPolygonTarget([[0, 7], [7, 0], [8, 8]], 0)), /positive extrusion direction/i);
+});
+
 test('annular saved bindings retain stock and source identity and refuse reversed parent extrusion', () => {
   const doc = annularTarget(), stock = doc.nodes[1], bound = doc.nodes[4];
   assert.ok(stock.kind === 'extrude' && bound.kind === 'face-end-extrude');
@@ -137,7 +226,7 @@ test('annular saved bindings retain stock and source identity and refuse reverse
   assert.throws(() => toPartDocument(annularTarget(0)), /positive extrusion direction/i);
 });
 
-test('annular support remains bounded to a direct upright single through Hole and rectangular source', () => {
+test('annular support remains bounded to a direct upright single through Hole and admitted straight source', () => {
   const doc = annularTarget(), hole = doc.nodes[2], stock = doc.nodes[1], circle = doc.nodes[0], source = doc.nodes[3];
   assert.ok(hole.kind === 'hole' && stock.kind === 'extrude' && circle.kind === 'sketch' && circle.profile === 'circle'
     && source.kind === 'sketch' && source.profile === 'rectangle');
@@ -154,7 +243,6 @@ test('annular support remains bounded to a direct upright single through Hole an
     replaceNode(doc, 1, { ...stock, draft: 2 }),
     replaceNode(doc, 0, { ...circle, plane: { origin: [0, 0, 0], normal: [0, 0, 1], xAxis: [1, 0, 0] } }),
     replaceNode(doc, 3, { id: 'n3', kind: 'sketch', profile: 'circle', center: [6, 0], radius: 1 }),
-    replaceNode(doc, 3, { id: 'n3', kind: 'sketch', profile: 'polygon', points: [[4, -2], [8, -2], [6, 2]] }),
   ]) assert.throws(() => toPartDocument(candidate));
   const bound = doc.nodes[4]; assert.ok(bound.kind === 'face-end-extrude');
   const consumed: StudioDoc = { ...doc, nodes: [...doc.nodes.slice(0, 4),
