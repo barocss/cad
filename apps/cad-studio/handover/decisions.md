@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1587: [Build a centred circular-segment Twist through Smooth Loft](notes/centred-circular-segment-twist-2026-11-22/README.md), #630. Preserve a fixed centroid path, compact circular supports and both signed windings through desktop Save and Open.
 - D1586: [Refine viewport display for circular-segment Screw STEP imports](notes/line-arc-screw-step-display-2026-11-22/README.md), #630. Certify the rational family and verify lower rail error and the same native pick in both desktop renderers.
 - D1585: [Qualify circular-segment Screw AP214 exchange](notes/line-arc-screw-step-roundtrip-2026-11-22/README.md), #630. Verify signed rational geometry, independent volume, exact file Open and the observed viewport gap.
 - D1584: [Review a circular-segment Smooth Screw through the local Agent](notes/line-arc-screw-agent-2026-11-22/README.md), #630 and #322. Verify revision-pinned creation, stale refusal, explicit Studio approval, and exact geometry across direct creation and Save and Open.

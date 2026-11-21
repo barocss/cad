@@ -17,7 +17,7 @@ import { admitNurbsGuide, type LoftNurbsGuideInput, type LoftNurbsGuideSpan } fr
 import { orientedLoftSolid } from './oriented-loft.js';
 import { patchLoftGuideSides } from './loft-guide-patches.js';
 import { twoGuideLoftSolid } from './loft-two-guides.js';
-import { fitConvexPolygonScrew, fitLineArcScrew, fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from './loft-rectangular-turn.js';
+import { fitConvexPolygonScrew, fitLineArcScrew, fitLineArcTurn, fitRectangularScrew, fitRectangularTurn, fitTriangularScrew, fitTriangularTurn } from './loft-rectangular-turn.js';
 
 type XY = [number, number];
 type Piece = { readonly kind: 'line'; readonly a: XY; readonly b: XY } | { readonly kind: 'arc'; readonly c: XY; readonly r: number; readonly t0: number; readonly dt: number };
@@ -142,10 +142,13 @@ function legacyLoft(input: LoftInput, guideFactory?: LoftGuideFactory, nurbsGuid
   const authoredScrew = input.smooth && !guideFactory && !nurbsGuide && n >= 4
     && sections.every(row => row.length === n && row.every(piece => piece.kind === 'line'))
     ? fitConvexPolygonScrew(sections.map(row => row.map(startOf)), z, z.map(value => (value - z[0]) / (z[K] - z[0]))) : null;
-  const authoredLineArc = input.smooth && !guideFactory && !nurbsGuide && K >= 6 && K <= 15
-    && loops[0].segments.length === 2 && loops[0].segments.filter(segment => segment.kind === 'line').length === 1
-    ? fitLineArcScrew(loops, sections.map(row => row.map((_, i) => pieceBezier(row, i))), z,
-      z.map(value => (value - z[0]) / (z[K] - z[0]))) : null;
+  let authoredLineArc: ReturnType<typeof fitLineArcScrew> = null;
+  if (input.smooth && !guideFactory && !nurbsGuide && K >= 6 && K <= 15
+    && loops[0].segments.length === 2 && loops[0].segments.filter(segment => segment.kind === 'line').length === 1) {
+    const rows = sections.map(row => row.map((_, i) => pieceBezier(row, i)));
+    const stations = z.map(value => (value - z[0]) / (z[K] - z[0]));
+    authoredLineArc = fitLineArcScrew(loops, rows, z, stations) ?? fitLineArcTurn(loops, rows, z, stations);
+  }
   for (const p of sections) while (p.length < n) { let i = 0; p.forEach((q, j) => { if (lengthOf(q) > lengthOf(p[i])) i = j; }); p.splice(i, 1, ...half(p[i])); if (p === sections[0]) src0.splice(i, 1, src0[i], src0[i]); }
   const tagged = taggedSides(src0, input.sideTags);
   // Turn each section to start nearest the previous one's start (directions about the centroids).

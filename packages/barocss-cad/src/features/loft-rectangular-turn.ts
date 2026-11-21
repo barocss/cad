@@ -16,6 +16,24 @@ const rotated = ([c, s]: XY, [x, y]: XY): XY => [c * x - s * y, s * x + c * y];
 type RationalPiece = { readonly p: readonly XY[]; readonly w: readonly number[] };
 type CapPiece = { p: [number, number][]; w: number[] };
 type HomogeneousPoint = [number, number, number, number];
+type LineArcFit = { knots: number[]; nets: HomogeneousPoint[][][]; caps: [CapPiece[], CapPiece[]] };
+type CircularArc = Extract<ProfileLoop['segments'][number], { kind: 'arc' }>;
+
+function circularSegmentCentroid(arc: CircularArc): XY {
+  const angle = arc.sweep, squared = angle * angle;
+  // Avoid cancellation in a shallow segment's angle - sin(angle).
+  const areaFactor = angle < .1 ? angle * squared * (1 / 6 + squared * (-1 / 120
+    + squared * (1 / 5040 + squared * (-1 / 362880 + squared / 39916800)))) : angle - Math.sin(angle);
+  const distance = 4 * arc.radius * Math.sin(angle / 2) ** 3 / (3 * areaFactor);
+  const direction = arc.startAngle + angle / 2;
+  return [arc.center[0] + distance * Math.cos(direction), arc.center[1] + distance * Math.sin(direction)];
+}
+
+function fixedSegmentCentroid(arc: CircularArc, measured: XY, pivot: XY, tolerance: number): boolean {
+  const analytic = circularSegmentCentroid(arc);
+  return analytic.every(Number.isFinite) && Math.hypot(...sub(analytic, measured)) <= tolerance
+    && Math.hypot(...sub(analytic, pivot)) <= tolerance;
+}
 
 function discClearsOrigin(centre: XY, radius: number, tolerance: number): boolean {
   const unavailable = new Error('Circular segment axis clearance arithmetic is unavailable.');
@@ -49,6 +67,19 @@ function followsTurn(fit: PlainFitCurve, sign: number): boolean {
     if (product.some(value => !(value > 0))) return false;
   }
   return true;
+}
+
+/** Recover signed winding without extrapolating one rounded station's phase. */
+function fullStationTurnStep(factors: readonly XY[]): number | undefined {
+  const sign = Math.sign(Math.atan2(factors[1][1], factors[1][0]));
+  if (!sign) return;
+  let total = 0;
+  for (let i = 1; i < factors.length; i++) {
+    const step = Math.atan2(cross(factors[i - 1], factors[i]), dot(factors[i - 1], factors[i]));
+    if (!Number.isFinite(step) || Math.sign(step) !== sign || Math.abs(step) > maximumStep + 1e-9) return;
+    total += step;
+  }
+  return total / (factors.length - 1);
 }
 
 function rectangle(first: readonly XY[]) {
@@ -139,13 +170,29 @@ export function fitConvexPolygonScrew(
 export function fitLineArcScrew(
   loops: readonly ProfileLoop[], rows: readonly (readonly RationalPiece[])[],
   heights: readonly number[], stations: readonly number[],
-): { knots: number[]; nets: HomogeneousPoint[][][]; caps: [CapPiece[], CapPiece[]] } | null {
+): LineArcFit | null {
+  return fitLineArc(loops, rows, heights, stations, false);
+}
+
+/** A circular segment turning only about its fixed analytic area centroid. */
+export function fitLineArcTurn(
+  loops: readonly ProfileLoop[], rows: readonly (readonly RationalPiece[])[],
+  heights: readonly number[], stations: readonly number[],
+): LineArcFit | null {
+  return fitLineArc(loops, rows, heights, stations, true);
+}
+
+function fitLineArc(
+  loops: readonly ProfileLoop[], rows: readonly (readonly RationalPiece[])[],
+  heights: readonly number[], stations: readonly number[], centered: boolean,
+): LineArcFit | null {
   const last = loops.length - 1;
   if (last < 6 || last > 15 || rows.length !== loops.length || heights.length !== loops.length || stations.length !== loops.length) return null;
   const first = loops[0], pieces = rows[0];
   if (first.segments.length !== 2 || first.segments.filter(segment => segment.kind === 'line').length !== 1) return null;
   const arcIndex = first.segments.findIndex(segment => segment.kind === 'arc'), arc = first.segments[arcIndex];
   if (arc.kind !== 'arc' || !(arc.sweep > 0 && arc.sweep < 2 * Math.PI)) return null;
+  const pivot: XY = centered ? circularSegmentCentroid(arc) : [0, 0];
   const tolerance = linearToleranceMM(2 * arc.radius), height = heights[last] - heights[0];
   if (!(height > 0) || !Number.isFinite(height) || heights.some((z, i) => !Number.isFinite(z) || (i > 0 && z <= heights[i - 1]))
     || stations.some((t, i) => !Number.isFinite(t) || Math.abs(t - i / last) > 1e-9
@@ -159,7 +206,8 @@ export function fitLineArcScrew(
         || loop.segments.some((segment, i) => segment.kind !== first.segments[i].kind)
         || current.kind !== 'arc' || Math.abs(current.radius - arc.radius) > tolerance
         || Math.abs(current.sweep - arc.sweep) * arc.radius > tolerance
-        || !discClearsOrigin(current.center, current.radius, tolerance)
+        || (centered ? !fixedSegmentCentroid(current, loop.centroid, pivot, tolerance)
+          : !discClearsOrigin(current.center, current.radius, tolerance))
         || row.length !== pieces.length || row.some((piece, i) => {
           const base = pieces[i], count = piece.p.length;
           return (count !== 2 && count !== 3) || count !== base.p.length || piece.w.length !== count
@@ -174,10 +222,11 @@ export function fitLineArcScrew(
     const current = arcs[k];
     return [...row.flatMap(piece => piece.p), current.kind === 'arc' ? current.center : [0, 0] as XY];
   });
-  const reference = controls[0].reduce((best, point, i) => dot(point, point) > dot(controls[0][best], controls[0][best]) ? i : best, 0);
-  const u = controls[0][reference], direction = controls[1][reference];
+  const initial = centered ? controls[0].map(point => sub(point, pivot)) : controls[0];
+  const reference = initial.reduce((best, point, i) => dot(point, point) > dot(initial[best], initial[best]) ? i : best, 0);
+  const u = initial[reference], direction = centered ? sub(controls[1][reference], pivot) : controls[1][reference];
   if (Math.atan2(cross(u, direction), dot(u, direction)) === 0) return null;
-  const fit = fitTurn(controls, heights, stations, [0, 0], u, Math.hypot(...u), tolerance, reference, false);
+  const fit = fitTurn(controls, heights, stations, pivot, u, Math.hypot(...u), tolerance, reference, false, centered);
   if (!fit) return null;
   let column = 0;
   const nets = pieces.map(piece => piece.p.map((_, j) => {
@@ -194,7 +243,7 @@ export function fitLineArcScrew(
 
 function fitTurn(
   rows: readonly (readonly XY[])[], heights: readonly number[], stations: readonly number[],
-  centre: XY, u: XY, width: number, tol: number, referenceCorner?: number, preserveEnds = true,
+  centre: XY, u: XY, width: number, tol: number, referenceCorner?: number, preserveEnds = true, fullStationPhase = false,
 ): { knots: number[]; rails: Point[][] } | null {
   const last = rows.length - 1;
   // The compact basis uses one pole per station and stays within the native surface limit.
@@ -209,8 +258,8 @@ function fitTurn(
     if (row.some((point, i) => Math.hypot(...sub(sub(point, centre), rotated(factor, offsets[i]))) > tol)) return null;
     factors.push(factor);
   }
-  const step = Math.atan2(factors[1][1], factors[1][0]);
-  if (Math.abs(step) > maximumStep + 1e-9 || factors.some((factor, i) => Math.hypot(...sub(factor,
+  const step = fullStationPhase ? fullStationTurnStep(factors) : Math.atan2(factors[1][1], factors[1][0]);
+  if (step === undefined || Math.abs(step) > maximumStep + 1e-9 || factors.some((factor, i) => Math.hypot(...sub(factor,
     [Math.cos(step * i), Math.sin(step * i)])) > 1e-9)) return null;
 
   // Interpolate the rotation factors once so each section keeps its proportions.

@@ -34,6 +34,35 @@ const segmentSource = withNode(emptyDoc(), segmentSketch);
 const segmentCtx: Ctx = { ...ctx, doc: segmentSource };
 const segmentInput = { axisX: 0, axisY: 0, pitch: 40, angle: -360 };
 
+test('Smooth Loft accepts both centred circular-segment windings through tilted sketch projection', () => {
+  const loft = commandById('loft')!;
+  const sweep = 2 * Math.PI / 3;
+  const centroid = 4 * 3 * Math.sin(sweep / 2) ** 3 / (3 * (sweep - Math.sin(sweep)));
+  const ordinate = 3 * Math.sin(Math.PI / 3);
+  for (const angle of [-360, 360]) {
+    let doc = emptyDoc();
+    const sketches = Array.from({ length: 13 }, (_, i) => i);
+    for (const i of sketches) {
+      const t = i / 12, phase = angle * t * Math.PI / 180;
+      const c = Math.cos(phase), s = Math.sin(phase);
+      const spin = (x: number, y: number): [number, number] => [c * x - s * y, s * x + c * y];
+      doc = withNode(doc, { kind: 'sketch', profile: 'loop',
+        segments: [
+          { kind: 'line', start: spin(1.5 - centroid, ordinate) },
+          { kind: 'arc', start: spin(1.5 - centroid, -ordinate), center: spin(-centroid, 0), direction: 'ccw' },
+        ],
+        plane: { origin: [21, -19.4 + 24 * t, 24.8 + 32 * t], normal: [0, .6, .8], xAxis: [1, 0, 0] },
+      });
+    }
+    const next = loft.build!({ ...ctx, doc, selection: { ...ctx.selection, sketches } }, { smooth: 'yes' });
+    const [{ brep }] = partBreps(next);
+    const check = checkBrep(brep, { strict: true });
+    assert.ok(check.valid, JSON.stringify(check.issues));
+    assert.deepEqual([check.counts.bodies, check.counts.faces, check.counts.edges], [1, 5, 9]);
+    assert.ok(Math.abs(brepMassProperties(brep, 1).volume - 221.13498549200997) < 1e-7);
+  }
+});
+
 test('a single circular segment Screw retains the arc and axis through History and native Open', async () => {
   assert.ok(command.available(segmentCtx).ok);
   const prior = command.build!(segmentCtx, segmentInput);
@@ -76,7 +105,9 @@ test('a single circular segment Screw retains the arc and axis through History a
 
 test('a circular segment Screw rejects axes inside the supporting disc and guards History copies', () => {
   assert.equal(command.available({ ...segmentCtx, selection: { ...segmentCtx.selection, sketches: [0, 0] } }).ok, false);
-  for (const axisX of [10, 14]) {
+  const sweep = 2 * Math.PI / 3;
+  const centroidX = 12 + 4 * 3 * Math.sin(sweep / 2) ** 3 / (3 * (sweep - Math.sin(sweep)));
+  for (const axisX of [10, 14, centroidX]) {
     assert.throws(() => command.build!(segmentCtx, { ...segmentInput, axisX }), /Screw axis.*outside.*disc/i);
   }
   assert.deepEqual(segmentCtx.doc, withNode(emptyDoc(), segmentSketch));

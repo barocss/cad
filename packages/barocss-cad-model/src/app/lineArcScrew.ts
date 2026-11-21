@@ -52,6 +52,9 @@ export function nativeLineArcScrew(rows: readonly (readonly LineArcSegment[])[],
   try {
     const loop = buildProfileLoop(rows[0]), arc = loop.segments.find(segment => segment.kind === 'arc');
     if (loop.segments.length !== 2 || arc?.kind !== 'arc') return false;
+    // The shared Loft also supports centroid Twists. This consumer requires an exterior Screw.
+    const clearance = Math.max(CadNumericPolicy.linearTolerance, CadNumericPolicy.relativeLinearTolerance * 2 * arc.radius);
+    if (Math.hypot(...arc.center) <= arc.radius + clearance) return false;
     const sides = 1 + Math.max(1, Math.ceil(Math.abs(arc.sweep) / (Math.PI / 2) - 1e-9));
     const { brep } = loftSolid({ id: 'line-arc-screw', name: 'line-arc-screw', smooth: true,
       sections: rows.map((profile, i) => ({ profile, z: heights[i] })) });

@@ -2,17 +2,22 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const singleSketch = process.argv.includes('--single-sketch');
-const circularSegment = process.argv.includes('--line-arc');
+const centred = process.argv.includes('--centred-line-arc');
+const circularSegment = centred || process.argv.includes('--line-arc');
 const triangular = (singleSketch && !circularSegment) || process.argv.includes('--triangle');
 const polygon = ['pentagon', 'hexagon', 'trapezoid', 'skew-quadrilateral']
   .find(name => process.argv.includes('--' + name));
 const command = singleSketch ? 'Smooth Screw' : 'Loft';
-const profile = circularSegment ? 'line-arc' : polygon ?? (triangular ? 'triangular' : 'rectangular');
+const profile = centred ? 'centred-line-arc' : circularSegment ? 'line-arc' : polygon ?? (triangular ? 'triangular' : 'rectangular');
 const degrees = circularSegment || polygon || triangular ? 360 : 180;
 const height = 40, spans = degrees / 30, samples = spans * 10;
 const chordY = 3 * Math.sin(Math.PI / 3);
+const arcSweep = 2 * Math.PI / 3;
+const centroidOffset = 4 * 3 * Math.sin(arcSweep / 2) ** 3 / (3 * (arcSweep - Math.sin(arcSweep)));
+const circleX = centred ? -centroidOffset : 12;
+const arcSection = { corners: [[circleX + 1.5, chordY], [circleX + 1.5, -chordY], [circleX + 3, 0]],
+  volume: 221.13498549200997 };
 const profiles = {
-  'line-arc': { corners: [[13.5, chordY], [13.5, -chordY], [15, 0]], volume: 221.13498549200997 },
   pentagon: { corners: [[-7, -4], [2, -3], [1, -1], [-4, 1], [-6, -1]], volume: 1080.138914574982 },
   hexagon: { corners: [[-7, -5], [1, -5], [3, -3], [2, -1], [-3, 1], [-7, -1]], volume: 1840.2366692758953 },
   trapezoid: { corners: [[-8, -5], [2, -5], [0, -1], [-7, -1]], volume: 1360.1749294647923 },
@@ -20,7 +25,7 @@ const profiles = {
   triangular: { corners: [[-7, -4], [2, -3], [-4, 1]], volume: 840.1080446694306 },
   rectangular: { corners: [[14, -4], [26, -4], [26, 4], [14, 4]], volume: 840.4060323005599 * 96 / 21 },
 };
-const { corners, volume } = profiles[profile];
+const { corners, volume } = circularSegment ? arcSection : profiles[profile];
 const frame = { origin: profile === 'rectangular' ? [11, -17, 23] : [21, -19.4, 24.8], normal: [0, .6, .8], xAxis: [1, 0, 0] };
 const [x, y, z] = frame.origin;
 const ontoPlane = (u, v, h) => [x + u, y + .8 * v + .6 * h, z - .6 * v + .8 * h];
@@ -37,6 +42,7 @@ const frozen = [
   'packages/barocss-cad/src/part/part-profile-solid.ts',
   'packages/barocss-cad/src/features/loft.ts',
   'packages/barocss-cad/src/features/loft-rectangular-turn.ts',
+  ...(centred ? ['packages/barocss-cad-model/src/app/lineArcScrew.ts'] : []),
   ...(circularSegment && singleSketch ? [
     'packages/barocss-cad-model/src/app/lineArcScrew.ts',
     'packages/barocss-cad-model/src/app/editFields.ts',
@@ -49,7 +55,8 @@ const f = await createFlow({
   name: 'external-axis-screw-loft',
   output: process.argv[2],
   envFrozen: 'SCREW_LOFT_FROZEN',
-  qualification: 'Create both windings of a compact external-axis ' + profile + ' Screw with Studio ' + command + '.',
+  qualification: centred ? 'Create both windings of a compact centred circular-segment Twist with Studio Smooth Loft.'
+    : 'Create both windings of a compact external-axis ' + profile + ' Screw with Studio ' + command + '.',
   limits: ['Desktop Chrome. Synthetic source sketches in one tilted frame.'],
   initialFiles: frozen,
   requiredFrozen: frozen,
@@ -84,7 +91,7 @@ const spin = ([x, y], angle, t) => {
 };
 const lineArcSegments = rotate => [
   { kind: 'line', start: rotate(corners[0]) },
-  { kind: 'arc', start: rotate(corners[1]), center: rotate([12, 0]), direction: 'ccw' },
+  { kind: 'arc', start: rotate(corners[1]), center: rotate([circleX, 0]), direction: 'ccw' },
 ];
 function source(angle) {
   if (singleSketch) return {
@@ -118,11 +125,14 @@ function source(angle) {
 }
 
 async function build(angle) {
-  f.phase = 'create external-axis Screw at ' + angle;
+  f.phase = (centred ? 'create centred Twist at ' : 'create external-axis Screw at ') + angle;
   await f.newPage();
   const doc = source(angle);
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
-  await chooser.setFiles({ name: 'screw-sections.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) });
+  await chooser.setFiles({
+    name: centred ? 'centred-twist-sections.bcad' : 'screw-sections.bcad',
+    mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)),
+  });
   await f.same(doc);
   for (let i = 0; i < doc.nodes.length; i++) await button('Sketch ' + (i + 1)).click(i ? { modifiers: ['Shift'] } : {});
   await f.page.evaluate(() => document.activeElement?.blur());
@@ -199,13 +209,13 @@ async function inspect(doc, angle, label, advance = height) {
   let arcError;
   if (circularSegment) {
     assert.equal(part.arcs.length, 2);
-    let circleError = 0, seamError = 0, tangentError = 0;
+    let circleError = 0, seamError = 0, tangentError = 0, centroidError = 0;
     const unit = v => v.map(c => c / Math.hypot(...v));
     const distance = (a, b) => Math.hypot(...a.map((c, axis) => c - b[axis]));
     const [first, second] = part.arcs;
     for (let i = 0; i <= spans; i++) {
       const t = i / spans;
-      const centre = ontoPlane(...spin([12, 0], angle, t), advance * t);
+      const centre = ontoPlane(...spin([circleX, 0], angle, t), advance * t);
       for (const { point } of [...first[i], ...second[i]]) {
         const axialError = Math.abs(.6 * (point[1] - centre[1]) + .8 * (point[2] - centre[2]));
         circleError = Math.max(circleError, axialError, Math.abs(distance(point, centre) - 3));
@@ -213,9 +223,15 @@ async function inspect(doc, angle, label, advance = height) {
       const left = first[i].at(-1), right = second[i][0];
       seamError = Math.max(seamError, distance(left.point, right.point));
       tangentError = Math.max(tangentError, distance(unit(left.du), unit(right.du)), distance(unit(left.dv), unit(right.dv)));
+      if (centred) {
+        const a = first[i][0].point, b = second[i].at(-1).point;
+        const capCentre = left.point.map((mid, j) => a[j] + b[j] - mid);
+        const centroid = capCentre.map((c, j) => c + (left.point[j] - c) * centroidOffset / 3);
+        centroidError = Math.max(centroidError, distance(centroid, ontoPlane(0, 0, advance * t)));
+      }
     }
-    assert.ok(Math.max(circleError, seamError, tangentError) < 1e-8);
-    arcError = { circleError, seamError, tangentError };
+    assert.ok(Math.max(circleError, seamError, tangentError, centroidError) < 1e-8);
+    arcError = { circleError, seamError, tangentError, ...(centred ? { centroidError } : {}) };
   }
   f.report.observations.push({
     label, angle, advance, digest: part.digest, counts: part.counts, coedges: part.coedges, volume: part.volume,
@@ -249,7 +265,7 @@ await f.run(async () => {
   const right = await inspect(positive, degrees, 'external-axis-positive-native');
   await frameView('external-axis-positive-' + degrees);
   if (circularSegment) {
-    const saved = await f.save('external-axis-line-arc-positive');
+    const saved = await f.save(centred ? 'centred-line-arc-positive-twist' : 'external-axis-line-arc-positive');
     await f.freshOpen(saved.file, positive, 'external-axis-line-arc-positive-open');
     assert.deepEqual(await inspect(positive, degrees, 'line-arc-positive-reopened-native'), right);
     await frameView('line-arc-positive-reopened');
@@ -259,7 +275,7 @@ await f.run(async () => {
   const left = await inspect(negative, -degrees, 'external-axis-negative-native');
   assert.notEqual(left.digest, right.digest);
   await frameView('external-axis-negative-' + degrees);
-  const saved = await f.save('external-axis-' + profile + '-screw');
+  const saved = await f.save(centred ? 'centred-line-arc-negative-twist' : 'external-axis-' + profile + '-screw');
   await f.freshOpen(saved.file, negative, 'external-axis-fresh-open');
   assert.deepEqual(await inspect(negative, -degrees, 'external-axis-reopened-native'), left);
   await frameView('external-axis-reopened-' + degrees);

@@ -177,6 +177,47 @@ test('both longitudinal rails have distinct native names when the circular arc i
   }
 });
 
+test('centred circular segment Twists keep a straight centroid path and a tangent arc seam', () => {
+  const angle = 2 * Math.PI / 3, radius = 3;
+  const centroidOffset = 4 * radius * Math.sin(angle / 2) ** 3 / (3 * (angle - Math.sin(angle)));
+  const gap = (a, b) => Math.hypot(...a.map((v, i) => v - b[i]));
+  const unit = vector => vector.map(v => v / Math.hypot(...vector));
+  for (const [degrees, pivot] of [[360, [0, 0]], [-360, [7, -9]]]) {
+    const move = point => point.map((value, axis) => value + pivot[axis]);
+    const sections = lineArcStations(degrees, -centroidOffset).map(section => ({ ...section,
+      profile: section.profile.map(segment => segment.kind === 'arc'
+        ? { ...segment, start: move(segment.start), center: move(segment.center) }
+        : { ...segment, start: move(segment.start) }),
+    }));
+    const { brep, mass } = build(sections);
+    const check = checkBrep(brep, { strict: true });
+    assert.ok(check.valid, JSON.stringify(check.issues));
+    assert.deepEqual([check.counts.bodies, check.counts.faces, check.counts.edges, check.counts.vertices], [1, 5, 9, 6]);
+    const arcs = brep.faces.map(face => face.surface).filter(surface => surface.degreeU === 2 && surface.degreeV === 3);
+    assert.equal(arcs.length, 2);
+    assert.ok(arcs.every(surface => surface.controlPoints[0].length === 13));
+    const [first, second] = arcs.map(surface => (u, v) => evaluateSurfaceD2(surface, u, v));
+    for (let i = 0; i <= 120; i++) {
+      const t = i / 120;
+      const left = first(1, t), right = second(0, t);
+      const a = first(0, t).point, b = second(1, t).point;
+      const centre = left.point.map((value, axis) => a[axis] + b[axis] - value);
+      const centroid = centre.map((value, axis) => value + (left.point[axis] - value) * centroidOffset / radius);
+      assert.ok(gap(centroid, [...pivot, height * t]) < 1e-9);
+      assert.ok(gap(left.point, right.point) < 1e-9);
+      assert.ok(gap(unit(left.du), unit(right.du)) < 1e-9);
+      assert.ok(gap(left.dv, right.dv) < 1e-9);
+      assert.ok(Math.sign(degrees) * ((left.point[0] - pivot[0]) * left.dv[1]
+        - (left.point[1] - pivot[1]) * left.dv[0]) > 0);
+      const sectionRadius = gap(left.point, centre);
+      for (const side of [first, second]) {
+        assert.ok(Math.abs(gap(side(.37, t).point, centre) - sectionRadius) < 1e-9);
+      }
+    }
+    assert.ok(Math.abs(mass(1).volume - 221.13498549200997) < 1e-7);
+  }
+});
+
 test('compact line-and-arc admission leaves irregular curved lofts outside the native pole limit', () => {
   // With this centre the axis pierces the circular segment (the chord is at x=-0.5).
   const interior = lineArcStations(360, -2);
