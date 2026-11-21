@@ -92,6 +92,16 @@ export function directJoinDegreeCompatible(a: Curve, b: Curve): boolean {
     && singlePolynomialSpan(a) && singlePolynomialSpan(b);
 }
 
+/** Match only the admitted line/quadratic pair in scratch sources; retain order and native IDs. */
+function degreeMatchedPair(d: DirectGeometry, a: string, b: string, first = curveOf(d, a), second = curveOf(d, b)): [Curve, Curve] {
+  if (first.degree !== second.degree && directJoinDegreeCompatible(first, second)) {
+    const line = first.degree === 1 ? a : b, elevated = directOps.elevateCurveDegree(d, line);
+    if (first.degree === 1) first = curveOf(elevated, a);
+    else second = curveOf(elevated, b);
+  }
+  return [first, second];
+}
+
 const selectedSurface = (d: DirectGeometry, id: string) => {
   const o = object(d, id), surface = geometryOf(d, o);
   if (surface.kind !== 'surface') throw refusal('DIRECT_PICK', 'Pick a surface.');
@@ -284,12 +294,7 @@ export const directOps = {
     return add(d, [id], r.source, [{ geometry: r.lower.id, name: `${nameOf(d, id)} · lower` }, { geometry: r.upper.id, name: `${nameOf(d, id)} · upper` }]);
   },
   joinCurves(d: DirectGeometry, a: string, b: string) {
-    let left = curveOf(d, a), right = curveOf(d, b);
-    if (left.degree !== right.degree && directJoinDegreeCompatible(left, right)) {
-      const line = left.degree === 1 ? a : b, elevated = directOps.elevateCurveDegree(d, line);
-      if (left.degree === 1) left = curveOf(elevated, a);
-      else right = curveOf(elevated, b);
-    }
+    const [left, right] = degreeMatchedPair(d, a, b);
     const r = joinCurves(left, right, { curveId: fresh(usedIds(d), 'joined') });
     return add(d, [a, b], r.source, [{ geometry: r.curve.id, name: 'Joined curve' }]);
   },
@@ -407,7 +412,14 @@ export const directOps = {
     return refine(d, id, r.source);
   },
   ruledSurface(d: DirectGeometry, a: string, b: string) {
-    const used = usedIds(d), first = curveOf(d, a), second = curveOf(d, b), surfaceId = fresh(used, 'ruled'), resultIdPrefix = freshPrefix(used, 'er', 8);
+    const originalFirst = curveOf(d, a), originalSecond = curveOf(d, b);
+    if (originalFirst.degree !== originalSecond.degree && directJoinDegreeCompatible(originalFirst, originalSecond)) {
+      const domain = curveDomain(originalFirst), other = curveDomain(originalSecond);
+      if (!domain.every((value, axis) => Object.is(value, other[axis]))
+        || ![originalFirst, originalSecond].every(curve => curve.knots.every((knot, i) => Object.is(knot, domain[i <= curve.degree ? 0 : 1]))))
+        throw refusal('DIRECT_RANGE', 'Original domain endpoint bits must agree, including every clamp slot.');
+    }
+    const used = usedIds(d), [first, second] = degreeMatchedPair(d, a, b, originalFirst, originalSecond), surfaceId = fresh(used, 'ruled'), resultIdPrefix = freshPrefix(used, 'er', 8);
     const ra = fresh(used, 'ra'), rb = fresh(used, 'rb');
     // A section that needs no knots aligned keeps its id; one that does gets a new one: try each pairing.
     let last: unknown;
