@@ -4,8 +4,10 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const [output, input] = process.argv.slice(2);
+const [output, input, mode] = process.argv.slice(2);
 assert.ok(input && output && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
+assert.ok(mode === undefined || mode === '--finish');
+const finish = mode === '--finish';
 const sourceBytes = await readFile(input), source = JSON.parse(sourceBytes);
 const faces = ['n2.face#1', 'n2.face#2'], titles = ['Restore the left front corner', 'Restore the right front corner'];
 const revision = '53136f70095ade85';
@@ -20,8 +22,9 @@ const pins = [
 const f = await createFlow({
   name: 'neighboring-chamfer-proposals', envFrozen: 'CHAMFER_PROPOSALS_FROZEN', output,
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Approve one of two different pinned chamfer repairs and preserve the stale unapproved proposal and its bevel.',
-  limits: ['One 40 × 30 × 10 mm box, two neighboring 2 mm chamfers, two local MCP proposals on one source and one user approval.'],
+  qualification: finish ? 'Approve the remaining exact bevel from a fresh revision and preserve both separate decisions.'
+    : 'Approve one of two different pinned chamfer repairs and preserve the stale unapproved proposal and its bevel.',
+  limits: ['One 40 × 30 × 10 mm box and two neighboring 2 mm chamfers.', finish ? 'Two separate user approvals.' : 'One user approval.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep } from '@barocss/cad';
@@ -41,6 +44,74 @@ async function inspect(label, doc, volume) {
   near(result.mass.volume, volume);
   near((await f.bodies()).bodies[0].volume, volume);
   return result;
+}
+
+async function approveRemaining(saved, savedBytes, initial, first) {
+  f.phase = 'Make a new proposal for the exact right bevel on the reopened checkpoint';
+  const file = join(output, 'pending-current-right-chamfer.bcad');
+  await copyFile(saved.file, file);
+  const title = 'Restore the remaining right front corner';
+  const reviewed = await mcp(file, 'current-right', async call => {
+    const pin = await call('query', { action: 'render', highlight: [faces[1]] });
+    assert.notEqual(pin.revision, revision);
+    assert.ok(Object.values(pin.legend).includes(faces[1]));
+    assert.ok(!Object.values(pin.legend).includes(faces[0]));
+    const args = { action: 'command', command: 'delete-face', faces: [faces[1]], expectedRevision: pin.revision };
+    const proposal = await call('proposals', { action: 'propose', title, ops: [{ tool: 'features', args }] });
+    assert.deepEqual([proposal.proposal, proposal.applied, proposal.change.volume], ['P3', false, 20]);
+    const { proposals } = await call('proposals', { action: 'list', all: true });
+    assert.deepEqual(proposals.map(p => [p.id, p.status]), [['P1', 'accepted'], ['P2', 'open'], ['P3', 'open']]);
+    assert.deepEqual(proposals.slice(1).map(p => p.stale), [true, false]);
+    assert.equal((await call('query', { action: 'summary' })).facts.volume, 11980);
+    return pin.revision;
+  });
+  const pendingBytes = await readFile(file), pending = JSON.parse(pendingBytes);
+  assert.deepEqual(pending.nodes, initial.nodes);
+  assert.deepEqual(pending.proposals.slice(0, 2), initial.proposals);
+  await f.freshOpen(file, pending, 'current-right-proposal-opened');
+  await button('Chat').first().click();
+  await card('P3').getByText(title, { exact: false }).waitFor();
+  await card('P2').locator('.stale').waitFor();
+  assert.equal(await button('Accept', card('P2')).count(), 0);
+  await button('Preview', card('P3')).click();
+  await card('P3').getByLabel('Volume change').getByText('+20 mm³ (+0.17%)', { exact: true }).waitFor();
+  await f.same(pending);
+  await f.snapshot('current-right-reviewed');
+
+  f.phase = 'Approve the second exact repair in its separate history step';
+  await button('Accept', card('P3')).click();
+  await f.changed(pending);
+  const complete = await f.doc(), edit = complete.nodes.at(-1);
+  assert.deepEqual(complete.nodes.slice(0, -1), initial.nodes);
+  assert.deepEqual([edit.kind, edit.parent, edit.faces], ['delete-face', { node: initial.nodes.length - 1, side: 'solid' }, [faces[1]]]);
+  assert.equal(edit.sigs[faces[1]].k, 'plane');
+  assert.deepEqual(complete.history.filter(entry => entry.kind === 'accept').map(entry => [entry.proposal, entry.by.agent]),
+    [['P1', 'user'], ['P3', 'user']]);
+  assert.deepEqual(complete.proposals.slice(0, 2), pending.proposals.slice(0, 2));
+  const repaired = await inspect('both-sharp', complete, 12000);
+  assert.deepEqual(repaired.report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+  assert.deepEqual(repaired.brep.faces.map(item => [item.name, item.id]).sort(),
+    first.brep.faces.filter(item => item.name !== faces[1]).map(item => [item.name, item.id]).sort());
+  for (const name of source.nodes.at(-1).edges) assert.ok(repaired.brep.edges.some(edge => edge.name === name));
+  await f.snapshot('both-repairs-approved');
+
+  await f.undo(); await f.same(pending);
+  assert.deepEqual((await inspect('undo-second', pending, 11980)).brep, first.brep);
+  await f.redo(); await f.same(complete);
+  const accepted = await f.save('both-chamfer-repairs-approved'), bytes = await readFile(accepted.file);
+  await f.freshOpen(accepted.file, complete, 'two-approvals-fresh-open');
+  assert.deepEqual((await inspect('reopened-both-sharp', complete, 12000)).brep, repaired.brep);
+  await mcp(accepted.file, 'both-reopened', async call => {
+    const { proposals } = await call('proposals', { action: 'list', all: true });
+    assert.deepEqual(proposals.map(p => [p.id, p.status]), [['P1', 'accepted'], ['P2', 'open'], ['P3', 'accepted']]);
+    assert.equal(proposals[1].stale, true);
+    assert.equal((await call('query', { action: 'summary' })).facts.volume, 12000);
+    assert.deepEqual(await readFile(accepted.file), bytes);
+  });
+  assert.deepEqual(await readFile(saved.file), savedBytes);
+  assert.deepEqual(await readFile(file), pendingBytes);
+  f.report.observations.push({ label: 'second-approval', reviewed, previousVolume: first.mass.volume, finalVolume: repaired.mass.volume,
+    savedHash: sha256(bytes) });
 }
 
 await f.run(async () => {
@@ -128,6 +199,7 @@ await f.run(async () => {
     assert.match(refusal.error, /P2 is stale/);
     assert.deepEqual(await readFile(saved.file), savedBytes);
   });
+  if (finish) await approveRemaining(saved, savedBytes, accepted, result);
   assert.deepEqual(await readFile(file), pendingBytes);
   assert.deepEqual(await readFile(input), sourceBytes);
   f.report.observations.push({ revision, approved: 'P1', stale: 'P2', original: before.mass.volume, accepted: result.mass.volume,

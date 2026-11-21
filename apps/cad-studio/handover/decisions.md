@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1474: [Approve a fresh repair of the remaining chamfer](notes/second-current-chamfer-proposal-2026-11-21/README.md), #17. Verify both independent approvals, stale P2, exact second Undo and native reopening at 12000 mm³.
 - D1473: [Approve one of two chamfer repairs on a common source](notes/two-neighboring-chamfer-proposals-2026-11-21/README.md), #17. Verify both previews, only one approval, the held bevel and stale second proposal through Open.
 - D1472: [Review a fresh repair against the edited R3 source](notes/fresh-r3-cap-fillet-repair-proposal-2026-11-21/README.md), #17. Verify one user approval of P2, retained stale P1 and native Save and Open.
 - D1471: [Retire a failed proposal recheck notice with its source](notes/proposal-recheck-notice-ownership-2026-11-21/README.md), #17. Verify expiry on Undo, no reappearance on Redo and valid approval in actual Studio.
