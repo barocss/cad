@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1616: [Place an Ellipse centre at a calculated sketch point](notes/calculated-sketch-ellipse-centre-2026-11-22/README.md), #229. Verify the off-grid centre, ordinary semi-axis picks and native curve after Save and Open.
 - D1615: [Read the exact Direct Join angle through the local Agent](notes/agent-direct-join-inspection-2026-11-22/README.md), #322 and #29. The Agent and Studio agree at the native knot, and a Direct edit invalidates the read pin.
 - D1614: [Measure the tangent angle at a bounded exact Direct Join](notes/direct-join-tangent-angle-2026-11-22/README.md), #29. Studio verifies the independent angle after Open and keeps the adjacent radius inspections.
 - D1613: [Start Line at a calculated two-point snap](notes/calculated-sketch-line-start-2026-11-22/README.md), #229. Transfer the point once and verify the closed profile, exact extrusion and native Open.

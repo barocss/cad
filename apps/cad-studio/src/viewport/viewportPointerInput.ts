@@ -456,6 +456,12 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
       request();
       return true;
     }
+    if (tool === 'ellipse') {
+      if (ellipseDraft.current) return false;
+      ellipseDraft.current = ellipseClick(null, at).draft;
+      request();
+      return true;
+    }
     if (tool !== 'rectangle' && tool !== 'circle' && tool !== 'slot') return false;
     drafting.current = true;
     if (tool === 'circle') {
@@ -1164,6 +1170,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
       }
       if (sk.tool === 'ellipse') {
         // Centre, end of the first axis, then a point whose distance from that axis is the other semi-axis (the draft is cleared when the ellipse is made; a refusal is then shown in the panel and the sketch keeps its shape).
+        if (!ellipseDraft.current && startSketchPrimitiveAt(sk, c)) return;
         const r = ellipseClick(ellipseDraft.current, c); ellipseDraft.current = r.draft;
         if (r.def) { ellipseDraft.current = null; propsRef.current.onSketchShape(ellipseShape(r.def), true, 'ellipse-finish'); }
         request(); return;

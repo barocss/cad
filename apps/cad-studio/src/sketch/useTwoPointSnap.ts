@@ -43,7 +43,7 @@ export function useTwoPointSnap(doc: StudioDoc, sketch: SketchState | null, docN
   useEffect(() => {
     if (draft && !visible && current.current === draft) { current.current = null; setDraft(null); }
   }, [draft, visible]);
-  const points = useMemo(() => sketch && (sketch.tool === 'rectangle' || sketch.tool === 'slot' || sketch.tool === 'polygon'
+  const points = useMemo(() => sketch && (sketch.tool === 'rectangle' || sketch.tool === 'slot' || sketch.tool === 'polygon' || sketch.tool === 'ellipse'
       || (sketch.tool === 'circle' && !sketch.band))
     && !sketch.shape && !sketch.construct && !sketch.hideConstruction
     ? (sketch.done ?? []).flatMap(shape => shape.construction ? shapeSnaps(shape).filter(point => point.kind === 'end') : [])
