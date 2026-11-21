@@ -92,7 +92,7 @@ export interface RawNurbsSurface {
   readonly controlPoints: readonly (readonly (readonly [number, number, number])[])[];
   readonly weights: readonly (readonly number[])[];
 }
-/** Total thickness t along du × dv by default. Use exact-planar for a whole affine sheet. */
+/** Total thickness t along du × dv by default. Exact planar mode accepts a whole convex coplanar bilinear sheet with equal weights. */
 export interface ThickenOptions { t: Dim; side?: 'normal' | 'reverse' | 'both'; mode?: ThickenMode }
 /** `sew`: tolerance in mm; omitted or 0 uses the native automatic tolerance. */
 export interface SewOptions { tol?: number }
@@ -196,7 +196,7 @@ export function shellSpec(open: readonly string[], o: Resolved<ShellOptions>): F
   return { command: 'shell', faces: open, values: { t: positive('t', o.t) } };
 }
 
-/** Capture a whole-surface recipe. The exact mode requires affine support. */
+/** Capture a whole-surface recipe. Exact planar mode requires a convex coplanar bilinear support. */
 export function thickenSpec(surface: RawNurbsSurface, o: Resolved<ThickenOptions>): Extract<FeatureSpec, { readonly command: 'thicken' }> {
   const t = positive('t', o.t), { side, mode } = o;
   if (t > 10000) throw refuse('VALUE', 'thicken t must be at most 10000 mm');

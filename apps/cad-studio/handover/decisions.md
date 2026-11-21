@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1630: [Exact planar Thicken for convex quadrilateral sheets](notes/exact-planar-trapezoid-thicken-2026-11-22/README.md), #11. Verify exact corner admission, a tilted native trapezoid, warped refusal, retained affine identity and Studio edit and Open.
 - D1629: [Exact planar Thicken for an affine sheet](notes/exact-planar-thicken-2026-11-22/README.md), #11. Verify the six native faces, independent mass and thickness, preserved sampled names, and Studio edit and native Open.
 - D1628: [Propose Thicken from a visible Direct surface](notes/agent-direct-thicken-proposal-2026-11-22/README.md), #322 and #11. Verify an independently measured solid from a revision-pinned planar Ruled sheet through Studio approval and native Open.
 - D1627: [Review a pending Direct Ruled proposal as an image](notes/agent-direct-proposal-image-2026-11-22/README.md), #324 and #322. Verify the private candidate, stale refusal and byte-identical image after Studio approval and native Open.

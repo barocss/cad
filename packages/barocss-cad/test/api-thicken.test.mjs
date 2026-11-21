@@ -63,13 +63,47 @@ test('opt-in exact planar Thicken keeps six native faces on a tilted and skew af
   }
 });
 
-test('exact planar admission refuses a real non-affine coefficient and unequal weights', () => {
+test('exact planar admission refuses a one-ULP twist and unequal weights', () => {
   const small = plane();
   small.controlPoints[1][1][2] = 3 + Number.EPSILON * 2;
   refused(() => part().thicken(small, { t: 2, mode: 'exact-planar' }), 'CAPABILITY', 'evaluate');
   const rational = plane();
   rational.weights[1][1] = 2;
   refused(() => part().thicken(rational, { t: 2, mode: 'exact-planar' }), 'CAPABILITY', 'evaluate');
+});
+
+test('exact planar Thicken offsets a non-affine tilted trapezoid and preserves all six boundary names', () => {
+  const raw = { ...plane(), controlPoints: [[[10, -6, 3], [16, 24, 11]], [[34, -6, 35], [34, 24, 35]]], weights: [[2, 2], [2, 2]] };
+  const made = part().thicken(raw, { t: 4, side: 'both', mode: 'exact-planar' });
+  const { brep } = outputOf(evaluateCadPart(made.doc), 'thicken1');
+  assert.equal(checkBrep(brep, { strict: true }).valid, true);
+  assert.deepEqual([brep.bodies[0].kind, brep.vertices.length, brep.edges.length, brep.faces.length], ['solid', 8, 12, 6]);
+  assert.deepEqual(brep.faces.map(face => face.name).sort(), ['normal', 'reverse', 'u-max', 'u-min', 'v-max', 'v-min'].map(face => 'thicken1.' + face));
+  const normal = [-0.8, 0, 0.6];
+  for (const point of raw.controlPoints.flat()) for (const distance of [-2, 2]) {
+    const expected = point.map((value, axis) => value + normal[axis] * distance);
+    assert.ok(brep.vertices.some(vertex => vertex.point.every((value, axis) => Math.abs(value - expected[axis]) < 1e-10)));
+  }
+  const expected = (40 + 30) / 2 * 30 * 4;
+  assert.ok(Math.abs(made.mass({ density: 1 }).volume - expected) < 1e-8);
+
+  const asymmetric = plane();
+  asymmetric.controlPoints[1][1] = [40, 9, 3];
+  const mixed = part().thicken(asymmetric, { t: 2, mode: 'exact-planar' });
+  const { brep: mixedBrep } = outputOf(evaluateCadPart(mixed.doc), 'thicken1');
+  assert.equal(checkBrep(mixedBrep, { strict: true }).valid, true);
+  assert.equal(mixedBrep.faces.length, 6);
+  assert.ok(Math.abs(mixed.mass({ density: 1 }).volume - 2 * (40 * 15 + 30 * 30) / 2) < 1e-8);
+});
+
+test('exact planar Thicken refuses a twisted, collinear or folded trapezoid', () => {
+  // UV boundary order is (0,0), (1,0), (1,1), (0,1). The second control is collinear
+  // with the two adjacent corners. The last two give a concave and a crossed outline.
+  for (const corner of [[40, 24, 3 + Number.EPSILON * 2], [30, 9, 3], [20, 1.5, 3], [0, 24, 3]]) {
+    const raw = plane();
+    raw.controlPoints[1][1] = corner;
+    refused(() => part().thicken(raw, { t: 2, mode: 'exact-planar' }), 'CAPABILITY', 'evaluate');
+  }
 });
 
 test('public thicken: exact six-field plain dense snapshot refuses metadata, accessors, wrappers and malformed geometry', () => {

@@ -10,7 +10,7 @@ export const DIRECT_THICKEN_COMMAND = {
   label: 'Thicken',
   hint: 'Use features.command inside proposals.propose for Studio approval. The body copies the source at the reviewed revision.',
   selection: 'Use the ID of one visible whole Direct surface in values and pass direct_revision from query.summary as expectedRevision.',
-  values: { surface: 'Direct surface ID', t: 'positive thickness in mm', side: 'normal (default), reverse, or both', mode: 'sampled (default) or exact-planar for a whole affine sheet' },
+  values: { surface: 'Direct surface ID', t: 'positive thickness in mm', side: 'normal (default), reverse, or both', mode: 'sampled (default) or exact-planar for a whole convex coplanar bilinear sheet with equal weights' },
 };
 
 export const DIRECT_SNAPSHOT_APPROVAL = 'Direct surface snapshot';

@@ -5,14 +5,16 @@ import { createFlow } from './flow-helper.mjs';
 
 const legacy = { degreeU: 1, degreeV: 1, knotsU: [-2, -2, 6, 6], knotsV: [1, 1, 7, 7],
   controlPoints: [[[10, -6, 3], [10, 24, 3]], [[50, -6, 3], [50, 24, 3]]], weights: [[1, 1], [1, 1]] };
-const corners = [[-45, -6, 3], [-39, 24, 11], [-21, -6, 35], [-15, 24, 43]];
+const trapezoid = process.argv.includes('--trapezoid'), label = trapezoid ? 'Tilted trapezoid' : 'Tilted affine sheet';
+const corners = [[-45, -6, 3], [-39, 24, 11], [-21, -6, 35], trapezoid ? [-21, 24, 35] : [-15, 24, 43]];
+const makeSource = points => `@model sheet {version:0;length-unit:mm; @surface #tilted {type:nurbs;degree-u:1;degree-v:1;knots-u:[-2,-2,6,6];knots-v:[1,1,7,7];control-points:${JSON.stringify([points.slice(0, 2), points.slice(2)])};weights:[[2,2],[2,2]];}}`;
 const initial = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [{ id: 'n0', kind: 'thicken', name: 'Legacy sampled plate', surface: legacy, thickness: 2 }],
   outputs: { b0: { node: 0, side: 'solid' } }, nextId: 1,
   direct: {
-    sources: { tilted: `@model sheet {version:0;length-unit:mm; @surface #tilted {type:nurbs;degree-u:1;degree-v:1;knots-u:[-2,-2,6,6];knots-v:[1,1,7,7];control-points:${JSON.stringify([corners.slice(0, 2), corners.slice(2)])};weights:[[2,2],[2,2]];}}` },
-    objects: [{ id: 'tilted-1', name: 'Tilted affine sheet', source: 'tilted', geometry: 'tilted' }],
+    sources: { tilted: makeSource(corners) },
+    objects: [{ id: 'tilted-1', name: label, source: 'tilted', geometry: 'tilted' }],
   },
 };
 const pins = [
@@ -22,10 +24,11 @@ const pins = [
   'packages/barocss-cad/src/api/spec.ts',
 ];
 const f = await createFlow({
-  name: 'exact-planar-thicken', output: process.argv[2], envFrozen: 'D1629_SOURCE_FROZEN',
+  name: trapezoid ? 'exact-planar-thicken-trapezoid' : 'exact-planar-thicken',
+  output: process.argv[2], envFrozen: trapezoid ? 'D1630_SOURCE_FROZEN' : 'D1629_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Apply Exact planar Thicken to a tilted affine sheet, edit thickness and reopen with both feature and legacy face identity.',
-  limits: ['A degree-1 by degree-1 affine sheet with nonunit parameter spans and equal weights. Desktop WebGPU.'],
+  qualification: `Apply Exact planar Thicken to the ${label.toLowerCase()}, edit thickness and reopen with both feature and legacy face identity.`,
+  limits: ['A degree-1 by degree-1 planar sheet with nonunit parameter spans and equal weights. Desktop WebGPU.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkBrep, brepMassProperties } from '@barocss/cad';
@@ -51,7 +54,8 @@ async function check(label, doc, thickness, original) {
   assert.deepEqual([exact.key, exact.valid, exact.solid, exact.vertices.length, exact.edges], ['b1', true, 'solid', 8, 12]);
   assert.deepEqual(exact.faces.map(face => face.name).sort(), names);
   assert.ok(exact.faces.every(face => face.kind === 'surface' && face.u === 1 && face.v === 1));
-  assert.ok(Math.abs(exact.volume - 40 * 30 * thickness) < 1e-8, exact.volume);
+  const area = (40 + (trapezoid ? 30 : 40)) / 2 * 30;
+  assert.ok(Math.abs(exact.volume - area * thickness) < 1e-8, exact.volume);
   for (const corner of corners) for (const distance of [-thickness / 2, thickness / 2]) {
     const expected = corner.map((value, axis) => value + distance * normal[axis]);
     assert.ok(exact.vertices.some(vertex => vertex.every((value, i) => Math.abs(value - expected[i]) < 1e-10)), expected);
@@ -61,6 +65,16 @@ async function check(label, doc, thickness, original) {
   assert.equal(doc.nodes[1].mode, 'exact-planar');
   assert.deepEqual(doc.direct, initial.direct);
   return exact;
+}
+
+async function chooseExact() {
+  await f.page.locator('.ol.direct').filter({ hasText: label }).click();
+  await panel().getByLabel('Thickness', { exact: true }).fill('4');
+  await panel().getByLabel('Thicken side', { exact: true }).selectOption('both');
+  await button('Thicken into a body', panel()).click();
+  const geometry = hud().getByLabel('Geometry', { exact: true });
+  assert.equal(await geometry.inputValue(), 'sampled');
+  await geometry.selectOption('exact-planar');
 }
 
 await f.run(async () => {
@@ -75,6 +89,20 @@ await f.run(async () => {
     });
     return context;
   };
+  if (trapezoid) {
+    const twisted = { ...initial, direct: { ...initial.direct, sources: { tilted: makeSource([...corners.slice(0, 3), [-21, 24, 35.05]]) } } };
+    const twistedFile = join(f.output, 'twisted-sheet.bcad');
+    await writeFile(twistedFile, JSON.stringify(twisted));
+    await f.freshOpen(twistedFile, twisted, '00-twisted-input');
+    f.phase = 'Refuse warped support in Exact planar without changing the file';
+    await button('Top').click();
+    await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+    await chooseExact();
+    await hud().locator('.status').filter({ hasText: /refused/ }).waitFor();
+    assert.equal(await button('Apply', hud()).isDisabled(), true);
+    await f.same(twisted);
+    await f.snapshot('00-exact-planar-refusal');
+  }
   const file = join(f.output, 'affine-sheet.bcad');
   await writeFile(file, JSON.stringify(initial));
   await f.freshOpen(file, initial, '01-legacy-and-sheet');
@@ -84,15 +112,9 @@ await f.run(async () => {
   assert.ok(original.faces.every(face => /^n0\.facet\d+$/.test(face.name)));
 
   f.phase = 'Choose Exact planar and preview without committing';
-  await button('Iso').click();
+  await button(trapezoid ? 'Top' : 'Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await f.page.locator('.ol.direct').filter({ hasText: 'Tilted affine sheet' }).click();
-  await panel().getByLabel('Thickness', { exact: true }).fill('4');
-  await panel().getByLabel('Thicken side', { exact: true }).selectOption('both');
-  await button('Thicken into a body', panel()).click();
-  const geometry = hud().getByLabel('Geometry', { exact: true });
-  assert.equal(await geometry.inputValue(), 'sampled');
-  await geometry.selectOption('exact-planar');
+  await chooseExact();
   await hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor();
   await f.same(initial);
   await f.snapshot('02-exact-planar-preview');
@@ -114,7 +136,7 @@ await f.run(async () => {
   const saved = await f.save('exact-planar-thicken');
   await f.freshOpen(saved.file, edited, '05-fresh-open');
   assert.deepEqual(await check('reopened-native', await f.doc(), 6, original), second);
-  await button('Iso').click();
+  await button(trapezoid ? 'Top' : 'Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('06-reopened-exact-planar');
   f.report.observations.push({ thicknesses: [4, 6], volumes: [first.volume, second.volume],

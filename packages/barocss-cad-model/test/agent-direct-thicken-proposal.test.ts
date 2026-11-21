@@ -51,11 +51,14 @@ test('a reviewed Direct Thicken snapshots the visible whole source and always ne
   assert.equal(accepted.state.doc.direct, direct);
   assert.equal(accepted.state.doc.proposals?.[0].decided?.by, 'user');
 
-  const exact = await propose(state, { ...command, values: { ...command.values, mode: 'exact-planar' } });
+  const trapezoid = { ...state, doc: { ...state.doc, direct: directOps.editSurfacePole(direct, source.id, 1, 1, { xMM: 15 }) } };
+  const exact = await propose(trapezoid, { ...command, expectedRevision: directInspectionRevision(trapezoid.doc), values: { ...command.values, mode: 'exact-planar' } });
   assert.equal(exact.isError, false, exact.content);
   const exactPreview = await previewProposal(exact.state, proposal.id, evaluate);
   assert.ok('doc' in exactPreview);
   const exactNode = exactPreview.doc.nodes[0];
   assert.equal(exactNode.kind, 'thicken');
   assert.equal(exactNode.mode, 'exact-planar');
+  const exactVolume = exactPreview.bodies[0].volume;
+  assert.ok(exactVolume !== null && Math.abs(exactVolume - (20 + 15) / 2 * 10 * 2) < 1e-8);
 });
