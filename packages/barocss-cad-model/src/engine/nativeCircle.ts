@@ -1,4 +1,4 @@
-import { CadNumericPolicy, type Curve } from '@barocss/cad';
+import { CadNumericPolicy, curveDomain, evaluateCurve, faceGeometry, type BrepFace, type Curve } from '@barocss/cad';
 import { add, cross, dot, len, scale, sub, unit, type Vec3 } from './vec3';
 
 export interface NativeCircle {
@@ -47,4 +47,25 @@ export function nativeCircleOf(curve: Curve): NativeCircle | undefined {
     support ??= circle;
   }
   return support;
+}
+
+/** Frame of one rational arc on a planar cap and an outward coaxial cylinder. */
+export function nativeCircularFilletFrame(curve: Curve, circle: NativeCircle, cap: { o: Vec3; n: Vec3 }, wall: BrepFace):
+  { midpoint: Vec3; direction: Vec3 } | undefined {
+  if (curve.controlPoints.length !== 3) return;
+  const cylinder = faceGeometry(wall);
+  if (cylinder.kind !== 'cylinder' || cylinder.out !== 1) return;
+  const { a: axis, c: axisOrigin, r } = cylinder;
+  const tolerance = linear(circle.radius);
+  const radial = (point: Vec3) => {
+    const fromAxis = sub(point, axisOrigin);
+    return sub(fromAxis, scale(axis, dot(fromAxis, axis)));
+  };
+  if (len(cross(axis, circle.normal)) > 1e-9 || len(cross(axis, cap.n)) > 1e-9
+    || Math.abs(r - circle.radius) > tolerance || len(radial(circle.centre)) > tolerance
+    || Math.abs(dot(sub(circle.centre, cap.o), cap.n)) > tolerance) return;
+  const [start, end] = curveDomain(curve);
+  const midpoint = evaluateCurve(curve, start + (end - start) / 2);
+  const direction = unit(add(cap.n, unit(radial(midpoint))));
+  return { midpoint, direction };
 }

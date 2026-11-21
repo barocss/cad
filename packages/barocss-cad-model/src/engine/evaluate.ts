@@ -606,6 +606,7 @@ export function placeBody(b: BodyResult, m: readonly number[], t: readonly numbe
     delete placed.nativeLine;
     delete placed.nativeFinishLine;
     delete placed.nativeJoint;
+    delete placed.nativeFilletRim;
     return placed;
   });
   const mesh = { ...src, positions, normals, edgeLines, faces, edges, bounds: { min, max } };

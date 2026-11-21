@@ -216,7 +216,7 @@ const unit3 = (v: readonly number[]): [number, number, number] => { const l = Ma
  * It stops at the largest size the two faces allow: the round (or the cut) meets each face r / tan(φ/2)
  * (a chamfer: d) from the edge, φ the angle between the faces inside the body, and must stay on it.
  */
-function edgeHandle(ctx: Ctx, key: string, size: number, kind: 'fillet' | 'chamfer'): HandleSpec[] {
+function edgeHandle(ctx: Ctx, key: string, size: number, kind: 'fillet' | 'chamfer', useNativeRim = false): HandleSpec[] {
   const sel = edgesOfOneBody(ctx); if (!sel?.edges.length) return [];
   const mesh = sel.body.mesh, normals = (e: DisplayEdge) => e.faces.map(f => mesh.faces[f]?.normal).filter((x): x is [number, number, number] => !!x);
   // The largest size each edge takes: what its two faces leave either side of it (the smallest over the edges).
@@ -238,8 +238,11 @@ function edgeHandle(ctx: Ctx, key: string, size: number, kind: 'fillet' | 'chamf
     return kind === 'fillet' ? room * Math.tan(half) : room;
   };
   const e = sel.edges[0], n = normals(e); if (n.length !== 2) return [];
-  const max = Math.min(...sel.edges.map(limit)), out = unit3([n[0][0] + n[1][0], n[0][1] + n[1][1], n[0][2] + n[1][2]]);
-  const mid = [0, 1, 2].map(k => (e.a[k] + e.b[k]) / 2), at = [0, 1, 2].map(k => mid[k] + out[k] * Math.max(0, size)) as [number, number, number];
+  const max = Math.min(...sel.edges.map(limit));
+  const rim = useNativeRim && sel.edges.length === 1 && ctx.selection.edges.length === 1 && !ctx.selection.faces.length ? e.nativeFilletRim : undefined;
+  const out = rim?.direction ?? unit3([n[0][0] + n[1][0], n[0][1] + n[1][1], n[0][2] + n[1][2]]);
+  const mid = rim?.midpoint ?? [0, 1, 2].map(k => (e.a[k] + e.b[k]) / 2);
+  const at = [0, 1, 2].map(k => mid[k] + out[k] * Math.max(0, size)) as [number, number, number];
   return [{ key, at, dir: out, min: 0.1, step: 0.5, ...(max > 0.1 && Number.isFinite(max) ? { max: Math.floor(max / 0.5) * 0.5 } : {}) }];
 }
 
@@ -726,7 +729,8 @@ const allCommands: Command[] = [
     },
     defaults: () => ({ radius: 3, endRadius: 0, stationMode: 'ends', stationAt: 50, stationRadius: 3, station2At: 75, station2Radius: 3, shape: 'circular', rho: 0.5, tension: 0.5 }),
     steps: edgeSteps,
-    handles: (ctx, v) => edgeHandle(ctx, 'radius', Number(v.radius), 'fillet'),
+    handles: (ctx, v) => edgeHandle(ctx, 'radius', Number(v.radius), 'fillet',
+      Number(v.endRadius ?? 0) === 0 && (!v.stationMode || v.stationMode === 'ends') && (!v.shape || v.shape === 'circular')),
     build: (ctx, v) => {
       const { body, edges } = edgesOfOneBody(ctx)!, why = ellipseSideRefusal(ctx, edges); if (why) throw refusal('VALUE', why);
       const r = Number(v.radius), endRadius = Number(v.endRadius ?? 0), r1 = endRadius || 0, names = edges.flatMap(e => e.names);

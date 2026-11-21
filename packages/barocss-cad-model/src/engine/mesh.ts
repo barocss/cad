@@ -7,7 +7,7 @@ import { closestPointOnSurface, createCylindricalBoreCheck, faceGeometry, pointT
 export { sub, cross, dot, len, unit as norm } from './vec3';
 import { sub, cross, dot, len, unit as norm } from './vec3';
 import { nativeStraightEdgeMatches } from './nativeStraightEdge';
-import { nativeCircleOf, sameNativeCircle, type NativeCircle } from './nativeCircle';
+import { nativeCircleOf, nativeCircularFilletFrame, sameNativeCircle, type NativeCircle } from './nativeCircle';
 import { nativeCylinderAreaReader } from './nativeCylinderArea';
 import { insetOutlineProblem } from './insetOutline';
 
@@ -60,6 +60,8 @@ export interface DisplayEdge { index: number; faces: [number, number]; a: Vec3; 
   nativeFinishLine?: true;
   /** Circular support shared by every native curve in this display edge. */
   nativeCircle?: NativeCircle;
+  /** Radius handle frame for one original convex circular prism rim. */
+  nativeFilletRim?: { midpoint: Vec3; direction: Vec3 };
 }
 export interface DisplayMesh {
   /** World XYZ millimetres: native bodyMesh retains doubles; legacy display generators can retain floats. */
@@ -334,6 +336,7 @@ export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundar
       delete mate.nativeLine;
       delete mate.nativeFinishLine;
       delete mate.nativeJoint;
+      delete mate.nativeFilletRim;
       if (!nativeCircle || !mate.nativeCircle || !sameNativeCircle(mate.nativeCircle, nativeCircle)) delete mate.nativeCircle;
       mate.names.push(name);
       for (let k = 0; k + 1 < pts.length; k++) { pushSegment(lines, pts[k], pts[k + 1]); segmentEdge.push(mate.index, mate.index); }
@@ -344,6 +347,15 @@ export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundar
     const made: DisplayEdge = { index, faces: [fa, fb], a, b: z, straight, axis, names: [name], ...(nativeCircle ? { nativeCircle } : {}) };
     if (brep.source.family !== 'mesh' && fs.every(face => faceById.get(face)?.surface.kind === 'surface')) {
       made.nativeJoint = { edgeId: source.id, faces: [fs[0], fs[1]] };
+    }
+    if (nativePrism && nativeCircle && made.nativeJoint && fs.every(id => groups.get(find(id))?.length === 1)) {
+      const capIndex = b.faces[fa].exact?.kind === 'plane' ? 0 : 1;
+      const cap = b.faces[made.faces[capIndex]].exact;
+      const wallIndex = 1 - capIndex;
+      if (cap?.kind === 'plane' && b.faces[made.faces[wallIndex]].exact?.kind === 'cylinder') {
+        const frame = nativeCircularFilletFrame(source.curve, nativeCircle, cap, faceById.get(fs[wallIndex])!);
+        if (frame) made.nativeFilletRim = frame;
+      }
     }
     if (meshPoints && straight && source.vertices[0] !== source.vertices[1]) {
       const p = meshPoints.get(source.vertices[0]), q = meshPoints.get(source.vertices[1]);
