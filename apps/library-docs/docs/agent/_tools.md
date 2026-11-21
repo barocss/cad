@@ -35,7 +35,7 @@ Reads the part without changing it.
 | Action | Handler | Arguments and notes |
 |---|---|---|
 | `query.summary` | `get_part_summary` | body?, page? — features, parameters, bodies, faces and edges by name |
-| `query.inspect` | `inspect` | faces?, edges? — detail, neighbours, the feature that made them |
+| `query.inspect` | `inspect` | faces?, edges?, curve? — native detail |
 | `query.measure` | `measure` | a, b? — a face or edge, or the distance and angle between two |
 | `query.mass` | `mass_properties` | bodies? |
 | `query.interference` | `interference` | bodies? — overlap and clearance |

@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { commandById } from '../src/app/commands';
+import { brepMassProperties, checkBrep } from '@barocss/cad';
+import { commandById, type Ctx } from '../src/app/commands';
 import { dispatchTool } from '../src/chat/tools';
 import { emptyDoc, isDeleteFaceFilletSource, rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
 import { readStudioDoc } from '../src/engine/migrate';
+import { captureSignatures, toSig } from '../src/engine/references';
+import { signaturesOf } from '../src/engine/rematch';
 import { revisionOf } from '../src/util/revision';
 
 function plate(depth?: number) {
@@ -17,6 +20,131 @@ function plate(depth?: number) {
 const evaluate = async (doc: StudioDoc) => evaluatePart(doc, 0);
 const command = commandById('delete-face')!;
 const emptySel = { edges: [], bodies: [] };
+const twoBorePlate = () => withNode(plate(), { kind: 'hole', parent: { node: 2, side: 'solid' }, center: [27, 20], radius: 2, face: 'n1.top' });
+
+for (const order of [['n2.side0', 'n3.side0'], ['n3.side0', 'n2.side0']]) {
+  test(`Delete face atomically heals both original bores in ${order.join(', ')} order`, async () => {
+    const doc = twoBorePlate(), pristine = structuredClone(doc), before = await evaluate(doc);
+    assert.ok(before.ok);
+    const [body] = before.bodies;
+    const picks = order.map(name => {
+      const index = body.mesh.faces.findIndex(face => face.name === name);
+      assert.ok(index >= 0);
+      const member = body.mesh.faces[index].nativeFaces?.find(face => face.name === name + '#1');
+      assert.ok(member);
+      return { index, name: member.name, signature: toSig({ kind: 'curved', at: member.centroid, dir: null, size: member.area, radius: member.radius! }) };
+    });
+    const ctx = { doc, bodies: before.bodies, selection: { ...emptySel, faces: picks.map(pick => ({ body: 0, face: pick.index })) } };
+    assert.equal(command.available(ctx).ok, true);
+    const next = command.build!(ctx, {});
+    const expected: StudioDoc = { ...doc, nextId: 6, outputs: { b5: { node: 5, side: 'solid' } }, nodes: [
+      ...doc.nodes,
+      { id: 'n4', kind: 'delete-face', parent: { node: 3, side: 'solid' }, faces: [picks[0].name], sigs: { [picks[0].name]: picks[0].signature } },
+      { id: 'n5', kind: 'delete-face', parent: { node: 4, side: 'solid' }, faces: [picks[1].name], sigs: { [picks[1].name]: picks[1].signature } },
+    ] };
+    assert.deepEqual(next, expected);
+    assert.deepEqual(captureSignatures(next, before.bodies), expected);
+    // The second stored native signature remains valid on the first heal's result.
+    const first = await evaluate(withNode(doc, expected.nodes[4]));
+    assert.ok(first.ok);
+    assert.deepEqual(signaturesOf(first.bodies[0], 'individual').faces.get(picks[1].name),
+      signaturesOf(body, 'individual').faces.get(picks[1].name));
+    const reply = await dispatchTool({ doc, bodies: before.bodies }, 'features', {
+      action: 'command', command: 'delete-face', faces: order, expectedRevision: revisionOf(doc),
+    }, evaluate);
+    assert.ok(reply.changed && !reply.isError, reply.content);
+    assert.deepEqual(reply.state.doc, expected);
+    const reopened = readStudioDoc(JSON.stringify(reply.state.doc));
+    assert.ok('doc' in reopened);
+    assert.deepEqual(reopened.doc, expected);
+    const after = await evaluate(reopened.doc);
+    assert.ok(after.ok);
+    assert.equal(after.bodies.length, 1);
+    assert.deepEqual(after.bodies[0].ref, { node: 5, side: 'solid' });
+    assert.equal(after.bodies[0].volume, 12000);
+    const original = partBreps(doc)[0].brep, healed = partBreps(reopened.doc)[0].brep;
+    const report = checkBrep(healed, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+    assert.equal(report.topology[0].genus, 0);
+    const mass = brepMassProperties(healed, 1);
+    assert.ok(Math.abs(mass.volume - 40 * 30 * 10) < 1e-7);
+    mass.centroid.forEach((coordinate, axis) => assert.ok(Math.abs(coordinate - [20, 15, 5][axis]) < 1e-7));
+    assert.deepEqual(healed.faces.map(face => [face.id, face.name, face.surface.id]),
+      original.faces.filter(face => face.name?.startsWith('n1.')).map(face => [face.id, face.name, face.surface.id]));
+    for (const kind of ['loops', 'coedges', 'edges', 'vertices'] as const)
+      for (const item of healed[kind]) assert.deepEqual(item, original[kind].find(candidate => candidate.id === item.id));
+    assert.deepEqual(doc, pristine);
+  });
+}
+
+test('Delete face refuses duplicate and mixed batch picks without a single-face fallback', async () => {
+  let doc = twoBorePlate();
+  doc = withNode(doc, { kind: 'sketch', profile: 'rectangle', min: [60, 0], max: [100, 30] });
+  doc = withNode(doc, { kind: 'extrude', sketch: 4, height: 10 });
+  doc = withNode(doc, { kind: 'hole', parent: { node: 5, side: 'solid' }, center: [71, 9], radius: 3, face: 'n5.top' });
+  doc = withNode(doc, { kind: 'hole', parent: { node: 6, side: 'solid' }, center: [87, 20], radius: 2, face: 'n5.top' });
+  const pristine = structuredClone(doc), before = await evaluate(doc);
+  assert.ok(before.ok);
+  assert.equal(before.bodies.length, 2);
+  const firstBody = before.bodies.findIndex(body => body.ref?.node === 3), otherBody = before.bodies.findIndex(body => body.ref?.node === 7);
+  const body = before.bodies[firstBody], first = body.mesh.faces.find(face => face.name === 'n2.side0')!;
+  const second = body.mesh.faces.find(face => face.name === 'n3.side0')!, cap = body.mesh.faces.find(face => face.name === 'n1.top')!;
+  const other = before.bodies[otherBody].mesh.faces.find(face => face.name === 'n6.side0')!;
+  assert.ok(first && second && cap && other);
+  const pick = { body: firstBody, face: first.index };
+  for (const faces of [
+    [pick, pick], [pick, { body: firstBody, face: cap.index }], [pick, { body: otherBody, face: other.index }],
+    [pick, { body: firstBody, face: second.index }, pick],
+  ]) {
+    const ctx: Ctx = { doc, bodies: before.bodies, selection: { ...emptySel, faces } };
+    assert.equal(command.available(ctx).ok, false);
+    assert.throws(() => command.build!(ctx, {}), /Select the cylindrical wall/);
+  }
+  for (const faces of [
+    [first.name, first.name], [first.name, first.id], [first.name, cap.name], [first.name, other.name],
+    [first.name, second.name, first.name],
+  ]) {
+    const reply = await dispatchTool({ doc, bodies: before.bodies }, 'features', {
+      action: 'command', command: 'delete-face', faces, expectedRevision: revisionOf(doc),
+    }, evaluate);
+    assert.ok(reply.isError && !reply.changed, reply.content);
+    assert.equal(reply.state.doc, doc);
+    assert.equal(reply.state.bodies, before.bodies);
+  }
+  const mixed = await dispatchTool({ doc, bodies: before.bodies }, 'features', {
+    action: 'command', command: 'delete-face', faces: [first.name, second.name], bodies: [body.key], expectedRevision: revisionOf(doc),
+  }, evaluate);
+  assert.ok(mixed.isError && !mixed.changed, mixed.content);
+  assert.equal(mixed.state.doc, doc);
+  assert.deepEqual(doc, pristine);
+});
+
+test('a changed second bore signature refuses the whole candidate and keeps the original two bores', async () => {
+  const doc = twoBorePlate(), pristine = structuredClone(doc), before = await evaluate(doc);
+  assert.ok(before.ok);
+  const faces = before.bodies[0].mesh.faces.flatMap(face => face.nativeFaces?.length === 2 ? [{ body: 0, face: face.index }] : []);
+  assert.equal(faces.length, 2);
+  const next = command.build!({ doc, bodies: before.bodies, selection: { ...emptySel, faces } }, {});
+  const second = next.nodes[5];
+  assert.ok(second.kind === 'delete-face' && second.sigs);
+  second.sigs[second.faces[0]].r = 30;
+  const result = await evaluate(next);
+  assert.ok(!result.ok);
+  assert.equal(result.error.code, 'REFERENCE_MOVED');
+  const reply = await dispatchTool({ doc, bodies: before.bodies }, 'features', {
+    action: 'add', features: next.nodes.slice(4), expectedRevision: revisionOf(doc),
+  }, evaluate);
+  assert.ok(reply.isError && !reply.changed, reply.content);
+  assert.equal(reply.state.doc, doc);
+  assert.equal(reply.state.bodies, before.bodies);
+  assert.deepEqual(reply.state.doc.nodes, pristine.nodes);
+  assert.equal(reply.state.doc.nodes.length, 4);
+  const retained = partBreps(reply.state.doc)[0].brep;
+  assert.equal(retained.faces.length, 10);
+  assert.ok(Math.abs(brepMassProperties(retained, 1).volume - (12000 - 130 * Math.PI)) < 1e-7);
+  assert.deepEqual(doc, pristine);
+});
 
 test('Delete face consumes the current bore solid, preserving the Hole recipe and surviving native names', async () => {
   const doc = plate(), pristine = structuredClone(doc);

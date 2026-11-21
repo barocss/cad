@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1619: [Heal two through bores in one Delete face action](notes/atomic-two-bore-delete-face-2026-11-22/README.md), #17. Studio and local MCP agree on both exact heals, one Undo and native Open.
 - D1618: [Cut a measured gap in one of several construction arcs](notes/construction-polyline-multiple-arc-gap-2026-11-22/README.md), #226. Verify the unchanged other arcs and source IDs through native Studio Save and Open.
 - D1617: [Join a straight span to a cubic Bézier](notes/join-straight-cubic-native-2026-11-22/README.md), #29. Verify native domain mapping, both original spans and source retention after desktop Save and Open.
 - D1616: [Place an Ellipse centre at a calculated sketch point](notes/calculated-sketch-ellipse-centre-2026-11-22/README.md), #229. Verify the off-grid centre, ordinary semi-axis picks and native curve after Save and Open.

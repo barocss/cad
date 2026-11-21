@@ -8,11 +8,13 @@ const [output, variant = 'single', mode] = process.argv.slice(2);
 assert.ok(output && isAbsolute(output) && relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
 assert.ok(['single', 'first', 'second'].includes(variant));
 const twoBores = variant !== 'single';
-assert.ok(mode === undefined || (mode === 'successive' && twoBores));
+const atomic = mode === 'atomic';
+assert.ok(mode === undefined || (['successive', 'atomic'].includes(mode) && twoBores));
 const firstBore = { name: 'n2.side0', x: 11, y: 9, radius: 3 };
 const secondBore = { name: 'n3.side0', x: 27, y: 20, radius: 2 };
 const [removed, survivor] = variant === 'second' ? [secondBore, firstBore] : [firstBore, secondBore];
-const sequence = mode === 'successive' ? [removed, survivor] : [removed];
+const sequence = mode === undefined ? [removed] : [removed, survivor];
+const batches = atomic ? [sequence] : sequence.map(target => [target]);
 const source = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
@@ -34,12 +36,14 @@ const volumeAfter = step => step === 0 ? initialVolume : 12000 - 10 * Math.PI * 
 const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/files/documentFile.ts', 'apps/cad-studio/src/state/commandApply.ts',
   'packages/barocss-cad-model/src/app/deleteFaceCommand.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
+  'packages/barocss-cad-model/src/chat/part/features.ts',
   'packages/barocss-cad/src/features/bored-cap-offset.ts',
   'packages/barocss-cad/src/part/part-model.ts', 'packages/barocss-cad/src/part/part-delete-face.ts',
 ];
 const f = await createFlow({
   name: 'delete-bore-face', envFrozen: 'DELETE_BORE_FACE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Heal a rectangular plate from its selected bore wall, preserving authored history and the surviving native face IDs.',
+  qualification: atomic ? 'Heal both selected bore walls in one action and preserve the original authored history.'
+    : 'Heal a rectangular plate from its selected bore wall, preserving authored history and the surviving native face IDs.',
   limits: [`One 40 × 30 × 10 mm rectangular solid with ${twoBores ? 'two Ø6 and Ø4' : 'one Ø6'} straight through bore(s).`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -76,8 +80,10 @@ async function measure(label, doc, before, step = 0) {
   if (before) {
     assert.deepEqual(result.report.counts, retainedRadius(step) ? { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 } :
       { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
-    const removedWalls = before.faces.filter(face => face.name.startsWith(sequence[step - 1].name + '#'));
-    assert.equal(removedWalls.length, 2);
+    const previousStep = boreCount - before.report.topology[0].genus;
+    const removedTargets = sequence.slice(previousStep, step);
+    const removedWalls = before.faces.filter(face => removedTargets.some(target => face.name.startsWith(target.name + '#')));
+    assert.equal(removedWalls.length, 2 * removedTargets.length);
     assert.deepEqual(result.faces.map(face => face.id),
       before.faces.filter(face => !removedWalls.includes(face)).map(face => face.id));
     const retainedLoops = new Set(result.loops.map(loop => loop.id));
@@ -102,39 +108,65 @@ async function healWithMcp() {
   return withMcpSession({ app: resolve(import.meta.dirname, '..'), output, clientName: 'cad-two-bore-heal', autonomy: 3 },
     file, 'delete-two-bore-face', async call => {
       const documents = [source];
-      for (const [index, target] of sequence.entries()) {
-        const faces = [target.name], pin = await call('query', { action: 'render', highlight: faces });
+      let completed = 0;
+      for (const targets of batches) {
+        const faces = targets.map(target => target.name);
+        const pin = await call('query', { action: 'render', highlight: faces });
         const edit = { action: 'command', command: 'delete-face', faces, expectedRevision: pin.revision };
+        if (atomic) {
+          await call('features', { ...edit, faces: [faces[0], faces[0]] }, true);
+          assert.deepEqual(await readFile(file), bytes);
+        }
         await call('features', edit);
         const accepted = await readFile(file), doc = JSON.parse(accepted);
-        assert.deepEqual(doc.nodes.slice(0, initialCount + index), documents[index].nodes);
-        const summary = await call('query', { action: 'summary' }), body = 'b' + (initialCount + index);
-        assert.ok(Math.abs(summary.bodies.find(candidate => candidate.key === body).volume - volumeAfter(index + 1)) < 5e-4);
+        assert.deepEqual(doc.nodes.slice(0, initialCount + completed), documents.at(-1).nodes);
+        completed += targets.length;
+        const summary = await call('query', { action: 'summary' }), body = 'b' + (initialCount + completed - 1);
+        assert.ok(Math.abs(summary.bodies.find(candidate => candidate.key === body).volume - volumeAfter(completed)) < 5e-4);
         const refused = await call('features', edit, true);
         assert.equal(refused.code, 'COMMAND_STALE');
         assert.deepEqual(await readFile(file), accepted);
-        f.report.observations.push({ mcpRevision: pin.revision, removedFace: target.name, stale: refused.code });
+        f.report.observations.push({ mcpRevision: pin.revision, removedFaces: faces, stale: refused.code });
         documents.push(doc);
       }
       return { documents, file };
     });
 }
 
-async function healInStudio(target, previous) {
-  f.phase = 'Pick ' + target.name + ' and preview Delete face';
+async function pickBore(target) {
+  f.phase = 'Pick ' + target.name;
   const pickFilter = button('Selection filter');
   if (!(await pickFilter.innerText()).includes('Faces')) await pickFilter.click();
   assert.match(await pickFilter.innerText(), /Faces/);
   const label = f.page.getByLabel('Face property and colour target');
+  let pixel;
   for (const z of [8, 9.25, 8.5, 9.6, 9.9]) {
     const bore = await f.page.evaluate(point => window.__studioScreenOf(point), [target.x, target.y, z]);
     assert.ok(bore?.length === 2);
     await f.page.mouse.click(...bore);
     await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
-    if (await label.count() && (await label.innerText()).includes(target.name)) break;
+    if (await label.count() && (await label.innerText()).includes(target.name)) {
+      pixel = bore;
+      break;
+    }
   }
-  assert.ok((await label.innerText()).includes(target.name));
+  assert.ok(pixel, 'Pick the expected native wall');
   await f.page.waitForFunction(() => window.__studioSelection.selection.faces.length === 1);
+  const pick = await f.page.evaluate(() => window.__studioSelection.selection.faces[0]);
+  return { pixel, pick };
+}
+
+async function healInStudio(targets, previous) {
+  const picks = [];
+  for (const target of targets) picks.push(await pickBore(target));
+  if (targets.length === 2) {
+    await f.page.mouse.click(...picks[0].pixel);
+    await f.page.keyboard.down('Shift');
+    try { await f.page.mouse.click(...picks[1].pixel); } finally { await f.page.keyboard.up('Shift'); }
+    await f.page.waitForFunction(() => window.__studioSelection.selection.faces.length === 2);
+    assert.deepEqual(await f.page.evaluate(() => window.__studioSelection.selection.faces), picks.map(result => result.pick));
+    await f.snapshot('selected-two-bore-walls');
+  }
   await f.command('Delete face');
   const dialog = f.page.getByRole('dialog', { name: 'Delete face', exact: true });
   const apply = button('Apply', dialog);
@@ -164,23 +196,30 @@ await f.run(async () => {
   let native = await measure('before-heal', source), priorNative = native;
   await f.snapshot('original-bore');
   const documents = [source];
-  for (const [index, target] of sequence.entries()) {
-    const previous = documents[index], healed = await healInStudio(target, previous), node = healed.nodes[initialCount + index];
+  let completed = 0;
+  for (const [index, targets] of batches.entries()) {
+    const previous = documents[index], healed = await healInStudio(targets, previous);
     if (agent) assert.deepEqual(healed, agent.documents[index + 1]);
-    assert.equal(node.kind, 'delete-face');
-    assert.deepEqual(node.parent, { node: initialCount + index - 1, side: 'solid' });
-    assert.ok(node.faces[0].startsWith(target.name + '#'));
-    assert.equal(node.sigs[node.faces[0]].k, 'curved');
-    assert.deepEqual(healed.nodes.slice(0, initialCount + index), previous.nodes);
+    for (const [offset, target] of targets.entries()) {
+      const at = initialCount + completed + offset, node = healed.nodes[at];
+      assert.equal(node.kind, 'delete-face');
+      assert.deepEqual(node.parent, { node: at - 1, side: 'solid' });
+      assert.ok(node.faces[0].startsWith(target.name + '#'));
+      assert.equal(node.sigs[node.faces[0]].k, 'curved');
+    }
+    assert.deepEqual(healed.nodes.slice(0, initialCount + completed), previous.nodes);
+    completed += targets.length;
+    assert.equal(healed.nodes.length, initialCount + completed);
     priorNative = native;
-    native = await measure(index === 0 ? 'after-heal' : 'after-second-heal', healed, priorNative, index + 1);
+    native = await measure(targets.length === 2 ? 'after-atomic-heal' : index === 0 ? 'after-heal' : 'after-second-heal', healed, priorNative, completed);
     documents.push(healed);
-    await f.snapshot(index === 0 ? 'healed' : 'healed-both');
+    await f.snapshot(completed === 2 ? 'healed-both' : 'healed');
   }
   for (let i = documents.length - 2; i >= 0; i--) {
     await f.undo();
     await f.same(documents[i]);
-    if (i === 1) await f.snapshot('undo-second-heal');
+    if (atomic) await f.snapshot('single-undo-restores-both-bores');
+    else if (i === 1) await f.snapshot('undo-second-heal');
   }
   for (const document of documents.slice(1)) {
     await f.redo();
