@@ -7,6 +7,7 @@ import type { SketchPlane } from '../sketch/plane';
 import { resolveSketchDims } from '../sketch/reopen';
 import type { Command, Ctx } from './commands';
 import { planeOf } from './profiles';
+import { rotateTurnCorners } from './smoothLoftTurn';
 
 const maximumAngle = 450;
 const selectRectangle = 'Select one standalone rectangular sketch without holes or separate regions.';
@@ -55,7 +56,6 @@ function turnCommand(smooth: boolean): Command {
       const max: Point = [Number(rectangle.max[0]), Number(rectangle.max[1])];
       if (![...min, ...max].every(Number.isFinite) || max[0] <= min[0] || max[1] <= min[1])
         throw refusal('VALUE', 'Use a rectangle with positive width and depth.');
-      const centre: Point = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2];
       const corners: Point[] = [min, [max[0], min[1]], max, [min[0], max[1]]];
       const { plane } = source, yAxis = cross(plane.normal, plane.xAxis);
       const spans = Math.max(smooth ? 6 : 1, Math.ceil(Math.abs(angle) / (smooth ? 30 : 90)));
@@ -63,11 +63,8 @@ function turnCommand(smooth: boolean): Command {
       let doc = ctx.doc;
       for (let station = 0; station <= spans; station++) {
         const fraction = station / spans, z = height * fraction;
-        const radians = angle * fraction * (Math.PI / 180), c = Math.cos(radians), s = Math.sin(radians);
-        const points = station === 0 ? corners : corners.map(([x, y]): Point => {
-          const u = x - centre[0], v = y - centre[1];
-          return [centre[0] + c * u - s * v, centre[1] + s * u + c * v];
-        });
+        const radians = angle * fraction * (Math.PI / 180);
+        const points = station === 0 ? corners : rotateTurnCorners(corners, radians);
         if (!smooth) {
           const [u, v] = points[0];
           const point = add(plane.origin, add(scale(plane.xAxis, u), scale(yAxis, v)));

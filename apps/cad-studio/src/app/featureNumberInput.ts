@@ -4,8 +4,10 @@ import type { ModelNode } from '@barocss/cad-model/engine/doc';
 import { CadPartLimits } from '@barocss/cad';
 import { isSketchAnchoredCut } from '@barocss/cad-model/app/editFields';
 import { smoothLoftHeightKey } from '@barocss/cad-model/app/smoothLoftHeight';
+import { smoothTurnAngleKey, smoothTurnAngleLimit } from '@barocss/cad-model/app/smoothLoftTurn';
 
-export type FeatureNumberRule = 'pipe-angle' | 'nonzero' | 'thread-length' | 'nonnegative-mm' | 'nonnegative' | 'positive' | 'align-gap' | 'open-unit' | 'draft-angle' | 'scale-factor';
+export type FeatureNumberRule = 'pipe-angle' | 'nonzero' | 'thread-length' | 'nonnegative-mm' | 'nonnegative' | 'positive'
+  | 'align-gap' | 'open-unit' | 'draft-angle' | 'scale-factor' | { signedAngleLimit: number };
 
 export function commandNumberRule(command: string, key: string, operation?: unknown): FeatureNumberRule | undefined {
   if (command === 'face-thread') {
@@ -30,6 +32,7 @@ export function commandNumberRule(command: string, key: string, operation?: unkn
 export function historyNumberRule(nodes: readonly ModelNode[], index: number, key: string): FeatureNumberRule | undefined {
   const node = nodes[index];
   if (node?.kind === 'loft' && key === smoothLoftHeightKey) return 'positive';
+  if (node?.kind === 'loft' && key === smoothTurnAngleKey) return { signedAngleLimit: smoothTurnAngleLimit(node.sections.length) };
   if (node?.kind === 'sheet-flange' && key === 'ownBendRadius') return 'positive';
   if (node?.kind === 'keyway') return commandNumberRule('keyway', key);
   if (node?.kind === 'face-thread') return commandNumberRule('face-thread', key);
@@ -47,6 +50,7 @@ export function historyNumberRule(nodes: readonly ModelNode[], index: number, ke
 export function featureNumberInvalid(value: string | number, rule: FeatureNumberRule): boolean {
   const number = Number(value);
   if (!Number.isFinite(number)) return true;
+  if (typeof rule === 'object') return Math.abs(number) > rule.signedAngleLimit;
   if (rule === 'pipe-angle') return number <= 0 || number > 180;
   if (rule === 'scale-factor') return number <= 0 || number > 1000;
   if (rule === 'draft-angle') return number === 0 || Math.abs(number) >= 45;
@@ -57,6 +61,7 @@ export function featureNumberInvalid(value: string | number, rule: FeatureNumber
 }
 
 export function featureNumberRange(rule: FeatureNumberRule): string {
+  if (typeof rule === 'object') return `From −${rule.signedAngleLimit}° to +${rule.signedAngleLimit}°`;
   if (rule === 'pipe-angle') return 'Greater than 0° and at most 180°';
   if (rule === 'scale-factor') return 'Unitless factor · greater than 0 and at most 1000';
   if (rule === 'draft-angle') return 'Greater than −45° and less than 45°, excluding 0°';
@@ -69,6 +74,7 @@ export function featureNumberRange(rule: FeatureNumberRule): string {
 }
 
 export function featureNumberBounds(rule: FeatureNumberRule | undefined): { min?: number; max?: number } {
+  if (typeof rule === 'object') return { min: -rule.signedAngleLimit, max: rule.signedAngleLimit };
   if (rule === 'pipe-angle') return { min: 0, max: 180 };
   if (rule === 'scale-factor') return { min: 0, max: 1000 };
   if (rule === 'draft-angle') return { min: -45, max: 45 };
