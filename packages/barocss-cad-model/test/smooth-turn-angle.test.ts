@@ -76,15 +76,29 @@ test('Smooth Turn creates and edits one circular segment about its offset area c
   assert.deepEqual(partBreps(reopened.doc), partBreps(longer));
 });
 
-test('circular-segment Smooth Turn creation and angle edits stay scoped to Studio', async () => {
+test('Agent creates a circular-segment Smooth Turn from an explicit current sketch', async () => {
+  const state = { doc: arcSource, bodies: [] };
   const unevaluated = () => assert.fail('Out-of-scope Agent requests must not evaluate.');
-  const sourceState = { doc: arcSource, bodies: [] };
-  const create = await dispatchTool(sourceState, 'features', {
-    action: 'command', command: 'smooth-turn', values: { sketch: 'n0', height: 40, angle: -360 },
-    expectedRevision: revisionOf(arcSource),
-  }, unevaluated);
-  assert.ok(create.isError && !create.changed, create.content);
-  assert.equal(create.state, sourceState);
+  const values = { sketch: 'n0', height: 50, angle: -450 };
+  const request = { action: 'command', command: 'smooth-turn', values };
+  const revision = revisionOf(arcSource);
+  for (const args of [request,
+    { ...request, expectedRevision: '0'.repeat(16) },
+    { ...request, expectedRevision: revision, values: { ...values, sketch: 'n9' } },
+    { ...request, expectedRevision: revision, values: { ...values, angle: 0 } },
+  ]) {
+    const rejected = await dispatchTool(state, 'features', args, unevaluated);
+    assert.ok(rejected.isError && !rejected.changed, rejected.content);
+    assert.equal(rejected.state, state);
+  }
+  const accepted = await dispatchTool(state, 'features', { ...request, expectedRevision: revision },
+    async doc => evaluateDoc(doc, 1));
+  assert.ok(accepted.changed && !accepted.isError, accepted.content);
+  assert.deepEqual(accepted.state.doc, arcCommand.build!(arcContext, { angle: -450, height: 50 }));
+});
+
+test('circular-segment Smooth Turn angle edits stay scoped to Studio', async () => {
+  const unevaluated = () => assert.fail('Out-of-scope Agent requests must not evaluate.');
   const doc = arcCommand.build!(arcContext, { angle: -360, height: 40 }), index = doc.nodes.length - 1;
   const state = { doc, bodies: [] };
   const discovered = await dispatchTool(state, 'features', { action: 'edit', index }, unevaluated);

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1589: [Review a centred circular-segment Twist through the local Agent](notes/centred-circular-twist-agent-2026-11-22/README.md), #630 and #322. Verify revision-pinned creation, stale refusal, explicit Studio approval and exact native reopening.
 - D1588: [Author centred circular-segment Twist from one sketch](notes/centred-circular-segment-smooth-turn-command-2026-11-22/README.md), #630. Verify nonzero signed creation, angle and height edits, and exact native geometry and History values after Open.
 - D1587: [Build a centred circular-segment Twist through Smooth Loft](notes/centred-circular-segment-twist-2026-11-22/README.md), #630. Preserve a fixed centroid path, compact circular supports and both signed windings through desktop Save and Open.
 - D1586: [Refine viewport display for circular-segment Screw STEP imports](notes/line-arc-screw-step-display-2026-11-22/README.md), #630. Certify the rational family and verify lower rail error and the same native pick in both desktop renderers.

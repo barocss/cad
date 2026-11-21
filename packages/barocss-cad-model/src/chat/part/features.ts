@@ -5,7 +5,7 @@ import { updateBoxFootprint } from '../../app/editCommand';
 import { editFields } from '../../app/editFields';
 import { editSavedOffsetFaceCommand } from '../../app/offsetFaceEdit';
 import { smoothScrewAngleField, smoothScrewAngleKey, smoothScrewWindingRule, smoothScrewPitchAdvance, smoothScrewPitchField, smoothScrewPitchKey, smoothScrewTurns, smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '../../app/smoothLoftTurn';
-import { hasLineArcScrewSections, hasLineArcTurnSections, isLineArcSource } from '../../app/lineArcScrew';
+import { hasLineArcScrewSections, hasLineArcTurnSections } from '../../app/lineArcScrew';
 import { featureLabel, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
 import { loadPersonRows } from '../rows';
 import { ROWS_NOT_FROM_PERSON } from '../../engine/rowFiles';
@@ -48,8 +48,8 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
     values: { sketch: 'stable sketch ID from query.summary', height: 'positive height in mm', angle: 'signed degrees from −450 to +450' },
   },
   'smooth-turn': {
-    selection: 'Use features.command with values.sketch and expectedRevision from query.rebuild. Requires one standalone rectangle.',
-    values: { sketch: 'stable sketch ID from query.summary', height: 'positive height in mm', angle: 'signed degrees from −450 to +450' },
+    selection: 'Use features.command with values.sketch and expectedRevision from query.rebuild. Requires one standalone rectangle, straight triangle or circular segment made from one line and one circular arc. The circular segment turns about its fixed area centroid.',
+    values: { sketch: 'stable sketch ID from query.summary', height: 'positive height in mm', angle: 'signed degrees from −450 to +450. Use a nonzero angle for a circular segment.' },
   },
   'smooth-screw': {
     selection: 'Use values.sketch and expectedRevision from query.rebuild. Requires one standalone rectangle, straight triangle, convex polygon with 4 to 64 straight sides, or circular segment made from one line and one circular arc. The sketch must have no holes. For a circular segment, place the axis outside the full supporting disc.',
@@ -240,8 +240,6 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
     const matches = state.doc.nodes.flatMap((_, index) => featureId(state.doc.nodes, index) === sketch ? [index] : []);
     if (matches.length !== 1)
       return fail(state, `${cmd.label} needs one current sketch with that ID from query.summary.`, { code: 'COMMAND_INPUT' });
-    if (cmd.id === 'smooth-turn' && isLineArcSource(state.doc.nodes[matches[0]]))
-      return fail(state, 'Circular-segment Smooth Turn creation is available in Studio only.', { code: 'COMMAND_INPUT' });
     ctx = { ...ctx, selection: { ...selection, sketches: matches } };
     given = other;
   }

@@ -5,7 +5,8 @@ import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
 const triangular = process.argv.includes('--triangle');
-const circularSegment = process.argv.includes('--line-arc');
+const centred = process.argv.includes('--centred-line-arc');
+const circularSegment = centred || process.argv.includes('--line-arc');
 const polygon = ['pentagon', 'hexagon', 'trapezoid', 'skew-quadrilateral']
   .find(name => process.argv.includes('--' + name));
 const polygonProfiles = {
@@ -16,17 +17,21 @@ const polygonProfiles = {
 };
 const convex = polygon && polygonProfiles[polygon];
 const tilted = triangular || circularSegment || !!convex;
-const screw = tilted || process.argv.includes('--screw');
-const smooth = screw || process.argv.includes('--smooth');
+const screw = !centred && (tilted || process.argv.includes('--screw'));
+const smooth = centred || screw || process.argv.includes('--smooth');
 const command = screw ? 'smooth-screw' : smooth ? 'smooth-turn' : 'ruled-turn';
 const commandLabel = screw ? 'Smooth Screw' : smooth ? 'Smooth Turn' : 'Ruled Turn';
 const profile = circularSegment ? 'circular segment' : polygon ?? (triangular ? 'triangle' : 'rectangle');
 const screwInput = { axisX: circularSegment ? 0 : tilted ? 10 : -1, axisY: circularSegment ? 0 : tilted ? -3 : 1, pitch: 40 };
 const insideAxis = circularSegment ? { axisX: 14, axisY: 0 } : tilted ? { axisX: 7, axisY: -5 } : { axisX: 3, axisY: 4 };
 const arcY = 3 * Math.sin(Math.PI / 3);
+const arcSweep = 2 * Math.PI / 3;
+const centroidOffset = 4 * 3 * Math.sin(arcSweep / 2) ** 3 / (3 * (arcSweep - Math.sin(arcSweep)));
+const circleX = centred ? -centroidOffset : 12;
+const arcCorners = [[circleX + 1.5, arcY], [circleX + 1.5, -arcY], [circleX + 3, 0]];
 const segment = { profile: 'loop', segments: [
-  { kind: 'line', start: [13.5, arcY] },
-  { kind: 'arc', start: [13.5, -arcY], center: [12, 0], direction: 'ccw' },
+  { kind: 'line', start: arcCorners[0] },
+  { kind: 'arc', start: arcCorners[1], center: [circleX, 0], direction: 'ccw' },
 ] };
 const pins = [
   'packages/barocss-cad/src/internal/triangular-screw-axis.ts', 'packages/barocss-cad-model/src/engine/evaluate.ts',
@@ -94,7 +99,7 @@ function cornerAt([x, y], index) {
 }
 
 function checkSmoothRails(result) {
-  const corners = circularSegment ? [[13.5, arcY], [13.5, -arcY], [15, 0]] : convex?.corners ?? (triangular ? [[-7, -4], [2, -3], [-4, 1]]
+  const corners = circularSegment ? arcCorners : convex?.corners ?? (triangular ? [[-7, -4], [2, -3], [-4, 1]]
     : screw ? [[2, 1], [14, 1], [14, 9], [2, 9]] : [[-6, -4], [6, -4], [6, 4], [-6, 4]]);
   assert.equal(result.edges.length, corners.length * 3);
   assert.equal(result.rails.length, corners.length);
@@ -192,7 +197,9 @@ await f.run(async () => {
     assert.match(description.selection, /values.sketch and expectedRevision/);
     if (triangular) assert.match(description.selection, /straight triangle/);
     if (convex) assert.match(description.selection, /convex polygon with 4 to 64 straight sides/);
-    if (circularSegment) assert.match(description.selection, /circular segment made from one line and one circular arc.*outside the full supporting disc/);
+    if (circularSegment) assert.match(description.selection, /circular segment made from one line and one circular arc/);
+    if (centred) assert.match(description.selection, /fixed area centroid/);
+    else if (circularSegment) assert.match(description.selection, /outside the full supporting disc/);
     const report = await call('query', { action: 'summary' });
     assert.deepEqual(report.features.map(feature => feature.id), ['n0', 'n1']);
     const { revision } = await call('query', { action: 'rebuild' });
@@ -206,6 +213,8 @@ await f.run(async () => {
     if (screw) assert.match((await call('proposals', propose({ ...args, expectedRevision: revision,
       values: { ...args.values, ...insideAxis } }), true)).error,
       circularSegment ? /Screw axis.*outside.*disc/i : convex ? /axis outside it with clearance/i : new RegExp(`axis outside the ${profile}`, 'i'));
+    if (centred) assert.match((await call('proposals', propose({ ...args, expectedRevision: revision,
+      values: { ...args.values, angle: 0 } }), true)).error, /nonzero/i);
     assert.equal(await readFile(file, 'utf8'), original);
     const proposal = await call('proposals', propose({ ...args, expectedRevision: revision }));
     assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);
