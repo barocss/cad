@@ -17,6 +17,7 @@ const f = await createFlow({
     'apps/cad-studio/test/smooth-turn-rail-display-browser.mjs',
     'apps/cad-studio/src/viewport/Viewport.tsx', 'apps/cad-studio/src/App.tsx',
     'packages/barocss-cad-model/src/engine/evaluate.ts', 'packages/barocss-cad-model/src/engine/loftDisplay.ts',
+    'packages/barocss-cad-model/src/engine/screwDisplay.ts',
     'packages/barocss-cad-model/src/engine/mesh.ts', 'packages/barocss-cad-model/src/engine/meshWire.ts',
     'packages/barocss-cad/src/internal/step-turn-display.ts',
   ],
@@ -34,6 +35,7 @@ assert.ok(evaluated.ok);
 const baseline = evaluated.bodies.find(body => body.key === result.key)!.mesh;
 const native = result.brep.edges.filter(edge => edge.curve.degree === 3 && edge.curve.controlPoints.length === ${(triangular || screw) ? 16 : 13});
 assert.equal(native.length, ${triangular ? 3 : 4});
+if (${screw && !baseline}) assert.ok(baseline.loftDetail?.screwGrid === true);
 const dense = ${screw} ? { ...baseline, ...baseline.loftDetail, quality: 'structured' } : bodyMesh(result.brep, 1, 24);
 const data = [baseline, dense].map(mesh => ({
   quality: mesh.quality, triangles: mesh.indices.length / 3, rails: native.map(edge => {

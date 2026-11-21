@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CadNumericPolicy, brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1 } from '@barocss/cad';
+import { compactStepTurnKind } from '@barocss/cad/internal/step-turn-display';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
 import { smoothScrewAngleField, smoothScrewPitchField, smoothScrewWindingRule } from '../src/app/smoothLoftTurn';
 import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { emptyDoc, withNode } from '../src/engine/doc';
-import { evaluateDoc, evaluatePart, partBreps } from '../src/engine/evaluate';
+import { evaluateDoc, evaluatePart, exportStudioStep, partBreps, type BodyResult } from '../src/engine/evaluate';
+import { smoothTurnDisplayMesh } from '../src/engine/loftDisplay';
 import { bodyMesh } from '../src/engine/mesh';
 import { revisionOf } from '../src/util/revision';
 
@@ -297,4 +299,53 @@ test('Agent Screw winding requires the current revision and a verified native ed
   const expected = smoothScrewAngleField(doc.nodes, index);
   assert.ok(expected?.kind === 'number');
   assert.deepEqual(accepted.state.doc.nodes, expected.set(doc.nodes, -360));
+});
+
+test('Imported compact Screws get the structured grid under the native STEP owners', () => {
+  for (const angle of [180, -360, 450]) {
+    const native = command.build!(ctx, { ...input, angle });
+    const otherSketch = native.nodes.length;
+    const withControl = withNode(native, { kind: 'sketch', profile: 'rectangle', min: [100, 100], max: [104, 104] });
+    const box = withNode(withControl, { kind: 'extrude', sketch: otherSketch, height: 4 });
+    const step = exportStudioStep(box, { name: 'Arbitrary file title' }).text;
+    const opened = withNode(emptyDoc(), { kind: 'import', name: 'Unrelated name', step, solids: 2 });
+    const base = evaluateDoc(opened, 3), result = evaluateDoc(opened, 3, 8, true);
+    assert.ok(base.ok && result.ok);
+    const openedParts = partBreps(opened);
+    for (const [i, { brep }] of openedParts.entries()) {
+      const actual: BodyResult = result.bodies[i];
+      const { loftDetail, ...canonical } = actual.mesh;
+      assert.deepEqual({ ...actual, mesh: canonical }, base.bodies[i]);
+      if (!brep.edges.some(edge => edge.curve.degree === 3)) {
+        assert.equal(loftDetail, undefined);
+        assert.equal(compactStepTurnKind(brep), undefined);
+        continue;
+      }
+      assert.equal(compactStepTurnKind(brep), 'screw');
+      assert.ok(loftDetail && 'kind' in loftDetail && loftDetail.screwGrid);
+      assert.ok(loftDetail.indices.length > canonical.indices.length);
+      assert.deepEqual([...new Set(loftDetail.edgeOfSegment)].sort((a, b) => a - b), canonical.edges.map(edge => edge.index));
+      assert.deepEqual([...new Set(loftDetail.faceOfVertex)].sort((a, b) => a - b), canonical.faces.map(face => face.index));
+      const renamed = { ...brep, faces: brep.faces.map((face, j) => ({ ...face, name: `surface-${j}` })).reverse(),
+        edges: brep.edges.map((edge, j) => ({ ...edge, name: `edge-${j}` })).reverse() };
+      assert.equal(compactStepTurnKind(renamed), 'screw');
+
+      // Keep all rail/side bindings exact while perturbing a common control column.
+      // It is still a strictly valid solid, but no longer has one constant screw law.
+      const shifted = structuredClone(brep);
+      for (const { curve } of shifted.edges) if (curve.degree === 3) {
+        const original = JSON.stringify(curve.controlPoints);
+        const [x, y, z] = curve.controlPoints[3];
+        const target: [number, number, number] = [x + .01, y, z];
+        for (const { surface } of shifted.faces) if (surface.kind === 'surface')
+          for (const row of surface.controlPoints) if (JSON.stringify(row) === original) row[3] = target;
+        curve.controlPoints[3] = target;
+      }
+      const check = checkBrep(shifted, { strict: true });
+      assert.ok(check.valid, JSON.stringify(check.issues));
+      assert.equal(compactStepTurnKind(shifted), undefined);
+      const shiftedMesh = bodyMesh(shifted, 0, 8);
+      assert.equal(smoothTurnDisplayMesh(shiftedMesh, shifted), shiftedMesh);
+    }
+  }
 });

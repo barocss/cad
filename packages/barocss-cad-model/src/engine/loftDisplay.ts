@@ -1,5 +1,5 @@
 import { CadNumericPolicy, faceGeometry, surfaceD1Evaluator, surfaceDomain, type Brep, type BrepFace } from '@barocss/cad';
-import { isCompactStepTurn } from '@barocss/cad/internal/step-turn-display';
+import { compactStepTurnKind } from '@barocss/cad/internal/step-turn-display';
 import { tessellateTwoGuideLoftDisplay } from '@barocss/cad/internal/two-guide-loft-display';
 import { bodyMesh, type DisplayMesh, type BoundedDisplayMesh, type SmoothTurnDisplayMesh, type Vec3 } from './mesh';
 import { screwDisplayMesh } from './screwDisplay';
@@ -124,9 +124,13 @@ function exactTurnNormals(mesh: DisplayMesh, brep: Brep): Float32Array | undefin
 }
 
 function buildTurnDetail(base: DisplayMesh, brep: Brep, sections: number | undefined, structured: boolean): SmoothTurnDisplayMesh | undefined {
-  let refined: DisplayMesh;
+  let refined: DisplayMesh, screw = structured;
   try {
-    if (sections === undefined ? !isCompactStepTurn(brep) : !isAuthoredCompactTurn(brep, sections)) return;
+    if (sections === undefined) {
+      const family = compactStepTurnKind(brep);
+      if (!family) return;
+      screw = family === 'screw';
+    } else if (!isAuthoredCompactTurn(brep, sections)) return;
     refined = bodyMesh(brep, 0, 24);
   } catch {
     // The optional viewport samples must not invalidate an accepted model.
@@ -141,7 +145,7 @@ function buildTurnDetail(base: DisplayMesh, brep: Brep, sections: number | undef
         && e.faces.every((f, j) => f === owner.faces[j])
         && e.a.every((v, k) => v === owner.a[k]) && e.b.every((v, k) => v === owner.b[k]);
     })) return;
-  if (structured) {
+  if (screw) {
     try {
       const grid = screwDisplayMesh(refined, brep);
       if (grid) return grid;

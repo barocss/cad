@@ -6,7 +6,7 @@ const along = 96;
 const same = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 const mid = (a: Vec3, b: Vec3) => scale(add(a, b), .5);
 
-/** Replace only the display of an admitted origin-axis Screw. The mesh still indexes the native owners. */
+/** Replace only the display of an admitted external-axis Screw. The mesh still indexes the native owners. */
 export function screwDisplayMesh(mesh: DisplayMesh, brep: Brep): SmoothTurnDisplayMesh | undefined {
   const byEdge = new Map(brep.edges.map(edge => [edge.id, edge]));
   const byFace = new Map(brep.faces.map(face => [face.id, face]));
