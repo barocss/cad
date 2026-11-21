@@ -5,10 +5,13 @@ import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
 const triangular = process.argv.includes('--triangle');
-const polygon = process.argv.includes('--pentagon') ? 'pentagon' : process.argv.includes('--hexagon') ? 'hexagon' : null;
+const polygon = ['pentagon', 'hexagon', 'trapezoid', 'skew-quadrilateral']
+  .find(name => process.argv.includes('--' + name));
 const polygonProfiles = {
   pentagon: { corners: [[-7, -4], [2, -3], [1, -1], [-4, 1], [-6, -1]], volume: 1350.078786522149 },
   hexagon: { corners: [[-7, -5], [1, -5], [3, -3], [2, -1], [-3, 1], [-7, -1]], volume: 2300.134228889587 },
+  trapezoid: { corners: [[-8, -5], [2, -5], [0, -1], [-7, -1]], volume: 1700.0992126575209 },
+  'skew-quadrilateral': { corners: [[-7, -4], [2, -3], [0, -1], [-5, 1]], volume: 1225.0714914738019 },
 };
 const convex = polygon && polygonProfiles[polygon];
 const tilted = triangular || !!convex;
@@ -179,7 +182,7 @@ await f.run(async () => {
     const description = await call('describe', { command });
     assert.match(description.selection, /values.sketch and expectedRevision/);
     if (triangular) assert.match(description.selection, /straight triangle/);
-    if (convex) assert.match(description.selection, /convex polygon with 5 to 64 straight sides/);
+    if (convex) assert.match(description.selection, /convex polygon with 4 to 64 straight sides/);
     const report = await call('query', { action: 'summary' });
     assert.deepEqual(report.features.map(feature => feature.id), ['n0', 'n1']);
     const { revision } = await call('query', { action: 'rebuild' });
