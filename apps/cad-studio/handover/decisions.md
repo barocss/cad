@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1485: [Share the fixed-span end Hole proof with local Agent review](notes/agent-fixed-span-end-hole-2026-11-21/README.md), #25. Verify the exact pair through local proposal, Studio review and fresh Open.
 - D1484: [Resize Count and Total span together with an active end Hole](notes/fixed-span-count-paired-hole-2026-11-21/README.md), #25. Verify the exact new terminal face, owned native commit and fresh Open.
 - D1483: [Extract Studio reference preview routing from App](notes/studio-reference-preview-routing-2026-11-21/README.md). Verify matching Model and Drawing state and retire previews after sheet and file changes.
 - D1482: [Extract Studio Browser reference decisions from App](notes/studio-reference-decisions-extraction-2026-11-21/README.md). Compare alternative discovery, native candidate application and model and drawing focus across 29 actual checkpoints.

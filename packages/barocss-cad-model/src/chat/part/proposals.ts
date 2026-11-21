@@ -4,6 +4,7 @@
 import { prefixDoc, type ModelNode, type StudioDoc } from '../../engine/doc';
 import type { BodyResult } from '../../engine/evaluate';
 import { featureId } from '../../engine/ids';
+import { changesFixedSpanCountAndLength } from '../../app/patternHoleSpacing';
 import { deleteFeatures, featureDependents, renumber } from '../features';
 import { factsOf } from '../observe';
 import { treeDiff } from '../transactions';
@@ -224,6 +225,24 @@ export function proposalParts(base: StudioDoc, after: StudioDoc): ProposalPart[]
     out.push({ id: x.id, label: x.label, kind, children });
   }
   const baseIndex = new Map(base.nodes.map((_, i) => [featureId(base.nodes, i), i]));
+  for (const part of out) {
+    if (part.kind !== 'changed') continue;
+    const oldHole = base.nodes[baseIndex.get(part.id)!], newHole = after.nodes[index.get(part.id)!];
+    if (oldHole?.kind !== 'hole' || newHole?.kind !== 'hole' || oldHole.suppressed || newHole.suppressed
+      || oldHole.held || newHole.held) continue;
+    const oldPattern = base.nodes[oldHole.parent.node], newPattern = after.nodes[newHole.parent.node];
+    if (oldPattern?.kind !== 'linear-span-pattern' || newPattern?.kind !== 'linear-span-pattern'
+      || !changesFixedSpanCountAndLength(oldPattern, newPattern)) continue;
+    const patternId = featureId(after.nodes, newHole.parent.node);
+    if (featureId(base.nodes, oldHole.parent.node) !== patternId
+      || oldHole.face !== `${featureId(base.nodes, oldPattern.parent.node)}.top@${oldPattern.count - 1}`
+      || newHole.face !== `${featureId(after.nodes, newPattern.parent.node)}.top@${newPattern.count - 1}`) continue;
+    const pattern = out.find(candidate => candidate.id === patternId && candidate.kind === 'changed');
+    if (!pattern) continue;
+    // Restoring only one side of this paired rewrite would put the unchanged Hole on the wrong copy.
+    part.children.push(pattern.id);
+    pattern.children.push(part.id);
+  }
   for (const x of diff.deleted) if (base.nodes[baseIndex.get(x.id)!]?.kind !== 'sketch' && base.nodes[baseIndex.get(x.id)!]?.kind !== 'driven-sketch') out.push({ id: x.id, label: x.label, kind: 'deleted', children: [] });
   return out;
 }

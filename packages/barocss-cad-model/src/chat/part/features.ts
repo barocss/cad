@@ -29,6 +29,7 @@ import { addParameters, bindParameter, parameterUses, PARAMETER_CODES, removePar
 import { featureId } from '../../engine/ids';
 import { sweepSourceRevision } from '../sweepSource';
 import { isReferencePlaneEdit } from '../../app/offsetPlanePick';
+import { preparePairedFixedSpanHoleEdit } from '../../app/patternHoleSpacing';
 
 /** Commands the chat can run (the ones that build; sketch-mode and measure UI actions are tools of their own). */
 // (Loft takes sketches picked in the studio, Align a face clicked there; chat writes a loft node with
@@ -299,8 +300,10 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   // (FRf, O121: a skeleton frames follow keeps every point and segment they use.)
   const held = firstProblem(checkSkeletonEdit(nodes, index, next[index]));
   if (held) return fail(state, held);
+  const paired = preparePairedFixedSpanHoleEdit(state.doc, next, index);
+  if ('error' in paired) return fail(state, `${paired.error.title}. ${paired.error.hint}`, { kept: 'the part is unchanged' });
   // (Names later features store, renumbered by this edit, matched again by their geometry: engine/rematch.ts.)
-  const rm = await rematchNames(state.doc, prefixDoc({ ...state.doc, nodes: next }, next.length), evaluate);
+  const rm = await rematchNames(state.doc, prefixDoc({ ...state.doc, nodes: paired.nodes }, paired.nodes.length), evaluate);
   if ('error' in rm) return fail(state, rm.error, { kept: 'the part is unchanged' });
   return accept(state, rm.doc, evaluate, options, `edited ${index}: ${featureLabel(rm.doc.nodes[index], index, rm.doc.nodes)}`,
     rm.changes.length ? { rematched: rm.changes.map(c => ({ feature: c.node, was: c.from, now: c.to })), note_rematched: 'these stored names were renumbered by the edit and matched again by their geometry; check them' } : {}, true);
