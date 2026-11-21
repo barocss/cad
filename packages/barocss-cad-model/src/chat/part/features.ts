@@ -3,6 +3,7 @@
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
 import { updateBoxFootprint } from '../../app/editCommand';
 import { editFields } from '../../app/editFields';
+import { editSavedOffsetFaceCommand } from '../../app/offsetFaceEdit';
 import { smoothTurnAngleKey, smoothTurnAngleLimit } from '../../app/smoothLoftTurn';
 import { featureLabel, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
 import { loadPersonRows } from '../rows';
@@ -285,6 +286,34 @@ async function addFeaturesTool(state: ChatState, args: Record<string, unknown>, 
   }
   return accept(state, doc, evaluate, options, `added ${list.length} feature${list.length > 1 ? 's' : ''}`, { added: doc.nodes.slice(state.doc.nodes.length).map((n, k) => `${state.doc.nodes.length + k}: ${featureLabel(n, state.doc.nodes.length + k, doc.nodes)}`), ...(solves.length ? { skeletons: solves } : {}) });
 }
+const savedWallDistanceKey = 'offsetDistance';
+
+function reviewedWallDistance(state: ChatState, index: number) {
+  const { doc, bodies } = state, node = doc.nodes[index];
+  if (state.partOf || node?.kind !== 'offset-face' || node.faces.length !== 1 ||
+    node.faces[0] !== featureId(doc.nodes, node.parent.node) + '.side1' ||
+    typeof node.distance !== 'number') return;
+  const ctx: Ctx = { doc, bodies, selection: { bodies: [], faces: [], edges: [] } };
+  const cmd = editSavedOffsetFaceCommand(doc, index);
+  if (!cmd?.build || cmd.handles?.(ctx, { d: node.distance })?.length !== 1) return;
+  return { ctx, build: cmd.build, distance: node.distance };
+}
+
+async function editReviewedWallDistance(state: ChatState, index: number, distance: unknown, evaluate: Evaluate, options: CallOptions) {
+  if (typeof distance !== 'number' || !Number.isFinite(distance))
+    return fail(state, 'Set values.offsetDistance to a finite signed distance in mm.', { code: 'EDIT_INPUT' });
+  const edit = reviewedWallDistance(state, index);
+  if (!edit) return fail(state, 'This edit needs the current terminal right wall Offset of an ordinary rectangular taper.', { code: 'EDIT_INPUT' });
+  let next: StudioDoc;
+  try { next = edit.build(edit.ctx, { d: distance }); }
+  catch (error) {
+    if (isRefusal(error, 'VALUE', 'BAD_REFERENCE')) return fail(state, error.message, { code: 'EDIT_INPUT' });
+    throw error;
+  }
+  if (next === state.doc) return fail(state, 'The saved wall already has this Offset distance.', { code: 'EDIT_INPUT' });
+  return accept(state, next, evaluate, options, `edited ${index}: ${featureLabel(next.nodes[index], index, next.nodes)}`);
+}
+
 async function editFeatureTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {
   const refusal = checkFeatureRevision(state, args.expectedRevision, 'EDIT');
   if (refusal) return refusal;
@@ -293,11 +322,16 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   if (editTurnAngle && (args.expectedRevision === undefined || args.feature !== undefined || Object.keys(given).length !== 1))
     return fail(state, 'Edit a Smooth Turn with only values.smoothTurnAngle and the current expectedRevision from query.render or query.rebuild.',
       { code: 'EDIT_INPUT' });
+  const editWallDistance = Object.hasOwn(given, savedWallDistanceKey);
+  if (editWallDistance && (args.expectedRevision === undefined || args.feature !== undefined || Object.keys(given).length !== 1))
+    return fail(state, 'Edit a saved right wall Offset with only values.offsetDistance and the current expectedRevision from query.render or query.rebuild.',
+      { code: 'EDIT_INPUT' });
   const index = Number(args.index), nodes = state.doc.nodes;
   if (!Number.isInteger(index) || !nodes[index]) return fail(state, `There is no feature ${String(args.index)} (features 0–${nodes.length - 1}).`);
   const retainBox = args.retainBoxCommand === true;
   if (args.retainBoxCommand !== undefined && (!retainBox || args.feature === undefined || args.values !== undefined || nodes.length !== 2 || index !== 0))
     return fail(state, 'Retaining the Box command requires a replacement sketch for one standard Box.');
+  if (editWallDistance) return editReviewedWallDistance(state, index, given[savedWallDistanceKey], evaluate, options);
   let next: ModelNode[];
   if (args.feature !== undefined) {
     const why = checkNode(args.feature, nodes.slice(0, index), state.doc.parameters, state.doc.frames?.sections, state.partOf ? null : state.doc.instances ?? []);
@@ -312,7 +346,11 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   } else {
     // (O167, F6: a part-scoped edit offers what the bearing command offers — the draft's context and its fit tables.)
     const fields = editFields(nodes, index, undefined, undefined, { context: bearingContextOf(state.doc), fits: state.doc.fits, doc: state.doc });
-    if (!Object.keys(given).length) return fail(state, `Pass "values" or a whole "feature". Feature ${index}'s values: ${fields.map(f => `${f.key} (${f.label} = ${String(f.get(nodes))})`).join(', ') || 'none — replace it with "feature"'}.`);
+    if (!Object.keys(given).length) {
+      const wall = reviewedWallDistance(state, index);
+      if (wall) return fail(state, `Pass only values.offsetDistance (signed mm, current value ${wall.distance}) and the current expectedRevision.`);
+      return fail(state, `Pass "values" or a whole "feature". Feature ${index}'s values: ${fields.map(f => `${f.key} (${f.label} = ${String(f.get(nodes))})`).join(', ') || 'none — replace it with "feature"'}.`);
+    }
     next = [...nodes];
     for (const [key, v] of Object.entries(given)) {
       const f = fields.find(x => x.key === key);

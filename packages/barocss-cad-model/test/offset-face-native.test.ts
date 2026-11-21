@@ -14,6 +14,7 @@ import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { isRefusal } from '../src/engine/refusal';
 import { part, sketch } from '../src/api/index';
+import { revisionOf } from '../src/util/revision';
 
 function near(a: number, b: number, tolerance = 1e-7): void { assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`); }
 function bodyOf(doc: StudioDoc): Brep { const native = partBreps(doc); assert.equal(native.length, 1); return native[0].brep; }
@@ -523,6 +524,57 @@ test('saved right taper wall preserves mid-height and the signed native support'
     const wrong = { ...accepted, mesh: { ...accepted.mesh, faces } };
     assert.deepEqual(edit.handles?.({ ...ctx, bodies: [wrong] }, { d: distance }), []);
   }
+});
+
+test('Agent wall distance edits require a fresh review and change only the saved signed distance', async () => {
+  const base = rectanglePart(40, 30, 10);
+  const source: StudioDoc = { ...base, nodes: base.nodes.map(node => node.kind === 'extrude' ? { ...node, draft: 10 } : node) };
+  const stock = context(source);
+  const face = stock.bodies[0].mesh.faces.findIndex(face => face.name === 'n1.side1');
+  assert.ok(face >= 0);
+  const selected = { ...stock, selection: { ...stock.selection, faces: [{ body: 0, face }] } };
+  const older = offsetFaceCommand.build!(selected, { d: 3 });
+  const doc = offsetFaceCommand.build!(selected, { d: 4 });
+  const cap = offsetFaceCommand.build!(stock, { d: 4 });
+  const index = source.nodes.length, node = doc.nodes[index];
+  assert.ok(node.kind === 'offset-face');
+  const expectedRevision = revisionOf(doc), state = { doc, bodies: context(doc).bodies };
+  const evaluate = async (candidate: StudioDoc) => evaluateDoc(candidate, 1);
+  const noEvaluation = async () => assert.fail('Refuse this request before native evaluation');
+  const edit = { action: 'edit', index, values: { offsetDistance: -2 } };
+  freezeDoc(doc);
+  const discovery = await dispatchTool(state, 'features', { action: 'edit', index }, noEvaluation);
+  assert.match(discovery.content, /values\.offsetDistance .*current value 4/);
+  for (const [args, reason] of [
+    [edit, 'EDIT_INPUT'],
+    [{ ...edit, expectedRevision: revisionOf(older) }, 'EDIT_STALE'],
+    [{ ...edit, expectedRevision, feature: node }, 'EDIT_INPUT'],
+    [{ ...edit, expectedRevision, values: { offsetDistance: -2, d: 4 } }, 'EDIT_INPUT'],
+    ...[0, 4, Number.NaN, Infinity, '-2'].map(distance =>
+      [{ ...edit, expectedRevision, values: { offsetDistance: distance } }, 'EDIT_INPUT'] as const),
+  ] as const) {
+    const refused = await dispatchTool(state, 'features', args, noEvaluation);
+    assert.ok(refused.isError && !refused.changed, refused.content);
+    assert.match(refused.content, new RegExp(reason));
+    assert.equal(refused.state.doc, doc);
+  }
+  const capState = { doc: cap, bodies: context(cap).bodies };
+  const unsupported = await dispatchTool(capState, 'features', { ...edit, expectedRevision: revisionOf(cap) }, noEvaluation);
+  assert.ok(unsupported.isError && !unsupported.changed, unsupported.content);
+  assert.match(unsupported.content, /terminal right wall Offset/);
+
+  const collapse = await dispatchTool(state, 'features', { ...edit, expectedRevision, values: { offsetDistance: -40 } }, evaluate);
+  assert.ok(collapse.isError && !collapse.changed, collapse.content);
+  assert.match(collapse.content, /close a section or cross the opposite wall/);
+  assert.equal(collapse.state.doc, doc);
+  const accepted = await dispatchTool(state, 'features', { ...edit, expectedRevision }, evaluate);
+  assert.ok(!accepted.isError && accepted.changed, accepted.content);
+  assert.deepEqual(accepted.state.doc, { ...doc, nodes: [...source.nodes, { ...node, distance: -2 }] });
+  const brep = bodyOf(accepted.state.doc);
+  closed(brep);
+  const t = Math.tan(Math.PI / 18), dx = -2 / Math.cos(Math.PI / 18);
+  const area = (z: number) => (40 - 2 * z * t + dx) * (30 - 2 * z * t);
+  near(brepMassProperties(brep, 1).volume, (area(0) + 4 * area(5) + area(10)) * 10 / 6);
 });
 
 test('legacy Offset chain refuses an upstream edit before a downstream absolute tool can go stale', async () => {
