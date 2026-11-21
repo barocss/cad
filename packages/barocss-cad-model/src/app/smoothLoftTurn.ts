@@ -100,17 +100,17 @@ export function hasTriangularTurnSections(nodes: readonly ModelNode[], index: nu
 }
 
 function savedTurn(nodes: readonly ModelNode[], index: number) {
-  if (index !== nodes.length - 1) return;
-  const turn = turnSections(nodes, index);
-  if (turn && !turn.triangular) return turn;
+  if (index === nodes.length - 1) return turnSections(nodes, index);
 }
 
 function updateTurnCopies(nodes: readonly ModelNode[], turn: NonNullable<ReturnType<typeof savedTurn>>, first: Point[], rotation: (fraction: number) => number) {
+  const centre = turn.triangular ? triangleTurnCentre(first) : undefined;
   return nodes.map((node, i) => {
     const station = i - turn.start;
     if (station < 0 || station > turn.last || (station === 0 && first === turn.first)
       || node.kind !== 'sketch' || node.profile !== 'loop') return node;
-    const points = station === 0 ? first : rotateTurnCorners(first, rotation(station / turn.last));
+    const radians = rotation(station / turn.last);
+    const points = station === 0 ? first : centre ? rotateTurnPoints(first, centre, radians) : rotateTurnCorners(first, radians);
     return { ...node, segments: points.map(start => ({ kind: 'line' as const, start })) };
   });
 }
@@ -133,16 +133,17 @@ function turnWidth(corners: readonly Point[]): number {
 }
 
 export function smoothLoftTurnWidthField(nodes: readonly ModelNode[], index: number): EditField | undefined {
-  if (!savedTurn(nodes, index)) return;
+  const turn = savedTurn(nodes, index);
+  if (!turn || turn.triangular) return;
   return {
     kind: 'number', key: smoothTurnWidthKey, label: 'Turn width', unit: 'mm',
     get: current => {
       const turn = savedTurn(current, index);
-      return turn ? turnWidth(turn.first) : NaN;
+      return turn && !turn.triangular ? turnWidth(turn.first) : NaN;
     },
     set: (current, width) => {
       const turn = savedTurn(current, index);
-      if (!turn || smoothTurnWidthInvalid(width) || width === turnWidth(turn.first)) return [...current];
+      if (!turn || turn.triangular || smoothTurnWidthInvalid(width) || width === turnWidth(turn.first)) return [...current];
       const [[minX, minY], , [maxX, maxY]] = turn.first;
       const centre = (minX + maxX) / 2;
       const left = centre - width / 2, right = centre + width / 2;

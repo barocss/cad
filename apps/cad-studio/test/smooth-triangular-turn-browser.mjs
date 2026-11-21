@@ -17,7 +17,7 @@ const f = await createFlow({
   envFrozen: 'TRIANGULAR_TURN_FROZEN',
   initialFiles: frozen,
   requiredFrozen: frozen,
-  qualification: 'Create, verify and reopen one continuous Smooth Turn from a straight triangular sketch.',
+  qualification: 'Create, edit and reopen one continuous Smooth Turn from a straight triangular sketch.',
   limits: ['Desktop Studio, one tilted scalene triangle, continuous cubic interpolation between rigid stations.'],
   inspectorSource: String.raw`
 import { readFileSync } from 'node:fs';
@@ -157,7 +157,8 @@ await f.run(async () => {
   await f.openFeatureEditor(negative.nodes.length - 1, 'triangular Smooth Turn total height');
   const editor = f.editor(), height = editor.getByLabel('Total height', { exact: true });
   assert.equal(Number(await height.inputValue()), 40);
-  assert.equal(await editor.getByLabel(/Section .*height|Turn angle|Turn width|^Smooth$/).count(), 0);
+  assert.equal(Number(await editor.getByLabel('Turn angle', { exact: true }).inputValue()), -450);
+  assert.equal(await editor.getByLabel(/Section .*height|Turn width|^Smooth$/).count(), 0);
   await height.fill('50');
   const taller = (await f.applyEditor(negative, 'triangular-height-applied')).doc;
   assert.deepEqual(taller.nodes.slice(0, -1), negative.nodes.slice(0, -1));
@@ -169,9 +170,34 @@ await f.run(async () => {
   await f.redo();
   await f.same(taller);
 
-  f.phase = 'save and reopen triangular Smooth Turn';
+  await frame('triangular-before-angle-edit');
+  await f.openFeatureEditor(taller.nodes.length - 1, 'triangular Smooth Turn signed angle');
+  const angleEditor = f.editor(), angle = angleEditor.getByLabel('Turn angle', { exact: true });
+  assert.equal(Number(await angle.inputValue()), -450);
+  await angle.fill('451');
+  assert.equal(await angle.getAttribute('aria-invalid'), 'true');
+  assert.ok(await button('Apply', angleEditor).isDisabled());
+  await f.same(taller);
+  await angle.fill('450');
+  const reversed = (await f.applyEditor(taller, 'triangular-angle-applied')).doc;
+  assert.deepEqual(reversed.nodes[0], taller.nodes[0]);
+  assert.deepEqual(reversed.nodes.at(-1), taller.nodes.at(-1));
+  assert.deepEqual(reversed.nodes.map(node => node.id), taller.nodes.map(node => node.id));
+  const reoriented = await inspect(reversed, 450, 'triangular-reversed-native', 50);
+  assert.deepEqual(reoriented.ids, stretched.ids);
+  assert.notEqual(reoriented.digest, stretched.digest);
+  await frame('triangular-after-angle-edit');
+  await f.undo();
+  await f.same(taller);
+  await f.redo();
+  await f.same(reversed);
+
+  f.phase = 'save and reopen reversed triangular Smooth Turn';
   const saved = await f.save('smooth-triangular-turn');
-  await f.freshOpen(saved.file, taller, 'triangular-fresh-open');
-  assert.deepEqual(await inspect(taller, -450, 'triangular-reopened-native', 50), stretched);
+  await f.freshOpen(saved.file, reversed, 'triangular-fresh-open');
+  assert.deepEqual(await inspect(reversed, 450, 'triangular-reopened-native', 50), reoriented);
+  await f.openFeatureEditor(reversed.nodes.length - 1, 'reopened triangle angle');
+  assert.equal(Number(await f.editor().getByLabel('Turn angle', { exact: true }).inputValue()), 450);
+  await f.closeEditor();
   await frame('triangular-reopened-450');
 });

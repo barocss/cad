@@ -3,10 +3,12 @@ import test from 'node:test';
 import { brepMassProperties, checkBrep, evaluateCurve, evaluateCurveD1, faceGeometry, type Point } from '@barocss/cad';
 import { commandById, type Ctx } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
+import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { emptyDoc, withNode, type SketchNode } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 import { bodyMesh } from '../src/engine/mesh';
+import { revisionOf } from '../src/util/revision';
 
 const triangle = {
   kind: 'sketch', profile: 'polygon', points: [[3, -7], [12, -6], [6, -2]],
@@ -34,7 +36,11 @@ test('Smooth Turn makes one closed triangle-based solid with three common cubic 
     const last = Math.max(6, Math.ceil(Math.abs(angle) / 30));
     assert.deepEqual([node.smooth, node.sections.length, node.from, node.guide], [true, last + 1, [0], undefined]);
     const fields = editFields(doc.nodes, doc.nodes.length - 1, doc.parameters);
-    assert.deepEqual(fields.map(field => field.label), ['Total height']);
+    assert.deepEqual(fields.map(field => field.label), ['Total height', 'Turn angle']);
+    const angleField = fields[1];
+    assert.ok(angleField.kind === 'number');
+    assert.equal(angleField.get(doc.nodes), angle || 0);
+    for (const value of [-30 * last - 1, NaN, Infinity, angle]) assert.deepEqual(angleField.set(doc.nodes, value), doc.nodes);
     const height = fields[0];
     assert.ok(height.kind === 'number');
     const taller = partBreps({ ...doc, nodes: height.set(doc.nodes, 50) })[0].brep;
@@ -53,6 +59,31 @@ test('Smooth Turn makes one closed triangle-based solid with three common cubic 
     assert.deepEqual(taller.faces.map(face => face.id), brep.faces.map(face => face.id));
     assert.deepEqual(taller.edges.map(edge => edge.id), brep.edges.map(edge => edge.id));
     assert.ok(Math.abs(brepMassProperties(taller, 1).volume - mass.volume * 1.25) < 1e-7);
+    if (angle !== 0) {
+      const flipped = { ...doc, nodes: angleField.set(doc.nodes, -angle) };
+      assert.equal(angleField.get(flipped.nodes), -angle);
+      assert.equal(flipped.nodes[0], doc.nodes[0]);
+      assert.equal(flipped.nodes.at(-1), node);
+      const updated = partBreps(flipped)[0].brep;
+      assert.equal(checkBrep(updated, { strict: true }).valid, true);
+      assert.deepEqual(updated.faces.map(face => face.id), brep.faces.map(face => face.id));
+      assert.deepEqual(updated.edges.map(edge => edge.id), brep.edges.map(edge => edge.id));
+      const reflect = (value: Point) => {
+        const [u, dy, dz] = minus(value, [18, -21, 26]);
+        return { u, w: .8 * dy - .6 * dz };
+      };
+      const byName = new Map(updated.edges.map(edge => [edge.id, edge.curve]));
+      for (const edge of brep.edges.filter(edge => /^c[0-2]$/.test(edge.id))) {
+        const { u, w } = reflect(evaluateCurve(edge.curve, 0));
+        for (let j = 0; j <= last; j++) {
+          const t = j / last, phase = -angle * Math.PI / 180 * t;
+          const x = u * Math.cos(phase) - w * Math.sin(phase), y = u * Math.sin(phase) + w * Math.cos(phase);
+          close(evaluateCurve(byName.get(edge.id)!, t), [18 + x, -21 + .8 * y + 24 * t, 26 - .6 * y + 32 * t]);
+        }
+      }
+      close(brepMassProperties(updated, 1).centroid, mass.centroid);
+      assert.ok(Math.abs(brepMassProperties(updated, 1).volume - mass.volume) < 1e-7);
+    }
     const rails = brep.edges.filter(edge => /^c[0-2]$/.test(edge.id)).map(edge => edge.curve);
     assert.equal(rails.length, 3);
     for (const rail of rails) {
@@ -174,4 +205,29 @@ test('compact Turn packets use native side normals and retain positions, creases
   assert.ok(vertices > 300 && worstResidual < 1e-8 && worstOld > 1 && worstNew < 1e-5,
     JSON.stringify({ vertices, worstResidual, worstOld, worstNew }));
   if (process.env.TURN_NORMAL_METRICS === '1') console.log(JSON.stringify({ vertices, worstResidual, worstOld, worstNew }));
+});
+
+test('triangle angle editing retains terminal ownership and requires an exact Agent revision', async () => {
+  const doc = smooth.build!(ctx(), { height: 40, angle: -180 });
+  const index = doc.nodes.length - 1;
+  const withLaterSketch = withNode(doc, { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [4, 3] });
+  assert.deepEqual(editFields(withLaterSketch.nodes, index, doc.parameters).map(field => field.key), ['smoothLoftHeight']);
+  const evaluated = evaluateDoc(doc, 1);
+  assert.ok(evaluated.ok);
+  const state = { doc, bodies: evaluated.bodies };
+  const args = { action: 'edit', index, values: { smoothTurnAngle: 180 } };
+  for (const [request, code] of [
+    [args, 'EDIT_INPUT'],
+    [{ ...args, expectedRevision: revisionOf(withLaterSketch) }, 'EDIT_STALE'],
+  ] as const) {
+    const refused = await dispatchTool(state, 'features', request, () => assert.fail('Rejected angle edits must not evaluate.'));
+    assert.ok(refused.isError && !refused.changed, refused.content);
+    assert.equal(refused.state, state);
+    assert.equal(JSON.parse(refused.content).code, code);
+  }
+  const accepted = await dispatchTool(state, 'features', { ...args, expectedRevision: revisionOf(doc) }, async candidate => evaluateDoc(candidate, 2));
+  assert.ok(accepted.changed && !accepted.isError, accepted.content);
+  const got = editFields(accepted.state.doc.nodes, index, doc.parameters).find(field => field.key === 'smoothTurnAngle');
+  assert.ok(got?.kind === 'number');
+  assert.equal(got.get(accepted.state.doc.nodes), 180);
 });

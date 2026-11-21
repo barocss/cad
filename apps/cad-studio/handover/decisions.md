@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1547: [Edit the signed angle of a saved triangular Smooth Turn](notes/triangular-turn-history-angle-2026-11-21/README.md), #630. Verify owned station updates, native IDs, Studio edit and reopen, and the local revision requirement.
 - D1546: [Shade compact Smooth Turn sides with native surface normals](notes/smooth-turn-surface-normals-2026-11-21/README.md), #630. Verify exact geometry and pick ownership and reduced shading bands on both Model backends.
 - D1545: [Isolate the Model ground shadow on the triangular Smooth Turn](notes/triangular-turn-model-shadow-2026-11-21/README.md), #630. Verify unchanged sampled surface pixels and the same native solid across the two desktop backends.
 - D1544: [Create a continuous Smooth Turn from a triangular sketch](notes/smooth-triangular-turn-2026-11-21/README.md), #630. Verify common cubic rails, editable total height and exact native Studio reopening.

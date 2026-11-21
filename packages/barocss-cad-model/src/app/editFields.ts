@@ -497,13 +497,13 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
     case 'loft': {
       const height = smoothLoftHeightField(node, i);
       if (height) out.push(height);
-      if (hasTriangularTurnSections(nodes, i)) break;
       const angle = smoothLoftTurnAngleField(nodes, i);
       if (angle) {
         out.push(angle);
         const width = smoothLoftTurnWidthField(nodes, i);
         if (width) out.push(width);
       }
+      if (hasTriangularTurnSections(nodes, i)) break;
       out.push(...loftSectionSourceFields(nodes, i, node, parameters));
       if (!node.guides && !angle) node.sections.forEach((sec, k) => {
         out.push(...sketchFields(nodes, sec.sketch, `Section ${k + 1} · `, parameters));
