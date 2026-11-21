@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1606: [Propose an outside wall Offset on a coaxial tube](notes/reviewed-coaxial-tube-outer-wall-offset-2026-11-22/README.md), #322 and #629. Pin the evaluated wall and revision, approve in Studio and preserve the bore through native Open.
 - D1605: [Join a straight span to a quadratic span at an exact endpoint](notes/join-straight-quadratic-native-2026-11-22/README.md), #29. Preserve both shapes and source texts through native Save and Open.
 - D1604: [Propose Extrude to face from the current Agent review](notes/reviewed-extrude-to-face-2026-11-22/README.md), #322 and #222. Pin the sketch and exact native face, approve in Studio and retain associative height after Open.
 - D1603: [Offset the outside wall of an upright coaxial tube](notes/coaxial-tube-outer-wall-offset-2026-11-22/README.md), #629. Keep the fit bore and native owners exact through both signs and native reopening.

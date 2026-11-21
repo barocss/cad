@@ -655,7 +655,7 @@ for (const kind of ['cylinder wall', 'through bore', 'tube inner wall', 'tube ou
     const request = { action: 'edit', index, expectedRevision: revisionOf(opened.doc), values: { offsetDistance: -1 } };
     const noEvaluation = async () => assert.fail('Refuse this request before evaluating a candidate');
     const discovery = await dispatchTool(state, 'features', { action: 'edit', index }, noEvaluation);
-    if (kind !== 'tube inner wall') {
+    if (!tube) {
       assert.doesNotMatch(discovery.content, /values\.offsetDistance/);
       const refusal = await dispatchTool(state, 'features', request, noEvaluation);
       assert.ok(refusal.isError && !refusal.changed);
@@ -663,7 +663,8 @@ for (const kind of ['cylinder wall', 'through bore', 'tube inner wall', 'tube ou
     }
     assert.match(discovery.content, /values\.offsetDistance .*current value 2/);
     const evaluate = async (candidate: StudioDoc) => evaluateDoc(candidate, 1);
-    for (const [distance, detail] of [[radius, /bore axis/], [-5, /outer tube wall/]] as const) {
+    const invalid = tubeOuter ? [[-5, /retained bore/]] as const : [[radius, /bore axis/], [-5, /outer tube wall/]] as const;
+    for (const [distance, detail] of invalid) {
       const refused = await dispatchTool(state, 'features', { ...request, values: { offsetDistance: distance } }, evaluate);
       assert.ok(refused.isError && !refused.changed);
       assert.match(JSON.parse(refused.content).detail, detail);

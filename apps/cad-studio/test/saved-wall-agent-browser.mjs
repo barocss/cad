@@ -8,10 +8,11 @@ import { withMcpSession } from './mcp-browser-session.mjs';
 const olderBytes = await readFile(resolve(process.argv[3]));
 const currentBytes = await readFile(resolve(process.argv[4]));
 const source = JSON.parse(currentBytes), index = source.nodes.length - 1;
-const tube = process.argv.includes('--tube');
-const wall = source.nodes[index], face = tube ? 'n2.side0#1' : 'n1.side1';
-const currentDistance = tube ? 1 : 4, olderDistance = tube ? -1 : 3;
-const subject = tube ? 'coaxial tube inner wall' : 'right drafted wall';
+const tubeOuter = process.argv.includes('--tube-outer');
+const tube = tubeOuter || process.argv.includes('--tube');
+const wall = source.nodes[index], face = tubeOuter ? 'n1.side0#1' : tube ? 'n2.side0#1' : 'n1.side1';
+const currentDistance = tubeOuter ? 2 : tube ? 1 : 4, olderDistance = tube ? -1 : 3;
+const subject = tubeOuter ? 'coaxial tube outer wall' : tube ? 'coaxial tube inner wall' : 'right drafted wall';
 assert.deepEqual([wall.kind, wall.faces, wall.distance], ['offset-face', [face], currentDistance]);
 const at = distance => [...source.nodes.slice(0, index), { ...wall, distance }];
 assert.deepEqual(JSON.parse(olderBytes).nodes, at(olderDistance));
@@ -43,7 +44,11 @@ console.log(JSON.stringify({ key, ids, digest: digestOf(brep), closed: brep.shel
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const radians = Math.PI / 18, t = Math.tan(radians), sec = 1 / Math.cos(radians);
 const area = (z, d) => (40 - 2 * z * t + d * sec) * (30 - 2 * z * t);
-const volume = d => tube ? Math.PI * (81 - (4 - d) ** 2) * 16 : (area(0, d) + 4 * area(5, d) + area(10, d)) * 10 / 6;
+function volume(d) {
+  if (tubeOuter) return Math.PI * ((9 + d) ** 2 - 16) * 16;
+  if (tube) return Math.PI * (81 - (4 - d) ** 2) * 16;
+  return (area(0, d) + 4 * area(5, d) + area(10, d)) * 10 / 6;
+}
 const near = (a, b, tolerance = 1e-9) => Math.abs(a - b) <= tolerance;
 const vectorNear = (a, b) => a.every((value, i) => near(value, b[i]));
 
@@ -65,9 +70,10 @@ function checkTube(read, distance) {
   const walls = read.planes.filter(([, geometry]) => geometry.kind === 'cylinder');
   assert.equal(walls.length, 4);
   assert.equal(walls.filter(([, geometry]) => geometry.out === -1).length, 2);
-  assert.ok(walls.some(([name, geometry]) => face === name && geometry.out === -1));
+  assert.ok(walls.some(([name, geometry]) => face === name && geometry.out === (tubeOuter ? 1 : -1)));
+  const boreRadius = tubeOuter ? 4 : 4 - distance, outsideRadius = tubeOuter ? 9 + distance : 9;
   for (const [, geometry] of walls) {
-    assert.ok(near(geometry.r, geometry.out === -1 ? 4 - distance : 9));
+    assert.ok(near(geometry.r, geometry.out === -1 ? boreRadius : outsideRadius));
     assert.ok(near(geometry.c[0], 14) && near(geometry.c[1], 9) && near(Math.abs(geometry.a[2]), 1));
   }
 }
@@ -155,7 +161,7 @@ await f.run(async () => {
     await denied({ ...pinned, values: { offsetDistance: 0 } }, /nonzero signed distance/i);
     if (tube) {
       // Proposal preview reports the standard evaluator refusal. The Model test checks each native limit.
-      await denied({ ...pinned, values: { offsetDistance: 4 } }, /could not build.*nothing was applied/i);
+      if (!tubeOuter) await denied({ ...pinned, values: { offsetDistance: 4 } }, /could not build.*nothing was applied/i);
       await denied({ ...pinned, values: { offsetDistance: -5 } }, /could not build.*nothing was applied/i);
     } else await denied({ ...pinned, values: { offsetDistance: -40 } }, /could not build|close a section/i);
     const proposal = await call('proposals', proposed(pinned));
@@ -175,7 +181,7 @@ await f.run(async () => {
   await button('Chat').first().click();
   const card = f.page.getByRole('listitem', { name: `Proposal ${proposalId}`, exact: true });
   await card.waitFor();
-  await f.snapshot(tube ? 'reviewed-plus-one-tube-wall' : 'reviewed-plus-four-wall');
+  await f.snapshot(tubeOuter ? 'reviewed-plus-two-outer-wall' : tube ? 'reviewed-plus-one-tube-wall' : 'reviewed-plus-four-wall');
 
   f.phase = 'preview the signed distance and accept it through desktop Studio';
   await button('Preview', card).click();
@@ -201,7 +207,7 @@ await f.run(async () => {
   await native('undo-wall-native', pending, currentDistance);
   await f.redo();
   await f.same(accepted);
-  const saved = await f.save(tube ? 'approved-tube-wall-minus-two' : 'approved-right-wall-minus-two');
+  const saved = await f.save(tubeOuter ? 'approved-tube-outer-wall-minus-two' : tube ? 'approved-tube-wall-minus-two' : 'approved-right-wall-minus-two');
   await f.freshOpen(saved.file, accepted, 'reopened-approved-wall');
   assert.equal((await native('reopened-minus-two-native', accepted, -2)).digest, after.digest);
   await frame();

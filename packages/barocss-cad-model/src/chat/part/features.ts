@@ -334,27 +334,34 @@ async function addFeaturesTool(state: ChatState, args: Record<string, unknown>, 
 }
 const savedWallDistanceKey = 'offsetDistance';
 
-function isReviewedTubeBore(state: ChatState, index: number, node: Extract<ModelNode, { kind: 'offset-face' }>) {
+function isReviewedTubeWall(state: ChatState, index: number, node: Extract<ModelNode, { kind: 'offset-face' }>) {
   const { doc, bodies } = state, [face] = node.faces, [body] = bodies;
   if (index !== doc.nodes.length - 1 || node.target !== undefined || node.parent.side !== 'solid' ||
     node.sigs?.[face]?.k !== 'curved' || !isAnnularReplacementSource(doc.nodes, node.parent.node) ||
     doc.instances?.length || doc.variability || doc.configurations ||
     bodies.length !== 1 || Object.keys(doc.outputs).length !== 1 || body.ref?.node !== index || body.ref.side !== 'solid' ||
     doc.outputs[body.key]?.node !== index || doc.outputs[body.key]?.side !== 'solid') return false;
-  // A curved signature alone also describes an outside wall. Use the current evaluated native bore.
-  return body.mesh.faces.some(candidate => candidate.nativeBoreDiameter !== undefined &&
-    candidate.nativeFaces?.some(native => native.name === face));
+  const cylinders = body.mesh.faces.filter(candidate => candidate.exact?.kind === 'cylinder');
+  const matches = cylinders.filter(candidate => candidate.nativeFaces?.some(native => native.name === face));
+  if (matches.length !== 1) return false;
+  const [wall] = matches;
+  if (wall.nativeBoreDiameter !== undefined) return true;
+
+  // Confirm the outside wall against the one independently verified, smaller bore.
+  const boreDiameter = cylinders.find(candidate => candidate.nativeBoreDiameter !== undefined)?.nativeBoreDiameter;
+  return cylinders.length === 2 && boreDiameter !== undefined && wall.nativeFaces?.length === 2 &&
+    wall.exact?.kind === 'cylinder' && 2 * wall.exact.r > boreDiameter;
 }
 
 function reviewedWallDistance(state: ChatState, index: number) {
   const { doc, bodies } = state, node = doc.nodes[index];
   if (state.partOf || node?.kind !== 'offset-face' || node.faces.length !== 1 || typeof node.distance !== 'number') return;
   const rightTaperWall = node.faces[0] === featureId(doc.nodes, node.parent.node) + '.side1';
-  const tubeBore = isReviewedTubeBore(state, index, node);
-  if (!rightTaperWall && !tubeBore) return;
+  const tubeWall = isReviewedTubeWall(state, index, node);
+  if (!rightTaperWall && !tubeWall) return;
   const ctx: Ctx = { doc, bodies, selection: { bodies: [], faces: [], edges: [] } };
   const cmd = editSavedOffsetFaceCommand(doc, index);
-  if (!cmd?.build || (!tubeBore && cmd.handles?.(ctx, { d: node.distance })?.length !== 1)) return;
+  if (!cmd?.build || (!tubeWall && cmd.handles?.(ctx, { d: node.distance })?.length !== 1)) return;
   return { ctx, build: cmd.build, distance: node.distance };
 }
 
@@ -362,7 +369,7 @@ async function editReviewedWallDistance(state: ChatState, index: number, distanc
   if (typeof distance !== 'number' || !Number.isFinite(distance))
     return fail(state, 'Set values.offsetDistance to a finite signed distance in mm.', { code: 'EDIT_INPUT' });
   const edit = reviewedWallDistance(state, index);
-  if (!edit) return fail(state, 'This edit needs the current terminal right wall Offset of an ordinary rectangular taper or the inner wall Offset of a coaxial tube.', { code: 'EDIT_INPUT' });
+  if (!edit) return fail(state, 'This edit needs the current terminal right wall Offset of an ordinary rectangular taper or a radial wall Offset of a coaxial tube.', { code: 'EDIT_INPUT' });
   let next: StudioDoc;
   try { next = edit.build(edit.ctx, { d: distance }); }
   catch (error) {
