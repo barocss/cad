@@ -47,6 +47,7 @@ import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
 import { returnEditorFocus } from './ui/editorReturnFocus';
 import { handoffReferenceFocus, type ReferenceFocusReceipt } from './ui/referenceFocus';
+import { createReferenceDecisions, type ReferenceChoices } from './state/referenceDecisions';
 import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
 import { viewportRecoveryToast } from './viewport/viewportRecovery';
 import { useSpecificationActions } from './state/useSpecificationActions';
@@ -164,7 +165,7 @@ import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skel
 import { offsetFaceGroup, carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, withNode, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { bodyKeyFor, cutAfter, featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
-import { candidatesFor, captureSignatures, confirmReference, markedReferences, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
+import { captureSignatures, markedReferences, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
 import { type BodyResult, type EvalResult } from '@barocss/cad-model/engine/evaluate';
 import type { DrawingReferenceLabel, DrawingReferencePreview } from './ui/DrawingWorkspace';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
@@ -682,7 +683,7 @@ export function App() {
   // References an opened file stores that could not be told (engine/references.ts), and the candidates on show.
   const referenceProblems = useRef(new WeakMap<StudioDoc, RefProblem[]>());
   const refProblems = referenceProblems.current.get(doc) ?? [];
-  const [referenceChoices, setRefChoices] = useState<{ doc: StudioDoc; index: number; names: string[] } | null>(null);
+  const [referenceChoices, setRefChoices] = useState<ReferenceChoices | null>(null);
   const refChoices = referenceChoices?.doc === doc ? referenceChoices : null;
   const [referencePreview, setReferencePreview] = useState<(DrawingReferencePreview & { owner: StudioDoc }) | null>(null);
   const [referenceLabelCache, setReferenceLabelCache] = useState<{ owner: ReferenceLabelOwner; labels: readonly DrawingReferenceLabel[] } | null>(null);
@@ -2574,39 +2575,14 @@ export function App() {
     if (edges.length !== 1) { setToast({ title: 'Preview unavailable', hint: edges.length ? 'This name covers more than one displayed edge.' : 'This edge is not present in the current displayed model.', detail: '' }); return; }
     setReferencePreview(null); setDrawing(false); setRendering(false); setMeasure(null); setInstanceSel([]); setDirectSel([]); setSelection({ faces: [], edges, bodies: [] });
   };
-  const settleRef = async (index: number, to?: string, keyboardButton?: HTMLButtonElement) => {
-    const focusRequest = ++referenceFocusRequest.current;
-    referenceFocus.current = null;
-    const open = openIntent.current;
-    const current = () => openIntent.current === open && ownsEvaluatedSource() && canChangeDocument();
-    const problem = refProblems.find(p => p.index === index);
-    const held = problem?.node == null ? undefined : doc.nodes[problem.node];
-    const heldFinish = held?.held && (held.kind === 'fillet' || held.kind === 'chamfer') ? held : undefined;
-    if (heldFinish && to !== undefined && to !== problem?.name && heldFinish.edges.includes(to)) {
-      setToast({ title: 'Reference not applied', hint: 'This feature already uses that edge.', detail: to });
-      return false;
-    }
-    const remaining = refProblems.filter(p => p.index !== index);
-    const pending = heldFinish && problem ? remaining.find(p => p.node === problem.node) : undefined;
-    const next = await confirmReference(doc, index, bodies, d => engine.part(d, revision.current++, 'refs'), to, undefined, pending);
-    if (!current() || next === doc) return false;
-    if (heldFinish && !pending) {
-      const result = await engine.part(prefixDoc(next, next.nodes.length), revision.current++, 'refs');
-      if (!current()) return false;
-      if (!result.ok) { setToast({ ...result.error, title: 'Reference not applied' }); return false; }
-    }
-    pushUndo(); if (!setDoc(next)) return false;
-    if (keyboardButton && focusRequest === referenceFocusRequest.current)
-      referenceFocus.current = { doc: next, scope: openIntent.current, button: keyboardButton };
-    referenceProblems.current.set(next, remaining);
-    setRefChoices(null); setDirty(true);
-    return true;
-  };
-  const showRefChoices = async (index: number) => {
-    const scope = currentOpenScope(), dispatch = saveDocumentToken.current;
-    const names = await candidatesFor(doc, index, bodies, d => engine.part(d, revision.current++, 'refs'));
-    if (isOpenCurrent(scope) && saveDocumentToken.current === dispatch && docNow.current === doc) setRefChoices({ doc, index, names });
-  };
+  const { settleRef, showRefChoices } = createReferenceDecisions({
+    model: { doc, bodies, problems: refProblems },
+    owner: { document: docNow, open: openIntent, dispatch: saveDocumentToken, canSettle: () => ownsEvaluatedSource() && canChangeDocument() },
+    focus: { request: referenceFocusRequest, receipt: referenceFocus },
+    readPart: source => engine.part(source, revision.current++, 'refs'),
+    changes: { pushUndo, setDoc, remember: (next, problems) => referenceProblems.current.set(next, problems),
+      setChoices: setRefChoices, setDirty, notice: setToast },
+  });
   /** A sketch's profile as DXF, 1:1 in its plane (R11b, O1). */
   const exportSketchDxf = (index: number) => {
     const n = doc.nodes[index];

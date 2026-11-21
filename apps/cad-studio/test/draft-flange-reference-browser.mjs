@@ -139,7 +139,15 @@ await f.run(async () => {
   const matched = await f.snapshot('flange-matched-again');
   assert.deepEqual(matched.doc.nodes[5].rematched, { [topCandidate]: rim });
   volumes(matched, { b5: flangeVolume(79.5) });
-  await button('Confirm reference', refs()).click();
+  await button('Show alternatives', refs()).click();
+  await button('Preview candidate 1', refs()).waitFor();
+  const alternatives = await f.snapshot('flange-matched-alternatives');
+  for (const key of ['doc', 'bodies', 'selection', 'history']) assert.deepEqual(alternatives[key], matched[key], key);
+  const candidateNames = (await refs().locator('details').textContent())
+    .split(/Candidate \d+: /).slice(1);
+  assert.ok(candidateNames.includes(bottomCandidate), JSON.stringify(candidateNames));
+  f.report.observations.push({ label: 'matched-alternatives', candidateNames });
+  await refs().getByRole('button', { name: /^Confirm reference for Flange .*\(n5\)$/ }).click();
   await refs().waitFor({ state: 'hidden' });
   await f.ready();
   const confirmedMatch = await f.snapshot('flange-match-confirmed');
