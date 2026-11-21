@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1612 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1613 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1612](notes/coaxial-tube-lower-cap-offset-2026-11-22/README.md), P5 row 31, moves the original lower annular cap of a coaxial tube. Studio verifies the signed edit, fixed upper cap and exact native Open. See [row 31](roadmap-rows/31.md) and the [decision index](decisions.md).
-- **Next MAIN:** D1613, P1 row 09, [#229](https://github.com/barocss/cad/issues/229). Start an ordinary Line at a calculated position from two construction endpoints and preserve the exact first point through profile finish and native Open.
+- **Current position:** [D1613](notes/calculated-sketch-line-start-2026-11-22/README.md), P1 row 09, starts an ordinary Line at a calculated point. Studio verifies exact closure, extrusion and native Open. See [row 09](roadmap-rows/09.md) and the [decision index](decisions.md).
+- **Next MAIN:** D1614, P5 row 24, [#29](https://github.com/barocss/cad/issues/29). Inspect the one-sided tangent angle at the original knot of an exact straight-to-quadratic Direct Join.
 - **Separate follow-ups:** [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Measured progress:** whole CAD and core readiness **NOT_MEASURED**; B01 v1 **12/12 accepted groups**; B02 v1 **11/11 accepted groups**; B04 v1 **26/26 accepted groups**; B07 v1 **6/6 accepted profiles**; B09 v1 **9/9 accepted groups**; initial scenarios **8/10 accepted**; B06 **6/7 qualified groups, PDF held**; B05 **7/7 accepted groups**; B08 **6/6 accepted groups**; B10 **7/7 accepted groups**; B03 **NOT_ADJUDICATED**. The legacy43% is frozen history. P0 has12 acceptance items; R01–R12 have bounded D521–D532 closeouts; D785 demonstrates one R04 native collision; no whole-product acceptance follows. This is backlog state, not a whole-CAD percentage.

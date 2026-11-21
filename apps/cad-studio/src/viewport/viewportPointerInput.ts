@@ -450,6 +450,12 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
   const startSketchPrimitiveAt = (owner: SketchState, at: [number, number]) => {
     if (propsRef.current.sketch !== owner || drafting.current) return false;
     const { tool } = owner;
+    if (tool === 'polygon') {
+      if (liveShape.current) return false;
+      emit({ kind: 'polygon', points: [at], closed: false, bulges: [0], pending: false }, true, 'line-point');
+      request();
+      return true;
+    }
     if (tool !== 'rectangle' && tool !== 'circle' && tool !== 'slot') return false;
     drafting.current = true;
     if (tool === 'circle') {
@@ -1211,6 +1217,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
         }
       } else {
         // Line (polygon) and arc tools share one open chain; an arc's bulge follows the cursor until the next click.
+        if (sk.tool === 'polygon' && !s && startSketchPrimitiveAt(sk, c)) return;
         const open = s && s.kind === 'polygon' && !s.closed ? s : null;
         if (s?.kind === 'polygon' && s.pending) { emit({ ...s, pending: false }, false, 'arc-finish'); return; }
         const pts = open ? open.points : [], bulges = open?.bulges ?? pts.map(() => 0);
