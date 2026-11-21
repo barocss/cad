@@ -69,10 +69,11 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
     </NativeSelect></label>}
     {!!n && dragSettings.tool === 'rotate' && <>
       <label className={FIELD}><span>Rotate frame</span><NativeSelect className={CONTROL} aria-label="Rotate drag frame" value={rotation.frame} disabled={dragging}
-        onChange={event => rotation.setFrame(event.target.value === 'face' ? 'face' : 'world')}>
-        <option value="world">World axes</option><option value="face">Face normal</option>
+        onChange={event => rotation.setFrame(FACE_DRAG_FRAMES.find(frame => frame.value === event.target.value)?.value ?? 'world')}>
+        <option value="world">World axes</option>
+        {FACE_DRAG_FRAMES.map(frame => <option key={frame.value} value={frame.value}>{frame.label}</option>)}
       </NativeSelect></label>
-      {rotation.reason && <div className="warn" role="status">Face normal: {rotation.reason}.</div>}
+      {rotation.reason && <div className="warn" role="status">{rotation.reason}.</div>}
     </>}
     {!!n && (dragSettings.tool === 'scale' || dragSettings.tool === 'rotate' && rotation.frame === 'world') && <>
       <label className={FIELD}><span>Pivot</span><NativeSelect className={CONTROL} aria-label={`${pivotTool} drag pivot`} value={pivot.mode} disabled={dragging}

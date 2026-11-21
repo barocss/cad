@@ -19,10 +19,13 @@ type CageDrag = {
 };
 const DEFAULT_RADIUS = '10';
 type CageDragFrame = 'world' | CageLocalFrame;
+type CageRotateFrame = Exclude<CageDragFrame, 'edge'>;
 type CageDragTool = 'move' | 'scale' | 'rotate';
 type CageDragTransform = { kind: 'scale'; factor: number } | { kind: 'rotate'; axis: Axis3; degrees: number }
   | { kind: 'rotate-along'; direction: Vec3; degrees: number };
 const LOCAL_AXIS_LABEL: Record<CageLocalFrame, string> = { edge: 'T', face: 'N', 'face-u': 'U', 'face-v': 'V' };
+// Use the next axis in the right-handed U, V, normal frame as the arc's first radial.
+const ROTATION_RADIAL = { 'face-u': 'face-v', 'face-v': 'face', face: 'face-u' } as const;
 type PivotVertexInput = { value: string; cage: CageSession['cage'] };
 
 function currentPivotVertex(input: PivotVertexInput, cage: CageSession['cage'], point: Vec3): boolean {
@@ -41,16 +44,17 @@ export function useCageGizmo(
   fail: (title: string, hint: string) => void,
 ) {
   const [tool, setTool] = useState<CageDragTool>('move');
-  const [rotateFrame, setRotateFrame] = useState<'world' | 'face'>('world');
-  const localRotate = tool === 'rotate' && rotateFrame === 'face';
+  const [rotateFrame, setRotateFrame] = useState<CageRotateFrame>('world');
+  const localRotate = tool === 'rotate' && rotateFrame !== 'world';
   const localTurn = useMemo(() => {
-    if (!localRotate || !session) return null;
+    if (tool !== 'rotate' || rotateFrame === 'world' || !session) return null;
     try {
-      return { turnAlong: { direction: cageLocalDirection(session, 'face'), radial: cageLocalDirection(session, 'face-u'), label: 'N' } };
+      return { turnAlong: { direction: cageLocalDirection(session, rotateFrame),
+        radial: cageLocalDirection(session, ROTATION_RADIAL[rotateFrame]), label: LOCAL_AXIS_LABEL[rotateFrame] } };
     } catch (error) {
       return { reason: error instanceof Error ? error.message.replace(/^SubD: local direction: /, '') : String(error) };
     }
-  }, [localRotate, session]);
+  }, [tool, rotateFrame, session]);
   const [pivotMode, setPivotMode] = useState<CagePivotMode>('centre');
   const [pivotVertex, setPivotVertex] = useState<PivotVertexInput | null>(null);
   const pivot = useMemo(() => {
@@ -184,7 +188,7 @@ export function useCageGizmo(
       setTool: (next: CageDragTool) => { if (!isDragging()) setTool(next); },
       rotation: {
         frame: rotateFrame, reason: localTurn?.reason,
-        setFrame: (next: 'world' | 'face') => { if (!isDragging()) setRotateFrame(next); },
+        setFrame: (next: CageRotateFrame) => { if (!isDragging()) setRotateFrame(next); },
       },
       pivot: {
         mode: pivotMode, vertex: pivotVertex?.value ?? '', reason: pivot?.reason,

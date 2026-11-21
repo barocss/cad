@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1497: [Drag a SubD cage quad around its U and V axes](notes/cage-local-uv-rotation-drag-2026-11-21/README.md), #625. Verify both plane angles, refusals, numeric parity and native reopening.
 - D1496: [Drag a SubD cage quad around its winding normal](notes/cage-local-normal-rotation-drag-2026-11-21/README.md), #625. Verify independent rotation in oblique perspective, view-change cancellation and native reopening.
 - D1495: [Qualify the X and Y SubD cage rotation handles](notes/cage-world-rotation-xy-2026-11-21/README.md), #625. Verify signed rotation, numeric parity, cancellation and native reopening in actual Studio.
 - D1494: [Rotate the selected SubD cage region about a guarded vertex](notes/cage-vertex-rotation-drag-2026-11-21/README.md), #625. Verify shared pivot ownership, numeric parity, cancellation and native reopening.
