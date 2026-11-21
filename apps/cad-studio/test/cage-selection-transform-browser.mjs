@@ -7,12 +7,15 @@ const pivotTopology = stalePivot || process.argv.includes('--pivot-topology');
 const vertexScale = pivotBaseline || pivotTopology || process.argv.includes('--vertex-scale');
 const scaleDrag = scaleBaseline || vertexScale || process.argv.includes('--scale-drag');
 const rotateBaseline = process.argv.includes('--expect-no-rotate-drag');
-const rotateDrag = rotateBaseline || process.argv.includes('--rotate-drag');
+const rotateVertexBaseline = process.argv.includes('--expect-no-rotate-vertex');
+const rotateVertex = rotateVertexBaseline || process.argv.includes('--rotate-vertex');
+const rotateDrag = rotateBaseline || rotateVertex || process.argv.includes('--rotate-drag');
 const pins=['packages/barocss-cad-model/src/subd/cageEdit.ts','apps/cad-studio/src/ui/CagePanel.tsx','apps/cad-studio/src/subd/useCageEditor.ts','apps/cad-studio/src/subd/cageTransformDraft.ts','apps/cad-studio/src/ui/CageTransformControls.tsx'];
 if (scaleDrag || rotateDrag) pins.push('apps/cad-studio/src/subd/useCageGizmo.ts', 'apps/cad-studio/src/viewport/gizmo.ts',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts', 'apps/cad-studio/test/cage-selection-transform-browser.mjs');
 const f=await createFlow({name:'cage-selection-transform',output:process.argv[2],envFrozen:'CAGE_TRANSFORM_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,
- qualification: rotateDrag ? 'Physical signed Z rotation of two connected cage faces about their original centre.'
+ qualification: rotateVertex ? 'Physical signed Z rotation of two connected faces about one guarded cage vertex.'
+   : rotateDrag ? 'Physical signed Z rotation of two connected cage faces about their original centre.'
    : vertexScale ? 'Physical uniform scaling of two connected cage faces about one exact cage vertex.'
    : scaleDrag ? 'Physical uniform scaling of two connected cage faces about the original centre, compared with numeric Scale.'
    : 'Numeric world-axis rotation and uniform scale on selected faces, explicit pivot, no-op/cancel/history and native persistence.',
@@ -233,6 +236,7 @@ async function scaleSelection(seed, base, verify, apply) {
 async function rotateSelection(seed, base, verify, apply) {
  const tool = panel().getByLabel('Cage drag tool',{exact:true});
  const arc = f.page.locator('[data-gizmo="turnZ"]');
+ const pivotMode = panel().getByLabel('Rotate drag pivot',{exact:true});
  if (rotateBaseline) {
   assert.equal(await tool.locator('option[value="rotate"]').count(),0);
   assert.equal(await arc.count(),0);
@@ -245,6 +249,57 @@ async function rotateSelection(seed, base, verify, apply) {
  await tool.selectOption('rotate');
  await arc.waitFor();
  assert.equal(await f.page.locator('[data-gizmo^="move"],[data-gizmo^="scale"]').count(),0);
+ if (rotateVertexBaseline) {
+  assert.equal(await pivotMode.count(),0);
+  await f.snapshot('original-centre-rotate');
+  await f.same(base);
+  return;
+ }
+ const undo = () => button('Undo cage step',panel()).click();
+ let vertexId, pivot;
+ if (rotateVertex) {
+  const vertex = panel().getByRole('spinbutton',{name:'Rotate drag vertex ID',exact:true});
+  vertexId = Math.min(...seed.sel.faces.flatMap(face=>seed.cage.faces[face]));
+  pivot = seed.cage.positions.slice(3*vertexId,3*vertexId+3);
+  assert.equal(await pivotMode.inputValue(),'centre');
+  await pivotMode.selectOption('vertex');
+  await vertex.fill('-1');
+  await panel().getByRole('status').filter({hasText:'Enter a current cage vertex ID'}).waitFor();
+  assert.equal(await arc.count(),0);
+  assert.deepEqual(await state(),seed);
+  await vertex.fill(String(vertexId));
+  const expectPivot = () => f.page.waitForFunction(point=>{
+   const mark = document.querySelector('circle.gizmo-origin');
+   if (!mark) return false;
+   const box = mark.getBoundingClientRect();
+   const [x,y] = window.__studioScreenOf(point);
+   return Math.hypot(x-(box.x+box.width/2),y-(box.y+box.height/2)) < 0.5;
+  },pivot);
+  await expectPivot();
+  await tool.selectOption('scale');
+  assert.equal(await panel().getByLabel('Scale drag pivot',{exact:true}).inputValue(),'vertex');
+  assert.equal(await panel().getByRole('spinbutton',{name:'Scale drag vertex ID',exact:true}).inputValue(),String(vertexId));
+  await tool.selectOption('rotate');
+  await expectPivot();
+  f.phase = 'move the chosen point and require an updated vertex pivot';
+  await button('Move selection',panel()).click();
+  await f.page.getByRole('spinbutton',{name:'Selection distance mm',exact:true}).fill('1');
+  await apply();
+  const shifted = await state();
+  assert.deepEqual(shifted.cage.positions.slice(3*vertexId,3*vertexId+3),[pivot[0],pivot[1],pivot[2]+1]);
+  assert.equal(await vertex.inputValue(),String(vertexId));
+  await panel().getByRole('status').filter({hasText:'The cage changed. Enter the pivot vertex again.'}).waitFor();
+  assert.equal(await arc.count(),0);
+  await f.snapshot('rotation-pivot-retired');
+  await f.same(base);
+  await undo();
+  assert.deepEqual(await state(),seed);
+  await expectPivot();
+ }
+ const verifyRotation = (result, angle) => {
+  verify(seed,result,'rotate',angle,pivot);
+  if (vertexId !== undefined) assert.deepEqual(result.cage.positions.slice(3*vertexId,3*vertexId+3),pivot);
+ };
  const readout = f.page.locator('.gizmo-readout');
  async function start(angle, steps = 12, fine = false) {
   const point = await arc.locator('polyline').last().evaluate(polyline => {
@@ -270,7 +325,6 @@ async function rotateSelection(seed, base, verify, apply) {
   }
   return 0;
  }
- const undo = () => button('Undo cage step',panel()).click();
  f.phase = 'identity, held rotation, and Escape';
  await start(0);
  await f.page.mouse.up();
@@ -308,7 +362,7 @@ async function rotateSelection(seed, base, verify, apply) {
  await f.page.keyboard.up('Shift');
  assert.ok(Math.abs(fineAngle-8)<=1);
  const fine = await state();
- verify(seed,fine,'rotate',fineAngle);
+ verifyRotation(fine,fineAngle);
  assert.equal(fine.undo,1);
  await undo();
  assert.deepEqual(await state(),seed);
@@ -317,7 +371,7 @@ async function rotateSelection(seed, base, verify, apply) {
  await start(-15);
  await f.page.mouse.up();
  const negative = await state();
- verify(seed,negative,'rotate',-15);
+ verifyRotation(negative,-15);
  assert.deepEqual(negative.cage.creases,seed.cage.creases);
  assert.equal(negative.undo,1);
  await undo();
@@ -327,7 +381,7 @@ async function rotateSelection(seed, base, verify, apply) {
  await start(15,24);
  await f.page.mouse.up();
  const positive = await state();
- verify(seed,positive,'rotate',15);
+ verifyRotation(positive,15);
  assert.equal(positive.undo,1);
  await undo();
  assert.deepEqual(await state(),seed);
@@ -336,6 +390,10 @@ async function rotateSelection(seed, base, verify, apply) {
  await undo();
  await button('Rotate selection',panel()).click();
  await f.page.getByLabel('Rotation world axis',{exact:true}).selectOption('2');
+ if (vertexId !== undefined) {
+  await f.page.getByLabel('Selection pivot',{exact:true}).selectOption('vertex');
+  await f.page.getByRole('spinbutton',{name:'Pivot cage vertex',exact:true}).fill(String(vertexId));
+ }
  await f.page.getByRole('spinbutton',{name:'Selection angle degrees',exact:true}).fill('15');
  await apply();
  assert.deepEqual(await state(),positive);
@@ -350,7 +408,7 @@ async function rotateSelection(seed, base, verify, apply) {
  await f.redo(); await f.same(accepted);
  const saved = await f.save('selection-rotate-drag');
  await f.freshOpen(saved.file,accepted,'selection-rotate-drag-reopened');
- f.report.observations.push({angles:[-15,15],fineAngle,numericParity:true,selectedFaces:seed.sel.faces});
+ f.report.observations.push({angles:[-15,15],fineAngle,numericParity:true,selectedFaces:seed.sel.faces,vertexId,pivot});
 }
 
 await f.run(async()=>{

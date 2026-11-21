@@ -48,7 +48,8 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
   const pickedEdges = selectedCageEdges(s), sharpCount = pickedEdges.filter(edge => edge.sharp).length;
   const localFrames = s.mode === 'edge' ? EDGE_DRAG_FRAMES : FACE_DRAG_FRAMES;
   const chosenFrame = localFrames.find(frame => frame.value === dragSettings.dragFrame);
-  const scalePivot = dragSettings.scalePivot;
+  const pivot = dragSettings.pivot;
+  const pivotTool = dragSettings.tool === 'rotate' ? 'Rotate' : 'Scale';
   const what = s.sel.faces.length ? `${s.sel.faces.length} face${s.sel.faces.length === 1 ? '' : 's'}` : s.sel.edges.length ? `${s.sel.edges.length} edge${s.sel.edges.length === 1 ? '' : 's'}` : s.sel.vertices.length ? `${s.sel.vertices.length} vertex${s.sel.vertices.length === 1 ? '' : 'es'}` : 'nothing';
   return <aside className="card props cage-panel" aria-label="Cage editor">
     <div className="card-title">CAGE · {name}</div>
@@ -65,15 +66,15 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
       onChange={event => dragSettings.setTool(event.target.value === 'scale' ? 'scale' : event.target.value === 'rotate' ? 'rotate' : 'move')}>
       <option value="move">Move</option><option value="rotate">Rotate</option><option value="scale">Uniform scale</option>
     </NativeSelect></label>}
-    {!!n && dragSettings.tool === 'scale' && <>
-      <label className={FIELD}><span>Pivot</span><NativeSelect className={CONTROL} aria-label="Scale drag pivot" value={scalePivot.mode} disabled={dragging}
-        onChange={event => scalePivot.setMode(event.target.value === 'vertex' ? 'vertex' : 'centre')}>
+    {!!n && dragSettings.tool !== 'move' && <>
+      <label className={FIELD}><span>Pivot</span><NativeSelect className={CONTROL} aria-label={`${pivotTool} drag pivot`} value={pivot.mode} disabled={dragging}
+        onChange={event => pivot.setMode(event.target.value === 'vertex' ? 'vertex' : 'centre')}>
         <option value="centre">Selection centre</option><option value="vertex">Cage vertex</option>
       </NativeSelect></label>
-      {scalePivot.mode === 'vertex' && <label className={FIELD}><span>Vertex ID</span><input className={CONTROL} type="number" min="0" step="1"
-        aria-label="Scale drag vertex ID" aria-invalid={!!scalePivot.reason} value={scalePivot.vertex} disabled={dragging}
-        onChange={event => scalePivot.setVertex(event.target.value)} /></label>}
-      {scalePivot.reason && <div className="warn" role="status">{scalePivot.reason}</div>}
+      {pivot.mode === 'vertex' && <label className={FIELD}><span>Vertex ID</span><input className={CONTROL} type="number" min="0" step="1"
+        aria-label={`${pivotTool} drag vertex ID`} aria-invalid={!!pivot.reason} value={pivot.vertex} disabled={dragging}
+        onChange={event => pivot.setVertex(event.target.value)} /></label>}
+      {pivot.reason && <div className="warn" role="status">{pivot.reason}</div>}
     </>}
     {dragSettings.tool === 'move' && s.mode === 'vertex' && <div className="space-y-1">
       <label className="flex items-center gap-2"><input type="checkbox" checked={dragSettings.enabled} disabled={dragging} onChange={e => dragSettings.setEnabled(e.target.checked)} />Connected proportional drag</label>
