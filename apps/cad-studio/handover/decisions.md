@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1500: [Verify SubD scale and face-normal rotation at a mirrored seam](notes/cage-mirrored-seam-transforms-2026-11-21/README.md), #625. Verify two constrained coordinates, numeric parity, history and native reopening.
 - D1499: [Share the guarded vertex pivot with all three SubD face rotation axes](notes/cage-local-face-rotation-pivot-2026-11-21/README.md), #625. Verify signed rotation, refusal, pivot retirement and native reopening.
 - D1498: [Rotate one SubD cage edge around its tangent](notes/cage-edge-tangent-rotation-drag-2026-11-21/README.md), #625. Verify centre identity, guarded off-edge pivot, numeric parity and native reopening.
 - D1497: [Drag a SubD cage quad around its U and V axes](notes/cage-local-uv-rotation-drag-2026-11-21/README.md), #625. Verify both plane angles, refusals, numeric parity and native reopening.
