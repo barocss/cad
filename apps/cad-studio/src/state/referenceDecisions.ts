@@ -1,8 +1,10 @@
 import type { RefObject } from 'react';
+import type { Selection } from '@barocss/cad-model/app/commands';
 import { prefixDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult, EvalResult } from '@barocss/cad-model/engine/evaluate';
 import { candidatesFor, confirmReference, type Problem } from '@barocss/cad-model/engine/references';
 import type { StudioNotice } from '../app/studioNotice';
+import type { DrawingReferencePreview } from '../ui/DrawingWorkspace';
 import type { ReferenceFocusReceipt } from '../ui/referenceFocus';
 import type { OpenScope } from './openOwnership';
 
@@ -79,4 +81,53 @@ export function createReferenceDecisions({ model, owner, focus, readPart, change
   }
 
   return { settleRef, showRefChoices };
+}
+
+export interface ReferencePreviewOptions {
+  edge?: string;
+  candidateNumber?: number;
+  inModel?: boolean;
+}
+
+interface ReferencePreviewRoute {
+  model: { doc: StudioDoc; bodies: readonly BodyResult[]; ready: boolean; edgeBlocked(): boolean };
+  owner: { document: RefObject<StudioDoc>; switchDrawing(ready: () => void): void };
+  changes: {
+    setPreview(preview: (DrawingReferencePreview & { owner: StudioDoc }) | null): void;
+    showDrawing(): void;
+    showModel(edges: Selection['edges']): void;
+    notice(notice: StudioNotice): void;
+  };
+}
+
+export function createReferencePreview({ model, owner, changes }: ReferencePreviewRoute) {
+  const { doc, bodies, ready, edgeBlocked } = model;
+  return (where: string, { edge, candidateNumber, inModel = false }: ReferencePreviewOptions = {}) => {
+    const dimension = doc.drawing?.dimensions.find(value => where === `dimension ${value.id}`);
+    if (dimension && !inModel) {
+      if (!ready) {
+        changes.setPreview(null);
+        changes.notice({ title: 'Preview unavailable', hint: 'Wait for the current model before inspecting a drawing reference.', detail: '' });
+        return;
+      }
+      owner.switchDrawing(() => {
+        if (owner.document.current !== doc) return;
+        changes.setPreview({ owner: doc, dimensionId: dimension.id, edge, candidateNumber });
+        changes.showDrawing();
+      });
+      return;
+    }
+    if (!edge || !ready || edgeBlocked()) {
+      changes.notice({ title: 'Preview unavailable', hint: 'Show the current model without a section or active tool first.', detail: '' });
+      return;
+    }
+    const edges = bodies.flatMap((body, bodyIndex) => body.mesh.edges.flatMap((candidate, edgeIndex) =>
+      candidate.names.includes(edge) ? [{ body: bodyIndex, edge: edgeIndex }] : []));
+    if (edges.length !== 1) {
+      changes.notice({ title: 'Preview unavailable', hint: edges.length ? 'This name covers more than one displayed edge.' : 'This edge is not present in the current displayed model.', detail: '' });
+      return;
+    }
+    changes.setPreview(null);
+    changes.showModel(edges);
+  };
 }

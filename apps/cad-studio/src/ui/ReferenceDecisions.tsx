@@ -2,9 +2,8 @@ import { type CSSProperties, type MouseEvent } from 'react';
 import { featureLabel, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { featureId } from '@barocss/cad-model/engine/ids';
 import { markedReferences, referencesOf, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
+import type { ReferencePreviewOptions } from '../state/referenceDecisions';
 import type { DrawingReferenceLabel } from './DrawingWorkspace';
-
-export interface ReferencePreviewOptions { edge?: string; candidateNumber?: number; inModel?: boolean }
 
 interface ReferenceDecisionsProps {
   doc: StudioDoc;

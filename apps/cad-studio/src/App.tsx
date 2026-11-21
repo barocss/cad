@@ -47,7 +47,7 @@ import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
 import { returnEditorFocus } from './ui/editorReturnFocus';
 import { handoffReferenceFocus, type ReferenceFocusReceipt } from './ui/referenceFocus';
-import { createReferenceDecisions, type ReferenceChoices } from './state/referenceDecisions';
+import { createReferenceDecisions, createReferencePreview, type ReferenceChoices } from './state/referenceDecisions';
 import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
 import { viewportRecoveryToast } from './viewport/viewportRecovery';
 import { useSpecificationActions } from './state/useSpecificationActions';
@@ -117,7 +117,7 @@ import { cutPatternSourceLabel, isCutPattern, selectedCutPatternSource } from '.
 import { moveRenderAppearance } from './app/moveRenderAppearance';
 import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument, insertedCurvePartProblem, prepareDirectCurveCandidate, type DirectCurveEdit } from './app/directCurveCandidate';
 import { LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
-import { ReferenceDecisions, type ReferencePreviewOptions } from './ui/ReferenceDecisions';
+import { ReferenceDecisions } from './ui/ReferenceDecisions';
 import { useRobotExports } from './robot/useRobotExports';
 import { RobotInspector } from './robot/RobotInspector';
 import { shownExtrudeEndFace } from './app/extrudeEndFace';
@@ -2534,7 +2534,6 @@ export function App() {
     useSpecificationActions({ doc, bodies, commit, engine, revision, setToast, setChat, setChatOutbox });
   // The references marked matched again (until confirmed), and the user's say on them and on the problems.
   const refMarks = useMemo(() => markedReferences(doc), [doc]);
-  const referenceDimension = (where: string) => doc.drawing?.dimensions.find(d => where === `dimension ${d.id}`);
   const showWorkspace = (mode: 'Model' | 'Drawing' | 'Render') => {
     setSketch(null);
     if (mode !== 'Model') { discardFeatureDraft(); setMeasure(null); }
@@ -2554,27 +2553,14 @@ export function App() {
     },
       { event, destinationFocus: sketchModeButton.current });
   };
-  const previewReference = (where: string, { edge, candidateNumber, inModel = false }: ReferencePreviewOptions = {}) => {
-    const dimension = referenceDimension(where);
-    if (dimension && !inModel) {
-      if (!fresh || busy) {
-        clearReferencePreview();
-        setToast({ title: 'Preview unavailable', hint: 'Wait for the current model before inspecting a drawing reference.', detail: '' });
-        return;
-      }
-      workspaceModeExit.switchWhenReady(() => {
-        if (docNow.current !== doc) return;
-        setReferencePreview({ owner: doc, dimensionId: dimension.id, edge, candidateNumber });
-        showWorkspace('Drawing');
-        setBrowserOpen(true);
-      }, { readFeature: commandDraft });
-      return;
-    }
-    if (!edge || !fresh || busy || section || previewBodies || sketch || mateFaces) { setToast({ title: 'Preview unavailable', hint: 'Show the current model without a section or active tool first.', detail: '' }); return; }
-    const edges = bodies.flatMap((body, bodyIndex) => body.mesh.edges.flatMap((candidate, edgeIndex) => candidate.names.includes(edge) ? [{ body: bodyIndex, edge: edgeIndex }] : []));
-    if (edges.length !== 1) { setToast({ title: 'Preview unavailable', hint: edges.length ? 'This name covers more than one displayed edge.' : 'This edge is not present in the current displayed model.', detail: '' }); return; }
-    setReferencePreview(null); setDrawing(false); setRendering(false); setMeasure(null); setInstanceSel([]); setDirectSel([]); setSelection({ faces: [], edges, bodies: [] });
-  };
+  const previewReference = createReferencePreview({
+    model: { doc, bodies, ready: fresh && !busy, edgeBlocked: () => !!(section || previewBodies || sketch || mateFaces) },
+    owner: { document: docNow, switchDrawing: ready => workspaceModeExit.switchWhenReady(ready, { readFeature: commandDraft }) },
+    changes: { setPreview: setReferencePreview, notice: setToast,
+      showDrawing: () => { showWorkspace('Drawing'); setBrowserOpen(true); },
+      showModel: edges => { setDrawing(false); setRendering(false); setMeasure(null); setInstanceSel([]); setDirectSel([]); setSelection({ faces: [], edges, bodies: [] }); },
+    },
+  });
   const { settleRef, showRefChoices } = createReferenceDecisions({
     model: { doc, bodies, problems: refProblems },
     owner: { document: docNow, open: openIntent, dispatch: saveDocumentToken, canSettle: () => ownsEvaluatedSource() && canChangeDocument() },
