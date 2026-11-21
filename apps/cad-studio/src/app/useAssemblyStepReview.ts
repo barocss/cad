@@ -6,17 +6,30 @@ import {
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import { hostsOf } from '../assembly/nestedSelection';
+import type { OpenScope } from '../state/openOwnership';
 import type { ValueStore } from '../state/valueStore';
 import type { ViewportHandle } from '../viewport/Viewport';
 import {
-  cameraOfView, clampStep, stepBatchTakeOutOffer, stepBatchTransferOffer, stepOffer, stepsDisplay, viewOfCamera,
+  cameraOfView, canSelectStepPart, clampStep, stepBatchTakeOutOffer, stepBatchTransferOffer, stepOffer, stepsDisplay, viewOfCamera,
 } from './assemblySteps';
 
 interface AssemblyStepReviewOptions {
   doc: StudioDoc;
   docGeneration: number;
   available: boolean;
-  selectedParts: readonly string[];
+  selection: {
+    selectedParts: readonly string[];
+    editor: object | null;
+    editorPending: boolean;
+    pickPart(id: string): void;
+  };
+  source: {
+    docNow: RefObject<StudioDoc>;
+    openIntent: RefObject<OpenScope>;
+    workerSessionNow: RefObject<number>;
+    workerSession: number;
+    opening(): boolean;
+  };
   viewport: RefObject<Pick<ViewportHandle, 'getCamera' | 'setCamera'> | null>;
   explodeStore: ValueStore<number>;
   commit(next: StudioDoc): boolean;
@@ -25,8 +38,10 @@ interface AssemblyStepReviewOptions {
 
 /** Session display and authoring for the Steps panel. App owns shared selection and history. */
 export function useAssemblyStepReview({
-  doc, docGeneration, available, selectedParts, viewport, explodeStore, commit, onNotice,
+  doc, docGeneration, available, selection, source, viewport, explodeStore, commit, onNotice,
 }: AssemblyStepReviewOptions) {
+  const { selectedParts, editor, editorPending, pickPart } = selection;
+  const { docNow, openIntent, workerSessionNow, workerSession, opening } = source;
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState(0);
   const [faded, setFaded] = useState(false);
@@ -73,6 +88,56 @@ export function useAssemblyStepReview({
     }
     if (commit(next)) afterCommit?.();
   };
+
+  // Keep delayed member actions bound to the step and selection the panel showed.
+  const openScope = openIntent.current;
+  const nextScope = { doc, docGeneration, selectedParts, index, shown, openScope, workerSession };
+  const actionScope = useRef(nextScope);
+  const previous = actionScope.current;
+  if (previous.doc !== doc || previous.docGeneration !== docGeneration || previous.selectedParts !== selectedParts
+    || previous.index !== index || previous.shown !== shown || previous.openScope !== openScope
+    || previous.workerSession !== workerSession) actionScope.current = nextScope;
+  const ownedAction = actionScope.current;
+  const currentAction = () => actionScope.current === ownedAction && docNow.current === doc && shown
+    && openIntent.current === ownedAction.openScope && workerSessionNow.current === ownedAction.workerSession && !opening();
+
+  const pickScope = useRef({ action: ownedAction, editor, editorPending });
+  if (pickScope.current.action !== ownedAction || pickScope.current.editor !== editor
+    || pickScope.current.editorPending !== editorPending) pickScope.current = { action: ownedAction, editor, editorPending };
+  const ownedPick = pickScope.current;
+  const selectionDisabled = !!editor || editorPending;
+  const currentPick = () => pickScope.current === ownedPick && !selectionDisabled && currentAction();
+
+  // Text belongs to the document session and step even when the accepted document or selection changes.
+  const stepId = steps[index]?.id;
+  const nextTextDraft = { docGeneration, index, stepId, shown, openScope, workerSession, pending: false };
+  const textDraft = useRef(nextTextDraft);
+  const previousText = textDraft.current;
+  if (previousText.docGeneration !== docGeneration || previousText.index !== index || previousText.stepId !== stepId
+    || previousText.shown !== shown || previousText.openScope !== openScope || previousText.workerSession !== workerSession) {
+    textDraft.current = nextTextDraft;
+  }
+  const ownedTextDraft = textDraft.current;
+  const changeTextDraft = (pending: boolean) => {
+    if (textDraft.current === ownedTextDraft) ownedTextDraft.pending = pending;
+  };
+  const transferSelected = (id: string) => {
+    if (!currentAction()) return;
+    const offer = stepBatchTransferOffer(doc, selectedParts, index);
+    if (!offer || offer.target !== id) return;
+    applyEdit(current => moveAssemblyStepParts(current, id, offer.parts));
+  };
+  const takeOutSelected = (id: string) => {
+    if (!currentPick() || textDraft.current !== ownedTextDraft || ownedTextDraft.pending) return;
+    const offer = stepBatchTakeOutOffer(doc, selectedParts, index);
+    if (!offer || offer.target !== id) return;
+    const remove = new Set(offer.parts), step = steps[index];
+    applyEdit(current => editAssemblyStep(current, { id, add: step.add.filter(part => !remove.has(part)) }));
+  };
+  const selectPart = (id: string, part: string) => {
+    if (currentPick() && canSelectStepPart(doc, index, id, part)) pickPart(part);
+  };
+
   const change = (options: EditAssemblyStepOptions) => applyEdit(current => editAssemblyStep(current, options));
   const selectedHosts = () => hostsOf(selectedParts).filter(id => doc.instances?.some(instance => instance.id === id));
   const createStep = () => {
@@ -104,12 +169,18 @@ export function useAssemblyStepReview({
   const problems = useMemo(() => assemblyStepProblems(doc).map(problem => problem.message), [doc.assemblySteps, doc.instances]);
 
   return {
-    shown, openPanel, display, index, applyEdit,
+    shown, openPanel, display,
     panelProps: {
       doc, index, selectedParts, faded, problems,
       offer: shown ? stepOffer(doc, selectedParts, index) : null,
       batchOffer: shown ? stepBatchTransferOffer(doc, selectedParts, index) : null,
       takeOutOffer: shown ? stepBatchTakeOutOffer(doc, selectedParts, index) : null,
+      textDraftScope: ownedTextDraft,
+      onTextDraftChange: changeTextDraft,
+      onTransferSelected: transferSelected,
+      onTakeOutSelected: takeOutSelected,
+      selectionDisabled,
+      onSelectPart: selectPart,
       onGo: (to: number) => setPosition(clampStep(to, steps.length)),
       onFaded: setFaded,
       onNew: createStep,

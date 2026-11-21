@@ -191,9 +191,8 @@ import { OutlinerCuts } from './ui/OutlinerCuts';
 import { AssemblyCutHud } from './ui/AssemblyCutHud';
 import { nextInstanceId } from '@barocss/cad-model/assembly/takenIds';
 import { AssemblyStepsPanel } from './ui/AssemblyStepsPanel';
-import { STEPS_COMMAND, shownSelection as litSelection, stepBatchTransferOffer, stepBatchTakeOutOffer, canSelectStepPart } from './app/assemblySteps';
+import { STEPS_COMMAND, shownSelection as litSelection } from './app/assemblySteps';
 import { useAssemblyStepReview } from './app/useAssemblyStepReview';
-import { editAssemblyStep, moveAssemblyStepParts, stepsOf } from '@barocss/cad-model/assembly/steps';
 import { cutOfDraft, cuttableOf, defaultCutAt, draftOfCut, draftProblem, draftTrialProblem, newCutDraft, withAddedTargets, withDraftCut, type CutDraft } from './app/assemblyCutDraft';
 import { addAssemblyCut, deleteAssemblyCut, editAssemblyCut } from '@barocss/cad-model/assembly/cuts';
 import { useJoints } from './state/useJoints';
@@ -1517,8 +1516,12 @@ export function App() {
   const exploded = useSyncExternalStore(explodeStore.subscribe, () => explodeStore.get() !== 0);
   // (Dev/bench: any explode factor, as a drag would set it frame by frame; the button steps 0, 0.5, 1, 2.)
   useEffect(() => { if (import.meta.env.DEV) (window as unknown as { __studioSetExplode: (k: number) => void }).__studioSetExplode = setExplode; }, []);
-  const { shown: stepsShown, openPanel: openSteps, display: stepsDisp, index: stepAt, applyEdit: stepEdit, panelProps: stepsPanel } = useAssemblyStepReview({
-    doc, docGeneration, selectedParts: instanceSel, viewport, explodeStore, commit, onNotice: setToast,
+  // Outliner picks clear the edit owner; additive selection retains only current top-level occurrences.
+  const pickInstanceRow = useCallback((id: string, additive = false) => { setSelection(emptySel); setDirectSel([]); setInstanceSel(previous => pickPlacedPart(previous.filter(value => doc.instances?.some(i => i.id === value)), id, additive)); setInstanceEdit(null); }, [doc.instances]);
+  const { shown: stepsShown, openPanel: openSteps, display: stepsDisp, panelProps: stepsPanel } = useAssemblyStepReview({
+    doc, docGeneration, viewport, explodeStore, commit, onNotice: setToast,
+    selection: { selectedParts: instanceSel, editor: instanceEdit, editorPending: instanceEditPending, pickPart: pickInstanceRow },
+    source: { docNow, openIntent, workerSessionNow, workerSession, opening: () => project.opening() },
     available: !bomOpen && !libraryOpen && !paramsOpen && !variantsOpen && !rebuildOpen && !rendering && !drawing && !sketch && !active,
   });
   const selectedTopId = singleTop(instanceSel);
@@ -1536,19 +1539,6 @@ export function App() {
   // The CPU section clips the dragged placement. Other views use the viewport's preview matrix.
   const { instancesPlaced, instancePoseMap, cpuInstanceSection, instancesShown } = useScenePoses(doc, sceneInstanceBodies, bodies, jointFk, explode, section, sketch, gpuSection, instDrag, excludedSectionInstances);
   const instancePreview = cpuInstanceSection ? null : dragPreview;
-  // A delayed handler must never transfer a previous document's or selection's parts.
-  const stepTransferOpen = openIntent.current;
-  const stepTransferScope = useRef({ doc, docGeneration, instanceSel, stepAt, stepsShown, open: stepTransferOpen, worker: workerSession });
-  if (stepTransferScope.current.doc !== doc || stepTransferScope.current.docGeneration !== docGeneration || stepTransferScope.current.instanceSel !== instanceSel || stepTransferScope.current.stepAt !== stepAt || stepTransferScope.current.stepsShown !== stepsShown || stepTransferScope.current.open !== stepTransferOpen || stepTransferScope.current.worker !== workerSession) {
-    stepTransferScope.current = { doc, docGeneration, instanceSel, stepAt, stepsShown, open: stepTransferOpen, worker: workerSession };
-  }
-  const ownedStepTransfer = stepTransferScope.current;
-  const transferSelectedStepParts = (id: string) => {
-    if (stepTransferScope.current !== ownedStepTransfer || docNow.current !== doc || !stepsShown || openIntent.current !== ownedStepTransfer.open || workerSessionNow.current !== ownedStepTransfer.worker || project.opening()) return;
-    const offer = stepBatchTransferOffer(doc, instanceSel, stepAt);
-    if (!offer || offer.target !== id) return;
-    stepEdit(current => moveAssemblyStepParts(current, id, offer.parts));
-  };
   // (`source`: what the instance names as its file — CG6: `./<path>` for a project document, storage/linked.ts.)
   const insertPart = async (file: File, source = file.name) => {
     try {
@@ -1924,37 +1914,6 @@ export function App() {
   // Placing a new shape: it follows the pointer over the ground and upward faces; a click or a drop sets
   // it there. Dragging a shape's button from the rail onto the viewport starts it as the drag comes in.
   const dragCmd = useRef<string | null>(null);
-  // Outliner picks clear the edit owner; additive selection retains only current top-level occurrences.
-  const pickInstanceRow = useCallback((id: string, additive = false) => { setSelection(emptySel); setDirectSel([]); setInstanceSel(previous => pickPlacedPart(previous.filter(value => doc.instances?.some(i => i.id === value)), id, additive)); setInstanceEdit(null); }, [doc.instances]);
-  // A step-member pick is session-only and must not discard an in-progress part edit.
-  const stepPickOpen = openIntent.current;
-  const stepPickScope = useRef({ doc, docGeneration, instanceSel, stepAt, stepsShown, instanceEdit, instanceEditPending, open: stepPickOpen, worker: workerSession });
-  if (stepPickScope.current.doc !== doc || stepPickScope.current.docGeneration !== docGeneration || stepPickScope.current.instanceSel !== instanceSel || stepPickScope.current.stepAt !== stepAt || stepPickScope.current.stepsShown !== stepsShown || stepPickScope.current.instanceEdit !== instanceEdit || stepPickScope.current.instanceEditPending !== instanceEditPending || stepPickScope.current.open !== stepPickOpen || stepPickScope.current.worker !== workerSession) {
-    stepPickScope.current = { doc, docGeneration, instanceSel, stepAt, stepsShown, instanceEdit, instanceEditPending, open: stepPickOpen, worker: workerSession };
-  }
-  const ownedStepPick = stepPickScope.current;
-  // Draft lifetime follows the document session and step, not unrelated immutable document edits or selection changes.
-  const stepTextId = stepsOf(doc)[stepAt]?.id;
-  const stepTextDraft = useRef({ docGeneration, stepAt, stepId: stepTextId, stepsShown, open: stepPickOpen, worker: workerSession, pending: false });
-  if (stepTextDraft.current.docGeneration !== docGeneration || stepTextDraft.current.stepAt !== stepAt || stepTextDraft.current.stepId !== stepTextId || stepTextDraft.current.stepsShown !== stepsShown || stepTextDraft.current.open !== stepPickOpen || stepTextDraft.current.worker !== workerSession) {
-    stepTextDraft.current = { docGeneration, stepAt, stepId: stepTextId, stepsShown, open: stepPickOpen, worker: workerSession, pending: false };
-  }
-  const ownedStepTextDraft = stepTextDraft.current;
-  const changeStepTextDraft = (pending: boolean) => { if (stepTextDraft.current === ownedStepTextDraft) ownedStepTextDraft.pending = pending; };
-  const takeOutSelectedStepParts = (stepId: string) => {
-    if (stepPickScope.current !== ownedStepPick || docNow.current !== doc || !stepsShown || instanceEdit || instanceEditPending || openIntent.current !== ownedStepPick.open || workerSessionNow.current !== ownedStepPick.worker || project.opening()) return;
-    if (stepTextDraft.current !== ownedStepTextDraft || ownedStepTextDraft.pending) return;
-    const offer = stepBatchTakeOutOffer(doc, instanceSel, stepAt);
-    if (!offer || offer.target !== stepId) return;
-    const remove = new Set(offer.parts), step = stepsOf(doc)[stepAt];
-    stepEdit(current => editAssemblyStep(current, { id: stepId, add: step.add.filter(id => !remove.has(id)) }));
-  };
-
-  const selectStepPart = (stepId: string, partId: string) => {
-    if (stepPickScope.current !== ownedStepPick || docNow.current !== doc || !stepsShown || instanceEdit || instanceEditPending || openIntent.current !== ownedStepPick.open || workerSessionNow.current !== ownedStepPick.worker || project.opening()) return;
-    if (!canSelectStepPart(doc, stepAt, stepId, partId)) return;
-    pickInstanceRow(partId);
-  };
   const editInstanceRow = useCallback((id: string, index: number) => {
     setBomOpen(false); setLibraryOpen(false); setParamsOpen(false); setSelection(emptySel); setDirectSel([]); setEditNode(null); setInstanceSel([id]); setInstanceEdit({ owner: id, index });
   }, []);
@@ -3437,10 +3396,7 @@ export function App() {
         onInsert={path => void project.fileOf(path).then(f => { if (f) void insertPart(f, linkSource(path)); })}
         onOpen={d => { replaceDoc(d, 'project'); if (docNow.current !== d) return;
           setCompareBase(null); setDirty(true); setTimeout(() => viewport.current?.fit(), 300); }} />}
-      {stepsShown && <AssemblyStepsPanel {...stepsPanel}
-        textDraftScope={ownedStepTextDraft} onTextDraftChange={changeStepTextDraft}
-        onTakeOutSelected={takeOutSelectedStepParts} onTransferSelected={transferSelectedStepParts}
-        selectionDisabled={!!instanceEdit || instanceEditPending} onSelectPart={selectStepPart} />}
+      {stepsShown && <AssemblyStepsPanel {...stepsPanel} />}
       {variantsOpen && !bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <VariantsPanel doc={doc} variants={variants} onCommit={next => commit(next, false)} onError={hint => setToast({ title: 'Variants: refused', hint, detail: '' })} onClose={() => setVariantsOpen(false)} />}
       {libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <LibraryPanel doc={doc} documentSession={docGeneration} onCommit={next => commit(next)} onFitTableCommit={next => { void commitFitTables(next); }} onClose={() => setLibraryOpen(false)} onError={(title, hint) => setToast({ title, hint, detail: '' })} onQuote={() => { void exportQuote(); }} />}
       {paramsOpen && !rendering && !drawing && !sketch && !active && <ParametersPanel doc={doc} onClose={() => setParamsOpen(false)}
