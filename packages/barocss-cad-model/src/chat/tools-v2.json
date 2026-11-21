@@ -430,6 +430,7 @@
        "select",
        "move",
        "scale",
+       "rotate",
        "extrude",
        "insert_loop",
        "bridge",

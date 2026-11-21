@@ -16,9 +16,9 @@ import { updateSubdCage } from '../subd/cageProvenance';
 type SubdNode = Extract<ModelNode, { kind: 'subd' }>;
 type V3 = [number, number, number];
 type Args = Record<string, unknown>;
-export const CAGE_TOOL_NAMES = new Set(['subd_cage', 'subd_select', 'subd_move', 'subd_scale', 'subd_extrude', 'subd_insert_loop', 'subd_bridge', 'subd_fill', 'subd_weld', 'subd_crease', 'subd_delete']);
+export const CAGE_TOOL_NAMES = new Set(['subd_cage', 'subd_select', 'subd_move', 'subd_scale', 'subd_rotate', 'subd_extrude', 'subd_insert_loop', 'subd_bridge', 'subd_fill', 'subd_weld', 'subd_crease', 'subd_delete']);
 /** The ones that change the part. */
-export const CAGE_MUTATORS = new Set(['subd_move', 'subd_scale', 'subd_extrude', 'subd_insert_loop', 'subd_bridge', 'subd_fill', 'subd_weld', 'subd_crease', 'subd_delete']);
+export const CAGE_MUTATORS = new Set(['subd_move', 'subd_scale', 'subd_rotate', 'subd_extrude', 'subd_insert_loop', 'subd_bridge', 'subd_fill', 'subd_weld', 'subd_crease', 'subd_delete']);
 
 /** A tool's answer: the next document and what it did, a read-only result, or why not. */
 export type CageToolResult = { doc: StudioDoc; did: string; extra: Record<string, unknown> } | { read: Record<string, unknown> } | { error: string };
@@ -87,8 +87,9 @@ function cageRevision(doc: StudioDoc, index: number, node: SubdNode): string {
 
 /** Runs one cage tool. Read-only tools answer `read`; the others the document they make (not yet evaluated). */
 export function runCageTool(doc: StudioDoc, name: string, args: Args, partOf?: string): CageToolResult {
-  if (name === 'subd_scale') {
-    if (partOf !== undefined) return { error: 'Scale is available on the base part. Open a placed part definition before scaling its cage.' };
+  const selectionTransform = name === 'subd_scale' || name === 'subd_rotate';
+  if (selectionTransform) {
+    if (partOf !== undefined) return { error: 'This transform is available on the base part. Open a placed part definition before transforming its cage.' };
     if (typeof args.index !== 'number' || !Number.isInteger(args.index)) return { error: 'Pass the current cage feature index as an integer.' };
   }
   const at = nodeAt(doc, args.index);
@@ -101,8 +102,8 @@ export function runCageTool(doc: StudioDoc, name: string, args: Args, partOf?: s
       const picked = select(c, args);
       return { read: 'error' in picked || partOf !== undefined ? picked : { ...picked, cageRevision: cageRevision(doc, index, node) } };
     }
-    if (name === 'subd_scale') {
-      if (node.suppressed || node.held) return { error: 'Restore the active SubD feature before scaling its cage.' };
+    if (selectionTransform) {
+      if (node.suppressed || node.held) return { error: 'Restore the active SubD feature before transforming its cage.' };
       if (args.cageRevision !== cageRevision(doc, index, node)) return { error: 'The cage revision is missing or has changed. Read this cage and select its elements again.' };
     }
     const sel = selectionOf(c, args);
@@ -122,6 +123,19 @@ export function runCageTool(doc: StudioDoc, name: string, args: Args, partOf?: s
         if (!pivot) return { error: 'Pass cage "vertices", "edges" or "faces" to scale.' };
         next = transformCageSelection(s, { kind: 'scale', factor, pivot });
         did = `scaled ${selectedVertices(s).length} cage vertices by ${factor} about their selection centre`;
+        break;
+      }
+      case 'subd_rotate': {
+        const { axis, degrees, pivotVertex } = args;
+        if (axis !== 'x' && axis !== 'y' && axis !== 'z') return { error: 'Choose world axis "x", "y" or "z".' };
+        if (typeof degrees !== 'number' || !Number.isFinite(degrees)) return { error: 'Pass a finite signed angle in degrees.' };
+        if (pivotVertex !== undefined && (typeof pivotVertex !== 'number' || !Number.isInteger(pivotVertex) || pivotVertex < 0 || pivotVertex >= nv))
+          return { error: 'Pass a current integer cage vertex ID for pivotVertex.' };
+        const centre = selectionCentre(s);
+        if (!centre) return { error: 'Pass cage "vertices", "edges" or "faces" to rotate.' };
+        const pivot = pivotVertex === undefined ? centre : c.positions.slice(3 * pivotVertex, 3 * pivotVertex + 3) as V3;
+        next = transformCageSelection(s, { kind: 'rotate', axis: axis === 'x' ? 0 : axis === 'y' ? 1 : 2, degrees, pivot });
+        did = `rotated ${selectedVertices(s).length} cage vertices by ${degrees}° around world ${axis.toUpperCase()} through ${pivotVertex === undefined ? 'their selection centre' : `cage vertex ${pivotVertex}`}`;
         break;
       }
       case 'subd_extrude': {
@@ -156,7 +170,7 @@ export function runCageTool(doc: StudioDoc, name: string, args: Args, partOf?: s
     const v = validationOf(next);
     if (!v.valid) return { error: `That would leave the cage not a manifold (${v.nonManifoldEdges.length} edges and ${v.nonManifoldVertices.length} vertices).` };
     const out = next.cage, made = { vertices: out.positions.length / 3, faces: out.faces.length };
-    const newElements = name !== 'subd_scale' && (next.sel.faces.length || next.sel.edges.length) ? { faces: next.sel.faces, edges: next.sel.edges } : null;
+    const newElements = !selectionTransform && (next.sel.faces.length || next.sel.edges.length) ? { faces: next.sel.faces, edges: next.sel.edges } : null;
     return { doc: withCage(doc, next), did: `${did} (feature ${index})`, extra: { cage: { before: { vertices: nv, faces: c.faces.length }, after: made, ...(newElements ? { new: newElements } : {}) }, validation: validationSummary(v) } };
   } catch (e) {
     if (e instanceof SubdError) return { error: e.message.replace(/^SubD: /, '') };
@@ -219,6 +233,12 @@ export const CAGE_TOOLS: ToolDefinition[] = [
       factor: { type: 'number', exclusiveMinimum: 0, description: 'Positive dimensionless scale ratio.' },
       vertices: ints('vertex indices'), edges: pairs('edges [a, b]'), faces: ints('face indices') },
     required: ['index', 'cageRevision', 'factor'], additionalProperties: false,
+  } },
+  { name: 'subd_rotate', description: 'Rotates selected base-part cage elements by signed degrees about a world axis. Supply a current cage vertex ID or use the selection centre. Copy cageRevision from the selection. Mirror seam points stay on the mirror plane.', input_schema: {
+    type: 'object', properties: { index: idx, cageRevision: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+      axis: { type: 'string', enum: ['x', 'y', 'z'] }, degrees: { type: 'number' }, pivotVertex: { type: 'integer', minimum: 0 },
+      vertices: ints('vertex indices'), edges: pairs('edges [a, b]'), faces: ints('face indices') },
+    required: ['index', 'cageRevision', 'axis', 'degrees'], additionalProperties: false,
   } },
   { name: 'subd_extrude', description: 'Extrudes cage "faces" as one region (side quads round it) by "offset" [dx, dy, dz] or "distance" along their mean normal; or pulls open boundary "edges" out by "offset". Changes topology (a proposal at L2). The result names the new faces or edges.', input_schema: { type: 'object', properties: { index: idx, faces: ints('face indices'), edges: pairs('open edges [a, b]'), offset: v3('[dx, dy, dz] mm'), distance: { type: 'number', description: 'mm along the faces\' mean normal' } }, required: ['index'], additionalProperties: false } },
   { name: 'subd_insert_loop', description: 'Inserts an edge loop across the ring of faces through "edge" [a, b], at "t" along each ring edge from the side of a (default 0.5, the middle; near 0 or 1 a holding loop that tightens the rounding there). Changes topology.', input_schema: { type: 'object', properties: { index: idx, edge: { type: 'array', items: { type: 'integer' }, minItems: 2, maxItems: 2 }, t: { type: 'number', description: 'fraction along the edge from a, between 0 and 1' } }, required: ['index', 'edge'], additionalProperties: false } },

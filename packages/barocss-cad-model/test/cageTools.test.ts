@@ -27,7 +27,7 @@ function sound(s: ChatState): number {
 }
 
 test('R8.2 the tools listed for the agent; subd_cage and subd_select read without changing the part', async () => {
-  for (const n of ['subd_cage', 'subd_select', 'subd_move', 'subd_scale', 'subd_extrude', 'subd_insert_loop', 'subd_bridge', 'subd_fill', 'subd_weld', 'subd_crease', 'subd_delete']) assert.ok(TOOLS.some(t => t.name === n), n);
+  for (const n of ['subd_cage', 'subd_select', 'subd_move', 'subd_scale', 'subd_rotate', 'subd_extrude', 'subd_insert_loop', 'subd_bridge', 'subd_fill', 'subd_weld', 'subd_crease', 'subd_delete']) assert.ok(TOOLS.some(t => t.name === n), n);
   const s = await boxState(), i = subdIndex(s);
   const info = await dispatchTool(s, 'subd_cage', { index: i }, evaluate), c = parse(info.content);
   assert.ok(!info.isError && !info.changed); assert.equal(c.faces, 24); assert.equal(c.vertices, 26); assert.equal(c.validation.valid, true); assert.equal(c.validation.poles, 8);
@@ -108,6 +108,52 @@ test('scale uses the exact selected cage revision and changes each selected poin
   const partArg = await dispatchTool(state, 'subd', { ...args, part: 'p1' }, neverEvaluate);
   assert.match(parse(partArg.content).error, /UNKNOWN_ARGUMENT.*"part"/);
   assert.equal(partArg.state.doc, state.doc);
+});
+
+test('signed rotation uses the exact current vertex or selection centre and refuses stale or invalid input', async () => {
+  const state = await boxState(), index = subdIndex(state);
+  const selection = parse((await dispatchTool(state, 'subd', { action: 'select', index, what: 'faces',
+    normal: [0, 0, 1], box: { min: [0, 0, 0] } }, evaluate)).content);
+  const [{ face, centre }] = selection.faces;
+  const before = cageOf(state), vertices = new Set(before.faces[face]);
+  const pivot=[0,10,16];
+  const pivotVertex=Array.from({length:before.positions.length/3},(_,id)=>id)
+    .find(id=>before.positions.slice(id*3,id*3+3).every((value,axis)=>value===pivot[axis]));
+  assert.ok(pivotVertex!==undefined);
+  const args={action:'rotate',index,axis:'z',degrees:15,faces:[face],cageRevision:selection.cageRevision};
+  async function verify(degrees:number, anchor:number[], vertex?:number) {
+    const result=await dispatchTool(state,'subd',{...args,degrees,...(vertex===undefined?{}:{pivotVertex:vertex})},evaluate);
+    assert.ok(!result.isError && result.changed,result.content);
+    assert.equal(parse(result.content).cage.new,undefined);
+    const after=cageOf(result.state), theta=degrees*Math.PI/180, c=Math.cos(theta), s=Math.sin(theta);
+    for(let id=0;id<before.positions.length/3;id++) {
+      const p=before.positions.slice(3*id,3*id+3), actual=after.positions.slice(3*id,3*id+3);
+      if(!vertices.has(id)){assert.deepEqual(actual,p);continue;}
+      const x=p[0]-anchor[0], y=p[1]-anchor[1];
+      const expected=[anchor[0]+c*x-s*y,anchor[1]+s*x+c*y,p[2]];
+      assert.ok(actual.every((value,i)=>Math.abs(value-expected[i])<1e-12));
+    }
+    assert.deepEqual(after.faces,before.faces);
+    assert.deepEqual(after.creases,before.creases);
+    assert.ok(sound(result.state)>0);
+    return result.state;
+  }
+  const turned=await verify(15,pivot,pivotVertex);
+  await verify(-15,pivot,pivotVertex);
+  await verify(15,centre);
+  const neverEvaluate=async()=>{throw new Error('An invalid rotation must stop before evaluation');};
+  for(const input of [
+    {...args,pivotVertex:-1}, {...args,pivotVertex:100}, {...args,pivotVertex:1.5},
+    {...args,pivotVertex:null}, {...args,pivotVertex:'0'}, {...args,axis:'n'}, {...args,degrees:Infinity},
+    {...args,degrees:360}, {...args,part:'p1'},
+  ]) {
+    const refused=await dispatchTool(state,'subd',input,neverEvaluate);
+    assert.ok(refused.isError && !refused.changed,refused.content);
+    assert.equal(refused.state.doc,state.doc);
+  }
+  const stale=await dispatchTool(turned,'subd',{...args,pivotVertex},neverEvaluate);
+  assert.match(parse(stale.content).error,/cage revision.*changed/i);
+  assert.equal(stale.state.doc,turned.doc);
 });
 
 test('R8.2 shaping: a top face extruded up (its region walled), a loop inserted, an edge creased, vertices moved — each body valid, the result naming what is new', async () => {

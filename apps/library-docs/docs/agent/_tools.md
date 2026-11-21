@@ -186,7 +186,7 @@ The part's 2D drawing; a drawing change is always the user's, so make it as ops 
 
 ### `subd`: SubD
 
-A SubD cage (features.command subd-box, subd-torus or subd-tube makes one), by its feature index.
+Edit a SubD cage by feature index.
 
 | Action | Handler | Arguments and notes |
 |---|---|---|
@@ -194,6 +194,7 @@ A SubD cage (features.command subd-box, subd-torus or subd-tube makes one), by i
 | `subd.select` | `subd_select` | index, what, normal?, withinAngle?, box?, edge?, limit? |
 | `subd.move` | `subd_move` | index, delta, vertices?, edges?, faces? |
 | `subd.scale` | `subd_scale` | index, cageRevision, factor, vertices?, edges?, faces? |
+| `subd.rotate` | `subd_rotate` | index, cageRevision, axis, degrees, pivotVertex?, vertices?, edges?, faces? |
 | `subd.extrude` | `subd_extrude` | index, faces? \| edges?, offset? \| distance? |
 | `subd.insert_loop` | `subd_insert_loop` | index, edge, t? |
 | `subd.bridge` | `subd_bridge` | index, edges |
