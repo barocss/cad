@@ -7,6 +7,7 @@ import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { emptyDoc, withNode } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
+import { bodyMesh } from '../src/engine/mesh';
 import { revisionOf } from '../src/util/revision';
 
 const command = commandById('smooth-screw')!;
@@ -44,6 +45,28 @@ test('Smooth Screw keeps its external axis, signed pitch and display through nat
     assert.ok(displayed.ok);
     const detail = displayed.bodies[0].mesh.loftDetail;
     assert.ok(detail && 'kind' in detail && detail.kind === 'smooth-turn');
+    const original = bodyMesh(brep, 0, 24), shown = displayed.bodies[0].mesh;
+    assert.notDeepEqual(detail.positions, original.positions);
+    assert.equal(detail.indices.length / 3, 96 * 16 + 16);
+    assert.deepEqual([...new Set(detail.edgeOfSegment)].sort((a, b) => a - b), shown.edges.map(edge => edge.index));
+    assert.deepEqual([...new Set(detail.faceOfVertex)].sort((a, b) => a - b), shown.faces.map(face => face.index));
+    assert.deepEqual(shown.edges.map(edge => edge.nativeJoint?.edgeId), original.edges.map(edge => edge.nativeJoint?.edgeId));
+    const triangleEdges = new Map<string, { forward: number; reverse: number }>();
+    const pointKey = (i: number) => detail.positions.subarray(3 * i, 3 * i + 3).join(',');
+    for (let i = 0; i < detail.indices.length; i += 3) {
+      const corners = [...detail.indices.subarray(i, i + 3)].map(pointKey);
+      for (const [j, a] of corners.entries()) {
+        const b = corners[(j + 1) % 3];
+        assert.notEqual(a, b);
+        const order = a < b;
+        const key = order ? a + '/' + b : b + '/' + a;
+        const count = triangleEdges.get(key) ?? { forward: 0, reverse: 0 };
+        if (order) count.forward++;
+        else count.reverse++;
+        triangleEdges.set(key, count);
+      }
+    }
+    assert.ok([...triangleEdges.values()].every(edge => edge.forward === 1 && edge.reverse === 1));
     const reopened = await readStudioFile(encodeStudioFile(doc));
     assert.ok('doc' in reopened);
     assert.deepEqual(reopened.doc, doc);

@@ -2,6 +2,7 @@ import { CadNumericPolicy, faceGeometry, surfaceD1Evaluator, surfaceDomain, type
 import { isCompactStepTurn } from '@barocss/cad/internal/step-turn-display';
 import { tessellateTwoGuideLoftDisplay } from '@barocss/cad/internal/two-guide-loft-display';
 import { bodyMesh, type DisplayMesh, type BoundedDisplayMesh, type SmoothTurnDisplayMesh, type Vec3 } from './mesh';
+import { screwDisplayMesh } from './screwDisplay';
 import { cross, dot, len, scale, sub } from './vec3';
 
 const cache = new WeakMap<DisplayMesh, DisplayMesh>();
@@ -50,10 +51,10 @@ function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefi
 
 const turnCache = new WeakMap<DisplayMesh, DisplayMesh>();
 
-export function smoothTurnDisplayMesh(base: DisplayMesh, brep: Brep, sections?: number): DisplayMesh {
+export function smoothTurnDisplayMesh(base: DisplayMesh, brep: Brep, sections?: number, structured = false): DisplayMesh {
   const cached = turnCache.get(base);
   if (cached) return cached;
-  const detail = buildTurnDetail(base, brep, sections);
+  const detail = buildTurnDetail(base, brep, sections, structured);
   const result = detail ? { ...base, loftDetail: detail } : base;
   turnCache.set(base, result);
   return result;
@@ -122,13 +123,11 @@ function exactTurnNormals(mesh: DisplayMesh, brep: Brep): Float32Array | undefin
   return normals;
 }
 
-function buildTurnDetail(base: DisplayMesh, brep: Brep, sections?: number): SmoothTurnDisplayMesh | undefined {
+function buildTurnDetail(base: DisplayMesh, brep: Brep, sections: number | undefined, structured: boolean): SmoothTurnDisplayMesh | undefined {
   let refined: DisplayMesh;
-  let normals: Float32Array;
   try {
     if (sections === undefined ? !isCompactStepTurn(brep) : !isAuthoredCompactTurn(brep, sections)) return;
     refined = bodyMesh(brep, 0, 24);
-    normals = exactTurnNormals(refined, brep) ?? refined.normals;
   } catch {
     // The optional viewport samples must not invalidate an accepted model.
     return;
@@ -142,6 +141,19 @@ function buildTurnDetail(base: DisplayMesh, brep: Brep, sections?: number): Smoo
         && e.faces.every((f, j) => f === owner.faces[j])
         && e.a.every((v, k) => v === owner.a[k]) && e.b.every((v, k) => v === owner.b[k]);
     })) return;
+  if (structured) {
+    try {
+      const grid = screwDisplayMesh(refined, brep);
+      if (grid) return grid;
+    } catch {
+      // The original refined packet is the fallback for a failed grid evaluation.
+    }
+  }
   const { positions, faceOfVertex, indices, edgeLines, edgeOfSegment, bounds } = refined;
-  return { kind: 'smooth-turn', positions, normals, faceOfVertex, indices, edgeLines, edgeOfSegment, bounds };
+  try {
+    const normals = exactTurnNormals(refined, brep) ?? refined.normals;
+    return { kind: 'smooth-turn', positions, normals, faceOfVertex, indices, edgeLines, edgeOfSegment, bounds };
+  } catch {
+    return undefined;
+  }
 }

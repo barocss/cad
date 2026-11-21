@@ -113,7 +113,7 @@ def depth_summary(results, kind):
     }
 
 
-def measure(geometry, view):
+def measure(geometry, view, require_live_grid=False):
     eye, camera, canvas = view['eye'], view['camera'], view['canvas']
     assert not camera['ortho'] and view['devicePixelRatio'] == 1
     forward = unit(difference(camera['target'], eye))
@@ -136,7 +136,9 @@ def measure(geometry, view):
     walls = {face: ([list(map(camera_point, row)) for row in s['controlPoints']], s['knotsV'])
              for face, s in faces.items() if s['degreeV'] == 3}
     assert len(walls) == 4
-    meshes = geometry['meshes']
+    meshes = dict(geometry['meshes'])
+    if not require_live_grid:
+        meshes.pop('live', None)
     meshes['structured'] = structured(meshes['q24'], faces, walls)
     triangles = {}
     for kind, mesh in meshes.items():
@@ -220,6 +222,9 @@ def measure(geometry, view):
         assert stat['q24']['maxDepthMM'] > 9 and stat['q48']['maxDepthMM'] > 9
         assert stat['structured']['maxDepthMM'] < .75
         assert stat['structured']['missingOrSpurious'] == stat['structured']['wrongFace'] == 0
+        if require_live_grid:
+            assert stat['live']['maxDepthMM'] < .75
+            assert stat['live']['missingOrSpurious'] == stat['live']['wrongFace'] == 0
         stats.append(stat)
 
     interior = {}
@@ -239,6 +244,8 @@ def measure(geometry, view):
                 counts[face][1] += 1
         interior[kind] = counts
     assert all(c[1] == 0 for kind in ('q24', 'q48') for c in interior[kind].values())
+    if require_live_grid:
+        assert all(count[1] > 0 for count in interior['live'].values())
     return {'regions': stats, 'sidePointsAndInterior': interior}
 
 
@@ -246,4 +253,4 @@ if __name__ == '__main__':
     root = Path(sys.argv[1])
     solid = json.loads((root / 'geometry.stdout.json').read_text())
     camera_view = json.loads((root / 'view.json').read_text())
-    print(json.dumps(measure(solid, camera_view)))
+    print(json.dumps(measure(solid, camera_view, '--grid' in sys.argv[2:])))

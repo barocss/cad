@@ -5,7 +5,8 @@ const baseline = process.argv.includes('--baseline');
 const backend = process.argv.includes('--webgl2') ? 'webgl2' : 'webgpu';
 const imported = process.argv.includes('--step');
 const triangular = process.argv.includes('--triangle');
-const turnIndex = triangular ? 0 : 1;
+const screw = process.argv.includes('--screw');
+const turnIndex = triangular || screw ? 0 : 1;
 const file = process.argv[3];
 const input = JSON.parse(await readFile(imported ? process.argv[4] : file, 'utf8'));
 const doc = imported ? input.doc : input;
@@ -31,9 +32,10 @@ const result = partBreps(source).find(body => body.brep.faces.length === ${trian
 const evaluated = evaluateDoc(source, 1, 8, true);
 assert.ok(evaluated.ok);
 const baseline = evaluated.bodies.find(body => body.key === result.key)!.mesh;
-const native = result.brep.edges.filter(edge => edge.curve.degree === 3 && edge.curve.controlPoints.length === ${triangular ? 16 : 13});
+const native = result.brep.edges.filter(edge => edge.curve.degree === 3 && edge.curve.controlPoints.length === ${(triangular || screw) ? 16 : 13});
 assert.equal(native.length, ${triangular ? 3 : 4});
-const data = [baseline, bodyMesh(result.brep, 1, 24)].map(mesh => ({
+const dense = ${screw} ? { ...baseline, ...baseline.loftDetail, quality: 'structured' } : bodyMesh(result.brep, 1, 24);
+const data = [baseline, dense].map(mesh => ({
   quality: mesh.quality, triangles: mesh.indices.length / 3, rails: native.map(edge => {
     const index = mesh.edges.find(view => view.nativeJoint?.edgeId === edge.id)!.index;
     const lines = [];
@@ -83,7 +85,7 @@ await f.run(async () => {
   f.report.observations.push({ camera, backend, baseline });
   const read = await f.inspect('rails-and-tiers', doc);
   const detail = await f.page.evaluate(index => window.__studioLoftDisplay?.(index), turnIndex);
-  if (!triangular) assert.equal(await f.page.evaluate(() => window.__studioLoftDisplay?.(0)), null);
+  if (!triangular && !screw) assert.equal(await f.page.evaluate(() => window.__studioLoftDisplay?.(0)), null);
   if (baseline) assert.equal(detail, null);
   else assert.deepEqual(detail, {
     triangles: read.data[1].triangles, baseTriangles: read.data[0].triangles, kind: 'smooth-turn',
