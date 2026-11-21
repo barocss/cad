@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1491: [Scale a selected SubD cage region with the viewport](notes/cage-centre-scale-drag-2026-11-21/README.md), #625. Verify centre scaling, numeric parity, cancellation and native reopening.
 - D1490: [Move Assembly Steps action ownership out of Studio App](notes/studio-assembly-step-action-ownership-2026-11-21/README.md). Compare exact member selection, Take out and batch transfer in actual desktop Studio.
 - D1489: [Drag a SubD cage quad along its in-plane U and V directions](notes/cage-quad-plane-drag-2026-11-21/README.md), #625. Verify both signed local axes, history and native files.
 - D1488: [Drag one SubD cage edge along its tangent](notes/cage-edge-tangent-drag-2026-11-21/README.md), #625. Verify the stable endpoint direction, exact Done and reopen.

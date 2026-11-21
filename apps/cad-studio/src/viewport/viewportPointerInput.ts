@@ -754,7 +754,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     }
     if (hit.kind === 'scale') {
       const k = dragScale(d.from!, [x, y], d.origin ?? g.origin, hit.axis, P), step = shift ? 0.01 : 0.05;
-      d.factor = Math.max(step, Math.round(k / step) * step); g.onScale?.(d.factor, done); return;
+      d.factor = Math.max(step, Math.round(k / step) * step); g.onScale?.(d.factor, done, d.pointerId); return;
     }
     // A turn adds up the sweep step by step, so it can go past half a turn.
     d.turned = (d.turned ?? 0) + dragTurn(d.last!, [x, y], g.origin, hit.axis, P); d.last = [x, y];

@@ -34,7 +34,7 @@ export interface TransformGizmo {
   onTurn?(axis: Axis3, degrees: number, done: boolean): void;
   /** Uniform scale: a cube at the centre and one along each axis; `onScale` gets the factor from the drag's start (×, 0.05 steps; Shift: 0.01). */
   scale?: boolean;
-  onScale?(factor: number, done: boolean): void;
+  onScale?(factor: number, done: boolean, pointerId?: number): void;
 }
 /** One dimension dragged along a direction: `value` at the start, `toValue` maps the mm moved to the new value. */
 export interface FeatureHandle {

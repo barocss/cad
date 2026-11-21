@@ -60,12 +60,16 @@ export function CagePanel({ editor, name }: { editor: CageEditor; name: string }
     <div className="seg" role="group" aria-label="Show">
       <button className={focusClass} style={!s.smooth ? activeStyle : undefined} aria-pressed={!s.smooth} data-tip="Box" data-tip-desc="The cage as it is (Tab)" onClick={() => s.smooth && editor.toggleSmooth()}>Box</button>
       <button className={focusClass} style={s.smooth ? activeStyle : undefined} aria-pressed={s.smooth} data-tip="Smooth" data-tip-desc="The limit surface (Tab)" onClick={() => !s.smooth && editor.toggleSmooth()}>Smooth</button></div>
-    {s.mode === 'vertex' && <div className="space-y-1">
+    {!!n && <label className={FIELD}><span>Drag tool</span><NativeSelect className={CONTROL} aria-label="Cage drag tool" value={dragSettings.tool} disabled={dragging}
+      onChange={event => dragSettings.setTool(event.target.value === 'scale' ? 'scale' : 'move')}>
+      <option value="move">Move</option><option value="scale">Uniform scale</option>
+    </NativeSelect></label>}
+    {dragSettings.tool === 'move' && s.mode === 'vertex' && <div className="space-y-1">
       <label className="flex items-center gap-2"><input type="checkbox" checked={dragSettings.enabled} disabled={dragging} onChange={e => dragSettings.setEnabled(e.target.checked)} />Connected proportional drag</label>
       {dragSettings.enabled && <label className={FIELD}><span>Drag graph radius mm</span><input className={CONTROL} type="number" min="0" step="1" value={dragSettings.radius} disabled={dragging} aria-invalid={!dragSettings.radiusValid} onChange={e => dragSettings.setRadius(e.target.value)} /></label>}
       {dragSettings.enabled && !dragSettings.radiusValid && <div className="warn" role="status">Enter a radius greater than 0 mm.</div>}
     </div>}
-    {s.mode !== 'vertex' && <>
+    {dragSettings.tool === 'move' && s.mode !== 'vertex' && <>
       <label className={FIELD}><span>Drag frame</span><NativeSelect className={CONTROL} aria-label="Drag frame" value={dragSettings.dragFrame} disabled={dragging}
         onChange={event => dragSettings.setDragFrame(localFrames.find(frame => frame.value === event.target.value)?.value ?? 'world')}>
         <option value="world">World axes</option>

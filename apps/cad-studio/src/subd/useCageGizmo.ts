@@ -4,7 +4,7 @@ import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { cageLocalDirection, type CageLocalFrame } from '@barocss/cad-model/subd/cageLocalDirection';
 import {
   commitCageProportionalDrag, commitDrag, dragged, planCageProportionalDrag, previewCageProportionalDrag,
-  selectionCentre, type CageProportionalDragPlan, type CageSession,
+  selectionCentre, transformCageSelection, type CageProportionalDragPlan, type CageSession,
 } from '@barocss/cad-model/subd/cageEdit';
 import type { TransformGizmo } from '../viewport/gizmo';
 
@@ -14,9 +14,11 @@ type CageDrag = {
   pointerId: number;
   extrude: boolean;
   plan: CageProportionalDragPlan | null;
+  pivot: Vec3 | null;
 };
 const DEFAULT_RADIUS = '10';
 type CageDragFrame = 'world' | CageLocalFrame;
+type CageDragTool = 'move' | 'scale';
 const LOCAL_AXIS_LABEL: Record<CageLocalFrame, string> = { edge: 'T', face: 'N', 'face-u': 'U', 'face-v': 'V' };
 
 export function useCageGizmo(
@@ -24,8 +26,10 @@ export function useCageGizmo(
   setSession: (update: (current: CageSession | null) => CageSession | null) => void,
   fail: (title: string, hint: string) => void,
 ) {
+  const [tool, setTool] = useState<CageDragTool>('move');
+  const scale = tool === 'scale';
   const [dragFrame, setDragFrame] = useState<CageDragFrame>('world');
-  const frameMode = session?.mode === (dragFrame === 'edge' ? 'edge' : 'face') ? dragFrame : 'world';
+  const frameMode = !scale && session?.mode === (dragFrame === 'edge' ? 'edge' : 'face') ? dragFrame : 'world';
   const local = useMemo(() => {
     if (!session || frameMode === 'world') return null;
     try {
@@ -36,11 +40,11 @@ export function useCageGizmo(
     }
   }, [session, frameMode]);
   const owner = useMemo(() => available && session && (frameMode === 'world' || local?.moveAlong)
-    ? { doc, base: session, moveAlong: local?.moveAlong }
-    : null, [available, session, doc, frameMode, local]);
+    ? { doc, base: session, moveAlong: local?.moveAlong, scale }
+    : null, [available, session, doc, frameMode, local, scale]);
   const ownerNow = useRef(owner);
   const held = useRef<CageDrag | null>(null);
-  const [frame, setFrame] = useState<{ gesture: CageDrag; delta: Vec3 | null } | null>(null);
+  const [frame, setFrame] = useState<{ gesture: CageDrag; delta?: Vec3; factor?: number } | null>(null);
   const [enabled, setEnabled] = useState(false);
   const [radius, setRadius] = useState(DEFAULT_RADIUS);
   const radiusMM = radius.trim() ? Number(radius) : NaN;
@@ -48,7 +52,7 @@ export function useCageGizmo(
 
   const isDragging = useCallback(() => held.current !== null, []);
   const cancel = useCallback(() => { held.current = null; setFrame(null); }, []);
-  const reset = useCallback(() => { cancel(); setDragFrame('world'); setEnabled(false); setRadius(DEFAULT_RADIUS); }, [cancel]);
+  const reset = useCallback(() => { cancel(); setTool('move'); setDragFrame('world'); setEnabled(false); setRadius(DEFAULT_RADIUS); }, [cancel]);
   useLayoutEffect(() => {
     ownerNow.current = owner;
     if (held.current && held.current.owner !== owner) cancel();
@@ -57,9 +61,11 @@ export function useCageGizmo(
 
   const active = frame && frame.gesture.owner === owner ? frame : null;
   const live = useMemo(() => {
-    if (!active?.delta) return session;
-    const { plan, extrude, owner: { base } } = active.gesture;
+    if (!active) return session;
+    const { plan, extrude, pivot, owner: { base } } = active.gesture;
     try {
+      if (pivot && active.factor !== undefined) return transformCageSelection(base, { kind: 'scale', factor: active.factor, pivot });
+      if (!active.delta) return session;
       return plan ? previewCageProportionalDrag(plan, active.delta) : { ...base, ...dragged(base, active.delta, extrude) };
     } catch { return base; }
   }, [session, active]);
@@ -75,15 +81,16 @@ export function useCageGizmo(
       cancelOnEscape: true,
       origin: (active?.gesture.plan || active?.delta && owner.moveAlong) && live ? selectionCentre(live) ?? centre
         : [centre[0] + (delta?.[0] ?? 0), centre[1] + (delta?.[1] ?? 0), centre[2] + (delta?.[2] ?? 0)],
-      ...(owner.moveAlong ? { moveAlong: owner.moveAlong } : { move: [0, 1, 2] }),
+      ...(owner.scale ? { scale: true } : owner.moveAlong ? { moveAlong: owner.moveAlong } : { move: [0, 1, 2] }),
       onStart: (pointerId, shiftKey) => {
         if (ownerNow.current !== owner || held.current) return;
         try {
-          const weighted = enabled && owner.base.mode === 'vertex';
+          const weighted = !owner.scale && enabled && owner.base.mode === 'vertex';
           const plan = weighted ? planCageProportionalDrag(owner.base, radiusMM) : null;
-          gesture = { owner, pointerId, extrude: !owner.moveAlong && shiftKey && owner.base.mode !== 'vertex', plan };
+          gesture = { owner, pointerId, pivot: owner.scale ? centre : null,
+            extrude: !owner.scale && !owner.moveAlong && shiftKey && owner.base.mode !== 'vertex', plan };
           held.current = gesture;
-          setFrame({ gesture, delta: null });
+          setFrame({ gesture });
         } catch (error) {
           fail('Cannot start proportional drag', error instanceof Error ? error.message.replace(/^SubD: /, '') : String(error));
         }
@@ -92,12 +99,24 @@ export function useCageGizmo(
         if (gesture && held.current === gesture && gesture.pointerId === pointerId) cancel();
       },
       onMove: (total, done, pointerId) => {
-        if (!gesture || held.current !== gesture || gesture.pointerId !== pointerId || ownerNow.current !== owner) return;
+        if (!gesture || gesture.pivot || held.current !== gesture || gesture.pointerId !== pointerId || ownerNow.current !== owner) return;
         if (!done) { setFrame({ gesture, delta: total }); return; }
         const { plan, extrude } = gesture;
         cancel();
         try {
           const next = plan ? commitCageProportionalDrag(plan, total) : commitDrag(owner.base, total, extrude);
+          setSession(current => current === owner.base ? next : current);
+        } catch (error) {
+          fail('Not done', error instanceof Error ? error.message.replace(/^SubD: /, '') : String(error));
+        }
+      },
+      onScale: (factor, done, pointerId) => {
+        if (!gesture?.pivot || held.current !== gesture || gesture.pointerId !== pointerId || ownerNow.current !== owner) return;
+        if (!done) { setFrame({ gesture, factor }); return; }
+        const { pivot } = gesture;
+        cancel();
+        try {
+          const next = transformCageSelection(owner.base, { kind: 'scale', factor, pivot });
           setSession(current => current === owner.base ? next : current);
         } catch (error) {
           fail('Not done', error instanceof Error ? error.message.replace(/^SubD: /, '') : String(error));
@@ -110,7 +129,8 @@ export function useCageGizmo(
     gizmo, live, dragging: !!active, extruding: !!active?.delta && active.gesture.extrude, isDragging, cancel, reset,
     influence: active?.gesture.plan?.weights,
     settings: {
-      enabled, radius, radiusValid, dragFrame: frameMode, frameReason: local?.reason,
+      enabled, radius, radiusValid, tool, dragFrame: frameMode, frameReason: local?.reason,
+      setTool: (next: CageDragTool) => { if (!isDragging()) setTool(next); },
       setDragFrame: (next: CageDragFrame) => { if (!isDragging()) setDragFrame(next); },
       setEnabled: (next: boolean) => { if (!isDragging()) setEnabled(next); },
       setRadius: (next: string) => { if (!isDragging()) setRadius(next); },
