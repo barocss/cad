@@ -122,15 +122,17 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     if (equalCircularHoleDraft()) return;
     const patternEdit = prepareLinearPatternHoleEdit(doc, nodes, editNode);
     if ('error' in patternEdit) return Promise.resolve(patternEdit.error);
-    // Only the admitted paired rewrite requires this exact evaluated-owner and reply-revision fence.
-    const circularHolePivotChanged = dependentCircularHole
+    const pairedSpanEdit = oldPattern?.kind === 'linear-span-pattern' && newPattern?.kind === 'linear-span-pattern'
+      && oldPattern.count !== newPattern.count && oldPattern.span !== newPattern.span;
+    // A coupled pattern and Hole rewrite requires the exact evaluated owner and reply revision.
+    const pairedPatternHoleChanged = (dependentCircularHole || pairedSpanEdit)
       && patternEdit.nodes.some((node, index) => index !== editNode && node !== nodes[index]);
-    const circularHoleSource = circularHolePivotChanged ? canonical(doc) : '';
-    const circularHoleDraft = circularHolePivotChanged ? canonical(nodes) : '';
-    const circularHoleCurrent = () => fresh && !busy && canChangeDocument() && owner.evaluated() === evaluated
+    const pairedPatternHoleSource = pairedPatternHoleChanged ? canonical(doc) : '';
+    const pairedPatternHoleDraft = pairedPatternHoleChanged ? canonical(nodes) : '';
+    const pairedPatternHoleCurrent = () => fresh && !busy && canChangeDocument() && owner.evaluated() === evaluated
       && owner.marker() === null && !owner.variant()
-      && canonical(doc) === circularHoleSource && canonical(nodes) === circularHoleDraft;
-    if (circularHolePivotChanged && !circularHoleCurrent()) return;
+      && canonical(doc) === pairedPatternHoleSource && canonical(nodes) === pairedPatternHoleDraft;
+    if (pairedPatternHoleChanged && !pairedPatternHoleCurrent()) return;
     const cutProblem = rectangularCutEditProblem(doc, patternEdit.nodes, editNode);
     if (cutProblem) return Promise.resolve(cutProblem);
     const hint = holePatternEditProblem(doc.nodes[editNode], patternEdit.nodes[editNode], doc.parameters);
@@ -162,7 +164,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     const resize = !heightResize && isRectangleFinishResize(doc,next,editNode), worker = owner.worker(), open = owner.open();
     const current = () => ownsDraft() && owner.document() === doc && owner.scope() === scope
       && owner.worker() === worker && owner.open() === open
-      && (!circularHolePivotChanged || circularHoleCurrent())
+      && (!pairedPatternHoleChanged || pairedPatternHoleCurrent())
       && (!flangeSourceSizeChanged || canonical(doc) === flangeSourceSizeSource && canonical(nodes) === flangeSourceSizeDraft)
       && (!flangeSourceThicknessChanged || canonical(doc) === flangeSourceThicknessSource && canonical(nodes) === flangeSourceThicknessDraft)
       && (!reliefThicknessChanged || canChangeDocument() && canonical(doc) === reliefThicknessSource && canonical(nodes) === reliefThicknessDraft)
@@ -313,7 +315,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
         } catch { if (current()) return failure; return; }
       }
       const reply = await engine.evaluate(next, request);
-      if (!reply || !current() || (circularHolePivotChanged || heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeRadiusSourceChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged || flangeSourceSizeChanged) && reply.revision !== request) return;
+      if (!reply || !current() || (pairedPatternHoleChanged || heightResize || openingChanged || sectionChanged || radiusModeChanged || flangePositionChanged || flangeRadiusSourceChanged || flangeMeasureChanged || reliefThicknessChanged || flangeSourceThicknessChanged || flangeSourceSizeChanged) && reply.revision !== request) return;
       if (reply.ok) {
         if (!resize) {
           const notice = reply.revision === request && fresh && !busy && owner.evaluated() === evaluated

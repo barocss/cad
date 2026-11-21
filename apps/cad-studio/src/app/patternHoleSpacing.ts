@@ -21,7 +21,7 @@ const same = (a: unknown, b: unknown): boolean => {
 };
 const pair = (v: unknown): v is [number, number] => Array.isArray(v) && v.length === 2 && finite(v[0]) && finite(v[1]);
 
-/** Span edits move the existing last-copy bore; Count-only retargeting stays separate. */
+/** Span edits move the existing last-copy bore. A paired edit also changes its numbered face. */
 function prepareSpanHoleEdit(doc: StudioDoc, draft: ModelNode[], index: number): Result {
   const active = (nodes: ModelNode[]) => nodes.some(n => n.kind === "hole" && !n.held && !n.suppressed
     && n.parent.node === index);
@@ -50,7 +50,8 @@ function prepareSpanHoleEdit(doc: StudioDoc, draft: ModelNode[], index: number):
     || !only(old,["id","kind","parent","axis","span","count"])
     || !same(old.parent,{node:1,side:"solid"}) || (old.axis !== "x" && old.axis !== "y")
     || !Number.isInteger(old.count) || old.count < 2 || old.count > 64 || !finite(old.span) || !finite(next.span) || old.span <= 0 || next.span <= 0
-    || !same({...old,span:next.span},next)
+    || (suspended && old.count !== next.count)
+    || !same({...old,span:next.span,count:next.count},next)
     || hole.kind !== "hole" || !only(hole,["id","kind","parent","center","radius","face","axis","side",...(suspended ? ["suppressed"] : [])])
     || !same(hole.parent,{node:2,side:"solid"}) || !pair(hole.center) || !finite(hole.radius) || hole.radius <= 0
     || (hole.axis !== undefined && hole.axis !== "z") || (hole.side !== undefined && hole.side !== "max")
@@ -60,6 +61,7 @@ function prepareSpanHoleEdit(doc: StudioDoc, draft: ModelNode[], index: number):
   if (ids.some(id => typeof id !== "string" || !id) || new Set(ids).size !== 4) return refuse();
   const oldInput = linearSpanPatternInput(old,index), newInput = linearSpanPatternInput(next,index);
   if (!("spacing" in oldInput) || !("spacing" in newInput)) return refuse();
+  if (old.count !== next.count) return prepareNumberedLinearHoleEdit(doc, draft, index, true);
   const spacingNode = (node: typeof old, spacing: number): ModelNode => {
     return {id:node.id,kind:"linear-pattern",parent:node.parent,axis:node.axis,count:node.count,spacing};
   };
@@ -84,6 +86,11 @@ export function prepareLinearPatternHoleEdit(doc: StudioDoc, draft: ModelNode[],
   if (pattern?.kind === "linear-span-pattern" && next?.kind === "linear-span-pattern" && !Object.is(pattern.span,next.span)) {
     return prepareSpanHoleEdit(doc,draft,index);
   }
+  return prepareNumberedLinearHoleEdit(doc, draft, index);
+}
+
+function prepareNumberedLinearHoleEdit(doc: StudioDoc, draft: ModelNode[], index: number, moveSpanEnd = false): Result {
+  const pattern = doc.nodes[index], next = draft[index];
   if ((pattern?.kind !== 'linear-pattern' && pattern?.kind !== 'linear-span-pattern')
     || (next?.kind !== 'linear-pattern' && next?.kind !== 'linear-span-pattern')) return { nodes: draft };
   const fixedSpan = pattern.kind === 'linear-span-pattern' && next.kind === 'linear-span-pattern';
@@ -123,9 +130,6 @@ export function prepareLinearPatternHoleEdit(doc: StudioDoc, draft: ModelNode[],
   if (fixedSpacing && !spacingChanged) return { nodes: draft };
   const [{ hole, at, seed, copy }] = dependents;
   const holeName = `${featureLabel(hole, at, doc.nodes)} (${featureId(doc.nodes, at)})`;
-  if (fixedSpan && pattern.span !== next.span) {
-    return refused(`Keep Total span unchanged while changing Count for ${holeName}.`);
-  }
   if (fixedSpan && copy !== pattern.count - 1) {
     return refused(`Changing Count moves or removes copy ${copy + 1}, used by ${holeName} on ${hole.face}. Keep Count or suppress the Hole first.`);
   }
@@ -184,7 +188,7 @@ export function prepareLinearPatternHoleEdit(doc: StudioDoc, draft: ModelNode[],
   if (!containsBore(centre, before.copy * oldPitch)) {
     return refused('The existing Hole crosses or touches the selected copy boundary. Move its centre inside that copy before editing spacing.');
   }
-  if (fixedSpan) {
+  if (fixedSpan && !moveSpanEnd) {
     if (!containsBore(centre, after.copy * newPitch)) {
       return refused('The end copy no longer contains the complete Hole. Keep Count or move the Hole inside the copy.');
     }
@@ -195,5 +199,6 @@ export function prepareLinearPatternHoleEdit(doc: StudioDoc, draft: ModelNode[],
   if (!containsBore(moved, after.copy * newPitch)) {
     return refused('The moved Hole crosses or touches the selected copy boundary. Choose a spacing that preserves the bore.');
   }
-  return { nodes: draft.map((node, i) => i === at ? { ...hole, center: moved } : node) };
+  const endFace = moveSpanEnd ? { face: `${seed}@${after.copy}` } : {};
+  return { nodes: draft.map((node, i) => i === at ? { ...hole, center: moved, ...endFace } : node) };
 }

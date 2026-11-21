@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1484: [Resize Count and Total span together with an active end Hole](notes/fixed-span-count-paired-hole-2026-11-21/README.md), #25. Verify the exact new terminal face, owned native commit and fresh Open.
 - D1483: [Extract Studio reference preview routing from App](notes/studio-reference-preview-routing-2026-11-21/README.md). Verify matching Model and Drawing state and retire previews after sheet and file changes.
 - D1482: [Extract Studio Browser reference decisions from App](notes/studio-reference-decisions-extraction-2026-11-21/README.md). Compare alternative discovery, native candidate application and model and drawing focus across 29 actual checkpoints.
 - D1481: [Keep an explicit Flange radius during a rectangular Sheet resize](notes/flange-own-radius-source-extents-2026-11-21/README.md), #20. Verify Own R2.5 distinct from Sheet R1.5, the same signed rim, exact return and fresh Open.

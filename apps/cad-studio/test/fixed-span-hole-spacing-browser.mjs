@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const combined = process.argv.includes('--combined');
+const expectRefused = process.argv.includes('--expect-refused');
+assert.ok(!expectRefused || combined);
 const pins = [
   'apps/cad-studio/test/fixed-span-hole-spacing-browser.mjs',
   'apps/cad-studio/test/flow-helper.mjs',
@@ -15,7 +18,7 @@ const pins = [
 const f = await createFlow({
   name: 'fixed-span-hole-spacing', output: process.argv[2],
   envFrozen: 'FIXED_SPAN_HOLE_SPACING_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
-  qualification: baseline ? 'Observe Total span-only History edits with a legacy numbered terminal Hole; lifecycle PASS does not certify copy-relative placement.' : 'Require exact copy-relative Hole motion for Total span-only edits, with atomic refusal of overlap and mixed Count edits.',
+  qualification: combined ? 'Apply Count and Total span together with the exact terminal Hole, or observe the original refusal.' : 'Measure legacy terminal Hole ownership through Total span edits and invalid spacing controls.',
   limits: ['Schema 3 legacy simple Hole without signatures, opened through the real file UI. Modern signature-bearing creation is NOT_RUN.',
     'Independent fresh contexts: span 32 to 32.5 (original bore still fits), and 32 to 40 (original bore outside all copies). No product changes.'],
   snapshotExtra: () => ({ undoRedo: ['Undo', 'Redo'].map(name => document.querySelector(`button[aria-label="${name}"]`)?.disabled) }),
@@ -44,26 +47,72 @@ async function native(label, doc) {
   const n = rows[0], pattern = doc.nodes[2];
   const span = pattern.kind === 'linear-span-pattern' ? pattern.span : pattern.spacing * (pattern.count - 1);
   const x = doc.nodes[3].center[0];
-  assert.equal(n.id, 'n3'); assert.equal(n.count, 3); assert.equal(n.valid, true);
+  assert.equal(n.id, 'n3'); assert.equal(n.count, pattern.count); assert.equal(n.valid, true);
   assert.equal(n.strict.valid, true, JSON.stringify(n.strict));
   // These two bounded outcomes have independently known geometry. Do not infer a passing oracle from arbitrary native output.
   const hasBore = x >= 51 + span && x <= 53 + span;
   if (!hasBore) assert.ok(span === 40 && x === 84, 'Only the explicit large-span stale-centre control may have no bore');
-  assert.deepEqual(n.tops, [['n1.top', 1], ['n1.top@1', 1], ['n1.top@2', hasBore ? 2 : 1]]);
+  const tops = Array.from({length:pattern.count}, (_, index) =>
+    [index ? `n1.top@${index}` : 'n1.top', hasBore && index === pattern.count - 1 ? 2 : 1]);
+  assert.deepEqual(n.tops, tops);
   assert.equal(n.walls.length, hasBore ? 2 : 0);
   for (const wall of n.walls) {
     assert.equal(wall.kind, 'cylinder'); near(wall.r, 1);
     near(wall.c[0], x); near(wall.c[1], 13);
     near(wall.a[0], 0); near(wall.a[1], 0); near(Math.abs(wall.a[2]), 1);
   }
-  const removed = hasBore ? 8 * Math.PI : 0, volume = 576 - removed;
+  const stockVolume = 192 * pattern.count;
+  const removed = hasBore ? 8 * Math.PI : 0, volume = stockVolume - removed;
   near(n.mass.volume, volume);
-  near(n.mass.centroid[0], (576 * (52 + span / 2) - removed * x) / volume);
+  near(n.mass.centroid[0], (stockVolume * (52 + span / 2) - removed * x) / volume);
   near(n.mass.centroid[1], 13); near(n.mass.centroid[2], 4);
   f.report.observations.push({ label, span, holeX: x, intendedHoleX: 52 + span, hasBore, native: n });
   await f.persist();
 }
+async function combinedRun(){
+  f.phase='open the fixed-span pattern with its terminal Hole';
+  await f.newPage();
+  await f.page.locator('input[aria-label="Model file"]').setInputFiles({
+    name:'combined-span-history.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(source)),
+  });
+  await f.same(source);await native('combined-original',source);
+  await f.openFeatureEditor(2,'Fixed span Linear pattern');
+  const field=name=>f.editor().getByRole('spinbutton',{name,exact:true});
+  const edit=async(count,span)=>{
+    await field('Count').fill(String(count));await field('Total span').fill(String(span));
+  };
+  const expected={...source,nodes:source.nodes.map((node,i)=>i===2?{...node,count:4,span:42}:
+    i===3?{...node,center:[94,13],face:'n1.top@3'}:node)};
+  if(expectRefused){
+    await f.dismissToasts();const before=await f.snapshot('combined-before-original-refusal');
+    await edit(4,42);
+    await f.editor().getByRole('button',{name:'Apply',exact:true}).click();
+    await f.editor().locator('.hud-error').waitFor();
+    const refused=await f.snapshot('combined-original-refused');
+    for(const key of ['doc','bodies','selection','history','undoRedo'])assert.deepEqual(refused[key],before[key],key);
+    await f.same(source);return;
+  }
+  f.phase='apply both numeric edits in one History step';
+  await edit(4,42);await f.same(source);
+  await f.applyEditor(source,'combined-applied');await f.same(expected);
+  await native('combined-applied-native',expected);
+  await f.undo();await f.same(source);await native('combined-undo-native',source);
+  await f.redo();await f.same(expected);await native('combined-redo-native',expected);
+  const saved=await f.save('fixed-span-count-and-length');
+  await f.freshOpen(saved.file,saved.doc,'combined-reopened');await f.same(expected);
+  await native('combined-reopened-native',expected);
+  await f.openFeatureEditor(2,'Fixed span Linear pattern');
+  assert.equal(await field('Count').inputValue(),'4');
+  assert.equal(await field('Total span').inputValue(),'42');
+  await edit(3,32);
+  await f.applyEditor(expected,'combined-reversed');await f.same(source);
+  await native('combined-restored-native',source);
+  const restored=await f.save('fixed-span-original-restored');
+  await f.freshOpen(restored.file,restored.doc,'combined-original-reopened');
+  await f.same(source);
+}
 await f.run(async () => {
+  if(combined){await combinedRun();return;}
   for (const requested of [32.5, 40]) {
     const tag = requested === 32.5 ? 'small' : 'large';
     f.phase = `${tag}: fresh legacy file Open`;
@@ -151,7 +200,7 @@ await f.run(async () => {
       await f.snapshot(`mode-${mode}-saved-history`); await f.closeEditor();
       previous = accepted;
     }
-    for (const control of [{ tag: 'overlap', span: 4 }, { tag: 'mixed-count', span: 32.5, count: 4 }]) {
+    for (const control of [{ tag: 'overlap', span: 4 }, { tag: 'mixed-overlap', span: 12, count: 4 }]) {
       f.phase = `${control.tag}: fresh original and atomic refusal`;
       await f.newPage();
       await f.page.locator('input[aria-label="Model file"]').setInputFiles({ name: `${control.tag}-original.bcad`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) });
