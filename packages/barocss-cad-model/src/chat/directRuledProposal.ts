@@ -1,4 +1,6 @@
 import { loadDirect } from '../engine/directModule';
+import type { Op, Proposal } from '../engine/schema/proposals';
+import { digestOf } from '../util/digest';
 import { isObj } from '../util/guards';
 import { directInspectionRevision } from './sweepSource';
 import { accept, fail, type ChatState, type Evaluate, type CallOptions } from './toolKit';
@@ -10,6 +12,12 @@ export const DIRECT_RULED_COMMAND = {
   selection: 'Pass two distinct visible Direct curve IDs in values and use direct_revision from query.summary as expectedRevision. Do not pass face, edge, body or point selections.',
   values: { first: 'ID of the first Direct rail (v = 0)', second: 'ID of the second Direct rail (v = 1)' },
 };
+
+export const isDirectRuledOperation = (op: Op) => op.tool === 'run_command' && op.args?.command === DIRECT_RULED_COMMAND.command;
+
+export function directReviewRevision(proposal: Proposal): string | undefined {
+  if (proposal.status === 'open' && proposal.ops.length && proposal.ops.every(isDirectRuledOperation)) return digestOf(proposal);
+}
 
 export async function proposeDirectRuledCommand(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions) {
   if (!options.proposal || state.partOf)

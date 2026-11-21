@@ -3,29 +3,58 @@
 import { resolveNames, resolveSelectors, type NameSelection } from '../names';
 import { edgeDetail, faceDetail } from '../observe';
 import { renderDirectViews, renderViews } from '../views';
-import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, json, fail, strings, list } from '../toolKit';
+import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, type PartRun, json, fail, strings, list } from '../toolKit';
 import { isObj } from '../../util/guards';
 import { revisionOf } from '../../util/revision';
 import { loadDirect } from '../../engine/directModule';
+import { requirementEvidenceRevision } from '../../util/digest';
 import { directInspectionRevision } from '../sweepSource';
+import { directReviewRevision } from '../directRuledProposal';
+import { proposalIsStale } from '../proposals';
+import { previewProposalWith } from './proposals';
 import { evaluateCurve, surfaceDomain } from '@barocss/cad';
 
-async function renderViewsTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate): Promise<ToolOutcome> {
-  if (args.expectedDirectRevision !== undefined) {
-    if (typeof args.expectedDirectRevision !== 'string' || !/^[a-f0-9]{64}$/.test(args.expectedDirectRevision)
-      || args.expectedRevision !== undefined || args.highlight !== undefined || args.section !== undefined)
-      return fail(state, 'For Direct review, pass direct_revision from query.summary as expectedDirectRevision without expectedRevision, highlight or section.', { code: 'DIRECT_RENDER_INPUT' });
-    if (state.partOf || state.bodies.length || state.doc.instances?.length)
-      return fail(state, 'Use Direct review on the base document with only Direct geometry to display.', { code: 'DIRECT_RENDER_SCOPE' });
-    const revision = directInspectionRevision(state.doc);
-    if (args.expectedDirectRevision !== revision)
-      return fail(state, 'The Direct inputs changed. Read query.summary again.', { code: 'DIRECT_RENDER_STALE', expectedDirectRevision: args.expectedDirectRevision, revision });
-    const result = await renderDirectViews(state.doc);
-    if (!result) return fail(state, 'There is no visible Direct curve or sheet to render.', { code: 'DIRECT_RENDER_EMPTY' });
-    const { image, ...rest } = result;
-    return { state, content: json({ revision, ...rest }), isError: false, changed: false,
-      summary: `Direct views (${rest.directObjects.length} objects)`, images: [{ data: image, mediaType: 'image/png' }] };
+const isDirectPin = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+
+async function renderDirectReview(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, dispatch: PartRun): Promise<ToolOutcome> {
+  const { expectedDirectRevision, proposal, expectedProposalRevision } = args;
+  if (!isDirectPin(expectedDirectRevision) || args.expectedRevision !== undefined || args.highlight !== undefined || args.section !== undefined)
+    return fail(state, 'For Direct review, pass direct_revision from query.summary as expectedDirectRevision without expectedRevision, highlight or section.', { code: 'DIRECT_RENDER_INPUT' });
+  if (state.partOf || state.bodies.length || state.doc.instances?.length)
+    return fail(state, 'Use Direct review on the base document with only Direct geometry to display.', { code: 'DIRECT_RENDER_SCOPE' });
+
+  let doc = state.doc;
+  const baseDirectRevision = directInspectionRevision(doc);
+  if (expectedDirectRevision !== baseDirectRevision)
+    return fail(state, 'The Direct inputs changed. Read query.summary again.', { code: 'DIRECT_RENDER_STALE', expectedDirectRevision, revision: baseDirectRevision });
+  let candidate: { proposal: string; proposalRevision: string; baseDirectRevision: string } | undefined;
+  if (proposal !== undefined || expectedProposalRevision !== undefined) {
+    if (typeof proposal !== 'string' || !proposal || !isDirectPin(expectedProposalRevision))
+      return fail(state, 'Pass the proposal ID and its directReviewRevision from proposals.list as expectedProposalRevision.', { code: 'DIRECT_RENDER_PROPOSAL_INPUT' });
+    const matches = (doc.proposals ?? []).filter(p => p.id === proposal);
+    const pending = matches.length === 1 ? matches[0] : undefined, pin = pending && directReviewRevision(pending);
+    if (!pending || !pin)
+      return fail(state, 'Choose a unique open Ruled surface proposal from proposals.list.', { code: 'DIRECT_RENDER_PROPOSAL_UNAVAILABLE' });
+    if (pin !== expectedProposalRevision || proposalIsStale(pending, requirementEvidenceRevision(doc)))
+      return fail(state, 'The proposal or its source changed. Read proposals.list and review the current document.', { code: 'DIRECT_RENDER_PROPOSAL_STALE' });
+    const preview = await previewProposalWith(dispatch, state, proposal, evaluate);
+    if ('error' in preview) return fail(state, preview.error, { code: 'DIRECT_RENDER_PROPOSAL_FAILED' });
+    if (preview.doc.direct === doc.direct)
+      return fail(state, 'The replay did not produce a Direct candidate.', { code: 'DIRECT_RENDER_PROPOSAL_FAILED' });
+    doc = preview.doc;
+    candidate = { proposal, proposalRevision: pin, baseDirectRevision };
   }
+  const result = await renderDirectViews(doc);
+  if (!result) return fail(state, 'There is no visible Direct curve or sheet to render.', { code: 'DIRECT_RENDER_EMPTY' });
+  const { image, ...rest } = result;
+  return { state, content: json({ revision: candidate ? directInspectionRevision(doc) : baseDirectRevision, ...rest, ...(candidate ? { candidate } : {}) }),
+    isError: false, changed: false, summary: candidate ? `Direct proposal ${candidate.proposal}` : `Direct views (${rest.directObjects.length} objects)`,
+    images: [{ data: image, mediaType: 'image/png' }] };
+}
+
+const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dispatch) => {
+  if (args.expectedDirectRevision !== undefined || args.proposal !== undefined || args.expectedProposalRevision !== undefined)
+    return renderDirectReview(state, args, evaluate, dispatch);
   if (args.expectedRevision !== undefined && (typeof args.expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(args.expectedRevision)))
     return fail(state, 'expectedRevision must be the 16-digit revision from query.rebuild for the same part.', { code: 'RENDER_INPUT' });
   const revision = revisionOf(state.doc);
@@ -37,7 +66,7 @@ async function renderViewsTool(state: ChatState, args: Record<string, unknown>, 
   if (typeof r === 'string') return fail(state, r);
   const { image, ...rest } = r;
   return { state, content: json({ revision, ...rest }), isError: false, changed: false, summary: `views (${Object.keys(r.legend).length} faces labelled)`, images: [{ data: image, mediaType: 'image/png' }] };
-}
+};
 async function inspectCurveJoin(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
   const { curve, parameter, expectedDirectRevision } = args;
   if (args.faces !== undefined || args.edges !== undefined || typeof curve !== 'string' || !curve

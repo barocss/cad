@@ -9,7 +9,7 @@ import { deleteFeatures, featureDependents, renumber } from '../features';
 import { factsOf } from '../observe';
 import { treeDiff } from '../transactions';
 import { approvalOf, diffLine, DIRECT_GEOMETRY_APPROVAL, nextProposalId, PLAN_CHARS, PROMPT_CHARS, proposalIsStale, riskOf, riskRank, withHistory } from '../proposals';
-import { DIRECT_RULED_COMMAND } from '../directRuledProposal';
+import { directReviewRevision, isDirectRuledOperation } from '../directRuledProposal';
 import type { ChecksDelta, FollowUpRepairSource, Proposal, Risk } from '../../engine/schema/proposals';
 import { checkSpec, modelHash } from '../spec';
 import { MUTATORS } from '../toolDefinitions';
@@ -133,7 +133,7 @@ export async function proposalOfWith(dispatch: PartRun, state: ChatState, ops: u
   // run.results also contains skipped opIds; run.ops retains only executed operations.
   const executedResults = run.results.filter(result => result.skipped === undefined);
   const stepChanges = run.ops.flatMap((op, index) => op.tool === 'add_assembly_step' && typeof executedResults[index]?.did === 'string' ? [executedResults[index].did as string] : []);
-  const sheets = run.ops.flatMap((op, index) => op.tool === 'run_command' && op.args?.command === DIRECT_RULED_COMMAND.command
+  const sheets = run.ops.flatMap((op, index) => isDirectRuledOperation(op)
     && typeof executedResults[index]?.did === 'string' ? [executedResults[index].did as string] : []);
   const checkLabel = nested !== undefined ? 'root checks' : 'checks';
   const rootChecks = checks && `${checkLabel} ${checks.before.pass}/${checks.before.fail}/${checks.before.unknown} → ${checks.after.pass}/${checks.after.fail}/${checks.after.unknown}`;
@@ -379,7 +379,8 @@ async function listProposalsTool(state: ChatState, args: Record<string, unknown>
   const revision = list.some(p => p.status === 'open') ? requirementEvidenceRevision(state.doc) : '';
   return { state, content: json({ proposals: list.map(p => {
     const { ops, ...details } = p;
-    return { ...details, ops: ops.length, stale: proposalIsStale(p, revision) };
+    const review = directReviewRevision(p);
+    return { ...details, ops: ops.length, stale: proposalIsStale(p, revision), ...(review ? { directReviewRevision: review } : {}) };
   }) }), isError: false, changed: false, summary: `${list.length} proposal${list.length === 1 ? '' : 's'}` };
 }
 
