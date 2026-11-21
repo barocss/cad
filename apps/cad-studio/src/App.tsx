@@ -94,6 +94,7 @@ import { useProposalPreview } from './state/useProposalPreview';
 import { ProposalBrowser } from './ui/ProposalBrowser';
 import { DeleteDependentsDialog } from './ui/DeleteDependentsDialog';
 import { useFeatureHistory } from './state/useFeatureHistory';
+import { useDocumentHistoryActions } from './state/useDocumentHistoryActions';
 import { useAlignHistoryPreview } from './app/useAlignHistoryPreview';
 import { useOppositeFlangeRadiusPreview } from './app/useOppositeFlangeRadiusPreview';
 import { carrySketchSelection } from './state/profileSelection';
@@ -2131,12 +2132,12 @@ export function App() {
   // triangles takes a few seconds): the worker restarts and the change that started it is taken back.
   const [slow, setSlow] = useState(false);
   useEffect(() => { if (!busy) { setSlow(false); return; } const t = setTimeout(() => setSlow(true), 1000); return () => clearTimeout(t); }, [busy]);
-  const invalidateDocumentWork = () => {
+  const invalidateDocumentWork = useCallback(() => {
     workOwnership.current = invalidateWork(workOwnership.current); undoFor.current = null; workCompletion.current = null;
     parameterRequest.current++; parameterEditNow.current = null; setParameterEdit(null); evaluationEvidence.clearHandoff();
     evaluationEvidence.discardUninstalled();
     setBusy(false);
-  };
+  }, [evaluationEvidence]);
   // A failed or restarted worker cannot supply current caches or finish an older import.
   const invalidateWorkerResults = () => {
     // A content match cannot carry worker provenance across restart. Keep old pixels stale until recomputed.
@@ -2161,36 +2162,29 @@ export function App() {
   };
   const activeNotice = noticeExpired ? null : notice;
   const toast = workerFailure ? { ...workerFailure, action: { label: 'Retry engine', run: retryWorker } } : activeNotice;
-  const projectBinding = project.documentBinding;
-  const reverseHistoryEntry = useCallback((target: WorkHistory<StudioDoc>, doc: StudioDoc, marker: number | null): WorkHistory<StudioDoc> => {
-    if (!target.documentBoundary) return { doc, marker };
+  const clearHistoryBoundaryDraft = useCallback(() => {
     setCheckpointReview(null);
     clearBodyClipboard();
     resetDocumentDraft();
-    const identity = target.documentIdentity;
-    const documentIdentity = identity && {
-      ...currentDocumentIdentity(),
-      ...(identity.binding !== undefined ? { binding: projectBinding() } : {}),
-    };
-    return { doc, marker, documentBoundary: true, ...(documentIdentity ? { documentIdentity } : {}) };
-  }, [clearBodyClipboard, currentDocumentIdentity, projectBinding, resetDocumentDraft]);
-  const restoreProjectDocument = project.restoreDocument;
-  const restoreHistoryEntry = useCallback((entry: WorkHistory<StudioDoc>) => {
-    const previous = docNow.current;
-    if (entry.documentBoundary) { cancelStlExportRef.current(); resetDocumentSection(); setPinnedMeasure(null); }
-    else setSelection(selection => carrySketchSelection(selection, previous, entry.doc));
-    setDocState(entry.doc);
-    setMarker(entry.marker);
-    if (entry.documentIdentity) {
-      restoreProjectDocument(entry.documentIdentity.binding ?? null);
-      setCompareBase(null);
-      setDocGeneration(generation => generation + 1);
-      setFileName(entry.documentIdentity.fileName);
-      setDirty(entry.documentIdentity.dirty);
-      if (!entry.documentIdentity.dirty) clearRecovery();
-    }
-    cancel();
-  }, [cancel, restoreProjectDocument, resetDocumentSection, setDirty, setDocState, setFileName]);
+  }, [clearBodyClipboard, resetDocumentDraft]);
+  const resetHistoryBoundaryView = useCallback(() => {
+    cancelStlExportRef.current();
+    resetDocumentSection();
+    setPinnedMeasure(null);
+  }, [resetDocumentSection]);
+  const restoreHistoryIdentity = useCallback((identity: NonNullable<WorkHistory<StudioDoc>['documentIdentity']>) => {
+    setCompareBase(null);
+    setDocGeneration(generation => generation + 1);
+    setFileName(identity.fileName);
+    setDirty(identity.dirty);
+  }, [setFileName, setDirty]);
+  const { reverseHistoryEntry, restoreHistoryEntry, doUndo, doRedo } = useDocumentHistoryActions({
+    history: { undo, redo, setUndo, setRedo },
+    document: { doc, current: docNow, marker, setDoc: setDocState, setMarker, setSelection },
+    boundary: { clearDraft: clearHistoryBoundaryDraft, resetView: resetHistoryBoundaryView, identity: currentDocumentIdentity,
+      captureBinding: project.documentBinding, restoreBinding: project.restoreDocument, restoreIdentity: restoreHistoryIdentity },
+    invalidateWork: invalidateDocumentWork, cancelReview: cancelNativeReview, cancel,
+  });
   const cancelWork = () => {
     if (!workOwnership.current.run) { setBusy(false); setSlow(false); return; }
     const stopped = stopOwnedWork(workOwnership.current, docNow.current, evaluatedRef.current, undo[undo.length - 1]);
@@ -2208,24 +2202,8 @@ export function App() {
       setToast({ title: 'Stopped', hint: 'The computation was stopped and its change taken back.', detail: '' });
     } else setToast({ title: 'Stopped', hint: 'The computation was stopped; no unrelated change was taken back.', detail: 'The document is unchanged. The view is not up to date.' });
   };
-  const doUndo = useCallback(() => {
-    cancelNativeReview();
-    if (!undo.length) return; const last = undo[undo.length - 1];
-    invalidateDocumentWork();
-    const redoEntry = reverseHistoryEntry(last, doc, marker);
-    setRedo(r => [...r, redoEntry]); setUndo(u => u.slice(0, -1));
-    restoreHistoryEntry(last);
-  }, [undo, doc, marker, restoreHistoryEntry, reverseHistoryEntry, cancelNativeReview]);
   // (The latest undo, for a toast made before the change it takes back was committed.)
   const undoNow = useRef(doUndo); undoNow.current = doUndo;
-  const doRedo = useCallback(() => {
-    cancelNativeReview();
-    if (!redo.length) return; const last = redo[redo.length - 1];
-    invalidateDocumentWork();
-    const undoEntry = reverseHistoryEntry(last, doc, marker);
-    setUndo(u => [...u, undoEntry]); setRedo(r => r.slice(0, -1));
-    restoreHistoryEntry(last);
-  }, [redo, doc, marker, restoreHistoryEntry, reverseHistoryEntry, cancelNativeReview]);
 
   const featureHistory = useFeatureHistory({ model: { doc, marker, bodies, selection }, worker: { engine, nextRevision: () => revision.current++ },
     suppression: {
