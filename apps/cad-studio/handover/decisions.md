@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1527: [Keep a regenerated drawing diameter attached to its bore](notes/drawing-bore-regeneration-2026-11-21/README.md), #738 and #202. Verify Ø8 to Ø10 and the missing reference with same-size neighbors in desktop Studio and independently read SVGs.
 - D1526: [Drag a saved tapered lower-cap Offset from its native face](notes/saved-tapered-lower-offset-handle-2026-11-21/README.md), #629. Reopen the saved cap, drag it in the signed direction and verify typed parity and native reopening in Studio.
 - D1525: [Pin an Agent Smooth Turn angle edit to the reviewed revision](notes/review-pinned-smooth-turn-angle-2026-11-21/README.md), #630 and #324. Refuse an older visual revision and reopen the explicitly approved native turn in Studio.
 - D1524: [Edit a saved Smooth Turn angle within its existing stations](notes/smooth-turn-angle-history-2026-11-21/README.md), #630. Reverse the winding with fixed IDs, reject an out-of-range edit and reopen the accepted native part in Studio.
