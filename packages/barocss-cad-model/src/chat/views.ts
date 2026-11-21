@@ -12,11 +12,14 @@ import { contentKey } from '../engine/evalMemo';
 import { sha256Hex } from '../util/sha256';
 import { refOf } from '../app/bodyRef';
 import { VIEWS } from '../drawing/views';
-import { VIEW_IDS, type ViewId } from '../drawing/types';
+import { VIEW_IDS, type ViewId, type XY } from '../drawing/types';
+import type { DirectDisplay } from '../engine/direct';
+import { loadDirect } from '../engine/directModule';
 import type { DisplayMesh } from '../engine/mesh';
 import { crc32, deflateZlib } from '../io/zip';
 
 const CELL = 500, MARGIN = 28, W = CELL * 2, H = CELL * 2;
+const LAYOUT = 'one 1000 × 1000 PNG, four views: front (top left), top (top right), right (bottom left), isometric (bottom right); third-angle';
 /** Faces showing fewer pixels than this get no label (too small to point at). */
 const LABEL_MIN_PIXELS = 60;
 
@@ -137,6 +140,72 @@ function projectionOf(breps: readonly Brep[], id: ViewId): BrepProjection {
   if (!pr) { pr = projectBrepHiddenLines(breps, VIEWS[id]); byView.set(id, pr); }
   return pr;
 }
+
+function fitCell(min: Readonly<XY>, max: Readonly<XY>) {
+  const sx = (CELL - 2 * MARGIN) / Math.max(1e-9, max[0] - min[0]), sy = (CELL - 2 * MARGIN) / Math.max(1e-9, max[1] - min[1]), s = Math.min(sx, sy);
+  const cx = MARGIN + ((CELL - 2 * MARGIN) - (max[0] - min[0]) * s) / 2, cy = MARGIN + ((CELL - 2 * MARGIN) - (max[1] - min[1]) * s) / 2;
+  return { X: (x: number) => cx + (x - min[0]) * s, Y: (y: number) => CELL - cy - (y - min[1]) * s, mm_per_px: Math.round(1e4 / s) / 1e4 };
+}
+
+function frameCell(ox: number, oy: number) {
+  segment(ox + 0.5, oy + CELL - 0.5, ox + CELL - 0.5, oy + CELL - 0.5, 1, 200, 200, 205, 0, 0);
+  segment(ox + CELL - 0.5, oy + 0.5, ox + CELL - 0.5, oy + CELL - 0.5, 1, 200, 200, 205, 0, 0);
+}
+
+function directProjection(items: readonly DirectDisplay[], { right, up, toward }: BrepProjection) {
+  const min: XY = [Infinity, Infinity], max: XY = [-Infinity, -Infinity];
+  const projected = items.map(({ positions }) => {
+    const points = new Float64Array(positions.length);
+    for (let i = 0; i < positions.length; i += 3) {
+      const [x, y, z] = [positions[i], positions[i + 1], positions[i + 2]];
+      const u = x * right[0] + y * right[1] + z * right[2], v = x * up[0] + y * up[1] + z * up[2];
+      points[i] = u; points[i + 1] = v; points[i + 2] = x * toward[0] + y * toward[1] + z * toward[2];
+      min[0] = Math.min(min[0], u); min[1] = Math.min(min[1], v);
+      max[0] = Math.max(max[0], u); max[1] = Math.max(max[1], v);
+    }
+    return points;
+  });
+  return { projected, ...fitCell(min, max) };
+}
+
+/** Four orthographic views of the same surface tessellation and curve segments Studio draws. */
+export async function renderDirectViews(doc: StudioDoc): Promise<(ViewsResult & { directObjects: Pick<DirectDisplay, 'id' | 'name' | 'kind'>[] }) | null> {
+  const { directDisplay } = await loadDirect();
+  const items = directDisplay(doc.direct).filter(({ kind, positions, indices }) =>
+    positions.length >= 6 && positions.every(Number.isFinite) && (kind === 'curve' || !!indices?.length));
+  if (!items.length) return null;
+  const directObjects = items.map(({ id, name, kind }) => ({ id, name, kind }));
+  const views: ViewsResult['views'] = {};
+  img = new Uint8ClampedArray(W * H * 4).fill(255);
+  VIEW_IDS.forEach((id, v) => {
+    const ox = (v % 2) * CELL, oy = Math.floor(v / 2) * CELL;
+    const { projected, X, Y, mm_per_px } = directProjection(items, projectBrepHiddenLines([], VIEWS[id]));
+    ids.fill(-1); depth.fill(-Infinity);
+    items.forEach(({ indices }, index) => {
+      if (!indices) return;
+      const p = projected[index];
+      for (let i = 0; i < indices.length; i += 3) {
+        const a = indices[i] * 3, b = indices[i + 1] * 3, c = indices[i + 2] * 3;
+        triangle(X(p[a]), Y(p[a + 1]), p[a + 2], X(p[b]), Y(p[b + 1]), p[b + 2], X(p[c]), Y(p[c + 1]), p[c + 2], index);
+      }
+    });
+    for (let y = 0; y < CELL; y++) for (let x = 0; x < CELL; x++) {
+      if (ids[y * CELL + x] >= 0) blend(ox + x, oy + y, 171, 199, 228, 1);
+    }
+    items.forEach(({ kind }, index) => {
+      if (kind !== 'curve') return;
+      const p = projected[index];
+      for (let i = 0; i < p.length; i += 6)
+        segment(ox + X(p[i]), oy + Y(p[i + 1]), ox + X(p[i + 3]), oy + Y(p[i + 4]), 2, 23, 101, 125, 0, 0);
+    });
+    frameCell(ox, oy);
+    views[id] = { visible_faces: [], mm_per_px };
+  });
+  const bytes = await png(img, W, H);
+  return { image: base64(bytes), imageSha256: sha256Hex(bytes), legend: {}, views, layout: LAYOUT, directObjects,
+    notes: ['Orthographic review uses Studio display samples for shaded sheets and overlaid curve traces.'] };
+}
+
 export async function renderViews(doc: StudioDoc, bodies: readonly BodyResult[], evaluate: (doc: StudioDoc) => Promise<EvalResult | null>, options: { highlight?: readonly string[]; section?: { axis: 'x' | 'y' | 'z'; at: number } } = {}): Promise<ViewsResult | string> {
   // (The model by its nodes' kept texts — not the whole document written out, a STEP import's text and all; PERF3 C16.)
   if (!bodies.length) return 'there is no body to show';
@@ -174,9 +243,7 @@ export async function renderViews(doc: StudioDoc, bodies: readonly BodyResult[],
   const numbers = new Map<string, number>(), out: ViewsResult['views'] = {};
   VIEW_IDS.forEach((id: ViewId, v) => {
     const pr: BrepProjection = projectionOf(breps, id), ox = (v % 2) * CELL, oy = Math.floor(v / 2) * CELL;
-    const sx = (CELL - 2 * MARGIN) / Math.max(1e-9, pr.max[0] - pr.min[0]), sy = (CELL - 2 * MARGIN) / Math.max(1e-9, pr.max[1] - pr.min[1]), s = Math.min(sx, sy);
-    const cx = MARGIN + ((CELL - 2 * MARGIN) - (pr.max[0] - pr.min[0]) * s) / 2, cy = MARGIN + ((CELL - 2 * MARGIN) - (pr.max[1] - pr.min[1]) * s) / 2;
-    const X = (x: number) => cx + (x - pr.min[0]) * s, Y = (y: number) => CELL - cy - (y - pr.min[1]) * s;
+    const { X, Y, mm_per_px } = fitCell(pr.min, pr.max);
     // Faces: the nearest at each pixel.
     ids.fill(-1); depth.fill(-Infinity);
     shown.forEach((b, bi) => {
@@ -221,13 +288,13 @@ export async function renderViews(doc: StudioDoc, bodies: readonly BodyResult[],
       label(ox + at[f] % CELL, oy + Math.floor(at[f] / CELL), numbers.get(name)!, hot.has(name));
     }
     // A thin frame round the cell.
-    segment(ox + 0.5, oy + CELL - 0.5, ox + CELL - 0.5, oy + CELL - 0.5, 1, 200, 200, 205, 0, 0); segment(ox + CELL - 0.5, oy + 0.5, ox + CELL - 0.5, oy + CELL - 0.5, 1, 200, 200, 205, 0, 0);
-    out[id] = { visible_faces: visible, mm_per_px: Math.round(1e4 / s) / 1e4 };
+    frameCell(ox, oy);
+    out[id] = { visible_faces: visible, mm_per_px };
   });
   const bytes = await png(img, W, H);
   const result: ViewsResult = {
     image: base64(bytes), imageSha256: sha256Hex(bytes), legend: Object.fromEntries([...numbers].map(([name, n]) => [String(n), name])), views: out,
-    layout: 'one 1000 × 1000 PNG, four views: front (top left), top (top right), right (bottom left), isometric (bottom right); third-angle',
+    layout: LAYOUT,
     notes: ['edges by the kernel\'s exact hidden-line projection: solid visible, thin dashed hidden', 'face fill and labels from the display mesh (to its chord error); a face showing under 60 px is listed but not labelled', ...(options.section ? [`cut at ${options.section.axis} = ${options.section.at}, the side ${options.section.axis === 'y' ? 'beyond (y > at)' : `below (${options.section.axis} < at)`} kept: its cut faces look at the ${options.section.axis === 'y' ? 'front' : options.section.axis === 'x' ? 'right' : 'top'} view`] : []), ...(hot.size ? ['highlighted faces filled red, their labels ringed red'] : [])],
   };
   cache.set(key, { doc: new WeakRef(doc), bodies: new WeakRef(bodies), result }); if (cache.size > 8) cache.delete(cache.keys().next().value!);

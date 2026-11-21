@@ -3,14 +3,52 @@ import assert from 'node:assert/strict';
 import { writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { evaluatePart } from '../src/engine/evaluate';
-import { rectanglePart, cylinderPart, withNode, type StudioDoc } from '../src/engine/doc';
+import { directOps, emptyDirect, importSource } from '../src/engine/direct';
+import { emptyDoc, rectanglePart, cylinderPart, withNode, type StudioDoc } from '../src/engine/doc';
 import { revisionOf } from '../src/util/revision';
 import { runTool, type ChatState } from '../src/chat/tools';
+import { v2Result } from '../src/chat/groups';
+import { directInspectionRevision } from '../src/chat/sweepSource';
 
 // Views for an agent (A2.3): one PNG sheet of exact line views with numbered faces, and its legend.
 const evaluate = async (doc: StudioDoc) => evaluatePart(doc, 1);
 async function stateOf(doc: StudioDoc): Promise<ChatState> { const r = await evaluate(doc); assert.ok(r.ok); return { doc, bodies: r.bodies }; }
 const parse = (content: string) => JSON.parse(content) as Record<string, any>;
+
+test('Direct image review pins visible display geometry and preserves literal IDs in the public result', async () => {
+  const source = `@model rails {version:0;length-unit:mm;
+    @curve #a {type:nurbs;degree:1;knots:[0,0,1,1];control-points:[[0,0,0],[20,0,0]];weights:[1,1];}
+    @curve #b {type:nurbs;degree:1;knots:[0,0,1,1];control-points:[[0,10,0],[20,10,5]];weights:[1,1];}
+  }`;
+  const rails = importSource(emptyDirect(), source, 'Rails');
+  const direct = directOps.ruledSurface(rails, rails.objects[0].id, rails.objects[1].id);
+  direct.objects[0] = { ...direct.objects[0], id: 'get_part_summary', name: 'run_command' };
+  const state = { doc: { ...emptyDoc(), direct }, bodies: [] };
+  const pin = directInspectionRevision(state.doc);
+  const read = async (current: ChatState, extra: Record<string, unknown> = {}) =>
+    runTool(current, 'query', { action: 'render', expectedDirectRevision: pin, ...extra }, async () => { throw new Error('Unexpected part evaluation'); });
+  const image = await read(state);
+  assert.ok(!image.isError, image.content);
+  const { directObjects, revision, imageSha256 } = parse(v2Result(image.content, 'render_views'));
+  assert.equal(revision, pin);
+  assert.deepEqual(directObjects[0], { id: 'get_part_summary', name: 'run_command', kind: 'curve' });
+  assert.equal(imageSha256, createHash('sha256').update(Buffer.from(image.images![0].data, 'base64')).digest('hex'));
+  assert.equal(image.state.doc, state.doc);
+  assert.equal(image.changed, false);
+  const edited = { ...state, doc: { ...state.doc, direct: { ...direct, objects: direct.objects.map(object => ({ ...object, hidden: true })) } } };
+  for (const [current, args, code] of [
+    [edited, {}, 'DIRECT_RENDER_STALE'],
+    [edited, { expectedDirectRevision: directInspectionRevision(edited.doc) }, 'DIRECT_RENDER_EMPTY'],
+    [state, { expectedRevision: revisionOf(state.doc) }, 'DIRECT_RENDER_INPUT'],
+    [state, { section: { axis: 'z', at: 1 } }, 'DIRECT_RENDER_INPUT'],
+    [{ ...state, partOf: 'p1' }, {}, 'DIRECT_RENDER_SCOPE'],
+  ] as const) {
+    const refused = await read(current, args);
+    assert.equal(parse(refused.content).code, code);
+    assert.equal(refused.images, undefined);
+    assert.equal(refused.state, current);
+  }
+});
 
 test('render_views: a 1000 × 1000 PNG of four views, faces numbered with a legend, highlight and section', async () => {
   let s = await stateOf(rectanglePart(40, 20, 8));

@@ -56,7 +56,7 @@ export const GROUPS: Record<string, Group> = {
       welds: ['weld_list', '— the frame\'s weld joints, seams from the geometry, sizes yours or estimated (FRd1)'],
       cutlist: ['cut_list', 'csv? — a frame\u2019s members to cut: rows of identical ones, lengths, end cuts, mass (FR4a); nested into the stock lengths (FRb)'],
       bom: ['output_bom', 'expectedRevision? — BOM files'], purchase_csv: ['output_purchase_csv', 'withMade?, expectedRevision?'], clearance: ['output_clearance', 'near?, expectedRevision? — current assembly map'], cam: ['output_cam_package', 'part?, toolDiameter?, expectedRevision? — NOT FOR PRODUCTION'],
-      render: ['render_views', 'highlight?, section?, expectedRevision?'],
+      render: ['render_views', 'highlight?, section?, expectedRevision? or expectedDirectRevision for Direct-only review'],
       select: ['select', 'faces?, edges?, bodies? — shows them selected in the studio'],
       manufacturability: ['check_printability', 'direction?, finish?, sides? — the report for the part\'s process: printing, injection moulding (pull, finish, halves), machining, casting (pull)'],
     },
@@ -208,6 +208,7 @@ export function v2Result(text: string, handler?: string): string {
   // These records carry literal IDs, names and refusal codes.
   if (handler === 'get_drawing_dimensions' || handler === 'calculate_drawing_tolerance_stack'
     || (handler === 'inspect' && isRecord(parsed) && ('curveJoin' in parsed || 'surfacePoint' in parsed))
+    || (handler === 'render_views' && isRecord(parsed) && Array.isArray(parsed.directObjects))
     || handler === 'list_native_joints' || handler === 'measure_edge_continuity' || handler === 'measure_edge_curvature') return text;
   if (handler === 'get_part_summary' && isRecord(parsed)) {
     const { direct_curves, direct_surfaces, ...summary } = parsed;

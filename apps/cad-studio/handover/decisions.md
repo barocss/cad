@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1626: [Review Direct geometry visually through the local Agent](notes/agent-direct-visual-review-2026-11-22/README.md), #324 and #322. Match the shared geometry in Studio and the pinned MCP image, then refuse an older pin after a live rail edit.
 - D1625: [Propose a native Direct Ruled surface through the local Agent](notes/agent-direct-ruled-proposal-2026-11-22/README.md), #29 and #322. Verify the pinned source, Studio preview, human approval and exact native Open.
 - D1624: [Inspect a Direct surface point and normal through the local Agent](notes/agent-direct-surface-inspection-2026-11-22/README.md), #29 and #322. Verify exact revision and U,V against the native Studio inspector after Open.
 - D1623: [Build a ruled surface from a straight span and cubic Bézier](notes/exact-ruled-straight-cubic-2026-11-22/README.md), #29. Verify both unchanged rails, the midpoint normal and exact native Open in Studio.

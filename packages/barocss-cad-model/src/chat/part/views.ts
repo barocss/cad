@@ -2,7 +2,7 @@
 // edge's detail, and the selection by name.
 import { resolveNames, resolveSelectors, type NameSelection } from '../names';
 import { edgeDetail, faceDetail } from '../observe';
-import { renderViews } from '../views';
+import { renderDirectViews, renderViews } from '../views';
 import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, json, fail, strings, list } from '../toolKit';
 import { isObj } from '../../util/guards';
 import { revisionOf } from '../../util/revision';
@@ -11,6 +11,21 @@ import { directInspectionRevision } from '../sweepSource';
 import { evaluateCurve, surfaceDomain } from '@barocss/cad';
 
 async function renderViewsTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate): Promise<ToolOutcome> {
+  if (args.expectedDirectRevision !== undefined) {
+    if (typeof args.expectedDirectRevision !== 'string' || !/^[a-f0-9]{64}$/.test(args.expectedDirectRevision)
+      || args.expectedRevision !== undefined || args.highlight !== undefined || args.section !== undefined)
+      return fail(state, 'For Direct review, pass direct_revision from query.summary as expectedDirectRevision without expectedRevision, highlight or section.', { code: 'DIRECT_RENDER_INPUT' });
+    if (state.partOf || state.bodies.length || state.doc.instances?.length)
+      return fail(state, 'Use Direct review on the base document with only Direct geometry to display.', { code: 'DIRECT_RENDER_SCOPE' });
+    const revision = directInspectionRevision(state.doc);
+    if (args.expectedDirectRevision !== revision)
+      return fail(state, 'The Direct inputs changed. Read query.summary again.', { code: 'DIRECT_RENDER_STALE', expectedDirectRevision: args.expectedDirectRevision, revision });
+    const result = await renderDirectViews(state.doc);
+    if (!result) return fail(state, 'There is no visible Direct curve or sheet to render.', { code: 'DIRECT_RENDER_EMPTY' });
+    const { image, ...rest } = result;
+    return { state, content: json({ revision, ...rest }), isError: false, changed: false,
+      summary: `Direct views (${rest.directObjects.length} objects)`, images: [{ data: image, mediaType: 'image/png' }] };
+  }
   if (args.expectedRevision !== undefined && (typeof args.expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(args.expectedRevision)))
     return fail(state, 'expectedRevision must be the 16-digit revision from query.rebuild for the same part.', { code: 'RENDER_INPUT' });
   const revision = revisionOf(state.doc);

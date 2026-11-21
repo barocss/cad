@@ -53,7 +53,7 @@ Reads the part without changing it.
 | `query.purchase_csv` | `output_purchase_csv` | withMade?, expectedRevision? |
 | `query.clearance` | `output_clearance` | near?, expectedRevision? — current assembly map |
 | `query.cam` | `output_cam_package` | part?, toolDiameter?, expectedRevision? — NOT FOR PRODUCTION |
-| `query.render` | `render_views` | highlight?, section?, expectedRevision? |
+| `query.render` | `render_views` | highlight?, section?, expectedRevision? or expectedDirectRevision for Direct-only review |
 | `query.select` | `select` | faces?, edges?, bodies? — shows them selected in the studio |
 | `query.manufacturability` | `check_printability` | direction?, finish?, sides? — the report for the part's process: printing, injection moulding (pull, finish, halves), machining, casting (pull) |
 
