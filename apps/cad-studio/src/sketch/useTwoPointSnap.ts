@@ -43,7 +43,8 @@ export function useTwoPointSnap(doc: StudioDoc, sketch: SketchState | null, docN
   useEffect(() => {
     if (draft && !visible && current.current === draft) { current.current = null; setDraft(null); }
   }, [draft, visible]);
-  const points = useMemo(() => sketch?.tool === 'rectangle' && !sketch.shape && !sketch.construct && !sketch.hideConstruction
+  const points = useMemo(() => sketch && (sketch.tool === 'rectangle' || (sketch.tool === 'circle' && !sketch.band))
+    && !sketch.shape && !sketch.construct && !sketch.hideConstruction
     ? (sketch.done ?? []).flatMap(shape => shape.construction ? shapeSnaps(shape).filter(point => point.kind === 'end') : [])
     : [], [sketch]);
   const available = points.length > 1;
@@ -78,8 +79,9 @@ export function useTwoPointSnap(doc: StudioDoc, sketch: SketchState | null, docN
       if (!value || !at) return;
       // Retire before handing the point to the drawing gesture, including repeated submit events.
       change(null);
-      if (!viewport.current?.startRectangleAt(value.sketch, at) && docNow.current === value.doc && generation.current === value.generation)
-        change({ ...value, problem: 'Start a new rectangle before using the point.' });
+      if (!viewport.current?.startSketchPrimitiveAt(value.sketch, at) && docNow.current === value.doc && generation.current === value.generation)
+        change({ ...value, problem: value.sketch.tool === 'circle'
+          ? 'Start a new circle before using the point.' : 'Start a new rectangle before using the point.' });
     },
   };
 }

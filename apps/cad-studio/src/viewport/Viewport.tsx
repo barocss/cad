@@ -61,7 +61,7 @@ export { DRAG_TYPE, instancePickFields } from './viewportPointerInput';
 export interface ViewportHandle {
   /** Frames everything, or the box given (the picked bodies). */
   fit(box?: { min: Vec3; max: Vec3 }): void; setView(name: Parameters<OrbitCamera['setView']>[0]): void; toggleOrtho(): boolean; camera: OrbitCamera;
-  startRectangleAt(owner: SketchState, at: [number, number]): boolean;
+  startSketchPrimitiveAt(owner: SketchState, at: [number, number]): boolean;
   /** A straight view onto the sketch plane, framing its rectangle (plane coordinates) in the area not covered by `insets` (CSS px). */
   frameSketch(min: [number, number], max: [number, number], plane: SketchPlane): void;
   frameActiveSketch(min: [number, number], max: [number, number], plane: SketchPlane): boolean;
@@ -935,7 +935,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
 
   useImperativeHandle(ref, () => ({
     camera: camera.current,
-    startRectangleAt: input.startRectangleAt,
+    startSketchPrimitiveAt: input.startSketchPrimitiveAt,
     fit(box) { const b = sourceProps.printActive ? boundsForFit() : box ?? boundsForFit(); if (b) fitBounds(b); request(); },
     setView(name) {
       ++turning.current;

@@ -31,12 +31,12 @@ try {
   ({ useTwoPointSnap } = await import(pathToFileURL(outfile).href));
 } finally { await rm(temporary, { recursive: true, force: true }); }
 
-function rig(run: (r: ReturnType<typeof setup>) => void) {
+function rig(run: (r: ReturnType<typeof setup>) => void, tool: 'rectangle' | 'circle' = 'rectangle') {
   const previous = shared.__twoPointOwnershipHooks;
-  const r = setup();
+  const r = setup(tool);
   try { run(r); } finally { shared.__twoPointOwnershipHooks = previous; }
 }
-function setup() {
+function setup(tool: 'rectangle' | 'circle') {
   const slots: Slot[] = [], effects: (() => void)[] = []; let cursor = 0, writes = 0;
   const same = (a: unknown[] | undefined, b: unknown[]) => !!a && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
   shared.__twoPointOwnershipHooks = {
@@ -50,10 +50,10 @@ function setup() {
   };
   const doc: StudioDoc = { format: 'barocss-cad-model', schema: 3, units: 'mm', nodes: [], outputs: {}, parameters: {}, nextId: 0 };
   const docNow = { current: doc }, generation = { current: 1 };
-  let sketch: SketchState = { plane: { origin: [0, 0, 0], normal: [0, 0, 1], xAxis: [1, 0, 0] }, tool: 'rectangle', shape: null, base: null,
+  let sketch: SketchState = { plane: { origin: [0, 0, 0], normal: [0, 0, 1], xAxis: [1, 0, 0] }, tool, shape: null, base: null,
     done: [{ kind: 'polygon', construction: true, closed: false, points: [[0, 0], [12, 0]] }] };
   const calls: { owner: SketchState; at: [number, number] }[] = [];
-  const viewport = { current: { startRectangleAt(owner: SketchState, at: [number, number]) { calls.push({ owner, at }); return true; } } as ViewportHandle };
+  const viewport = { current: { startSketchPrimitiveAt(owner: SketchState, at: [number, number]) { calls.push({ owner, at }); return true; } } as ViewportHandle };
   const render = () => { cursor = 0; return useTwoPointSnap(docNow.current, sketch, docNow, generation, viewport); };
   const arm = () => { const state = render(); assert.equal(state.available, true); state.begin();
     const points = state.input.read()!.points; state.input.pick(points[0]); state.input.pick(points[1]); state.setValue('0.25');
@@ -88,3 +88,16 @@ test('Cancel retires pending point synchronously and a fresh attempt transfers e
   assert.equal(fresh.input.read(), null); assert.equal(r.render().visible, null);
   assert.deepEqual(r.doc, { format: 'barocss-cad-model', schema: 3, units: 'mm', nodes: [], outputs: {}, parameters: {}, nextId: 0 });
 }));
+
+test('Circle transfers the calculated centre once and rejects a replaced sketch', () => rig(r => {
+  const state = r.arm();
+  state.apply(); state.apply();
+  assert.equal(r.calls.length, 1);
+  assert.equal(r.calls[0].owner.tool, 'circle');
+  assert.deepEqual(r.calls[0].at, [3, 0]);
+  const stale = r.arm();
+  r.replaceSketch();
+  stale.apply();
+  assert.equal(r.calls.length, 1);
+  assert.equal(r.render().available, false);
+}, 'circle'));

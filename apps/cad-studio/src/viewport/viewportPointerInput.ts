@@ -447,10 +447,15 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     const project = sketchProject(plane);
     return nearestSnap(points, ([u, v]) => { const [sx, sy] = project(u, v); return [sx, sy]; }, [x, y]);
   };
-  const startRectangleAt = (owner: SketchState, at: [number, number]) => {
-    if (propsRef.current.sketch !== owner || owner.tool !== 'rectangle' || drafting.current) return false;
+  const startSketchPrimitiveAt = (owner: SketchState, at: [number, number]) => {
+    if (propsRef.current.sketch !== owner || drafting.current) return false;
+    const { tool } = owner;
+    if (tool !== 'rectangle' && tool !== 'circle') return false;
     drafting.current = true;
-    emit({ kind: 'rectangle', a: at, b: at }, true, 'rectangle-start');
+    if (tool === 'circle') {
+      clearSketchSnap();
+      emit({ kind: 'circle', c: at, r: 1 }, true, 'circle-start');
+    } else emit({ kind: 'rectangle', a: at, b: at }, true, 'rectangle-start');
     request();
     return true;
   };
@@ -1174,14 +1179,10 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
         request(); return;
       }
       if (sk.tool === 'rectangle') {
-        if (!drafting.current) startRectangleAt(sk, c);
+        if (!drafting.current) startSketchPrimitiveAt(sk, c);
         else { drafting.current = false; if (s && s.kind === 'rectangle') emit({ ...s, b: c }, false, 'rectangle-finish'); }
       } else if (sk.tool === 'circle') {
-        if (!drafting.current) {
-          drafting.current = true;
-          clearSketchSnap();
-          emit({ kind: 'circle', c, r: 1 }, true, 'circle-start');
-        }
+        if (!drafting.current) startSketchPrimitiveAt(sk, c);
         else {
           drafting.current = false;
           if (s?.kind === 'circle') {
@@ -1332,7 +1333,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     canvasHandlers: { onPointerDown, onPointerMove, onPointerLeave, onPointerUp, onPointerCancel, onLostPointerCapture, onDoubleClick, onWheel, onContextMenu },
     placementHandlers: { onDragOver, onDrop },
     overlay: { drag, gizmoHot, valueBox, sketchDraft, twoPointHover, bezierDraft, ellipseDraft, carc, liveShape, toolView, projector },
-    cancelGizmo, listenForSketchKeys, resetSketchTool, startRectangleAt,
+    cancelGizmo, listenForSketchKeys, resetSketchTool, startSketchPrimitiveAt,
     dragTrimPreview: () => canvas.current ? trimStroke.preview(trimOwner(), pointerFrame) : null,
   };
 }

@@ -3278,11 +3278,13 @@ export function App() {
 
       {insetReview && <InsetSourceReview review={insetReview} cancel={() => insetRelink.cancel(true)} apply={insetRelink.apply} />}
       {midpointReview && <MidpointSketchReview review={midpointReview} cancel={cancelNativeReview} adopt={midpointSketch.adopt} />}
-      {sketch && <SketchPanel sketch={sketch} constraintInspection={constraintInspection} constraintDocument={doc} toolControls={<><SketchSnapControls twoPoint={twoPointSnap} extension={arcExtensionSnap} objectKinds={objectSnapKinds}
+      {sketch && <SketchPanel sketch={sketch} constraintInspection={constraintInspection} constraintDocument={doc} toolControls={<><SketchSnapControls
+        twoPoint={{ ...twoPointSnap, begin: () => { circleChord.cancel(); twoPointSnap.begin(); } }} extension={arcExtensionSnap} objectKinds={objectSnapKinds}
         crossingToolSupported={usesNativeCrossings}
         placedRotationLimited={placedSketchSnaps?.sources.some(({ instance }) => !supportsPlacedBoxSnapRotation(instance.rotation))}
         onToggleObjectKind={kind => setObjectSnapKinds(kinds => toggleObjectSnapKind(kinds, kind))}
-        onExitObjectKinds={sketch.editDim ? () => sketchViewportActions.onDimEdit?.(null) : undefined} /><PathGapControls gap={pathGap} /><CircleChordControls circle={circleChord} /><OverlaidLinesControls scan={overlaidLines} /></>} toolLabel={TOOLS.find(t => t.tool === sketch.tool)!.label} finishError={sketchFinishError} error={sketchIssue?.ellipse && !ownsEllipseAxesRecovery(sketchIssue.ellipse, doc, sketch) ? null : sketchIssue?.reason ?? null}
+        onExitObjectKinds={sketch.editDim ? () => sketchViewportActions.onDimEdit?.(null) : undefined} /><PathGapControls gap={pathGap} />
+        <CircleChordControls circle={{ ...circleChord, begin: () => { twoPointSnap.cancel(); circleChord.begin(); } }} /><OverlaidLinesControls scan={overlaidLines} /></>} toolLabel={TOOLS.find(t => t.tool === sketch.tool)!.label} finishError={sketchFinishError} error={sketchIssue?.ellipse && !ownsEllipseAxesRecovery(sketchIssue.ellipse, doc, sketch) ? null : sketchIssue?.reason ?? null}
         onEditEllipseAxes={ownsEllipseAxesRecovery(sketchIssue?.ellipse, doc, sketch) ? () => ownsEllipseAxesRecovery(sketchIssue?.ellipse, docNow.current, renderedSketch.current.draft) && renderedSketch.current.generation === sketchGeneration.current : undefined}
         referencePicker={<SavedBezierPicker sketch={sketch} onActivate={source => {
           if (docNow.current !== doc || renderedSketch.current.draft !== sketch
