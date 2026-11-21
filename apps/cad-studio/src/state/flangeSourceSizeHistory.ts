@@ -37,7 +37,7 @@ export function admitFlangeSourceSizeChange(before: StudioDoc, next: StudioDoc, 
   const a=before.nodes[0],b=next.nodes[0],flange=before.nodes[2];
   if(a.kind!=='sketch'||b.kind!=='sketch'||a.profile!=='rectangle'||b.profile!=='rectangle'
     ||flange.kind!=='sheet-flange'||flange.bendRadius!==undefined)return false;
-  if(a.max.filter((v,i)=>v!==b.max[i]).length!==1)return false;
+  if(!a.max.some((v,i)=>v!==b.max[i]))return false;
   return canonical({...before,nodes:before.nodes.map((n,i)=>i===0?{...a,max:b.max}:n)})===canonical(next);
 }
 /** Full worker-parent evidence; temporary extrude descriptions are never evaluated or saved. */

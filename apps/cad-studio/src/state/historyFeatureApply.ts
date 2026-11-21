@@ -102,7 +102,7 @@ export function createHistoryFeatureApply({ model, owner, worker, changes }: Opt
     if (flangeSourceThicknessChanged && !admitFlangeSourceThicknessChange(doc, { ...doc, nodes }, editNode)) return Promise.resolve(flangeSourceThicknessFailure);
     const flangeSourceThicknessSource = flangeSourceThicknessChanged ? canonical(doc) : '', flangeSourceThicknessDraft = flangeSourceThicknessChanged ? canonical(nodes) : '';
     const flangeSourceSizeChanged = isFlangeSourceSizeChange(doc, { ...doc, nodes }, editNode);
-    const flangeSourceSizeFailure = {title: 'Flange source size not applied', hint: 'Apply only one numeric Width or Depth change on the unchanged plain sheet with one full-width inside Flange using the sheet radius. Its original top edge must be verified.', detail: 'The original sheet, flange and references are unchanged.'};
+    const flangeSourceSizeFailure = {title: 'Flange source size not applied', hint: 'Edit the numeric Width or Depth on a plain rectangular sheet with one full-width inside Flange using the sheet radius. The same original top edge must be verified.', detail: 'The original sheet, flange and references are unchanged.'};
     if (flangeSourceSizeChanged && !admitFlangeSourceSizeChange(doc, { ...doc, nodes }, editNode)) return Promise.resolve(flangeSourceSizeFailure);
     const flangeSourceSizeSource = flangeSourceSizeChanged ? canonical(doc) : '', flangeSourceSizeDraft = flangeSourceSizeChanged ? canonical(nodes) : '';
     const scope = owner.scope();

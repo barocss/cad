@@ -20,17 +20,17 @@ const patch=(doc:StudioDoc,change:object):StudioDoc=>({...doc,nodes:doc.nodes.ma
 type Call={doc:StudioDoc;revision:number;resolve(r:EvalResult):void;reject(e:Error):void};
 const tick=()=>new Promise<void>(resolve=>queueMicrotask(resolve));
 function native(doc:StudioDoc){const r=evaluateDoc(doc,99);assert.ok(r.ok);if(!r.ok)throw Error('native');return r.bodies;}
-function harness(source=fixture().doc,width=100){
- const doc=source,next=patch(doc,{max:[width,50]});let document=doc,evaluated=doc,scope={},open={},worker=1,draft=true,marker:number|null=null,variant:string|null=null,revision=0;
+function harness(source=fixture().doc,width=100,depth=50){
+ const doc=source,next=patch(doc,{max:[width,depth]});let document=doc,evaluated=doc,scope={},open={},worker=1,draft=true,marker:number|null=null,variant:string|null=null,revision=0;
  const parts:Call[]=[],full:Call[]=[],commits:StudioDoc[]=[];
  const enqueue=(calls:Call[],d:StudioDoc,r:number)=>new Promise<EvalResult>((resolve,reject)=>calls.push({doc:d,revision:r,resolve,reject}));
  const apply=createHistoryFeatureApply({model:{doc,evaluated:doc,editNode:1,fresh:true,busy:false},owner:{document:()=>document,evaluated:()=>evaluated,scope:()=>scope,open:()=>open,worker:()=>worker,marker:()=>marker,variant:()=>variant},worker:{engine:{part:(d,r)=>enqueue(parts,d,r),evaluate:(d,r)=>enqueue(full,d,r)},nextRevision:()=>++revision},changes:{canChangeDocument:()=>true,commit:d=>{commits.push(d);return true;},applyRoundedInsetEdit:()=>assert.fail('inset'),stageFeatureCandidate:()=>assert.fail('pattern')}});
  const good=(c:Call)=>{const r=evaluateDoc(c.doc,c.revision);assert.ok(r.ok,r.ok?'':r.error.detail);c.resolve(r);};
  return{doc,next,parts,full,commits,good,apply:(nodes=next.nodes)=>apply(nodes,()=>draft),invalidate:{document:()=>{document={...doc};},evaluated:()=>{evaluated={...doc};},scope:()=>{scope={};},open:()=>{open={};},worker:()=>{worker++;},draft:()=>{draft=false;},marker:()=>{marker=0;},variant:()=>{variant='other';},sourceMutation:()=>{doc.nextId=(doc.nextId??0)+1;},draftMutation:()=>{const n=next.nodes[0];if(n.kind==='sketch'&&n.profile==='rectangle')n.max=[120,50];}}};
 }
-test('inherited whole-parent native proof preserves omission and refreshes only signed top-rim evidence for width and depth increase and decrease',()=>{
+test('inherited whole-parent native proof refreshes only the signed top rim after individual and combined extent changes',()=>{
  let before=fixture().doc;
- for(const [width,depth] of [[100,50],[80,50],[80,60],[80,50]]){
+ for(const [width,depth] of [[100,50],[80,50],[80,60],[80,50],[100,60],[80,50]]){
   const next=patch(before,{max:[width,depth]}),saved=structuredClone(before);
   assert.equal(admitFlangeSourceSizeChange(before,next,1),true);
   const a=native(prefixDoc(before,2)),b=native(prefixDoc(next,2));
@@ -58,7 +58,7 @@ test('ordinary sheet keeps its existing direct full-evaluation commit path',asyn
 });
 test('mixed, dependent, unsupported source and invalid extents fail admission without mutation',()=>{
  const {doc}=fixture(),saved=structuredClone(doc),next=patch(doc,{max:[100,50]});
- for(const candidate of [patch(doc,{max:[0,50]}),patch(doc,{max:[-1,50]}),patch(doc,{max:[NaN,50]}),patch(doc,{max:[Infinity,50]}),patch(doc,{max:[{parameter:'W'},50]}),patch(doc,{max:[100,60]}),patch(doc,{min:[1,0],max:[100,50]}),basePatch(next,{bendRadius:2}),basePatch(next,{thickness:3}),basePatch(next,{kFactor:.5}),flangePatch(next,{length:21}),flangePatch(next,{measure:'inner'}),flangePatch(next,{bendRadius:1.5})])assert.equal(admitFlangeSourceSizeChange(doc,candidate,1),false);
+ for(const candidate of [doc,patch(doc,{max:[0,50]}),patch(doc,{max:[-1,50]}),patch(doc,{max:[NaN,60]}),patch(doc,{max:[Infinity,60]}),patch(doc,{max:[{parameter:'W'},60]}),patch(doc,{min:[1,0],max:[100,60]}),basePatch(next,{bendRadius:2}),basePatch(next,{thickness:3}),basePatch(next,{kFactor:.5}),flangePatch(next,{length:21}),flangePatch(next,{measure:'inner'}),flangePatch(next,{bendRadius:1.5})])assert.equal(admitFlangeSourceSizeChange(doc,candidate,1),false);
  for(const raw of [flangePatch(doc,{held:'test'}),flangePatch(doc,{suppressed:true}),flangePatch(doc,{measure:'inner'}),flangePatch(doc,{position:'material-outside'}),flangePatch(doc,{angle:45}),flangePatch(doc,{offsets:[0,0]}),flangePatch(doc,{bendRadius:2}),flangePatch(doc,{bendRadius:{parameter:'R'}}),flangePatch(doc,{bendRadius:0}),basePatch(doc,{bendRadius:{parameter:'R'}}),basePatch(doc,{thickness:{parameter:'T'}}),{...doc,direct:[]},{...doc,nodes:[...doc.nodes,doc.nodes[2]]}]){
   const source=raw as unknown as StudioDoc;assert.equal(admitFlangeSourceSizeChange(source,patch(source,{max:[100,50]}),1),false);
  }
@@ -79,7 +79,7 @@ async function reach(h:ReturnType<typeof harness>,stage:'before'|'after'|'full')
  return stage==='full'?h.full[0]:h.parts[stage==='before'?0:1];
 }
 test('two owned prefixes and final native evaluation commit exactly once',async()=>{
- const h=harness(),saved=structuredClone(h.doc),pending=h.apply();assert.equal(h.parts.length,1);assert.deepEqual(h.parts[0].doc,prefixDoc(h.doc,2));
+ const h=harness(fixture().doc,100,60),saved=structuredClone(h.doc),pending=h.apply();assert.equal(h.parts.length,1);assert.deepEqual(h.parts[0].doc,prefixDoc(h.doc,2));
  const full=await reach(h,'full');assert.deepEqual(h.parts[1].doc,prefixDoc(h.next,2));
  const expected=proveFlangeSourceSizeChange(h.doc,h.next,native(prefixDoc(h.doc,2)),native(prefixDoc(h.next,2)));assert.ok(expected);assert.deepEqual(full.doc,expected);
  h.good(full);await pending;assert.deepEqual(h.commits,[expected]);assert.equal(Object.hasOwn(h.commits[0].nodes[2],'bendRadius'),false);assert.deepEqual(h.doc,saved);
@@ -98,10 +98,10 @@ test('invalid draft fails before worker; parent errors and native full refusal p
  const refused=evaluateDoc(flangePatch(c.doc,{length:-1}),c.revision);assert.equal(refused.ok,false);c.resolve(refused);assert.ok(await pending);assert.equal(k.commits.length,0);assert.deepEqual(k.doc,saved);
 });
 
-test('valid original flange with impossible new width refuses final native build atomically',async()=>{const h=harness(fixture().doc,2),saved=structuredClone(h.doc),pending=h.apply();const c=await reach(h,'full');const r=evaluateDoc(c.doc,c.revision);assert.equal(r.ok,false);if(!r.ok)assert.match(r.error.detail,/BEND_DOES_NOT_FIT/);c.resolve(r);assert.ok(await pending);assert.equal(h.commits.length,0);assert.deepEqual(h.doc,saved);});
+test('valid original flange with impossible new width refuses final native build atomically even after depth changes',async()=>{const h=harness(fixture().doc,2,60),saved=structuredClone(h.doc),pending=h.apply();const c=await reach(h,'full');const r=evaluateDoc(c.doc,c.revision);assert.equal(r.ok,false);if(!r.ok)assert.match(r.error.detail,/BEND_DOES_NOT_FIT/);c.resolve(r);assert.ok(await pending);assert.equal(h.commits.length,0);assert.deepEqual(h.doc,saved);});
 
 test('each of four native top-rim semantic roles refreshes only its own edge',()=>{
- for(let side=0;side<4;side++)for(const max of [[100,50],[80,60]]){
+ for(let side=0;side<4;side++)for(const max of [[100,50],[80,60],[100,60]]){
   const name=`n1.side${side}|n1.top`,{doc}=fixture(name),next=patch(doc,{max}),a=native(prefixDoc(doc,2)),b=native(prefixDoc(next,2));
   const result=proveFlangeSourceSizeChange(doc,next,a,b);assert.ok(result);
   const f=result.nodes[2];if(f.kind!=='sheet-flange')throw Error('flange');

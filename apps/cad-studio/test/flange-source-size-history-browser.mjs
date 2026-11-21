@@ -3,12 +3,19 @@ import {isDeepStrictEqual} from 'node:util';
 import {createFlow} from './flow-helper.mjs';
 import {clickModelCommand} from './model-rail-helper.mjs';
 const baseline=process.argv.includes('--baseline');
-const depth=process.argv.includes('--depth'),fieldLabel=depth?'Depth':'Width',target=depth?60:100;
+const both=process.argv.includes('--both');
+const expectRefused=process.argv.includes('--expect-refused');
+const depth=process.argv.includes('--depth');
+assert.ok(!both||(!depth&&!baseline),'Combined extent has its own runtime baseline');
+assert.ok(!expectRefused||both,'The current refusal is only expected for the combined edit');
+const edits=both?[['Width',80,100],['Depth',50,60]]:[depth?['Depth',50,60]:['Width',80,100]];
+const measure=both?'width-depth':depth?'depth':'width';
+const nextMax=[depth?80:100,depth||both?60:50];
 const pins=['apps/cad-studio/test/flange-source-size-history-browser.mjs','apps/cad-studio/test/flow-helper.mjs','apps/cad-studio/test/model-rail-helper.mjs','packages/barocss-cad/src/part/part-sheet.ts','packages/barocss-cad-model/src/app/sheetCommands.ts','packages/barocss-cad-model/src/app/flangeRadiusEdit.ts','packages/barocss-cad-model/src/app/flangePositionEdit.ts','packages/barocss-cad-model/src/app/editFields.ts','packages/barocss-cad-model/src/engine/part.ts','apps/cad-studio/src/ui/NodeEditor.tsx','apps/cad-studio/src/app/featureNumberInput.ts','apps/cad-studio/src/state/historyFeatureApply.ts'];
 pins.push('apps/cad-studio/src/state/rectangleFinishResize.ts','packages/barocss-cad-model/src/app/flangeMeasureEdit.ts','apps/cad-studio/src/state/flangeMeasureHistory.ts','packages/barocss-cad-model/src/engine/references.ts','packages/barocss-cad-model/src/engine/rematch.ts','apps/cad-studio/src/App.tsx');
 pins.push('apps/cad-studio/src/state/flangeSourceThicknessHistory.ts','packages/barocss-cad-model/src/app/flangeRadiusSourceEdit.ts');
 if(!baseline)pins.push('apps/cad-studio/src/state/flangeSourceSizeHistory.ts');
-const f=await createFlow({name:'flange-source-size-history',output:process.argv[2],envFrozen:'FLANGE_SOURCE_SIZE_HISTORY_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:'Observe source rectangle Width or Depth History editing with an inherited-radius Flange; acceptance, refusal and reopen changes are distinct outcomes.',limits:['Actual signed Flange creation on a synthetic plain XY sheet. Single full-width inside flange, omitted own radius inheriting sheet R1.5, L20, 90 degrees. No general signature repair or manufacturing claim. Later stages NOT_RUN when source edit or reopen prevents continuation.'],inspectorSource:`
+const f=await createFlow({name:'flange-source-size-history',output:process.argv[2],envFrozen:'FLANGE_SOURCE_SIZE_HISTORY_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,qualification:'Observe source rectangle extent edits with an inherited-radius Flange.',limits:['Actual signed Flange creation on a synthetic plain XY sheet. Single full-width inside flange, omitted own radius inheriting sheet R1.5, L20, 90 degrees. No general signature repair.'],snapshotExtra:()=>({dirty:!!document.querySelector('[aria-label="Unsaved changes"]')}),inspectorSource:`
 import {readFileSync} from 'node:fs';
 import {evaluateCadPart,massPropertiesOf,flatPatternOf,checkBrep,faceGeometry} from '@barocss/cad';
 import {toPartDocument} from '@barocss/cad-model/engine/part';
@@ -74,40 +81,45 @@ async function applyObserved(original,label){
  await f.page.waitForFunction(original=>JSON.stringify(window.__studioDoc)!==original||!!document.querySelector('.node-editor .hud-error')?.textContent?.trim()||document.querySelectorAll('.toast').length>0,JSON.stringify(original),{timeout:60000});
  await f.ready();const outcome=await f.snapshot(label+'-outcome'),current=await f.doc(),accepted=!isDeepStrictEqual(current,original);
  f.report.observations.push({label,accepted,notices:outcome.notices,errors:await f.editor().locator('.hud-error').allTextContents()});
- if(!accepted){assert.deepEqual(current,original);assert.deepEqual(outcome.history,before.history);assert.equal(await button('Undo').isEnabled(),undoBefore);assert.equal(await button('Redo').isEnabled(),redoBefore);assert.ok(outcome.notices.length||(await f.editor().locator('.hud-error').allTextContents()).some(x=>x.trim()));}
+ if(!accepted){assert.deepEqual(current,original);for(const key of ['bodies','selection','history','dirty'])assert.deepEqual(outcome[key],before[key],key);assert.equal(await button('Undo').isEnabled(),undoBefore);assert.equal(await button('Redo').isEnabled(),redoBefore);assert.ok(outcome.notices.length||(await f.editor().locator('.hud-error').allTextContents()).some(x=>x.trim()));}
  await f.closeEditor();await f.same(current);await f.persist();return {accepted,current};
 }
 await f.run(async()=>{
- const measure=depth?'depth':'width';
  await f.newPage();await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'flange-position-source.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(source))});await f.same(source);
  const [native]=await f.inspect(measure+'-01-sheet-native',source);assert.ok(native.check.valid);near(native.mass.volume,6000,1e-7);const edge=native.edges.filter(e=>e.straight&&e.a[0]===80&&e.b[0]===80&&e.a[2]===T&&e.b[2]===T);assert.equal(edge.length,1);assert.deepEqual(edge[0].names,['n1.side1|n1.top']);near(Math.hypot(...edge[0].a.map((v,i)=>v-edge[0].b[i])),50);
  await button('Iso').click();await f.page.getByTitle('Frame all (F)',{exact:true}).click();const filter=button('Selection filter');for(let i=0;i<6&&!(await filter.innerText()).includes('Edges');i++)await filter.click();await f.worldClick([80,25,T]);await f.page.waitForFunction(()=>window.__studioSelection?.selection.edges.length===1);
  await clickModelCommand(f.page,'Modify','Flange');const hud=f.page.getByRole('dialog',{name:'Flange',exact:true});assert.equal(Number(await hud.getByLabel('Bend radius (0: the sheet’s)',{exact:true}).inputValue()),0);assert.equal(await hud.getByLabel('Position',{exact:true}).inputValue(),'material-inside');assert.equal(await hud.getByLabel('Length to',{exact:true}).inputValue(),'outer');await hud.getByLabel('Length to',{exact:true}).selectOption('outer');await hud.locator('.status').filter({hasText:/^preview$/}).waitFor();await button('Apply',hud).click();await f.changed(source);await f.ready();const doc=await f.doc();assert.equal(doc.nodes.length,3);assert.deepEqual(doc.nodes.slice(0,2),source.nodes);assert.equal(doc.nodes[2].kind,'sheet-flange');assert.equal(Object.hasOwn(doc.nodes[2],'bendRadius'),false,'Actual default r0 must retain inheritance by omission');assert.equal(doc.nodes[2].length,20);assert.equal(doc.nodes[2].position??'material-inside','material-inside');assert.equal(doc.nodes[2].measure??'outer','outer');assert.equal(doc.nodes[2].angle??90,90);assert.deepEqual(doc.nodes[2].edges,edge[0].names);
  await geometry(measure+'-02-flange-native',doc);await history(measure+'-03-history-measure-observation',doc);await f.undo();await f.same(source);await f.redo();await f.same(doc);await geometry(measure+'-04-redo-native',doc);
  assert.equal(await signatures('05-original-parent',doc),true,'Actual creation must capture its original native top-rim signature');
- await f.openFeatureEditor(1,'Sheet base');const input=f.editor().getByRole('spinbutton',{name:fieldLabel,exact:true});assert.equal(Number(await input.inputValue()),depth?50:80);await input.fill(String(target));await f.same(doc);
- const change=await applyObserved(doc,'06-'+fieldLabel.toLowerCase()),current=change.current;
- if(!baseline)assert.equal(change.accepted,true,'Fixed single source extent must apply');
+ await f.openFeatureEditor(1,'Sheet base');
+ for(const [field,start,target] of edits){
+  const input=f.editor().getByRole('spinbutton',{name:field,exact:true});assert.equal(Number(await input.inputValue()),start);await input.fill(String(target));
+ }
+ await f.same(doc);
+ const change=await applyObserved(doc,'06-'+measure),current=change.current;
+ if(expectRefused)assert.equal(change.accepted,false,'Original combined extent shows the existing safe refusal');
+ else if(!baseline)assert.equal(change.accepted,true,'Proven source extents must apply');
  const stripSigs=d=>({...d,nodes:d.nodes.map((n,i)=>{if(i!==2)return n;const {sigs,...rest}=n;void sigs;return rest;})});
  if(change.accepted){
-  const expected={...doc,nodes:doc.nodes.map((n,i)=>i===0?{...n,max:depth?[80,target]:[target,50]}:n)};
+  const expected={...doc,nodes:doc.nodes.map((n,i)=>i===0?{...n,max:nextMax}:n)};
   assert.deepEqual(stripSigs(current),stripSigs(expected),'Only the requested rectangle extent may change apart from observed flange signatures');
   assert.equal(Object.hasOwn(current.nodes[2],'bendRadius'),false);const matched=await signatures('07-resized-parent',current);if(!baseline)assert.equal(matched,true,'Accepted extent must retain current native rim evidence');
  }
  await geometry('08-observed-native',current);
  if(change.accepted){await f.undo();await f.same(doc);await geometry('09-size-undo',doc);await f.redo();await f.same(current);await geometry('10-size-redo',current);}
- const saved=await f.save('flange-'+fieldLabel.toLowerCase()+'-observed');await f.newPage();await f.openFile(saved.file,3);const reopened=await f.doc();await f.snapshot('11-reopened');
- const preserved=isDeepStrictEqual(reopened,current);f.report.observations.push({label:'reopen-preservation',field:fieldLabel,target,preserved,accepted:current,reopened});await f.persist();
+ const saved=await f.save('flange-'+measure+'-observed');await f.newPage();await f.openFile(saved.file,3);const reopened=await f.doc();await f.snapshot('11-reopened');
+ const preserved=isDeepStrictEqual(reopened,current);f.report.observations.push({label:'reopen-preservation',edits,preserved,accepted:current,reopened});await f.persist();
  if(!baseline)assert.equal(preserved,true,'Accepted size and repaired signature must survive fresh Open');
  if(!preserved){f.report.observations.push({label:'continuation',status:'NOT_RUN',reason:'Open changed accepted document; held/rematched/suppressed state is preserved in the snapshot'});await f.persist();return;}
  await geometry('12-reopened-native',reopened);await signatures('13-reopened-parent',reopened);
  f.report.observations.push({label:'continuation',status:'NOT_RUN',reason:'This baseline covers source size and saved replay only; no subsequent Flange editing support is claimed.'});await f.persist();
- if(!baseline){
-  await f.openFeatureEditor(1,'Sheet base');await f.editor().getByRole('spinbutton',{name:fieldLabel,exact:true}).fill(String(depth?50:80));
+ if(change.accepted&&!baseline){
+  await f.openFeatureEditor(1,'Sheet base');
+  for(const [field,start] of edits)await f.editor().getByRole('spinbutton',{name:field,exact:true}).fill(String(start));
   const restored=(await f.applyEditor(current,'14-restored-size')).doc;assert.deepEqual(restored,doc,'Reverse extent restores the complete original document');
   assert.equal(await signatures('15-restored-parent',restored),true);await geometry('16-restored-native',restored);
   await f.undo();await f.same(current);await geometry('17-reverse-undo',current);await f.redo();await f.same(restored);await geometry('18-reverse-redo',restored);
-  const back=await f.save('flange-'+fieldLabel.toLowerCase()+'-restored');await f.freshOpen(back.file,back.doc,'19-restored-reopened');await f.same(doc);await geometry('20-restored-reopened-native',doc);assert.equal(await signatures('21-restored-reopened-parent',doc),true);
+  const back=await f.save('flange-'+measure+'-restored');await f.freshOpen(back.file,back.doc,'19-restored-reopened');await f.same(doc);await geometry('20-restored-reopened-native',doc);assert.equal(await signatures('21-restored-reopened-parent',doc),true);
  }
  await history('22-reopened-history',await f.doc());await button('Iso').click();await f.page.getByTitle('Frame all (F)',{exact:true}).click();await f.snapshot('15-final');
 });
