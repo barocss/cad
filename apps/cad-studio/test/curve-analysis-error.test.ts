@@ -23,6 +23,7 @@ test('a circular two-span join retains native refusal with actionable guidance a
   const join = inspectCurvePoint(direct, id, 1);
   assert.deepEqual(join.point, [0, 20, 0]);
   assert.match(join.radiusNote!, /Unavailable at join/);
+  assert.equal(join.tangentAngle, null);
   assert.equal(JSON.stringify(direct), snapshot);
 });
 
@@ -50,6 +51,7 @@ test('issue 498: joined line Point survives radius refusal without altering the 
     assert.equal(result.radius, null);
     if (t === 1) assert.match(result.radiusNote!, /Unavailable at join/);
     else assert.equal(result.radiusNote, null);
+    assert.equal(result.tangentAngle, t === 1 ? 0 : null);
   }
   assert.throws(() => inspectCurvePoint(direct, id, NaN));
   assert.equal(JSON.stringify(direct), before);

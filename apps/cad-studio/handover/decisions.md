@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1614: [Measure the tangent angle at a bounded exact Direct Join](notes/direct-join-tangent-angle-2026-11-22/README.md), #29. Studio verifies the independent angle after Open and keeps the adjacent radius inspections.
 - D1613: [Start Line at a calculated two-point snap](notes/calculated-sketch-line-start-2026-11-22/README.md), #229. Transfer the point once and verify the closed profile, exact extrusion and native Open.
 - D1612: [Offset the original lower cap of a coaxial tube](notes/coaxial-tube-lower-cap-offset-2026-11-22/README.md), #629. Keep the original upper station and both wall radii through signed native edits and Studio Open.
 - D1611: [Build an exact ruled surface between a line and quadratic curve](notes/exact-ruled-straight-quadratic-2026-11-22/README.md), #29. Preserve both source curves and verify an independent parameter grid through native Open.

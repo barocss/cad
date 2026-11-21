@@ -3,6 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
+const inspectAngle = process.argv.includes('--inspect-angle');
 const line = [[10, 10, 0], [25, 10, 0]], quadratic = [[25, 10, 0], [35, 24, 0], [50, 18, 0]];
 function source(points) {
   const count = points.length;
@@ -21,7 +22,7 @@ const pins = [
   'apps/cad-studio/src/ui/joinEndpointGuidance.ts', 'packages/barocss-cad-model/src/engine/direct.ts',
 ];
 const f = await createFlow({
-  name: 'join-line-quadratic', output: process.argv[2], envFrozen: 'D1605_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
+  name: 'join-line-quadratic', output: process.argv[2], envFrozen: inspectAngle ? 'D1614_SOURCE_FROZEN' : 'D1605_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
   qualification: 'Join the exact line end to the quadratic start, preserve both spans and reopen the single native curve.',
   limits: ['One unit-weight line and one unit-weight quadratic Bézier with an exact shared endpoint.'],
   inspectorSource: `
@@ -104,4 +105,33 @@ await f.run(async () => {
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await row('Joined curve').click();
   await f.snapshot('05-reopened-native-selection');
+  if (inspectAngle) {
+    f.phase = 'inspect both sides of the exact join parameter after native Open';
+    const at = panel().getByLabel('At t', { exact: true });
+    const angle = panel().locator('.kv').filter({ hasText: /^Tangent angle/ });
+    const radius = panel().locator('.kv').filter({ hasText: /^Radius/ });
+    const expected = Math.atan2(14, 10) * 180 / Math.PI;
+    await at.fill('1');
+    await angle.waitFor();
+    await expectAngle();
+    await angle.scrollIntoViewIfNeeded();
+    await f.snapshot('06-tangent-angle-at-join');
+
+    await at.fill('0.75');
+    await angle.waitFor({ state: 'hidden' });
+    await radius.getByText('straight', { exact: true }).waitFor();
+    await f.snapshot('07-radius-inside-straight-span');
+    await at.fill('1.25');
+    await angle.waitFor({ state: 'hidden' });
+    await radius.getByText(/^\d+(?:\.\d+)? mm$/).waitFor();
+    await at.fill('1');
+    await expectAngle();
+    await f.same(joined);
+    f.report.observations.push({ expectedAngleDeg: expected, displayedAngle: await angle.locator('b').innerText() });
+
+    async function expectAngle() {
+      await radius.getByText(/Unavailable at join/).waitFor();
+      await angle.getByText(Math.round(expected * 1000) / 1000 + '°', { exact: true }).waitFor();
+    }
+  }
 });

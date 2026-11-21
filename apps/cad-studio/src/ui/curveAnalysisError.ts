@@ -1,6 +1,6 @@
 import { evaluateCurve, NativeCurvatureError, NativeSecondDerivativeError } from '@barocss/cad';
 
-import { analyzeCurve, geometryOf, type DirectGeometry } from '@barocss/cad-model/engine/direct';
+import { analyzeCurve, directJoinTangentAngle, geometryOf, type DirectGeometry } from '@barocss/cad-model/engine/direct';
 
 function isJoinRefusal(error: unknown): error is NativeCurvatureError {
   return error instanceof NativeCurvatureError && error.code === 'DERIVATIVE'
@@ -17,13 +17,17 @@ export function curveAnalysisError(error: unknown): string {
 
 /** A point needs no second derivative. Retain it at a native continuity refusal only. */
 export function inspectCurvePoint(direct: DirectGeometry, id: string, parameter: number) {
-  try { return { ...analyzeCurve(direct, id, parameter), radiusNote: null }; }
+  try { return { ...analyzeCurve(direct, id, parameter), radiusNote: null, tangentAngle: null }; }
   catch (error) {
     if (!isJoinRefusal(error)) throw error;
     const object = direct.objects.find(candidate => candidate.id === id);
     if (!object) throw error;
     const geometry = geometryOf(direct, object);
     if (geometry.kind !== 'curve') throw error;
-    return { point: evaluateCurve(geometry, parameter), radius: null, radiusNote: 'Unavailable at join; inspect inside a span.' };
+    return {
+      point: evaluateCurve(geometry, parameter), radius: null,
+      radiusNote: 'Unavailable at join; inspect inside a span.',
+      tangentAngle: directJoinTangentAngle(geometry, parameter),
+    };
   }
 }
