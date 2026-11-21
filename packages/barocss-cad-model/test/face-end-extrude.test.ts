@@ -26,6 +26,88 @@ const documentAt = (from: number): StudioDoc => ({
   outputs: { b1: { node: 1, side: 'solid' }, b3: { node: 3, side: 'solid' } }, nextId: 4,
 });
 
+function circularTarget(from = 20, radius = 12): StudioDoc {
+  const doc = documentAt(from);
+  return { ...doc, nodes: [{ id: 'n0', kind: 'sketch', profile: 'circle', center: [5, 5], radius }, ...doc.nodes.slice(1)] };
+}
+
+test('a literal XY rectangle reaches the current original lower disk of an intact circular Extrude', () => {
+  for (const from of [20, 30, 40]) {
+    const doc = circularTarget(from), saved = structuredClone(doc), opened = readStudioDoc(JSON.stringify(doc));
+    assert.ok('doc' in opened);
+    assert.deepEqual(opened.doc, doc);
+    const part = toPartDocument(doc);
+    assert.deepEqual(part.features[3], { id: 'n3', kind: 'extrude', sketch: 'n2', height: from });
+    assert.equal(currentFaceEndDistance(doc, 3), from);
+    const { outputs } = evaluateCadPart(part), target = outputs[0], result = outputs[1];
+    assert.deepEqual(outputs.map(output => output.id), ['n1', 'n3']);
+    assert.ok(outputs.every(output => checkOutput(output).valid));
+    assert.equal(target.brep.faces.length, 4); assert.equal(result.brep.faces.length, 6);
+    assert.ok(Math.abs(massPropertiesOf(target).volume - Math.PI * 12 ** 2 * 5) < 1e-7);
+    assert.ok(Math.abs(massPropertiesOf(result).volume - 100 * from) < 1e-8);
+    assert.ok(massPropertiesOf(result).centroid.every((value, i) => Math.abs(value - [5, 5, from / 2][i]) < 1e-9));
+    const bottom = target.brep.faces.find(face => face.name === 'n1.bottom'), top = result.brep.faces.find(face => face.name === 'n3.top');
+    assert.ok(bottom && top);
+    const end = faceGeometry(bottom), reached = faceGeometry(top);
+    assert.ok(end.kind === 'plane' && reached.kind === 'plane');
+    assert.equal(end.o[2], from); assert.equal(reached.o[2], from);
+    assert.deepEqual(end.n, [0, 0, -1]); assert.deepEqual(reached.n, [0, 0, 1]);
+    const original = evaluateCadPart(toPartDocument(prefixDoc(doc, 3))).outputs[0];
+    assert.deepEqual(target.brep, original.brep, 'the target is read from the same current native solid and is not rebuilt or modified');
+    assert.deepEqual(doc, saved);
+  }
+});
+
+test('circular target containment checks the farthest rectangle corner rather than its bounding square', () => {
+  // R6's bounding square [-1,11]² contains [0,10]², but every corner is sqrt(50) from the disk centre.
+  for (const radius of [6, Math.sqrt(50), Math.sqrt(50) - 1e-9]) {
+    assert.throws(() => toPartDocument(circularTarget(20, radius)), /entire projected profile/i);
+  }
+  assert.equal(currentFaceEndDistance(circularTarget(20, Math.sqrt(50) + 1e-6), 3), 20);
+  const behind = circularTarget(0);
+  assert.throws(() => toPartDocument(behind), /positive extrusion direction/i);
+});
+
+test('circular target admission keeps the direction, authored identity and saved-format guards', () => {
+  const doc = circularTarget(), target = doc.nodes[1];
+  const edit = (index: number, next: ModelNode): StudioDoc => ({ ...doc, nodes: doc.nodes.map((node, i) => i === index ? next : node) });
+  assert.throws(() => toPartDocument(edit(3, { ...recipe, target: { ...recipe.target, face: 'n1.top' } })), /face normal must oppose/i);
+  assert.throws(() => toPartDocument(edit(3, { ...recipe, target: { ...recipe.target, face: 'n1.side0#1' } })), /persistent native face name/i);
+  assert.throws(() => toPartDocument(edit(1, { ...target, held: 'old circle' })), /convex straight trim|current exact solid/i);
+  const changedId = edit(1, { ...target, id: 'n9' }), read = readStudioDoc(JSON.stringify(changedId));
+  assert.ok('error' in read);
+  assert.match(read.error, /target feature identity/i);
+  assert.throws(() => toPartDocument(changedId), /target feature identity/i);
+  assert.ok(target.kind === 'extrude');
+  const reversed = edit(1, { ...target, height: -5 });
+  assert.throws(() => toPartDocument(reversed), /target extrusion must stay forward/i);
+  const staleRecipe = { ...recipe, height: 20 };
+  const unknown = readStudioDoc(JSON.stringify(edit(3, staleRecipe)));
+  assert.ok('error' in unknown);
+  assert.match(unknown.error, /unknown field/i);
+  assert.deepEqual(doc.nodes[3], recipe);
+});
+
+test('circular target scope excludes annular, oblique and transformed caps and other source profiles', () => {
+  const doc = circularTarget(), circle = doc.nodes[0];
+  assert.ok(circle.kind === 'sketch' && circle.profile === 'circle');
+  const annular: StudioDoc = { ...doc, nodes: [{ ...circle, holes: [[{ kind: 'arc', start: [6, 5], center: [5, 5], direction: 'ccw' }]] }, ...doc.nodes.slice(1)] };
+  assert.throws(() => toPartDocument(annular), /convex straight trim.*without holes/i);
+  const oblique: StudioDoc = { ...doc, nodes: [{ ...circle, plane: { origin: [0, 0, 0], normal: [0, 1, 1], xAxis: [1, 0, 0] } }, ...doc.nodes.slice(1)] };
+  assert.throws(() => toPartDocument(oblique), /plane parallel to the sketch/i);
+  const transformed: StudioDoc = { ...doc, nodes: [
+    ...doc.nodes.slice(0, 2), { id: 'n2', kind: 'translate', parent: { node: 1, side: 'solid' }, offset: [0, 0, 0] },
+    { ...doc.nodes[2], id: 'n3' }, { ...recipe, id: 'n4', sketch: 3, target: { body: { node: 2, side: 'solid' }, feature: 'n2', face: 'n1.bottom' } },
+  ], outputs: { b2: { node: 2, side: 'solid' }, b4: { node: 4, side: 'solid' } }, nextId: 5 };
+  assert.throws(() => toPartDocument(transformed), /convex straight trim|named target face/i);
+  for (const source of [
+    { id: 'n2', kind: 'sketch', profile: 'circle', center: [5, 5], radius: 1 },
+    { id: 'n2', kind: 'sketch', profile: 'polygon', points: [[0, 0], [10, 0], [5, 10]] },
+  ] as ModelNode[]) {
+    assert.throws(() => toPartDocument({ ...doc, nodes: [...doc.nodes.slice(0, 2), source, recipe] }), /convex straight trim/i);
+  }
+});
+
 test('a named native end face changes only the derived height on a target edit', () => {
   for (const from of [20, 30, 40]) {
     const doc = documentAt(from);

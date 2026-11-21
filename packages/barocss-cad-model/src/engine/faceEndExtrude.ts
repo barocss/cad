@@ -1,4 +1,5 @@
 import { CadNumericPolicy, CadPartLimits, ExtrudedProfileLimits, checkOutput, coedgeVertices, evaluateCadPart, faceGeometry, type Brep, type BrepFace, type CadPartFeature, type Point } from '@barocss/cad';
+import { circularCapReplacementFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { NODE_EXTRA_FIELDS, type DocPlane, type FaceEndExtrudeNode, type ModelNode, type NodeExtras, type SketchNode, type StudioDoc } from './doc';
 import { refusal } from './refusal';
 import { finiteBinary64Integer as exact } from './binary64';
@@ -143,6 +144,33 @@ function literalCircle(sketch: Extract<SketchNode, { profile: 'circle' }>): sket
   return center.every(c => typeof c === 'number' && finiteCoordinate(c - radius) && finiteCoordinate(c + radius));
 }
 
+/** Only a current original lower disk of an intact upright circular Extrude reaches this branch. */
+function circularRectangleTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
+  brep: Brep, face: BrepFace, axes: EndFrame): ReturnType<typeof targetPolygon> | undefined {
+  const target = doc.nodes[node.target.body.node];
+  if (sketch.profile !== 'rectangle' || axes !== XY || target?.kind !== 'extrude' || target.held || target.cutDepth !== undefined
+    || target.draft || face.name !== `${node.target.feature}.bottom`) return;
+  const circle = doc.nodes[target.sketch];
+  if (circle?.kind !== 'sketch' || circle.profile !== 'circle' || circle.suppressed || circle.held || circle.plane || !literalCircle(circle)) return;
+  const frame = circularCapReplacementFrame(brep, face.name);
+  if (!frame || frame.normal[0] !== 0 || frame.normal[1] !== 0 || frame.normal[2] !== -1) return;
+  // The kernel verifies the complete rational disk, its two outward half cylinders and exact trims.
+  // Bound the disk from the same native supports, rather than from the authored circle radius.
+  const cylinders = brep.faces.map(candidate => faceGeometry(candidate)).filter(support => support.kind === 'cylinder');
+  if (cylinders.length !== 2) return;
+  const extent = Math.max(1, ...brep.faces.flatMap(candidate => candidate.surface.kind === 'surface'
+    ? candidate.surface.controlPoints.flat().flat().map(Math.abs) : []));
+  const roundoff = 64 * Number.EPSILON * extent, [cx, cy, level] = frame.anchor;
+  const radius = Math.min(...cylinders.map(support => support.r - Math.hypot(support.c[0] - cx, support.c[1] - cy))) - roundoff;
+  if (!(radius > roundoff)) throw invalid('the circular target radius cannot be certified.');
+  return {
+    min: [cx - radius, cy - radius], max: [cx + radius, cy + radius], level, rectangle: false,
+    // A rectangle is convex and distance to a fixed centre attains its maximum at a corner.
+    // The extra roundoff margin also bounds subtraction and hypot, so tangency is not silently widened.
+    contains: point => Math.hypot(point[0] - cx, point[1] - cy) + roundoff <= radius,
+  };
+}
+
 /** Exact global convexity plus the existing minimum edge/altitude boundary. */
 function admittedPolygon(points: readonly (readonly number[])[]): boolean {
   const n = points.length;
@@ -237,7 +265,7 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const brep = outputs[0].brep;
   const faces = brep.faces.filter(face => face.name === node.target.face);
   if (faces.length !== 1) throw missing('the named target face is missing or ambiguous.');
-  const box = targetPolygon(brep, faces[0], axes);
+  const box = circularRectangleTarget(doc, node, sketch, brep, faces[0], axes) ?? targetPolygon(brep, faces[0], axes);
   if (u0 < box.min[0] || v0 < box.min[1] || u1 > box.max[0] || v1 > box.max[1]) throw invalid('the target face must contain the entire projected profile.');
   if (!box.rectangle) {
     // Native circles reconstruct their radius from rounded arc endpoints. Do not

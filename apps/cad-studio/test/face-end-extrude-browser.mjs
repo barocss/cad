@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
 const baseline = process.argv[3] === '--baseline', create = process.argv[3] === '--create', detach = process.argv[3] === '--detach', bind = process.argv[3] === '--bind';
+const circularTarget = create && process.argv.includes('--circular-target');
 const pins = [
   'apps/cad-studio/test/face-end-extrude-browser.mjs',
   'apps/cad-studio/src/ui/NodeEditor.tsx',
@@ -14,7 +17,7 @@ const pins = [
   'packages/barocss-cad-model/src/engine/migrate.ts',
   'packages/barocss-cad-model/src/engine/part.ts',
 ];
-const decision = bind ? 'D848' : detach ? 'D842' : create ? 'D841' : 'D840';
+const decision = circularTarget ? 'D1601' : bind ? 'D848' : detach ? 'D842' : create ? 'D841' : 'D840';
 const f = await createFlow({
   name: 'face-end-extrude', output: process.argv[2], envFrozen: decision + '_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
@@ -23,11 +26,12 @@ const f = await createFlow({
     : bind ? 'Convert one saved Distance extrusion to a picked earlier end face and verify its identity, Undo and project Open.'
     : detach ? 'Detach a saved end face at the exact current distance, preserve History and verify independence after project Open.'
     : 'Resolve a fixed XY rectangle to a preceding native cap and retain its two output bodies through target edits and Open.',
-  limits: ['Two rectangular prisms in the same desktop document. Positive Z. One native rectangle cap.'],
+  limits: [circularTarget ? 'One XY rectangle extruded in positive Z to the lower cap of one upright cylinder.'
+    : 'Two rectangular prisms in the same desktop document. Positive Z. One native rectangle cap.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { toPartDocument } from '@barocss/cad-model/engine/part';
-import { checkOutput, evaluateCadPart, massPropertiesOf } from '@barocss/cad';
+import { checkOutput, evaluateCadPart, faceGeometry, massPropertiesOf } from '@barocss/cad';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const part = toPartDocument(doc), result = evaluateCadPart(part);
 console.log(JSON.stringify({
@@ -35,6 +39,7 @@ console.log(JSON.stringify({
   outputs: result.outputs.map(body => ({
     id: body.id, count: body.bodyCount, valid: checkOutput(body).valid, mass: massPropertiesOf(body),
     corners: body.brep.vertices.map(vertex => vertex.point),
+    supports: body.brep.faces.map(face => ({ name: face.name, geometry: faceGeometry(face) })),
     faces: body.brep.faces.map(face => ({ name: face.name, level: face.surface.kind === 'surface' ? face.surface.controlPoints.flat().map(point => point[2]) : [] })),
   })),
 }));
@@ -51,7 +56,8 @@ const recipe = {
 const documentAt = (from, fixed, distance = 20) => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
-    { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [-5, -5], max: [15, 15] },
+    circularTarget ? { id: 'n0', kind: 'sketch', profile: 'circle', center: [5, 5], radius: 12 }
+      : { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [-5, -5], max: [15, 15] },
     { id: 'n1', kind: 'extrude', sketch: 0, from, height: 5 },
     { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, 10] },
     fixed ? recipe : { id: 'n3', kind: 'extrude', sketch: 2, height: distance },
@@ -80,10 +86,25 @@ async function geometry(label, from, cap, fixed) {
   assert.ok(fresh && massReady);
   assert.deepEqual(bodies.map(body => body.key), ['b1', 'b3']);
   assert.equal(native.outputs.length, 2);
-  for (const [key, range, lo, hi, volume, center, face, faceZ] of [
+  const prisms = [
     ['n1', [-5, 15], from, from + 5, 2000, [5, 5, from + 2.5], 'n1.bottom', from],
     ['n3', [0, 10], 0, cap, 100 * cap, [5, 5, cap / 2], 'n3.top', cap],
-  ]) {
+  ];
+  if (circularTarget) {
+    prisms.shift();
+    const stock = native.outputs.find(output => output.id === 'n1');
+    assert.ok(stock?.valid && stock.count === 1);
+    const walls = stock.supports.filter(({ geometry }) => geometry.kind === 'cylinder');
+    assert.equal(walls.length, 2);
+    assert.ok(walls.every(({ geometry }) => near(geometry.r, 12) && near(geometry.c[0], 5) && near(geometry.c[1], 5)));
+    const bottom = stock.supports.find(({ name }) => name === 'n1.bottom')?.geometry;
+    assert.ok(bottom?.kind === 'plane' && bottom.n[2] === -1 && near(bottom.o[2], from));
+    for (const result of [stock.mass, bodies[0]]) {
+      assert.ok(near(result.volume, Math.PI * 12 ** 2 * 5));
+      assert.ok(result.centroid.every((value, i) => near(value, [5, 5, from + 2.5][i])));
+    }
+  }
+  for (const [key, range, lo, hi, volume, center, face, faceZ] of prisms) {
     const output = native.outputs.find(output => output.id === key);
     assert.ok(output?.valid && output.count === 1);
     assert.equal(output.corners.length, 8);
@@ -97,7 +118,8 @@ async function geometry(label, from, cap, fixed) {
       assert.ok(result.centroid.every((v, i) => near(v, center[i])));
     }
   }
-  f.report.observations.push({ label, targetCap: from, extrudeCap: cap, volume: 100 * cap, corners: 16, outputs: ['b1', 'b3'] });
+  f.report.observations.push({ label, targetCap: from, extrudeCap: cap, volume: 100 * cap,
+    corners: native.outputs.reduce((total, output) => total + output.corners.length, 0), outputs: ['b1', 'b3'] });
 }
 
 async function editTargetStart(value) {
@@ -283,6 +305,7 @@ async function saveAndReopen(accepted) {
     return Array.from(new Uint8Array(await (await directory.getFileHandle(name)).getFile().then(file => file.arrayBuffer())));
   }, [project, name]));
   assert.deepEqual(JSON.parse(bytes), accepted);
+  if (circularTarget) await writeFile(join(f.output, name), bytes);
   f.report.files.push({ name, bytes: bytes.length, sha256: sha256(bytes) });
   await button(versions(), 'Close project').click();
   await field(versions(), 'Project').waitFor({ state: 'hidden' });
@@ -359,11 +382,19 @@ async function bindSavedDistance() {
 }
 
 await f.run(async () => {
-  if (detach) {
+  if (detach || circularTarget) {
     const newContext = f.browser.newContext.bind(f.browser);
     f.browser.newContext = async options => {
       const context = await newContext(options);
-      await context.addInitScript(holdFaceEndDistance);
+      if (detach) await context.addInitScript(holdFaceEndDistance);
+      if (circularTarget) {
+        const origin = new URL(f.server.resolvedUrls.local[0]).origin;
+        await context.route('**/*', route => {
+          const url = new URL(route.request().url());
+          if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
+          return url.origin === origin || !['http:', 'https:'].includes(url.protocol) ? route.continue() : route.abort();
+        });
+      }
       return context;
     };
   }
@@ -394,7 +425,7 @@ await f.run(async () => {
   f.phase = 'refuse a target face that no longer contains the projected profile';
   await f.openFeatureEditor(1, 'target width');
   const before = await f.snapshot('accepted-before-shrink');
-  await field(f.editor(), 'Width').fill('8');
+  await field(f.editor(), circularTarget ? 'Diameter' : 'Width').fill(circularTarget ? '12' : '8');
   await button(f.editor(), 'Apply').click();
   const error = f.editor().locator('.hud-error');
   await error.waitFor();
