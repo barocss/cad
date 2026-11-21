@@ -5,14 +5,15 @@ import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 const creaseBaseline=process.argv.includes('--crease-baseline');
 const agent=process.argv.includes('--agent-crease-fence');
-const creaseFence=creaseBaseline||agent||process.argv.includes('--crease-fence');
+const extended=process.argv.includes('--open-crease-fence')?'open':process.argv.includes('--mirror-crease-fence')?'mirrored':null;
+const creaseFence=creaseBaseline||agent||extended!==null||process.argv.includes('--crease-fence');
 const pins=['packages/barocss-cad-model/src/subd/cageEdit.ts','apps/cad-studio/src/ui/CagePanel.tsx','apps/cad-studio/src/subd/useCageEditor.ts'];
 if(creaseFence)pins.push('apps/cad-studio/test/cage-connected-selection-browser.mjs','apps/cad-studio/src/ui/CageTransformControls.tsx');
 if(agent)pins.push('apps/cad-studio/test/mcp-browser-session.mjs','apps/cad-studio/server/cadMcp.ts',
  'packages/barocss-cad-model/src/chat/cageTools.ts','packages/barocss-cad-model/src/chat/groups.ts','packages/barocss-cad-model/src/chat/toolDefinitions.ts');
 const f=await createFlow({name:'cage-connected-selection',output:process.argv[2],envFrozen:'CAGE_CONNECTED_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,
- qualification:agent?'Discover a crease-bounded region with local MCP and approve its exact scale proposal in Studio.':creaseFence?'Select the upper cage region inside its explicit creases and move only that region.':'Current-mode Grow/Shrink/Linked change only selection; subsequent crease owns one cage undo step and native persistence.',
- limits:[creaseFence?'One four-quads-per-side box at 1440×1000 with 16 explicit upper perimeter creases. A fixture adds the crease data before native Open. The Agent run uses local stdio and explicit user approval.':'One four-quads-per-side box at 1440×1000. Disconnected and invalid topology checked separately in pure tests.'],
+ qualification:extended?`Select the crease-bounded region on an actual ${extended} cage and preserve its native topology through a move.`:agent?'Discover a crease-bounded region with local MCP and approve its exact scale proposal in Studio.':creaseFence?'Select the upper cage region inside its explicit creases and move only that region.':'Current-mode Grow/Shrink/Linked change only selection; subsequent crease owns one cage undo step and native persistence.',
+ limits:[extended?'One four-quads-per-side box with 16 upper perimeter creases. Studio removes one interior quad or mirrors the box before selection.':creaseFence?'One four-quads-per-side box at 1440×1000 with 16 explicit upper perimeter creases. A fixture adds the crease data before native Open. The Agent run uses local stdio and explicit user approval.':'One four-quads-per-side box at 1440×1000. Disconnected and invalid topology checked separately in pure tests.'],
  inspectorSource:creaseFence?`
 import { readFileSync } from 'node:fs';
 import { checkBrep, brepMassProperties } from '@barocss/cad';
@@ -20,8 +21,11 @@ import { partBreps } from '@barocss/cad-model/engine/evaluate';
 import { digestOf } from '@barocss/cad-model/util/digest';
 const doc=JSON.parse(readFileSync(process.argv[2],'utf8'));
 const [{brep,key}]=partBreps(doc);
-console.log(JSON.stringify({key,strict:checkBrep(brep,{strict:true}),volume:brepMassProperties(brep,1).volume,digest:digestOf(brep),
- kind:brep.bodies[0].kind,closed:brep.shells.length===1&&brep.shells[0].closed}));
+const kind=brep.bodies[0].kind, uses=new Map();
+for(const use of brep.coedges)uses.set(use.edge,(uses.get(use.edge)??0)+1);
+console.log(JSON.stringify({key,strict:checkBrep(brep,{strict:true}),volume:kind==='solid'?brepMassProperties(brep,1).volume:null,
+ digest:digestOf(brep),kind,closed:brep.shells.length===1&&brep.shells[0].closed,
+ boundaryEdges:brep.edges.filter(edge=>uses.get(edge.id)===1).length}));
 `:undefined});
 const button=(name,scope=f.page)=>scope.getByRole('button',{name,exact:true});
 const panel=()=>f.page.getByRole('complementary',{name:'Cage editor',exact:true});
@@ -141,20 +145,95 @@ async function agentFencedWorkflow(doc,cage,upper,moving,original,nativeFor,begi
   originalVolume:original.volume,acceptedVolume:result.volume,nativeDigest:result.digest});
 }
 
+function boundaryKeys(cage){
+ const counts=new Map();
+ for(const face of cage.faces)face.forEach((a,i)=>{
+  const b=face[(i+1)%face.length],key=[Math.min(a,b),Math.max(a,b)].join(':');
+  counts.set(key,(counts.get(key)??0)+1);
+ });
+ return [...counts].filter(([,n])=>n===1).map(([key])=>key).sort();
+}
+
+async function expandedFenceWorkflow(doc,cage,nativeFor,begin,profile){
+ const isOpen=profile==='open';
+ f.phase=`author a ${profile} cage through the actual editor`;
+ await begin();
+ if(isOpen){
+  await pick('Face',[3.75,2.5,16]);
+  const seed=await state();
+  const deleted=seed.cage.faces[seed.sel.faces[0]];
+  assert.equal(seed.sel.faces.length,1);
+  assert.ok(deleted.every(id=>Math.abs(cage.positions[id*3])<15&&Math.abs(cage.positions[id*3+1])<10));
+  await button('Delete',panel()).click();
+ }else await panel().getByLabel('Mirror',{exact:true}).selectOption('x');
+ const authored=await state();
+ assert.deepEqual(authored.sel,{vertices:[],edges:[],faces:[]});
+ assert.equal(authored.cage.faces.length,isOpen?95:48);
+ assert.equal(authored.cage.creases.length,isOpen?16:8);
+ const boundary=boundaryKeys(authored.cage);
+ if(isOpen)assert.equal(boundary.length,4);
+ else {
+  assert.ok(boundary.length>0);
+  assert.ok(boundary.every(key=>key.split(':').every(id=>authored.cage.positions[Number(id)*3]===0)));
+ }
+ await f.same(doc);await done();
+ const source=await f.doc(), initial=await nativeFor('expanded-fence-source',source,isOpen?'sheet':'solid');
+ assert.deepEqual(source.nodes[0].cage,authored.cage);
+ assert.equal(source.nodes[0].mirror,isOpen?undefined:'x');
+ const expected=authored.cage.faces.flatMap((face,id)=>face.every(i=>authored.cage.positions[i*3+2]===16)?[id]:[]);
+ assert.equal(expected.length,isOpen?15:8);
+ const point=[isOpen?-3.75:3.75,2.5,16];
+ f.phase=`select the exact linked region of the ${profile} cage`;
+ await begin();
+ await pick('Face',point);
+ const picked=await state();assert.ok(expected.includes(picked.sel.faces[0]));
+ const linked=()=>button('Linked within creases',panel()).click();
+ await linked();
+ const area=await state();
+ assert.deepEqual(area.sel.faces,expected);assert.deepEqual(area.cage,authored.cage);assert.equal(area.undo,0);
+ await f.same(source);await f.snapshot('expanded-fence-selected');
+ await button('Linked',panel()).click();assert.equal((await state()).sel.faces.length,authored.cage.faces.length);
+ await pick('Face',point);await linked();assert.deepEqual((await state()).sel,area.sel);
+ f.phase=`move, save and reopen the ${profile} cage`;
+ const moving=new Set(expected.flatMap(i=>area.cage.faces[i]));
+ const moved={...area.cage,positions:area.cage.positions.map((value,i)=>i%3===2&&moving.has(Math.floor(i/3))?value+1:value)};
+ await button('Move selection',panel()).click();
+ await f.page.getByLabel('Selection distance mm',{exact:true}).fill('1');
+ await button('Apply transform',panel()).click();
+ const after=await state();
+ assert.equal(after.undo,1);assert.deepEqual(after.cage,moved);assert.deepEqual(after.sel,area.sel);
+ assert.deepEqual(boundaryKeys(after.cage),boundary);await f.same(source);
+ await button('Undo cage step',panel()).click();assert.deepEqual((await state()).cage,area.cage);assert.deepEqual((await state()).sel,area.sel);
+ await button('Redo cage step',panel()).click();assert.deepEqual((await state()).cage,moved);
+ await done();
+ const accepted=await f.doc(), native=await nativeFor('expanded-fence-moved',accepted,isOpen?'sheet':'solid');
+ assert.deepEqual(accepted.nodes[0].cage,moved);assert.equal(accepted.nodes[0].mirror,source.nodes[0].mirror);
+ assert.notEqual(native.digest,initial.digest);assert.equal(native.boundaryEdges,initial.boundaryEdges);
+ await f.undo();await f.same(source);await f.redo();await f.same(accepted);
+ const file=await f.save(profile+'-crease-region');await f.freshOpen(file.file,accepted,'expanded-fence-reopened');
+ assert.equal((await nativeFor('expanded-fence-reopened-native',accepted,isOpen?'sheet':'solid')).digest,native.digest);
+ await button('Iso').click();await f.page.getByTitle('Frame all (F)',{exact:true}).click();
+ await f.snapshot('expanded-fence-reopened-framed');
+ f.report.observations.push({label:'expanded-fence',profile,faces:expected,vertexMoves:moving.size,cageBoundaryEdges:boundary.length,nativeBoundaryEdges:native.boundaryEdges,digest:native.digest});
+}
+
 async function fencedWorkflow(base,begin){
  f.phase='open a native box with a closed crease fence';
  const {doc,cage,upper,moving}=fencedBox(base);
  const [chooser]=await Promise.all([f.page.waitForEvent('filechooser'),button('Open').click()]);
  await chooser.setFiles({name:'creased-upper-panel.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(doc))});
  await f.same(doc);
- const nativeFor=async(label,source)=>{
+ const nativeFor=async(label,source,kind='solid')=>{
   const native=await f.inspect(label,source), [body]=(await f.bodies()).bodies;
   assert.ok(native.strict.valid,JSON.stringify(native.strict.issues));
-  assert.deepEqual([native.strict.counts.bodies,native.kind,native.closed],[1,'solid',true]);
-  assert.equal(body.key,native.key);assert.ok(Math.abs(body.volume-native.volume)<1e-6);
+  assert.deepEqual([native.strict.counts.bodies,native.kind,native.closed],[1,kind,kind==='solid']);
+  assert.equal(body.key,native.key);
+  if(kind==='solid')assert.ok(Math.abs(body.volume-native.volume)<1e-6);
+  else assert.ok(native.boundaryEdges>0);
   return native;
  };
  const original=await nativeFor('crease-fence-source-native',doc);
+ if(extended){await expandedFenceWorkflow(doc,cage,nativeFor,begin,extended);return;}
  if(agent){await agentFencedWorkflow(doc,cage,upper,moving,original,nativeFor,begin);return;}
  await begin();await pick('Face',[3.75,2.5,16]);
  const one=await state();

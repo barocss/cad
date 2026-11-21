@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1514: [Accept bounded connected cage selection on open and mirrored parts](notes/cage-linked-open-mirrored-acceptance-2026-11-21/README.md), #626. Compare the full supported selection workflow with exact actual native files and existing path and mode evidence.
 - D1513: [Drag a saved tapered upper-cap Offset from its native face](notes/saved-tapered-offset-handle-2026-11-21/README.md), #629. Verify a head-on +3 to +4 mm edit, late pointer refusal, exact supports and native reopening in Studio.
 - D1512: [Discover a crease-bounded SubD region through local MCP](notes/agent-subd-linked-within-creases-2026-11-21/README.md), #322. Verify whole-region read refusal, a revision-bound scale and the exact Studio-approved native result.
 - D1511: [Select linked SubD faces within explicit creases](notes/subd-linked-within-creases-2026-11-21/README.md), #626. Verify the bounded face selection, one region move, history and exact native reopening in actual Studio.
