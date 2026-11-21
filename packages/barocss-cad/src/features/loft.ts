@@ -11,6 +11,7 @@ import { buildProfileLoop, capSurface, type ProfileSegmentInput } from './extrud
 import { solidMassFromIntegrals, type MassProperties } from '../brep/solid-mass.js';
 import type { Curve, Point, Surface } from '../types.js';
 import { gauss } from '../core/quadrature.js';
+import { linearToleranceMM } from '../numeric-policy.js';
 import type { LoftGuideFactory } from './loft-guide.js';
 import { admitNurbsGuide, type LoftNurbsGuideInput, type LoftNurbsGuideSpan } from './loft-nurbs-guide.js';
 import { orientedLoftSolid } from './oriented-loft.js';
@@ -63,6 +64,20 @@ export interface LoftInput {
 }
 
 const startOf = (q: Piece): XY => q.kind === 'line' ? q.a : [q.c[0] + q.r * Math.cos(q.t0), q.c[1] + q.r * Math.sin(q.t0)];
+/** A shared guide displacement preserves the distances between ruling midpoints within a span. */
+function collapsesQuadSpan(lower: readonly Piece[], upper: readonly Piece[]): boolean {
+  if (lower.length !== 4 || lower.some(piece => piece.kind !== 'line') || upper.some(piece => piece.kind !== 'line')) return false;
+  const [ax, ay] = startOf(lower[0]), [bx, by] = startOf(upper[0]);
+  let size = 0, spread = 0;
+  for (let corner = 1; corner < lower.length; corner++) {
+    const [x, y] = startOf(lower[corner]), [u, v] = startOf(upper[corner]);
+    const dx = x - ax, dy = y - ay, du = u - bx, dv = v - by;
+    size = Math.max(size, Math.hypot(dx, dy), Math.hypot(du, dv));
+    spread = Math.max(spread, Math.hypot(dx + du, dy + dv) / 2);
+  }
+  return spread <= linearToleranceMM(size);
+}
+
 const lengthOf = (q: Piece) => q.kind === 'line' ? Math.hypot(q.b[0] - q.a[0], q.b[1] - q.a[1]) : q.r * Math.abs(q.dt);
 const half = (q: Piece): [Piece, Piece] => {
   if (q.kind === 'line') { const m: XY = [(q.a[0] + q.b[0]) / 2, (q.a[1] + q.b[1]) / 2]; return [{ kind: 'line', a: q.a, b: m }, { kind: 'line', a: m, b: q.b }]; }
@@ -139,6 +154,10 @@ function legacyLoft(input: LoftInput, guideFactory?: LoftGuideFactory, nurbsGuid
       sections[k] = [...p.slice(at), ...p.slice(0, at)];
       if (k === 0) src0.splice(0, src0.length, ...src0.slice(at), ...src0.slice(0, at));
     });
+    for (let k = 0; k < K; k++) {
+      if (collapsesQuadSpan(sections[k], sections[k + 1]))
+        fail(`guide collapses the span between sections ${k + 1} and ${k + 2} to one point`);
+    }
     nurbsSpans = spans;
   }
   const piece = (k: number, i: number): Bezier => { const b = bezier(sections[k][i]); return { p: [...b.p.slice(0, -1), startOf(sections[k][(i + 1) % n])], w: b.w }; };

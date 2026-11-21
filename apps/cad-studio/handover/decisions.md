@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1517: [Refuse a copied Loft guide that collapses a four-sided span](notes/loft-refuse-collapsed-guided-span-2026-11-21/README.md), #630. Fix a reproduced invalid half-turn in creation and History. Preserve the valid straight, 179° and full-turn controls.
 - D1516: [Qualify a full ruled turn with copied Loft guides](notes/loft-guided-full-ruled-turn-2026-11-21/README.md), #630. Verify signed corner paths through History and native reopening with unchanged authored sections.
 - D1515: [Rotate one SubD quad around a local frame through MCP](notes/agent-subd-quad-frame-rotation-2026-11-21/README.md), #322. Verify the normal, U and V directions in Studio with the same exact cage revision and user approval as world-axis rotation.
 - D1514: [Accept bounded connected cage selection on open and mirrored parts](notes/cage-linked-open-mirrored-acceptance-2026-11-21/README.md), #626. Compare the full supported selection workflow with exact actual native files and existing path and mode evidence.

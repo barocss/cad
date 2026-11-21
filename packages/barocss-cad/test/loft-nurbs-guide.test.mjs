@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkBrep, tessellateBrep, evaluateCadPart, massPropertiesOf, checkOutput, evaluateSurface } from '../dist/index.js';
+import { checkBrep, tessellateBrep, evaluateCadPart, massPropertiesOf, checkOutput, evaluateSurface, evaluateCurve } from '../dist/index.js';
 import { loftSolid } from '../dist/features/loft.js';
 
 // CG1.3: a general (polynomial B-spline) seam guide on a ruled loft of parallel sections. Each slice is the ruled one
@@ -32,6 +32,53 @@ function watertight(brep) {
   return [...uses.values()].every(n => n === 2);
 }
 const solid = input => { const r = loftSolid(input); assert.equal(checkBrep(r.brep, { strict: true }).valid, true, input.id); assert.ok(watertight(r.brep), `${input.id}: watertight`); return { ...r, m: r.mass(1) }; };
+
+function turningRectangle(z, angle, centre, opposite = false) {
+  const sign = opposite ? -1 : 1, c = sign * Math.cos(angle), s = sign * Math.sin(angle);
+  const profile = [[-5, -3], [5, -3], [5, 3], [-5, 3]].map(([x, y]) => ({
+    kind: 'line', start: [centre[0] + c * x - s * y, centre[1] + s * x + c * y],
+  }));
+  return { z, profile };
+}
+
+function turningGuide(sections) {
+  const last = sections.length - 1;
+  return {
+    kind: 'nurbs', degree: 1, knots: [0, ...sections.map((_, index) => index), last],
+    controlPoints: sections.map(({ profile, z }) => [...profile[0].start, z]),
+  };
+}
+
+test('a guide through every vertex refuses an exact half-turn collapse in its own span', () => {
+  const angle = 0.17;
+  const sections = [
+    turningRectangle(0, 0, [-13, 9]),
+    turningRectangle(8, angle, [7, 11]),
+    turningRectangle(19, angle, [33, -20], true),
+    turningRectangle(30, 3.5, [34, -22]),
+  ];
+  const input = { id: 'turn', name: 'turn' };
+  assert.throws(() => loftSolid({ ...input, sections, guide: turningGuide(sections) }),
+    /loft: guide collapses the span between sections 2 and 3 to one point$/);
+  const pair = sections.slice(1, 3);
+  assert.throws(() => loftSolid({ ...input, sections: pair, guide: turningGuide(pair) }),
+    /loft: guide collapses the span between sections 1 and 2 to one point$/);
+  assert.equal(checkBrep(loftSolid({ ...input, sections: pair }).brep, { strict: true }).valid, true);
+});
+
+test('nearby signed turns have strict topology and retain their separate ruling midpoints', () => {
+  for (const angle of [179, -179, 179.9999, -179.9999].map(degrees => degrees * Math.PI / 180)) {
+    const sections = [turningRectangle(0, 0, [13, -8]), turningRectangle(10, angle, [13, -8])];
+    const { brep, mass } = loftSolid({ id: 'near', name: 'near', sections, guide: turningGuide(sections) });
+    assert.equal(checkBrep(brep, { strict: true }).valid, true);
+    assert.ok(Math.abs(mass(1).volume - 200 * (2 + Math.cos(angle))) < 1e-8);
+    const points = brep.edges.filter(edge => edge.id.startsWith('l0_')).map(edge => evaluateCurve(edge.curve, 0.5));
+    assert.equal(points.length, 4);
+    const distances = points.flatMap((point, index) => points.slice(index + 1).map(other =>
+      Math.hypot(...point.map((value, axis) => value - other[axis]))));
+    assert.ok(Math.abs(Math.min(...distances) - 6 * Math.cos(angle / 2)) < 1e-9);
+  }
+});
 
 test('CG1.3 a straight guide at an uneven pace on an oblique prism: the prism (volume and centroid)', () => {
   const chord = s => [6 * s, 3 * s, 12 * s], sections = [{ profile: sq(0, 0, 10), z: 0 }, { profile: sq(6, 3, 10), z: 12 }];
