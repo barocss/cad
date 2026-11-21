@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1568: [Qualify local Agent authoring of triangular Smooth Screw](notes/triangular-screw-agent-2026-11-21/README.md), #630 and #322. Verify stale review gating, explicit Studio approval and exact native equality with direct creation.
 - D1567: [Match compact Turn and Screw live preview to Model](notes/compact-loft-live-preview-2026-11-21/README.md), #630. Verify exact preview and applied render buffers and recovery after refusal.
 - D1566: [Author triangular Smooth Screw from one sketch](notes/triangular-screw-command-2026-11-21/README.md), #630. Verify shared exact axis clearance, both windings, saved native geometry and History edits.
 - D1565: [Share viewport rail samples across compact Twist walls](notes/compact-twist-shared-display-2026-11-21/README.md), #630. Verify projected tolerance, closed display seams and matching native picks in both desktop renderers.

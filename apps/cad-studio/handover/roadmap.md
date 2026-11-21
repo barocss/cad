@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-21 · Priority authority: D520 · Latest delivery: D1567 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-21 · Priority authority: D520 · Latest delivery: D1568 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1567](notes/compact-loft-live-preview-2026-11-21/README.md), P5 row 07, shows the compact Turn and Screw wall samples in live Studio preview and verifies equality with Apply. See [row 07](roadmap-rows/07.md) and the [decision index](decisions.md).
-- **Next MAIN:** D1568, P5 row 07, [#630](https://github.com/barocss/cad/issues/630) and [#322](https://github.com/barocss/cad/issues/322). Qualify triangular Smooth Screw through local Agent discovery, revision-pinned proposal and explicit Studio review. Compare the approved native shape to direct Studio authoring and verify reopening.
+- **Current position:** [D1568](notes/triangular-screw-agent-2026-11-21/README.md), P5 row 07, qualifies a revision-pinned triangular Smooth Screw through local Agent proposal, explicit Studio approval and exact native equality with direct authoring. See [row 07](roadmap-rows/07.md) and the [decision index](decisions.md).
+- **Next MAIN:** D1569, P2 row 13, [#630](https://github.com/barocss/cad/issues/630). Export and reopen the approved triangular external-axis Screw in Studio AP214. Verify closed topology, signed winding and independently reconstructed volume from the exchange file, and record the disclosed feature-history loss.
 - **Separate follow-ups:** [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Measured progress:** whole CAD and core readiness **NOT_MEASURED**; B01 v1 **12/12 accepted groups**; B02 v1 **11/11 accepted groups**; B04 v1 **26/26 accepted groups**; B07 v1 **6/6 accepted profiles**; B09 v1 **9/9 accepted groups**; initial scenarios **8/10 accepted**; B06 **6/7 qualified groups, PDF held**; B05 **7/7 accepted groups**; B08 **6/6 accepted groups**; B10 **7/7 accepted groups**; B03 **NOT_ADJUDICATED**. The legacy43% is frozen history. P0 has12 acceptance items; R01–R12 have bounded D521–D532 closeouts; D785 demonstrates one R04 native collision; no whole-product acceptance follows. This is backlog state, not a whole-CAD percentage.
