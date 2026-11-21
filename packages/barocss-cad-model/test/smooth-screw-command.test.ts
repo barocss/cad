@@ -7,10 +7,11 @@ import { editFields } from '../src/app/editFields';
 import { smoothScrewAngleField, smoothScrewPitchField, smoothScrewWindingRule } from '../src/app/smoothLoftTurn';
 import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
-import { emptyDoc, withNode } from '../src/engine/doc';
-import { evaluateDoc, evaluatePart, exportStudioStep, partBreps, type BodyResult } from '../src/engine/evaluate';
+import { emptyDoc, withNode, type SketchNode, type StudioDoc } from '../src/engine/doc';
+import { evaluateDoc, evaluatePart, evaluatePreview, exportStudioStep, partBreps, type BodyResult } from '../src/engine/evaluate';
 import { smoothTurnDisplayMesh } from '../src/engine/loftDisplay';
-import { bodyMesh } from '../src/engine/mesh';
+import { bodyMesh, type DisplayMesh } from '../src/engine/mesh';
+import type { SketchPlane } from '../src/sketch/plane';
 import { revisionOf } from '../src/util/revision';
 
 const command = commandById('smooth-screw')!;
@@ -93,6 +94,38 @@ test('Only the display evaluation of a sole Screw supplies the proposal grid', (
   const turnPreview = evaluatePart(centred, 3, 8, 'proposal-display');
   assert.ok(turnPreview.ok);
   assert.equal(turnPreview.bodies[0].mesh.loftDetail, undefined);
+});
+
+test('live preview refines the new compact Loft output with the applied packet', () => {
+  const existing: StudioDoc = command.build!(ctx, input);
+  const plane: SketchPlane = { origin: [111, -17, 23], normal: [0, .6, .8], xAxis: [1, 0, 0] };
+  for (const id of ['smooth-screw', 'smooth-turn', 'ruled-turn']) {
+    const sketch: SketchNode = id === 'smooth-screw'
+      ? { kind: 'sketch', profile: 'polygon', points: [[3, -7], [12, -6], [6, -2]], plane }
+      : { kind: 'sketch', profile: 'rectangle', min: [-6, -4], max: [6, 4], plane };
+    const doc = withNode(existing, sketch);
+    const next: StudioDoc = commandById(id)!.build!({ ...ctx, doc, selection: { ...ctx.selection, sketches: [existing.nodes.length] } },
+      id === 'smooth-screw' ? { axisX: 10, axisY: -3, pitch: 40, angle: -360 } : { height: 40, angle: 360 });
+    const preview = evaluatePreview(next, 1), model = evaluateDoc(next, 2, 8, true);
+    const section = evaluatePreview(next, 3, 8, 'section'), otherQuality = evaluatePreview(next, 4, 12);
+    assert.ok(preview.ok && model.ok && section.ok && otherQuality.ok);
+    assert.equal(preview.bodies.length, 2);
+    for (const body of preview.bodies) {
+      const applied: BodyResult | undefined = model.bodies.find(candidate => candidate.key === body.key);
+      assert.ok(applied);
+      const { loftDetail, ...canonical } = body.mesh;
+      const { loftDetail: appliedDetail, ...appliedCanonical }: DisplayMesh = applied.mesh;
+      assert.deepEqual(canonical, appliedCanonical);
+      assert.equal(body.volume, null);
+      assert.equal(body.mass, null);
+      if (body.ref?.node === next.nodes.length - 1 && id !== 'ruled-turn') {
+        assert.ok(loftDetail && 'kind' in loftDetail && loftDetail.kind === 'smooth-turn');
+        assert.deepEqual(loftDetail, appliedDetail);
+        assert.equal(Boolean(loftDetail.screwGrid), id === 'smooth-screw');
+      } else assert.equal(loftDetail, undefined);
+    }
+    for (const body of [...section.bodies, ...otherQuality.bodies]) assert.equal(body.mesh.loftDetail, undefined);
+  }
 });
 
 test('Smooth Screw History changes pitch and preserves the tilted axis, signed winding and section copies', async () => {

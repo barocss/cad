@@ -301,13 +301,13 @@ function partResult(doc: StudioDoc, snapshot: CadPartSnapshot, revision: number,
   const faceTable = faceTableFrom(snapshot.outputs); rememberFaceTable(doc, faceTable);
   return { ok: true, revision, bodies, wallTime: (performance.now() - t0) / 1000, faceTable, shopRows };
 }
-function refineSmoothTurns(bodies: BodyResult[], snapshot: CadPartSnapshot, doc: StudioDoc, screwOnly = false): void {
+function refineSmoothTurns(bodies: BodyResult[], snapshot: CadPartSnapshot, doc: StudioDoc, scope?: number | 'screw'): void {
   for (const [i, body] of bodies.entries()) {
     const ref = body.ref;
-    if (!ref) continue;
+    if (!ref || (typeof scope === 'number' && ref.node !== scope)) continue;
     const node = doc.nodes[ref.node];
     const structured = node?.kind === 'loft' && hasExternalScrewSections(doc.nodes, ref.node);
-    if (screwOnly && !structured) continue;
+    if (scope === 'screw' && !structured) continue;
     const sections = node?.kind === 'loft' && node.smooth && !node.guide && !node.guides
       && node.sections.every(section => !section.frame) ? node.sections.length : undefined;
     if (node?.kind !== 'import' && sections === undefined) continue;
@@ -492,7 +492,10 @@ export function evaluatePreview(doc: StudioDoc, revision: number, quality = 8, s
         }
       }
     }
-    if (slot === 'preview' && quality === 8) refineLoftBody(bodies, snapshot, doc);
+    if (slot === 'preview' && quality === 8) {
+      refineLoftBody(bodies, snapshot, doc);
+      if (node?.kind === 'loft' && node.smooth) refineSmoothTurns(bodies, snapshot, doc, tail);
+    }
     return { ok: true, revision, bodies, wallTime: (performance.now() - t0) / 1000 };
   } catch (cause) {
     lastPreview[slot] = null;
@@ -517,7 +520,7 @@ export function evaluatePart(doc: StudioDoc, revision: number, quality = 8, slot
     lastParts.set(slot, snapshot);
     const result = partResult(doc, snapshot, revision, quality, shopRows, t0);
     if (screwWinding !== undefined) result.checkedScrewWinding = screwWinding;
-    if (slot === 'proposal-display' && result.bodies.length === 1) refineSmoothTurns(result.bodies, snapshot, doc, true);
+    if (slot === 'proposal-display' && result.bodies.length === 1) refineSmoothTurns(result.bodies, snapshot, doc, 'screw');
     return result;
   } catch (cause) {
     return failed(revision, cause, t0, doc);
