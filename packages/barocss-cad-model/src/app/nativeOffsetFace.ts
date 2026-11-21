@@ -5,7 +5,7 @@ import { boredCapOffsetFrame, boredPlateWallOffsetFrame, boreWallOffsetFrame, ci
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
-import { isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
+import { isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, massOfRef, partBreps, type BodyResult } from '../engine/evaluate';
 import { bodyKeyFor, withIds } from '../engine/ids';
 import { refusal } from '../engine/refusal';
@@ -350,9 +350,9 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   const { body, display, ref } = offsetPick(ctx, true);
   if (ref.side !== 'solid') return undefined;
   if (display.exact?.kind === 'cylinder') {
-    const bore = isBoredPlateHole(ctx.doc.nodes, ref.node);
+    const bore = isBoredPlateHole(ctx.doc.nodes, ref.node) || isAnnularReplacementSource(ctx.doc.nodes, ref.node);
     if (!bore && !isCylinderReplacementSource(ctx.doc.nodes, ref.node))
-      return unsupported('select an uncut cylinder wall or one straight through bore in an upright rectangular plate.');
+      return unsupported('select an uncut cylinder wall or one straight through bore in an upright plate or tube.');
     const current = currentOffsetBody(ctx, body);
     const members = current.mesh.faces[ctx.selection.faces[0].face].nativeFaces?.map(face => face.name).sort();
     const natives = partBreps(ctx.doc).filter(candidate => candidate.key === body.key);

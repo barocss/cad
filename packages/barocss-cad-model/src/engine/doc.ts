@@ -644,8 +644,9 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const [face] = node.faces as [string];
       const signature = (node.sigs as Record<string, Sig>)[face];
       if (signature.k === 'curved') {
-        if (!isCylinderReplacementSource(value.nodes, parentIndex) && !isBoredPlateHole(value.nodes, parentIndex))
-          return 'Offset face: radial offset needs a straight circular extrusion or one straight through bore in a rectangular plate.';
+        if (!isCylinderReplacementSource(value.nodes, parentIndex) && !isBoredPlateHole(value.nodes, parentIndex)
+          && !isAnnularReplacementSource(value.nodes, parentIndex))
+          return 'Offset face: radial offset needs a straight circular extrusion or one straight through bore in an upright plate or tube.';
         continue;
       }
       if (boredPlateOffsets.has(parentIndex) || isBoredPlateOffsetBase(value.nodes, parentIndex)) {

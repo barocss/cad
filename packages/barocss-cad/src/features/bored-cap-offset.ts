@@ -367,21 +367,31 @@ function admittedBoreWall(brep: Brep, faceName: string) {
   if (brep.source.family !== 'prismatic-solid') return;
   const matches = brep.faces.filter(face => face.name === faceName);
   if (matches.length !== 1) return;
-  const stock = admittedAxialStock(brep, 'bored'), walls = stock?.borePairs?.[0];
-  if (!stock || stock.borePairs?.length !== 1 || !walls?.includes(matches[0])) return;
+  const annular = brep.faces.length === stockCounts.annular[0];
+  const stock = admittedAxialStock(brep, annular ? 'annular' : 'bored');
+  if (!stock || (!annular && stock.borePairs?.length !== 1)) return;
+  const walls = annular ? brep.faces.filter(face => {
+    const support = faceGeometry(face);
+    return support.kind === 'cylinder' && support.out === -1;
+  }) : stock.borePairs![0];
+  if (!walls.includes(matches[0])) return;
   const faces = walls.map(face => face.name), extent = geometryScaleMM(brep.vertices.map(vertex => vertex.point));
   const round = cylinderPair(walls, extent, -1);
   if (!round || faces.some(name => !name) || new Set(faces).size !== 2) return;
+  // The general annular cap proof permits eccentric tubes. Only numerical roundoff,
+  // rather than the modeling linear tolerance, is allowed in this new coaxial path.
+  const roundoff = 64 * Number.EPSILON * Math.max(1, extent);
+  if (annular && dist(round.center, [stock.center[0], stock.center[1], stock.lo]) > roundoff) return;
   const wallLoops = new Set(walls.flatMap(wall => wall.loops));
   const edges = new Set(brep.coedges.filter(use => wallLoops.has(use.loop)).map(use => use.edge));
   const vertices = new Set(brep.edges.filter(edge => edges.has(edge.id)).flatMap(edge => edge.vertices));
   const capLoops = new Set(brep.loops.filter(loop => loop.kind === 'inner'
     && (loop.face === stock.bottom.id || loop.face === stock.top.id)).map(loop => loop.id));
   if (edges.size !== 6 || vertices.size !== 4 || capLoops.size !== 2) return;
-  return { stock, wall: matches[0], walls, round, faces: faces as string[], edges, vertices, capLoops };
+  return { stock, wall: matches[0], walls, round, faces: faces as string[], edges, vertices, capLoops, annular };
 }
 
-/** Both inward native patches of one through bore, with a handle pointing out of the material. */
+/** Both inward patches of one plate bore or coaxial tube, with a handle pointing out of the material. */
 export function boreWallOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point; faces: string[] } | undefined {
   const admitted = admittedBoreWall(brep, faceName);
   if (!admitted) return;
@@ -392,7 +402,7 @@ export function boreWallOffsetFrame(brep: Brep, faceName: string): { anchor: Poi
   return { anchor, normal: [(round.center[0] - point[0]) / round.radius, (round.center[1] - point[1]) / round.radius, 0], faces };
 }
 
-/** Change one through-bore radius while keeping the plate supports and native boundary ownership. */
+/** Change one through-bore radius while keeping the stock supports and native boundary ownership. */
 export function offsetBoreWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
   const admitted = admittedBoreWall(brep, faceName);
   if (!admitted) return;
@@ -401,7 +411,9 @@ export function offsetBoreWallIfAdmitted(brep: Brep, faceName: string, distance:
   const { stock, walls, round, edges, vertices, capLoops } = admitted, radius = round.radius - distance;
   const extent = Math.max(Math.abs(radius), geometryScaleMM(brep.vertices.map(vertex => vertex.point))), tolerance = linearToleranceMM(extent);
   if (!(radius > tolerance)) throw new BrepError('GEOMETRY', 'bore wall offset: the offset would reach or cross the bore axis');
-  if (!diskClearsRectangle(round.center, radius, stock.min, stock.max, tolerance))
+  if (admitted.annular && !(stock.radius - radius > dist(round.center, [stock.center[0], stock.center[1], stock.lo]) + tolerance))
+    throw new BrepError('GEOMETRY', 'bore wall offset: the offset would reach or cross the outer tube wall');
+  if (!admitted.annular && !diskClearsRectangle(round.center, radius, stock.min, stock.max, tolerance))
     throw new BrepError('GEOMETRY', 'bore wall offset: the offset would reach or cross an outer plate wall');
   if (radius === round.radius) throw new BrepError('GEOMETRY', 'bore wall offset: distance is too small to move the wall');
   const factor = radius / round.radius, [cx, cy] = round.center;

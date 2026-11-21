@@ -3,7 +3,7 @@ import test from 'node:test';
 import { checkBrep, createCylindricalBoreCheck, evaluateCadPart, evaluateCurve, evaluateSurface, faceGeometry } from '../dist/index.js';
 import { transformBrep, quarterTurn } from '../dist/brep/brep-transform.js';
 import { brepMassProperties } from '../dist/brep/solid-mass.js';
-import { boreWallOffsetFrame, boredCapOffsetFrame, offsetBoreWallIfAdmitted } from '../dist/features/bored-cap-offset.js';
+import { annularCapReplacementFrame, boreWallOffsetFrame, boredCapOffsetFrame, offsetBoreWallIfAdmitted } from '../dist/features/bored-cap-offset.js';
 
 const plate = ({ min = [0, 0], max = [40, 30], center = [11, 9], radius = 3, from = -2, height = 10, ...hole } = {}) => ({
   format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
@@ -139,5 +139,100 @@ test('through-bore wall admission refuses outer supports and other topologies', 
     { ...source, source: { ...source.source, family: 'step-import' } }]) {
     assert.equal(boreWallOffsetFrame(brep, name), undefined);
     assert.equal(offsetBoreWallIfAdmitted(brep, name, 1), undefined);
+  }
+});
+
+const tube = ({ center = [14, 9], bore = center, from = 0 } = {}) => ({
+  format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
+    { id: 'n0', kind: 'sketch', profile: 'circle', center, radius: 9 },
+    { id: 'n1', kind: 'extrude', sketch: 'n0', from, height: 16 },
+    { id: 'n2', kind: 'hole', target: 'n1', face: 'n1.top', center: bore, radius: 4 },
+  ],
+});
+const innerWalls = brep => walls(brep).filter(face => faceGeometry(face).out === -1);
+
+for (const distance of [1, -2]) {
+  test(`coaxial tube inner-wall offset ${distance} preserves the outer cylinder, rim and cap charts`, () => {
+    const doc = tube(), source = freeze(solid(doc)), saved = structuredClone(source), names = innerWalls(source).map(face => face.name);
+    const radius = 4 - distance;
+    close(brepMassProperties(source, 1).volume, Math.PI * (9 ** 2 - 4 ** 2) * 16, 1e-7);
+    for (const name of names) {
+      const frame = boreWallOffsetFrame(source, name);
+      assert.deepEqual(frame.faces, names);
+      close(frame.anchor[2], 8);
+      close(Math.hypot(frame.anchor[0] - 14, frame.anchor[1] - 9), 4);
+      pointClose(frame.normal, [(14 - frame.anchor[0]) / 4, (9 - frame.anchor[1]) / 4, 0]);
+      const result = offsetBoreWallIfAdmitted(source, name, distance), report = checkBrep(result, { strict: true });
+      assert.ok(report.valid, report.issues.join('\n'));
+      assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 8, coedges: 24, edges: 12, vertices: 8 });
+      assert.equal(report.topology[0].genus, 1);
+      assert.ok(report.maximumEdgeSurfaceGap < 1e-9 && report.maximumPcurveGap < 1e-9);
+      assert.deepEqual(identity(result), identity(source));
+      assert.ok(annularCapReplacementFrame(result, 'n1.top'), 'the exact annular cap proof survives the radial edit');
+      const innerLoopIds = new Set(source.loops.filter(loop => loop.kind === 'inner').map(loop => loop.id));
+      for (const [index, face] of source.faces.entries()) {
+        if (!names.includes(face.name)) assert.equal(result.faces[index], face, `${face.name} support and chart must stay exact`);
+      }
+      for (const [index, use] of source.coedges.entries()) {
+        if (!innerLoopIds.has(use.loop)) assert.equal(result.coedges[index], use, 'outer and cylinder UV uses must stay exact');
+      }
+      const movedLoops = new Set(innerWalls(source).flatMap(face => face.loops));
+      const movedEdges = new Set(source.coedges.filter(use => movedLoops.has(use.loop)).map(use => use.edge));
+      for (const [index, edge] of source.edges.entries()) {
+        if (!movedEdges.has(edge.id)) assert.equal(result.edges[index], edge, 'outer rims and seams must stay exact');
+      }
+      for (const wall of walls(result)) {
+        const support = faceGeometry(wall);
+        close(support.r, support.out === -1 ? radius : 9);
+        pointClose(support.c, [14, 9, 0]);
+        pointClose(support.a, [0, 0, 1]);
+        for (const u of [0, .19, .5, .83, 1]) {
+          const point = evaluateSurface(wall.surface, u, .37);
+          close(Math.hypot(point[0] - 14, point[1] - 9), support.out === -1 ? radius : 9);
+          close(point[2], 16 * .37);
+        }
+      }
+      const mass = brepMassProperties(result, 1);
+      close(mass.volume, Math.PI * (9 ** 2 - radius ** 2) * 16, 1e-7);
+      pointClose(mass.centroid, [14, 9, 8]);
+      const edit = { id: 'offset', kind: 'offset-face', target: 'n2', face: name, distance };
+      assert.deepEqual(solid({ ...doc, features: [...doc.features, edit] }), result);
+    }
+    assert.deepEqual(source, saved);
+  });
+}
+
+test('coaxial tube proof accepts native circle roundoff near zero and negative coordinates', () => {
+  for (const center of [[0, 0], [.125, -.25], [-14, -9]]) {
+    const source = solid(tube({ center, from: -2 })), name = innerWalls(source)[0].name;
+    const result = offsetBoreWallIfAdmitted(source, name, -2);
+    assert.ok(result);
+    close(brepMassProperties(result, 1).volume, Math.PI * (81 - 36) * 16, 1e-7);
+    pointClose(brepMassProperties(result, 1).centroid, [...center, 6]);
+  }
+});
+
+test('coaxial tube offset rejects inner collapse, outer contact and unsupported outer selection', () => {
+  const source = freeze(solid(tube())), saved = structuredClone(source), name = innerWalls(source)[0].name;
+  for (const distance of [4, 5, 4 - 5e-8])
+    assert.throws(() => offsetBoreWallIfAdmitted(source, name, distance), /reach or cross the bore axis/);
+  for (const distance of [-5, -6, -5 + 5e-8])
+    assert.throws(() => offsetBoreWallIfAdmitted(source, name, distance), /reach or cross the outer tube wall/);
+  for (const distance of [0, NaN, Infinity, -Infinity])
+    assert.throws(() => offsetBoreWallIfAdmitted(source, name, distance), /distance/);
+  for (const face of source.faces.filter(face => !innerWalls(source).includes(face))) {
+    assert.equal(boreWallOffsetFrame(source, face.name), undefined);
+    assert.equal(offsetBoreWallIfAdmitted(source, face.name, 1), undefined);
+  }
+  assert.deepEqual(source, saved);
+});
+
+test('coaxial tube radial admission rejects genuine eccentricity without narrowing annular cap replacement', () => {
+  for (const offset of [1e-9, 1]) {
+    const source = solid(tube({ bore: [14 + offset, 9] })), name = innerWalls(source)[0].name;
+    assert.ok(checkBrep(source, { strict: true }).valid);
+    assert.ok(annularCapReplacementFrame(source, 'n1.top'), 'the existing eccentric annular cap family is unchanged');
+    assert.equal(boreWallOffsetFrame(source, name), undefined);
+    assert.equal(offsetBoreWallIfAdmitted(source, name, 1), undefined);
   }
 });

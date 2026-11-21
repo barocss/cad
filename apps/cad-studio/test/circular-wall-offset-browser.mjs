@@ -3,17 +3,20 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
-const bore = process.argv.includes('--bore');
-const centre = bore ? [11, 9] : [7, -4], radius = bore ? 3 : 5, height = bore ? 10 : 20;
-const plate = [40, 30], area = plate[0] * plate[1];
+const tube = process.argv.includes('--tube');
+const bore = tube || process.argv.includes('--bore');
+const centre = tube ? [14, 9] : bore ? [11, 9] : [7, -4];
+const radius = tube ? 4 : bore ? 3 : 5, height = tube ? 16 : bore ? 10 : 20;
+const plate = [40, 30], outerRadius = 9;
+const area = tube ? Math.PI * outerRadius ** 2 : plate[0] * plate[1];
 const first = bore ? 1 : 2, second = bore ? -2 : -1;
-const feature = bore ? 'bore' : 'cylinder';
+const feature = tube ? 'tube' : bore ? 'bore' : 'cylinder';
 const name = bore ? 'Cylindrical bore · Radial' : 'Cylindrical wall · Radial';
 const source = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
-    bore ? { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: plate }
-      : { id: 'n0', kind: 'sketch', profile: 'circle', center: centre, radius },
+    bore && !tube ? { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: plate }
+      : { id: 'n0', kind: 'sketch', profile: 'circle', center: centre, radius: tube ? outerRadius : radius },
     { id: 'n1', kind: 'extrude', sketch: 0, height },
     ...(bore ? [{ id: 'n2', kind: 'hole', center: centre, radius, parent: { node: 1, side: 'solid' } }] : []),
   ],
@@ -56,13 +59,22 @@ const near = (measured, expected, tolerance = 1e-8) => assert.ok(Math.abs(measur
 async function measure(label, doc, radialOffset, original) {
   const native = await f.inspect(label, doc), expectedRadius = radius + (bore ? -radialOffset : radialOffset);
   assert.ok(native.check.valid, native.check.issues.join(', '));
-  const expected = bore ? { faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 }
-    : { faces: 4, loops: 4, coedges: 12, edges: 6, vertices: 4 };
+  const expected = tube ? { faces: 6, loops: 8, coedges: 24, edges: 12, vertices: 8 }
+    : bore ? { faces: 8, loops: 10, coedges: 36, edges: 18, vertices: 12 }
+      : { faces: 4, loops: 4, coedges: 12, edges: 6, vertices: 4 };
   assert.deepEqual(native.check.counts, { bodies: 1, shells: 1, ...expected });
-  const cylinders = native.supports.filter(face => face.geometry.kind === 'cylinder');
+  const cylinders = native.supports.filter(face => face.geometry.kind === 'cylinder' && face.geometry.out === (bore ? -1 : 1));
   const planes = native.supports.filter(face => face.geometry.kind === 'plane');
   assert.equal(cylinders.length, 2);
-  assert.equal(planes.length, bore ? 6 : 2);
+  assert.equal(planes.length, bore && !tube ? 6 : 2);
+  const outer = tube ? native.supports.filter(face => face.geometry.kind === 'cylinder' && face.geometry.out === 1) : [];
+  if (tube) {
+    assert.equal(outer.length, 2);
+    for (const { geometry } of outer) {
+      near(geometry.r, outerRadius);
+      near(geometry.c[0], centre[0]); near(geometry.c[1], centre[1]);
+    }
+  }
   for (const { geometry: g } of cylinders) {
     assert.equal(g.out, bore ? -1 : 1);
     near(g.c[0], centre[0]); near(g.c[1], centre[1]); near(Math.abs(g.a[2]), 1);
@@ -75,13 +87,14 @@ async function measure(label, doc, radialOffset, original) {
   const volume = (bore ? area - circularArea : circularArea) * height;
   near(native.mass.volume, volume);
   near((await f.bodies()).bodies[0].volume, volume);
-  const centroid = bore ? plate.map((side, i) => (area * side / 2 - circularArea * centre[i]) / (area - circularArea)) : centre;
+  const centroid = bore && !tube ? plate.map((side, i) => (area * side / 2 - circularArea * centre[i]) / (area - circularArea)) : centre;
   native.mass.centroid.forEach((value, axis) => near(value, [...centroid, height / 2][axis]));
   if (original) {
     assert.deepEqual(native.owners, original.owners);
     if (bore) {
-      const planesOf = result => result.brep.faces.filter(face => planes.some(plane => plane.name === face.name));
-      assert.deepEqual(planesOf(native), planesOf(original));
+      const fixedNames = new Set([...planes, ...outer].map(face => face.name));
+      const fixedFaces = result => result.brep.faces.filter(face => fixedNames.has(face.name));
+      assert.deepEqual(fixedFaces(native), fixedFaces(original));
     } else assert.deepEqual(native.brep.coedges, original.brep.coedges);
   }
   f.report.observations.push({ label, radialOffset, capLevels, expectedRadius, volume, measuredVolume: native.mass.volume,
@@ -157,7 +170,7 @@ await f.run(async () => {
     await f.snapshot(feature + '-' + label);
   }
   await refuse(bore ? radius : -radius, bore ? /bore axis/i : /reach or cross the cylinder axis/i, 'radial-collapse-refused');
-  if (bore) await refuse(radius - Math.min(...centre), /outer plate wall/i, 'wall-contact-refused');
+  if (bore) await refuse(radius - (tube ? outerRadius : Math.min(...centre)), /outer (?:plate|tube) wall/i, 'wall-contact-refused');
   await distance.fill(String(second));
   await status(history, 'preview');
   await button('Apply', history).click();

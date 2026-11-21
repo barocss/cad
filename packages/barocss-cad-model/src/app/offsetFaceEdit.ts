@@ -1,5 +1,5 @@
 import { draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
-import { isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
+import { isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, partBreps } from '../engine/evaluate';
 import { bodyKeyFor, featureId } from '../engine/ids';
 import type { DisplayFace } from '../engine/mesh';
@@ -160,7 +160,8 @@ function preserveFollowingOffsetRecipes(doc: StudioDoc, index: number): StudioDo
 export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Command | null {
   const direct = directOffsetAt(doc, index);
   const radialLabel = direct?.sigs?.[direct.faces[0]]?.k === 'curved'
-    ? isBoredPlateHole(doc.nodes, direct.parent.node) ? 'Cylindrical bore · Radial' : 'Cylindrical wall · Radial'
+    ? (isBoredPlateHole(doc.nodes, direct.parent.node) || isAnnularReplacementSource(doc.nodes, direct.parent.node))
+      ? 'Cylindrical bore · Radial' : 'Cylindrical wall · Radial'
     : undefined;
   const allowPlane = !!direct && !radialLabel && !isBoredPlateOffsetSource(doc.nodes, direct.parent.node) && !isBoxCapOffsetSource(doc.nodes, direct.parent.node);
   let directSource: Ctx | undefined;
