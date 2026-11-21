@@ -1,4 +1,5 @@
-import { CadNumericPolicy } from '@barocss/cad';
+import { CadNumericPolicy, ExtrudedProfileLimits } from '@barocss/cad';
+import { convexPolygonScrewAxisTolerance } from '@barocss/cad/internal/convex-polygon-screw-axis';
 import { triangleClearsScrewAxis } from '@barocss/cad/internal/triangular-screw-axis';
 import { withNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
@@ -16,14 +17,15 @@ const selectSmoothProfile = 'Select one standalone rectangular or straight trian
 type TurnProfile = Extract<SketchNode, { profile: 'rectangle' | 'polygon' }>;
 type Point = [number, number];
 
-function turnSource({ doc, selection }: Ctx, smooth: boolean): { index: number; sketch: TurnProfile; plane: SketchPlane } | undefined {
+function turnSource({ doc, selection }: Ctx, smooth: boolean, allowConvexPolygons = false): { index: number; sketch: TurnProfile; plane: SketchPlane } | undefined {
   const [index, ...others] = selection.sketches ?? [];
   const sketch = doc.nodes[index];
   if (others.length || selection.bodies.length || selection.faces.length || selection.edges.length || selection.profileRegions
     || selection.vertices?.length
     || sketch?.kind !== 'sketch' || sketch.suppressed || sketch.on
     || sketch.association || sketch.pocketFloor || sketch.holes?.length || sketch.regions?.length) return;
-  if (sketch.profile !== 'rectangle' && (!smooth || sketch.profile !== 'polygon' || sketch.points.length !== 3
+  if (sketch.profile !== 'rectangle' && (!smooth || sketch.profile !== 'polygon'
+    || (sketch.points.length !== 3 && (!allowConvexPolygons || sketch.points.length < 5 || sketch.points.length > ExtrudedProfileLimits.segments))
     || sketch.construction?.length || sketch.outline?.bulges?.some(Boolean) || sketch.outline?.circles?.length
     || sketch.outline?.spline || sketch.outline?.ellipse)) return;
   const stored = planeOf(sketch);
@@ -37,12 +39,17 @@ function turnSource({ doc, selection }: Ctx, smooth: boolean): { index: number; 
   return { index, sketch, plane };
 }
 
-function triangleCorners(sketch: Extract<SketchNode, { profile: 'polygon' }>): Point[] {
+function straightCorners(sketch: Extract<SketchNode, { profile: 'polygon' }>, reason: string): Point[] {
   const points = sketch.points as Point[];
   if (points.some(point => !point.every(Number.isFinite))
-    || (sketch.outline && (sketch.outline.points.length !== 3
+    || (sketch.outline && (sketch.outline.points.length !== points.length
       || sketch.outline.points.some((point, i) => point.some((value, j) => value !== points[i][j])))))
-    throw refusal('VALUE', 'Use three finite straight corners that match the sketch outline.');
+    throw refusal('VALUE', reason);
+  return points;
+}
+
+function triangleCorners(sketch: Extract<SketchNode, { profile: 'polygon' }>): Point[] {
+  const points = straightCorners(sketch, 'Use three finite straight corners that match the sketch outline.');
   const [a, b, c] = points;
   const u: Point = [b[0] - a[0], b[1] - a[1]], v: Point = [c[0] - a[0], c[1] - a[1]];
   const span = Math.max(Math.hypot(...u), Math.hypot(...v), Math.hypot(c[0] - b[0], c[1] - b[1]));
@@ -126,10 +133,10 @@ function turnCommand(smooth: boolean): Command {
 export const ruledTurnCommand = turnCommand(false);
 export const smoothTurnCommand = turnCommand(true);
 
-const selectScrewProfile = 'Select one standalone rectangle or straight triangle without holes or separate regions.';
+const selectScrewProfile = 'Select one standalone rectangle, triangle or convex polygon with straight edges and no holes.';
 
 function screwSource(ctx: Ctx) {
-  const source = turnSource(ctx, true);
+  const source = turnSource(ctx, true, true);
   const sketch = source?.sketch;
   if (!source || !sketch || sketch.construction?.length
     || sketch.outline?.bulges?.some(Boolean) || sketch.outline?.circles?.length
@@ -139,7 +146,7 @@ function screwSource(ctx: Ctx) {
 
 export const smoothScrewCommand: Command = {
   id: 'smooth-screw', label: 'Smooth Screw', icon: 'cad-loft', group: 'create', keywords: 'screw helix helical pitch external axis',
-  hint: 'Rotate one rectangle or straight triangle about an external axis normal to its plane.',
+  hint: 'Rotate one straight convex outline about an external axis normal to its plane.',
   available: ctx => screwSource(ctx) ? { ok: true } : { ok: false, reason: selectScrewProfile },
   fields: () => [
     { key: 'axisX', label: 'Axis X', kind: 'mm', min: -CadNumericPolicy.coordinateAbs, max: CadNumericPolicy.coordinateAbs },
@@ -163,12 +170,18 @@ export const smoothScrewCommand: Command = {
     if (height <= CadNumericPolicy.linearTolerance || height > limit)
       throw refusal('VALUE', 'Pitch and Turn angle must give an axial height within the model range.');
     const sketch = resolveSketchDims(source.sketch, ctx.doc.parameters) as TurnProfile;
-    const triangular = sketch.profile === 'polygon';
-    const corners = triangular ? triangleCorners(sketch) : rectangleCorners(sketch);
+    const triangular = sketch.profile === 'polygon' && sketch.points.length === 3;
+    const corners = sketch.profile === 'rectangle' ? rectangleCorners(sketch)
+      : triangular ? triangleCorners(sketch) : straightCorners(sketch, 'Use finite straight corners that match the sketch outline.');
     const local = corners.map(([x, y]): Point => [x - axisX, y - axisY]);
-    if (triangular ? !triangleClearsScrewAxis(local)
-      : rectangularAxisClearance(corners[0], corners[2], [axisX, axisY]) <= CadNumericPolicy.linearTolerance)
-      throw refusal('VALUE', triangular ? 'Place the Screw axis outside the triangle with clearance.' : 'Place the Screw axis outside the rectangle.');
+    if (sketch.profile === 'rectangle') {
+      if (rectangularAxisClearance(corners[0], corners[2], [axisX, axisY]) <= CadNumericPolicy.linearTolerance)
+        throw refusal('VALUE', 'Place the Screw axis outside the rectangle.');
+    } else if (triangular) {
+      if (!triangleClearsScrewAxis(local)) throw refusal('VALUE', 'Place the Screw axis outside the triangle with clearance.');
+    } else if (convexPolygonScrewAxisTolerance(local) === undefined) {
+      throw refusal('VALUE', 'Use a strictly convex polygon and place the Screw axis outside it with clearance.');
+    }
     if (local.some(point => Math.hypot(...point) > limit))
       throw refusal('VALUE', 'Move the Screw axis closer to the profile.');
     const { plane } = source, yAxis = cross(plane.normal, plane.xAxis);

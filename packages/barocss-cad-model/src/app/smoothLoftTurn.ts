@@ -1,4 +1,5 @@
-import { CadNumericPolicy } from '@barocss/cad';
+import { CadNumericPolicy, ExtrudedProfileLimits } from '@barocss/cad';
+import { convexPolygonScrewAxisTolerance } from '@barocss/cad/internal/convex-polygon-screw-axis';
 import { triangleClearsScrewAxis, triangleScrewAxisTolerance } from '@barocss/cad/internal/triangular-screw-axis';
 import { usesOf, type ModelNode } from '../engine/doc';
 import { canonical } from '../util/revision';
@@ -62,17 +63,19 @@ function turnSections(nodes: readonly ModelNode[], index: number) {
   const start = index - loft.sections.length, source = nodes[loft.from[0]], last = loft.sections.length - 1;
   const height = loft.sections[last].z;
   if (loft.from[0] >= start || source?.kind !== 'sketch'
-    || (source.profile !== 'rectangle' && (source.profile !== 'polygon' || source.points.length !== 3))
+    || (source.profile !== 'rectangle' && source.profile !== 'polygon')
     || typeof height !== 'number' || !Number.isFinite(height) || height <= 0 || loft.sections[0].z !== 0
     || loft.sections.some((section, i) => section.sketch !== start + i || Object.hasOwn(section, 'frame')
       || typeof section.z !== 'number' || !Number.isFinite(section.z) || Math.abs(section.z / height - i / last) > 1e-9)) return;
   if (nodes.slice(0, index).some(node => usesOf(node, nodes).some(ref => ref >= start && ref < index))) return;
-  const triangular = source.profile === 'polygon';
-  const corners = triangular ? 3 : 4;
+  const corners = source.profile === 'polygon' ? source.points.length : 4;
+  const triangular = source.profile === 'polygon' && corners === 3;
+  const convexPolygon = source.profile === 'polygon' && corners >= 5 && corners <= ExtrudedProfileLimits.segments;
+  if (source.profile === 'polygon' && !triangular && !convexPolygon) return;
   const base = copyGeometry(nodes[start], corners);
   if (!base) return;
   const { points: first, plane } = base;
-  if (!triangular && (first[1][0] <= first[0][0] || first[2][1] <= first[0][1]
+  if (source.profile === 'rectangle' && (first[1][0] <= first[0][0] || first[2][1] <= first[0][1]
     || first[1][1] !== first[0][1] || first[3][0] !== first[0][0]
     || first[1][0] !== first[2][0] || first[3][1] !== first[2][1])) return;
   const centre = triangular ? triangleTurnCentre(first) : undefined;
@@ -83,7 +86,11 @@ function turnSections(nodes: readonly ModelNode[], index: number) {
     if (!copy || copy.plane !== plane) return;
     rows.push(copy.points);
   }
-  const axes = rows.map(diagonal);
+  // The greatest axis radius gives a stable angle for profiles with closely spaced corners.
+  const reference = convexPolygon
+    ? first.reduce((best, point, i) => Math.hypot(...point) > Math.hypot(...first[best]) ? i : best, 0)
+    : undefined;
+  const axes = rows.map(row => reference === undefined ? diagonal(row) : row[reference]);
   const accumulated = axes.slice(1).reduce((sum, axis, i) => sum + phase(axes[i], axis), 0);
   const principal = phase(axes[0], axes[last]);
   const radians = principal + 2 * Math.PI * Math.round((accumulated - principal) / (2 * Math.PI));
@@ -98,10 +105,13 @@ function turnSections(nodes: readonly ModelNode[], index: number) {
     return points.every(([x, y], j) => Math.hypot(x - expected[j][0], y - expected[j][1]) <= tolerance);
   });
   const externalAxis: Point = [0, 0];
-  const external = !matches(centre);
-  if (external && (!matches(externalAxis) || (triangular ? !triangleClearsScrewAxis(first)
-    : rectangularAxisClearance(first[0], first[2], externalAxis) <= CadNumericPolicy.linearTolerance))) return;
-  return { start, last, first, rows, height, angle, radians, limit, triangular, external };
+  const external = convexPolygon || !matches(centre);
+  if (external && !matches(externalAxis)) return;
+  if (convexPolygon) {
+    if (angle === 0 || convexPolygonScrewAxisTolerance(first) === undefined) return;
+  } else if (external && (triangular ? !triangleClearsScrewAxis(first)
+    : rectangularAxisClearance(first[0], first[2], externalAxis) <= CadNumericPolicy.linearTolerance)) return;
+  return { start, last, first, rows, height, angle, radians, limit, triangular, convexPolygon, external };
 }
 
 export function hasSmoothTurnSections(nodes: readonly ModelNode[], index: number): boolean {
@@ -170,6 +180,7 @@ function savedScrewWinding(nodes: readonly ModelNode[], index: number) {
   if (index !== nodes.length - 1) return;
   const turn = turnSections(nodes, index);
   if (!turn?.external || turn.angle === 0) return;
+  if (turn.convexPolygon) return turn;
   const [[left, bottom], , [right, top]] = turn.first;
   const tol = turn.triangular ? triangleScrewAxisTolerance(turn.first)
     : Math.max(CadNumericPolicy.linearTolerance, CadNumericPolicy.relativeLinearTolerance * Math.max(right - left, top - bottom));

@@ -457,6 +457,37 @@ test('Polygon Screw refuses concave sections and axes inside or on the boundary'
   }
 });
 
+test('One convex polygon sketch makes a Smooth Screw with editable signed angle and pitch', () => {
+  const command = commandById('smooth-screw')!;
+  for (const [points, volume] of [[screwPentagon, 1080.138914574982], [screwHexagon, 1840.2366692758953]] as const) {
+    const sketch: SketchNode = { ...triangle, points: points.map(([u, v]) => [u + 10, v - 3]) };
+    const source = ctx(sketch);
+    assert.ok(command.available(source).ok);
+    assert.ok(!smooth.available(source).ok);
+    const values = { axisX: 10, axisY: -3, pitch: 40, angle: -360 };
+    const [boundaryX, boundaryY] = points[0];
+    assert.throws(() => command.build!(source, { ...values, axisX: 7, axisY: -5 }), /outside it with clearance/);
+    assert.throws(() => command.build!(source, { ...values, axisX: boundaryX + 10, axisY: boundaryY - 3 }), /outside it with clearance/);
+    const doc = command.build!(source, values);
+    const index = doc.nodes.length - 1;
+    assert.deepEqual(doc.nodes[0], source.doc.nodes[0]);
+    const [{ brep }] = partBreps(doc);
+    assert.ok(checkBrep(brep, { strict: true }).valid);
+    close([brepMassProperties(brep, 1).volume], [volume], 1e-7);
+    const winding = smoothScrewAngleField(doc.nodes, index), pitch = smoothScrewPitchField(doc.nodes, index);
+    assert.ok(winding?.kind === 'number' && pitch?.kind === 'number');
+    assert.deepEqual([winding.get(doc.nodes), pitch.get(doc.nodes)], [-360, 40]);
+    assert.equal(smoothLoftTurnWidthField(doc.nodes, index), undefined);
+    const reversed: StudioDoc = { ...doc, nodes: winding.set(doc.nodes, 360) };
+    assert.deepEqual(reversed, command.build!(source, { ...values, angle: 360 }));
+    assert.deepEqual(winding.set(reversed.nodes, 0), reversed.nodes);
+    const longer: StudioDoc = { ...reversed, nodes: pitch.set(reversed.nodes, 48) };
+    assert.deepEqual(longer, command.build!(source, { ...values, angle: 360, pitch: 48 }));
+  }
+  const concave: SketchNode = { ...triangle, points: [[-7, -5], [1, -5], [-4, -3], [-3, 1], [-7, -1]] };
+  assert.throws(() => command.build!(ctx(concave), { axisX: 10, axisY: -3, pitch: 40, angle: 360 }), /strictly convex polygon/);
+});
+
 test('External triangle Screw admission uses the actual triangle and its vertex clearance', () => {
   const corners = [[0, 0], [12, 0], [0, 6]];
   const fromPivot = ([x, y]: readonly number[]): [number, number][] => corners.map(([u, v]) => [u - x, v - y]);

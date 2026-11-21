@@ -21,6 +21,7 @@ const ontoPlane = (u, v, h) => [x + u, y + .8 * v + .6 * h, z - .6 * v + .8 * h]
 
 const frozen = [
   'apps/cad-studio/test/external-axis-screw-loft-browser.mjs',
+  'packages/barocss-cad/package.json',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
   'packages/barocss-cad-model/src/app/profiles.ts',
   'packages/barocss-cad-model/src/app/ruledTurnCommand.ts',
@@ -100,7 +101,8 @@ async function build(angle) {
       await field('Axis X').fill('7');
       await field('Axis Y').fill('-5');
       await status(/^refused$/).waitFor();
-      await hud.locator('.hud-error').filter({ hasText: /Place the Screw axis outside the triangle with clearance\./ }).waitFor();
+      const reason = polygon ? /place the Screw axis outside it with clearance\./ : /Place the Screw axis outside the triangle with clearance\./;
+      await hud.locator('.hud-error').filter({ hasText: reason }).waitFor();
       assert.ok(await button('Apply', hud).isDisabled());
       await f.same(doc);
       await f.snapshot('single-sketch-interior-axis-refused');
@@ -214,7 +216,13 @@ await f.run(async () => {
     await field('Pitch per revolution').fill('48');
     const longer = (await f.applyEditor(reversed, 'single-sketch-pitch-48')).doc;
     assert.deepEqual(longer.nodes.slice(0, -1), reversed.nodes.slice(0, -1));
-    await inspect(longer, degrees, 'single-sketch-pitch-48-native', 48);
+    const edited = await inspect(longer, degrees, 'single-sketch-pitch-48-native', 48);
     await frameView('single-sketch-pitch-48-model');
+    if (polygon) {
+      const saved = await f.save('single-sketch-pitch-48');
+      await f.freshOpen(saved.file, longer, 'single-sketch-pitch-48-fresh-open');
+      assert.deepEqual(await inspect(longer, degrees, 'single-sketch-pitch-48-reopened-native', 48), edited);
+      await frameView('single-sketch-pitch-48-reopened');
+    }
   }
 });
