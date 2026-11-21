@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
 const fixture = resolve(process.argv[3]);
+const compareOutlines = process.argv.includes('--outlines');
 const renderer = process.argv.includes('--webgl2') ? 'webgl2' : 'webgpu';
+assert.ok(!compareOutlines || renderer === 'webgpu');
 const { PNG } = createRequire(join(process.env.PW_DIR, 'package.json'))('playwright-core/lib/utilsBundle');
 const doc = JSON.parse(await readFile(fixture, 'utf8'));
 const pins = [
@@ -21,7 +23,7 @@ const f = await createFlow({
   initialFiles: pins,
   requiredFrozen: pins,
   qualification: 'Compare display modes at a fixed camera on the exact saved Smooth Turn solid.',
-  limits: [`Desktop Studio. Reopen the approved ruled-and-smooth comparison file from D1520 on actual ${renderer}.`],
+  limits: [`Desktop Studio. Reopen the same saved two-body comparison on actual ${renderer}.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
@@ -52,9 +54,9 @@ async function settle() {
   await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
-async function snapshot(label, position) {
+async function snapshot(label, position, expected = doc) {
   await settle();
-  await f.same(doc);
+  await f.same(expected);
   assert.deepEqual(await camera(), position);
   const state = await f.snapshot(label, () => ({
     renderer: document.querySelector('.viewport')?.getAttribute('data-renderer'),
@@ -81,6 +83,76 @@ async function comparePixels(position) {
   assert.ok(offPixels > 0, 'AO must change at least one surface pixel in this scene');
   assert.equal(restoredPixels, 0, 'Restored display must match the original crop');
   f.report.observations.push({ renderer, position, roi, offPixels, restoredPixels, maximumDelta });
+}
+
+async function outlineComparison(modelPosition) {
+  if (await ao().getAttribute('aria-pressed') === 'true') await ao().click();
+  assert.equal(await ao().getAttribute('aria-pressed'), 'false');
+  await snapshot('model-with-outlines-ao-off', modelPosition);
+
+  await f.page.getByRole('group', { name: 'Mode', exact: true }).getByRole('button', { name: 'Render', exact: true }).click();
+  const panel = f.page.getByRole('complementary', { name: 'Render', exact: true });
+  await panel.getByRole('tab', { name: 'Scene', exact: true }).click();
+  const edges = panel.getByRole('checkbox', { name: 'Edges', exact: true });
+  await panel.getByRole('checkbox', { name: 'Occlusion', exact: true }).uncheck();
+  await edges.check();
+  await f.page.mouse.move(1050, 880);
+  await settle();
+  const position = await camera(), baseline = await f.doc();
+  assert.equal(baseline.render.environment.occlusion, false);
+  const roi = { left: 650, top: 225, width: 390, height: 675 };
+  const capture = async (label, expected) => {
+    await f.page.mouse.move(1050, 880);
+    await snapshot(label, position, expected);
+    const png = PNG.sync.read(await readFile(join(f.output, label + '.png')));
+    assert.ok(roi.left + roi.width <= png.width && roi.top + roi.height <= png.height);
+    const crop = new PNG({ width: roi.width, height: roi.height });
+    for (let y = 0; y < roi.height; y++) {
+      const start = ((roi.top + y) * png.width + roi.left) * 4;
+      crop.data.set(png.data.subarray(start, start + roi.width * 4), y * roi.width * 4);
+    }
+    await writeFile(join(f.output, label + '-crop.png'), PNG.sync.write(crop));
+    return crop.data;
+  };
+  const setEdges = async enabled => {
+    await edges.setChecked(enabled);
+    const expected = { ...baseline, render: { ...baseline.render, environment: { ...baseline.render.environment, edges: enabled } } };
+    await f.same(expected);
+    return expected;
+  };
+  const withEdges = await capture('outlines-on', baseline);
+  const edgeFree = await setEdges(false);
+  const noEdges = await capture('outlines-off', edgeFree);
+  const restoredEdges = await capture('outlines-restored', await setEdges(true));
+  assert.deepEqual(restoredEdges, withEdges);
+
+  await setEdges(false);
+  await panel.getByRole('tab', { name: 'Lights', exact: true }).click();
+  const shadow = panel.getByRole('checkbox', { name: 'Light 1 shadow', exact: true });
+  assert.deepEqual(edgeFree.render.lights.map(light => light.castShadow), [true, false]);
+  assert.ok(await shadow.isChecked());
+  const withShadow = await capture('shadow-on', edgeFree);
+  assert.deepEqual(withShadow, noEdges);
+  await shadow.uncheck();
+  const shadowFree = { ...edgeFree, render: { ...edgeFree.render, lights: edgeFree.render.lights.map((light, index) => index === 0 ?
+    { ...light, castShadow: false } : light) } };
+  const noShadow = await capture('shadow-off', shadowFree);
+  await shadow.check();
+  const restoredShadow = await capture('shadow-restored', edgeFree);
+  assert.deepEqual(restoredShadow, withShadow);
+
+  const difference = (before, after) => {
+    let changed = 0, maximumDelta = 0;
+    for (let i = 0; i < before.length; i += 4) {
+      const delta = Math.max(...[0, 1, 2].map(channel => Math.abs(before[i + channel] - after[i + channel])));
+      if (delta) changed++;
+      maximumDelta = Math.max(maximumDelta, delta);
+    }
+    assert.ok(changed > 0);
+    return { changed, maximumDelta };
+  };
+  f.report.observations.push({ renderer, position, roi, outlines: difference(withEdges, noEdges),
+    shadow: difference(withShadow, noShadow), restoredPixels: 0 });
 }
 
 await f.run(async () => {
@@ -119,6 +191,13 @@ await f.run(async () => {
   await settle();
   const position = await camera();
   assert.ok(position.points.every(point => point?.length === 2));
+
+  if (compareOutlines) {
+    f.phase = 'compare Smooth Turn edge outlines with AO off at identical projection';
+    await outlineComparison(position);
+    assert.deepEqual(await f.inspect('native-after-view-comparison', await f.doc()), native);
+    return;
+  }
 
   f.phase = 'compare shaded views with AO on and off at identical projection';
   if (await ao().getAttribute('aria-pressed') !== 'true') await ao().click();
