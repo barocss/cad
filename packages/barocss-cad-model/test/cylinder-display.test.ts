@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { StudioDoc } from '../src/engine/doc';
-import { evaluateDoc, shareMeshes } from '../src/engine/evaluate';
+import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
+import { evaluateDoc, partBreps, shareMeshes } from '../src/engine/evaluate';
 import { MeshReceiver, MeshSender } from '../src/engine/meshWire';
+import { cylinderDisplayMesh } from '../src/engine/cylinderDisplay';
+import { offsetFaceCommand } from '../src/app/profileCommands';
+import type { CylinderDisplayTier, DisplayMesh } from '../src/engine/mesh';
 
 const doc: StudioDoc = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 2,
@@ -79,5 +82,116 @@ test('straight Sweep refinement keeps one tilted cylinder, its native references
           && xyz.every((value, axis) => value === packet.positions[3 * vertex + axis])));
       }
     }
+  }
+});
+
+function tube(bore: [number, number] = [14, 9]): StudioDoc {
+  const stock = withNode(withNode(emptyDoc(), { kind: 'sketch', profile: 'circle', center: [14, 9], radius: 9 }),
+    { kind: 'extrude', sketch: 0, height: 16 });
+  return withNode(stock, { kind: 'hole', parent: { node: 1, side: 'solid' }, center: bore, radius: 4 });
+}
+
+function radialOffset(source: StudioDoc, distance: number): StudioDoc {
+  const result = evaluateDoc(source, 1);
+  assert.ok(result.ok);
+  const face = result.bodies[0].mesh.faces.findIndex(face => face.nativeBoreDiameter !== undefined);
+  assert.ok(face >= 0);
+  const ctx = { doc: source, bodies: result.bodies, selection: { faces: [{ body: 0, face }], edges: [], bodies: [] } };
+  return offsetFaceCommand.build!(ctx, { d: distance });
+}
+
+function sharedTubeBoundaries(mesh: DisplayMesh, packet: CylinderDisplayTier, quality: number): void {
+  const owned = new Map<number, Set<string>>();
+  for (let vertex = 0; vertex < packet.faceOfVertex.length; vertex++) {
+    const owner = packet.faceOfVertex[vertex], key = Array.from(packet.positions.subarray(3 * vertex, 3 * vertex + 3)).join(',');
+    if (!owned.has(owner)) owned.set(owner, new Set());
+    owned.get(owner)!.add(key);
+  }
+  const counts = new Map<number, number>(), pairs = new Set<string>();
+  for (let point = 0; point < packet.edgeLines.length; point += 3) {
+    const edgeIndex = packet.edgeOfSegment[point / 3], edge = mesh.edges[edgeIndex];
+    const xyz = Array.from(packet.edgeLines.subarray(point, point + 3)), key = xyz.join(',');
+    assert.ok(edge.nativeCircle);
+    counts.set(edgeIndex, (counts.get(edgeIndex) ?? 0) + 1);
+    pairs.add([...edge.faces].sort().join(':'));
+    for (const face of edge.faces) assert.ok(owned.get(face)?.has(key), `rim ${edgeIndex} has the exact same native sample on face ${face}`);
+    assert.ok(Math.abs(Math.hypot(xyz[0] - 14, xyz[1] - 9) - edge.nativeCircle.radius) < 1e-10);
+    assert.ok(xyz[2] === 0 || xyz[2] === 16);
+  }
+  assert.equal(pairs.size, 4);
+  assert.equal(counts.size, 4);
+  assert.ok([...counts.values()].every(count => count === 8 * quality));
+}
+
+test('coaxial tube and one signed inner-wall Offset get two bounded Top Ortho packets with canonical owners', () => {
+  shareMeshes(true);
+  try {
+    const source = tube(), before = structuredClone(source);
+    const cases = [{ doc: source, radius: 4 }, { doc: radialOffset(source, 1), radius: 3 }, { doc: radialOffset(source, -2), radius: 6 }];
+    for (const fixture of cases) {
+      const canonical = evaluateDoc(fixture.doc, 2), qualified = evaluateDoc(fixture.doc, 3, 8, true);
+      assert.ok(canonical.ok && qualified.ok);
+      const base = canonical.bodies[0].mesh, mesh = qualified.bodies[0].mesh, detail = mesh.cylinderDetail;
+      assert.equal(base.cylinderDetail, undefined);
+      assert.ok(detail);
+      assert.equal(detail.sweep, undefined, 'tube refinement keeps the existing Top Ortho viewport gate');
+      assert.equal(mesh.faces, base.faces); assert.equal(mesh.edges, base.edges); assert.equal(mesh.positions, base.positions);
+      assert.equal(mesh.faces.length, 4); assert.equal(mesh.edges.length, 4);
+      const volume = qualified.bodies[0].volume;
+      assert.equal(volume, canonical.bodies[0].volume);
+      assert.ok(volume !== null && Math.abs(volume - Math.PI * (81 - fixture.radius ** 2) * 16) < 1e-7);
+      assert.equal(detail.tiers.length, 2);
+      let bytes = 0, previousError = detail.baseChordErrorMM;
+      for (const [index, packet] of detail.tiers.entries()) {
+        const quality = 16 << index;
+        assert.ok(packet.chordErrorMM < previousError);
+        assert.ok(Math.abs(packet.chordErrorMM - 18 * Math.sin(Math.PI / (8 * quality)) ** 2) < 1e-10);
+        sharedTubeBoundaries(mesh, packet, quality);
+        bytes += packet.positions.byteLength + packet.normals.byteLength + packet.faceOfVertex.byteLength + packet.indices.byteLength
+          + packet.edgeLines.byteLength + packet.edgeOfSegment.byteLength;
+        previousError = packet.chordErrorMM;
+      }
+      assert.ok(bytes <= 192 * 1024);
+      const again = evaluateDoc(fixture.doc, 4, 8, true);
+      assert.ok(again.ok);
+      assert.equal(again.bodies[0].mesh, mesh);
+    }
+    assert.deepEqual(source, before);
+  } finally {
+    shareMeshes(false);
+  }
+});
+
+test('tube display admission excludes eccentric tubes, additional bores and translated recipes', () => {
+  const original = tube();
+  const extraHole = withNode(original, { kind: 'hole', parent: { node: 2, side: 'solid' }, center: [20, 9], radius: 1 });
+  const moved = withNode(original, { kind: 'translate', parent: { node: 2, side: 'solid' }, offset: [0, 0, 0] });
+  for (const candidate of [tube([14 + 1e-9, 9]), tube([15, 9]), extraHole, moved]) {
+    const result = evaluateDoc(candidate, 2, 8, true);
+    assert.ok(result.ok, JSON.stringify(result));
+    assert.equal(result.bodies[0].mesh.cylinderDetail, undefined);
+  }
+  const ordinary = evaluateDoc(original, 3), highQuality = evaluateDoc(original, 4, 16, true);
+  assert.ok(ordinary.ok && highQuality.ok);
+  assert.equal(ordinary.bodies[0].mesh.cylinderDetail, undefined);
+  assert.equal(highQuality.bodies[0].mesh.cylinderDetail, undefined);
+});
+
+test('tube packets reject forged circular support or rim ownership without changing the canonical table', () => {
+  const source = tube(), result = evaluateDoc(source, 1);
+  assert.ok(result.ok);
+  const { brep } = partBreps(source)[0], base = result.bodies[0].mesh;
+  for (const mutation of ['circle', 'wall', 'owner', 'open']) {
+    const altered = structuredClone(base);
+    if (mutation === 'circle') altered.edges[0].nativeCircle!.radius += 1e-5;
+    if (mutation === 'wall') {
+      const wall = altered.faces.find(face => face.exact?.kind === 'cylinder');
+      assert.ok(wall?.exact?.kind === 'cylinder');
+      wall.exact.r += 1e-5;
+    }
+    if (mutation === 'owner') altered.edges[0].faces = [...altered.edges[1].faces];
+    if (mutation === 'open') altered.edges[0].b = [altered.edges[0].b[0] + 1e-5, altered.edges[0].b[1], altered.edges[0].b[2]];
+    assert.equal(cylinderDisplayMesh(altered, brep, 2), altered, mutation);
+    assert.equal(altered.cylinderDetail, undefined);
   }
 });

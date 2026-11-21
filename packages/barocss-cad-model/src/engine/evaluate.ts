@@ -14,6 +14,7 @@ import type { FaceTable } from '../assembly/mates';
 import { BarocssError, checkOutput, massPropertiesOf, reevaluate, exportStl, type CadPartOutput, brepSurfaceArea, cutPiece, evaluateCadPart, transformBrep, FACET_PREVIEW_TRIANGLES, type Brep, type CadPartFeatureProfile, type CadPartSnapshot, type FlatPattern, type GearPlacement, type RackPlacement, type SubdSummary, type CutPiece, exportStep } from '@barocss/cad';
 import { bodyMesh, canonicalSweepCapSamples, withoutNativeFaces, type DisplayEdge, type DisplayMesh } from './mesh';
 import { cylinderDisplayMesh } from './cylinderDisplay';
+import { boreWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { arcSweepDisplayMesh } from './arcSweepDisplay';
 import { arcSweepMixedDisplayMesh, mixedSweepFilletExterior } from './arcSweepMixedDisplay';
 import { bandRailDisplayMesh } from './bandRailDisplay';
@@ -22,7 +23,7 @@ import { hasExternalScrewSections, smoothScrewWindingRule } from '../app/smoothL
 import { lumpTouches } from './lumps';
 import { friendlyCause, type FriendlyError } from './errors';
 import { bodyKeyOf, partSnapshot } from './part';
-import { bodyKey, placedBase, placedDoc, type PartInstance, type BodyRef, type ModelNode, type Side, type StudioDoc } from './doc';
+import { bodyKey, isAnnularReplacementSource, placedBase, placedDoc, type PartInstance, type BodyRef, type ModelNode, type Side, type StudioDoc } from './doc';
 import { placementOf } from './placement';
 import { bodyKeyFor, bodyNodeOf, featureId, serialOf } from './ids';
 import { registerPartBox, type PartBox } from './assemblyCut';
@@ -342,6 +343,20 @@ function refineSweepFillet(base: DisplayMesh, output: CadPartOutput, doc: Studio
 }
 /** The document with its parameter-bound skeletons solved for its parameters now (O140; the same document when none moved); their refusal thrown. */
 function skeletonsNow(doc: StudioDoc): StudioDoc { return resolveSkeletons(doc).doc; }
+function uprightTubeDisplaySource(nodes: readonly ModelNode[], index: number, brep: Brep): boolean {
+  const node = nodes[index];
+  if (!node || node.suppressed || node.held) return false;
+  const offset = node.kind === 'offset-face' ? node : undefined;
+  if (offset && (offset.target !== undefined || offset.faces.length !== 1 || offset.parent.side !== 'solid'
+    || !(typeof offset.distance === 'number' && Number.isFinite(offset.distance) && offset.distance !== 0)
+    || !boreWallOffsetFrame(brep, offset.faces[0]))) return false;
+  const holeIndex = offset ? offset.parent.node : index, hole = nodes[holeIndex];
+  if (hole?.kind !== 'hole' || !isAnnularReplacementSource(nodes, holeIndex) || hole.suppressed || hole.held) return false;
+  const stock = nodes[hole.parent.node];
+  if (stock?.kind !== 'extrude' || stock.cutDepth !== undefined) return false;
+  const sketch = nodes[stock.sketch];
+  return sketch?.kind === 'sketch' && sketch.profile === 'circle' && !sketch.plane && !sketch.on;
+}
 function requireScrewWindingOutput(doc: StudioDoc, snapshot: CadPartSnapshot, index: number): void {
   const feature = featureId(doc.nodes, index);
   const output = snapshot.outputs.find(candidate => candidate.feature === feature && candidate.brep.bodies.length === 1
@@ -363,7 +378,8 @@ export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refin
       const body = result.bodies[0], node = body.ref && doc.nodes[body.ref.node];
       const source = node && node.kind === 'extrude' ? doc.nodes[node.sketch] : undefined;
       if ((source?.kind === 'sketch' && source.profile === 'circle' && !source.plane)
-        || (node?.kind === 'sweep-curve' && node.mode === 'exact-straight')) {
+        || (node?.kind === 'sweep-curve' && node.mode === 'exact-straight')
+        || (body.ref && uprightTubeDisplaySource(doc.nodes, body.ref.node, snapshot.outputs[0].brep))) {
         const mesh = cylinderDisplayMesh(body.mesh, snapshot.outputs[0].brep, revision);
         if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
       } else if (node?.kind === 'sweep-curve' && node.mode === 'exact') {

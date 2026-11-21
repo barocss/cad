@@ -1,4 +1,5 @@
-import type { Brep } from '@barocss/cad';
+import { faceGeometry, type Brep } from '@barocss/cad';
+import { boreWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { bodyMesh, type CylinderDisplayTier, type DisplayMesh } from './mesh';
 import { cross, len, sub, unit } from './vec3';
 
@@ -31,16 +32,55 @@ function sameOwners(base: DisplayMesh, next: DisplayMesh): boolean {
     });
 }
 
-/** Display refinement for a single uncut circular extrusion or exact straight Sweep. */
+function nativeTubeWall(wall: DisplayMesh['faces'][number], brep: Brep, tolerance: number): boolean {
+  const support = wall.exact, members = wall.nativeFaces;
+  if (support?.kind !== 'cylinder' || members?.length !== 2 || members[0].name === members[1].name) return false;
+  return members.every(member => {
+    const matches = brep.faces.filter(face => face.name === member.name);
+    if (matches.length !== 1) return false;
+    const native = faceGeometry(matches[0]);
+    return native.kind === 'cylinder' && Math.abs(native.a[2]) === 1 && Math.abs(support.a[2]) === 1
+      && Math.abs(native.r - support.r) <= tolerance && Math.hypot(native.c[0] - support.c[0], native.c[1] - support.c[1]) <= tolerance;
+  });
+}
+
+function uprightTube(base: DisplayMesh, brep: Brep): boolean {
+  if (brep.faces.length !== 6 || brep.edges.length !== 12 || base.faces.length !== 4 || base.edges.length !== 4) return false;
+  const caps = base.faces.filter(face => face.kind === 'plane'), walls = base.faces.filter(face => face.exact?.kind === 'cylinder');
+  const inward = brep.faces.find(face => {
+    const support = faceGeometry(face);
+    return support.kind === 'cylinder' && support.out === -1;
+  });
+  const frame = inward?.name && boreWallOffsetFrame(brep, inward.name);
+  if (!frame || caps.length !== 2 || walls.length !== 2 || !walls.some(wall => wall.nativeFaces?.length === 2
+    && frame.faces.every(name => wall.nativeFaces!.some(member => member.name === name)))
+    || !caps.every(cap => cap.exact?.kind === 'plane' && Math.abs(cap.exact.n[2]) === 1)) return false;
+  const extent = Math.max(1, ...base.bounds.min.map(Math.abs), ...base.bounds.max.map(Math.abs)), tolerance = 64 * Number.EPSILON * extent;
+  if (!walls.every(wall => nativeTubeWall(wall, brep, tolerance)) || new Set(walls.flatMap(wall => wall.nativeFaces!.map(member => member.name))).size !== 4) return false;
+  const owners = new Set<string>();
+  for (const edge of base.edges) {
+    const circle = edge.nativeCircle, cap = caps.find(face => edge.faces.includes(face.index)), wall = walls.find(face => edge.faces.includes(face.index));
+    if (!circle || edge.straight || edge.names.length !== 2 || len(sub(edge.a, edge.b)) > tolerance
+      || !cap || !wall || cap.exact?.kind !== 'plane' || wall.exact?.kind !== 'cylinder'
+      || Math.abs(circle.normal[2]) < 1 - 1e-10 || Math.abs(wall.exact.a[2]) !== 1
+      || Math.abs(circle.radius - wall.exact.r) > tolerance || Math.abs(circle.centre[2] - cap.exact.o[2]) > tolerance
+      || Math.hypot(circle.centre[0] - wall.exact.c[0], circle.centre[1] - wall.exact.c[1]) > tolerance) return false;
+    owners.add(`${cap.index}:${wall.index}`);
+  }
+  return owners.size === 4;
+}
+
+/** Display refinement for one upright cylinder or coaxial tube, or an exact straight Sweep. */
 export function cylinderDisplayMesh(base: DisplayMesh, brep: Brep, revision: number): DisplayMesh {
   const cached = byMesh.get(base);
   if (cached) return cached;
   byMesh.set(base, base);
   const straightSweep = brep.source.family === 'sweep-curve';
   if ((!straightSweep && brep.source.family !== 'prismatic-solid') || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
-    || brep.shells.length !== 1 || !brep.shells[0].closed || brep.faces.length !== 4 || brep.edges.length !== 6
-    || base.faces.length !== 3 || base.faces.filter(face => face.kind === 'plane').length !== 2
-    || base.edges.length !== 2) return base;
+    || brep.shells.length !== 1 || !brep.shells[0].closed) return base;
+  const tube = !straightSweep && uprightTube(base, brep);
+  if (!tube && (brep.faces.length !== 4 || brep.edges.length !== 6 || base.faces.length !== 3
+    || base.faces.filter(face => face.kind === 'plane').length !== 2 || base.edges.length !== 2)) return base;
   const a = base.edges[0].nativeCircle, b = base.edges[1].nativeCircle;
   if (!a || !b) return base;
   let sweep: NonNullable<DisplayMesh['cylinderDetail']>['sweep'];
