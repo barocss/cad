@@ -187,6 +187,7 @@ import { sceneSelection } from './viewport/sceneSelection';
 import { useSceneDisplayMode } from './viewport/useSceneDisplayMode';
 import { GravityExperimentPanel } from './ui/GravityExperimentPanel';
 import { useScenePoses } from './state/useScenePoses';
+import { useViewportBodyDetails } from './state/useViewportBodyDetails';
 import { useInstanceGizmo } from './assembly/useInstanceGizmo';
 import type { CamOptions } from './viewport/camDisplay';
 import { withPrintPreviewSettings, type PrintPreviewPatch } from './viewport/printSettings';
@@ -250,10 +251,8 @@ import { Lanes } from './engine/lanes';
 import { useAssembly } from './assembly/useAssembly';
 import { pickedSketches, planeOf, unusedSketches } from '@barocss/cad-model/app/profiles';
 import { addedHoles, holeGroup, holeRegions, type ToolRegion } from '@barocss/cad-model/app/holeRegion';
-import { threadLines, threadsOf } from '@barocss/cad-model/app/threads';
-import { fastenerSizesOf } from '@barocss/cad-model/engine/fastenerSizeRows';
 import type { Analysis } from './viewport/analysis';
-import { asSection, sectionHatch, sectionPlanes, type AxisSection, type Section } from './viewport/sectionView';
+import { asSection, type AxisSection, type Section } from './viewport/sectionView';
 import { type MapKind } from './viewport/scalarMaps';
 import { edgeChain } from '@barocss/cad-model/app/edgeChain';
 import type { SectionOutlineMode } from '@barocss/cad-model/app/sectionSketchProfile';
@@ -273,7 +272,6 @@ import { heldDraftFacePreviewClear, heldDraftFaceWorkCurrent } from './state/hel
 import { useHeldDraftFace } from './state/useHeldDraftFace';
 import { useHistoryFilletRadius } from './app/useHistoryFilletRadius';
 import { useHeldFinishEdge } from './state/useHeldFinishEdge';
-import { flattenAssembly } from '@barocss/cad-model/engine/flatten';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
 import { openAccepted, type InPlaceSession } from './app/editInPlace';
 import { editInPlaceActions } from './app/editInPlaceActions';
@@ -2625,31 +2623,11 @@ export function App() {
     owner: () => project.opening() ? undefined : openIntent.current });
   // (A nested path lights only the host's bodies from that part; a top-level id, the whole placed part.)
   const viewportInstanceSel = useMemo(() => viewportInstanceSelection(instanceSel, host => instanceBodies.get(host)), [instanceSel, instanceBodies]) as string[];
-  // Cosmetic threads (tapped holes, bolts, nuts): rings on the part's bodies and the placed parts'
-  // (not on a preview, a section or a render).
-  const threads = useMemo(() => {
-    if (rendering || section || previewBodies) return new Float32Array();
-    const out: number[] = [], own = threadsOf(evaluated.nodes, fastenerSizesOf(doc));
-    for (const b of bodies) out.push(...threadLines(own, b.mesh));
-    return new Float32Array(out);
-  }, [bodies, evaluated.nodes, doc.fastenerSizes, rendering, section, previewBodies]);
-  // (The placed parts' rings go with their meshes, G1: posed and exploded by the same matrix.)
-  // Roadmap 10 ①: each placed part's bodies in the definition's colours (or this occurrence's own), face colours and hidden bodies.
-  const instancesDrawn = useMemo(() => {
-    if (section) return cpuInstanceSection && sectionHatchOn
-      ? instancesShown.map(it => ({ ...it, hatch: excludedSectionInstances.includes(it.id) ? [] : sectionHatch(it.bodies, sectionPlanes(section), hatchStep) }))
-      : instancesShown;
-    if (rendering || previewBodies) return instancesShown;
-    return instancesShown.map(it => {
-      const inst = doc.instances?.find(i => i.id === it.id), t = inst ? threadsOf(flattenAssembly(inst.doc).nodes, { ...fastenerSizesOf(doc), ...fastenerSizesOf(inst.doc) }) : null, out: number[] = [];
-      if (t) for (const b of it.bodies) if (!instanceLooks.get(it.id)?.get(b.key)?.hidden) out.push(...threadLines(t, b.mesh));
-      return out.length ? { ...it, threads: new Float32Array(out) } : it;
-    });
-  }, [instancesShown, doc.instances, rendering, section, previewBodies, cpuInstanceSection, sectionHatchOn, hatchStep, instanceLooks, excludedSectionInstances]);
-
-  const instancesLooked = useMemo(() => instancesDrawn.map(it => { const looks = instanceLooks.get(it.id); return looks ? { ...it, looks } : it; }), [instancesDrawn, instanceLooks]);
-  // (Roadmap 10 ⑥: the parts the shown step has not introduced yet are left out of the view — display only, the document is untouched.)
-  const instancesStepped = useMemo(() => stepsDisp?.hidden.size ? instancesLooked.filter(it => !stepsDisp.hidden.has(it.id)) : instancesLooked, [instancesLooked, stepsDisp]);
+  const { threads, instancesStepped, hasInstances } = useViewportBodyDetails({
+    doc, nodes: evaluated.nodes, bodies, instances: instancesShown, looks: instanceLooks,
+    display: { rendering, previewBodies, steps: stepsDisp },
+    section: { view: section, cpu: cpuInstanceSection, showHatch: sectionHatchOn, spacing: hatchStep, excludedInstances: excludedSectionInstances },
+  });
   const distanceMatePreview = ghost?.placed?.kind === 'ready' && !!ghost.placed.distanceMate;
   const jointPosePreview = useSyncExternalStore(poseStore.subscribe, () =>
     distanceMatePreview && Object.values(poseStore.get()).some(value => value !== 0));
@@ -2775,7 +2753,7 @@ export function App() {
     analysisOverlay: !!(viewAnalysis || scalarMaps?.length || mouldShown),
     directOverlay: !!(directShown.length || ghost && proposalOverlay),
     editorActive: !!(sketch || cageInputActive || skel.tool || active || regions.length),
-    sectionClipped: !!sectionClip, hasInstances: instancesDrawn.length > 0,
+    sectionClipped: !!sectionClip, hasInstances,
   });
   const { displayScopeReason, effectiveDisplayMode } = viewDisplay.controls;
   const isolationSelection = snapshotInstanceIsolation(hostsOf(instanceSel), instancesPlaced);

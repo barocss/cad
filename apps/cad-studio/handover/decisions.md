@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1707: [Extract viewport body details from Studio App](notes/studio-viewport-body-details-2026-11-23/README.md), #44. Match the existing section, assembly steps, occurrence appearance and thread views across 50 desktop checkpoints.
+
 - D1706: [Sweep a circular disk along same-turn tangent arcs](notes/exact-same-turn-sweep-2026-11-23/README.md), #10. Preserve two unequal arc radii, a native tangent joint, editable Studio diameter and exact fresh Open.
 
 - D1705: [Review a pending Exact rectangular S-bend duct](notes/pending-rectangular-duct-review-2026-11-23/README.md), #324. Pin the image to the actual Direct path, both native openings and all eight shared edges before Studio approval.

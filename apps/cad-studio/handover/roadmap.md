@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1706 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1707 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1706](notes/exact-same-turn-sweep-2026-11-23/README.md), P5 Exact Sweep rows 07 and 30. The native Sweep accepts one circular disk along two same-turn tangent arcs with unequal radii. Studio verifies both native shared edges, diameter editing and exact fresh Open. Local Agent approval matches direct creation. The B06 PDF group remains held.
-- **Next MAIN:** D1707, P4 Studio structure [row 22](roadmap-rows/22.md). Move the preparation of displayed model and assembly thread lines, placed-body appearance, CPU section hatching and assembly-step visibility out of `App.tsx`. Check reference desktop behavior before extraction and compare the affected flows after it.
+- **Current position:** [D1707](notes/studio-viewport-body-details-2026-11-23/README.md), P4 Studio structure row 22. The viewport detail preparation is separate from `App.tsx`. Fifty before-and-after checkpoints, eight native files and the selected desktop image regions match. [D1706](notes/exact-same-turn-sweep-2026-11-23/README.md) qualifies the same-turn Exact disk. The B06 PDF group remains held.
+- **Next MAIN:** D1708, P5 Exact Sweep [rows 07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Check one concentric circular bore on the same-turn Exact Sweep. Qualify both bore mouths, four bound shared edges, positive wall clearance and editable Studio Save and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
