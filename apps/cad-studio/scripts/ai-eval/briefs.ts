@@ -18,6 +18,7 @@ import { clearanceMap, applyFill, fillOverlap } from '@barocss/cad-model/team/cl
 import type { CallRecord } from './codex';
 import { LONG_BRIEFS } from './long';
 import { bracketRevisionBrief } from './bracket-revision';
+import { pinMateRevisionBrief } from './pin-mate-revision';
 import { type Element, allNodes, check, evaluates, hasKind, oneSolid, reads, size, sizeOf, solids, sorted, volume, volumeOf, type Check, type Judged } from './oracle';
 
 // (The bundle runs from a temporary folder: ai-eval.mjs passes the repository's path.)
@@ -500,7 +501,7 @@ export const BRIEFS: Brief[] = [
   // standard sizes from the person's files
   TAPPED_PLATE, MOTOR_PLATE, BEARING_SHAFT,
   // assemblies
-  rb9(7, 'assembly', { baseAsInstance: true }), GEAR_PAIR, rb9(12, 'assembly', { baseAsInstance: true }),
+  pinMateRevisionBrief(REPO), rb9(7, 'assembly', { baseAsInstance: true }), GEAR_PAIR, rb9(12, 'assembly', { baseAsInstance: true }),
   // mechanisms and robots
   rb9(14, 'mechanism'), SCARA, MOTION, rb9(11, 'mechanism', { flatten: true }),
   // manufacturing outputs
