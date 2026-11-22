@@ -15,12 +15,12 @@ interface FeatureHistoryBarProps {
   marker: number | null;
   source: { innerSteps: ReadonlySet<number>; freeSketches: readonly number[] };
   layout: { historyBar: RefObject<HTMLDivElement | null>; historyRows: boolean; setHistoryRows: Dispatch<SetStateAction<boolean>>; historyLabels: boolean; setHistoryLabels: Dispatch<SetStateAction<boolean>>; historyHidden: number };
-  actions: { pickProfile(index: number, additive: boolean): void; setEditNode(index: number): void; setMarker(marker: number | null): void; setHistoryMenu(target: HistoryMenuTarget): void; openHistoryFeature: MouseEventHandler<HTMLButtonElement>; rememberFocus: PointerEventHandler<HTMLButtonElement>; takeFocus(event: MouseEvent<HTMLButtonElement>): HTMLElement | null };
+  actions: { pickProfile(index: number, additive: boolean): void; openHistorySketch(index: number, opener: HTMLButtonElement): void; setMarker(marker: number | null): void; setHistoryMenu(target: HistoryMenuTarget): void; openHistoryFeature: MouseEventHandler<HTMLButtonElement>; rememberFocus: PointerEventHandler<HTMLButtonElement>; takeFocus(event: MouseEvent<HTMLButtonElement>): HTMLElement | null };
 }
 export function FeatureHistoryBar({ busy = false, doc, selection, editNode, marker, source, layout, actions }: FeatureHistoryBarProps) {
   const { innerSteps, freeSketches } = source;
   const { historyBar, historyRows, setHistoryRows, historyLabels, setHistoryLabels, historyHidden } = layout;
-  const { pickProfile, setEditNode, setMarker, setHistoryMenu, openHistoryFeature, rememberFocus, takeFocus } = actions;
+  const { pickProfile, openHistorySketch, setMarker, setHistoryMenu, openHistoryFeature, rememberFocus, takeFocus } = actions;
   const totalNodes = doc.nodes.length, markerAt = marker ?? totalNodes;
   return <div className={'history' + (historyRows ? ' expanded' : '') + (historyLabels ? ' show-labels' : '') + (busy ? ' busy' : '')} role="group" aria-label="History" ref={historyBar}
         aria-disabled={busy || undefined} title={busy ? 'Finish or cancel the command or sketch to use the History' : undefined}
@@ -34,7 +34,7 @@ export function FeatureHistoryBar({ busy = false, doc, selection, editNode, mark
         ) : (n.kind === 'sketch' || n.kind === 'driven-sketch') ? (freeSketches.includes(i) ? (
           // A finished sketch no feature uses yet: click picks it as a profile (Shift adds) and opens its editor.
           <button key={i} aria-label={featureLabel(n, i, doc.nodes)} className={'hs sketch' + (i >= markerAt ? ' rolled' : '') + (selection.sketches?.includes(i) ? ' picked' : '') + (editNode === i ? ' edit' : '')} title={`${featureLabel(n, i, doc.nodes)} · click to pick it as a profile (Shift: add) · double-click to roll back here`}
-            onPointerDown={rememberFocus} onClick={e => { pickProfile(i, e.shiftKey); setEditNode(i); }} onDoubleClick={() => setMarker(i + 1 >= totalNodes ? null : i + 1)}
+            onPointerDown={rememberFocus} onClick={e => { pickProfile(i, e.shiftKey); openHistorySketch(i, e.currentTarget); }} onDoubleClick={() => setMarker(i + 1 >= totalNodes ? null : i + 1)}
             onContextMenu={e => { e.preventDefault(); setHistoryMenu({ at: { x: e.clientX, y: e.clientY }, index: i, focus: takeFocus(e), opener: e.currentTarget }); }}>
             <Icon name="cad-sketch" small />{historyLabels && <span className="hs-label">{featureLabel(n, i, doc.nodes)}</span>}</button>) : null) : (
           <button key={i} data-node-index={i} aria-label={featureLabel(n, i, doc.nodes)} className={'hs' + (i >= markerAt ? ' rolled' : '') + (editNode === i ? ' edit' : '') + (n.suppressed ? ' suppressed' : '') + (n.rematched || n.held ? ' rematched' : '')} title={`${featureLabel(n, i, doc.nodes)}${n.held ? ` (held: ${n.held})` : n.suppressed ? ' (suppressed)' : ''}${n.rematched ? ` · matched again: ${Object.entries(n.rematched).map(([now, was]) => `${was} → ${now}`).join(', ')}` : ''} · click to edit · double-click to roll back here`}

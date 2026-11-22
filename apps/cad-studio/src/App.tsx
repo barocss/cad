@@ -26,7 +26,7 @@ import { prepareParameterHeightFinish } from './state/parameterHeightFinish';
 import { HistoryFeatureEditor } from './ui/HistoryFeatureEditor';
 import { createCommandHudActions } from './app/commandHudActions';
 import { InstanceInspector } from './ui/InstanceInspector';
-import { createHistoryFeatureApply } from './state/historyFeatureApply';
+import { useHistoryEditorSession } from './state/useHistoryEditorSession';
 import { useFilletEndpointDisplay } from './state/useFilletEndpointDisplay';
 import { createCommandReferencePicking, type CommandPickScope } from './app/commandReferencePicking';
 import { retireStudioNotice, type StudioNotice } from './app/studioNotice';
@@ -38,7 +38,6 @@ import { useBrowserActions } from './app/useBrowserActions';
 import { commandApplyReadiness, createCommandApplyQueue } from './state/commandApply';
 import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
-import { returnEditorFocus } from './ui/editorReturnFocus';
 import { handoffReferenceFocus, type ReferenceFocusReceipt } from './ui/referenceFocus';
 import { createReferenceDecisions, createReferencePreview, type ReferenceChoices } from './state/referenceDecisions';
 import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
@@ -466,8 +465,8 @@ export function App() {
   const projectionRequest = useRef(0);
   const footprintState = useRef<{ ready: boolean; midpointReady: boolean; insetReady: boolean; editor: number | null; selection: Selection | null }>({ ready: false, midpointReady: false, insetReady: false, editor: null, selection: null });
   const setSketch = useCallback((next: Parameters<typeof setSketchState>[0]) => { sketchGeneration.current++; setSketchState(next); }, []);
-  const nodeEditorDraft = useRef<object | null>(null);
-  const reportNodeEditorDraft = useCallback((owner: object | null) => { nodeEditorDraft.current = owner; }, []);
+  const { editNode, editNodeNow, setEditNode, nodeEditorDraft, reportNodeEditorDraft, openFromHistory,
+    closeHistoryEditor, restoreEditorFocusAfterClose } = useHistoryEditorSession(doc, openIntent, activeStore.get);
   const commandDraft = () => activeStore.get()?.ctx ?? null;
   const workspaceModeExit = useWorkspaceModeExit(sketch, sketchGeneration, docNow, () => commandDraft() ?? nodeEditorDraft.current);
   const sketchModeButton = useRef<HTMLButtonElement>(null);
@@ -666,9 +665,6 @@ export function App() {
   const [mouldSpread, setMouldSpread] = useState(0);
   const halvesShownRef = useRef(false);
   const [ao, setAo] = useState(true);
-  const [editNode, setEditNode] = useState<number | null>(null);
-  const historyEditorOpener = useRef<{ index: number; doc: StudioDoc; button: HTMLElement } | null>(null);
-  const editNodeNow = useRef(editNode); editNodeNow.current = editNode;
   const [instanceEdit, setInstanceEdit] = useState<{ owner: string; index: number } | null>(null);
   const [instanceEditPending, setInstanceEditPending] = useState(false);
   // A changed selection invalidates a pending edit even if the user selects the same occurrence again.
@@ -1400,13 +1396,6 @@ export function App() {
   const { play, animatedAt, videoBusy, recordVideo, exportImage } = useRenderPlayback({ render, rendering, state: { time, setTime, playing, setPlaying, turnFrom }, viewport, fileName, onNotice: setToast });
 
   const extrudeOpener = useRef<HTMLElement | null>(null);
-  const returnAfterEditorClose = (opener: HTMLElement | null) => {
-    const scope = openIntent.current;
-    requestAnimationFrame(() => {
-      returnEditorFocus(scope, openIntent.current, !activeStore.get() && editNodeNow.current === null, opener,
-        document.querySelector<HTMLElement>('[data-reference-return]') ?? document.querySelector<HTMLElement>('[data-workspace-mode] button:first-child'), document);
-    });
-  };
   const holeOpener = useRef<HTMLElement | null>(null);
   const holeCloseFocus = useCallback((active: Active | null) => {
     const focused = document.activeElement;
@@ -1427,13 +1416,11 @@ export function App() {
     if (running?.independentExtrude) commandApply.clear();
     holeCloseFocus(running);
     if (running?.cmd.id === 'extrude' && document.activeElement?.closest('.hud')) {
-      const opener = extrudeOpener.current, scope = openIntent.current;
-      requestAnimationFrame(() => returnEditorFocus(scope, openIntent.current, !activeStore.get() && editNodeNow.current === null, opener,
-        document.querySelector<HTMLElement>('[data-reference-return]') ?? document.querySelector<HTMLElement>('[data-workspace-mode] button:first-child'), document));
+      restoreEditorFocusAfterClose(extrudeOpener.current);
     }
     if (command) setToast(current => current?.inputPick === command ? null : current);
     discardDirectCandidateRef.current(); discardRouteRef.current(); setActive(null); setPreviewBodies(null); setSketch(null);
-  }, [activeStore, commandApply, holeCloseFocus, setSketch]);
+  }, [activeStore, commandApply, holeCloseFocus, restoreEditorFocusAfterClose, setSketch]);
 
   const openRoute = () => {
     cancel(); poleEditor.clear(); routeEditor.open(directSel);
@@ -1730,6 +1717,7 @@ export function App() {
   const openHistoryFeatureAt = (index: number, event?: React.MouseEvent<HTMLButtonElement>, owns?: () => boolean, onOpened?: () => void) => {
     const node = doc.nodes[index];
     if (!node || (owns && !owns()) || (index === editNode && nodeEditorDraft.current)) return;
+    const opener = event?.currentTarget;
     workspaceModeExit.switchWhenReady(() => {
       if (owns && !owns()) return;
       onOpened?.();
@@ -1746,7 +1734,8 @@ export function App() {
           return;
         }
       }
-      setEditNode(index);
+      if (opener) openFromHistory(index, opener);
+      else setEditNode(index);
     }, { event, readFeature: readFeatureTransitionDraft });
   };
 
@@ -3139,32 +3128,26 @@ export function App() {
           model={{ doc, evaluated, commandDoc, editNode, fresh, busy, workerSession }}
           owner={{ document: () => docNow.current, evaluated: () => evaluatedRef.current, marker: () => markerNow.current,
             variant: () => shownVariant.current, worker: () => workerSessionNow.current, hasDraft: () => !!nodeEditorDraft.current,
-            bodies: () => bodiesRef.current, open: () => openIntent.current, ownsEvaluatedSource }}
+            bodies: () => bodiesRef.current, open: () => openIntent.current, scope: () => bearingEditScope.current, ownsEvaluatedSource }}
           commands={{ ctx, discardFeatureDraft, closeForCommand: () => setEditNode(null), setActive, editSketch,
             replaceAxis: replaceRevolveAxis ? () => void startRevolveAxisReplacement() : undefined }}
-          inset={{ roundedPending: !!parameterEdit?.roundedInset, detach: () => applyRoundedInsetEdit(), problem: insetSource.problem,
+          inset={{ roundedPending: !!parameterEdit?.roundedInset, detach: applyRoundedInsetEdit, problem: insetSource.problem,
             relink: insetSource.start ? { start: insetSource.start, cancel: insetRelink.cancel, reviewing: !!insetReview } : undefined }}
-          worker={engine} canChangeDocument={canChangeDocument} onNotice={setToast}
+          worker={{ engine, nextRevision: () => revision.current++ }} onNotice={setToast}
+          changes={{ canChangeDocument, commit, stageFeatureCandidate, onNotice: notice => {
+            if (!inPlaceNow.current) setToast(notice);
+          } }}
           editor={{ onFilletStations: publishFilletStations, filletEndpoints: replacementEndpointLocations ?? historyEndpointLocations,
             alignPreview: historyAlign, oppositeRadiusPreview, readAlignTargets: readAlignHistoryTargets,
             draftFaceReplacement: heldDraftFace.available ? heldDraftFace : undefined,
             edgeReplacement: finishEdgeEditor.available ? { start: finishEdgeEditor.start, cancel: finishEdgeEditor.cancel,
               apply: finishEdgeEditor.apply, draft: finishEdgeEditor.current } : undefined,
             onDraft: reportNodeEditorDraft, pending: parameterEdit?.kind === 'direct',
-            onApply: createHistoryFeatureApply({
-              model: { doc, evaluated, editNode, fresh, busy },
-              owner: { document: () => docNow.current, evaluated: () => evaluatedRef.current, marker: () => markerNow.current,
-                variant: () => shownVariant.current, scope: () => bearingEditScope.current, worker: () => workerSessionNow.current, open: () => openIntent.current },
-              worker: { engine, nextRevision: () => revision.current++ },
-              changes: { canChangeDocument, commit, applyRoundedInsetEdit, stageFeatureCandidate,
-                onNotice: notice => { if (!inPlaceNow.current) setToast(notice); } },
+            onDelete: opener => deleteNode(editNode, opener), onClose: () => closeHistoryEditor(() => {
+              heldDraftFace.cancel();
+              finishEdgeEditor.cancel();
+              discardDirectCandidateRef.current();
             }),
-            onDelete: opener => deleteNode(editNode, opener), onClose: () => {
-              const opener = historyEditorOpener.current;
-              if (opener?.index === editNode && opener.doc === doc) returnAfterEditorClose(opener.button);
-              historyEditorOpener.current = null;
-              heldDraftFace.cancel(); finishEdgeEditor.cancel(); discardDirectCandidateRef.current(); setEditNode(null);
-            },
           }} />}
       </SelectionInspector>}
       </div></Profiler>
@@ -3285,11 +3268,8 @@ export function App() {
           exporting={videoBusy} onExportVideo={() => { setPlaying(false); turnFrom.current = viewport.current?.getCamera() ?? null; void recordVideo(render.animation.duration, setTime, `${fileName}-render.webm`); }} />;
       })()}
       <Profiler id="history" onRender={onBlockRender}>{historyLayout.visible && <FeatureHistoryBar busy={historyLayout.busy} doc={doc} selection={selection} editNode={editNode} marker={marker} source={{ innerSteps, freeSketches }}
-        layout={historyLayout.bar} actions={{ pickProfile, setEditNode: index => {
-          const focused = document.activeElement;
-          historyEditorOpener.current = focused instanceof HTMLElement && focused.matches('button.hs') ? { index, doc, button: focused } : null;
-          setEditNode(index);
-        }, setMarker, setHistoryMenu, openHistoryFeature, rememberFocus: workspaceModeExit.rememberFocus, takeFocus: workspaceModeExit.takeFocus }} />}</Profiler>
+        layout={historyLayout.bar} actions={{ pickProfile, openHistorySketch: openFromHistory, setMarker, setHistoryMenu,
+          openHistoryFeature, rememberFocus: workspaceModeExit.rememberFocus, takeFocus: workspaceModeExit.takeFocus }} />}</Profiler>
 
       {inPlace && <div className="card in-place-bar" role="status" aria-label="Editing a part in place">
         <span>Editing <b>{inPlace.name}</b>{inPlace.shared > 1 ? ` · shared by ${inPlace.shared}` : ''}</span>

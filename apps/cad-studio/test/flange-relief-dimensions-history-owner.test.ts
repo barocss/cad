@@ -19,14 +19,15 @@ function fixture() {
   const props:ComponentProps<typeof HistoryFeatureEditor> = {
     model:{doc,evaluated:doc,commandDoc:doc,editNode:2,fresh:true,busy:false,workerSession:1},
     owner:{document:()=>doc,evaluated:()=>doc,marker:()=>null,variant:()=>null,worker:()=>1,
-      hasDraft:()=>false,ownsEvaluatedSource:()=>true},
+      hasDraft:()=>false,ownsEvaluatedSource:()=>true,scope:()=>doc,open:()=>doc,bodies:()=>[]},
     commands:{ctx:{doc,bodies:[],selection:{bodies:[],faces:[],edges:[]}},
       discardFeatureDraft:()=>{events.push('discard');},closeForCommand:()=>{events.push('close');},
       setActive:active.set,editSketch:()=>{events.push('sketch');}},
     inset:{roundedPending:false,detach:()=>{},relink:undefined},
-    editor:{onApply:()=>{},onClose:()=>{}},
-    worker:{faceEndDistance:async()=>{throw new Error('Not used');}},
-    canChangeDocument:()=>true,onNotice:()=>{},
+    editor:{onClose:()=>{}},
+    worker:{engine:{faceEndDistance:async()=>{throw new Error('Not used');},
+      evaluate:async()=>{throw new Error('Not used');},part:async()=>{throw new Error('Not used');}},nextRevision:()=>1},
+    changes:{canChangeDocument:()=>true,commit:()=>{},stageFeatureCandidate:()=>{}},onNotice:()=>{},
   };
   const editor=()=>(HistoryFeatureEditor(props) as ReactElement<ComponentProps<typeof NodeEditor>>).props;
   return {doc,props,active,events,editor};
@@ -52,7 +53,7 @@ for(const boundary of ['document','evaluated','worker','marker','variant','draft
    case 'source':f.props.owner.ownsEvaluatedSource=()=>false;break;
    case 'fresh':f.props.model.fresh=false;break;
    case 'busy':f.props.model.busy=true;break;
-   case 'permission':f.props.canChangeDocument=()=>false;break;
+   case 'permission':f.props.changes.canChangeDocument=()=>false;break;
    case 'ctx':f.props.commands.ctx={...f.props.commands.ctx,doc:{...f.doc}};break;
   }
   // Render flags/ctx are captured by a new render; live owner guards also cover old callbacks.

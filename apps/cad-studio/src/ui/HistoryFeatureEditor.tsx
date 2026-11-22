@@ -26,30 +26,31 @@ import { sharedHoleLayoutPair, sharedHoleLayoutCommand } from '../app/sharedHole
 import type { Active } from '../app/commandState';
 import type { StudioNotice } from '../app/studioNotice';
 import type { EngineClient } from '../engine/client';
+import { createHistoryFeatureApply } from '../state/historyFeatureApply';
 import { NodeEditor } from './NodeEditor';
 
 type Editor = ComponentProps<typeof NodeEditor>;
+type ApplyOptions = Parameters<typeof createHistoryFeatureApply>[0];
 interface Props {
-  model: { doc: StudioDoc; evaluated: StudioDoc; commandDoc: StudioDoc; editNode: number;
-    fresh: boolean; busy: boolean; workerSession: number };
-  owner: { document(): StudioDoc; evaluated(): StudioDoc; marker(): number | null;
-    variant(): string | null; worker(): number; hasDraft(): boolean; ownsEvaluatedSource(): boolean;
-    bodies?(): Ctx['bodies']; open?(): object };
+  model: ApplyOptions['model'] & { commandDoc: StudioDoc; workerSession: number };
+  owner: ApplyOptions['owner'] & { hasDraft(): boolean; ownsEvaluatedSource(): boolean; bodies(): Ctx['bodies'] };
   commands: { ctx: Ctx; discardFeatureDraft(): void; closeForCommand(): void;
     setActive: Dispatch<SetStateAction<Active | null>>; editSketch(index: number): void; replaceAxis?(): void };
-  inset: { roundedPending: boolean; detach(): void; problem?: string; relink: Editor['onRelinkInset'] };
+  inset: { roundedPending: boolean; detach: ApplyOptions['changes']['applyRoundedInsetEdit'];
+    problem?: string; relink: Editor['onRelinkInset'] };
   editor: Pick<Editor, 'onFilletStations' | 'filletEndpoints' | 'alignPreview' | 'oppositeRadiusPreview' | 'readAlignTargets' |
-    'edgeReplacement' | 'draftFaceReplacement' | 'onDraft' | 'pending' | 'onApply' | 'onDelete' | 'onClose'>;
-  worker: Pick<EngineClient, 'faceEndDistance'>;
-  canChangeDocument(): boolean;
+    'edgeReplacement' | 'draftFaceReplacement' | 'onDraft' | 'pending' | 'onDelete' | 'onClose'>;
+  worker: { engine: Pick<EngineClient, 'faceEndDistance' | 'evaluate' | 'part'>; nextRevision(): number };
+  changes: Omit<ApplyOptions['changes'], 'applyRoundedInsetEdit'>;
   onNotice: Dispatch<SetStateAction<StudioNotice | null>>;
 }
-/** Base-part History composition and saved-command admission; App owns draft lifetime and accepted changes. */
+/** Base-part History composition and saved-command admission. */
 export function HistoryFeatureEditor({ model, owner, commands, inset, editor, worker,
-  canChangeDocument, onNotice: setToast }: Props) {
+  changes, onNotice: setToast }: Props) {
   const { doc, evaluated, commandDoc, editNode, fresh, busy, workerSession } = model;
   const { ctx, discardFeatureDraft, closeForCommand, setActive, editSketch, replaceAxis } = commands;
   const { ownsEvaluatedSource } = owner;
+  const { canChangeDocument } = changes;
   const savedCommand = () => fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc)?.command ?? mountHistoryEdit(commandDoc, editNode) ?? connectorHistoryEdit(commandDoc, editNode) ?? subdPrimitiveHistoryEdit(commandDoc, editNode) ?? mirrorHistoryEdit(commandDoc, editNode) ?? sweepHistoryEdit(commandDoc, editNode) ?? loftSectionHistoryEdit(commandDoc, editNode) ?? subtractHistoryEdit(commandDoc, editNode) ?? booleanHistoryEdit(commandDoc, editNode) ?? sheetReliefCornerHistoryEdit(commandDoc, editNode) ?? editSavedReplaceFaceCommand(commandDoc, editNode);
   const savedWidth = flangeWidthHistoryEdit(commandDoc, editNode) ?? flangeReliefDimensionsHistoryEdit(commandDoc, editNode) ?? partialFlangeRadiusHistoryEdit(commandDoc, editNode);
   const savedFeature = savedWidth ?? savedCommand();
@@ -68,11 +69,12 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
         && owner.worker() === workerSession && owner.marker() === null && !owner.variant() });
   };
   return <NodeEditor {...editor} nodes={doc.nodes} parameters={doc.parameters} doc={doc} index={editNode}
+    onApply={createHistoryFeatureApply({ model, owner, worker, changes: { ...changes, applyRoundedInsetEdit: inset.detach } })}
     bearingAssembly={{ root: doc, owner: 'base' }}
     readAlignTargets={doc.nodes[editNode]?.kind === 'align' ? editor.readAlignTargets : undefined}
     pendingLabel={inset.roundedPending ? 'Checking the rounded inset…' : doc.nodes[editNode]?.kind === 'fill-feature-pattern' ? 'Checking the fill cut pattern…' : 'Checking the path cut pattern…'}
     onRefuse={m => setToast({ title: 'Cannot bind that value', hint: m, detail: '' })}
-    onDetachInset={editNode === 2 && doc.nodes[1]?.kind === 'rounded-rectangle-inset' ? inset.detach : undefined}
+    onDetachInset={editNode === 2 && doc.nodes[1]?.kind === 'rounded-rectangle-inset' ? () => inset.detach() : undefined}
     insetSourceWidth={editNode === 2 && doc.nodes[1]?.kind === 'rounded-rectangle-inset' && doc.nodes[0]?.kind === 'sketch' ? roundedInsetSourceWidth(doc.nodes[0]) : undefined}
     insetRelinkProblem={inset.problem} onRelinkInset={inset.relink}
     onDelete={doc.nodes[1]?.kind === 'rounded-rectangle-inset' ? undefined : editor.onDelete}
@@ -111,9 +113,9 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
       const cmd = editSavedOffsetFaceCommand(commandDoc, editNode);
       if (!cmd) return;
       const values = cmd.defaults?.(ctx) ?? {};
-      const open = owner.open?.();
-      const current = () => open !== undefined && owner.open?.() === open && owner.document() === doc && owner.evaluated() === evaluated &&
-        owner.bodies?.() === ctx.bodies && owner.worker() === workerSession && owner.marker() === null &&
+      const open = owner.open();
+      const current = () => owner.open() === open && owner.document() === doc && owner.evaluated() === evaluated &&
+        owner.bodies() === ctx.bodies && owner.worker() === workerSession && owner.marker() === null &&
         !owner.variant() && ownsEvaluatedSource();
       const handle = current() && cmd.handles?.(ctx, values)?.length === 1;
       discardFeatureDraft();
@@ -138,7 +140,7 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
       if (!current() || !fresh || busy || !canChangeDocument()) {
         return { error: 'Show the master at the latest History and wait for the model before detaching.' };
       }
-      const result = await worker.faceEndDistance(doc, editNode);
+      const result = await worker.engine.faceEndDistance(doc, editNode);
       return current() ? result : { error: 'The source changed. Open the current feature again.' };
     }} />;
 }

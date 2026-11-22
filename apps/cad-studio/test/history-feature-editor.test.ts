@@ -26,15 +26,19 @@ function fixture() {
   const props: ComponentProps<typeof HistoryFeatureEditor> = {
     model: { doc, evaluated: doc, commandDoc: doc, editNode: 3, fresh: true, busy: false, workerSession: 1 },
     owner: { document: () => current, evaluated: () => doc, marker: () => marker, variant: () => null,
-      worker: () => 1, hasDraft: () => false, ownsEvaluatedSource: () => current === doc },
+      worker: () => 1, hasDraft: () => false, ownsEvaluatedSource: () => current === doc, scope: () => doc, open: () => doc, bodies: () => [] },
     commands: { ctx: { doc, bodies: [], selection: { faces: [], edges: [], bodies: [] } },
       discardFeatureDraft: () => { events.push('discard'); }, closeForCommand: () => { events.push('close'); },
       setActive: active.set, editSketch: index => { events.push(`sketch-${index}`); } },
     inset: { roundedPending: false, detach: () => {}, relink: undefined },
-    editor: { onApply: () => {}, onClose: () => {}, onDelete: () => {},
+    editor: { onClose: () => {}, onDelete: () => {},
       readAlignTargets: async () => { throw new Error('Not an Align feature'); } },
-    worker: { faceEndDistance: () => { events.push('read'); return new Promise(resolve => { finish = resolve; }); } },
-    canChangeDocument: () => true, onNotice: notice.set,
+    worker: { engine: {
+      faceEndDistance: () => { events.push('read'); return new Promise(resolve => { finish = resolve; }); },
+      evaluate: async () => { throw new Error('Not used'); },
+      part: async () => { throw new Error('Not used'); },
+    }, nextRevision: () => 1 },
+    changes: { canChangeDocument: () => true, commit: () => {}, stageFeatureCandidate: () => {} }, onNotice: notice.set,
   };
   const editor = () => (HistoryFeatureEditor(props) as ReactElement<ComponentProps<typeof NodeEditor>>).props;
   return { props, editor, active, notice, events, stale: () => { current = { ...doc }; },
@@ -42,7 +46,7 @@ function fixture() {
 }
 test('History editor composes existing evidence and source sketch without exposing irrelevant Align readers', () => {
   const f = fixture(), editor = f.editor();
-  assert.equal(editor.nodes, f.props.model.doc.nodes); assert.equal(editor.onApply, f.props.editor.onApply);
+  assert.equal(editor.nodes, f.props.model.doc.nodes);
   assert.equal(editor.onClose, f.props.editor.onClose); assert.equal(editor.onDelete, f.props.editor.onDelete);
   assert.equal(editor.readAlignTargets, undefined); editor.onEditSketch?.(); assert.deepEqual(f.events, ['sketch-2']);
 });
@@ -102,7 +106,7 @@ for (const failure of ['document', 'evaluated', 'worker', 'marker', 'variant', '
     if (failure === 'variant') f.props.owner.variant = () => 'other';
     if (failure === 'draft') f.props.owner.hasDraft = () => true;
     // These functions are captured when rendered, as in the other saved-command entries.
-    if (failure === 'permission') { f.props.canChangeDocument = () => false; f.editor().savedFeatureEdit!.start(); }
+    if (failure === 'permission') { f.props.changes.canChangeDocument = () => false; f.editor().savedFeatureEdit!.start(); }
     else if (failure === 'source') { f.props.owner.ownsEvaluatedSource = () => false; f.editor().savedFeatureEdit!.start(); }
     else action.start();
     assert.deepEqual(f.events, []); assert.equal(f.active.get(), null);

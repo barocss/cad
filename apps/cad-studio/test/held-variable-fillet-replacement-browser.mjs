@@ -8,9 +8,6 @@ console.log(JSON.stringify({valid:checkBrep(brep,{strict:true}).valid,volume:bre
 `});
 const source={format:'barocss-cad-model',schema:3,units:'mm',parameters:{},nodes:[{id:'n0',kind:'sketch',profile:'rectangle',min:[0,0],max:[30,12]},{id:'n1',kind:'extrude',sketch:0,height:20}],outputs:{b1:{node:1,side:'solid'}},nextId:2};
 const button=(name,scope=f.page)=>scope.getByRole('button',{name,exact:true});
-const hud=()=>f.page.getByRole('dialog',{name:'Fillet',exact:true});
-const field=(name,scope=hud())=>scope.getByLabel(name,{exact:true});
-const preview=()=>f.page.waitForFunction(()=>document.querySelector('.hud .status')?.textContent==='preview',null,{timeout:30000});
 async function openExact(doc){await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:'endpoint-box.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(doc))});await f.page.waitForFunction(n=>window.__studioDoc?.nodes?.length===n,doc.nodes.length,{timeout:30000});await f.ready();assert.deepEqual(await f.doc(),doc);}
 async function endpoints(length=30){const start=f.page.locator('[data-fillet-endpoint="Start"]'),end=f.page.locator('[data-fillet-endpoint="End"]');await start.waitFor();await end.waitFor();assert.deepEqual((await start.getAttribute('data-position')).split(',').map(Number),[0,0,20]);assert.deepEqual((await end.getAttribute('data-position')).split(',').map(Number),[length,0,20]);}
 async function verify(doc,label,start,end){const n=await f.inspect(label,doc);assert.ok(n.valid);assert.ok(Math.abs(n.volume-(7200-130*(1-Math.PI/4)))<1e-6);for(const p of [[0,start,20],[30,end,20]])assert.ok(n.corners.some(c=>Math.hypot(...c.map((v,i)=>v-p[i]))<1e-7),JSON.stringify({want:p,corners:n.corners}));}
@@ -28,6 +25,19 @@ await f.run(async()=>{
   await button('Replace edge',f.editor()).click();await pick();await f.page.evaluate(()=>{window.__replaceHold.enabled=true;});await button('Apply edge replacement',f.editor()).click();await f.page.waitForFunction(()=>window.__replaceHold.held>0,null,{timeout:30000});await button('New part').click();await f.page.evaluate(()=>window.__replaceHold.release());await f.ready();assert.equal((await f.doc()).nodes.length,0);assert.equal(await f.page.locator('[data-fillet-endpoint]').count(),0);await f.snapshot('03-new-part-retires-request');return;
  }
  await button('Replace edge',f.editor()).click();await pick();await f.same(before);await f.snapshot('02-staged-mapping');await button('Cancel edge replacement',f.editor()).click();await f.same(before);assert.equal(await f.page.locator('[data-fillet-endpoint]').count(),0);
- await button('Replace edge',f.editor()).click();await pick();await f.page.evaluate(()=>{window.__replaceHold.enabled=true;});await button('Apply edge replacement',f.editor()).click();await f.page.waitForFunction(()=>window.__replaceHold.held>0,null,{timeout:30000});await button('Cancel edge replacement',f.editor()).click();await f.page.evaluate(()=>window.__replaceHold.release());await f.ready();await f.same(before);await f.snapshot('03-cancelled-pending');
+ await button('Replace edge',f.editor()).click();await pick();await f.page.evaluate(()=>{window.__replaceHold.enabled=true;});await button('Apply edge replacement',f.editor()).click();await f.page.waitForFunction(()=>window.__replaceHold.held>0,null,{timeout:30000});
+ if(process.argv.includes('--close-editor-pending')){
+  await f.closeEditor();
+  await f.page.evaluate(()=>window.__replaceHold.release());
+  await f.same(before);
+  assert.equal(await f.page.locator('[data-fillet-endpoint]').count(),0);
+  await f.snapshot('03-closed-editor-pending');
+  await f.openFeatureEditor(2);
+ }else{
+  await button('Cancel edge replacement',f.editor()).click();
+  await f.page.evaluate(()=>window.__replaceHold.release());
+  await f.same(before);
+  await f.snapshot('03-cancelled-pending');
+ }
  await button('Replace edge',f.editor()).click();await pick();await button('Apply edge replacement',f.editor()).click();await f.changed(before);await f.ready();const accepted=await f.doc();assert.equal(accepted.nodes[2].held,undefined);assert.equal(accepted.nodes[2].suppressed,undefined);assert.equal(accepted.nodes[2].id,'n2');assert.deepEqual(accepted.nodes[2].radii.map(r=>r.at),[[0,0,20],[30,0,20]]);assert.deepEqual(accepted.nodes[2].radii.map(r=>r.radius),[1,3]);await verify(accepted,'04-repaired-native',1,3);await f.undo();await f.same(before);await f.redo();await f.same(accepted);await button('New part').click();await f.ready();await openExact(accepted);await f.openFeatureEditor(2);await endpoints();await f.snapshot('05-reopened');await f.closeEditor();assert.deepEqual(f.report.downloads,[]);
 });

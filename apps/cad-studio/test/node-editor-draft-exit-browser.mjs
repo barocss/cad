@@ -948,6 +948,11 @@ await f.run(async () => {
   await f.page.waitForFunction(() => document.querySelector('.node-editor input[aria-label="Distance"]')?.value === '5');
   await f.same(source);
   await f.snapshot('04-other-feature');
+  await f.editor().getByRole('button', { name: 'Close editor', exact: true }).press('Enter');
+  await f.editor().waitFor({ state: 'hidden' });
+  await waitFocus(historyStep(3));
+  await f.same(source);
+  await f.snapshot('04-history-focus-restored');
   await historyStep(1).click();
   await f.page.waitForFunction(() => document.querySelector('.node-editor input[aria-label="Distance"]')?.value === '2');
   await f.snapshot('05-original-value');
