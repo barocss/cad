@@ -27,7 +27,7 @@ const pins = [
   'apps/cad-studio/test/mcp-browser-session.mjs',
   'packages/barocss-cad-model/src/chat/part/proposals.ts',
   'packages/barocss-cad-model/src/chat/thickenWall.ts',
-  'packages/barocss-cad-model/src/engine/upperThickenCapOffset.ts',
+  'packages/barocss-cad-model/src/engine/exactThickenCapOffset.ts',
   'packages/barocss-cad/src/features/exact-cylinder-cap-offset.ts',
 ];
 const f = await createFlow({

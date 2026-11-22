@@ -5,8 +5,8 @@ import { exactSemicylinderCapSource, type StudioDoc } from './doc';
 import { featureId } from './ids';
 import { resolveOffsetPlaneDistance } from './offsetPlane';
 
-/** Bind the current two skin names to a replay of the original native upper-cap operation. */
-export function isUpperThickenCapOffset(doc: StudioDoc, snapshot: CadPartSnapshot, index: number, brep: Brep,
+/** Bind the current two skin names to a replay of the original native axial-cap operation. */
+export function isExactThickenCapOffset(doc: StudioDoc, snapshot: CadPartSnapshot, index: number, brep: Brep,
   names: readonly [string, string]): boolean {
   const { nodes } = doc, node = nodes[index];
   if (node?.kind !== 'offset-face' || node.suppressed || node.held !== undefined ||
@@ -14,13 +14,14 @@ export function isUpperThickenCapOffset(doc: StudioDoc, snapshot: CadPartSnapsho
       Object.keys(node.rematched ?? {}).length > 0 || (node.target !== undefined && node.distance !== undefined)) return false;
   const { document } = snapshot, { features, parameters } = document;
   const parent = exactSemicylinderCapSource(nodes, node.parent.node, doc.parameters);
-  if (!parent || node.faces[0] !== parent.face ||
+  const [face] = node.faces;
+  if (!parent || (face !== parent.upperFace && (face !== parent.lowerFace || node.target !== undefined)) ||
       !names.includes(`${parent.id}.normal`) || !names.includes(`${parent.id}.reverse`)) return false;
 
   const id = featureId(nodes, index), offsetIndex = features.findIndex(feature => feature.id === id);
   const offset = features[offsetIndex], parentIndex = features.findIndex(feature => feature.id === parent.id);
   const stock = features[parentIndex];
-  if (offset?.kind !== 'offset-face' || offset.target !== parent.id || offset.face !== parent.face ||
+  if (offset?.kind !== 'offset-face' || offset.target !== parent.id || offset.face !== face ||
       stock?.kind !== 'thicken' || stock.mode !== 'exact-cylinder' || parentIndex >= offsetIndex) return false;
   const thickness = typeof stock.thickness === 'number' ? stock.thickness : parameters[stock.thickness.parameter];
   if (thickness !== parent.thickness) return false;
@@ -36,7 +37,7 @@ export function isUpperThickenCapOffset(doc: StudioDoc, snapshot: CadPartSnapsho
     const { outputs: [original] } = build({ ...document, features: [stock] });
     if (original?.id !== parent.id || original.feature !== parent.id) return false;
     const surface = { ...structuredClone(stock.surface), kind: 'surface', id: 'surface' } as Surface;
-    const expected = offsetExactSemicylinderCapIfAdmitted(original.brep, parent.face,
+    const expected = offsetExactSemicylinderCapIfAdmitted(original.brep, face,
       { id: parent.id, surface, thickness, side: stock.side }, offset.distance);
     return expected !== undefined && canonical(expected) === canonical(brep);
   } catch {

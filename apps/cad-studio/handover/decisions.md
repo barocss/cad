@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1650: [Offset the original Exact semicylinder lower cap](notes/exact-semicylinder-lower-cap-offset-2026-11-22/README.md), #17 and #629. Move the lower cap by signed distance, retain the upper station and verify History, refusal and native Open.
 - D1649: [Link the Exact semicylinder upper cap to a reference plane](notes/exact-semicylinder-cap-to-plane-2026-11-22/README.md), #17 and #629. Move a saved native reference, refuse collapse, and verify the cap and wall evidence after Open.
 - D1648: [Extract Studio Direct control-point editing from App](notes/studio-direct-pole-extraction-2026-11-22/README.md). Verify typed controls, canceled and accepted pole drags, and equal before/after native output.
 - D1647: [Verify the radial wall after an upper-cap Offset](notes/agent-upper-cap-wall-approval-2026-11-22/README.md), #322 and #17. Approve the measured 2 mm wall, refuse the 1 mm wall and refresh revision-bound evidence after native Open.

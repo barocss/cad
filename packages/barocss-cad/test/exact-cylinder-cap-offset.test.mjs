@@ -33,19 +33,22 @@ const incidence = brep => ({
   vertices: brep.vertices.map(({ point: _point, ...vertex }) => vertex),
 });
 
-for (const distance of [2, -3]) test(`original Exact semicylinder upper Offset ${distance} preserves native supports and topology`, () => {
+for (const sign of [1, -1]) for (const distance of [2, -3]) test(`original Exact semicylinder ${sign === 1 ? 'upper' : 'lower'} Offset ${distance} preserves native supports and topology`, () => {
   const base = doc(), source = freeze(body(base, 'h')), saved = structuredClone(source), recipe = structuredClone(base);
-  assert.deepEqual(exactSemicylinderCapOffsetFrame(source, 'h.v-max', sourceOf(base)), { anchor: [20, 29, 12], normal: [0, 0, 1] });
-  const result = body(withOffset(base, distance), 'move'), height = 12 + distance;
+  const movingFace = sign === 1 ? 'h.v-max' : 'h.v-min', fixedFace = sign === 1 ? 'h.v-min' : 'h.v-max';
+  const station = sign === 1 ? 12 : 0, next = station + sign * distance;
+  assert.deepEqual(exactSemicylinderCapOffsetFrame(source, movingFace, sourceOf(base)), { anchor: [20, 29, station], normal: [0, 0, sign] });
+  const result = body(withOffset(base, distance, movingFace), 'move'), height = 12 + distance;
+  const lo = sign === 1 ? 0 : next, hi = sign === 1 ? next : 12;
   const report = checkBrep(result, { strict: true });
   assert.ok(report.valid, report.issues.join('\n'));
   assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
   assert.equal(report.topology[0].genus, 0);
   assert.ok(report.maximumPcurveGap < 1e-9 && report.maximumEdgeSurfaceGap < 1e-9);
   assert.deepEqual(incidence(result), incidence(source));
-  assert.deepEqual(result.faces.find(face => face.name === 'h.v-min'), source.faces.find(face => face.name === 'h.v-min'));
+  assert.deepEqual(result.faces.find(face => face.name === fixedFace), source.faces.find(face => face.name === fixedFace));
   assert.deepEqual(result.coedges, source.coedges);
-  const expectedPoint = point => [point[0], point[1], point[2] === 12 ? height : point[2]];
+  const expectedPoint = point => [point[0], point[1], point[2] === station ? next : point[2]];
   for (const vertex of result.vertices) assert.deepEqual(vertex.point, expectedPoint(source.vertices.find(v => v.id === vertex.id).point));
   for (const edge of result.edges) {
     const original = source.edges.find(e => e.id === edge.id);
@@ -62,14 +65,14 @@ for (const distance of [2, -3]) test(`original Exact semicylinder upper Offset $
     assert.equal(geometry.out, out);
     near(geometry.r, radius); near(geometry.c[0], 20); near(geometry.c[1], 20);
   }
-  const top = result.faces.find(face => face.name === 'h.v-max'), plane = faceGeometry(top);
-  assert.equal(plane.kind, 'plane'); assert.deepEqual(plane.n, [0, 0, 1]); near(plane.o[2], height);
+  const top = result.faces.find(face => face.name === movingFace), plane = faceGeometry(top);
+  assert.equal(plane.kind, 'plane'); assert.deepEqual(plane.n, [0, 0, sign]); near(plane.o[2], next);
   const loop = result.loops.find(loop => loop.id === top.loops[0]);
   const rims = loop.coedges.map(id => result.edges.find(edge => edge.id === result.coedges.find(use => use.id === id).edge));
   assert.deepEqual(rims.map(edge => edge.curve.degree).sort(), [1, 1, 2, 2]);
   for (const edge of rims) for (const t of [0, .17, .5, .83, 1]) {
     const point = evaluateCurve(edge.curve, t);
-    near(point[2], height);
+    near(point[2], next);
     if (edge.curve.degree === 2) {
       const radius = Math.round(Math.hypot(edge.curve.controlPoints[0][0] - 20, edge.curve.controlPoints[0][1] - 20));
       near(Math.hypot(point[0] - 20, point[1] - 20), radius); assert.ok(point[1] >= 20 - 1e-9);
@@ -79,13 +82,13 @@ for (const distance of [2, -3]) test(`original Exact semicylinder upper Offset $
   const area = Math.PI * (10 ** 2 - 8 ** 2) / 2, mass = brepMassProperties(result, 1);
   near(mass.volume, area * height, 1e-7);
   near(mass.volume - brepMassProperties(source, 1).volume, area * distance, 1e-7);
-  mass.centroid.forEach((value, axis) => near(value, [20, 20 + 488 / (27 * Math.PI), height / 2][axis]));
+  mass.centroid.forEach((value, axis) => near(value, [20, 20 + 488 / (27 * Math.PI), (lo + hi) / 2][axis]));
   assert.deepEqual(source, saved); assert.deepEqual(base, recipe);
 });
 
-test('upper-cap admission rejects another cap, a stale source, changed geometry and a quarter source', () => {
+test('axial-cap admission rejects side faces, a stale source, changed geometry and a quarter source', () => {
   const base = doc(), source = body(base), input = sourceOf(base);
-  for (const face of ['h.v-min', 'h.normal', 'h.reverse', 'h.u-min', 'h.u-max', 'h.v-max#1', 'missing']) {
+  for (const face of ['h.normal', 'h.reverse', 'h.u-min', 'h.u-max', 'h.v-max#1', 'h.v-min#1', 'missing']) {
     assert.equal(exactSemicylinderCapOffsetFrame(source, face, input), undefined);
     assert.throws(() => body(withOffset(base, 2, face)));
   }
@@ -98,12 +101,13 @@ test('upper-cap admission rejects another cap, a stale source, changed geometry 
   const quarter = raw(); quarter.controlPoints.length = quarter.weights.length = 3; quarter.knotsU = [0, 0, 0, 1, 1, 1];
   const quarterDoc = doc(quarter), quarterBody = body(quarterDoc);
   assert.equal(exactSemicylinderCapOffsetFrame(quarterBody, 'h.v-max', sourceOf(quarterDoc)), undefined);
-  assert.throws(() => body(withOffset(quarterDoc, 2)), /original upper cap/);
+  assert.throws(() => body(withOffset(quarterDoc, 2)), /original axial cap/);
 });
 
-test('signed upper Offset refuses collapse, an unchanged station, range overflow, transforms and chains', () => {
+test('signed axial Offset refuses collapse, an unchanged station, range overflow, transforms and chains', () => {
   const base = doc(), original = structuredClone(base), native = body(base), source = sourceOf(base);
-  for (const distance of [-12, -13, -12 + 1e-8]) assert.throws(() => body(withOffset(base, distance)), /reach or cross the opposite cap/);
+  for (const face of ['h.v-max', 'h.v-min']) for (const distance of [-12, -13, -12 + 1e-8])
+    assert.throws(() => body(withOffset(base, distance, face)), /reach or cross the opposite cap/);
   assert.throws(() => body(withOffset(base, Number.MIN_VALUE)), /too small to move/);
   assert.throws(() => body(withOffset(base, 10000)), /modeling range/);
   for (const distance of [0, NaN, Infinity, -Infinity, 10001]) {
@@ -137,10 +141,17 @@ test('resolved Thicken parameter and reversed V retain original source-relative 
   near(brepMassProperties(body(withOffset(base, 2)), 1).volume, 252 * Math.PI, 1e-7);
   const surface = raw(); surface.controlPoints.forEach(row => row.reverse());
   const reversed = doc(surface), source = body(reversed);
-  assert.equal(exactSemicylinderCapOffsetFrame(source, 'h.v-max', sourceOf(reversed)), undefined);
+  assert.deepEqual(exactSemicylinderCapOffsetFrame(source, 'h.v-max', sourceOf(reversed)), { anchor: [20, 31, 0], normal: [0, 0, -1] });
   const frame = exactSemicylinderCapOffsetFrame(source, 'h.v-min', sourceOf(reversed));
   assert.equal(frame.anchor[2], 12); assert.deepEqual(frame.normal, [0, 0, 1]);
   const result = body(withOffset(reversed, -3, 'h.v-min'));
   const cap = faceGeometry(result.faces.find(face => face.name === 'h.v-min'));
   assert.equal(cap.kind, 'plane'); assert.deepEqual(cap.n, [0, 0, 1]); near(cap.o[2], 9);
+  for (const distance of [2, -3]) {
+    const lower = body(withOffset(reversed, distance, 'h.v-max'));
+    const lowerCap = faceGeometry(lower.faces.find(face => face.name === 'h.v-max'));
+    assert.equal(lowerCap.kind, 'plane'); assert.deepEqual(lowerCap.n, [0, 0, -1]); near(lowerCap.o[2], -distance);
+    near(Math.max(...lower.vertices.map(vertex => vertex.point[2])), 12);
+    near(brepMassProperties(lower, 1).volume, Math.PI * (12 ** 2 - 10 ** 2) / 2 * (12 + distance), 1e-7);
+  }
 });

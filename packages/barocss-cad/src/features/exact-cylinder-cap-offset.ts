@@ -1,4 +1,4 @@
-// Signed upper-cap move of the original native two-quarter Exact cylinder Thicken only.
+// Signed axial-cap move of the original native two-quarter Exact cylinder Thicken only.
 import { BrepError, checkBrep, type Brep } from '../brep/brep-core.js';
 import { thickenCylinderSolid } from '../brep/thicken-cylinder.js';
 import { validateSurface } from '../core/math.js';
@@ -18,39 +18,41 @@ function admitted(brep: Brep, faceName: string, source: Source) {
     if (JSON.stringify(brep) !== JSON.stringify(original)) return;
     const [a, b] = source.surface.controlPoints[0], lo = Math.min(a[2], b[2]), hi = Math.max(a[2], b[2]);
     const upper = `${source.id}.${a[2] < b[2] ? 'v-max' : 'v-min'}`;
-    if (faceName !== upper || brep.faces.filter(face => face.name === upper).length !== 1) return;
+    const lower = `${source.id}.${a[2] < b[2] ? 'v-min' : 'v-max'}`;
+    if ((faceName !== upper && faceName !== lower) || brep.faces.filter(face => face.name === faceName).length !== 1) return;
+    const sign = faceName === upper ? 1 : -1, station = sign === 1 ? hi : lo, opposite = sign === 1 ? lo : hi;
     const skins = ['normal', 'reverse'].map(role => brep.faces.find(face => face.name === `${source.id}.${role}`)?.surface);
     if (skins.some(surface => surface?.kind !== 'surface')) return;
-    const poles = skins.map(surface => (surface as Surface).controlPoints[2][1]);
+    const poles = skins.map(surface => (surface as Surface).controlPoints[2][sign === 1 ? 1 : 0]);
     const anchor: Point = [poles[0][0] + (poles[1][0] - poles[0][0]) / 2,
-      poles[0][1] + (poles[1][1] - poles[0][1]) / 2, hi];
-    return { anchor, lo, hi };
+      poles[0][1] + (poles[1][1] - poles[0][1]) / 2, station];
+    return { anchor, lo, hi, sign, station, opposite };
   } catch { return; }
 }
 
-/** The original upper axial cap, with a handle on annular material and outward +Z. */
+/** Either original axial cap, with a handle on annular material and its outward Z normal. */
 export function exactSemicylinderCapOffsetFrame(brep: Brep, faceName: string, source: Source): { anchor: Point; normal: Point } | undefined {
   const cap = admitted(brep, faceName, source);
-  return cap && { anchor: cap.anchor, normal: [0, 0, 1] };
+  return cap && { anchor: cap.anchor, normal: [0, 0, cap.sign] };
 }
 
-/** Move only the upper native station. All incidence, IDs and UV charts remain owned by the source. */
+/** Move only the selected native station. All incidence, IDs and UV charts remain owned by the source. */
 export function offsetExactSemicylinderCapIfAdmitted(brep: Brep, faceName: string, source: Source, distance: number): Brep | undefined {
   const cap = admitted(brep, faceName, source);
   if (!cap) return;
   if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
     throw new BrepError('INPUT', 'Exact semicylinder cap offset: distance must be nonzero and within the modeling range');
-  const next = cap.hi + distance;
+  const next = cap.station + cap.sign * distance;
   const controls = [...brep.vertices.map(vertex => vertex.point), ...brep.edges.flatMap(edge => edge.curve.controlPoints),
     ...brep.faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints.flat() : [])];
   const extent = Math.max(Math.abs(next), geometryScaleMM(controls));
   if (!(extent <= CadNumericPolicy.coordinateAbs)) throw new BrepError('GEOMETRY', 'Exact semicylinder cap offset: the cap leaves the modeling range');
-  if (next === cap.hi) throw new BrepError('GEOMETRY', 'Exact semicylinder cap offset: distance is too small to move the cap');
-  if (!(next - cap.lo > linearToleranceMM(extent)))
+  if (next === cap.station) throw new BrepError('GEOMETRY', 'Exact semicylinder cap offset: distance is too small to move the cap');
+  if (!((next - cap.opposite) * cap.sign > linearToleranceMM(extent)))
     throw new BrepError('GEOMETRY', 'Exact semicylinder cap offset: the offset would reach or cross the opposite cap');
   if (controls.some(point => point[2] !== cap.lo && point[2] !== cap.hi)) return;
-  // The station assignment is the positive axial affine map, with the lower station assigned exactly.
-  const candidate = mapCapStation(brep, cap.hi, () => next), report = checkBrep(candidate, { strict: true });
+  // The station assignment is the positive axial affine map, with the opposite station fixed exactly.
+  const candidate = mapCapStation(brep, cap.station, () => next), report = checkBrep(candidate, { strict: true });
   if (!report.valid) throw new BrepError('GEOMETRY', `Exact semicylinder cap offset: the offset solid is invalid: ${report.issues[0]}`, report);
   return candidate;
 }

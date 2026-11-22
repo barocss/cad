@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
-const cap = 'n0.v-max', originalHeight = 12;
+const lower = process.argv.includes('--lower');
+const cap = lower ? 'n0.v-min' : 'n0.v-max', originalHeight = 12;
+const end = lower ? 'lower' : 'upper', sign = lower ? -1 : 1;
+const sourceStation = lower ? 0 : originalHeight;
 const profile = [[30, 20], [30, 30], [20, 30], [10, 30], [10, 20]];
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 1,
@@ -27,10 +30,10 @@ const pins = [
   'packages/barocss-cad/src/part/part-model.ts',
 ];
 const f = await createFlow({
-  name: 'exact-cylinder-cap-offset', envFrozen: 'D1646_SOURCE_FROZEN', output: process.argv[2],
+  name: 'exact-cylinder-cap-offset', envFrozen: lower ? 'D1650_SOURCE_FROZEN' : 'D1646_SOURCE_FROZEN', output: process.argv[2],
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Offset one original Exact semicylinder cap, edit a signed distance and reopen the native solid.',
-  limits: ['Two-quarter upright Exact cylinder Thicken. Signed offset of its original upper cap. Desktop WebGPU.'],
+  limits: [`Two-quarter upright Exact cylinder Thicken. Signed offset of its original ${end} cap. Desktop WebGPU.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
@@ -59,8 +62,11 @@ async function check(label, doc, height, original) {
   assert.ok(report.valid, report.issues.join('\n'));
   assert.equal(report.topology[0]?.genus, 0);
   assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
-  assert.deepEqual([geometry[cap].kind, geometry[cap].n, geometry[cap].o[2]], ['plane', [0, 0, 1], height]);
-  assert.deepEqual([geometry['n0.v-min'].kind, geometry['n0.v-min'].n, geometry['n0.v-min'].o[2]], ['plane', [0, 0, -1], 0]);
+  const [lo, hi] = lower ? [originalHeight - height, originalHeight] : [0, height];
+  for (const [name, normalZ, station] of [['n0.v-max', 1, hi], ['n0.v-min', -1, lo]]) {
+    const plane = geometry[name];
+    assert.deepEqual([plane.kind, plane.n, plane.o[2]], ['plane', [0, 0, normalZ], station]);
+  }
   for (const [name, radius, sense] of [['n0.normal', 10, 1], ['n0.reverse', 8, -1]]) {
     const wall = geometry[name];
     assert.deepEqual([wall.kind, wall.a, wall.out], ['cylinder', [0, 0, 1], sense]);
@@ -69,7 +75,7 @@ async function check(label, doc, height, original) {
     near(wall.c[1], 20);
   }
   const volume = 18 * Math.PI * height;
-  const centroid = [20, 20 + 488 / (27 * Math.PI), height / 2];
+  const centroid = [20, 20 + 488 / (27 * Math.PI), (hi + lo) / 2];
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, 1);
   near(bodies[0].volume, volume);
@@ -80,16 +86,16 @@ async function check(label, doc, height, original) {
   });
   if (original) {
     const source = original.brep;
-    const upper = ([x, y, z]) => [x, y, z === originalHeight ? height : z];
+    const moved = ([x, y, z]) => [x, y, z === sourceStation ? (lower ? lo : hi) : z];
     const before = { ...source,
-      vertices: source.vertices.map(vertex => ({ ...vertex, point: upper(vertex.point) })),
-      edges: source.edges.map(edge => ({ ...edge, curve: { ...edge.curve, controlPoints: edge.curve.controlPoints.map(upper) } })),
+      vertices: source.vertices.map(vertex => ({ ...vertex, point: moved(vertex.point) })),
+      edges: source.edges.map(edge => ({ ...edge, curve: { ...edge.curve, controlPoints: edge.curve.controlPoints.map(moved) } })),
       faces: source.faces.map(face => ({ ...face,
-        surface: { ...face.surface, controlPoints: face.surface.controlPoints.map(row => row.map(upper)) } })),
+        surface: { ...face.surface, controlPoints: face.surface.controlPoints.map(row => row.map(moved)) } })),
     };
     assert.deepEqual(brep, before);
   }
-  f.report.observations.push({ label, height, volume, nativeVolume: mass.volume, studioVolume: bodies[0].volume,
+  f.report.observations.push({ label, lo, hi, height, volume, nativeVolume: mass.volume, studioVolume: bodies[0].volume,
     nativeCentroid: mass.centroid, digest: item.digest, gap: report.maximumEdgeSurfaceGap });
   return item;
 }
@@ -111,11 +117,18 @@ await f.run(async () => {
   await file.setFiles({ name: 'exact-semicylinder.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
   const original = await check('01-source-native', seed, 12);
-  f.phase = 'Select the original upper cap';
-  await button('Top', f.page.getByRole('group', { name: 'Views', exact: true })).click();
+  f.phase = `Select the original ${end} cap`;
+  let bottomTurnStarted;
+  if (lower) {
+    await button('View cube directions').click();
+    await f.page.getByRole('menuitem', { name: 'Bottom', exact: true }).click();
+    bottomTurnStarted = await f.page.evaluate(() => performance.now());
+  } else await button('Top', f.page.getByRole('group', { name: 'Views', exact: true })).click();
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  const pick = await f.page.evaluate(() => window.__studioScreenOf([20, 29, 12]));
+  if (lower) await f.page.waitForFunction(() => window.__studioCamera().pitch < -1.3);
+  await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+  const pick = await f.page.evaluate(z => window.__studioScreenOf([20, 29, z]), sourceStation);
   assert.ok(pick && await f.page.evaluate(p => document.elementFromPoint(...p)?.matches('canvas.vp-canvas'), pick));
   await f.page.mouse.click(...pick);
   const capIndex = original.meshFaces.find(([name]) => name === cap)[1];
@@ -123,18 +136,22 @@ await f.run(async () => {
     const selected = window.__studioSelection.selection.faces;
     return selected.length === 1 && selected[0].face === index;
   }, capIndex);
-  await f.snapshot('01-selected-upper-cap');
+  await f.page.evaluate(() => document.activeElement?.blur());
+  await f.snapshot(`01-selected-${end}-cap`);
   await f.command('Offset face');
   const panel = hud('Offset face');
   await status(panel, 'preview');
-  assert.equal(await panel.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
-  assert.match(await panel.innerText(), /n0\.v-max.*Outward \+Z/s);
+  if (lower) assert.equal(await panel.getByLabel('Mode', { exact: true }).count(), 0);
+  else assert.equal(await panel.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
+  assert.match(await panel.innerText(), lower ? /n0\.v-min.*Outward −Z/s : /n0\.v-max.*Outward \+Z/s);
 
   f.phase = 'Drag the normal handle and apply a 2 mm offset';
-  const delta = await f.page.evaluate(() => {
-    const a = window.__studioScreenOf([20, 29, 12]), b = window.__studioScreenOf([20, 29, 13]);
+  if (bottomTurnStarted !== undefined)
+    await f.page.waitForFunction(start => performance.now() - start >= 300, bottomTurnStarted);
+  const delta = await f.page.evaluate(({ station, sign }) => {
+    const a = window.__studioScreenOf([20, 29, station]), b = window.__studioScreenOf([20, 29, station + sign]);
     return b.map((value, i) => value - a[i]);
-  });
+  }, { station: sourceStation, sign });
   assert.ok(Math.hypot(...delta) > 8, delta);
   const handle = await f.page.locator('g.gizmo-handle[data-handle="d"] polygon').evaluate(polygon => {
     const svg = polygon.closest('svg').getBoundingClientRect(), points = [...polygon.points];
@@ -162,14 +179,15 @@ await f.run(async () => {
   assert.ok(node.sigs[cap]);
   assert.equal(node.target, undefined);
   await check('03-outward-native', outward, 14, original);
-  await f.snapshot('03-applied-upper-cap');
+  await f.snapshot(`03-applied-${end}-cap`);
 
-  await f.openFeatureEditor(1, 'upper cap Offset');
+  await f.openFeatureEditor(1, `${end} cap Offset`);
   await button('Edit offset', f.editor()).click();
   const edit = hud('Edit Offset face');
   await status(edit, 'preview');
   assert.equal(await offset(edit).inputValue(), '2');
-  assert.equal(await edit.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
+  if (lower) assert.equal(await edit.getByLabel('Mode', { exact: true }).count(), 0);
+  else assert.equal(await edit.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
   f.phase = 'Reject collapse and apply the inward History edit';
   await offset(edit).fill('-12');
   await status(edit, 'refused');
@@ -195,7 +213,7 @@ await f.run(async () => {
   await f.freshOpen(saved.file, inward, '06-native-fresh-open');
   const reopened = await check('06-reopened-native', await f.doc(), 9, original);
   assert.equal(reopened.digest, expected.digest);
-  await f.openFeatureEditor(1, 'reopened upper cap Offset');
+  await f.openFeatureEditor(1, `reopened ${end} cap Offset`);
   await button('Edit offset', f.editor()).click();
   assert.equal(await offset(hud('Edit Offset face')).inputValue(), '-3');
   await f.snapshot('07-reopened-distance');

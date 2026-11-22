@@ -652,8 +652,8 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       return () => {
         const brep = namedFaceTargetBrep(t, f.target, target[0]);
         if (exactCylinder) {
-          const offset = exactCylinder && offsetExactSemicylinderCapIfAdmitted(brep, face, exactCylinder, distance);
-          if (!offset) return fail('CAPABILITY', 'Offset face needs the original upper cap of one clean two-quarter Exact cylinder Thicken.');
+          const offset = offsetExactSemicylinderCapIfAdmitted(brep, face, exactCylinder, distance);
+          if (!offset) return fail('CAPABILITY', 'Offset face needs an original axial cap of one clean two-quarter Exact cylinder Thicken.');
           return one({ kind: 'brep', brep: offset });
         }
         if (annularCapReplacementFrame(brep, face)) {

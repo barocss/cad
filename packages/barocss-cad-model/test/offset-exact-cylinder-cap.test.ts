@@ -93,10 +93,61 @@ test('Offset edits the original semicylinder upper cap through the command, Hist
   assert.equal(Math.max(...reverseBrep.vertices.map(vertex => vertex.point[2])), 14);
 });
 
-test('Offset refuses collapse, the other cap, stale geometry, a missing plane target and chained cap offsets', async () => {
-  const source = sourceDoc(), ctx = context(source), other = context(source, bottom);
+test('the original lower cap uses signed distance and preserves the upper station and radial wall', async () => {
+  const source = sourceDoc(), ctx = context(source, bottom);
+  assert.equal(offsetFaceCommand.available(ctx).ok, true);
+  assert.deepEqual(offsetFaceCommand.fields!(ctx).map(field => field.key), ['d']);
+  const [handle] = offsetFaceCommand.handles!(ctx, { d: 2 });
+  assert.deepEqual(handle.dir, [0, 0, -1]);
+  assert.equal(handle.at[2], 0);
+  assert.throws(() => offsetFaceCommand.build!(ctx, { offsetMode: 'to-plane' }), /reference plane/);
+
+  const outward = offsetFaceCommand.build!(ctx, { d: 2 }), saved = outward.nodes[1];
+  assert.ok(saved.kind === 'offset-face');
+  assert.deepEqual(saved.faces, [bottom]);
+  assert.equal(saved.distance, 2);
+  assert.equal(saved.target, undefined);
+  assert.deepEqual(outward.nodes[0], source.nodes[0]);
+  const edit = editSavedOffsetFaceCommand(outward, 1), current = context(outward, bottom);
+  assert.ok(edit?.build);
+  assert.deepEqual(edit.fields!(current).map(field => field.key), ['d']);
+  assert.equal(edit.onPick, undefined);
+  assert.throws(() => edit.build!(current, { offsetMode: 'to-plane' }), /signed distance/);
+  const inward = edit.build(current, { d: -3 });
+  assert.deepEqual(inward.nodes[1], { ...saved, distance: -3 });
+
+  for (const [doc, station] of [[outward, -2], [inward, 3]] as const) {
+    const brep = native(doc), z = brep.vertices.map(vertex => vertex.point[2]);
+    assert.equal(Math.min(...z), station);
+    assert.equal(Math.max(...z), 12);
+    assert.ok(Math.abs(brepMassProperties(brep, 1).volume - 18 * Math.PI * (12 - station)) < 1e-8);
+    const result = evaluateDoc(doc, 1);
+    assert.ok(result.ok);
+    const wall = await runCheck(doc, result.bodies, async next => evaluateDoc(next, 1), {
+      query: { fn: 'radial_wall', a: 'n0.normal', b: 'n0.reverse' }, op: '==', value: 2, tol: 0.01, unit: 'mm',
+    });
+    assert.equal(wall.status, 'pass');
+    assert.deepEqual(wall.entities, ['n0.normal', 'n0.reverse']);
+    assert.ok(typeof wall.measured === 'number' && Math.abs(wall.measured - 2) < 1e-8);
+  }
+  const opened = await readStudioFile(encodeStudioFile(inward));
+  assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, inward);
+  assert.deepEqual(native(opened.doc), native(inward));
+
+  const reverse = offsetFaceCommand.build!(context(sourceDoc(true), top), { d: 2 });
+  assert.equal(Math.min(...native(reverse).vertices.map(vertex => vertex.point[2])), -2);
+  for (const d of [-12, -13, -12 + 1e-8]) {
+    const result = evaluateDoc(edit.build(current, { d }), 1);
+    assert.ok(!result.ok, String(d));
+    assert.match(result.error.detail, /opposite cap/i);
+  }
+});
+
+test('Offset refuses collapse, a side face, stale geometry, a missing plane target and chained cap offsets', async () => {
+  const source = sourceDoc(), ctx = context(source), other = context(source, 'n0.u-min');
   assert.equal(offsetFaceCommand.available(other).ok, false);
-  assert.throws(() => offsetFaceCommand.build!(other, { d: 2 }), /original upper cap/);
+  assert.throws(() => offsetFaceCommand.build!(other, { d: 2 }), /original axial cap/);
   assert.throws(() => offsetFaceCommand.build!(ctx, { d: 2, offsetMode: 'to-plane' }), /earlier solid/);
   assert.throws(() => offsetFaceCommand.build!(ctx, { d: 10001 }), /signed distance/);
 
@@ -113,12 +164,12 @@ test('Offset refuses collapse, the other cap, stale geometry, a missing plane ta
   assert.ok(saved.kind === 'offset-face' && saved.sigs?.[top]);
   assert.equal(offsetFaceCommand.available(context(applied)).ok, false);
   const chain = withNode(applied, { ...saved, id: 'n2', parent: { node: 1, side: 'solid' } });
-  const wrongCap = { ...applied, nodes: [applied.nodes[0], { ...saved, faces: [bottom], sigs: { [bottom]: saved.sigs[top] } }] } as StudioDoc;
+  const wrongCap = { ...applied, nodes: [applied.nodes[0], { ...saved, faces: ['n0.u-min'], sigs: { 'n0.u-min': saved.sigs[top] } }] } as StudioDoc;
   for (const forged of [chain, wrongCap]) {
     assert.equal(evaluateDoc(forged, 1).ok, false);
     const reopened = await readStudioFile(encodeStudioFile(forged));
     assert.ok('error' in reopened);
-    assert.match(reopened.error, /original (Exact semicylinder|upper cap)/);
+    assert.match(reopened.error, /original (Exact semicylinder|axial cap)/);
   }
 });
 
@@ -144,6 +195,14 @@ test('the original upper cap follows a named parallel plane across reference edi
     [{ node: 0, side: 'solid' }, [top], { node: 3, side: 'solid' }, 'n3', 'n2.top']);
   assert.equal(Object.hasOwn(saved, 'distance'), false);
   assert.deepEqual(accepted.nodes.slice(0, 4), base.nodes);
+  const lowerDistance = offsetFaceCommand.build!(context(sourceDoc(), bottom), { d: 2 }).nodes[1];
+  assert.ok(lowerDistance.kind === 'offset-face');
+  const invalidBinding = { ...accepted, nodes: [...accepted.nodes.slice(0, 4),
+    { ...saved, faces: lowerDistance.faces, sigs: lowerDistance.sigs }] } as StudioDoc;
+  const denied = await readStudioFile(encodeStudioFile(invalidBinding));
+  assert.ok('error' in denied);
+  assert.match(denied.error, /original lower cap.*signed distance/);
+
   const check = (doc: StudioDoc, height: number, reference: string) => {
     const bodies = partBreps(doc);
     assert.deepEqual(bodies.map(body => body.key).sort(), ['b3', 'b4']);

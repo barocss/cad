@@ -418,7 +418,7 @@ function isExactCylinderThicken(node: unknown): boolean {
   return textRecord(node) && node.kind === 'thicken' && node.mode === 'exact-cylinder';
 }
 
-/** Identify the authored upper cap. Kernel evaluation certifies the two quarter spans and native trims. */
+/** Identify the two authored axial caps. Kernel evaluation certifies the two quarter spans and native trims. */
 export function exactSemicylinderCapSource(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>) {
   const node = nodes[index];
   if (!textRecord(node) || !isExactCylinderThicken(node) || node.suppressed || node.held !== undefined ||
@@ -430,7 +430,12 @@ export function exactSemicylinderCapSource(nodes: readonly unknown[], index: num
   if (!Array.isArray(first) || first.length !== 2 || !textVector(first[0], false) || !textVector(first[1], false) || first[1][2] === first[0][2]) return;
   const thickness = textDimension(node.thickness, parameters);
   if (thickness === null || thickness <= 0) return;
-  return { id: node.id, face: `${node.id}.${first[1][2] > first[0][2] ? 'v-max' : 'v-min'}`, thickness };
+  const forwardV = first[1][2] > first[0][2];
+  return {
+    id: node.id, thickness,
+    upperFace: `${node.id}.${forwardV ? 'v-max' : 'v-min'}`,
+    lowerFace: `${node.id}.${forwardV ? 'v-min' : 'v-max'}`,
+  };
 }
 
 function offsetSourceBase(nodes: readonly unknown[], index: number): number | undefined {
@@ -691,8 +696,10 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       if (isExactCylinderThicken(parent)) {
         const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
         const source = exactSemicylinderCapSource(value.nodes, parentIndex, parameters);
-        if (!source || face !== source.face || signature.k !== 'plane')
-          return 'Offset face: pick the original upper cap of an Exact semicylinder.';
+        if (!source || (face !== source.upperFace && face !== source.lowerFace) || signature.k !== 'plane')
+          return 'Offset face: pick an original axial cap of an Exact semicylinder.';
+        if (face === source.lowerFace && node.target !== undefined)
+          return 'Offset face: the original lower cap of an Exact semicylinder needs a signed distance.';
         continue;
       }
       if (isExactCylinderOffsetChain(value.nodes, parentIndex))

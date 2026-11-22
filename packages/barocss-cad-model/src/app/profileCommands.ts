@@ -345,7 +345,7 @@ function offsetPlaneAvailable(ctx: Ctx): boolean {
   const node = ref && ctx.doc.nodes[ref.node], face = body?.mesh.faces[pick.face];
   if (!node || !face?.exact || ref.side !== 'solid') return false;
   if (node.kind === 'thicken' && node.mode === 'exact-cylinder')
-    return face.exact.kind === 'plane' && exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters)?.face === face.name;
+    return face.exact.kind === 'plane' && exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters)?.upperFace === face.name;
   return node.kind === 'draft' || (node.kind === 'offset-face' && !isBoredPlateOffsetSource(ctx.doc.nodes, ref.node) &&
     !isBoxCapOffsetSource(ctx.doc.nodes, ref.node)) || (node.kind === 'extrude' &&
     (!!node.draft || (face.nativeAxisPlane?.axis !== 'z' && isStraightHexagonalExtrusion(ctx.doc.nodes, node))));
@@ -374,9 +374,11 @@ export const offsetFaceCommand: Command = {
     const picked = selection.faces[0], body = ctx.bodies[picked.body], face = body?.mesh.faces[picked.face];
     if (!Number.isInteger(picked.body) || !Number.isInteger(picked.face) || !body || !face || face.facet || !face.name) return no(unsupportedFace);
     const ref = body.ref, source = ref && ctx.doc.nodes[ref.node];
-    if (source?.kind === 'thicken' && source.mode === 'exact-cylinder' &&
-        (ref?.side !== 'solid' || exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters)?.face !== face.name))
-      return no('Pick the original upper cap of an Exact semicylinder.');
+    if (source?.kind === 'thicken' && source.mode === 'exact-cylinder') {
+      const caps = ref?.side === 'solid' && exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
+      if (!caps || face.exact?.kind !== 'plane' || (face.name !== caps.upperFace && face.name !== caps.lowerFace))
+        return no('Pick an original axial cap of an Exact semicylinder.');
+    }
     if (ref && isExactCylinderOffsetChain(ctx.doc.nodes, ref.node))
       return no('Edit the existing Offset face in History. Chained cap offsets are unsupported.');
     const cylinder = face.exact?.kind === 'cylinder' && body.ref?.side === 'solid'
