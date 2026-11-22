@@ -435,6 +435,22 @@ export function exactSemicylinderCapSource(nodes: readonly unknown[], index: num
     skins: [`${node.id}.normal`, `${node.id}.reverse`] };
 }
 
+/** Identify one signed radial edit of an original Exact semicylinder and its other skin. */
+export function exactSemicylinderFirstWallOffset(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>) {
+  const node = nodes[index];
+  if (!textRecord(node) || node.suppressed || node.held !== undefined || typeof node.distance !== 'number' ||
+      offsetFaceNodeProblem(node, index)) return;
+  const sourceIndex = precedingSolidParent(node, index);
+  if (sourceIndex === undefined) return;
+  const source = exactSemicylinderCapSource(nodes, sourceIndex, parameters);
+  const [face] = node.faces as [string];
+  const signature = textRecord(node.sigs) ? node.sigs[face] : undefined;
+  if (!source?.skins.includes(face) || !textRecord(signature) || signature.k !== 'curved') return;
+  const otherFace = source.skins.find(name => name !== face);
+  if (otherFace === undefined) return;
+  return { source, sourceIndex, prior: { face, distance: node.distance }, otherFace };
+}
+
 function offsetSourceBase(nodes: readonly unknown[], index: number): number | undefined {
   for (;;) {
     const node = nodes[index];
@@ -706,8 +722,13 @@ export function directFaceDocumentProblem(input: unknown): string | null {
         if (radial && node.target !== undefined) return 'Offset face: an original Exact semicylinder wall needs a signed distance.';
         continue;
       }
-      if (isExactCylinderOffsetChain(value.nodes, parentIndex))
-        return 'Offset face: use the original Exact semicylinder Thicken parent. Chained offsets are unsupported.';
+      if (isExactCylinderOffsetChain(value.nodes, parentIndex)) {
+        const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
+        const first = exactSemicylinderFirstWallOffset(value.nodes, parentIndex, parameters);
+        if (first?.otherFace !== face || signature.k !== 'curved' || node.target !== undefined)
+          return 'Offset face: use the original Exact semicylinder or select its other wall after one signed radial Offset.';
+        continue;
+      }
       if (signature.k === 'curved') {
         if (!isCylinderReplacementSource(value.nodes, parentIndex) && !isBoredPlateHole(value.nodes, parentIndex)
           && !isAnnularReplacementSource(value.nodes, parentIndex))

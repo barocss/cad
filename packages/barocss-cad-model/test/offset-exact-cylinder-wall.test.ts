@@ -116,3 +116,58 @@ for (const [role, wall, sign, radius] of [['outer', outer, 1, 10], ['inner', inn
     measure(offsetFaceCommand.build!(reverseCtx, { d: 0.1 }), ...reverseRadii, inner);
   });
 }
+
+test('the two original walls accept successive signed Offsets in either order', async () => {
+  const source = sourceDoc(), runs = [];
+  for (const [first, second] of [[outer, inner], [inner, outer]]) {
+    const initial = offsetFaceCommand.build!(context(source, first), { d: 2 });
+    const ctx = context(initial, second);
+    assert.equal(offsetFaceCommand.available(ctx).ok, true);
+    assert.equal(offsetFaceCommand.available(context(initial, first)).ok, false);
+    assert.equal(offsetFaceCommand.available(context(initial, 'n0.v-max')).ok, false);
+    assert.deepEqual(offsetFaceCommand.fields!(ctx).map(field => field.key), ['d']);
+    assert.throws(() => offsetFaceCommand.build!(ctx, { offsetMode: 'to-plane' }), /reference plane/);
+
+    const accepted = offsetFaceCommand.build!(ctx, { d: 2 }), saved = accepted.nodes[2];
+    assert.ok(saved.kind === 'offset-face');
+    assert.deepEqual([saved.parent, saved.faces, saved.distance, saved.target], [{ node: 1, side: 'solid' }, [second], 2, undefined]);
+    assert.deepEqual(accepted.nodes.slice(0, 2), initial.nodes);
+    const exact = measure(accepted, 12, 6);
+    runs.push(exact);
+    const after = context(accepted, second);
+    assert.equal(offsetFaceCommand.available(after).ok, false);
+    assert.equal(offsetFaceCommand.available(context(accepted, first)).ok, false);
+
+    const agent = await dispatchTool({ doc: initial, bodies: ctx.bodies }, 'features',
+      { action: 'command', command: 'offset-face', faces: [second], values: { d: 2 }, expectedRevision: revisionOf(initial) }, evaluate);
+    assert.ok(agent.changed && !agent.isError, agent.content);
+    assert.deepEqual(agent.state.doc, accepted);
+
+    const edit = editSavedOffsetFaceCommand(accepted, 2);
+    assert.ok(edit?.build);
+    const refused = await evaluate(edit.build(after, { d: -4 }));
+    assert.ok(!refused.ok);
+    assert.match(refused.error.detail, /retained (?:outer|inner) wall/i);
+    const edited = edit.build(after, { d: -1 });
+    assert.deepEqual(edited.nodes.slice(0, 2), initial.nodes);
+    const expected = measure(edited, second === outer ? 9 : 12, second === inner ? 9 : 6);
+    const reopened = await readStudioFile(encodeStudioFile(edited));
+    assert.ok('doc' in reopened);
+    assert.deepEqual(reopened.doc, edited);
+    assert.deepEqual(measure(reopened.doc, second === outer ? 9 : 12, second === inner ? 9 : 6), expected);
+
+    const firstEditor = editSavedOffsetFaceCommand(accepted, 1);
+    assert.ok(firstEditor?.build);
+    const updatedFirst = firstEditor.build(after, { d: 1 });
+    assert.deepEqual(updatedFirst.nodes[2], saved);
+    measure(updatedFirst, first === outer ? 11 : 12, first === inner ? 7 : 6);
+    const wall = await runCheck(accepted, after.bodies, evaluate, {
+      query: { fn: 'radial_wall', a: outer, b: inner }, op: '==', value: 6, tol: 0.01, unit: 'mm',
+    });
+    assert.equal(wall.status, 'pass');
+    assert.deepEqual(wall.entities, [outer, inner]);
+    assert.ok(typeof wall.measured === 'number');
+    near(wall.measured, 6);
+  }
+  assert.deepEqual(runs[0], runs[1]);
+});

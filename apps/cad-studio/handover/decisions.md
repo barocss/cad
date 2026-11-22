@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1658: [Offset both original walls of an Exact semicylinder](notes/exact-semicylinder-paired-wall-offsets-2026-11-22/README.md), #17 and #629. Verify both edit orders, upstream contact refusal, native Open and current radial-wall evidence.
 - D1657: [Offset the original inner wall of an Exact semicylinder](notes/exact-semicylinder-inner-wall-offset-2026-11-22/README.md), #17 and #629. Edit the inside radius and verify axis and outer-wall refusal, Studio Open and Agent parity.
 - D1656: [Offset the original outer wall of an Exact semicylinder](notes/exact-semicylinder-outer-wall-offset-2026-11-22/README.md), #17 and #629. Edit the outer radius, verify the retained wall and prove native Studio and Agent parity.
 - D1655: [Extract Studio section selection mapping](notes/studio-section-selection-extraction-2026-11-22/README.md). Verify original face and edge picks, cap exclusion and unchanged measurement in desktop Studio.

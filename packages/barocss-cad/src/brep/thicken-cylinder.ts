@@ -180,10 +180,10 @@ export function thickenCylinderSolid(req: Pick<ThickenSolidRequest, 'id' | 'surf
   return cylinderSolid(req, 0);
 }
 
-/** @internal Continue one physical skin with signed distance along its outward material normal. */
-export function thickenCylinderWallOffsetSolid(req: Pick<ThickenSolidRequest, 'id' | 'surface' | 'thickness' | 'side'>, skin: 'outer' | 'inner', distance: number): Brep {
-  if (!Number.isFinite(distance) || (skin !== 'outer' && skin !== 'inner')) return fail('the skin and its radius offset must be valid and finite.');
-  return cylinderSolid(req, skin === 'outer' ? distance : 0, skin === 'inner' ? -distance : 0);
+/** @internal Signed physical skin moves; the optional opposite distance belongs to a certified first recipe. */
+export function thickenCylinderWallOffsetSolid(req: Pick<ThickenSolidRequest, 'id' | 'surface' | 'thickness' | 'side'>, skin: 'outer' | 'inner', distance: number, oppositeDistance = 0): Brep {
+  if (!Number.isFinite(distance) || !Number.isFinite(oppositeDistance) || (skin !== 'outer' && skin !== 'inner')) return fail('the skin and its radius offset must be valid and finite.');
+  return cylinderSolid(req, skin === 'outer' ? distance : oppositeDistance, skin === 'inner' ? -distance : -oppositeDistance);
 }
 
 function cylinderSolid(req: Pick<ThickenSolidRequest, 'id' | 'surface' | 'thickness' | 'side'>, outerOffset: number, innerOffset = 0): Brep {

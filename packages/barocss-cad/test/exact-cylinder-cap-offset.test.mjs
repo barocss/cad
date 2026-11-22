@@ -4,6 +4,7 @@ import { brepMassProperties, checkBrep, evaluateCadPart, evaluateCurve, faceGeom
 import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementFrame, offsetExactSemicylinderCapIfAdmitted,
   exactSemicylinderOuterWallOffsetFrame, offsetExactSemicylinderOuterWallIfAdmitted,
   exactSemicylinderWallOffsetFrame, offsetExactSemicylinderWallIfAdmitted,
+  exactSemicylinderSecondWallOffsetFrame, offsetExactSemicylinderSecondWallIfAdmitted,
   replaceExactSemicylinderCapIfAdmitted } from '../dist/features/exact-cylinder-cap-offset.js';
 
 const raw = () => ({
@@ -203,10 +204,86 @@ test('inner wall Offset rejects axis contact, retained outer contact, stale sour
     }
     const altered = structuredClone(source); altered.vertices[0].point[0] += .01;
     assert.equal(exactSemicylinderWallOffsetFrame(altered, face, input), undefined);
-    for (const nextFace of ['h.normal', 'h.reverse']) {
-      const chain = withOffset(base, 1, face);
-      chain.features.push({ id: 'again', kind: 'offset-face', target: 'move', face: nextFace, distance: 1 });
-      assert.throws(() => body(chain));
+    const sameSkin = withOffset(base, 1, face);
+    sameSkin.features.push({ id: 'again', kind: 'offset-face', target: 'move', face, distance: 1 });
+    assert.throws(() => body(sameSkin));
+  }
+});
+
+const withSecondWall = (base, prior, face, distance) => ({ ...base,
+  features: [...withOffset(base, prior.distance, prior.face).features,
+    { id: 'second', kind: 'offset-face', target: 'move', face, distance }],
+});
+
+for (const firstSkin of ['outer', 'inner']) for (const reverseV of [false, true]) for (const [firstDistance, distance] of [[1, 1], [.3, -.5], [-.5, .3]])
+  test(`second opposite wall Offset after ${firstSkin} ${firstDistance}, then ${distance}, reverse V ${reverseV}`, () => {
+    const surface = raw(); if (reverseV) surface.controlPoints.forEach(row => row.reverse());
+    const base = doc(surface), source = freeze(body(base)), input = sourceOf(base);
+    const outerName = reverseV ? 'h.reverse' : 'h.normal', innerName = reverseV ? 'h.normal' : 'h.reverse';
+    const prior = { face: firstSkin === 'outer' ? outerName : innerName, distance: firstDistance };
+    const face = firstSkin === 'outer' ? innerName : outerName;
+    const current = freeze(body(withOffset(base, prior.distance, prior.face))), saved = structuredClone(current);
+    const movingOriginalRadius = firstSkin === 'outer' ? reverseV ? 10 : 8 : reverseV ? 12 : 10;
+    assert.deepEqual(exactSemicylinderSecondWallOffsetFrame(current, face, input, prior), {
+      anchor: [20, 20 + movingOriginalRadius, 6], normal: [0, firstSkin === 'outer' ? -1 : 1, 0],
+    });
+    const result = body(withSecondWall(base, prior, face, distance), 'second');
+    assert.deepEqual(offsetExactSemicylinderSecondWallIfAdmitted(current, face, input, prior, distance), result);
+    const report = checkBrep(result, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+    assert.equal(report.topology[0].genus, 0);
+    const identity = brep => ({ ...incidence(brep), coedges: brep.coedges.map(({ pcurve, ...use }) => [use, pcurve?.id]) });
+    assert.deepEqual(identity(result), identity(source));
+    const retained = current.faces.find(value => value.name === prior.face);
+    assert.deepEqual(result.faces.find(value => value.id === retained.id), retained);
+    const edges = new Set(current.coedges.filter(use => retained.loops.includes(use.loop)).map(use => use.edge));
+    const vertices = new Set(current.edges.filter(edge => edges.has(edge.id)).flatMap(edge => edge.vertices));
+    for (const edge of current.edges.filter(edge => edges.has(edge.id))) assert.deepEqual(result.edges.find(value => value.id === edge.id), edge);
+    for (const vertex of current.vertices.filter(vertex => vertices.has(vertex.id))) assert.deepEqual(result.vertices.find(value => value.id === vertex.id), vertex);
+    const outerRadius = (reverseV ? 12 : 10) + (firstSkin === 'outer' ? firstDistance : distance);
+    const innerRadius = (reverseV ? 10 : 8) - (firstSkin === 'inner' ? firstDistance : distance);
+    for (const name of [outerName, innerName]) {
+      const support = faceGeometry(result.faces.find(face => face.name === name));
+      assert.equal(support.kind, 'cylinder'); near(support.r, name === outerName ? outerRadius : innerRadius);
+      assert.deepEqual(support.a, [0, 0, 1]); near(support.c[0], 20); near(support.c[1], 20);
+    }
+    assert.deepEqual([...new Set(result.vertices.map(vertex => vertex.point[2]))].sort((a, b) => a - b), [0, 12]);
+    // Independent half-annulus volume and centroid for the two final physical radii.
+    const area = Math.PI * (outerRadius ** 2 - innerRadius ** 2) / 2, mass = brepMassProperties(result, 1);
+    const meanY = 4 * (outerRadius ** 3 - innerRadius ** 3) / (3 * Math.PI * (outerRadius ** 2 - innerRadius ** 2));
+    near(mass.volume, area * 12, 1e-7);
+    mass.centroid.forEach((value, axis) => near(value, [20, 20 + meanY, 6][axis]));
+    assert.deepEqual(current, saved);
+  });
+
+test('second wall requires exact source, first recipe, current boundary and opposite target', () => {
+  const base = doc(), input = sourceOf(base), prior = { face: 'h.normal', distance: 1 };
+  const current = body(withOffset(base, prior.distance, prior.face)), next = 'h.reverse';
+  for (const wrongPrior of [{ ...prior, distance: .5 }, { ...prior, distance: 0 }, { ...prior, distance: NaN },
+    { ...prior, face: 'h.v-max' }, { ...prior, face: next }, { ...prior, other: true }])
+    assert.equal(exactSemicylinderSecondWallOffsetFrame(current, next, input, wrongPrior), undefined);
+  for (const wrongSource of [{ ...input, thickness: 3 }, { ...input, id: 'other' }])
+    assert.equal(exactSemicylinderSecondWallOffsetFrame(current, next, wrongSource, prior), undefined);
+  const altered = structuredClone(current); altered.edges[0].curve.controlPoints[0][0] += .01;
+  for (const wrongCurrent of [body(base), altered])
+    assert.equal(exactSemicylinderSecondWallOffsetFrame(wrongCurrent, next, input, prior), undefined);
+  for (const wrongFace of ['h.normal', 'h.v-max', 'h.u-min', 'h.reverse#1', 'missing']) {
+    assert.equal(exactSemicylinderSecondWallOffsetFrame(current, wrongFace, input, prior), undefined);
+    assert.throws(() => body(withSecondWall(base, prior, wrongFace, 1)), /other original physical wall|missing|name/);
+  }
+  for (const distance of [8, 8 - 1e-8, 9]) assert.throws(() => body(withSecondWall(base, prior, next, distance)), /cylinder axis/);
+  for (const distance of [0, NaN, Infinity, 10001])
+    assert.throws(() => offsetExactSemicylinderSecondWallIfAdmitted(current, next, input, prior, distance), /nonzero.*modeling range/);
+  for (const firstFace of ['h.normal', 'h.reverse']) {
+    const first = { face: firstFace, distance: -1 }, other = firstFace === 'h.normal' ? 'h.reverse' : 'h.normal';
+    for (const distance of [-1, -1 + 1e-8])
+      assert.throws(() => body(withSecondWall(base, first, other, distance)), /retained (outer|inner) wall/);
+    const twice = withSecondWall(base, first, other, 1), twiceBody = body(twice);
+    assert.equal(exactSemicylinderSecondWallOffsetFrame(twiceBody, other, input, first), undefined);
+    for (const face of ['h.normal', 'h.reverse', 'h.v-max']) {
+      const third = { ...twice, features: [...twice.features, { id: 'third', kind: 'offset-face', target: 'second', face, distance: 1 }] };
+      assert.throws(() => body(third));
     }
   }
 });

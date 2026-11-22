@@ -10,6 +10,7 @@ import { encloseAxialSideTrims, mapCapStation } from './bored-cap-offset.js';
 
 type Source = { id: string; surface: Surface; thickness: number; side?: 'normal' | 'reverse' | 'both' };
 type ReplacementPlane = { origin: Point; normal: Point };
+type PriorWallOffset = { face: string; distance: number };
 
 function admitted(brep: Brep, faceName: string, source: Source) {
   try {
@@ -85,7 +86,7 @@ export function exactSemicylinderOuterWallOffsetFrame(brep: Brep, faceName: stri
   return wall?.skin === 'outer' ? wallFrame(wall) : undefined;
 }
 
-function offsetWall(brep: Brep, source: Source, wall: NonNullable<ReturnType<typeof admittedWall>>, distance: number): Brep {
+function offsetWall(brep: Brep, source: Source, wall: NonNullable<ReturnType<typeof admittedWall>>, distance: number, oppositeDistance = 0): Brep {
   const label = `Exact semicylinder ${wall.skin} offset`, fixedSkin = wall.skin === 'outer' ? 'inner' : 'outer';
   if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
     throw new BrepError('INPUT', `${label}: distance must be nonzero and within the modeling range`);
@@ -103,7 +104,7 @@ function offsetWall(brep: Brep, source: Source, wall: NonNullable<ReturnType<typ
     Math.max(Math.abs(cx + (x - cx) * factor), Math.abs(cy + (y - cy) * factor)) > CadNumericPolicy.coordinateAbs);
   if (outsideRange) throw new BrepError('GEOMETRY', `${label}: the wall leaves the modeling range`);
   let candidate: Brep;
-  try { candidate = thickenCylinderWallOffsetSolid(source, wall.skin, distance); }
+  try { candidate = thickenCylinderWallOffsetSolid(source, wall.skin, distance, oppositeDistance); }
   catch (cause) {
     if (isThickenCylinderError(cause)) throw new BrepError('GEOMETRY', `${label}: ${cause.message}`);
     throw cause;
@@ -144,6 +145,33 @@ export function offsetExactSemicylinderWallIfAdmitted(brep: Brep, faceName: stri
 export function offsetExactSemicylinderOuterWallIfAdmitted(brep: Brep, faceName: string, source: Source, distance: number): Brep | undefined {
   const wall = admittedWall(brep, faceName, source);
   return wall?.skin === 'outer' ? offsetWall(brep, source, wall, distance) : undefined;
+}
+
+function admittedSecondWall(brep: Brep, faceName: string, source: Source, prior: PriorWallOffset) {
+  try {
+    if (!prior || typeof prior !== 'object' || Array.isArray(prior) || Object.keys(prior).sort().join(',') !== 'distance,face') return;
+    const original = thickenCylinderSolid(source);
+    const first = admittedWall(original, prior.face, source), next = admittedWall(original, faceName, source);
+    if (!first || !next || first.skin === next.skin) return;
+    const replay = offsetWall(original, source, first, prior.distance);
+    if (JSON.stringify(brep) !== JSON.stringify(replay)) return;
+    const moving = brep.faces.find(face => face.id === next.moving.id)!, fixed = brep.faces.find(face => face.id === first.moving.id)!;
+    const support = faceGeometry(moving), retained = faceGeometry(fixed);
+    if (support.kind !== 'cylinder' || retained.kind !== 'cylinder') return;
+    return { ...next, moving, fixed, support, retained };
+  } catch { return; }
+}
+
+/** The other original wall on an exact replay of one certified signed radial Offset. */
+export function exactSemicylinderSecondWallOffsetFrame(brep: Brep, faceName: string, source: Source, prior: PriorWallOffset): { anchor: Point; normal: Point } | undefined {
+  const wall = admittedSecondWall(brep, faceName, source, prior);
+  return wall && wallFrame(wall);
+}
+
+/** Apply a second signed move only to the other wall, retaining the first wall's current native boundary. */
+export function offsetExactSemicylinderSecondWallIfAdmitted(brep: Brep, faceName: string, source: Source, prior: PriorWallOffset, distance: number): Brep | undefined {
+  const wall = admittedSecondWall(brep, faceName, source, prior);
+  return wall && offsetWall(brep, source, wall, distance, prior.distance);
 }
 
 /** Move only the selected native station. All incidence, IDs and UV charts remain owned by the source. */
