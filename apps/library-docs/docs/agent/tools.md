@@ -105,6 +105,15 @@ and reflex corners, including eligible pairs in a grouped edit.
 To edit the setback of a saved constrained Chamfer in Studio, reopen the sketch, select the
 bevel edge, and choose **Edit Chamfer**. Enter the new setback in **Distance** and apply the preview.
 
+For an Agent edit, call `query.edit_fields` with `includeSketchCorners: true`. Read the saved
+bevel side ID and current setback from `sketchChamfers`. Use that side ID as `bevel` with the
+same sketch ID, feature index and revision. Stage the operation with `proposals.propose`
+and approve it in Studio.
+
+```json
+{ "sketchChamfer": { "sketch": "n0", "bevel": "e9", "distance": 8 } }
+```
+
 ### Round a sketch corner
 
 For the same read and approval workflow, send `sketchRound` instead of `sketchChamfer`:

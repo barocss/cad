@@ -40,7 +40,7 @@ import { bodyKeyFor, featureId } from '../../engine/ids';
 import { sweepSourceRevision } from '../sweepSource';
 import { isReferencePlaneEdit } from '../../app/offsetPlanePick';
 import { preparePairedFixedSpanHoleEdit } from '../../app/patternHoleSpacing';
-import { editSketchCorner, sketchEditCorners } from './sketchCorner';
+import { editSketchCorner, sketchEditChamfers, sketchEditCorners } from './sketchCorner';
 
 /** Commands the chat can run (the ones that build; sketch-mode and measure UI actions are tools of their own). */
 // (Loft takes sketches picked in the studio, Align a face clicked there; chat writes a loft node with
@@ -467,7 +467,9 @@ async function listFeatureEditFields(state: ChatState, args: Record<string, unkn
   if (wall) fields.push({ key: savedWallDistanceKey, label: 'Offset distance', kind: 'number', unit: 'mm', value: wall.distance });
   const label = featureLabel(nodes[index], index, nodes);
   const corners = args.includeSketchCorners === true ? { sketchCorners: sketchEditCorners(doc, index) } : {};
-  return { state, content: json({ index, id: featureId(nodes, index), label, revision: revisionOf(doc), fields, ...corners }),
+  const chamfers = args.includeSketchCorners === true ? sketchEditChamfers(doc, index) : [];
+  return { state, content: json({ index, id: featureId(nodes, index), label, revision: revisionOf(doc), fields, ...corners,
+    ...(chamfers.length ? { sketchChamfers: chamfers } : {}) }),
     isError: false, changed: false, summary: `${fields.length} edit fields for ${label}` };
 }
 
@@ -504,6 +506,7 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
       ? editSketchCorner(state.doc, index, 'ROUND', args.sketchRound)
       : editSketchCorner(state.doc, index, 'CHAMFER', args.sketchChamfer);
     if ('error' in result) return fail(state, result.error, { code: result.code, kept: 'the part is unchanged' });
+    if (result.node === nodes[index]) return fail(state, 'The saved Chamfer already has this distance.', { code: 'EDIT_INPUT' });
     next = dropStaleMade(nodes, nodes.map((node, at) => at === index ? result.node : node));
   } else if (args.feature !== undefined) {
     const why = checkNode(args.feature, nodes.slice(0, index), state.doc.parameters, state.doc.frames?.sections, state.partOf ? null : state.doc.instances ?? []);

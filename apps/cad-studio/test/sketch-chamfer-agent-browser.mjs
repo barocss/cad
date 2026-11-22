@@ -79,7 +79,9 @@ await f.run(async () => {
   const args = await withMcpSession(session, file, `sketch-${operation.toLowerCase()}`, async call => {
     const schema = await call('describe', { tool: 'features', action: 'edit' });
     assert.deepEqual(schema.input.properties[editKey].required, ['sketch', field]);
-    assert.deepEqual(schema.input.properties[editKey].oneOf, [{ required: ['sides'] }, { required: ['corners'] }]);
+    assert.deepEqual(schema.input.properties[editKey].oneOf, [
+      { required: ['sides'] }, { required: ['corners'] }, ...(round ? [] : [{ required: ['bevel'] }]),
+    ]);
     const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
     assert.deepEqual([fields.index, fields.id, fields.revision], [0, 'n0', await currentPartRevision(call)]);
     const corner = fields.sketchCorners.find(item => item.point[0] === 40 && item.point[1] === 0);

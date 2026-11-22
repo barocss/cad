@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const original = [[0, 0], [60, 0], [60, 40], [38, 40], [38, 15], [22, 15], [22, 40], [0, 40]];
 const chamfered = [[0, 0], [60, 0], [60, 40], [44, 40], [38, 34], [38, 21], [32, 15], [22, 15], [22, 40], [0, 40]];
 const ids = ['e1', 'e2', 'e3', 'e9', 'e4', 'e10', 'e5', 'e6', 'e7', 'e8'];
 const pairs = [['e9', 'e3', 'e4'], ['e10', 'e4', 'e5']];
 const resize = process.argv.includes('--resize');
+const agentResize = process.argv.includes('--agent-resize');
 const pins = [
   'apps/cad-studio/src/viewport/sketchPointDrag.ts',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts',
@@ -16,15 +18,21 @@ const pins = [
   'packages/barocss-cad-model/src/sketch/corner.ts',
   'packages/barocss-cad-model/src/sketch/cornerBatch.ts',
   'packages/barocss-cad-model/src/sketch/pointDrag.ts',
-  ...(resize ? ['apps/cad-studio/src/ui/ConstraintTools.tsx',
+  ...(resize || agentResize ? ['apps/cad-studio/src/ui/ConstraintTools.tsx',
     'apps/cad-studio/src/sketch/constraintInspection.ts', 'packages/barocss-cad-model/src/sketch/chamferEdit.ts'] : []),
+  ...(agentResize ? [
+    'apps/cad-studio/test/mcp-browser-session.mjs', 'apps/cad-studio/src/ui/ProposalBrowser.tsx',
+    'packages/barocss-cad-model/src/chat/contract.ts', 'packages/barocss-cad-model/src/chat/toolDefinitions.ts',
+    'packages/barocss-cad-model/src/chat/part/features.ts', 'packages/barocss-cad-model/src/chat/part/sketchCorner.ts',
+  ] : []),
 ];
 const f = await createFlow({
-  output: process.argv[2], name: resize ? 'sketch-chamfer-resize' : 'sketch-chamfer-drag',
-  envFrozen: resize ? 'D1700_SOURCE_FROZEN' : 'D1699_SOURCE_FROZEN',
+  output: process.argv[2], name: agentResize ? 'sketch-chamfer-agent-resize' : resize ? 'sketch-chamfer-resize' : 'sketch-chamfer-drag',
+  envFrozen: agentResize ? 'D1701_SOURCE_FROZEN' : resize ? 'D1700_SOURCE_FROZEN' : 'D1699_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: resize ? 'Edit one saved orthogonal Chamfer in a mixed-turn group and retain both named native walls.'
-    : 'Apply one mixed convex and reflex chamfer group in desktop Studio and keep all four setbacks through a later point drag.',
+  qualification: agentResize ? 'Discover and propose a revision-pinned saved bevel resize through local MCP, then approve it in Studio.'
+    : resize ? 'Edit one saved orthogonal Chamfer in a mixed-turn group and retain both named native walls.'
+      : 'Apply one mixed convex and reflex chamfer group in desktop Studio and keep all four setbacks through a later point drag.',
   limits: ['One independent notched XY outline with orthogonal carriers, 6 and 8 mm chamfers and one 10 mm Extrude.'],
   inspectorSource: String.raw`
 import assert from 'node:assert/strict';
@@ -103,6 +111,9 @@ const near = (a, b, tolerance = 2e-6) => assert.ok(Math.abs(a - b) <= tolerance,
 const target = [50, 44];
 const collapsed = [60, 44];
 const pickedMark = '.sk-pick-point.on[data-sketch-entity="point:3"]';
+const enlarged = chamfered.map((point, i) => i === 3 ? [46, 40] : i === 4 ? [38, 32] : point);
+const boundChamfer = prior => ({ ...prior, parameters: { bevelX: 44 },
+  nodes: [{ ...prior.nodes[0], points: chamfered.map((p, i) => i === 3 ? [{ parameter: 'bevelX' }, p[1]] : p) }, prior.nodes[1]] });
 
 async function edit() {
   await f.openFeatureEditor(1, 'extrude');
@@ -143,6 +154,20 @@ async function checkNative(label, doc, distances = [6, 6]) {
   return native;
 }
 
+async function checkEnlarged(label, doc, prior, before) {
+  const native = await checkNative(label, doc, [8, 6]);
+  assert.deepEqual(doc.nodes[0].outline.points, enlarged);
+  near(native.volume, before.volume - 140);
+  assert.notEqual(native.hash, before.hash);
+  assert.deepEqual(native.bevels[1], before.bevels[1]);
+  assert.deepEqual(native.bevels.map(bevel => bevel.tip), before.bevels.map(bevel => bevel.tip));
+  assert.deepEqual(doc.nodes[0].outline.rules, prior.nodes[0].outline.rules);
+  assert.deepEqual(doc.nodes[0].outline.hv, prior.nodes[0].outline.hv);
+  near(doc.nodes[0].outline.lengths[3], 8 * Math.SQRT2);
+  near(doc.nodes[0].outline.lengths[5], 6 * Math.SQRT2);
+  return native;
+}
+
 async function resizeSavedChamfer(prior, before) {
   const originalSave = await f.save('two-constrained-chamfers');
   await f.freshOpen(originalSave.file, prior, 'resize-01-original-open');
@@ -154,7 +179,6 @@ async function resizeSavedChamfer(prior, before) {
   const apply = () => button('Apply', panel());
   const preview = () => f.page.locator('.sk-corner-preview');
   const start = [41, 37];
-  const expected = chamfered.map((point, i) => i === 3 ? [46, 40] : i === 4 ? [38, 32] : point);
   f.phase = 'Discover the saved setback by selecting the native bevel edge';
   await f.worldClick([60, 20]);
   assert.equal(await tool().count(), 0);
@@ -188,21 +212,13 @@ async function resizeSavedChamfer(prior, before) {
   await input().press('Enter');
   await preview().waitFor({ state: 'hidden' });
   assert.equal(await f.sketchPanel().isVisible(), true);
-  assert.deepEqual(await points(), expected);
+  assert.deepEqual(await points(), enlarged);
   await f.page.keyboard.press(`${keyboard}+z`);
   assert.deepEqual(await points(), chamfered);
   await f.page.keyboard.press(`${keyboard}+Shift+z`);
-  assert.deepEqual(await points(), expected);
+  assert.deepEqual(await points(), enlarged);
   const { doc } = await f.finishSketch('resize-03-rebuilt-c8');
-  const native = await checkNative('native-resized', doc, [8, 6]);
-  near(native.volume, before.volume - 140);
-  assert.notEqual(native.hash, before.hash);
-  assert.deepEqual(native.bevels[1], before.bevels[1]);
-  assert.deepEqual(native.bevels.map(bevel => bevel.tip), before.bevels.map(bevel => bevel.tip));
-  assert.deepEqual(doc.nodes[0].outline.rules, prior.nodes[0].outline.rules);
-  assert.deepEqual(doc.nodes[0].outline.hv, prior.nodes[0].outline.hv);
-  near(doc.nodes[0].outline.lengths[3], 8 * Math.SQRT2);
-  near(doc.nodes[0].outline.lengths[5], 6 * Math.SQRT2);
+  const native = await checkEnlarged('native-resized', doc, prior, before);
   const saved = await f.save('resized-chamfer');
   await f.freshOpen(saved.file, doc, 'resize-04-reopened-extrude');
   assert.deepEqual(await checkNative('native-resized-open', await f.doc(), [8, 6]), native);
@@ -219,8 +235,7 @@ async function resizeSavedChamfer(prior, before) {
   f.report.observations.push({ label: 'one-bevel-resized', points: doc.nodes[0].outline.points, before, native });
 
   f.phase = 'Refuse a resize that would detach an authored coordinate binding';
-  const bound = { ...prior, parameters: { bevelX: 44 },
-    nodes: [{ ...prior.nodes[0], points: chamfered.map((p, i) => i === 3 ? [{ parameter: 'bevelX' }, p[1]] : p) }, prior.nodes[1]] };
+  const bound = boundChamfer(prior);
   const boundFile = join(f.output, 'bound-chamfer.bcad'), boundBytes = JSON.stringify(bound);
   await writeFile(boundFile, boundBytes);
   await f.freshOpen(boundFile, bound, 'resize-05-bound-open');
@@ -235,6 +250,107 @@ async function resizeSavedChamfer(prior, before) {
   await f.same(bound);
   assert.equal(await readFile(boundFile, 'utf8'), boundBytes);
   await f.snapshot('resize-06-bound-refusal');
+}
+
+async function proposeSavedChamferResize(prior, before) {
+  const title = 'Change saved bevel e9 from 6 to 8 mm';
+  const file = join(f.output, 'saved-chamfer-proposal.bcad'), bytes = JSON.stringify(prior);
+  const session = { app: f.app, output: f.output, clientName: f.name };
+  const propose = (call, args, refused = false) => call('proposals', {
+    action: 'propose', title, ops: [{ tool: 'features', args }],
+  }, refused);
+  await writeFile(file, bytes);
+  f.phase = 'Read saved bevels and stage a guarded local L1 Agent proposal';
+  const op = await withMcpSession(session, file, 'agent-resize-stage', async (call, request) => {
+    const detail = await call('describe', { tool: 'features', action: 'edit' });
+    assert.deepEqual(detail.input.properties.sketchChamfer.oneOf,
+      [{ required: ['sides'] }, { required: ['corners'] }, { required: ['bevel'] }]);
+    assert.equal((await call('query', { action: 'edit_fields', index: 0 })).sketchChamfers, undefined);
+    const response = await request('tools/call', { name: 'query', arguments: { action: 'edit_fields', index: 0, includeSketchCorners: true } });
+    assert.equal(response.isError, false);
+    const fields = JSON.parse(response.content[0].text);
+    assert.deepEqual(response.structuredContent, fields);
+    assert.deepEqual([fields.index, fields.id, fields.revision], [0, 'n0', await currentPartRevision(call)]);
+    assert.deepEqual(fields.sketchChamfers, [{ bevel: 'e9', distance: 6 }, { bevel: 'e10', distance: 6 }]);
+    const chamfer = { sketch: fields.id, bevel: fields.sketchChamfers[0].bevel, distance: 8 };
+    const args = { action: 'edit', index: fields.index, expectedRevision: fields.revision, sketchChamfer: chamfer };
+    assert.match((await call('features', args, true)).error, /propos/i);
+    for (const [patch, reason] of [
+      [{ expectedRevision: undefined }, /expectedRevision/i],
+      [{ expectedRevision: '0000000000000000' }, /part changed/i],
+      [{ sketchChamfer: { ...chamfer, bevel: 'e1' } }, /saved.*chamfer|bevel/i],
+      [{ sketchChamfer: { ...chamfer, sides: ['e3', 'e4'] } }, /bevel|corner selector/i],
+      [{ sketchChamfer: { ...chamfer, distance: 6 } }, /already|same/i],
+      [{ sketchChamfer: { ...chamfer, distance: 24 } }, /collapse|cross/i],
+    ]) {
+      assert.match((await propose(call, { ...args, ...patch }, true)).error, reason);
+      assert.equal(await readFile(file, 'utf8'), bytes);
+    }
+    assert.deepEqual((await call('proposals', { action: 'list' })).proposals, []);
+    const dry = await call('features', { action: 'batch', dryRun: true, ops: [{ tool: 'features', args }] });
+    assert.equal(dry.dryRun, true);
+    near(dry.change.volume, -140);
+    assert.deepEqual(dry.diff.changed.map(feature => feature.id), ['n0']);
+    assert.equal(await readFile(file, 'utf8'), bytes);
+    const pending = await propose(call, args);
+    assert.deepEqual([pending.proposal, pending.applied], ['P1', false]);
+    const staged = await readFile(file);
+    assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
+    assert.deepEqual(await readFile(file), staged);
+    return args;
+  });
+
+  const staged = await readFile(file), pending = JSON.parse(staged);
+  assert.deepEqual([pending.nodes, pending.outputs], [prior.nodes, prior.outputs]);
+  const [proposal] = pending.proposals;
+  assert.equal(pending.proposals.length, 1);
+  assert.equal(proposal.ops.length, 1);
+  assert.deepEqual(proposal.ops[0].args.sketchChamfer, op.sketchChamfer);
+  assert.equal(proposal.ops[0].args.expectedRevision, op.expectedRevision);
+
+  f.phase = 'Preview and explicitly accept the saved Chamfer resize in Studio';
+  await f.freshOpen(file, pending, 'agent-01-pending');
+  await button('Chat').first().click();
+  const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+  await button('Preview', card).click();
+  await card.getByLabel('Volume change').getByText(/^−140(?:\.0+)? mm³/).waitFor();
+  await f.same(pending);
+  assert.deepEqual(await readFile(file), staged);
+  await f.snapshot('agent-02-resize-preview');
+  await button('Accept', card).click();
+  await f.changed(pending);
+  const { doc } = await f.snapshot('agent-03-accepted');
+  assert.equal(doc.proposals[0].status, 'accepted');
+  const approval = doc.history.at(-1);
+  assert.deepEqual([approval.kind, approval.proposal, approval.by.agent], ['accept', 'P1', 'user']);
+  assert.deepEqual([doc.nodes[1], doc.outputs], [prior.nodes[1], prior.outputs]);
+  const native = await checkEnlarged('native-agent-resize', doc, prior, before);
+  assert.equal(native.hash, '40b2dbef36d61300a322886b40ebb35f2705924408a483ec11c586c862e35c42', 'same native body as the prior direct Studio edit');
+  await f.undo();
+  await f.same(pending);
+  await f.redo();
+  await f.same(doc);
+  const saved = await f.save('agent-resized-chamfer');
+  await f.freshOpen(saved.file, doc, 'agent-04-reopened');
+  assert.deepEqual(await checkNative('native-agent-reopened', await f.doc(), [8, 6]), native);
+  await withMcpSession(session, saved.file, 'agent-resize-reopened', async call => {
+    const savedBytes = await readFile(saved.file);
+    const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
+    assert.notEqual(fields.revision, op.expectedRevision);
+    assert.deepEqual(fields.sketchChamfers, [{ bevel: 'e9', distance: 8 }, { bevel: 'e10', distance: 6 }]);
+    assert.match((await propose(call, op, true)).error, /part changed/i);
+    assert.deepEqual(await readFile(saved.file), savedBytes);
+  });
+  assert.deepEqual(await readFile(file), staged);
+  f.report.observations.push({ label: 'agent-resize-matches-studio', op, before, native });
+
+  const boundFile = join(f.output, 'bound-agent-chamfer.bcad'), boundBytes = JSON.stringify(boundChamfer(prior));
+  await writeFile(boundFile, boundBytes);
+  await withMcpSession(session, boundFile, 'agent-resize-binding', async call => {
+    const expectedRevision = await currentPartRevision(call);
+    assert.match((await propose(call, { ...op, expectedRevision }, true)).error, /parameter binding/i);
+    assert.equal(await readFile(boundFile, 'utf8'), boundBytes);
+  });
 }
 
 await f.run(async () => {
@@ -257,8 +373,9 @@ await f.run(async () => {
   assert.deepEqual(await points(), chamfered);
   const { doc: prior } = await f.finishSketch('03-constrained-chamfers');
   const before = await checkNative('native-before-drag', prior);
-  if (resize) {
-    await resizeSavedChamfer(prior, before);
+  if (resize || agentResize) {
+    if (agentResize) await proposeSavedChamferResize(prior, before);
+    else await resizeSavedChamfer(prior, before);
     assert.equal(await readFile(source, 'utf8'), bytes);
     return;
   }

@@ -35,14 +35,15 @@ const nameList = { type: 'array', items: { type: 'string' } };
 const cornerSidePair = { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 2, maxItems: 2, uniqueItems: true };
 const sketchCornerInput = (field: 'distance' | 'radius', operation: string) => ({
   type: 'object',
-  description: `${operation} in sketch mm. Send it alone with index and expectedRevision. Use the sketch ID and side pairs from query.edit_fields with includeSketchCorners.`,
+  description: `${operation} in sketch mm. Send it alone with index and expectedRevision. Use the sketch ID and side pairs from query.edit_fields with includeSketchCorners.${field === 'distance' ? ' To resize a saved Chamfer, use its side ID from sketchChamfers as the bevel selector.' : ''}`,
   additionalProperties: false,
   required: ['sketch', field],
-  oneOf: [{ required: ['sides'] }, { required: ['corners'] }],
+  oneOf: [{ required: ['sides'] }, { required: ['corners'] }, ...(field === 'distance' ? [{ required: ['bevel'] }] : [])],
   properties: {
     sketch: { type: 'string', minLength: 1 },
     sides: { ...cornerSidePair, description: 'One pair of incident straight side IDs.' },
     corners: { type: 'array', minItems: 2, items: cornerSidePair, description: 'Two or more distinct corner pairs. One operation uses the same size for every pair.' },
+    ...(field === 'distance' ? { bevel: { type: 'string', minLength: 1, description: 'The side ID of one saved constrained Chamfer to resize.' } } : {}),
     [field]: { type: 'number', exclusiveMinimum: 0 },
   },
 });
@@ -98,7 +99,7 @@ const PART_TOOLS: ToolDefinition[] = [
   },
   {
     name: 'list_feature_edit_fields',
-    description: 'Read the current fields of one feature by index from get_part_summary. Returns field keys, values, units or options, and the current part revision. Use the key in edit_feature values and pass the revision as expectedRevision. A null numeric value is unavailable. A named parameter is the current binding. With includeSketchCorners, sketchCorners lists straight incident side pairs and points in sketch mm for a supported outline. Edits and proposals still validate the value and geometry.',
+    description: 'Read the current fields of one feature by index from get_part_summary. Returns field keys, values, units or options, and the current part revision. Use the key in edit_feature values and pass the revision as expectedRevision. A null numeric value is unavailable. A named parameter is the current binding. With includeSketchCorners, sketchCorners lists straight incident side pairs and points in sketch mm. When present, sketchChamfers lists saved constrained bevel IDs and their current setbacks in mm. Edits and proposals still validate the value and geometry.',
     input_schema: { type: 'object', properties: { index: { type: 'integer', minimum: 0 }, includeSketchCorners: { type: 'boolean' } }, required: ['index'], additionalProperties: false },
   },
   {

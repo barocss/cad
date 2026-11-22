@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1700 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1701 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1700](notes/edit-saved-sketch-chamfer-2026-11-23/README.md), P1 advanced sketch row 09. Desktop Studio edits one saved C6 to C8 and preserves the neighboring C6, native IDs and both carrier relations through fresh Open. The B06 PDF group remains held.
-- **Next MAIN:** D1701, P1 Agent editing [rows 09](roadmap-rows/09.md) and [16](roadmap-rows/16.md), [#21](https://github.com/barocss/cad/issues/21). Discover a saved constrained Chamfer by its side ID and current setback. Stage a revision-pinned resize through the existing proposal workflow, then approve it in Studio and compare the native setback and unchanged neighboring bevel after fresh Open.
+- **Current position:** [D1701](notes/agent-saved-sketch-chamfer-edit-2026-11-23/README.md), P1 Agent editing rows 09 and 16. Local MCP discovers e9/C6 and e10/C6, proposes a revision-pinned e9/C8 and reproduces the same native output as the direct Studio edit after approval and fresh Open. The B06 PDF group remains held.
+- **Next MAIN:** D1702, P1 Agent visual review [rows 04](roadmap-rows/04.md) and [16](roadmap-rows/16.md), [#324](https://github.com/barocss/cad/issues/324). Show a pending saved Chamfer resize in the existing pinned four-view review. Bind the image to the exact proposal, the changed bevel and its retained neighbor. Verify a wrong review revision is refused and the approved native file yields the same proof.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

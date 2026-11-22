@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1701: [Propose a saved sketch Chamfer resize](notes/agent-saved-sketch-chamfer-edit-2026-11-23/README.md), #21. Discover and resize a saved bevel under the part revision, then approve and reopen the same native result as the direct Studio edit.
+
 - D1700: [Edit the setback of a saved sketch Chamfer](notes/edit-saved-sketch-chamfer-2026-11-23/README.md), #21. Select one saved bevel, change C6 to C8, and preserve the neighboring bevel, constraints and native IDs.
 
 - D1699: [Keep orthogonal Chamfer setbacks during a sketch drag](notes/orthogonal-chamfer-drag-2026-11-23/README.md), #21. Distances on both mixed-turn bevels survive point drag, downstream rebuild and fresh Open.

@@ -1,6 +1,7 @@
 import type { ModelNode, StudioDoc } from '../../engine/doc';
 import { isRefusal } from '../../engine/refusal';
 import { chamferCorner, roundStraightCornerForEdit } from '../../sketch/corner';
+import { editChamferSetback, savedChamferSetback } from '../../sketch/chamferEdit';
 import { prepareStraightCornerBatch } from '../../sketch/cornerBatch';
 import { nextIdOf } from '../../sketch/entityIds';
 import { profileOf } from '../../sketch/loops';
@@ -42,6 +43,21 @@ export function sketchEditCorners(doc: StudioDoc, index: number) {
     : [];
 }
 
+export function sketchEditChamfers(doc: StudioDoc, index: number) {
+  const source = cornerSource(doc, index);
+  return source && hasSavedTags(source)
+    ? source.ids.flatMap((bevel, at) => {
+      const distance = savedChamferSetback(source.outline, at);
+      return distance === undefined ? [] : [{ bevel, distance }];
+    })
+    : [];
+}
+
+function hasSavedTags(source: NonNullable<ReturnType<typeof cornerSource>>) {
+  const tags = source.node.sideTags!.outer;
+  return source.ids.length === tags.length && source.ids.every((id, at) => id === tags[at]);
+}
+
 function sidePair(value: unknown): value is [string, string] {
   return Array.isArray(value) && value.length === 2
     && typeof value[0] === 'string' && value[0].length > 0
@@ -63,14 +79,19 @@ export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' 
   const field = kind === 'ROUND' ? 'radius' : 'distance';
   const value = isObj(input) ? input[field] : undefined;
   const refuse = (reason: string, error: string) => ({ code: `EDIT_SKETCH_${kind}_${reason}`, error });
+  const savedBevel = kind === 'CHAMFER' && isObj(input) && Object.hasOwn(input, 'bevel');
   const pairs = isObj(input) ? requestedPairs(input, field) : null;
-  if (!isObj(input) || typeof input.sketch !== 'string' || !pairs || typeof value !== 'number' || !Number.isFinite(value))
-    return { code: 'EDIT_INPUT', error: `Give the saved sketch ID and a finite ${field} in mm. Use sides for one side pair or corners for at least two side pairs.` };
+  const validBevel = savedBevel && isObj(input) && typeof input.bevel === 'string' && input.bevel.length > 0
+    && Object.keys(input).every(key => ['sketch', 'bevel', 'distance'].includes(key));
+  if (!isObj(input) || typeof input.sketch !== 'string' || (savedBevel ? !validBevel : !pairs) || typeof value !== 'number' || !Number.isFinite(value))
+    return { code: 'EDIT_INPUT', error: savedBevel
+      ? 'Give the saved sketch ID, one bevel ID and a finite distance in mm. Use bevel alone; do not mix it with sides or corners.'
+      : `Give the saved sketch ID and a finite ${field} in mm. Use sides for one side pair or corners for at least two side pairs.` };
   const source = cornerSource(doc, index);
-  if (!source || source.node.id !== input.sketch || !Number.isSafeInteger(source.nextId))
+  if (!source || source.node.id !== input.sketch || (savedBevel ? !hasSavedTags(source) : !Number.isSafeInteger(source.nextId)))
     return refuse('SOURCE', 'Use the ID of one independent saved outline with stable side IDs.');
   const available = straightCorners(source), targets = new Set<number>();
-  for (const pair of pairs) {
+  for (const pair of pairs ?? []) {
     const corner = available.find(item => item.sides.every(id => pair.includes(id)));
     if (!corner) return refuse('CORNER', 'Use the two straight sides of one corner from query.edit_fields.');
     if (targets.has(corner.index)) return refuse('CORNER', 'List each selected corner once.');
@@ -78,7 +99,15 @@ export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' 
   }
 
   let shape: Polygon;
-  if (targets.size > 1) {
+  if (savedBevel) {
+    const at = source.ids.indexOf(input.bevel as string);
+    if (at < 0 || savedChamferSetback(source.outline, at) === undefined)
+      return refuse('BEVEL', 'Use a saved bevel ID from query.edit_fields.');
+    const result = editChamferSetback(source.outline, at, value);
+    if ('error' in result) return refuse('GEOMETRY', result.error);
+    if (result.shape === source.outline) return { node: source.node };
+    shape = result.shape;
+  } else if (targets.size > 1) {
     const result = prepareStraightCornerBatch(source.outline, kind === 'ROUND' ? 'fillet' : 'chamfer', [...targets], value, source.nextId);
     if ('error' in result) return refuse('GEOMETRY', result.error);
     shape = result.display;
@@ -97,6 +126,9 @@ export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' 
   const tags = profile.node.sideTags?.outer;
   if (!shape.ids || !tags || tags.length !== shape.ids.length || shape.ids.some(id => !tags.includes(id)))
     return refuse('GEOMETRY', 'The corner edit would change existing side IDs.');
+  const savedTags = source.node.sideTags!.outer;
+  if (savedBevel && (tags.length !== savedTags.length || tags.some((id, at) => id !== savedTags[at])))
+    return refuse('GEOMETRY', 'The Chamfer edit would change the saved side IDs or their order.');
   const rebound = rebindDims(source.node, profile.node, doc.parameters);
   if (rebound.dropped.length)
     return refuse('BINDING', 'The corner edit would remove a sketch parameter binding.');
