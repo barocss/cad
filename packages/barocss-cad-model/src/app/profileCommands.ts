@@ -686,9 +686,12 @@ export function sweepRepresentationLabel(mode: unknown, path?: SweepRail): strin
       return 'Exact closed circle';
     if (controlPoints.length === 7 && weights.length === 7 && knots.length === 10
       && knots[3] === knots[4] && knots[5] === knots[6]
-      && weights[1] === first && weights[2] === first && weights[3] < first
-      && weights[4] === first && weights[5] === first && weights[6] === first)
-      return 'Exact line–arc–line';
+      && weights[2] === first && weights[4] === first && weights[6] === first) {
+      if (weights[1] === first && weights[3] < first && weights[5] === first)
+        return 'Exact line–arc–line';
+      if (weights[1] > 0 && weights[1] < first && weights[3] === first && weights[5] > 0 && weights[5] < first)
+        return 'Exact arc–line–arc';
+    }
     if (controlPoints.length === 5 && weights.length === 5 && knots.length === 8 && knots[3] === knots[4]
       && weights[2] === first && weights[4] === first) {
       if (weights[1] === first) return 'Exact line and arc';

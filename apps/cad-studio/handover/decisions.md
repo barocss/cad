@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1721: [Sweep a circular disk through two bends separated by a straight span](notes/exact-spaced-s-bend-2026-11-23/README.md), #10. Verify four bound native joins, the diameter edit, fresh Open and explicit Agent approval.
+
 - D1720: [Extract viewport selection presentation from Studio App](notes/studio-viewport-selection-presentation-2026-11-23/README.md), #44. Match 57 desktop states and retain native Fillet edge placement, section picks and command preview ownership.
 
 - D1719: [Drag the setback of one saved sketch Chamfer](notes/drag-saved-sketch-chamfer-2026-11-23/README.md), #21. Verify opposite midpoint travel and retain the adjacent native bevel after fresh Open.
