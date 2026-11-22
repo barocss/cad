@@ -7,12 +7,14 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 const review = process.argv.includes('--review');
 const agent = review || process.argv.includes('--agent');
 const mixedRadii = process.argv.includes('--mixed-fillet-radii');
+const mixedSetbacks = process.argv.includes('--mixed-chamfer-setbacks');
+const mixedSizes = mixedRadii || mixedSetbacks;
 const resizeFillets = mixedRadii || process.argv.includes('--resize-fillets');
-const resizeChamfers = process.argv.includes('--resize-chamfers');
+const resizeChamfers = mixedSetbacks || process.argv.includes('--resize-chamfers');
 const agentResizeFillets = process.argv.includes('--agent-resize-fillets');
 const agentResizeChamfers = process.argv.includes('--agent-resize-chamfers');
 const agentResize = agentResizeFillets || agentResizeChamfers;
-const mixedAgentResize = mixedRadii && agentResizeFillets;
+const mixedAgentResize = mixedSizes && agentResize;
 const agentResizeName = agentResizeFillets ? 'Fillet' : 'Chamfer';
 const agentResizeBaseline = process.argv.includes('--expect-no-group-proposal');
 const resize = resizeFillets || resizeChamfers;
@@ -57,7 +59,7 @@ const pins = [
 const f = await createFlow({
   name: agentResize ? `saved-sketch-${agentResizeName.toLowerCase()}-pair-proposal` : resize ? `saved-sketch-${resizeName.toLowerCase()}-pair`
     : review ? 'sketch-corner-batch-review' : agent ? 'sketch-corner-batch-agent' : 'sketch-corner-batch',
-  output: process.argv[2], envFrozen: mixedAgentResize ? 'D1738_SOURCE_FROZEN' : mixedRadii ? 'D1737_SOURCE_FROZEN'
+  output: process.argv[2], envFrozen: mixedSetbacks ? 'D1741_SOURCE_FROZEN' : mixedAgentResize ? 'D1738_SOURCE_FROZEN' : mixedRadii ? 'D1737_SOURCE_FROZEN'
     : agentResizeChamfers ? 'D1731_SOURCE_FROZEN' : agentResizeFillets ? 'D1730_SOURCE_FROZEN'
     : resizeChamfers ? 'D1728_SOURCE_FROZEN' : resizeFillets ? 'D1726_SOURCE_FROZEN'
     : review ? 'D1697_SOURCE_FROZEN' : agent ? 'D1696_SOURCE_FROZEN' : 'D1695_SOURCE_FROZEN',
@@ -88,9 +90,11 @@ if (mode === 'seed') {
   const sketch = input.plane ? { ...profile.node, plane: input.plane } : profile.node;
   console.log(JSON.stringify(withNode(withNode(emptyDoc(), sketch), { kind: 'extrude', sketch: 0, height: 10 })));
 } else if (mode === 'mixed-fixture') {
-  const { doc, points } = input, [sketch, ...features] = doc.nodes;
+  const { doc, points, fillet } = input, [sketch, ...features] = doc.nodes;
+  const sizes = fillet ? { radii: { 3: 4, 5: 14 } }
+    : { lengths: { ...sketch.outline.lengths, 3: 4 * Math.SQRT2, 5: 14 * Math.SQRT2 } };
   const profile = profileOf([{ ...sketch.outline, kind: 'polygon', closed: true, points,
-    radii: { 3: 4, 5: 14 }, ids: sketch.sideTags.outer }]);
+    ...sizes, ids: sketch.sideTags.outer }]);
   assert.ok('node' in profile);
   console.log(JSON.stringify({ ...doc, nodes: [replaceSketchProfile(sketch, profile.node), ...features] }));
 } else {
@@ -117,8 +121,8 @@ async function edit() {
   await button('Edit sketch', f.editor()).click();
   await f.sketchPanel().waitFor();
   await f.tool('Select', 's');
-  // A dimension label can cover an original corner. Keep the fitted scale for the small R4 pick.
-  if (!mixedRadii) await f.frame(original.map(worldXY));
+  // A dimension label can cover an original corner. Keep the fitted scale for the smaller selected feature.
+  if (!mixedSizes) await f.frame(original.map(worldXY));
 }
 async function expectPoints(points) {
   const outline = group('Outline points');
@@ -146,21 +150,21 @@ async function selectSavedCorners(size, reflex = size, reverse = false) {
   const selected = f.page.locator('.vp-overlay .sk-pick-edge.on');
   assert.deepEqual(await selected.evaluateAll(edges => edges.map(edge => edge.dataset.sketchEntity).sort()), ['edge:3', 'edge:5']);
 }
-async function prepareMixedFillets(accepted) {
-  f.phase = 'Open the saved profile with R4 and R14';
-  const doc = await f.inspect('mixed-source', { doc: accepted, points: sizedCorners(4, 14) }, 'mixed-fixture');
+async function prepareMixedCorners(accepted, fillet) {
+  f.phase = 'Open the saved profile with two different corner sizes';
+  const doc = await f.inspect('mixed-source', { doc: accepted, points: sizedCorners(4, 14), fillet }, 'mixed-fixture');
   assert.deepEqual([doc.nodes[1], doc.outputs], [accepted.nodes[1], accepted.outputs]);
-  await checkNative('mixed-starting-radii', doc, true, 4, 14);
-  const file = join(f.output, 'saved-mixed-fillets.bcad');
+  await checkNative(fillet ? 'mixed-starting-radii' : 'mixed-starting-setbacks', doc, fillet, 4, 14);
+  const file = join(f.output, fillet ? 'saved-mixed-fillets.bcad' : 'saved-mixed-chamfers.bcad');
   await writeFile(file, JSON.stringify(doc));
-  await f.freshOpen(file, doc, '07-two-different-saved-radii');
+  await f.freshOpen(file, doc, '07-two-different-saved-sizes');
   return doc;
 }
 async function resizeSavedCorners(accepted) {
   f.phase = `Select saved convex and reflex ${resizeName}s`;
   const single = 'Edit ' + resizeName, name = single + 's';
   const handleLabel = resizeFillets ? 'Fillet radius handle' : 'Chamfer setback handle';
-  const initial = mixedRadii ? [4, 14] : [6, 6], target = mixedRadii ? 12 : 8;
+  const initial = mixedSizes ? [4, 14] : [6, 6], target = mixedSizes ? 12 : 8;
   const beforePoints = sizedCorners(...initial);
   await edit();
   await selectSavedCorners(...initial);
@@ -179,11 +183,11 @@ async function resizeSavedCorners(accepted) {
   const apply = () => button('Apply', editor());
   const cancel = () => button('Cancel', editor()).click();
   await open();
-  assert.equal(await field().inputValue(), mixedRadii ? '' : '6');
+  assert.equal(await field().inputValue(), mixedSizes ? '' : '6');
   assert.equal(await apply().isDisabled(), true);
-  if (mixedRadii) {
+  if (mixedSizes) {
     assert.equal(await editor().getByRole('alert').count(), 0);
-    await f.snapshot('08-mixed-radii-before-edit');
+    await f.snapshot('08-mixed-starting-sizes');
   }
   f.phase = 'Refuse a size that would consume the shared straight carrier';
   await field().fill('13');
@@ -202,7 +206,7 @@ async function resizeSavedCorners(accepted) {
   await cancel();
   await preview().waitFor({ state: 'hidden' });
   await expectPoints(beforePoints);
-  if (mixedRadii) {
+  if (mixedSizes) {
     await selectSavedCorners(...initial, true);
     await open();
     await field().fill(String(target));
@@ -223,7 +227,7 @@ async function resizeSavedCorners(accepted) {
   await f.page.mouse.down();
   const dragTo = () => f.page.mouse.move(at[0] + to[0] - from[0], at[1] + to[1] - from[1], { steps: 10 });
   await dragTo();
-  if (mixedRadii) {
+  if (mixedSizes) {
     await f.page.mouse.move(...at);
     assert.equal(await field().inputValue(), '');
     assert.equal(await apply().isDisabled(), true);
@@ -266,12 +270,13 @@ async function resizeSavedCorners(accepted) {
 async function checkNative(label, doc, fillet, size = 6, reflex = size) {
   const native = await f.inspect(label, doc);
   const points = sizedCorners(size, reflex);
-  const volume = (60 * 40 - 16 * 25 + (reflex ** 2 - size ** 2) * (1 - Math.PI / 4)) * 10;
+  const cornerArea = fillet ? 1 - Math.PI / 4 : .5;
+  const volume = (60 * 40 - 16 * 25 + (reflex ** 2 - size ** 2) * cornerArea) * 10;
   assert.ok(Math.abs(native.volume - volume) < 1e-8);
   assert.equal(native.faces.length, 12);
   const [source] = doc.nodes;
   assert.deepEqual(source.sideTags.outer, resultIds);
-  assert.deepEqual(source.outline.lengths, fillet ? { 0: 60 } : { 0: 60, 3: size * Math.SQRT2, 5: size * Math.SQRT2 });
+  assert.deepEqual(source.outline.lengths, fillet ? { 0: 60 } : { 0: 60, 3: size * Math.SQRT2, 5: reflex * Math.SQRT2 });
   const fixed = [{ kind: 'fix', point: 0, at: [0, 0] }];
   assert.deepEqual(source.outline.rules, fillet ? fixed : [...fixed,
     { kind: 'angle', a: 2, b: 3, value: 135 }, { kind: 'angle', a: 4, b: 5, value: 135 }]);
@@ -303,14 +308,18 @@ async function proposeSavedCornerPair(accepted, fillet) {
   const discovery = fillet ? 'sketchFillets' : 'sketchChamfers';
   const initial = mixedAgentResize ? [4, 14] : [6, 6], target = mixedAgentResize ? 12 : 8;
   const requestedEdges = mixedAgentResize ? ['e9', 'e10'] : ['e10', 'e9'];
-  const expectedSizes = (size, reflex = size) => ['e9', 'e10'].map((id, index) => ({ [selector]: id, [field]: index ? reflex : size }));
+  const checkSizes = (items, size, reflex = size) => {
+    assert.deepEqual(items.map(item => item[selector]), ['e9', 'e10']);
+    for (const [index, expected] of [size, reflex].entries())
+      assert.ok(Math.abs(items[index][field] - expected) < 1e-10);
+  };
   f.phase = `Discover and propose both saved ${name}s in one revision-bound edit`;
   const file = join(f.output, 'resize-pair-proposal.bcad');
   const bytes = JSON.stringify(accepted);
   await writeFile(file, bytes);
   await withMcpSession(session, file, `resize-${tag}-pair`, async call => {
     const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
-    assert.deepEqual(fields[discovery], expectedSizes(...initial));
+    checkSizes(fields[discovery], ...initial);
     const revision = await currentPartRevision(call);
     assert.equal(fields.revision, revision);
     const resize = { sketch: fields.id, [groupSelector]: requestedEdges, [field]: target };
@@ -321,7 +330,7 @@ async function proposeSavedCornerPair(accepted, fillet) {
       action: 'propose', title: `Resize both saved ${name}s to ${fillet ? 'R' : 'C'}${target}`, ops: [op],
     }, denied);
     if (agentResizeBaseline) {
-      const message = mixedAgentResize ? /same current radius/i : /use sides|corners|fillets|bevels|invalid/i;
+      const message = mixedAgentResize ? new RegExp('same current ' + field, 'i') : /use sides|corners|fillets|bevels|invalid/i;
       assert.match((await propose(makeOp(), true)).error, message);
       assert.equal(await readFile(file, 'utf8'), bytes);
       return;
@@ -331,7 +340,7 @@ async function proposeSavedCornerPair(accepted, fillet) {
     assert.ok(schema.oneOf.some(choice => choice.required[0] === groupSelector));
     assert.equal(schema.properties[groupSelector].minItems, 2);
     assert.equal(schema.properties[groupSelector].uniqueItems, true);
-    if (mixedAgentResize) assert.match(schema.properties[groupSelector].description, /different starting radii/i);
+    if (mixedAgentResize) assert.match(schema.properties[groupSelector].description, /different starting (?:radii|setbacks)/i);
     for (const [args, message] of [
       [{ expectedRevision: undefined }, /expectedRevision/i],
       [{ expectedRevision: '0000000000000000' }, /part changed/i],
@@ -388,14 +397,14 @@ async function proposeSavedCornerPair(accepted, fillet) {
   assert.deepEqual(await checkNative(label + '-reopened', await f.doc(), fillet, target), native);
   await withMcpSession(session, saved.file, `read-resized-${tag}-pair`, async call => {
     const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
-    assert.deepEqual(fields[discovery], expectedSizes(target));
+    checkSizes(fields[discovery], target);
     if (mixedAgentResize) {
       const bytes = await readFile(saved.file);
       const [staged] = pending.proposals[0].ops;
       const dryRun = op => call('features', { action: 'batch', dryRun: true, ops: [op] }, true);
       assert.match((await dryRun(staged)).error, /part changed/i);
       assert.match((await dryRun({ ...staged, args: { ...staged.args, expectedRevision: fields.revision } })).error,
-        /already ha(?:s|ve) this radius/i);
+        new RegExp('already ha(?:s|ve) this ' + field, 'i'));
       assert.deepEqual(await readFile(saved.file), bytes);
     }
   });
@@ -608,13 +617,13 @@ await f.run(async () => {
       : await applySketchEdit(seed, name, field, selection, tag, fillet);
     const native = await checkNative(`${tag}-native`, accepted, fillet);
     if (agentResize) {
-      await proposeSavedCornerPair(mixedAgentResize ? await prepareMixedFillets(accepted) : accepted, fillet);
+      await proposeSavedCornerPair(mixedAgentResize ? await prepareMixedCorners(accepted, fillet) : accepted, fillet);
       assert.equal(await readFile(file, 'utf8'), bytes);
       return;
     }
     if (resize) {
       assert.equal(await readFile(file, 'utf8'), bytes);
-      await resizeSavedCorners(mixedRadii ? await prepareMixedFillets(accepted) : accepted);
+      await resizeSavedCorners(mixedSizes ? await prepareMixedCorners(accepted, fillet) : accepted);
       return;
     }
     if (reviewed) assert.equal(native.bodySha256, reviewed.meta.candidate.bodySha256);

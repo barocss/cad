@@ -56,6 +56,26 @@ export function savedChamferSetback(source: Polygon, bevel: number): number | un
   return inspect(source, bevel)?.setback;
 }
 
+/** Resize saved Chamfers together without exposing any intermediate sketch. */
+export function editChamferSetbacks(source: Polygon, edges: readonly number[], value: number): { shape: Polygon } | { error: string } {
+  const selected: { edge: number; setback: number }[] = [];
+  for (const edge of new Set(edges)) {
+    const setback = savedChamferSetback(source, edge);
+    if (setback === undefined) return { error: 'Select saved, constrained orthogonal Chamfers.' };
+    selected.push({ edge, setback });
+  }
+  if (!selected.length) return { error: 'Select saved, constrained orthogonal Chamfers.' };
+  // Shrink larger setbacks before growing smaller ones on a shared carrier. Equal sizes retain selection order.
+  selected.sort((a, b) => b.setback - a.setback);
+  let shape = source;
+  for (const { edge } of selected) {
+    const result = editChamferSetback(shape, edge, value);
+    if ('error' in result) return result;
+    shape = result.shape;
+  }
+  return { shape };
+}
+
 /** Resize one saved Chamfer; all other geometry and authored constraints stay in place. */
 export function editChamferSetback(source: Polygon, bevel: number, value: number): { shape: Polygon } | { error: string } {
   const plan = inspect(source, bevel);

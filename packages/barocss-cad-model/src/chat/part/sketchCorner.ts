@@ -1,7 +1,7 @@
 import type { ModelNode, StudioDoc } from '../../engine/doc';
 import { isRefusal } from '../../engine/refusal';
 import { chamferCorner, roundStraightCornerForEdit } from '../../sketch/corner';
-import { editChamferSetback, savedChamferSetback } from '../../sketch/chamferEdit';
+import { editChamferSetbacks, savedChamferSetback } from '../../sketch/chamferEdit';
 import { prepareStraightCornerBatch } from '../../sketch/cornerBatch';
 import { nextIdOf } from '../../sketch/entityIds';
 import { editFilletRadii, savedFilletRadius } from '../../sketch/filletEdit';
@@ -131,20 +131,10 @@ export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' 
     const sizes = edges.map(edge => sizeOf(source.outline, edge));
     if (sizes.includes(undefined))
       return refuse(round ? 'FILLET' : 'BEVEL', `Use a saved ${selector} ID from query.edit_fields.`);
-    if (round) {
-      const result = editFilletRadii(source.outline, edges, value);
-      if ('error' in result) return refuse('GEOMETRY', result.error);
-      shape = result.shape;
-    } else {
-      if (sizes.some(size => size !== sizes[0]))
-        return refuse('GEOMETRY', 'Select Chamfers with the same current distance.');
-      shape = source.outline;
-      for (const edge of edges) {
-        const result = editChamferSetback(shape, edge, value);
-        if ('error' in result) return refuse('GEOMETRY', result.error);
-        shape = result.shape;
-      }
-    }
+    const editSizes = round ? editFilletRadii : editChamferSetbacks;
+    const result = editSizes(source.outline, edges, value);
+    if ('error' in result) return refuse('GEOMETRY', result.error);
+    shape = result.shape;
     if (shape === source.outline) return { node: source.node };
   } else if (targets.size > 1) {
     const result = prepareStraightCornerBatch(source.outline, kind === 'ROUND' ? 'fillet' : 'chamfer', [...targets], value, source.nextId);

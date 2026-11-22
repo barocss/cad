@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkBrep, massPropertiesOf } from '@barocss/cad';
+import { checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
 import { emptyDoc, withNode } from '../src/engine/doc';
 import { partSnapshot } from '../src/engine/part';
-import { editChamferSetback, savedChamferSetback } from '../src/sketch/chamferEdit';
+import { editChamferSetback, editChamferSetbacks, savedChamferSetback } from '../src/sketch/chamferEdit';
 import { chamferCorner } from '../src/sketch/corner';
 import { prepareStraightCornerBatch } from '../src/sketch/cornerBatch';
 import { profileOf } from '../src/sketch/loops';
@@ -30,14 +30,15 @@ function resized(source: Polygon, edge: number, value: number) {
   if ('error' in result) assert.fail(result.error);
   return result.shape;
 }
-function reopened(source: Polygon, expectedVolume?: number) {
+function native(source: Polygon, expectedVolume?: number, height = 2) {
   const saved = profileOf([source]);
   if ('error' in saved) assert.fail(saved.error);
   const shape = sketchShapes(saved.node).shape;
   assert.equal(shape?.kind, 'polygon');
-  const body = partSnapshot(withNode(withNode(emptyDoc(), saved.node), { kind: 'extrude', sketch: 0, height: 2 })).outputs[0];
+  const body = partSnapshot(withNode(withNode(emptyDoc(), saved.node), { kind: 'extrude', sketch: 0, height })).outputs[0];
   assert.ok(body && checkBrep(body.brep, { strict: true }).valid);
   if (expectedVolume !== undefined) near(massPropertiesOf(body).volume, expectedVolume);
+  for (const id of saved.node.sideTags!.outer) assert.equal(body.brep.faces.filter(face => face.name === `n1.side[${id}]`).length, 1);
   const bottom = (i: number) => {
     const id = saved.node.sideTags!.outer[i];
     const face = body.brep.faces.find(item => item.name === `n1.side[${id}]`); assert.ok(face);
@@ -56,8 +57,9 @@ function reopened(source: Polygon, expectedVolume?: number) {
     for (const point of ends) near(Math.hypot(point[0] - support[0], point[1] - support[1]), expected);
   }
   assert.deepEqual(shape.rules, source.rules); assert.deepEqual(shape.lengths, source.lengths);
-  return shape;
+  return { shape, body };
 }
+const reopened = (source: Polygon, expectedVolume?: number) => native(source, expectedVolume).shape;
 
 test('saved orthogonal Chamfer edits one setback, keeps bindings and settles to the preview', () => {
   const source = bevel({ ...rectangle(), rules: [{ kind: 'dy', a: 0, b: 3, value: 30 }] });
@@ -103,6 +105,85 @@ test('grouped notch C6 to C8 changes only e9 and keeps its adjacent opposite-tur
   near(savedChamferSetback(afterDrag, 3)!, 8); near(savedChamferSetback(afterDrag, 5)!, 6);
   for (let i = 0; i < source.points.length; i++) if (i !== 3 && i !== 4) assert.deepEqual(afterDrag.points[i], moved.points[i]);
   reopened(afterDrag);
+});
+
+function adjacentChamfers() {
+  const result = prepareStraightCornerBatch(notch(), 'chamfer', [3, 4], 6);
+  if ('error' in result) assert.fail(result.error);
+  return result.shape;
+}
+
+test('mixed convex C4 and reflex C14 reach shared C12 in either selection order with native planar bevel proof', () => {
+  // Original area 2000; convex C4 removes 8 and reflex C14 adds 98 mm².
+  const source = native(resized(resized(adjacentChamfers(), 3, 4), 5, 14), 20900, 10).shape;
+  const before = structuredClone(source);
+  assert.ok('error' in editChamferSetback(source, 3, 12), 'growing first consumes the shared 25 mm carrier');
+  let previous: Polygon | undefined;
+  for (const edges of [[3, 5], [5, 3]]) {
+    const selection = [...edges], result = editChamferSetbacks(source, edges, 12);
+    if ('error' in result) assert.fail(result.error);
+    const shape = result.shape;
+    assert.deepEqual(edges, selection, 'internal edit order does not change the selected handle order');
+    assert.deepEqual(shape.points.slice(3, 7), [[50, 40], [38, 28], [38, 27], [26, 15]]);
+    near(Math.hypot(shape.points[4][0] - shape.points[5][0], shape.points[4][1] - shape.points[5][1]), 1);
+    near(savedChamferSetback(shape, 3)!, 12); near(savedChamferSetback(shape, 5)!, 12);
+    assert.deepEqual(shape.lengths, { ...source.lengths, 3: 12 * Math.SQRT2, 5: 12 * Math.SQRT2 });
+    for (const key of ['ids', 'rules', 'hv', 'bulges'] as const)
+      assert.deepEqual(shape[key], source[key], key);
+    assert.deepEqual(shape.tangents ?? [], source.tangents ?? []);
+    assert.deepEqual(shape.radii ?? {}, source.radii ?? {});
+    for (const i of [0, 1, 2, 7, 8, 9]) assert.deepEqual(shape.points[i], source.points[i]);
+    if (previous) assert.deepEqual(shape, previous);
+    previous = shape;
+    const { shape: opened, body } = native(shape, 20000, 10);
+    assert.deepEqual(opened.ids, source.ids);
+    assert.equal(body.brep.faces.length, shape.points.length + 2, 'only the ten original side walls and two caps remain');
+    const bottom = (id: string) => {
+      const face = body.brep.faces.find(item => item.name === `n1.side[${id}]`); assert.ok(face);
+      assert.equal(faceGeometry(face).kind, 'plane');
+      const edgeIds = new Set(body.brep.coedges.filter(use => face.loops.includes(use.loop)).map(use => use.edge));
+      const vertexIds = new Set(body.brep.edges.filter(edge => edgeIds.has(edge.id)).flatMap(edge => edge.vertices));
+      return body.brep.vertices.filter(vertex => vertexIds.has(vertex.id) && Math.abs(vertex.point[2]) < 1e-8)
+        .map(vertex => vertex.point.slice(0, 2)).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    };
+    assert.equal(source.ids?.[3], 'e9'); assert.equal(source.ids?.[5], 'e10');
+    assert.deepEqual(bottom('e9'), [[38, 28], [50, 40]]);
+    assert.deepEqual(bottom('e10'), [[26, 15], [38, 27]]);
+    assert.deepEqual(bottom(source.ids![4]), [[38, 27], [38, 28]], 'native shared wall retains the 1 mm carrier at x38');
+    assert.deepEqual(source, before);
+  }
+});
+
+test('shared Chamfer resizing retains same-size history, no-op identity and atomic refusal', () => {
+  const equal = adjacentChamfers(), current = savedChamferSetback(equal, 3)!;
+  for (const edges of [[3, 5], [5, 3]]) {
+    const expected = edges.reduce((shape, edge) => resized(shape, edge, 8), equal);
+    const result = editChamferSetbacks(equal, edges, 8);
+    if ('error' in result) assert.fail(result.error);
+    assert.deepEqual(result.shape, expected, 'equal-size edits keep the historical sequential result');
+    const unchanged = editChamferSetbacks(equal, edges, current);
+    if ('error' in unchanged) assert.fail(unchanged.error);
+    assert.equal(unchanged.shape, equal);
+  }
+  const source = resized(resized(equal, 3, 4), 5, 14), before = structuredClone(source);
+  const shrunk = resized(source, 5, 13);
+  assert.ok('error' in editChamferSetback(shrunk, 3, 13), 'a later growth can refuse after a valid shrink');
+  for (const edges of [[3, 5], [5, 3]]) {
+    for (const value of [13, 25, NaN, Infinity, -1, 0, 1e-7]) {
+      assert.ok('error' in editChamferSetbacks(source, edges, value), String(value));
+      assert.deepEqual(source, before);
+    }
+  }
+  for (const edges of [[], [3, 4], [3, -1], [3, 0.5], [3, 10]]) {
+    assert.ok('error' in editChamferSetbacks(source, edges, 12)); assert.deepEqual(source, before);
+  }
+  const unlocked: Polygon = { ...source, lengths: { ...source.lengths } };
+  delete unlocked.lengths![5];
+  const unlockedBefore = structuredClone(unlocked);
+  assert.ok('error' in editChamferSetbacks(unlocked, [3, 5], 12)); assert.deepEqual(unlocked, unlockedBefore);
+  const duplicated = editChamferSetbacks(source, [3, 5, 3], 12);
+  const unique = editChamferSetbacks(source, [3, 5], 12);
+  assert.deepEqual(duplicated, unique);
 });
 
 test('saved direct perpendicular recipe edits in rotation, in either authored order, and resaves', () => {

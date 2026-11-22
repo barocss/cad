@@ -39,7 +39,7 @@ const sketchCornerInput = (field: 'distance' | 'radius', operation: string) => {
   const group = selector + 's';
   const name = chamfer ? 'Chamfer' : 'Fillet';
   const results = chamfer ? 'sketchChamfers' : 'sketchFillets';
-  const groupDescription = chamfer ? 'Distinct saved Chamfer side IDs with the same current distance.'
+  const groupDescription = chamfer ? 'Distinct saved Chamfer side IDs. Different starting setbacks can share one new setback.'
     : 'Distinct saved Fillet side IDs. Different starting radii can share one new radius.';
   return {
     type: 'object',

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1741: [Set a common setback on saved sketch Chamfers with different sizes](notes/resize-mixed-saved-sketch-chamfers-2026-11-23/README.md), #21. Match numeric, drag and revision-bound Agent edits after fresh Open.
 - D1740: [Extract Align and Revolve History reference actions from Studio App](notes/studio-history-reference-actions-2026-11-23/README.md), #44. Match 14 desktop states, eight native oracles and three saved files.
 - D1739: [Retain the spaced rectangular duct joints after an inlet Subtract](notes/spaced-duct-inlet-boolean-2026-11-23/README.md), #10. Preserve eight inherited native bindings and both mouths through depth edits and fresh Open.
 - D1738: [Propose one common radius for mixed-size saved sketch Fillets](notes/agent-resize-mixed-sketch-fillets-2026-11-23/README.md), #21. Verify current revision and explicit Studio approval with exact manual and Agent parity through fresh Open.
