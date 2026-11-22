@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1634: [Exact cylinder Thicken from a Studio sketch](notes/sketch-arc-exact-thicken-2026-11-22/README.md), #11 and #368. Preserve a newly authored quarter circle through Make curves, Duplicate, vertical Move and Ruled, then verify exact Thicken and native Open.
 - D1633: [Exact Thicken for upright circular sectors](notes/exact-cylinder-sector-thicken-2026-11-22/README.md), #11 and #368. Extend certified arcs beyond 90° and verify one native Studio edit and Open, local agent approval and quarter-cylinder compatibility.
 - D1632: [Exact Thicken for an upright quarter-cylinder](notes/exact-cylinder-thicken-2026-11-22/README.md), #11 and #368. Add a native six-face solid and verify independent radii, axis-collapse refusal, Studio edit and native Open.
 - D1631: [Through Cut on an exact planar Thicken solid](notes/exact-thicken-through-cut-2026-11-22/README.md), #175 and #11. Verify the existing native cut, independently reconstructed cap loops and persistent operands through Studio edit and Open.

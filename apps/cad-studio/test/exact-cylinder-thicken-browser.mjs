@@ -4,8 +4,13 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
 const sector = process.argv.includes('--sector');
-const profile = sector ? [[40, -14], [40, 6], [24, -6]] : [[36, -6], [28, 0], [22, -8]];
-const grid = profile.map(([x, y]) => [[x, y, -2], [x, y, 10]]);
+const authored = process.argv.includes('--authored');
+assert.ok(!authored || !sector, 'Choose either the authored or the explicit sector source');
+const profile = authored ? [[30, 20], [30, 30], [20, 30]]
+  : sector ? [[40, -14], [40, 6], [24, -6]] : [[36, -6], [28, 0], [22, -8]];
+const [z0, z1] = authored ? [0, 12] : [-2, 10];
+const [cx, cy] = authored ? [20, 20] : [30, -14];
+const grid = profile.map(([x, y]) => [[x, y, z0], [x, y, z1]]);
 const weight = sector ? 1 / Math.sqrt(5) : Math.SQRT1_2;
 const sweep = sector ? 2 * Math.atan(2) : Math.PI / 2;
 const patch = sector ? 'sector' : 'quarter';
@@ -20,24 +25,30 @@ const pins = [
   'packages/barocss-cad-model/src/engine/thicken.ts', 'packages/barocss-cad-model/src/engine/part.ts',
   'packages/barocss-cad/src/brep/thicken-cylinder.ts', 'packages/barocss-cad/src/part/part-shell.ts', 'packages/barocss-cad/src/api/spec.ts',
 ];
+if (authored) pins.push('apps/cad-studio/src/viewport/viewportPointerInput.ts',
+  'apps/cad-studio/src/sketch/useSketchActions.ts', 'packages/barocss-cad-model/src/engine/curveSource.ts');
 const f = await createFlow({
-  name: 'exact-cylinder-thicken', output: process.argv[2], envFrozen: sector ? 'D1633_SOURCE_FROZEN' : 'D1632_SOURCE_FROZEN',
+  name: 'exact-cylinder-thicken', output: process.argv[2],
+  envFrozen: authored ? 'D1634_SOURCE_FROZEN' : sector ? 'D1633_SOURCE_FROZEN' : 'D1632_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: `Thicken an open upright ${(sweep * 180 / Math.PI).toFixed(2)}-degree cylinder inward, edit its thickness, and reopen the exact solid in Studio.`,
+  qualification: authored ? 'Draw a Centre arc, make and duplicate its curve, move it in Z, build a Ruled surface and save the exact thickened cylinder in Studio.'
+    : `Thicken an open upright ${(sweep * 180 / Math.PI).toFixed(2)}-degree cylinder inward, edit its thickness, and reopen the exact solid in Studio.`,
   limits: ['One canonical rational circular span and one linear axial span. Desktop WebGPU.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkBrep, brepMassProperties, faceGeometry } from '@barocss/cad';
+import { geometryOf } from '@barocss/cad-model/engine/direct';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 import { digestOf } from '@barocss/cad-model/util/digest';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-console.log(JSON.stringify(partBreps(doc).map(({ key, brep }) => {
+const solids = partBreps(doc).map(({ key, brep }) => {
   const report = checkBrep(brep, { strict: true });
   return { key, valid: report.valid, counts: report.counts, genus: report.topology[0]?.genus,
     volume: brepMassProperties(brep, 1).volume,
     faces: brep.faces.map(face => ({ name: face.name, geometry: faceGeometry(face, 20) })).sort((a, b) => a.name.localeCompare(b.name)),
     vertices: brep.vertices.map(v => v.point), digest: digestOf(brep) };
-})));
+});
+console.log(JSON.stringify(solids.length ? solids : (doc.direct?.objects ?? []).map(object => geometryOf(doc.direct, object))));
 `,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -46,12 +57,79 @@ const hud = () => f.page.getByRole('dialog', { name: 'Thicken', exact: true });
 const near = (a, b, tolerance = 1e-8) => assert.ok(Math.abs(a - b) < tolerance, `${a} != ${b}`);
 const names = ['normal', 'reverse', 'u-max', 'u-min', 'v-max', 'v-min'].map(name => 'n0.' + name);
 
-async function verify(label, doc, thickness) {
+const row = name => f.page.locator('.ol.direct').and(f.page.getByTitle(name, { exact: true }));
+
+async function authorPatch() {
+  await f.newPage();
+  await button('New part').click();
+  await f.page.waitForFunction(() => window.__studioDoc?.nodes.length === 0);
+  await f.ready();
+  const blank = await f.doc();
+  assert.equal(blank.nodes.length, 0);
+  assert.equal(blank.direct?.objects.length ?? 0, 0);
+  f.phase = 'Draw a 90-degree arc with the Centre arc tool';
+  await button('Sketch', f.page.locator('.mode')).click();
+  const sketch = f.sketchPanel();
+  await sketch.waitFor();
+  await sketch.getByLabel('Sketch plane', { exact: true }).selectOption('xy');
+  await f.frame([[12, 12], [38, 38]]);
+  await f.tool('Centre arc', 'q');
+  await f.worldClick([cx, cy]);
+  await f.worldClick(profile[0]);
+  for (const point of [[28, 26], [26, 28], profile[2]]) {
+    const pixel = await f.screenOf(point);
+    await f.page.mouse.move(...pixel, { steps: 3 });
+  }
+  await f.worldClick(profile[2]);
+  near(Number(await sketch.getByLabel('Arc 1 radius', { exact: true }).inputValue()), 10, 1e-7);
+  await f.snapshot('01-authored-centre-arc');
+
+  f.phase = 'Make the native curve and move only its duplicate';
+  await button('Make curves', sketch).click();
+  await f.changed(blank);
+  await sketch.waitFor({ state: 'hidden' });
+  const arc = await f.doc(), [original] = arc.direct.objects;
+  assert.equal(arc.direct.objects.length, 1);
+  assert.deepEqual(arc.nodes, blank.nodes);
+  const [low] = await f.inspect('01a-curve-native', arc);
+  assert.deepEqual(low.controlPoints, grid.map(ends => ends[0]));
+  assert.deepEqual(low.weights, [1, weight, 1]);
+  await button('Duplicate', panel()).click();
+  await f.changed(arc);
+  const duplicated = await f.doc(), copy = duplicated.direct.objects[1];
+  assert.notEqual(copy.id, original.id);
+  await panel().getByLabel('ΔZ', { exact: true }).fill(String(z1 - z0));
+  await button('Move', panel()).click();
+  await f.changed(duplicated);
+  const moved = await f.doc();
+  assert.deepEqual(moved.direct.objects[0], original);
+  assert.equal(moved.direct.sources[original.source], arc.direct.sources[original.source]);
+
+  f.phase = 'Make the native Ruled cylinder from the two authored rails';
+  await row(original.name).click();
+  await row(copy.name).click({ modifiers: ['Shift'] });
+  await button('Ruled surface', panel()).click();
+  await f.changed(moved);
+  const ruledDoc = await f.doc();
+  const [originalRail, liftedRail, ruled] = await f.inspect('01b-authored-ruled-native', ruledDoc);
+  assert.deepEqual(originalRail, low);
+  assert.deepEqual(liftedRail.controlPoints, grid.map(ends => ends[1]));
+  assert.deepEqual(liftedRail.weights, low.weights);
+  assert.deepEqual([ruled.kind, ruled.degreeU, ruled.degreeV], ['surface', 2, 1]);
+  assert.deepEqual(ruled.controlPoints, grid);
+  assert.deepEqual(ruled.weights, [[1, 1], [weight, weight], [1, 1]]);
+  await button('Iso').click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await f.snapshot('01c-authored-ruled-cylinder');
+  return ruledDoc;
+}
+
+async function verify(label, doc, sourceDoc, thickness) {
   assert.equal(doc.nodes.length, 1);
   assert.deepEqual([doc.nodes[0].kind, doc.nodes[0].mode, doc.nodes[0].side, doc.nodes[0].thickness], ['thicken', 'exact-cylinder', 'reverse', thickness]);
   assert.deepEqual(doc.nodes[0].surface.controlPoints, grid);
   assert.deepEqual(doc.nodes[0].surface.weights, [[1, 1], [weight, weight], [1, 1]]);
-  assert.deepEqual(doc.direct, input.direct);
+  assert.deepEqual(doc.direct, sourceDoc.direct);
   const [solid] = await f.inspect(label, doc);
   assert.deepEqual([solid.key, solid.valid, solid.genus, solid.counts.bodies, solid.counts.faces, solid.counts.edges, solid.counts.vertices],
     ['b0', true, 0, 1, 6, 12, 8]);
@@ -62,25 +140,25 @@ async function verify(label, doc, thickness) {
     const wall = byName.get(face);
     assert.deepEqual([wall.kind, wall.out], ['cylinder', orientation]);
     near(wall.r, radius);
-    near(wall.c[0], 30);
-    near(wall.c[1], -14);
+    near(wall.c[0], cx);
+    near(wall.c[1], cy);
     near(Math.abs(wall.a[2]), 1);
   }
-  for (const [face, z] of [['n0.v-min', -2], ['n0.v-max', 10]]) {
+  for (const [face, z] of [['n0.v-min', z0], ['n0.v-max', z1]]) {
     const cap = byName.get(face);
     assert.equal(cap.kind, 'plane');
     near(cap.o[2], z);
     near(Math.abs(cap.n[2]), 1);
   }
-  const rays = sector ? [[1, 0], [-.6, .8]] : [[.6, .8], [-.8, .6]];
+  const rays = [profile[0], profile[2]].map(([x, y]) => [(x - cx) / 10, (y - cy) / 10]);
   for (const [face, ray] of [['n0.u-min', rays[0]], ['n0.u-max', rays[1]]]) {
     const wall = byName.get(face);
     assert.equal(wall.kind, 'plane');
     near(wall.n[2], 0);
     near(wall.n[0] * ray[0] + wall.n[1] * ray[1], 0);
-    near(wall.n[0] * (wall.o[0] - 30) + wall.n[1] * (wall.o[1] + 14), 0);
-    for (const radius of [10, inner]) for (const z of [-2, 10]) {
-      const point = [30 + radius * ray[0], -14 + radius * ray[1], z];
+    near(wall.n[0] * (wall.o[0] - cx) + wall.n[1] * (wall.o[1] - cy), 0);
+    for (const radius of [10, inner]) for (const z of [z0, z1]) {
+      const point = [cx + radius * ray[0], cy + radius * ray[1], z];
       assert.ok(solid.vertices.some(vertex => Math.hypot(...vertex.map((coord, axis) => coord - point[axis])) < 1e-8));
     }
   }
@@ -101,12 +179,16 @@ await f.run(async () => {
     });
     return context;
   };
-  const file = join(f.output, `${patch}-cylinder.bcad`);
-  await writeFile(file, JSON.stringify(input));
-  await f.freshOpen(file, input, `01-open-${patch}`);
-  await button('Iso').click();
-  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await f.page.locator('.ol.direct').filter({ hasText: patchName }).click();
+  let sourceDoc = input;
+  if (authored) sourceDoc = await authorPatch();
+  else {
+    const file = join(f.output, `${patch}-cylinder.bcad`);
+    await writeFile(file, JSON.stringify(input));
+    await f.freshOpen(file, input, `01-open-${patch}`);
+    await button('Iso').click();
+    await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+    await f.page.locator('.ol.direct').filter({ hasText: patchName }).click();
+  }
   await panel().getByLabel('Thicken side', { exact: true }).selectOption('reverse');
   await button('Thicken into a body', panel()).click();
   await hud().getByLabel('Geometry', { exact: true }).selectOption('exact-cylinder');
@@ -116,29 +198,29 @@ await f.run(async () => {
   await thickness.fill(sector ? '11' : '10');
   await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
   assert.equal(await button('Apply', hud()).isDisabled(), true);
-  await f.same(input);
+  await f.same(sourceDoc);
   await f.snapshot('02-collapse-refused');
 
   f.phase = 'Preview and apply the exact inward offset';
   await thickness.fill('2');
   await hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor();
-  await f.same(input);
+  await f.same(sourceDoc);
   await f.snapshot('03-exact-preview');
   await button('Apply', hud()).click();
-  await f.changed(input);
-  const applied = await f.doc(), first = await verify('04-native-applied', applied, 2);
+  await f.changed(sourceDoc);
+  const applied = await f.doc(), first = await verify('04-native-applied', applied, sourceDoc, 2);
   await f.openFeatureEditor(0, 'exact cylinder Thicken');
   const edit = f.editor().getByLabel('Thickness', { exact: true });
   assert.equal(await edit.inputValue(), '2');
   await edit.fill('3');
   await f.applyEditor(applied, '05-thickness-3');
-  const edited = await f.doc(), second = await verify('06-native-edited', edited, 3);
+  const edited = await f.doc(), second = await verify('06-native-edited', edited, sourceDoc, 3);
   const saved = await f.save('exact-cylinder-thicken');
   await f.freshOpen(saved.file, edited, '07-fresh-open');
-  assert.deepEqual(await verify('08-native-reopened', await f.doc(), 3), second);
+  assert.deepEqual(await verify('08-native-reopened', await f.doc(), sourceDoc, 3), second);
   await button('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('09-reopened-cylinder');
-  f.report.observations.push({ sweep, thicknesses: [2, 3], radii: [[8, 10], [7, 10]],
+  f.report.observations.push({ authored, sweep, thicknesses: [2, 3], radii: [[8, 10], [7, 10]],
     volumes: [first.volume, second.volume], names, digest: second.digest });
 });

@@ -8,6 +8,33 @@ import type { DisplayMesh, Vec3 } from './mesh';
 
 type P2 = [number, number];
 export interface NurbsCurve { degree: number; knots: number[]; points: Vec3[]; weights: number[] }
+// Only newly constructed, certified single arcs use full precision. This is not stored metadata.
+const canonicalQuarterCurves = new WeakMap<NurbsCurve, string>();
+const quarterBulge = Math.tan(Math.PI / 8);
+
+/** A dyadic quarter turn: the tangent intersection is M - sign(bulge) perpendicular(B-A)/2. */
+function canonicalQuarter(plane: SketchPlane, a: P2, b: P2, bulge: number): NurbsCurve | null {
+  if (bulge !== quarterBulge && bulge !== -quarterBulge) return null;
+  // The fixed binary grid bounds each integer sum below 2^53. It also makes the pole exactly
+  // representable; arbitrary decimals and conditioned-but-uncertified planes retain the legacy path.
+  const grid = 2 ** 30, input = [...a, ...b];
+  if (!input.every(value => Number.isFinite(value) && Math.abs(value) <= 1e6 && Number.isSafeInteger(value * grid))) return null;
+  const [ax, ay, bx, by] = input.map(value => value * grid), sign = bulge > 0 ? 1 : -1;
+  const tangent: P2 = [(ax + bx + sign * (by - ay)) / (2 * grid), (ay + by - sign * (bx - ax)) / (2 * grid)];
+  const points = [toWorld(plane, a), toWorld(plane, tangent), toWorld(plane, b)];
+  const scale = 2 * grid;
+  if (!points.flat().every(value => Number.isFinite(value) && Math.abs(value) <= 1e6
+    && Number.isSafeInteger(value * scale) && !/[eE]/.test(String(value)))) return null;
+  const integers = points.map(point => point.map(value => BigInt(value * scale)));
+  if (integers.some(point => point[2] !== integers[0][2])) return null;
+  const first = integers[1].map((value, axis) => value - integers[2][axis]);
+  const last = integers[1].map((value, axis) => value - integers[0][axis]);
+  const dot = (x: bigint[], y: bigint[]) => x.reduce((sum, value, axis) => sum + value * y[axis], 0n);
+  if (dot(first, first) === 0n || dot(first, last) !== 0n || dot(first, first) !== dot(last, last)) return null;
+  const curve = fromSpans([{ p0: points[0], p1: points[1], p2: points[2], w: Math.SQRT1_2 }]);
+  canonicalQuarterCurves.set(curve, JSON.stringify(curve));
+  return curve;
+}
 
 /** Spans (P0, P1, P2, w1) of degree-2 rational Béziers, in order, as one curve with C0 joints. */
 function fromSpans(spans: { p0: Vec3; p1: Vec3; p2: Vec3; w: number }[]): NurbsCurve {
@@ -29,6 +56,10 @@ function arcSpans(plane: SketchPlane, c: P2, r: number, t0: number, sw: number) 
 
 /** A sketch outline (points, bulges) as one curve in 3D; closed outlines return to their start. */
 export function outlineCurve(plane: SketchPlane, points: P2[], bulges: number[] | undefined, closed: boolean): NurbsCurve {
+  if (!closed && points.length === 2) {
+    const canonical = canonicalQuarter(plane, points[0], points[1], bulges?.[0] ?? 0);
+    if (canonical) return canonical;
+  }
   const n = points.length, spans: { p0: Vec3; p1: Vec3; p2: Vec3; w: number }[] = [];
   for (let i = 0; i < (closed ? n : n - 1); i++) {
     const a = points[i], b = points[(i + 1) % n], bulge = bulges?.[i] ?? 0;
@@ -94,7 +125,13 @@ const num = (v: number) => { const r = Math.round(v * 1e9) / 1e9; if (r === 0) r
 /** Curves as one CAD source model `name` (curve ids c1, c2 …). */
 export function curvesSource(name: string, curves: NurbsCurve[]): string {
   const id = name.replace(/[^A-Za-z0-9_]/g, '_').replace(/^[^A-Za-z_]/, '_') || 'curves';
-  const body = curves.map((c, k) => `  @curve #c${k + 1} { type: nurbs; degree: ${c.degree}; knots: [${c.knots.map(num).join(',')}]; control-points: [${c.points.map(p => `[${p.map(num).join(',')}]`).join(',')}]; weights: [${c.weights.map(num).join(',')}]; }`).join('\n');
+  const body = curves.map((c, k) => {
+    // Certified coordinates have plain-decimal shortest spellings, so no duplicate decimal expander
+    // is needed here. Every other producer keeps its existing nine-decimal spelling byte for byte.
+    const snapshot = canonicalQuarterCurves.get(c), certified = snapshot !== undefined && snapshot === JSON.stringify(c);
+    const decimal = certified ? (value: number) => Object.is(value, -0) ? '-0' : String(value) : num;
+    return `  @curve #c${k + 1} { type: nurbs; degree: ${c.degree}; knots: [${c.knots.map(decimal).join(',')}]; control-points: [${c.points.map(p => `[${p.map(decimal).join(',')}]`).join(',')}]; weights: [${c.weights.map(decimal).join(',')}]; }`;
+  }).join('\n');
   return `@model ${id} {\n  version: 0;\n  length-unit: mm;\n${body}\n}`;
 }
 

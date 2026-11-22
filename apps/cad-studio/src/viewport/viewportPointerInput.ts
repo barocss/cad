@@ -1190,7 +1190,10 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
           if (sw < 1e-3 || sw > 2 * Math.PI - 1e-3) { request(); return; }
           d.sweep = sg * sw;
           const e = carcEnd(d); carc.current = null;
-          emit({ kind: 'polygon', points: [d.a, e], bulges: [Math.round(Math.tan(d.sweep / 4) * 1e9) / 1e9, 0], closed: false }, true, 'centre-arc-finish');
+          // Keep the quarter-turn coefficient so Make curves can retain the exact circular arc.
+          const bulge = Math.tan(d.sweep / 4);
+          const storedBulge = sw === Math.PI / 2 ? bulge : Math.round(bulge * 1e9) / 1e9;
+          emit({ kind: 'polygon', points: [d.a, e], bulges: [storedBulge, 0], closed: false }, true, 'centre-arc-finish');
         }
         request(); return;
       }
