@@ -10,7 +10,8 @@ export const DIRECT_THICKEN_COMMAND = {
   label: 'Thicken',
   hint: 'Use features.command inside proposals.propose for Studio approval. The body copies the source at the reviewed revision.',
   selection: 'Use the ID of one visible whole Direct surface in values and pass direct_revision from query.summary as expectedRevision.',
-  values: { surface: 'Direct surface ID', t: 'positive thickness in mm', side: 'normal (default), reverse, or both', mode: 'sampled (default) or exact-planar for a whole convex coplanar bilinear sheet with equal weights' },
+  values: { surface: 'Direct surface ID', t: 'positive thickness in mm', side: 'normal (default), reverse, or both',
+    mode: 'sampled (default), exact-planar for a whole convex coplanar bilinear sheet, or exact-cylinder for a whole upright quarter-cylinder patch' },
 };
 
 export const DIRECT_SNAPSHOT_APPROVAL = 'Direct surface snapshot';
@@ -26,7 +27,7 @@ export async function proposeDirectThickenCommand(state: ChatState, args: Record
     || typeof values.surface !== 'string' || !values.surface || typeof values.t !== 'number' || !Number.isFinite(values.t)
     || values.t <= 0 || values.t > 10000
     || (values.side !== undefined && values.side !== 'normal' && values.side !== 'reverse' && values.side !== 'both')
-    || (values.mode !== undefined && values.mode !== 'sampled' && values.mode !== 'exact-planar')
+    || (values.mode !== undefined && values.mode !== 'sampled' && values.mode !== 'exact-planar' && values.mode !== 'exact-cylinder')
     || args.faces !== undefined || args.edges !== undefined || args.bodies !== undefined || args.point !== undefined)
     return fail(state, 'Use values.surface, positive thickness values.t in mm, optional values.side and values.mode, and direct_revision from query.summary as expectedRevision.', { code: 'DIRECT_THICKEN_INPUT' });
 

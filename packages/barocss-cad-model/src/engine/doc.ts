@@ -1733,7 +1733,10 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'full-round': return `Full round × ${node.faces.length}`;
     case 'face-fillet': return `Face fillet ${n(node.radius)}`;
     case 'face-thread': return (node.diameter !== undefined ? `Thread M${n(node.diameter)}×${n(node.pitch)}` : `Thread ×${n(node.pitch)}`) + (node.hand === 'left' ? ' LH' : '');
-    case 'thicken': return `${node.mode === 'exact-planar' ? 'Exact planar Thicken' : 'Thicken'} ${node.name} ${n(node.thickness)}`;
+    case 'thicken': {
+      const labels = { sampled: 'Thicken', 'exact-planar': 'Exact planar Thicken', 'exact-cylinder': 'Exact cylinder Thicken' };
+      return `${labels[node.mode ?? 'sampled']} ${node.name} ${n(node.thickness)}`;
+    }
     case 'sheet-base': return `Sheet plate T${n(node.thickness)}`;
     case 'sheet-flange': return `Flange ${n(node.length)} · ${fmt(node.angle ?? 90)}°`;
     case 'frame-member': return `Member ${sectionLabel(node.section, n)} · ${memberLength(node)}`;

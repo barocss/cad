@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { part, param, thickenSpec, BarocssError, Location } from '../dist/api/index.js';
-import { evaluateCadPart, checkBrep, outputOf, saveCadPart, loadCadPart } from '../dist/index.js';
+import { evaluateCadPart, checkBrep, faceGeometry, outputOf, saveCadPart, loadCadPart } from '../dist/index.js';
 
 // Independent plane S(u,v)=[20+5u,-11+5v,3], u in [-2,6], v in [1,7].
 const plane = () => ({ degreeU: 1, degreeV: 1, knotsU: [-2, -2, 6, 6], knotsV: [1, 1, 7, 7], controlPoints: [[[10, -6, 3], [10, 24, 3]], [[50, -6, 3], [50, 24, 3]]], weights: [[1, 1], [1, 1]] });
@@ -104,6 +104,51 @@ test('exact planar Thicken refuses a twisted, collinear or folded trapezoid', ()
     raw.controlPoints[1][1] = corner;
     refused(() => part().thicken(raw, { t: 2, mode: 'exact-planar' }), 'CAPABILITY', 'evaluate');
   }
+});
+
+const quarterCylinder = () => ({
+  degreeU: 2, degreeV: 1, knotsU: [-2, -2, -2, 6, 6, 6], knotsV: [1, 1, 7, 7],
+  controlPoints: [[[36, -6, -2], [36, -6, 10]], [[28, 0, -2], [28, 0, 10]], [[22, -8, -2], [22, -8, 10]]],
+  weights: [[1, 1], [Math.SQRT1_2, Math.SQRT1_2], [1, 1]],
+});
+
+test('exact cylinder Thicken builds six faces with direction-aware radii and native volume', () => {
+  for (const [side, flipU, flipV, lower, upper] of [
+    ['reverse', false, false, 8, 10], ['normal', false, false, 10, 12], ['both', false, false, 9, 11],
+    ['normal', true, false, 8, 10], ['normal', false, true, 8, 10], ['normal', true, true, 10, 12],
+  ]) {
+    const raw = quarterCylinder();
+    if (flipU) { raw.controlPoints.reverse(); raw.weights.reverse(); }
+    if (flipV) for (const row of raw.controlPoints) row.reverse();
+    const made = part().thicken(raw, { t: 2, side, mode: 'exact-cylinder' });
+    const { brep } = outputOf(evaluateCadPart(made.doc), 'thicken1');
+    const check = checkBrep(brep, { strict: true });
+    assert.ok(check.valid, JSON.stringify(check.issues));
+    assert.deepEqual([brep.bodies[0].kind, brep.vertices.length, brep.edges.length, brep.faces.length], ['solid', 8, 12, 6]);
+    const native = new Map(brep.faces.map(face => [face.name, faceGeometry(face, 20)]));
+    assert.deepEqual([...native.keys()].sort(), ['normal', 'reverse', 'u-max', 'u-min', 'v-max', 'v-min'].map(name => 'thicken1.' + name));
+    const normal = native.get('thicken1.normal'), reverse = native.get('thicken1.reverse');
+    assert.equal(normal.kind, 'cylinder'); assert.equal(reverse.kind, 'cylinder');
+    assert.ok(Math.abs(normal.r - (flipU === flipV ? upper : lower)) < 1e-9);
+    assert.ok(Math.abs(reverse.r - (flipU === flipV ? lower : upper)) < 1e-9);
+    for (const wall of [normal, reverse]) {
+      assert.ok(Math.hypot(wall.c[0] - 30, wall.c[1] + 14) < 1e-9);
+      assert.ok(Math.abs(Math.abs(wall.a[2]) - 1) < 1e-12);
+    }
+    for (const face of ['u-min', 'u-max', 'v-min', 'v-max']) assert.equal(native.get('thicken1.' + face).kind, 'plane');
+    const expected = Math.PI / 4 * (upper ** 2 - lower ** 2) * 12;
+    assert.ok(Math.abs(made.mass({ density: 1 }).volume - expected) < 1e-7);
+  }
+});
+
+test('exact cylinder Thicken refuses a changed arc coefficient, a skew axis and radius collapse', () => {
+  const rational = quarterCylinder();
+  rational.weights[1] = [0.71, 0.71];
+  refused(() => part().thicken(rational, { t: 2, mode: 'exact-cylinder' }), 'CAPABILITY', 'evaluate');
+  const skew = quarterCylinder();
+  skew.controlPoints[1][1][0] += 0.01;
+  refused(() => part().thicken(skew, { t: 2, mode: 'exact-cylinder' }), 'CAPABILITY', 'evaluate');
+  refused(() => part().thicken(quarterCylinder(), { t: 10, side: 'reverse', mode: 'exact-cylinder' }), 'OFFSET_FOLDS', 'evaluate');
 });
 
 test('public thicken: exact six-field plain dense snapshot refuses metadata, accessors, wrappers and malformed geometry', () => {

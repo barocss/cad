@@ -53,7 +53,7 @@ const SPECS: Record<string, Spec> = {
   'text-relief': { parent: 'ref', faces: 'names1', text: 'text', font: 'any', size: 'dim', depth: 'dim', at: 'dim2', mode: 'enum:emboss|engrave', tolerance: 'num', 'tracking?': 'dim' },
   split: { parent: 'ref', at: 'dim', axis: 'enum:x|y|z' },
   sew: { names: 'any', surfaces: 'any', 'tolerance?': 'num' },
-  thicken: { name: 'text', surface: 'any', thickness: 'dim', 'side?': 'enum:normal|reverse|both', 'mode?': 'enum:sampled|exact-planar' },
+  thicken: { name: 'text', surface: 'any', thickness: 'dim', 'side?': 'enum:normal|reverse|both', 'mode?': 'enum:sampled|exact-planar|exact-cylinder' },
   shell: { parent: 'ref', thickness: 'dim', open: 'names' },
   draft: { parent: 'ref', faces: 'names1', angle: 'num', 'pull?': 'enum:x|y|z|-x|-y|-z', 'neutral?': 'dim' },
   'full-round': { parent: 'ref', faces: 'names1', 'along?': 'enum:x|y' },

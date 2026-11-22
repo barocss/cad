@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1632: [Exact Thicken for an upright quarter-cylinder](notes/exact-cylinder-thicken-2026-11-22/README.md), #11 and #368. Add a native six-face solid and verify independent radii, axis-collapse refusal, Studio edit and native Open.
 - D1631: [Through Cut on an exact planar Thicken solid](notes/exact-thicken-through-cut-2026-11-22/README.md), #175 and #11. Verify the existing native cut, independently reconstructed cap loops and persistent operands through Studio edit and Open.
 - D1630: [Exact planar Thicken for convex quadrilateral sheets](notes/exact-planar-trapezoid-thicken-2026-11-22/README.md), #11. Verify exact corner admission, a tilted native trapezoid, warped refusal, retained affine identity and Studio edit and Open.
 - D1629: [Exact planar Thicken for an affine sheet](notes/exact-planar-thicken-2026-11-22/README.md), #11. Verify the six native faces, independent mass and thickness, preserved sampled names, and Studio edit and native Open.

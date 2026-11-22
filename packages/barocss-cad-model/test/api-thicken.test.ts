@@ -107,6 +107,23 @@ test('exact planar Studio facade and native file preserve the chosen recipe and 
   assert.deepEqual(partBreps(reopened.doc)[0].brep, brep);
 });
 
+test('exact cylinder mode survives the Studio facade and native file round trip', async () => {
+  const w = Math.SQRT1_2;
+  const raw: RawNurbsSurface = { degreeU: 2, degreeV: 1, knotsU: [0, 0, 0, 1, 1, 1], knotsV: [0, 0, 1, 1],
+    controlPoints: [[[10, 0, 0], [10, 0, 12]], [[10, 10, 0], [10, 10, 12]], [[0, 10, 0], [0, 10, 12]]],
+    weights: [[1, 1], [w, w], [1, 1]] };
+  const plate = part('Exact quarter').thicken(raw, { t: 2, side: 'reverse', mode: 'exact-cylinder' });
+  const doc = plate.doc, node = doc.nodes[0];
+  assert.equal(node.kind, 'thicken');
+  assert.equal(node.mode, 'exact-cylinder');
+  assert.equal(checkNode(node, [], {}), null);
+  close(plate.mass({ density: 1 }).volume, Math.PI * 108);
+  const reopened = await readStudioFile(encodeStudioFile(doc));
+  assert.ok('doc' in reopened, JSON.stringify(reopened));
+  assert.deepEqual(reopened.doc, doc);
+  assert.deepEqual(partBreps(reopened.doc), partBreps(doc));
+});
+
 test('selected direct capture checks trims and identity before copying, and keeps independent history', async () => {
   await loadDirect();
   const doc = sourceDoc(), ctx = context(doc, ['surface']), before = structuredClone(doc), snapshot = thickenSnapshot(ctx);

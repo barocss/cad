@@ -40,7 +40,7 @@ import type { GussetPlaced, MemberPlaced } from './part-frame.js';
 import type { CadPartNameSignature } from './part-expect.js';
 
 export type CadPartDim = number | { readonly parameter: string };
-export type ThickenMode = 'sampled' | 'exact-planar';
+export type ThickenMode = 'sampled' | 'exact-planar' | 'exact-cylinder';
 export type CadPartAxis = 'x' | 'y' | 'z';
 export type CadPartPoint2 = readonly [CadPartDim, CadPartDim];
 export type CadPartPoint3 = readonly [CadPartDim, CadPartDim, CadPartDim];

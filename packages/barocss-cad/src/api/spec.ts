@@ -34,7 +34,7 @@ type BaseSpec =
   | { readonly command: 'box'; readonly values: { readonly w: number; readonly d: number; readonly h: number; readonly x: number; readonly y: number; readonly z: number } }
   | { readonly command: 'cylinder'; readonly values: { readonly r: number; readonly h: number; readonly x: number; readonly y: number; readonly z: number } }
   | { readonly command: 'sew'; readonly surfaces: readonly RawNurbsSurface[]; readonly values: { readonly tol: number } }
-  | { readonly command: 'thicken'; readonly surface: RawNurbsSurface; readonly values: { readonly t: number; readonly side?: 'normal' | 'reverse' | 'both'; readonly mode?: 'exact-planar' } }
+  | { readonly command: 'thicken'; readonly surface: RawNurbsSurface; readonly values: { readonly t: number; readonly side?: 'normal' | 'reverse' | 'both'; readonly mode?: Exclude<ThickenMode, 'sampled'> } }
   | { readonly command: 'extrude'; readonly sketch: SketchData; readonly values: { readonly h: number; readonly draft: number } }
   | { readonly command: 'revolve'; readonly sketch: SketchData; readonly values: { readonly axis: 'x' | 'y'; readonly deg: number } }
   | { readonly command: 'hole'; readonly face: string; readonly values: { readonly type: 'through' | 'blind'; readonly d: number; readonly x: number; readonly y: number; readonly depth?: number } }
@@ -92,7 +92,7 @@ export interface RawNurbsSurface {
   readonly controlPoints: readonly (readonly (readonly [number, number, number])[])[];
   readonly weights: readonly (readonly number[])[];
 }
-/** Total thickness t along du × dv by default. Exact planar mode accepts a whole convex coplanar bilinear sheet with equal weights. */
+/** Total thickness t along du × dv by default. Exact modes accept whole planar quadrilaterals or upright quarter-cylinder patches. */
 export interface ThickenOptions { t: Dim; side?: 'normal' | 'reverse' | 'both'; mode?: ThickenMode }
 /** `sew`: tolerance in mm; omitted or 0 uses the native automatic tolerance. */
 export interface SewOptions { tol?: number }
@@ -196,14 +196,15 @@ export function shellSpec(open: readonly string[], o: Resolved<ShellOptions>): F
   return { command: 'shell', faces: open, values: { t: positive('t', o.t) } };
 }
 
-/** Capture a whole-surface recipe. Exact planar mode requires a convex coplanar bilinear support. */
+/** Capture a whole-surface recipe with its selected geometry mode. */
 export function thickenSpec(surface: RawNurbsSurface, o: Resolved<ThickenOptions>): Extract<FeatureSpec, { readonly command: 'thicken' }> {
   const t = positive('t', o.t), { side, mode } = o;
   if (t > 10000) throw refuse('VALUE', 'thicken t must be at most 10000 mm');
   if (side !== undefined && side !== 'normal' && side !== 'reverse' && side !== 'both') throw refuse('VALUE', 'thicken side must be normal, reverse or both');
-  if (mode !== undefined && mode !== 'sampled' && mode !== 'exact-planar') throw refuse('VALUE', 'thicken mode must be sampled or exact-planar');
+  if (mode !== undefined && mode !== 'sampled' && mode !== 'exact-planar' && mode !== 'exact-cylinder')
+    throw refuse('VALUE', 'thicken mode must be sampled, exact-planar or exact-cylinder');
   return { command: 'thicken', surface: surfaceSnapshot(surface), values: { t, ...(side !== undefined && side !== 'normal' ? { side } : {}),
-    ...(mode === 'exact-planar' ? { mode } : {}) } };
+    ...(mode !== undefined && mode !== 'sampled' ? { mode } : {}) } };
 }
 
 /** Copy ordered whole surfaces into one new closed body with the existing native sewing algorithm. */
