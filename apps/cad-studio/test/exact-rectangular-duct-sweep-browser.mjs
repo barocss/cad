@@ -5,6 +5,7 @@ import { createFlow } from './flow-helper.mjs';
 import { checkApprovedDuctReview, checkChangedDuctPath, reviewPendingDuct } from './duct-proposal-review-browser-steps.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
+const lineArc = process.argv.includes('--line-and-arc');
 const spacedOpposite = process.argv.includes('--spaced-opposite');
 const opposite = spacedOpposite || process.argv.includes('--opposite-arcs');
 const spaced = spacedOpposite || process.argv.includes('--spaced');
@@ -13,6 +14,7 @@ const twoArcs = opposite || sameTurn;
 const endX = sameTurn ? -6 : 30;
 const run = spaced ? 8 : 0;
 assert.ok(!opposite || !sameTurn, 'Choose one two-arc turn direction.');
+assert.ok(!lineArc || !twoArcs, 'Choose one path family.');
 const baseline = process.argv.includes('--expect-refused');
 const review = process.argv.includes('--review');
 assert.ok(!review || (opposite && !spaced && !baseline), 'Review needs an active touching opposite-arc duct flow.');
@@ -23,13 +25,15 @@ const ends = twoArcs ? [
   { direction: sameTurn ? 'Left' : 'Right', center: [endX, 30 + run, 0], axis: 0, sign: sameTurn ? -1 : 1 },
 ] : [
   { direction: 'Left', center: [-10, 0, 0], axis: 0, sign: -1 },
-  { direction: 'Back', center: [20, 34, 0], axis: 1, sign: 1 },
+  { direction: 'Back', center: [20, lineArc ? 20 : 34, 0], axis: 1, sign: 1 },
 ];
 const path = spaced ? { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
   controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0], [12, 20, 0], [12, 38, 0], [endX, 38, 0]],
   weights: [1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1] } : twoArcs ? { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
   controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 30, 0], [endX, 30, 0]],
-  weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1] } : { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
+  weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1] } : lineArc ? { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
+  controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0]],
+  weights: [1, 1, 1, Math.SQRT1_2, 1] } : { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
   controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0], [20, 27, 0], [20, 34, 0]],
   weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1] };
 const hole = [[-1, -2], [-1, 2], [1, 2], [1, -2]].map(start => ({ kind: 'line', start }));
@@ -52,11 +56,11 @@ if (review) pins.push('apps/cad-studio/test/duct-proposal-review-browser-steps.m
 const f = await createFlow({
   name: spacedOpposite ? 'exact-spaced-s-bend-duct' : spaced ? 'exact-spaced-same-turn-duct' : sameTurn ? 'exact-rectangular-same-turn-duct'
     : opposite ? 'exact-rectangular-s-bend-duct' : 'exact-rectangular-duct-sweep', output: process.argv[2],
-  envFrozen: spacedOpposite ? 'D1736_SOURCE_FROZEN' : spaced ? 'D1733_SOURCE_FROZEN' : review ? 'D1705_SOURCE_FROZEN'
+  envFrozen: lineArc ? 'D1746_SOURCE_FROZEN' : spacedOpposite ? 'D1736_SOURCE_FROZEN' : spaced ? 'D1733_SOURCE_FROZEN' : review ? 'D1705_SOURCE_FROZEN'
     : sameTurn ? 'D1713_SOURCE_FROZEN' : opposite ? 'D1704_SOURCE_FROZEN' : 'D1675_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Sweep a centered rectangular duct, inspect both openings and edit the aperture through Studio History.',
-  limits: [`One bend-aligned 4 × 6 mm section with one centered rectangular opening, ${twoArcs ? 'R12/R18 mm quarter arcs' : 'R20 mm quarter elbow'}${spaced ? ' and 8 mm straight' : ''}, desktop WebGPU and local L1 MCP.`],
+  limits: [`One bend-aligned 4 × 6 mm section with one centered rectangular opening, ${twoArcs ? 'R12/R18 mm quarter arcs' : (lineArc ? 'R20 mm quarter arc with a 10 mm straight lead' : 'R20 mm quarter elbow')}${spaced ? ' and 8 mm straight' : ''}, desktop WebGPU and local L1 MCP.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, curveDomain, evaluateCurve, faceGeometry, massPropertiesOf,
@@ -75,7 +79,7 @@ const capLoops = face => face.loops.map(id => {
     const use = uses.get(id), twin = uses.get(use.twin), edge = edges.get(use.edge), [lo, hi] = curveDomain(edge.curve);
     return { degree: edge.curve.degree, adjacent: faces.get(loops.get(twin.loop).face).name,
       reciprocal: twin.twin === id && twin.edge === use.edge && twin.sense !== use.sense,
-      points: [0, .25, .5, .75, 1].map(fraction => evaluateCurve(edge.curve, lo + (hi - lo) * fraction)) };
+      bound: !!use.pcurve && !!twin.pcurve, points: [0, .25, .5, .75, 1].map(fraction => evaluateCurve(edge.curve, lo + (hi - lo) * fraction)) };
   }) };
 });
 const caps = brep.faces.filter(face => /^n1[.](start|end)$/.test(face.name)).map(face =>
@@ -85,7 +89,7 @@ const bend = bendFaces.map(face => faceGeometry(face));
 const outerFaces = ${spaced} ? [...bendFaces, ...brep.faces.filter(face => face.name.includes('.line.'))] : bendFaces;
 const outer = outerFaces.filter(face => ${JSON.stringify(sideTags.outer)}.some(tag => face.name.endsWith('.side[' + tag + ']')))
   .map(face => [face.name, digestOf(face.surface)]);
-const joins = ${JSON.stringify(spaced ? [[1, 12], [1, 20]] : twoArcs ? [[1, 12]] : [[0, 0], [1, 20]])}.map(([axis, at]) => brep.edges
+const joins = ${JSON.stringify(spaced ? [[1, 12], [1, 20]] : twoArcs ? [[1, 12]] : lineArc ? [[0, 0]] : [[0, 0], [1, 20]])}.map(([axis, at]) => brep.edges
   .filter(edge => edge.curve.controlPoints.every(point => Math.abs(point[axis] - at) < 1e-7))
   .map(edge => ({ ...measureBrepEdgeContinuity(brep, edge.id, { curvature: true }),
     x: edge.curve.controlPoints.map(point => point[0]),
@@ -103,9 +107,13 @@ const browser = () => f.page.getByRole('complementary', { name: 'Browser', exact
 const hud = () => f.page.getByRole('dialog', { name: 'Sweep', exact: true });
 const card = id => f.page.getByRole('listitem', { name: `Proposal ${id}`, exact: true });
 const coordinate = (i, axis) => f.sketchPanel().getByLabel(`Point ${i} ${axis}`, { exact: true });
-const volumeAt = height => (24 - 2 * height) * (twoArcs ? 15 * Math.PI + run : 24 + 10 * Math.PI);
+const volumeAt = height => (24 - 2 * height) * (twoArcs ? 15 * Math.PI + run : (lineArc ? 10 : 24) + 10 * Math.PI);
 const ductCentre = height => {
   const area = 24 - 2 * height, q = (24 * 4 ** 2 - 2 * height * 2 ** 2) / (12 * area);
+  if (lineArc) {
+    const arc = 10 * Math.PI, x = 2 * (20 + q / 20) / Math.PI;
+    return [(arc * x - 50) / (10 + arc), arc * (20 - x) / (10 + arc), 0];
+  }
   const first = 6 * Math.PI, second = 9 * Math.PI, length = first + run + second;
   const moment = radius => 2 * (radius + q / radius) / Math.PI;
   const a = moment(12), b = moment(18);
@@ -120,7 +128,7 @@ async function verify(label, doc, innerHeight) {
   assert.ok(read.check.valid, read.check.issues.join('\n'));
   assert.deepEqual(read.source, { family: 'sweep-curve', id: 'n1' });
   assert.equal(read.check.topology[0].genus, 1);
-  assert.deepEqual(read.check.counts, twoArcs && !spaced
+  assert.deepEqual(read.check.counts, lineArc || (twoArcs && !spaced)
     ? { bodies: 1, shells: 1, faces: 18, loops: 20, coedges: 80, edges: 40, vertices: 24 }
     : { bodies: 1, shells: 1, faces: 26, loops: 28, coedges: 112, edges: 56, vertices: 32 });
   assert.deepEqual([...read.openedFaces].sort(), ['n1.end', 'n1.start']);
@@ -139,6 +147,7 @@ async function verify(label, doc, innerHeight) {
       for (const edge of loop.edges) {
         assert.equal(edge.degree, 1);
         assert.ok(edge.reciprocal);
+        if (lineArc && cap.name === 'n1.end') assert.ok(edge.bound, 'The curved outlet has two native chart bindings');
         for (const point of edge.points) {
           near(point[axis], center[axis]);
           const u = Math.abs(point[1 - axis] - center[1 - axis]), v = Math.abs(point[2]);
@@ -156,14 +165,14 @@ async function verify(label, doc, innerHeight) {
     near(cylinders[i].r, radius);
     assert.equal(cylinders[i].out, sense);
   });
-  assert.deepEqual(read.joins.map(joint => joint.length), twoArcs && !spaced ? [8] : [8, 8]);
+  assert.deepEqual(read.joins.map(joint => joint.length), lineArc || (twoArcs && !spaced) ? [8] : [8, 8]);
   for (const [index, joint] of read.joins.entries()) {
     for (const edge of joint) {
       assert.equal(edge.status, 'measured');
       near(edge.maximumAngleDegrees, 0, 1e-5);
       assert.equal(edge.curvature.status, 'measured');
+      if (lineArc || twoArcs) assert.deepEqual(edge.bound, [true, true]);
       if (twoArcs) {
-        assert.deepEqual(edge.bound, [true, true]);
         const x = edge.x[0];
         const axial = edge.x.every(value => Math.abs(value - x) < 1e-7);
         const jumps = !axial ? 0 : spaced ? 1 / Math.abs(x - (index ? endX : 0))
@@ -181,7 +190,7 @@ async function verify(label, doc, innerHeight) {
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, 1);
   near(bodies[0].volume, volumeAt(innerHeight));
-  const centre = spaced ? ductCentre(innerHeight) : undefined;
+  const centre = spaced || lineArc ? ductCentre(innerHeight) : undefined;
   if (centre) for (const values of [read.centroid, read.quadratureCentroid, bodies[0].centroid])
     values.forEach((value, axis) => near(value, centre[axis]));
   f.report.observations.push({ label, innerHeight, volume: read.volume, quadrature: read.quadrature,
@@ -255,9 +264,11 @@ await f.run(async () => {
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Sweep');
   await hud().getByLabel('Representation', { exact: true }).selectOption('exact');
+  if (lineArc) await hud().locator('.hud-step').getByText('Exact line and arc', { exact: true }).waitFor();
   if (baseline) {
     await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
-    const refusal = spacedOpposite ? 'The arc–line–arc Sweep needs a circular outer section' : spaced ? 'The spaced rectangular Sweep needs a solid section'
+    const refusal = lineArc ? 'The line-and-arc Sweep needs a circular outer section'
+      : spacedOpposite ? 'The arc–line–arc Sweep needs a circular outer section' : spaced ? 'The spaced rectangular Sweep needs a solid section'
       : sameTurn ? 'The same-turn rectangle must be solid' : 'The rectangular S-bend needs a solid section';
     await hud().getByText(refusal, { exact: true }).waitFor();
     assert.ok(await button('Apply', hud()).isDisabled());
@@ -315,18 +326,18 @@ await f.run(async () => {
   const reopened = (await f.freshOpen(saved.file, edited, '07-fresh-open')).doc;
   const reopenedNative = await verify('reopened-native', reopened, 2);
   assert.equal(reopenedNative.digest, after.digest);
-  if (twoArcs) {
+  if (lineArc || twoArcs) {
     await showOpening(ends[0], '07-reopened-inlet');
     await showOpening(ends[1], '07-reopened-outlet');
   }
-  if (spaced) await inspectJoints(reopenedNative, '07-reopened');
+  if (spaced || lineArc) await inspectJoints(reopenedNative, '07-reopened');
   await f.openFeatureEditor(1);
   await button('Edit sketch', f.editor()).click();
   await f.sketchPanel().getByLabel('Active outline', { exact: true }).selectOption('1');
   assert.equal(await coordinate(1, 'Y').inputValue(), '-1');
   assert.equal(await coordinate(2, 'Y').inputValue(), '1');
   await f.snapshot('08-reopened-aperture-edit');
-  if (sameTurn || spacedOpposite) {
+  if (lineArc || sameTurn || spacedOpposite) {
     await coordinate(1, 'Y').fill('-2');
     await coordinate(2, 'Y').fill('2');
     const restored = (await f.finishSketch('08-aperture-resized-after-open')).doc;
@@ -346,13 +357,14 @@ await f.run(async () => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
     assert.match(description.values.sketch, /one centered rectangular opening/);
+    if (lineArc) assert.match(description.values.sketch, /A line–arc path accepts .* rectangle aligned with the bend frame/);
     const summary = await call('query', { action: 'summary' });
     const rail = summary.direct_curves.find(candidate => candidate.id === railId);
     assert.ok(rail?.revision);
     const op = { tool: 'features', args: { action: 'command', command: 'sweep-curve', expectedRevision,
       values: { sketch: 'n0', path: rail.id, pathRevision: rail.revision, representation: 'exact' } } };
     const before = await readFile(file);
-    if (sameTurn || spacedOpposite) {
+    if (lineArc || sameTurn || spacedOpposite) {
       const stale = { ...op, args: { ...op.args, values: { ...op.args.values, pathRevision: '0'.repeat(64) } } };
       assert.match((await call('features', { action: 'batch', dryRun: true, ops: [stale] }, true)).error, /revision|changed/i);
       assert.deepEqual(await readFile(file), before);
@@ -363,7 +375,7 @@ await f.run(async () => {
     assert.deepEqual(await readFile(file), before);
     const result = await call('proposals', { action: 'propose', title: 'Exact rectangular duct', ops: [op] });
     assert.deepEqual([result.proposal, result.applied], ['P1', false]);
-    if (sameTurn || spacedOpposite) {
+    if (lineArc || sameTurn || spacedOpposite) {
       const staged = await readFile(file);
       assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*Studio/i);
       assert.deepEqual(await readFile(file), staged);

@@ -429,27 +429,36 @@ function bindBendSections(glued: Brep, id: string, hasTail: boolean, edgeCount: 
     const face = facesByLoop.get(use.loop), twin = use.twin ? uses.get(use.twin) : undefined;
     if (!face?.name?.startsWith(`${id}.bend.`) || !twin) continue;
     const other = facesByLoop.get(twin.loop);
-    const atEnd = other?.name?.startsWith(`${id}.tail.`);
+    const atCap = !hasTail && edgeCount !== 2 && other?.name === `${id}.end`;
+    const atEnd = atCap || other?.name?.startsWith(`${id}.tail.`);
     if (!atEnd && !other?.name?.startsWith(`${id}.line.`)) continue;
     const surface = face.surface, edge = edges.get(use.edge);
     if (surface.kind !== 'surface' || !edge) return;
     const bore = surface.id.startsWith(`${id}_hole0_`);
     const peer = other?.surface;
-    if (peer?.kind !== 'surface' || bore !== peer.id.startsWith(`${id}_${atEnd ? 'tail' : 'line'}_w0_0_1_`)) return;
+    if (peer?.kind !== 'surface' || (!atCap && bore !== peer.id.startsWith(`${id}_${atEnd ? 'tail' : 'line'}_w0_0_1_`))) return;
     const { u, v } = surfaceDomain(surface), row = atEnd ? surface.controlPoints.length - 1 : 0;
     const bendBinding = edgeCount !== 2 && surface.degreeU === 1 ? affinePlaneBinding(edge.curve, surface, tolerance)
       : sectionBinding(edge.curve, { degree: surface.degreeV, knots: surface.knotsV,
         controlPoints: surface.controlPoints[row], weights: surface.weights[row] }, u[atEnd ? 1 : 0], v, 'v', tolerance);
     if (!bendBinding) return;
     bindings.set(use.id, bendBinding);
-    const peerBinding = ringChartEdge(edge.curve, peer, tolerance);
-    if (peerBinding?.side !== (atEnd ? 'v0' : 'v1')) return;
-    bindings.set(twin.id, peerBinding.pcurve);
+    // Without a tail the terminal rectangle trims one affine cap chart, including its opening.
+    if (atCap) {
+      const capBinding = affinePlaneBinding(edge.curve, peer, tolerance);
+      if (!capBinding) return;
+      bindings.set(twin.id, capBinding);
+    } else {
+      const peerBinding = ringChartEdge(edge.curve, peer, tolerance);
+      if (peerBinding?.side !== (atEnd ? 'v0' : 'v1')) return;
+      bindings.set(twin.id, peerBinding.pcurve);
+    }
     (atEnd ? ends : starts)[bore ? 1 : 0]++;
   }
   const outerCount = edgeCount === 8 ? 4 : edgeCount, innerCount = hasBore ? 2 : edgeCount === 8 ? 4 : 0;
+  const bindEnd = hasTail || edgeCount !== 2;
   if (starts[0] === outerCount && starts[1] === innerCount
-    && ends[0] === (hasTail ? outerCount : 0) && ends[1] === (hasTail ? innerCount : 0)) return { ...glued, coedges: glued.coedges.map(use => {
+    && ends[0] === (bindEnd ? outerCount : 0) && ends[1] === (bindEnd ? innerCount : 0)) return { ...glued, coedges: glued.coedges.map(use => {
     const pcurve = bindings.get(use.id);
     if (!pcurve) return use;
     const { id, edge, sense, loop, next, prev, twin } = use;
@@ -909,11 +918,9 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
 
   const lineArc: JoinedRail | undefined = tangentLineArcLine(path, refuse) ?? tangentLineArc(path, refuse);
   if (lineArc) {
-    const rectangle = profileRadius === undefined && lineArc.tailLength !== undefined ? rectangleSection(outer) : undefined;
+    const rectangle = profileRadius === undefined ? rectangleSection(outer) : undefined;
     if (!rectangle && profileRadius === undefined) return refuse('CAPABILITY',
-      lineArc.tailLength !== undefined && profileRadius === undefined
-        ? 'Exact line-arc-line sweep needs one circular disk or one bend-aligned rectangular section.'
-        : 'Exact line-and-arc sweep needs one circular outer section.');
+      `Exact ${sweepStyle(lineArc)} sweep needs one circular disk or one bend-aligned rectangular section.`);
     const hole = rectangle ? undefined : circularHole(holes, sweepStyle(lineArc), refuse);
     const bore = hole && concentricBore(disk!, hole, refuse, sweepStyle(lineArc));
     const initial = frame(lineArc.tangent), [x, y] = initial;

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1746: [Sweep rectangular sections from a straight span into an arc](notes/exact-rectangular-line-arc-sweep-2026-11-23/README.md), #10. Verify four solid joins, eight duct joins, both terminal openings and editable fresh Open.
 - D1745: [Extract Sketch camera framing from Studio Viewport](notes/studio-sketch-camera-framing-2026-11-23/README.md), #44. Match 23 desktop states and 24 camera and Fit observations.
 - D1744: [Sweep a concentric circular bore from a straight span into an arc](notes/exact-annular-line-arc-sweep-2026-11-23/README.md), #10. Verify the curved outlet and all four native joints through a bore edit and fresh Open.
 - D1743: [Sweep a concentric circular bore through an exact elbow](notes/exact-annular-elbow-sweep-2026-11-23/README.md), #10. Retain both tube openings, eight native joins and editable fresh Open.
