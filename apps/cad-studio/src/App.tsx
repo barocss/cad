@@ -34,7 +34,6 @@ import { readFilletPickedEdgeHighlight, type FilletPickedEdgeRequest } from './a
 import { SHARED_HOLE_LAYOUT_EDIT } from './app/sharedHoleLayout';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { useBrowserActions } from './app/useBrowserActions';
-import { useContinuityLocation } from './app/useContinuityLocation';
 import { commandApplyReadiness, createCommandApplyQueue } from './state/commandApply';
 import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
@@ -99,12 +98,8 @@ import { MeasurementInspector, PinnedMeasurement, InterferenceInspector } from '
 import { useInterferenceCheck } from './state/useInterferenceCheck';
 import { measureQuantityText } from './ui/quantityText';
 import { SelectionInspector } from './ui/SelectionInspector';
-import { EdgeContinuity } from './ui/EdgeContinuity';
-import { EdgeCurvature } from './ui/EdgeCurvature';
-import { useEdgeCurvature } from './app/useEdgeCurvature';
 import { useDirectCurveCurvature } from './app/useDirectCurveCurvature';
-import type { ContinuityRequest } from '@barocss/cad-model/engine/edgeContinuity';
-import { continuitySelection } from './app/edgeContinuitySelection';
+import { useNativeEdgeInspection } from './app/useNativeEdgeInspection';
 import { MeshFileDialogs } from './files/MeshFileDialogs';
 import { useRouteBundleEditor } from './state/useRouteBundleEditor';
 import { cutPatternSourceLabel, isCutPattern, selectedCutPatternSource } from './app/cutPatternSource';
@@ -2889,30 +2884,15 @@ export function App() {
   const viewportUnderlays = useMemo(() => routeGuideUnderlays.length ? [...underlaysShown, ...routeGuideUnderlays] : underlaysShown, [underlaysShown, routeGuideUnderlays]);
 
   const selBodies = selectedBodies(selection).map(i => bodies[i]).filter(Boolean);
-  const continuityPick = fresh && !busy && shownDoc === doc && marker === null && !workerFailure
-    && !drawing && !rendering && !section && !inPlace && !active && !bodyDrag && !ghost && !workingComparison
-    && !routePanelOpen && !halvesShownRef.current && viewBodies === drawnBodies && sameMeshes(drawnBodies, bodies)
-    ? continuitySelection(selection, bodies) : null;
-  const continuityOpen = openIntent.current, continuityKey = continuityPick?.body.key;
-  const readContinuity = async (input: ContinuityRequest) => {
-    const current = () => continuityOpen === openIntent.current && ownsEvaluatedSource() && shownDocNow.current === doc;
-    const unavailable = { error: 'The source changed. Select the edge again.' };
-    if (!continuityKey || !current()) return unavailable;
-    const reply = await engine.edgeContinuity(evaluated, continuityKey, input);
-    return current() ? reply : unavailable;
-  };
-  const curvaturePick = continuityPick?.picked && !lookOf(doc, continuityPick.body).hidden &&
-    !printEnabled && !camEnabled && !measure && !directSel.length && !instanceSel.length && !isolatedInstances && !stepsDisp?.opaque &&
-    !assembly.draft && !sketch && !cageEd.session && !skel.session && !inPlace && editNode === null ? continuityPick.picked : undefined;
-  const curvatureOwner = useMemo(() => curvaturePick ? {} : null,
-    [evaluated, docGeneration, workerSession, curvaturePick, continuityKey, continuityOpen]);
-  const curvature = useEdgeCurvature(curvatureOwner, curvaturePick, readContinuity);
-  const continuityVisible = !!continuityPick && !lookOf(doc, continuityPick.body).hidden &&
-    !printEnabled && !camEnabled && !measure && !directSel.length && !instanceSel.length && !isolatedInstances && !stepsDisp?.opaque &&
-    !assembly.draft && !sketch && !cageEd.session && !skel.session && editNode === null;
-  const continuityLocationOwner = useMemo(() => continuityVisible ? {} : null,
-    [continuityVisible, evaluated, docGeneration, workerSession, continuityKey, continuityPick?.edge, continuityOpen]);
-  const continuityLocation = useContinuityLocation(continuityLocationOwner, readContinuity);
+  const edgeInspection = useNativeEdgeInspection({
+    source: { doc, evaluated, docGeneration, workerSession, bodies, selection },
+    enabled: fresh && !busy && shownDoc === doc && marker === null && !workerFailure
+      && !drawing && !rendering && !section && !inPlace && !active && !bodyDrag && !ghost && !workingComparison
+      && !routePanelOpen && !halvesShownRef.current && viewBodies === drawnBodies && sameMeshes(drawnBodies, bodies),
+    overlaysEnabled: !printEnabled && !camEnabled && !measure && !directSel.length && !instanceSel.length && !isolatedInstances && !stepsDisp?.opaque
+      && !assembly.draft && !sketch && !cageEd.session && !skel.session && !inPlace && editNode === null,
+    engine, openIntent, shownDocNow, ownsEvaluatedSource,
+  });
   const directCurveId = poleEditor.objectId;
   const directCurveVisible = !!directCurveId && !workerFailure && !printEnabled && !camEnabled &&
     !drawing && !rendering && !section && !inPlace && !active && !ghost && !workingComparison &&
@@ -3200,11 +3180,8 @@ export function App() {
       {sketch3dInputActive && skel.session && <SkeletonPanel editor={skel} name={skel.session.node === null ? 'new skeleton' : featureLabel(doc.nodes[skel.session.node], skel.session.node, doc.nodes)} />}
       {!cageEd.session && !skel.session && !rendering && !sketch && !measure && !active && !directSel.length && !instanceSel.length && !assembly.draft && <SelectionInspector model={{ doc, evaluated, bodies, fresh, busy, massReady }} selection={selection} materialSettings={{ material, setMaterial }}
         display={{ showBox, setShowBox, inertiaAt, setInertiaAt }} changes={{ commit, setSelection, edgesToCurves, loadBendTable, setFlatView, setCutListView, separate }}>
-        {continuityPick && !lookOf(doc, continuityPick.body).hidden && <EdgeContinuity
-          key={JSON.stringify([docGeneration, workerSession, continuityPick.body.key, continuityPick.edge, continuityPick.picked])}
-          picked={continuityPick.picked} selectedDisplayEdge={continuityPick.edge !== undefined} source={evaluated} location={continuityLocation}
-          read={readContinuity} />}
-        {curvaturePick && <EdgeCurvature {...curvature} />}
+        {edgeInspection.panel}
+        {edgeInspection.combControls}
         {editNode !== null && <HistoryFeatureEditor
           model={{ doc, evaluated, commandDoc, editNode, fresh, busy, workerSession }}
           owner={{ document: () => docNow.current, evaluated: () => evaluatedRef.current, marker: () => markerNow.current,
@@ -3312,7 +3289,7 @@ export function App() {
         poses={{ poseStore, explodeStore, jointTree, bodies: drawnBodies, instancesPlaced: viewportPlacements, cpuInstanceSection }} liveSection={sectionLiveView}
         display={viewDisplay.viewport} onBackend={setViewBackend}
         modelUnavailable={modelUnavailable} bodies={cageInputActive ? cageEd.shown(shownBodies) : viewBodies} modelSelection={modelSelection}
-        ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? curvature.overlay} continuityLocation={continuityLocation.curve} filletEndpoints={displayedFilletEndpoints} filletPickedEdgeHighlight={filletPickedEdgeHighlight} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
+        ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? edgeInspection.comb} continuityLocation={edgeInspection.location} filletEndpoints={displayedFilletEndpoints} filletPickedEdgeHighlight={filletPickedEdgeHighlight} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
         gizmo={cageInputActive ? cageEd.gizmo : routeGizmo ?? gizmo ?? instGizmo ?? poleEditor.gizmo} cage={cageInputActive ? cageEd.overlay : null} onPickCage={cageInputActive ? cageEd.onPick : undefined} tool={skel.tool}
         handles={sectionDrag.length ? sectionDrag : handles} instancePreview={instancePreview} contactLinks={contactShown && motionContact ? motionContact.links : undefined}
         render={rendering ? render : null} analysis={rendering ? null : viewAnalysis}
