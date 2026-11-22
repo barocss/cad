@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1709: [Sweep a solid rectangle along same-turn tangent arcs](notes/exact-same-turn-rectangular-sweep-2026-11-23/README.md), #10. Verify four native joins, width changes before and after fresh Open, and explicit Agent approval.
+
 - D1708: [Sweep a concentric bore along same-turn tangent arcs](notes/exact-same-turn-annular-sweep-2026-11-23/README.md), #10. Verify four native seams, two bore mouths, explicit Agent approval and fresh Studio Open.
 
 - D1707: [Extract viewport body details from Studio App](notes/studio-viewport-body-details-2026-11-23/README.md), #44. Match the existing section, assembly steps, occurrence appearance and thread views across 50 desktop checkpoints.

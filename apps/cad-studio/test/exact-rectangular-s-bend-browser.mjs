@@ -4,8 +4,11 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
+const sameTurn = process.argv.includes('--same-turn');
+const endX = sameTurn ? -6 : 30;
+const bendName = sameTurn ? 'same-turn bend' : 'S-bend';
 const first = [[0, 0, 0], [12, 0, 0], [12, 12, 0]];
-const second = [[12, 12, 0], [12, 30, 0], [30, 30, 0]];
+const second = [[12, 12, 0], [12, 30, 0], [endX, 30, 0]];
 const knot = [0, 0, 0, 1, 1, 1];
 const weights = [1, Math.SQRT1_2, 1];
 const path = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
@@ -26,9 +29,10 @@ const pins = ['packages/barocss-cad/src/brep/exact-sweep.ts', 'packages/barocss-
   'packages/barocss-cad-model/src/chat/part/features.ts', 'apps/cad-studio/src/ui/SweepHistoryInputs.tsx'];
 const baseline = process.argv.includes('--expect-refused');
 const f = await createFlow({
-  name: 'exact-rectangular-s-bend', output: process.argv[2], envFrozen: 'D1703_SOURCE_FROZEN',
+  name: 'exact-rectangular-two-arc-sweep', output: process.argv[2],
+  envFrozen: sameTurn ? 'D1709_SOURCE_FROZEN' : 'D1703_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Sweep an aligned solid rectangle along two exact opposite circular bends.',
+  qualification: `Sweep an aligned solid rectangle along the exact ${bendName}.`,
   limits: ['Two 90° arcs with radii 12 and 18 mm and one bend-aligned rectangle in desktop Studio.'],
   ...(!baseline && { inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -94,20 +98,20 @@ async function verify(label, doc, width) {
   assert.equal(native.check.topology[0].genus, 0);
   assert.equal(native.caps.length, 2);
   for (const cap of native.caps) {
-    const start = cap.name.endsWith('.start'), at = start ? 0 : 30;
+    const start = cap.name.endsWith('.start'), at = start ? 0 : endX;
     assert.equal(cap.support.kind, 'plane');
     near(cap.support.o[0], at);
-    cap.support.n.forEach((value, i) => near(value, i === 0 ? (start ? -1 : 1) : 0));
+    cap.support.n.forEach((value, i) => near(value, i === 0 ? (start || sameTurn ? -1 : 1) : 0));
     const [edges] = cap.boundary;
     assert.equal(cap.boundary.length, 1);
     assert.equal(edges.length, 4);
     for (const edge of edges) {
       assert.equal(edge.degree, 1);
       assert.ok(edge.pair);
-      verifySection(edge.points, 0, at, point => point[1] - at, half);
+      verifySection(edge.points, 0, at, point => point[1] - (start ? 0 : 30), half);
     }
   }
-  for (const [name, cx, radius] of [['first', 0, 12], ['second', 30, 18]]) {
+  for (const [name, cx, radius] of [['first', 0, 12], ['second', endX, 18]]) {
     const walls = native.walls.filter(wall => wall.name.startsWith(`n1.${name}.side[`));
     assert.equal(walls.length, 4);
     assert.deepEqual(walls.map(wall => wall.name).sort(), ['e1', 'e2', 'e3', 'e4'].map(id => `n1.${name}.side[${id}]`));
@@ -138,7 +142,7 @@ async function verify(label, doc, width) {
     assert.equal(result.curvature.status, 'measured');
     const [x] = seam.points[0];
     const axial = seam.points.every(point => Math.abs(point[0] - x) < 1e-7);
-    const expected = axial ? 1 / x + 1 / (30 - x) : 0;
+    const expected = axial ? Math.abs(1 / x + (sameTurn ? -1 : 1) / Math.abs(endX - x)) : 0;
     near(result.curvature.maximumDifference, expected);
   }
   near(native.volume, volumeAt(width));
@@ -154,7 +158,7 @@ async function verify(label, doc, width) {
 }
 
 async function inspectJoints(native) {
-  f.phase = 'Measure all four native S-bend joints in Studio';
+  f.phase = 'Measure all four native joints in Studio';
   await button('Iso', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await button(`Sweep along ${railName}`, browser()).click();
@@ -181,7 +185,7 @@ async function approveProposal(source, joined, rail, native, applied) {
   await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'rectangular-s-bend', async call => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
-    assert.match(description.values.sketch, /S-bend accepts .* solid rectangle aligned with the bend frame/);
+    assert.match(description.values.sketch, /Both two-arc paths accept .* solid rectangle aligned with the bend frame/);
     const summary = await call('query', { action: 'summary' });
     const saved = summary.direct_curves.find(curve => curve.id === rail.id);
     assert.ok(saved?.revision);
@@ -194,7 +198,7 @@ async function approveProposal(source, joined, rail, native, applied) {
     assert.ok(dry.dryRun);
     near(dry.change.volume, volumeAt(4), .001);
     assert.deepEqual(await readFile(file), before);
-    const result = await call('proposals', { action: 'propose', title: 'Exact rectangular S-bend', ops: [op] });
+    const result = await call('proposals', { action: 'propose', title: `Exact rectangular ${bendName}`, ops: [op] });
     assert.deepEqual([result.proposal, result.applied], ['P1', false]);
   });
   const pending = JSON.parse(await readFile(file));
@@ -229,7 +233,7 @@ await f.run(async () => {
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: 'rectangular-s-bend-input.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
-  f.phase = 'Join the two valid opposing arcs';
+  f.phase = 'Join the two valid tangent arcs';
   await button('First arc', browser()).click();
   await button('Second arc', browser()).click({ modifiers: ['Shift'] });
   await button('Join', f.page).click();
@@ -239,7 +243,7 @@ await f.run(async () => {
   assert.ok(rail);
   const source = baseline ? undefined : await f.save('rectangular-s-bend-source');
 
-  f.phase = 'Request the Exact rectangular S-bend';
+  f.phase = `Request the Exact rectangular ${bendName}`;
   await button('Sketch 1', browser()).click();
   await button(railName, browser()).click();
   await f.page.evaluate(() => document.activeElement?.blur());
@@ -247,7 +251,8 @@ await f.run(async () => {
   await hud().getByLabel('Representation', { exact: true }).selectOption('exact');
   if (baseline) {
     await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
-    await hud().getByText('The S-bend needs a circular outer section', { exact: true }).waitFor();
+    const refusal = sameTurn ? 'The same-turn Sweep needs a circular outer section' : 'The S-bend needs a circular outer section';
+    await hud().getByText(refusal, { exact: true }).waitFor();
     assert.ok(await button('Apply', hud()).isDisabled());
     await f.same(joined);
     f.report.observations.push({ label: 'baseline-exact-refused', text: await hud().innerText() });
@@ -264,7 +269,7 @@ await f.run(async () => {
   const native = await verify('applied-native', applied, 4);
   await inspectJoints(native);
 
-  await f.openFeatureEditor(1, 'edit the S-bend section from Sweep History');
+  await f.openFeatureEditor(1, 'edit the rectangular section from Sweep History');
   await f.editor().getByText('Sketch 1 · 4 × 6 mm', { exact: true }).waitFor();
   await button('Edit sketch', f.editor()).click();
   await f.sketchPanel().waitFor();
@@ -294,5 +299,17 @@ await f.run(async () => {
   await f.openFeatureEditor(1);
   await f.editor().getByText('Sketch 1 · 8 × 6 mm', { exact: true }).waitFor();
   await f.snapshot('08-reopened-history');
+  if (sameTurn) {
+    f.phase = 'Edit the reopened rectangular section';
+    await button('Edit sketch', f.editor()).click();
+    await widthInput().fill('4');
+    const restored = (await f.finishSketch('08-width-edited-after-open')).doc;
+    assert.deepEqual(restored.nodes[1], applied.nodes[1]);
+    assert.equal((await verify('width-edited-after-open', restored, 4)).digest, native.digest);
+    await f.undo();
+    await f.same(reopened);
+    await f.redo();
+    await f.same(restored);
+  }
   await approveProposal(source, joined, rail, native, applied);
 });

@@ -374,14 +374,12 @@ test('same-turn pair refuses eccentric, thin, touching, multiple and noncircular
   refused({ ...circle, holes: [rectangle], sideTags: undefined }, 'CAPABILITY', /at most one circular hole/);
 });
 
-test('same-turn pair refuses rectangle, either axis contact, kink, reversal, nonplanarity and unsupported span angles', () => {
-  const { first, curve } = pair({ turn: 1 });
+test('same-turn pair refuses either axis contact, kink, reversal, nonplanarity and unsupported span angles', () => {
+  const { first } = pair({ turn: 1 });
   const refused = (path, code, detail, section = circle) => assert.throws(() => evaluateCadPart(document(path, section)),
     error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
   const joinedWith = (tangent, inward) => joinCurves(first.curve, arc('changed', first.end, tangent, inward, 18, 90).curve,
     { curveId: 'changedPair' }).curve;
-  refused(curve, 'CAPABILITY', /same-turn two-arc sweep needs one circular outer section/,
-    { id: 's', kind: 'sketch', profile: 'rectangle', min: [-1, -2], max: [1, 2] });
   for (const [R1, R2] of [[12, 18], [18, 12]]) for (const radius of [12, 13])
     refused(pair({ R1, R2, turn: 1 }).curve, 'PARAMETER', /both path radii larger/, { ...circle, radius });
   refused(joinedWith([1, 0, 0], [0, 1, 0]), 'GEOMETRY', /common forward tangent/);
