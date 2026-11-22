@@ -30,7 +30,7 @@ export function SketchCornerTools({ owner, source, doc, corners, resize, inspect
   const current = useStoreValue(inspection);
   const draft = current?.target === 'corner' && current.owner === owner && current.doc === doc ? current : null;
   const resizeTool = resize && resizeTools[resize.operation];
-  const choices = resizeTool ? [resize?.edges.length === 1 ? resizeTool : { ...resizeTool, label: 'Edit Fillets' }] : tools;
+  const choices = resizeTool ? [resize?.edges.length === 1 ? resizeTool : { ...resizeTool, label: resizeTool.label + 's' }] : tools;
   const tool = choices.find(item => item.operation === draft?.operation);
   const result = draft?.result;
   const preview = (operation: SketchCornerAction, value: string) => {

@@ -34,9 +34,10 @@ export function selectedSavedCorners(owner: SketchState, source: Polygon, doc: S
     const value = savedFilletRadius(source, first.i);
     if (value !== undefined && others.every(pick => savedFilletRadius(source, pick.i) === value))
       return { edges, value, operation: 'resize-fillet' };
-  } else if (edges.length === 1) {
+  } else {
     const value = savedChamferSetback(source, first.i);
-    if (value !== undefined) return { edges, value, operation: 'resize-chamfer' };
+    if (value !== undefined && others.every(pick => savedChamferSetback(source, pick.i) === value))
+      return { edges, value, operation: 'resize-chamfer' };
   }
 }
 
