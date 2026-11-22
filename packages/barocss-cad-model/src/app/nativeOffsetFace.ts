@@ -327,8 +327,9 @@ function offsetPick(ctx: Ctx, allowCylinder = false) {
   return { body, display, ref };
 }
 
-function currentOffsetBody(ctx: Ctx, body: BodyResult) {
-  const evaluated = evaluateDoc(ctx.doc, 0, body.mesh.quality ?? 8);
+/** Check that a displayed body still agrees with the current native evaluation. */
+export function currentOffsetBody(doc: StudioDoc, body: BodyResult) {
+  const evaluated = evaluateDoc(doc, 0, body.mesh.quality ?? 8);
   if (!evaluated.ok) return missing('the current document cannot resolve the selected native body.');
   const current = evaluated.bodies.find(candidate => candidate.key === body.key);
   if (!current || !consistent(body, current)) return missing('the picked display no longer agrees with the current document.');
@@ -383,7 +384,7 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   if (bore) {
     if (display.name !== bore.wallFace || display.exact?.kind !== 'cylinder')
       return unsupported('pick the original outer wall of the radial through-bore semicylinder.');
-    const current = currentOffsetBody(ctx, body), frame = boredWallFrame(ctx.doc, ref.node, bore, display);
+    const current = currentOffsetBody(ctx.doc, body), frame = boredWallFrame(ctx.doc, ref.node, bore, display);
     if (!frame) return unsupported('the current outer wall and complete radial through bore could not be certified.');
     return radialOffsetPick(ref, display.name, current, frame);
   }
@@ -399,7 +400,7 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
     const radial = display.exact?.kind === 'cylinder';
     if (!source || !(radial ? source.skins : source.faces).includes(display.name))
       return unsupported('select an original axial cap or cylindrical wall of an Exact semicylinder.');
-    const current = currentOffsetBody(ctx, body);
+    const current = currentOffsetBody(ctx.doc, body);
     const { brep } = nativeOffsetBody(ctx, body, display);
     const authored = { id: source.id, surface: { ...stock.surface, kind: 'surface', id: 'surface' } as Surface,
       thickness: source.thickness, side: stock.side };
@@ -423,7 +424,7 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
     const plate = isBoredPlateHole(ctx.doc.nodes, ref.node), tube = isAnnularReplacementSource(ctx.doc.nodes, ref.node);
     if (!plate && !tube && !isCylinderReplacementSource(ctx.doc.nodes, ref.node))
       return unsupported('select a complete cylindrical wall on an uncut cylinder or upright tube, or a straight through bore in an upright plate.');
-    const current = currentOffsetBody(ctx, body);
+    const current = currentOffsetBody(ctx.doc, body);
     const acceptedFace = current.mesh.faces[ctx.selection.faces[0].face];
     const members = acceptedFace.nativeFaces?.map(face => face.name).sort();
     const natives = partBreps(ctx.doc).filter(candidate => candidate.key === body.key);
@@ -443,7 +444,7 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
     const stock = ctx.doc.nodes[node.parent.node];
     const sign = display.name === `${stock.id}.top` ? 1 : display.name === `${stock.id}.bottom` ? -1 : undefined;
     if (sign === undefined) return unsupported('only an original annular cap supports a signed offset.');
-    currentOffsetBody(ctx, body);
+    currentOffsetBody(ctx.doc, body);
     const { brep } = nativeOffsetBody(ctx, body, display), frame = annularCapReplacementFrame(brep, display.name);
     if (!frame || !samePoint(frame.normal, [0, 0, sign])) return unsupported('the complete native annulus could not be certified.');
     return { parent: ref, face: display.name, ...frame, allowsPlane: false };
@@ -455,7 +456,7 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   if (!boredPlate && node.kind !== 'draft' && node.kind !== 'offset-face' && node.kind !== 'extrude') return undefined;
   if (!boxCap && node.kind === 'extrude' && !node.draft &&
       (!isStraightHexagonalExtrusion(ctx.doc.nodes, node) || display.nativeAxisPlane?.axis === 'z')) return undefined;
-  currentOffsetBody(ctx, body);
+  currentOffsetBody(ctx.doc, body);
   const { brep } = nativeOffsetBody(ctx, body, display);
   const frame = boredPlate ? boredCapOffsetFrame(brep, display.name) ?? boredPlateWallOffsetFrame(brep, display.name)
     : boxCap ? boxCapOffsetFrame(brep, display.name) : draftedFaceOffsetFrame(brep, display.name) ?? prismWallOffsetFrame(brep, display.name);
@@ -473,7 +474,7 @@ export function resolveNativeOffsetFace(ctx: Ctx): NativeOffsetFaceProfile {
     if (!consistent(body, have.body)) return missing('the picked display no longer agrees with the current document.');
     return owned(have.profile, have.bound, have.target, content);
   }
-  const current = currentOffsetBody(ctx, body);
+  const current = currentOffsetBody(ctx.doc, body);
   const { brep, selected } = nativeOffsetBody(ctx, body, display);
   const axis = capAxis(selected), coordinate = (selected.surface as Surface).controlPoints[0][0][axis];
   let lo = Infinity, hi = -Infinity;

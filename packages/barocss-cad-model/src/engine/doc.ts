@@ -581,13 +581,13 @@ export function exactSemicylinderRadialBoreSource(nodes: readonly unknown[], ind
     if (faceEditNodeProblem(stock, stockIndex, 'replace-face')) return;
     const [capFace] = stock.faces as [string];
     const pair = exactSemicylinderCapAfterWall(nodes, prior, parameters, capFace);
-    if (pair) return { stockIndex, toolIndex, wallFace: pair.prior.face, capFace, boreFaces };
+    if (pair) return { stockIndex, toolIndex, replacementIndex: stockIndex, wallFace: pair.prior.face, capFace, boreFaces };
     return;
   }
   if (offsetFaceNodeProblem(stock, stockIndex) || stock.target !== undefined) return;
   const [wallFace] = stock.faces as [string];
   const pair = exactSemicylinderWallAfterReplacement(nodes, prior, parameters, wallFace);
-  if (pair) return { stockIndex, toolIndex, wallFace, capFace: pair.prior.faces[0], boreFaces };
+  if (pair) return { stockIndex, toolIndex, replacementIndex: prior, wallFace, capFace: pair.prior.faces[0], boreFaces };
 }
 
 export function radialBoreDeleteFaces(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>) {

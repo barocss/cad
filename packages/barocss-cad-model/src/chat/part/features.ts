@@ -5,10 +5,11 @@ import { updateBoxFootprint } from '../../app/editCommand';
 import { editFields } from '../../app/editFields';
 import { extrudeEndFaceValues } from '../../app/extrudeEndFacePick';
 import { editSavedOffsetFaceCommand } from '../../app/offsetFaceEdit';
+import { currentOffsetBody } from '../../app/nativeOffsetFace';
 import { extrudeCommand } from '../../app/profileCommands';
 import { smoothScrewAngleField, smoothScrewAngleKey, smoothScrewWindingRule, smoothScrewPitchAdvance, smoothScrewPitchField, smoothScrewPitchKey, smoothScrewTurns, smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '../../app/smoothLoftTurn';
 import { hasLineArcScrewSections, hasLineArcTurnSections } from '../../app/lineArcScrew';
-import { exactSemicylinderWallAfterReplacement, featureLabel, isAnnularReplacementSource, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
+import { exactSemicylinderRadialBoreSource, exactSemicylinderWallAfterReplacement, featureLabel, isAnnularReplacementSource, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
 import { snapshotOf } from '../../engine/evaluate';
 import { isExactThickenEdit } from '../../engine/exactThickenEdit';
 import { DIRECT_RULED_COMMAND, proposeDirectRuledCommand } from '../directRuledProposal';
@@ -362,23 +363,45 @@ function isReviewedTubeWall(state: ChatState, index: number, node: Extract<Model
 }
 
 function isReviewedLinkedCapWall(state: ChatState, index: number, node: Extract<ModelNode, { kind: 'offset-face' }>) {
-  const { doc, bodies } = state, [face] = node.faces;
-  if (index !== doc.nodes.length - 1 || node.target !== undefined || node.parent.side !== 'solid' ||
+  const { doc, bodies } = state, { nodes, parameters } = doc, [face] = node.faces;
+  if (index !== nodes.length - 1 || node.target !== undefined || node.parent.side !== 'solid' ||
     node.sigs?.[face]?.k !== 'curved' || doc.instances?.length || doc.variability || doc.configurations ||
     bodies.length !== 2 || Object.keys(doc.outputs).length !== 2) return false;
-  const paired = exactSemicylinderWallAfterReplacement(doc.nodes, node.parent.node, doc.parameters, face);
-  if (!paired) return false;
-  const donor = paired.prior.target.body.node;
-  if (![index, donor].every(node => {
-    const key = bodyKeyFor(doc.nodes, node, 'solid');
-    const matches = bodies.filter(body => body.key === key && body.ref?.node === node && body.ref.side === 'solid');
-    return matches.length === 1 && doc.outputs[key]?.node === node && doc.outputs[key]?.side === 'solid';
+  const parent = node.parent.node;
+  const bore = exactSemicylinderRadialBoreSource(nodes, parent, parameters);
+  const paired = bore ? undefined : exactSemicylinderWallAfterReplacement(nodes, parent, parameters, face);
+  const replace = bore ? nodes[bore.replacementIndex] : paired?.prior;
+  if (replace?.kind !== 'replace-face') return false;
+  const donor = replace.target.body.node;
+  if (![index, donor].every(owner => {
+    const key = bodyKeyFor(nodes, owner, 'solid');
+    const matches = bodies.filter(body => body.key === key && body.ref?.node === owner && body.ref.side === 'solid');
+    return matches.length === 1 && doc.outputs[key]?.node === owner && doc.outputs[key]?.side === 'solid';
   })) return false;
+
   try {
-    const snapshot = snapshotOf(doc), id = featureId(doc.nodes, index);
+    if (bore && (face !== bore.wallFace || node.suppressed || node.held !== undefined ||
+      Object.keys(node.rematched ?? {}).length || !bodies.every(body => currentOffsetBody(doc, body)))) return false;
+    const snapshot = snapshotOf(doc), id = featureId(nodes, index);
     const outputs = snapshot.outputs.filter(output => output.id === id && output.feature === id);
-    const [a, b] = paired.source.skins;
-    return outputs.length === 1 && isExactThickenEdit(doc, snapshot, index, outputs[0].brep, [a, b]);
+    if (outputs.length !== 1) return false;
+    const [output] = outputs;
+    if (bore) {
+      // Native evaluation already certifies the two openings and original incidence.
+      // Bind that result to this saved edit, its original Difference and the current donor.
+      const cutId = featureId(nodes, parent), donorId = featureId(nodes, donor);
+      const native = snapshot.document.features.find(feature => feature.id === id);
+      const cut = snapshot.document.features.find(feature => feature.id === cutId);
+      return snapshot.outputs.length === 2 && snapshot.outputs.some(source =>
+        source.id === donorId && source.feature === donorId && source.bodyCount === 1 && source.representation !== 'faceted') &&
+        native?.kind === 'offset-face' && native.target === cutId && native.face === face &&
+        native.distance === node.distance && native.expect?.[face]?.kind === 'curved' &&
+        cut?.kind === 'difference' && cut.target === featureId(nodes, bore.stockIndex) && cut.tool === featureId(nodes, bore.toolIndex) &&
+        output.bodyCount === 1 && output.brep.source.family === 'analytic-boolean' && output.brep.source.id === cutId;
+    }
+    if (!paired) return false;
+    const [outer, inner] = paired.source.skins;
+    return isExactThickenEdit(doc, snapshot, index, output.brep, [outer, inner]);
   } catch {
     return false;
   }
@@ -400,7 +423,7 @@ async function editReviewedWallDistance(state: ChatState, index: number, distanc
   if (typeof distance !== 'number' || !Number.isFinite(distance))
     return fail(state, 'Set values.offsetDistance to a finite signed distance in mm.', { code: 'EDIT_INPUT' });
   const edit = reviewedWallDistance(state, index);
-  if (!edit) return fail(state, 'This edit needs the current terminal right wall Offset of an ordinary rectangular taper, a radial wall Offset of a coaxial tube, or a terminal wall Offset of an Exact semicylinder with a linked inclined upper-cap replacement.', { code: 'EDIT_INPUT' });
+  if (!edit) return fail(state, 'This edit needs the current terminal right wall Offset of an ordinary rectangular taper, a radial wall Offset of a coaxial tube, or a terminal wall Offset of an Exact semicylinder with a linked inclined upper-cap replacement, with or without one certified radial through bore.', { code: 'EDIT_INPUT' });
   let next: StudioDoc;
   try { next = edit.build(edit.ctx, { d: distance }); }
   catch (error) {

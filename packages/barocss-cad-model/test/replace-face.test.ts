@@ -5,7 +5,7 @@ import { offsetFaceCommand } from '../src/app/profileCommands';
 import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { runCheck } from '../src/chat/spec';
-import { dispatchTool, type ChatState } from '../src/chat/tools';
+import { acceptProposal, dispatchTool, type ChatState } from '../src/chat/tools';
 import { directFaceDocumentProblem, emptyDoc, parentsOf, usesOf, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
 import { isExactThickenBoreHeal, isExactThickenEdit } from '../src/engine/exactThickenEdit';
@@ -447,5 +447,88 @@ test('a terminal signed outer-wall Offset preserves the complete radial bore and
     const bad = await evaluate(editor.build(editCtx, { d: 3 }));
     assert.ok(!bad.ok);
     assert.match(bad.error.detail, /through bore|cutter|opening/i);
+  }
+});
+
+test('reviewed wall proposals edit the terminal outer Offset of a certified radial bore', async () => {
+  const face = 'n0.normal', index = 9;
+  for (const wallFirst of [false, true]) {
+    const cut = await boredSemicylinder(wallFirst);
+    const start = await applyLinkedCapCommand(cut, 'offset-face', [face], { d: -1 });
+    const original = await stateOf(start);
+    const moved = structuredClone(start), donor = moved.nodes[3], offset = moved.nodes[index];
+    assert.ok(donor.kind === 'translate' && offset.kind === 'offset-face' && offset.target === undefined);
+    donor.offset[2] = -1;
+    const current = await stateOf(moved);
+    const edit = { action: 'edit', index, expectedRevision: revisionOf(moved), values: { offsetDistance: 1 } };
+    const discovery = { action: 'edit', index };
+    assert.match((await dispatchTool(current, 'features', discovery, evaluate)).content, /values\.offsetDistance .*current value -1/);
+
+    const stale = await dispatchTool(current, 'features', { ...edit, expectedRevision: revisionOf(start) }, evaluate);
+    assert.equal(JSON.parse(stale.content).code, 'EDIT_STALE');
+    assert.equal(stale.state.doc, moved);
+    for (const distance of [0, 3]) {
+      const refused = await dispatchTool(current, 'features', { ...edit, values: { offsetDistance: distance } }, evaluate);
+      assert.ok(refused.isError && !refused.changed);
+      assert.equal(refused.state.doc, moved);
+      if (distance === 3) assert.match(JSON.parse(refused.content).detail, /does not preserve both openings/i);
+    }
+
+    const output = current.bodies.find(body => body.ref?.node === index)!;
+    const blind = { ...moved, nodes: moved.nodes.map(node => node === offset ? { ...offset, distance: 3 } : node) };
+    const suppressed = { ...moved, nodes: moved.nodes.map(node => node === offset ? { ...offset, suppressed: true as const } : node) };
+    const wrongFace = { ...moved, nodes: moved.nodes.map(node => node === offset ? { ...offset, faces: ['n0.reverse'] as [string] } : node) };
+    const rematched = { ...moved, nodes: moved.nodes.map(node => node === offset ? { ...offset, rematched: { [face]: 'n0.reverse' } } : node) };
+    const continued = withNode(moved, { kind: 'translate', parent: { node: index, side: 'solid' }, offset: [0, 0, 1] });
+    for (const unowned of [
+      { ...current, bodies: original.bodies },
+      { ...current, bodies: [output, output] },
+      { ...current, doc: blind },
+      { ...current, doc: suppressed },
+      { ...current, doc: wrongFace },
+      { ...current, doc: rematched },
+      { ...current, doc: continued },
+    ]) {
+      assert.doesNotMatch((await dispatchTool(unowned, 'features', discovery, evaluate)).content, /values\.offsetDistance/);
+      const refused = await dispatchTool(unowned, 'features', { ...edit, expectedRevision: revisionOf(unowned.doc) }, evaluate);
+      assert.ok(refused.isError && !refused.changed, refused.content);
+      assert.equal(refused.state.doc, unowned.doc);
+    }
+
+    const pending = await dispatchTool(current, 'proposals', {
+      action: 'propose', title: 'Offset the outside wall and retain both bore openings',
+      ops: [{ tool: 'features', args: edit }],
+    }, evaluate);
+    assert.ok(!pending.isError && pending.changed, pending.content);
+    assert.deepEqual(pending.state.doc.nodes, moved.nodes);
+    assert.deepEqual(pending.state.doc.outputs, moved.outputs);
+    assert.equal(pending.state.doc.proposals?.[0].status, 'open');
+    const accepted = await acceptProposal(pending.state, 'P1', evaluate);
+    assert.ok('state' in accepted, 'error' in accepted ? accepted.error : '');
+    const approved = accepted.state.doc;
+    assert.deepEqual(approved.nodes, [...moved.nodes.slice(0, index), { ...offset, distance: 1 }]);
+    assert.deepEqual(approved.outputs, moved.outputs);
+    const result = partBreps(approved).find(body => body.key === 'b9')!.brep;
+    const report = checkBrep(result, { strict: true });
+    assert.ok(report.valid);
+    assert.equal(report.topology[0].genus, 1);
+    const donorBody = (doc: StudioDoc) => partBreps(doc).find(body => body.key === 'b3')!.brep;
+    assert.deepEqual(donorBody(approved), donorBody(moved));
+    const nativeRead = await readStudioFile(encodeStudioFile(approved));
+    assert.ok('doc' in nativeRead);
+    assert.deepEqual(partBreps(nativeRead.doc), partBreps(approved));
+
+    const guarded = { ...moved, requirements: [{ id: 'WALL-4', source: 'Retain a measured radial wall of 4 mm.',
+      hard: true, check: { query: { fn: 'radial_wall', a: face, b: 'n0.reverse' }, op: '>=', value: 4, unit: 'mm' } }] } satisfies StudioDoc;
+    const guardedProposal = await dispatchTool({ ...current, doc: guarded }, 'proposals', {
+      action: 'propose', title: 'Request a verified radial wall', requirements: ['WALL-4'],
+      ops: [{ tool: 'features', args: { ...edit, expectedRevision: revisionOf(guarded) } }],
+    }, evaluate);
+    assert.ok(!guardedProposal.isError && guardedProposal.changed, guardedProposal.content);
+    assert.equal(guardedProposal.state.doc.proposals?.[0].checks?.after.unknown, 1);
+    const guardedBefore = JSON.stringify(guardedProposal.state.doc);
+    const blocked = await acceptProposal(guardedProposal.state, 'P1', evaluate);
+    assert.match('error' in blocked ? blocked.error : '', /WALL-4.*wall thickness/i);
+    assert.equal(JSON.stringify(guardedProposal.state.doc), guardedBefore);
   }
 });
