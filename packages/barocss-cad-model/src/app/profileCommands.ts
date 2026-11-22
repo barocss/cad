@@ -7,7 +7,7 @@ import type { BodyResult, VolumeEvaluation } from '../engine/evaluate';
 // (a picked profile pulled along its normal), Revolve (turned about a sketch axis), Pipe (carried along
 // runs and bends) and Loft (through two or more picked sections). A profile drawn on a body's face joins
 // that body by default; Operation can make a new body or cut it instead.
-import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, featureLabel, isExactCylinderFaceEditChain, offsetFaceEndLabel, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, exactSemicylinderRadialBoreSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, featureLabel, isExactCylinderFaceEditChain, offsetFaceEndLabel, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
 import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle, twoGuideLoftSections } from './profiles';
@@ -374,7 +374,9 @@ export const offsetFaceCommand: Command = {
     const picked = selection.faces[0], body = ctx.bodies[picked.body], face = body?.mesh.faces[picked.face];
     if (!Number.isInteger(picked.body) || !Number.isInteger(picked.face) || !body || !face || face.facet || !face.name) return no(unsupportedFace);
     const ref = body.ref, source = ref && ctx.doc.nodes[ref.node];
-    let exactWall = false;
+    const bore = ref?.side === 'solid' && exactSemicylinderRadialBoreSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
+    let exactWall = !!bore && face.name === bore.wallFace && face.exact?.kind === 'cylinder';
+    if (bore && !exactWall) return no('Pick the original outer wall of the radial through-bore semicylinder.');
     if (source?.kind === 'thicken' && source.mode === 'exact-cylinder') {
       const caps = ref?.side === 'solid' && exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
       const exact = face.exact;
@@ -399,7 +401,11 @@ export const offsetFaceCommand: Command = {
     return matches === 1 ? ok : no(unsupportedFace);
   },
   fields: ctx => offsetFields(offsetPlaneAvailable(ctx)),
-  defaults: ctx => ({ d: 2, ...(offsetPlaneAvailable(ctx) ? { offsetMode: 'distance' } : {}) }),
+  defaults: ctx => {
+    const pick = ctx.selection.faces[0], ref = pick && ctx.bodies[pick.body]?.ref;
+    const bore = ref && exactSemicylinderRadialBoreSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
+    return { d: bore ? 1 : 2, ...(offsetPlaneAvailable(ctx) ? { offsetMode: 'distance' } : {}) };
+  },
   derive: resetOffsetPlane,
   steps: (ctx, v) => [{ label: 'Face', text: offsetFaceDescription(ctx), done: true }, ...(v.offsetMode === 'to-plane' ? [offsetPlaneStep(v)] : [{ label: 'Move', text: Number(v.d) > 0 ? `${v.d} mm out (material added)` : Number(v.d) < 0 ? `${-Number(v.d)} mm in (material taken off)` : 'give it a distance (out +, in −)', done: Number(v.d) !== 0 }])],
   onPick: (ctx, values, hit) => {

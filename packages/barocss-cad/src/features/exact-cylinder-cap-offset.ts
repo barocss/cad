@@ -398,3 +398,18 @@ export function offsetExactSemicylinderWallAfterReplacementIfAdmitted(brep: Brep
     throw new BrepError('GEOMETRY', 'Exact semicylinder replacement offset: the retained wall boundary or inclined plane changed');
   return candidate;
 }
+
+/** Replay the current pair, then compose the two signed moves of its original outer support. */
+export function offsetExactSemicylinderOuterAfterPairedEditsIfAdmitted(current: Brep, first: Brep, original: Brep,
+  source: Source, wall: PriorWallOffset, cap: PriorCapReplacement, wallFirst: boolean, distance: number): Brep | undefined {
+  if (admittedWall(original, wall.face, source)?.skin !== 'outer') return;
+  const replay = wallFirst ? replaceExactSemicylinderCapAfterWallIfAdmitted(first, cap.face, source, wall, cap.plane)
+    : offsetExactSemicylinderWallAfterReplacementIfAdmitted(first, wall.face, source, cap, wall.distance);
+  if (!replay || JSON.stringify(replay) !== JSON.stringify(current)) return;
+  const total = wall.distance + distance;
+  if (total === 0) return replaceExactSemicylinderCapIfAdmitted(original, cap.face, source, cap.plane);
+  const updatedWall = offsetExactSemicylinderOuterWallIfAdmitted(original, wall.face, source, total);
+  return updatedWall && replaceExactSemicylinderCapAfterWallIfAdmitted(updatedWall, cap.face, source, { face: wall.face, distance: total }, cap.plane);
+}
+
+export { exactSemicylinderBoredOuterWallOffsetFrame } from './heal-exact-cylinder-bore.js';

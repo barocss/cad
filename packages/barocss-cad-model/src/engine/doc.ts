@@ -560,8 +560,8 @@ export function isBoredPlateHealSource(nodes: readonly unknown[], index: number)
   return boredPlate !== undefined && isTwoBorePlate(nodes, boredPlate);
 }
 
-/** Bind a radial bore selection to the direct circular cutter and both authored stock edits. */
-export function radialBoreDeleteFaces(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>) {
+/** Bind a radial bore to its direct circular cutter and both authored stock edits. */
+export function exactSemicylinderRadialBoreSource(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>) {
   const cut = nodes[index];
   if (!textRecord(cut) || cut.kind !== 'difference' || cut.suppressed || cut.held !== undefined) return;
   const stockIndex = precedingSolidParent(cut, index), toolIndex = precedingSolidIndex(cut.tool, index);
@@ -576,13 +576,22 @@ export function radialBoreDeleteFaces(nodes: readonly unknown[], index: number, 
       sketch.regions !== undefined || sketch.sideTags !== undefined) return;
   const prior = precedingSolidParent(stock, stockIndex);
   if (prior === undefined) return;
+  const boreFaces = [tool.id + '.side0#1', tool.id + '.side0#2'] as const;
   if (stock.kind === 'replace-face') {
-    if (faceEditNodeProblem(stock, stockIndex, 'replace-face') ||
-        !exactSemicylinderCapAfterWall(nodes, prior, parameters, (stock.faces as [string])[0])) return;
-  } else if (offsetFaceNodeProblem(stock, stockIndex) || stock.target !== undefined ||
-      !exactSemicylinderWallAfterReplacement(nodes, prior, parameters, (stock.faces as [string])[0])) return;
-  // Native evaluation certifies the outer skin, both opening loops and the retained solid.
-  return [tool.id + '.side0#1', tool.id + '.side0#2'] as const;
+    if (faceEditNodeProblem(stock, stockIndex, 'replace-face')) return;
+    const [capFace] = stock.faces as [string];
+    const pair = exactSemicylinderCapAfterWall(nodes, prior, parameters, capFace);
+    if (pair) return { stockIndex, toolIndex, wallFace: pair.prior.face, capFace, boreFaces };
+    return;
+  }
+  if (offsetFaceNodeProblem(stock, stockIndex) || stock.target !== undefined) return;
+  const [wallFace] = stock.faces as [string];
+  const pair = exactSemicylinderWallAfterReplacement(nodes, prior, parameters, wallFace);
+  if (pair) return { stockIndex, toolIndex, wallFace, capFace: pair.prior.faces[0], boreFaces };
+}
+
+export function radialBoreDeleteFaces(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>) {
+  return exactSemicylinderRadialBoreSource(nodes, index, parameters)?.boreFaces;
 }
 
 function extrusionSupportNames(stock: unknown, index: number, wallCount = 4) {
@@ -781,6 +790,12 @@ export function directFaceDocumentProblem(input: unknown): string | null {
         const expected = afterReplace || second?.nextKind === 'cylinder' ? 'curved' : 'plane';
         if ((!second && !afterReplace) || signature.k !== expected || node.target !== undefined)
           return 'Offset face: follow one signed Offset of the original Exact semicylinder with the other wall, or pair an original wall with the original upper cap.';
+        continue;
+      }
+      const bore = exactSemicylinderRadialBoreSource(value.nodes, parentIndex, parameters);
+      if (bore) {
+        if (signature.k !== 'curved' || face !== bore.wallFace || node.target !== undefined)
+          return 'Offset face: pick the original outer wall of the radial through-bore semicylinder and give a signed distance.';
         continue;
       }
       if (signature.k === 'curved') {

@@ -1,12 +1,12 @@
 // Offset face owns a native cap snapshot. Display data identifies the pick only; it never authors a profile.
-import { CadNumericPolicy, CadPartLimits, brepFromPrismatic, checkBrep, prismaticFromProfile, prismaticMassProperties, transformBrep, type Brep, type BrepFace, type Curve, type Surface } from '@barocss/cad';
+import { CadNumericPolicy, CadPartLimits, brepFromPrismatic, checkBrep, prismaticFromProfile, prismaticMassProperties, reevaluate, transformBrep, type Brep, type BrepFace, type Curve, type Surface } from '@barocss/cad';
 import { boxCapOffsetFrame, draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { annularCapReplacementFrame, boredCapOffsetFrame, boredPlateWallOffsetFrame, boreWallOffsetFrame, circularWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
-import { exactSemicylinderCapOffsetFrame, exactSemicylinderMixedOffsetFrame, exactSemicylinderSecondWallOffsetFrame, exactSemicylinderWallOffsetAfterReplacementFrame, exactSemicylinderWallOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
+import { exactSemicylinderBoredOuterWallOffsetFrame, exactSemicylinderCapOffsetFrame, exactSemicylinderMixedOffsetFrame, exactSemicylinderSecondWallOffsetFrame, exactSemicylinderWallOffsetAfterReplacementFrame, exactSemicylinderWallOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
-import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, isExactCylinderFaceEditChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, exactSemicylinderRadialBoreSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, isExactCylinderFaceEditChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, massOfRef, partBreps, snapshotOf, type BodyResult } from '../engine/evaluate';
 import { bodyKeyFor, featureId, withIds } from '../engine/ids';
 import { refusal } from '../engine/refusal';
@@ -353,6 +353,25 @@ function radialOffsetPick(parent: ReturnType<typeof refOf>, face: string, curren
     signature: { ...stored, p: [zero(x), zero(y), zero(z)] as XYZ } };
 }
 
+function boredWallFrame(doc: StudioDoc, cutIndex: number, bore: NonNullable<ReturnType<typeof exactSemicylinderRadialBoreSource>>,
+  display: ReturnType<typeof offsetPick>['display']) {
+  const snapshot = snapshotOf(doc), { document } = snapshot;
+  const cutId = featureId(doc.nodes, cutIndex);
+  const stockId = featureId(doc.nodes, bore.stockIndex), toolId = featureId(doc.nodes, bore.toolIndex);
+  const cutAt = document.features.findIndex(feature => feature.id === cutId), native = document.features[cutAt];
+  const current = snapshot.outputs.find(output => output.id === cutId && output.feature === cutId)?.brep;
+  if (native?.kind !== 'difference' || native.target !== stockId || native.tool !== toolId ||
+      !current?.faces.some(face => face.id === display.id && face.name === bore.wallFace)) return;
+  const prefix = { ...document, features: document.features.slice(0, cutAt) };
+  const { outputs } = reevaluate(snapshot, { document: prefix });
+  const stock = outputs.find(output => output.id === stockId && output.feature === stockId)?.brep;
+  const tool = outputs.find(output => output.id === toolId && output.feature === toolId)?.brep;
+  if (!stock || !tool) return;
+  // The frame's native check owns the material-side witness and verifies that the through bore is complete.
+  const frame = exactSemicylinderBoredOuterWallOffsetFrame(current, stock, tool, bore.wallFace, bore.capFace);
+  if (frame) return { anchor: [...frame.anchor] as XYZ, normal: [...frame.normal] as XYZ };
+}
+
 /** Check the same native profile the direct offset evaluates. The old snapshot recipe remains separate. */
 export function resolveDirectOffsetFace(ctx: Ctx): {
   parent: ReturnType<typeof refOf>; face: string; anchor: XYZ; normal: XYZ; allowsPlane: boolean; signature?: Sig;
@@ -360,6 +379,14 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   const { body, display, ref } = offsetPick(ctx, true);
   if (ref.side !== 'solid') return undefined;
   const node = ctx.doc.nodes[ref.node];
+  const bore = exactSemicylinderRadialBoreSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
+  if (bore) {
+    if (display.name !== bore.wallFace || display.exact?.kind !== 'cylinder')
+      return unsupported('pick the original outer wall of the radial through-bore semicylinder.');
+    const current = currentOffsetBody(ctx, body), frame = boredWallFrame(ctx.doc, ref.node, bore, display);
+    if (!frame) return unsupported('the current outer wall and complete radial through bore could not be certified.');
+    return radialOffsetPick(ref, display.name, current, frame);
+  }
   const chain = isExactCylinderFaceEditChain(ctx.doc.nodes, ref.node);
   const second = chain ? exactSemicylinderSecondOffset(ctx.doc.nodes, ref.node, ctx.doc.parameters, display.name) : undefined;
   const replaced = chain ? exactSemicylinderWallAfterReplacement(ctx.doc.nodes, ref.node, ctx.doc.parameters, display.name) : undefined;

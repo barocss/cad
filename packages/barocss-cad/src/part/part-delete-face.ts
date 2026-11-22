@@ -6,6 +6,7 @@ import { healConvexLPrismaticFilletIfAdmitted, healConvexPrismaticFilletIfAdmitt
   healHorizontalPrismaticFilletIfAdmitted, healPrismaticFilletIfAdmitted } from '../features/heal-prismatic-fillet.js';
 import { healAdjacentPrismaticChamferIfAdmitted, healConvexLPrismaticChamferIfAdmitted, healHorizontalChamferIfAdmitted, healOppositePrismaticChamferIfAdmitted,
   healPrismaticChamferIfAdmitted } from '../features/heal-prismatic-chamfer.js';
+import { exactCylinderBorePlan } from './part-exact-cylinder-bore.js';
 import type { Tools } from './part-model.js';
 import type { CadPartFeature, Part, Result, Solid } from './part-types.js';
 
@@ -15,38 +16,6 @@ interface DeleteFaceHelpers {
 }
 
 const exactBoreRefusal = 'Delete face needs one complete central radial through bore in the Exact semicylinder after the outer Offset and the linked upper Replace. Select either native half of the bore wall.';
-
-function singleBrep(result: Result): Brep | undefined {
-  if (result.kind !== 'solid' || result.parts.length !== 1) return;
-  const { solid } = result.parts[0];
-  if (solid.kind === 'brep') return solid.brep;
-}
-
-/** Bind the direct authored operands before the feature cache captures its inputs. */
-function exactBorePlan(t: Tools, target: string, current: Brep, face: string) {
-  if (current.faces.length !== 8 || !/#(?:1|2)$/.test(face) || current.faces.filter(value => value.name === face).length !== 1) return;
-  const { author: difference } = t.ref(target, 'target');
-  if (difference?.kind !== 'difference') return;
-  const { author: last, result: stockResult } = t.ref(difference.target, 'difference stock');
-  if (last?.kind !== 'offset-face' && last?.kind !== 'replace-face') return;
-  const { author: first } = t.ref(last.target, 'first stock edit');
-  const offset = last.kind === 'offset-face' ? last : first?.kind === 'offset-face' ? first : undefined;
-  const replace = last.kind === 'replace-face' ? last : first?.kind === 'replace-face' ? first : undefined;
-  if (!first || !offset || !replace || (first.kind !== 'offset-face' && first.kind !== 'replace-face')) return;
-  const { author: source } = t.ref(first.target, 'original stock');
-  if (source?.kind !== 'thicken' || source.mode !== 'exact-cylinder') return;
-  const stock = singleBrep(stockResult);
-  if (!stock || stock.source.id !== source.id) return;
-  const { author: extrude, result: toolResult } = t.ref(difference.tool, 'difference tool');
-  if (extrude?.kind !== 'extrude' || extrude.draft) return;
-  const tool = singleBrep(toolResult);
-  if (!tool) return;
-  const { author: circle } = t.ref(extrude.sketch, 'tool sketch');
-  // A sketch loop can share the same cached geometry as a circle. Check its authored profile before reuse.
-  if (circle?.kind !== 'sketch' || circle.profile !== 'circle' || !circle.plane || circle.holes !== undefined || circle.regions !== undefined)
-    return t.fail('CAPABILITY', exactBoreRefusal);
-  return { stock, tool, outer: offset.face, upper: replace.face };
-}
 
 /** Find the original sharp edge of the numbered bevel left by the first certified Delete face. */
 function remainingPairedChamferEdge(t: Tools, target: string, brep: Brep, face: string): string | undefined {
@@ -75,7 +44,9 @@ export function deleteFaceOperation(f: Extract<CadPartFeature, { kind: 'delete-f
     return fail('INPUT', 'Delete face needs one exact native face name.');
   const [part] = target;
   const remainingEdge = part.solid.kind === 'brep' ? remainingPairedChamferEdge(t, f.target, part.solid.brep, face) : undefined;
-  const exactBore = part.solid.kind === 'brep' ? exactBorePlan(t, f.target, part.solid.brep, face) : undefined;
+  const current = part.solid.kind === 'brep' ? part.solid.brep : undefined;
+  const exactBore = current?.faces.length === 8 && /#(?:1|2)$/.test(face) && current.faces.filter(value => value.name === face).length === 1
+    ? exactCylinderBorePlan(t, f.target, exactBoreRefusal) : undefined;
   return () => {
     const brep = namedFaceTargetBrep(t, f.target, part);
     if (brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid')
@@ -83,7 +54,7 @@ export function deleteFaceOperation(f: Extract<CadPartFeature, { kind: 'delete-f
     if (brep.faces.filter(candidate => candidate.name === face).length !== 1)
       return fail('REFERENCE', 'Delete face: the selected native face is missing or ambiguous.');
     if (exactBore) {
-      const healed = healExactCylinderBoreIfAdmitted(brep, face, exactBore.stock, exactBore.tool, exactBore.outer, exactBore.upper);
+      const healed = healExactCylinderBoreIfAdmitted(brep, face, exactBore.stock, exactBore.tool, exactBore.offset.face, exactBore.replace.face);
       if (!healed) return fail('CAPABILITY', exactBoreRefusal);
       return one({ kind: 'brep', brep: healed });
     }

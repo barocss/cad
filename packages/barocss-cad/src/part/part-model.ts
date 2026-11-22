@@ -62,6 +62,7 @@ import { bandOperation } from './part-band.js';
 import { sheetOperation } from './part-sheet.js';
 import { faceFilletOperation } from './part-face-fillet.js';
 import { deleteFaceOperation } from './part-delete-face.js';
+import { exactBoreOffsetRefusal, exactCylinderBorePlan, offsetBoredExactCylinder } from './part-exact-cylinder-bore.js';
 import { frameOperation, planEndpointBeads, endpointContext, isEndpointBead } from './part-frame.js';
 import type { EndpointBead } from './part-frame.js';
 import { checkExpected, expectOf } from './part-expect.js';
@@ -643,6 +644,8 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         return fail('PARAMETER', 'Offset face needs a nonzero signed distance within the modeling range.');
       // Register authored dependencies before the evaluator captures cache inputs.
       const hole = ref(f.target, 'target').author;
+      const borePlan = hole?.kind === 'difference' ? exactCylinderBorePlan(t, f.target, exactBoreOffsetRefusal) : undefined;
+      const exactBore = borePlan && { ...borePlan, thickness: dim(borePlan.source.thickness, 'Thicken thickness', true) };
       const stock = hole?.kind === 'hole' ? ref(hole.target, 'tube stock').author : undefined;
       const circle = stock?.kind === 'extrude' ? ref(stock.sketch, 'tube sketch').author : undefined;
       const exactCylinder = hole?.kind === 'thicken' && hole.mode === 'exact-cylinder' ? {
@@ -663,6 +666,14 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       } : undefined;
       return () => {
         const brep = namedFaceTargetBrep(t, f.target, target[0]);
+        if (exactBore) {
+          const recut = (stock: Brep, tool: Brep, id: string) => {
+            // The certified operands both use the analytic B-rep Difference path.
+            const result = boolean({ kind: 'brep', brep: stock }, { kind: 'brep', brep: tool }, 'difference', id);
+            return result.kind === 'brep' ? result.brep : fail('GEOMETRY', 'Offset face: the radial bore did not produce a native solid.');
+          };
+          return one({ kind: 'brep', brep: offsetBoredExactCylinder(t, brep, face, distance, exactBore, recut) });
+        }
         if (exactCylinder) {
           const offset = offsetExactSemicylinderCapIfAdmitted(brep, face, exactCylinder, distance)
             ?? offsetExactSemicylinderWallIfAdmitted(brep, face, exactCylinder, distance);

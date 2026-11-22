@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, CadPartError, checkBrep, evaluateCadPart, reevaluate } from '../dist/index.js';
-import { healExactCylinderBoreIfAdmitted } from '../dist/features/heal-exact-cylinder-bore.js';
+import { brepMassProperties, CadPartError, checkBrep, evaluateCadPart, faceGeometry, reevaluate } from '../dist/index.js';
+import { certifyExactCylinderBore, exactSemicylinderBoredOuterWallOffsetFrame, healExactCylinderBoreIfAdmitted,
+  preservesExactCylinderBoreOnOffset } from '../dist/features/heal-exact-cylinder-bore.js';
 import { faceSignatures } from '../dist/part/part-expect.js';
 
 const halves = ['tool.side0#1', 'tool.side0#2'];
@@ -112,4 +113,74 @@ test('the native bore certificate refuses different stock and an altered retaine
   differentEdge.edges.find(edge => edge.name === 'half.normal|half.v-max').name = 'unknown';
   assert.equal(checkBrep(differentEdge, { strict: true }).valid, true);
   assert.equal(certify(differentEdge, original), undefined);
+});
+
+const terminalOffset = (distance, face = 'half.normal', expect) => ({ id: 'resized', kind: 'offset-face', target: 'cut', face, distance, ...(expect ? { expect } : {}) });
+
+for (const replaceFirst of [false, true]) {
+  test(`terminal signed outer Offset preserves a complete radial bore in ${replaceFirst ? 'Replace → Offset' : 'Offset → Replace'} order`, () => {
+    const options = { z: 3, height: 9, replaceFirst };
+    const { stock, bored, tool } = fixture(options);
+    const current = body(bored, 'cut'), uncut = body(stock, 'stock'), cutter = body(append(stock, ...tool), 'tool');
+    const outer = 'half.normal', upper = 'half.v-max';
+    const frame = exactSemicylinderBoredOuterWallOffsetFrame(current, uncut, cutter, outer, upper);
+    assert.ok(frame);
+    assert.ok(Math.hypot(...frame.anchor.map((value, axis) => value - [20, 32, .75][axis])) < 1e-10);
+    assert.ok(Math.hypot(...frame.normal.map((value, axis) => value - [0, 1, 0][axis])) < 1e-10);
+    assert.equal(exactSemicylinderBoredOuterWallOffsetFrame(current, uncut, cutter, 'half.reverse', upper), undefined);
+    const expected = { [outer]: { ...faceSignatures(current).get(outer), size: 0 } };
+    for (const distance of [1, -1]) {
+      const doc = append(bored, terminalOffset(distance, outer, expected));
+      const snapshot = evaluateCadPart(doc), [resized] = snapshot.outputs;
+      const effective = fixture({ ...options, distance: 2 + distance });
+      const oracle = body(effective.bored, 'cut');
+      assert.equal(snapshot.outputs.length, 1);
+      assert.equal(resized.feature, 'resized');
+      assert.deepEqual(resized.brep, oracle);
+      assert.deepEqual(snapshot.document, doc);
+      const check = checkBrep(resized.brep, { strict: true });
+      assert.ok(check.valid, check.issues.join('\n'));
+      assert.equal(check.topology[0].genus, 1);
+      assert.deepEqual(check.counts, { bodies: 1, shells: 1, faces: 8, loops: 10, coedges: 60, edges: 30, vertices: 24 });
+      const radius = faceGeometry(resized.brep.faces.find(face => face.name === outer)).r;
+      assert.ok(Math.abs(radius - (12 + distance)) < 1e-10);
+      for (const edge of current.edges.filter(edge => edge.name.startsWith('half.reverse|'))) {
+        assert.deepEqual(resized.brep.edges.find(candidate => candidate.id === edge.id), edge);
+      }
+    }
+  });
+}
+
+test('terminal Offset may return the original outer radius while keeping the linked replacement and the bore', () => {
+  const { stock, tool, cut, bored } = fixture({ z: 3, height: 9 });
+  const [original, , replace] = stock.features;
+  const expected = { ...stock, features: [original, { ...replace, target: original.id }, ...tool, cut] };
+  assert.deepEqual(body(append(bored, terminalOffset(-2)), 'resized'), body(expected, 'cut'));
+});
+
+test('terminal Offset rejects blind, cap-breakout, tangency, wrong face and stale cases', () => {
+  const { bored } = fixture({ z: 3, height: 9 });
+  const refuseOffset = (source, offset, code) => assert.throws(() => evaluateCadPart(append(source, offset)),
+    cause => cause instanceof CadPartError && cause.feature === 'resized' && cause.code === code);
+  refuseOffset(bored, terminalOffset(3), 'GEOMETRY');
+  refuseOffset(fixture({ z: 5.25, height: 9 }).bored, terminalOffset(1), 'GEOMETRY');
+  refuseOffset(fixture({ z: 5, height: 8 }).bored, terminalOffset(1), 'GEOMETRY');
+  refuseOffset(fixture({ z: 1.25, height: 9 }).bored, terminalOffset(-1), 'CAPABILITY');
+  refuseOffset(fixture({ z: 3, height: 5 }).bored, terminalOffset(-1), 'CAPABILITY');
+  for (const face of ['half.reverse', 'half.v-max', ...halves]) refuseOffset(bored, terminalOffset(1, face), 'CAPABILITY');
+  refuseOffset(bored, terminalOffset(1, 'foreign.normal'), 'REFERENCE');
+  const outer = 'half.normal', signature = faceSignatures(body(bored, 'cut')).get(outer);
+  refuseOffset(bored, terminalOffset(1, outer, { [outer]: { ...signature, radius: 9, size: 0 } }), 'REFERENCE_MOVED');
+});
+
+test('terminal Offset refuses a re-cut that changes only native Difference IDs', () => {
+  const { stock, tool, bored } = fixture({ z: 3, height: 9 });
+  const next = fixture({ z: 3, height: 9, distance: 3 });
+  const current = body(bored, 'cut'), cutter = body(append(stock, ...tool), 'tool');
+  const reidentified = body(append(next.stock, ...next.tool, { ...next.cut, id: 'foreign' }), 'foreign');
+  const outer = 'half.normal', upper = 'half.v-max';
+  const before = certifyExactCylinderBore(current, body(stock, 'stock'), cutter, outer, upper);
+  const after = certifyExactCylinderBore(reidentified, body(next.stock, 'stock'), cutter, outer, upper);
+  assert.ok(before && after);
+  assert.equal(preservesExactCylinderBoreOnOffset(current, reidentified, before, after, outer, 1), false);
 });

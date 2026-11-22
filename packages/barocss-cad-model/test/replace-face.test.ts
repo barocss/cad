@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { editSavedOffsetFaceCommand } from '../src/app/offsetFaceEdit';
+import { offsetFaceCommand } from '../src/app/profileCommands';
 import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { runCheck } from '../src/chat/spec';
@@ -332,31 +334,36 @@ test('the linked upper-cap wall edit requires current ownership and a pinned sin
   assert.equal(missingDonor.state.doc, moved);
 });
 
+async function applyLinkedCapCommand(doc: StudioDoc, name: string, faces: string[], values?: Record<string, number>) {
+  const reply = await dispatchTool(await stateOf(doc), 'features', {
+    action: 'command', command: name, faces, values, expectedRevision: revisionOf(doc),
+  }, evaluate);
+  assert.ok(reply.changed && !reply.isError, reply.content);
+  return reply.state.doc;
+}
+
+async function boredSemicylinder(wallFirst: boolean) {
+  const source = inclinedCapSource();
+  const replace = (doc: StudioDoc) => applyLinkedCapCommand(doc, 'replace-face', ['n0.v-max', 'n2.bottom']);
+  const offset = (doc: StudioDoc) => applyLinkedCapCommand(doc, 'offset-face', ['n0.normal'], { d: 2 });
+  const stock = wallFirst ? await replace(await offset(source)) : await offset(await replace(source));
+  const circle = withNode(stock, { kind: 'sketch', profile: 'circle', center: [0, 0], radius: 1.5,
+    plane: { origin: [20, 25, 3], normal: [0, 1, 0], xAxis: [1, 0, 0] } });
+  const tool = withNode(circle, { kind: 'extrude', sketch: 6, height: 9 });
+  return withNode(tool, { kind: 'difference', parent: { node: 5, side: 'solid' }, tool: { node: 7, side: 'solid' } });
+}
+
 test('wall evidence follows the current Exact semicylinder through bore repair', async () => {
   const a = 'n0.normal', b = 'n0.reverse', solid = (node: number) => ({ node, side: 'solid' as const });
   const check = { query: { fn: 'radial_wall', a, b }, op: '>=', value: 4, tol: 0.01, unit: 'mm' } as const;
-  const apply = async (doc: StudioDoc, name: string, faces: string[], values?: Record<string, number>) => {
-    const reply = await dispatchTool(await stateOf(doc), 'features', {
-      action: 'command', command: name, faces, values, expectedRevision: revisionOf(doc),
-    }, evaluate);
-    assert.ok(reply.changed && !reply.isError, reply.content);
-    return reply.state.doc;
-  };
   const read = async (doc: StudioDoc, query: { fn: 'radial_wall'; a: string; b: string } = check.query) =>
     runCheck(doc, (await stateOf(doc)).bodies, evaluate, { ...check, query });
 
   for (const wallFirst of [false, true]) {
-    const source = inclinedCapSource();
-    const replace = (doc: StudioDoc) => apply(doc, 'replace-face', ['n0.v-max', 'n2.bottom']);
-    const offset = (doc: StudioDoc) => apply(doc, 'offset-face', [a], { d: 2 });
-    const stock = wallFirst ? await replace(await offset(source)) : await offset(await replace(source));
-    const circle = withNode(stock, { kind: 'sketch', profile: 'circle', center: [0, 0], radius: 1.5,
-      plane: { origin: [20, 25, 3], normal: [0, 1, 0], xAxis: [1, 0, 0] } });
-    const tool = withNode(circle, { kind: 'extrude', sketch: 6, height: 9 });
-    const cut = withNode(tool, { kind: 'difference', parent: solid(5), tool: solid(7) });
+    const cut = await boredSemicylinder(wallFirst);
     assert.equal((await read(cut)).status, 'unknown');
 
-    const healed = await apply(cut, 'delete-face', ['n7.side0#2']);
+    const healed = await applyLinkedCapCommand(cut, 'delete-face', ['n7.side0#2']);
     const proof = await read(healed);
     assert.equal(proof.status, 'pass');
     near(typeof proof.measured === 'number' ? proof.measured : undefined, 4);
@@ -383,5 +390,62 @@ test('wall evidence follows the current Exact semicylinder through bore repair',
 
     const moved = withNode(healed, { kind: 'translate', parent: solid(9), offset: [2, 0, 0] });
     assert.equal((await read(moved)).status, 'unknown');
+  }
+});
+
+test('a terminal signed outer-wall Offset preserves the complete radial bore and linked cap', async () => {
+  const wall = 'n0.normal', inner = 'n0.reverse', cap = 'n0.v-max';
+  for (const wallFirst of [false, true]) {
+    const cut = await boredSemicylinder(wallFirst), state = await stateOf(cut);
+    const body = state.bodies.findIndex(candidate => candidate.key === 'b8');
+    assert.ok(body >= 0);
+    const context = (faceName: string) => {
+      const face = state.bodies[body].mesh.faces.findIndex(face => face.name === faceName);
+      assert.ok(face >= 0, faceName);
+      return { doc: cut, bodies: state.bodies, selection: { faces: [{ body, face }], edges: [], bodies: [] } };
+    };
+    const ctx = context(wall);
+    assert.ok(offsetFaceCommand.available(ctx).ok);
+    for (const other of [inner, cap, 'n7.side0']) assert.ok(!offsetFaceCommand.available(context(other)).ok);
+    assert.deepEqual(offsetFaceCommand.fields!(ctx).map(field => field.key), ['d']);
+    assert.deepEqual(offsetFaceCommand.defaults!(ctx), { d: 1 });
+    const [handle] = offsetFaceCommand.handles!(ctx, { d: 1 });
+    near(handle.at[0], 20);
+    near(handle.at[1], 32);
+    assert.ok(handle.at[2] > 0 && handle.at[2] < 1.5);
+    handle.dir.forEach((component, axis) => near(component, axis === 1 ? 1 : 0));
+
+    const inspect = (doc: StudioDoc, key: string) => partBreps(doc).find(row => row.key === key)!.brep;
+    const assertOffset = async (doc: StudioDoc, distance: number) => {
+      assert.deepEqual(doc.nodes.slice(0, 9), cut.nodes);
+      const node = doc.nodes[9];
+      assert.ok(node.kind === 'offset-face');
+      assert.deepEqual([node.parent, node.faces, node.distance], [{ node: 8, side: 'solid' }, [wall], distance]);
+      assert.equal(node.sigs?.[wall]?.k, 'curved');
+      const brep = inspect(doc, 'b9'), report = checkBrep(brep, { strict: true });
+      assert.equal(report.valid, true);
+      assert.equal(report.topology[0].genus, 1);
+      const earlier = structuredClone(cut), prior = earlier.nodes[wallFirst ? 4 : 5];
+      assert.ok(prior.kind === 'offset-face' && prior.target === undefined);
+      prior.distance += distance;
+      // Original Difference ID and authored tolerances are shared by the two orderings.
+      assert.deepEqual(brep, inspect(earlier, 'b8'));
+      assert.deepEqual(inspect(doc, 'b3'), inspect(cut, 'b3'));
+      const opened = await readStudioFile(encodeStudioFile(doc));
+      assert.ok('doc' in opened);
+      assert.deepEqual(opened.doc, doc);
+      assert.deepEqual(inspect(opened.doc, 'b9'), brep);
+    };
+
+    const expanded = offsetFaceCommand.build!(ctx, { d: 1 });
+    await assertOffset(expanded, 1);
+    assert.deepEqual(await applyLinkedCapCommand(cut, 'offset-face', [wall], { d: 1 }), expanded);
+    const editor = editSavedOffsetFaceCommand(expanded, 9);
+    assert.ok(editor?.build);
+    const ready = await stateOf(expanded), editCtx = { ...ready, selection: { faces: [], edges: [], bodies: [] } };
+    await assertOffset(editor.build(editCtx, { d: -1 }), -1);
+    const bad = await evaluate(editor.build(editCtx, { d: 3 }));
+    assert.ok(!bad.ok);
+    assert.match(bad.error.detail, /through bore|cutter|opening/i);
   }
 });

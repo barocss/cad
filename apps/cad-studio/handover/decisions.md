@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1666: [Offset the outer wall of a bored Exact semicylinder](notes/bored-exact-semicylinder-wall-offset-2026-11-22/README.md), #17 and #629. Verify the signed edit, both openings, blind-result refusal, linked cap motion and native Open in Studio.
 - D1665: [Verify the current wall of a healed Exact semicylinder](notes/healed-exact-semicylinder-wall-evidence-2026-11-22/README.md), #17. Studio and local MCP distinguish the restored 4 mm pass from a current measured 3 mm failure through History and fresh Open.
 - D1664: [Heal a radial bore after an Exact semicylinder wall and cap edit](notes/delete-exact-semicylinder-radial-bore-2026-11-22/README.md), #17. Both edit orders recover exact stock through Studio and local MCP with History and native Open.
 - D1663: [Extract Studio live measurement](notes/studio-live-measurement-extraction-2026-11-22/README.md). Six actual desktop flows preserve all 26 recorded checkpoints.
