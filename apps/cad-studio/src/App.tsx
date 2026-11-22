@@ -1906,9 +1906,9 @@ export function App() {
     ownsSource: () => finishEdgeOpen === openIntent.current && ownsEvaluatedSource() && shownDocNow.current === doc
       && editNodeNow.current === editNode && bodiesRef.current === bodies && referenceProblems.current.get(doc) === refProblems,
     evaluate: next => engine.part(prefixDoc(next, next.nodes.length), revision.current++, 'refs'),
-    accept: (next, problem) => {
+    accept: (next, resolved) => {
       if (!commit(next, false, false, true)) return false;
-      referenceProblems.current.set(next, refProblems.filter(value => value !== problem));
+      referenceProblems.current.set(next, refProblems.filter(value => !resolved.includes(value)));
       return true;
     },
     notice: setToast,
@@ -2503,7 +2503,7 @@ export function App() {
     section: { doc, section, cutFrom: nextSerial(evaluated), sourceBodies: bodies, sourceKeys: sectionExact?.from,
       exactView: sectionExactShown && shownBodies === sectionBodies, showSelection: !!(section && sectionBodies && !sketch && !previewBodies),
       sourceEdges: liveMeasurement.picks ?? selection.edges },
-    highlights: { replacement: finishEdgeEditor.previewEdge, hideSource: !!(routePreviewBodies || routePanelOpen || shownPreviewBodies || sketch),
+    highlights: { replacement: finishEdgeEditor.previewEdges, hideSource: !!(routePreviewBodies || routePanelOpen || shownPreviewBodies || sketch),
       mateFaces: mateFaces ? assembly.highlight.faces : null, source: liveMeasurement.selection ?? selection },
   });
   commandPickScope.current = viewportSelection.commandScope;
@@ -3013,7 +3013,8 @@ export function App() {
             alignPreview: historyAlign, oppositeRadiusPreview, readAlignTargets: readAlignHistoryTargets,
             draftFaceReplacement: heldDraftFace.available ? heldDraftFace : undefined,
             edgeReplacement: finishEdgeEditor.available ? { start: finishEdgeEditor.start, cancel: finishEdgeEditor.cancel,
-              apply: finishEdgeEditor.apply, draft: finishEdgeEditor.current } : undefined,
+              apply: finishEdgeEditor.apply, draft: finishEdgeEditor.current, paired: finishEdgeEditor.paired,
+              pair: finishEdgeEditor.pairReview, selectSlot: finishEdgeEditor.selectSlot } : undefined,
             onDraft: reportNodeEditorDraft, pending: parameterEdit?.kind === 'direct',
             onDelete: opener => deleteNode(editNode, opener), onClose: () => closeHistoryEditor(() => {
               heldDraftFace.cancel();

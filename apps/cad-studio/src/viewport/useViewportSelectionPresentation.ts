@@ -22,7 +22,7 @@ interface Inputs {
   command: { active: Active | null; doc: StudioDoc; canPick: boolean };
   section: Omit<Parameters<typeof useSectionSelection>[0], 'shownBodies' | 'canPick'>;
   highlights: {
-    replacement?: { mesh: BodyResult['mesh']; edge: { index: number } };
+    replacement?: { mesh: BodyResult['mesh']; edges: readonly { index: number }[] };
     hideSource: boolean;
     mateFaces: FaceSel[] | null;
     source: Selection;
@@ -44,7 +44,7 @@ export function useViewportSelectionPresentation({ scene, command, section, high
   const { replacement, hideSource, mateFaces, source } = highlights;
   const replacementBody = replacement ? shown.findIndex(body => body.mesh === replacement.mesh) : -1;
   const selection = unavailable ? emptySel : cut.selection ?? (
-    replacement && replacementBody >= 0 ? { ...emptySel, edges: [{ body: replacementBody, edge: replacement.edge.index }] }
+    replacement && replacementBody >= 0 ? { ...emptySel, edges: replacement.edges.map(edge => ({ body: replacementBody, edge: edge.index })) }
       : endFace ? { ...emptySel, faces: [endFace] }
       : band ? band
       : hideSource ? emptySel

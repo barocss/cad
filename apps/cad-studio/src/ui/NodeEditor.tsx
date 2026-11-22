@@ -1,3 +1,4 @@
+import type { HeldFinishEdgeEditor } from '../state/useHeldFinishEdge';
 import type { HeldDraftFaceEditor } from '../state/heldDraftFaceSession';
 import { oppositeFlangeOwnRadiusField } from '../state/oppositeFlangeRadiusHistory';
 import type { useOppositeFlangeRadiusPreview } from '../app/useOppositeFlangeRadiusPreview';
@@ -41,7 +42,7 @@ function invalidInteger(value: number, range: { min: number; max: number }): boo
   return !Number.isInteger(value) || value < range.min || value > range.max;
 }
 
-export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, onApply, onClose, onEditSketch, onRelinkInset, insetRelinkProblem, onDetachInset, insetSourceWidth, onDelete, readFaceEndDistance, onPickEndFace, onReplaceAxis, onEditOffset, onEditDraft, onEditSharedHoleLayout, savedFeatureEdit, savedPathEdit, savedReliefShapeEdit, savedPartialRadiusSourceEdit, readAlignTargets, alignPreview, oppositeRadiusPreview, edgeReplacement, draftFaceReplacement, parameters, onRefuse, bearingAssembly, doc, onDraft, pending = false, pendingLabel = 'Checking the current bearing and housing…' }: { onFilletStations?(draft: FilletStationDraft): () => void; filletEndpoints?: FilletEndpoints | null; nodes: ModelNode[]; index: number; onApply(nodes: ModelNode[], ownsDraft: () => boolean, sourceWidth?: number): void | Promise<FeatureFailure | undefined>; onClose(): void; onEditSketch?(): void; onRelinkInset?: { start(opener: HTMLButtonElement): void; cancel(): void; reviewing: boolean }; insetRelinkProblem?: string; onDetachInset?(): void; insetSourceWidth?: number; onDelete?(opener: HTMLElement): void; readFaceEndDistance?(): Promise<FaceEndDistanceReply>; onPickEndFace?(): void; onReplaceAxis?(): void; onEditOffset?(): void; onEditDraft?(): void; onEditSharedHoleLayout?(): void; savedFeatureEdit?: { label: string; start(): void }; savedPathEdit?: { label: string; start(): void }; savedReliefShapeEdit?: { label: string; start(): void }; savedPartialRadiusSourceEdit?: { label: string; start(): void }; readAlignTargets?(): Promise<AlignTargetOption[]>; alignPreview?: ReturnType<typeof useAlignHistoryPreview>; oppositeRadiusPreview?: ReturnType<typeof useOppositeFlangeRadiusPreview>; edgeReplacement?: { start(): void; cancel(): void; apply(): void; draft: { name: string | null; pending?: boolean; endpoints?: {start: readonly number[]; end: readonly number[]; stations?: {label:string; at:readonly number[]; fraction:number}[]} } | null }; draftFaceReplacement?: HeldDraftFaceEditor; parameters: Record<string, number>; onRefuse(message: string): void; bearingAssembly?: BearingAssemblyInput; doc?: StudioDoc; onDraft?(owner: object | null): void; pending?: boolean; pendingLabel?: string }) {
+export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, onApply, onClose, onEditSketch, onRelinkInset, insetRelinkProblem, onDetachInset, insetSourceWidth, onDelete, readFaceEndDistance, onPickEndFace, onReplaceAxis, onEditOffset, onEditDraft, onEditSharedHoleLayout, savedFeatureEdit, savedPathEdit, savedReliefShapeEdit, savedPartialRadiusSourceEdit, readAlignTargets, alignPreview, oppositeRadiusPreview, edgeReplacement, draftFaceReplacement, parameters, onRefuse, bearingAssembly, doc, onDraft, pending = false, pendingLabel = 'Checking the current bearing and housing…' }: { onFilletStations?(draft: FilletStationDraft): () => void; filletEndpoints?: FilletEndpoints | null; nodes: ModelNode[]; index: number; onApply(nodes: ModelNode[], ownsDraft: () => boolean, sourceWidth?: number): void | Promise<FeatureFailure | undefined>; onClose(): void; onEditSketch?(): void; onRelinkInset?: { start(opener: HTMLButtonElement): void; cancel(): void; reviewing: boolean }; insetRelinkProblem?: string; onDetachInset?(): void; insetSourceWidth?: number; onDelete?(opener: HTMLElement): void; readFaceEndDistance?(): Promise<FaceEndDistanceReply>; onPickEndFace?(): void; onReplaceAxis?(): void; onEditOffset?(): void; onEditDraft?(): void; onEditSharedHoleLayout?(): void; savedFeatureEdit?: { label: string; start(): void }; savedPathEdit?: { label: string; start(): void }; savedReliefShapeEdit?: { label: string; start(): void }; savedPartialRadiusSourceEdit?: { label: string; start(): void }; readAlignTargets?(): Promise<AlignTargetOption[]>; alignPreview?: ReturnType<typeof useAlignHistoryPreview>; oppositeRadiusPreview?: ReturnType<typeof useOppositeFlangeRadiusPreview>; edgeReplacement?: HeldFinishEdgeEditor; draftFaceReplacement?: HeldDraftFaceEditor; parameters: Record<string, number>; onRefuse(message: string): void; bearingAssembly?: BearingAssemblyInput; doc?: StudioDoc; onDraft?(owner: object | null): void; pending?: boolean; pendingLabel?: string }) {
   // The draft is the whole node list: a sketch dimension changes the sketch the feature is made from.
   const [draft, setDraft] = useState<ModelNode[]>(nodes);
   const [stationDraftOrigin, setStationDraftOrigin] = useState({nodes,index});
@@ -347,7 +348,15 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
       </> : <button type="button" className="ghost" disabled={ordinaryLocked || changed || hasInvalidNumber || Object.keys(typed).length > 0 || !sameDraftScope}
         onClick={() => { retireEvaluation(); draftFaceReplacement.start(); }}>Replace face</button>)}
       {edgeReplacement && (edgeReplacement.draft ? <>
-        <span className="small break-all" role="status">{edgeReplacement.draft.name ?? 'Select an edge on the feature body.'}</span>
+        {edgeReplacement.pair ? <div role="group" aria-label="Fillet edge replacements">
+          {([0, 1] as const).map(slot => <div className="row-actions" key={slot}>
+            <button className="ghost" type="button" aria-pressed={edgeReplacement.pair?.slot === slot}
+              disabled={edgeReplacement.draft?.pending} onClick={() => edgeReplacement.selectSlot?.(slot)}>
+              {slot === 0 ? 'Pick first edge' : 'Pick second edge'}
+            </button>
+            <span className="small break-all" role="status">{edgeReplacement.pair?.picks[slot] ?? edgeReplacement.pair?.references[slot]}</span>
+          </div>)}
+        </div> : <span className="small break-all" role="status">{edgeReplacement.draft.name ?? 'Select an edge on the feature body.'}</span>}
         {edgeReplacement.draft.endpoints && node?.kind === 'fillet' && node.radii && <div className="small" role="status">
           <div>This choice assigns the saved Start/End radii to the new edge in the displayed direction. Interior positions keep their saved fractions.</div>
           <div>Start R{heldFinishRadiusText(node.radii[0].radius,parameters)} → ({edgeReplacement.draft.endpoints.start.join(', ')})</div>
@@ -355,11 +364,13 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
           <div>End R{heldFinishRadiusText(node.radii.at(-1)!.radius,parameters)} → ({edgeReplacement.draft.endpoints.end.join(', ')})</div>
         </div>}
         <div className="row-actions">
-          <button className="primary" type="button" aria-label="Apply edge replacement"
-            disabled={changed || !edgeReplacement.draft.name || edgeReplacement.draft.pending} onClick={edgeReplacement.apply}>Apply edge</button>
+          <button className="primary" type="button" aria-label={edgeReplacement.paired ? 'Apply edge replacements' : 'Apply edge replacement'}
+            disabled={changed || edgeReplacement.draft.pending || (edgeReplacement.pair
+              ? !edgeReplacement.pair.picks.every(Boolean) : !edgeReplacement.draft.name)}
+            onClick={edgeReplacement.apply}>{edgeReplacement.paired ? 'Apply edges' : 'Apply edge'}</button>
           <button className="ghost" type="button" aria-label="Cancel edge replacement" onClick={edgeReplacement.cancel}>Cancel</button>
         </div>
-      </> : <button className="ghost" type="button" disabled={pending || changed || hasInvalidNumber || !sameDraftScope} onClick={() => { retireEvaluation(); edgeReplacement.start(); }}>Replace edge</button>)}
+      </> : <button className="ghost" type="button" disabled={pending || changed || hasInvalidNumber || !sameDraftScope} onClick={() => { retireEvaluation(); edgeReplacement.start(); }}>{edgeReplacement.paired ? 'Replace edges' : 'Replace edge'}</button>)}
       {readingEnd && <div className="empty" role="status">Reading exact distance…</div>}
       {node?.kind === 'shaft' && node.steps.some(step => (step.grooves?.length ?? 0) > 1) && <p className="empty" role="status">Groove positions are editable only on steps with one groove. Moving multiple grooves past one another can change named references.</p>}
       {hasMissingNumber && <div className="hud-error" role="status">Enter a number for {missingNumbers.map(field => field.label).join(', ')}.</div>}

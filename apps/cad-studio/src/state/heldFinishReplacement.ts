@@ -39,6 +39,44 @@ function constantPair(node: ModelNode | undefined): node is Extract<HeldFinish, 
   node.edges[0] !== node.edges[1] && !node.radii && node.section === undefined && !node.rematched;
 }
 
+/** Match the two current problems to the author's slot order. Both must still be held by this terminal Fillet. */
+export function heldFilletPairProblems(doc: StudioDoc, index: number, problems: readonly Problem[]): [Problem, Problem] | undefined {
+ const node = doc.nodes[index];
+ if (!constantPair(node) || index !== doc.nodes.length - 1 || !positiveRadius(node.radius, doc.parameters) ||
+     !node.edges.every(name => node.sigs?.[name]?.k === 'line' && node.sigs[name].n === undefined)) return;
+ const here = problems.filter(problem => problem.node === index);
+ if (here.length !== 2) return;
+ const first = here.find(problem => problem.name === node.edges[0]);
+ const second = here.find(problem => problem.name === node.edges[1]);
+ if (first && second && first.index !== second.index) return [first, second];
+}
+
+export function validFilletPairEdge(edge: DisplayEdge | undefined, edges: readonly DisplayEdge[]): edge is DisplayEdge {
+ return !!edge && !!edge.nativeJoint && !!nativeLine(edge) && edge.names.length === 1 &&
+  !!edge.names[0] && !edge.names[0].includes('+') && edges.includes(edge) &&
+  edges.filter(member => member.names.includes(edge.names[0]) || member.nativeJoint?.edgeId === edge.nativeJoint!.edgeId).length === 1;
+}
+
+/** Both signatures come from the owned live mesh. Remove both authored aliases before writing either pick. */
+export function replaceHeldFilletPair(doc: StudioDoc, index: number, problems: readonly Problem[],
+ body: BodyResult, picks: readonly [DisplayEdge | undefined, DisplayEdge | undefined]): StudioDoc | null {
+ const original = doc.nodes[index];
+ if (!constantPair(original) || !heldFilletPairProblems(doc, index, problems)) return null;
+ const [first, second] = picks, edges = body.mesh.edges;
+ if (!validFilletPairEdge(first, edges) || !validFilletPairEdge(second, edges) || first === second) return null;
+ const names = [first.names[0], second.names[0]];
+ const signatures = signaturesOf(body).edges;
+ const a = signatures.get(names[0]), b = signatures.get(names[1]);
+ if (a?.kind !== 'line' || b?.kind !== 'line' || a.shared !== undefined || b.shared !== undefined) return null;
+ const sigs = { ...original.sigs };
+ for (const name of original.edges) delete sigs[name];
+ sigs[names[0]] = toSig(a);
+ sigs[names[1]] = toSig(b);
+ const next = { ...original, edges: names, sigs };
+ delete next.held; delete next.suppressed;
+ return { ...doc, nodes: doc.nodes.map((node, i) => i === index ? next : node) };
+}
+
 /** Direct replacement releases a pair only when its other authored line still has its original identity. */
 export function heldFinishProblem(doc: StudioDoc, index: number, problems: readonly Problem[], body: BodyResult): Problem | undefined {
  const node = doc.nodes[index];

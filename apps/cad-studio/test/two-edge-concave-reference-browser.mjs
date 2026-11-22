@@ -3,6 +3,9 @@ import { createFlow } from './flow-helper.mjs';
 
 const manualBase = process.argv.includes('--manual-base');
 const manual = process.argv.includes('--manual');
+const dualBase = process.argv.includes('--dual-base');
+const dualManual = process.argv.includes('--dual-manual');
+const dual = dualBase || dualManual;
 const pins = [
   'apps/cad-studio/test/two-edge-concave-reference-browser.mjs',
   'apps/cad-studio/test/flow-helper.mjs',
@@ -15,7 +18,8 @@ const pins = [
   'packages/barocss-cad-model/src/engine/rematch.ts',
 ];
 const oldEdge = 'n1.side1|n1.side2', retained = 'n1.side0|n1.side1', desired = 'n1.side2|n1.side3';
-const oldPoints = [[0, 0], [20, 0], [20, 20], [15, 20], [15, 15], [5, 15], [5, 20], [0, 20]];
+const oldBottom = dual ? -12 : 0;
+const oldPoints = [[0, oldBottom], [20, oldBottom], [20, 20], [15, 20], [15, 15], [5, 15], [5, 20], [0, 20]];
 const newPoints = [[0, 0], [20, 0], [20, 5], [5, 5], [5, 20], [0, 20]];
 const ref = node => ({ node, side: 'solid' });
 const model = (points, edges) => ({
@@ -28,9 +32,10 @@ const model = (points, edges) => ({
 const f = await createFlow({
   name: 'two-edge-concave-reference', output: process.argv[2],
   envFrozen: 'TWO_EDGE_CONCAVE_REFERENCE_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Recover one changed edge of a two-edge constant Fillet, with the other native line unchanged.',
+  qualification: dual ? 'Recover both changed edges of a saved two-edge constant Fillet together.'
+    : 'Recover one changed edge of a two-edge constant Fillet, with the other native line unchanged.',
   limits: ['Source model opened through the supported file UI. Creation by viewport is NOT_RUN.',
-    'Native original and explicit target must pass before browser claims. Two missing edges, varying/shaped Fillets and Chamfers are excluded.',
+    'Native original and explicit target must pass before browser claims. Varying or shaped Fillets and Chamfers are excluded.',
     'The inner corner is an explicit replacement target.'],
   inspectorSource: `
 import {readFileSync} from 'node:fs';
@@ -65,6 +70,7 @@ function geometry(rows, volume, corners) {
   }
 }
 const convex = { centre: [18, 2], contacts: [[18, 0], [20, 2]] };
+const sourceConvex = { centre: [18, oldBottom + 2], contacts: [[18, oldBottom], [20, oldBottom + 2]] };
 const oldTop = { centre: [18, 18], contacts: [[20, 18], [18, 20]] };
 const concave = { centre: [7, 7], contacts: [[7, 5], [5, 7]] };
 async function open(name, doc) {
@@ -90,18 +96,39 @@ async function candidateRows() {
   }
   return out;
 }
+async function direction(name) {
+  await button('View cube directions').click();
+  await f.page.getByRole('menuitem', { name, exact: true }).click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await f.page.evaluate(async () => {
+    let previous, settled = 0;
+    for (let i = 0; i < 90 && settled < 4; i++) {
+      await new Promise(requestAnimationFrame);
+      const pixel = window.__studioScreenOf([5, 5, 1.5]);
+      settled = previous && Math.hypot(pixel[0] - previous[0], pixel[1] - previous[1]) < 0.01 ? settled + 1 : 0;
+      previous = pixel;
+    }
+    if (settled < 4) throw new Error('View has not settled');
+  });
+}
+async function pick(point) {
+  const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), point);
+  assert.ok(await f.page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('canvas.vp-canvas'), pixel));
+  await f.page.mouse.click(...pixel);
+}
 await f.run(async () => {
   f.report.observations.push({ nativePreflight: 'NOT_RUN until inspector completes', browserRecovery: 'NOT_RUN' });
   f.phase = 'native preflight: genuine old signatures and both supported target corners';
   const prep = await f.inspect('00-native-preflight', { prepare: true,
     old: model(oldPoints, [oldEdge, retained]), target: model(newPoints, [desired, retained]),
     single: model(oldPoints, [oldEdge]) });
-  geometry(prep.old.native, 1050 - 6 * (4 - Math.PI), [convex, oldTop]);
+  const oldVolume = 1050 - 60 * oldBottom;
+  geometry(prep.old.native, oldVolume - 6 * (4 - Math.PI), [sourceConvex, oldTop]);
   geometry(prep.target.native, 525, [convex, concave]);
-  geometry(prep.single.native, 1050 - 3 * (4 - Math.PI), [oldTop]);
+  geometry(prep.single.native, oldVolume - 3 * (4 - Math.PI), [oldTop]);
   const signature = prep.old.doc.nodes[2].sigs[retained];
-  assert.deepEqual(signature, prep.target.doc.nodes[2].sigs[retained]);
-  assert.equal(signature.k, 'line'); assert.deepEqual(signature.p, [20, 0, 1.5]); near(signature.s, 3);
+  if (!dual) assert.deepEqual(signature, prep.target.doc.nodes[2].sigs[retained]);
+  assert.equal(signature.k, 'line'); assert.deepEqual(signature.p, [20, oldBottom, 1.5]); near(signature.s, 3);
   near(Math.abs(signature.d[2]), 1); near(signature.d[0], 0); near(signature.d[1], 0);
   assert.deepEqual(prep.old.doc.nodes[2].sigs[oldEdge].p, [20, 20, 1.5]);
   f.report.observations.push({ nativePreflight: 'PASS', retainedNativeSignature: signature, oldNative: prep.old.native, explicitTargetNative: prep.target.native });
@@ -116,9 +143,58 @@ await f.run(async () => {
   assert.equal(before.doc.nodes[2].suppressed, true);
   near(before.bodies.bodies[0].volume, 525);
   const rows = await candidateRows();
-  assert.equal(rows.filter(r => r.text.includes('Choose a reference') || r.text.includes('Reference missing')).length, 1, 'Exactly one problem, not two missing edges');
+  assert.equal(rows.filter(r => r.text.includes('Choose a reference') || r.text.includes('Reference missing')).length, dual ? 2 : 1);
   f.report.observations.push({ candidates: rows, held: before.doc.nodes[2].held, rematched: before.doc.nodes[2].rematched ?? null, historicalSignatures: before.doc.nodes[2].sigs });
   await f.snapshot('03-all-reference-candidates');
+  if (dualBase) {
+    await f.openFeatureEditor(2, 'two unresolved Fillet edges');
+    await f.editor().scrollIntoViewIfNeeded();
+    assert.equal(await button('Replace edge', f.editor()).count(), 0);
+    assert.equal(await button('Replace edges', f.editor()).count(), 0);
+    await f.same(before.doc);
+    await f.snapshot('04-dual-direct-replacement-unavailable');
+    f.report.observations.push({ unresolvedEdges: 2, directPairedReplacement: 'FAIL: unavailable in History' });
+    return;
+  }
+  if (dualManual) {
+    const editor = f.editor();
+    const replace = button('Replace edges', editor);
+    const apply = button('Apply edge replacements', editor);
+    const cancel = button('Cancel edge replacement', editor);
+    const stage = editor.getByRole('group', { name: 'Fillet edge replacements', exact: true });
+    await direction('Back right');
+    await f.openFeatureEditor(2, 'two unresolved Fillet edges');
+    await replace.click();
+    await pick([5, 5, 1.5]); await stage.getByText(desired, { exact: true }).waitFor();
+    assert.ok(await apply.isDisabled());
+    assert.equal(await button('Pick second edge', stage).getAttribute('aria-pressed'), 'true');
+    await pick([5, 5, 1.5]);
+    await f.page.getByText('Select a different unmerged straight edge on the body of this feature.', { exact: true }).waitFor();
+    assert.ok(await apply.isDisabled());
+    await stage.getByText(desired, { exact: true }).waitFor();
+    await f.same(before.doc);
+    await cancel.click(); await f.same(before.doc);
+    assert.deepEqual((await f.snapshot('04-dual-cancel-keeps-both-held')).history, before.history);
+    await replace.click();
+    await pick([5, 5, 1.5]); await stage.getByText(desired, { exact: true }).waitFor();
+    await direction('Front right'); await pick([20, 0, 1.5]);
+    await f.page.waitForFunction(() => document.querySelector('button[aria-label="Apply edge replacements"]')?.disabled === false);
+    const preview = await f.snapshot('05-two-explicit-uncommitted-picks');
+    assert.deepEqual(preview.doc, before.doc);
+    assert.deepEqual(preview.bodies.bodies, before.bodies.bodies);
+    assert.deepEqual(preview.history, before.history);
+    await apply.click(); await f.changed(before.doc); await refs().waitFor({ state: 'hidden' }); await f.ready();
+    const accepted = await f.snapshot('06-both-edge-replacements-applied');
+    assert.deepEqual(accepted.doc, prep.target.doc);
+    geometry(await f.inspect('07-both-resolved-native', accepted.doc), 525, [convex, concave]);
+    await f.undo(); await f.same(before.doc); await refs().waitFor();
+    assert.equal(await refs().getByText('Choose a reference · Feature held', { exact: true }).count(), 2);
+    assert.deepEqual((await f.snapshot('08-undo-restores-two-problems')).history, before.history);
+    await f.redo(); await f.same(accepted.doc); await refs().waitFor({ state: 'hidden' });
+    await saveOpen(accepted.doc, 'two-edge-pair-confirmed', 525, [convex, concave]);
+    f.report.observations.push({ dualManual: 'PASS', sameNameNewSignature: 'PASS', duplicateRefusal: 'PASS', Cancel: 'PASS', UndoRedoSaveOpen: 'PASS' });
+    return;
+  }
   const offered = rows.flatMap(row => row.candidates.map(candidate => ({ ...candidate, group: row.group }))).find(c => c.name === desired);
   if (manualBase) {
     await f.openFeatureEditor(2, 'held Fillet');
@@ -133,26 +209,6 @@ await f.run(async () => {
     const readyToApply = button('Apply edge replacement', editor);
     const cancel = button('Cancel edge replacement', editor);
     const replace = button('Replace edge', editor);
-    const direction = async name => {
-      await button('View cube directions').click();
-      await f.page.getByRole('menuitem', { name, exact: true }).click();
-      await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-      await f.page.evaluate(async () => {
-        let previous, settled = 0;
-        for (let i = 0; i < 90 && settled < 4; i++) {
-          await new Promise(requestAnimationFrame);
-          const pixel = window.__studioScreenOf([5, 5, 1.5]);
-          settled = previous && Math.hypot(pixel[0] - previous[0], pixel[1] - previous[1]) < 0.01 ? settled + 1 : 0;
-          previous = pixel;
-        }
-        if (settled < 4) throw new Error('View has not settled');
-      });
-    };
-    const pick = async point => {
-      const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), point);
-      assert.ok(await f.page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('canvas.vp-canvas'), pixel));
-      await f.page.mouse.click(...pixel);
-    };
     await direction('Front right');
     await f.openFeatureEditor(2, 'held pair');
     await replace.click();
