@@ -10,6 +10,7 @@ import { translateSelection } from './assembly/translateSelection';
 import { pickPlacedPart } from './assembly/groundSelection';
 import { SelectedInstancesPanel } from './ui/SelectedInstancesPanel';
 import { commitOutlineRotation } from './sketch/outlineRotationCommit';
+import { usePinnedFaceReadout, usePinnedFaceSession } from './state/usePinnedFaceMeasurement';
 import { usePinnedMass } from './state/usePinnedMass';
 import { PinnedMassControls } from './ui/PinnedMassControls';
 import { useDirectPoleEditor } from './state/useDirectPoleEditor';
@@ -160,7 +161,6 @@ import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { carrySelection, commands, patchValues, refOf, selectedBodies, subdNodeOf, type Command, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
 import { measureBetween, type MeasurePick } from '@barocss/cad-model/app/measure';
-import { capturePinnedFacePair, readPinnedFacePair, type PinnedFacePair } from './app/pinnedFaceMeasure';
 import { usesCurvedMeshDistance } from './app/measureProvenance';
 import { captureMeasureTarget, readMeasureTarget, sameMeasureOccurrence, type MeasureTarget, type PlacedMeasureSource } from './app/measureTargets';
 import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportInstanceSelection } from './assembly/nestedSelection';
@@ -741,9 +741,8 @@ export function App() {
   const meshCirclePick = useRef<((hit: MeshCircleHit) => boolean) | null>(null);
   const [measurementFocus, setMeasurementFocus] = useState(false);
   const measureNativeReady = useRef(false);
-  const [pinnedMeasure, setPinnedMeasure] = useState<{ pair: PinnedFacePair; generation: number; worker: number; project: typeof project.view.store } | null>(null);
-  const pinOwned = pinnedMeasure?.generation === docGeneration && pinnedMeasure.worker === workerSession && pinnedMeasure.project === project.view.store ? pinnedMeasure : null;
-  useEffect(() => { if (pinnedMeasure && !pinOwned) setPinnedMeasure(null); }, [pinnedMeasure, pinOwned]);
+  const pinnedFaces = usePinnedFaceSession(docGeneration, workerSession, project.view.store);
+  const clearPinnedFaces = pinnedFaces.clear;
   // The SubD cage editor (R8.2, D81): a session on one subd node; Done commits it (see commitRef: commit is defined below).
   const commitRef = useRef<(next: StudioDoc) => void>(() => {});
   const cageEdRef = useRef<ReturnType<typeof useCageEditor>>(null!);
@@ -2001,8 +2000,8 @@ export function App() {
   const resetHistoryBoundaryView = useCallback(() => {
     cancelStlExportRef.current();
     resetDocumentSection();
-    setPinnedMeasure(null);
-  }, [resetDocumentSection]);
+    clearPinnedFaces();
+  }, [clearPinnedFaces, resetDocumentSection]);
   const restoreHistoryIdentity = useCallback((identity: NonNullable<WorkHistory<StudioDoc>['documentIdentity']>) => {
     setCompareBase(null);
     setDocGeneration(generation => generation + 1);
@@ -2114,7 +2113,7 @@ export function App() {
       if (mode !== 'in-place') setCheckpointReview(null);
       if (mode === 'detached' || mode === 'new-part') { project.detach(); setCompareBase(null); }
       if (mode === 'new-part') setFileName('Untitled');
-      cancel(); setCutDraft(null); setDocGeneration(g => g + 1); setSelection(emptySel); setPick(null); setInstanceSel([]); setIsolatedInstances(undefined); setDirectSel([]); setMeasure(null); setPinnedMeasure(null); setEditNode(null);
+      cancel(); setCutDraft(null); setDocGeneration(g => g + 1); setSelection(emptySel); setPick(null); setInstanceSel([]); setIsolatedInstances(undefined); setDirectSel([]); setMeasure(null); clearPinnedFaces(); setEditNode(null);
       return true;
     } finally { replacement.current = null; }
   };
@@ -2406,7 +2405,7 @@ export function App() {
       // Leave text history and focused control activation to the browser.
       if (undoKey && typing) return;
       if (!typing && e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.code === 'KeyM' || e.key.toLowerCase() === 'm')
-        && !rendering && !drawing && !sketch && !active && (measure || pinOwned)) {
+        && !rendering && !drawing && !sketch && !active && (measure || pinnedFaces.pair)) {
         e.preventDefault(); layout.setDockSheet(true); setMeasurementFocus(true); return;
       }
       const control = target instanceof Element && target.closest('button, summary, select, [role="button"], [role="menuitem"]');
@@ -2661,15 +2660,12 @@ export function App() {
   const meshCircle = useMeshCircleMeasurement(doc, bodies, meshCircleSession, measure !== null, pinReady && !exploded && !assembly.draft && !stepsDisp && !isolatedInstances);
   meshCirclePick.current = meshCircle.pick;
   measureNativeReady.current = pinReady;
-  const pinOffer = pinReady && liveMeasurePicks?.length === measure?.length && liveMeasurePicks ? capturePinnedFacePair(doc, bodies, liveMeasurePicks) : null;
-  const pinResult = useMemo(() => pinReady && pinOwned ? readPinnedFacePair(doc, bodies, pinOwned.pair) : null,
-    [pinReady, pinOwned, doc, bodies]);
-  const pinMeasurement = () => {
-    if (!pinOffer || !measureNativeReady.current || docNow.current !== doc || workerSessionNow.current !== workerSession) return;
-    setPinnedMeasure({ pair: pinOffer, generation: docGeneration, worker: workerSession, project: project.view.store });
-    setMeasure(null);
-  };
-  const visibleMeasurement = measure ? measured : pinResult;
+  const pinnedReadout = usePinnedFaceReadout({
+    session: pinnedFaces, doc, bodies, ready: pinReady, picks: liveMeasurePicks, targetCount: measure?.length,
+    isCurrent: () => measureNativeReady.current && docNow.current === doc && workerSessionNow.current === workerSession,
+    stopMeasuring: () => setMeasure(null),
+  });
+  const visibleMeasurement = measure ? measured : pinnedReadout.result;
   const sketchTool = sketch?.tool;
   const usesNativeCrossings = sketchTool === 'rectangle' || sketchTool === 'polygon' || sketchTool === 'arc' || sketchTool === 'circle' || sketchTool === 'carc';
   const crossingBodies = usesNativeCrossings && fresh && !busy && shownDoc === doc && marker === null && !inPlace && !doc.instances?.length
@@ -3086,9 +3082,9 @@ export function App() {
         onSaveCamera={() => { const c = viewport.current?.getCamera(); if (c) commitRender({ ...render, camera: c }); }}
         onUseCamera={() => { if (render.camera) { viewport.current?.setCamera(render.camera); setFov(Math.round(render.camera.fovY * 180 / Math.PI)); } }} /></Suspense>}
       {fresh && !rendering && !sketch && measure && meshCircle.mode && <MeshCircleInspector state={meshCircle.state} ready={meshCircle.ready} onReset={meshCircle.reset} onBack={() => { meshCircle.choose(false); setMeasure([]); }} onClose={() => { meshCircle.choose(false); setMeasure(null); }} />}
-      {fresh && !rendering && !sketch && measure && !meshCircle.mode && <MeasurementInspector onMeshCircle={() => { meshCircle.choose(true); setMeasure([]); }} pickFilter={pickFilter} targets={measure} items={measurementItems ?? []} measured={measured} approximateDistance={approximateMeasure} onClose={() => setMeasure(null)} onPin={pinOffer ? pinMeasurement : undefined} />}
+      {fresh && !rendering && !sketch && measure && !meshCircle.mode && <MeasurementInspector onMeshCircle={() => { meshCircle.choose(true); setMeasure([]); }} pickFilter={pickFilter} targets={measure} items={measurementItems ?? []} measured={measured} approximateDistance={approximateMeasure} onClose={() => setMeasure(null)} onPin={pinnedReadout.pin} />}
       {massPinView && (massPin.pinned || (!active && !measure && !directSel.length && !instanceSel.length)) && <PinnedMassControls pinned={massPin.pinned} result={massPin.result} canPin={massPin.canPin} onPin={massPin.pin} onClear={massPin.clear} />}
-      {pinView && pinOwned && !measure && <PinnedMeasurement distance={pinResult?.normalDistance ?? null} onClear={() => setPinnedMeasure(null)} />}
+      {pinView && pinnedFaces.pair && !measure && <PinnedMeasurement distance={pinnedReadout.result?.normalDistance ?? null} onClear={clearPinnedFaces} />}
       {cutDraft && !rendering && !sketch && !measure && <AssemblyCutHud draft={cutDraft} instances={doc.instances ?? NO_INSTANCES} problem={draftProblem(doc, cutDraft) ?? (cutTrial?.key === cutKey ? cutTrial.problem : undefined)}
         onChange={patch => setCutDraft(d => d && { ...d, ...patch })} onAddSelected={() => setCutDraft(d => d && { ...d, targets: withAddedTargets(d.targets, cuttableOf(doc, instanceSel)) })}
         onApply={applyCut} onCancel={() => setCutDraft(null)} />}

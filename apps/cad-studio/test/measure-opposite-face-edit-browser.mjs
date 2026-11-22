@@ -107,7 +107,7 @@ async function check(label, height, reverse = false, keep = false) {
   assert.equal(await metric('Distance').innerText(), height + ' mm');
   assert.equal(await metric('Normal distance').innerText(), height + ' mm');
   assert.equal(await metric('Angle').innerText(), '0°');
-  assert.deepEqual((await metric('ΔX ΔY ΔZ').innerText()).split(', ').map(Number), [0, 0, reverse ? height : -height]);
+  assert.equal(await metric('ΔX ΔY ΔZ').innerText(), `0, 0, ${reverse ? height : -height} mm`);
   await f.page.waitForFunction(height => window.__studioOverlayTexts?.()['measure:label']?.includes(height + ' mm'), height);
   const current = await f.snapshot(label);
   for (const field of ['doc', 'bodies', 'history', 'controls', 'dirty']) assert.deepEqual(current[field], before[field], field);
