@@ -23,10 +23,10 @@ const review = process.argv.includes('--review');
 const baselineReview = process.argv.includes('--expect-review-refused');
 const oppositeImage = process.argv.includes('--opposite-image');
 const baselineImage = process.argv.includes('--expect-opposite-unavailable');
-assert.ok(!oppositeImage || (lineArc && review && !baselineReview));
+assert.ok(!oppositeImage || (singleJoin && review && !baselineReview));
 assert.ok(!baselineImage || oppositeImage);
-assert.ok(!review || (!baseline && (lineArc || (opposite && !spaced))), 'Choose a supported duct review path.');
-assert.ok(!baselineReview || (review && lineArc));
+assert.ok(!review || (!baseline && (singleJoin || (opposite && !spaced))), 'Choose a supported duct review path.');
+assert.ok(!baselineReview || (review && singleJoin));
 const railId = sameTurn ? 'same-turn' : opposite ? 's-bend' : 'elbow';
 const railName = sameTurn ? 'Same-turn rail' : opposite ? 'S-bend rail' : 'Elbow rail';
 const forwardEnds = twoArcs ? [
@@ -67,7 +67,7 @@ if (review) pins.push('apps/cad-studio/test/duct-proposal-review-browser-steps.m
 const f = await createFlow({
   name: spacedOpposite ? 'exact-spaced-s-bend-duct' : spaced ? 'exact-spaced-same-turn-duct' : sameTurn ? 'exact-rectangular-same-turn-duct'
     : opposite ? 'exact-rectangular-s-bend-duct' : 'exact-rectangular-duct-sweep', output: process.argv[2],
-  envFrozen: arcLine ? 'D1751_SOURCE_FROZEN' : oppositeImage ? 'D1748_SOURCE_FROZEN' : lineArc ? (review ? 'D1747_SOURCE_FROZEN' : 'D1746_SOURCE_FROZEN') : spacedOpposite ? 'D1736_SOURCE_FROZEN' : spaced ? 'D1733_SOURCE_FROZEN' : review ? 'D1705_SOURCE_FROZEN'
+  envFrozen: arcLine ? (review ? 'D1752_SOURCE_FROZEN' : 'D1751_SOURCE_FROZEN') : oppositeImage ? 'D1748_SOURCE_FROZEN' : lineArc ? (review ? 'D1747_SOURCE_FROZEN' : 'D1746_SOURCE_FROZEN') : spacedOpposite ? 'D1736_SOURCE_FROZEN' : spaced ? 'D1733_SOURCE_FROZEN' : review ? 'D1705_SOURCE_FROZEN'
     : sameTurn ? 'D1713_SOURCE_FROZEN' : opposite ? 'D1704_SOURCE_FROZEN' : 'D1675_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Sweep a centered rectangular duct, inspect both openings and edit the aperture through Studio History.',
@@ -418,11 +418,11 @@ await f.run(async () => {
         expectedProposalRevision: proposal.modelReviewRevision }, true);
       assert.equal(result.code, 'MODEL_REVIEW_REPLAY_FAILED');
       assert.deepEqual(await readFile(file), staged);
-      f.report.observations.push({ label: 'line-and-arc-review-refused', proposal: proposal.id, result });
+      f.report.observations.push({ label: arcLine ? 'arc-and-line-review-refused' : 'line-and-arc-review-refused', proposal: proposal.id, result });
       return;
     }
     const evidence = await reviewPendingDuct(f, call, request, expectedRevision, op.args.values,
-      lineArc ? 'line-and-arc' : undefined, oppositeImage ? (baselineImage ? 'baseline' : 'opposite') : undefined);
+      arcLine ? 'arc-and-line' : lineArc ? 'line-and-arc' : undefined, oppositeImage ? (baselineImage ? 'baseline' : 'opposite') : undefined);
     assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*Studio/i);
     assert.deepEqual(await readFile(file), staged);
     return evidence;
@@ -455,7 +455,7 @@ await f.run(async () => {
     const saved = await f.save('reviewed-rectangular-duct');
     await f.freshOpen(saved.file, approved, '11-reviewed-duct-fresh-open');
     assert.equal((await verify('approved-draft-reopened', await f.doc(), 4)).digest, native.digest);
-    if (lineArc) {
+    if (singleJoin) {
       await showOpening(ends[0], '11-approved-inlet');
       await showOpening(ends[1], '11-approved-outlet');
     }

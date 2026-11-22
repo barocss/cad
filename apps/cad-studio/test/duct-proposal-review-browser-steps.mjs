@@ -40,7 +40,7 @@ export async function reviewPendingDuct(f, call, request, expectedRevision, valu
   assert.equal(new Set([...exteriorSeams, ...interiorSeams]).size, 8);
   const labels = Object.values(meta.legend);
   const visibleCaps = faces.filter(name => Object.values(meta.views).some(view => view.visible_faces.includes(name)));
-  if (pathKind === 'line-and-arc') {
+  if (pathKind) {
     assert.ok(labels.some(name => name.startsWith('n1.line.side[')));
     assert.ok(labels.some(name => name.startsWith('n1.bend.side[')));
   } else {
@@ -78,8 +78,9 @@ async function reviewOppositeDuct(f, call, request, pins, standard, mode) {
   assert.equal(meta.orientation, orientation);
   assert.notEqual(meta.imageSha256, standard.meta.imageSha256);
   assert.deepEqual(Object.keys(meta.views), ['back', 'top', 'left', 'iso']);
-  assert.ok(meta.views.left.visible_faces.includes('n1.start'));
-  assert.ok(meta.views.back.visible_faces.includes('n1.end'));
+  const arcFirst = standard.meta.rectangularDuct.pathKind === 'arc-and-line';
+  assert.ok(meta.views.left.visible_faces.includes(arcFirst ? 'n1.end' : 'n1.start'));
+  assert.ok(meta.views.back.visible_faces.includes(arcFirst ? 'n1.start' : 'n1.end'));
   assert.deepEqual(meta.rectangularDuct, standard.meta.rectangularDuct);
   assert.equal(meta.candidate.bodySha256, standard.meta.candidate.bodySha256);
   assert.notEqual(meta.candidate.reviewRevision, standard.meta.candidate.reviewRevision);

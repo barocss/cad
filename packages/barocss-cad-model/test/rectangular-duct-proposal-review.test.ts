@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, checkBrep } from '@barocss/cad';
+import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
 import { sweepPath } from '../src/app/profileCommands';
 import { rectangularDuctProposal, reviewedRectangularDuctEvidence } from '../src/chat/rectangularDuctProposalReview';
 import { sweepSourceRevision } from '../src/chat/sweepSource';
@@ -158,6 +158,42 @@ test('a line-and-arc duct certifies the terminal chart and eight seams for the p
   const seams = [...rectangularDuct.exteriorSeams, ...rectangularDuct.interiorSeams];
   assert.equal(new Set(seams).size, 8);
   assert.ok(seams.every(id => brep.edges.find(edge => edge.id === id)?.name?.includes('n1.line.side[')));
+  assert.ok(Math.abs(brepMassProperties(brep, 1).volume - 16 * (10 + 10 * Math.PI)) < 1e-7);
+  assert.equal(await reviewedRectangularDuctEvidence(base, candidate, { ...edit, pathRevision: 'b'.repeat(64) }), undefined);
+});
+
+
+test('an arc-and-line duct binds both mouth names to travel order and certifies the curved start charts', async () => {
+  const railText = `@model rails { version:0; length-unit:mm;
+    @curve #arc-line { type:nurbs; degree:2; knots:[0,0,0,1,1,2,2,2];
+      control-points:[[20,20,0],[20,0,0],[0,0,0],[-5,0,0],[-10,0,0]];
+      weights:[1,${Math.SQRT1_2},1,1,1]; } }`;
+  const { base, candidate, edit } = await fixture(railText, 'arc-line', 'Arc and line rail');
+  const evidence = await reviewedRectangularDuctEvidence(base, candidate, edit);
+  assert.ok(evidence);
+  const { brep, rectangularDuct } = evidence;
+  assert.deepEqual([rectangularDuct.pathKind, rectangularDuct.path, rectangularDuct.pathRevision],
+    ['arc-and-line', 'arc-line', edit.pathRevision]);
+  assert.deepEqual(rectangularDuct.caps.map(cap => [cap.name, cap.outerEdges.length, cap.innerEdges.length]),
+    [['n1.start', 4, 4], ['n1.end', 4, 4]]);
+  const [start, end] = rectangularDuct.caps;
+  const cap = (name: string) => {
+    const face = brep.faces.find(face => face.name === name);
+    assert.ok(face);
+    const plane = faceGeometry(face);
+    assert.ok(plane.kind === 'plane');
+    return plane;
+  };
+  const startPlane = cap(start.name), endPlane = cap(end.name);
+  assert.ok(Math.abs(startPlane.o[1] - 20) < 1e-7 && startPlane.n[1] > .999999);
+  assert.ok(Math.abs(endPlane.o[0] + 10) < 1e-7 && endPlane.n[0] < -.999999);
+  for (const edge of [...start.outerEdges, ...start.innerEdges]) {
+    const uses = brep.coedges.filter(use => use.edge === edge);
+    assert.equal(uses.length, 2);
+    assert.ok(uses.every(use => use.pcurve));
+  }
+  const seams = [...rectangularDuct.exteriorSeams, ...rectangularDuct.interiorSeams];
+  assert.equal(new Set(seams).size, 8);
   assert.ok(Math.abs(brepMassProperties(brep, 1).volume - 16 * (10 + 10 * Math.PI)) < 1e-7);
   assert.equal(await reviewedRectangularDuctEvidence(base, candidate, { ...edit, pathRevision: 'b'.repeat(64) }), undefined);
 });
