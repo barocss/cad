@@ -28,8 +28,9 @@ const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: 
 const pins = ['packages/barocss-cad/src/brep/exact-sweep.ts', 'packages/barocss-cad-model/src/app/profileCommands.ts',
   'packages/barocss-cad-model/src/engine/errors.ts', 'packages/barocss-cad-model/src/chat/part/features.ts'];
 const f = await createFlow({
-  name: sameTurn ? 'exact-spaced-same-turn' : annular ? 'exact-spaced-annular-s-bend' : 'exact-spaced-s-bend', output: process.argv[2],
-  envFrozen: sameTurn ? 'D1725_SOURCE_FROZEN' : annular ? 'D1723_SOURCE_FROZEN' : 'D1721_SOURCE_FROZEN',
+  name: `exact-spaced-${annular ? 'annular-' : ''}${sameTurn ? 'same-turn' : 's-bend'}`, output: process.argv[2],
+  envFrozen: sameTurn && annular ? 'D1729_SOURCE_FROZEN'
+    : sameTurn ? 'D1725_SOURCE_FROZEN' : annular ? 'D1723_SOURCE_FROZEN' : 'D1721_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: `Sweep a ${annular ? 'concentric annulus' : 'disk'} along two tangent bends separated by a native straight span.`,
   limits: [`Coplanar R12/R18 ${sameTurn ? 'same-turn' : 'opposite'} quarter circles and 8 mm straight. One circular ${annular ? 'concentric bore' : 'disk'}. Desktop WebGPU and local MCP.`],
@@ -165,7 +166,8 @@ async function studyJoints(native, label) {
 async function inspectBoreMouths(inner) {
   const cube = f.page.getByRole('group', { name: 'View cube', exact: true });
   const middle = (inner + 2) / 2;
-  const mouths = [{ name: 'start', view: 'Front', x: 0, y: 0 }, { name: 'end', view: 'Back', x: 38, y: 30 }];
+  const mouths = [{ name: 'start', view: 'Front', x: 0, y: 0 },
+    { name: 'end', view: sameTurn ? 'Front' : 'Back', x: 38, y: endY }];
   for (const { name, view, x, y } of mouths) {
     f.phase = 'Inspect the open ' + name + ' bore mouth';
     await button('View cube directions', cube).click();
@@ -215,8 +217,9 @@ await f.run(async () => {
   assert.ok(await button('Apply', hud()).isDisabled());
   await f.same(seed);
   const refusal = await hud().innerText();
-  assert.match(refusal, baseline ? sameTurn ? /outside the arc–line–arc Sweep range/i
-    : annular ? /needs a circular disk/i : /outside the exact Sweep range/i : /tangent/i);
+  const baselineRefusal = sameTurn && !annular ? /outside the arc–line–arc Sweep range/i
+    : annular ? /needs a circular disk/i : /outside the exact Sweep range/i;
+  assert.match(refusal, baseline ? baselineRefusal : /tangent/i);
   await f.snapshot(baseline ? '02-baseline-spaced-refused' : '02-kink-refused');
   if (baseline) return;
 
@@ -260,7 +263,11 @@ await f.run(async () => {
     assert.deepEqual(edited.nodes.slice(1), accepted.nodes.slice(1));
   }
   const native = await verify('edited-native', edited, radius);
-  if (annular) assert.deepEqual(native.outerSurfaces, original.outerSurfaces);
+  if (annular) {
+    assert.deepEqual(native.outerSurfaces, original.outerSurfaces);
+    assert.deepEqual(native.joints.map(joint => joint.map(edge => edge.id)),
+      original.joints.map(joint => joint.map(edge => edge.id)));
+  }
   await f.undo(); await f.same(accepted);
   await f.redo(); await f.same(edited);
   const saved = await f.save('spaced-s-bend');
@@ -278,7 +285,7 @@ await f.run(async () => {
   assert.equal(Number(await f.editor().getByLabel('Diameter', { exact: true }).inputValue()), 2 * radius);
   await f.editor().getByText(representation, { exact: true }).waitFor();
   await f.snapshot('09-spaced-history');
-  if (sameTurn) {
+  if (sameTurn && !annular) {
     await f.editor().getByLabel('Diameter', { exact: true }).fill('4');
     const restored = (await f.applyEditor(edited, '09-spaced-diameter-restored')).doc;
     assert.deepEqual(restored, accepted);
@@ -292,8 +299,7 @@ await f.run(async () => {
     const expectedRevision = await currentPartRevision(call);
     if (annular || sameTurn) {
       const description = await call('describe', { command: 'sweep-curve' });
-      assert.match(description.values.sketch, /arc–line–arc path accepts a circular disk/);
-      assert.match(description.values.sketch, /circular hole is supported when the bends turn in opposite directions/);
+      assert.match(description.values.sketch, /arc–line–arc path accepts a circular disk with an optional concentric circular hole/);
       assert.match(description.values.representation, /straight tangent span can separate two coplanar bends that turn in the same or opposite directions/);
     }
     const { direct_curves: curves } = await call('query', { action: 'summary' });

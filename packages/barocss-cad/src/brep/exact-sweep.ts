@@ -949,8 +949,6 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
   if (spaced) {
     if (!disk || profileRadius === undefined)
       return refuse('CAPABILITY', 'Exact arc-line-arc sweep needs one circular outer section.');
-    if (spaced.turn === 1 && holes.length)
-      return refuse('CAPABILITY', 'Exact same-turn arc-line-arc sweep needs one circular disk section without holes.');
     const hole = circularHole(holes, 'arc-line-arc', refuse);
     const bore = hole && concentricBore(disk, hole, refuse);
     const initial = frame(spaced.first.tangent), [x, y] = initial;

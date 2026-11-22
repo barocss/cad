@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1729: [Carry a concentric bore through the spaced same-turn Sweep](notes/exact-spaced-annular-same-turn-2026-11-23/README.md), #10. Keep both mouths open, preserve all eight native joint edges and qualify the reopened bore edit.
+
 - D1728: [Resize two saved sketch Chamfers in one edit](notes/resize-saved-sketch-chamfer-pair-2026-11-23/README.md), #21. Verify one shared setback edit for the convex/reflex pair and retain both native bevel walls after fresh Open.
 
 - D1727: [Extract placed-body evaluation and Assembly Cut preview from Studio App](notes/studio-placed-body-evaluation-2026-11-23/README.md), #44. The App loses 51 lines. Before and after, 15 desktop states, one native file and six raster exports match.

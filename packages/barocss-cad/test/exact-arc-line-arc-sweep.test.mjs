@@ -84,10 +84,11 @@ function verifyEnvelope(brep, path, radius) {
   }
 }
 
-// Independent disk integration: dV = (1-u/R) du dv ds. Integrate sin, cos and their products analytically.
+// Independent circular-section integration: dV = (1-u/R) du dv ds. Integrate sin, cos and their products analytically.
 // The straight span has its own uniform cylinder moments. No native revolve, B-rep or mass producer supplies these values.
-function independentDiskMass(path, radius, density) {
-  const area = Math.PI * radius ** 2, q = radius ** 2 / 4, volume = area * path.totalLength;
+function independentCircularMass(path, radius, density, boreRadius = 0) {
+  const area = Math.PI * (radius ** 2 - boreRadius ** 2), q = (radius ** 2 + boreRadius ** 2) / 4;
+  const volume = area * path.totalLength;
   const first = [0, 0, 0], second = Array.from({ length: 3 }, () => [0, 0, 0]);
   for (const bend of [path.first, path.second]) {
     const { angle: a, radius: R, center: C, inward: n, tangent: t } = bend, b = unit(bend.axis);
@@ -116,8 +117,8 @@ function independentDiskMass(path, radius, density) {
   return { volume, centroid, mass, inertia };
 }
 
-function checkIndependentDiskMass(output, path, radius) {
-  const density = 7.85, expected = independentDiskMass(path, radius, density), native = brepMassProperties(output.brep, density);
+function checkIndependentCircularMass(output, path, radius, boreRadius = 0) {
+  const density = 7.85, expected = independentCircularMass(path, radius, density, boreRadius), native = brepMassProperties(output.brep, density);
   assert.equal(native.method, 'quadrature');
   for (const actual of [massPropertiesOf(output, density), native]) {
     near(actual.volume, expected.volume, 2e-8 * expected.volume);
@@ -300,7 +301,7 @@ test('same-turn quarter arcs and their straight span keep four native G1 seams, 
   const initial = evaluateCadPart(document(curve));
   const verifyDisk = (snapshot, radius) => {
     verify(snapshot.outputs[0], path, radius);
-    checkIndependentDiskMass(snapshot.outputs[0], path, radius);
+    checkIndependentCircularMass(snapshot.outputs[0], path, radius);
   };
   verifyDisk(initial, 2);
   const edited = reevaluate(initial, { document: document(curve, { ...disk, radius: 3 }) });
@@ -314,7 +315,7 @@ test('same-turn quarter arcs and their straight span keep four native G1 seams, 
   assert.deepEqual(restored.outputs[0].brep, initial.outputs[0].brep);
   // The opposite-turn disk uses the same independent straight-plus-sectors oracle.
   const opposite = rail();
-  checkIndependentDiskMass(evaluateCadPart(document(opposite.curve)).outputs[0], opposite, 2);
+  checkIndependentCircularMass(evaluateCadPart(document(opposite.curve)).outputs[0], opposite, 2);
 });
 
 for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
@@ -325,14 +326,13 @@ for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
       start: [40, -30, 7], tangent: [.6, .8, 0], inward: [0, 0, 1] });
     const output = evaluateCadPart(document(path.curve, { ...disk, radius: 8 })).outputs[0];
     verify(output, path, 8);
-    checkIndependentDiskMass(output, path, 8);
+    checkIndependentCircularMass(output, path, 8);
   });
 }
 
-test('same-turn arc-line-arc refuses holes, other sections, kinks, noncoplanarity, axis contact and unsupported carriers', () => {
+test('same-turn arc-line-arc refuses other sections, kinks, noncoplanarity, axis contact and unsupported carriers', () => {
   const refused = (options, code, detail, section = disk) => assert.throws(() => evaluateCadPart(document(rail({ sameTurn: true, ...options }).curve, section)),
     error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
-  refused({}, 'CAPABILITY', /one circular disk section without holes/, boreSection(1));
   refused({}, 'CAPABILITY', /one circular outer section/, { id: 's', kind: 'sketch', profile: 'rectangle', min: [-1, -1], max: [1, 1] });
   refused({ lineTangent: [0, 1, 0] }, 'GEOMETRY', /common forward tangent at both joins/);
   refused({ secondTangent: [-1, 0, 0] }, 'GEOMETRY', /common forward tangent at both joins/);
@@ -345,11 +345,71 @@ test('same-turn arc-line-arc refuses holes, other sections, kinks, noncoplanarit
   refused({ secondAngle: 121 }, 'CAPABILITY', /two coplanar circular arcs/);
 });
 
+test('same-turn quarter arcs and their straight span preserve a concentric through bore, independent annulus mass and edited native charts', () => {
+  const path = rail({ sameTurn: true }), initial = evaluateCadPart(document(path.curve, boreSection(1)));
+  const verifyAnnulus = (snapshot, boreRadius) => {
+    verify(snapshot.outputs[0], path, 2, boreRadius);
+    checkIndependentCircularMass(snapshot.outputs[0], path, 2, boreRadius);
+  };
+  verifyAnnulus(initial, 1);
+  const edited = reevaluate(initial, { document: document(path.curve, boreSection(1.5)) });
+  verifyAnnulus(edited, 1.5);
+  near(massPropertiesOf(edited.outputs[0]).volume / massPropertiesOf(initial.outputs[0]).volume, 7 / 12);
+  const identity = snapshot => Object.fromEntries(['bodies', 'shells', 'faces', 'loops', 'coedges', 'edges', 'vertices']
+    .map(kind => [kind, snapshot.outputs[0].brep[kind].map(({ id, name }) => [id, name])]));
+  assert.deepEqual(identity(edited), identity(initial));
+  const outerCharts = snapshot => {
+    const { brep } = snapshot.outputs[0], faces = brep.faces.filter(face => face.name.includes('.side[rim]'));
+    const loopIds = new Set(faces.flatMap(face => face.loops));
+    const coedges = brep.coedges.filter(use => loopIds.has(use.loop)), edgeIds = new Set(coedges.map(use => use.edge));
+    const edges = brep.edges.filter(edge => edgeIds.has(edge.id)), vertexIds = new Set(edges.flatMap(edge => edge.vertices));
+    return { faces, loops: brep.loops.filter(loop => loopIds.has(loop.id)), coedges, edges,
+      vertices: brep.vertices.filter(vertex => vertexIds.has(vertex.id)) };
+  };
+  assert.deepEqual(outerCharts(edited), outerCharts(initial));
+  const reopened = loadCadPart(saveCadPart(edited));
+  assert.deepEqual(reopened.document, edited.document);
+  assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
+  verifyAnnulus(reopened, 1.5);
+  const restored = reevaluate(reopened, { document: document(path.curve, boreSection(1)) });
+  assert.deepEqual(restored.outputs[0].brep, initial.outputs[0].brep);
+  verifyAnnulus(restored, 1);
+});
+
+for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
+  [30, 120, 23, 10, 8], [120, 30, 10, 23, 8], [120, 120, 23, 10, 8], [90, 90, 12, 12, .00011],
+]) {
+  test(`oblique same-turn annulus ${firstAngle}°/${secondAngle}° R${firstRadius}/R${secondRadius} with ${length} mm line keeps its clockwise bore`, () => {
+    const path = rail({ firstAngle, secondAngle, firstRadius, secondRadius, length, sameTurn: true,
+      start: [40, -30, 7], tangent: [.6, .8, 0], inward: [0, 0, 1] });
+    const section = { ...boreSection(1.5, disk.center, [.6, .8], 'cw'), radius: 8, sideTags: undefined };
+    const output = evaluateCadPart(document(path.curve, section)).outputs[0];
+    verify(output, path, 8, 1.5);
+    checkIndependentCircularMass(output, path, 8, 1.5);
+  });
+}
+
+test('same-turn annulus still refuses kinks, reversal, noncoplanarity and unsupported carriers', () => {
+  const refused = (options, code, detail) => assert.throws(() => evaluateCadPart(document(rail({ sameTurn: true, ...options }).curve, boreSection(1))),
+    error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
+  refused({ lineTangent: [0, 1, 0] }, 'GEOMETRY', /common forward tangent at both joins/);
+  refused({ secondTangent: [-1, 0, 0] }, 'GEOMETRY', /common forward tangent at both joins/);
+  refused({ secondInward: [0, 0, 1] }, 'CAPABILITY', /two coplanar circular arcs separated/);
+  refused({ length: -8 }, 'GEOMETRY', /common forward tangent at both joins/);
+  refused({ length: .00001 }, 'PARAMETER', /straight segment at least 0.0001 mm/);
+  refused({ firstAngle: 29 }, 'CAPABILITY', /two coplanar circular arcs/);
+  refused({ firstAngle: 121 }, 'CAPABILITY', /two coplanar circular arcs/);
+  refused({ secondAngle: 29 }, 'CAPABILITY', /two coplanar circular arcs/);
+  refused({ secondAngle: 121 }, 'CAPABILITY', /two coplanar circular arcs/);
+});
+
 test('the spaced S-bend preserves an exact through bore, eight tangent seams and edited reopen identity', () => {
   const path = rail(), initial = evaluateCadPart(document(path.curve, boreSection(1)));
   const firstMass = verify(initial.outputs[0], path, 2, 1);
   const edited = reevaluate(initial, { document: document(path.curve, boreSection(1.5)) });
   const editedMass = verify(edited.outputs[0], path, 2, 1.5);
+  checkIndependentCircularMass(initial.outputs[0], path, 2, 1);
+  checkIndependentCircularMass(edited.outputs[0], path, 2, 1.5);
   near(editedMass.volume / firstMass.volume, 7 / 12);
   const outerWalls = snapshot => snapshot.outputs[0].brep.faces.filter(face => face.name.includes('.side[rim]'));
   assert.deepEqual(outerWalls(edited), outerWalls(initial));
@@ -370,14 +430,14 @@ test('an oblique spaced S-bend preserves an untagged clockwise bore with an auth
   verify(evaluateCadPart(document(path.curve, section)).outputs[0], path, 8, 1.5);
 });
 
-test('the spaced annulus enforces concentricity and native wall clearance without admitting other sections', () => {
-  const path = rail(), refused = (section, code, detail) => assert.throws(() => evaluateCadPart(document(path.curve, section)),
+for (const sameTurn of [false, true]) test(`the ${sameTurn ? 'same-turn' : 'opposite-turn'} spaced annulus enforces concentricity and native wall clearance without admitting other sections`, () => {
+  const path = rail({ sameTurn }), refused = (section, code, detail) => assert.throws(() => evaluateCadPart(document(path.curve, section)),
     error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
   refused(boreSection(1, [8.25, -4]), 'GEOMETRY', /bore concentric/);
   for (const radius of [2 - 5e-7, 2, 2.1]) refused(boreSection(radius), 'GEOMETRY', /strictly positive wall clearance/);
   refused(boreSection(.005), 'PARAMETER', /hole radius of at least 0.01/);
   for (const [firstRadius, secondRadius] of [[2, 18], [12, 2]])
-    assert.throws(() => evaluateCadPart(document(rail({ firstRadius, secondRadius }).curve, boreSection(1))),
+    assert.throws(() => evaluateCadPart(document(rail({ firstRadius, secondRadius, sameTurn }).curve, boreSection(1))),
       error => error instanceof CadPartError && error.feature === 'w' && error.code === 'PARAMETER' && /both path radii larger/.test(error.message));
   const twoHoles = [...boreSection(.2, [8.5, -4]).holes, ...boreSection(.2, [7.5, -4]).holes];
   refused({ ...disk, holes: twoHoles, sideTags: undefined }, 'CAPABILITY', /at most one circular hole/);
