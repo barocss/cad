@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1694: [Preview and apply sketch Fillet and Chamfer](notes/sketch-corner-command-preview-2026-11-22/README.md), #21. Match the Model command controls and verify cancellation, selection, history and native outputs.
+
 - D1693: [Propose a revision-pinned straight-corner sketch Round](notes/agent-sketch-round-2026-11-22/README.md), #21. Protect constraints and boundary contact, then verify the approved native cylindrical wall and editable radius after fresh Open.
 
 - D1692: [Propose a revision-pinned sketch chamfer](notes/agent-sketch-chamfer-2026-11-22/README.md), #21. Discover the two saved sides through MCP and verify explicit Studio approval and editable fresh Open.

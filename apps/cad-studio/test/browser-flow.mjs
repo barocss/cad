@@ -5955,8 +5955,11 @@ try {
     await page.click('[aria-label="New part"]'); await press('s'); await press('r'); const [cx, cy] = await canvasCenter();
     await clickAt(cx - 100, cy - 60); await clickAt(cx + 100, cy + 60);
     await press('s'); await page.waitForTimeout(200); await clickAt(cx + 100, cy + 60);
-    await page.waitForSelector('[aria-label="Round the corner"]', { timeout: 5000 });
-    await page.fill('[aria-label="Corner radius"]', '3'); await page.click('button[aria-label="Round the corner"]');
+    const panel = page.getByRole('complementary', { name: 'Sketch', exact: true });
+    await panel.getByRole('button', { name: 'Fillet', exact: true }).click();
+    const fillet = panel.getByRole('group', { name: 'Fillet', exact: true });
+    await fillet.getByLabel('Radius', { exact: true }).fill('3');
+    await fillet.getByRole('button', { name: 'Apply', exact: true }).click();
     await page.evaluate(() => document.activeElement?.blur()); await press('Enter');
     await page.waitForFunction(() => window.__studioDoc.nodes.length === 1, null, { timeout: 10000 });
     const n = (await doc()).nodes[0];

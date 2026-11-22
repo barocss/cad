@@ -1,6 +1,8 @@
+import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { ConstraintEntry, ConstraintKind, Polygon, SketchPick } from '@barocss/cad-model/sketch/rules';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { createValueStore, type ValueStore } from '../state/valueStore';
+import type { SketchCornerOperation, SketchCornerResult } from './cornerDraft';
 
 export type ConstraintComparison = { ok: true; shape: Polygon; display: Polygon } | { ok: false; reason: string };
 export type ConstraintInspection = {
@@ -10,10 +12,17 @@ export type ConstraintInspection = {
   | { target: 'row'; entry: ConstraintEntry }
   | { target: 'comparison'; kind: ConstraintKind; result: ConstraintComparison }
   | { target: 'mobility'; entity: SketchPick }
+  | { target: 'corner'; doc: StudioDoc; operation: SketchCornerOperation; value: string; result: SketchCornerResult }
 );
 
 export type ConstraintInspectionStore = ValueStore<ConstraintInspection | null>;
 export const createConstraintInspection = () => createValueStore<ConstraintInspection | null>(null);
+
+/** Hover and focus inspections wait while an explicit corner edit owns the overlay. */
+export function inspectConstraint(store: ConstraintInspectionStore, next: Exclude<ConstraintInspection, { target: 'corner' }>): void {
+  const held = store.get();
+  if (held?.target !== 'corner' || held.owner !== next.owner) store.set(next);
+}
 
 export function clearConstraintInspection(store: ConstraintInspectionStore, owner: SketchState | null): boolean {
   const current = store.get();

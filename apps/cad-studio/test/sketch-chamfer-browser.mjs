@@ -10,6 +10,12 @@ const chamferSides = ['e1', 'e5', 'e2', 'e3', 'e4'];
 const pins = [
   'apps/cad-studio/test/sketch-chamfer-browser.mjs',
   'apps/cad-studio/src/ui/ConstraintTools.tsx',
+  'apps/cad-studio/src/ui/SketchCornerTools.tsx',
+  'apps/cad-studio/src/ui/constraints.css',
+  'apps/cad-studio/src/sketch/cornerDraft.ts',
+  'apps/cad-studio/src/sketch/constraintInspection.ts',
+  'apps/cad-studio/src/viewport/Viewport.tsx',
+  'apps/cad-studio/src/viewport/sketchOverlay.tsx',
   'apps/cad-studio/src/app/sketchControls.ts',
   'apps/cad-studio/src/app/useStudioKeyboard.ts',
   'apps/cad-studio/src/sketch/useSketchDraftHistory.ts',
@@ -22,8 +28,8 @@ const pins = [
 const f = await createFlow({
   name: 'sketch-chamfer', envFrozen: 'D1691_SOURCE_FROZEN', output: process.argv[2],
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Chamfer an existing straight-corner sketch in Studio and verify both draft and native document lifecycles.',
-  limits: ['One 6 mm equal-distance chamfer on a 40 × 30 mm XY sketch feeding a native 10 mm Extrude. Desktop Studio WebGPU.'],
+  qualification: 'Preview, cancel and apply a sketch Fillet and Chamfer. Verify draft history and native document lifecycles.',
+  limits: ['One R6 Fillet and 6 mm equal-distance Chamfer on a 40 × 30 mm XY sketch feeding a native 10 mm Extrude. Desktop Studio WebGPU.'],
   inspectorSource: String.raw`
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -45,7 +51,7 @@ if (process.argv[3] === '"seed"') {
   const b = output.brep, vertices = new Map(b.vertices.map(v => [v.id, v.point])),
     edges = new Map(b.edges.map(e => [e.id, e])), coedges = new Map(b.coedges.map(c => [c.id, c])),
     loops = new Map(b.loops.map(l => [l.id, l]));
-  const faces = b.faces.map(face => ({ name: face.name, kind: faceGeometry(face).kind,
+  const faces = b.faces.map(face => ({ name: face.name, geometry: faceGeometry(face),
     points: face.loops.flatMap(id => loops.get(id).coedges.flatMap(id => edges.get(coedges.get(id).edge).vertices.map(id => vertices.get(id)))) }));
   console.log(JSON.stringify({ volume: massPropertiesOf(output).volume, vertices: b.vertices.map(v => v.point), faces }));
 }
@@ -53,8 +59,10 @@ if (process.argv[3] === '"seed"') {
 });
 
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
-const group = () => f.sketchPanel().getByRole('group', { name: 'Chamfer the corner', exact: true });
-const field = () => group().getByLabel('Chamfer distance', { exact: true });
+const group = (name = 'Chamfer') => f.sketchPanel().getByRole('group', { name, exact: true });
+const field = (name = 'Distance') => f.sketchPanel().getByLabel(name, { exact: true });
+const preview = () => f.page.locator('.sk-corner-preview');
+const start = name => button(name, f.sketchPanel().getByRole('group', { name: 'Corner tools', exact: true })).click();
 async function expectPoints(expected) {
   const outline = f.sketchPanel().getByRole('group', { name: 'Outline points', exact: true });
   for (const [i, point] of expected.entries()) for (const [axis, k] of [['X', 0], ['Y', 1]])
@@ -68,13 +76,17 @@ async function editSketch() {
   await f.tool('Select', 's');
   await f.frame(points);
 }
-async function verifyNative(label, doc, outline, sides, volume) {
+async function verifyNative(label, doc, outline, sides, volume, radius) {
   const result = await f.inspect(label, doc);
   assert.ok(Math.abs(result.volume - volume) < 1e-8, result.volume);
   assert.equal(result.vertices.length, 2 * outline.length);
   for (const [i, point] of outline.entries()) {
     const next = outline[(i + 1) % outline.length], face = result.faces.find(face => face.name === `n1.side[${sides[i]}]`);
-    assert.equal(face?.kind, 'plane');
+    assert.equal(face?.geometry.kind, radius && i === 1 ? 'cylinder' : 'plane');
+    if (radius && i === 1) {
+      assert.ok(Math.abs(face.geometry.r - radius) < 1e-8);
+      assert.ok(Math.hypot(face.geometry.c[0] - (40 - radius), face.geometry.c[1] - radius) < 1e-8);
+    }
     for (const [x, y] of [point, next]) for (const z of [0, 10])
       assert.ok(face.points.some(p => Math.hypot(p[0] - x, p[1] - y, p[2] - z) < 1e-8), `${sides[i]} at ${[x, y, z]}`);
   }
@@ -91,33 +103,97 @@ await f.run(async () => {
 
   await editSketch();
   await f.worldClick(points[1]);
+  f.phase = 'Preview and cancel the R6 Fillet without changing the original outline';
+  await start('Fillet');
+  await field('Radius').fill('6');
+  await preview().waitFor();
+  assert.ok(await preview().evaluate(polygon => polygon.points.numberOfItems > 5));
+  await f.sketchPanel().getByRole('list', { name: 'Constraints', exact: true }).getByRole('listitem').first().hover();
+  await expectPoints(points);
+  await f.same(seed);
+  await f.snapshot('02-fillet-preview');
+  await f.page.keyboard.down('Escape');
+  await f.page.keyboard.down('Escape');
+  await f.page.keyboard.up('Escape');
+  await group('Fillet').waitFor({ state: 'hidden' });
+  await preview().waitFor({ state: 'hidden' });
+  await expectPoints(points);
+  assert.match(await f.sketchPanel().locator('.cons-sel').innerText(), /point 2/);
+
+  f.phase = 'Switch and then reselect the picked corner';
+  await start('Fillet');
+  await start('Chamfer');
+  await group('Fillet').waitFor({ state: 'hidden' });
+  await group().waitFor();
+  assert.equal(await preview().evaluate(polygon => polygon.points.numberOfItems), 5);
+  await f.worldClick(points[2]);
+  await group().waitFor({ state: 'hidden' });
+  await preview().waitFor({ state: 'hidden' });
+  await expectPoints(points);
+  await f.worldClick(points[1]);
+
+  f.phase = 'Apply one Fillet, then cancel a Chamfer without consuming Redo';
+  await start('Fillet');
+  await field('Radius').fill('6');
+  await button('Apply', group('Fillet')).focus();
+  await f.page.keyboard.down('Enter');
+  await expectPoints(cut);
+  await f.page.keyboard.down('Enter');
+  await f.page.keyboard.up('Enter');
+  await f.same(seed);
+  await preview().waitFor({ state: 'hidden' });
+  await f.page.keyboard.press('Meta+z');
+  await expectPoints(points);
+  await f.worldClick(points[1]);
+  await start('Chamfer');
+  await preview().waitFor();
+  await button('Cancel', group()).click();
+  await preview().waitFor({ state: 'hidden' });
+  await expectPoints(points);
+  await f.page.keyboard.press('Meta+Shift+z');
+  await expectPoints(cut);
+  const rounded = (await f.finishSketch('03-fillet-applied')).doc;
+  assert.deepEqual(rounded.nodes[0].sideTags.outer, chamferSides);
+  assert.equal(rounded.nodes[0].outline.radii[1], 6);
+  await verifyNative('fillet-native', rounded, cut, chamferSides, (40 * 30 - 36 * (1 - Math.PI / 4)) * 10, 6);
+  await f.undo();
+  await f.same(seed);
+  await editSketch();
+  await f.worldClick(points[1]);
+  await start('Chamfer');
   await group().waitFor();
   await expectPoints(points);
-  await f.snapshot('02-chamfer-control');
+  await f.snapshot('04-chamfer-control');
   await field().fill('');
+  assert.equal(await button('Apply', group()).isDisabled(), true);
   await field().press('Enter');
   await f.sketchPanel().getByRole('alert').getByText(/Enter a positive chamfer distance/).waitFor();
   await expectPoints(points);
   await f.same(seed);
   await field().fill('30');
-  await button('Chamfer the corner', group()).click();
+  assert.equal(await button('Apply', group()).isDisabled(), true);
+  await preview().waitFor({ state: 'hidden' });
   await f.sketchPanel().getByRole('alert').getByText('The chamfer distance must be shorter than both edges.', { exact: true }).waitFor();
   await expectPoints(points);
   await f.same(seed);
-  await f.snapshot('03-oversized-refused');
+  await f.snapshot('05-oversized-refused');
 
   await field().fill('6');
+  await preview().waitFor();
+  await expectPoints(points);
+  await f.same(seed);
+  await f.snapshot('06-chamfer-preview');
   await field().press('Enter');
   await expectPoints(cut);
   await f.same(seed);
-  await f.snapshot('04-six-mm-chamfer');
+  await f.snapshot('07-six-mm-chamfer');
 
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.page.keyboard.press('Meta+z');
   await expectPoints(points);
   await f.page.keyboard.press('Meta+Shift+z');
   await expectPoints(cut);
-  const accepted = (await f.finishSketch('05-finished-chamfer')).doc;
+  const accepted = (await f.finishSketch('08-finished-chamfer')).doc;
   assert.deepEqual(accepted.nodes[0].sideTags.outer, chamferSides);
   assert.deepEqual(accepted.nodes[0].outline.lengths, { 3: 40 });
   assert.deepEqual(accepted.nodes[0].outline.rules, seed.nodes[0].outline.rules);
@@ -131,12 +207,12 @@ await f.run(async () => {
   await f.redo();
   await f.same(accepted);
   const saved = await f.save('six-mm-chamfer');
-  await f.freshOpen(saved.file, saved.doc, '06-reopened-solid');
+  await f.freshOpen(saved.file, saved.doc, '09-reopened-solid');
   assert.deepEqual(await verifyNative('reopened-native', await f.doc(), cut, chamferSides, 11820), result);
   assert.equal(await readFile(file, 'utf8'), originalBytes);
   await editSketch();
   await expectPoints(cut);
-  await f.snapshot('07-reopened-editable-outline');
+  await f.snapshot('10-reopened-editable-outline');
 
   const bound = { ...seed, parameters: { W: 40 }, nodes: [
     { id: seed.nodes[0].id, kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [{ parameter: 'W' }, 30],
@@ -145,13 +221,14 @@ await f.run(async () => {
   ] };
   const boundFile = join(f.output, 'bound-source.bcad');
   await writeFile(boundFile, JSON.stringify(bound));
-  await f.freshOpen(boundFile, bound, '08-bound-source');
+  await f.freshOpen(boundFile, bound, '11-bound-source');
   await editSketch();
   await f.worldClick(points[1]);
+  await start('Chamfer');
   await field().fill('6');
-  await button('Chamfer the corner', group()).click();
+  assert.equal(await button('Apply', group()).isDisabled(), true);
   await f.sketchPanel().getByRole('alert').getByText('Chamfer would remove a sketch parameter binding.', { exact: true }).waitFor();
   await expectPoints(points);
   await f.same(bound);
-  await f.snapshot('09-binding-preserved');
+  await f.snapshot('12-binding-preserved');
 });

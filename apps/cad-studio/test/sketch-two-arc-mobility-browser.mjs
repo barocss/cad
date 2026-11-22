@@ -13,7 +13,7 @@ const source={format:'barocss-cad-model',schema:3,units:'mm',parameters:{},nodes
 const points=[[0,0],[36,0],[40,4],[40,30],[4,30],[0,26]];
 async function native(doc,label,rounded){const bodies=await f.inspect(label,doc);assert.equal(bodies.length,1);const n=bodies[0];assert.equal(n.valid,true);const volume=rounded?(1200-2*(16-4*Math.PI))*5:6000;assert.ok(Math.abs(n.volume-volume)<1e-7);assert.ok(Math.abs((await f.bodies()).bodies[0].volume-volume)<1e-7);const xy=rounded?points:[[0,0],[40,0],[40,30],[0,30]];for(const [x,y] of xy)for(const z of [0,5])assert.ok(n.vertices.some(p=>Math.hypot(p[0]-x,p[1]-y,p[2]-z)<1e-8),JSON.stringify([x,y,z]));return n;}
 async function edit(){await f.openFeatureEditor(1);await button('Edit sketch',f.editor()).click();await f.sketchPanel().waitFor();await f.tool('Select','s');await f.frame([[0,0],[40,30]]);}
-async function round(point){await f.worldClick(point);const group=f.sketchPanel().getByRole('group',{name:'Round the corner',exact:true});await group.getByLabel('Corner radius',{exact:true}).fill('4');await button('Round the corner',group).click();assert.equal(await f.sketchAlert(),null);}
+async function round(point){await f.worldClick(point);await button('Fillet',f.sketchPanel()).click();const group=f.sketchPanel().getByRole('group',{name:'Fillet',exact:true});await group.getByLabel('Radius',{exact:true}).fill('4');await button('Apply',group).click();assert.equal(await f.sketchAlert(),null);}
 async function noMobility(label,doc){
  const panel=f.sketchPanel(),details=panel.locator('details.sk-mobility');
  if(baseline)assert.equal(await details.count(),0);

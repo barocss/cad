@@ -86,6 +86,7 @@ interface SketchOverlayInputs {
   dragTrim?: DragTrimPreview | null;
   inspected?: readonly SketchPick[];
   constraintComparison?: Polygon;
+  cornerPreview?: Polygon;
   bandCache: RefObject<SketchBandCache | null>;
   picking: boolean;
   cutting: boolean;
@@ -97,7 +98,7 @@ interface SketchOverlayInputs {
 
 /** Add the active sketch's SVG marks and return its separate HTML dimension editor. */
 export function drawSketchOverlay({
-  sk, shape, cam, w, h, rail, dimensionArea, draft, bezierPoles, ellipse, centreArc, extensionGuide, pathGap, circleChord, overlaidLine, dragTrim, inspected, constraintComparison, bandCache, picking, cutting, banding, dimensions, lengthLabelLayout, items,
+  sk, shape, cam, w, h, rail, dimensionArea, draft, bezierPoles, ellipse, centreArc, extensionGuide, pathGap, circleChord, overlaidLine, dragTrim, inspected, constraintComparison, cornerPreview, bandCache, picking, cutting, banding, dimensions, lengthLabelLayout, items,
 }: SketchOverlayInputs): ReactNode {
   let editor: ReactNode = null;
   const P = (u: number, v: number) => cam.project(toWorld(sk.plane, [u, v]), w, h);
@@ -223,13 +224,18 @@ export function drawSketchOverlay({
     const last = pts.at(-1);
     if (!s.closed && last) ring.push([last[0], last[1]]);
     const line = s.closed || s.pending ? ring : cur ? [...ring, P(cur[0], cur[1])] : ring;
-    const shapeClass = 'sk-shape' + (s.construction ? ' construction' : '');
+    const shapeClass = 'sk-shape' + (s.construction ? ' construction' : '') + (cornerPreview ? ' sk-corner-source' : '');
     items.push(s.closed ? <polygon key="pg" points={line.map(p => p[0] + ',' + p[1]).join(' ')} className={shapeClass} />
       : <polyline key="pl" points={line.map(p => p[0] + ',' + p[1]).join(' ')} className={shapeClass + ' open'} />);
     if (constraintComparison) {
       const comparison = constraintComparison.points.map(([u, v]) => P(u, v));
       items.push(<polygon key="constraint-comparison" className="sk-constraint-comparison" aria-hidden="true"
         points={comparison.map(p => `${p[0]},${p[1]}`).join(' ')} />);
+    }
+    if (cornerPreview) {
+      const candidate = cornerPreview.points.flatMap((_, i) => projectSketchEdge(cornerPreview, i, P, scale).slice(0, -1));
+      items.push(<polygon key="corner-preview" className="sk-corner-preview" aria-hidden="true"
+        points={candidate.map(p => `${p[0]},${p[1]}`).join(' ')} />);
     }
     const underIndex = items.length;
     const ell = isSettled(s) && !!s.ellipse && ellipseMatches(s); // (An ellipse's 96 tiny arcs get no radius labels or centre dots; its centre and axis ends are marked instead.)

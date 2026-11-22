@@ -22,6 +22,8 @@ const sourceEditBaseline = mode === '--source-edit-baseline';
 const pins = [
   'apps/cad-studio/test/line-arc-round-browser.mjs',
   'apps/cad-studio/src/ui/ConstraintTools.tsx',
+  'apps/cad-studio/src/ui/SketchCornerTools.tsx',
+  'apps/cad-studio/src/sketch/cornerDraft.ts',
   'apps/cad-studio/src/ui/SketchPanel.tsx',
   'apps/cad-studio/src/app/sketchControls.ts',
   'apps/cad-studio/src/sketch/useSketchActions.ts',
@@ -145,12 +147,18 @@ async function applyRound(corner, radius) {
 }
 
 async function setRoundRadius(radius) {
-  const panel = f.sketchPanel().getByRole('group', { name: 'Round the corner', exact: true });
-  await panel.getByLabel('Corner radius', { exact: true }).fill(String(radius));
-  await button(panel, 'Round the corner').click();
+  await button(f.sketchPanel(), 'Fillet').click();
+  const panel = f.sketchPanel().getByRole('group', { name: 'Fillet', exact: true });
+  await panel.getByLabel('Radius', { exact: true }).fill(String(radius));
+  const apply = button(panel, 'Apply');
+  if (await apply.isEnabled()) await apply.click();
 }
 
 async function cancel() {
+  const fillet = f.sketchPanel().getByRole('group', { name: 'Fillet', exact: true });
+  if (await fillet.isVisible()) await button(fillet, 'Cancel').click();
+  // Clearing the card can bring a constraint row under the stationary pointer.
+  await f.page.mouse.move(250, 100);
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.page.keyboard.press('Escape');
   if (await f.sketchPanel().isVisible()) await f.page.keyboard.press('Escape');
@@ -1031,9 +1039,9 @@ async function checkFixed() {
   await f.sketchPanel().getByRole('alert').waitFor();
   await f.same(doc);
   await f.snapshot('01-oversized-round-refused');
-  const round = f.sketchPanel().getByRole('group', { name: 'Round the corner', exact: true });
-  await round.getByLabel('Corner radius', { exact: true }).fill('3');
-  await button(round, 'Round the corner').focus();
+  const round = f.sketchPanel().getByRole('group', { name: 'Fillet', exact: true });
+  await round.getByLabel('Radius', { exact: true }).fill('3');
+  await button(round, 'Apply').focus();
   await f.page.keyboard.down('Enter');
   await round.waitFor({ state: 'hidden' });
   await f.page.keyboard.down('Enter');

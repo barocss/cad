@@ -1287,12 +1287,13 @@ async function drawInsetSource() {
   await f.page.mouse.wheel(0, -800);
   await f.page.waitForTimeout(450);
   await f.frame([[0, 0], [20, 10]]);
-  const round = panel.getByRole('group', { name: 'Round the corner', exact: true });
+  const round = panel.getByRole('group', { name: 'Fillet', exact: true });
   for (const [index, corner] of [[0, 0], [20, 0], [20, 10], [0, 10]].entries()) {
     f.phase = 'Round corner ' + (index + 1);
     await f.worldClick(corner);
-    await round.getByLabel('Corner radius', { exact: true }).fill('2');
-    await button(round, 'Round the corner').click();
+    await button(panel, 'Fillet').click();
+    await round.getByLabel('Radius', { exact: true }).fill('2');
+    await button(round, 'Apply').click();
     await f.snapshot('round-' + (index + 1));
   }
   f.phase = 'Finish the drawn rounded source';

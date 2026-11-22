@@ -1,14 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1693 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1694 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1693](notes/agent-sketch-round-2026-11-22/README.md), P1 sketch authoring and Agent tools rows 04, 09 and 16. Studio approves an Agent R6 Round and reopens it for an R5 edit with the same native wall ID. The D1692 Chamfer control also passes. The B06 PDF group remains held.
-- **Next MAIN:** D1694, P1 sketch authoring [rows 09](roadmap-rows/09.md) and [20](roadmap-rows/20.md). Bring the single-corner 2D Fillet and Chamfer controls in line with the 3D commands. Reuse their names, icons, parameter entry and Preview, Apply and Cancel flow. Confirm selection and cancellation protect the sketch and history in desktop Studio.
-- **Multi-corner follow-up:** Qualify a shared radius or distance across selected sketch vertices. Accept the group as one sketch edit. Detect shared-edge consumption and refuse overlaps before committing any member of the group. For edge selection, show the resolved vertices before Apply.
+- **Current position:** [D1694](notes/sketch-corner-command-preview-2026-11-22/README.md), P1 sketch authoring rows 09 and 20. Studio previews single-corner Fillet and Chamfer with the Model command names and controls. The desktop proof covers Apply, Cancel, selection, history and native Save/Open. The B06 PDF group remains held.
+- **Next MAIN:** D1695, P1 sketch authoring [rows 09](roadmap-rows/09.md), [16](roadmap-rows/16.md) and [20](roadmap-rows/20.md). Use a shared radius or distance across selected vertices on one outline. Resolve selected straight sides through their shared endpoints and show the resolved vertices in Preview. Follow the local convex or reflex turn at each corner. Reject overlap or shared-edge consumption before any member commits. Verify one Apply and Undo in desktop Studio.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

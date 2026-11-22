@@ -3,7 +3,7 @@ import { outlineMobility } from '@barocss/cad-model/sketch/mobility';
 import { isSettled, samePick, type SketchPick } from '@barocss/cad-model/sketch/rules';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { pointMotionLabel } from '../sketch/pointMotionLabel';
-import { keepsDimensionDraft, type ConstraintInspection, type ConstraintInspectionStore } from '../sketch/constraintInspection';
+import { inspectConstraint, keepsDimensionDraft, type ConstraintInspection, type ConstraintInspectionStore } from '../sketch/constraintInspection';
 
 export function SketchMobility({ owner, inspection, onDimEdit }: {
   owner: SketchState;
@@ -23,7 +23,7 @@ export function SketchMobility({ owner, inspection, onDimEdit }: {
     const current = inspection.get();
     if (current?.owner === owner && current.target === 'mobility' && current.input === input
       && samePick(current.entity, entity)) return;
-    inspection.set({ owner, target: 'mobility', entity, input });
+    inspectConstraint(inspection, { owner, target: 'mobility', entity, input });
   };
   const leave = (entity: SketchPick, input: ConstraintInspection['input']) => {
     const current = inspection.get();

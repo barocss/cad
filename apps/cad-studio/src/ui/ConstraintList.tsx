@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { NativeSelect } from '@/components/ui/native-select';
 import { removeConstraint, type ConstraintEntry, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
-import { clearConstraintInspection, keepsDimensionDraft, type ConstraintInspection, type ConstraintInspectionStore } from '../sketch/constraintInspection';
+import { clearConstraintInspection, inspectConstraint, keepsDimensionDraft, type ConstraintInspection, type ConstraintInspectionStore } from '../sketch/constraintInspection';
 import { activeCircleDistanceRow, constraintInvolves, constraintListRows, filterConstraintList } from '../sketch/constraintList';
 import { CONTROL, FIELD } from './panelStyles';
 
@@ -64,7 +64,7 @@ export function ConstraintList({ shape, owner, conflictIds, documentScope, inspe
     if (hiddenInspection) clearConstraintInspection(inspection, owner);
   }, [hiddenInspection, inspection, owner]);
 
-  const enter = (entry: ConstraintEntry, input: ConstraintInspection['input']) => inspection.set({ owner, target: 'row', entry, input });
+  const enter = (entry: ConstraintEntry, input: ConstraintInspection['input']) => inspectConstraint(inspection, { owner, target: 'row', entry, input });
   const leave = (entry: ConstraintEntry, input: ConstraintInspection['input']) => {
     const current = inspection.get();
     if (current?.owner === owner && current.target === 'row' && current.entry.id === entry.id && current.input === input) inspection.set(null);

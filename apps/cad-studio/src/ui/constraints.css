@@ -11,6 +11,10 @@
 .vp-overlay .sk-constraint-comparison {
   fill: none; stroke: #8fb8ff; stroke-width: 2; stroke-dasharray: 7 5; pointer-events: none;
 }
+.vp-overlay .sk-corner-source { opacity: 0.4; }
+.vp-overlay .sk-corner-preview {
+  fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; pointer-events: none;
+}
 :root[data-theme='light'] .vp-overlay .sk-pick-edge.inspected,
 :root[data-theme='light'] .vp-overlay .sk-pick-point.inspected,
 :root[data-theme='light'] .vp-overlay .sk-constraint-comparison { stroke: #2f6fd6; }
