@@ -677,11 +677,18 @@ const sweepRepresentations = [
 type SweepRail = { degree: number; controlPoints: readonly unknown[]; knots: readonly number[]; weights: readonly number[] };
 
 export function sweepRepresentationLabel(mode: unknown, path?: SweepRail): string {
-  // Distinguish an authored straight-to-arc pair from co-circular spans. The kernel checks the geometry.
-  if (mode === 'exact' && path?.degree === 2 && path.controlPoints.length === 5 && path.weights.length === 5
-    && path.knots.length === 8 && path.knots[3] === path.knots[4]
-    && path.weights[0] === path.weights[1] && path.weights[0] === path.weights[2] && path.weights[0] === path.weights[4])
-    return 'Exact line and arc';
+  // Label the authored span patterns. The kernel checks the geometry.
+  if (mode === 'exact' && path?.degree === 2) {
+    const { controlPoints, knots, weights } = path, first = weights[0];
+    if (controlPoints.length === 7 && weights.length === 7 && knots.length === 10
+      && knots[3] === knots[4] && knots[5] === knots[6]
+      && weights[1] === first && weights[2] === first && weights[3] < first
+      && weights[4] === first && weights[5] === first && weights[6] === first)
+      return 'Exact line–arc–line';
+    if (controlPoints.length === 5 && weights.length === 5 && knots.length === 8 && knots[3] === knots[4]
+      && weights[1] === first && weights[2] === first && weights[4] === first)
+      return 'Exact line and arc';
+  }
   return sweepRepresentations.find(item => item.value === mode)?.label ?? sweepRepresentations[0].label;
 }
 

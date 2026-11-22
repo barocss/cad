@@ -36,3 +36,11 @@ test('the exact label distinguishes a joined line and arc from a two-span circul
   assert.equal(sweepRepresentationLabel('exact', { ...joined, weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1] }), 'Exact circular arc');
   assert.equal(sweepRepresentationLabel('exact-straight', joined), 'Exact straight path');
 });
+
+test('the exact elbow label follows the stored seven-pole span pattern', () => {
+  const elbow = { degree: 2, controlPoints: [0, 1, 2, 3, 4, 5, 6], knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
+    weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1] };
+  assert.equal(sweepRepresentationLabel('exact', elbow), 'Exact line–arc–line');
+  assert.equal(sweepRepresentationLabel(undefined, elbow), 'Faceted');
+  assert.equal(sweepRepresentationLabel('exact', { ...elbow, weights: [1, 1, 1, 1, 1, 1, 1] }), 'Exact circular arc');
+});

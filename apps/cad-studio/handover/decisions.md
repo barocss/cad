@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1671: [Sweep a circular disk through a tangent elbow](notes/exact-line-arc-line-sweep-2026-11-22/README.md), #10. Verify four native junction edges, editable Studio Open and a revision-bound local Agent proposal.
 - D1670: [Sweep a circular disk along a tangent line and arc](notes/exact-tangent-line-arc-sweep-2026-11-22/README.md), #10. Verify both native junction edges, diameter edit, Studio Save and Open and a local Agent proposal.
 - D1669: [Review the native bore before approving a wall edit](notes/pending-bored-wall-review-2026-11-22/README.md), #322 and #324. The same PNG and two native openings survive approval and Open. A pin from another proposal fails even for identical geometry.
 - D1668: [Approve a reviewed outer-wall Offset on a bored Exact semicylinder](notes/reviewed-bored-wall-offset-2026-11-22/README.md), #322, #324 and #629. Verify stale and unsafe refusals, explicit Studio approval and native Open with both openings.

@@ -4,12 +4,19 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
-const turnWeight = Math.SQRT1_2, straightLength = 10, bendRadius = 20;
+const elbow = process.argv.includes('--elbow');
+const turnWeight = Math.SQRT1_2, straightLength = 10, bendRadius = 20, tailLength = elbow ? 14 : 0;
+const name = elbow ? 'exact-elbow-sweep' : 'exact-tangent-sweep';
+const representation = elbow ? 'Exact line–arc–line' : 'Exact line and arc';
+const railName = elbow ? 'Elbow rail' : 'Joined curve';
 const line = [[-10, 0, 0], [-5, 0, 0], [0, 0, 0]], bend = [[0, 0, 0], [20, 0, 0], [20, 20, 0]];
-const kink = [[...line[0]], [...line[1]], [0, 0, 0], [0, 20, 0], [-20, 20, 0]];
-const clamp = [0, 0, 0, 1, 1, 1], joinedKnots = [0, 0, 0, 1, 1, 2, 2, 2];
-const joinedPath = { degree: 2, knots: joinedKnots, controlPoints: [...line, ...bend.slice(1)],
-  weights: [1, 1, 1, turnWeight, 1] };
+const tail = [[20, 20, 0], [20, 27, 0], [20, 34, 0]];
+const kink = elbow ? [...line, ...bend.slice(1), [27, 20, 0], [34, 20, 0]]
+  : [...line, [0, 20, 0], [-20, 20, 0]];
+const clamp = [0, 0, 0, 1, 1, 1];
+const joinedPath = { degree: 2, knots: elbow ? [0, 0, 0, 1, 1, 2, 2, 3, 3, 3] : [0, 0, 0, 1, 1, 2, 2, 2],
+  controlPoints: [...line, ...bend.slice(1), ...(elbow ? tail.slice(1) : [])],
+  weights: [1, 1, 1, turnWeight, 1, ...(elbow ? [1, 1] : [])] };
 const mark = (id, knots, points, weights) => `@curve #${id} { type:nurbs; degree:2; knots:${JSON.stringify(knots)};
   control-points:${JSON.stringify(points)}; weights:${JSON.stringify(weights)}; }`;
 const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 1,
@@ -17,11 +24,13 @@ const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: 
   direct: { sources: { rail: `@model rail { version:0; length-unit:mm;
     ${mark('line', clamp, line, [1, 1, 1])}
     ${mark('bend', clamp, bend, [1, turnWeight, 1])}
-    ${mark('kink', joinedKnots, kink, [1, 1, 1, turnWeight, 1])} }` },
+    ${elbow ? mark('tail', clamp, tail, [1, 1, 1]) : ''}
+    ${mark('kink', joinedPath.knots, kink, joinedPath.weights)} }` },
   objects: [
     { id: 'line', name: 'Straight rail', source: 'rail', geometry: 'line' },
     { id: 'bend', name: 'Tangent bend', source: 'rail', geometry: 'bend' },
     { id: 'kink', name: 'Kinked rail', source: 'rail', geometry: 'kink' },
+    ...(elbow ? [{ id: 'tail', name: 'Exit rail', source: 'rail', geometry: 'tail' }] : []),
   ] } };
 
 const pins = [
@@ -32,10 +41,10 @@ const pins = [
   'apps/cad-studio/test/mcp-browser-session.mjs',
 ];
 const f = await createFlow({
-  name: 'exact-tangent-sweep', output: process.argv[2], envFrozen: 'D1670_SOURCE_FROZEN',
+  name, output: process.argv[2], envFrozen: elbow ? 'D1671_SOURCE_FROZEN' : 'D1670_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Join Direct rails, create the exact Sweep, measure both native joints, edit its disk and reopen the part.',
-  limits: ['One disk, one straight-to-quarter-arc rail, desktop WebGPU and local L1 MCP.'],
+  qualification: 'Join Direct rails, create the exact Sweep, measure the native junction edges, edit its disk and reopen the part.',
+  limits: [`One disk, one ${elbow ? 'straight–quarter arc–straight' : 'straight-to-quarter-arc'} rail, desktop WebGPU and local L1 MCP.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry, massPropertiesOf, measureBrepEdgeContinuity, revolutionOf } from '@barocss/cad';
@@ -43,8 +52,10 @@ import { partSnapshot } from '@barocss/cad-model/engine/part';
 import { digestOf } from '@barocss/cad-model/util/digest';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const { outputs: [output] } = partSnapshot(doc), { brep } = output;
-const tangencies = brep.edges.filter(edge => edge.curve.controlPoints.every(point => Math.abs(point[0]) < 1e-7))
-  .map(edge => measureBrepEdgeContinuity(brep, edge.id, { curvature: true }));
+const joinPlanes = ${JSON.stringify(elbow ? [[0, 0], [1, 20]] : [[0, 0]])};
+const tangencies = joinPlanes.map(([axis, at]) =>
+  brep.edges.filter(edge => edge.curve.controlPoints.every(point => Math.abs(point[axis] - at) < 1e-7))
+    .map(edge => measureBrepEdgeContinuity(brep, edge.id, { curvature: true })));
 const curved = brep.faces.filter(face => faceGeometry(face).kind === 'other')
   .map(face => revolutionOf(face.surface, 100)?.profile ?? null);
 console.log(JSON.stringify({ report: checkBrep(brep, { strict: true }), expectedSource: brep.source,
@@ -61,29 +72,31 @@ const hud = () => f.page.getByRole('dialog', { name: 'Sweep', exact: true });
 const status = value => hud().locator('.status').filter({ hasText: new RegExp(`^${value}$`) });
 const card = id => f.page.getByRole('listitem', { name: `Proposal ${id}`, exact: true });
 const near = (value, target, tolerance = 1e-7) => assert.ok(Math.abs(value - target) < tolerance, `${value} != ${target}`);
-const volume = radius => Math.PI * radius ** 2 * (straightLength + Math.PI * bendRadius / 2);
+const volume = radius => Math.PI * radius ** 2 * (straightLength + Math.PI * bendRadius / 2 + tailLength);
 
 async function measure(label, doc, radius) {
   const receipt = await f.inspect(label, doc);
   assert.ok(receipt.report.valid && receipt.bodyCount === 1);
   assert.equal(receipt.report.topology[0].genus, 0);
-  assert.deepEqual(receipt.report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 20, edges: 10, vertices: 6 });
+  assert.deepEqual(receipt.report.counts, elbow
+    ? { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 28, edges: 14, vertices: 8 }
+    : { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 20, edges: 10, vertices: 6 });
   assert.equal(receipt.expectedSource.family, 'sweep-curve');
   assert.deepEqual(receipt.caps.map(([name]) => name.split('.').at(-1)).sort(), ['end', 'start']);
   for (const [name, plane] of receipt.caps) {
-    const [axis, at, normal] = name.endsWith('.start') ? [0, -10, [-1, 0, 0]] : [1, 20, [0, 1, 0]];
+    const [axis, at, normal] = name.endsWith('.start') ? [0, -10, [-1, 0, 0]] : [1, 20 + tailLength, [0, 1, 0]];
     near(plane.o[axis], at);
     normal.forEach((component, index) => near(plane.n[index], component));
   }
-  assert.equal(receipt.cylinders.length, 2);
+  assert.equal(receipt.cylinders.length, elbow ? 4 : 2);
   receipt.cylinders.forEach(support => near(support.r, radius));
   assert.equal(receipt.curved.length, 2);
   assert.ok(receipt.curved.every(profile => profile?.kind === 'arc'));
   receipt.curved.forEach(profile => { near(profile.c[0], bendRadius); near(profile.r, radius); });
   near(receipt.mass.volume, volume(radius));
   near(receipt.quadrature, volume(radius));
-  assert.equal(receipt.tangencies.length, 2);
-  for (const seam of receipt.tangencies) {
+  assert.deepEqual(receipt.tangencies.map(junction => junction.length), elbow ? [2, 2] : [2]);
+  for (const seam of receipt.tangencies.flat()) {
     assert.equal(seam.status, 'measured');
     assert.ok(seam.maximumAngleDegrees < 1e-5);
     assert.equal(seam.curvature.status, 'measured');
@@ -91,7 +104,8 @@ async function measure(label, doc, radius) {
   }
   f.report.observations.push({ label, radius, volume: receipt.mass.volume, quadrature: receipt.quadrature, digest: receipt.digest,
     counts: receipt.report.counts, gap: receipt.report.maximumPcurveGap,
-    seams: receipt.tangencies.map(({ edgeId, maximumAngleDegrees, curvature }) => [edgeId, maximumAngleDegrees, curvature.maximumDifference]) });
+    seams: receipt.tangencies.map(junction => junction.map(({ edgeId, maximumAngleDegrees, curvature }) =>
+      [edgeId, maximumAngleDegrees, curvature.maximumDifference])) });
   return receipt;
 }
 
@@ -108,14 +122,17 @@ async function visibleContinuity(native) {
   const options = panel.getByRole('combobox', { name: 'Native shared edge', exact: true });
   const result = panel.getByRole('status', { name: 'Edge continuity result', exact: true });
   const reading = result.locator('[data-continuity-angle]');
-  for (const item of native.tangencies) {
-    await options.selectOption(item.edgeId);
-    await button('Measure continuity', panel).click();
-    await reading.waitFor();
-    assert.equal(await reading.textContent(), '0°');
-    assert.match(await result.innerText(), /Native samples\s+8/);
+  for (const [index, junction] of native.tangencies.entries()) {
+    for (const item of junction) {
+      await options.selectOption(item.edgeId);
+      await button('Measure continuity', panel).click();
+      await reading.waitFor();
+      assert.equal(await reading.textContent(), '0°');
+      assert.match(await result.innerText(), /Native samples\s+8/);
+    }
+    if (elbow) await result.scrollIntoViewIfNeeded();
+    await f.snapshot(elbow ? `05-${index + 1}-tangent-junction` : '05-tangent-joints');
   }
-  await f.snapshot('05-tangent-joints');
 }
 
 await f.run(async () => {
@@ -132,17 +149,35 @@ await f.run(async () => {
   };
   await f.newPage();
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
-  await chooser.setFiles({ name: 'exact-tangent-sweep.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
+  await chooser.setFiles({ name: `${name}.bcad`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
   f.phase = 'Join the saved line and tangent arc in Studio';
   await button('Straight rail', browser()).click();
   await button('Tangent bend', browser()).click({ modifiers: ['Shift'] });
   await button('Join').click();
   await f.changed(seed);
+  if (elbow) {
+    const firstJoin = await f.doc();
+    const firstRail = firstJoin.direct.objects.find(object => object.name === 'Joined curve');
+    assert.ok(firstRail && !firstRail.hidden);
+    f.phase = 'Join the tangent exit and name the complete Direct rail';
+    await button('Joined curve', browser()).click();
+    await button('Exit rail', browser()).click({ modifiers: ['Shift'] });
+    await button('Join').click();
+    await f.changed(firstJoin);
+    const secondJoin = await f.doc();
+    assert.ok(secondJoin.direct.objects.find(object => object.id === firstRail.id)?.hidden);
+    assert.ok(secondJoin.direct.objects.find(object => object.id === 'tail')?.hidden);
+    await button('Joined curve', browser()).last().click();
+    const rename = f.page.getByLabel('Object name', { exact: true });
+    await rename.fill(railName);
+    await rename.press('Enter');
+    await f.changed(secondJoin);
+  }
   const joined = (await f.snapshot('01-joined-direct-rail')).doc;
   assert.deepEqual(joined.nodes, seed.nodes);
-  const rail = joined.direct.objects.find(object => object.name === 'Joined curve');
-  assert.ok(rail);
+  const rail = joined.direct.objects.find(object => object.name === railName);
+  assert.ok(rail && !rail.hidden);
   const savedRail = await f.save('joined-path-input');
 
   f.phase = 'Refuse an exact path with a corner and preview the tangent rail';
@@ -152,12 +187,12 @@ await f.run(async () => {
   await f.command('Sweep');
   await hud().getByLabel('Representation', { exact: true }).selectOption('exact');
   await status('refused').waitFor();
-  await hud().getByText('The line and arc are not tangent', { exact: true }).waitFor();
+  await hud().getByText(elbow ? 'Both Sweep joins must be tangent' : 'The line and arc are not tangent', { exact: true }).waitFor();
   assert.ok(await button('Apply', hud()).isDisabled());
   await f.same(joined);
   await f.snapshot('02-kink-refused');
-  await button('Joined curve', browser()).click();
-  await hud().locator('.hud-step').getByText('Exact line and arc', { exact: true }).waitFor();
+  await button(railName, browser()).click();
+  await hud().locator('.hud-step').getByText(representation, { exact: true }).waitFor();
   await status('preview').waitFor();
   await f.snapshot('03-tangent-preview');
   await button('Apply', hud()).click();
@@ -169,7 +204,7 @@ await f.run(async () => {
 
   f.phase = 'Edit the disk diameter and retain the exact path';
   await f.openFeatureEditor(1, 'change input disk');
-  await f.editor().getByText('Exact line and arc', { exact: true }).waitFor();
+  await f.editor().getByText(representation, { exact: true }).waitFor();
   const diameter = f.editor().getByLabel('Diameter', { exact: true });
   await diameter.fill('40');
   await button('Apply', f.editor()).click();
@@ -185,12 +220,12 @@ await f.run(async () => {
   await f.same(accepted);
   await f.redo();
   await f.same(edited);
-  const saved = await f.save('exact-tangent-sweep');
+  const saved = await f.save(name);
   await f.freshOpen(saved.file, edited, '08-reopened');
   assert.equal((await measure('reopened-native', await f.doc(), 3)).digest, larger.digest);
   await f.openFeatureEditor(1);
-  await f.editor().getByText('Joined curve · Degree 2 NURBS · Copied', { exact: true }).waitFor();
-  await f.editor().getByText('Exact line and arc', { exact: true }).waitFor();
+  await f.editor().getByText(`${railName} · Degree 2 NURBS · Copied`, { exact: true }).waitFor();
+  await f.editor().getByText(representation, { exact: true }).waitFor();
   await f.snapshot('09-reopened-history');
 
   f.phase = 'Propose the same joined rail through local MCP and approve in Studio';
@@ -203,7 +238,23 @@ await f.run(async () => {
     assert.ok(path?.revision);
     const args = { action: 'command', command: 'sweep-curve', expectedRevision,
       values: { sketch: 'n0', path: path.id, pathRevision: path.revision, representation: 'exact' } };
-    const result = await call('proposals', { action: 'propose', title: 'Exact Sweep along the tangent join',
+    if (elbow) {
+      const description = await call('describe', { command: 'sweep-curve' });
+      assert.match(description.values.representation, /tangent lead and tail/);
+      const kinked = summary.direct_curves.find(candidate => candidate.id === 'kink');
+      assert.ok(kinked?.revision && kinked.revision !== path.revision);
+      const batch = (values, error = false) => call('features', { action: 'batch', dryRun: true,
+        ops: [{ tool: 'features', args: { ...args, values: { ...args.values, ...values } } }] }, error);
+      const before = await readFile(pendingFile);
+      assert.match((await batch({ pathRevision: kinked.revision }, true)).error, /path geometry changed/);
+      assert.match((await batch({ path: kinked.id, pathRevision: kinked.revision }, true)).error, /Both Sweep joins must be tangent/);
+      const preview = await batch({});
+      assert.ok(preview.dryRun);
+      near(preview.change.volume, volume(2), 0.001);
+      assert.deepEqual(await readFile(pendingFile), before);
+      f.report.observations.push({ label: 'elbow-agent-dry-run', volume: preview.change.volume });
+    }
+    const result = await call('proposals', { action: 'propose', title: `Sweep: ${representation}`,
       ops: [{ tool: 'features', args }] });
     assert.deepEqual([result.proposal, result.applied], ['P1', false]);
   });
@@ -217,6 +268,7 @@ await f.run(async () => {
   await f.same(pending);
   await button('Accept', card('P1')).click();
   await f.changed(pending);
+  if (elbow) await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const approved = (await f.snapshot('11-proposal-approved')).doc;
   assert.deepEqual(approved.nodes[0], accepted.nodes[0]);
   for (const key of ['id', 'kind', 'mode', 'path', 'sketch', 'name'])
