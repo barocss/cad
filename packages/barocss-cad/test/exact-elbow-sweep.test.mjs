@@ -133,7 +133,7 @@ test('exact elbow refuses kinks at either join, reversal at one join, axis conta
   refused({ ...curve, knots: [0, 0, 0, 1, 1, 2, 2.1, 3, 3, 3] }, 'CAPABILITY', /straight segment, one circular arc/);
   for (const angle of [29, 121]) refused(elbow({ angle }).curve, 'CAPABILITY', /30° to 120°/);
   for (const radius of [20, 21]) refused(curve, 'PARAMETER', /path radius larger/, { ...disk, radius });
-  refused(elbow().lineArc, 'CAPABILITY', /without holes/, { ...disk, center: [0, 0], holes: [[{ kind: 'arc', center: [0, 0], start: [1, 0], direction: 'ccw' }]] });
+  refused(elbow().lineArc, 'GEOMETRY', /bore concentric/, { ...disk, center: [0, 0], holes: [[{ kind: 'arc', center: [.25, 0], start: [1.25, 0], direction: 'ccw' }]] });
   refused(curve, 'CAPABILITY', /one circular disk or one bend-aligned rectangular section/,
     { id: 's', kind: 'sketch', profile: 'polygon', points: [[0, 0], [3, 0], [0, 2]] });
   refused(curve, 'CAPABILITY', /one open straight segment/, disk, 'exact-straight');

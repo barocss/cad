@@ -6,45 +6,51 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--expect-refused');
 const elbow = process.argv.includes('--annular-elbow');
-const annular = elbow || process.argv.includes('--annular');
+const lineArc = process.argv.includes('--annular-line-arc');
+const hasLead = elbow || lineArc;
+const tailLength = elbow ? 14 : 0;
+const annular = hasLead || process.argv.includes('--annular');
 const sameTurn = process.argv.includes('--same-turn');
 const turn = sameTurn ? -1 : 1;
 const endY = 12 + turn * 18;
-const path = elbow ? { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
-  controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0], [20, 27, 0], [20, 34, 0]],
-  weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1] } : { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
+const leadBend = [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0]];
+const path = hasLead ? { degree: 2, knots: elbow ? [0, 0, 0, 1, 1, 2, 2, 3, 3, 3] : [0, 0, 0, 1, 1, 2, 2, 2],
+  controlPoints: elbow ? [...leadBend, [20, 27, 0], [20, 34, 0]] : leadBend,
+  weights: [1, 1, 1, Math.SQRT1_2, 1, ...(elbow ? [1, 1] : [])] } : { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
   controlPoints: [[0, 0, 0], [0, 12, 0], [12, 12, 0], [16, 12, 0], [20, 12, 0], [38, 12, 0], [38, endY, 0]],
   weights: [1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1] };
 const kink = path.controlPoints.map((point, i) => elbow && i >= 5 ? [20 + (i - 4) * 7, 20, 0]
-  : !elbow && i === 5 ? [20, endY, 0] : point);
+  : lineArc && i < 2 ? [point[0], point[0], 0] : !hasLead && i === 5 ? [20, endY, 0] : point);
 const mark = (id, points) => `@curve #${id} { type:nurbs; degree:2; knots:${JSON.stringify(path.knots)};
   control-points:${JSON.stringify(points)}; weights:${JSON.stringify(path.weights)}; }`;
-const rail = elbow ? 'Annular elbow rail' : sameTurn ? 'Spaced same-turn rail' : 'Spaced S-bend rail';
-const representation = elbow ? 'Exact line–arc–line' : 'Exact arc–line–arc';
-const stations = elbow ? [{ axis: 0, centre: [0, 0, 0] }, { axis: 1, centre: [20, 20, 0] }]
+const rail = lineArc ? 'Annular line and arc rail' : elbow ? 'Annular elbow rail' : sameTurn ? 'Spaced same-turn rail' : 'Spaced S-bend rail';
+const representation = lineArc ? 'Exact line and arc' : elbow ? 'Exact line–arc–line' : 'Exact arc–line–arc';
+const stations = hasLead ? [{ axis: 0, centre: [0, 0, 0] }, ...(elbow ? [{ axis: 1, centre: [20, 20, 0] }] : [])]
   : [{ axis: 0, centre: [12, 12, 0] }, { axis: 0, centre: [20, 12, 0] }];
-const mouths = elbow ? [{ name: 'start', view: 'Left', axis: 0, sign: -1, centre: [-10, 0, 0] },
-  { name: 'end', view: 'Back', axis: 1, sign: 1, centre: [20, 34, 0] }]
+const mouths = hasLead ? [{ name: 'start', view: 'Left', axis: 0, sign: -1, centre: [-10, 0, 0] },
+  { name: 'end', view: 'Back', axis: 1, sign: 1, centre: [20, 20 + tailLength, 0] }]
   : [{ name: 'start', view: 'Front', axis: 1, sign: -1, centre: [0, 0, 0] },
     { name: 'end', view: sameTurn ? 'Front' : 'Back', axis: 1, sign: turn, centre: [38, endY, 0] }];
 const disk = { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 2, sideTags: { outer: ['e0'] } };
 const bore = { kind: 'arc', start: [{ parameter: 'BoreRadius' }, 0], center: [0, 0], direction: 'cw' };
 const profile = annular ? { ...disk, holes: [[bore]], sideTags: { ...disk.sideTags, holes: [['bore']] } } : disk;
+const recipe = lineArc ? 'annular-line-arc' : 'spaced-s-bend';
+const kinkName = lineArc ? 'Kinked line and arc rail' : 'Kinked spaced rail';
 const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: annular ? { BoreRadius: 1 } : {},
   nextId: 1, nodes: [profile], outputs: {},
   direct: { sources: { rail: `@model rail { version:0; length-unit:mm; ${mark('spaced', path.controlPoints)} ${mark('kink', kink)} }` },
     objects: [{ id: 'spaced', name: rail, source: 'rail', geometry: 'spaced' },
-      { id: 'kink', name: 'Kinked spaced rail', source: 'rail', geometry: 'kink' }] } };
+      { id: 'kink', name: kinkName, source: 'rail', geometry: 'kink' }] } };
 const pins = ['packages/barocss-cad/src/brep/exact-sweep.ts', 'packages/barocss-cad-model/src/app/profileCommands.ts',
   'packages/barocss-cad-model/src/engine/errors.ts', 'packages/barocss-cad-model/src/chat/part/features.ts'];
 const f = await createFlow({
-  name: elbow ? 'exact-annular-elbow' : `exact-spaced-${annular ? 'annular-' : ''}${sameTurn ? 'same-turn' : 's-bend'}`, output: process.argv[2],
-  envFrozen: elbow ? 'D1743_SOURCE_FROZEN' : sameTurn && annular ? 'D1729_SOURCE_FROZEN'
+  name: lineArc ? 'exact-annular-line-arc' : elbow ? 'exact-annular-elbow' : `exact-spaced-${annular ? 'annular-' : ''}${sameTurn ? 'same-turn' : 's-bend'}`, output: process.argv[2],
+  envFrozen: lineArc ? 'D1744_SOURCE_FROZEN' : elbow ? 'D1743_SOURCE_FROZEN' : sameTurn && annular ? 'D1729_SOURCE_FROZEN'
     : sameTurn ? 'D1725_SOURCE_FROZEN' : annular ? 'D1723_SOURCE_FROZEN' : 'D1721_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: elbow ? 'Sweep a concentric annulus through a tangent quarter elbow with two straight spans.'
+  qualification: hasLead ? 'Sweep a concentric annulus through a tangent quarter bend on a straight lead.'
     : `Sweep a ${annular ? 'concentric annulus' : 'disk'} along two tangent bends separated by a native straight span.`,
-  limits: [elbow ? 'R20 quarter bend, 10 and 14 mm straight spans, one circular concentric bore, desktop WebGPU and local MCP.'
+  limits: [hasLead ? `R20 quarter bend, 10 mm straight lead${elbow ? ' and 14 mm tail' : ''}, one circular concentric bore, desktop WebGPU and local MCP.`
     : `Coplanar R12/R18 ${sameTurn ? 'same-turn' : 'opposite'} quarter circles and 8 mm straight. One circular ${annular ? 'concentric bore' : 'disk'}. Desktop WebGPU and local MCP.`],
   ...(!baseline && { inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -91,13 +97,13 @@ const browser = () => f.page.getByRole('complementary', { name: 'Browser', exact
 const hud = () => f.page.getByRole('dialog', { name: 'Sweep', exact: true });
 const status = value => hud().locator('.status').filter({ hasText: new RegExp(`^${value}$`) });
 const firstLength = 6 * Math.PI, secondLength = 9 * Math.PI, run = 8;
-const pathLength = elbow ? 24 + 10 * Math.PI : firstLength + run + secondLength;
+const pathLength = hasLead ? 10 + tailLength + 10 * Math.PI : firstLength + run + secondLength;
 const volume = (radius, inner = 0) => Math.PI * (radius ** 2 - inner ** 2) * pathLength;
 const centroid = (radius, inner) => {
   const innerMoment = bend => 2 * (bend + (radius ** 2 + inner ** 2) / (4 * bend)) / Math.PI;
-  if (elbow) {
+  if (hasLead) {
     const m = innerMoment(20), arc = 10 * Math.PI;
-    return [(-50 + arc * m + 14 * 20) / pathLength, (arc * (20 - m) + 14 * 27) / pathLength, 0];
+    return [(-50 + arc * m + tailLength * 20) / pathLength, (arc * (20 - m) + tailLength * (20 + tailLength / 2)) / pathLength, 0];
   }
   const first = innerMoment(12), second = innerMoment(18);
   return [(firstLength * (12 - first) + run * 16 + secondLength * (20 + second)) / pathLength,
@@ -111,7 +117,9 @@ async function verify(label, doc, radius) {
   const inner = annular ? doc.parameters.BoreRadius : 0;
   assert.ok(native.check.valid, native.check.issues.join('\n'));
   assert.deepEqual(native.check.topology.map(body => body.genus), [annular ? 1 : 0]);
-  assert.deepEqual(native.check.counts, annular
+  assert.deepEqual(native.check.counts, lineArc
+    ? { bodies: 1, shells: 1, faces: 10, loops: 12, coedges: 40, edges: 20, vertices: 12 }
+    : annular
     ? { bodies: 1, shells: 1, faces: 14, loops: 16, coedges: 56, edges: 28, vertices: 16 }
     : { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 28, edges: 14, vertices: 8 });
   assert.equal(native.caps.length, 2);
@@ -128,7 +136,7 @@ async function verify(label, doc, radius) {
       }
     }
   }
-  assert.deepEqual(native.joints.map(joint => joint.length), annular ? [4, 4] : [2, 2]);
+  assert.deepEqual(native.joints.map(joint => joint.length), stations.map(() => annular ? 4 : 2));
   native.joints.forEach((joint, index) => {
     const { axis, centre } = stations[index];
     assert.equal(joint.filter(edge => edge.bore[0]).length, annular ? 2 : 0);
@@ -220,12 +228,12 @@ await f.run(async () => {
   };
   await f.newPage();
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
-  await chooser.setFiles({ name: 'spaced-s-bend-input.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
+  await chooser.setFiles({ name: recipe + '-input.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
   await f.snapshot('01-opened-spaced-rail');
   const source = baseline ? null : await f.save('spaced-rail-source');
   await button('Sketch 1', browser()).click();
-  await button(baseline ? rail : 'Kinked spaced rail', browser()).click();
+  await button(baseline ? rail : kinkName, browser()).click();
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Sweep');
   await hud().getByLabel('Representation', { exact: true }).selectOption('exact');
@@ -286,7 +294,7 @@ await f.run(async () => {
   }
   await f.undo(); await f.same(accepted);
   await f.redo(); await f.same(edited);
-  const saved = await f.save('spaced-s-bend');
+  const saved = await f.save(recipe);
   await f.freshOpen(saved.file, edited, '07-spaced-s-bend-reopened');
   const reopened = await verify('reopened-native', await f.doc(), radius);
   assert.equal(reopened.digest, native.digest);
@@ -313,9 +321,10 @@ await f.run(async () => {
   await copyFile(source.file, proposalFile);
   await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, proposalFile, 'spaced-s-bend', async call => {
     const expectedRevision = await currentPartRevision(call);
-    if (elbow) {
+    if (hasLead) {
       const description = await call('describe', { command: 'sweep-curve' });
-      assert.match(description.values.sketch, /line–arc–line path accepts a circular disk with an optional concentric circular hole/);
+      const style = lineArc ? 'line–arc' : 'line–arc–line';
+      assert.ok(description.values.sketch.includes(style + ' path accepts a circular disk with an optional concentric circular hole'));
     } else if (annular || sameTurn) {
       const description = await call('describe', { command: 'sweep-curve' });
       assert.match(description.values.sketch, /arc–line–arc path accepts a circular disk with an optional concentric circular hole/);

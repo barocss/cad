@@ -46,6 +46,7 @@ function elbow({ angle = 90, radius = 20, lead = 10, tail = 14,
 }
 
 const boreWall = name => name.includes('[bore]') || name.includes('.hole0.side');
+const leadBend = rail => ({ ...rail, curve: rail.lineArc, end: rail.last, tail: undefined, length: rail.length - rail.tail });
 function sampleSection(curve, center, normal, radius) {
   const [lo, hi] = curveDomain(curve);
   for (const f of [0, .19, .5, .87, 1]) {
@@ -57,13 +58,16 @@ function sampleSection(curve, center, normal, radius) {
 
 function verify(output, rail, outer = 2, inner = 1) {
   const { brep } = output, report = checkBrep(brep, { strict: true });
+  const hasTail = rail.tail !== undefined;
   assert.equal(output.representation, 'curved');
   assert.deepEqual(brep.source, { family: 'sweep-curve', id: 'w' });
   assert.ok(report.valid, report.issues.join('\n'));
   assert.equal(report.topology.length, 1);
   assert.equal(report.topology[0].genus, 1);
-  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 14, loops: 16, coedges: 56, edges: 28, vertices: 16 });
-  assert.equal(new Set(brep.faces.map(face => face.name)).size, 14);
+  assert.deepEqual(report.counts, hasTail
+    ? { bodies: 1, shells: 1, faces: 14, loops: 16, coedges: 56, edges: 28, vertices: 16 }
+    : { bodies: 1, shells: 1, faces: 10, loops: 12, coedges: 40, edges: 20, vertices: 12 });
+  assert.equal(new Set(brep.faces.map(face => face.name)).size, hasTail ? 14 : 10);
   // Independent annular area times the authored centerline length; no producer supplies this value.
   const volume = Math.PI * (outer ** 2 - inner ** 2) * rail.length, mass = massPropertiesOf(output);
   assert.equal(mass.method, 'closed-form');
@@ -90,7 +94,7 @@ function verify(output, rail, outer = 2, inner = 1) {
     }
   }
 
-  for (const label of ['line', 'bend', 'tail']) {
+  for (const label of hasTail ? ['line', 'bend', 'tail'] : ['line', 'bend']) {
     const faces = brep.faces.filter(face => face.name.startsWith(`w.${label}.`));
     assert.equal(faces.filter(face => boreWall(face.name)).length, 2);
     assert.equal(faces.filter(face => !boreWall(face.name)).length, 2);
@@ -120,8 +124,9 @@ function verify(output, rail, outer = 2, inner = 1) {
   }
 
   const joints = [];
-  for (const [label, center, normal, inward] of [['line', rail.first, rail.tangent, rail.inward],
-    ['tail', rail.last, rail.atExit, rail.exitInward]]) {
+  const stations = [['line', rail.first, rail.tangent, rail.inward]];
+  if (hasTail) stations.push(['tail', rail.last, rail.atExit, rail.exitInward]);
+  for (const [label, center, normal, inward] of stations) {
     const seams = brep.edges.filter(edge => edge.name?.includes('w.bend.') && edge.name.includes(`w.${label}.`));
     assert.equal(seams.filter(edge => boreWall(edge.name)).length, 2);
     assert.equal(seams.filter(edge => !boreWall(edge.name)).length, 2);
@@ -160,57 +165,61 @@ function verify(output, rail, outer = 2, inner = 1) {
       }
     }
   }
-  assert.equal(new Set(joints).size, 8);
+  assert.equal(new Set(joints).size, hasTail ? 8 : 4);
   return mass;
 }
 
-test('R20 line-arc-line preserves a concentric bore, eight native G1 edges, ID and OD edits, and reopened identity', () => {
-  const rail = elbow(), doc = document(rail.curve);
-  assert.deepEqual(rail.start, [-10, 0, 0]);
-  pointNear(rail.end, [20, 34, 0]);
-  near(rail.length, 24 + 10 * Math.PI);
-  doc.parameters = { OuterRadius: 2, BoreEdgeX: 51 };
-  doc.features[0].radius = { parameter: 'OuterRadius' };
-  doc.features[0].holes[0][0].start = [{ parameter: 'BoreEdgeX' }, -30];
-  const initial = evaluateCadPart(doc), firstMass = verify(initial.outputs[0], rail);
-  const edited = reevaluate(initial, { parameters: { BoreEdgeX: 51.5 } }), editedMass = verify(edited.outputs[0], rail, 2, 1.5);
-  near(editedMass.volume / firstMass.volume, 7 / 12);
-  const walls = snapshot => snapshot.outputs[0].brep.faces.filter(face => !boreWall(face.name));
-  assert.deepEqual(walls(edited).filter(face => face.name.includes('.side[rim]')), walls(initial).filter(face => face.name.includes('.side[rim]')));
-  const identity = snapshot => snapshot.outputs[0].brep.edges.map(edge => [edge.id, edge.name]);
-  assert.deepEqual(identity(edited), identity(initial));
-  const expanded = reevaluate(edited, { parameters: { OuterRadius: 3 } });
-  verify(expanded.outputs[0], rail, 3, 1.5);
-  assert.deepEqual(identity(expanded), identity(initial));
-  const reopened = loadCadPart(saveCadPart(edited));
-  assert.deepEqual(reopened.document, edited.document);
-  assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
-  verify(reopened.outputs[0], rail, 2, 1.5);
-  assert.deepEqual(reevaluate(reopened, { parameters: { OuterRadius: 3 } }).outputs[0].brep, expanded.outputs[0].brep);
-  const restored = reevaluate(reopened, { parameters: { BoreEdgeX: 51 } });
-  assert.deepEqual(restored.outputs[0].brep, initial.outputs[0].brep);
-});
+for (const hasTail of [true, false]) {
+  const route = hasTail ? 'line-arc-line' : 'line-and-arc', selectedRail = rail => hasTail ? rail : leadBend(rail);
+  test(`R20 ${route} preserves a concentric bore, ${hasTail ? 'eight' : 'four'} native G1 edges, ID and OD edits, and reopened identity`, () => {
+    const rail = selectedRail(elbow()), doc = document(rail.curve);
+    assert.deepEqual(rail.start, [-10, 0, 0]);
+    pointNear(rail.end, hasTail ? [20, 34, 0] : [20, 20, 0]);
+    near(rail.length, (hasTail ? 24 : 10) + 10 * Math.PI);
+    doc.parameters = { OuterRadius: 2, BoreEdgeX: 51 };
+    doc.features[0].radius = { parameter: 'OuterRadius' };
+    doc.features[0].holes[0][0].start = [{ parameter: 'BoreEdgeX' }, -30];
+    const initial = evaluateCadPart(doc), firstMass = verify(initial.outputs[0], rail);
+    const edited = reevaluate(initial, { parameters: { BoreEdgeX: 51.5 } }), editedMass = verify(edited.outputs[0], rail, 2, 1.5);
+    near(editedMass.volume / firstMass.volume, 7 / 12);
+    const walls = snapshot => snapshot.outputs[0].brep.faces.filter(face => !boreWall(face.name));
+    assert.deepEqual(walls(edited).filter(face => face.name.includes('.side[rim]')), walls(initial).filter(face => face.name.includes('.side[rim]')));
+    const identity = snapshot => snapshot.outputs[0].brep.edges.map(edge => [edge.id, edge.name]);
+    assert.deepEqual(identity(edited), identity(initial));
+    const expanded = reevaluate(edited, { parameters: { OuterRadius: 3 } });
+    verify(expanded.outputs[0], rail, 3, 1.5);
+    assert.deepEqual(identity(expanded), identity(initial));
+    const reopened = loadCadPart(saveCadPart(edited));
+    assert.deepEqual(reopened.document, edited.document);
+    assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
+    verify(reopened.outputs[0], rail, 2, 1.5);
+    assert.deepEqual(reevaluate(reopened, { parameters: { OuterRadius: 3 } }).outputs[0].brep, expanded.outputs[0].brep);
+    const restored = reevaluate(reopened, { parameters: { BoreEdgeX: 51 } });
+    assert.deepEqual(restored.outputs[0].brep, initial.outputs[0].brep);
+  });
 
-test('oblique 30 and 120 degree elbows retain clockwise phased bore charts and oriented inner walls', () => {
-  for (const angle of [30, 120]) {
-    const rail = elbow({ angle, radius: 10, lead: 50, tail: 35, first: [32, 14, -18], tangent: [.6, .8, 0], inward: [0, 0, 1] });
-    verify(evaluateCadPart(document(rail.curve, { ...section(1.5, center, [.6, .8], 'cw'), radius: 8, sideTags: undefined })).outputs[0], rail, 8, 1.5);
-  }
-});
+  test(`oblique 30 and 120 degree ${route} retains clockwise phased bore charts and oriented inner walls`, () => {
+    for (const angle of [30, 120]) {
+      const rail = selectedRail(elbow({ angle, radius: 10, lead: 50, tail: 35, first: [32, 14, -18], tangent: [.6, .8, 0], inward: [0, 0, 1] }));
+      verify(evaluateCadPart(document(rail.curve, { ...section(1.5, center, [.6, .8], 'cw'), radius: 8, sideTags: undefined })).outputs[0], rail, 8, 1.5);
+    }
+  });
 
-test('annular elbow refuses eccentric, unsupported and thin holes without admitting line-and-arc bores', () => {
-  const rail = elbow(), refused = (sketch, code, detail, path = rail.curve) => assert.throws(() => evaluateCadPart(document(path, sketch)),
-    error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
-  refused(section(1, [50.25, -30]), 'GEOMETRY', /Exact line-arc-line sweep needs the bore concentric/);
-  refused(section(.005), 'PARAMETER', /Exact line-arc-line sweep needs a hole radius of at least 0.01/);
-  for (const radius of [2 - 5e-7, 2, 2.1]) refused(section(radius), 'GEOMETRY', /strictly positive wall clearance around the bore/);
-  const jointGap = 1e-6 + 2e-13;
-  assert.ok(2 - (2 - jointGap) > 1e-6);
-  refused(section(2 - jointGap), 'GEOMETRY', /strictly positive wall clearance around the bore/);
-  verify(evaluateCadPart(document(rail.curve, section(2 - 5e-6))).outputs[0], rail, 2, 2 - 5e-6);
-  for (const radius of [20, 21]) refused({ ...section(1), radius }, 'PARAMETER', /path radius larger/);
-  refused({ ...section(.2), sideTags: undefined, holes: [...section(.2).holes, ...section(.2).holes] }, 'CAPABILITY', /accepts at most one circular hole/);
-  const rectangle = [[49.5, -30.5], [50.5, -30.5], [50.5, -29.5], [49.5, -29.5]].map(start => ({ kind: 'line', start }));
-  refused({ ...section(), sideTags: undefined, holes: [rectangle] }, 'CAPABILITY', /accepts at most one circular hole/);
-  refused(section(), 'CAPABILITY', /without holes/, rail.lineArc);
-});
+  test(`annular ${route} refuses eccentric, unsupported and thin holes without admitting arc-first paths`, () => {
+    const rail = selectedRail(elbow()), refused = (sketch, code, detail, path = rail.curve) => assert.throws(() => evaluateCadPart(document(path, sketch)),
+      error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
+    refused(section(1, [50.25, -30]), 'GEOMETRY', new RegExp(`Exact ${route} sweep needs the bore concentric`));
+    refused(section(.005), 'PARAMETER', new RegExp(`Exact ${route} sweep needs a hole radius of at least 0.01`));
+    for (const radius of [2 - 5e-7, 2, 2.1]) refused(section(radius), 'GEOMETRY', /strictly positive wall clearance around the bore/);
+    const jointGap = 1e-6 + 2e-13;
+    assert.ok(2 - (2 - jointGap) > 1e-6);
+    refused(section(2 - jointGap), 'GEOMETRY', /strictly positive wall clearance around the bore/);
+    verify(evaluateCadPart(document(rail.curve, section(2 - 5e-6))).outputs[0], rail, 2, 2 - 5e-6);
+    for (const radius of [20, 21]) refused({ ...section(1), radius }, 'PARAMETER', /path radius larger/);
+    refused({ ...section(.2), sideTags: undefined, holes: [...section(.2).holes, ...section(.2).holes] }, 'CAPABILITY', /accepts at most one circular hole/);
+    const rectangle = [[49.5, -30.5], [50.5, -30.5], [50.5, -29.5], [49.5, -29.5]].map(start => ({ kind: 'line', start }));
+    refused({ ...section(), sideTags: undefined, holes: [rectangle] }, 'CAPABILITY', /accepts at most one circular hole/);
+    const arcFirst = { ...rail.lineArc, controlPoints: rail.lineArc.controlPoints.toReversed(), weights: rail.lineArc.weights.toReversed() };
+    refused(section(), 'CAPABILITY', /one open circular arc/, arcFirst);
+  });
+}

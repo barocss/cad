@@ -575,7 +575,7 @@ function lineAndArcSweep(id: string, rail: JoinedRail, section: JoinedSection,
   if (!(localRadius - radialReach > tolerance)) return bendClearance();
   const wall = opening?.clearance ?? (bore ? radialReach - circleRadius(bore) : undefined);
   const wallError = () => opening ? ductWallError(refuse)
-    : refuse('GEOMETRY', 'Exact line-arc-line sweep needs strictly positive wall clearance around the bore.');
+    : refuse('GEOMETRY', `Exact ${style} sweep needs strictly positive wall clearance around the bore.`);
   if (wall !== undefined && !(wall > 10 * tolerance)) return wallError();
   const holes = opening ? [opening.profile] : bore ? [[bore]] : undefined;
   const prismSection = { outer: profile, holes, sideTags };
@@ -910,12 +910,12 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
   const lineArc: JoinedRail | undefined = tangentLineArcLine(path, refuse) ?? tangentLineArc(path, refuse);
   if (lineArc) {
     const rectangle = profileRadius === undefined && lineArc.tailLength !== undefined ? rectangleSection(outer) : undefined;
-    if (!rectangle && (profileRadius === undefined || (holes.length && lineArc.tailLength === undefined))) return refuse('CAPABILITY',
+    if (!rectangle && profileRadius === undefined) return refuse('CAPABILITY',
       lineArc.tailLength !== undefined && profileRadius === undefined
         ? 'Exact line-arc-line sweep needs one circular disk or one bend-aligned rectangular section.'
-        : `Exact ${sweepStyle(lineArc)} sweep needs one circular disk section without holes.`);
-    const hole = rectangle ? undefined : circularHole(holes, 'line-arc-line', refuse);
-    const bore = hole && concentricBore(disk!, hole, refuse, 'line-arc-line');
+        : 'Exact line-and-arc sweep needs one circular outer section.');
+    const hole = rectangle ? undefined : circularHole(holes, sweepStyle(lineArc), refuse);
+    const bore = hole && concentricBore(disk!, hole, refuse, sweepStyle(lineArc));
     const initial = frame(lineArc.tangent), [x, y] = initial;
     const joined: { axes: SweepAxes; section: JoinedSection } = rectangle ? rectangularElbowSection(rectangle, holes, initial, lineArc, refuse) : {
       axes: initial, section: { profile: [originDisk(profileRadius!)], bendCentre: [dot(lineArc.toCentre, x), dot(lineArc.toCentre, y)],
