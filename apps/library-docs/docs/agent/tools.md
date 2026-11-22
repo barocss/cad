@@ -114,6 +114,13 @@ and approve it in Studio.
 { "sketchChamfer": { "sketch": "n0", "bevel": "e9", "distance": 8 } }
 ```
 
+For a saved Chamfer on a standalone XY sketch with one straight extrusion, use the
+`modelReviewRevision` from `proposals.list` to request the four-view PNG with `query.render`.
+Pass the base `expectedRevision`, the proposal ID, and `expectedProposalRevision` as shown in
+the group workflow below. Read the changed setback and any retained bevels on a shared side in
+`chamferResize.faces`. Inspect those native wall faces using `candidate.reviewRevision` from that
+image as `expectedReviewRevision`. Approve the reviewed change in Studio.
+
 ### Round a sketch corner
 
 For the same read and approval workflow, send `sketchRound` instead of `sketchChamfer`:

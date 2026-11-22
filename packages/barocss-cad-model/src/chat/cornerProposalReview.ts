@@ -5,8 +5,8 @@ import { bodyKeyFor } from '../engine/ids';
 import type { Proposal } from '../engine/schema/proposals';
 import { digestOf } from '../util/digest';
 import { isObj } from '../util/guards';
-import { canonical, revisionOf } from '../util/revision';
-import { sketchEditCorners } from './part/sketchCorner';
+import { canonical, canonicalOf, revisionOf } from '../util/revision';
+import { editSketchCorner, sketchEditChamfers, sketchEditCorners } from './part/sketchCorner';
 
 type SidePair = [string, string];
 type Operation = 'fillet' | 'chamfer';
@@ -151,4 +151,128 @@ export function reviewedCornerBatchEvidence(base: StudioDoc, candidate: StudioDo
     faces.push({ name, sides, geometry });
   }
   return { brep: native.brep, cornerBatch: { body: result.body, sketch: edit.sketch, operation: edit.operation, size: edit.size, faces } };
+}
+
+/** Identify one pinned saved-bevel resize, plus saved neighbors on either carrier. */
+export function savedChamferResizeProposal(doc: StudioDoc, proposal: Proposal) {
+  if (proposal.status !== 'open' || proposal.ops.length !== 1) return;
+  const [{ tool, args }] = proposal.ops;
+  if (tool !== 'edit_feature' || !isObj(args) || args.index !== 0 ||
+    Object.keys(args).sort().join(',') !== 'expectedRevision,index,sketchChamfer' ||
+    typeof args.expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(args.expectedRevision) ||
+    args.expectedRevision !== revisionOf(doc)) return;
+  const input = args.sketchChamfer, source = scope(doc);
+  if (!source || !isObj(input) || Object.keys(input).sort().join(',') !== 'bevel,distance,sketch' ||
+    input.sketch !== source.sketchId || typeof input.bevel !== 'string' || !input.bevel ||
+    typeof input.distance !== 'number' || !Number.isFinite(input.distance) || input.distance <= 0) return;
+  // Tilted placement currently emits the generic `prismatic` source ID, so it cannot
+  // satisfy this review's feature-owned native prism pin. Do not advertise a review.
+  const plane = source.sketch.plane;
+  if (plane && (plane.normal[0] !== 0 || plane.normal[1] !== 0 || plane.xAxis[2] !== 0)) return;
+  const faces = savedChamferFaces(doc, source, input.bevel, input.distance);
+  if (!faces) return;
+  return { revision: digestOf(proposal), sourceRevision: args.expectedRevision, source: canonicalOf(doc),
+    sketch: source.sketchId, bevel: input.bevel, distance: input.distance, faces };
+}
+
+function savedChamferFaces(doc: StudioDoc, source: NonNullable<ReturnType<typeof scope>>, bevel: string, distance: number) {
+  const saved = sketchEditChamfers(doc, 0), selected = saved.find(item => item.bevel === bevel);
+  if (!selected || near(selected.distance, distance)) return;
+  const sidesOf = (bevel: string): SidePair => {
+    const at = source.tags.indexOf(bevel), count = source.tags.length;
+    return [source.tags[(at - 1 + count) % count], source.tags[(at + 1) % count]];
+  };
+  const sides = sidesOf(selected.bevel);
+  return [selected, ...saved.filter(item => item !== selected && sidesOf(item.bevel).some(side => sides.includes(side)))].map(item => ({
+    bevel: item.bevel, sides: sidesOf(item.bevel), before: item.distance,
+    after: item === selected ? distance : item.distance,
+  }));
+}
+
+function samePlane(a: Plane, b: Plane) {
+  return near(dot(a.n, b.n), 1) && near(signedDistance(b.o, a), 0);
+}
+
+function seamPoints(brep: Brep, id: string) {
+  const edge = brep.edges.find(item => item.id === id);
+  if (edge?.curve.degree !== 1 || edge.vertices.length !== 2) return;
+  const points = edge.vertices.map(vertex => brep.vertices.find(item => item.id === vertex)?.point);
+  if (points.some(point => !point || !point.every(Number.isFinite))) return;
+  return points as Point[];
+}
+
+/** The point on the two native carrier planes at the seam point's axial station. */
+function carrierIntersection(point: Point, a: Plane, b: Plane): Point | undefined {
+  const cosine = dot(a.n, b.n), determinant = 1 - cosine * cosine;
+  if (determinant <= CadNumericPolicy.relativeComparison) return;
+  const da = signedDistance(point, a), db = signedDistance(point, b);
+  const u = (da - cosine * db) / determinant, v = (db - cosine * da) / determinant;
+  return [point[0] - u * a.n[0] - v * b.n[0], point[1] - u * a.n[1] - v * b.n[1],
+    point[2] - u * a.n[2] - v * b.n[2]];
+}
+
+function measuredChamfer(native: NonNullable<ReturnType<typeof prism>>, bevel: string, sides: SidePair, expected: number) {
+  const wall = native.faces.get(native.sideName(bevel));
+  if (!wall) return;
+  const geometry = faceGeometry(wall), seams = wallSeams(native.brep, wall);
+  if (geometry.kind !== 'plane' || !near(dot(geometry.n, native.axis), 0) ||
+    !seams?.has(native.bottom) || !seams.has(native.top)) return;
+  const carriers: { plane: Plane; seam: string }[] = [];
+  for (const side of sides) {
+    const face = native.faces.get(native.sideName(side)), seam = seams.get(native.sideName(side));
+    if (!face || !seam) return;
+    const plane = faceGeometry(face);
+    if (plane.kind !== 'plane' || !near(dot(plane.n, native.axis), 0)) return;
+    carriers.push({ plane, seam });
+  }
+  const distances: number[] = [];
+  for (const [index, { plane, seam }] of carriers.entries()) {
+    if (!hasChamferSetback(native.brep, seam, plane, carriers[1 - index].plane, expected)) return;
+    const points = seamPoints(native.brep, seam);
+    if (!points) return;
+    for (const point of points) {
+      const corner = carrierIntersection(point, carriers[0].plane, carriers[1].plane);
+      if (!corner) return;
+      const distance = Math.hypot(point[0] - corner[0], point[1] - corner[1], point[2] - corner[2]);
+      if (!near(distance, expected)) return;
+      distances.push(distance);
+    }
+  }
+  return { distance: distances[0], geometry, carriers, seams };
+}
+
+function unchangedSeams(before: NonNullable<ReturnType<typeof measuredChamfer>>, after: NonNullable<ReturnType<typeof measuredChamfer>>,
+  original: Brep, candidate: Brep) {
+  if (!samePlane(before.geometry, after.geometry) || before.seams.size !== after.seams.size) return false;
+  for (const [name, id] of before.seams) {
+    const next = after.seams.get(name), a = seamPoints(original, id), b = next && seamPoints(candidate, next);
+    if (!a || !b || !a.every(point => b.some(other => point.every((value, axis) => near(value, other[axis]))))) return false;
+  }
+  return true;
+}
+
+/** Certify exact saved-bevel replay and measure both edited and retained native walls. */
+export function reviewedChamferResizeEvidence(base: StudioDoc, candidate: StudioDoc, edit: NonNullable<ReturnType<typeof savedChamferResizeProposal>>) {
+  const source = scope(base), result = scope(candidate);
+  if (!source || !result || edit.source !== canonicalOf(base) || revisionOf(base) !== edit.sourceRevision ||
+    source.sketchId !== edit.sketch || result.sketchId !== edit.sketch || source.body !== result.body ||
+    canonicalOf({ ...candidate, nodes: base.nodes }) !== canonicalOf(base)) return;
+  // Reuse the production operation; the review does not implement a second sketch solver.
+  const replay = editSketchCorner(base, 0, 'CHAMFER', { sketch: edit.sketch, bevel: edit.bevel, distance: edit.distance });
+  if (!('node' in replay) || replay.node === source.sketch || canonical(replay.node) !== canonical(result.sketch) ||
+    canonical(dropStaleMade(base.nodes, [result.sketch, source.extrude])[1]) !== canonical(result.extrude) ||
+    canonical(source.tags) !== canonical(result.tags)) return;
+  const recognized = savedChamferFaces(base, source, edit.bevel, edit.distance);
+  if (!recognized || canonical(recognized) !== canonical(edit.faces)) return;
+  const original = prism(base, source), native = prism(candidate, result);
+  if (!original || !native) return;
+  const faces: { name: string; sides: SidePair; before: number; after: number }[] = [];
+  for (const face of edit.faces) {
+    const before = measuredChamfer(original, face.bevel, face.sides, face.before);
+    const after = measuredChamfer(native, face.bevel, face.sides, face.after);
+    if (!before || !after || before.carriers.some(({ plane }, index) => !samePlane(plane, after.carriers[index].plane)) ||
+      (face.bevel !== edit.bevel && !unchangedSeams(before, after, original.brep, native.brep))) return;
+    faces.push({ name: native.sideName(face.bevel), sides: face.sides, before: before.distance, after: after.distance });
+  }
+  return { brep: native.brep, chamferResize: { body: result.body, sketch: edit.sketch, bevel: edit.bevel, faces } };
 }

@@ -11,7 +11,7 @@ import { treeDiff } from '../transactions';
 import { approvalOf, diffLine, DIRECT_GEOMETRY_APPROVAL, nextProposalId, PLAN_CHARS, PROMPT_CHARS, proposalIsStale, proposalRevisionOf, riskOf, riskRank, withHistory } from '../proposals';
 import { isDirectRuledOperation } from '../directRuledProposal';
 import { directReviewRevision } from '../directProposalReview';
-import { cornerBatchProposal } from '../cornerProposalReview';
+import { cornerBatchProposal, savedChamferResizeProposal } from '../cornerProposalReview';
 import { boredWallProposal } from '../modelProposalReview';
 import { DIRECT_SNAPSHOT_APPROVAL, isDirectThickenOperation, isRuledThickenOperation } from '../directThickenProposal';
 import type { ChecksDelta, FollowUpRepairSource, Proposal, Risk } from '../../engine/schema/proposals';
@@ -402,7 +402,8 @@ async function listProposalsTool(state: ChatState, args: Record<string, unknown>
   return { state, content: json({ proposals: list.map(p => {
     const { ops, ...details } = p;
     const direct = directReviewRevision(p);
-    const model = state.partOf ? undefined : boredWallProposal(state.doc, p)?.revision ?? cornerBatchProposal(state.doc, p)?.revision;
+    const model = state.partOf ? undefined
+      : boredWallProposal(state.doc, p)?.revision ?? cornerBatchProposal(state.doc, p)?.revision ?? savedChamferResizeProposal(state.doc, p)?.revision;
     return { ...details, ops: ops.length, stale: proposalIsStale(p, revision),
       ...(p.status === 'open' ? { proposalRevision: proposalRevisionOf(p) } : {}),
       ...(direct ? { directReviewRevision: direct } : {}),

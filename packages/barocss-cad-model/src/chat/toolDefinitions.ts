@@ -321,7 +321,7 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'list_proposals',
-    description: 'The open proposals (all: true for accepted and rejected ones too, with who decided, when and why): id, title, summary, risk, and stale when the part changed since. Open Direct Ruled and Exact Thicken proposals include directReviewRevision for query.render. Supported bored-wall Offset and sketch corner group proposals include modelReviewRevision. Open proposals include proposalRevision for drawing review.',
+    description: 'The open proposals (all: true for accepted and rejected ones too, with who decided, when and why): id, title, summary, risk, and stale when the part changed since. Open Direct Ruled and Exact Thicken proposals include directReviewRevision for query.render. Supported bored-wall Offset, sketch corner group and saved Chamfer resize proposals include modelReviewRevision. Open proposals include proposalRevision for drawing review.',
     input_schema: { type: 'object', properties: { all: { type: 'boolean' } }, additionalProperties: false },
   },
   {
@@ -331,16 +331,16 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'render_views',
-    description: 'Front, top, right and isometric views. Solids use exact hidden lines and numbered faces. The legend lists face names. Use highlight to fill faces red or section to cut along an axis. For Direct-only views, pass expectedDirectRevision. To render an open Direct Ruled or Exact Thicken candidate on a copy, also pass proposal and expectedProposalRevision. The result gives the proposal pin, baseDirectRevision and candidate geometry revision. Direct sheet views list exact IDs in directObjects. For a bored-wall Offset or sketch corner group proposal, use the base expectedRevision, proposal and its modelReviewRevision as expectedProposalRevision, without highlight or section. The returned candidate.reviewRevision pins its image for inspection. imageSha256 identifies the returned PNG. A supplied pin refuses changed input.',
+    description: 'Front, top, right and isometric views. Solids use exact hidden lines and numbered faces. The legend lists face names. Use highlight to fill faces red or section to cut along an axis. For Direct-only views, pass expectedDirectRevision. To render an open Direct Ruled or Exact Thicken candidate on a copy, also pass proposal and expectedProposalRevision. The result gives the proposal pin, baseDirectRevision and candidate geometry revision. Direct sheet views list exact IDs in directObjects. For a bored-wall Offset, sketch corner group or saved Chamfer resize proposal, use the base expectedRevision, proposal and its modelReviewRevision as expectedProposalRevision, without highlight or section. The returned candidate.reviewRevision pins its image for inspection. imageSha256 identifies the returned PNG. A supplied pin refuses changed input.',
     input_schema: { type: 'object', properties: { expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$', description: 'The revision from query.rebuild for this same part scope; omit for an unpinned solid read.' },
       expectedDirectRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The direct_revision from query.summary for Direct or candidate review.' },
-      proposal: { type: 'string', description: 'An open Direct Ruled, Exact Thicken, bored-wall Offset or sketch corner group proposal ID from proposals.list.' },
+      proposal: { type: 'string', description: 'An open Direct Ruled, Exact Thicken, bored-wall Offset, sketch corner group or saved Chamfer resize proposal ID from proposals.list.' },
       expectedProposalRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The directReviewRevision or modelReviewRevision for this proposal from proposals.list.' },
       highlight: { ...nameList, description: 'Face names to fill red.' }, section: { type: 'object', properties: { axis: { type: 'string', enum: ['x', 'y', 'z'] }, at: { type: 'number' } }, required: ['axis', 'at'], additionalProperties: false } }, additionalProperties: false },
   },
   {
     name: 'inspect',
-    description: 'Face and edge details, or exact native planes and cylinders by face name. For a pending Exact Thicken, pass faces with proposal, expectedProposalRevision and expectedDirectRevision from query.render. For a pending bored-wall Offset or sketch corner group, pass faces with proposal, expectedRevision for the unchanged base, expectedProposalRevision from proposals.list and expectedReviewRevision from candidate.reviewRevision in query.render. For current native faces, pass faces and expectedRevision from query.rebuild or query.render. For a Direct join pass curve, parameter and expectedDirectRevision. For an untrimmed Direct surface point pass surface, u, v and expectedDirectRevision.',
+    description: 'Face and edge details, or exact native planes and cylinders by face name. For a pending Exact Thicken, pass faces with proposal, expectedProposalRevision and expectedDirectRevision from query.render. For a pending bored-wall Offset, sketch corner group or saved Chamfer resize, pass faces with proposal, expectedRevision for the unchanged base, expectedProposalRevision from proposals.list and expectedReviewRevision from candidate.reviewRevision in query.render. For current native faces, pass faces and expectedRevision from query.rebuild or query.render. For a Direct join pass curve, parameter and expectedDirectRevision. For an untrimmed Direct surface point pass surface, u, v and expectedDirectRevision.',
     input_schema: { type: 'object', properties: {
       faces: selectorList('Faces'), edges: selectorList('Edges'),
       curve: { type: 'string', description: 'A visible Direct curve ID from query.summary.' },
@@ -350,7 +350,7 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
       v: { type: 'number', description: 'The native v parameter of the surface point.' },
       expectedDirectRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The direct_revision from query.summary.' },
       expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$', description: 'The current part revision, or the base revision for pending model inspection.' },
-      proposal: { type: 'string', description: 'An open Exact Thicken, bored-wall Offset or sketch corner group proposal ID.' },
+      proposal: { type: 'string', description: 'An open Exact Thicken, bored-wall Offset, sketch corner group or saved Chamfer resize proposal ID.' },
       expectedProposalRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The directReviewRevision or modelReviewRevision for the pending proposal.' },
       expectedReviewRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The candidate.reviewRevision from the same pending model image.' },
     }, additionalProperties: false },

@@ -3,7 +3,7 @@ import { partBreps } from '../../engine/evaluate';
 import { bodyKeyFor, featureId } from '../../engine/ids';
 import { digestOf, requirementEvidenceRevision } from '../../util/digest';
 import { revisionOf } from '../../util/revision';
-import { cornerBatchProposal, reviewedCornerBatchEvidence } from '../cornerProposalReview';
+import { cornerBatchProposal, reviewedChamferResizeEvidence, reviewedCornerBatchEvidence, savedChamferResizeProposal } from '../cornerProposalReview';
 import { boredWallProposal, reviewedBoreEvidence, type ModelCandidatePin } from '../modelProposalReview';
 import { proposalIsStale } from '../proposals';
 import { fail, type ChatState, type Evaluate, type PartRun } from '../toolKit';
@@ -44,17 +44,19 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
   const pending = matches.length === 1 ? matches[0] : undefined;
   const boreEdit = pending && boredWallProposal(state.doc, pending);
   const cornerEdit = pending && !boreEdit ? cornerBatchProposal(state.doc, pending) : undefined;
-  const proposalRevision = boreEdit?.revision ?? cornerEdit?.revision;
+  const resizeEdit = pending && !boreEdit && !cornerEdit ? savedChamferResizeProposal(state.doc, pending) : undefined;
+  const proposalRevision = boreEdit?.revision ?? cornerEdit?.revision ?? resizeEdit?.revision;
   if (!pending || !proposalRevision)
-    return refuse('MODEL_REVIEW_UNAVAILABLE', 'Choose a unique open proposal for a supported bored-wall Offset or sketch corner group.');
+    return refuse('MODEL_REVIEW_UNAVAILABLE', 'Choose a unique open proposal for a supported bored-wall Offset, sketch corner group or saved Chamfer resize.');
   if (proposalRevision !== expectedProposalRevision || proposalIsStale(pending, requirementEvidenceRevision(state.doc)))
     return refuse('MODEL_REVIEW_PROPOSAL_STALE', 'The proposal or its source changed. Read proposals.list and request a fresh proposal.');
 
   const preview = await previewProposalWith(dispatch, state, proposal, evaluate);
   if ('error' in preview) return refuse('MODEL_REVIEW_REPLAY_FAILED', preview.error);
   const evidence = boreEdit ? boredWallEvidence(preview.doc, boreEdit)
-    : cornerEdit && reviewedCornerBatchEvidence(state.doc, preview.doc, cornerEdit);
-  if (!evidence) return refuse('MODEL_REVIEW_REPLAY_FAILED', 'The native walls of the sketch corner group could not be verified.');
+    : cornerEdit ? reviewedCornerBatchEvidence(state.doc, preview.doc, cornerEdit)
+      : resizeEdit && reviewedChamferResizeEvidence(state.doc, preview.doc, resizeEdit);
+  if (!evidence) return refuse('MODEL_REVIEW_REPLAY_FAILED', 'The native walls of the sketch edit could not be verified.');
   if ('error' in evidence) return refuse('MODEL_REVIEW_REPLAY_FAILED', evidence.error);
   const { brep, ...geometry } = evidence;
 
