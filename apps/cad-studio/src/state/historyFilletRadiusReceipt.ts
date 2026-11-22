@@ -5,6 +5,7 @@ import type { BodyResult, EvalResult } from '@barocss/cad-model/engine/evaluate'
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { toSig } from '@barocss/cad-model/engine/references';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
+import type { NativeFilletTorusFace } from '@barocss/cad-model/engine/nativeFilletTorus';
 import { add, cross, dot, len, scale, sub, unit, type Vec3 } from '@barocss/cad-model/engine/vec3';
 import type { Active } from '../app/commandState';
 
@@ -43,6 +44,13 @@ function historyTopEdges(doc: StudioDoc, fillet: Fillet) {
   if (pair.every(edge => fillet.edges.includes(edge) && fillet.sigs?.[edge]?.k === 'line')) return { pair, adjacent };
 }
 
+function historyCircularRims(doc: StudioDoc, fillet: Fillet) {
+  if (fillet.edges.length !== 2) return;
+  const id = featureId(doc.nodes, 1);
+  const rims = [`${id}.side1|${id}.top`, `${id}.bottom|${id}.side1`] as const;
+  if (rims.every(edge => fillet.edges.includes(edge) && fillet.sigs?.[edge]?.k === 'curve')) return rims;
+}
+
 export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null,bodies?:readonly BodyResult[]): Fillet | null {
   if (index!==2 || doc.schema!==3 || doc.nodes.length!==3 || doc.direct!==undefined ||
       doc.instances?.length || doc.variability || doc.configurations || Object.hasOwn(doc,'routeBundles')) return null;
@@ -59,8 +67,10 @@ export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null,bodies?:
   const circular = sketch.profile === 'loop' && stored?.k === 'curve' && plainQuarterSector(sketch);
   if (!plain && !circular) return null;
   const pair = historyTopEdges(doc, fillet);
-  if (fillet.edges.length !== 1 && (!plain || !pair)) return null;
+  const circularPair = circular && historyCircularRims(doc, fillet);
+  if (fillet.edges.length !== 1 && !(plain && pair) && !circularPair) return null;
   if (pair?.adjacent && bodies && (bodies.length !== 1 || bodies[0].nativeFilletPair?.adjacentTop !== true)) return null;
+  if (circularPair && bodies && (bodies.length !== 1 || !bodies[0].nativeFilletTorusPair)) return null;
   const out=doc.outputs[bodyKeyFor(doc.nodes,index,'solid')];
   return out?.node===index&&out.side==='solid'?fillet:null;
 }
@@ -130,11 +140,10 @@ function pairedHistoryFrame(doc: StudioDoc, fillet: Fillet, stock: BodyResult, f
   return { at: add(first.midpoint, scale(dir, radius)), dir };
 }
 
-function circularHistoryFrame(source: DisplayEdge, finished: BodyResult, edge: string, face: string, radius: number):
+function verifiedCircularFrame(source: DisplayEdge, torus: Omit<NativeFilletTorusFace, 'faceId' | 'face'>, radius: number):
   HistoryFilletReceipt['frame'] {
-  const rim = source.nativeFilletRim, circle = source.nativeCircle, torus = finished.nativeFilletTorus;
-  if (source.straight || !rim?.quarter || !circle || !torus || torus.edge !== edge || torus.face !== face
-    || !closedSolid(finished)) return;
+  const rim = source.nativeFilletRim, circle = source.nativeCircle;
+  if (source.straight || !rim?.quarter || !circle) return;
   if (![...rim.midpoint, ...rim.direction, ...circle.centre, ...circle.normal, circle.radius,
     ...torus.centre, ...torus.axis, torus.radius, torus.majorRadius].every(Number.isFinite)
     || Math.abs(len(torus.axis) - 1) > 1e-9 || Math.abs(len(rim.direction) - 1) > 1e-9) return;
@@ -144,6 +153,46 @@ function circularHistoryFrame(source: DisplayEdge, finished: BodyResult, edge: s
   if (!capSign || len(cross(torus.axis, circle.normal)) > 1e-9 || len(sub(torus.centre, expectedCentre)) > tolerance
     || Math.abs(torus.radius - radius) > tolerance || Math.abs(torus.majorRadius - (circle.radius - radius)) > tolerance) return;
   return { at: add(rim.midpoint, scale(rim.direction, radius)), dir: rim.direction };
+}
+
+function circularHistoryFrame(source: DisplayEdge, finished: BodyResult, edge: string, face: string, radius: number):
+  HistoryFilletReceipt['frame'] {
+  const torus = finished.nativeFilletTorus;
+  if (!torus || torus.edge !== edge || torus.face !== face || !closedSolid(finished)) return;
+  return verifiedCircularFrame(source, torus, radius);
+}
+
+function pairedCircularHistoryFrame(rims: readonly [string, string], fillet: Fillet, stock: BodyResult, finished: BodyResult,
+  faces: readonly HistoryFilletReceipt['face'][], radius: number): HistoryFilletReceipt['frame'] {
+  const accepted = finished.nativeFilletTorusPair;
+  if (!accepted || !closedSolid(stock) || !closedSolid(finished)
+    || !rims.every(edge => accepted.targets.includes(edge))
+    || new Set(accepted.tori.map(torus => torus.faceId)).size !== 2
+    || accepted.tori.some(torus => !faces.some(face => face.id === torus.faceId))) return;
+  const signatures = signaturesOf(stock);
+  const originals = rims.map(edge => {
+    const match = originalFilletEdge(stock, fillet, edge, signatures);
+    return match && match.sig.kind === 'curve' && match.stored.d === undefined && match.stored.r === undefined
+      ? match.source : undefined;
+  });
+  const [top, bottom] = originals;
+  const topCircle = top?.nativeCircle, bottomCircle = bottom?.nativeCircle;
+  if (!top?.nativeJoint || !bottom?.nativeJoint || !topCircle || !bottomCircle
+    || top.nativeJoint.edgeId === bottom.nativeJoint.edgeId
+    || new Set([...top.nativeJoint.faces, ...bottom.nativeJoint.faces]).size !== 3
+    || topCircle.centre[2] - bottomCircle.centre[2] <= 2 * radius
+    || Math.hypot(topCircle.centre[0] - bottomCircle.centre[0], topCircle.centre[1] - bottomCircle.centre[1]) > 1e-8
+    || len(cross(topCircle.normal, bottomCircle.normal)) > 1e-9
+    || Math.abs(topCircle.radius - bottomCircle.radius) > 1e-8
+    || !(top.nativeFilletRim && top.nativeFilletRim.direction[2] > 0
+      && bottom.nativeFilletRim && bottom.nativeFilletRim.direction[2] < 0)) return;
+  const matches = [top, bottom].map(source => accepted.tori.flatMap((torus, index) => {
+    const frame = verifiedCircularFrame(source, torus, radius);
+    return frame ? [{ index, frame }] : [];
+  }));
+  const [topMatches, bottomMatches] = matches;
+  if (topMatches.length === 1 && bottomMatches.length === 1 && topMatches[0].index !== bottomMatches[0].index)
+    return topMatches[0].frame;
 }
 
 export function historyFilletReceipt(doc:StudioDoc,commandDoc:StudioDoc,index:number,bodies:readonly BodyResult[],
@@ -157,14 +206,17 @@ export function historyFilletReceipt(doc:StudioDoc,commandDoc:StudioDoc,index:nu
     (stock.pieces??1)!==1||(finished.pieces??1)!==1) return null;
   const name=featureId(doc.nodes,index)+'.face', face=finished.mesh.faces.filter(f=>f.name.startsWith(featureId(doc.nodes,index)+'.'));
   const topPair = historyTopEdges(doc, fillet);
+  const circularPair = historyCircularRims(doc, fillet);
   // The joined fillet patches share one display face under the feature name.
   const expectedFaces = topPair?.adjacent ? 1 : fillet.edges.length;
   if(face.length!==expectedFaces||face.some(item=>item.name!==name)||!face[0].normal.every(Number.isFinite)||
     Math.abs(Math.hypot(...face[0].normal)-1)>1e-8) return null;
   const radius = Number(fillet.radius), sketch = doc.nodes[0];
   if (fillet.edges.length === 2) {
-    const frame = pairedHistoryFrame(doc, fillet, stock, finished, radius);
-    return frame ? { document:doc,commandDoc,index,bodies,edge:topPair?.adjacent ? topPair.pair[0] : edge,face:face[0],isCurrent,frame } : null;
+    const frame = circularPair ? pairedCircularHistoryFrame(circularPair, fillet, stock, finished, face, radius)
+      : pairedHistoryFrame(doc, fillet, stock, finished, radius);
+    const anchor = circularPair?.[0] ?? (topPair?.adjacent ? topPair.pair[0] : edge);
+    return frame ? { document:doc,commandDoc,index,bodies,edge:anchor,face:face[0],isCurrent,frame } : null;
   }
   const match = originalFilletEdge(stock, fillet, edge, signaturesOf(stock));
   if (!match) return null;

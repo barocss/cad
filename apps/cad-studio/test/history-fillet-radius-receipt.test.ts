@@ -202,6 +202,34 @@ test('curved History candidates outside the plain sector and pending pointer pro
   assert.equal(historyFilletPendingPress({...h,scalarDragSession:x.evidence},side,false),undefined);
 });
 
+test('two original circular rims share the upper History anchor and require two independently matched tori', () => {
+  const upper = 'n1.side1|n1.top';
+  const lower = 'n1.bottom|n1.side1';
+  const expected = [8 * Math.SQRT1_2 + .3, 8 * Math.SQRT1_2 + .3, 10 + .6 * Math.SQRT1_2];
+  for (const order of [[lower, upper], [upper, lower]]) {
+    const x = fixture(quarterSector, order, .6);
+    const [body] = x.accepted.bodies;
+    const metadata = body.nativeFilletTorusPair;
+    assert.ok(metadata);
+    const [a, b] = metadata.tori;
+    const receipt = (pair: typeof metadata | undefined) =>
+      historyFilletReceipt(x.doc, x.doc, 2, [{ ...body, nativeFilletTorusPair: pair }], x.reply, 3, x.current);
+    for (const result of [x.evidence, receipt({ ...metadata, tori: [b, a] })]) {
+      assert.equal(result?.edge, upper);
+      const frame = result?.frame;
+      assert.ok(frame);
+      assert.ok(frame.at.every((value, axis) => Math.abs(value - expected[axis]) < 1e-12));
+      assert.ok(frame.dir.every((value, axis) => Math.abs(value - [.5, .5, Math.SQRT1_2][axis]) < 1e-12));
+    }
+    assert.equal(ownedHistoryFilletHandle(x.evidence, x.cmd, x.ctx, x.handle, null), x.evidence);
+    assert.equal(receipt(undefined), null);
+    assert.equal(receipt({ ...metadata, targets: [upper, upper] }), null);
+    assert.equal(receipt({ ...metadata, tori: [a, { ...b, centre: a.centre }] }), null);
+    assert.equal(receipt({ ...metadata, tori: [a, { ...b, faceId: a.faceId }] }), null);
+    assert.equal(receipt({ ...metadata, tori: [a, { ...b, majorRadius: 8 }] }), null);
+  }
+});
+
 test('opposite original top edges give one stable History frame regardless of the input and native face order',()=>{
  const edges=['n1.side0|n1.top','n1.side2|n1.top'];
  for (const picked of [edges,[...edges].reverse()]) {

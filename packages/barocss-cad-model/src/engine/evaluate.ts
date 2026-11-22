@@ -37,7 +37,7 @@ import { beadNotes, bearingNotes, bevelGearNotes, bevelMeshNotes, camNotes, conn
 import { refusal } from './refusal';
 import { stableNames } from './occurrences';
 import { rememberNativeMass, placeNativeMass } from './nativeMassWire';
-import { nativeFilletTorusOf, type NativeFilletTorus } from './nativeFilletTorus';
+import { nativeFilletTorusOf, nativeFilletTorusPairOf, type NativeFilletTorus, type NativeFilletTorusPair } from './nativeFilletTorus';
 import { nativeFilletPairOf, type NativeFilletPair } from './nativeFilletPair';
 
 /** A kernel output's body key and the node and side it is now. */
@@ -68,6 +68,8 @@ export interface BodyResult {
   filletTargets?: readonly string[];
   /** Verified single-edge toroidal finish in the accepted native body frame. */
   nativeFilletTorus?: NativeFilletTorus;
+  /** Independent resolved curved targets and separate native toroidal faces, before placement. */
+  nativeFilletTorusPair?: NativeFilletTorusPair;
   /** Resolved targets and verified outward cylinders of a two-edge finish on the original body. */
   nativeFilletPair?: NativeFilletPair;
   /** Whole native cap rims certified on the original, unplaced half ring. */
@@ -280,12 +282,16 @@ function bodyOf(o: CadPartSnapshot['outputs'][number], doc: StudioDoc, revision:
   const element = elementOf(o, node);
   const nativeFilletTorus = node?.kind === 'fillet' && !node.radii && !node.section && node.sigs?.[node.edges[0]]?.k === 'curve'
     ? nativeFilletTorusOf(o) : undefined;
+  const nativeFilletTorusPair = node?.kind === 'fillet' && !node.radii && !node.section && node.edges.length === 2 &&
+    node.edges[0] !== node.edges[1] && node.edges.every(edge => node.sigs?.[edge]?.k === 'curve' &&
+      node.sigs[edge].n === undefined && o.filletTargets?.includes(edge))
+    ? nativeFilletTorusPairOf(o) : undefined;
   const nativeFilletPair = node?.kind === 'fillet' && !node.radii && !node.section && node.edges.length === 2 &&
     node.edges.every(edge => node.sigs?.[edge]?.k === 'line') ? nativeFilletPairOf(o) : undefined;
   const halfRingFilletRims = node?.kind === 'intersect' ? halfRingFilletReferenceRims(o.brep) : undefined;
   return { ...at, topology: nativeBodyTopology(o.brep), ...(o.cylindricalWrap ? { cylindricalWrap: o.cylindricalWrap } : {}), ...(o.band ? { band: o.band } : {}), ...(notes.length ? { notes } : {}), ...(roleOf(lib) ? { role: roleOf(lib) } : {}), innerShells: inner, family: o.representation, mesh: meshOf(o.brep, revision, quality), ...mass, ...areaOf(A, o.brep, revision, quality), ...(o.bodyCount > 1 ? { pieces: o.bodyCount, ...touchField(o.brep, meshOf(o.brep, revision, quality)) } : {}),
     ...(o.gearPlacement ? { gear: o.gearPlacement } : {}), ...(o.bevelGear?.idealModel ? { idealModel: o.bevelGear.diagnostics.find(x => x.code === 'IDEAL_MODEL')?.message ?? 'an ideal model' } : {}), ...(o.rackPlacement ? { rack: o.rackPlacement } : {}),
-    ...(o.subd && o.subd.caps ? { subd: o.subd } : {}), ...(sheet ? sheetFields(sheet) : {}), ...(o.member && m ? { cutPiece: cutPiece(o, { volume: m.volume }) } : {}), ...(element ? { element } : {}), ...(nativeFilletTorus ? { nativeFilletTorus } : {}), ...(nativeFilletPair ? { nativeFilletPair } : {}),
+    ...(o.subd && o.subd.caps ? { subd: o.subd } : {}), ...(sheet ? sheetFields(sheet) : {}), ...(o.member && m ? { cutPiece: cutPiece(o, { volume: m.volume }) } : {}), ...(element ? { element } : {}), ...(nativeFilletTorus ? { nativeFilletTorus } : {}), ...(nativeFilletTorusPair ? { nativeFilletTorusPair } : {}), ...(nativeFilletPair ? { nativeFilletPair } : {}),
     ...(halfRingFilletRims ? { halfRingFilletRims } : {}) };
 }
 
@@ -684,6 +690,7 @@ export function placeBody(b: BodyResult, m: readonly number[], t: readonly numbe
   const placedBody = { ...b };
   delete placedBody.sheetBendOwners;
   delete placedBody.nativeFilletTorus;
+  delete placedBody.nativeFilletTorusPair;
   delete placedBody.nativeFilletPair;
   delete placedBody.halfRingFilletRims;
   return { ...placedBody, mesh, ...placedMass(b, m, t), ...(b.massRef !== undefined ? { massPlace: [...(b.massPlace ?? []), { m: [...m], t: [...t] }] } : {}), ...(element ? { element } : {}) };

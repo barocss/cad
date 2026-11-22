@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1715: [Drag one History Fillet radius for two circular rims](notes/paired-circular-history-fillet-2026-11-23/README.md), #214. Keep the upper original rim as the anchor and match end-on drag, numeric entry and fresh Open.
+
 - D1714: [Retain native duct joints after an inlet Subtract](notes/exact-duct-inlet-boolean-2026-11-23/README.md), #10. Recover four native cylinder seam measurements, both open mouths and editable Studio fresh Open.
 
 - D1713: [Sweep a rectangular duct along same-turn tangent arcs](notes/exact-same-turn-rectangular-duct-2026-11-23/README.md), #10. Verify both mouths, eight native joins, aperture editing, positive wall clearance and explicit Studio approval.
