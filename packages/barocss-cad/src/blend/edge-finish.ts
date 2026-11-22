@@ -21,9 +21,9 @@
 // other edges are refused with a typed reason (TANGENT_FACES, RADIUS_EXCEEDS_FACE, RADIUS_EXCEEDS_CURVATURE,
 // NOT_ANALYTIC_PAIR). Every finish must fit on its faces: its contact at most each face's true reach across
 // the edge, the least over the edge's length (D88; it replaced the farthest control point, an upper bound).
-import { BrepError, buildBrep, lineCurve, type Brep } from '../brep/brep-core.js';
+import { BrepError, buildBrep, checkBrep, lineCurve, type Brep } from '../brep/brep-core.js';
 import { booleanAnalytic, faceGeometry, type FaceGeometry } from '../brep/analytic-boolean.js';
-import { planHalfRingFillet, retainHalfRingFilletCharts } from '../brep/exact-ring-intersect.js';
+import { planHalfRingFillet, retainHalfRingFilletCharts, separateHalfRingFilletTools } from '../brep/exact-ring-intersect.js';
 import { brepFromPrismatic, nameEdges, prismaticFromProfile } from '../features/prismatic-solid.js';
 import { revolveProfile } from '../features/revolve.js';
 import { transformBrep } from '../brep/brep-transform.js';
@@ -191,7 +191,7 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
   }
   if (options.singleConvexEdge && chain.size !== 1)
     refuse('SELECTION', 'two interior fillet stations need one edge without tangent continuations.');
-  const halfRing = kind === 'fillet' && !options.radii && !options.shape && chain.size === 2
+  const halfRing = kind === 'fillet' && !options.radii && !options.shape && (chain.size === 2 || chain.size === 4)
     ? planHalfRingFillet(body, [...chain.values()].map(edge => edge.name ?? edge.id)) : undefined;
   // At the tube radius all inward normals meet the centerline. Beyond it the ball crosses the opposite tube wall.
   if (halfRing && !(size < halfRing.radius - halfRing.roundoff))
@@ -538,6 +538,8 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
   // The rolling-ball tools first, each on its own: its contact faces meet the body along their contacts only.
   // (A result in more bodies than the part had: the fillet ran off its faces near an end and cut a piece free — it would
   // have rolled onto the face there, R10.4: refused, D90.)
+  if (halfRing?.rims.length === 2 && !separateHalfRingFilletTools(halfRing, rings))
+    refuseFillet('CONTACT_LEAVES_FACE', 'The two half-ring rim fillets must stay on separate ends of the ring.');
   for (const ring of rings) {
     const was = out.bodies.length, square = squareEnds.get(ring);
     try { out = booleanAnalytic(out, ring.brep, ring.convex ? 'difference' : 'union', { id, contactFaces: ring.contactFaces, contactWith: ring.sides }); }
@@ -548,7 +550,12 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
   apply(cornerTools, 'difference');
   apply(concaveTools, 'union');
   apply(concaveCorners, 'union');
-  if (halfRing && rings.length === 1 && rings[0].convex && !convexTools.length && !cornerTools.length
+  if (halfRing?.rims.length === 2) {
+    const report = checkBrep(out, { strict: true });
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 0)
+      refuseFillet('CONTACT_LEAVES_FACE', 'The two half-ring rim fillets must leave one closed solid.');
+  }
+  if (halfRing && rings.length === halfRing.rims.length && rings.every(ring => ring.convex) && !convexTools.length && !cornerTools.length
     && !concaveTools.length && !concaveCorners.length) return retainHalfRingFilletCharts(out, halfRing);
   return out;
   } finally { if (usedCylinder) used.cylinder = true; }

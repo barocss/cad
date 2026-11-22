@@ -377,7 +377,8 @@ function originalDirection(a: Curve, b: Curve): 'forward' | 'reversed' | undefin
 
 interface HalfRingFilletPlan {
   stock: Brep;
-  opposite: HalfRingCap;
+  rims: readonly HalfRingCap[];
+  opposite?: HalfRingCap;
   radius: number;
   roundoff: number;
 }
@@ -427,14 +428,31 @@ function readHalfRingFilletStock(body: Brep) {
   return { caps: [a, b] as const, radius: r, roundoff };
 }
 
-/** Certify the complete transverse cap rim before the rolling ball chooses its inward offset branch. */
+/** Certify each complete transverse rim before either rolling ball chooses its inward offset branch. */
 export function planHalfRingFillet(body: Brep, names: readonly string[]): HalfRingFilletPlan | undefined {
-  if (names.length !== 2 || new Set(names).size !== 2) return;
+  if ((names.length !== 2 && names.length !== 4) || new Set(names).size !== names.length) return;
   const proof = readHalfRingFilletStock(body);
   if (!proof) return;
-  const [a, b] = proof.caps;
-  const selected = proof.caps.find(cap => cap.edges.every(edge => edge.name !== undefined && names.includes(edge.name)));
-  if (selected) return { stock: body, opposite: selected === a ? b : a, radius: proof.radius, roundoff: proof.roundoff };
+  const rims = proof.caps.filter(cap => cap.edges.every(edge => edge.name !== undefined && names.includes(edge.name)));
+  if (2 * rims.length !== names.length) return;
+  const opposite = proof.caps.find(cap => !rims.includes(cap));
+  return { stock: body, rims, opposite, radius: proof.radius, roundoff: proof.roundoff };
+}
+
+/** The positive-weight hulls of the two fitted tools must stay strictly apart across the two cap centers. */
+export function separateHalfRingFilletTools(plan: HalfRingFilletPlan, tools: readonly { brep: Brep; convex: boolean; report: { edges: readonly string[] } }[]): boolean {
+  if (plan.rims.length !== 2 || tools.length !== 2) return false;
+  const [first, second] = plan.rims;
+  const axis = unit(sub(second.center, first.center)), midpoint = scale(add(first.center, second.center), .5);
+  return plan.rims.every((rim, i) => {
+    const tool = tools.find(candidate => candidate.convex && candidate.report.edges.length === rim.edges.length
+      && rim.edges.every(edge => edge.name !== undefined && candidate.report.edges.includes(edge.name)));
+    if (!tool) return false;
+    const sign = i === 0 ? -1 : 1;
+    return tool.brep.faces.every(face => face.surface.kind === 'surface'
+      && face.surface.weights.every(row => row.every(w => w > 0))
+      && face.surface.controlPoints.every(row => row.every(point => sign * dot(sub(point, midpoint), axis) > plan.roundoff)));
+  });
 }
 
 /** Keep the two certified cap rims separate for saved constant-fillet reference verification. */
@@ -447,19 +465,21 @@ function halfRingInputTopology(brep: Brep) {
     && brep.coedges.length === 20 && brep.coedges.every(use => use.pcurve);
 }
 
-function halfRingFilletTopology(brep: Brep) {
-  return brep.source.family === 'analytic-boolean' && brep.faces.length === 14 && brep.edges.length === 32 && brep.coedges.length === 64;
+function halfRingFilletTopology(brep: Brep, rims = 1) {
+  return brep.source.family === 'analytic-boolean' && brep.faces.length === 6 + 8 * rims
+    && brep.edges.length === 10 + 22 * rims && brep.coedges.length === 2 * brep.edges.length;
 }
 
 function loopOwners(brep: Brep): Map<string, BrepFace> {
   return new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
 }
 
-/** Reapply only exact, unchanged edge parameters after rounding one whole cap of an Exact Sweep half ring. */
+/** Reapply only exact, unchanged edge parameters after rounding the selected rims of an Exact Sweep half ring. */
 export function retainHalfRingFilletCharts(result: Brep, plan: HalfRingFilletPlan): Brep {
-  if (!halfRingFilletTopology(result)) return result;
-  const { stock: body, opposite, roundoff } = plan;
-  if (result.faces.filter(face => sameChart(face, opposite.face)).length !== 1) return result;
+  if (!halfRingFilletTopology(result, plan.rims.length)) return result;
+  const { stock: body, rims, opposite, roundoff } = plan;
+  const requiredCharts = opposite ? [opposite.face] : body.faces.filter(face => !rims.some(rim => rim.face === face));
+  if (requiredCharts.some(chart => result.faces.filter(face => sameChart(face, chart)).length !== 1)) return result;
   const originalFaces = loopOwners(body), faces = loopOwners(result), keep = new Map<string, Curve>(), matched = new Set<string>();
   for (const edge of result.edges) {
     const uses = result.coedges.filter(use => use.edge === edge.id);
@@ -487,7 +507,7 @@ export function retainHalfRingFilletCharts(result: Brep, plan: HalfRingFilletPla
       keep.set(uses[i].id, match.direction === 'forward' ? uv : curveReversed(uv));
     }
   }
-  if (!opposite.edges.every(edge => matched.has(edge.id))) return result;
+  if (!keep.size || opposite?.edges.some(edge => !matched.has(edge.id))) return result;
   const coedges = result.coedges.map(use => {
     const pcurve = keep.get(use.id);
     return pcurve ? withPcurve(use, pcurve) : use;

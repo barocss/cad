@@ -8,6 +8,7 @@ const dot = (a, b) => a.reduce((sum,x,i) => sum+x*b[i],0);
 const norm = a => Math.hypot(...a);
 const cross = (a,b) => [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const R = 20;
+const bothRims = process.argv[3] === 'both-rims';
 function section(t, r, f) {
   const sr = r - f, rho = R + sr * Math.cos(t), y = Math.sqrt(rho ** 2 - f ** 2);
   const center = [f,y,sr*Math.sin(t)];
@@ -55,11 +56,14 @@ const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: 
 const pins = [
   'packages/barocss-cad/src/brep/exact-ring-intersect.ts', 'packages/barocss-cad/src/blend/edge-finish.ts',
   'packages/barocss-cad/src/blend/rolling-ball.ts', 'apps/cad-studio/src/app/filletFamily.ts',
+  'packages/barocss-cad-model/src/engine/references.ts',
 ];
 const f = await createFlow({
-  name: 'exact-half-ring-rim-fillet', output: process.argv[2], envFrozen: 'D1678_SOURCE_FROZEN',
+  name: 'exact-half-ring-rim-fillet', output: process.argv[2],
+  envFrozen: bothRims ? 'D1679_SOURCE_FROZEN' : 'D1678_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Round one complete cap rim of an Exact Sweep half ring and measure the untouched opposite rim.',
+  qualification: bothRims ? 'Round both complete cap rims of an Exact Sweep half ring in one Fillet.'
+    : 'Round one complete cap rim of an Exact Sweep half ring and measure the untouched opposite rim.',
   limits: ['Desktop WebGPU; one centered box Intersect, one external constant-radius Fillet, original R20 mm rail.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -99,9 +103,10 @@ const inherited = brep.faces.filter(face=>faceGeometry(face).kind!=='plane' && !
   const {u,v}=surfaceDomain(face.surface);
   return [0,.29,.63,1].flatMap(s=>[0,.35,.71,1].map(t=>evaluateSurface(face.surface,at(u,s),at(v,t))));
 });
+const bendSeams = brep.edges.filter(edge => /^n1[.]side[01]#1[|]n1[.]side[01]#2$/.test(edge.name ?? '')).map(edgeInfo);
 const properties=massPropertiesOf(output);
 console.log(JSON.stringify({ check:checkBrep(brep,{strict:true}), digest:digestOf(brep), mass:properties,
-  quadrature:brepMassProperties(brep,1).volume, caps, roundSamples, contacts, inherited,
+  quadrature:brepMassProperties(brep,1).volume, caps, roundSamples, contacts, inherited, bendSeams,
   fits:output.fillet??[], targets:output.filletTargets??[] }));
 `,
 });
@@ -137,19 +142,32 @@ async function verify(label, doc, r, fillet, picked, opposing) {
   const cap = geometry.caps.find(item => side(item) === 1);
   const far = geometry.caps.find(item => side(item) === -1);
   assert.ok(cap && far);
-  assert.deepEqual(names(far.edges), opposing);
+  if (!bothRims) assert.deepEqual(names(far.edges), opposing);
   assert.deepEqual(geometry.targets.slice().sort(), picked);
-  assert.equal(geometry.fits.length, 1);
-  const fit = geometry.fits[0];
-  assert.deepEqual(fit.edges.slice().sort(), picked);
-  assert.ok(fit.patches > 1 && fit.stations > fit.patches);
-  for (const bound of [fit.contact, fit.section, fit.ball]) assert.ok(bound >= 0 && bound < 8e-7);
-  assert.ok(fit.normal >= 0 && fit.normal < 1e-3);
+  assert.equal(geometry.fits.length, bothRims ? 2 : 1);
+  assert.deepEqual(geometry.fits.flatMap(fit => fit.edges).sort(), picked);
+  for (const fit of geometry.fits) {
+    assert.ok(fit.patches > 1 && fit.stations > fit.patches);
+    for (const bound of [fit.contact, fit.section, fit.ball]) assert.ok(bound >= 0 && bound < 8e-7);
+    assert.ok(fit.normal >= 0 && fit.normal < 1e-3);
+  }
+  if (bothRims) {
+    assert.equal(geometry.fits.filter(fit => fit.edges.every(name => name.includes(cap.name))).length, 1);
+    assert.equal(geometry.fits.filter(fit => fit.edges.every(name => name.includes(far.name))).length, 1);
+    near(geometry.mass.centroid[1], 0, 2e-7);
+    near(geometry.mass.centroid[2], 0, 2e-7);
+    assert.equal(geometry.bendSeams.length, 2);
+    for (const seam of geometry.bendSeams) {
+      assert.deepEqual(seam.bindings, [true, true]);
+      assert.equal(seam.joint.status, 'measured');
+      near(seam.joint.maximumAngleDegrees, 0, 1e-6);
+    }
+  }
   assert.equal(geometry.mass.method, 'quadrature');
   assert.ok(geometry.check.maximumEdgeSurfaceGap < 1e-6);
 
   let untouchedError = 0, transitionError = 0, supportError = 0, envelopeError = 0;
-  for (const edge of far.edges) {
+  for (const edge of bothRims ? [] : far.edges) {
     assert.equal(edge.degree, 2);
     for (const [x, y, z] of edge.points)
       untouchedError = Math.max(untouchedError, Math.abs(x), Math.abs(Math.hypot(y + R, z) - r));
@@ -158,10 +176,15 @@ async function verify(label, doc, r, fillet, picked, opposing) {
     near(edge.joint.maximumAngleDegrees, 90, 1e-6);
     assert.equal(edge.joint.sampleCount, 8);
   }
+  const contactsByEnd = new Map((bothRims ? [1, -1] : [1]).map(sign => [sign, new Set()]));
   for (const edge of geometry.contacts) {
-    const planar = edge.faces.includes(cap.name);
+    const planar = edge.faces.includes(cap.name) || (bothRims && edge.faces.includes(far.name));
+    const sign = Math.sign(edge.points[0][1]);
+    const contacts = contactsByEnd.get(sign);
+    assert.ok(contacts, `Unexpected Fillet contact on end ${sign}`);
+    contacts.add(planar ? 'cap' : 'wall');
     for (const [x, y, z] of edge.points) {
-      assert.ok(y > 0 && x > -1e-6 && x < 2 * fillet);
+      assert.ok(Math.sign(y) === sign && x > -1e-6 && x < 2 * fillet);
       const rho = Math.hypot(x, y);
       const residual = planar
         ? Math.max(Math.abs(x), Math.abs(Math.hypot(Math.hypot(fillet, y) - R, z) - (r - fillet)))
@@ -169,11 +192,16 @@ async function verify(label, doc, r, fillet, picked, opposing) {
       transitionError = Math.max(transitionError, residual);
     }
   }
-  assert.ok(geometry.contacts.some(edge => edge.faces.includes(cap.name)));
-  assert.ok(geometry.contacts.some(edge => !edge.faces.includes(cap.name)));
+  for (const contacts of contactsByEnd.values()) assert.deepEqual(contacts, new Set(['cap', 'wall']));
   assert.ok(geometry.roundSamples.length && geometry.inherited.length);
-  for (const point of geometry.roundSamples)
-    envelopeError = Math.max(envelopeError, Math.abs(distanceToBallCenters(point, r, fillet) - fillet));
+  for (const sign of contactsByEnd.keys()) {
+    const samples = geometry.roundSamples.filter(point => Math.sign(point[1]) === sign);
+    assert.ok(samples.length);
+    for (const [x, y, z] of samples) {
+      const deviation = Math.abs(distanceToBallCenters([x, Math.abs(y), z], r, fillet) - fillet);
+      envelopeError = Math.max(envelopeError, deviation);
+    }
+  }
   for (const [x, y, z] of geometry.inherited.flat())
     supportError = Math.max(supportError, Math.abs(Math.hypot(Math.hypot(x, y) - R, z) - r));
   near(untouchedError, 0, 1e-7);
@@ -181,32 +209,34 @@ async function verify(label, doc, r, fillet, picked, opposing) {
   near(transitionError, 0, 1e-6);
   near(envelopeError, 0, 2e-6);
 
-  const removal = removedVolume(r, fillet);
+  const removal = (bothRims ? 2 : 1) * removedVolume(r, fillet);
   const expected = Math.PI ** 2 * R * r ** 2 - removal;
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, 1);
   for (const value of [geometry.mass.volume, geometry.quadrature, bodies[0].volume]) near(value, expected, 3e-6);
   f.report.observations.push({ label, r, fillet, removal, expected, volume: geometry.mass.volume, workers: bodies[0].volume,
-    untouchedError, transitionError, supportError, envelopeError, fit, counts: geometry.check.counts,
-    maximumEdgeSurfaceGap: geometry.check.maximumEdgeSurfaceGap, far: far.edges.map(({id,name,bindings,joint}) =>
+    untouchedError, transitionError, supportError, envelopeError,
+    ...(bothRims ? { fits: geometry.fits, centroid: geometry.mass.centroid } : { fit: geometry.fits[0] }), counts: geometry.check.counts,
+    maximumEdgeSurfaceGap: geometry.check.maximumEdgeSurfaceGap,
+    [bothRims ? 'bendSeams' : 'far']: (bothRims ? geometry.bendSeams : far.edges).map(({id,name,bindings,joint}) =>
       ({id,name,bindings,status:joint.status,reason:joint.reason,angle:joint.maximumAngleDegrees})), digest: geometry.digest });
   return geometry;
 }
 
-async function measureOpposite(geometry, label) {
-  f.phase = 'Measure the unchanged opposite circular rim in Studio';
+async function measureRetainedEdges(geometry, label) {
+  f.phase = bothRims ? 'Measure both unchanged bend seams in Studio' : 'Measure the unchanged opposite circular rim in Studio';
   await browser().getByRole('button', { name: /^Sweep along Circular rail/ }).click();
   const panel = f.page.getByRole('region', { name: 'Edge continuity', exact: true });
   await button('Inspect native joints', panel).click();
   const edges = panel.getByRole('combobox', { name: 'Native shared edge', exact: true });
   const result = panel.getByRole('status', { name: 'Edge continuity result', exact: true });
-  const far = geometry.caps.find(cap => side(cap) === -1);
-  for (const [i, edge] of far.edges.entries()) {
+  const retained = bothRims ? geometry.bendSeams : geometry.caps.find(cap => side(cap) === -1).edges;
+  for (const [i, edge] of retained.entries()) {
     await edges.selectOption(edge.id);
     await button('Measure continuity', panel).click();
     const angle = result.locator('[data-continuity-angle]');
     await angle.waitFor();
-    assert.equal(await angle.innerText(), '90°');
+    assert.equal(await angle.innerText(), bothRims ? '0°' : '90°');
     assert.match(await result.innerText(), /Native samples\s+8/);
     f.report.observations.push({ label: label + '-' + i, text: await result.innerText(), edge: edge.name });
     if (i === 0) await f.snapshot(label);
@@ -231,10 +261,11 @@ await f.run(async () => {
   await f.same(seed);
   const stock = await f.inspect('stock', seed);
   assert.ok(stock.check.valid && stock.caps.length === 2);
-  const picked = names(stock.caps.find(cap => side(cap) === 1).edges);
+  const positive = names(stock.caps.find(cap => side(cap) === 1).edges);
   const opposing = names(stock.caps.find(cap => side(cap) === -1).edges);
-  assert.equal(picked.length, 2);
+  assert.equal(positive.length, 2);
   assert.equal(opposing.length, 2);
+  const picked = (bothRims ? [...positive, ...opposing] : positive).sort();
 
   f.phase = 'Pick one half of the positive-Y circular cut rim';
   await button('View cube directions', f.page.getByRole('group', { name: 'View cube', exact: true })).click();
@@ -250,7 +281,16 @@ await f.run(async () => {
   assert.ok(pixel && await f.page.evaluate(p => document.elementFromPoint(...p)?.matches('canvas.vp-canvas'), pixel));
   await f.page.mouse.click(...pixel);
   await f.page.waitForFunction(() => window.__studioSelection?.selection.edges.length === 1);
-  await f.snapshot('01-single-rim-pick');
+  if (bothRims) {
+    f.phase = 'Shift-click one native edge of the opposite cap rim';
+    const opposite = [0, -R - Math.SQRT2, Math.SQRT2];
+    const otherPixel = await f.page.evaluate(p => window.__studioScreenOf(p), opposite);
+    assert.ok(otherPixel && await f.page.evaluate(p => document.elementFromPoint(...p)?.matches('canvas.vp-canvas'), otherPixel));
+    await f.page.keyboard.down('Shift');
+    try { await f.page.mouse.click(...otherPixel); } finally { await f.page.keyboard.up('Shift'); }
+    await f.page.waitForFunction(() => window.__studioSelection?.selection.edges.length === 2);
+  }
+  await f.snapshot(bothRims ? '01-both-rims-picked' : '01-single-rim-pick');
   await f.page.evaluate(() => document.activeElement?.blur());
   f.phase = 'Refuse the excessive default before starting a valid preview';
   const beforeDefault = Date.now();
@@ -263,7 +303,7 @@ await f.run(async () => {
   f.report.observations.push({ label: 'default-radius-refused', elapsedMs: Date.now() - beforeDefault, radius: 3 });
   await f.snapshot('01-default-radius-refused');
 
-  f.phase = 'Preview the complete positive-Y rim at 0.5 mm';
+  f.phase = 'Preview the full Fillet scope at 0.5 mm';
   await radius.fill('0.5');
   await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor({ timeout: 90000 });
   const scope = hud.getByRole('group', { name: 'Fillet scope' });
@@ -272,6 +312,10 @@ await f.run(async () => {
   const authored = await scopedNames('Picked native edges');
   const added = await scopedNames('Tangent edges added');
   assert.deepEqual([...authored, ...added].sort(), picked);
+  if (bothRims) {
+    assert.equal(authored.filter(name => positive.includes(name)).length, 1);
+    assert.equal(authored.filter(name => opposing.includes(name)).length, 1);
+  }
   await f.same(seed);
   await f.snapshot('02-complete-rim-preview');
 
@@ -282,7 +326,7 @@ await f.run(async () => {
   await f.same(seed);
   await f.snapshot('03-oversize-refused');
 
-  f.phase = 'Preview and apply the complete positive-Y rim';
+  f.phase = 'Preview and apply the complete Fillet';
   await radius.fill('0.5');
   await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor({ timeout: 90000 });
   await f.same(seed);
@@ -293,7 +337,8 @@ await f.run(async () => {
   const rounded = (await f.snapshot('04-rim-filleted')).doc;
   const feature = rounded.nodes[5];
   assert.deepEqual([feature.kind, feature.parent, feature.radius, feature.edges.slice().sort()], ['fillet', solid(4), 0.5, authored.slice().sort()]);
-  await measureOpposite(await verify('filleted', rounded, 2, 0.5, picked, opposing), '05-opposite-rim');
+  const first = await verify('filleted', rounded, 2, 0.5, picked, opposing);
+  await measureRetainedEdges(first, bothRims ? '05-retained-bend-seam' : '05-opposite-rim');
 
   await f.openFeatureEditor(5);
   await f.editor().getByLabel('Radius', { exact: true }).fill('0.75');
@@ -319,7 +364,7 @@ await f.run(async () => {
   const reopened = (await f.freshOpen(saved.file, enlarged, '08-reopened')).doc;
   const afterOpen = await verify('reopened', reopened, 3, 0.75, picked, opposing);
   assert.equal(afterOpen.digest, beforeOpen.digest);
-  await measureOpposite(afterOpen, '09-reopened-opposite-rim');
+  await measureRetainedEdges(afterOpen, bothRims ? '09-reopened-bend-seam' : '09-reopened-opposite-rim');
   await f.openFeatureEditor(5);
   assert.equal(await f.editor().getByLabel('Radius', { exact: true }).inputValue(), '0.75');
   await f.snapshot('10-reopened-fillet-edit');

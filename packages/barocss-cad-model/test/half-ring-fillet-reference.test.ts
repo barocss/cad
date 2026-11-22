@@ -63,3 +63,37 @@ test('a signed constant half-ring Fillet keeps the exact authored semicircle at 
   assert.equal(wrongCenter.doc.nodes[5].suppressed, true);
   assert.deepEqual((wrongCenter.doc.nodes[5] as typeof fillet).edges, [selected]);
 });
+
+test('a signed two-rim Fillet keeps the authored half on each cap after a diameter edit and reopen', async () => {
+  const source = evaluatePart(stock, 1, 8, 'refs');
+  assert.ok(source.ok);
+  const rims = source.bodies[0].halfRingFilletRims;
+  assert.ok(rims);
+  const edges = rims.map(rim => [...rim.edges].sort()[1]);
+  const authored = withNode(stock, { kind: 'fillet', parent: solid(4), edges, radius: 0.75 });
+  const signed = captureSignatures(authored, source.bodies);
+  const circle = signed.nodes[0];
+  assert.ok(circle.kind === 'sketch' && circle.profile === 'circle');
+  const saved = JSON.parse(JSON.stringify({ ...signed, nodes: [{ ...circle, radius: 3 }, ...signed.nodes.slice(1)] })) as StudioDoc;
+  const fillet = saved.nodes[5];
+  assert.ok(fillet.kind === 'fillet');
+  const resized = evaluatePart({ ...stock, nodes: saved.nodes.slice(0, 5) }, 2, 8, 'refs');
+  assert.ok(resized.ok);
+  const reopened = evaluatePart(saved, 3, 8, 'refs');
+  assert.ok(reopened.ok);
+  const parentOnly = async (doc: StudioDoc) => {
+    assert.equal(doc.nodes.length, 5);
+    return resized;
+  };
+
+  const accepted = await verifyReferences(saved, reopened.bodies, parentOnly);
+  assert.equal(accepted.doc, saved);
+  assert.deepEqual([accepted.changes, accepted.problems], [[], []]);
+
+  const wrongCap = { ...fillet, sigs: { ...fillet.sigs, [edges[0]]: fillet.sigs![edges[1]] } };
+  const ambiguous = await verifyReferences({ ...saved, nodes: [...saved.nodes.slice(0, 5), wrongCap] },
+    reopened.bodies, parentOnly);
+  assert.equal(ambiguous.problems.length, 1);
+  assert.equal(ambiguous.doc.nodes[5].suppressed, true);
+  assert.deepEqual((ambiguous.doc.nodes[5] as typeof fillet).edges, edges);
+});

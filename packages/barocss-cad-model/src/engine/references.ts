@@ -289,14 +289,19 @@ function fitsVaryingEndpoints(radii: readonly { at: Vec3 }[], edge: DisplayEdge)
   return first !== 0 && first === -second;
 }
 
-/** Both semicircles have the same chord signature. Keep the authored half of this certified complete rim. */
-function keepsAuthoredHalfRingRim(node: ModelNode | undefined, ref: Ref, match: string, body: BodyResult | undefined): boolean {
-  const sig = ref.sig;
+/** Both semicircles have the same chord signature. Keep the authored half of a certified cap rim. */
+function matchHalfRingFilletRim(node: ModelNode, ref: Ref, match: string, body: BodyResult | undefined): string | string[] {
+  const sig = ref.sig, rims = body?.halfRingFilletRims;
   if (!ref.edge || !sig || sig.k !== 'curve' || sig.d || sig.r !== undefined || (sig.n ?? 1) !== 1
-      || ref.rematched || ref.was !== undefined || node?.kind !== 'fillet' || node.edges.length !== 1 || node.radii
-      || node.section || typeof node.radius !== 'number' || !(node.radius > 0)) return false;
-  const rim = body?.halfRingFilletRims?.find(candidate => candidate.edges.includes(ref.name) && candidate.edges.includes(match));
-  return !!rim && r3(rim.center, 1e-6).every((coordinate, axis) => coordinate === sig.p[axis]);
+      || ref.rematched || ref.was !== undefined || node.kind !== 'fillet' || node.radii
+      || node.section || typeof node.radius !== 'number' || !(node.radius > 0) || !rims) return match;
+  const bothRims = node.edges.length > 1 && rims.every(rim => node.edges.some(edge => rim.edges.includes(edge)))
+    && node.edges.every(edge => rims.some(rim => rim.edges.includes(edge)));
+  if (node.edges.length !== 1 && !bothRims) return match;
+  const rim = rims.find(candidate => candidate.edges.includes(ref.name));
+  if (rim?.edges.includes(match) && r3(rim.center, 1e-6).every((coordinate, axis) => coordinate === sig.p[axis])) return ref.name;
+  // A proposal from another cap would make both authored targets refer to that end.
+  return bothRims ? [match] : match;
 }
 
 export interface Verified { where: string; was: string; now: string }
@@ -329,8 +334,8 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
     // The bounded wrap and offset use their original named faces.
     if ((node?.kind === 'cylindrical-wrap' || node?.kind === 'offset-face' || node?.kind === 'replace-face' || node?.kind === 'delete-face') && m !== ref.name) m = [];
     const finish = ref.edge && (node?.kind === 'fillet' || node?.kind === 'chamfer') ? node : undefined;
-    if (finish && ref.node !== null && ref.parent && typeof m === 'string' && m !== ref.name && cands.has(ref.name)
-      && keepsAuthoredHalfRingRim(finish, ref, m, parents.get(parentKey(ref.node, ref.parent)))) m = ref.name;
+    if (finish && ref.node !== null && ref.parent && typeof m === 'string' && m !== ref.name && cands.has(ref.name))
+      m = matchHalfRingFilletRim(finish, ref, m, parents.get(parentKey(ref.node, ref.parent)));
     const splitFinish = finish && (finish.parent.side === 'negative' || finish.parent.side === 'positive') &&
       ref.name.split('|').some(face => face.startsWith(featureId(out.nodes, finish.parent.node) + '.cut.') && isSplitCapFace(out.nodes, face));
     const varying = finish?.kind === 'fillet' && finish.edges.length === 1 && !finish.section &&

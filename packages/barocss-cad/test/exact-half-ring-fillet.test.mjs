@@ -4,12 +4,14 @@ import {
   CadPartError, brepMassProperties, checkBrep, curveDomain, evaluateCadPart, evaluateCurve, faceGeometry, loadCadPart,
   massPropertiesOf, measureBrepEdgeContinuity, reevaluate, saveCadPart,
 } from '../dist/index.js';
-import { planHalfRingFillet, retainHalfRingFilletCharts } from '../dist/brep/exact-ring-intersect.js';
+import { planHalfRingFillet, retainHalfRingFilletCharts, separateHalfRingFilletTools } from '../dist/brep/exact-ring-intersect.js';
+import { setRingTrace } from '../dist/blend/rolling-ball.js';
 import { curveReversed } from '../dist/nurbs/curves/curve-segment.js';
 
 const R = 20, r = 2, w = Math.cos(Math.PI / 4);
 const half = Math.PI ** 2 * R * r ** 2;
 const target = ['box.side3#2|ring.side0#2', 'box.side3#2|ring.side1#2'];
+const other = ['box.side3#1|ring.side0#1', 'box.side3#1|ring.side1#1'];
 const doc = features => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features });
 const add = (a, b) => a.map((x, i) => x + b[i]);
 const scale = (a, s) => a.map(x => x * s);
@@ -170,4 +172,111 @@ test('exact chart transfer honors a reversed canonical edge and skips an altered
   const report = measureBrepEdgeContinuity(result, opposite.id);
   assert.equal(report.status, 'measured', JSON.stringify(report));
   near(report.maximumAngleDegrees, 90, 1e-8);
+});
+
+function inspectPairedFillets(output, stock, radius) {
+  const { brep } = output, check = checkBrep(brep, { strict: true });
+  assert.ok(check.valid, check.issues.join('\n'));
+  assert.deepEqual(check.counts, { bodies: 1, shells: 1, faces: 22, loops: 22, coedges: 108, edges: 54, vertices: 34 });
+  assert.equal(check.topology[0].genus, 0);
+  assert.ok(check.maximumPcurveGap < 1e-10);
+  assert.ok(check.maximumEdgeSurfaceGap < 6e-7);
+  assert.deepEqual([...output.filletTargets].sort(), [...other, ...target].sort());
+  assert.deepEqual(output.fillet.map(fit => [...fit.edges].sort().join(',')).sort(),
+    [other.join(','), target.join(',')].sort());
+  for (const fit of output.fillet) {
+    assert.ok(fit.patches === 8 && fit.stations > fit.patches);
+    assert.ok(fit.contact < 2e-7 && fit.section < 2e-7 && fit.ball < 1e-8 && fit.normal < 3e-5);
+  }
+  const expected = half - 2 * materialRemoved(radius), mass = massPropertiesOf(output);
+  assert.equal(mass.method, 'quadrature');
+  near(mass.volume, expected, 2e-6);
+  near(brepMassProperties(brep, 1).volume, expected, 2e-6);
+  near(mass.centroid[1], 0, 1e-8);
+  near(mass.centroid[2], 0, 1e-8);
+
+  const capNames = new Set(brep.faces.filter(face => faceGeometry(face).kind === 'plane').map(face => face.name));
+  assert.deepEqual([...capNames].sort(), ['box.side3#1', 'box.side3#2']);
+  for (const original of stock.faces.filter(face => faceGeometry(face).kind !== 'plane')) {
+    const inherited = brep.faces.find(face => face.name === original.name);
+    assert.ok(inherited);
+    assert.equal(inherited.sense, original.sense);
+    assert.deepEqual(chart(inherited.surface), chart(original.surface));
+  }
+  const originalSeams = stock.edges.filter(edge => edge.curve.controlPoints.every(point => Math.abs(point[1]) <= 1e-10));
+  assert.equal(originalSeams.length, 2);
+  assert.equal(brep.coedges.filter(use => use.pcurve).length, 4);
+  for (const original of originalSeams) {
+    const inherited = brep.edges.find(edge => edge.name === original.name);
+    assert.ok(inherited);
+    assert.deepEqual(coefficients(inherited.curve), coefficients(original.curve));
+    const measured = measureBrepEdgeContinuity(brep, inherited.id);
+    assert.equal(measured.status, 'measured', JSON.stringify(measured));
+    near(measured.maximumAngleDegrees, 0, 1e-8);
+  }
+
+  const facesByLoop = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face])));
+  const contacts = new Map([[-1, { cap: 0, torus: 0 }], [1, { cap: 0, torus: 0 }]]);
+  for (const edge of brep.edges) {
+    const uses = brep.coedges.filter(use => use.edge === edge.id), incident = uses.map(use => facesByLoop.get(use.loop));
+    if (!incident.some(face => face.name.startsWith('f.face'))) continue;
+    const cap = incident.find(face => capNames.has(face.name));
+    if (!cap && !incident.some(face => face.name.startsWith('ring.side'))) continue;
+    assert.ok(uses.every(use => !use.pcurve));
+    const [lo, hi] = curveDomain(edge.curve);
+    const side = Math.sign(evaluateCurve(edge.curve, (lo + hi) / 2)[1]);
+    if (cap) {
+      assert.equal(cap.name, side > 0 ? 'box.side3#2' : 'box.side3#1');
+      contacts.get(side).cap++;
+    } else contacts.get(side).torus++;
+    for (let i = 0; i <= 16; i++) {
+      const [x, y, z] = evaluateCurve(edge.curve, lo + (hi - lo) * i / 16);
+      assert.ok(side * y > 0 && x >= -1e-7 && x < 2 * radius);
+      if (cap) {
+        near(x, 0, 2e-7);
+        near(Math.hypot(Math.hypot(y, radius) - R, z), r - radius, 2e-7);
+      } else {
+        const rho = Math.hypot(x, y);
+        near(Math.hypot(rho - R, z), r, 2e-7);
+        near(x * (1 - radius * (rho - R) / (r * rho)), radius, 2e-7);
+      }
+    }
+  }
+  for (const end of contacts.values()) assert.ok(end.cap >= 2 && end.torus >= 2);
+}
+
+test('one constant fillet rounds both distinct half-ring rims and preserves the exact bend seams', () => {
+  const stock = evaluateCadPart(doc(stockFeatures)).outputs[0].brep;
+  const picks = [target[0], other[0]];
+  const first = evaluateCadPart(fillet(.5, picks));
+  inspectPairedFillets(first.outputs[0], stock, .5);
+  const next = reevaluate(first, { document: fillet(.75, picks) });
+  inspectPairedFillets(next.outputs[0], stock, .75);
+  const reopened = loadCadPart(saveCadPart(next));
+  assert.deepEqual(reopened.document, next.document);
+  assert.deepEqual(reopened.outputs[0].brep, next.outputs[0].brep);
+});
+
+test('singular or oversize radii on two rims are refused before either rolling fit starts', () => {
+  const stock = evaluateCadPart(doc(stockFeatures)).outputs[0].brep;
+  const picks = [target[0], other[0]], explicit = [...target, ...other];
+  assert.equal(planHalfRingFillet(stock, picks), undefined);
+  assert.equal(planHalfRingFillet(stock, [...target, other[0], target[0]]), undefined);
+  const plan = planHalfRingFillet(stock, explicit);
+  assert.equal(plan?.rims.length, 2);
+  // A matching report cannot authorize a tool whose hull crosses to the other end.
+  const crossed = [target, other].map(edges => ({ brep: stock, convex: true, report: { edges } }));
+  assert.equal(separateHalfRingFilletTools(plan, crossed), false);
+  let fits = 0;
+  setRingTrace(() => { fits++; });
+  try {
+    for (const radius of [2, 3]) for (const selected of [picks, explicit]) {
+      assert.throws(() => evaluateCadPart(fillet(radius, selected)), error => error instanceof CadPartError
+        && error.feature === 'f' && error.code === 'CONTACT_LEAVES_FACE'
+        && /complete half-ring rim fillet needs a radius smaller than the 2 mm tube radius/.test(error.message));
+    }
+    assert.equal(fits, 0);
+  } finally {
+    setRingTrace(null);
+  }
 });
