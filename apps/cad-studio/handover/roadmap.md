@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1690 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1691 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1690](notes/studio-proposal-drawing-callouts-2026-11-22/README.md), Studio and Agent review rows 09, 11, 16 and 20. The existing Studio proposal card shows the changed sheet callouts before approval. The candidate label matches the approved SVG after fresh Open. The B06 PDF group remains held.
-- **Next MAIN:** D1691, P1 sketch authoring [rows 09](roadmap-rows/09.md), [16](roadmap-rows/16.md) and [20](roadmap-rows/20.md). Add an equal-distance 2D Chamfer for one corner between two straight sketch segments. Preserve surviving side IDs, verify the authored distances and native Extrude result, and check Undo, Redo, Save and fresh Open in Studio.
+- **Current position:** [D1691](notes/equal-distance-sketch-chamfer-2026-11-22/README.md), P1 sketch authoring rows 09, 16 and 20. Desktop Studio creates the 6 mm equal-distance sketch bevel, keeps its original wall IDs and reopens the exact native Extrude. The B06 PDF group remains held.
+- **Next MAIN:** D1692, P1 sketch authoring and Agent tools [rows 04](roadmap-rows/04.md), [09](roadmap-rows/09.md) and [16](roadmap-rows/16.md). Expose the same equal-distance sketch chamfer through the existing Agent feature-edit workflow. Pin the sketch, incident side IDs and model revision. Verify local proposal, refusal, explicit Studio approval and editable fresh Open without creating a second geometry implementation.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

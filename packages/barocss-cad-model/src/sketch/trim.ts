@@ -74,6 +74,19 @@ function crossings(s: Piece, o: Piece): number[] {
   return pts.filter(onBoth).map(p => paramOf(s, p));
 }
 
+/** A newly inserted straight side may meet only its two neighbors, at their shared ends. */
+export function sideMeetsOtherOutline(shape: Extract<SketchShape, { kind: 'polygon' }>, index: number): boolean {
+  const pieces = piecesOf(shape), n = pieces.length, line = pieces[index];
+  if (line?.kind !== 'line') return true;
+  const before = (index - 1 + n) % n, after = (index + 1) % n;
+  const meets = (other: Piece) => crossings(line, other).length > 0
+    // The crossing calculation leaves parallel lines alone.
+    || (other.kind === 'line' && [line.a, line.b].some(p => distance(other, p) <= 1e-6))
+    || (other.kind === 'line' && [other.a, other.b].some(p => distance(line, p) <= 1e-6));
+  return pieces.some((other, i) => i !== index && i !== before && i !== after && meets(other))
+    || (shape.circles ?? []).some(c => meets({ kind: 'arc', c: c.c, r: c.r, t0: 0, sw: TAU }));
+}
+
 /** The outline of piece `s` from t0 to t1 as its start point and bulge. */
 const partBulge = (s: Piece, t0: number, t1: number) => s.kind === 'line' ? 0 : Math.round(Math.tan(s.sw * (t1 - t0) / 4) * 1e9) / 1e9;
 const pt = (s: Piece, t: number): P2 => { const q = at(s, t); return [r6(q[0]), r6(q[1])]; };

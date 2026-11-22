@@ -4,7 +4,7 @@ import { checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
 import { emptyDoc, withNode, type DocPlane } from '../src/engine/doc';
 import { partBreps } from '../src/engine/evaluate';
 import { partSnapshot } from '../src/engine/part';
-import { roundCorner } from '../src/sketch/corner';
+import { chamferCorner, roundCorner } from '../src/sketch/corner';
 import { planPinnedLineArcRadiusEdit } from '../src/sketch/internal/pinnedLineArcRound';
 import { profileOf } from '../src/sketch/loops';
 import { arcOf, type P2 } from '../src/sketch/profile';
@@ -22,6 +22,95 @@ test('rounding a corner: an arc tangent to both edges, ends cut back, constraint
   assert.deepEqual([r.shape.lengths, r.shape.radii, r.shape.tangents, r.shape.hv], [{ 3: 20 }, { 1: 3 }, [1, 2], { h: [0, 3], v: [2, 4] }]);
   assert.ok('error' in roundCorner(sq, 1, 11), 'R11 does not fit the 10 mm edge');
   assert.ok('error' in roundCorner(r.shape, 2, 1), 'next to the arc');
+});
+
+const rectangle: Polygon = {
+  kind: 'polygon', closed: true, points: [[0, 0], [40, 0], [40, 30], [0, 30]],
+  ids: ['e1', 'e2', 'e3', 'e4'], hv: { h: [0, 2], v: [1, 3] },
+  lengths: { 2: 40 }, rules: [{ kind: 'fix', point: 0, at: [0, 0] }],
+};
+
+test('chamfer splits a corner and preserves the survivors, constraints and native wall owners', () => {
+  const before = structuredClone(rectangle);
+  const r = chamferCorner(rectangle, 1, 6);
+  assert.ok('shape' in r, 'error' in r ? r.error : '');
+  assert.deepEqual(rectangle, before);
+  assert.deepEqual(r.shape.points, [[0, 0], [34, 0], [40, 6], [40, 30], [0, 30]]);
+  assert.deepEqual(r.shape.ids, ['e1', '', 'e2', 'e3', 'e4']);
+  assert.deepEqual(r.shape.hv, { h: [0, 3], v: [2, 4] });
+  assert.deepEqual(r.shape.lengths, { 3: 40 });
+  assert.deepEqual(r.shape.rules, rectangle.rules);
+  assert.ok(r.shape.bulges?.every(b => b === 0));
+  const profile = profileOf([r.shape]);
+  assert.ok('node' in profile);
+  assert.deepEqual(profile.node.sideTags?.outer, ['e1', 'e5', 'e2', 'e3', 'e4']);
+  const [body] = partSnapshot(withNode(withNode(emptyDoc(), profile.node), { kind: 'extrude', sketch: 0, height: 10 })).outputs;
+  assert.ok(body && checkBrep(body.brep, { strict: true }).valid);
+  assert.ok(Math.abs(massPropertiesOf(body).volume - 11820) < 1e-8);
+  for (const id of ['e1', 'e2', 'e3', 'e4', 'e5'])
+    assert.equal(body.brep.faces.filter(face => face.name === `n1.side[${id}]`).length, 1);
+});
+
+test('chamfer measures oblique setbacks after settling and handles the wraparound side IDs', () => {
+  const source: Polygon = { kind: 'polygon', closed: true, points: [[0, 0], [20, 0], [0, 20]],
+    ids: ['e1', 'e2', 'e3'], hv: { h: [0], v: [2] } };
+  const r = chamferCorner(source, 1, 5);
+  assert.ok('shape' in r, 'error' in r ? r.error : '');
+  const [a, b] = r.shape.points.slice(1, 3);
+  for (const point of [a, b]) assert.ok(Math.abs(Math.hypot(point[0] - 20, point[1]) - 5) < 2e-6);
+  assert.deepEqual(a, [15, 0]);
+  assert.ok(Math.hypot(b[0] - (20 - 5 / Math.sqrt(2)), b[1] - 5 / Math.sqrt(2)) < 1e-6);
+  const reversed: Polygon = { kind: 'polygon', closed: true, points: [[0, 0], [0, 30], [40, 30], [40, 0]],
+    ids: ['e4', 'e3', 'e2', 'e1'], hv: { h: [1, 3], v: [0, 2] } };
+  const wrap = chamferCorner(reversed, 0, 6);
+  assert.ok('shape' in wrap, 'error' in wrap ? wrap.error : '');
+  assert.deepEqual(wrap.shape.points, [[6, 0], [0, 6], [0, 30], [40, 30], [40, 0]]);
+  assert.deepEqual(wrap.shape.ids, ['', 'e4', 'e3', 'e2', 'e1']);
+});
+
+test('chamfer keeps a remote circular arc and can add the local triangle at a reflex corner', () => {
+  const arc: Polygon = { ...rectangle, bulges: [0, 0, Math.SQRT2 - 1, 0], lengths: {}, hv: { h: [0], v: [1, 3] } };
+  const mixed = chamferCorner(arc, 1, 6);
+  assert.ok('shape' in mixed, 'error' in mixed ? mixed.error : '');
+  assert.ok(Math.abs(mixed.shape.bulges![3] - arc.bulges![2]) < 1e-9);
+  const concave: Polygon = { kind: 'polygon', closed: true,
+    points: [[0, 0], [40, 0], [40, 15], [20, 15], [20, 30], [0, 30]],
+    ids: ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'], hv: { h: [0, 2, 4], v: [1, 3, 5] } };
+  const r = chamferCorner(concave, 3, 3);
+  assert.ok('shape' in r, 'error' in r ? r.error : '');
+  assert.deepEqual(r.shape.points.slice(3, 5), [[23, 15], [20, 18]]);
+  const profile = profileOf([r.shape]);
+  assert.ok('node' in profile);
+  const [body] = partSnapshot(withNode(withNode(emptyDoc(), profile.node), { kind: 'extrude', sketch: 0, height: 10 })).outputs;
+  assert.ok(body && checkBrep(body.brep, { strict: true }).valid);
+  assert.ok(Math.abs(massPropertiesOf(body).volume - 9045) < 1e-8);
+});
+
+test('chamfer refuses non-finite and full-side distances, lost constraints, arcs and boundary contact atomically', () => {
+  const crossed: Polygon = { kind: 'polygon', closed: true,
+    points: [[0, 0], [10, 0], [10, 10], [8, 10], [8, 2], [2, 2], [2, 10], [0, 10]] };
+  const cases: [Polygon, number, number, RegExp][] = [
+    [rectangle, 1, Infinity, /positive/],
+    [rectangle, 1, 0, /positive/],
+    [rectangle, 1, 30, /shorter/],
+    [{ ...rectangle, lengths: { 0: 40 } }, 1, 6, /constraints/],
+    [{ ...rectangle, rules: [{ kind: 'fix', point: 1, at: [40, 0] }] }, 1, 6, /constraints/],
+    [{ ...rectangle, bulges: [0, 0.2, 0, 0] }, 1, 6, /straight/],
+    [{ ...rectangle, points: [[0, 0], [20, 0], [40, 0], [0, 30]] }, 1, 6, /usable corner/],
+    [{ ...rectangle, circles: [{ c: [39, 1], r: 0.1 }] }, 1, 6, /circle/],
+    [crossed, 1, 8, /touch/],
+    [{ kind: 'polygon', closed: true, points: [[-100, 0], [0, 0], [100, 0.00011], [100, 10], [-100, 10]],
+      hv: { h: [0, 3], v: [2, 4] } }, 1, 0.1, /distinct corners/],
+    [{ kind: 'polygon', closed: true, points: [[-100, -20], [0, 0], [100, 20.00011], [100, 100], [-100, 100]],
+      hv: { h: [3], v: [2, 4] } }, 1, 0.1, /distinct corners/],
+  ];
+  for (const [shape, corner, distance, reason] of cases) {
+    const before = structuredClone(shape);
+    const result = chamferCorner(shape, corner, distance);
+    assert.ok('error' in result);
+    assert.match(result.error, reason);
+    assert.deepEqual(shape, before);
+  }
 });
 
 const pinned = (): Polygon => ({

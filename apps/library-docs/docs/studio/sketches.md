@@ -91,6 +91,15 @@ What holds for a Bézier curve:
 A closed shape inside a hole is not supported in the same sketch. **Finish sketch** refuses it;
 draw that shape in a separate sketch.
 
+## Chamfer a sketch corner
+
+With **Select**, pick the point where two straight sides meet on one independent closed outline. Enter a
+**Chamfer distance** in millimeters and choose **Chamfer** or press <kbd>Enter</kbd>. The two sides shorten by
+that distance and a straight edge joins their new ends. The original sides keep their IDs.
+
+If the distance cannot fit or the edit would remove a constraint or a parameter binding, Studio keeps the
+current outline and shows the reason. After **Finish sketch**, the chamfer reopens as part of the editable outline.
+
 ## Reusing a face and offsetting a shape
 
 When the sketch is on a selected face with zero plane offset and angle, the **FACE** section offers two copy actions:

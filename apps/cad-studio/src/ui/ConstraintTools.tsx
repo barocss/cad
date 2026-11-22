@@ -2,8 +2,10 @@
 // apply to it, and every constraint with a remove button. Refusals are shown with their reason.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
-import { roundCorner } from '@barocss/cad-model/sketch/corner';
+import { chamferCorner, roundCorner } from '@barocss/cad-model/sketch/corner';
 import { nextIdOf, withIds } from '@barocss/cad-model/sketch/entityIds';
+import { profileOf } from '@barocss/cad-model/sketch/loops';
+import { rebindDims } from '@barocss/cad-model/sketch/reopen';
 import {
   applyConstraint, circleDimensionKeys, circlePairKeys, constraintOptions, dimensionKey, isSettled, pointDimensionKeys,
   type ConstraintKind, type Polygon, type SketchPick,
@@ -25,12 +27,24 @@ const TOOLS: { kind: ConstraintKind; sym: string; label: string; short: string }
 
 const pickName = (s: Polygon, p: SketchPick) => p.kind === 'point' ? `point ${p.i + 1}` : p.kind === 'circle' ? `circle ${p.i + 1}` : `${s.bulges?.[p.i] ? 'arc' : 'edge'} ${p.i + 1}`;
 
+function tagCornerSegment(owner: SketchState, shape: Polygon, corner: number, operation: string): Polygon | string {
+  const id = nextIdOf([shape, ...(owner.done ?? [])]);
+  const noIds = `This sketch has no available side IDs for the ${operation} and its other shapes.`;
+  if (!Number.isSafeInteger(id)) return noIds;
+  const tagged = shape.ids ? { ...shape, ids: shape.ids.map((side, i) => i === corner ? `e${id}` : side) } : shape;
+  const { joined, protectedShapes } = sketchFinishInputs({ ...owner, shape: tagged });
+  const unsafeId = (id: string) => /^e\d+$/.test(id) && !Number.isSafeInteger(Number(id.slice(1)));
+  return withIds(joined, undefined, protectedShapes).some(item =>
+    item.ids?.some(unsafeId) || (item.kind === 'polygon' && item.circleIds?.some(unsafeId))) ? noIds : tagged;
+}
+
 export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, inspection, picked, onShape, onPicked, onEditDim }: {
   shape: Polygon; owner: SketchState; conflictIds?: readonly string[]; documentScope: StudioDoc; inspection: ConstraintInspectionStore; picked: readonly SketchPick[];
   onShape(shape: Polygon): void; onPicked(picks: SketchPick[]): void; onEditDim(key: string | null): void;
 }) {
   const [refused, setRefused] = useState<string | null>(null);
   const [roundR, setRoundR] = useState(2);
+  const [chamferDistance, setChamferDistance] = useState('2');
   const current = useStoreValue(inspection);
   const active = current?.owner === owner ? current : null;
   const inspectedId = active?.target === 'row' ? active.entry.id : null;
@@ -53,21 +67,29 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
     }
     const result = roundCorner(s, corner, roundR);
     if ('error' in result) { setRefused(result.error); return; }
-    const shape = result.shape;
-    if (meetsArc && shape.ids) {
-      const id = nextIdOf([shape, ...(owner.done ?? [])]);
-      const noIds = 'This sketch has no available side IDs for the round and its other shapes.';
-      if (!Number.isSafeInteger(id)) { setRefused(noIds); return; }
-      const tagged = { ...shape, ids: shape.ids.map((side, i) => i === corner ? `e${id}` : side) };
-      const { joined, protectedShapes } = sketchFinishInputs({ ...owner, shape: tagged });
-      const unsafeId = (id: string) => /^e\d+$/.test(id) && !Number.isSafeInteger(Number(id.slice(1)));
-      if (withIds(joined, undefined, protectedShapes).some(item =>
-        item.ids?.some(unsafeId) || (item.kind === 'polygon' && item.circleIds?.some(unsafeId)))) {
-        setRefused(noIds);
-        return;
-      }
-      onShape(tagged);
-    } else onShape(shape);
+    const shape = meetsArc && result.shape.ids ? tagCornerSegment(owner, result.shape, corner, 'round') : result.shape;
+    if (typeof shape === 'string') { setRefused(shape); return; }
+    onShape(shape);
+    onPicked([]);
+  };
+  const chamfer = (corner: number) => {
+    const stored = owner.editNode === undefined ? undefined : documentScope.nodes[owner.editNode];
+    if (owner.association || owner.base || owner.band || (stored?.kind === 'sketch' && (stored.on || stored.profile === 'band')) ||
+      owner.done?.some(shape => !shape.construction && shape.kind !== 'bezier') || s.construction) {
+      setRefused('Chamfer one independent material outline.');
+      return;
+    }
+    const result = chamferCorner(s, corner, Number(chamferDistance));
+    if ('error' in result) { setRefused(result.error); return; }
+    const shape = tagCornerSegment(owner, result.shape, corner, 'chamfer');
+    if (typeof shape === 'string') { setRefused(shape); return; }
+    const profile = profileOf(sketchFinishInputs({ ...owner, shape }).joined);
+    if ('error' in profile) { setRefused(profile.error); return; }
+    if (stored?.kind === 'sketch' && rebindDims(stored, profile.node, documentScope.parameters).dropped.length) {
+      setRefused('Chamfer would remove a sketch parameter binding.');
+      return;
+    }
+    onShape(shape);
     onPicked([]);
   };
   const compare = (kind: ConstraintKind, input: ConstraintInspection['input']) => {
@@ -132,6 +154,13 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
       <span className="muted">Round corner</span>
       <span className="num"><input aria-label="Corner radius" type="number" step="any" min={0.1} value={roundR} onChange={e => setRoundR(Number(e.target.value))} /><em>mm</em></span>
       <button type="button" data-sketch-action className="ghost" aria-label="Round the corner" onClick={() => round(point.i)}>Round</button>
+    </div>}
+    {picked.length === 1 && point && <div className="sk-offset" role="group" aria-label="Chamfer the corner">
+      <span className="muted">Chamfer corner</span>
+      <span className="num"><input aria-label="Chamfer distance" type="number" step="any" min={0}
+        value={chamferDistance} onChange={e => setChamferDistance(e.target.value)} data-sketch-action
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); chamfer(point.i); } }} /><em>mm</em></span>
+      <button type="button" data-sketch-action className="ghost" aria-label="Chamfer the corner" onClick={() => chamfer(point.i)}>Chamfer</button>
     </div>}
     {refused && <div className="sk-status open" role="alert"><i />{refused}</div>}
     <ConstraintList shape={s} owner={owner} conflictIds={conflictIds} documentScope={documentScope} inspection={inspection}

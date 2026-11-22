@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1691: [Add an equal-distance chamfer to a sketch corner](notes/equal-distance-sketch-chamfer-2026-11-22/README.md), #21. Verify the setback, surviving side IDs and exact native extrusion through Studio history and fresh Open.
 - D1690: [Show changed drawing callouts in Studio proposal preview](notes/studio-proposal-drawing-callouts-2026-11-22/README.md), #322. Compare printed marks on the two exact snapshots and retire the complete preview on engine Retry.
 - D1689: [Compare printable drawing callouts before proposal approval](notes/drawing-proposal-callout-review-2026-11-22/README.md), #322 and #324. Bind the working and candidate sheets to their revisions and match the approved SVG after fresh Open.
 - D1688: [Read the selected drawing's printable callouts from the Agent](notes/drawing-printable-callouts-2026-11-22/README.md), #322. Match the selected sheet's literal diameter and radius marks and title-block source to actual SVG.
