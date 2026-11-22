@@ -2,7 +2,7 @@ import type { JsonSchema } from './contract';
 import type { Resolved } from '../drawing/dimensions';
 import { issueContext, type SheetInputs } from '../drawing/issues';
 import { drawingScopeOf } from '../drawing/scope';
-import { dimensionLine } from '../drawing/sheet';
+import { dimensionLine, type Sheet } from '../drawing/sheet';
 import { forSheet, sheetCount, sheetName } from '../drawing/sheets';
 import { presetFor } from '../drawing/standard';
 import { calculateToleranceStack, type ToleranceStackTerm } from '../drawing/toleranceStack';
@@ -15,11 +15,12 @@ export const DRAWING_TOLERANCE_STACK = 'calculate_drawing_tolerance_stack';
 export const STACK_READ_TOOLS: { name: string; description: string; input_schema: JsonSchema }[] = [
   {
     name: DRAWING_DIMENSIONS,
-    description: 'Lists linear dimensions by default on one sheet of the tool session’s drawing snapshot, with their IDs, views, model lengths in mm, authored tolerances and any unresolved references. Printed annotations are separate. With include_diameters or include_radii true, also lists the respective geometric diameters or radii in model mm, without annotations or manufacturing meaning. Tolerance stacks remain linear-only. Use this revision and linear IDs to calculate a tolerance stack. Read only.',
+    description: 'Lists linear dimensions by default on one sheet of the tool session’s drawing snapshot, with their IDs, views, model lengths in mm, authored tolerances and any unresolved references. Printed annotations are separate. With include_diameters or include_radii true, also lists the respective geometric diameters or radii in model mm, without annotations or manufacturing meaning. With include_callouts true, returns the visible diameter/radius annotation text marks separately, with the current drawing source. Tolerance stacks remain linear-only. Use this revision and linear IDs to calculate a tolerance stack. Read only.',
     input_schema: { type: 'object', properties: {
       sheet: sheetArg,
       include_diameters: { type: 'boolean', description: 'Include geometric diameters, without annotations or manufacturing meaning. Defaults to false; tolerance stacks remain linear-only.' },
       include_radii: { type: 'boolean', description: 'Include geometric radii, without annotations or manufacturing meaning. Defaults to false; independent of include_diameters; tolerance stacks remain linear-only.' },
+      include_callouts: { type: 'boolean', description: 'Include the visible diameter and radius annotation text marks and the drawing source. Defaults to false.' },
     }, additionalProperties: false },
   },
   {
@@ -44,26 +45,35 @@ function readTerm(value: unknown): ToleranceStackTerm | null {
   return { id, sign };
 }
 
+/** Only resolved dimension marks actually printed on this sheet can supply callout text. */
+function printableCallouts(sheet: Sheet) {
+  const kinds = new Map<string, 'diameter' | 'radius'>();
+  for (const r of sheet.dimensions) {
+    if (r.ok && (r.kind === 'diameter' || r.kind === 'radius'))
+      kinds.set(JSON.stringify([r.dim.id, r.dim.view]), r.kind);
+  }
+  return sheet.groups.flatMap(group => {
+    if (group.role !== 'dimension' || !group.id || !group.view) return [];
+    const kind = kinds.get(JSON.stringify([group.id, group.view]));
+    if (!kind) return [];
+    const lines = group.marks.flatMap(mark => mark.kind === 'text' ? [mark.text] : []);
+    return lines.length ? [{ id: group.id, view: group.view, kind, lines }] : [];
+  });
+}
+
 export function readDrawingStack(
   doc: StudioDoc, name: string, args: Record<string, unknown>,
   settings: SheetInputs['settings'], project: () => SheetInputs | string,
 ): { content: Record<string, unknown>; summary: string } | { error: string } {
-  const hasIncludeDiameters = Object.prototype.hasOwnProperty.call(args, 'include_diameters');
-  if (hasIncludeDiameters && name === DRAWING_TOLERANCE_STACK) {
-    return { error: 'include_diameters is only supported by drawing.dimensions. Tolerance stacks are linear-only.' };
+  for (const option of ['include_diameters', 'include_radii', 'include_callouts']) {
+    if (!Object.hasOwn(args, option)) continue;
+    if (name === DRAWING_TOLERANCE_STACK)
+      return { error: `${option} is only supported by drawing.dimensions. Tolerance stacks are linear-only.` };
+    if (typeof args[option] !== 'boolean') return { error: `${option} must be a boolean.` };
   }
-  if (hasIncludeDiameters && typeof args.include_diameters !== 'boolean') {
-    return { error: 'include_diameters must be a boolean.' };
-  }
-  const hasIncludeRadii = Object.prototype.hasOwnProperty.call(args, 'include_radii');
-  if (hasIncludeRadii && name === DRAWING_TOLERANCE_STACK) {
-    return { error: 'include_radii is only supported by drawing.dimensions. Tolerance stacks are linear-only.' };
-  }
-  if (hasIncludeRadii && typeof args.include_radii !== 'boolean') {
-    return { error: 'include_radii must be a boolean.' };
-  }
-  const includeDiameters = hasIncludeDiameters && args.include_diameters === true;
-  const includeRadii = hasIncludeRadii && args.include_radii === true;
+  const optedIn = (key: string) => Object.hasOwn(args, key) && args[key] === true;
+  const includeDiameters = optedIn('include_diameters');
+  const includeRadii = optedIn('include_radii');
   const sheet = args.sheet === undefined ? 1 : args.sheet;
   const count = sheetCount(settings);
   if (typeof sheet !== 'number' || !Number.isInteger(sheet) || sheet < 1 || sheet > count) {
@@ -88,7 +98,8 @@ export function readDrawingStack(
   if (typeof inputs === 'string') return { error: inputs };
   const scope = drawingScopeOf(settings);
   const local = { ...forSheet(settings, sheet - 1), scope };
-  const { dimensions } = issueContext({ ...inputs, settings: local }).sheet;
+  const drawn = issueContext({ ...inputs, settings: local }).sheet;
+  const { dimensions } = drawn;
   const preset = presetFor(local);
   const provenance = { revision, sheet, sheetName: sheetName(settings, sheet - 1), scope, unit: 'mm', printUnit: preset.units };
   const describe = (r: Resolved) => ({
@@ -98,6 +109,7 @@ export function readDrawingStack(
     ...(r.ok ? { resolved: true, value: r.value, printed: dimensionLine(r, preset) } : { resolved: false, reason: r.reason }),
   });
   if (!terms) {
+    const callouts = optedIn('include_callouts') ? { source: inputs.meta.source, callouts: printableCallouts(drawn) } : {};
     if (includeDiameters || includeRadii) {
       const selected = dimensions.filter(r => r.dim.kind === 'linear'
         || includeDiameters && r.dim.kind === 'diameter' || includeRadii && r.dim.kind === 'radius').map(r =>
@@ -106,10 +118,10 @@ export function readDrawingStack(
           ...(r.ok ? { resolved: true, value: r.value } : { resolved: false, reason: r.reason }),
         });
       const kinds = includeRadii ? (includeDiameters ? 'linear, diameter and radius' : 'linear and radius') : 'linear and diameter';
-      return { content: { ...provenance, dimensions: selected }, summary: `${selected.length} ${kinds} drawing dimensions` };
+      return { content: { ...provenance, dimensions: selected, ...callouts }, summary: `${selected.length} ${kinds} drawing dimensions` };
     }
     const linear = dimensions.filter(r => r.dim.kind === 'linear').map(describe);
-    return { content: { ...provenance, dimensions: linear }, summary: `${linear.length} linear drawing dimensions` };
+    return { content: { ...provenance, dimensions: linear, ...callouts }, summary: `${linear.length} linear drawing dimensions` };
   }
   const result = calculateToleranceStack('mm', terms, dimensions);
   if (!result.ok) return { error: result.reason };

@@ -41,6 +41,23 @@ test('discover the current dimensions and calculate actual signed limits in read
   }
 });
 
+test('printable callouts are opt-in and keep linear dimensions and stacks unchanged', async () => {
+  const doc = stackStock();
+  const original = await read(doc, 'dimensions');
+  const optIn = await read(doc, 'dimensions', { include_callouts: true });
+  assert.equal(optIn.isError, false, optIn.content);
+  const { source, callouts, ...dimensions } = optIn.result;
+  assert.match(source, /^[a-f0-9]+$/);
+  assert.deepEqual(callouts, []);
+  assert.deepEqual(dimensions, original.result);
+  assert.deepEqual(validate(outputSchemaOf('get_drawing_dimensions')!, optIn.result), []);
+  assert.deepEqual((await read(doc, 'dimensions', { include_callouts: false })).result, original.result);
+  assert.match((await read(doc, 'dimensions', { include_callouts: 'true' })).result.error, /boolean/);
+  const stack = await read(doc, 'stack', { expectedRevision: original.result.revision, terms: stackTerms, include_callouts: true });
+  assert.equal(stack.isError, true);
+  assert.match(stack.result.error, /include_callouts/);
+});
+
 test('a revision binds the authored document and selected sheet', async () => {
   const doc = stackStock();
   doc.drawing!.sheets = [{ id: 'Top', name: 'Top dimensions', views: ['top'] }];

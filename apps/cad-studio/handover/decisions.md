@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1688: [Read the selected drawing's printable callouts from the Agent](notes/drawing-printable-callouts-2026-11-22/README.md), #322. Match the selected sheet's literal diameter and radius marks and title-block source to actual SVG.
 - D1687: [Freeze a two-sheet counterbore drawing revision for Agent evaluation](notes/b06-counterbore-drawing-agent-revision-2026-11-22/README.md), #322. Verify the editable approved depth and the original Sheet 2 callout in actual SVG exports after native Open.
 - D1686: [Preview the solved Distance mate before approval](notes/preview-distance-mate-2026-11-22/README.md), #322. Separate the candidate pin pose from accepted picking and preserve the editable Save/Open result.
 - D1685: [Freeze the B05 pin-and-holder mate revision for Agent evaluation](notes/b05-pin-mate-agent-revision-2026-11-22/README.md), #322. Verify the Distance change, exact mate references, user approval and editable Open. Record the candidate-placement preview gap.

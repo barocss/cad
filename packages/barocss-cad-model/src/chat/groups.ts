@@ -99,7 +99,7 @@ export const GROUPS: Record<string, Group> = {
     about: 'The part\'s 2D drawing; a drawing change is always the user\'s, so make it as ops of proposals.propose.',
     actions: {
       issues: ['drawing_issues', 'include_targets? — opaque dimension IDs and view for this snapshot only'], tolerances: ['tolerance_suggestions', 'mode?'],
-      dimensions: ['get_drawing_dimensions', 'sheet?, include_diameters?, include_radii?'], stack: ['calculate_drawing_tolerance_stack', 'sheet?, expectedRevision from dimensions, terms: [{id, sign: 1 or -1}]'], auto: ['auto_dimension', 'layout?'], fix: ['fix_drawing', 'codes?'],
+      dimensions: ['get_drawing_dimensions', 'sheet?, include_diameters?, include_radii?, include_callouts?'], stack: ['calculate_drawing_tolerance_stack', 'sheet?, expectedRevision from dimensions, terms: [{id, sign: 1 or -1}]'], auto: ['auto_dimension', 'layout?'], fix: ['fix_drawing', 'codes?'],
       accept: ['accept_tolerances', 'ids?, mode?'], set: ['set_drawing', 'drawing scope, sheet, views, units, annotations and tables; describe gives the fields; propose changes'],
     },
   },

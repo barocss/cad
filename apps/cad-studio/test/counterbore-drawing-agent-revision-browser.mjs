@@ -18,13 +18,16 @@ const pins = [
   'apps/cad-studio/src/ui/DrawingWorkspace.tsx',
   'apps/cad-studio/src/state/useProposalPreview.ts',
   'packages/barocss-cad-model/src/chat/part/features.ts',
+  'packages/barocss-cad-model/src/chat/drawingToleranceStack.ts',
+  'packages/barocss-cad-model/src/chat/contract.ts',
+  'packages/barocss-cad-model/src/chat/groups.ts',
   'packages/barocss-cad-model/src/drawing/callout.ts',
   'packages/barocss-cad-model/src/io/svg.ts',
 ];
 const f = await createFlow({
-  name: 'counterbore-drawing-agent-revision', envFrozen: 'D1687_SOURCE_FROZEN', output: process.argv[2],
+  name: 'counterbore-drawing-agent-revision', envFrozen: 'D1688_SOURCE_FROZEN', output: process.argv[2],
   initialFiles: pins, requiredFrozen: pins, oracleSource,
-  qualification: 'Approve a local counterbore depth revision, preserve the two-sheet drawing and read the current SVGs after native Open.',
+  qualification: 'Approve a local counterbore depth revision, preserve the two-sheet drawing and match the printable MCP callouts to the exported SVGs before and after native Open.',
   limits: ['One D675 counterbore and Top callout, two A4 sheets, desktop Studio WebGPU, scripted local L1 MCP.'],
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -40,6 +43,29 @@ function checkModel(actual, depth) {
   assert.deepEqual(model, { ...seed, nodes });
 }
 
+const mcp = { app: f.app, output: f.output, clientName: f.name };
+
+async function matchPrintableCallouts(call, front, top) {
+  const read = (sheet, flags) => call('drawing', { action: 'dimensions', sheet, ...flags });
+  const first = await read(1, { include_callouts: true });
+  const topOnly = await read(2, { include_callouts: true });
+  const full = await read(2, { include_callouts: true, include_diameters: true });
+  const plain = await read(2, { include_diameters: true });
+  const { source, callouts, ...geometric } = full;
+  assert.deepEqual(geometric, plain);
+  assert.equal(plain.dimensions.find(dimension => dimension.id === top.id).kind, 'diameter');
+  assert.deepEqual([first.sheet, full.sheet], [1, 2]);
+  assert.deepEqual([first.source, source], [front.source, top.source]);
+  assert.equal(first.source, source);
+  assert.deepEqual(first.callouts, []);
+  assert.deepEqual(callouts, [{ id: top.id, view: 'top', kind: 'diameter', lines: top.printedLines }]);
+  assert.deepEqual(topOnly.callouts, callouts);
+  assert.match(first.revision, /^[a-f0-9]{64}$/);
+  assert.match(full.revision, /^[a-f0-9]{64}$/);
+  assert.notEqual(first.revision, full.revision);
+  return { source, firstRevision: first.revision, secondRevision: full.revision, callouts };
+}
+
 await f.run(async () => {
   const stagedFile = join(f.output, 'counterbore-proposal.bcad');
   await writeFile(stagedFile, bytes);
@@ -52,7 +78,9 @@ await f.run(async () => {
   await f.same(seed);
 
   f.phase = 'Discover the depth field and stage the revision';
-  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, stagedFile, 'counterbore', async call => {
+  const initialPrint = await withMcpSession(mcp, stagedFile, 'counterbore', async call => {
+    const printed = await matchPrintableCallouts(call, initialFront, initialTop);
+    assert.equal(sha256(await readFile(stagedFile)), seedHash);
     const fields = await call('query', { action: 'edit_fields', index: 3 });
     assert.deepEqual([fields.id, fields.index, fields.revision], ['n3', 3, await currentPartRevision(call)]);
     const depth = fields.fields.find(field => field.key === 'depth');
@@ -70,6 +98,7 @@ await f.run(async () => {
     const staged = await readFile(stagedFile);
     assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
     assert.deepEqual(await readFile(stagedFile), staged);
+    return printed;
   });
 
   const staged = await readFile(stagedFile);
@@ -111,9 +140,18 @@ await f.run(async () => {
   await button('Drawing').click();
   const front = await captureCounterboreSheet(f, 1, 2, '08-reopened-sheet-one');
   const top = await captureCounterboreSheet(f, 2, 2, '09-reopened-sheet-two');
-  assert.deepEqual(front, initialFront);
+  assert.deepEqual(front.views, initialFront.views);
+  assert.deepEqual(front.callouts, initialFront.callouts);
   assert.equal(top.id, initialTop.id);
   await f.same(reopened);
+  const savedBytes = await readFile(saved.file);
+  const currentPrint = await withMcpSession(mcp, saved.file, 'reopened-print',
+    call => matchPrintableCallouts(call, front, top));
+  assert.deepEqual(await readFile(saved.file), savedBytes);
+  assert.notEqual(currentPrint.source, initialPrint.source);
+  assert.notEqual(currentPrint.firstRevision, initialPrint.firstRevision);
+  assert.notEqual(currentPrint.secondRevision, initialPrint.secondRevision);
+  await writeFile(join(f.output, 'printable-callouts.json'), JSON.stringify({ initialPrint, currentPrint }, null, 2));
 
   f.phase = 'Edit the same depth after Open and restore the first callout';
   await button('Model').click();
@@ -125,5 +163,7 @@ await f.run(async () => {
   checkModel(await f.doc(), 4);
   await button('Drawing').click();
   const restored = await captureCounterboreSheet(f, 2, 4, '11-restored-sheet-two');
-  assert.deepEqual(restored, initialTop);
+  assert.deepEqual(restored.printedLines, initialTop.printedLines);
+  assert.deepEqual(restored.paperRadiiMm, initialTop.paperRadiiMm);
+  assert.equal(restored.id, initialTop.id);
 });

@@ -100,6 +100,25 @@ test('omitted/false radius and existing diameter responses retain literal legacy
   }
 });
 
+test('printable callouts include resolved radius and diameter marks on the selected sheet', () => {
+  const doc = fixture();
+  doc.drawing!.views = ['front'];
+  doc.drawing!.sheets = [{ id: 'second', name: 'Top', views: ['top'] }];
+  const input = inputs(doc);
+  const ordinary = direct(doc, { sheet: 2 }, input);
+  assert.deepEqual(direct(doc, { include_callouts: true }, input).content.callouts, []);
+  assert.deepEqual(direct(doc, Object.assign(Object.create({ include_callouts: true }), { sheet: 2 }), input), ordinary);
+  const included = direct(doc, { sheet: 2, include_callouts: true }, input);
+  assert.equal(included.content.source, input.meta.source);
+  assert.deepEqual(included.content.dimensions, ordinary.content.dimensions);
+  assert.ok(Array.isArray(included.content.callouts));
+  assert.deepEqual(included.content.callouts.map(({ id, view, kind }) => [id, view, kind]),
+    [['radius', 'top', 'radius'], ['hole', 'top', 'diameter']]);
+  assert.match(included.content.callouts[0].lines[0], /R[0-9]/);
+  assert.match(included.content.callouts[1].lines[0], /Ø[0-9]/);
+  assert.doesNotMatch(JSON.stringify(included.content.callouts), new RegExp(sentinel));
+});
+
 test('radius-only and both options are independent, ordered, and keep legacy linear fields', () => {
   const doc = fixture(), input = inputs(doc), ordinary = direct(doc, {}, input);
   const radius = direct(doc, { include_radii: true }, input), both = direct(doc, { include_diameters: true, include_radii: true }, input);

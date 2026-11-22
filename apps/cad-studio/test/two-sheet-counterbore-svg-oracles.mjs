@@ -19,6 +19,7 @@ index, depth = data['index'], data['depth']
 texts = [e.text or '' for e in root.iter(ns + 'text')]
 assert f'{index} OF 2 A4' in texts, texts
 groups = list(root.iter(ns + 'g'))
+source, = [t.removeprefix('SRC ') for t in texts if t.startswith('SRC ')]
 views = [g.get('data-view') for g in groups if g.get('class') == 'view']
 callouts = [' '.join(t.split()) for t in texts if 'CBORE' in t]
 if index == 1:
@@ -45,6 +46,8 @@ else:
     assert math.isclose(max(ys) - min(ys), 40, abs_tol=0.0001, rel_tol=0)
     result = dict(status='PASS', sheet=index, views=views, callouts=callouts,
                   id=owner.get('data-dim'), paperRadiiMm=sorted(radii))
+    result['printedLines'] = [t.text or '' for t in owner.iter(ns + 'text')]
+result['source'] = source
 print(json.dumps(result))
 `;
 
