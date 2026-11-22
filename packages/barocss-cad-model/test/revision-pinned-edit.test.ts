@@ -126,7 +126,8 @@ test('sketch chamfer discovers saved side IDs and makes an atomic revision-pinne
   assert.deepEqual(sketch, {
     kind: 'sketch', profile: 'polygon', id: 'n0',
     points: [[0, 0], [34, 0], [40, 6], [40, 20], [0, 20]],
-    outline: { points: [[0, 0], [34, 0], [40, 6], [40, 20], [0, 20]], hv: { h: [0, 3], v: [2, 4] } },
+    outline: { points: [[0, 0], [34, 0], [40, 6], [40, 20], [0, 20]], hv: { h: [0, 3], v: [2, 4] },
+      lengths: { 1: 6 * Math.SQRT2 }, rules: [{ kind: 'angle', a: 0, b: 1, value: 135 }] },
     sideTags: { outer: ['e1', 'e10', 'e2', 'e3', 'e4'] }, plane,
     construction: [{ kind: 'circle', c: [12, 8], r: 2, construction: true, ids: ['e9'] }],
   });

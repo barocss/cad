@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1699: [Keep orthogonal Chamfer setbacks during a sketch drag](notes/orthogonal-chamfer-drag-2026-11-23/README.md), #21. Distances on both mixed-turn bevels survive point drag, downstream rebuild and fresh Open.
+
 - D1698: [Drag a constrained sketch point](notes/constrained-sketch-point-drag-2026-11-22/README.md), #21. Keep authored constraints and a valid preview, commit one sketch edit and verify the R6 native extrusion after Save and fresh Open.
 
 - D1697: [Review native sketch corner groups before approval](notes/pending-sketch-corner-review-2026-11-22/README.md), #324. Pin one pending image and the two native walls, and match both after Studio approval and fresh Open.

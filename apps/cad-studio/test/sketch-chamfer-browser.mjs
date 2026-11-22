@@ -195,8 +195,9 @@ await f.run(async () => {
   await expectPoints(cut);
   const accepted = (await f.finishSketch('08-finished-chamfer')).doc;
   assert.deepEqual(accepted.nodes[0].sideTags.outer, chamferSides);
-  assert.deepEqual(accepted.nodes[0].outline.lengths, { 3: 40 });
-  assert.deepEqual(accepted.nodes[0].outline.rules, seed.nodes[0].outline.rules);
+  assert.deepEqual(accepted.nodes[0].outline.lengths, { 1: 6 * Math.SQRT2, 3: 40 });
+  assert.deepEqual(accepted.nodes[0].outline.rules, [...seed.nodes[0].outline.rules,
+    { kind: 'angle', a: 0, b: 1, value: 135 }]);
   assert.deepEqual(accepted.nodes[1], seed.nodes[1]);
   assert.deepEqual(accepted.outputs, seed.outputs);
   const result = await verifyNative('chamfer-native', accepted, cut, chamferSides, (40 * 30 - 6 * 6 / 2) * 10);

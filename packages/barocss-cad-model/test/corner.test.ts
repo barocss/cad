@@ -98,8 +98,8 @@ test('chamfer splits a corner and preserves the survivors, constraints and nativ
   assert.deepEqual(r.shape.points, [[0, 0], [34, 0], [40, 6], [40, 30], [0, 30]]);
   assert.deepEqual(r.shape.ids, ['e1', '', 'e2', 'e3', 'e4']);
   assert.deepEqual(r.shape.hv, { h: [0, 3], v: [2, 4] });
-  assert.deepEqual(r.shape.lengths, { 3: 40 });
-  assert.deepEqual(r.shape.rules, rectangle.rules);
+  assert.deepEqual(r.shape.lengths, { 1: 6 * Math.SQRT2, 3: 40 });
+  assert.deepEqual(r.shape.rules, [...rectangle.rules!, { kind: 'angle', a: 0, b: 1, value: 135 }]);
   assert.ok(r.shape.bulges?.every(b => b === 0));
   const profile = profileOf([r.shape]);
   assert.ok('node' in profile);

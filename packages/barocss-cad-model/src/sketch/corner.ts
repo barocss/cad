@@ -128,12 +128,22 @@ export function chamferCorner(s: Polygon, i: number, distance: number): { shape:
   const delta = (x: P2, y: P2) => Math.hypot(x[0] - y[0], x[1] - y[1]);
   if (delta(A, B) < minimum) return { error: 'The bevel would be too short to keep as a separate edge.' };
 
-  const candidate = replaceCorner({ ...s, hv: hvOf(s) }, i, A, B, 0, true);
+  const hv = hvOf(s);
+  const candidate = replaceCorner({ ...s, hv }, i, A, B, 0, true);
   const angleAtCorner = s.rules?.some(rule => rule.kind === 'angle' &&
     ((rule.a === prev && rule.b === i) || (rule.a === i && rule.b === prev)));
   if (angleAtCorner || s.tangents?.includes(i) || (s.rules?.length ?? 0) !== (candidate.rules?.length ?? 0) ||
     s.lengths?.[prev] !== undefined || s.lengths?.[i] !== undefined)
     return { error: 'Remove the constraints on this corner or the trimmed lengths before chamfering.' };
+  const perpendicularCarriers = s.rules?.some(rule => rule.kind === 'perpendicular' &&
+    ((rule.a === prev && rule.b === i) || (rule.a === i && rule.b === prev)));
+  if (perpendicularCarriers || (hv.h.includes(prev) && hv.v.includes(i)) || (hv.v.includes(prev) && hv.h.includes(i))) {
+    // Orthogonal carriers leave two independent setback freedoms. The bevel's
+    // length and its 135° joint angle hold both, including the opposite turn at a reflex corner.
+    // The native angle rule takes its sign from this seed; no pointer constraint is persisted.
+    candidate.lengths = { ...candidate.lengths, [i]: distance * Math.SQRT2 };
+    candidate.rules = [...(candidate.rules ?? []), { kind: 'angle', a: i === 0 ? n : prev, b: i, value: 135 }];
+  }
   const { shape, error } = settleShape(candidate, s);
   if (error || shape?.kind !== 'polygon') return { error: error ?? 'The chamfer could not be settled.' };
   if (shape.points.some((point, j) => delta(point, candidate.points[j]) > grid) ||

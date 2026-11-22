@@ -132,8 +132,9 @@ await f.run(async () => {
   assert.deepEqual([approval.kind, approval.proposal, approval.by.agent], ['accept', 'P1', 'user']);
   const [sketch, extrude] = doc.nodes;
   assert.deepEqual([sketch.id, sketch.outline.points, sketch.sideTags.outer], ['n0', expected, expectedSides]);
-  assert.deepEqual(sketch.outline.lengths, round ? { 3: 40, 4: 30 } : { 3: 40 });
-  assert.deepEqual(sketch.outline.rules, source.nodes[0].outline.rules);
+  assert.deepEqual(sketch.outline.lengths, round ? { 3: 40, 4: 30 } : { 1: 6 * Math.SQRT2, 3: 40 });
+  const fixed = source.nodes[0].outline.rules;
+  assert.deepEqual(sketch.outline.rules, round ? fixed : [...fixed, { kind: 'angle', a: 0, b: 1, value: 135 }]);
   assert.deepEqual([extrude, doc.outputs], [source.nodes[1], source.outputs]);
   const after = await f.inspect('native-after', doc);
   assert.ok(Math.abs(after.volume - (40 * 30 * 10 - removal(6))) < 1e-8);

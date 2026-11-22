@@ -29,8 +29,9 @@ for (const operation of operations) {
     assert.deepEqual(notch, before);
     assert.deepEqual(shape.ids, ['e1', 'e2', 'e3', 'e9', 'e4', 'e10', 'e5', 'e6', 'e7', 'e8']);
     assert.deepEqual(shape.points.slice(3, 7), [[44, 40], [38, 34], [38, 21], [32, 15]]);
-    assert.deepEqual(shape.lengths, notch.lengths);
-    assert.deepEqual(shape.rules, notch.rules);
+    assert.deepEqual(shape.lengths, operation === 'chamfer' ? { 0: 60, 3: 6 * Math.SQRT2, 5: 6 * Math.SQRT2 } : notch.lengths);
+    assert.deepEqual(shape.rules, operation === 'chamfer' ? [...notch.rules!,
+      { kind: 'angle', a: 2, b: 3, value: 135 }, { kind: 'angle', a: 4, b: 5, value: 135 }] : notch.rules);
     const applied = settleShape(shape, notch);
     assert.equal(applied.error, null);
     assert.deepEqual(applied.shape, shape);

@@ -97,6 +97,11 @@ The distance is the setback in mm along each of the two straight sides. This edi
 independent material outline with saved side IDs and no holes. The edit is refused if the corner
 cannot fit, a constraint or binding would be lost, or the part revision has changed.
 
+For a corner whose sides have horizontal and vertical constraints or a shared perpendicular
+constraint, Chamfer uses the bevel length and its 135° joint angle to hold both setbacks through
+a later sketch point drag. You can inspect these constraints in Studio. This applies to convex
+and reflex corners, including eligible pairs in a grouped edit.
+
 ### Round a sketch corner
 
 For the same read and approval workflow, send `sketchRound` instead of `sketchChamfer`:

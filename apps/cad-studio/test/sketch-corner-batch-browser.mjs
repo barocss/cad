@@ -106,8 +106,10 @@ async function checkNative(label, doc, fillet) {
   assert.equal(native.faces.length, 12);
   const [source] = doc.nodes;
   assert.deepEqual(source.sideTags.outer, resultIds);
-  assert.deepEqual(source.outline.lengths, { 0: 60 });
-  assert.deepEqual(source.outline.rules, [{ kind: 'fix', point: 0, at: [0, 0] }]);
+  assert.deepEqual(source.outline.lengths, fillet ? { 0: 60 } : { 0: 60, 3: 6 * Math.SQRT2, 5: 6 * Math.SQRT2 });
+  const fixed = [{ kind: 'fix', point: 0, at: [0, 0] }];
+  assert.deepEqual(source.outline.rules, fillet ? fixed : [...fixed,
+    { kind: 'angle', a: 2, b: 3, value: 135 }, { kind: 'angle', a: 4, b: 5, value: 135 }]);
   if (fillet) {
     assert.deepEqual(source.outline.radii, { 3: 6, 5: 6 });
     assert.ok(source.outline.bulges[3] > 0 && source.outline.bulges[5] < 0);
