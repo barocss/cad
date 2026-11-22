@@ -291,7 +291,8 @@ test('arc-line-arc refuses unsupported carriers, kinks, reversals, short lines, 
   refused({ ...curve, knots: [0, 0, 0, 1, 1.1, 2, 2, 3, 3, 3] }, 'CAPABILITY', /two coplanar circular arcs/);
   for (const [firstRadius, secondRadius] of [[2, 18], [12, 2], [1, 18], [12, 1]])
     refused(rail({ firstRadius, secondRadius }).curve, 'PARAMETER', /both path radii larger than the profile radius/);
-  refused(curve, 'CAPABILITY', /one circular outer section/, { id: 's', kind: 'sketch', profile: 'rectangle', min: [-1, -1], max: [1, 1] });
+  refused(curve, 'CAPABILITY', /one circular outer section or one bend-aligned rectangular section/,
+    { id: 's', kind: 'sketch', profile: 'polygon', points: [[-1, -1], [1, -1], [0, 1]] });
   refused(curve, 'CAPABILITY', /one open straight segment/, disk, 'exact-straight');
 });
 

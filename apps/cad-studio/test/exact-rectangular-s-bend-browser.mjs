@@ -4,12 +4,13 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
-const spaced = process.argv.includes('--spaced');
-const sameTurn = spaced || process.argv.includes('--same-turn');
+const spacedOpposite = process.argv.includes('--spaced-opposite');
+const spaced = spacedOpposite || process.argv.includes('--spaced');
+const sameTurn = !spacedOpposite && (spaced || process.argv.includes('--same-turn'));
 const run = spaced ? 8 : 0;
 const endX = sameTurn ? -6 : 30;
 const endY = 30 + run;
-const bendName = spaced ? 'spaced same-turn bend' : sameTurn ? 'same-turn bend' : 'S-bend';
+const bendName = spacedOpposite ? 'spaced S-bend' : spaced ? 'spaced same-turn bend' : sameTurn ? 'same-turn bend' : 'S-bend';
 const first = [[0, 0, 0], [12, 0, 0], [12, 12, 0]];
 const second = [[12, 12 + run, 0], [12, endY, 0], [endX, endY, 0]];
 const knot = [0, 0, 0, 1, 1, 1];
@@ -37,7 +38,7 @@ const pins = ['packages/barocss-cad/src/brep/exact-sweep.ts', 'packages/barocss-
 const baseline = process.argv.includes('--expect-refused');
 const f = await createFlow({
   name: spaced ? 'exact-rectangular-arc-line-arc-sweep' : 'exact-rectangular-two-arc-sweep', output: process.argv[2],
-  envFrozen: spaced ? 'D1732_SOURCE_FROZEN' : sameTurn ? 'D1709_SOURCE_FROZEN' : 'D1703_SOURCE_FROZEN',
+  envFrozen: spacedOpposite ? 'D1736_SOURCE_FROZEN' : spaced ? 'D1732_SOURCE_FROZEN' : sameTurn ? 'D1709_SOURCE_FROZEN' : 'D1703_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: `Sweep an aligned solid rectangle along the exact ${bendName}.`,
   limits: [`Two 90° arcs with radii 12 and 18 mm${spaced ? ', an 8 mm straight span' : ''} and one bend-aligned rectangle in desktop Studio.`],
@@ -91,7 +92,7 @@ const spacedCentroid = width => {
   const first = 6 * Math.PI, second = 9 * Math.PI, length = first + run + second;
   const moment = radius => 2 * (radius + width ** 2 / (12 * radius)) / Math.PI;
   const a = moment(12), b = moment(18);
-  return [(first * a + run * 12 + second * (endX + b)) / length,
+  return [(first * a + run * 12 + second * (endX + (sameTurn ? b : -b))) / length,
     (first * (12 - a) + run * (12 + run / 2) + second * (12 + run + b)) / length, 0];
 };
 const near = (value, expected, tolerance = 1e-7) =>
@@ -219,7 +220,7 @@ async function approveProposal(source, joined, rail, native, applied) {
   await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'rectangular-s-bend', async call => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
-    assert.match(description.values.sketch, spaced ? /same direction.*rectangle aligned with the bend frame/
+    assert.match(description.values.sketch, spaced ? /arc–line–arc path accepts .* rectangle aligned with the bend frame/
       : /Both two-arc paths accept .* rectangle aligned with the bend frame/);
     const summary = await call('query', { action: 'summary' });
     const saved = summary.direct_curves.find(curve => curve.id === rail.id);
@@ -339,7 +340,7 @@ await f.run(async () => {
   await f.openFeatureEditor(1);
   await f.editor().getByText('Sketch 1 · 8 × 6 mm', { exact: true }).waitFor();
   await f.snapshot('08-reopened-history');
-  if (sameTurn) {
+  if (sameTurn || spacedOpposite) {
     f.phase = 'Edit the reopened rectangular section';
     await button('Edit sketch', f.editor()).click();
     await widthInput().fill('4');

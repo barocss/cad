@@ -256,13 +256,15 @@ function checkAnalyticMass(output, { first, second, direction, length }, halfWid
   }
 }
 
-test('same-turn spaced rectangle keeps eight native G1 seams, exact moments and edit/reopen identity', () => {
-  const path = rail(), tagged = { ...section, sideTags: { outer: ['south', 'east', 'north', 'west'] } };
-  assert.deepEqual(path.path.controlPoints, [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0], [12, 20, 0], [12, 38, 0], [-6, 38, 0]]);
+for (const turn of [-1, 1]) test(`the ${turn === 1 ? 'same-turn' : 'opposite-turn'} spaced rectangle keeps eight native G1 seams, exact moments and edit/reopen identity`, () => {
+  const path = rail({ turn }), tagged = { ...section, sideTags: { outer: ['south', 'east', 'north', 'west'] } };
+  assert.deepEqual(path.path.controlPoints, [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0], [12, 20, 0], [12, 38, 0], [turn === 1 ? -6 : 30, 38, 0]]);
   const initial = evaluateCadPart(document(path.path, tagged));
   verify(initial.outputs[0], path);
   checkAnalyticMass(initial.outputs[0], path, 2, 3);
   near(massPropertiesOf(initial.outputs[0]).volume, 360 * Math.PI + 192);
+  if (turn === -1) pointNear(massPropertiesOf(initial.outputs[0]).centroid,
+    [(270 * Math.PI - 84) / (15 * Math.PI + 8), (252 * Math.PI + 308) / (15 * Math.PI + 8), 0]);
   for (const tag of tagged.sideTags.outer) assert.deepEqual(initial.outputs[0].brep.faces
     .filter(face => face.name.endsWith(`.side[${tag}]`)).map(face => face.name).sort(),
   [`w.first.side[${tag}]`, `w.line.side[${tag}]`, `w.second.side[${tag}]`]);
@@ -281,11 +283,13 @@ test('same-turn spaced rectangle keeps eight native G1 seams, exact moments and 
   assert.deepEqual(restored.outputs[0].brep, initial.outputs[0].brep);
 });
 
-test('a same-turn spaced rectangular duct keeps two open caps, sixteen native G1 seams and exact moments through opening edit and reopen', () => {
-  const path = rail(), initial = evaluateCadPart(document(path.path, duct));
+for (const turn of [-1, 1]) test(`the ${turn === 1 ? 'same-turn' : 'opposite-turn'} spaced rectangular duct keeps two open caps, sixteen native G1 seams and exact moments through opening edit and reopen`, () => {
+  const path = rail({ turn }), initial = evaluateCadPart(document(path.path, duct));
   verify(initial.outputs[0], path, 2, 3, [1, 2]);
   checkAnalyticMass(initial.outputs[0], path, 2, 3, [1, 2]);
   near(massPropertiesOf(initial.outputs[0]).volume, 240 * Math.PI + 128);
+  if (turn === -1) pointNear(massPropertiesOf(initial.outputs[0]).centroid,
+    [(270 * Math.PI - 84) / (15 * Math.PI + 8), (252 * Math.PI + 308) / (15 * Math.PI + 8), 0]);
   const editedSection = { ...duct, holes: [rectangle(1, 1, { clockwise: true })] };
   const edited = reevaluate(initial, { document: document(path.path, editedSection) });
   verify(edited.outputs[0], path, 2, 3, [1, 1]);
@@ -307,10 +311,10 @@ test('a same-turn spaced rectangular duct keeps two open caps, sixteen native G1
   assert.deepEqual(restored.outputs[0].brep, initial.outputs[0].brep);
 });
 
-for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
+for (const turn of [-1, 1]) for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
   [30, 120, 7, 4, 8], [120, 30, 4, 7, 8], [120, 120, 7, 4, 8], [90, 90, 12, 12, .00011],
-]) test(`an oblique radial-Y ${firstAngle}°/${secondAngle}° duct retains opening ownership for either winding and authored side tags`, () => {
-  const path = rail({ firstAngle, secondAngle, firstRadius, secondRadius, length,
+]) test(`an oblique ${turn === 1 ? 'same-turn' : 'opposite-turn'} radial-Y ${firstAngle}°/${secondAngle}° duct retains opening ownership for either winding and authored side tags`, () => {
+  const path = rail({ turn, firstAngle, secondAngle, firstRadius, secondRadius, length,
     start: [42, -17, 8], tangent: [.6, .8, 0], inward: [.8, -.6, 0] });
   for (const clockwise of [false, true]) {
     const hole = rectangle(9, 1, { clockwise });
@@ -327,8 +331,8 @@ for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
   }
 });
 
-test('a spaced rectangular duct retains safe thin walls and refuses unsupported openings without changing the prior solid', () => {
-  const path = rail(), initial = evaluateCadPart(document(path.path, duct)), before = structuredClone(initial);
+for (const turn of [-1, 1]) test(`the ${turn === 1 ? 'same-turn' : 'opposite-turn'} spaced rectangular duct retains safe thin walls and refuses unsupported openings without changing the prior solid`, () => {
+  const path = rail({ turn }), initial = evaluateCadPart(document(path.path, duct)), before = structuredClone(initial);
   const refused = (changedRail, sketch, code, message) => {
     assert.throws(() => reevaluate(initial, { document: document(changedRail.path, sketch) }),
       error => error instanceof CadPartError && error.feature === 'w' && error.code === code && message.test(error.message));
@@ -353,14 +357,13 @@ test('a spaced rectangular duct retains safe thin walls and refuses unsupported 
   refused(path, { ...duct, plane: { origin: [0, 0, 0], normal: path.first.tangent, xAxis: [0, Math.SQRT1_2, Math.SQRT1_2] } },
     'CAPABILITY', /original axes aligned to the bend radial and binormal/);
   for (const radius of [2, 1.99]) for (const radii of [{ firstRadius: radius }, { secondRadius: radius }])
-    refused(rail(radii), duct, 'PARAMETER', /radial half-width smaller than both path radii/);
-  refused(rail({ turn: -1 }), duct, 'CAPABILITY', /one circular outer section/);
+    refused(rail({ turn, ...radii }), duct, 'PARAMETER', /radial half-width smaller than both path radii/);
 });
 
-for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
+for (const turn of [-1, 1]) for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
   [30, 120, 7, 4, 8], [120, 30, 4, 7, 8], [120, 120, 7, 4, 8], [90, 90, 12, 12, .00011],
-]) test(`oblique radial-Y rectangle ${firstAngle}°/${secondAngle}° keeps both joins and its large binormal extent`, () => {
-  const path = rail({ firstAngle, secondAngle, firstRadius, secondRadius, length,
+]) test(`an oblique ${turn === 1 ? 'same-turn' : 'opposite-turn'} radial-Y rectangle ${firstAngle}°/${secondAngle}° keeps both joins and its large binormal extent`, () => {
+  const path = rail({ turn, firstAngle, secondAngle, firstRadius, secondRadius, length,
     start: [42, -17, 8], tangent: [.6, .8, 0], inward: [.8, -.6, 0] });
   const sketch = { ...section, min: [40, -32], max: [60, -28],
     plane: { origin: [5, 4, 3], normal: path.first.tangent, xAxis: path.first.axis } };
@@ -369,8 +372,8 @@ for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
   checkAnalyticMass(output, path, 2, 10);
 });
 
-test('spaced rectangle refuses unsupported openings, roll, either axis contact, opposite turns and invalid rails without state changes', () => {
-  const path = rail(), initial = evaluateCadPart(document(path.path)), before = structuredClone(initial);
+for (const turn of [-1, 1]) test(`the ${turn === 1 ? 'same-turn' : 'opposite-turn'} spaced rectangle refuses unsupported openings, roll, either axis contact and invalid rails without state changes`, () => {
+  const path = rail({ turn }), initial = evaluateCadPart(document(path.path)), before = structuredClone(initial);
   const refused = (changedRail, sketch, code, message) => {
     assert.throws(() => reevaluate(initial, { document: document(changedRail.path, sketch) }),
       error => error instanceof CadPartError && error.feature === 'w' && error.code === code && message.test(error.message));
@@ -383,14 +386,13 @@ test('spaced rectangle refuses unsupported openings, roll, either axis contact, 
   for (const holes of [[circle], [rectangle, circle]]) refused(path, { ...section, holes },
     'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/);
   for (const radius of [2, 1.99]) for (const radii of [{ firstRadius: radius }, { secondRadius: radius }])
-    refused(rail(radii), section, 'PARAMETER', /rectangular arc-line-arc sweep needs radial half-width smaller than both path radii/);
-  refused(rail({ turn: -1 }), section, 'CAPABILITY', /one circular outer section/);
+    refused(rail({ turn, ...radii }), section, 'PARAMETER', /rectangular arc-line-arc sweep needs radial half-width smaller than both path radii/);
   for (const options of [{ lineTangent: [1, 0, 0] }, { secondTangent: [0, -1, 0] }, { length: -8 }])
-    refused(rail(options), section, 'GEOMETRY', /common forward tangent at both joins/);
-  refused(rail({ secondInward: [0, 0, 1] }), section, 'CAPABILITY', /two coplanar circular arcs/);
+    refused(rail({ turn, ...options }), section, 'GEOMETRY', /common forward tangent at both joins/);
+  refused(rail({ turn, secondInward: [0, 0, 1] }), section, 'CAPABILITY', /two coplanar circular arcs/);
   for (const options of [{ firstAngle: 29 }, { secondAngle: 121 }])
-    refused(rail(options), section, 'CAPABILITY', /two coplanar circular arcs/);
-  refused(rail({ length: .00001 }), section, 'PARAMETER', /straight segment at least 0.0001 mm/);
+    refused(rail({ turn, ...options }), section, 'CAPABILITY', /two coplanar circular arcs/);
+  refused(rail({ turn, length: .00001 }), section, 'PARAMETER', /straight segment at least 0.0001 mm/);
   const triangle = { id: 's', kind: 'sketch', profile: 'polygon', points: [[-1, -1], [1, -1], [0, 1]] };
   refused(path, triangle, 'CAPABILITY', /one circular outer section/);
   const reopened = loadCadPart(saveCadPart(initial));

@@ -5,16 +5,17 @@ import { createFlow } from './flow-helper.mjs';
 import { checkApprovedDuctReview, checkChangedDuctPath, reviewPendingDuct } from './duct-proposal-review-browser-steps.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
-const opposite = process.argv.includes('--opposite-arcs');
-const spaced = process.argv.includes('--spaced');
-const sameTurn = spaced || process.argv.includes('--same-turn');
+const spacedOpposite = process.argv.includes('--spaced-opposite');
+const opposite = spacedOpposite || process.argv.includes('--opposite-arcs');
+const spaced = spacedOpposite || process.argv.includes('--spaced');
+const sameTurn = process.argv.includes('--spaced') || process.argv.includes('--same-turn');
 const twoArcs = opposite || sameTurn;
 const endX = sameTurn ? -6 : 30;
 const run = spaced ? 8 : 0;
 assert.ok(!opposite || !sameTurn, 'Choose one two-arc turn direction.');
 const baseline = process.argv.includes('--expect-refused');
 const review = process.argv.includes('--review');
-assert.ok(!review || (opposite && !baseline), 'Review needs an active opposite-arc duct flow.');
+assert.ok(!review || (opposite && !spaced && !baseline), 'Review needs an active touching opposite-arc duct flow.');
 const railId = sameTurn ? 'same-turn' : opposite ? 's-bend' : 'elbow';
 const railName = sameTurn ? 'Same-turn rail' : opposite ? 'S-bend rail' : 'Elbow rail';
 const ends = twoArcs ? [
@@ -25,7 +26,7 @@ const ends = twoArcs ? [
   { direction: 'Back', center: [20, 34, 0], axis: 1, sign: 1 },
 ];
 const path = spaced ? { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
-  controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0], [12, 20, 0], [12, 38, 0], [-6, 38, 0]],
+  controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0], [12, 20, 0], [12, 38, 0], [endX, 38, 0]],
   weights: [1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1] } : twoArcs ? { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
   controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 30, 0], [endX, 30, 0]],
   weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1] } : { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
@@ -49,9 +50,9 @@ if (review) pins.push('apps/cad-studio/test/duct-proposal-review-browser-steps.m
   'packages/barocss-cad-model/src/chat/part/proposals.ts');
 
 const f = await createFlow({
-  name: spaced ? 'exact-spaced-same-turn-duct' : sameTurn ? 'exact-rectangular-same-turn-duct'
+  name: spacedOpposite ? 'exact-spaced-s-bend-duct' : spaced ? 'exact-spaced-same-turn-duct' : sameTurn ? 'exact-rectangular-same-turn-duct'
     : opposite ? 'exact-rectangular-s-bend-duct' : 'exact-rectangular-duct-sweep', output: process.argv[2],
-  envFrozen: spaced ? 'D1733_SOURCE_FROZEN' : review ? 'D1705_SOURCE_FROZEN'
+  envFrozen: spacedOpposite ? 'D1736_SOURCE_FROZEN' : spaced ? 'D1733_SOURCE_FROZEN' : review ? 'D1705_SOURCE_FROZEN'
     : sameTurn ? 'D1713_SOURCE_FROZEN' : opposite ? 'D1704_SOURCE_FROZEN' : 'D1675_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Sweep a centered rectangular duct, inspect both openings and edit the aperture through Studio History.',
@@ -108,7 +109,7 @@ const ductCentre = height => {
   const first = 6 * Math.PI, second = 9 * Math.PI, length = first + run + second;
   const moment = radius => 2 * (radius + q / radius) / Math.PI;
   const a = moment(12), b = moment(18);
-  return [(first * a + run * 12 + second * (endX + b)) / length,
+  return [(first * a + run * 12 + second * (endX + (sameTurn ? b : -b))) / length,
     (first * (12 - a) + run * (12 + run / 2) + second * (12 + run + b)) / length, 0];
 };
 const near = (value, expected, tolerance = 1e-7) =>
@@ -256,7 +257,7 @@ await f.run(async () => {
   await hud().getByLabel('Representation', { exact: true }).selectOption('exact');
   if (baseline) {
     await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
-    const refusal = spaced ? 'The spaced rectangular Sweep needs a solid section'
+    const refusal = spacedOpposite ? 'The arc–line–arc Sweep needs a circular outer section' : spaced ? 'The spaced rectangular Sweep needs a solid section'
       : sameTurn ? 'The same-turn rectangle must be solid' : 'The rectangular S-bend needs a solid section';
     await hud().getByText(refusal, { exact: true }).waitFor();
     assert.ok(await button('Apply', hud()).isDisabled());
@@ -325,7 +326,7 @@ await f.run(async () => {
   assert.equal(await coordinate(1, 'Y').inputValue(), '-1');
   assert.equal(await coordinate(2, 'Y').inputValue(), '1');
   await f.snapshot('08-reopened-aperture-edit');
-  if (sameTurn) {
+  if (sameTurn || spacedOpposite) {
     await coordinate(1, 'Y').fill('-2');
     await coordinate(2, 'Y').fill('2');
     const restored = (await f.finishSketch('08-aperture-resized-after-open')).doc;
@@ -351,7 +352,7 @@ await f.run(async () => {
     const op = { tool: 'features', args: { action: 'command', command: 'sweep-curve', expectedRevision,
       values: { sketch: 'n0', path: rail.id, pathRevision: rail.revision, representation: 'exact' } } };
     const before = await readFile(file);
-    if (sameTurn) {
+    if (sameTurn || spacedOpposite) {
       const stale = { ...op, args: { ...op.args, values: { ...op.args.values, pathRevision: '0'.repeat(64) } } };
       assert.match((await call('features', { action: 'batch', dryRun: true, ops: [stale] }, true)).error, /revision|changed/i);
       assert.deepEqual(await readFile(file), before);
@@ -362,7 +363,7 @@ await f.run(async () => {
     assert.deepEqual(await readFile(file), before);
     const result = await call('proposals', { action: 'propose', title: 'Exact rectangular duct', ops: [op] });
     assert.deepEqual([result.proposal, result.applied], ['P1', false]);
-    if (sameTurn) {
+    if (sameTurn || spacedOpposite) {
       const staged = await readFile(file);
       assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*Studio/i);
       assert.deepEqual(await readFile(file), staged);
