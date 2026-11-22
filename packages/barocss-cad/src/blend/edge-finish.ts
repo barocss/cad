@@ -23,6 +23,7 @@
 // the edge, the least over the edge's length (D88; it replaced the farthest control point, an upper bound).
 import { BrepError, buildBrep, lineCurve, type Brep } from '../brep/brep-core.js';
 import { booleanAnalytic, faceGeometry, type FaceGeometry } from '../brep/analytic-boolean.js';
+import { planHalfRingFillet, retainHalfRingFilletCharts } from '../brep/exact-ring-intersect.js';
 import { brepFromPrismatic, nameEdges, prismaticFromProfile } from '../features/prismatic-solid.js';
 import { revolveProfile } from '../features/revolve.js';
 import { transformBrep } from '../brep/brep-transform.js';
@@ -35,6 +36,8 @@ import { add, cross, dot, len, scale, sub, unit } from '../core/vec3.js';
 import { linearToleranceMM } from '../numeric-policy.js';
 import type { Curve, Point, Surface } from '../types.js';
 import type { ProfileSegmentInput } from '../features/extruded-profile-solid.js';
+
+export { halfRingFilletReferenceRims } from '../brep/exact-ring-intersect.js';
 
 type XY = [number, number];
 export type EdgeFinishKind = 'fillet' | 'chamfer';
@@ -188,6 +191,11 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
   }
   if (options.singleConvexEdge && chain.size !== 1)
     refuse('SELECTION', 'two interior fillet stations need one edge without tangent continuations.');
+  const halfRing = kind === 'fillet' && !options.radii && !options.shape && chain.size === 2
+    ? planHalfRingFillet(body, [...chain.values()].map(edge => edge.name ?? edge.id)) : undefined;
+  // At the tube radius all inward normals meet the centerline. Beyond it the ball crosses the opposite tube wall.
+  if (halfRing && !(size < halfRing.radius - halfRing.roundoff))
+    refuseFillet('CONTACT_LEAVES_FACE', `A complete half-ring rim fillet needs a radius smaller than the ${+halfRing.radius.toPrecision(9)} mm tube radius.`);
   // Capture the original body's scope. Phased passes can use newly generated names.
   if (options.tangentTargets) {
     options.tangentTargets.clear();
@@ -540,6 +548,8 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
   apply(cornerTools, 'difference');
   apply(concaveTools, 'union');
   apply(concaveCorners, 'union');
+  if (halfRing && rings.length === 1 && rings[0].convex && !convexTools.length && !cornerTools.length
+    && !concaveTools.length && !concaveCorners.length) return retainHalfRingFilletCharts(out, halfRing);
   return out;
   } finally { if (usedCylinder) used.cylinder = true; }
 }

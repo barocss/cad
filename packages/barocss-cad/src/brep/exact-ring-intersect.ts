@@ -1,5 +1,6 @@
 import { surfaceD1Evaluator } from '../core/derivatives.js';
 import { basis, evaluateSurface, surfaceDomain } from '../core/math.js';
+import { same } from '../core/structural-equality.js';
 import { add, cross, dot, len, scale, sub, unit } from '../core/vec3.js';
 import { curvePiece, curveReversed } from '../nurbs/curves/curve-segment.js';
 import { revolutionOf } from '../nurbs/surfaces/surface-revolution.js';
@@ -301,9 +302,10 @@ export function bindHalfRingIntersection(a: Brep, b: Brep, result: Brep, toleran
 
 /** Evaluate an exact quarter-knot rim on both original Bézier quarters, only when their derivatives agree. */
 export function halfRingMeridianD1(brep: Brep, edge: BrepEdge, face: BrepFace, mate: BrepFace, uv: Curve) {
-  if (brep.source.family !== 'analytic-boolean' || brep.faces.length !== 6 || brep.edges.length !== 10
-    || brep.coedges.length !== 20 || brep.coedges.some(use => !use.pcurve)
+  if ((!halfRingInputTopology(brep) && !halfRingFilletTopology(brep))
     || face.surface.kind !== 'surface' || uv.degree !== 1 || uv.controlPoints.some(point => point[0] !== .5)) return;
+  const uses = brep.coedges.filter(use => use.edge === edge.id);
+  if (uses.length !== 2 || uses.some(use => !use.pcurve)) return;
   const surface = face.surface, plane = facePlane(mate);
   if (!plane || !halfTurnGrid(surface) || !circleOf(edge.curve)) return;
   const size = Math.max(1, geometryScaleMM(surface.controlPoints.flat())), roundoff = 512 * Number.EPSILON * size;
@@ -326,4 +328,171 @@ export function halfRingMeridianD1(brep: Brep, edge: BrepEdge, face: BrepFace, m
       throw new RangeError('The native quarter patches do not have the same tangent plane at their knot.');
     return a;
   };
+}
+
+interface HalfRingCap {
+  face: BrepFace;
+  plane: Plane;
+  center: Point;
+  radius: number;
+  edges: BrepEdge[];
+}
+
+function halfRingCap(body: Brep, face: BrepFace): HalfRingCap | undefined {
+  const plane = facePlane(face);
+  if (!plane || face.loops.length !== 1) return;
+  const loop = body.loops.find(candidate => candidate.id === face.loops[0]);
+  if (loop?.kind !== 'outer' || loop.coedges.length !== 2) return;
+  const edges: BrepEdge[] = [];
+  let first: NonNullable<ReturnType<typeof circleOf>> | undefined;
+  for (const id of loop.coedges) {
+    const use = body.coedges.find(candidate => candidate.id === id);
+    const edge = use && body.edges.find(candidate => candidate.id === use.edge), circle = edge && circleOf(edge.curve);
+    if (!edge || !circle || circle.spans.length !== 2 || Math.abs(circle.spans[0].phi + circle.spans[1].phi - Math.PI) > ANGULAR_ROUNDOFF) return;
+    const roundoff = ANGULAR_ROUNDOFF * Math.max(1, geometryScaleMM(edge.curve.controlPoints));
+    if (Math.abs(signedDistance(plane, circle.c)) > roundoff
+      || edge.curve.controlPoints.some(point => Math.abs(signedDistance(plane, point)) > roundoff)
+      || first && (dist(first.c, circle.c) > roundoff || Math.abs(first.r - circle.r) > roundoff)) return;
+    first ??= circle;
+    edges.push(edge);
+  }
+  if (first) return { face, plane, center: first.c, radius: first.r, edges };
+}
+
+function sameChart(a: BrepFace, b: BrepFace) {
+  const x = a.surface, y = b.surface;
+  return a.sense === b.sense && x.kind === 'surface' && y.kind === 'surface'
+    && x.degreeU === y.degreeU && x.degreeV === y.degreeV
+    && same(x.knotsU, y.knotsU) && same(x.knotsV, y.knotsV)
+    && same(x.controlPoints, y.controlPoints) && same(x.weights, y.weights);
+}
+
+function originalDirection(a: Curve, b: Curve): 'forward' | 'reversed' | undefined {
+  if (a.degree !== b.degree) return;
+  const equal = (candidate: Curve) => same(a.knots, candidate.knots)
+    && same(a.controlPoints, candidate.controlPoints) && same(a.weights, candidate.weights);
+  const forward = equal(b), reversed = equal(curveReversed(b));
+  if (forward !== reversed) return forward ? 'forward' : 'reversed';
+}
+
+interface HalfRingFilletPlan {
+  stock: Brep;
+  opposite: HalfRingCap;
+  radius: number;
+  roundoff: number;
+}
+
+function readHalfRingFilletStock(body: Brep) {
+  if (!halfRingInputTopology(body)) return;
+  const caps: HalfRingCap[] = [];
+  const walls: { face: BrepFace; surface: Surface }[] = [];
+  for (const face of body.faces) {
+    if (face.surface.kind !== 'surface') return;
+    if (halfTurnGrid(face.surface)) walls.push({ face, surface: face.surface });
+    else {
+      const cap = halfRingCap(body, face);
+      if (!cap) return;
+      caps.push(cap);
+    }
+  }
+  if (walls.length !== 4 || caps.length !== 2) return;
+  const torus = walls[0].surface;
+  const [a, b] = caps;
+  const size = Math.max(1, geometryScaleMM(torus.controlPoints.flat()));
+  const roundoff = ANGULAR_ROUNDOFF * size;
+  const rev = revolutionOf(torus, size);
+  if (!rev || rev.profile.kind !== 'arc' || !(rev.profile.c[0] > rev.profile.r)) return;
+  const { a: axis, c, profile: { c: [R, h], r } } = rev, center = add(c, scale(axis, h));
+  const offset = sub(a.center, center);
+  if (dist(a.plane.normal, b.plane.normal) > ANGULAR_ROUNDOFF || Math.abs(signedDistance(a.plane, b.plane.point)) > roundoff
+    || Math.abs(dot(axis, a.plane.normal)) > ANGULAR_ROUNDOFF || Math.abs(signedDistance(a.plane, center)) > roundoff
+    || Math.abs(len(offset) - R) > roundoff || Math.abs(dot(offset, axis)) > roundoff
+    || dist(add(a.center, b.center), scale(center, 2)) > roundoff
+    || Math.abs(a.radius - r) > roundoff || Math.abs(b.radius - r) > roundoff) return;
+  if (body.vertices.some(vertex => signedDistance(a.plane, vertex.point) > roundoff)) return;
+  for (const { face, surface } of walls) {
+    const carrier = revolutionOf(surface, size);
+    if (!carrier || carrier.profile.kind !== 'arc'
+      || Math.abs(Math.abs(dot(carrier.a, axis)) - 1) > ANGULAR_ROUNDOFF
+      || dist(add(carrier.c, scale(carrier.a, carrier.profile.c[1])), center) > roundoff
+      || Math.abs(carrier.profile.c[0] - R) > roundoff || Math.abs(carrier.profile.r - r) > roundoff) return;
+    const sample = surfaceD1Evaluator(surface)(.25, .25);
+    const fromCenter = sub(sample.point, center), radial = sub(fromCenter, scale(axis, dot(fromCenter, axis)));
+    const outward = unit(sub(fromCenter, scale(unit(radial), R)));
+    const normal = scale(unit(cross(sample.du, sample.dv)), face.sense === 'forward' ? 1 : -1);
+    if (dist(normal, outward) > ANGULAR_ROUNDOFF) return;
+  }
+  const report = checkBrep(body, { strict: true });
+  if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 0) return;
+  return { caps: [a, b] as const, radius: r, roundoff };
+}
+
+/** Certify the complete transverse cap rim before the rolling ball chooses its inward offset branch. */
+export function planHalfRingFillet(body: Brep, names: readonly string[]): HalfRingFilletPlan | undefined {
+  if (names.length !== 2 || new Set(names).size !== 2) return;
+  const proof = readHalfRingFilletStock(body);
+  if (!proof) return;
+  const [a, b] = proof.caps;
+  const selected = proof.caps.find(cap => cap.edges.every(edge => edge.name !== undefined && names.includes(edge.name)));
+  if (selected) return { stock: body, opposite: selected === a ? b : a, radius: proof.radius, roundoff: proof.roundoff };
+}
+
+/** Keep the two certified cap rims separate for saved constant-fillet reference verification. */
+export function halfRingFilletReferenceRims(body: Brep) {
+  return readHalfRingFilletStock(body)?.caps.map(cap => ({ center: cap.center, edges: cap.edges.map(edge => edge.name ?? edge.id) }));
+}
+
+function halfRingInputTopology(brep: Brep) {
+  return brep.source.family === 'analytic-boolean' && brep.faces.length === 6 && brep.edges.length === 10
+    && brep.coedges.length === 20 && brep.coedges.every(use => use.pcurve);
+}
+
+function halfRingFilletTopology(brep: Brep) {
+  return brep.source.family === 'analytic-boolean' && brep.faces.length === 14 && brep.edges.length === 32 && brep.coedges.length === 64;
+}
+
+function loopOwners(brep: Brep): Map<string, BrepFace> {
+  return new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
+}
+
+/** Reapply only exact, unchanged edge parameters after rounding one whole cap of an Exact Sweep half ring. */
+export function retainHalfRingFilletCharts(result: Brep, plan: HalfRingFilletPlan): Brep {
+  if (!halfRingFilletTopology(result)) return result;
+  const { stock: body, opposite, roundoff } = plan;
+  if (result.faces.filter(face => sameChart(face, opposite.face)).length !== 1) return result;
+  const originalFaces = loopOwners(body), faces = loopOwners(result), keep = new Map<string, Curve>(), matched = new Set<string>();
+  for (const edge of result.edges) {
+    const uses = result.coedges.filter(use => use.edge === edge.id);
+    if (uses.length !== 2 || edge.curve.degree !== 2) continue;
+    const matches = body.edges.flatMap(candidate => {
+      const direction = originalDirection(edge.curve, candidate.curve);
+      return direction ? [{ edge: candidate, direction }] : [];
+    });
+    if (matches.length !== 1) continue;
+    const [match] = matches, oldUses = body.coedges.filter(use => use.edge === match.edge.id);
+    const bindings = uses.map(use => {
+      const face = faces.get(use.loop);
+      if (!face) return;
+      const older = oldUses.filter(old => {
+        const owning = originalFaces.get(old.loop);
+        return owning && sameChart(face, owning) && (old.sense === use.sense) === (match.direction === 'forward');
+      });
+      return older.length === 1 ? older[0] : undefined;
+    });
+    const [first, second] = bindings;
+    if (!first?.pcurve || !second?.pcurve || first.id === second.id || matched.has(match.edge.id)) continue;
+    matched.add(match.edge.id);
+    for (const [i, binding] of [first, second].entries()) {
+      const uv = binding.pcurve!;
+      keep.set(uses[i].id, match.direction === 'forward' ? uv : curveReversed(uv));
+    }
+  }
+  if (!opposite.edges.every(edge => matched.has(edge.id))) return result;
+  const coedges = result.coedges.map(use => {
+    const pcurve = keep.get(use.id);
+    return pcurve ? withPcurve(use, pcurve) : use;
+  });
+  const repaired = { ...result, coedges };
+  const report = checkBrep(repaired, { strict: true });
+  return report.valid && report.topology.length === 1 && report.topology[0].genus === 0 && report.maximumPcurveGap <= roundoff ? repaired : result;
 }

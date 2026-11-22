@@ -15,6 +15,7 @@ import { BarocssError, checkOutput, massPropertiesOf, reevaluate, exportStl, typ
 import { bodyMesh, canonicalSweepCapSamples, withoutNativeFaces, type DisplayEdge, type DisplayMesh } from './mesh';
 import { cylinderDisplayMesh } from './cylinderDisplay';
 import { boreWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
+import { halfRingFilletReferenceRims } from '@barocss/cad/internal/quarter-rim-fillet';
 import { arcSweepDisplayMesh } from './arcSweepDisplay';
 import { arcSweepMixedDisplayMesh, mixedSweepFilletExterior } from './arcSweepMixedDisplay';
 import { bandRailDisplayMesh } from './bandRailDisplay';
@@ -69,6 +70,8 @@ export interface BodyResult {
   nativeFilletTorus?: NativeFilletTorus;
   /** Resolved targets and verified outward cylinders of a two-edge finish on the original body. */
   nativeFilletPair?: NativeFilletPair;
+  /** Whole native cap rims certified on the original, unplaced half ring. */
+  halfRingFilletRims?: NonNullable<ReturnType<typeof halfRingFilletReferenceRims>>;
   /** The successful Chamfer preview's original native edge targets. */
   chamferTargets?: readonly string[];
   /** Mass belongs to the closed radial reference; literal stored coefficient closure is not asserted. */
@@ -279,9 +282,11 @@ function bodyOf(o: CadPartSnapshot['outputs'][number], doc: StudioDoc, revision:
     ? nativeFilletTorusOf(o) : undefined;
   const nativeFilletPair = node?.kind === 'fillet' && !node.radii && !node.section && node.edges.length === 2 &&
     node.edges.every(edge => node.sigs?.[edge]?.k === 'line') ? nativeFilletPairOf(o) : undefined;
+  const halfRingFilletRims = node?.kind === 'intersect' ? halfRingFilletReferenceRims(o.brep) : undefined;
   return { ...at, topology: nativeBodyTopology(o.brep), ...(o.cylindricalWrap ? { cylindricalWrap: o.cylindricalWrap } : {}), ...(o.band ? { band: o.band } : {}), ...(notes.length ? { notes } : {}), ...(roleOf(lib) ? { role: roleOf(lib) } : {}), innerShells: inner, family: o.representation, mesh: meshOf(o.brep, revision, quality), ...mass, ...areaOf(A, o.brep, revision, quality), ...(o.bodyCount > 1 ? { pieces: o.bodyCount, ...touchField(o.brep, meshOf(o.brep, revision, quality)) } : {}),
     ...(o.gearPlacement ? { gear: o.gearPlacement } : {}), ...(o.bevelGear?.idealModel ? { idealModel: o.bevelGear.diagnostics.find(x => x.code === 'IDEAL_MODEL')?.message ?? 'an ideal model' } : {}), ...(o.rackPlacement ? { rack: o.rackPlacement } : {}),
-    ...(o.subd && o.subd.caps ? { subd: o.subd } : {}), ...(sheet ? sheetFields(sheet) : {}), ...(o.member && m ? { cutPiece: cutPiece(o, { volume: m.volume }) } : {}), ...(element ? { element } : {}), ...(nativeFilletTorus ? { nativeFilletTorus } : {}), ...(nativeFilletPair ? { nativeFilletPair } : {}) };
+    ...(o.subd && o.subd.caps ? { subd: o.subd } : {}), ...(sheet ? sheetFields(sheet) : {}), ...(o.member && m ? { cutPiece: cutPiece(o, { volume: m.volume }) } : {}), ...(element ? { element } : {}), ...(nativeFilletTorus ? { nativeFilletTorus } : {}), ...(nativeFilletPair ? { nativeFilletPair } : {}),
+    ...(halfRingFilletRims ? { halfRingFilletRims } : {}) };
 }
 
 /** The main part's evaluation profiles its features (O10; a reused snapshot keeps the option). */
@@ -680,6 +685,7 @@ export function placeBody(b: BodyResult, m: readonly number[], t: readonly numbe
   delete placedBody.sheetBendOwners;
   delete placedBody.nativeFilletTorus;
   delete placedBody.nativeFilletPair;
+  delete placedBody.halfRingFilletRims;
   return { ...placedBody, mesh, ...placedMass(b, m, t), ...(b.massRef !== undefined ? { massPlace: [...(b.massPlace ?? []), { m: [...m], t: [...t] }] } : {}), ...(element ? { element } : {}) };
 }
 /** A body's centre of mass moved and its inertia turned by a placement (what it has of them). */
