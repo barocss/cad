@@ -24,6 +24,7 @@
 import { BrepError, buildBrep, checkBrep, lineCurve, type Brep } from '../brep/brep-core.js';
 import { booleanAnalytic, faceGeometry, type FaceGeometry } from '../brep/analytic-boolean.js';
 import { planHalfRingFillet, retainHalfRingFilletCharts, separateHalfRingFilletTools } from '../brep/exact-ring-intersect.js';
+import { retainSweepCircularJoinBindings } from '../brep/sweep-circular-join-bindings.js';
 import { brepFromPrismatic, nameEdges, prismaticFromProfile } from '../features/prismatic-solid.js';
 import { revolveProfile } from '../features/revolve.js';
 import { transformBrep } from '../brep/brep-transform.js';
@@ -557,7 +558,7 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
   }
   if (halfRing && rings.length === halfRing.rims.length && rings.every(ring => ring.convex) && !convexTools.length && !cornerTools.length
     && !concaveTools.length && !concaveCorners.length) return retainHalfRingFilletCharts(out, halfRing);
-  return out;
+  return rings.length ? retainSweepCircularJoinBindings(body, out) : out;
   } finally { if (usedCylinder) used.cylinder = true; }
 }
 
