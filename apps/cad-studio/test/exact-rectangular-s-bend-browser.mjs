@@ -219,7 +219,7 @@ async function approveProposal(source, joined, rail, native, applied) {
   await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'rectangular-s-bend', async call => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
-    assert.match(description.values.sketch, spaced ? /same direction.*solid rectangle aligned with the bend frame/
+    assert.match(description.values.sketch, spaced ? /same direction.*rectangle aligned with the bend frame/
       : /Both two-arc paths accept .* rectangle aligned with the bend frame/);
     const summary = await call('query', { action: 'summary' });
     const saved = summary.direct_curves.find(curve => curve.id === rail.id);

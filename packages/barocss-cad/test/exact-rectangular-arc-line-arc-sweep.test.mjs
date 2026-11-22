@@ -14,6 +14,13 @@ const norm = a => Math.hypot(...a);
 const near = (a, b, tolerance = 1e-8) => assert.ok(Math.abs(a - b) <= tolerance, `${a} vs ${b} at tolerance ${tolerance}`);
 const pointNear = (a, b, tolerance = 1e-8) => near(norm(sub(a, b)), 0, tolerance);
 const section = { id: 's', kind: 'sketch', profile: 'rectangle', min: [48, -33], max: [52, -27] };
+const innerWall = face => face.surface.id.includes('_hole0_') || face.surface.id.startsWith('w_line_w0_0_1_');
+function rectangle(halfX, halfY, { center = [50, -30], clockwise = false } = {}) {
+  const points = clockwise ? [[-halfX, -halfY], [-halfX, halfY], [halfX, halfY], [halfX, -halfY]]
+    : [[-halfX, -halfY], [halfX, -halfY], [halfX, halfY], [-halfX, halfY]];
+  return points.map(start => ({ kind: 'line', start: add(start, center) }));
+}
+const duct = { ...section, holes: [rectangle(1, 2, { clockwise: true })] };
 const document = ({ degree, knots, controlPoints, weights }, sketch = section) => ({
   format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
     sketch, { kind: 'sweep-curve', id: 'w', sketch: 's', mode: 'exact', path: { degree, knots, controlPoints, weights } },
@@ -59,36 +66,43 @@ function verifySection(edges, center, radial, axis, halfWidth, halfHeight) {
   assert.equal(corners.size, 4);
 }
 
-function verify(output, { first, second, direction, length }, halfWidth = 2, halfHeight = 3) {
+function verify(output, { first, second, direction, length }, halfWidth = 2, halfHeight = 3, inner) {
   const { brep } = output, check = checkBrep(brep, { strict: true });
   assert.equal(output.representation, 'curved');
   assert.deepEqual(brep.source, { family: 'sweep-curve', id: 'w' });
   assert.ok(check.valid, check.issues.join('\n'));
   assert.equal(check.topology.length, 1);
-  assert.equal(check.topology[0].genus, 0);
-  assert.deepEqual(check.counts, { bodies: 1, shells: 1, faces: 14, loops: 14, coedges: 56, edges: 28, vertices: 16 });
-  assert.equal(new Set(brep.faces.map(face => face.name)).size, 14);
+  assert.equal(check.topology[0].genus, inner ? 1 : 0);
+  assert.deepEqual(check.counts, inner
+    ? { bodies: 1, shells: 1, faces: 26, loops: 28, coedges: 112, edges: 56, vertices: 32 }
+    : { bodies: 1, shells: 1, faces: 14, loops: 14, coedges: 56, edges: 28, vertices: 16 });
+  assert.equal(new Set(brep.faces.map(face => face.name)).size, inner ? 26 : 14);
   const geometry = new Map(brep.faces.map(face => [face.id, faceGeometry(face)]));
   for (const [label, bend] of [['first', first], ['second', second]]) {
     const walls = brep.faces.filter(face => face.name.startsWith(`w.${label}.`));
-    assert.equal(walls.length, 4);
-    const cylinders = walls.map(face => geometry.get(face.id)).filter(g => g.kind === 'cylinder');
-    assert.equal(cylinders.length, 2);
-    assert.deepEqual(cylinders.map(g => g.out).sort(), [-1, 1]);
-    for (const cylinder of cylinders) {
-      near(Math.abs(dot(cylinder.a, bend.axis)), 1);
-      near(norm(cross(sub(cylinder.c, bend.center), bend.axis)), 0);
-      near(cylinder.r, bend.radius + cylinder.out * halfWidth);
-    }
-    const planes = walls.map(face => geometry.get(face.id)).filter(g => g.kind === 'plane');
-    assert.equal(planes.length, 2);
-    for (const plane of planes) {
-      near(Math.abs(dot(plane.n, bend.axis)), 1);
-      near(dot(sub(plane.o, bend.start), plane.n), halfHeight);
+    assert.equal(walls.length, inner ? 8 : 4);
+    for (const isInner of inner ? [false, true] : [false]) {
+      const [width, height] = isInner ? inner : [halfWidth, halfHeight], sign = isInner ? -1 : 1;
+      const group = walls.filter(face => innerWall(face) === isInner);
+      assert.equal(group.length, 4);
+      const cylinders = group.map(face => geometry.get(face.id)).filter(g => g.kind === 'cylinder');
+      assert.equal(cylinders.length, 2);
+      assert.deepEqual(cylinders.map(g => g.out).sort(), [-1, 1]);
+      for (const cylinder of cylinders) {
+        near(Math.abs(dot(cylinder.a, bend.axis)), 1);
+        near(norm(cross(sub(cylinder.c, bend.center), bend.axis)), 0);
+        near(cylinder.r, bend.radius + sign * cylinder.out * width);
+      }
+      const planes = group.map(face => geometry.get(face.id)).filter(g => g.kind === 'plane');
+      assert.equal(planes.length, 2);
+      for (const plane of planes) {
+        near(Math.abs(dot(plane.n, bend.axis)), 1);
+        near(dot(sub(plane.o, bend.start), plane.n), sign * height);
+      }
     }
   }
   const lineWalls = brep.faces.filter(face => face.name.startsWith('w.line.'));
-  assert.equal(lineWalls.length, 4);
+  assert.equal(lineWalls.length, inner ? 8 : 4);
   for (const face of lineWalls) assert.equal(geometry.get(face.id).kind, 'plane');
   for (const face of brep.faces.filter(face => face.name === 'w.start' || face.name === 'w.end')) {
     const start = face.name === 'w.start', bend = start ? first : second;
@@ -97,16 +111,29 @@ function verify(output, { first, second, direction, length }, halfWidth = 2, hal
     assert.equal(plane.kind, 'plane');
     pointNear(plane.n, normal);
     near(dot(sub(plane.o, center), normal), 0);
-    assert.equal(face.loops.length, 1);
-    const edges = brep.coedges.filter(use => face.loops.includes(use.loop)).map(use => brep.edges.find(edge => edge.id === use.edge));
-    verifySection(edges, center, start ? first.inward : second.exitInward, bend.axis, halfWidth, halfHeight);
+    const loops = face.loops.map(id => brep.loops.find(loop => loop.id === id));
+    assert.deepEqual(loops.map(loop => loop.kind).sort(), inner ? ['inner', 'outer'] : ['outer']);
+    for (const loop of loops) {
+      const uses = loop.coedges.map(id => brep.coedges.find(use => use.id === id));
+      const edges = uses.map(use => brep.edges.find(edge => edge.id === use.edge));
+      const [width, height] = loop.kind === 'inner' ? inner : [halfWidth, halfHeight];
+      verifySection(edges, center, start ? first.inward : second.exitInward, bend.axis, width, height);
+      let area = 0;
+      for (const [i, edge] of edges.entries()) {
+        const [a, b] = edge.curve.controlPoints.map(point => sub(point, center));
+        area += (uses[i].sense === 'forward' ? 1 : -1) * dot(cross(a, b), normal) / 2;
+      }
+      near(area, (loop.kind === 'inner' ? -1 : 1) * 4 * width * height);
+    }
   }
   assert.equal(brep.faces.filter(face => face.name === 'w.start' || face.name === 'w.end').length, 2);
 
   const jointIds = new Set();
   for (const [label, center, bend, radial] of [['first', first.end, first, first.exitInward], ['second', second.start, second, second.inward]]) {
     const seams = brep.edges.filter(edge => edge.name?.includes(`w.${label}.`) && edge.name.includes('w.line.'));
-    verifySection(seams, center, radial, first.axis, halfWidth, halfHeight);
+    const isInnerEdge = edge => innerWall(brep.faces.find(face => face.loops.includes(brep.coedges.find(use => use.edge === edge.id).loop)));
+    verifySection(seams.filter(edge => !isInnerEdge(edge)), center, radial, first.axis, halfWidth, halfHeight);
+    if (inner) verifySection(seams.filter(isInnerEdge), center, radial, first.axis, ...inner);
     let flat = 0, curved = 0;
     for (const edge of seams) {
       jointIds.add(edge.id);
@@ -115,6 +142,8 @@ function verify(output, { first, second, direction, length }, halfWidth = 2, hal
       assert.equal(uses[0].twin, uses[1].id);
       assert.equal(uses[1].twin, uses[0].id);
       assert.notEqual(uses[0].sense, uses[1].sense);
+      const owners = uses.map(use => brep.faces.find(face => face.loops.includes(use.loop)));
+      assert.equal(innerWall(owners[0]), innerWall(owners[1]));
       for (const use of uses) {
         assert.ok(use.pcurve, `${edge.name}: missing native pcurve`);
         assert.deepEqual(curveDomain(use.pcurve), domain);
@@ -146,10 +175,10 @@ function verify(output, { first, second, direction, length }, halfWidth = 2, hal
         near(sample.difference, Math.abs(expected), 1e-10);
       }
     }
-    assert.equal(flat, 2);
-    assert.equal(curved, 2);
+    assert.equal(flat, inner ? 4 : 2);
+    assert.equal(curved, inner ? 4 : 2);
   }
-  assert.equal(jointIds.size, 8);
+  assert.equal(jointIds.size, inner ? 16 : 8);
 
   // Each bend stays in its own half-space outside the straight slab. Check native surfaces against
   // the authored rectangular carrier, including radial clearance from each bend's own axis.
@@ -184,8 +213,11 @@ function verify(output, { first, second, direction, length }, halfWidth = 2, hal
 
 // Independent exact moments of dV = (1-u/R) du dv R dtheta. The radial second moment is a²/3;
 // integrate n(theta), n(theta)n(theta)^T with trigonometric antiderivatives, and the straight by polynomials.
-function checkAnalyticMass(output, { first, second, direction, length }, halfWidth, halfHeight) {
-  const density = 7.85, area = 4 * halfWidth * halfHeight, q = halfWidth ** 2 / 3, v = halfHeight ** 2 / 3;
+function checkAnalyticMass(output, { first, second, direction, length }, halfWidth, halfHeight, inner = [0, 0]) {
+  const [innerWidth, innerHeight] = inner, density = 7.85;
+  const carrier = halfWidth * halfHeight - innerWidth * innerHeight, area = 4 * carrier;
+  const q = (halfWidth ** 3 * halfHeight - innerWidth ** 3 * innerHeight) / (3 * carrier);
+  const v = (halfWidth * halfHeight ** 3 - innerWidth * innerHeight ** 3) / (3 * carrier);
   const volume = area * (first.length + length + second.length), moment = [0, 0, 0];
   const raw = Array.from({ length: 3 }, () => [0, 0, 0]);
   for (const bend of [first, second]) {
@@ -249,6 +281,82 @@ test('same-turn spaced rectangle keeps eight native G1 seams, exact moments and 
   assert.deepEqual(restored.outputs[0].brep, initial.outputs[0].brep);
 });
 
+test('a same-turn spaced rectangular duct keeps two open caps, sixteen native G1 seams and exact moments through opening edit and reopen', () => {
+  const path = rail(), initial = evaluateCadPart(document(path.path, duct));
+  verify(initial.outputs[0], path, 2, 3, [1, 2]);
+  checkAnalyticMass(initial.outputs[0], path, 2, 3, [1, 2]);
+  near(massPropertiesOf(initial.outputs[0]).volume, 240 * Math.PI + 128);
+  const editedSection = { ...duct, holes: [rectangle(1, 1, { clockwise: true })] };
+  const edited = reevaluate(initial, { document: document(path.path, editedSection) });
+  verify(edited.outputs[0], path, 2, 3, [1, 1]);
+  checkAnalyticMass(edited.outputs[0], path, 2, 3, [1, 1]);
+  near(massPropertiesOf(edited.outputs[0]).volume, 300 * Math.PI + 160);
+  const outerWalls = output => output.brep.faces.filter(face => !innerWall(face) && face.name !== 'w.start' && face.name !== 'w.end');
+  assert.deepEqual(outerWalls(edited.outputs[0]), outerWalls(initial.outputs[0]));
+  const solid = evaluateCadPart(document(path.path)).outputs[0];
+  assert.deepEqual(outerWalls(initial.outputs[0]).map(({ name, surface }) => ({ name, surface })),
+    outerWalls(solid).map(({ name, surface }) => ({ name, surface })));
+  const identity = output => Object.fromEntries(['bodies', 'shells', 'faces', 'loops', 'coedges', 'edges', 'vertices']
+    .map(kind => [kind, output.brep[kind].map(({ id, name }) => [id, name])]));
+  assert.deepEqual(identity(edited.outputs[0]), identity(initial.outputs[0]));
+  const reopened = loadCadPart(saveCadPart(edited));
+  assert.deepEqual(reopened.document, edited.document);
+  assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
+  verify(reopened.outputs[0], path, 2, 3, [1, 1]);
+  const restored = reevaluate(reopened, { document: document(path.path, duct) });
+  assert.deepEqual(restored.outputs[0].brep, initial.outputs[0].brep);
+});
+
+for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
+  [30, 120, 7, 4, 8], [120, 30, 4, 7, 8], [120, 120, 7, 4, 8], [90, 90, 12, 12, .00011],
+]) test(`an oblique radial-Y ${firstAngle}°/${secondAngle}° duct retains opening ownership for either winding and authored side tags`, () => {
+  const path = rail({ firstAngle, secondAngle, firstRadius, secondRadius, length,
+    start: [42, -17, 8], tangent: [.6, .8, 0], inward: [.8, -.6, 0] });
+  for (const clockwise of [false, true]) {
+    const hole = rectangle(9, 1, { clockwise });
+    hole.push(hole.shift());
+    const sketch = { id: 's', kind: 'sketch', profile: 'loop', segments: rectangle(10, 2), holes: [hole],
+      plane: { origin: [5, 4, 3], normal: path.first.tangent, xAxis: path.first.axis },
+      sideTags: { outer: ['o0', 'o1', 'o2', 'o3'], holes: [['i0', 'i1', 'i2', 'i3']] } };
+    const [output] = evaluateCadPart(document(path.path, sketch)).outputs;
+    verify(output, path, 2, 10, [1, 9]);
+    checkAnalyticMass(output, path, 2, 10, [1, 9]);
+    for (const tag of [...sketch.sideTags.outer, ...sketch.sideTags.holes[0]]) assert.deepEqual(output.brep.faces
+      .filter(face => face.name.endsWith(`.side[${tag}]`)).map(face => face.name).sort(),
+    [`w.first.side[${tag}]`, `w.line.side[${tag}]`, `w.second.side[${tag}]`]);
+  }
+});
+
+test('a spaced rectangular duct retains safe thin walls and refuses unsupported openings without changing the prior solid', () => {
+  const path = rail(), initial = evaluateCadPart(document(path.path, duct)), before = structuredClone(initial);
+  const refused = (changedRail, sketch, code, message) => {
+    assert.throws(() => reevaluate(initial, { document: document(changedRail.path, sketch) }),
+      error => error instanceof CadPartError && error.feature === 'w' && error.code === code && message.test(error.message));
+    assert.deepEqual(initial, before);
+  };
+  const aperture = /one centered rectangular opening aligned with the outer rectangle/;
+  const wall = /strictly positive wall clearance around the opening/;
+  const withHole = (...holes) => ({ ...duct, holes });
+  refused(path, withHole(rectangle(1, 2, { center: [50.05, -30] })), 'CAPABILITY', aperture);
+  const rotated = rectangle(1, 2, { center: [0, 0] }).map(({ kind, start: [x, y] }) => ({
+    kind, start: [50 + (x - y) * Math.SQRT1_2, -30 + (x + y) * Math.SQRT1_2],
+  }));
+  refused(path, withHole(rotated), 'CAPABILITY', aperture);
+  refused(path, withHole(...duct.holes, rectangle(.5, .5)), 'CAPABILITY', aperture);
+  refused(path, withHole(rectangle(1e-5, 2)), 'CAPABILITY', aperture);
+  for (const width of [2, 2.01, 2 - 5e-7, 2 - 1e-6]) refused(path, withHole(rectangle(width, 2)), 'GEOMETRY', wall);
+  refused(path, withHole(rectangle(1, 2, { center: [51, -30] })), 'GEOMETRY', wall);
+  const jointGap = 1e-6 + 2e-13;
+  assert.ok(2 - (2 - jointGap) > 1e-6);
+  refused(path, withHole(rectangle(2 - jointGap, 2)), 'GEOMETRY', wall);
+  verify(evaluateCadPart(document(path.path, withHole(rectangle(2 - 5e-6, 2)))).outputs[0], path, 2, 3, [2 - 5e-6, 2]);
+  refused(path, { ...duct, plane: { origin: [0, 0, 0], normal: path.first.tangent, xAxis: [0, Math.SQRT1_2, Math.SQRT1_2] } },
+    'CAPABILITY', /original axes aligned to the bend radial and binormal/);
+  for (const radius of [2, 1.99]) for (const radii of [{ firstRadius: radius }, { secondRadius: radius }])
+    refused(rail(radii), duct, 'PARAMETER', /radial half-width smaller than both path radii/);
+  refused(rail({ turn: -1 }), duct, 'CAPABILITY', /one circular outer section/);
+});
+
 for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
   [30, 120, 7, 4, 8], [120, 30, 4, 7, 8], [120, 120, 7, 4, 8], [90, 90, 12, 12, .00011],
 ]) test(`oblique radial-Y rectangle ${firstAngle}°/${secondAngle}° keeps both joins and its large binormal extent`, () => {
@@ -261,7 +369,7 @@ for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
   checkAnalyticMass(output, path, 2, 10);
 });
 
-test('spaced rectangle refuses holes, roll, either axis contact, opposite turns and invalid rails without state changes', () => {
+test('spaced rectangle refuses unsupported openings, roll, either axis contact, opposite turns and invalid rails without state changes', () => {
   const path = rail(), initial = evaluateCadPart(document(path.path)), before = structuredClone(initial);
   const refused = (changedRail, sketch, code, message) => {
     assert.throws(() => reevaluate(initial, { document: document(changedRail.path, sketch) }),
@@ -272,8 +380,8 @@ test('spaced rectangle refuses holes, roll, either axis contact, opposite turns 
     'CAPABILITY', /rectangle's original axes aligned to the bend radial and binormal/);
   const rectangle = [[49, -32], [51, -32], [51, -28], [49, -28]].map(start => ({ kind: 'line', start }));
   const circle = [{ kind: 'arc', start: [51, -30], center: [50, -30], direction: 'ccw' }];
-  for (const holes of [[rectangle], [circle], [rectangle, circle]]) refused(path, { ...section, holes },
-    'CAPABILITY', /one solid section without holes/);
+  for (const holes of [[circle], [rectangle, circle]]) refused(path, { ...section, holes },
+    'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/);
   for (const radius of [2, 1.99]) for (const radii of [{ firstRadius: radius }, { secondRadius: radius }])
     refused(rail(radii), section, 'PARAMETER', /rectangular arc-line-arc sweep needs radial half-width smaller than both path radii/);
   refused(rail({ turn: -1 }), section, 'CAPABILITY', /one circular outer section/);

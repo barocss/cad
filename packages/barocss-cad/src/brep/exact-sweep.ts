@@ -837,7 +837,7 @@ function arcPairSweep(id: string, arcs: NonNullable<ReturnType<typeof tangentArc
   let lead: Brep = a.brep;
   let lineMass: ((density: number) => MassProperties) | undefined;
   if (hasLine) {
-    const prism = prismaticFromProfile({ outer: profile, holes: bore ? [[bore]] : undefined,
+    const prism = prismaticFromProfile({ outer: profile, holes: opening ? [opening.profile] : bore ? [[bore]] : undefined,
       height: length, tag: `${id}.line`, sideTags: tags,
       names: { bottom: `${id}.line.start`, top: `${id}.line.end` } });
     const straight = transformBrep(brepFromPrismatic(prism, { id: `${id}_line` }),
@@ -845,7 +845,7 @@ function arcPairSweep(id: string, arcs: NonNullable<ReturnType<typeof tangentArc
     if (wall !== undefined && !jointWallClear(lead, straight, wall, roundoff)) return wallError();
     // The first bend stays behind its exit tangent plane; the straight occupies the slab between both joins.
     const glued = glueSection(lead, `${id}.first.end`, straight, `${id}.line.start`, join.offset, join.axes[2], roundoff, sharedSection, id);
-    if (!glued) return refuse('GEOMETRY', `The exact arc-line-arc sweep sections do not share the same ${rectangle ? 'rectangle' : bore ? 'annulus' : 'disk'}.`);
+    if (!glued) return refuse('GEOMETRY', `The exact arc-line-arc sweep sections do not share the same ${opening ? 'outer rectangle and opening' : rectangle ? 'rectangle' : bore ? 'annulus' : 'disk'}.`);
     lead = glued;
     lineMass = density => prismaticMassProperties(prism, density);
   }
@@ -854,7 +854,7 @@ function arcPairSweep(id: string, arcs: NonNullable<ReturnType<typeof tangentArc
   const glued = glueSection(lead, hasLine ? `${id}.line.end` : `${id}.first.end`, placed, `${id}.second.start`,
     secondFrame.offset, secondFrame.axes[2], roundoff, sharedSection, id);
   if (!glued) return refuse('GEOMETRY', `The exact ${style} sweep sections do not share the same ${opening ? 'outer rectangle and opening' : rectangle ? 'rectangle' : bore ? 'annulus' : 'disk'}.`);
-  const brep = hasLine ? bindArcLineArcJoins(glued, id, roundoff, bore !== undefined, rectangle ? 4 : 2)
+  const brep = hasLine ? bindArcLineArcJoins(glued, id, roundoff, hasOpening, rectangle ? 4 : 2)
     : bindArcPairJoin(glued, id, roundoff, hasOpening, rectangle ? 4 : 2);
   const hasCap = (end: 'start' | 'end') =>
     brep?.faces.some(face => face.name === `${id}.${end}` && face.loops.length === (hasOpening ? 2 : 1));
@@ -956,8 +956,6 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     const rectangle = profileRadius === undefined && spaced.turn === 1 ? rectangleSection(outer) : undefined;
     if (!rectangle && (!disk || profileRadius === undefined))
       return refuse('CAPABILITY', 'Exact arc-line-arc sweep needs one circular outer section.');
-    if (rectangle && holes.length)
-      return refuse('CAPABILITY', 'Exact rectangular arc-line-arc sweep needs one solid section without holes.');
     const hole = rectangle ? undefined : circularHole(holes, 'arc-line-arc', refuse);
     const bore = hole && concentricBore(disk!, hole, refuse);
     const initial = frame(spaced.first.tangent), [x, y] = initial;
@@ -969,7 +967,7 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     };
     const result = place(arcPairSweep(id, spaced, joined.section, bore, sideTags, refuse), joined.axes, spaced.first.start);
     const report = checkBrep(result.brep, { strict: true });
-    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== (bore ? 1 : 0))
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== (bore || joined.section.opening ? 1 : 0))
       return refuse('GEOMETRY', 'The exact arc-line-arc sweep did not produce a valid closed solid.');
     return result;
   }
