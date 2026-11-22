@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1734 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1735 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1734](notes/studio-assembly-cut-editor-2026-11-23/README.md), P4 row 22. Assembly Cut draft authoring and Apply leave App with matching desktop state, saved model and raster output. [D1733](notes/exact-spaced-rectangular-duct-2026-11-23/README.md) adds a centered rectangular duct opening across spaced same-turn bends. The B06 PDF group remains held.
-- **Next MAIN:** D1735, P0 reference ownership [rows 05](roadmap-rows/05.md), [15](roadmap-rows/15.md) and [16](roadmap-rows/16.md), [#20](https://github.com/barocss/cad/issues/20). Exercise the first reproducible native rebuild refusal after two admissible straight-edge picks in the D1722 replacement flow. Preserve both held references and the original body and history. Recover with a valid replacement pair in the same review.
+- **Current position:** [D1735](notes/held-fillet-pair-refusal-notice-2026-11-23/README.md), P0 rows 05, 15 and 16. A failed native Fillet rebuild preserves the held pair and its history. Studio clears the failure when the pick changes or the review ends. [D1734](notes/studio-assembly-cut-editor-2026-11-23/README.md) extracts Assembly Cut draft authoring from App. The B06 PDF group remains held.
+- **Next MAIN:** D1736, P5 Exact Sweep [rows 07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Carry a bend-aligned rectangular section through a tangent arc–straight–arc with opposite turns. Verify exact joints, editable dimensions and fresh Open. Check the centered rectangular duct through the same path if the shared admission admits it.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

@@ -529,7 +529,7 @@ export function App() {
   // (`action`: one button on the toast, e.g. Undo after the agent applied a change directly, D41.)
   const [workerFailure, setWorkerFailure] = useState<FriendlyError | null>(null);
   const [notice, setToast] = useState<StudioNotice | null>(null);
-  const clearDrawingToast = useCallback((owned: FriendlyError) => setToast(current => retireStudioNotice(current, owned)), []);
+  const clearOwnedNotice = useCallback((owned: FriendlyError) => setToast(current => retireStudioNotice(current, owned)), []);
   const clearBodyClipboard = useCallback(() => {
     clipboard.current = null;
     setToast(current => current?.bodyCopy ? null : current);
@@ -1842,6 +1842,7 @@ export function App() {
       return true;
     },
     notice: setToast,
+    retireNotice: clearOwnedNotice,
   });
   const replacementEndpointLocations = finishEdgeEditor.current?.endpoints;
   const displayedFilletEndpoints = replacementEndpointLocations ?? filletEndpointLocations;
@@ -3058,7 +3059,7 @@ export function App() {
 
       {browserPlacement === 'left' && browserPanel}
 
-      {drawing && <Suspense fallback={null}><DrawingWorkspace key={docGeneration} engine={engine} doc={{ ...evaluated, instances: doc.instances, assemblyCuts: doc.assemblyCuts }} bodies={bodies} settings={doc.drawing ?? defaultDrawing()} modelInput={evaluated} workerSession={workerSession} sourceCurrent={fresh && !busy && marker === null && !variants.showing} fileName={fileName} onChange={commitDrawing} onToast={setToast} onClearToast={clearDrawingToast} referencePreview={referencePreview?.owner === doc && fresh && !busy ? referencePreview : null} onClearReferencePreview={clearReferencePreview} onReferenceLabels={receiveReferenceLabels} /></Suspense>}
+      {drawing && <Suspense fallback={null}><DrawingWorkspace key={docGeneration} engine={engine} doc={{ ...evaluated, instances: doc.instances, assemblyCuts: doc.assemblyCuts }} bodies={bodies} settings={doc.drawing ?? defaultDrawing()} modelInput={evaluated} workerSession={workerSession} sourceCurrent={fresh && !busy && marker === null && !variants.showing} fileName={fileName} onChange={commitDrawing} onToast={setToast} onClearToast={clearOwnedNotice} referencePreview={referencePreview?.owner === doc && fresh && !busy ? referencePreview : null} onClearReferencePreview={clearReferencePreview} onReferenceLabels={receiveReferenceLabels} /></Suspense>}
 
       {!dockDocked && hud}
 

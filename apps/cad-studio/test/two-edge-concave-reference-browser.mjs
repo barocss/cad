@@ -4,12 +4,15 @@ import { createFlow } from './flow-helper.mjs';
 const manualBase = process.argv.includes('--manual-base');
 const manual = process.argv.includes('--manual');
 const dualBase = process.argv.includes('--dual-base');
-const dualManual = process.argv.includes('--dual-manual');
+const nativeRefusal = process.argv.includes('--dual-native-refusal');
+const expectStaleNotice = process.argv.includes('--expect-stale-notice');
+const dualManual = nativeRefusal || process.argv.includes('--dual-manual');
 const dual = dualBase || dualManual;
 const pins = [
   'apps/cad-studio/test/two-edge-concave-reference-browser.mjs',
   'apps/cad-studio/test/flow-helper.mjs',
   'apps/cad-studio/src/App.tsx',
+  'apps/cad-studio/src/app/studioNotice.ts',
   'apps/cad-studio/src/state/heldFinishReplacement.ts',
   'apps/cad-studio/src/state/useHeldFinishEdge.ts',
   'apps/cad-studio/src/ui/ReferenceDecisions.tsx',
@@ -18,6 +21,9 @@ const pins = [
   'packages/barocss-cad-model/src/engine/rematch.ts',
 ];
 const oldEdge = 'n1.side1|n1.side2', retained = 'n1.side0|n1.side1', desired = 'n1.side2|n1.side3';
+const frontTop = 'n1.side0|n1.top';
+const height = nativeRefusal ? 1 : 3;
+const targetVolume = 175 * height;
 const oldBottom = dual ? -12 : 0;
 const oldPoints = [[0, oldBottom], [20, oldBottom], [20, 20], [15, 20], [15, 15], [5, 15], [5, 20], [0, 20]];
 const newPoints = [[0, 0], [20, 0], [20, 5], [5, 5], [5, 20], [0, 20]];
@@ -25,14 +31,15 @@ const ref = node => ({ node, side: 'solid' });
 const model = (points, edges) => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [{ id: 'n0', kind: 'sketch', profile: 'polygon', points },
-    { id: 'n1', kind: 'extrude', sketch: 0, height: 3 },
+    { id: 'n1', kind: 'extrude', sketch: 0, height },
     { id: 'n2', kind: 'fillet', parent: ref(1), edges, radius: 2 }],
   outputs: { b2: ref(2) }, nextId: 3,
 });
 const f = await createFlow({
   name: 'two-edge-concave-reference', output: process.argv[2],
   envFrozen: 'TWO_EDGE_CONCAVE_REFERENCE_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
-  qualification: dual ? 'Recover both changed edges of a saved two-edge constant Fillet together.'
+  qualification: nativeRefusal ? 'Keep both held references after a native Fillet refusal and recover in the same review.'
+    : dual ? 'Recover both changed edges of a saved two-edge constant Fillet together.'
     : 'Recover one changed edge of a two-edge constant Fillet, with the other native line unchanged.',
   limits: ['Source model opened through the supported file UI. Creation by viewport is NOT_RUN.',
     'Native original and explicit target must pass before browser claims. Varying or shaped Fillets and Chamfers are excluded.',
@@ -50,7 +57,8 @@ function sign(doc){const prefix={...doc,nodes:doc.nodes.slice(0,2),outputs:{b1:{
  const e=evaluatePart(prefix,1);if(!e.ok)throw Error('Native prefix refused: '+JSON.stringify(e));
  const signed=captureSignatures(doc,e.bodies);if(Object.keys(signed.nodes[2].sigs??{}).length!==doc.nodes[2].edges.length)throw Error('Missing captured native signature');
  return {doc:signed,native:inspect(signed)};}
-console.log(JSON.stringify(input.prepare?{old:sign(input.old),target:sign(input.target),single:sign(input.single)}:inspect(input)));
+console.log(JSON.stringify(input.prepare?{old:sign(input.old),target:sign(input.target),single:sign(input.single),
+ refusal:input.reject&&evaluatePart(input.reject,1)}:inspect(input)));
 `,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -65,7 +73,7 @@ function geometry(rows, volume, corners) {
   for (const { centre, contacts } of corners) {
     const matches = cylinders.filter(c => Math.hypot(c.c[0] - centre[0], c.c[1] - centre[1]) < 1e-8);
     assert.equal(matches.length, 1); near(matches[0].r, 2, 1e-8); near(Math.abs(matches[0].a[2]), 1, 1e-8);
-    for (const [x, y] of contacts) for (const z of [0, 3])
+    for (const [x, y] of contacts) for (const z of [0, height])
       assert.ok(n.vertices.some(v => xyz(v, [x, y, z])), `missing tangency ${[x, y, z]}`);
   }
 }
@@ -121,16 +129,21 @@ await f.run(async () => {
   f.phase = 'native preflight: genuine old signatures and both supported target corners';
   const prep = await f.inspect('00-native-preflight', { prepare: true,
     old: model(oldPoints, [oldEdge, retained]), target: model(newPoints, [desired, retained]),
-    single: model(oldPoints, [oldEdge]) });
-  const oldVolume = 1050 - 60 * oldBottom;
-  geometry(prep.old.native, oldVolume - 6 * (4 - Math.PI), [sourceConvex, oldTop]);
-  geometry(prep.target.native, 525, [convex, concave]);
-  geometry(prep.single.native, oldVolume - 3 * (4 - Math.PI), [oldTop]);
+    single: model(oldPoints, [oldEdge]), reject: nativeRefusal ? model(newPoints, [desired, frontTop]) : undefined });
+  const oldVolume = (350 - 20 * oldBottom) * height;
+  geometry(prep.old.native, oldVolume - 2 * height * (4 - Math.PI), [sourceConvex, oldTop]);
+  geometry(prep.target.native, targetVolume, [convex, concave]);
+  geometry(prep.single.native, oldVolume - height * (4 - Math.PI), [oldTop]);
+  if (nativeRefusal) {
+    assert.equal(prep.refusal.ok, false);
+    assert.match(prep.refusal.error.detail, /RADIUS_EXCEEDS_FACE.*n1\.side0\|n1\.top.*walls of 1 and 5 mm/);
+    f.report.observations.push({ rejectedNativePair: prep.refusal.error });
+  }
   const signature = prep.old.doc.nodes[2].sigs[retained];
   if (!dual) assert.deepEqual(signature, prep.target.doc.nodes[2].sigs[retained]);
-  assert.equal(signature.k, 'line'); assert.deepEqual(signature.p, [20, oldBottom, 1.5]); near(signature.s, 3);
+  assert.equal(signature.k, 'line'); assert.deepEqual(signature.p, [20, oldBottom, height / 2]); near(signature.s, height);
   near(Math.abs(signature.d[2]), 1); near(signature.d[0], 0); near(signature.d[1], 0);
-  assert.deepEqual(prep.old.doc.nodes[2].sigs[oldEdge].p, [20, 20, 1.5]);
+  assert.deepEqual(prep.old.doc.nodes[2].sigs[oldEdge].p, [20, 20, height / 2]);
   f.report.observations.push({ nativePreflight: 'PASS', retainedNativeSignature: signature, oldNative: prep.old.native, explicitTargetNative: prep.target.native });
   await open('two-edge-original', prep.old.doc); await f.same(prep.old.doc);
   assert.equal(await refs().count(), 0); await f.snapshot('01-original-two-edge');
@@ -141,7 +154,7 @@ await f.run(async () => {
   assert.deepEqual(before.doc.nodes[2].edges, [oldEdge, retained]);
   assert.deepEqual(before.doc.nodes[2].sigs, stale.nodes[2].sigs);
   assert.equal(before.doc.nodes[2].suppressed, true);
-  near(before.bodies.bodies[0].volume, 525);
+  near(before.bodies.bodies[0].volume, targetVolume);
   const rows = await candidateRows();
   assert.equal(rows.filter(r => r.text.includes('Choose a reference') || r.text.includes('Reference missing')).length, dual ? 2 : 1);
   f.report.observations.push({ candidates: rows, held: before.doc.nodes[2].held, rematched: before.doc.nodes[2].rematched ?? null, historicalSignatures: before.doc.nodes[2].sigs });
@@ -162,13 +175,14 @@ await f.run(async () => {
     const apply = button('Apply edge replacements', editor);
     const cancel = button('Cancel edge replacement', editor);
     const stage = editor.getByRole('group', { name: 'Fillet edge replacements', exact: true });
+    const inside = [5, 5, height / 2], outside = [20, 0, height / 2];
     await direction('Back right');
     await f.openFeatureEditor(2, 'two unresolved Fillet edges');
     await replace.click();
-    await pick([5, 5, 1.5]); await stage.getByText(desired, { exact: true }).waitFor();
+    await pick(inside); await stage.getByText(desired, { exact: true }).waitFor();
     assert.ok(await apply.isDisabled());
     assert.equal(await button('Pick second edge', stage).getAttribute('aria-pressed'), 'true');
-    await pick([5, 5, 1.5]);
+    await pick(inside);
     await f.page.getByText('Select a different unmerged straight edge on the body of this feature.', { exact: true }).waitFor();
     assert.ok(await apply.isDisabled());
     await stage.getByText(desired, { exact: true }).waitFor();
@@ -176,8 +190,25 @@ await f.run(async () => {
     await cancel.click(); await f.same(before.doc);
     assert.deepEqual((await f.snapshot('04-dual-cancel-keeps-both-held')).history, before.history);
     await replace.click();
-    await pick([5, 5, 1.5]); await stage.getByText(desired, { exact: true }).waitFor();
-    await direction('Front right'); await pick([20, 0, 1.5]);
+    await pick(inside); await stage.getByText(desired, { exact: true }).waitFor();
+    await direction('Front right');
+    const failure = f.page.getByText('Edge replacement not applied', { exact: true });
+    if (nativeRefusal) {
+      await pick([10, 0, height]); await stage.getByText(frontTop, { exact: true }).waitFor();
+      assert.equal(await apply.isEnabled(), true);
+      await f.snapshot('04a-two-admitted-picks');
+      await apply.click(); await failure.waitFor();
+      await f.same(before.doc);
+      const refused = await f.snapshot('04b-native-refusal-keeps-both-picks');
+      assert.deepEqual(refused.bodies.bodies, before.bodies.bodies);
+      assert.deepEqual(refused.history, before.history);
+      assert.deepEqual(refused.selection, before.selection);
+      assert.equal(await refs().getByText('Choose a reference · Feature held', { exact: true }).count(), 2);
+      await stage.getByText(desired, { exact: true }).waitFor();
+      await stage.getByText(frontTop, { exact: true }).waitFor();
+      await button('Pick second edge', stage).click();
+    }
+    await pick(outside);
     await f.page.waitForFunction(() => document.querySelector('button[aria-label="Apply edge replacements"]')?.disabled === false);
     const preview = await f.snapshot('05-two-explicit-uncommitted-picks');
     assert.deepEqual(preview.doc, before.doc);
@@ -186,12 +217,26 @@ await f.run(async () => {
     await apply.click(); await f.changed(before.doc); await refs().waitFor({ state: 'hidden' }); await f.ready();
     const accepted = await f.snapshot('06-both-edge-replacements-applied');
     assert.deepEqual(accepted.doc, prep.target.doc);
-    geometry(await f.inspect('07-both-resolved-native', accepted.doc), 525, [convex, concave]);
+    geometry(await f.inspect('07-both-resolved-native', accepted.doc), targetVolume, [convex, concave]);
+    if (nativeRefusal) {
+      assert.equal(preview.notices.some(text => text.includes('Edge replacement not applied')), expectStaleNotice);
+      assert.equal(accepted.notices.some(text => text.includes('Edge replacement not applied')), expectStaleNotice);
+      f.report.observations.push({ nativeRefusalKeptDocumentAndHistory: 'PASS', staleNoticeReproduced: expectStaleNotice });
+    }
     await f.undo(); await f.same(before.doc); await refs().waitFor();
     assert.equal(await refs().getByText('Choose a reference · Feature held', { exact: true }).count(), 2);
     assert.deepEqual((await f.snapshot('08-undo-restores-two-problems')).history, before.history);
+    if (nativeRefusal && !expectStaleNotice) {
+      await direction('Back right'); await f.openFeatureEditor(2, 'two unresolved Fillet edges'); await replace.click();
+      await pick(inside); await stage.getByText(desired, { exact: true }).waitFor();
+      await direction('Front right'); await pick([10, 0, height]); await stage.getByText(frontTop, { exact: true }).waitFor();
+      await apply.click(); await failure.waitFor(); await cancel.click(); await failure.waitFor({ state: 'hidden' });
+      await f.same(before.doc);
+      assert.deepEqual((await f.snapshot('09-cancel-retires-failure-keeps-redo')).history, before.history);
+      await f.closeEditor();
+    }
     await f.redo(); await f.same(accepted.doc); await refs().waitFor({ state: 'hidden' });
-    await saveOpen(accepted.doc, 'two-edge-pair-confirmed', 525, [convex, concave]);
+    await saveOpen(accepted.doc, 'two-edge-pair-confirmed', targetVolume, [convex, concave]);
     f.report.observations.push({ dualManual: 'PASS', sameNameNewSignature: 'PASS', duplicateRefusal: 'PASS', Cancel: 'PASS', UndoRedoSaveOpen: 'PASS' });
     return;
   }

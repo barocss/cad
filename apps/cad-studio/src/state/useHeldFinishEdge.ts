@@ -1,6 +1,6 @@
 import { heldFilletPairProblems, heldFinishProblem, heldFinishCandidate, heldFinishReplacement,
   replaceHeldFilletPair, validFilletPairEdge, type ReplacementEndpoints } from './heldFinishReplacement';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
 import type { ModelNode, StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult, EvalResult } from '@barocss/cad-model/engine/evaluate';
@@ -35,9 +35,10 @@ interface Options {
   evaluate(doc: StudioDoc): Promise<EvalResult>;
   accept(doc: StudioDoc, resolved: readonly Problem[]): boolean;
   notice(value: FriendlyError): void;
+  retireNotice(value: FriendlyError): void;
 }
 
-export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsSource, evaluate, accept, notice }: Options) {
+export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsSource, evaluate, accept, notice, retireNotice }: Options) {
   const node = index === null ? undefined : doc.nodes[index];
   const finish: Finish | null = node?.held && (node.kind === 'fillet' || node.kind === 'chamfer') ? node : null;
   // A terminal held feature exposes its source as a passthrough body.
@@ -50,14 +51,25 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   const heldName = finish?.edges.length === 2 ? problem?.name : undefined;
   const [draft, setDraft] = useState<Draft | null>(null);
   const ticket = useRef<object | null>(null);
+  const failureNotice = useRef<FriendlyError | null>(null);
+  const clearFailure = useCallback(() => {
+    const owned = failureNotice.current;
+    failureNotice.current = null;
+    if (owned) retireNotice(owned);
+  }, [retireNotice]);
+  const reportFailure = (failure: FriendlyError) => {
+    failureNotice.current = failure;
+    notice(failure);
+  };
   useLayoutEffect(() => {
     ticket.current = null;
     setDraft(null);
+    clearFailure();
     return () => { ticket.current = null; };
-  }, [doc, index, body, problem, firstProblem, secondProblem, enabled]);
+  }, [doc, index, body, problem, firstProblem, secondProblem, enabled, clearFailure]);
   const current = enabled && draft?.doc === doc && draft.index === index && body &&
     (draft.pair ? pair && draft.pair.ownsSource() : problem) ? draft : null;
-  const cancel = () => { ticket.current = null; setDraft(null); };
+  const cancel = () => { ticket.current = null; setDraft(null); clearFailure(); };
   const start = () => {
     if (!enabled || !body || index === null || (!problem && !pair)) return;
     setDraft({ doc, index, name: null, pair: pair ? { slot: 0, edges: [undefined, undefined], ownsSource } : undefined });
@@ -77,11 +89,15 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
         return true;
       }
       const picks: PairDraft['edges'] = slot === 0 ? [edge, edges[1]] : [edges[0], edge];
+      if (edges[slot] !== edge) clearFailure();
       setDraft({ ...current, pair: { ...current.pair, edges: picks, slot: !picks[0] ? 0 : !picks[1] ? 1 : null } });
       return true;
     }
     const candidate = finish && heldFinishCandidate(finish,edge,body.mesh.edges,doc.parameters,heldName);
-    if(candidate && !('error' in candidate)) setDraft({...current,...candidate,edge});
+    if(candidate && !('error' in candidate)) {
+      if (current.edge !== edge) clearFailure();
+      setDraft({...current,...candidate,edge});
+    }
     else {
       setDraft({...current,name:null,endpoints:undefined,edge:undefined});
       notice({title:'Edge not selected',hint:candidate && 'error' in candidate ? candidate.error : 'Select one edge on the body of this feature.',detail:''});
@@ -117,9 +133,9 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
       const result = await evaluate(next);
       if (ticket.current !== request || !stillOwnsSource()) return;
       if (result.ok) { if (accept(next, resolved)) cancel(); }
-      else notice({ ...result.error, title: 'Edge replacement not applied' });
+      else reportFailure({ ...result.error, title: 'Edge replacement not applied' });
     } catch (error) {
-      if (ticket.current === request && stillOwnsSource()) notice({ title: 'Edge replacement not applied', hint: 'The feature is unchanged.', detail: String(error) });
+      if (ticket.current === request && stillOwnsSource()) reportFailure({ title: 'Edge replacement not applied', hint: 'The feature is unchanged.', detail: String(error) });
     } finally {
       if (ticket.current === request) {
         ticket.current = null;
