@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1686: [Preview the solved Distance mate before approval](notes/preview-distance-mate-2026-11-22/README.md), #322. Separate the candidate pin pose from accepted picking and preserve the editable Save/Open result.
 - D1685: [Freeze the B05 pin-and-holder mate revision for Agent evaluation](notes/b05-pin-mate-agent-revision-2026-11-22/README.md), #322. Verify the Distance change, exact mate references, user approval and editable Open. Record the candidate-placement preview gap.
 - D1684: [Read current feature edit fields in the Agent](notes/agent-edit-field-discovery-2026-11-22/README.md), #322. Expose the editable fields and part revision through an additive read action and verify stale refusal after Studio Open.
 - D1683: [Freeze an editable B01 bracket revision for Agent evaluation](notes/b01-bracket-agent-revision-2026-11-22/README.md), #322. Bind W60→W80 to the approved sketch edit and verify an editable fresh Studio Open. The provider metric remains unmeasured.

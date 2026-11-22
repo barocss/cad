@@ -40,9 +40,9 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, displ
   const toggleScrewChanges = () => setGhost(g => g && { ...g, changesShown: !g.changesShown });
   const partEval = (d: StudioDoc, screwWinding?: number) => engine.part(d, nextRevision(), 'agent', screwWinding);
   const previewEval = (d: StudioDoc, screwWinding?: number) => engine.part(d, nextRevision(), 'proposal-display', screwWinding);
-  const previewPlaced = async (before: StudioDoc, after: StudioDoc): Promise<PlacedProposalPreview | null> => {
+  const previewPlaced = async (before: StudioDoc, after: StudioDoc, ops?: Proposal['ops']): Promise<PlacedProposalPreview | null> => {
     try {
-      return await placedProposalPreview(before, after, instances, (inst, base, parent) => engine.placed(placedDoc(inst, parent), base, placementOf(inst), nextRevision()));
+      return await placedProposalPreview(before, after, instances, (inst, base, parent) => engine.placed(placedDoc(inst, parent), base, placementOf(inst), nextRevision()), ops);
     } catch {
       return { kind: 'unavailable', reason: 'Could not evaluate the placed proposal.' };
     }
@@ -66,7 +66,7 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, displ
     if (active || sketch || marker !== null) return;
     setProposalBusy(true);
     const tools = await import('@barocss/cad-model/chat/tools'), r = await tools.previewProposal({ doc: from, bodies, rowFiles: chatRowFiles.current }, p.id, previewEval);
-    const placed = 'doc' in r && from === currentDoc() ? await previewPlaced(from, r.doc) : null;
+    const placed = 'doc' in r && from === currentDoc() ? await previewPlaced(from, r.doc, p.ops) : null;
     setProposalBusy(false);
     if (from !== currentDoc()) return;
     if ('error' in r) { setToast({ title: `${p.id} does not apply to the part as it is`, hint: r.error, detail: '' }); return; }

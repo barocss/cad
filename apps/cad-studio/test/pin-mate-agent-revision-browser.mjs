@@ -16,6 +16,8 @@ const pins = [
   'apps/cad-studio/test/pin-mate-agent-revision-browser.mjs',
   'apps/cad-studio/test/static-assembly-axial-mate-oracles.mjs',
   'apps/cad-studio/test/mcp-browser-session.mjs',
+  'apps/cad-studio/src/App.tsx',
+  'apps/cad-studio/src/state/useProposalPreview.ts',
   'apps/cad-studio/src/ui/MatePanel.tsx',
   'apps/cad-studio/src/ui/ProposalBrowser.tsx',
   'apps/cad-studio/src/viewport/instanceEvaluation.ts',
@@ -23,10 +25,10 @@ const pins = [
   'packages/barocss-cad-model/src/assembly/edit.ts',
 ];
 const f = await createFlow({
-  name: 'pin-mate-agent-revision', envFrozen: 'D1685_SOURCE_FROZEN', output: process.argv[2],
+  name: 'pin-mate-agent-revision', envFrozen: 'D1686_SOURCE_FROZEN', output: process.argv[2],
   initialFiles: pins, requiredFrozen: pins, inspectorSource, oracleSource,
-  qualification: 'Discover the existing pin Distance mate, approve a local proposal, and edit the result after a native Save and fresh Open.',
-  limits: ['One unrotated top-level pin. Placement preview remains outside the existing review viewport contract. Local L1 MCP is scripted.'],
+  qualification: 'Preview the solved Distance mate pose in Studio, preserve accepted picking and state, and verify editable native Save/Open.',
+  limits: ['One unrotated top-level pin translated by a single Distance edit in static review. Local L1 MCP is scripted.'],
   snapshotExtra: () => ({ bounds: window.__studioInstanceBounds?.() ?? [] }),
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -42,12 +44,16 @@ function checkModel(actual, gap) {
   });
 }
 
-async function verify(label, gap) {
-  const z = 8 + gap;
+async function waitPinBounds(z) {
   await f.page.waitForFunction(z => {
     const pin = window.__studioInstanceBounds?.()?.find(row => row.id === 'pin');
     return pin?.min?.[2] === z && pin.max?.[2] === z + 20;
   }, z);
+}
+
+async function verify(label, gap) {
+  const z = 8 + gap;
+  await waitPinBounds(z);
   const state = await f.snapshot(label);
   checkModel(state.doc, gap);
   const native = await f.inspect(label, state.doc, 'read');
@@ -83,21 +89,72 @@ await f.run(async () => {
   await f.freshOpen(file, pending, '03-pending-mate-change');
   await button('Chat').first().click();
   const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+  const views = f.page.getByRole('group', { name: 'Views', exact: true });
+  await button('Front', views).click();
+  const ortho = button('Ortho', views);
+  if (await ortho.getAttribute('aria-pressed') !== 'true') await ortho.click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  const pinRow = f.page.locator('[data-browser-instance-path="pin"]');
+  const sourceBytes = await readFile(file);
+  const shown = async (label, gap) => {
+    const z = 8 + gap;
+    await waitPinBounds(z);
+    await f.same(pending);
+    const state = await f.snapshot(label);
+    assert.deepEqual(state.bounds, [{ id: 'pin', min: [28, 12, z], max: [36, 20, z + 20] }]);
+    assert.deepEqual(await readFile(file), sourceBytes);
+  };
+  const pointOnPin = async z => {
+    const point = [32, 12, z];
+    await f.page.waitForFunction(point => window.__studioInstanceAt(point)?.id === 'pin', point, { timeout: 10000 });
+    const pixel = await f.page.evaluate(point => {
+      const [x, y] = window.__studioProject(point);
+      const canvas = document.querySelector('.vp-canvas');
+      const rect = canvas.getBoundingClientRect();
+      const client = [x + rect.left, y + rect.top];
+      return document.elementFromPoint(...client) === canvas ? client : null;
+    }, point);
+    assert.ok(pixel, 'A visible candidate or accepted pin on the actual canvas');
+    return pixel;
+  };
+  f.phase = 'Read the After pose and refuse picking its translated body';
   await button('Preview', card).click();
   await button('Hide', card).waitFor();
-  await card.getByText('Placement changes are outside this preview.', { exact: true }).waitFor();
+  const preview = card.getByLabel('Mate distance preview', { exact: true });
+  await preview.getByText('3 mm', { exact: true }).waitFor();
+  await waitPinBounds(11);
   assert.equal(await card.getByLabel('Volume change').count(), 0);
+  await f.page.mouse.click(...await pointOnPin(29.5));
+  assert.doesNotMatch(await pinRow.getAttribute('class'), /\bsel\b/);
+  await shown('04-after-gap-three-before-approval', 3);
+
+  f.phase = 'Restore accepted picking in Before and after Hide';
+  await button('Show before', card).click();
+  await preview.getByText('0 mm', { exact: true }).waitFor();
+  await waitPinBounds(8);
+  assert.equal(await f.page.evaluate(() => window.__studioInstanceAt([32, 12, 29.5])), null);
+  await f.page.mouse.click(...await pointOnPin(24));
+  await f.page.locator('[data-browser-instance-path="pin"].sel').waitFor();
+  await shown('05-before-accepted-pick', 0);
+  await button('Show after', card).click();
+  await waitPinBounds(11);
+  await button('Hide', card).click();
+  await button('Preview', card).waitFor();
+  assert.equal(await preview.count(), 0);
+  await shown('06-hidden-accepted-pose', 0);
+  await button('Preview', card).click();
+  await waitPinBounds(11);
   await f.same(pending);
-  await verify('04-preview-explains-placement-limit', 0);
+  f.phase = 'Accept the reviewed mate and verify native Save/Open';
   await button('Accept', card).click();
   await f.changed(pending);
-  const accepted = await verify('05-approved-gap-three', 3);
+  const accepted = await verify('07-approved-gap-three', 3);
   assert.deepEqual(accepted.proposals.map(p => p.status), ['accepted']);
   const last = accepted.history.at(-1);
   assert.deepEqual([last.kind, last.proposal, last.by.agent], ['accept', 'P1', 'user']);
 
   const saved = await f.save('pin-and-holder-gap-three');
-  await f.freshOpen(saved.file, saved.doc, '06-fresh-open-gap-three');
+  await f.freshOpen(saved.file, saved.doc, '08-fresh-open-gap-three');
   await withMcpSession(session, saved.file, 'saved-mate', async call => {
     const source = await readFile(saved.file);
     const assembly = await call('assembly', { action: 'get' });
@@ -111,9 +168,9 @@ await f.run(async () => {
   await mates.locator('button.ol.mate').filter({ hasText: 'Distance' }).click();
   const input = mates.getByLabel('Mate distance', { exact: true });
   assert.equal(Number(await input.inputValue()), 3);
-  await verify('07-reopened-distance-editable', 3);
+  await verify('09-reopened-distance-editable', 3);
   await input.fill('0');
   await input.press('Enter');
   await f.changed(saved.doc);
-  await verify('08-edit-reopened-gap-to-zero', 0);
+  await verify('10-edit-reopened-gap-to-zero', 0);
 });

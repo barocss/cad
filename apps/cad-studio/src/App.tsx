@@ -2650,7 +2650,11 @@ export function App() {
   const instancesLooked = useMemo(() => instancesDrawn.map(it => { const looks = instanceLooks.get(it.id); return looks ? { ...it, looks } : it; }), [instancesDrawn, instanceLooks]);
   // (Roadmap 10 ⑥: the parts the shown step has not introduced yet are left out of the view — display only, the document is untouched.)
   const instancesStepped = useMemo(() => stepsDisp?.hidden.size ? instancesLooked.filter(it => !stepsDisp.hidden.has(it.id)) : instancesLooked, [instancesLooked, stepsDisp]);
-  const placedPreviewEnabled = !section && !rendering && !drawing && !cutDraft && !instDrag && !assembly.draft && !stepsDisp && !cageEd.session && !sketch && !active;
+  const distanceMatePreview = ghost?.placed?.kind === 'ready' && !!ghost.placed.distanceMate;
+  const jointPosePreview = useSyncExternalStore(poseStore.subscribe, () =>
+    distanceMatePreview && Object.values(poseStore.get()).some(value => value !== 0));
+  const placedPreviewEnabled = !section && !rendering && !drawing && !cutDraft && !instDrag && !assembly.draft && !stepsDisp && !cageEd.session && !sketch && !active
+    && (!distanceMatePreview || (!exploded && !jointPosePreview && !joints.jointPlaying && !motion));
   const versionsVisible = versionsOpen && !inPlace && !variantsOpen && !bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active;
   const openProposals = doc.proposals?.filter(p => p.status === 'open').length ?? 0, decidedProposals = (doc.proposals?.length ?? 0) - openProposals;
   const chatColumnShown = columnShown(chat && !rendering && !drawing, openProposals, decidedProposals, decidedShown);
@@ -3138,7 +3142,7 @@ export function App() {
         display={viewDisplay.viewport} onBackend={setViewBackend}
         modelUnavailable={modelUnavailable} bodies={cageInputActive ? cageEd.shown(shownBodies) : viewBodies} modelSelection={modelSelection}
         ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? edgeInspection.comb} continuityLocation={edgeInspection.location} filletEndpoints={displayedFilletEndpoints} filletPickedEdgeHighlight={filletPickedEdgeHighlight} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
-        gizmo={cageInputActive ? cageEd.gizmo : routeGizmo ?? gizmo ?? instGizmo ?? poleEditor.gizmo} cage={cageInputActive ? cageEd.overlay : null} onPickCage={cageInputActive ? cageEd.onPick : undefined} tool={skel.tool}
+        gizmo={cageInputActive ? cageEd.gizmo : routeGizmo ?? gizmo ?? (distanceMatePreview && ghost?.after && placedPreviewEnabled ? null : instGizmo) ?? poleEditor.gizmo} cage={cageInputActive ? cageEd.overlay : null} onPickCage={cageInputActive ? cageEd.onPick : undefined} tool={skel.tool}
         handles={sectionDrag.length ? sectionDrag : handles} instancePreview={instancePreview} contactLinks={contactShown && motionContact ? motionContact.links : undefined}
         render={rendering ? render : null} analysis={rendering ? null : viewAnalysis}
         printDisplay={printDisplay} printActive={printEnabled && !printReason} camDisplay={camDisplay} camActive={camEnabled && !camReason}
