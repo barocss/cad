@@ -173,7 +173,7 @@ test('an oblique translated 120°/30° pair admits radial sketch Y and binormal 
   verify(evaluateCadPart(document(rail.path, sketch)).outputs[0], rail, 2, 10);
 });
 
-test('a rectangular S-bend refuses roll, either bend axis contact or crossing, and every hole', () => {
+test('a rectangular S-bend refuses roll, either bend axis contact or crossing, and unsupported circular holes', () => {
   const refuses = (rail, sketch, code, message) => assert.throws(() => evaluateCadPart(document(rail.path, sketch)),
     error => error instanceof CadPartError && error.feature === 'w' && error.code === code && message.test(error.message));
   const rail = pair();
@@ -183,6 +183,5 @@ test('a rectangular S-bend refuses roll, either bend axis contact or crossing, a
     refuses(pair(radii), section, 'PARAMETER', /radial half-width smaller than both path radii/);
   for (const hole of [
     [{ kind: 'arc', start: [51, -30], center: [50, -30], direction: 'ccw' }],
-    [[49, -31], [51, -31], [51, -29], [49, -29]].map(start => ({ kind: 'line', start })),
-  ]) refuses(rail, { ...section, holes: [hole] }, 'CAPABILITY', /solid rectangle without holes/);
+  ]) refuses(rail, { ...section, holes: [hole] }, 'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/);
 });

@@ -175,7 +175,7 @@ test('exact two-arc sweep refuses a kink, reversal, nonplanarity, same curvature
   refused(pair({ b: 121 }).curve, 'CAPABILITY', /30° to 120°/);
   refused({ ...curve, knots: [0, 0, 0, 1, 1.1, 2, 2, 2] }, 'CAPABILITY', /30° to 120°/);
   for (const radius of [12, 13]) refused(curve, 'PARAMETER', /both path radii larger/, { ...circle, radius });
-  refused(curve, 'CAPABILITY', /one circular outer section or one bend-aligned solid rectangle/,
+  refused(curve, 'CAPABILITY', /one circular outer section or one bend-aligned rectangular section/,
     { id: 's', kind: 'sketch', profile: 'polygon', points: [[0, 0], [3, 0], [0, 2]] });
   refused(curve, 'CAPABILITY', /one open straight segment/, circle, 'exact-straight');
 });

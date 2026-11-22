@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1704: [Sweep a rectangular duct along an exact S-bend](notes/exact-rectangular-s-bend-duct-2026-11-23/README.md), #10. Keep both openings and eight bound native seams through aperture editing, Studio approval and fresh Open.
+
 - D1703: [Sweep a solid rectangle along an exact S-bend](notes/exact-rectangular-s-bend-sweep-2026-11-23/README.md), #10. Build the four native tangent joins, edit the width in Studio and reproduce the exact body after fresh Open and local Agent approval.
 
 - D1702: [Review a saved sketch Chamfer resize before approval](notes/pending-saved-chamfer-resize-review-2026-11-23/README.md), #324. Pin the four-view image to the changed and retained native walls, and match the proof after Studio approval and fresh Open.

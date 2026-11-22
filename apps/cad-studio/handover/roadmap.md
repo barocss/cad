@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1703 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1704 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1703](notes/exact-rectangular-s-bend-sweep-2026-11-23/README.md), P5 Exact Sweep rows 07 and 30. The native S-bend accepts a solid aligned rectangular section. Studio verifies four tangent seams, width editing, axis clearance, and matching native results after fresh Open and local Agent approval. The B06 PDF group remains held.
-- **Next MAIN:** D1704, P5 Exact Sweep [rows 07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Continue the rectangular S-bend with one centered, aligned rectangular opening. Establish both end openings, four exterior and four interior seams, positive wall clearance, and an editable Studio part after fresh Open.
+- **Current position:** [D1704](notes/exact-rectangular-s-bend-duct-2026-11-23/README.md), P5 Exact Sweep rows 07 and 30. The aligned rectangular S-bend accepts one centered opening. Studio verifies eight tangent seams, both open ends, exact aperture editing and fresh Open, and matching local Agent approval. The B06 PDF group remains held.
+- **Next MAIN:** D1705, P1 visual Agent review [rows 04](roadmap-rows/04.md) and [16](roadmap-rows/16.md), [#324](https://github.com/barocss/cad/issues/324). Check the existing four-view review for the pending Exact rectangular S-bend duct proposal. If the current review refuses the valid proposal, bind its image to the source path revision, native body and both named open caps. Verify explicit Studio approval and the same native part after fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
