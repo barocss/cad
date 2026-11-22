@@ -560,6 +560,31 @@ export function isBoredPlateHealSource(nodes: readonly unknown[], index: number)
   return boredPlate !== undefined && isTwoBorePlate(nodes, boredPlate);
 }
 
+/** Bind a radial bore selection to the direct circular cutter and both authored stock edits. */
+export function radialBoreDeleteFaces(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>) {
+  const cut = nodes[index];
+  if (!textRecord(cut) || cut.kind !== 'difference' || cut.suppressed || cut.held !== undefined) return;
+  const stockIndex = precedingSolidParent(cut, index), toolIndex = precedingSolidIndex(cut.tool, index);
+  if (stockIndex === undefined || toolIndex === undefined || stockIndex === toolIndex) return;
+  const stock = nodes[stockIndex], tool = nodes[toolIndex];
+  if (!textRecord(stock) || stock.suppressed || stock.held !== undefined ||
+      !textRecord(tool) || tool.suppressed || tool.held !== undefined || tool.cutDepth !== undefined || typeof tool.id !== 'string' ||
+      nodes.filter(node => textRecord(node) && node.id === tool.id).length !== 1) return;
+  const sketch = straightExtrudeSketch(nodes, toolIndex);
+  if (sketch?.profile !== 'circle' || sketch.suppressed || sketch.held !== undefined || sketch.plane === undefined ||
+      sketch.on !== undefined || sketch.association !== undefined || sketch.holes !== undefined ||
+      sketch.regions !== undefined || sketch.sideTags !== undefined) return;
+  const prior = precedingSolidParent(stock, stockIndex);
+  if (prior === undefined) return;
+  if (stock.kind === 'replace-face') {
+    if (faceEditNodeProblem(stock, stockIndex, 'replace-face') ||
+        !exactSemicylinderCapAfterWall(nodes, prior, parameters, (stock.faces as [string])[0])) return;
+  } else if (offsetFaceNodeProblem(stock, stockIndex) || stock.target !== undefined ||
+      !exactSemicylinderWallAfterReplacement(nodes, prior, parameters, (stock.faces as [string])[0])) return;
+  // Native evaluation certifies the outer skin, both opening loops and the retained solid.
+  return [tool.id + '.side0#1', tool.id + '.side0#2'] as const;
+}
+
 function extrusionSupportNames(stock: unknown, index: number, wallCount = 4) {
   const id = textRecord(stock) && typeof stock.id === 'string' ? stock.id : `n${index}`;
   return { walls: Array.from({ length: wallCount }, (_, side) => `${id}.side${side}`), caps: [`${id}.top`, `${id}.bottom`] };
@@ -661,7 +686,8 @@ export function planarDeleteFaceDirection(dir: readonly number[], role: PlanarHe
       dir.filter(value => Math.abs(Math.abs(value) - Math.SQRT1_2) < 1e-8).length === 2;
 }
 
-function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly unknown[], index: number): string | null {
+function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly unknown[], index: number,
+  parameters: Readonly<Record<string, number>> = {}): string | null {
   const allowed = new Set(['kind', 'parent', 'faces', ...NODE_EXTRA_FIELDS]);
   for (const key of Object.keys(node)) if (!allowed.has(key)) return `Delete face: unknown field ${key}.`;
   const parent = node.parent;
@@ -671,8 +697,11 @@ function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly 
   const name = Array.isArray(node.faces) && node.faces.length === 1 ? node.faces[0] : undefined;
   if (typeof name !== 'string' || !name.trim() || /[+\0]/.test(name)) return 'Delete face: one exact native face is required.';
   const plane = planarDeleteFaceTarget(nodes, parent.node, name);
-  if (!plane && !isBoredPlateHealSource(nodes, parent.node) && !isDeleteFaceFilletSource(nodes, parent.node))
-    return 'Delete face: a supported through-hole plate, cylindrical boss, chamfered box or L-section, or filleted box or L-section is required.';
+  const radialBore = radialBoreDeleteFaces(nodes, parent.node, parameters);
+  if (!plane && !radialBore && !isBoredPlateHealSource(nodes, parent.node) && !isDeleteFaceFilletSource(nodes, parent.node))
+    return 'Delete face: a supported through bore, cylindrical boss, chamfered box or L-section, or filleted box or L-section is required.';
+  if (radialBore && !radialBore.some(member => member === name))
+    return 'Delete face: select the original radial bore wall.';
   if (node.rematched !== undefined && (!textRecord(node.rematched) || Object.keys(node.rematched).length))
     return 'Delete face: the original face name is required.';
   const sig = textRecord(node.sigs) && Object.hasOwn(node.sigs, name) && Object.keys(node.sigs).length === 1 ? node.sigs[name] : undefined;
@@ -696,12 +725,13 @@ export function directFaceDocumentProblem(input: unknown): string | null {
     const value = stack.pop();
     if (!textRecord(value) || seen.has(value)) continue;
     seen.add(value);
+    const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
     const boredPlateOffsets = new Set<number>();
     const boxCapOffsets = new Set<number>();
     if (Array.isArray(value.nodes)) for (const [index, node] of value.nodes.entries()) {
       if (!textRecord(node)) continue;
       if (node.kind === 'delete-face') {
-        const problem = deleteFaceRecipeProblem(node, value.nodes, index);
+        const problem = deleteFaceRecipeProblem(node, value.nodes, index, parameters);
         if (problem) return problem;
         continue;
       }
@@ -723,7 +753,6 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const signature = (node.sigs as Record<string, Sig>)[face];
       if (node.kind === 'replace-face') {
         if (isExactCylinderThicken(value.nodes[parentIndex]) || isExactCylinderFaceEditChain(value.nodes, parentIndex)) {
-          const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
           const originalCap = exactSemicylinderCapSource(value.nodes, parentIndex, parameters)?.upperFace === face;
           if (signature.k !== 'plane' || (!originalCap && !exactSemicylinderCapAfterWall(value.nodes, parentIndex, parameters, face)))
             return 'Replace face: pick the original upper cap of an Exact semicylinder, with at most one original wall Offset.';
@@ -738,7 +767,6 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const parent = value.nodes[parentIndex];
       if (!textRecord(parent)) return 'Offset face: a supported solid parent is required.';
       if (isExactCylinderThicken(parent)) {
-        const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
         const source = exactSemicylinderCapSource(value.nodes, parentIndex, parameters);
         const axial = signature.k === 'plane' && source?.faces.includes(face);
         const radial = signature.k === 'curved' && source?.skins.includes(face);
@@ -748,7 +776,6 @@ export function directFaceDocumentProblem(input: unknown): string | null {
         continue;
       }
       if (isExactCylinderFaceEditChain(value.nodes, parentIndex)) {
-        const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
         const second = exactSemicylinderSecondOffset(value.nodes, parentIndex, parameters, face);
         const afterReplace = exactSemicylinderWallAfterReplacement(value.nodes, parentIndex, parameters, face);
         const expected = afterReplace || second?.nextKind === 'cylinder' ? 'curved' : 'plane';
@@ -763,7 +790,6 @@ export function directFaceDocumentProblem(input: unknown): string | null {
         continue;
       }
       if (isAnnularReplacementSource(value.nodes, parentIndex)) {
-        const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
         if (!isAnnularCapOffsetSource(value.nodes, parentIndex, parameters))
           return 'Offset face: the annular cap needs one original upright coaxial through Hole in a forward circular Extrude.';
         const stock = value.nodes[throughHoleStockIndex(value.nodes, parentIndex)!] as Record<string, unknown>;

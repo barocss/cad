@@ -16,7 +16,9 @@ export const matchesFaceName = (face: DisplayFace, name: string): boolean =>
 export function resolveNames(bodies: BodyResult[], names: Partial<NameSelection>, requireUniqueFaces = false): { selection: Selection; unknown: string[] } {
   const selection: Selection = { faces: [], edges: [], bodies: [] }, unknown: string[] = [];
   for (const name of names.faces ?? []) {
-    const hits = bodies.flatMap((b, bi) => b.mesh.faces.flatMap(f => matchesFaceName(f, name) ? [{ body: bi, face: f.index }] : []));
+    const hits = bodies.flatMap((b, bi) => b.mesh.faces.flatMap(f =>
+      matchesFaceName(f, name) || (requireUniqueFaces && f.nativeFaces?.some(member => member.name === name))
+        ? [{ body: bi, face: f.index }] : []));
     const hit = requireUniqueFaces && hits.length !== 1 ? undefined : hits[0];
     if (hit) { if (!selection.faces.some(f => f.body === hit.body && f.face === hit.face)) selection.faces.push(hit); } else unknown.push(name);
   }

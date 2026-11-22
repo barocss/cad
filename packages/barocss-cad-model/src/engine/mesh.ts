@@ -158,6 +158,10 @@ export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundar
   let checkBore: ReturnType<typeof createCylindricalBoreCheck> | undefined;
   let readCylinderArea: ReturnType<typeof nativeCylinderAreaReader> | undefined;
   const nameOf = new Map(brep.faces.map(f => [f.id, f.name ?? f.id]));
+  // Preserve individual signatures on a numbered bore group between the two trimmed Thicken skins.
+  const radialBoreMembers = brep.source.family === 'analytic-boolean' && brep.faces.length === 8 &&
+    brep.faces.some(({ name, loops }) => name?.endsWith('.normal') && loops.length === 2 &&
+      brep.faces.some(peer => peer.name === name.replace(/\.normal$/, '.reverse') && peer.loops.length === 2));
   const P = mesh.positions, N = mesh.normals;
   const meshFace = new Map(mesh.faces.map(f => [f.faceId, f]));
   const loopFace = new Map(brep.loops.map(l => [l.id, l.face]));
@@ -204,7 +208,9 @@ export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundar
       ? faceGeometry(nativeFace) : undefined;
     const draftedPlane = drafted?.kind === 'plane' ? drafted : undefined;
     addFace(b, root, names.length === 1 ? names[0] : members.map(m => nameOf.get(m)!).join('+'), rootKind === 'planar' || flatRegion ? 'plane' : 'curved', pos, nor, idx);
-    if (brep.source.family === 'prismatic-solid' && members.length > 1 && rootKind !== 'planar' && rootKind !== 'facet') {
+    const radialBore = radialBoreMembers && members.length === 2 && names.length === 1 && names[0].endsWith('.side0') &&
+      members.every(id => nameOf.get(id) === names[0] + '#1' || nameOf.get(id) === names[0] + '#2');
+    if ((brep.source.family === 'prismatic-solid' || radialBore) && members.length > 1 && rootKind !== 'planar' && rootKind !== 'facet') {
       native ??= nativeFaceMetrics(brep, quality === 8 ? mesh : tessellateBrep(brep, { segmentsPerQuarter: 8 }));
       const memberFaces: NativeDisplayFace[] = [];
       for (const id of members) memberFaces.push(native.get(id)!);

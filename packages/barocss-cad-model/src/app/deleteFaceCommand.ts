@@ -1,4 +1,4 @@
-import { isBoredPlateHealSource, isBoredPlateHole, isBoredPlateReplacementSource, isDeleteFaceFilletSource, planarDeleteFaceDirection, planarDeleteFaceTarget, withNode } from '../engine/doc';
+import { isBoredPlateHealSource, isBoredPlateHole, isBoredPlateReplacementSource, isDeleteFaceFilletSource, planarDeleteFaceDirection, planarDeleteFaceTarget, radialBoreDeleteFaces, withNode } from '../engine/doc';
 import { featureId } from '../engine/ids';
 import { toSig } from '../engine/references';
 import { signaturesOf } from '../engine/rematch';
@@ -27,11 +27,13 @@ function pickedHealFace(ctx: Ctx, pick: Ctx['selection']['faces'][number]) {
     return { parent, name: face.name,
       signature: toSig({ kind: 'curved', at: face.centroid, dir: null, size: face.area, radius: face.radius }) };
   }
-  if (!isBoredPlateHealSource(ctx.doc.nodes, parent.node)) return;
+  const radialBore = radialBoreDeleteFaces(ctx.doc.nodes, parent.node, ctx.doc.parameters);
+  if (!radialBore && !isBoredPlateHealSource(ctx.doc.nodes, parent.node)) return;
   const members = face.nativeFaces ?? [];
   if (members.length !== 2 || members[0].name === members[1].name ||
       members.some(member => member.kind !== 'curved' || !member.name || /[+\0]/.test(member.name) ||
         !Number.isFinite(member.radius) || !Number.isFinite(member.area) || member.area <= 0)) return;
+  if (radialBore && !radialBore.every(name => members.some(member => member.name === name))) return;
   const member = members[0].name < members[1].name ? members[0] : members[1];
   return { parent, name: member.name,
     signature: toSig({ kind: 'curved', at: member.centroid, dir: null, size: member.area, radius: member.radius }) };
