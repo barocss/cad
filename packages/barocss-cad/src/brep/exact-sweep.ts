@@ -420,8 +420,10 @@ function ringChartEdge(edge: Curve, surface: Surface, tolerance: number) {
 }
 
 /** Attach each ring coedge to exactly one isocurve of its own revolved patch. */
-function bindClosedRing(brep: Brep, tolerance: number): Brep | undefined {
-  if (brep.faces.length !== 4 || brep.coedges.length !== 16) return;
+function bindClosedRing(brep: Brep, tolerance: number, shellCount: 1 | 2): Brep | undefined {
+  if (brep.bodies.length !== 1 || brep.shells.length !== shellCount
+    || brep.shells.some(shell => !shell.closed || shell.faces.length !== 4)
+    || brep.faces.length !== 4 * shellCount || brep.coedges.length !== 16 * shellCount) return;
   const facesByLoop = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
   const edges = new Map(brep.edges.map(edge => [edge.id, edge]));
   const bound = new Set<string>(), coedges: BrepCoedge[] = [];
@@ -945,8 +947,10 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
 
   const closed = closedCircularPath(path, refuse);
   if (closed) {
-    if (profileRadius === undefined || holes.length)
-      return refuse('CAPABILITY', 'Exact closed-circle sweep needs one circular disk section without holes.');
+    if (profileRadius === undefined)
+      return refuse('CAPABILITY', 'Exact closed-circle sweep needs one circular disk section.');
+    const hole = circularHole(holes, 'closed-circle', refuse);
+    const bore = hole && concentricBore(disk!, hole, refuse, 'closed-circle');
     const { start, tangent, toCentre, radius, tolerance } = closed;
     if (radius > CadNumericPolicy.coordinateAbs)
       return refuse('PARAMETER', 'Exact closed-circle sweep path radius must be at most 10000 mm.');
@@ -954,14 +958,18 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     const [dx, dy] = [dot(toCentre, x), dot(toCentre, y)], localRadius = Math.hypot(dx, dy);
     const clearance = () => refuse('PARAMETER', 'Exact closed-circle sweep needs a path radius larger than the profile radius.');
     if (!(localRadius - profileRadius > tolerance)) return clearance();
+    if (bore && !(profileRadius - circleRadius(bore) > 10 * tolerance))
+      return refuse('GEOMETRY', 'Exact closed-circle sweep needs strictly positive wall clearance around the bore.');
     const revolve: RevolveInput = { id, profile: [originDisk(profileRadius)], axis: { origin: [dx, dy], direction: [-dy, dx] },
-      angle: 360, ...(sideTags ? { sideTags: sideTags.outer } : {}) };
+      angle: 360, ...(sideTags ? { sideTags: sideTags.outer } : {}),
+      ...(bore ? { holes: [[bore]], holeTags: sideTags?.holes } : {}) };
     const ring = revolveSweepProfile(revolve, { minimum: tolerance, refuse: clearance });
-    const brep = bindClosedRing(ring, 128 * Number.EPSILON * Math.max(1, localRadius + profileRadius));
+    const shellCount = bore ? 2 : 1;
+    const brep = bindClosedRing(ring, 128 * Number.EPSILON * Math.max(1, localRadius + profileRadius), shellCount);
     if (!brep) return refuse('GEOMETRY', 'The exact closed-circle sweep could not bind the native ring seams.');
     const result = place({ brep, mass: density => revolveMassProperties(revolve, density) }, axes, start);
     const report = checkBrep(result.brep, { strict: true });
-    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 1)
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== shellCount || report.topology[0].genus !== shellCount)
       return refuse('GEOMETRY', 'The exact closed-circle sweep did not produce one valid closed ring.');
     return result;
   }

@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  brepMassProperties, CadPartError, checkBrep, evaluateCadPart, faceGeometry, joinCurves, loadCadPart,
-  massPropertiesOf, measureBrepEdgeContinuity, saveCadPart, surfaceDomain,
+  brepMassProperties, CadPartError, checkBrep, curveDomain, evaluateCadPart, evaluateCurve, evaluateSurface, faceGeometry, joinCurves, loadCadPart,
+  massPropertiesOf, measureBrepEdgeContinuity, reevaluate, saveCadPart, surfaceDomain,
 } from '../dist/index.js';
 import { evaluateSurfaceD1 } from '../dist/core/derivatives.js';
+import { brepQuadratureIntegrals } from '../dist/brep/brep-mass-quadrature.js';
+import { circleOf } from '../dist/brep/brep-tessellate.js';
+import { locateInRegion } from '../dist/brep/curved-arrangement.js';
 
 const add = (a, b) => a.map((x, i) => x + b[i]);
 const sub = (a, b) => a.map((x, i) => x - b[i]);
@@ -17,6 +20,10 @@ const near = (a, b, tolerance = 1e-7) => assert.ok(Math.abs(a - b) <= tolerance,
 const pointNear = (a, b) => near(norm(sub(a, b)), 0);
 
 const disk = { id: 's', kind: 'sketch', profile: 'circle', center: [50, -30], radius: 2 };
+const annulus = (radius = 1, center = disk.center, phase = [1, 0], direction = 'ccw') => ({ ...disk,
+  holes: [[{ kind: 'arc', center, start: add(center, scale(phase, radius)), direction }]],
+  sideTags: { outer: ['rim'], holes: [['bore']] },
+});
 const pathOf = ({ degree, knots, controlPoints, weights }) => ({ degree, knots, controlPoints, weights });
 const document = (path, section = disk, mode = 'exact') => ({
   format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
@@ -46,38 +53,84 @@ function makerCircle(center, e0, e1, radius) {
     weights: controlPoints.map((_, i) => i % 2 ? round(Math.cos(Math.PI / 4)) : 1) };
 }
 
-function verify(output, center, normal, R, r) {
+function shellBrep(brep, shell) {
+  const faces = brep.faces.filter(face => shell.faces.includes(face.id)), faceIds = new Set(shell.faces);
+  const loops = brep.loops.filter(loop => faceIds.has(loop.face)), loopIds = new Set(loops.map(loop => loop.id));
+  const coedges = brep.coedges.filter(use => loopIds.has(use.loop)), edgeIds = new Set(coedges.map(use => use.edge));
+  const edges = brep.edges.filter(edge => edgeIds.has(edge.id)), vertexIds = new Set(edges.flatMap(edge => edge.vertices));
+  return { ...brep, bodies: [{ ...brep.bodies[0], shells: [shell.id] }], shells: [shell], faces, loops, coedges, edges,
+    vertices: brep.vertices.filter(vertex => vertexIds.has(vertex.id)) };
+}
+
+function verify(output, center, normal, R, r, inner = 0) {
   const { brep } = output, report = checkBrep(brep, { strict: true });
+  const count = inner ? 2 : 1;
   assert.equal(output.representation, 'curved');
   assert.deepEqual(brep.source, { family: 'sweep-curve', id: 'w' });
   assert.ok(report.valid, report.issues.join('\n'));
-  assert.equal(report.topology[0].genus, 1);
-  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 4, loops: 4, coedges: 16, edges: 8, vertices: 4 });
+  assert.equal(report.topology.length, 1);
+  assert.equal(report.topology[0].genus, count);
+  assert.deepEqual(report.counts, { bodies: 1, shells: count, faces: 4 * count, loops: 4 * count,
+    coedges: 16 * count, edges: 8 * count, vertices: 4 * count });
   assert.ok(brep.coedges.every(use => use.pcurve));
   assert.ok(report.maximumPcurveGap < 1e-8);
   const analytic = massPropertiesOf(output), quadrature = brepMassProperties(brep, 1);
   assert.equal(analytic.method, 'closed-form');
   assert.equal(quadrature.method, 'quadrature');
-  const volume = 2 * Math.PI ** 2 * R * r ** 2;
+  const volume = 2 * Math.PI ** 2 * R * (r ** 2 - inner ** 2), mass = volume * 1e-3;
   near(analytic.volume, volume, 1e-9 * volume);
   near(quadrature.volume, volume, 1e-9 * volume);
   pointNear(analytic.centroid, center);
   pointNear(quadrature.centroid, center);
+  // Integrating a circular annulus about its swept centreline gives these centroidal principal moments.
+  const axial = mass * (R ** 2 + .75 * (r ** 2 + inner ** 2));
+  const transverse = mass * (.5 * R ** 2 + .625 * (r ** 2 + inner ** 2));
+  for (const props of [analytic, quadrature]) {
+    near(props.mass, mass, 1e-9 * mass);
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++)
+      near(props.inertia[i][j], (i === j ? transverse : 0) + (axial - transverse) * normal[i] * normal[j], 1e-8 * axial);
+  }
+
+  for (const [index, shell] of brep.shells.entries()) {
+    assert.equal(shell.closed, true);
+    const isolated = shellBrep(brep, shell), topology = checkBrep(isolated, { strict: true });
+    assert.ok(topology.valid, topology.issues.join('\n'));
+    assert.equal(topology.topology[0].genus, 1);
+    assert.equal(isolated.faces.length, 4);
+    const integrals = brepQuadratureIntegrals(isolated, 8);
+    assert.equal(integrals.meshed, false);
+    // The cavity contributes negative signed volume, although both shells remain closed native B-reps.
+    const signedVolume = (index === 0 ? 1 : -1) * 2 * Math.PI ** 2 * R * (index === 0 ? r : inner) ** 2;
+    near(integrals.integrals[0], signedVolume, 1e-9 * Math.abs(signedVolume));
+  }
 
   for (const face of brep.faces) {
-    assert.ok(face.name.startsWith('w.side'));
+    const inward = face.surface.id.startsWith('w_hole0_'), radius = inward ? inner : r;
+    assert.ok(face.name.startsWith('w.side') || inward && face.name.startsWith('w_hole0.side'));
     assert.notEqual(faceGeometry(face).kind, 'plane');
     const { u, v } = surfaceDomain(face.surface);
     for (const s of [0, .15, .39, .63, .8, 1]) for (const t of [0, .11, .42, .66, 1]) {
       const actual = evaluateSurfaceD1(face.surface, u[0] + (u[1] - u[0]) * s, v[0] + (v[1] - v[0]) * t);
       const fromCenter = sub(actual.point, center), axial = dot(fromCenter, normal);
       const radial = unit(sub(fromCenter, scale(normal, axial))), displacement = sub(fromCenter, scale(radial, R));
-      near(norm(displacement), r);
+      near(norm(displacement), radius);
       const outward = scale(unit(cross(actual.du, actual.dv)), face.sense === 'forward' ? 1 : -1);
-      pointNear(outward, unit(displacement));
+      pointNear(outward, scale(unit(displacement), inward ? -1 : 1));
     }
   }
   for (const edge of brep.edges) {
+    const uses = brep.coedges.filter(use => use.edge === edge.id), domain = curveDomain(edge.curve);
+    assert.equal(uses.length, 2);
+    for (const [index, use] of uses.entries()) {
+      assert.equal(use.twin, uses[1 - index].id);
+      assert.notEqual(use.sense, uses[1 - index].sense);
+      assert.deepEqual(curveDomain(use.pcurve), domain);
+      const face = brep.faces.find(face => face.loops.includes(use.loop));
+      for (const fraction of [0, .19, .5, .87, 1]) {
+        const t = domain[0] + fraction * (domain[1] - domain[0]), [u, v] = evaluateCurve(use.pcurve, t);
+        pointNear(evaluateSurface(face.surface, u, v), evaluateCurve(edge.curve, t));
+      }
+    }
     const continuity = measureBrepEdgeContinuity(brep, edge.id, { curvature: true });
     assert.equal(continuity.status, 'measured', JSON.stringify(continuity));
     near(continuity.maximumAngleDegrees, 0);
@@ -138,11 +191,100 @@ test('closed-circle sweep keeps the path accuracy cutoff and requires one disk c
   const refused = (path, code, detail, section) => assert.throws(() => evaluateCadPart(document(path, section)),
     error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
   for (const radius of [20, 21]) refused(circle, 'PARAMETER', /larger than the profile radius/, { ...disk, radius });
-  refused(circle, 'CAPABILITY', /without holes/, { ...disk, center: [0, 0], holes: [[{ kind: 'arc', center: [0, 0], start: [1, 0], direction: 'ccw' }]] });
   refused(circle, 'CAPABILITY', /one circular disk section/, { id: 's', kind: 'sketch', profile: 'rectangle', min: [-1, -1], max: [1, 1] });
   refused(makerCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 3000), 'CAPABILITY', /four rational quarter spans/);
   const a = [1 / 3, -2 / 3, -2 / 3], b = [-2 / 3, 1 / 3, -2 / 3];
   const wide = joinedCircle(10100, [0, 0, 0], scale(add(a, b), Math.SQRT1_2), scale(sub(a, b), Math.SQRT1_2));
   assert.ok(wide.controlPoints.flat().every(value => Math.abs(value) < 10000));
   refused(wide, 'PARAMETER', /radius must be at most 10000/);
+});
+
+test('closed annular Sweep preserves separate outward and inward toroidal shells through ID/OD edits and native reopen', t => {
+  const doc = document(joinedCircle(), annulus());
+  doc.parameters = { OuterRadius: 2, BoreEdgeX: 51 };
+  doc.features[0].radius = { parameter: 'OuterRadius' };
+  doc.features[0].holes[0][0].start = [{ parameter: 'BoreEdgeX' }, -30];
+  const initial = evaluateCadPart(doc), first = initial.outputs[0];
+  const initialMass = verify(first, [0, 0, 0], [0, 0, 1], 20, 2, 1);
+  const identity = snapshot => {
+    const brep = snapshot.outputs[0].brep;
+    return { bodies: brep.bodies, shells: brep.shells,
+      faces: brep.faces.map(({ id, name, sense }) => ({ id, name, sense })), edges: brep.edges.map(({ id, name }) => ({ id, name })) };
+  };
+  const edited = reevaluate(initial, { parameters: { BoreEdgeX: 51.5 } });
+  const editedMass = verify(edited.outputs[0], [0, 0, 0], [0, 0, 1], 20, 2, 1.5);
+  near(editedMass.volume / initialMass.volume, 7 / 12);
+  assert.deepEqual(identity(edited), identity(initial));
+  const outerWalls = snapshot => snapshot.outputs[0].brep.faces.filter(face => face.name.startsWith('w.side[rim]'));
+  assert.equal(outerWalls(initial).length, 4);
+  assert.deepEqual(outerWalls(edited), outerWalls(initial));
+  assert.equal(first.brep.faces.filter(face => face.name.startsWith('w.side[bore]#')).length, 4);
+  const expanded = reevaluate(edited, { parameters: { OuterRadius: 3 } });
+  verify(expanded.outputs[0], [0, 0, 0], [0, 0, 1], 20, 3, 1.5);
+  assert.deepEqual(identity(expanded), identity(initial));
+  const reopened = loadCadPart(saveCadPart(edited));
+  assert.deepEqual(reopened.document, edited.document);
+  assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
+  assert.deepEqual(reevaluate(reopened, { parameters: { OuterRadius: 3 } }).outputs[0].brep, expanded.outputs[0].brep);
+  assert.deepEqual(reevaluate(reopened, { parameters: { BoreEdgeX: 51 } }).outputs[0].brep, first.brep);
+  t.diagnostic(JSON.stringify({ counts: checkBrep(first.brep, { strict: true }).counts,
+    topology: checkBrep(first.brep, { strict: true }).topology, mass: initialMass,
+    editedVolume: editedMass.volume, shellIdentityPreserved: true, reopenIdentical: true }));
+});
+
+test('native meridian section curves classify material, sealed bore, exterior and both boundaries on either side of the axis', () => {
+  const { brep } = evaluateCadPart(document(joinedCircle(), annulus())).outputs[0];
+  for (const station of [-20, 20]) {
+    const rings = brep.shells.map(shell => {
+      const section = shellBrep(brep, shell).edges.filter(edge => {
+        const carrier = circleOf(edge.curve);
+        return carrier && norm(sub(carrier.c, [station, 0, 0])) < 1e-8;
+      });
+      assert.equal(section.length, 2);
+      return section.map(({ curve }) => {
+        assert.ok(curve.controlPoints.every(point => Math.abs(point[1]) < 1e-8));
+        const [t0, t1] = curveDomain(curve);
+        // Read the actual native section curves; do not rebuild a circle from the authored radii.
+        return { kind: 'curve', t0, t1, f: t => {
+          const [x, , z] = evaluateCurve(curve, t); return [x - station, z];
+        } };
+      });
+    });
+    const region = { outer: rings[0], holes: [rings[1]] };
+    for (const [point, expected] of [[[0, .3], 'out'], [[0, 1.5], 'in'], [[0, 2.5], 'out'],
+      [[0, 1], 'boundary'], [[0, 2], 'boundary'], [[1.5, 0], 'in'], [[-1.5, 0], 'in']])
+      assert.equal(locateInRegion(point, region, 1e-7), expected, `${station}: ${point}`);
+  }
+});
+
+test('oblique reversed closed annular path keeps clockwise phased bore charts and translated mass moments', () => {
+  const center = [123.456789123, -2.125, 21.875], e0 = [.36, .48, .8], e1 = [-.8, .6, 0], normal = cross(e0, e1);
+  const path = makerCircle(center, e0, e1, 20);
+  path.knots = [-4, -4, -4, -2, -2, 1, 1, 2.25, 2.25, 3, 3, 3];
+  const reverse = { ...path, controlPoints: path.controlPoints.toReversed(), weights: path.weights.toReversed().map(weight => weight * 2),
+    knots: path.knots.toReversed().map(knot => -knot) };
+  for (const curve of [path, reverse]) for (const tags of [true, false]) {
+    const section = { ...annulus(1.5, disk.center, [.6, .8], 'cw'), radius: 8, ...(tags ? {} : { sideTags: undefined }) };
+    verify(evaluateCadPart(document(curve, section)).outputs[0], center, normal, 20, 8, 1.5);
+  }
+});
+
+test('closed annular sweep refuses eccentric, thin, oversized and unsupported bores with feature-scoped errors', () => {
+  const path = joinedCircle(), refused = (section, code, detail, curve = path) => assert.throws(() => evaluateCadPart(document(curve, section)),
+    error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
+  for (const center of [[50.25, -30], [50 + 1e-10, -30]])
+    refused(annulus(1, center), 'GEOMETRY', /closed-circle sweep needs the bore concentric/);
+  refused(annulus(.005), 'PARAMETER', /hole radius of at least 0.01/);
+  for (const radius of [2 - 5e-7, 2 - 1e-6, 2, 2.1])
+    refused(annulus(radius), 'GEOMETRY', /strictly positive wall clearance around the bore/);
+  verify(evaluateCadPart(document(path, annulus(2 - 5e-6))).outputs[0], [0, 0, 0], [0, 0, 1], 20, 2, 2 - 5e-6);
+  verify(evaluateCadPart(document(path, { ...annulus(.01, [0, 0]), center: [0, 0] })).outputs[0], [0, 0, 0], [0, 0, 1], 20, 2, .01);
+  for (const radius of [20, 21])
+    refused({ ...annulus(), radius }, 'PARAMETER', /path radius larger than the profile radius/);
+  refused({ ...annulus(.2), sideTags: undefined, holes: [...annulus(.2).holes, ...annulus(.2).holes] },
+    'CAPABILITY', /accepts at most one circular hole/);
+  const rectangle = [[49.5, -30.5], [50.5, -30.5], [50.5, -29.5], [49.5, -29.5]].map(start => ({ kind: 'line', start }));
+  refused({ ...annulus(), sideTags: undefined, holes: [rectangle] }, 'CAPABILITY', /accepts at most one circular hole/);
+  const wide = { ...path, controlPoints: path.controlPoints.map(([x, y, z]) => [x + 10000, y, z]) };
+  refused(annulus(), 'PARAMETER', /path coordinates must be within/, wide);
 });

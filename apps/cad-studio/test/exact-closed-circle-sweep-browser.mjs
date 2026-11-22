@@ -4,13 +4,18 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
+const annular = process.argv.includes('--annular');
+const baseline = process.argv.includes('--expect-refused');
+assert.ok(!baseline || annular);
 const railRadius = 20;
 const knots = [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4];
 const ellipse = [[20, 0], [20, 12], [0, 12], [-20, 12], [-20, 0], [-20, -12], [0, -12], [20, -12], [20, 0]]
   .map(([x, y]) => [x, y, 0]);
 const weights = Array.from({ length: 9 }, (_, i) => i % 2 === 0 ? 1 : Math.SQRT1_2);
-const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 1,
-  nodes: [{ id: 'n0', kind: 'sketch', profile: 'circle', center: [5, -8], radius: 2 }], outputs: {},
+const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: annular ? { BoreRadius: 1 } : {}, nextId: 1,
+  nodes: [{ id: 'n0', kind: 'sketch', profile: 'circle', center: annular ? [0, 0] : [5, -8], radius: 2,
+    ...(annular ? { holes: [[{ kind: 'arc', start: [{ parameter: 'BoreRadius' }, 0], center: [0, 0], direction: 'cw' }]],
+      sideTags: { outer: ['outer'], holes: [['bore']] } } : {}) }], outputs: {},
   direct: { sources: { control: `@model control { version:0; length-unit:mm;
     @curve #ellipse { type:nurbs; degree:2; knots:${JSON.stringify(knots)};
       control-points:${JSON.stringify(ellipse)}; weights:${JSON.stringify(weights)}; } }` },
@@ -23,10 +28,10 @@ const pins = [
 ];
 
 const f = await createFlow({
-  name: 'exact-closed-circle-sweep', output: process.argv[2], envFrozen: 'D1673_SOURCE_FROZEN',
+  name: 'exact-closed-circle-sweep', output: process.argv[2], envFrozen: annular ? 'D1753_SOURCE_FROZEN' : 'D1673_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Draw the circular path in Studio, create the closed exact Sweep, inspect its seams and reopen its editable History.',
-  limits: ['One four-quarter R20 mm path, a circular disk, desktop WebGPU, and local L1 MCP.'],
+  limits: ['One four-quarter R20 mm path, a circular disk or a concentric bore, desktop WebGPU, and local L1 MCP.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import {
@@ -40,7 +45,9 @@ const { outputs: [output] } = partSnapshot(doc), { brep } = output;
 const intervals = [0, .17, .5, .83, 1], at = ([lo, hi], t) => lo + (hi - lo) * t;
 const samples = brep.faces.map(face => {
   const { u, v } = surfaceDomain(face.surface);
-  return intervals.flatMap(s => intervals.map(t => evaluateSurface(face.surface, at(u, s), at(v, t))));
+  const shell = brep.shells.findIndex(item => item.faces.includes(face.id));
+  const points = intervals.flatMap(s => intervals.map(t => evaluateSurface(face.surface, at(u, s), at(v, t))));
+  return { shell, name: face.name, points };
 });
 console.log(JSON.stringify({ check: checkBrep(brep, { strict: true }), source: brep.source, bodyCount: output.bodyCount,
   mass: massPropertiesOf(output), quadrature: brepMassProperties(brep, 1).volume, samples,
@@ -58,36 +65,44 @@ const status = value => hud().locator('.status').filter({ hasText: new RegExp(`^
 const card = id => f.page.getByRole('listitem', { name: `Proposal ${id}`, exact: true });
 const near = (value, expected, tolerance = 1e-7) =>
   assert.ok(Math.abs(value - expected) <= tolerance, JSON.stringify({ value, expected, tolerance }));
-const expectedVolume = r => 2 * Math.PI ** 2 * railRadius * r ** 2;
+const expectedVolume = (radius, bore = 0) => 2 * Math.PI ** 2 * railRadius * (radius ** 2 - bore ** 2);
 
 async function verify(label, doc, radius) {
   const read = await f.inspect(label, doc);
   assert.ok(read.check.valid, read.check.issues.join('\n'));
   assert.deepEqual(read.source, { family: 'sweep-curve', id: 'n1' });
   assert.equal(read.bodyCount, 1);
-  assert.deepEqual(read.check.counts, { bodies: 1, shells: 1, faces: 4, loops: 4, coedges: 16, edges: 8, vertices: 4 });
-  assert.equal(read.check.topology[0].genus, 1);
+  const bore = annular ? doc.parameters.BoreRadius : 0, shells = bore ? 2 : 1;
+  assert.deepEqual(read.check.counts, { bodies: 1, shells, faces: 4 * shells, loops: 4 * shells,
+    coedges: 16 * shells, edges: 8 * shells, vertices: 4 * shells });
+  assert.equal(read.check.topology[0].genus, shells);
   assert.equal(read.planes, 0);
-  assert.equal(read.pcurves, 16);
-  assert.equal(read.samples.length, 4);
+  assert.equal(read.pcurves, 16 * shells);
   let surfaceResidual = 0;
-  for (const [x, y, z] of read.samples.flat())
-    surfaceResidual = Math.max(surfaceResidual, Math.abs(Math.hypot(Math.hypot(x, y) - railRadius, z) - radius));
+  for (const [shell, target] of (bore ? [radius, bore] : [radius]).entries()) {
+    const faces = read.samples.filter(face => face.shell === shell);
+    assert.equal(faces.length, 4);
+    for (const face of faces) {
+      if (annular) assert.ok(face.name.includes(shell ? '[bore]' : '[outer]'), face.name);
+      for (const [x, y, z] of face.points)
+        surfaceResidual = Math.max(surfaceResidual, Math.abs(Math.hypot(Math.hypot(x, y) - railRadius, z) - target));
+    }
+  }
   near(surfaceResidual, 0);
-  near(read.mass.volume, expectedVolume(radius));
-  near(read.quadrature, expectedVolume(radius));
+  near(read.mass.volume, expectedVolume(radius, bore));
+  near(read.quadrature, expectedVolume(radius, bore));
   read.mass.centroid.forEach(value => near(value, 0));
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, 1);
-  near(bodies[0].volume, expectedVolume(radius));
-  assert.equal(read.seams.length, 8);
+  near(bodies[0].volume, expectedVolume(radius, bore));
+  assert.equal(read.seams.length, 8 * shells);
   for (const seam of read.seams) {
     assert.equal(seam.status, 'measured');
     near(seam.maximumAngleDegrees, 0, 1e-5);
     assert.equal(seam.curvature.status, 'measured');
     near(seam.curvature.maximumDifference, 0);
   }
-  f.report.observations.push({ label, radius, volume: read.mass.volume, quadrature: read.quadrature, digest: read.digest,
+  f.report.observations.push({ label, radius, ...(annular ? { bore } : {}), volume: read.mass.volume, quadrature: read.quadrature, digest: read.digest,
     surfaceResidual, gap: read.check.maximumPcurveGap, counts: read.check.counts,
     maximumAngle: Math.max(...read.seams.map(seam => seam.maximumAngleDegrees)),
     maximumCurvatureDifference: Math.max(...read.seams.map(seam => seam.curvature.maximumDifference)) });
@@ -102,7 +117,7 @@ async function startSweep(path) {
   await hud().getByLabel('Representation', { exact: true }).selectOption('exact');
 }
 
-async function measureSeams(native, railName) {
+async function measureSeams(native, railName, label = '05-measured-native-seams') {
   f.phase = 'Measure all native ring seams in the Studio inspector';
   await button('Top', f.page.locator('.views')).click();
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
@@ -121,7 +136,26 @@ async function measureSeams(native, railName) {
     assert.match(await result.innerText(), /Native samples\s+8/);
   }
   await result.scrollIntoViewIfNeeded();
-  await f.snapshot('05-measured-native-seams');
+  await f.snapshot(label);
+}
+
+async function showCavity(doc) {
+  f.phase = 'Show the closed cavity in a Studio section';
+  await button('Section view').click();
+  await button('Section across Y').click();
+  await button('Front', f.page.locator('.views')).click();
+  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await f.page.waitForFunction(() => {
+    const section = window.__studioSection();
+    return section.mode === 'plane' && section.planes[0].axis === 'y' && Math.abs(section.planes[0].offset) < 1e-6;
+  });
+  const section = await f.page.evaluate(() => window.__studioSection());
+  assert.equal(section.gpu, true);
+  await f.same(doc);
+  await f.snapshot('08-reopened-cavity-section', () => ({ section: window.__studioSection() }));
+  await button('Section view').click();
+  await f.same(doc);
 }
 
 await f.run(async () => {
@@ -179,11 +213,19 @@ await f.run(async () => {
   await button('Hide', f.page.getByRole('complementary', { name: 'Direct geometry', exact: true })).click();
   await f.changed(authored);
   const railDoc = await f.doc();
-  const savedRail = await f.save('closed-circle-input');
+  const savedRail = baseline ? null : await f.save('closed-circle-input');
 
   f.phase = 'Preview and apply the closed circle';
   await startSweep(rail.name);
   await hud().locator('.hud-step').getByText('Exact closed circle', { exact: true }).waitFor();
+  if (baseline) {
+    await status('refused').waitFor();
+    await hud().getByText('This Sweep needs a circular disk', { exact: true }).waitFor();
+    assert.ok(await button('Apply', hud()).isDisabled());
+    await f.same(railDoc);
+    await f.snapshot('03-closed-annulus-refused');
+    return;
+  }
   await status('preview').waitFor();
   await f.snapshot('03-closed-circle-preview');
   await button('Apply', hud()).click();
@@ -193,29 +235,52 @@ await f.run(async () => {
   const native = await verify('accepted-native', applied, 2);
   await measureSeams(native, rail.name);
 
-  await f.openFeatureEditor(1, 'edit the closed Sweep diameter');
-  await f.editor().getByText('Exact closed circle', { exact: true }).waitFor();
-  const diameter = f.editor().getByLabel('Diameter', { exact: true });
-  await diameter.fill('40');
-  await button('Apply', f.editor()).click();
-  await f.editor().getByText('Choose a larger arc radius or reduce the sketch diameter.', { exact: true }).waitFor();
-  await f.same(applied);
-  await f.snapshot('06-refuse-axis-contact');
-  await diameter.fill('6');
-  const edited = (await f.applyEditor(applied, '07-history-diameter-edit')).doc;
-  assert.equal(edited.nodes[0].radius, 3);
-  assert.deepEqual(edited.nodes[1], applied.nodes[1]);
-  const expanded = await verify('edited-native', edited, 3);
+  let edited;
+  const radius = annular ? 2 : 3;
+  if (annular) {
+    const panel = await f.openParameters();
+    const input = panel.getByLabel('Value of BoreRadius', { exact: true });
+    await input.fill('2'); await input.press('Enter');
+    await f.waitToast(/strictly positive wall clearance around the bore/);
+    await f.same(applied);
+    await f.snapshot('06-refuse-wall-contact');
+    await f.closeParameters(panel);
+    edited = (await f.setParameter('BoreRadius', 1.5, '07-enlarge-cavity')).doc;
+    assert.deepEqual(edited.nodes, applied.nodes);
+  } else {
+    await f.openFeatureEditor(1, 'edit the closed Sweep diameter');
+    await f.editor().getByText('Exact closed circle', { exact: true }).waitFor();
+    const diameter = f.editor().getByLabel('Diameter', { exact: true });
+    await diameter.fill('40');
+    await button('Apply', f.editor()).click();
+    await f.editor().getByText('Choose a larger arc radius or reduce the sketch diameter.', { exact: true }).waitFor();
+    await f.same(applied);
+    await f.snapshot('06-refuse-axis-contact');
+    await diameter.fill('6');
+    edited = (await f.applyEditor(applied, '07-history-diameter-edit')).doc;
+    assert.equal(edited.nodes[0].radius, 3);
+    assert.deepEqual(edited.nodes[1], applied.nodes[1]);
+  }
+  const expanded = await verify('edited-native', edited, radius);
   await f.undo();
   await f.same(applied);
   await f.redo();
   await f.same(edited);
   const saved = await f.save('closed-circle-sweep');
   const reopened = (await f.freshOpen(saved.file, edited, '08-reopened')).doc;
-  assert.equal((await verify('reopened-native', reopened, 3)).digest, expanded.digest);
+  const reopenedNative = await verify('reopened-native', reopened, radius);
+  assert.equal(reopenedNative.digest, expanded.digest);
+  if (annular) {
+    await showCavity(reopened);
+    await measureSeams(reopenedNative, rail.name, '08-reopened-native-seams');
+    const restored = (await f.setParameter('BoreRadius', 1, '09-restored-cavity')).doc;
+    assert.equal((await verify('restored-native', restored, radius)).digest, native.digest);
+    await f.undo();
+    await f.same(edited);
+  }
   await f.openFeatureEditor(1);
   await f.editor().getByText('Exact closed circle', { exact: true }).waitFor();
-  assert.equal(await f.editor().getByLabel('Diameter', { exact: true }).inputValue(), '6');
+  assert.equal(Number(await f.editor().getByLabel('Diameter', { exact: true }).inputValue()), 2 * radius);
   await f.snapshot('09-reopened-history');
 
   f.phase = 'Qualify a revision-bound local proposal on the authored circle';
@@ -225,6 +290,7 @@ await f.run(async () => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
     assert.match(description.values.representation, /closed circle.*four rational quadratic quarter spans/);
+    if (annular) assert.match(description.values.sketch, /A closed circle accepts a circular disk with an optional concentric circular bore/);
     const summary = await call('query', { action: 'summary' });
     const source = summary.direct_curves.find(candidate => candidate.id === rail.id);
     assert.ok(source?.revision);
@@ -236,7 +302,7 @@ await f.run(async () => {
     const op = feature(source.revision);
     const dry = await call('features', { action: 'batch', dryRun: true, ops: [op] });
     assert.ok(dry.dryRun);
-    near(dry.change.volume, expectedVolume(2), .001);
+    near(dry.change.volume, expectedVolume(2, annular ? 1 : 0), .001);
     assert.deepEqual(await readFile(file), before);
     const result = await call('proposals', { action: 'propose', title: 'Exact Sweep around the authored circle', ops: [op] });
     assert.deepEqual([result.proposal, result.applied], ['P1', false]);
