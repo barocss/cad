@@ -435,20 +435,22 @@ export function exactSemicylinderCapSource(nodes: readonly unknown[], index: num
     skins: [`${node.id}.normal`, `${node.id}.reverse`] };
 }
 
-/** Identify one signed radial edit of an original Exact semicylinder and its other skin. */
-export function exactSemicylinderFirstWallOffset(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>) {
+/** Admit the opposite skin or one radial and one upper-cap Offset after exactly one signed edit. */
+export function exactSemicylinderSecondOffset(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>, face: string) {
   const node = nodes[index];
   if (!textRecord(node) || node.suppressed || node.held !== undefined || typeof node.distance !== 'number' ||
       offsetFaceNodeProblem(node, index)) return;
   const sourceIndex = precedingSolidParent(node, index);
   if (sourceIndex === undefined) return;
   const source = exactSemicylinderCapSource(nodes, sourceIndex, parameters);
-  const [face] = node.faces as [string];
-  const signature = textRecord(node.sigs) ? node.sigs[face] : undefined;
-  if (!source?.skins.includes(face) || !textRecord(signature) || signature.k !== 'curved') return;
-  const otherFace = source.skins.find(name => name !== face);
-  if (otherFace === undefined) return;
-  return { source, sourceIndex, prior: { face, distance: node.distance }, otherFace };
+  const [priorFace] = node.faces as [string];
+  const signature = textRecord(node.sigs) ? node.sigs[priorFace] : undefined;
+  if (!source || !textRecord(signature) || priorFace === face) return;
+  const priorKind = signature.k === 'curved' && source.skins.includes(priorFace) ? 'cylinder'
+    : signature.k === 'plane' && priorFace === source.upperFace ? 'plane' : undefined;
+  const nextKind = source.skins.includes(face) ? 'cylinder' : face === source.upperFace ? 'plane' : undefined;
+  if (!priorKind || !nextKind) return;
+  return { source, sourceIndex, prior: { face: priorFace, distance: node.distance }, priorKind, nextKind, mixed: priorKind !== nextKind };
 }
 
 function offsetSourceBase(nodes: readonly unknown[], index: number): number | undefined {
@@ -724,9 +726,9 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       }
       if (isExactCylinderOffsetChain(value.nodes, parentIndex)) {
         const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
-        const first = exactSemicylinderFirstWallOffset(value.nodes, parentIndex, parameters);
-        if (first?.otherFace !== face || signature.k !== 'curved' || node.target !== undefined)
-          return 'Offset face: use the original Exact semicylinder or select its other wall after one signed radial Offset.';
+        const second = exactSemicylinderSecondOffset(value.nodes, parentIndex, parameters, face);
+        if (!second || signature.k !== (second.nextKind === 'cylinder' ? 'curved' : 'plane') || node.target !== undefined)
+          return 'Offset face: follow one signed Offset of the original Exact semicylinder with the other wall, or pair an original wall with the original upper cap.';
         continue;
       }
       if (signature.k === 'curved') {

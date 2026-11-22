@@ -7,7 +7,7 @@ import { offsetFaceCommand } from '../src/app/profileCommands';
 import { runCheck } from '../src/chat/spec';
 import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
-import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
+import { directFaceDocumentProblem, emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 
 const top = 'n0.v-max', bottom = 'n0.v-min';
@@ -211,6 +211,30 @@ for (const [end, cap, station, delta] of [['upper', top, 14, -5], ['lower', bott
       return solid;
     };
     check(accepted, station, 'n2.top');
+    if (end === 'upper') {
+      const originalWall = 'n0.normal';
+      const linkedResult = evaluateDoc(accepted, 1);
+      assert.ok(linkedResult.ok);
+      const body = linkedResult.bodies.findIndex(item => item.key === 'b4');
+      const face = linkedResult.bodies[body].mesh.faces.findIndex(item => item.name === originalWall);
+      assert.ok(face >= 0);
+      assert.equal(offsetFaceCommand.available({ doc: accepted, bodies: linkedResult.bodies,
+        selection: { faces: [{ body, face }], edges: [], bodies: [] } }).ok, false);
+      const initialResult = evaluateDoc(base, 1);
+      assert.ok(initialResult.ok);
+      const radial = await dispatchTool({ doc: base, bodies: initialResult.bodies }, 'features',
+        { action: 'command', command: 'offset-face', faces: [originalWall], values: { d: 2 } }, async doc => evaluateDoc(doc, 1));
+      assert.ok(radial.changed && !radial.isError, radial.content);
+      const radialNode = radial.state.doc.nodes[4];
+      assert.ok(radialNode.kind === 'offset-face' && radialNode.sigs && saved.sigs);
+      const parent = { node: 4, side: 'solid' } as const;
+      const forgedWall = withNode(accepted, { kind: 'offset-face', parent, faces: [originalWall], distance: 2, sigs: radialNode.sigs });
+      const forgedCap = withNode(radial.state.doc, { kind: 'offset-face', parent, faces: [cap], target: saved.target, sigs: saved.sigs });
+      for (const candidate of [forgedWall, forgedCap]) {
+        assert.match(directFaceDocumentProblem(candidate) ?? '', /one signed Offset of the original Exact semicylinder/);
+        assert.ok(!evaluateDoc(candidate, 1).ok);
+      }
+    }
     const move = (doc: StudioDoc, z: number): StudioDoc => ({ ...doc, nodes: doc.nodes.map((node, i) =>
       i === 3 && node.kind === 'translate' ? { ...node, offset: [0, 0, z] } : node) });
     const movedStation = station + delta;

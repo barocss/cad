@@ -32,12 +32,12 @@ function context(doc: StudioDoc, name = outer): Ctx {
   return { doc, bodies: result.bodies, selection: { faces: [{ body: 0, face }], edges: [], bodies: [] } };
 }
 
-function measure(doc: StudioDoc, outside: number, inside: number, wall = outer) {
+function measure(doc: StudioDoc, outside: number, inside: number, wall = outer, height = 12) {
   const [{ brep }] = partBreps(doc);
   const report = checkBrep(brep, { strict: true });
   assert.ok(report.valid, report.issues.join('\n'));
   assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
-  assert.deepEqual([...new Set(brep.vertices.map(({ point }) => point[2]))].sort((a, b) => a - b), [0, 12]);
+  assert.deepEqual([...new Set(brep.vertices.map(({ point }) => point[2]))].sort((a, b) => a - b), [0, height]);
   for (const [name, radius, out] of [[wall, outside, 1], [wall === outer ? inner : outer, inside, -1]] as const) {
     const support = faceGeometry(brep.faces.find(face => face.name === name)!);
     assert.equal(support.kind, 'cylinder');
@@ -46,7 +46,7 @@ function measure(doc: StudioDoc, outside: number, inside: number, wall = outer) 
     near(support.c[1], 20);
     near(support.r, radius);
   }
-  near(brepMassProperties(brep, 1).volume, 6 * Math.PI * (outside ** 2 - inside ** 2));
+  near(brepMassProperties(brep, 1).volume, height * Math.PI / 2 * (outside ** 2 - inside ** 2));
   return brep;
 }
 
@@ -124,7 +124,7 @@ test('the two original walls accept successive signed Offsets in either order', 
     const ctx = context(initial, second);
     assert.equal(offsetFaceCommand.available(ctx).ok, true);
     assert.equal(offsetFaceCommand.available(context(initial, first)).ok, false);
-    assert.equal(offsetFaceCommand.available(context(initial, 'n0.v-max')).ok, false);
+    assert.equal(offsetFaceCommand.available(context(initial, 'n0.v-min')).ok, false);
     assert.deepEqual(offsetFaceCommand.fields!(ctx).map(field => field.key), ['d']);
     assert.throws(() => offsetFaceCommand.build!(ctx, { offsetMode: 'to-plane' }), /reference plane/);
 
@@ -170,4 +170,68 @@ test('the two original walls accept successive signed Offsets in either order', 
     near(wall.measured, 6);
   }
   assert.deepEqual(runs[0], runs[1]);
+});
+
+test('one original radial wall and the original upper cap accept signed Offsets in either order', async () => {
+  for (const [skin, radial, outside, inside] of [[outer, 2, 12, 8], [inner, -1, 10, 9]] as const) {
+    const source = sourceDoc(), cap = 'n0.v-max', exactRuns = [];
+    for (const [first, second] of [[skin, cap], [cap, skin]]) {
+      const firstDistance = first === cap ? 3 : radial, secondDistance = second === cap ? 3 : radial;
+      const initial = offsetFaceCommand.build!(context(source, first), { d: firstDistance });
+      const ctx = context(initial, second);
+      assert.equal(offsetFaceCommand.available(ctx).ok, true);
+      assert.equal(offsetFaceCommand.available(context(initial, 'n0.v-min')).ok, false);
+      assert.deepEqual(offsetFaceCommand.fields!(ctx).map(field => field.key), ['d']);
+      const [handle] = offsetFaceCommand.handles!(ctx, { d: secondDistance });
+      if (second === cap) {
+        assert.deepEqual(handle.dir, [0, 0, 1]);
+        near(handle.at[1], 20 + (outside + inside) / 2);
+        assert.equal(handle.at[2], 12);
+      } else {
+        assert.deepEqual(handle.dir, [0, skin === outer ? 1 : -1, 0]);
+        near(handle.at[1], 20 + (skin === outer ? 10 : 8));
+        assert.equal(handle.at[2], 7.5);
+      }
+      assert.throws(() => offsetFaceCommand.build!(ctx, { offsetMode: 'to-plane' }), /reference plane/);
+
+      const accepted = offsetFaceCommand.build!(ctx, { d: secondDistance }), saved = accepted.nodes[2];
+      assert.ok(saved.kind === 'offset-face');
+      assert.deepEqual([saved.parent, saved.faces, saved.distance, saved.target], [{ node: 1, side: 'solid' }, [second], secondDistance, undefined]);
+      assert.deepEqual(accepted.nodes.slice(0, 2), initial.nodes);
+      const exact = measure(accepted, outside, inside, outer, 15);
+      exactRuns.push(exact);
+      const after = context(accepted, second);
+      assert.equal(offsetFaceCommand.available(after).ok, false);
+      assert.equal(offsetFaceCommand.available(context(accepted, first)).ok, false);
+
+      const agent = await dispatchTool({ doc: initial, bodies: ctx.bodies }, 'features',
+        { action: 'command', command: 'offset-face', faces: [second], values: { d: secondDistance }, expectedRevision: revisionOf(initial) }, evaluate);
+      assert.ok(agent.changed && !agent.isError, agent.content);
+      assert.deepEqual(agent.state.doc, accepted);
+
+      const capEditor = editSavedOffsetFaceCommand(accepted, first === cap ? 1 : 2);
+      assert.ok(capEditor?.build);
+      assert.deepEqual(capEditor.fields!(after).map(field => field.key), ['d']);
+      assert.equal(capEditor.onPick, undefined);
+      assert.throws(() => capEditor.build!(after, { offsetMode: 'to-plane' }), /signed distance/);
+      const refused = await evaluate(capEditor.build(after, { d: -12 }));
+      assert.ok(!refused.ok);
+      assert.match(refused.error.detail, /opposite cap/i);
+      const edited = capEditor.build(after, { d: -3 });
+      const expected = measure(edited, outside, inside, outer, 9);
+      assert.deepEqual(edited.nodes[first === cap ? 2 : 1], accepted.nodes[first === cap ? 2 : 1]);
+      const reopened = await readStudioFile(encodeStudioFile(edited));
+      assert.ok('doc' in reopened);
+      assert.deepEqual(reopened.doc, edited);
+      assert.deepEqual(measure(reopened.doc, outside, inside, outer, 9), expected);
+      const wall = await runCheck(edited, context(edited, cap).bodies, evaluate, {
+        query: { fn: 'radial_wall', a: outer, b: inner }, op: '==', value: outside - inside, tol: 0.01, unit: 'mm',
+      });
+      assert.equal(wall.status, 'pass');
+      assert.deepEqual(wall.entities, [outer, inner]);
+      assert.ok(typeof wall.measured === 'number');
+      near(wall.measured, outside - inside);
+    }
+    assert.deepEqual(exactRuns[0], exactRuns[1]);
+  }
 });

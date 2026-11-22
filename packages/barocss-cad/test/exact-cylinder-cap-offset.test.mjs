@@ -5,6 +5,7 @@ import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementFrame, 
   exactSemicylinderOuterWallOffsetFrame, offsetExactSemicylinderOuterWallIfAdmitted,
   exactSemicylinderWallOffsetFrame, offsetExactSemicylinderWallIfAdmitted,
   exactSemicylinderSecondWallOffsetFrame, offsetExactSemicylinderSecondWallIfAdmitted,
+  exactSemicylinderMixedOffsetFrame, offsetExactSemicylinderMixedOffsetIfAdmitted,
   replaceExactSemicylinderCapIfAdmitted } from '../dist/features/exact-cylinder-cap-offset.js';
 
 const raw = () => ({
@@ -180,7 +181,7 @@ test('outer wall Offset rejects retained inner skin, stale ownership, contact, r
   const chain = withOffset(base, 1, 'h.normal');
   chain.features.push({ id: 'again', kind: 'offset-face', target: 'move', face: 'h.normal', distance: 1 });
   assert.throws(() => body(chain));
-  const axial = withOffset(base, 2);
+  const axial = withOffset(base, 2, 'h.v-min');
   axial.features.push({ id: 'radial', kind: 'offset-face', target: 'move', face: 'h.normal', distance: 1 });
   assert.throws(() => body(axial));
 });
@@ -268,7 +269,7 @@ test('second wall requires exact source, first recipe, current boundary and oppo
   const altered = structuredClone(current); altered.edges[0].curve.controlPoints[0][0] += .01;
   for (const wrongCurrent of [body(base), altered])
     assert.equal(exactSemicylinderSecondWallOffsetFrame(wrongCurrent, next, input, prior), undefined);
-  for (const wrongFace of ['h.normal', 'h.v-max', 'h.u-min', 'h.reverse#1', 'missing']) {
+  for (const wrongFace of ['h.normal', 'h.v-min', 'h.u-min', 'h.reverse#1', 'missing']) {
     assert.equal(exactSemicylinderSecondWallOffsetFrame(current, wrongFace, input, prior), undefined);
     assert.throws(() => body(withSecondWall(base, prior, wrongFace, 1)), /other original physical wall|missing|name/);
   }
@@ -285,6 +286,107 @@ test('second wall requires exact source, first recipe, current boundary and oppo
       const third = { ...twice, features: [...twice.features, { id: 'third', kind: 'offset-face', target: 'second', face, distance: 1 }] };
       assert.throws(() => body(third));
     }
+  }
+});
+
+for (const skin of ['outer', 'inner']) for (const reverseV of [false, true]) for (const [radialDistance, axialDistance] of [[2, 3], [-.5, -2], [.3, .7]])
+  test(`one ${skin} radial ${radialDistance} and upper axial ${axialDistance} commute exactly, reverse V ${reverseV}`, () => {
+    const surface = raw(); if (reverseV) surface.controlPoints.forEach(row => row.reverse());
+    const base = doc(surface), input = sourceOf(base), original = freeze(body(base));
+    const upper = reverseV ? 'h.v-min' : 'h.v-max', lower = reverseV ? 'h.v-max' : 'h.v-min';
+    const outerName = reverseV ? 'h.reverse' : 'h.normal', innerName = reverseV ? 'h.normal' : 'h.reverse';
+    const radialFace = skin === 'outer' ? outerName : innerName, opposite = skin === 'outer' ? innerName : outerName;
+    const oldOuter = reverseV ? 12 : 10, oldInner = reverseV ? 10 : 8;
+    const outerRadius = skin === 'outer' ? oldOuter + radialDistance : oldOuter;
+    const innerRadius = skin === 'inner' ? oldInner - radialDistance : oldInner, height = 12 + axialDistance;
+    const results = [];
+    const boundary = (brep, name) => {
+      const face = brep.faces.find(face => face.name === name);
+      const edges = new Set(brep.coedges.filter(use => face.loops.includes(use.loop)).map(use => use.edge));
+      const vertices = new Set(brep.edges.filter(edge => edges.has(edge.id)).flatMap(edge => edge.vertices));
+      return { face, edges: brep.edges.filter(edge => edges.has(edge.id)), vertices: brep.vertices.filter(vertex => vertices.has(vertex.id)) };
+    };
+    for (const radialFirst of [true, false]) {
+      const prior = { face: radialFirst ? radialFace : upper, distance: radialFirst ? radialDistance : axialDistance };
+      const next = radialFirst ? upper : radialFace, distance = radialFirst ? axialDistance : radialDistance;
+      const current = freeze(body(withOffset(base, prior.distance, prior.face))), saved = structuredClone(current);
+      const frame = radialFirst
+        ? { anchor: [20, 20 + (outerRadius + innerRadius) / 2, 12], normal: [0, 0, 1] }
+        : { anchor: [20, 20 + (skin === 'outer' ? oldOuter : oldInner), height / 2], normal: [0, skin === 'outer' ? 1 : -1, 0] };
+      const actualFrame = exactSemicylinderMixedOffsetFrame(current, next, input, prior);
+      assert.ok(actualFrame); actualFrame.anchor.forEach((value, axis) => near(value, frame.anchor[axis]));
+      assert.deepEqual(actualFrame.normal, frame.normal);
+      const result = body(withSecondWall(base, prior, next, distance), 'second'), report = checkBrep(result, { strict: true });
+      assert.deepEqual(offsetExactSemicylinderMixedOffsetIfAdmitted(current, next, input, prior, distance), result);
+      assert.ok(report.valid, report.issues.join('\n'));
+      assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+      assert.equal(report.topology[0].genus, 0);
+      assert.ok(report.maximumPcurveGap < 1e-8 && report.maximumEdgeSurfaceGap < 1e-8);
+      const identity = brep => ({ ...incidence(brep), coedges: brep.coedges.map(({ pcurve, ...use }) => [use, pcurve?.id]) });
+      assert.deepEqual(identity(result), identity(original));
+      if (radialFirst) {
+        assert.deepEqual(boundary(result, lower), boundary(current, lower));
+        const moveZ = point => [point[0], point[1], point[2] === 12 ? height : point[2]];
+        for (const edge of result.edges) {
+          const before = current.edges.find(value => value.id === edge.id);
+          assert.deepEqual(edge.curve, { ...before.curve, controlPoints: before.curve.controlPoints.map(moveZ) });
+        }
+        for (const face of result.faces) {
+          const before = current.faces.find(value => value.id === face.id);
+          assert.deepEqual(face.surface, { ...before.surface, controlPoints: before.surface.controlPoints.map(row => row.map(moveZ)) });
+        }
+      } else {
+        assert.deepEqual(boundary(result, opposite), boundary(current, opposite));
+        for (const edge of result.edges) assert.deepEqual(edge.curve.controlPoints.map(point => point[2]),
+          current.edges.find(value => value.id === edge.id).curve.controlPoints.map(point => point[2]));
+      }
+      for (const [name, radius, out] of [[outerName, outerRadius, 1], [innerName, innerRadius, -1]]) {
+        const support = faceGeometry(result.faces.find(face => face.name === name));
+        assert.equal(support.kind, 'cylinder'); near(support.r, radius); assert.equal(support.out, out);
+        assert.deepEqual(support.a, [0, 0, 1]); near(support.c[0], 20); near(support.c[1], 20);
+      }
+      for (const [name, z, sign] of [[lower, 0, -1], [upper, height, 1]]) {
+        const plane = faceGeometry(result.faces.find(face => face.name === name));
+        assert.equal(plane.kind, 'plane'); assert.deepEqual(plane.n, [0, 0, sign]); near(plane.o[2], z);
+      }
+      assert.deepEqual([...new Set(result.vertices.map(vertex => vertex.point[2]))].sort((a, b) => a - b), [0, height]);
+      // Independent final section and height, not measurements from either replay helper.
+      const area = Math.PI * (outerRadius ** 2 - innerRadius ** 2) / 2, mass = brepMassProperties(result, 1);
+      const meanY = 4 * (outerRadius ** 3 - innerRadius ** 3) / (3 * Math.PI * (outerRadius ** 2 - innerRadius ** 2));
+      near(mass.volume, area * height, 1e-7);
+      mass.centroid.forEach((value, axis) => near(value, [20, 20 + meanY, height / 2][axis]));
+      if (skin === 'outer' && !reverseV && radialDistance === 2 && axialDistance === 3) near(mass.volume, 1884.9555921538758, 1e-7);
+      assert.deepEqual(current, saved); results.push(result);
+    }
+    assert.equal(JSON.stringify(results[0]), JSON.stringify(results[1]), 'both history orders have the same complete native representation');
+  });
+
+test('mixed Offset refuses wrong source/current/recipe, raw linked recipes, lower/same and third operations', () => {
+  const base = doc(), input = sourceOf(base), prior = { face: 'h.normal', distance: 2 };
+  const current = body(withOffset(base, prior.distance, prior.face)), next = 'h.v-max';
+  for (const wrongPrior of [{ ...prior, distance: 1 }, { ...prior, distance: 0 }, { ...prior, distance: NaN },
+    { ...prior, face: next }, { ...prior, target: { feature: 'reference' } }])
+    assert.equal(exactSemicylinderMixedOffsetFrame(current, next, input, wrongPrior), undefined);
+  for (const wrongSource of [{ ...input, thickness: 3 }, { ...input, id: 'other' }])
+    assert.equal(exactSemicylinderMixedOffsetFrame(current, next, wrongSource, prior), undefined);
+  const altered = structuredClone(current); altered.faces[0].surface.controlPoints[0][0][0] += .01;
+  for (const wrongCurrent of [body(base), altered]) assert.equal(exactSemicylinderMixedOffsetFrame(wrongCurrent, next, input, prior), undefined);
+  for (const face of ['h.normal', 'h.reverse', 'h.u-min', 'h.v-min', 'missing'])
+    assert.equal(exactSemicylinderMixedOffsetFrame(current, face, input, prior), undefined);
+  for (const distance of [-12, -13, -12 + 1e-8]) assert.throws(() => body(withSecondWall(base, prior, next, distance)), /opposite cap/);
+  for (const distance of [0, NaN, Infinity, 10001])
+    assert.throws(() => offsetExactSemicylinderMixedOffsetIfAdmitted(current, next, input, prior, distance), /nonzero.*modeling range/);
+  const capPrior = { face: next, distance: 3 }, capCurrent = body(withOffset(base, capPrior.distance, capPrior.face));
+  for (const distance of [8, 8 - 1e-8]) assert.throws(() => body(withSecondWall(base, capPrior, 'h.reverse', distance)), /cylinder axis/);
+  for (const distance of [-2, -2 + 1e-8]) assert.throws(() => body(withSecondWall(base, capPrior, 'h.normal', distance)), /retained inner wall/);
+  assert.equal(exactSemicylinderMixedOffsetFrame(capCurrent, 'h.v-min', input, capPrior), undefined);
+  const lowerPrior = { face: 'h.v-min', distance: 1 };
+  assert.throws(() => body(withSecondWall(base, lowerPrior, 'h.normal', 1)), /other original physical wall/);
+  const twice = withSecondWall(base, prior, next, 3), twiceBody = body(twice);
+  assert.equal(exactSemicylinderMixedOffsetFrame(twiceBody, next, input, prior), undefined);
+  for (const face of ['h.normal', 'h.reverse', 'h.v-min', 'h.v-max']) {
+    const third = { ...twice, features: [...twice.features, { id: 'third', kind: 'offset-face', target: 'second', face, distance: 1 }] };
+    assert.throws(() => body(third));
   }
 });
 

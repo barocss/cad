@@ -12,6 +12,15 @@ type Source = { id: string; surface: Surface; thickness: number; side?: 'normal'
 type ReplacementPlane = { origin: Point; normal: Point };
 type PriorWallOffset = { face: string; distance: number };
 
+function retainedBoundary(before: Brep, after: Brep, fixed: Brep['faces'][number]): boolean {
+  const loops = new Set(fixed.loops), edges = new Set(before.coedges.filter(use => loops.has(use.loop)).map(use => use.edge));
+  const vertices = new Set(before.edges.filter(edge => edges.has(edge.id)).flatMap(edge => edge.vertices));
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  return same(fixed, after.faces.find(face => face.id === fixed.id))
+    && before.edges.every(edge => !edges.has(edge.id) || same(edge, after.edges.find(value => value.id === edge.id)))
+    && before.vertices.every(vertex => !vertices.has(vertex.id) || same(vertex, after.vertices.find(value => value.id === vertex.id)));
+}
+
 function admitted(brep: Brep, faceName: string, source: Source) {
   try {
     if (source.surface.degreeU !== 2 || source.surface.degreeV !== 1 || source.surface.controlPoints.length !== 5) return;
@@ -111,12 +120,7 @@ function offsetWall(brep: Brep, source: Source, wall: NonNullable<ReturnType<typ
   }
   // A profile-chart scale change can round even the retained support. Refuse that
   // representation change instead of moving an unselected native boundary.
-  const fixedLoops = new Set(wall.fixed.loops), fixedEdges = new Set(brep.coedges.filter(use => fixedLoops.has(use.loop)).map(use => use.edge));
-  const fixedVertices = new Set(brep.edges.filter(edge => fixedEdges.has(edge.id)).flatMap(edge => edge.vertices));
-  const unchanged = (before: unknown, after: unknown) => JSON.stringify(before) === JSON.stringify(after);
-  if (!unchanged(wall.fixed, candidate.faces.find(face => face.id === wall.fixed.id))
-    || brep.edges.some(edge => fixedEdges.has(edge.id) && !unchanged(edge, candidate.edges.find(value => value.id === edge.id)))
-    || brep.vertices.some(vertex => fixedVertices.has(vertex.id) && !unchanged(vertex, candidate.vertices.find(value => value.id === vertex.id))))
+  if (!retainedBoundary(brep, candidate, wall.fixed))
     throw new BrepError('GEOMETRY', `${label}: the retained ${fixedSkin} boundary cannot preserve its native representation`);
   const poles = [...candidate.vertices.map(vertex => vertex.point), ...candidate.edges.flatMap(edge => edge.curve.controlPoints),
     ...candidate.faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints.flat() : [])];
@@ -178,6 +182,10 @@ export function offsetExactSemicylinderSecondWallIfAdmitted(brep: Brep, faceName
 export function offsetExactSemicylinderCapIfAdmitted(brep: Brep, faceName: string, source: Source, distance: number): Brep | undefined {
   const cap = admitted(brep, faceName, source);
   if (!cap) return;
+  return offsetCap(brep, cap, distance);
+}
+
+function offsetCap(brep: Brep, cap: NonNullable<ReturnType<typeof admitted>>, distance: number): Brep {
   if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
     throw new BrepError('INPUT', 'Exact semicylinder cap offset: distance must be nonzero and within the modeling range');
   const next = cap.station + cap.sign * distance;
@@ -188,10 +196,69 @@ export function offsetExactSemicylinderCapIfAdmitted(brep: Brep, faceName: strin
   if (next === cap.station) throw new BrepError('GEOMETRY', 'Exact semicylinder cap offset: distance is too small to move the cap');
   if (!((next - cap.opposite) * cap.sign > linearToleranceMM(extent)))
     throw new BrepError('GEOMETRY', 'Exact semicylinder cap offset: the offset would reach or cross the opposite cap');
-  if (controls.some(point => point[2] !== cap.lo && point[2] !== cap.hi)) return;
+  if (controls.some(point => point[2] !== cap.lo && point[2] !== cap.hi))
+    throw new BrepError('GEOMETRY', 'Exact semicylinder cap offset: the native poles do not retain the two original axial stations');
   // The station assignment is the positive axial affine map, with the opposite station fixed exactly.
   const candidate = mapCapStation(brep, cap.station, () => next), report = checkBrep(candidate, { strict: true });
   if (!report.valid) throw new BrepError('GEOMETRY', `Exact semicylinder cap offset: the offset solid is invalid: ${report.issues[0]}`, report);
+  return candidate;
+}
+
+function admittedMixed(brep: Brep, faceName: string, source: Source, prior: PriorWallOffset) {
+  try {
+    if (!prior || typeof prior !== 'object' || Array.isArray(prior) || Object.keys(prior).sort().join(',') !== 'distance,face') return;
+    const original = thickenCylinderSolid(source), [a, b] = source.surface.controlPoints[0];
+    const upper = `${source.id}.${a[2] < b[2] ? 'v-max' : 'v-min'}`;
+    const radialFirst = faceName === upper && prior.face !== upper;
+    if (!radialFirst && (prior.face !== upper || faceName === upper)) return;
+    const cap = admitted(original, upper, source), wall = admittedWall(original, radialFirst ? prior.face : faceName, source);
+    if (!cap || cap.sign !== 1 || !wall) return;
+    const replay = radialFirst ? offsetWall(original, source, wall, prior.distance) : offsetCap(original, cap, prior.distance);
+    if (JSON.stringify(brep) !== JSON.stringify(replay)) return;
+    return { original, cap, wall, radialFirst, upper };
+  } catch { return; }
+}
+
+/** One original radial skin and the original upper cap, after exact replay of the first signed recipe. */
+export function exactSemicylinderMixedOffsetFrame(brep: Brep, faceName: string, source: Source, prior: PriorWallOffset): { anchor: Point; normal: Point } | undefined {
+  const mixed = admittedMixed(brep, faceName, source, prior);
+  if (!mixed) return;
+  const { cap, wall } = mixed;
+  if (mixed.radialFirst) {
+    const poles = cap.skins.map(skin => (brep.faces.find(face => face.surface.id === skin.id)!.surface as Surface).controlPoints[2][1]);
+    return { anchor: [poles[0][0] + (poles[1][0] - poles[0][0]) / 2, poles[0][1] + (poles[1][1] - poles[0][1]) / 2, cap.hi], normal: [0, 0, 1] };
+  }
+  return wallFrame({ ...wall, moving: brep.faces.find(face => face.id === wall.moving.id)!, cap: { ...wall.cap, hi: cap.hi + prior.distance } });
+}
+
+/** Canonical radial-then-upper generation makes the two admitted history orders identical. */
+export function offsetExactSemicylinderMixedOffsetIfAdmitted(brep: Brep, faceName: string, source: Source, prior: PriorWallOffset, distance: number): Brep | undefined {
+  const mixed = admittedMixed(brep, faceName, source, prior);
+  if (!mixed) return;
+  const radialDistance = mixed.radialFirst ? prior.distance : distance, axialDistance = mixed.radialFirst ? distance : prior.distance;
+  const radial = offsetWall(mixed.original, source, mixed.wall, radialDistance);
+  const candidate = offsetCap(radial, mixed.cap, axialDistance);
+  const controls = [...candidate.edges.flatMap(edge => edge.curve.controlPoints),
+    ...candidate.faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints.flat() : [])];
+  const tolerance = linearToleranceMM(geometryScaleMM(controls));
+  const supports = ['normal', 'reverse'].map(role => faceGeometry(candidate.faces.find(face => face.name === `${source.id}.${role}`)!));
+  const outer = supports.find(support => support.kind === 'cylinder' && support.out === 1);
+  const inner = supports.find(support => support.kind === 'cylinder' && support.out === -1);
+  if (outer?.kind !== 'cylinder' || inner?.kind !== 'cylinder' || !(inner.r > tolerance && outer.r - inner.r > tolerance))
+    throw new BrepError('GEOMETRY', 'Exact semicylinder mixed offset: the radial wall or axis cannot be resolved within the final linear tolerance');
+  if (mixed.radialFirst) {
+    // Both upper rims move in Z; the complete lower cap and its boundary stay exactly fixed.
+    const bottom = brep.faces.find(face => face.surface.kind === 'surface' && face.surface.controlPoints.flat().every(point => point[2] === mixed.cap.lo));
+    if (!bottom || !retainedBoundary(brep, candidate, bottom))
+      throw new BrepError('GEOMETRY', 'Exact semicylinder mixed offset: the fixed lower boundary changed');
+  } else {
+    // The shared rim changes in XY, but its cap plane and the opposite radial boundary stay fixed.
+    const fixed = brep.faces.find(face => face.id === mixed.wall.fixed.id)!;
+    const top = candidate.faces.find(face => face.name === mixed.upper)!;
+    if (!retainedBoundary(brep, candidate, fixed) || top.surface.kind !== 'surface'
+      || top.surface.controlPoints.flat().some(point => point[2] !== mixed.cap.hi + prior.distance))
+      throw new BrepError('GEOMETRY', 'Exact semicylinder mixed offset: the retained radial boundary or upper plane changed');
+  }
   return candidate;
 }
 

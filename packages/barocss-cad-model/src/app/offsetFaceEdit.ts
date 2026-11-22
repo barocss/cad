@@ -1,5 +1,5 @@
 import { draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
-import { isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isExactCylinderOffsetChain, offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, partBreps } from '../engine/evaluate';
 import { bodyKeyFor, featureId } from '../engine/ids';
 import type { DisplayFace } from '../engine/mesh';
@@ -166,7 +166,11 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
   const radialLabel = radial && !tube
     ? isBoredPlateHole(doc.nodes, direct.parent.node) ? 'Cylindrical bore · Radial' : 'Cylindrical wall · Radial'
     : undefined;
-  const allowPlane = !!direct && !radial
+  const pairedCap = !!direct && !radial && direct.target === undefined
+    && exactSemicylinderCapSource(doc.nodes, direct.parent.node, doc.parameters)?.upperFace === direct.faces[0]
+    && doc.nodes.some((node, slot) => slot > index && node.kind === 'offset-face' && node.parent.node === index
+      && node.target === undefined && exactSemicylinderSecondOffset(doc.nodes, index, doc.parameters, node.faces[0])?.mixed);
+  const allowPlane = !!direct && !radial && !pairedCap && !isExactCylinderOffsetChain(doc.nodes, direct.parent.node)
     && !isBoredPlateOffsetSource(doc.nodes, direct.parent.node) && !isBoxCapOffsetSource(doc.nodes, direct.parent.node)
     && !isAnnularCapOffsetSource(doc.nodes, direct.parent.node, doc.parameters);
   let directSource: Ctx | undefined;

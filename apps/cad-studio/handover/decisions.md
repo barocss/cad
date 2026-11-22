@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1660: [Offset one wall and the original upper cap of an Exact semicylinder](notes/exact-semicylinder-wall-cap-offsets-2026-11-22/README.md), #17 and #629. Both signed edit orders agree in Studio and local Agent. Verify retained recipes, contact refusal and native Open.
 - D1659: [Extract Studio pinned face measurement](notes/studio-pinned-face-measurement-extraction-2026-11-22/README.md). Six desktop flows preserve document ownership, measurement, edits and native Save/Open across 51 matching checkpoints.
 - D1658: [Offset both original walls of an Exact semicylinder](notes/exact-semicylinder-paired-wall-offsets-2026-11-22/README.md), #17 and #629. Verify both edit orders, upstream contact refusal, native Open and current radial-wall evidence.
 - D1657: [Offset the original inner wall of an Exact semicylinder](notes/exact-semicylinder-inner-wall-offset-2026-11-22/README.md), #17 and #629. Edit the inside radius and verify axis and outer-wall refusal, Studio Open and Agent parity.

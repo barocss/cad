@@ -67,7 +67,7 @@ import type { EndpointBead } from './part-frame.js';
 import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
 import { offsetBoxCapIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
-import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderWallIfAdmitted, offsetExactSemicylinderSecondWallIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '../features/exact-cylinder-cap-offset.js';
+import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderWallIfAdmitted, offsetExactSemicylinderSecondWallIfAdmitted, offsetExactSemicylinderMixedOffsetIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '../features/exact-cylinder-cap-offset.js';
 import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallIfAdmitted } from '../features/prism-wall-offset.js';
 import { annularCapReplacementFrame, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted, offsetBoreWallIfAdmitted, offsetCircularWallIfAdmitted,
   replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
@@ -665,8 +665,10 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         }
         if (secondCylinder && firstOffset) {
           const offset = offsetExactSemicylinderSecondWallIfAdmitted(brep, face, secondCylinder,
-            { face: firstOffset.face, distance: firstOffset.distance }, distance);
-          if (!offset) return fail('CAPABILITY', 'Second Offset needs the other original physical wall after exactly one radial Offset of an Exact semicylinder.');
+            { face: firstOffset.face, distance: firstOffset.distance }, distance)
+            ?? offsetExactSemicylinderMixedOffsetIfAdmitted(brep, face, secondCylinder,
+              { face: firstOffset.face, distance: firstOffset.distance }, distance);
+          if (!offset) return fail('CAPABILITY', 'Second Offset needs the other original physical wall or one radial wall with the original upper cap of an Exact semicylinder.');
           return one({ kind: 'brep', brep: offset });
         }
         if (annularCapReplacementFrame(brep, face)) {

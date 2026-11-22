@@ -7,7 +7,7 @@ import type { BodyResult, VolumeEvaluation } from '../engine/evaluate';
 // (a picked profile pulled along its normal), Revolve (turned about a sketch axis), Pipe (carried along
 // runs and bends) and Loft (through two or more picked sections). A profile drawn on a body's face joins
 // that body by default; Operation can make a new body or cut it instead.
-import { exactSemicylinderCapSource, exactSemicylinderFirstWallOffset, featureLabel, isExactCylinderOffsetChain, offsetFaceEndLabel, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, featureLabel, isExactCylinderOffsetChain, offsetFaceEndLabel, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
 import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle, twoGuideLoftSections } from './profiles';
@@ -383,9 +383,10 @@ export const offsetFaceCommand: Command = {
       if (!exactWall && !axial) return no('Pick an original axial cap or cylindrical wall of an Exact semicylinder.');
     }
     if (ref && isExactCylinderOffsetChain(ctx.doc.nodes, ref.node)) {
-      const first = exactSemicylinderFirstWallOffset(ctx.doc.nodes, ref.node, ctx.doc.parameters);
-      exactWall = ref.side === 'solid' && face.exact?.kind === 'cylinder' && first?.otherFace === face.name;
-      if (!exactWall) return no('Pick the other original wall after one radial Offset, or edit the existing Offset in History.');
+      const second = exactSemicylinderSecondOffset(ctx.doc.nodes, ref.node, ctx.doc.parameters, face.name);
+      if (ref.side !== 'solid' || !second || face.exact?.kind !== second.nextKind)
+        return no('Pick the other original wall, or pair an original wall with the upper cap.');
+      exactWall = second.nextKind === 'cylinder';
     }
     const cylinder = face.exact?.kind === 'cylinder' && body.ref?.side === 'solid'
       && (exactWall || isCylinderReplacementSource(ctx.doc.nodes, body.ref.node) || isBoredPlateHole(ctx.doc.nodes, body.ref.node)
