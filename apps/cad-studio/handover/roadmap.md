@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1726 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1727 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1726](notes/resize-saved-sketch-fillet-pair-2026-11-23/README.md), P1 row 09. One Studio edit resizes two saved orthogonal Fillets of the same starting radius and preserves both when the shared carrier would collapse. [D1725](notes/exact-spaced-same-turn-sweep-2026-11-23/README.md) verifies an Exact same-turn Sweep across two bends and a straight span. The B06 PDF group remains held.
-- **Next MAIN:** D1727, P4 Studio composition [row 22](roadmap-rows/22.md), [#44](https://github.com/barocss/cad/issues/44). Extract placed-body evaluation and Assembly Cut preview from App. Keep the accepted bodies as the Render source and compare before and after in Studio for Cut editing, native Open and raster output.
+- **Current position:** [D1727](notes/studio-placed-body-evaluation-2026-11-23/README.md), P4 row 22. Placed-body evaluation and Assembly Cut preview leave App with matching desktop cut and raster output. [D1726](notes/resize-saved-sketch-fillet-pair-2026-11-23/README.md) adds shared resize for two saved Fillets. The B06 PDF group remains held.
+- **Next MAIN:** D1728, P1 Sketch [row 09](roadmap-rows/09.md), [#21](https://github.com/barocss/cad/issues/21). Extend the saved-corner edit to two orthogonal Chamfers with the same initial setback. Verify the convex and reflex pair, their shared carrier, both native bevel walls and editable fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1727: [Extract placed-body evaluation and Assembly Cut preview from Studio App](notes/studio-placed-body-evaluation-2026-11-23/README.md), #44. The App loses 51 lines. Before and after, 15 desktop states, one native file and six raster exports match.
+
 - D1726: [Resize two saved sketch Fillets in one edit](notes/resize-saved-sketch-fillet-pair-2026-11-23/README.md), #21. One radius input and handle update the convex/reflex pair, with no partial edit when the shared carrier would collapse.
 
 - D1725: [Sweep a circular disk through two same-turn bends with a straight span](notes/exact-spaced-same-turn-sweep-2026-11-23/README.md), #10. Verify four native tangent edges, independent mass, fresh Open edits and explicit local Agent approval.

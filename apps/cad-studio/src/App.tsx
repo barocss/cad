@@ -141,9 +141,9 @@ import { scheduleProjectOpenFit } from './app/projectOpenFit';
 import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
 import type { SectionPick } from './viewport/useSectionSelection';
 import { useViewportSelectionPresentation } from './viewport/useViewportSelectionPresentation';
-import { placedDoc, type PartInstance } from '@barocss/cad-model/engine/doc';
-import { placementOf } from '@barocss/cad-model/engine/placement';
-import { instanceEvaluationCurrent, instanceEvaluationSources, withPlacedProposalBodies, WORKER_CANDIDATE_TINT } from './viewport/instanceEvaluation';
+import type { PartInstance } from '@barocss/cad-model/engine/doc';
+import { withPlacedProposalBodies, WORKER_CANDIDATE_TINT } from './viewport/instanceEvaluation';
+import { usePlacedBodyEvaluation, type PlacedBodyMap } from './app/usePlacedBodyEvaluation';
 import { acceptedPlacedSketchSnaps } from './viewport/placedSketchSnaps';
 import { supportsPlacedBoxSnapRotation } from './viewport/placedBoxSnap';
 import { contentKey, evaluationKey } from '@barocss/cad-model/engine/evalMemo';
@@ -174,7 +174,7 @@ import { nextInstanceId } from '@barocss/cad-model/assembly/takenIds';
 import { AssemblyStepsPanel } from './ui/AssemblyStepsPanel';
 import { STEPS_COMMAND, shownSelection as litSelection } from './app/assemblySteps';
 import { useAssemblyStepReview } from './app/useAssemblyStepReview';
-import { cutOfDraft, cuttableOf, defaultCutAt, draftOfCut, draftProblem, draftTrialProblem, newCutDraft, withAddedTargets, withDraftCut, type CutDraft } from './app/assemblyCutDraft';
+import { cutOfDraft, cuttableOf, defaultCutAt, draftOfCut, draftProblem, draftTrialProblem, newCutDraft, withAddedTargets, type CutDraft } from './app/assemblyCutDraft';
 import { addAssemblyCut, deleteAssemblyCut, editAssemblyCut } from '@barocss/cad-model/assembly/cuts';
 import { useJoints } from './state/useJoints';
 import { refuseMotionSweep, timedMotion } from './state/motion';
@@ -478,7 +478,7 @@ export function App() {
   // Roadmap 10 ⑤: the Assembly cut's HUD values while it is open (null: closed). The viewport shows the cut parts as the draft leaves them.
   const [cutDraft, setCutDraft] = useState<CutDraft | null>(null);
   // (Each entry keeps the instance it was evaluated for; `key` changes whenever its bodies are evaluated anew.)
-  const [instanceBodies, setInstanceBodies] = useState<Map<string, { key: string; sourceKey: string; inst: PartInstance; bodies: BodyResult[] }>>(new Map());
+  const [instanceBodies, setInstanceBodies] = useState<PlacedBodyMap>(new Map());
   const [workerSession, setWorkerSession] = useState(0);
   const [importWorkerRecovery, setImportWorkerRecovery] = useState(0);
   const workerSessionNow = useRef(0);
@@ -495,7 +495,6 @@ export function App() {
     setInstanceBodies(map => { let next: typeof map | null = null; for (const [id, e] of map) { const bs = withMasses(e.bodies, got); if (bs !== e.bodies) (next ??= new Map(map)).set(id, { ...e, bodies: bs }); } return next ?? map; });
   }), [engine]);
   const massReady = useMemo(() => !bodies.some(b => b.massRef !== undefined) && ![...instanceBodies.values()].some(e => e.bodies.some(b => b.massRef !== undefined)), [bodies, instanceBodies]);
-  const instanceRun = useRef(0);
   /** Selected direct curves and surfaces (by object id). */
   const [directSel, setDirectSel] = useState<string[]>([]);
   const routeContext = useRef({ blocked: true });
@@ -1189,62 +1188,12 @@ export function App() {
     if (!commitInstances(out.prepared.root.instances!, [session.owner])) return;
     setInstanceEdit(null);
   };
-  // Evaluate each instance whose placed part changed (in the worker, beside the main part).
-  const instanceSources = useMemo(() => instanceEvaluationSources(shownDoc), [shownDoc]);
-  useEffect(() => {
-    // (R4b: each placed part on its own O9 lane, `placed:<id>`; this run's lanes cancelled by its cleanup, so a reply from
-    // a document since replaced comes back stale and the run stops, setting nothing.)
-    const asked = (shownDoc.instances ?? []).map(i => `placed:${i.id}`), generation = workerSessionNow.current;
-    const reportFailure = (error: FriendlyError) => {
-      if (docNow.current !== doc || shownDocNow.current !== shownDoc || workerSessionNow.current !== generation) return;
-      setToast({ ...error, documentSource: { doc, placed: { view: shownDoc, workerSession: generation } } });
-    };
-    (async () => {
-      const next = new Map<string, { key: string; sourceKey: string; inst: PartInstance; bodies: BodyResult[] }>();
-      for (const inst of shownDoc.instances ?? []) {
-        if (generation !== workerSessionNow.current) return;
-        const source = instanceSources.get(inst.id);
-        if (!source?.ok) { reportFailure({ title: 'The placed part could not be evaluated', hint: source && !source.ok ? source.error : 'Missing part context.', detail: '' }); continue; }
-        // The same placement of the same part (objects are replaced on edit, so by reference first; a new
-        // object only when its content changed, compared then).
-        const have = instanceBodies.get(inst.id);
-        if (have && have.sourceKey === source.key && samePlacement(have.inst, inst)) { next.set(inst.id, have.inst === inst ? have : { ...have, inst }); continue; }
-        const at = revision.current++, reply = await lanes.run(`placed:${inst.id}`, { revision: at, source: source.key }, () => engine.placed(placedDoc(inst, shownDoc), source.base, placementOf(inst), at));
-        if (reply.stale || generation !== workerSessionNow.current) return;
-        const r = reply.result;
-        if (r.ok) next.set(inst.id, { key: `${inst.id}#${++instanceRun.current}`, sourceKey: source.key, inst, bodies: r.bodies });
-        else reportFailure(r.error);
-      }
-      if (generation === workerSessionNow.current) setInstanceBodies(next);
-    })();
-    return () => { for (const lane of asked) lanes.cancel(lane); };
-  }, [doc, shownDoc, instanceSources, workerSession]);
-  // Roadmap 10 ⑤: the Assembly cut HUD's preview. It is the viewport's only: the parts the draft changes are evaluated apart from the
-  // committed ones (`instanceBodies`), so no export, robot calculation or looks panel reads an unapplied draft.
-  const cutPreviewDoc = useMemo(() => withDraftCut(shownDoc, cutDraft), [shownDoc, cutDraft]);
-  const [cutPreview, setCutPreview] = useState<Map<string, { key: string; sourceKey: string; inst: PartInstance; bodies: BodyResult[] }>>(new Map());
-  useEffect(() => {
-    if (cutPreviewDoc === shownDoc) { setCutPreview(was => was.size ? new Map() : was); return; }
-    const sources = instanceEvaluationSources(cutPreviewDoc), generation = workerSessionNow.current;
-    const changed = (shownDoc.instances ?? []).filter(i => { const a = sources.get(i.id), b = instanceSources.get(i.id); return a?.ok && (!b?.ok || a.key !== b.key); });
-    const asked = changed.map(i => `placed-preview:${i.id}`);
-    (async () => {
-      const next = new Map<string, { key: string; sourceKey: string; inst: PartInstance; bodies: BodyResult[] }>();
-      for (const inst of changed) {
-        const source = sources.get(inst.id); if (!source?.ok) continue;
-        const at = revision.current++, reply = await lanes.run(`placed-preview:${inst.id}`, { revision: at, source: source.key }, () => engine.placed(placedDoc(inst, cutPreviewDoc), source.base, placementOf(inst), at));
-        if (reply.stale || generation !== workerSessionNow.current) return;
-        if (reply.result.ok) next.set(inst.id, { key: `${inst.id}#p${++instanceRun.current}`, sourceKey: source.key, inst, bodies: reply.result.bodies });
-      }
-      setCutPreview(next);
-    })();
-    return () => { for (const lane of asked) lanes.cancel(lane); };
-  }, [cutPreviewDoc, shownDoc, instanceSources, workerSession]);
-  // Render and its exports use the applied cuts. Returning to Model resumes the draft.
-  const sceneInstanceBodies = useMemo(() => !rendering && cutPreviewDoc !== shownDoc && cutPreview.size
-    ? new Map([...instanceBodies, ...cutPreview]) : instanceBodies, [rendering, instanceBodies, cutPreview, cutPreviewDoc, shownDoc]);
-  const renderGeometryReady = (shownDoc.instances ?? []).every(inst => inst.hidden
-    || instanceEvaluationCurrent(instanceBodies.get(inst.id), inst, instanceSources.get(inst.id)));
+  const { instanceSources, sceneInstanceBodies, renderGeometryReady } = usePlacedBodyEvaluation({
+    model: { doc, shown: shownDoc, current: docNow, currentShown: shownDocNow },
+    worker: { client: engine, lanes, revision, session: workerSession, currentSession: workerSessionNow },
+    accepted: { bodies: instanceBodies, update: setInstanceBodies },
+    draft: cutDraft, rendering, onNotice: setToast,
+  });
   /** One undoable change of the instances and their mates together. */
   /** One undoable change of the placed parts and their waiting revisions (shared definitions). */
   const commitParts = useCallback((next: Pick<StudioDoc, 'instances' | 'pendingParts'>) => {
