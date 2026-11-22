@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1645: [Extract Studio Browser actions from App](notes/studio-browser-actions-extraction-2026-11-22/README.md). Preserve body query, exact selection reveal and isolation behavior through seven desktop flows.
 - D1644: [Cut a radial bore through an Exact semicylinder Thicken](notes/exact-cylinder-radial-bore-2026-11-22/README.md), #175 and #368. Verify the two native openings at edited diameters and after Studio Save and Open.
 - D1643: [Extract Studio sketch draft history from App](notes/studio-sketch-draft-history-extraction-2026-11-22/README.md). Move settlement, placement and local history into one hook and verify desktop edits and exact before/after Rectangle checkpoints.
 - D1642: [Verify the radial wall after an axial Subtract](notes/agent-axial-cut-wall-approval-2026-11-22/README.md), #175 and #322. Check full axial coverage, refuse a partial cutter at approval and reproduce current radial wall evidence on Open.

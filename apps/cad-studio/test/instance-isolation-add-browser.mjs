@@ -10,6 +10,19 @@ const f = await createFlow({ name: 'instance-isolation-add', envFrozen: 'ISOLATI
 const part = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nodes: [
   { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, 10] }, { id: 'n1', kind: 'extrude', sketch: 0, height: 10 }], outputs: { b1: { node: 1, side: 'solid' } }, nextId: 2 };
 const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nodes: [], outputs: {}, nextId: 0, instances: ['A', 'B', 'C', 'D'].map((name, i) => ({ id: `p${i + 1}`, name, doc: structuredClone(part), position: [i * 20, 0, 0], rotation: [0, 0, 0], ...(name === 'D' ? { hidden: true } : {}) })) };
+// Wait for the real deferred Open fit before taking the camera baseline.
+function observeOpenFit() {
+  const schedule = window.setTimeout;
+  window.__isolationOpenFits = 0;
+  window.setTimeout = function (callback, ms, ...args) {
+    if (typeof callback !== 'function' || ms !== 300 || !new Error().stack?.includes('/files/useStudioDocumentFiles.ts'))
+      return schedule.call(this, callback, ms, ...args);
+    return schedule.call(this, function (...forwarded) {
+      callback.apply(this, forwarded);
+      window.__isolationOpenFits++;
+    }, ms, ...args);
+  };
+}
 function holdPlaced() {
   const proto = Worker.prototype, post = proto.postMessage, descriptor = Object.getOwnPropertyDescriptor(proto, 'onmessage');
   let armed = false, target = null, held = null; const queue = [], tables = new WeakMap();
@@ -48,9 +61,22 @@ async function draws(opaque, faded) {
   assert.ok(!cost.bodies.find(b => b.key.startsWith('p4/'))?.draws);
   f.report.observations.push({ opaque, faded, cost });
 }
-async function open(doc = seed) { await f.page.setInputFiles('input[aria-label="Model file"]', { name: 'isolation-own-boxes.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) }); await f.same(doc); await f.page.waitForFunction(() => window.__studioInstanceBounds?.()?.length >= 3); }
+async function open(doc = seed) {
+  const fitted = await f.page.evaluate(() => window.__isolationOpenFits);
+  await f.page.setInputFiles('input[aria-label="Model file"]', {
+    name: 'isolation-own-boxes.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)),
+  });
+  await f.same(doc);
+  await f.page.waitForFunction(previous => window.__isolationOpenFits > previous && window.__studioInstanceBounds?.()?.length >= 3, fitted);
+}
 await f.run(async () => {
-  if (lifecycle) { const create = f.browser.newContext.bind(f.browser); f.browser.newContext = async options => { const context = await create(options); await context.addInitScript(holdPlaced); return context; }; }
+  const create = f.browser.newContext.bind(f.browser);
+  f.browser.newContext = async options => {
+    const context = await create(options);
+    await context.addInitScript(observeOpenFit);
+    if (lifecycle) await context.addInitScript(holdPlaced);
+    return context;
+  };
   await f.newPage(); await f.page.setViewportSize({ width: 1440, height: 900 }); await open();
   await button('Top').click(); await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await button('Display and previews').click(); await f.page.getByLabel('CAD display mode', { exact: true }).selectOption('shaded-with-edges');

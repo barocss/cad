@@ -14,7 +14,6 @@ import { usePinnedMass } from './state/usePinnedMass';
 import { PinnedMassControls } from './ui/PinnedMassControls';
 import { currentDirectPole, ownsDirectPole, type DirectPoleSelection } from './state/directPoleSelection';
 import type { PolePatch } from './ui/DirectPoleEditor';
-import { addToIsolation } from './app/addToIsolation';
 import { SavedBezierPicker } from './ui/SavedBezierPicker';
 import { currentCoordinateFeedback } from './sketch/coordinateFeedback';
 import { useSketchDraftHistory } from './sketch/useSketchDraftHistory';
@@ -35,8 +34,7 @@ import { filletStationInputKey } from './app/filletEndpoints';
 import { readFilletPickedEdgeHighlight, type FilletPickedEdgeRequest } from './app/filletPickedEdgeHighlight';
 import { SHARED_HOLE_LAYOUT_EDIT } from './app/sharedHoleLayout';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
-import { browserRevealTarget, BODY_REVEAL_SCOPE } from './app/bodyBrowserReveal';
-import { useBodyBrowserReveal } from './app/useBodyBrowserReveal';
+import { useBrowserActions } from './app/useBrowserActions';
 import { useContinuityLocation } from './app/useContinuityLocation';
 import { commandApplyReadiness, createCommandApplyQueue } from './state/commandApply';
 import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
@@ -95,7 +93,7 @@ import { useAlignHistoryPreview } from './app/useAlignHistoryPreview';
 import { useOppositeFlangeRadiusPreview } from './app/useOppositeFlangeRadiusPreview';
 import { carrySketchSelection } from './state/profileSelection';
 import { BodyBrowserRows } from './ui/BodyBrowserRows';
-import { BodySelectionQuery } from './ui/BodySelectionQuery';
+import { ModelBrowser } from './ui/ModelBrowser';
 import { RequirementsBrowser } from './ui/RequirementsBrowser';
 import { DesignHistory } from './ui/DesignHistory';
 import { MeasurementInspector, PinnedMeasurement, InterferenceInspector } from './ui/MeasurementInspector';
@@ -3018,61 +3016,30 @@ export function App() {
           : project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatView || cutListView || stepAsk || stlAsk
             ? 'Finish the current document or dialog operation before finding the selection.' : null;
   const bodyRevealOpenIntent = openIntent.current;
-  // Property-query ownership excludes selection: selecting once never turns the query into a live rule.
-  const bodyQueryOwner = useMemo(() => ({}), [doc, evaluated, bodies, docGeneration, workerSession, bodyRevealOpenIntent, bodyRevealBlocked]);
-  const bodyQueryOwnerNow = useRef(bodyQueryOwner); bodyQueryOwnerNow.current = bodyQueryOwner;
-  const bodyRevealOwner = useMemo(() => ({}), [doc, evaluated, bodies, selection, instanceSel, directSel, docGeneration, workerSession, bodyRevealOpenIntent, bodyRevealBlocked, instanceBodies, instanceSources]);
-  const bodyReveal = useBodyBrowserReveal(bodyRevealOwner,
-    browserRevealTarget(selection, bodies, instanceSel, directSel.length, doc, instanceBodies, instanceSources, bodyRevealBlocked),
-    browserOpen, setBrowserOpen, () => docNow.current === doc && evaluatedRef.current === evaluated && openIntent.current === bodyRevealOpenIntent &&
-      workerSessionNow.current === workerSession && !project.opening() && !dragCmd.current && !bodyRevealBlocked, docGeneration);
   const isolationAddBlocked = !fresh || busy || workerFailure || shownDoc !== doc || marker !== null || variants.showing
     ? 'Wait for the current main Model result.'
     : displayScopeReason || active || sketch || editNode !== null || instanceEdit || renaming || parameterEdit || assembly.draft || inPlace || section || measure || previewMode !== 'none' || pmiEnabled || routePanelOpen || stepsDisp || ghost || workingComparison || cutDraft
       ? 'Finish the current operation and return to ordinary Model view.'
       : bodyDrag || instDrag || poleDrag || sectionDragFrom || dragCmd.current || project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatView || cutListView || stepAsk || stlAsk
         ? 'Finish the current drag or dialog first.' : null;
-  const isolationAddOwner = useMemo(() => ({}), [doc, evaluated, docGeneration, workerSession, bodyRevealOpenIntent, isolatedInstances, instanceBodies, instanceSources, isolationAddBlocked]);
-  const isolationAddNow = useRef(isolationAddOwner); isolationAddNow.current = isolationAddOwner;
-  const isolationAction = isolatedInstances ? (inst: PartInstance) => {
-    const result = addToIsolation(isolatedInstances, inst.id, doc.instances ?? NO_INSTANCES, instanceBodies, instanceSources, isolationAddBlocked);
-    const included = isolatedInstances.includes(inst.id);
-    const reason = 'reason' in result ? result.reason : undefined;
-    return <button data-add-isolation={inst.id} aria-label={`Add ${inst.name} to isolation`} disabled={!!reason || included}
-      title={reason ?? (included ? 'This part is already isolated.' : 'Keep the isolated parts and add this part. Selection is unchanged. Leave any input field with Tab before adding.')}
-      onPointerDown={event => {
-        if (document.activeElement?.matches('input, textarea, select, [contenteditable="true"]')) {
-          event.preventDefault();
-          setToast({ title: 'Isolation unchanged', hint: 'Press Tab or click outside the current field before adding a part. Its draft has been kept.', detail: '' });
-        }
-      }} onClick={() => {
-        if (document.activeElement?.matches('input, textarea, select, [contenteditable="true"]') || isolationAddNow.current !== isolationAddOwner ||
-          docNow.current !== doc || evaluatedRef.current !== evaluated || workerSessionNow.current !== workerSession ||
-          openIntent.current !== bodyRevealOpenIntent || project.opening() || dragCmd.current || activeStore.get() || shownVariant.current || isolationAddBlocked) return;
-        setIsolatedInstances(current => {
-          if (current !== isolatedInstances || isolationAddNow.current !== isolationAddOwner) return current;
-          const next = addToIsolation(current, inst.id, doc.instances ?? NO_INSTANCES, instanceBodies, instanceSources, isolationAddBlocked);
-          return 'ids' in next ? next.ids : current;
-        });
-      }}>{included ? 'In isolation' : 'Add to isolation'}</button>;
-  } : undefined;
+  const browserActions = useBrowserActions({
+    model: { doc, evaluated, bodies, generation: docGeneration, workerSession, openIntent: bodyRevealOpenIntent },
+    instances: { entries: instanceBodies, sources: instanceSources },
+    selection: { model: selection, instances: instanceSel, direct: directSel, selectBodies: indices => {
+      setDirectSel([]); setInstanceSel([]); setSelection({ faces: [], edges: [], bodies: indices });
+    } },
+    browser: { open: browserOpen, setOpen: setBrowserOpen, blocked: bodyRevealBlocked },
+    isolation: { ids: isolatedInstances, setIds: setIsolatedInstances, blocked: isolationAddBlocked,
+      hasActiveMode: () => !!(activeStore.get() || shownVariant.current),
+      onInputBlocked: () => setToast({ title: 'Isolation unchanged', hint: 'Press Tab or click outside the current field before adding a part. Its draft has been kept.', detail: '' }),
+    },
+    isCurrent: () => docNow.current === doc && evaluatedRef.current === evaluated && openIntent.current === bodyRevealOpenIntent &&
+      workerSessionNow.current === workerSession && !project.opening() && !dragCmd.current,
+  });
+  const { reveal: bodyReveal, isolationAction } = browserActions;
   const browserPanel = (
-      <Profiler id="outliner" onRender={onBlockRender}><aside ref={referenceBrowser} className={'card outliner' + (browserOpen ? '' : ' closed')} aria-label="Browser">
-        <div className="card-title">BROWSER <span className="muted" aria-busy={!fresh}>Base part · {fresh ? `${bodies.length} bod${bodies.length === 1 ? 'y' : 'ies'}` : busy ? 'evaluating…' : 'not up to date'}</span>
-          <ToolIconButton size="tiny" aria-label="Show selection in Browser" title={bodyRevealBlocked ?? BODY_REVEAL_SCOPE}
-            onPointerDown={bodyReveal.pointerDown} onClick={bodyReveal.reveal}><Icon name="search" small /></ToolIconButton>
-          <ToolIconButton data-reference-return size="tiny" aria-label={browserOpen ? 'Collapse the browser' : 'Expand the browser'} onClick={() => {
-            if (browserOpen) clearReferencePreview();
-            setBrowserOpen(o => { try { localStorage.setItem('cad-studio.browser', o ? 'closed' : 'open'); } catch { /* private mode */ } return !o; });
-          }}><Icon name={browserOpen ? 'left_panel_close' : 'left_panel_open'} small /></ToolIconButton></div>
-        {bodyReveal.feedback && <div role="status" className="small muted" aria-label="Find selection in Browser">{bodyReveal.feedback}</div>}
-        {browserOpen && <>
-        <BodySelectionQuery key={docGeneration} doc={doc} bodies={bodies} owner={bodyQueryOwner} blocked={bodyRevealBlocked}
-          onSelect={(indices, owner) => {
-            if (owner !== bodyQueryOwnerNow.current || bodyRevealBlocked || docNow.current !== doc || evaluatedRef.current !== evaluated ||
-              openIntent.current !== bodyRevealOpenIntent || workerSessionNow.current !== workerSession || project.opening() || dragCmd.current || !indices.length) return false;
-            setDirectSel([]); setInstanceSel([]); setSelection({ faces: [], edges: [], bodies: indices }); return true;
-          }} />
+      <ModelBrowser ref={referenceBrowser} model={{ doc, bodies, generation: docGeneration, fresh, busy }} actions={browserActions}
+        state={{ open: browserOpen, setOpen: setBrowserOpen, blocked: bodyRevealBlocked, onCollapse: clearReferencePreview }}>
         <BodyBrowserRows registerBodyRow={bodyReveal.register} model={{ doc, evaluated, namesDoc, bodies, fresh, busy }} selection={selection}
           rows={{ expanded, setExpanded, renaming, setRenaming, editNode, setRowHover }} changes={{ commit, commitVisibility: commitBodyVisibility, setSelection, setDirectSel, setInstanceSel,
             rememberFocus: workspaceModeExit.rememberFocus, editRepair,
@@ -3112,8 +3079,7 @@ export function App() {
           setFailingOnly={setFailingOnly} setSelection={setSelection} setRequirement={setRequirement} />
         <DesignHistory doc={doc} historyOpen={historyOpen} setHistoryOpen={setHistoryOpen} saveShared={saveShared} />
         {referenceDecisions}
-        </>}
-      </aside></Profiler>
+      </ModelBrowser>
   );
   const insetSource = createInsetSourceReview({
     model: { doc, evaluated, ctx, editNode },
