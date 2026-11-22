@@ -80,7 +80,7 @@ await f.run(async () => {
     const schema = await call('describe', { tool: 'features', action: 'edit' });
     assert.deepEqual(schema.input.properties[editKey].required, ['sketch', field]);
     assert.deepEqual(schema.input.properties[editKey].oneOf, [
-      { required: ['sides'] }, { required: ['corners'] }, ...(round ? [] : [{ required: ['bevel'] }]),
+      { required: ['sides'] }, { required: ['corners'] }, { required: [round ? 'fillet' : 'bevel'] },
     ]);
     const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
     assert.deepEqual([fields.index, fields.id, fields.revision], [0, 'n0', await currentPartRevision(call)]);

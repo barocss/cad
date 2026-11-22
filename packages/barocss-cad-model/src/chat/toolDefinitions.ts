@@ -33,20 +33,26 @@ export const isMutator = (name: string) => MUTATORS.has(name);
 
 const nameList = { type: 'array', items: { type: 'string' } };
 const cornerSidePair = { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 2, maxItems: 2, uniqueItems: true };
-const sketchCornerInput = (field: 'distance' | 'radius', operation: string) => ({
-  type: 'object',
-  description: `${operation} in sketch mm. Send it alone with index and expectedRevision. Use the sketch ID and side pairs from query.edit_fields with includeSketchCorners.${field === 'distance' ? ' To resize a saved Chamfer, use its side ID from sketchChamfers as the bevel selector.' : ''}`,
-  additionalProperties: false,
-  required: ['sketch', field],
-  oneOf: [{ required: ['sides'] }, { required: ['corners'] }, ...(field === 'distance' ? [{ required: ['bevel'] }] : [])],
-  properties: {
-    sketch: { type: 'string', minLength: 1 },
-    sides: { ...cornerSidePair, description: 'One pair of incident straight side IDs.' },
-    corners: { type: 'array', minItems: 2, items: cornerSidePair, description: 'Two or more distinct corner pairs. One operation uses the same size for every pair.' },
-    ...(field === 'distance' ? { bevel: { type: 'string', minLength: 1, description: 'The side ID of one saved constrained Chamfer to resize.' } } : {}),
-    [field]: { type: 'number', exclusiveMinimum: 0 },
-  },
-});
+const sketchCornerInput = (field: 'distance' | 'radius', operation: string) => {
+  const chamfer = field === 'distance';
+  const selector = chamfer ? 'bevel' : 'fillet';
+  const name = chamfer ? 'Chamfer' : 'Fillet';
+  const results = chamfer ? 'sketchChamfers' : 'sketchFillets';
+  return {
+    type: 'object',
+    description: `${operation} in sketch mm. Send it alone with index and expectedRevision. Use the sketch ID and side pairs from query.edit_fields with includeSketchCorners. To resize a saved ${name}, use its side ID from ${results} as the ${selector} selector.`,
+    additionalProperties: false,
+    required: ['sketch', field],
+    oneOf: [{ required: ['sides'] }, { required: ['corners'] }, { required: [selector] }],
+    properties: {
+      sketch: { type: 'string', minLength: 1 },
+      sides: { ...cornerSidePair, description: 'One pair of incident straight side IDs.' },
+      corners: { type: 'array', minItems: 2, items: cornerSidePair, description: 'Two or more distinct corner pairs. One operation uses the same size for every pair.' },
+      [selector]: { type: 'string', minLength: 1, description: `The side ID of one saved constrained ${name} to resize.` },
+      [field]: { type: 'number', exclusiveMinimum: 0 },
+    },
+  };
+};
 /** A face or edge: its name, or a selector (A1.2) that resolves to it (the result reports the name). */
 const SELECTOR = 'or a selector: a feature\'s face by role {"feature": index or id, "role": "top" | "bottom" | "side2" (by position) or "side[e3]" (a sketch drawn in the sketcher: by its edge\'s id) | "side" (one of its sides) | "cut" …}, the flat face facing a direction {"normal": [0, 0, 1], "pick": "max" | "min"}, either with "on": a body key and "all": true for every face that fits; an edge {"between": [face, face]}';
 const selectorList = (what: string) => ({ type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'object' }] }, description: `${what}: names, ${SELECTOR}.` });
@@ -99,7 +105,7 @@ const PART_TOOLS: ToolDefinition[] = [
   },
   {
     name: 'list_feature_edit_fields',
-    description: 'Read the current fields of one feature by index from get_part_summary. Returns field keys, values, units or options, and the current part revision. Use the key in edit_feature values and pass the revision as expectedRevision. A null numeric value is unavailable. A named parameter is the current binding. With includeSketchCorners, sketchCorners lists straight incident side pairs and points in sketch mm. When present, sketchChamfers lists saved constrained bevel IDs and their current setbacks in mm. Edits and proposals still validate the value and geometry.',
+    description: 'Read the current fields of one feature by index from get_part_summary. Returns field keys, values, units or options, and the current part revision. Use the key in edit_feature values and pass the revision as expectedRevision. A null numeric value is unavailable. A named parameter is the current binding. With includeSketchCorners, sketchCorners lists straight incident side pairs and points in sketch mm. When present, sketchChamfers lists saved bevel IDs and setbacks, and sketchFillets lists saved Fillet IDs and radii. The sizes are in mm. Edits and proposals still validate the value and geometry.',
     input_schema: { type: 'object', properties: { index: { type: 'integer', minimum: 0 }, includeSketchCorners: { type: 'boolean' } }, required: ['index'], additionalProperties: false },
   },
   {

@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1710 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1711 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1710](notes/edit-saved-sketch-fillet-2026-11-23/README.md), P1 advanced sketch row 09. A saved orthogonal Fillet can change radius with its original straight carriers and stable side IDs. Studio verifies preview, refusal, Undo, Redo and fresh Open. [D1709](notes/exact-same-turn-rectangular-sweep-2026-11-23/README.md) completes the aligned solid rectangular same-turn Sweep profile. The B06 PDF group remains held.
-- **Next MAIN:** D1711, P1 local Agent sketch edit [rows 04](roadmap-rows/04.md) and [09](roadmap-rows/09.md), [#21](https://github.com/barocss/cad/issues/21). Discover a saved Fillet by its side ID and propose a revision-bound radius edit. Verify stale revision refusal, preserved carriers and explicit Studio approval against D1710.
+- **Current position:** [D1711](notes/agent-saved-sketch-fillet-edit-2026-11-23/README.md), P1 local Agent sketch edit rows 04 and 09. Discover an existing orthogonal Fillet by side ID, stage a revision-bound radius edit, and explicitly approve the same native result as [D1710](notes/edit-saved-sketch-fillet-2026-11-23/README.md) in Studio. Fresh Open reports the new radius on the same ID. The B06 PDF group remains held.
+- **Next MAIN:** D1712, P4 Studio structure [row 22](roadmap-rows/22.md), [#44](https://github.com/barocss/cad/issues/44). Extract the viewport Hole region calculation from Studio App. Retain the visible region for placement and saved Hole editing, and suppress it where Studio currently hides it. Compare the same desktop flows before and after.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

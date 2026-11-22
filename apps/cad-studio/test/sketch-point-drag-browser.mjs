@@ -2,15 +2,20 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const radiusBaseline = process.argv.includes('--radius-baseline');
 const radiusEdit = process.argv.includes('--radius-edit');
-const savedRadius = radiusBaseline || radiusEdit;
+const radiusAgent = process.argv.includes('--radius-agent');
+const savedRadius = radiusBaseline || radiusEdit || radiusAgent;
 const pins = [
   ...(savedRadius ? ['apps/cad-studio/src/ui/ConstraintTools.tsx',
     'apps/cad-studio/src/ui/SketchCornerTools.tsx', 'apps/cad-studio/src/sketch/cornerDraft.ts',
     'packages/barocss-cad-model/src/sketch/rules.ts'] : []),
-  ...(radiusEdit ? ['packages/barocss-cad-model/src/sketch/filletEdit.ts'] : []),
+  ...(radiusEdit || radiusAgent ? ['packages/barocss-cad-model/src/sketch/filletEdit.ts'] : []),
+  ...(radiusAgent ? ['packages/barocss-cad-model/src/chat/part/sketchCorner.ts',
+    'packages/barocss-cad-model/src/chat/part/features.ts', 'packages/barocss-cad-model/src/chat/contract.ts',
+    'packages/barocss-cad-model/src/chat/toolDefinitions.ts'] : []),
   'apps/cad-studio/src/viewport/sketchPointDrag.ts',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts',
   'apps/cad-studio/src/viewport/Viewport.tsx',
@@ -20,10 +25,11 @@ const pins = [
 ];
 const f = await createFlow({
   output: process.argv[2], name: savedRadius ? 'saved-sketch-fillet-radius' : 'sketch-point-drag',
-  envFrozen: savedRadius ? 'D1710_SOURCE_FROZEN' : 'D1698_SOURCE_FROZEN',
+  envFrozen: radiusAgent ? 'D1711_SOURCE_FROZEN' : savedRadius ? 'D1710_SOURCE_FROZEN' : 'D1698_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: radiusBaseline ? 'Measure the saved Fillet through the existing generic radius editor.'
     : radiusEdit ? 'Edit the saved Fillet radius while keeping both straight carriers in place.'
+      : radiusAgent ? 'Discover and explicitly approve a revision-bound Fillet radius edit in Studio.'
     : 'Drag one closed sketch vertex with its constraints, then finish and reopen the downstream solid.',
   limits: ['Desktop Studio WebGPU, one tagged XY outline, 10 mm native Extrude, one optional convex R6 Fillet.'],
   inspectorSource: String.raw`
@@ -108,6 +114,11 @@ async function checkSavedRadius() {
   const bytes = JSON.stringify(source);
   await writeFile(file, bytes);
   const original = await f.freshOpen(file, source, '01-saved-fillet-open');
+  if (radiusAgent) {
+    await approveSavedRadius(source);
+    assert.equal(await readFile(file, 'utf8'), bytes);
+    return;
+  }
   const arcMidpoint = [34 + 6 * Math.SQRT1_2, 24 + 6 * Math.SQRT1_2];
   await edit(shape.points);
   const pick = f.page.locator('.vp-overlay .sk-pick-edge.on[data-sketch-entity="edge:2"]');
@@ -231,6 +242,95 @@ async function editSavedRadius(source, shape, arcMidpoint) {
   await f.same(bound);
   assert.equal(await readFile(boundFile, 'utf8'), boundBytes);
   await f.snapshot('09-radius-binding-refused');
+}
+
+async function approveSavedRadius(source) {
+  const file = join(f.output, 'saved-fillet-proposal.bcad'), bytes = JSON.stringify(source);
+  const session = { app: f.app, output: f.output, clientName: f.name };
+  const title = 'Change saved Fillet e5 from R6 to R8';
+  const propose = (call, args, refused = false) => call('proposals', {
+    action: 'propose', title, ops: [{ tool: 'features', args }],
+  }, refused);
+  await writeFile(file, bytes);
+  f.phase = 'Discover the saved Fillet and stage one revision-bound local proposal';
+  const args = await withMcpSession(session, file, 'fillet-agent-stage', async (call, request) => {
+    const detail = await call('describe', { tool: 'features', action: 'edit' });
+    assert.deepEqual(detail.input.properties.sketchRound.oneOf, [
+      { required: ['sides'] }, { required: ['corners'] }, { required: ['fillet'] },
+    ]);
+    assert.equal((await call('query', { action: 'edit_fields', index: 0 })).sketchFillets, undefined);
+    const response = await request('tools/call', { name: 'query', arguments: { action: 'edit_fields', index: 0, includeSketchCorners: true } });
+    assert.equal(response.isError, false);
+    const fields = JSON.parse(response.content[0].text);
+    assert.deepEqual(response.structuredContent, fields);
+    assert.deepEqual([fields.index, fields.id, fields.revision], [0, 'n0', await currentPartRevision(call)]);
+    assert.deepEqual(fields.sketchFillets, [{ fillet: 'e5', radius: 6 }]);
+    const round = { sketch: fields.id, fillet: fields.sketchFillets[0].fillet, radius: 8 };
+    const args = { action: 'edit', index: fields.index, expectedRevision: fields.revision, sketchRound: round };
+    assert.match((await call('features', args, true)).error, /propos/i);
+    for (const [patch, reason] of [
+      [{ expectedRevision: undefined }, /expectedRevision/i],
+      [{ expectedRevision: '0000000000000000' }, /part changed/i],
+      [{ sketchRound: { ...round, fillet: 'e1' } }, /saved fillet/i],
+      [{ sketchRound: { ...round, sides: ['e2', 'e3'] } }, /fillet/i],
+      [{ sketchRound: { ...round, radius: 6 } }, /already|same/i],
+      [{ sketchRound: { ...round, radius: 30 } }, /collapse|cross/i],
+    ]) {
+      assert.match((await propose(call, { ...args, ...patch }, true)).error, reason);
+      assert.equal(await readFile(file, 'utf8'), bytes);
+    }
+    assert.deepEqual((await call('proposals', { action: 'list' })).proposals, []);
+    const dry = await call('features', { action: 'batch', dryRun: true, ops: [{ tool: 'features', args }] });
+    assert.equal(dry.dryRun, true);
+    // Dry-run volume compares body summaries rounded to 0.001 mm³.
+    assert.ok(Math.abs(dry.change.volume + 280 * (1 - Math.PI / 4)) < .001);
+    assert.deepEqual(dry.diff.changed.map(feature => feature.id), ['n0']);
+    assert.equal(await readFile(file, 'utf8'), bytes);
+    const proposed = await propose(call, args);
+    assert.deepEqual([proposed.proposal, proposed.applied], ['P1', false]);
+    const staged = await readFile(file);
+    assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
+    assert.deepEqual(await readFile(file), staged);
+    return args;
+  });
+  const staged = await readFile(file), pending = JSON.parse(staged);
+  assert.deepEqual([pending.nodes, pending.outputs], [source.nodes, source.outputs]);
+  assert.deepEqual(pending.proposals[0].ops[0].args.sketchRound, args.sketchRound);
+  await f.freshOpen(file, pending, '02-fillet-agent-pending');
+  const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
+  await button('Chat').first().click();
+  const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+  await button('Preview', card).click();
+  await button('Hide', card).waitFor();
+  await f.same(pending);
+  assert.deepEqual(await readFile(file), staged);
+  await f.snapshot('03-fillet-agent-preview');
+  await button('Accept', card).click();
+  await f.changed(pending);
+  const { doc } = await f.snapshot('04-fillet-agent-accepted');
+  const approval = doc.history.at(-1);
+  assert.deepEqual([doc.proposals[0].status, approval.kind, approval.proposal, approval.by.agent],
+    ['accepted', 'accept', 'P1', 'user']);
+  const native = await f.inspect('fillet-agent-native', doc);
+  assert.deepEqual(doc.nodes[0].outline.points, [[0, 0], [40, 0], [40, 22], [32, 30], [0, 30]]);
+  assert.deepEqual(doc.nodes[0].outline.radii, { 2: 8 });
+  assert.deepEqual([doc.nodes[0].sideTags, doc.nodes[1]], [source.nodes[0].sideTags, source.nodes[1]]);
+  near(native.volume, (1200 - 64 + 16 * Math.PI) * 10);
+  assert.equal(native.hash, '7681b66cb929f4b39a58e3018636f1da717bd5619ad21ec2b7be31c943a435bd',
+    'same native body as the D1710 direct Studio radius edit');
+  await f.undo();
+  await f.same(pending);
+  await f.redo();
+  await f.same(doc);
+  const saved = await f.save('agent-edited-fillet');
+  await f.freshOpen(saved.file, doc, '05-fillet-agent-reopened');
+  assert.deepEqual(await f.inspect('fillet-agent-reopened-native', await f.doc()), native);
+  await withMcpSession(session, saved.file, 'fillet-agent-reopened', async call => {
+    const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
+    assert.deepEqual(fields.sketchFillets, [{ fillet: 'e5', radius: 8 }]);
+    assert.notEqual(fields.revision, args.expectedRevision);
+  });
+  f.report.observations.push({ label: 'saved-fillet-agent-approval', native, previousRevision: args.expectedRevision });
 }
 
 await f.run(async () => {
