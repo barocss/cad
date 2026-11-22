@@ -47,7 +47,7 @@ await f.run(async () => {
   await f.worldClick(circle ? [8, 0] : [16, 10]);
   await input().waitFor();
   assert.equal(await readValue(), initial);
-  assert.equal(await button('Undo').isEnabled(), false);
+  assert.equal(await button('Undo').isEnabled(), true);
   await input().fill(String(edited));
   await input().press('Tab');
   assert.equal(await readValue(), edited);
@@ -62,9 +62,14 @@ await f.run(async () => {
   await f.snapshot(field + '-after-shortcut-undo');
   assert.equal(undoEnabled, true);
   assert.equal(undone, initial);
-  assert.equal(await button('Undo').isEnabled(), false);
+  assert.equal(await button('Undo').isEnabled(), true);
   assert.equal(await button('Redo').isEnabled(), true);
   await f.same(doc);
+  // Placement and the later numeric edit are distinct steps.
+  await button('Undo').click();
+  await input().waitFor({ state: 'hidden' });
+  await button('Redo').click();
+  assert.equal(await readValue(), initial);
   await button('Redo').click();
   assert.equal(await readValue(), edited);
   await button('Undo').click();
