@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sweepPathGeometryLabel } from '@barocss/cad-model/app/profileCommands';
+import { sweepPathGeometryLabel, sweepRepresentationLabel } from '@barocss/cad-model/app/profileCommands';
 import { SweepHistoryInputs } from '../src/ui/SweepHistoryInputs';
 import type { ModelNode } from '@barocss/cad-model/engine/doc';
 
@@ -27,4 +27,12 @@ test('History distinguishes stored path geometry from faceted output without cha
     assert.ok(!html.includes('approximation'));
     assert.deepEqual(sweep, before);
   }
+});
+
+test('the exact label distinguishes a joined line and arc from a two-span circular path', () => {
+  const joined = { degree: 2, controlPoints: [0, 1, 2, 3, 4], knots: [0, 0, 0, 1, 1, 2, 2, 2],
+    weights: [1, 1, 1, Math.SQRT1_2, 1] };
+  assert.equal(sweepRepresentationLabel('exact', joined), 'Exact line and arc');
+  assert.equal(sweepRepresentationLabel('exact', { ...joined, weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1] }), 'Exact circular arc');
+  assert.equal(sweepRepresentationLabel('exact-straight', joined), 'Exact straight path');
 });

@@ -674,7 +674,14 @@ const sweepRepresentations = [
   { value: 'exact-straight', label: 'Exact straight path' },
 ];
 
-export function sweepRepresentationLabel(mode: unknown): string {
+type SweepRail = { degree: number; controlPoints: readonly unknown[]; knots: readonly number[]; weights: readonly number[] };
+
+export function sweepRepresentationLabel(mode: unknown, path?: SweepRail): string {
+  // Distinguish an authored straight-to-arc pair from co-circular spans. The kernel checks the geometry.
+  if (mode === 'exact' && path?.degree === 2 && path.controlPoints.length === 5 && path.weights.length === 5
+    && path.knots.length === 8 && path.knots[3] === path.knots[4]
+    && path.weights[0] === path.weights[1] && path.weights[0] === path.weights[2] && path.weights[0] === path.weights[4])
+    return 'Exact line and arc';
   return sweepRepresentations.find(item => item.value === mode)?.label ?? sweepRepresentations[0].label;
 }
 
@@ -712,9 +719,10 @@ export const sweepCurveCommand: Command = {
     return typeof path === 'string' ? no(path) : ok;
   },
   fields: (ctx, values) => {
-    const p = oneProfile(ctx);
-    return [{ key: 'representation', label: 'Representation', kind: 'choice',
-      options: sweepRepresentations },
+    const p = oneProfile(ctx), rail = pickedPath(ctx);
+    const options = typeof rail === 'string' ? sweepRepresentations :
+      sweepRepresentations.map(item => ({ ...item, label: sweepRepresentationLabel(item.value, rail.path) }));
+    return [{ key: 'representation', label: 'Representation', kind: 'choice', options },
       ...opFields(!!(p && baseOf(ctx, p.node) && !exactSweepMode(values?.representation)))];
   },
   defaults: (ctx): Values => {
@@ -727,7 +735,7 @@ export const sweepCurveCommand: Command = {
     return [
       { label: 'Profile', text: profile ? `Sketch ${profile.index + 1}` : 'Pick a finished sketch', done: !!profile },
       { label: 'Path', text: typeof path === 'string' ? path : `${path.name} · ${sweepPathGeometryLabel(path.path)}`, done: typeof path !== 'string' },
-      { label: 'Solid', text: sweepRepresentationLabel(values.representation), done: true },
+      { label: 'Solid', text: sweepRepresentationLabel(values.representation, typeof path === 'string' ? undefined : path.path), done: true },
     ];
   },
   build: (ctx, v) => {

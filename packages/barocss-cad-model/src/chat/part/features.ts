@@ -75,10 +75,10 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   revolve: { selection: 'none: the newest finished sketch no feature uses yet', values: { axis: 'y | x: the sketch axis to turn about', deg: 'angle, up to 360', op: 'join | new | cut (sketch on a body face)' } },
   pipe: { selection: 'none: the newest finished sketch no feature uses yet', values: { h: 'straight run before and after the bend', bend: 'bend radius', bendAngle: 'bend angle', toward: 'x | -x | y | -y', op: 'join | new | cut (sketch on a body face)' } },
   'sweep-curve': { selection: 'none: provide the sketch and Direct curve IDs from query.summary', values: {
-    sketch: 'stable ID of a finished sketch with one closed line-and-arc outline and up to one strictly interior circular hole. An arc Sweep also needs clearance from the bend axis.',
+    sketch: 'stable ID of a finished sketch with one closed line-and-arc outline and up to one strictly interior circular hole. A tangent line-and-arc Sweep needs one circular disk without holes. Leave clearance from the bend axis.',
     path: 'stable ID of one visible Direct curve; its current path is copied',
     pathRevision: 'revision of that curve from query.summary; changed geometry requires a new proposal',
-    representation: 'required: exact-straight for one straight segment, or exact for one 30°–120° circular arc in one or two rational quadratic spans. The path starts at the outer profile’s area centroid. Creates a new body.',
+    representation: 'required: exact-straight for one straight segment, or exact for a 30°–120° circular arc or one straight segment followed by a tangent arc of that range. The line and arc must be joined as two rational quadratic spans. The path starts at the outer profile’s area centroid. Creates a new body.',
   } },
   'offset-face': { selection: 'Distance: faces [source]. To plane: faces [source, reference] in that order, on distinct current solids.', values: { offsetMode: 'distance (default) | to-plane (direct native source face and a parallel reference face)', d: 'distance along the face normal: + out (material added), − in (taken off)' } },
   'replace-face': { selection: 'Give faces [source, reference] on distinct current solids. The source can be a supported extrusion face, a straight cylinder or tube cap, a rectangular through-bore plate cap, or the original Exact semicylinder upper cap. The reference must be tilted.', values: {} },

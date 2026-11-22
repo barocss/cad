@@ -37,7 +37,7 @@ export function SweepHistoryInputs(props: Props) {
     <div className="field"><span>Profile</span><span>{profileLabel(props)}</span></div>
     <div className="field"><span>Path</span><span className="min-w-0 break-all" tabIndex={0} title={sweep.name} aria-label={`Path: ${sweep.name}`}
       onKeyDown={event => { if (event.key === 'Enter' || event.key === 'Delete') event.stopPropagation(); }}>{sweep.name} · {sweepPathGeometryLabel(sweep.path)} · {sweep.routeBundleMember ? 'Linked route' : 'Copied'}</span></div>
-    <div className="field"><span>Solid representation</span><span>{sweepRepresentationLabel(sweep.mode)}</span></div>
+    <div className="field"><span>Solid representation</span><span>{sweepRepresentationLabel(sweep.mode, sweep.path)}</span></div>
     {ends && <>
       <div className="field"><span>Start</span><span>{ends[0]}</span></div>
       <div className="field"><span>End</span><span>{ends[1]}</span></div>
