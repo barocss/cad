@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1695 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1696 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1695](notes/batch-sketch-corner-edit-2026-11-22/README.md), P1 sketch authoring rows 09, 16 and 20. Studio resolves selected vertices or connected straight sides and applies both convex and reflex corners in one edit. Desktop proof covers shared-side refusal, native wall ownership and fresh Open. The B06 PDF group remains held.
-- **Next MAIN:** D1696, P1 sketch authoring and Agent tools [rows 04](roadmap-rows/04.md), [09](roadmap-rows/09.md) and [16](roadmap-rows/16.md). Expose the same atomic corner batch through the revision-pinned feature edit. Discover the saved side pairs, verify one local proposal and refuse a stale, duplicate or consuming selection. Qualify one explicit Studio approval and editable fresh Open.
+- **Current position:** [D1696](notes/agent-sketch-corner-batch-2026-11-22/README.md), P1 sketch authoring and Agent tools rows 04, 09 and 16. An Agent group uses the same corner preparation as Studio. Both mixed-turn proposals pass explicit approval and reopen with their native wall IDs. The B06 PDF group remains held.
+- **Next MAIN:** D1697, P1 Agent review [rows 04](roadmap-rows/04.md) and [16](roadmap-rows/16.md), [#324](https://github.com/barocss/cad/issues/324). Use the existing pinned candidate render path to review one pending mixed-turn corner edit before approval. Bind the image and both native wall IDs to the exact working and proposal revisions. Verify cross-proposal refusal and match the candidate to the accepted native file after Studio Save and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

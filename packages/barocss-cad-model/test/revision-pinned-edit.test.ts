@@ -143,3 +143,47 @@ test('sketch chamfer discovers saved side IDs and makes an atomic revision-pinne
   assert.equal(denied.state, bound);
   assert.equal(JSON.parse(denied.content).code, 'EDIT_SKETCH_CHAMFER_BINDING');
 });
+
+test('pinned sketch corner groups resolve distinct side pairs and refuse the entire invalid edit', async () => {
+  const ordinary = stock();
+  const base = ordinary.nodes[0];
+  assert.ok(base.kind === 'sketch' && base.profile === 'rectangle');
+  const before = await stateOf({ ...ordinary, nodes: [{
+    ...base, sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] },
+    construction: [{ kind: 'circle', c: [12, 8], r: 2, construction: true, ids: ['e9'] }],
+  }, ordinary.nodes[1]] });
+  const neverEvaluate = async (): Promise<never> => assert.fail('The refused group must not evaluate.');
+  const expectedRevision = revisionOf(before.doc);
+  const corners = [['e3', 'e2'], ['e2', 'e1']];
+
+  for (const [key, field, prefix] of [
+    ['sketchRound', 'radius', 'EDIT_SKETCH_ROUND'],
+    ['sketchChamfer', 'distance', 'EDIT_SKETCH_CHAMFER'],
+  ] as const) {
+    const cornerEdit = { sketch: 'n0', corners, [field]: 6 };
+    const args = { action: 'edit', index: 0, expectedRevision, [key]: cornerEdit };
+    for (const [patch, code, message] of [
+      [{ expectedRevision: '0000000000000000' }, 'EDIT_STALE', /changed since/],
+      [{ [key]: { ...cornerEdit, sides: corners[0] } }, 'EDIT_INPUT', /use sides.*or corners/i],
+      [{ [key]: { ...cornerEdit, corners: [corners[0]] } }, 'EDIT_INPUT', /at least two side pairs/],
+      [{ [key]: { ...cornerEdit, corners: new Array(2) } }, 'EDIT_INPUT', /at least two side pairs/],
+      [{ [key]: { ...cornerEdit, corners: [corners[0], [...corners[0]].reverse()] } }, `${prefix}_CORNER`, /each selected corner once/],
+      [{ [key]: { ...cornerEdit, corners: [corners[0], ['e1', 'e3']] } }, `${prefix}_CORNER`, /straight sides of one corner/],
+      [{ [key]: { ...cornerEdit, [field]: 10 } }, `${prefix}_GEOMETRY`, /shared edge/],
+    ] as const) {
+      const denied = await dispatchTool(before, 'features', { ...args, ...patch }, neverEvaluate);
+      assert.ok(denied.isError && !denied.changed, denied.content);
+      assert.equal(denied.state, before);
+      const failure = JSON.parse(denied.content);
+      assert.equal(failure.code, code);
+      assert.match(failure.error, message);
+    }
+    const accepted = await dispatchTool(before, 'features', args, evaluate);
+    assert.ok(accepted.changed && !accepted.isError, accepted.content);
+    const sketch = accepted.state.doc.nodes[0];
+    assert.ok(sketch.kind === 'sketch');
+    assert.deepEqual(sketch.sideTags?.outer, ['e1', 'e10', 'e2', 'e11', 'e3', 'e4']);
+    assert.deepEqual(sketch.construction, (before.doc.nodes[0] as typeof sketch).construction);
+    assert.deepEqual(accepted.state.doc.nodes[1], before.doc.nodes[1]);
+  }
+});

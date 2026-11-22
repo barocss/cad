@@ -32,6 +32,20 @@ export const MUTATORS = new Set(['load_rows', 'set_stock', 'set_frame_stock', 's
 export const isMutator = (name: string) => MUTATORS.has(name);
 
 const nameList = { type: 'array', items: { type: 'string' } };
+const cornerSidePair = { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 2, maxItems: 2, uniqueItems: true };
+const sketchCornerInput = (field: 'distance' | 'radius', operation: string) => ({
+  type: 'object',
+  description: `${operation} in sketch mm. Send it alone with index and expectedRevision. Use the sketch ID and side pairs from query.edit_fields with includeSketchCorners.`,
+  additionalProperties: false,
+  required: ['sketch', field],
+  oneOf: [{ required: ['sides'] }, { required: ['corners'] }],
+  properties: {
+    sketch: { type: 'string', minLength: 1 },
+    sides: { ...cornerSidePair, description: 'One pair of incident straight side IDs.' },
+    corners: { type: 'array', minItems: 2, items: cornerSidePair, description: 'Two or more distinct corner pairs. One operation uses the same size for every pair.' },
+    [field]: { type: 'number', exclusiveMinimum: 0 },
+  },
+});
 /** A face or edge: its name, or a selector (A1.2) that resolves to it (the result reports the name). */
 const SELECTOR = 'or a selector: a feature\'s face by role {"feature": index or id, "role": "top" | "bottom" | "side2" (by position) or "side[e3]" (a sketch drawn in the sketcher: by its edge\'s id) | "side" (one of its sides) | "cut" …}, the flat face facing a direction {"normal": [0, 0, 1], "pick": "max" | "min"}, either with "on": a body key and "all": true for every face that fits; an edge {"between": [face, face]}';
 const selectorList = (what: string) => ({ type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'object' }] }, description: `${what}: names, ${SELECTOR}.` });
@@ -132,12 +146,8 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
     name: 'edit_feature',
     description: 'Changes an existing feature, as the feature editor does: "values" sets its editable dimensions by key (an extrude also edits its sketch: w, d, c0, c1 for a rectangle; dia, cc0, cc1 for a circle; h height; from; draft — a hole: dia, c0, c1, depth; fillet r; chamfer d; shell t; …). Read list_feature_edit_fields with the index for current keys and values. Or pass a whole replacement "feature" node (same rules as add_features). Use "retainBoxCommand": true to replace one or both extents of a standard Box sketch and retain the editable Box command. Later features follow the edit. Pass expectedRevision from list_feature_edit_fields, query.render or query.rebuild in the same part scope to refuse a stale edit. For a Smooth Turn edit, send only values.smoothTurnAngle in degrees or only values.smoothTurnWidth in mm, with the required expectedRevision. For a terminal Screw, send only values.smoothScrewPitch (mm per revolution) or only values.smoothScrewAngle (degrees), with required expectedRevision. For a supported terminal right drafted wall Offset, coaxial tube wall Offset, or Exact semicylinder wall Offset after a linked inclined upper-cap replacement (including one certified radial through bore), send only values.offsetDistance in signed mm with the required expectedRevision.',
     input_schema: { type: 'object', properties: { index: { type: 'integer' }, values: { type: 'object', additionalProperties: { type: ['number', 'string', 'boolean'] } }, feature: { type: 'object' }, retainBoxCommand: { type: 'boolean', const: true }, expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$' },
-      sketchChamfer: { type: 'object', description: 'An equal-distance corner edit in sketch mm. Send it alone with the index and expectedRevision. Use the sketch ID and one pair from query.edit_fields with includeSketchCorners.', additionalProperties: false, required: ['sketch', 'sides', 'distance'], properties: {
-        sketch: { type: 'string', minLength: 1 }, sides: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 2, maxItems: 2 }, distance: { type: 'number', exclusiveMinimum: 0 },
-      } },
-      sketchRound: { type: 'object', description: 'A tangent arc between two straight sketch sides. Radius is in mm. Send it alone with the index and expectedRevision. Use the sketch ID and one pair from query.edit_fields with includeSketchCorners.', additionalProperties: false, required: ['sketch', 'sides', 'radius'], properties: {
-        sketch: { type: 'string', minLength: 1 }, sides: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 2, maxItems: 2 }, radius: { type: 'number', exclusiveMinimum: 0 },
-      } },
+      sketchChamfer: sketchCornerInput('distance', 'An equal-distance setback at each selected corner'),
+      sketchRound: sketchCornerInput('radius', 'A tangent arc at each selected straight corner'),
     }, required: ['index'], additionalProperties: false },
   },
   {

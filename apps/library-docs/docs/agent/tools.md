@@ -108,9 +108,24 @@ For the same read and approval workflow, send `sketchRound` instead of `sketchCh
 Include the sketch's `index` and `expectedRevision` as above. Round places a tangent circular arc
 between two straight sides. Its radius is editable in Studio after approval. The edit refuses a
 radius that cannot fit, makes contact with another edge, or would remove a saved constraint or binding.
+
+### Edit several sketch corners together
+
+Use `corners` in place of `sides` to send two or more pairs from the same `query.edit_fields` result.
+Keep its sketch ID, feature index and revision in the request. Use one radius or distance in mm for the
+whole edit.
+
+```json
+{ "sketchRound": { "sketch": "n0", "corners": [["e3", "e4"], ["e4", "e5"]], "radius": 6 } }
+```
+
+For a bevel, use `sketchChamfer` with `distance` and the same list of pairs. Stage the full edit as
+one operation in `proposals.propose` and approve it in Studio. Each pair must identify a distinct
+corner. If any pair fails or the edits consume a shared side, the sketch stays as it was.
+
 If the model has changed, `EDIT_STALE`, `COMMAND_STALE` or `DELETE_STALE` returns the requested and current revisions.
 Review the current part before resubmitting. For delete, read the current feature tree to find the new index.
-In a batch, the pin applies to the document at the operation's position.
+In `features.batch`, the pin applies to the document at the operation's position.
 
 A part-tool refusal returns `ok: false` and `error`; fields such as `code`, `detail` and `kept` appear when the handler
 supplies them. Do not assume every tool result has the object API's `code`, `where` and `details` error fields.

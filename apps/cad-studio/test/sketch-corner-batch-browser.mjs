@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
+const agent = process.argv.includes('--agent');
 const original = [[0, 0], [60, 0], [60, 40], [38, 40], [38, 15], [22, 15], [22, 40], [0, 40]];
 const result = [[0, 0], [60, 0], [60, 40], [44, 40], [38, 34], [38, 21], [32, 15], [22, 15], [22, 40], [0, 40]];
 const originalIds = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8'];
@@ -14,11 +16,19 @@ const pins = [
   'apps/cad-studio/src/sketch/useSketchDraftHistory.ts', 'apps/cad-studio/src/viewport/Viewport.tsx',
   'apps/cad-studio/src/viewport/sketchOverlay.tsx',
   'packages/barocss-cad-model/src/sketch/corner.ts', 'packages/barocss-cad-model/src/sketch/cornerBatch.ts',
+  ...(agent ? [
+    'apps/cad-studio/test/mcp-browser-session.mjs', 'apps/cad-studio/src/ui/ProposalBrowser.tsx',
+    'apps/cad-studio/src/state/useProposalPreview.ts',
+    'packages/barocss-cad-model/src/chat/part/sketchCorner.ts', 'packages/barocss-cad-model/src/chat/part/features.ts',
+    'packages/barocss-cad-model/src/chat/toolDefinitions.ts',
+  ] : []),
 ];
 const f = await createFlow({
-  name: 'sketch-corner-batch', output: process.argv[2], envFrozen: 'D1695_SOURCE_FROZEN',
+  name: agent ? 'sketch-corner-batch-agent' : 'sketch-corner-batch',
+  output: process.argv[2], envFrozen: agent ? 'D1696_SOURCE_FROZEN' : 'D1695_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Round and chamfer adjacent convex and reflex sketch corners. Refuse shared-edge consumption as a group.',
+  qualification: agent ? 'Discover and propose a whole corner edit through local MCP. Approve one proposal and reopen the editable result.'
+    : 'Round and chamfer adjacent convex and reflex sketch corners. Refuse shared-edge consumption as a group.',
   limits: ['One notched XY outline, one 10 mm Extrude, desktop Studio WebGPU.'],
   inspectorSource: String.raw`
 import assert from 'node:assert/strict';
@@ -53,6 +63,7 @@ if (process.argv[3] === '"seed"') {
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const group = name => f.sketchPanel().getByRole('group', { name, exact: true });
 const preview = () => f.page.locator('.sk-corner-preview');
+const session = { app: f.app, output: f.output, clientName: f.name };
 async function edit() {
   await f.openFeatureEditor(1, 'extrude');
   await button('Edit sketch', f.editor()).click();
@@ -106,68 +117,147 @@ async function checkNative(label, doc, fillet) {
   return native;
 }
 
+async function approveAgentEdit(seed, tag, fillet) {
+  const file = join(f.output, `${tag}-proposal.bcad`);
+  const source = JSON.stringify(seed);
+  const editKey = fillet ? 'sketchRound' : 'sketchChamfer';
+  const sizeKey = fillet ? 'radius' : 'distance';
+  const propose = (call, args, denied = false) => call('proposals', {
+    action: 'propose', title: `${fillet ? 'Round' : 'Chamfer'} two sketch corners by 6 mm`, ops: [{ tool: 'features', args }],
+  }, denied);
+  await writeFile(file, source);
+  f.phase = `Discover, reject invalid pairs and propose the ${tag} batch`;
+  const op = await withMcpSession(session, file, `${tag}-proposal`, async call => {
+    const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
+    assert.deepEqual([fields.index, fields.id, fields.revision], [0, 'n0', await currentPartRevision(call)]);
+    const corners = fields.sketchCorners.filter(({ point }) => point[0] === 38 && [40, 15].includes(point[1])).map(item => item.sides);
+    assert.deepEqual(corners, [['e3', 'e4'], ['e4', 'e5']]);
+    const edit = { sketch: fields.id, corners: [corners[1].toReversed(), corners[0]], [sizeKey]: 6 };
+    const args = { action: 'edit', index: 0, expectedRevision: fields.revision, [editKey]: edit };
+    for (const [patch, message] of [
+      [{ expectedRevision: '0000000000000000' }, /part changed/i],
+      [{ [editKey]: { ...edit, sides: corners[0] } }, /use sides.*or corners/i],
+      [{ [editKey]: { ...edit, corners: [corners[0], corners[0].toReversed()] } }, /each selected corner once/],
+      [{ [editKey]: { ...edit, corners: [corners[0], ['e3', 'e5']] } }, /straight sides of one corner/],
+      [{ [editKey]: { ...edit, [sizeKey]: 12.5 } }, /shared edge/],
+    ]) {
+      assert.match((await propose(call, { ...args, ...patch }, true)).error, message);
+      assert.equal(await readFile(file, 'utf8'), source);
+    }
+    const dry = await call('features', { action: 'batch', dryRun: true, ops: [{ tool: 'features', args }] });
+    assert.equal(dry.dryRun, true);
+    assert.equal(dry.change.volume, undefined); // The two volume changes cancel. Dry-run facts omit zero deltas.
+    assert.deepEqual([dry.change.faces, dry.change.vertices], [2, 4]);
+    assert.deepEqual(dry.diff.changed.map(feature => feature.id), ['n0']);
+    assert.equal(await readFile(file, 'utf8'), source);
+    const proposal = await propose(call, args);
+    assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);
+    const staged = await readFile(file);
+    assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
+    assert.deepEqual(await readFile(file), staged);
+    return args;
+  });
+  const bytes = await readFile(file);
+  const previous = JSON.parse(bytes);
+  assert.deepEqual([previous.nodes, previous.outputs], [seed.nodes, seed.outputs]);
+  assert.equal(previous.proposals.length, 1);
+  assert.equal(previous.proposals[0].ops.length, 1);
+  assert.deepEqual(previous.proposals[0].ops[0].args[editKey], op[editKey]);
+
+  await f.freshOpen(file, previous, `02-${tag}-open-proposal`);
+  await button('Chat').first().click();
+  const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+  await button('Preview', card).click();
+  await card.getByLabel('Volume change').getByText(/^[+−]0(?:\.0+)? mm³/).waitFor();
+  await f.same(previous);
+  assert.deepEqual(await readFile(file), bytes);
+  await f.snapshot(`03-${tag}-proposal-preview`);
+  await button('Accept', card).click();
+  await f.changed(previous);
+  const { doc: accepted } = await f.snapshot(`04-${tag}-proposal-approved`);
+  assert.equal(accepted.proposals[0].status, 'accepted');
+  const approval = accepted.history.at(-1);
+  assert.deepEqual([approval.kind, approval.proposal, approval.by.agent], ['accept', 'P1', 'user']);
+  assert.deepEqual([accepted.nodes[1], accepted.outputs], [seed.nodes[1], seed.outputs]);
+  assert.deepEqual(await readFile(file), bytes);
+  return { previous, accepted, readReopened: async saved => {
+    await withMcpSession(session, saved.file, `${tag}-reopened`, async call => {
+      const after = await readFile(saved.file);
+      assert.notEqual(await currentPartRevision(call), op.expectedRevision);
+      assert.match((await propose(call, op, true)).error, /part changed/i);
+      assert.deepEqual(await readFile(saved.file), after);
+    });
+  } };
+}
+
+async function applySketchEdit(seed, name, field, selection, tag, fillet) {
+  await edit();
+  f.phase = `Pick ${tag} targets and refuse a consumed shared edge`;
+  await pick(selection);
+  await button(name, group('Corner tools')).click();
+  const input = group(name).getByLabel(field, { exact: true });
+  const apply = button('Apply', group(name));
+  await preview().waitFor();
+  await expectTargets();
+  await input.fill('12.5');
+  await preview().waitFor({ state: 'hidden' });
+  await group(name).getByRole('alert').getByText(/share|fit|overlap|shorter/i).waitFor();
+  assert.equal(await apply.isDisabled(), true);
+  await expectTargets();
+  await expectPoints(original);
+  await f.same(seed);
+  await f.snapshot(`02-${tag}-shared-edge-refused`);
+
+  f.phase = `Review and apply the two ${tag} corners once`;
+  await input.fill('6');
+  await preview().waitFor();
+  await expectTargets();
+  const projected = await preview().evaluate(polygon => polygon.points.numberOfItems);
+  assert.ok(fillet ? projected > result.length : projected === result.length);
+  await expectPoints(original);
+  await f.same(seed);
+  await f.snapshot(`03-${tag}-preview`);
+  if (!fillet) {
+    await button('Cancel', group(name)).click();
+    await preview().waitFor({ state: 'hidden' });
+    await expectPoints(original);
+    await button(name, group('Corner tools')).click();
+    await input.fill('6');
+  }
+  await apply.click();
+  await preview().waitFor({ state: 'hidden' });
+  await expectPoints(result);
+  await f.same(seed);
+  await f.page.keyboard.press('Meta+z');
+  await expectPoints(original);
+  await f.page.keyboard.press('Meta+Shift+z');
+  await expectPoints(result);
+  return { previous: seed, accepted: (await f.finishSketch(`04-${tag}-applied`)).doc };
+}
+
 await f.run(async () => {
   const seed = await f.inspect('seed', { points: original, ids: originalIds }, 'seed');
   const file = join(f.output, 'notched-source.bcad');
   const bytes = JSON.stringify(seed);
   await writeFile(file, bytes);
   await f.freshOpen(file, seed, '01-original');
-
   for (const { name, field, selection } of [
     { name: 'Fillet', field: 'Radius', selection: [[49, 40], [38, 27], [30, 15]] },
     { name: 'Chamfer', field: 'Distance', selection: [original[3], original[4]] },
   ]) {
     const fillet = name === 'Fillet', tag = name.toLowerCase();
-    await edit();
-    f.phase = `Pick ${tag} targets and refuse a consumed shared edge`;
-    await pick(selection);
-    await button(name, group('Corner tools')).click();
-    const input = group(name).getByLabel(field, { exact: true });
-    const apply = button('Apply', group(name));
-    await preview().waitFor();
-    await expectTargets();
-    await input.fill('12.5');
-    await preview().waitFor({ state: 'hidden' });
-    await group(name).getByRole('alert').getByText(/share|fit|overlap|shorter/i).waitFor();
-    assert.equal(await apply.isDisabled(), true);
-    await expectTargets();
-    await expectPoints(original);
-    await f.same(seed);
-    await f.snapshot(`02-${tag}-shared-edge-refused`);
-
-    f.phase = `Review and apply the two ${tag} corners once`;
-    await input.fill('6');
-    await preview().waitFor();
-    await expectTargets();
-    const projected = await preview().evaluate(polygon => polygon.points.numberOfItems);
-    assert.ok(fillet ? projected > result.length : projected === result.length);
-    await expectPoints(original);
-    await f.same(seed);
-    await f.snapshot(`03-${tag}-preview`);
-    if (!fillet) {
-      await button('Cancel', group(name)).click();
-      await preview().waitFor({ state: 'hidden' });
-      await expectPoints(original);
-      await button(name, group('Corner tools')).click();
-      await input.fill('6');
-    }
-    await apply.click();
-    await preview().waitFor({ state: 'hidden' });
-    await expectPoints(result);
-    await f.same(seed);
-    await f.page.keyboard.press('Meta+z');
-    await expectPoints(original);
-    await f.page.keyboard.press('Meta+Shift+z');
-    await expectPoints(result);
-    const accepted = (await f.finishSketch(`04-${tag}-applied`)).doc;
+    const { previous, accepted, readReopened } = agent
+      ? await approveAgentEdit(seed, tag, fillet)
+      : await applySketchEdit(seed, name, field, selection, tag, fillet);
     const native = await checkNative(`${tag}-native`, accepted, fillet);
     await f.undo();
-    await f.same(seed);
+    await f.same(previous);
     await f.redo();
     await f.same(accepted);
     const saved = await f.save(`batched-${tag}`);
     await f.freshOpen(saved.file, saved.doc, `05-${tag}-fresh-open`);
     assert.deepEqual(await checkNative(`${tag}-reopened`, await f.doc(), fillet), native);
+    await readReopened?.(saved);
     await edit();
     await expectPoints(result);
     await f.snapshot(`06-${tag}-editable-sketch`);

@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1696: [Propose several sketch corners as one edit](notes/agent-sketch-corner-batch-2026-11-22/README.md), #21. Pin the side pairs to one revision and verify explicit Studio approval, native wall ownership and fresh Open.
+
 - D1695: [Apply several sketch Fillets or Chamfers together](notes/batch-sketch-corner-edit-2026-11-22/README.md), #21. Verify mixed turns, shared-side refusal, one-step history and editable fresh Open.
 
 - D1694: [Preview and apply sketch Fillet and Chamfer](notes/sketch-corner-command-preview-2026-11-22/README.md), #21. Match the Model command controls and verify cancellation, selection, history and native outputs.
