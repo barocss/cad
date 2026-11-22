@@ -1,30 +1,61 @@
 import { useRef, type PointerEvent } from 'react';
 import { arcOf, type P2 } from '@barocss/cad-model/sketch/profile';
 import type { Polygon } from '@barocss/cad-model/sketch/rules';
-import { prepareSavedSketchCorner } from '../sketch/cornerDraft';
+import { prepareSavedSketchCorner, type SavedSketchCorner } from '../sketch/cornerDraft';
 import type { ConstraintInspection, ConstraintInspectionStore } from '../sketch/constraintInspection';
 
 type CornerDraft = Extract<ConstraintInspection, { target: 'corner' }>;
 type Press = { id: number; origin: P2; value: number; before: CornerDraft; latest: CornerDraft };
+type SizeOperation = SavedSketchCorner['operation'];
 
-export function SketchFilletRadiusHandle({ draft, source, store, project, pointUnderPointer }: {
+function savedSize(shape: Polygon, edge: number, operation: SizeOperation): number | undefined {
+  if (operation === 'resize-fillet') return shape.radii?.[edge];
+  const diagonal = shape.lengths?.[edge];
+  return diagonal === undefined ? undefined : diagonal / Math.SQRT2;
+}
+
+function midpointTravel(source: Polygon, edge: number, operation: SizeOperation, size: number): { midpoint: P2; step: P2 } | null {
+  const n = source.points.length;
+  const a = source.points[edge], b = source.points[(edge + 1) % n];
+  const bulge = source.bulges?.[edge];
+  if (operation === 'resize-fillet') {
+    if (!bulge) return null;
+    const arc = arcOf(a, b, bulge);
+    const angle = arc.start + arc.sweep / 2;
+    const x = Math.cos(angle), y = Math.sin(angle);
+    // The orthogonal Fillet midpoint moves away from its fixed corner as the radius grows.
+    const growth = 1 - Math.SQRT2;
+    return { midpoint: [arc.center[0] + size * x, arc.center[1] + size * y], step: [growth * x, growth * y] };
+  }
+  const previous = source.points[(edge - 1 + n) % n], next = source.points[(edge + 2) % n];
+  const incoming: P2 = [a[0] - previous[0], a[1] - previous[1]];
+  const outgoing: P2 = [next[0] - b[0], next[1] - b[1]];
+  const inLength = Math.hypot(...incoming), outLength = Math.hypot(...outgoing);
+  if (!inLength || !outLength || bulge) return null;
+  // Each bevel end moves by the added setback along its own straight carrier.
+  return { midpoint: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2],
+    step: [(outgoing[0] / outLength - incoming[0] / inLength) / 2,
+      (outgoing[1] / outLength - incoming[1] / inLength) / 2] };
+}
+
+export function SketchCornerSizeHandle({ draft, source, store, project, pointUnderPointer }: {
   draft: CornerDraft; source: Polygon; store: ConstraintInspectionStore; project(point: P2): P2;
   pointUnderPointer(event: { clientX: number; clientY: number }): P2 | null;
 }) {
   const press = useRef<Press | null>(null);
   const edge = draft.corners[0];
-  const radius = source.radii?.[edge], bulge = source.bulges?.[edge];
-  if (draft.operation !== 'resize-fillet' || !radius || !bulge) return null;
-  const arc = arcOf(source.points[edge], source.points[(edge + 1) % source.points.length], bulge);
-  const angle = arc.start + arc.sweep / 2;
-  const direction: P2 = [Math.cos(angle), Math.sin(angle)];
-  // As an orthogonal Fillet grows by one mm, its midpoint retreats from the fixed corner by sqrt(2) - 1 mm.
-  const growth = Math.SQRT2 - 1;
+  const operation = draft.operation;
+  if (operation !== 'resize-fillet' && operation !== 'resize-chamfer') return null;
+  const size = savedSize(source, edge, operation);
+  if (!size) return null;
+  const frame = midpointTravel(source, edge, operation, size);
+  if (!frame) return null;
+  const { midpoint, step } = frame;
   const position = (value: number) => project([
-    arc.center[0] + (radius - (value - radius) * growth) * direction[0],
-    arc.center[1] + (radius - (value - radius) * growth) * direction[1],
+    midpoint[0] + (value - size) * step[0],
+    midpoint[1] + (value - size) * step[1],
   ]);
-  const displayed = 'shape' in draft.result ? draft.result.shape.radii?.[edge] ?? radius : radius;
+  const displayed = 'shape' in draft.result ? savedSize(draft.result.shape, edge, operation) ?? size : size;
   const at = position(displayed), next = position(displayed + 1);
   if (![...at, ...next].every(Number.isFinite) || Math.hypot(next[0] - at[0], next[1] - at[1]) < 0.1) return null;
 
@@ -32,7 +63,7 @@ export function SketchFilletRadiusHandle({ draft, source, store, project, pointU
     const text = String(steps ? Number((start + steps / 10).toPrecision(15)) : start);
     if (current.value === text) return current;
     const result = prepareSavedSketchCorner(current.owner, source, current.doc,
-      { edge, operation: 'resize-fillet', value: radius }, text);
+      { edge, operation, value: size }, text);
     const update = { ...current, input: 'pointer' as const, value: text, result };
     store.set(update);
     return update;
@@ -44,8 +75,9 @@ export function SketchFilletRadiusHandle({ draft, source, store, project, pointU
     if (store.get() === held.latest) store.set(held.before);
   };
 
-  return <button type="button" className="sk-fillet-radius-handle" aria-label="Fillet radius handle"
-    title="Drag Fillet radius" data-sketch-action style={{ left: at[0], top: at[1] }}
+  const label = operation === 'resize-fillet' ? 'Fillet radius' : 'Chamfer setback';
+  return <button type="button" className="sk-corner-size-handle" aria-label={label + ' handle'}
+    title={'Drag ' + label} data-sketch-action style={{ left: at[0], top: at[1] }}
     onPointerDown={event => {
       if (event.button !== 0 || press.current || store.get() !== draft) return;
       const origin = pointUnderPointer(event);
@@ -59,7 +91,8 @@ export function SketchFilletRadiusHandle({ draft, source, store, project, pointU
       if (held?.id !== event.pointerId || store.get() !== held.latest) return;
       const point = pointUnderPointer(event);
       if (!point) return;
-      const delta = -((point[0] - held.origin[0]) * direction[0] + (point[1] - held.origin[1]) * direction[1]) / growth;
+      const delta = ((point[0] - held.origin[0]) * step[0] + (point[1] - held.origin[1]) * step[1]) /
+        (step[0] ** 2 + step[1] ** 2);
       if (Number.isFinite(delta)) {
         const steps = Math.round(delta * 10);
         if (!steps && held.latest === held.before) return;

@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1719: [Drag the setback of one saved sketch Chamfer](notes/drag-saved-sketch-chamfer-2026-11-23/README.md), #21. Verify opposite midpoint travel and retain the adjacent native bevel after fresh Open.
+
 - D1718: [Drag the radius of one saved sketch Fillet](notes/drag-saved-sketch-fillet-radius-2026-11-23/README.md), #21. Match the numeric preview, retain the sketch carriers and verify editable fresh Open.
 
 - D1717: [Replace one held edge in a saved two-edge Fillet](notes/two-edge-fillet-history-replacement-2026-11-23/README.md), #20. Preview a direct viewport pick, retain the second exact line and verify both blends after fresh Open.

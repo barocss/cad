@@ -15,7 +15,7 @@ const pins = [
     'apps/cad-studio/src/ui/SketchCornerTools.tsx', 'apps/cad-studio/src/sketch/cornerDraft.ts',
     'packages/barocss-cad-model/src/sketch/rules.ts'] : []),
   ...(radiusEdit || radiusAgent || radiusDrag || radiusDragBase ? ['packages/barocss-cad-model/src/sketch/filletEdit.ts'] : []),
-  ...(radiusDrag ? ['apps/cad-studio/src/viewport/SketchFilletRadiusHandle.tsx'] : []),
+  ...(radiusDrag ? ['apps/cad-studio/src/viewport/SketchCornerSizeHandle.tsx'] : []),
   ...(radiusAgent ? ['packages/barocss-cad-model/src/chat/part/sketchCorner.ts',
     'packages/barocss-cad-model/src/chat/part/features.ts', 'packages/barocss-cad-model/src/chat/contract.ts',
     'packages/barocss-cad-model/src/chat/toolDefinitions.ts'] : []),

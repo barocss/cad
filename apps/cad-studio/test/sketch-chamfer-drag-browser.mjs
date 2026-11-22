@@ -8,7 +8,9 @@ const original = [[0, 0], [60, 0], [60, 40], [38, 40], [38, 15], [22, 15], [22, 
 const chamfered = [[0, 0], [60, 0], [60, 40], [44, 40], [38, 34], [38, 21], [32, 15], [22, 15], [22, 40], [0, 40]];
 const ids = ['e1', 'e2', 'e3', 'e9', 'e4', 'e10', 'e5', 'e6', 'e7', 'e8'];
 const pairs = [['e9', 'e3', 'e4'], ['e10', 'e4', 'e5']];
-const resize = process.argv.includes('--resize');
+const resizeDrag = process.argv.includes('--resize-drag');
+const resizeDragBase = process.argv.includes('--resize-drag-base');
+const resize = process.argv.includes('--resize') || resizeDrag || resizeDragBase;
 const reviewResize = process.argv.includes('--review-resize');
 const agentResize = reviewResize || process.argv.includes('--agent-resize');
 const reviewPlane = { origin: [60, 40, 0], normal: [0, 0, 1], xAxis: [-1, 0, 0] };
@@ -23,6 +25,7 @@ const pins = [
   'packages/barocss-cad-model/src/sketch/pointDrag.ts',
   ...(resize || agentResize ? ['apps/cad-studio/src/ui/ConstraintTools.tsx',
     'apps/cad-studio/src/sketch/constraintInspection.ts', 'packages/barocss-cad-model/src/sketch/chamferEdit.ts'] : []),
+  ...(resizeDrag ? ['apps/cad-studio/src/viewport/SketchCornerSizeHandle.tsx'] : []),
   ...(agentResize ? [
     'apps/cad-studio/test/mcp-browser-session.mjs', 'apps/cad-studio/src/ui/ProposalBrowser.tsx',
     'packages/barocss-cad-model/src/chat/contract.ts', 'packages/barocss-cad-model/src/chat/toolDefinitions.ts',
@@ -36,7 +39,7 @@ const pins = [
 const f = await createFlow({
   output: process.argv[2], name: reviewResize ? 'sketch-chamfer-resize-review'
     : agentResize ? 'sketch-chamfer-agent-resize' : resize ? 'sketch-chamfer-resize' : 'sketch-chamfer-drag',
-  envFrozen: reviewResize ? 'D1702_SOURCE_FROZEN'
+  envFrozen: resizeDrag || resizeDragBase ? 'D1719_SOURCE_FROZEN' : reviewResize ? 'D1702_SOURCE_FROZEN'
     : agentResize ? 'D1701_SOURCE_FROZEN' : resize ? 'D1700_SOURCE_FROZEN' : 'D1699_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: reviewResize ? 'Bind the pending saved Chamfer resize image to both native walls and match it after Studio approval and fresh Open.'
@@ -190,6 +193,19 @@ async function resizeSavedChamfer(prior, before) {
   const apply = () => button('Apply', panel());
   const preview = () => f.page.locator('.sk-corner-preview');
   const start = [41, 37];
+  const handle = () => f.page.getByRole('button', { name: 'Chamfer setback handle', exact: true });
+  const drag = async (from, to) => {
+    await handle().waitFor();
+    const box = await handle().boundingBox();
+    const press = [box.x + box.width / 2, box.y + box.height / 2];
+    const reference = await f.screenOf(from);
+    assert.ok(Math.hypot(press[0] - reference[0], press[1] - reference[1]) < 0.5, 'Handle is on the native bevel midpoint');
+    const end = await f.screenOf(to);
+    await f.page.mouse.move(...press);
+    await f.page.mouse.down();
+    await f.page.mouse.move(press[0] + end[0] - reference[0], press[1] + end[1] - reference[1], { steps: 12 });
+    await f.page.mouse.up();
+  };
   f.phase = 'Discover the saved setback by selecting the native bevel edge';
   await f.worldClick([60, 20]);
   assert.equal(await tool().count(), 0);
@@ -198,29 +214,59 @@ async function resizeSavedChamfer(prior, before) {
   assert.equal(Number(await input().inputValue()), 6);
   assert.equal(await apply().isDisabled(), true);
   await preview().waitFor({ state: 'hidden' });
+  if (resizeDragBase) {
+    assert.equal(await f.page.getByRole('button', { name: 'Chamfer setback handle', exact: true }).count(), 0);
+    await f.snapshot('resize-02-no-setback-drag-handle');
+    await f.same(prior);
+    f.report.observations.push({ directSetbackDrag: 'FAIL: no handle', numericEditAvailable: true });
+    return;
+  }
 
   f.phase = 'Reject blank and shared-side-consuming values without changing the sketch';
   await input().fill('');
   await input().press('Enter');
   assert.equal(await f.sketchPanel().isVisible(), true);
   assert.equal(await apply().isDisabled(), true);
-  await input().fill('24');
+  if (resizeDrag) await drag(start, [50, 28]);
+  else await input().fill('24');
   await panel().getByRole('alert').waitFor();
   await preview().waitFor({ state: 'hidden' });
   assert.equal(await apply().isDisabled(), true);
   assert.deepEqual(await points(), chamfered);
   await f.same(prior);
+  if (resizeDrag) await f.snapshot('resize-02-setback-overflow-refused');
   await button('Cancel', panel()).click();
 
   f.phase = 'Preview C8 on one saved bevel and apply one edit through Enter';
   await tool().click();
   assert.equal(Number(await input().inputValue()), 6);
-  await input().fill('8');
+  if (resizeDrag) {
+    await drag(start, [42, 36]);
+    near(Number(await input().inputValue()), 8);
+    await preview().waitFor();
+    const dragged = await preview().getAttribute('points');
+    assert.deepEqual(await points(), chamfered);
+    await f.same(prior);
+    await f.snapshot('resize-02-physical-c8-preview');
+    await button('Cancel', panel()).click();
+    await handle().waitFor({ state: 'hidden' });
+    assert.deepEqual(await points(), chamfered);
+    await f.same(prior);
+    await tool().click(); await input().fill('8');
+    await preview().waitFor();
+    assert.equal(await preview().getAttribute('points'), dragged, 'Typed C8 and dragged C8 use the same preview outline');
+    await button('Cancel', panel()).click();
+    await tool().click(); await drag(start, [42, 36]);
+    near(Number(await input().inputValue()), 8);
+  } else {
+    await input().fill('8');
+  }
   await preview().waitFor();
   assert.deepEqual(await points(), chamfered);
   await f.same(prior);
   await f.snapshot('resize-02-preview-c8');
-  await input().press('Enter');
+  if (resizeDrag) await apply().click();
+  else await input().press('Enter');
   await preview().waitFor({ state: 'hidden' });
   assert.equal(await f.sketchPanel().isVisible(), true);
   assert.deepEqual(await points(), enlarged);
@@ -241,6 +287,15 @@ async function resizeSavedChamfer(prior, before) {
   await f.worldClick([35, 18]);
   await tool().click();
   assert.equal(Number(await input().inputValue()), 6);
+  if (resizeDrag) {
+    f.phase = 'Preview the retained reflex bevel in the opposite midpoint direction';
+    await drag([35, 18], [34.5, 18.5]);
+    near(Number(await input().inputValue()), 7);
+    await preview().waitFor();
+    assert.deepEqual(await points(), enlarged);
+    await f.same(doc);
+    await f.snapshot('resize-05-reflex-c7-preview');
+  }
   await button('Cancel', panel()).click();
   assert.deepEqual(await readFile(originalSave.file), startBytes);
   f.report.observations.push({ label: 'one-bevel-resized', points: doc.nodes[0].outline.points, before, native });
@@ -253,7 +308,8 @@ async function resizeSavedChamfer(prior, before) {
   await edit();
   await f.worldClick(start);
   await tool().click();
-  await input().fill('8');
+  if (resizeDrag) await drag(start, [42, 36]);
+  else await input().fill('8');
   await panel().getByRole('alert').getByText(/parameter binding/i).waitFor();
   assert.equal(await apply().isDisabled(), true);
   await preview().waitFor({ state: 'hidden' });
