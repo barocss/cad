@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createFlow } from './flow-helper.mjs';
+import { createFlow, sha256 } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const rails = process.argv.includes('--rails');
+const reviewImage = process.argv.includes('--candidate-image');
+const rails = reviewImage || process.argv.includes('--rails');
 const weight = Math.SQRT1_2;
 const arc = [[30, 20], [30, 30], [20, 30], [10, 30], [10, 20]];
 const rail = (id, z) => `@curve #${id} {type:nurbs;degree:2;knots:[0,0,0,1,1,2,2,2];
@@ -30,10 +31,14 @@ const pins = [
 ];
 if (rails) pins.push('packages/barocss-cad-model/src/chat/directRuledProposal.ts',
   'packages/barocss-cad/src/brep/thicken-cylinder.ts', 'apps/cad-studio/src/state/useProposalPreview.ts');
+if (reviewImage) pins.push('packages/barocss-cad-model/src/chat/directProposalReview.ts',
+  'packages/barocss-cad-model/src/chat/part/views.ts', 'packages/barocss-cad-model/src/chat/views.ts');
 const f = await createFlow({
-  name: 'direct-thicken-agent-proposal', output: process.argv[2], envFrozen: rails ? 'D1636_SOURCE_FROZEN' : 'D1628_SOURCE_FROZEN',
+  name: 'direct-thicken-agent-proposal', output: process.argv[2],
+  envFrozen: reviewImage ? 'D1637_SOURCE_FROZEN' : rails ? 'D1636_SOURCE_FROZEN' : 'D1628_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: rails ? 'Approve a pinned Ruled sheet and its exact semicylinder Thicken from two rails in one desktop Studio decision.'
+  qualification: reviewImage ? 'Compare the unapproved Exact Thicken image from local MCP with the Studio candidate and the approved model after fresh Open.'
+    : rails ? 'Approve a pinned Ruled sheet and its exact semicylinder Thicken from two rails in one desktop Studio decision.'
     : 'Approve a pinned planar Direct Thicken proposal in desktop Studio and check its native solid after Save and fresh Open.',
   limits: [rails ? 'A two-quarter R10 semicylinder, vertical span 12 mm, 2 mm inward offset, local MCP L4 and desktop WebGPU.'
     : 'A 40 × 30 mm planar Ruled sheet, symmetric 3 mm faceted thickness, local MCP L4 and desktop WebGPU.'],
@@ -65,6 +70,29 @@ const card = () => f.page.getByRole('listitem', { name: 'Proposal P1', exact: tr
 const sheet = () => f.page.locator('.ol.direct').filter({ hasText: 'Ruled surface' });
 const mcp = (file, label, run) => withMcpSession({ app: f.app, output: f.output, clientName: f.name, autonomy: 4 }, file, label, run);
 const near = (got, want) => assert.ok(Math.abs(got - want) < 1e-8, `${got} != ${want}`);
+const render = (request, args) => request('tools/call', { name: 'query', arguments: { action: 'render', ...args } });
+
+async function saveReviewPng(request, args, label) {
+  const result = await render(request, args);
+  assert.equal(result.isError, false, JSON.stringify(result.content[0]));
+  assert.deepEqual(result.content.map(block => block.type), ['text', 'image']);
+  assert.equal(result.content[1].mimeType, 'image/png');
+  const png = Buffer.from(result.content[1].data, 'base64');
+  const meta = JSON.parse(result.content[0].text);
+  assert.equal(meta.imageSha256, sha256(png));
+  assert.deepEqual(result.structuredContent, meta);
+  assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1000, 1000]);
+  await writeFile(join(f.output, label + '.png'), png);
+  return meta;
+}
+
+async function refuseReview(request, args, code) {
+  const result = await render(request, args);
+  assert.equal(result.isError, true);
+  assert.deepEqual(result.content.map(block => block.type), ['text']);
+  assert.equal(JSON.parse(result.content[0].text).code, code);
+}
+
 async function checkSolid(label, doc) {
   const native = await f.inspect(label, doc, 'solid');
   assert.equal(native.length, 1);
@@ -99,7 +127,7 @@ await f.run(async () => {
   const doc = rails ? seed : await f.inspect('input', seed, 'make'), file = join(f.output, 'pending-thicken.bcad');
   const original = Buffer.from(JSON.stringify(doc));
   await writeFile(file, original);
-  const pin = await mcp(file, 'proposal', async call => {
+  const { pin, review } = await mcp(file, 'proposal', async (call, request) => {
     const help = await call('describe', { command: 'direct-thicken' });
     assert.equal(help.command, 'direct-thicken');
     const before = await call('query', { action: 'summary' });
@@ -120,8 +148,25 @@ await f.run(async () => {
     assert.deepEqual(result.risk.approval, rails ? ['Direct geometry', 'Direct surface snapshot'] : ['Direct surface snapshot']);
     const pending = await readFile(file);
     assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user's approval.*Direct surface snapshot/i);
+    let review;
+    if (reviewImage) {
+      const [{ id: proposal, directReviewRevision: expectedProposalRevision, stale }] = (await call('proposals', { action: 'list' })).proposals;
+      assert.equal(stale, false);
+      assert.match(expectedProposalRevision, /^[a-f0-9]{64}$/);
+      const args = { expectedDirectRevision: before.direct_revision, proposal, expectedProposalRevision };
+      await refuseReview(request, { ...args, expectedProposalRevision: '0'.repeat(64) }, 'DIRECT_RENDER_PROPOSAL_STALE');
+      const candidate = await saveReviewPng(request, args, '01-mcp-exact-candidate');
+      assert.match(candidate.revision, /^[a-f0-9]{16}$/);
+      assert.deepEqual(candidate.candidate, { proposal, proposalRevision: expectedProposalRevision, baseDirectRevision: before.direct_revision,
+        directRevision: candidate.candidate.directRevision });
+      assert.match(candidate.candidate.directRevision, /^[a-f0-9]{64}$/);
+      assert.notEqual(candidate.candidate.directRevision, before.direct_revision);
+      assert.ok(Object.values(candidate.legend).some(name => name.endsWith('.normal')));
+      assert.ok(Object.values(candidate.legend).some(name => name.endsWith('.reverse')));
+      review = { args, candidate };
+    }
     assert.deepEqual(await readFile(file), pending);
-    return before.direct_revision;
+    return { pin: before.direct_revision, review };
   });
   const pendingBytes = await readFile(file), pending = JSON.parse(pendingBytes);
   assert.deepEqual([pending.nodes, pending.direct], [doc.nodes, doc.direct]);
@@ -154,6 +199,16 @@ await f.run(async () => {
   assert.equal(await button('Preview', card()).isDisabled(), true);
   await f.same(hidden);
   await f.snapshot('03-stale');
+  if (review) {
+    const edited = await f.save('stale-review');
+    const editedBytes = await readFile(edited.file);
+    await mcp(edited.file, 'stale-review', async (call, request) => {
+      const { direct_revision } = await call('query', { action: 'summary' });
+      await refuseReview(request, review.args, 'DIRECT_RENDER_STALE');
+      await refuseReview(request, { ...review.args, expectedDirectRevision: direct_revision }, 'DIRECT_RENDER_PROPOSAL_STALE');
+    });
+    assert.deepEqual(await readFile(edited.file), editedBytes);
+  }
   await f.undo();
   await f.same(pending);
 
@@ -179,6 +234,20 @@ await f.run(async () => {
   const saved = await f.save('approved-thicken');
   await f.freshOpen(saved.file, accepted, '05-reopened');
   assert.deepEqual(await checkSolid('reopened-native', await f.doc()), plate);
+  if (review) {
+    const approvedBytes = await readFile(saved.file);
+    await mcp(saved.file, 'approved-image', async (call, request) => {
+      const { direct_revision } = await call('query', { action: 'summary' });
+      assert.equal(direct_revision, review.candidate.candidate.directRevision);
+      const approved = await saveReviewPng(request, { expectedRevision: review.candidate.revision }, '05-mcp-approved-exact');
+      assert.equal(approved.imageSha256, review.candidate.imageSha256);
+      assert.deepEqual(approved.legend, review.candidate.legend);
+      await refuseReview(request, { ...review.args, expectedDirectRevision: direct_revision }, 'DIRECT_RENDER_PROPOSAL_UNAVAILABLE');
+    });
+    assert.deepEqual(await readFile(saved.file), approvedBytes);
+    f.report.observations.push({ candidateImage: review.candidate.imageSha256, approvedImageMatches: true,
+      candidateRevision: review.candidate.revision, candidateDirectRevision: review.candidate.candidate.directRevision });
+  }
   await button('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('06-reopened-plate');

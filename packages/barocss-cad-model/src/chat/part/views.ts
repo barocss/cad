@@ -9,7 +9,7 @@ import { revisionOf } from '../../util/revision';
 import { loadDirect } from '../../engine/directModule';
 import { requirementEvidenceRevision } from '../../util/digest';
 import { directInspectionRevision } from '../sweepSource';
-import { directReviewRevision } from '../directRuledProposal';
+import { directReviewKind, directReviewRevision } from '../directProposalReview';
 import { proposalIsStale } from '../proposals';
 import { previewProposalWith } from './proposals';
 import { evaluateCurve, surfaceDomain } from '@barocss/cad';
@@ -20,8 +20,10 @@ async function renderDirectReview(state: ChatState, args: Record<string, unknown
   const { expectedDirectRevision, proposal, expectedProposalRevision } = args;
   if (!isDirectPin(expectedDirectRevision) || args.expectedRevision !== undefined || args.highlight !== undefined || args.section !== undefined)
     return fail(state, 'For Direct review, pass direct_revision from query.summary as expectedDirectRevision without expectedRevision, highlight or section.', { code: 'DIRECT_RENDER_INPUT' });
-  if (state.partOf || state.bodies.length || state.doc.instances?.length)
-    return fail(state, 'Use Direct review on the base document with only Direct geometry to display.', { code: 'DIRECT_RENDER_SCOPE' });
+  if (state.partOf || state.doc.instances?.length)
+    return fail(state, 'Use Direct review in the base part of a document without placed parts.', { code: 'DIRECT_RENDER_SCOPE' });
+  const directOnlyScope = () => fail(state, 'Use sheet and curve review on a base document with only Direct geometry to display.', { code: 'DIRECT_RENDER_SCOPE' });
+  if (state.bodies.length && proposal === undefined && expectedProposalRevision === undefined) return directOnlyScope();
 
   let doc = state.doc;
   const baseDirectRevision = directInspectionRevision(doc);
@@ -32,17 +34,26 @@ async function renderDirectReview(state: ChatState, args: Record<string, unknown
     if (typeof proposal !== 'string' || !proposal || !isDirectPin(expectedProposalRevision))
       return fail(state, 'Pass the proposal ID and its directReviewRevision from proposals.list as expectedProposalRevision.', { code: 'DIRECT_RENDER_PROPOSAL_INPUT' });
     const matches = (doc.proposals ?? []).filter(p => p.id === proposal);
-    const pending = matches.length === 1 ? matches[0] : undefined, pin = pending && directReviewRevision(pending);
-    if (!pending || !pin)
-      return fail(state, 'Choose a unique open Ruled surface proposal from proposals.list.', { code: 'DIRECT_RENDER_PROPOSAL_UNAVAILABLE' });
+    const pending = matches.length === 1 ? matches[0] : undefined;
+    const kind = pending && directReviewKind(pending), pin = pending && directReviewRevision(pending);
+    if (!pending || !kind || !pin)
+      return fail(state, 'Choose a unique open Direct Ruled or Exact Thicken proposal from proposals.list.', { code: 'DIRECT_RENDER_PROPOSAL_UNAVAILABLE' });
+    if (kind === 'sheet' && state.bodies.length) return directOnlyScope();
     if (pin !== expectedProposalRevision || proposalIsStale(pending, requirementEvidenceRevision(doc)))
       return fail(state, 'The proposal or its source changed. Read proposals.list and review the current document.', { code: 'DIRECT_RENDER_PROPOSAL_STALE' });
     const preview = await previewProposalWith(dispatch, state, proposal, evaluate);
     if ('error' in preview) return fail(state, preview.error, { code: 'DIRECT_RENDER_PROPOSAL_FAILED' });
+    candidate = { proposal, proposalRevision: pin, baseDirectRevision };
+    if (kind === 'solid') {
+      const result = await renderViews(preview.doc, preview.bodies, evaluate);
+      if (typeof result === 'string') return fail(state, result, { code: 'DIRECT_RENDER_PROPOSAL_FAILED' });
+      const { image, ...rest } = result;
+      return { state, content: json({ revision: revisionOf(preview.doc), ...rest, candidate: { ...candidate, directRevision: directInspectionRevision(preview.doc) } }),
+        isError: false, changed: false, summary: `Solid proposal ${proposal}`, images: [{ data: image, mediaType: 'image/png' }] };
+    }
     if (preview.doc.direct === doc.direct)
       return fail(state, 'The replay did not produce a Direct candidate.', { code: 'DIRECT_RENDER_PROPOSAL_FAILED' });
     doc = preview.doc;
-    candidate = { proposal, proposalRevision: pin, baseDirectRevision };
   }
   const result = await renderDirectViews(doc);
   if (!result) return fail(state, 'There is no visible Direct curve or sheet to render.', { code: 'DIRECT_RENDER_EMPTY' });

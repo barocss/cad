@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1637: [Agent image review for a pending Exact Thicken](notes/agent-exact-thicken-visual-review-2026-11-22/README.md), #322 and #324. Render the pinned candidate solids read-only and match the PNG after Studio approval and fresh Open.
 - D1636: [Propose a Ruled surface and its exact Thicken together](notes/agent-ruled-exact-thicken-2026-11-22/README.md), #322 and #368. Use two pinned Direct rails, one private candidate and one Studio approval, with atomic refusal and native Open.
 - D1635: [Exact Thicken for an authored semicylinder](notes/exact-semicylinder-thicken-2026-11-22/README.md), #11 and #368. Certify two coaxial quarter spans and verify a six-face solid from a Studio-drawn 180° arc through thickness edit and native Open.
 - D1634: [Exact cylinder Thicken from a Studio sketch](notes/sketch-arc-exact-thicken-2026-11-22/README.md), #11 and #368. Preserve a newly authored quarter circle through Make curves, Duplicate, vertical Move and Ruled, then verify exact Thicken and native Open.

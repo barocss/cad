@@ -1,7 +1,6 @@
 import { loadDirect } from '../engine/directModule';
 import type { DirectGeometry } from '../engine/direct';
-import type { Op, Proposal } from '../engine/schema/proposals';
-import { digestOf } from '../util/digest';
+import type { Op } from '../engine/schema/proposals';
 import { isObj } from '../util/guards';
 import { directInspectionRevision } from './sweepSource';
 import { accept, fail, type ChatState, type Evaluate, type CallOptions } from './toolKit';
@@ -15,10 +14,6 @@ export const DIRECT_RULED_COMMAND = {
 };
 
 export const isDirectRuledOperation = (op: Op) => op.tool === 'run_command' && op.args?.command === DIRECT_RULED_COMMAND.command;
-
-export function directReviewRevision(proposal: Proposal): string | undefined {
-  if (proposal.status === 'open' && proposal.ops.length && proposal.ops.every(isDirectRuledOperation)) return digestOf(proposal);
-}
 
 /** Build privately from two uniquely identified visible curves. */
 export async function ruledFromVisibleRails(direct: DirectGeometry | undefined, first: string, second: string): Promise<DirectGeometry | undefined> {

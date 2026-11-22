@@ -297,7 +297,7 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'list_proposals',
-    description: 'The open proposals (all: true for accepted and rejected ones too, with who decided, when and why): id, title, summary, risk, and stale when the part changed since. Open Direct Ruled proposals also include directReviewRevision for query.render.',
+    description: 'The open proposals (all: true for accepted and rejected ones too, with who decided, when and why): id, title, summary, risk, and stale when the part changed since. Open Direct Ruled and Exact Thicken proposals include directReviewRevision for query.render.',
     input_schema: { type: 'object', properties: { all: { type: 'boolean' } }, additionalProperties: false },
   },
   {
@@ -307,10 +307,10 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'render_views',
-    description: 'The part as four engineering views: front, top, right and isometric. Solids use exact hidden lines and numbered faces. The legend lists face names. Use highlight to fill faces red or section to cut along an axis. For visible Direct geometry in a Direct-only base document, pass expectedDirectRevision. Also pass proposal and expectedProposalRevision to render an open Ruled proposal on a copy. The candidate result reports the proposal pin and baseDirectRevision alongside the candidate geometry revision. Direct views show shaded sheets and curve traces with exact IDs in directObjects. imageSha256 identifies the returned PNG bytes. A supplied pin refuses changed input before rendering.',
+    description: 'Front, top, right and isometric views. Solids use exact hidden lines and numbered faces. The legend lists face names. Use highlight to fill faces red or section to cut along an axis. For Direct-only views, pass expectedDirectRevision. To render an open Direct Ruled or Exact Thicken candidate on a copy, also pass proposal and expectedProposalRevision. The result gives the proposal pin, baseDirectRevision and candidate geometry revision. Direct sheet views list exact IDs in directObjects. A solid candidate uses the engineering views of the candidate solids. imageSha256 identifies the returned PNG. A supplied pin refuses changed input.',
     input_schema: { type: 'object', properties: { expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$', description: 'The revision from query.rebuild for this same part scope; omit for an unpinned solid read.' },
-      expectedDirectRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The direct_revision from query.summary for a Direct-only review.' },
-      proposal: { type: 'string', description: 'ID of an open Direct Ruled proposal from proposals.list. Supply both Direct and proposal revisions.' },
+      expectedDirectRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The direct_revision from query.summary for Direct or candidate review.' },
+      proposal: { type: 'string', description: 'Open Direct Ruled or Exact Thicken proposal ID from proposals.list. Supply both Direct and proposal revisions.' },
       expectedProposalRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The directReviewRevision for this proposal from proposals.list.' },
       highlight: { ...nameList, description: 'Face names to fill red.' }, section: { type: 'object', properties: { axis: { type: 'string', enum: ['x', 'y', 'z'] }, at: { type: 'number' } }, required: ['axis', 'at'], additionalProperties: false } }, additionalProperties: false },
   },
