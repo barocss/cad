@@ -112,9 +112,8 @@ import { ReferenceDecisions } from './ui/ReferenceDecisions';
 import { useRobotExports } from './robot/useRobotExports';
 import { RobotInspector } from './robot/RobotInspector';
 import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
-import { editSavedRevolveAxisCommand, joinedRevolveStock } from '@barocss/cad-model/app/revolveAxisEdit';
+import { useHistoryReferenceActions } from './app/useHistoryReferenceActions';
 import { filletLaunchAvailability, filletType, newFilletActive, pickedFilletSelection, prepareFilletPick, replaceFilletSelection, replaceFillet, type FilletType, type RadiusMode } from './app/filletFamily';
-import { alignFaceBinding } from '@barocss/cad-model/app/alignCommand';
 import { currentNativePlanePick, SKETCH_AT_MIDPOINT } from './app/midpointSketch';
 import { createInsetSourceReview } from './sketch/insetSourceReview';
 import { PROJECT_TO_SKETCH } from './app/materialFootprint';
@@ -150,7 +149,7 @@ import { contentKey, evaluationKey } from '@barocss/cad-model/engine/evalMemo';
 import { bearingEditCurrent, bearingFaceInput, captureBearingEditSession, prepareBearingEdit, type BearingEditSession } from './app/bearingEdit';
 import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skeleton';
 import { offsetFaceGroup, carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
-import { bodyKeyFor, featureId, nextSerial } from '@barocss/cad-model/engine/ids';
+import { featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
 import { captureSignatures, markedReferences, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
 import { type BodyResult, type EvalResult } from '@barocss/cad-model/engine/evaluate';
@@ -1740,65 +1739,20 @@ export function App() {
       clearQueuedApply: commandApply.clear },
     selection: { setSelection, setDirectSel }, onNotice: setToast,
   });
-  const replaceRevolveAxis = editNode === null ? null : editSavedRevolveAxisCommand(commandDoc, editNode);
-  const readAlignHistoryTargets = useCallback(async () => {
-    if (editNode === null || marker !== null || shownVariant.current || !ownsEvaluatedSource()) return [];
-    const node = doc.nodes[editNode];
-    if (node?.kind !== 'align' || node.suppressed) return [];
-    const prefix = prefixDoc(doc, editNode);
-    const result = await engine.part(prefix, revision.current++, 'refs');
-    if (!ownsEvaluatedSource() || bearingEditScope.current.editNode !== editNode) return [];
-    if (!result.ok) throw new Error(result.error.hint);
-    const source = { doc: prefix, bodies: result.bodies };
-    return result.bodies.flatMap((body, index) => {
-      if (!body.ref || body.ref.node === node.parent.node) return [];
-      const hidden = !!lookOf(doc, body).hidden;
-      if (hidden && (node.target.body.node !== body.ref.node || node.target.body.side !== body.ref.side)) return [];
-      const name = bodyName(doc, body);
-      return body.mesh.faces.flatMap(face => {
-        const binding = alignFaceBinding(source, { body: index, face: face.index });
-        if (!binding || (hidden && binding.face !== node.target.face)) return [];
-        return [{ target: { ...binding, body: refOf(body) }, bodyName: name, ...(hidden ? { hidden: true as const } : {}) }];
-      });
-    });
-  }, [doc, editNode, engine, marker, ownsEvaluatedSource]);
+  const { readAlignHistoryTargets, replaceRevolveAxis, startRevolveAxisReplacement } = useHistoryReferenceActions({
+    model: { doc, commandDoc, editNode, marker, fresh, busy, bodies, ctx },
+    owner: { scope: bearingEditScope, openIntent, markerNow, shownVariant, ownsEvaluatedSource, canChangeDocument,
+      hasDraft: () => !!activeStore.get() || !!nodeEditorDraft.current },
+    worker: { engine, revision },
+    command: { discardDraft: discardFeatureDraft, closeEditor: () => setEditNode(null), activate: setActive },
+    notice: setToast,
+  });
   const { historyEndpointLocations, filletEndpointLocations, publishFilletStations } = useFilletEndpointDisplay({
     model: { doc, evaluated, commandDoc, editNode, workerSession, marker, variantShown: variants.showing, fresh, busy,
       instanceSel, inPlace, active },
     owner: { docNow, evaluatedRef, workerSessionNow, markerNow, shownVariant, ownsEvaluatedSource },
     worker: { engine, nextRevision: () => revision.current++ },
   });
-  const axisReplacementRequest = useRef(0);
-  const startRevolveAxisReplacement = async () => {
-    if (editNode === null || !replaceRevolveAxis || !ownsEvaluatedSource() || markerNow.current !== null || shownVariant.current
-      || !fresh || busy || !canChangeDocument()) {
-      setToast({ title: 'Axis replacement not started', hint: 'Show the master at the latest History and wait for the model.', detail: '' });
-      return;
-    }
-    const request = ++axisReplacementRequest.current, owner = bearingEditScope.current, open = openIntent.current;
-    const joined = joinedRevolveStock(commandDoc, editNode);
-    let stock: BodyResult | undefined;
-    if (joined) {
-      const current = () => request === axisReplacementRequest.current && owner === bearingEditScope.current
-        && open === openIntent.current && ownsEvaluatedSource() && !activeStore.get() && !nodeEditorDraft.current;
-      try {
-        const result = await engine.part(prefixDoc(commandDoc, editNode), revision.current++, 'refs');
-        if (!current()) return;
-        const candidates = result.ok ? result.bodies.filter(body => body.ref?.node === joined.stock.node
-          && body.ref.side === joined.stock.side && body.key === bodyKeyFor(commandDoc.nodes, joined.stock.node, joined.stock.side)) : [];
-        if (candidates.length !== 1) throw new Error('The original stock did not resolve to one source body.');
-        stock = candidates[0];
-      } catch (error) {
-        if (current()) setToast({ title: 'Axis replacement not started', hint: 'The original stock is unavailable.', detail: String(error) });
-        return;
-      }
-      if (!canChangeDocument()) return;
-    }
-    discardFeatureDraft();
-    setEditNode(null);
-    setActive({ cmd: replaceRevolveAxis, ctx: stock ? { ...ctx, bodies: [...bodies, stock] } : ctx,
-      ...(joined && stock ? { joinedRevolvePick: { union: joined.union, stock } } : {}), values: {}, preview: 'busy' });
-  };
   const sectionBoxRef = useRef<{ min: Vec3; max: Vec3 }>(null!);
   const changeFillet = (type: FilletType, mode?: RadiusMode) => {
     if (docNow.current !== doc || evaluatedRef.current !== evaluated || activeStore.get()?.ctx.doc !== ctx.doc) { commandPreview.retire(); commandApply.clearApply(); setActive(null); return; }
