@@ -5,10 +5,13 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { createFlow } from './flow-helper.mjs';
 
 const annular = process.argv.includes('--annular');
+const sameTurn = process.argv.includes('--same-turn');
+assert.ok(!sameTurn || !annular, 'The same-turn flow uses a solid disk.');
 const weight = Math.SQRT1_2;
 const clamp = [0, 0, 0, 1, 1, 1];
 const first = [[0, 0, 0], [12, 0, 0], [12, 12, 0]];
-const second = [[12, 12, 0], [12, 30, 0], [30, 30, 0]];
+const secondEndX = sameTurn ? -6 : 30;
+const second = [[12, 12, 0], [12, 30, 0], [secondEndX, 30, 0]];
 const path = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
   controlPoints: [...first, ...second.slice(1)], weights: [1, weight, 1, weight, 1] };
 const mark = (id, knots, points, weights) => `@curve #${id} { type:nurbs; degree:2; knots:${JSON.stringify(knots)};
@@ -33,9 +36,11 @@ const pins = ['packages/barocss-cad/src/brep/exact-sweep.ts',
   'packages/barocss-cad-model/src/chat/part/features.ts', 'apps/cad-studio/src/ui/SweepHistoryInputs.tsx'];
 const baseline = process.argv.includes('--expect-refused');
 const f = await createFlow({
-  name: 'exact-s-bend-sweep', output: process.argv[2], envFrozen: annular ? 'D1682_SOURCE_FROZEN' : 'D1681_SOURCE_FROZEN',
+  name: sameTurn ? 'exact-same-turn-sweep' : 'exact-s-bend-sweep', output: process.argv[2],
+  envFrozen: sameTurn ? 'D1706_SOURCE_FROZEN' : annular ? 'D1682_SOURCE_FROZEN' : 'D1681_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: annular ? 'Sweep a concentric annulus through the S-bend and verify both editable bore openings.'
+  qualification: sameTurn ? 'Sweep an editable exact disk along two same-turn tangent arcs of unequal radii.'
+    : annular ? 'Sweep a concentric annulus through the S-bend and verify both editable bore openings.'
     : 'Join opposite circular arcs, Sweep an editable exact disk and inspect the native tangent joint.',
   limits: [`Desktop WebGPU and local MCP, two 90° arcs with radii 12 and 18 mm, ${annular ? 'one concentric annulus' : 'one circular disk'}.`],
   ...(!baseline && { inspectorSource: `
@@ -99,7 +104,8 @@ const volume = (radius, inner = 0) => Math.PI * (radius ** 2 - inner ** 2) * 15 
 const centroid = (radius, inner) => {
   const correction = bend => 2 * (bend + (radius ** 2 + inner ** 2) / (4 * bend)) / Math.PI;
   const a = correction(12), b = correction(18);
-  return [(12 * a + 18 * (30 - b)) / 30, (12 * (12 - a) + 18 * (12 + b)) / 30, 0];
+  const secondX = sameTurn ? -6 + b : 30 - b;
+  return [(12 * a + 18 * secondX) / 30, (12 * (12 - a) + 18 * (12 + b)) / 30, 0];
 };
 
 async function verify(label, doc, radius) {
@@ -111,14 +117,13 @@ async function verify(label, doc, radius) {
     ? { bodies: 1, shells: 1, faces: 10, loops: 12, coedges: 40, edges: 20, vertices: 12 }
     : { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 20, edges: 10, vertices: 6 });
   assert.deepEqual(shape.source, { family: 'sweep-curve', id: 'n1' });
-  const caps = shape.caps.sort((a,b) => a.geometry.o[0] - b.geometry.o[0]);
-  assert.equal(caps.length, 2);
+  assert.equal(shape.caps.length, 2);
   let capError = 0, torusError = 0, seamError = 0, curvatureError = 0;
-  for (const [i, cap] of caps.entries()) {
-    assert.equal(cap.name, i === 0 ? 'n1.start' : 'n1.end');
-    const at = i === 0 ? 0 : 30;
-    near(cap.geometry.o[0], at);
-    cap.geometry.n.forEach((v,k) => near(v, k === 0 ? (i === 0 ? -1 : 1) : 0));
+  for (const [name, x0, y0, sense] of [['n1.start', 0, 0, -1], ['n1.end', secondEndX, 30, sameTurn ? -1 : 1]]) {
+    const cap = shape.caps.find(cap => cap.name === name);
+    assert.ok(cap);
+    near(cap.geometry.o[0], x0);
+    cap.geometry.n.forEach((value, axis) => near(value, axis === 0 ? sense : 0));
     assert.deepEqual(cap.loops.map(loop => loop.kind), annular ? ['outer', 'inner'] : ['outer']);
     for (const loop of cap.loops) {
       const isInner = loop.kind === 'inner';
@@ -129,7 +134,7 @@ async function verify(label, doc, radius) {
         assert.equal(edge.degree, 2);
         assert.equal(edge.bore, isInner);
         for (const [x,y,z] of edge.points)
-          capError = Math.max(capError, Math.abs(x-at), Math.abs(Math.hypot(y-at,z)-rim));
+          capError = Math.max(capError, Math.abs(x-x0), Math.abs(Math.hypot(y-y0,z)-rim));
       }
     }
   }
@@ -143,7 +148,7 @@ async function verify(label, doc, radius) {
     near(profile.c[0], R);
     near(profile.r, support);
     for (const [x,y,z] of points)
-      torusError = Math.max(torusError, Math.abs(Math.hypot(Math.hypot(x-(left ? 0 : 30),y-12)-R,z)-support));
+      torusError = Math.max(torusError, Math.abs(Math.hypot(Math.hypot(x-(left ? 0 : secondEndX),y-12)-R,z)-support));
   }
   assert.equal(shape.seams.length, annular ? 4 : 2);
   assert.equal(shape.seams.filter(seam => seam.boreUses[0]).length, annular ? 2 : 0);
@@ -162,7 +167,8 @@ async function verify(label, doc, radius) {
       seamError = Math.max(seamError, Math.abs(y-12), Math.abs(Math.hypot(x-12,z)-seamRadius));
     for (const { point:[x], difference } of seam.curvature) {
       const dx = x-12;
-      const expected = Math.abs(dx) / seamRadius * (1/(12+dx) + 1/(18-dx));
+      const carrierJump = sameTurn ? 1/(12+dx) - 1/(18+dx) : 1/(12+dx) + 1/(18-dx);
+      const expected = Math.abs(dx) / seamRadius * carrierJump;
       curvatureError = Math.max(curvatureError, Math.abs(expected-difference));
     }
   }
@@ -182,7 +188,7 @@ async function verify(label, doc, radius) {
 }
 
 async function inspectJoint(shape, label) {
-  f.phase = 'Measure the native edges at the S-bend joint';
+  f.phase = 'Measure the native edges at the two-arc joint';
   await button('Iso', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await button('Sweep along ' + railName, browser()).click();
@@ -347,13 +353,14 @@ await f.run(async () => {
   await f.editor().getByText(representation, { exact: true }).waitFor();
   await f.snapshot('10-reopened-history');
 
-  f.phase = 'Approve a revision-bound S-bend Sweep proposal';
+  f.phase = 'Approve a revision-bound two-arc Sweep proposal';
   const proposalFile = join(f.output, 's-bend-proposal.bcad');
   await copyFile(savedRail.file, proposalFile);
   await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, proposalFile, 's-bend-sweep', async call => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
     assert.match(description.values.representation, /tangent circular arcs of opposite curvature/);
+    if (sameTurn) assert.match(description.values.representation, /unequal-radius arcs that turn in the same direction/);
     if (annular) assert.match(description.values.sketch, /concentric circular hole/);
     const summary = await call('query', { action: 'summary' });
     const source = summary.direct_curves.find(candidate => candidate.id === rail.id);
@@ -368,7 +375,7 @@ await f.run(async () => {
     assert.ok(dry.dryRun);
     near(dry.change.volume, volume(2, annular ? 1 : 0), .001);
     assert.deepEqual(await readFile(proposalFile), before);
-    const proposal = await call('proposals', { action: 'propose', title: 'Exact S-bend Sweep', ops: [op(source.revision)] });
+    const proposal = await call('proposals', { action: 'propose', title: sameTurn ? 'Exact same-turn Sweep' : 'Exact S-bend Sweep', ops: [op(source.revision)] });
     assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);
   });
   const pending = JSON.parse(await readFile(proposalFile, 'utf8'));

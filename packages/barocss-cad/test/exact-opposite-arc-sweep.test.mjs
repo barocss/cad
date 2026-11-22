@@ -40,10 +40,10 @@ function arc(id, start, tangent, inward, radius, degrees) {
       weights: [1, Math.cos(angle / 2), 1] } };
 }
 
-function pair({ a = 90, b = 90, R1 = 12, R2 = 18, start = [0, 0, 0], tangent = [1, 0, 0], inward = [0, 1, 0] } = {}) {
+function pair({ a = 90, b = 90, R1 = 12, R2 = 18, start = [0, 0, 0], tangent = [1, 0, 0], inward = [0, 1, 0], turn = -1 } = {}) {
   const first = arc('first', start, tangent, inward, R1, a);
-  const second = arc('second', first.end, first.atExit, scale(first.exitInward, -1), R2, b);
-  const curve = joinCurves(first.curve, second.curve, { curveId: 'oppositeArcs' }).curve;
+  const second = arc('second', first.end, first.atExit, scale(first.exitInward, turn), R2, b);
+  const curve = joinCurves(first.curve, second.curve, { curveId: turn === 1 ? 'sameTurnArcs' : 'oppositeArcs' }).curve;
   return { first, second, curve };
 }
 
@@ -117,6 +117,9 @@ function verify(output, first, second, r, boreRadius = 0) {
   assert.equal(seams.filter(edge => boreWall(edge.name)).length, boreRadius ? 2 : 0);
   for (const edge of seams) {
     const inner = boreWall(edge.name), radius = inner ? boreRadius : r;
+    assert.equal(edge.curve.degree, 2);
+    assert.equal(edge.curve.controlPoints.length, 5);
+    assert.deepEqual(edge.curve.weights, [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1]);
     sampleRim(edge.curve, first.end, first.atExit, radius);
     const uses = brep.coedges.filter(use => use.edge === edge.id);
     assert.equal(uses.length, 2);
@@ -132,11 +135,13 @@ function verify(output, first, second, r, boreRadius = 0) {
       // The longitudinal curvature of each torus is the radial normal component divided by its local orbit radius.
       const outward = inner ? -1 : 1;
       const firstCurvature = outward * inward / (radius * (first.radius - inward));
-      const secondCurvature = -outward * inward / (radius * (second.radius + inward));
+      const turn = Math.sign(dot(first.exitInward, second.center.map((x, i) => x - first.end[i])));
+      const secondCurvature = turn * outward * inward / (radius * (second.radius - turn * inward));
       const expected = face => face.name.startsWith('w.first.') ? firstCurvature : secondCurvature;
       near(sample.first, expected(report.faces[0]));
       near(sample.second, expected(report.faces[1]));
       near(sample.difference, Math.abs(firstCurvature - secondCurvature));
+      if (turn === 1 && Math.abs(inward) > 1e-5) assert.ok(sample.first * sample.second > 0);
     }
   }
   return mass;
@@ -161,7 +166,7 @@ test('the join plane also separates a translated oblique 120° and 30° pair clo
   verify(evaluateCadPart(document(curve, section)).outputs[0], first, second, 8);
 });
 
-test('exact two-arc sweep refuses a kink, reversal, nonplanarity, same curvature and axis contact', () => {
+test('exact two-arc sweep refuses a kink, reversal, nonplanarity and axis contact', () => {
   const { first, curve } = pair();
   const refused = (rail, code, detail, section, mode) => assert.throws(() => evaluateCadPart(document(rail, section, mode)),
     error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
@@ -169,8 +174,7 @@ test('exact two-arc sweep refuses a kink, reversal, nonplanarity, same curvature
     { curveId: 'changedPair' }).curve;
   refused(joinedWith([1, 0, 0], [0, 1, 0]), 'GEOMETRY', /common forward tangent/);
   refused(joinedWith(scale(first.atExit, -1), [1, 0, 0]), 'GEOMETRY', /common forward tangent/);
-  refused(joinedWith(first.atExit, [0, 0, 1]), 'CAPABILITY', /coplanar arcs of opposite curvature/);
-  refused(joinedWith(first.atExit, first.exitInward), 'CAPABILITY', /one open circular arc from 30° to 120°/);
+  refused(joinedWith(first.atExit, [0, 0, 1]), 'CAPABILITY', /two coplanar circular arcs/);
   refused(pair({ a: 29 }).curve, 'CAPABILITY', /30° to 120°/);
   refused(pair({ b: 121 }).curve, 'CAPABILITY', /30° to 120°/);
   refused({ ...curve, knots: [0, 0, 0, 1, 1.1, 2, 2, 2] }, 'CAPABILITY', /30° to 120°/);
@@ -223,4 +227,103 @@ test('the exact S-bend refuses an eccentric bore, thin or touching rim, two bore
   refused({ ...boreSection(1), radius: 12 }, 'PARAMETER', /both path radii larger/);
   const twoHoles = [...boreSection(.2, [8.5, -4]).holes, ...boreSection(.2, [7.5, -4]).holes];
   refused({ ...circle, holes: twoHoles, sideTags: undefined }, 'CAPABILITY', /at most one circular hole/);
+});
+
+
+// Independent disk integration in centerline coordinates: dV = (1 - u/R) du dv ds.
+// The circular disk has mean u² = mean v² = r²/4. No native revolve or surface integral is used.
+function diskIntegralMass(arcs, radius, density = 1) {
+  const volume = Math.PI * radius ** 2 * arcs.reduce((sum, arc) => sum + arc.length, 0);
+  const first = [0, 0, 0], second = Array.from({ length: 3 }, () => [0, 0, 0]);
+  const q = radius ** 2 / 4, area = Math.PI * radius ** 2, steps = 1024;
+  for (const arc of arcs) {
+    const inward = unit(sub(arc.center, arc.start)), binormal = unit(arc.axis);
+    for (let station = 0; station <= steps; station++) {
+      const theta = arc.angle * station / steps, c = Math.cos(theta), s = Math.sin(theta);
+      const n = add(scale(inward, c), scale(arc.tangent, -s));
+      const point = sub(arc.center, scale(n, arc.radius));
+      const weight = area * arc.length / (3 * steps) * (station === 0 || station === steps ? 1 : station % 2 ? 4 : 2);
+      for (let i = 0; i < 3; i++) {
+        first[i] += weight * (point[i] - q * n[i] / arc.radius);
+        for (let j = 0; j < 3; j++) second[i][j] += weight * (point[i] * point[j]
+          + q * (n[i] * n[j] + binormal[i] * binormal[j])
+          - q / arc.radius * (point[i] * n[j] + n[i] * point[j]));
+      }
+    }
+  }
+  const centroid = scale(first, 1 / volume), mass = density * .001 * volume;
+  const central = second.map((row, i) => row.map((entry, j) => entry - volume * centroid[i] * centroid[j]));
+  const trace = central[0][0] + central[1][1] + central[2][2];
+  const inertia = central.map((row, i) => row.map((entry, j) => density * .001 * ((i === j ? trace : 0) - entry)));
+  return { volume, centroid, mass, inertia };
+}
+
+function checkIndependentDiskMass(output, first, second, radius) {
+  const density = 7.85, expected = diskIntegralMass([first, second], radius, density);
+  const native = brepMassProperties(output.brep, density);
+  assert.equal(native.method, 'quadrature');
+  for (const actual of [massPropertiesOf(output, density), native]) {
+    near(actual.volume, expected.volume, 2e-8 * expected.volume);
+    near(actual.mass, expected.mass, 2e-8 * expected.mass);
+    for (let i = 0; i < 3; i++) {
+      near(actual.centroid[i], expected.centroid[i], 1e-7);
+      for (let j = 0; j < 3; j++) near(actual.inertia[i][j], expected.inertia[i][j], 2e-8 * expected.mass * 1000);
+    }
+  }
+}
+
+test('unequal same-turn quarter arcs keep native tangent seams, both caps, independent mass and edit/reopen identity', () => {
+  const { first, second, curve } = pair({ turn: 1 });
+  assert.deepEqual(curve.controlPoints, [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 30, 0], [-6, 30, 0]]);
+  const initial = evaluateCadPart(document(curve));
+  const verifyDisk = (snapshot, radius) => {
+    verify(snapshot.outputs[0], first, second, radius);
+    checkIndependentDiskMass(snapshot.outputs[0], first, second, radius);
+  };
+  verifyDisk(initial, 2);
+  const edited = reevaluate(initial, { document: document(curve, { ...circle, radius: 3 }) });
+  verifyDisk(edited, 3);
+  const reopened = loadCadPart(saveCadPart(edited));
+  assert.deepEqual(reopened.document, edited.document);
+  assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
+  const restored = reevaluate(reopened, { document: document(curve) });
+  assert.deepEqual(restored.outputs[0].brep, initial.outputs[0].brep);
+});
+
+for (const [a, b, R1, R2] of [[30, 120, 23, 10], [120, 30, 10, 23], [120, 120, 23, 10]]) {
+  test(`oblique same-turn ${a}°/${b}° unequal carriers retain a strict disk solid near the smaller bend axis`, () => {
+    const { first, second, curve } = pair({ a, b, R1, R2, turn: 1,
+      start: [40, -30, 7], tangent: [.6, .8, 0], inward: [0, 0, 1] });
+    const output = evaluateCadPart(document(curve, { ...circle, radius: 8 })).outputs[0];
+    verify(output, first, second, 8);
+    checkIndependentDiskMass(output, first, second, 8);
+  });
+}
+
+test('same-turn pair refuses holes, rectangle, either axis contact, kink, reversal, nonplanarity and unsupported span angles', () => {
+  const { first, curve } = pair({ turn: 1 });
+  const refused = (path, code, detail, section = circle) => assert.throws(() => evaluateCadPart(document(path, section)),
+    error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
+  const joinedWith = (tangent, inward) => joinCurves(first.curve, arc('changed', first.end, tangent, inward, 18, 90).curve,
+    { curveId: 'changedPair' }).curve;
+  refused(curve, 'CAPABILITY', /same-turn two-arc sweep needs one circular disk section without holes/, boreSection(1));
+  refused(curve, 'CAPABILITY', /same-turn two-arc sweep needs one circular disk section without holes/,
+    { id: 's', kind: 'sketch', profile: 'rectangle', min: [-1, -2], max: [1, 2] });
+  for (const [R1, R2] of [[12, 18], [18, 12]]) for (const radius of [12, 13])
+    refused(pair({ R1, R2, turn: 1 }).curve, 'PARAMETER', /both path radii larger/, { ...circle, radius });
+  refused(joinedWith([1, 0, 0], [0, 1, 0]), 'GEOMETRY', /common forward tangent/);
+  refused(joinedWith(scale(first.atExit, -1), [-1, 0, 0]), 'GEOMETRY', /common forward tangent/);
+  refused(joinedWith(first.atExit, [0, 0, 1]), 'CAPABILITY', /two coplanar circular arcs/);
+  for (const angles of [{ a: 29 }, { b: 121 }]) refused(pair({ ...angles, turn: 1 }).curve, 'CAPABILITY', /30° to 120°/);
+});
+
+test('same-carrier angle limits and omitted-mode faceted Sweep keep the existing route', () => {
+  const sameCarrier = pair({ a: 90, b: 90, R1: 12, R2: 12, turn: 1 }).curve;
+  assert.throws(() => evaluateCadPart(document(sameCarrier)),
+    error => error instanceof CadPartError && error.code === 'CAPABILITY' && /one open circular arc from 30° to 120°/.test(error.message));
+  const facetedDocument = document(pair({ turn: 1 }).curve);
+  delete facetedDocument.features[1].mode;
+  const legacy = evaluateCadPart(facetedDocument).outputs[0];
+  assert.deepEqual(legacy.brep.source, { family: 'mesh', id: 'w' });
+  assert.ok(legacy.brep.faces.length > 6);
 });

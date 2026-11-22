@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1706: [Sweep a circular disk along same-turn tangent arcs](notes/exact-same-turn-sweep-2026-11-23/README.md), #10. Preserve two unequal arc radii, a native tangent joint, editable Studio diameter and exact fresh Open.
+
 - D1705: [Review a pending Exact rectangular S-bend duct](notes/pending-rectangular-duct-review-2026-11-23/README.md), #324. Pin the image to the actual Direct path, both native openings and all eight shared edges before Studio approval.
 
 - D1704: [Sweep a rectangular duct along an exact S-bend](notes/exact-rectangular-s-bend-duct-2026-11-23/README.md), #10. Keep both openings and eight bound native seams through aperture editing, Studio approval and fresh Open.

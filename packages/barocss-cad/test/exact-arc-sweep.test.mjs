@@ -557,7 +557,7 @@ test('two spans respect the total turn limits and the rounded quarter-span repre
   checkBore(evaluateCadPart(document(planarSpans(Math.PI / 4, aboveQuarter), holedSection(1))).outputs[0], 1, false, aboveQuarter);
 });
 
-test('two spans must follow a common circle, plane and direction over both complete intervals', () => {
+test('two spans keep one carrier or accept an unequal-radius disk with a planar forward join', () => {
   const half = Math.PI / 3, turn = 2 * half, rail = planarSpans(half, turn);
   const [start, p1, join, p3, end] = rail.controlPoints;
   const radial = [Math.cos(half), Math.sin(half), 0];
@@ -577,7 +577,11 @@ test('two spans must follow a common circle, plane and direction over both compl
       [23, 10.320508076, 4], [18.358983849, 13, 4], [13, 13, 4]],
     weights: [1, Math.cos(Math.PI / 12), 1, Math.cos(Math.PI / 12), 1, Math.cos(Math.PI / 12), 1],
   };
-  for (const outside of [c1ButDifferentCircle, wrongPlane, poleTilt, unequal, wrongWeight, simpleKnots, reversedAtJoin,
+  const supportedPair = evaluateCadPart(document(c1ButDifferentCircle)).outputs[0];
+  assert.ok(checkOutput(supportedPair, { strict: true }).valid);
+  assert.equal(supportedPair.brep.faces.length, 6);
+  near(massPropertiesOf(supportedPair).volume, Math.PI * r ** 2 * (R + otherRadius) * half);
+  for (const outside of [wrongPlane, poleTilt, unequal, wrongWeight, simpleKnots, reversedAtJoin,
     threeSpans, planarSpans(Math.PI / 12, 29.999 * Math.PI / 180), planarSpans(half, 120.001 * Math.PI / 180)]) {
     assert.throws(() => evaluateCadPart(document(outside)), error => error instanceof CadPartError
       && error.feature === 'w' && error.code === 'CAPABILITY' && /one open circular arc from 30° to 120°/.test(error.message));
