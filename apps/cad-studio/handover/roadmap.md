@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1742 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1743 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1742](notes/spaced-duct-step-exchange-2026-11-23/README.md), P2 rows 13 and 30. STEP preview and fresh Open preserve both mouths and volume of the trimmed S-bend and disclose history, parameter and continuity limits. [D1741](notes/resize-mixed-saved-sketch-chamfers-2026-11-23/README.md) matches Studio and local Agent geometry for mixed-setback Chamfers. The B06 PDF group remains held.
-- **Next MAIN:** D1743, P5 Exact Sweep [rows 07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Carry one concentric circular bore through an exact line–arc–line elbow. Verify both open ends, the original straight spans, native joint charts, independent volume and editable Studio fresh Open.
+- **Current position:** [D1743](notes/exact-annular-elbow-sweep-2026-11-23/README.md), P5 rows 07 and 30. Exact Sweep carries a concentric circular bore through a straight–arc–straight elbow. Studio verifies both openings, eight native joints and editable fresh Open. [D1742](notes/spaced-duct-step-exchange-2026-11-23/README.md) qualifies the trimmed S-bend STEP geometry and its disclosed losses. The B06 PDF group remains held.
+- **Next MAIN:** D1744, P5 Exact Sweep [rows 07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Carry one concentric circular bore from a straight span into an exact circular arc. Verify the inlet and curved outlet, the four native joint edges, independent volume and editable fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

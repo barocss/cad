@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1743: [Sweep a concentric circular bore through an exact elbow](notes/exact-annular-elbow-sweep-2026-11-23/README.md), #10. Retain both tube openings, eight native joins and editable fresh Open.
 - D1742: [Qualify STEP geometry for the trimmed rectangular S-bend](notes/spaced-duct-step-exchange-2026-11-23/README.md), #10. Verify the disclosed losses and both open ends with local native writer, independent section volume and Studio fresh Open.
 - D1741: [Set a common setback on saved sketch Chamfers with different sizes](notes/resize-mixed-saved-sketch-chamfers-2026-11-23/README.md), #21. Match numeric, drag and revision-bound Agent edits after fresh Open.
 - D1740: [Extract Align and Revolve History reference actions from Studio App](notes/studio-history-reference-actions-2026-11-23/README.md), #44. Match 14 desktop states, eight native oracles and three saved files.

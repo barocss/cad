@@ -419,12 +419,12 @@ function bindClosedRing(brep: Brep, tolerance: number): Brep | undefined {
 }
 
 /** Bind the exact section isocurves to the final canonical edge directions after gluing. */
-function bindBendSections(glued: Brep, id: string, hasTail: boolean, edgeCount: number, tolerance: number): Brep | undefined {
+function bindBendSections(glued: Brep, id: string, hasTail: boolean, edgeCount: number, tolerance: number, hasBore = false): Brep | undefined {
   const facesByLoop = new Map(glued.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
   const edges = new Map(glued.edges.map(edge => [edge.id, edge]));
   const uses = new Map(glued.coedges.map(use => [use.id, use]));
   const bindings = new Map<string, Curve>();
-  let starts = 0, ends = 0;
+  const starts = [0, 0], ends = [0, 0];
   for (const use of glued.coedges) {
     const face = facesByLoop.get(use.loop), twin = use.twin ? uses.get(use.twin) : undefined;
     if (!face?.name?.startsWith(`${id}.bend.`) || !twin) continue;
@@ -433,27 +433,23 @@ function bindBendSections(glued: Brep, id: string, hasTail: boolean, edgeCount: 
     if (!atEnd && !other?.name?.startsWith(`${id}.line.`)) continue;
     const surface = face.surface, edge = edges.get(use.edge);
     if (surface.kind !== 'surface' || !edge) return;
+    const bore = surface.id.startsWith(`${id}_hole0_`);
+    const peer = other?.surface;
+    if (peer?.kind !== 'surface' || bore !== peer.id.startsWith(`${id}_${atEnd ? 'tail' : 'line'}_w0_0_1_`)) return;
     const { u, v } = surfaceDomain(surface), row = atEnd ? surface.controlPoints.length - 1 : 0;
     const bendBinding = edgeCount !== 2 && surface.degreeU === 1 ? affinePlaneBinding(edge.curve, surface, tolerance)
       : sectionBinding(edge.curve, { degree: surface.degreeV, knots: surface.knotsV,
         controlPoints: surface.controlPoints[row], weights: surface.weights[row] }, u[atEnd ? 1 : 0], v, 'v', tolerance);
     if (!bendBinding) return;
     bindings.set(use.id, bendBinding);
-    if (atEnd) {
-      const tail = other?.surface;
-      if (tail?.kind !== 'surface') return;
-      const { u: tailU, v: [tailStart] } = surfaceDomain(tail);
-      const tailBinding = sectionBinding(edge.curve, { degree: tail.degreeU, knots: tail.knotsU,
-        controlPoints: tail.controlPoints.map(row => row[0]), weights: tail.weights.map(row => row[0]) }, tailStart, tailU, 'u', tolerance);
-      if (!tailBinding) return;
-      bindings.set(twin.id, tailBinding);
-      ends++;
-    } else {
-      if (!twin.pcurve) return;
-      starts++;
-    }
+    const peerBinding = ringChartEdge(edge.curve, peer, tolerance);
+    if (peerBinding?.side !== (atEnd ? 'v0' : 'v1')) return;
+    bindings.set(twin.id, peerBinding.pcurve);
+    (atEnd ? ends : starts)[bore ? 1 : 0]++;
   }
-  if (starts === edgeCount && ends === (hasTail ? edgeCount : 0)) return { ...glued, coedges: glued.coedges.map(use => {
+  const outerCount = edgeCount === 8 ? 4 : edgeCount, innerCount = hasBore ? 2 : edgeCount === 8 ? 4 : 0;
+  if (starts[0] === outerCount && starts[1] === innerCount
+    && ends[0] === (hasTail ? outerCount : 0) && ends[1] === (hasTail ? innerCount : 0)) return { ...glued, coedges: glued.coedges.map(use => {
     const pcurve = bindings.get(use.id);
     if (!pcurve) return use;
     const { id, edge, sense, loop, next, prev, twin } = use;
@@ -568,7 +564,7 @@ function jointWallClear(a: Brep, b: Brep, wall: number, roundoff: number): boole
 }
 
 function lineAndArcSweep(id: string, rail: JoinedRail, section: JoinedSection,
-  sideTags: SideTags | undefined, refuse: Refuse): SweepSolid {
+  bore: Circle | undefined, sideTags: SideTags | undefined, refuse: Refuse): SweepSolid {
   const { length, radius, angle, tailLength, tolerance } = rail;
   const { profile, opening, edgeCount, radialReach, extent, bendCentre: [dx, dy] } = section;
   const rectangle = edgeCount !== 2, style = joinedStyle(rail, edgeCount), hasTail = tailLength !== undefined;
@@ -577,7 +573,11 @@ function lineAndArcSweep(id: string, rail: JoinedRail, section: JoinedSection,
   const bendClearance = () => refuse('PARAMETER', rectangle ? `Exact ${style} sweep needs radial half-width smaller than the path radius.`
     : `Exact ${hasTail ? 'line-arc-line ' : ''}sweep needs a path radius larger than the profile radius.`);
   if (!(localRadius - radialReach > tolerance)) return bendClearance();
-  const holes = opening ? [opening.profile] : undefined;
+  const wall = opening?.clearance ?? (bore ? radialReach - circleRadius(bore) : undefined);
+  const wallError = () => opening ? ductWallError(refuse)
+    : refuse('GEOMETRY', 'Exact line-arc-line sweep needs strictly positive wall clearance around the bore.');
+  if (wall !== undefined && !(wall > 10 * tolerance)) return wallError();
+  const holes = opening ? [opening.profile] : bore ? [[bore]] : undefined;
   const prismSection = { outer: profile, holes, sideTags };
   const prism = prismaticFromProfile({ ...prismSection, from: -length, height: length, tag: `${id}.line`,
     names: { bottom: `${id}.start`, top: `${id}.junction` } });
@@ -592,10 +592,10 @@ function lineAndArcSweep(id: string, rail: JoinedRail, section: JoinedSection,
   // Both join sections lie in z = 0. The bend has z = ρ sin θ, positive away from the join because the entire
   // section has ρ > 0 and 0 < θ ≤ 120°. The straight piece stays at z ≤ 0.
   const roundoff = 128 * Number.EPSILON * Math.max(1, localRadius, extent);
-  const boundary = opening ? 'outer rectangle and opening' : rectangle ? 'rectangle' : 'disk';
+  const boundary = opening ? 'outer rectangle and opening' : rectangle ? 'rectangle' : bore ? 'annulus' : 'disk';
   const badJoint = () => refuse('GEOMETRY', `The exact ${style} sweep sections do not share the same ${boundary}.`);
-  const sharedSection: SharedSection = edgeCount === 8 ? [4, 4] : [edgeCount, 0];
-  if (opening && !jointWallClear(straight, bend, opening.clearance, roundoff)) ductWallError(refuse);
+  const sharedSection: SharedSection = edgeCount === 8 ? [4, 4] : [edgeCount, bore ? 2 : 0];
+  if (wall !== undefined && !jointWallClear(straight, bend, wall, roundoff)) return wallError();
   const firstJoin = glueSection(straight, `${id}.junction`, bend, `${id}.start`, origin, identityAxes[2], roundoff, sharedSection, id);
   if (!firstJoin) return badJoint();
   let glued = firstJoin;
@@ -610,16 +610,17 @@ function lineAndArcSweep(id: string, rail: JoinedRail, section: JoinedSection,
     // For the lead versus the tail, the mid-angle tangent through the bend centre gives projections
     // −ρ sin(θ/2) − leadStation cos(θ/2) < 0 and ρ sin(θ/2) + tailStation cos(θ/2) > 0.
     // This also covers a long tail that crosses the lead's tangent plane when θ > 90°.
-    if (opening && !jointWallClear(glued, tail, opening.clearance, roundoff)) ductWallError(refuse);
+    if (wall !== undefined && !jointWallClear(glued, tail, wall, roundoff)) return wallError();
     const secondJoin = glueSection(glued, `${id}.end`, tail, `${id}.tail.junction`,
       tailFrame.offset, tailFrame.axes[2], roundoff, sharedSection, id);
     if (!secondJoin) return badJoint();
     glued = secondJoin;
     tailMass = density => ({ props: prismaticMassProperties(tailPrism, density), ...tailFrame });
   }
-  const brep = bindBendSections(glued, id, hasTail, edgeCount, roundoff);
-  if (!brep || brep.faces.length !== (hasTail ? 3 : 2) * edgeCount + 2 || brep.faces.filter(face => face.name === `${id}.start`).length !== 1
-    || brep.faces.filter(face => face.name === `${id}.end`).length !== 1)
+  const brep = bindBendSections(glued, id, hasTail, edgeCount, roundoff, bore !== undefined);
+  const hasCap = (end: 'start' | 'end') => brep?.faces.filter(face => face.name === `${id}.${end}`
+    && face.loops.length === (opening || bore ? 2 : 1)).length === 1;
+  if (!brep || brep.faces.length !== (hasTail ? 3 : 2) * (edgeCount + (bore ? 2 : 0)) + 2 || !hasCap('start') || !hasCap('end'))
     return refuse('GEOMETRY', `The exact ${style} sweep could not preserve the end caps and the tangent joins.`);
   return { brep, mass: density => {
     const parts = [
@@ -695,11 +696,11 @@ function tangentArcLineArc(path: Curve, refuse: Refuse) {
   return { first, second, turn, length: line.length };
 }
 
-function concentricBore(disk: Circle, hole: Circle, refuse: Refuse): Circle {
+function concentricBore(disk: Circle, hole: Circle, refuse: Refuse, style = 'two-arc'): Circle {
   const [x, y] = hole.center;
   const roundoff = 128 * Number.EPSILON * Math.max(1, geometryScaleMM([disk.center, hole.center]));
   if (Math.hypot(x - disk.center[0], y - disk.center[1]) > roundoff)
-    return refuse('GEOMETRY', 'Exact two-arc sweep needs the bore concentric with the outer circle.');
+    return refuse('GEOMETRY', `Exact ${style} sweep needs the bore concentric with the outer circle.`);
   return { ...hole, center: [0, 0], start: [hole.start[0] - x, hole.start[1] - y] };
 }
 
@@ -909,21 +910,23 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
   const lineArc: JoinedRail | undefined = tangentLineArcLine(path, refuse) ?? tangentLineArc(path, refuse);
   if (lineArc) {
     const rectangle = profileRadius === undefined && lineArc.tailLength !== undefined ? rectangleSection(outer) : undefined;
-    if (!rectangle && (profileRadius === undefined || holes.length)) return refuse('CAPABILITY',
+    if (!rectangle && (profileRadius === undefined || (holes.length && lineArc.tailLength === undefined))) return refuse('CAPABILITY',
       lineArc.tailLength !== undefined && profileRadius === undefined
         ? 'Exact line-arc-line sweep needs one circular disk or one bend-aligned rectangular section.'
         : `Exact ${sweepStyle(lineArc)} sweep needs one circular disk section without holes.`);
+    const hole = rectangle ? undefined : circularHole(holes, 'line-arc-line', refuse);
+    const bore = hole && concentricBore(disk!, hole, refuse, 'line-arc-line');
     const initial = frame(lineArc.tangent), [x, y] = initial;
     const joined: { axes: SweepAxes; section: JoinedSection } = rectangle ? rectangularElbowSection(rectangle, holes, initial, lineArc, refuse) : {
       axes: initial, section: { profile: [originDisk(profileRadius!)], bendCentre: [dot(lineArc.toCentre, x), dot(lineArc.toCentre, y)],
         radialReach: profileRadius!, extent: profileRadius!, edgeCount: 2 },
     };
-    const result = place(lineAndArcSweep(id, lineArc, joined.section, sideTags, refuse), joined.axes, lineArc.start);
+    const result = place(lineAndArcSweep(id, lineArc, joined.section, bore, sideTags, refuse), joined.axes, lineArc.start);
     const report = checkBrep(result.brep, { strict: true });
     if (!report.valid) return refuse('GEOMETRY',
       `The exact ${joinedStyle(lineArc, joined.section.edgeCount)} sweep is not a valid closed solid: ${report.issues[0]}`);
-    if (joined.section.opening && (report.topology.length !== 1 || report.topology[0].genus !== 1))
-      return refuse('GEOMETRY', 'The exact rectangular duct sweep did not preserve one through opening.');
+    if ((joined.section.opening || bore) && (report.topology.length !== 1 || report.topology[0].genus !== 1))
+      return refuse('GEOMETRY', `The exact ${joinedStyle(lineArc, joined.section.edgeCount)} sweep did not preserve one through opening.`);
     return result;
   }
 
