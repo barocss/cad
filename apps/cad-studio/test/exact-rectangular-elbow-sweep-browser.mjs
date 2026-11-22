@@ -5,11 +5,15 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const lineArc = process.argv.includes('--line-and-arc');
+const arcLine = process.argv.includes('--arc-and-line');
+assert.ok(!lineArc || !arcLine);
+const singleJoin = lineArc || arcLine;
 const baseline = process.argv.includes('--expect-refused');
-assert.ok(!baseline || lineArc);
-const path = lineArc ? { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
-  controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0]],
-  weights: [1, 1, 1, Math.SQRT1_2, 1] } : { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
+assert.ok(!baseline || singleJoin);
+const shortRail = [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0]];
+const path = singleJoin ? { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
+  controlPoints: arcLine ? shortRail.toReversed() : shortRail,
+  weights: arcLine ? [1, Math.SQRT1_2, 1, 1, 1] : [1, 1, 1, Math.SQRT1_2, 1] } : { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
   controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0], [20, 27, 0], [20, 34, 0]],
   weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1] };
 const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 1,
@@ -27,7 +31,7 @@ const pins = [
   'apps/cad-studio/src/ui/SweepHistoryInputs.tsx', 'apps/cad-studio/src/sketch/useSketchActions.ts',
 ];
 const f = await createFlow({
-  name: 'exact-rectangular-elbow-sweep', output: process.argv[2], envFrozen: lineArc ? 'D1746_SOURCE_FROZEN' : 'D1674_SOURCE_FROZEN',
+  name: 'exact-rectangular-elbow-sweep', output: process.argv[2], envFrozen: arcLine ? 'D1751_SOURCE_FROZEN' : lineArc ? 'D1746_SOURCE_FROZEN' : 'D1674_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Sweep a rectangle along a tangent elbow, inspect the native joints and edit the underlying sketch.',
   limits: ['One R20 mm quarter bend with a 10 mm straight lead, optional 14 mm tail and one bend-aligned rectangle through desktop WebGPU and local L1 MCP.'],
@@ -56,7 +60,7 @@ const caps = faces.filter(face => /^n1[.](start|end)$/.test(face.name)).map(face
         bound: !!use.pcurve && !!twin?.pcurve, points: stations.map(t => evaluateCurve(curve, at(curveDomain(curve), t))) };
     })),
 }));
-const joins = ${JSON.stringify(lineArc ? [[0, 0]] : [[0, 0], [1, 20]])}.map(([axis, location]) =>
+const joins = ${JSON.stringify(singleJoin ? [[0, 0]] : [[0, 0], [1, 20]])}.map(([axis, location]) =>
   brep.edges.filter(edge => edge.curve.controlPoints.every(point => Math.abs(point[axis] - location) < 1e-7))
     .map(edge => measureBrepEdgeContinuity(brep, edge.id, { curvature: true })));
 console.log(JSON.stringify({ check: checkBrep(brep, { strict: true }), source: brep.source, bend, caps, joins,
@@ -69,7 +73,7 @@ const browser = () => f.page.getByRole('complementary', { name: 'Browser', exact
 const hud = () => f.page.getByRole('dialog', { name: 'Sweep', exact: true });
 const card = id => f.page.getByRole('listitem', { name: `Proposal ${id}`, exact: true });
 const widthInput = () => f.sketchPanel().getByLabel('Edge 1 length', { exact: true });
-const volumeAt = width => width * 6 * ((lineArc ? 10 : 24) + 10 * Math.PI);
+const volumeAt = width => width * 6 * ((singleJoin ? 10 : 24) + 10 * Math.PI);
 const near = (value, expected, tolerance = 1e-7) =>
   assert.ok(Math.abs(value - expected) <= tolerance, JSON.stringify({ value, expected, tolerance }));
 
@@ -78,24 +82,24 @@ async function verify(label, doc, width) {
   assert.ok(read.check.valid, read.check.issues.join('\n'));
   assert.deepEqual(read.source, { family: 'sweep-curve', id: 'n1' });
   assert.equal(read.check.topology[0].genus, 0);
-  assert.deepEqual(read.check.counts, lineArc
+  assert.deepEqual(read.check.counts, singleJoin
     ? { bodies: 1, shells: 1, faces: 10, loops: 10, coedges: 40, edges: 20, vertices: 12 }
     : { bodies: 1, shells: 1, faces: 14, loops: 14, coedges: 56, edges: 28, vertices: 16 });
   assert.equal(read.caps.length, 2);
   for (const cap of read.caps) {
-    const start = cap.name.endsWith('.start');
+    const straight = cap.name.endsWith('.start') !== arcLine;
     assert.equal(cap.support.kind, 'plane');
-    const [axis, at, normal] = start ? [0, -10, [-1, 0, 0]] : [1, lineArc ? 20 : 34, [0, 1, 0]];
+    const [axis, at, normal] = straight ? [0, -10, [-1, 0, 0]] : [1, singleJoin ? 20 : 34, [0, 1, 0]];
     near(cap.support.o[axis], at);
     cap.support.n.forEach((value, i) => near(value, normal[i]));
     assert.equal(cap.edges.length, 4);
     for (const edge of cap.edges) {
       assert.equal(edge.degree, 1);
       assert.ok(edge.reciprocal);
-      if (lineArc && !start) assert.ok(edge.bound, 'The curved outlet has two native chart bindings');
+      if (singleJoin && !straight) assert.ok(edge.bound, 'The curved cap has two native chart bindings');
       for (const point of edge.points) {
         near(point[axis], at);
-        const radial = start ? point[1] : point[0] - 20;
+        const radial = straight ? point[1] : point[0] - 20;
         assert.ok(Math.abs(radial) <= width / 2 + 1e-7 && Math.abs(point[2]) <= 3 + 1e-7);
         assert.ok(Math.abs(Math.abs(radial) - width / 2) <= 1e-7 || Math.abs(Math.abs(point[2]) - 3) <= 1e-7);
       }
@@ -114,7 +118,7 @@ async function verify(label, doc, width) {
     }
   });
   for (const plane of planes) near(Math.abs(plane.support.o[2]), 3);
-  assert.deepEqual(read.joins.map(junction => junction.length), lineArc ? [4] : [4, 4]);
+  assert.deepEqual(read.joins.map(junction => junction.length), singleJoin ? [4] : [4, 4]);
   for (const junction of read.joins) {
     for (const seam of junction) {
       assert.equal(seam.status, 'measured');
@@ -182,10 +186,10 @@ await f.run(async () => {
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Sweep');
   await hud().getByLabel('Representation', { exact: true }).selectOption('exact');
-  await hud().locator('.hud-step').getByText(lineArc ? 'Exact line and arc' : 'Exact line–arc–line', { exact: true }).waitFor();
+  await hud().locator('.hud-step').getByText(arcLine ? 'Exact arc and line' : lineArc ? 'Exact line and arc' : 'Exact line–arc–line', { exact: true }).waitFor();
   if (baseline) {
     await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
-    await hud().getByText('The line-and-arc Sweep needs a circular outer section', { exact: true }).waitFor();
+    await hud().getByText(arcLine ? 'The arc-and-line Sweep needs a circle' : 'The line-and-arc Sweep needs a circular outer section', { exact: true }).waitFor();
     assert.ok(await button('Apply', hud()).isDisabled());
     await f.same(seed);
     await f.snapshot('01-solid-rectangle-refused');
@@ -228,11 +232,11 @@ await f.run(async () => {
   const reopened = (await f.freshOpen(saved.file, edited, '06-fresh-open')).doc;
   const reopenedNative = await verify('reopened-native', reopened, 6);
   assert.equal(reopenedNative.digest, larger.digest);
-  if (lineArc) await inspectJoints(reopenedNative, '06-reopened');
+  if (singleJoin) await inspectJoints(reopenedNative, '06-reopened');
   await f.openFeatureEditor(1);
   await f.editor().getByText('Sketch 1 · 6 × 6 mm', { exact: true }).waitFor();
   await f.snapshot('07-reopened-history');
-  if (lineArc) {
+  if (singleJoin) {
     await button('Edit sketch', f.editor()).click();
     await f.sketchPanel().waitFor();
     assert.equal(await widthInput().inputValue(), '6');
@@ -248,7 +252,8 @@ await f.run(async () => {
   await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'rectangular-elbow', async call => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
-    assert.match(description.values.sketch, lineArc ? /A line–arc path accepts .* rectangle aligned with the bend frame/
+    assert.match(description.values.sketch, arcLine ? /An arc–line path accepts [^.]* rectangle aligned with the bend frame/
+      : lineArc ? /A line–arc path accepts [^.]* rectangle aligned with the bend frame/
       : /rectangle aligned with the bend frame/);
     const summary = await call('query', { action: 'summary' });
     const rail = summary.direct_curves.find(candidate => candidate.id === 'elbow');

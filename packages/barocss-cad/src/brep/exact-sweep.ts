@@ -583,6 +583,38 @@ function rectangularElbowSection(rectangle: NonNullable<ReturnType<typeof rectan
   return refuse('CAPABILITY', `Exact ${style} sweep needs the rectangle's original axes aligned to the bend radial and binormal.`);
 }
 
+/** Carry the authored roll to the reversed producer, rather than projecting it at the last tangent. */
+function rectangularArcLineSection(rectangle: NonNullable<ReturnType<typeof rectangleSection>>,
+  holes: NonNullable<ExactSweepInput['holes']>, rail: JoinedRail, frame: (tangent: Point) => SweepAxes,
+  sideTags: SideTags | undefined, refuse: Refuse) {
+  const { tangent, toCentre, radius, angle } = rail, c = Math.cos(angle), s = Math.sin(angle);
+  const inward = unit(sub(toCentre, scale(tangent, dot(toCentre, tangent))));
+  const firstTangent = scale(add(scale(tangent, c), scale(inward, s)), -1);
+  const firstInward = sub(scale(inward, c), scale(tangent, s));
+  const authored = rectangularElbowSection(rectangle, holes, frame(firstTangent),
+    { ...rail, toCentre: scale(firstInward, radius) }, refuse, 'rectangular arc-and-line');
+  const axis = unit(cross(firstTangent, firstInward));
+  const rotate = (v: Point) => add(add(scale(v, c), scale(cross(axis, v), s)), scale(axis, dot(axis, v) * (1 - c)));
+  const axes: SweepAxes = [rotate(authored.axes[0]), scale(rotate(authored.axes[1]), -1), tangent];
+  // A y reflection restores a right-handed frame. Reverse the edges too, keeping each loop's winding.
+  const reflect = (loop: readonly ProfileSegmentInput[]): ProfileSegmentInput[] =>
+    [loop[0], loop[3], loop[2], loop[1]].map(({ start: [x, y] }) => ({ kind: 'line', start: [x, -y] }));
+  const section: JoinedSection = { ...authored.section, profile: reflect(authored.section.profile),
+    bendCentre: [authored.section.bendCentre[0], -authored.section.bendCentre[1]],
+    ...(authored.section.opening ? { opening: { profile: reflect(authored.section.opening.profile), clearance: authored.section.opening.clearance } } : {}) };
+  // Private producer tags also preserve positional side names when the document has no authored tags.
+  const outerTags = ['arcLineOuter0', 'arcLineOuter1', 'arcLineOuter2', 'arcLineOuter3'];
+  const holeTags = ['arcLineHole0', 'arcLineHole1', 'arcLineHole2', 'arcLineHole3'];
+  const names = new Map<string, string>();
+  for (let i = 0; i < 4; i++) {
+    names.set(`.side[${outerTags[i]}]`, sideTags ? `.side[${sideTags.outer[i]}]` : `.side${i}`);
+    const own = sideTags?.holes?.[0];
+    names.set(`.side[${holeTags[i]}]`, own ? `.side[${own[i]}]` : `.hole0.side${i}`);
+  }
+  const tags: SideTags = { outer: [...outerTags].reverse(), ...(section.opening ? { holes: [[...holeTags].reverse()] } : {}) };
+  return { axes, section, tags, names };
+}
+
 /** The generic gluer matches all loops together. Keep those loops apart at its native matching tolerance. */
 function jointWallClear(a: Brep, b: Brep, wall: number, roundoff: number): boolean {
   let vertexTolerance = 0;
@@ -936,24 +968,29 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
 
   const arcLineRefuse = arcLineRefusal(refuse), arcLine = tangentArcLine(path, arcLineRefuse);
   if (arcLine) {
-    if (!disk || profileRadius === undefined)
-      return refuse('CAPABILITY', 'Exact arc-and-line sweep needs one circular disk section.');
-    const hole = circularHole(holes, 'arc-and-line', refuse);
-    const bore = hole && concentricBore(disk, hole, refuse, 'arc-and-line');
-    const axes = frame(arcLine.tangent), [x, y] = axes;
-    const section: JoinedSection = { profile: [originDisk(profileRadius)],
+    const rectangle = profileRadius === undefined ? rectangleSection(outer) : undefined;
+    if (!rectangle && profileRadius === undefined)
+      return refuse('CAPABILITY', 'Exact arc-and-line sweep needs one circular disk or one bend-aligned rectangular section.');
+    const hole = rectangle ? undefined : circularHole(holes, 'arc-and-line', refuse);
+    const bore = hole && concentricBore(disk!, hole, refuse, 'arc-and-line');
+    const reflected = rectangle ? rectangularArcLineSection(rectangle, holes, arcLine, frame, sideTags, arcLineRefuse) : undefined;
+    const axes = reflected?.axes ?? frame(arcLine.tangent), [x, y] = axes;
+    const section: JoinedSection = reflected?.section ?? { profile: [originDisk(profileRadius!)],
       bendCentre: [dot(arcLine.toCentre, x), dot(arcLine.toCentre, y)],
-      radialReach: profileRadius, extent: profileRadius, edgeCount: 2 };
-    const local = lineAndArcSweep(id, arcLine, section, bore, sideTags, arcLineRefuse);
-    // The producer travels from the authored end to its start. Only cap names change;
-    // native surfaces, outward senses, seam names and canonical edge directions stay intact.
-    const capName = <T extends { name?: string }>(element: T): T => element.name === undefined ? element
-      : { ...element, name: element.name.split('|').map(name => name === `${id}.start` ? `${id}.end`
-        : name === `${id}.end` ? `${id}.start` : name).join('|') };
-    const brep = { ...local.brep, faces: local.brep.faces.map(capName), edges: local.brep.edges.map(capName) };
+      radialReach: profileRadius!, extent: profileRadius!, edgeCount: 2 };
+    const local = lineAndArcSweep(id, arcLine, section, bore, reflected?.tags ?? sideTags, arcLineRefuse);
+    // The producer travels in reverse. Restore authored cap order and rectangle side names.
+    const restoreNames = <T extends { name?: string }>(element: T): T => {
+      if (element.name === undefined) return element;
+      let name = element.name.split('|').map(name => name === `${id}.start` ? `${id}.end`
+        : name === `${id}.end` ? `${id}.start` : name).join('|');
+      if (reflected) name = name.replace(/\.side\[arcLine(?:Outer|Hole)[0-3]\]/g, token => reflected.names.get(token) ?? token);
+      return { ...element, name };
+    };
+    const brep = { ...local.brep, faces: local.brep.faces.map(restoreNames), edges: local.brep.edges.map(restoreNames) };
     const result = place({ ...local, brep }, axes, arcLine.start);
     const report = checkBrep(result.brep, { strict: true });
-    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== (bore ? 1 : 0))
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== (bore || section.opening ? 1 : 0))
       return refuse('GEOMETRY', 'The exact arc-and-line sweep did not produce a valid closed solid.');
     return result;
   }

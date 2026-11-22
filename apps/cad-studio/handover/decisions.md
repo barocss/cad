@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1751: [Sweep rectangular sections from an arc into a straight span](notes/exact-rectangular-arc-line-sweep-2026-11-23/README.md), #10. Preserve authored side identity, native cap order and both duct openings through editable fresh Open.
 - D1750: [Sweep a circular section from an arc into a straight span](notes/exact-circular-arc-line-sweep-2026-11-23/README.md), #10. Verify cap and rim ownership in travel order, both tube mouths and editable fresh Open.
 - D1749: [Extract placed candidate preview from Studio App](notes/studio-placed-candidate-preview-2026-11-23/README.md), #44. Eight desktop states match through preview dismissal, stale review and terminal approval.
 - D1748: [Show opposite solid views in Agent review](notes/agent-opposite-solid-views-2026-11-23/README.md), #324. Back and Left expose both duct mouths. Verify orientation-specific image pins through approval and fresh Open.

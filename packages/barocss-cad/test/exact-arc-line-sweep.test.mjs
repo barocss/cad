@@ -166,9 +166,8 @@ test('arc then line refuses unsupported profiles, openings, carrier errors, kink
   const malformedLine = path.curve.controlPoints.map((p, i) => i === 3 ? add(p, [1, 0, 0]) : p);
   refused({ ...path.curve, controlPoints: malformedLine }, 'CAPABILITY', /arc-and-line sweep needs one circular arc/);
   for (const radius of [20, 21]) refused(path.curve, 'PARAMETER', /Exact arc-and-line sweep needs a path radius larger/, { ...disk, radius });
-  const rectangle = { id: 's', kind: 'sketch', profile: 'rectangle', min: [-2, -1], max: [2, 1] };
   const triangle = { id: 's', kind: 'sketch', profile: 'polygon', points: [[0, 0], [3, 0], [0, 2]] };
-  for (const section of [rectangle, triangle]) refused(path.curve, 'CAPABILITY', /Exact arc-and-line sweep needs one circular disk section/, section);
+  refused(path.curve, 'CAPABILITY', /Exact arc-and-line sweep needs one circular disk or one bend-aligned rectangular section/, triangle);
   refused(path.curve, 'GEOMETRY', /Exact arc-and-line sweep needs the bore concentric/, annulus(1, [8.25, -4]));
   refused(path.curve, 'PARAMETER', /Exact arc-and-line sweep needs a hole radius of at least/, annulus(.005));
   for (const radius of [2 - 5e-7, 2, 2.1]) refused(path.curve, 'GEOMETRY', /arc-and-line sweep needs strictly positive wall clearance around the bore/, annulus(radius));
