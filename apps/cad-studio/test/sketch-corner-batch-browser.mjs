@@ -6,7 +6,8 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const review = process.argv.includes('--review');
 const agent = review || process.argv.includes('--agent');
-const resizeFillets = process.argv.includes('--resize-fillets');
+const mixedRadii = process.argv.includes('--mixed-fillet-radii');
+const resizeFillets = mixedRadii || process.argv.includes('--resize-fillets');
 const resizeChamfers = process.argv.includes('--resize-chamfers');
 const agentResizeFillets = process.argv.includes('--agent-resize-fillets');
 const agentResizeChamfers = process.argv.includes('--agent-resize-chamfers');
@@ -17,8 +18,8 @@ const resize = resizeFillets || resizeChamfers;
 const resizeName = resizeFillets ? 'Fillet' : 'Chamfer';
 const resizeBaseline = process.argv.includes('--expect-no-group-editor');
 const original = [[0, 0], [60, 0], [60, 40], [38, 40], [38, 15], [22, 15], [22, 40], [0, 40]];
-const sizedCorners = size => [[0, 0], [60, 0], [60, 40], [38 + size, 40], [38, 40 - size],
-  [38, 15 + size], [38 - size, 15], [22, 15], [22, 40], [0, 40]];
+const sizedCorners = (size, reflex = size) => [[0, 0], [60, 0], [60, 40], [38 + size, 40], [38, 40 - size],
+  [38, 15 + reflex], [38 - reflex, 15], [22, 15], [22, 40], [0, 40]];
 const result = sizedCorners(6);
 const originalIds = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8'];
 const resultIds = ['e1', 'e2', 'e3', 'e9', 'e4', 'e10', 'e5', 'e6', 'e7', 'e8'];
@@ -55,7 +56,7 @@ const pins = [
 const f = await createFlow({
   name: agentResize ? `saved-sketch-${agentResizeName.toLowerCase()}-pair-proposal` : resize ? `saved-sketch-${resizeName.toLowerCase()}-pair`
     : review ? 'sketch-corner-batch-review' : agent ? 'sketch-corner-batch-agent' : 'sketch-corner-batch',
-  output: process.argv[2], envFrozen: agentResizeChamfers ? 'D1731_SOURCE_FROZEN' : agentResizeFillets ? 'D1730_SOURCE_FROZEN'
+  output: process.argv[2], envFrozen: mixedRadii ? 'D1737_SOURCE_FROZEN' : agentResizeChamfers ? 'D1731_SOURCE_FROZEN' : agentResizeFillets ? 'D1730_SOURCE_FROZEN'
     : resizeChamfers ? 'D1728_SOURCE_FROZEN' : resizeFillets ? 'D1726_SOURCE_FROZEN'
     : review ? 'D1697_SOURCE_FROZEN' : agent ? 'D1696_SOURCE_FROZEN' : 'D1695_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
@@ -72,9 +73,11 @@ import { checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
 import { emptyDoc, withNode } from '@barocss/cad-model/engine/doc';
 import { partSnapshot } from '@barocss/cad-model/engine/part';
 import { profileOf } from '@barocss/cad-model/sketch/loops';
+import { replaceSketchProfile } from '@barocss/cad-model/sketch/reopen';
 import { digestOf } from '@barocss/cad-model/util/digest';
 const input = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-if (process.argv[3] === '"seed"') {
+const mode = JSON.parse(process.argv[3] ?? 'null');
+if (mode === 'seed') {
   const profile = profileOf([{ kind: 'polygon', closed: true, points: input.points, ids: input.ids,
     hv: { h: [0, 2, 4, 6], v: [1, 3, 5, 7] },
     lengths: { 0: 60 }, rules: [{ kind: 'fix', point: 0, at: [0, 0] }],
@@ -82,6 +85,12 @@ if (process.argv[3] === '"seed"') {
   assert.ok('node' in profile);
   const sketch = input.plane ? { ...profile.node, plane: input.plane } : profile.node;
   console.log(JSON.stringify(withNode(withNode(emptyDoc(), sketch), { kind: 'extrude', sketch: 0, height: 10 })));
+} else if (mode === 'mixed-fixture') {
+  const { doc, points } = input, [sketch, ...features] = doc.nodes;
+  const profile = profileOf([{ ...sketch.outline, kind: 'polygon', closed: true, points,
+    radii: { 3: 4, 5: 14 }, ids: sketch.sideTags.outer }]);
+  assert.ok('node' in profile);
+  console.log(JSON.stringify({ ...doc, nodes: [replaceSketchProfile(sketch, profile.node), ...features] }));
 } else {
   const [body] = partSnapshot(input).outputs;
   const b = body.brep;
@@ -106,7 +115,8 @@ async function edit() {
   await button('Edit sketch', f.editor()).click();
   await f.sketchPanel().waitFor();
   await f.tool('Select', 's');
-  await f.frame(original.map(worldXY));
+  // A dimension label can cover an original corner. Keep the fitted scale for the small R4 pick.
+  if (!mixedRadii) await f.frame(original.map(worldXY));
 }
 async function expectPoints(points) {
   const outline = group('Outline points');
@@ -124,26 +134,39 @@ async function expectTargets() {
   const targets = f.page.locator('.sk-corner-target');
   assert.deepEqual(await targets.evaluateAll(items => items.map(item => item.dataset.cornerIndex)), ['3', '4']);
 }
-function cornerMidpoints(size) {
-  const offset = (resizeFillets ? 1 - Math.SQRT1_2 : .5) * size;
-  return [[38 + offset, 40 - offset], [38 - offset, 15 + offset]];
+function cornerMidpoints(size, reflex = size) {
+  const factor = resizeFillets ? 1 - Math.SQRT1_2 : .5;
+  return [[38 + factor * size, 40 - factor * size], [38 - factor * reflex, 15 + factor * reflex]];
 }
-async function selectSavedCorners(size) {
-  await pick(cornerMidpoints(size));
+async function selectSavedCorners(size, reflex = size, reverse = false) {
+  const points = cornerMidpoints(size, reflex);
+  await pick(reverse ? points.reverse() : points);
   const selected = f.page.locator('.vp-overlay .sk-pick-edge.on');
   assert.deepEqual(await selected.evaluateAll(edges => edges.map(edge => edge.dataset.sketchEntity).sort()), ['edge:3', 'edge:5']);
+}
+async function prepareMixedFillets(accepted) {
+  f.phase = 'Open the saved profile with R4 and R14';
+  const doc = await f.inspect('mixed-source', { doc: accepted, points: sizedCorners(4, 14) }, 'mixed-fixture');
+  assert.deepEqual([doc.nodes[1], doc.outputs], [accepted.nodes[1], accepted.outputs]);
+  await checkNative('mixed-starting-radii', doc, true, 4, 14);
+  const file = join(f.output, 'saved-mixed-fillets.bcad');
+  await writeFile(file, JSON.stringify(doc));
+  await f.freshOpen(file, doc, '07-two-different-saved-radii');
+  return doc;
 }
 async function resizeSavedCorners(accepted) {
   f.phase = `Select saved convex and reflex ${resizeName}s`;
   const single = 'Edit ' + resizeName, name = single + 's';
   const handleLabel = resizeFillets ? 'Fillet radius handle' : 'Chamfer setback handle';
+  const initial = mixedRadii ? [4, 14] : [6, 6], target = mixedRadii ? 12 : 8;
+  const beforePoints = sizedCorners(...initial);
   await edit();
-  await selectSavedCorners(6);
+  await selectSavedCorners(...initial);
   if (resizeBaseline) {
     assert.equal(await button(single, group('Corner tools')).count(), 0);
     assert.equal(await button(name, group('Corner tools')).count(), 0);
     assert.equal(await button(handleLabel).count(), 0);
-    await expectPoints(result);
+    await expectPoints(beforePoints);
     await f.same(accepted);
     await f.snapshot('08-saved-pair-without-group-editor');
     return;
@@ -154,75 +177,95 @@ async function resizeSavedCorners(accepted) {
   const apply = () => button('Apply', editor());
   const cancel = () => button('Cancel', editor()).click();
   await open();
-  assert.equal(Number(await field().inputValue()), 6);
+  assert.equal(await field().inputValue(), mixedRadii ? '' : '6');
   assert.equal(await apply().isDisabled(), true);
+  if (mixedRadii) {
+    assert.equal(await editor().getByRole('alert').count(), 0);
+    await f.snapshot('08-mixed-radii-before-edit');
+  }
   f.phase = 'Refuse a size that would consume the shared straight carrier';
   await field().fill('13');
   await editor().getByRole('alert').getByText(/collapse|touch|cross/i).waitFor();
   assert.equal(await apply().isDisabled(), true);
   await preview().waitFor({ state: 'hidden' });
-  await expectPoints(result);
+  await expectPoints(beforePoints);
   await f.same(accepted);
   await f.snapshot('08-saved-pair-refused');
 
-  f.phase = 'Get the 8 mm numeric preview and cancel it';
-  await field().fill('8');
+  f.phase = `Get the ${target} mm numeric preview and cancel it`;
+  await field().fill(String(target));
   await preview().waitFor();
   const numeric = await preview().getAttribute('points');
   assert.ok(numeric);
   await cancel();
   await preview().waitFor({ state: 'hidden' });
-  await expectPoints(result);
+  await expectPoints(beforePoints);
+  if (mixedRadii) {
+    await selectSavedCorners(...initial, true);
+    await open();
+    await field().fill(String(target));
+    assert.equal(await preview().getAttribute('points'), numeric);
+    await cancel();
+    await selectSavedCorners(...initial);
+  }
   await open();
 
-  f.phase = `Drag the shared handle to 8 mm and apply both ${resizeName}s`;
+  f.phase = `Drag the shared handle to ${target} mm and apply both ${resizeName}s`;
   const handle = button(handleLabel);
   await handle.waitFor();
   const box = await handle.boundingBox();
-  const from = await f.screenOf(cornerMidpoints(6)[0]), to = await f.screenOf(cornerMidpoints(8)[0]);
+  const from = await f.screenOf(cornerMidpoints(...initial)[0]), to = await f.screenOf(cornerMidpoints(target)[0]);
   const at = [box.x + box.width / 2, box.y + box.height / 2];
   assert.ok(Math.hypot(at[0] - from[0], at[1] - from[1]) < .5);
   await f.page.mouse.move(...at);
   await f.page.mouse.down();
-  await f.page.mouse.move(at[0] + to[0] - from[0], at[1] + to[1] - from[1], { steps: 10 });
+  const dragTo = () => f.page.mouse.move(at[0] + to[0] - from[0], at[1] + to[1] - from[1], { steps: 10 });
+  await dragTo();
+  if (mixedRadii) {
+    await f.page.mouse.move(...at);
+    assert.equal(await field().inputValue(), '');
+    assert.equal(await apply().isDisabled(), true);
+    await preview().waitFor({ state: 'hidden' });
+    await dragTo();
+  }
   await f.page.mouse.up();
-  assert.equal(Number(await field().inputValue()), 8);
+  assert.equal(Number(await field().inputValue()), target);
   assert.equal(await preview().getAttribute('points'), numeric);
   assert.deepEqual(await f.page.locator('.sk-corner-target').evaluateAll(items => items.map(item => item.dataset.cornerIndex).sort()),
     ['3', '4', '5', '6']);
-  await expectPoints(result);
+  await expectPoints(beforePoints);
   await f.same(accepted);
   await f.snapshot('09-saved-pair-drag-preview');
   await apply().click();
-  const resized = sizedCorners(8);
+  const resized = sizedCorners(target);
   await expectPoints(resized);
   await f.same(accepted);
   await f.page.keyboard.press('Meta+z');
-  await expectPoints(result);
+  await expectPoints(beforePoints);
   await f.page.keyboard.press('Meta+Shift+z');
   await expectPoints(resized);
   const { doc } = await f.finishSketch('10-saved-pair-finished');
   assert.deepEqual([doc.nodes[1], doc.outputs], [accepted.nodes[1], accepted.outputs]);
-  const receiptLabel = resizeFillets ? 'both-R8' : 'both-C8';
-  const native = await checkNative(receiptLabel + '-native', doc, resizeFillets, 8);
+  const receiptLabel = `both-${resizeFillets ? 'R' : 'C'}${target}`;
+  const native = await checkNative(receiptLabel + '-native', doc, resizeFillets, target);
   await f.undo(); await f.same(accepted);
   await f.redo(); await f.same(doc);
   const saved = await f.save(`resized-${resizeName.toLowerCase()}s`);
   await f.freshOpen(saved.file, doc, '11-saved-pair-fresh-open');
-  assert.deepEqual(await checkNative(receiptLabel + '-reopened', await f.doc(), resizeFillets, 8), native);
+  assert.deepEqual(await checkNative(receiptLabel + '-reopened', await f.doc(), resizeFillets, target), native);
   await edit();
   await expectPoints(resized);
-  await selectSavedCorners(8);
+  await selectSavedCorners(target);
   await open();
-  assert.equal(Number(await field().inputValue()), 8);
+  assert.equal(Number(await field().inputValue()), target);
   assert.equal(await apply().isDisabled(), true);
   await f.snapshot('12-saved-pair-editable-after-open');
 }
-async function checkNative(label, doc, fillet, size = 6) {
+async function checkNative(label, doc, fillet, size = 6, reflex = size) {
   const native = await f.inspect(label, doc);
-  const points = sizedCorners(size);
-  // The convex removal and reflex addition cancel in this fixture. Check both named walls and their endpoints too.
-  assert.ok(Math.abs(native.volume - (60 * 40 - 16 * 25) * 10) < 1e-8);
+  const points = sizedCorners(size, reflex);
+  const volume = (60 * 40 - 16 * 25 + (reflex ** 2 - size ** 2) * (1 - Math.PI / 4)) * 10;
+  assert.ok(Math.abs(native.volume - volume) < 1e-8);
   assert.equal(native.faces.length, 12);
   const [source] = doc.nodes;
   assert.deepEqual(source.sideTags.outer, resultIds);
@@ -231,7 +274,7 @@ async function checkNative(label, doc, fillet, size = 6) {
   assert.deepEqual(source.outline.rules, fillet ? fixed : [...fixed,
     { kind: 'angle', a: 2, b: 3, value: 135 }, { kind: 'angle', a: 4, b: 5, value: 135 }]);
   if (fillet) {
-    assert.deepEqual(source.outline.radii, { 3: size, 5: size });
+    assert.deepEqual(source.outline.radii, { 3: size, 5: reflex });
     assert.ok(source.outline.bulges[3] > 0 && source.outline.bulges[5] < 0);
   }
   for (const [i, id] of resultIds.entries()) {
@@ -240,9 +283,9 @@ async function checkNative(label, doc, fillet, size = 6) {
     const newWall = id === 'e9' || id === 'e10';
     assert.equal(face.geometry.kind, fillet && newWall ? 'cylinder' : 'plane');
     if (fillet && newWall) {
-      const center = worldXY(id === 'e9' ? [38 + size, 40 - size] : [38 - size, 15 + size]);
+      const center = worldXY(id === 'e9' ? [38 + size, 40 - size] : [38 - reflex, 15 + reflex]);
       assert.ok(Math.hypot(face.geometry.c[0] - center[0], face.geometry.c[1] - center[1]) < 1e-8);
-      assert.ok(Math.abs(face.geometry.r - size) < 1e-8);
+      assert.ok(Math.abs(face.geometry.r - (id === 'e9' ? size : reflex)) < 1e-8);
       assert.equal(face.geometry.out, id === 'e9' ? 1 : -1);
     }
     for (const [x, y] of [points[i], points[(i + 1) % points.length]].map(worldXY)) for (const z of [0, 10])
@@ -551,7 +594,7 @@ await f.run(async () => {
     }
     if (resize) {
       assert.equal(await readFile(file, 'utf8'), bytes);
-      await resizeSavedCorners(accepted);
+      await resizeSavedCorners(mixedRadii ? await prepareMixedFillets(accepted) : accepted);
       return;
     }
     if (reviewed) assert.equal(native.bodySha256, reviewed.meta.candidate.bodySha256);

@@ -5,7 +5,7 @@ import { emptyDoc, withNode } from '../src/engine/doc';
 import { partSnapshot } from '../src/engine/part';
 import { roundStraightCornerForEdit } from '../src/sketch/corner';
 import { prepareStraightCornerBatch } from '../src/sketch/cornerBatch';
-import { editFilletRadius, savedFilletRadius } from '../src/sketch/filletEdit';
+import { editFilletRadii, editFilletRadius, savedFilletRadius } from '../src/sketch/filletEdit';
 import { profileOf } from '../src/sketch/loops';
 import { arcOf, type P2 } from '../src/sketch/profile';
 import { sketchShapes } from '../src/sketch/reopen';
@@ -96,6 +96,76 @@ test('one batch Fillet changes while its adjacent opposite-turn sibling retains 
   assert.deepEqual(reflex.points.slice(3, 7), [[44, 40], [38, 34], [38, 23], [30, 15]]);
   native(reflex, 20000 + 280 * (1 - Math.PI / 4));
   for (const value of [19, 20, 25]) assert.ok('error' in editFilletRadius(before, 3, value));
+});
+
+function adjacentFillets() {
+  const source: Polygon = { kind: 'polygon', closed: true,
+    points: [[0, 0], [60, 0], [60, 40], [38, 40], [38, 15], [22, 15], [22, 40], [0, 40]],
+    lengths: { 0: 60 }, rules: [{ kind: 'fix', point: 0, at: [0, 0] }],
+    ids: ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8'] };
+  const result = prepareStraightCornerBatch(source, 'fillet', [3, 4], 6);
+  if ('error' in result) assert.fail(result.error);
+  return result.shape;
+}
+
+test('mixed convex R4 and reflex R14 reach shared R12 in either selection order with native carrier and radius proof', () => {
+  const source = native(resized(resized(adjacentFillets(), 3, 4), 5, 14),
+    20000 + 1800 * (1 - Math.PI / 4)).shape;
+  const before = structuredClone(source);
+  assert.ok('error' in editFilletRadius(source, 3, 12), 'growing first consumes the shared 25 mm carrier');
+  let previous: Polygon | undefined;
+  for (const edges of [[3, 5], [5, 3]]) {
+    const selection = [...edges], result = editFilletRadii(source, edges, 12);
+    if ('error' in result) assert.fail(result.error);
+    const shape = result.shape;
+    assert.deepEqual(edges, selection, 'internal edit order does not change the selected handle order');
+    assert.deepEqual(shape.points.slice(3, 7), [[50, 40], [38, 28], [38, 27], [26, 15]]);
+    near(Math.hypot(shape.points[4][0] - shape.points[5][0], shape.points[4][1] - shape.points[5][1]), 1);
+    assert.deepEqual(shape.radii, { 3: 12, 5: 12 });
+    for (const key of ['ids', 'rules', 'lengths', 'hv', 'tangents', 'bulges'] as const)
+      assert.deepEqual(shape[key], source[key], key);
+    for (const i of [0, 1, 2, 7, 8, 9]) assert.deepEqual(shape.points[i], source.points[i]);
+    if (previous) assert.deepEqual(shape, previous);
+    previous = shape;
+    const { shape: reopened, body } = native(shape, 20000);
+    assert.deepEqual(reopened.ids, source.ids);
+    for (const [edge, center] of [[3, [50, 28]], [5, [26, 27]]] as const) {
+      const face = body.brep.faces.find(item => item.name === `n1.side[${source.ids![edge]}]`)!;
+      const geometry = faceGeometry(face); assert.equal(geometry.kind, 'cylinder');
+      near(geometry.r, 12); nearPoint([geometry.c[0], geometry.c[1]], [...center]);
+    }
+    const carrier = faceGeometry(body.brep.faces.find(item => item.name === `n1.side[${source.ids![4]}]`)!);
+    assert.equal(carrier.kind, 'plane'); near(carrier.o[0], 38);
+    assert.deepEqual(source, before);
+  }
+});
+
+test('shared Fillet resizing retains same-size history, no-op identity and atomic refusal', () => {
+  const equal = adjacentFillets();
+  for (const edges of [[3, 5], [5, 3]]) {
+    const expected = edges.reduce((shape, edge) => resized(shape, edge, 8), equal);
+    const result = editFilletRadii(equal, edges, 8);
+    if ('error' in result) assert.fail(result.error);
+    assert.deepEqual(result.shape, expected, 'equal-size edits keep the historical sequential result');
+    const unchanged = editFilletRadii(equal, edges, 6);
+    if ('error' in unchanged) assert.fail(unchanged.error);
+    assert.equal(unchanged.shape, equal);
+  }
+  const source = resized(resized(equal, 3, 4), 5, 14), before = structuredClone(source);
+  const shrunk = resized(source, 5, 13);
+  assert.ok('error' in editFilletRadius(shrunk, 3, 13), 'a later growth can refuse after a valid shrink');
+  for (const edges of [[3, 5], [5, 3]]) {
+    for (const value of [13, 25, NaN, Infinity, -1, 0, 0.009]) {
+      assert.ok('error' in editFilletRadii(source, edges, value), String(value));
+      assert.deepEqual(source, before);
+    }
+  }
+  for (const edges of [[], [3, 4], [3, -1], [3, 0.5], [3, 10]]) {
+    assert.ok('error' in editFilletRadii(source, edges, 12)); assert.deepEqual(source, before);
+  }
+  const unlocked = { ...source, tangents: source.tangents!.filter(edge => edge !== 6) };
+  const unlockedBefore = structuredClone(unlocked);
+  assert.ok('error' in editFilletRadii(unlocked, [3, 5], 12)); assert.deepEqual(unlocked, unlockedBefore);
 });
 
 test('orthogonal Fillet resizing works clockwise and with rotated direct perpendicular constraints', () => {

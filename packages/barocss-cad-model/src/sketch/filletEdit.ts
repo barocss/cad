@@ -52,6 +52,26 @@ export function savedFilletRadius(source: Polygon, edge: number): number | undef
   return inspect(source, edge)?.radius;
 }
 
+/** Resize saved Fillets together without exposing any intermediate sketch. */
+export function editFilletRadii(source: Polygon, edges: readonly number[], value: number): { shape: Polygon } | { error: string } {
+  const selected: { edge: number; radius: number }[] = [];
+  for (const edge of new Set(edges)) {
+    const radius = savedFilletRadius(source, edge);
+    if (radius === undefined) return { error: 'Select saved, constrained orthogonal Fillets.' };
+    selected.push({ edge, radius });
+  }
+  if (!selected.length) return { error: 'Select saved, constrained orthogonal Fillets.' };
+  // Shrink larger radii before growing smaller ones on a shared carrier. Equal radii retain selection order.
+  selected.sort((a, b) => b.radius - a.radius);
+  let shape = source;
+  for (const { edge } of selected) {
+    const result = editFilletRadius(shape, edge, value);
+    if ('error' in result) return result;
+    shape = result.shape;
+  }
+  return { shape };
+}
+
 /** Resize one saved Fillet while retaining its carriers and every other sketch element. */
 export function editFilletRadius(source: Polygon, edge: number, value: number): { shape: Polygon } | { error: string } {
   const plan = inspect(source, edge);

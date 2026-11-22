@@ -61,7 +61,7 @@ export function SketchCornerSizeHandle({ draft, source, store, project, pointUnd
   if (![...at, ...next].every(Number.isFinite) || Math.hypot(next[0] - at[0], next[1] - at[1]) < 0.1) return null;
 
   const preview = (current: CornerDraft, start: number, steps: number) => {
-    const text = String(steps ? Number((start + steps / 10).toPrecision(15)) : start);
+    const text = String(Number((start + steps / 10).toPrecision(15)));
     if (current.value === text) return current;
     const result = prepareSavedSketchCorners(current.owner, source, current.doc, resize, text);
     const update = { ...current, input: 'pointer' as const, value: text, result };
@@ -95,8 +95,11 @@ export function SketchCornerSizeHandle({ draft, source, store, project, pointUnd
         (step[0] ** 2 + step[1] ** 2);
       if (Number.isFinite(delta)) {
         const steps = Math.round(delta * 10);
-        if (!steps && held.latest === held.before) return;
-        held.latest = preview(held.latest, held.value, steps);
+        if (steps) held.latest = preview(held.latest, held.value, steps);
+        else if (held.latest !== held.before) {
+          held.latest = held.before;
+          store.set(held.before);
+        }
       }
     }}
     onPointerUp={event => { if (press.current?.id === event.pointerId) press.current = null; }}

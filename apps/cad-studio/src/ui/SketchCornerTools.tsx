@@ -30,6 +30,7 @@ export function SketchCornerTools({ owner, source, doc, corners, resize, inspect
   const current = useStoreValue(inspection);
   const draft = current?.target === 'corner' && current.owner === owner && current.doc === doc ? current : null;
   const resizeTool = resize && resizeTools[resize.operation];
+  const mixedSize = resize?.value === null;
   const choices = resizeTool ? [resize?.edges.length === 1 ? resizeTool : { ...resizeTool, label: resizeTool.label + 's' }] : tools;
   const tool = choices.find(item => item.operation === draft?.operation);
   const result = draft?.result;
@@ -55,14 +56,14 @@ export function SketchCornerTools({ owner, source, doc, corners, resize, inspect
       {choices.map(item => <Button key={item.operation} type="button" data-sketch-action
         variant={item.operation === draft?.operation ? 'default' : 'outline'}
         aria-pressed={item.operation === draft?.operation} onKeyDown={ownKeyboard}
-        onClick={() => { if (item.operation !== draft?.operation) preview(item.operation, String(resize?.value ?? 2)); }}>
+        onClick={() => { if (item.operation !== draft?.operation) preview(item.operation, mixedSize ? '' : String(resize?.value ?? 2)); }}>
         <Icon name={item.icon} small />{item.label}
       </Button>)}
     </div>
     {draft && tool && <div className="mb-1" role="group" aria-label={tool.label}>
       <label className={FIELD}><span>{tool.field}</span>
         <span className={NUM}><Input key={tool.operation} type="number" step="any" autoFocus
-          min={tool.operation === 'fillet' ? 0.1 : 0} value={draft.value} aria-label={tool.field} data-sketch-action
+          min={tool.operation === 'fillet' ? 0.1 : 0} value={draft.value} placeholder={mixedSize ? 'Mixed' : undefined} aria-label={tool.field} data-sketch-action
           onChange={event => preview(tool.operation, event.target.value)}
           onKeyDown={event => {
             if (event.key !== 'Enter') return;

@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1736 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1737 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1736](notes/exact-spaced-rectangular-s-bend-2026-11-23/README.md), P5 rows 07 and 30. Exact Sweep carries a solid rectangle or a centered rectangular duct through two opposite bends with a straight span. Both pass native join checks and desktop fresh Open. [D1735](notes/held-fillet-pair-refusal-notice-2026-11-23/README.md) clears the stale notice during held Fillet repair. The B06 PDF group remains held.
-- **Next MAIN:** D1737, P1 [row 09](roadmap-rows/09.md), [#21](https://github.com/barocss/cad/issues/21). Select saved convex and reflex sketch Fillets that start at different radii. Set one common radius through the existing input and drag paths. Check whether the shared carrier fits after the complete edit in both selection orders. Keep stable side IDs, Undo/Redo and fresh Open.
+- **Current position:** [D1737](notes/resize-mixed-saved-sketch-fillets-2026-11-23/README.md), P1 row 09. One input or drag assigns a common radius to mixed-size saved orthogonal Fillets. The checked pair retains one history step and an editable native file. [D1736](notes/exact-spaced-rectangular-s-bend-2026-11-23/README.md) adds solid and hollow rectangular sections to the spaced S-bend. The B06 PDF group remains held.
+- **Next MAIN:** D1738, P1 [rows 04](roadmap-rows/04.md) and [09](roadmap-rows/09.md), [#21](https://github.com/barocss/cad/issues/21). Let the existing revision-bound `sketchRound.fillets` proposal assign a common radius to mixed-size Fillets. Reuse the D1737 edit. Verify explicit Studio approval, refusal, native parity and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
