@@ -11,7 +11,7 @@ import { bodyKeyFor } from '../engine/ids';
 import { contentKey } from '../engine/evalMemo';
 import { sha256Hex } from '../util/sha256';
 import { refOf } from '../app/bodyRef';
-import { VIEWS } from '../drawing/views';
+import { viewsFor, VIEWS } from '../drawing/views';
 import { VIEW_IDS, type ViewId, type XY } from '../drawing/types';
 import type { DirectDisplay } from '../engine/direct';
 import { loadDirect } from '../engine/directModule';
@@ -20,6 +20,8 @@ import { crc32, deflateZlib } from '../io/zip';
 
 const CELL = 500, MARGIN = 28, W = CELL * 2, H = CELL * 2;
 const LAYOUT = 'one 1000 × 1000 PNG, four views: front (top left), top (top right), right (bottom left), isometric (bottom right); third-angle';
+const OPPOSITE_LAYOUT = 'one 1000 × 1000 PNG, four views: back (top left), top (top right), left (bottom left), opposite isometric (bottom right); third-angle';
+const OPPOSITE_VIEWS = viewsFor('y+');
 /** Faces showing fewer pixels than this get no label (too small to point at). */
 const LABEL_MIN_PIXELS = 60;
 
@@ -120,7 +122,7 @@ function curvePoints(c: ProjectedCurve): [number, number][] {
   return out;
 }
 
-export interface ViewsResult { image: string; imageSha256: string; legend: Record<string, string>; views: Record<string, { visible_faces: string[]; mm_per_px: number }>; layout: string; notes: string[] }
+export interface ViewsResult { image: string; imageSha256: string; legend: Record<string, string>; views: Record<string, { visible_faces: string[]; mm_per_px: number }>; layout: string; notes: string[]; orientation?: 'opposite' }
 const cache = new Map<string, { doc: WeakRef<StudioDoc>; bodies: WeakRef<readonly BodyResult[]>; result: ViewsResult }>();
 
 /**
@@ -131,13 +133,17 @@ const cache = new Map<string, { doc: WeakRef<StudioDoc>; bodies: WeakRef<readonl
  * The views' hidden-line projections, kept for the last bodies (the same B-rep objects: the part unchanged, a
  * highlight or another label asked) — the projections do not depend on the highlight; PERF3 C16.
  */
-let lastProjections: { breps: readonly Brep[]; byView: Map<ViewId, BrepProjection> } | null = null;
-function projectionOf(breps: readonly Brep[], id: ViewId): BrepProjection {
+let lastProjections: { breps: readonly Brep[]; byView: Map<string, BrepProjection> } | null = null;
+function projectionOf(breps: readonly Brep[], id: ViewId, opposite: boolean): BrepProjection {
   const last = lastProjections;
   if (!last || last.breps.length !== breps.length || last.breps.some((b, i) => b !== breps[i])) lastProjections = { breps: [...breps], byView: new Map() };
   const byView = lastProjections!.byView;
-  let pr = byView.get(id);
-  if (!pr) { pr = projectBrepHiddenLines(breps, VIEWS[id]); byView.set(id, pr); }
+  const key = opposite ? `opposite:${id}` : id;
+  let pr = byView.get(key);
+  if (!pr) {
+    pr = projectBrepHiddenLines(breps, (opposite ? OPPOSITE_VIEWS : VIEWS)[id]);
+    byView.set(key, pr);
+  }
   return pr;
 }
 
@@ -206,7 +212,7 @@ export async function renderDirectViews(doc: StudioDoc): Promise<(ViewsResult & 
     notes: ['Orthographic review uses Studio display samples for shaded sheets and overlaid curve traces.'] };
 }
 
-export async function renderViews(doc: StudioDoc, bodies: readonly BodyResult[], evaluate: (doc: StudioDoc) => Promise<EvalResult | null>, options: { highlight?: readonly string[]; section?: { axis: 'x' | 'y' | 'z'; at: number } } = {}): Promise<ViewsResult | string> {
+export async function renderViews(doc: StudioDoc, bodies: readonly BodyResult[], evaluate: (doc: StudioDoc) => Promise<EvalResult | null>, options: { highlight?: readonly string[]; section?: { axis: 'x' | 'y' | 'z'; at: number }; orientation?: 'opposite' } = {}): Promise<ViewsResult | string> {
   // (The model by its nodes' kept texts — not the whole document written out, a STEP import's text and all; PERF3 C16.)
   if (!bodies.length) return 'there is no body to show';
   const key = `${contentKey(doc)}\u0003${JSON.stringify(options)}`;
@@ -239,10 +245,11 @@ export async function renderViews(doc: StudioDoc, bodies: readonly BodyResult[],
       hotFace[faceBase[bi] + f] = hot.has(name) || hot.has(display) ? 1 : 0;
     }
   });
+  const opposite = options.orientation === 'opposite';
   img = new Uint8ClampedArray(W * H * 4).fill(255);
   const numbers = new Map<string, number>(), out: ViewsResult['views'] = {};
   VIEW_IDS.forEach((id: ViewId, v) => {
-    const pr: BrepProjection = projectionOf(breps, id), ox = (v % 2) * CELL, oy = Math.floor(v / 2) * CELL;
+    const pr: BrepProjection = projectionOf(breps, id, opposite), ox = (v % 2) * CELL, oy = Math.floor(v / 2) * CELL;
     const { X, Y, mm_per_px } = fitCell(pr.min, pr.max);
     // Faces: the nearest at each pixel.
     ids.fill(-1); depth.fill(-Infinity);
@@ -289,12 +296,14 @@ export async function renderViews(doc: StudioDoc, bodies: readonly BodyResult[],
     }
     // A thin frame round the cell.
     frameCell(ox, oy);
-    out[id] = { visible_faces: visible, mm_per_px };
+    const view = opposite && id === 'front' ? 'back' : opposite && id === 'right' ? 'left' : id;
+    out[view] = { visible_faces: visible, mm_per_px };
   });
   const bytes = await png(img, W, H);
   const result: ViewsResult = {
     image: base64(bytes), imageSha256: sha256Hex(bytes), legend: Object.fromEntries([...numbers].map(([name, n]) => [String(n), name])), views: out,
-    layout: LAYOUT,
+    layout: opposite ? OPPOSITE_LAYOUT : LAYOUT,
+    ...(opposite ? { orientation: 'opposite' as const } : {}),
     notes: ['edges by the kernel\'s exact hidden-line projection: solid visible, thin dashed hidden', 'face fill and labels from the display mesh (to its chord error); a face showing under 60 px is listed but not labelled', ...(options.section ? [`cut at ${options.section.axis} = ${options.section.at}, the side ${options.section.axis === 'y' ? 'beyond (y > at)' : `below (${options.section.axis} < at)`} kept: its cut faces look at the ${options.section.axis === 'y' ? 'front' : options.section.axis === 'x' ? 'right' : 'top'} view`] : []), ...(hot.size ? ['highlighted faces filled red, their labels ringed red'] : [])],
   };
   cache.set(key, { doc: new WeakRef(doc), bodies: new WeakRef(bodies), result }); if (cache.size > 8) cache.delete(cache.keys().next().value!);

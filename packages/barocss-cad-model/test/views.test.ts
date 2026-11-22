@@ -147,3 +147,28 @@ test('part-scoped render uses the same scoped revision as rebuild and preserves 
   assert.equal(parse(stale.content).code, 'RENDER_STALE');
   assert.equal(stale.images, undefined);
 });
+
+
+test('opposite solid views identify their actual directions and isolate cached images by orientation', async () => {
+  const block = await stateOf(rectanglePart(40, 20, 8));
+  const { state } = await runTool(block, 'run_command', { command: 'hole', faces: ['n1.top'], values: { d: 8, x: 8, y: 6 } }, evaluate);
+  const read = (extra: Record<string, unknown> = {}) => runTool(state, 'query', { action: 'render', ...extra }, evaluate);
+  const standard = await read();
+  assert.ok(!standard.isError, standard.content);
+  const original = parse(v2Result(standard.content, 'render_views'));
+  const opposite = await read({ orientation: 'opposite' });
+  assert.ok(!opposite.isError, opposite.content);
+  const image = parse(v2Result(opposite.content, 'render_views'));
+  assert.deepEqual(Object.keys(image.views), ['back', 'top', 'left', 'iso']);
+  assert.equal(image.orientation, 'opposite');
+  assert.match(image.layout, /back .*left/);
+  assert.equal(image.revision, original.revision);
+  assert.notEqual(image.imageSha256, original.imageSha256);
+  assert.equal(image.imageSha256, createHash('sha256').update(Buffer.from(opposite.images![0].data, 'base64')).digest('hex'));
+  assert.equal((await read({ orientation: 'standard' })).content, standard.content);
+  assert.deepEqual((await read({ orientation: 'standard' })).images, standard.images);
+  assert.deepEqual((await read({ orientation: 'opposite' })).images, opposite.images);
+  assert.equal(parse((await read({ orientation: 'opposite', section: { axis: 'y', at: 10 } })).content).code, 'RENDER_ORIENTATION_SCOPE');
+  assert.equal(opposite.state.doc, state.doc);
+  assert.equal(opposite.changed, false);
+});

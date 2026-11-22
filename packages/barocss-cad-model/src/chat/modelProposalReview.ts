@@ -57,5 +57,6 @@ export interface ModelCandidatePin {
   proposalRevision: string;
   baseRevision: string;
   bodySha256: string;
+  orientation?: 'opposite';
   reviewRevision: string;
 }

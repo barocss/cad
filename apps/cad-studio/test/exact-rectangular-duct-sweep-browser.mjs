@@ -18,6 +18,10 @@ assert.ok(!lineArc || !twoArcs, 'Choose one path family.');
 const baseline = process.argv.includes('--expect-refused');
 const review = process.argv.includes('--review');
 const baselineReview = process.argv.includes('--expect-review-refused');
+const oppositeImage = process.argv.includes('--opposite-image');
+const baselineImage = process.argv.includes('--expect-opposite-unavailable');
+assert.ok(!oppositeImage || (lineArc && review && !baselineReview));
+assert.ok(!baselineImage || oppositeImage);
 assert.ok(!review || (!baseline && (lineArc || (opposite && !spaced))), 'Choose a supported duct review path.');
 assert.ok(!baselineReview || (review && lineArc));
 const railId = sameTurn ? 'same-turn' : opposite ? 's-bend' : 'elbow';
@@ -58,7 +62,7 @@ if (review) pins.push('apps/cad-studio/test/duct-proposal-review-browser-steps.m
 const f = await createFlow({
   name: spacedOpposite ? 'exact-spaced-s-bend-duct' : spaced ? 'exact-spaced-same-turn-duct' : sameTurn ? 'exact-rectangular-same-turn-duct'
     : opposite ? 'exact-rectangular-s-bend-duct' : 'exact-rectangular-duct-sweep', output: process.argv[2],
-  envFrozen: lineArc ? (review ? 'D1747_SOURCE_FROZEN' : 'D1746_SOURCE_FROZEN') : spacedOpposite ? 'D1736_SOURCE_FROZEN' : spaced ? 'D1733_SOURCE_FROZEN' : review ? 'D1705_SOURCE_FROZEN'
+  envFrozen: oppositeImage ? 'D1748_SOURCE_FROZEN' : lineArc ? (review ? 'D1747_SOURCE_FROZEN' : 'D1746_SOURCE_FROZEN') : spacedOpposite ? 'D1736_SOURCE_FROZEN' : spaced ? 'D1733_SOURCE_FROZEN' : review ? 'D1705_SOURCE_FROZEN'
     : sameTurn ? 'D1713_SOURCE_FROZEN' : opposite ? 'D1704_SOURCE_FROZEN' : 'D1675_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Sweep a centered rectangular duct, inspect both openings and edit the aperture through Studio History.',
@@ -399,7 +403,7 @@ await f.run(async () => {
       return;
     }
     const evidence = await reviewPendingDuct(f, call, request, expectedRevision, op.args.values,
-      lineArc ? 'line-and-arc' : undefined);
+      lineArc ? 'line-and-arc' : undefined, oppositeImage ? (baselineImage ? 'baseline' : 'opposite') : undefined);
     assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*Studio/i);
     assert.deepEqual(await readFile(file), staged);
     return evidence;

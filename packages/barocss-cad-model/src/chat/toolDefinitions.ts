@@ -342,11 +342,12 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'render_views',
-    description: 'Front, top, right and isometric views. Solids use exact hidden lines and numbered faces. The legend lists face names. Use highlight to fill faces red or section to cut along an axis. For Direct-only views, pass expectedDirectRevision. To render an open Direct Ruled or Exact Thicken candidate on a copy, also pass proposal and expectedProposalRevision. The result gives the proposal pin, baseDirectRevision and candidate geometry revision. Direct sheet views list exact IDs in directObjects. For a bored-wall Offset, sketch corner group, saved Chamfer resize or rectangular duct proposal, use the base expectedRevision, proposal and its modelReviewRevision as expectedProposalRevision, without highlight or section. The returned candidate.reviewRevision pins its image for inspection. imageSha256 identifies the returned PNG. A supplied pin refuses changed input.',
+    description: 'Front, top, right and isometric views. For solid views without a section, opposite orientation shows back and left. Solids use exact hidden lines and numbered faces. The legend lists face names. Use highlight to fill faces red or section to cut along an axis. For Direct-only views, pass expectedDirectRevision. To render an open Direct Ruled or Exact Thicken candidate on a copy, also pass proposal and expectedProposalRevision. The result gives the proposal pin, baseDirectRevision and candidate geometry revision. Direct sheet views list exact IDs in directObjects. For a bored-wall Offset, sketch corner group, saved Chamfer resize or rectangular duct proposal, use the base expectedRevision, proposal and its modelReviewRevision as expectedProposalRevision, without highlight or section. The returned candidate.reviewRevision pins its image for inspection. imageSha256 identifies the returned PNG. A supplied pin refuses changed input.',
     input_schema: { type: 'object', properties: { expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$', description: 'The revision from query.rebuild for this same part scope; omit for an unpinned solid read.' },
       expectedDirectRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The direct_revision from query.summary for Direct or candidate review.' },
       proposal: { type: 'string', description: 'An open Direct Ruled, Exact Thicken, bored-wall Offset, sketch corner group, saved Chamfer resize or rectangular duct proposal ID from proposals.list.' },
       expectedProposalRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The directReviewRevision or modelReviewRevision for this proposal from proposals.list.' },
+      orientation: { type: 'string', enum: ['standard', 'opposite'], description: 'Use opposite for back and left views of a solid.' },
       highlight: { ...nameList, description: 'Face names to fill red.' }, section: { type: 'object', properties: { axis: { type: 'string', enum: ['x', 'y', 'z'] }, at: { type: 'number' } }, required: ['axis', 'at'], additionalProperties: false } }, additionalProperties: false },
   },
   {
@@ -363,6 +364,7 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
       expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$', description: 'The current part revision, or the base revision for pending model inspection.' },
       proposal: { type: 'string', description: 'An open Exact Thicken, bored-wall Offset, sketch corner group, saved Chamfer resize or rectangular duct proposal ID.' },
       expectedProposalRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The directReviewRevision or modelReviewRevision for the pending proposal.' },
+      orientation: { type: 'string', enum: ['standard', 'opposite'], description: 'Repeat the orientation of a pending solid image.' },
       expectedReviewRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The candidate.reviewRevision from the same pending model image.' },
     }, additionalProperties: false },
   },

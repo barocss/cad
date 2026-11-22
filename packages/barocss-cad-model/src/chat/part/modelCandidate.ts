@@ -35,7 +35,7 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
   if (typeof proposal !== 'string' || !proposal || !isDigest(expectedProposalRevision) ||
     typeof expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(expectedRevision) ||
     (inspect && !isDigest(expectedReviewRevision)) || args.highlight !== undefined || args.section !== undefined)
-    return refuse('MODEL_REVIEW_INPUT', 'Pass the current base revision, proposal ID and modelReviewRevision from proposals.list. For inspection, also pass the reviewRevision from the candidate image.');
+    return refuse('MODEL_REVIEW_INPUT', 'Pass the current base revision, proposal ID and modelReviewRevision from proposals.list. For inspection, also pass the reviewRevision from the candidate image and repeat its orientation if supplied.');
   if (state.partOf || state.doc.instances?.length)
     return refuse('MODEL_REVIEW_SCOPE', 'Review the pending model edit in the base part without placed parts.');
   const baseRevision = revisionOf(state.doc);
@@ -63,14 +63,15 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
   if ('error' in evidence) return refuse('MODEL_REVIEW_REPLAY_FAILED', evidence.error);
   const { brep, ...geometry } = evidence;
 
-  const result = await renderViews(preview.doc, preview.bodies, evaluate);
+  const orientation = args.orientation === 'opposite' ? 'opposite' as const : undefined;
+  const result = await renderViews(preview.doc, preview.bodies, evaluate, orientation ? { orientation } : undefined);
   if (typeof result === 'string') return refuse('MODEL_REVIEW_RENDER_FAILED', result);
   const revision = revisionOf(preview.doc);
-  const pins = { proposal, proposalRevision, baseRevision, bodySha256: digestOf(brep) };
+  const pins = { proposal, proposalRevision, baseRevision, bodySha256: digestOf(brep), ...(orientation ? { orientation } : {}) };
   const candidate: ModelCandidatePin = {
     ...pins, reviewRevision: digestOf({ ...pins, revision, imageSha256: result.imageSha256 }),
   };
   if (inspect && expectedReviewRevision !== candidate.reviewRevision)
-    return refuse('MODEL_REVIEW_IMAGE_STALE', 'That image belongs to a different review. Render this exact proposal before inspecting it.');
+    return refuse('MODEL_REVIEW_IMAGE_STALE', 'That image belongs to a different review. Use the exact proposal image pin and orientation.');
   return { preview, candidate, geometry, revision, result };
 }

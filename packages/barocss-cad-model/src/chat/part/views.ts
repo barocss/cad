@@ -53,6 +53,9 @@ async function renderDirectReview(state: ChatState, args: Record<string, unknown
 }
 
 const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dispatch) => {
+  const orientation = args.orientation === 'opposite' ? 'opposite' as const : undefined;
+  if (orientation && (args.expectedDirectRevision !== undefined || args.section !== undefined))
+    return fail(state, 'Use opposite orientation for solid views without a section.', { code: 'RENDER_ORIENTATION_SCOPE' });
   if (args.expectedDirectRevision === undefined && args.expectedRevision !== undefined &&
     (args.proposal !== undefined || args.expectedProposalRevision !== undefined)) {
     const review = await reviewModelCandidate(state, args, evaluate, dispatch, false);
@@ -74,7 +77,11 @@ const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dis
     return fail(state, 'The part changed since the requested revision. Read query.rebuild again for the same part.', { code: 'RENDER_STALE', expectedRevision: args.expectedRevision, revision });
   const highlight = strings(args.highlight), sec = isObj(args.section) ? args.section : undefined;
   if (sec && (!['x', 'y', 'z'].includes(String(sec.axis)) || !Number.isFinite(Number(sec.at)))) return fail(state, 'A section takes an axis (x, y or z) and at (mm).');
-  const r = await renderViews(state.doc, state.bodies, evaluate, { ...(highlight.length ? { highlight } : {}), ...(sec ? { section: { axis: String(sec.axis) as 'x' | 'y' | 'z', at: Number(sec.at) } } : {}) });
+  const r = await renderViews(state.doc, state.bodies, evaluate, {
+    ...(highlight.length ? { highlight } : {}),
+    ...(sec ? { section: { axis: String(sec.axis) as 'x' | 'y' | 'z', at: Number(sec.at) } } : {}),
+    ...(orientation ? { orientation } : {}),
+  });
   if (typeof r === 'string') return fail(state, r);
   const { image, ...rest } = r;
   return { state, content: json({ revision, ...rest }), isError: false, changed: false, summary: `views (${Object.keys(r.legend).length} faces labelled)`, images: [{ data: image, mediaType: 'image/png' }] };
@@ -203,6 +210,8 @@ async function inspectNativeFaces(state: ChatState, args: Record<string, unknown
 }
 
 const inspectTool: PartHandler = async (state, args, evaluate, _options, dispatch) => {
+  if (args.orientation === 'opposite' && (args.expectedReviewRevision === undefined || args.expectedDirectRevision !== undefined))
+    return fail(state, 'Use opposite orientation with the pinned pending solid image.', { code: 'MODEL_REVIEW_INPUT' });
   if (args.expectedRevision !== undefined || args.proposal !== undefined || args.expectedProposalRevision !== undefined || args.expectedReviewRevision !== undefined)
     return inspectNativeFaces(state, args, evaluate, dispatch);
   if (args.surface !== undefined || args.u !== undefined || args.v !== undefined)

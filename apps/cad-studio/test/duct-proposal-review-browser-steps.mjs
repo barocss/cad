@@ -15,7 +15,7 @@ async function render(request, args) {
   return { meta, png };
 }
 
-export async function reviewPendingDuct(f, call, request, expectedRevision, values, pathKind) {
+export async function reviewPendingDuct(f, call, request, expectedRevision, values, pathKind, orientationMode) {
   const { proposals: [first, second] } = await call('proposals', { action: 'list' });
   assert.deepEqual([first.id, second.id], ['P1', 'P2']);
   for (const item of [first, second]) assert.match(item.modelReviewRevision, /^[0-9a-f]{64}$/);
@@ -61,13 +61,48 @@ export async function reviewPendingDuct(f, call, request, expectedRevision, valu
   await writeFile(join(f.output, 'candidate-duct-four-views.png'), png);
   f.report.observations.push({ label: 'pending-duct-review', ...meta.candidate, imageSha256: meta.imageSha256,
     revision: meta.revision, rectangularDuct: meta.rectangularDuct, visibleCaps });
-  return { meta, png, faces, native, reviewPin };
+  const alternate = orientationMode && await reviewOppositeDuct(f, call, request, pins, { meta, faces, lookup, native }, orientationMode);
+  return { meta, png, faces, native, reviewPin, alternate };
+}
+
+async function reviewOppositeDuct(f, call, request, pins, standard, mode) {
+  const orientation = 'opposite', args = { ...pins, orientation };
+  if (mode === 'baseline') {
+    const reply = await request('tools/call', { name: 'query', arguments: { action: 'render', ...args } });
+    const result = JSON.parse(reply.content[0].text);
+    assert.ok(reply.isError || result.imageSha256 === standard.meta.imageSha256);
+    f.report.observations.push({ label: 'opposite-orientation-unavailable', toolError: reply.isError, result });
+    return;
+  }
+  const { meta, png } = await render(request, args);
+  assert.equal(meta.orientation, orientation);
+  assert.notEqual(meta.imageSha256, standard.meta.imageSha256);
+  assert.deepEqual(Object.keys(meta.views), ['back', 'top', 'left', 'iso']);
+  assert.ok(meta.views.left.visible_faces.includes('n1.start'));
+  assert.ok(meta.views.back.visible_faces.includes('n1.end'));
+  assert.deepEqual(meta.rectangularDuct, standard.meta.rectangularDuct);
+  assert.equal(meta.candidate.bodySha256, standard.meta.candidate.bodySha256);
+  assert.notEqual(meta.candidate.reviewRevision, standard.meta.candidate.reviewRevision);
+  const pin = { ...standard.lookup, orientation, expectedReviewRevision: meta.candidate.reviewRevision };
+  assert.equal((await call('query', { ...pin, orientation: 'standard' }, true)).code, 'MODEL_REVIEW_IMAGE_STALE');
+  assert.equal((await call('query', { ...pin, expectedReviewRevision: standard.meta.candidate.reviewRevision }, true)).code, 'MODEL_REVIEW_IMAGE_STALE');
+  const native = await call('query', pin);
+  assert.deepEqual(native.faces, standard.native.faces);
+  assert.deepEqual([native.candidate, native.imageSha256], [meta.candidate, meta.imageSha256]);
+  await writeFile(join(f.output, 'candidate-duct-opposite-views.png'), png);
+  f.report.observations.push({ label: 'opposite-duct-review', ...meta.candidate, orientation, imageSha256: meta.imageSha256,
+    left: meta.views.left.visible_faces, back: meta.views.back.visible_faces });
+  return { png, orientation };
 }
 
 export async function checkApprovedDuctReview(call, request, reviewed) {
   const expectedRevision = await currentPartRevision(call);
   assert.equal(expectedRevision, reviewed.meta.revision);
   assert.deepEqual((await render(request, { expectedRevision })).png, reviewed.png);
+  if (reviewed.alternate) {
+    const { orientation, png } = reviewed.alternate;
+    assert.deepEqual((await render(request, { expectedRevision, orientation })).png, png);
+  }
   const current = await call('query', { action: 'inspect', faces: reviewed.faces, expectedRevision });
   assert.deepEqual(current.faces, reviewed.native.faces);
   assert.equal((await call('query', { ...reviewed.reviewPin, expectedRevision }, true)).code, 'MODEL_REVIEW_UNAVAILABLE');
