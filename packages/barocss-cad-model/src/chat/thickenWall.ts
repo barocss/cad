@@ -4,7 +4,7 @@ import type { BodyResult } from '../engine/evaluate';
 import { bodyNodeOf, featureId } from '../engine/ids';
 import { bodyKeyOf, partSnapshot } from '../engine/part';
 import { isAxialThickenCut, isClosedSixFaceSolid } from '../engine/axialThickenCut';
-import { isExactThickenCapOffset } from '../engine/exactThickenCapOffset';
+import { isExactThickenCapEdit } from '../engine/exactThickenCapEdit';
 import { dot, sub } from '../engine/vec3';
 import type { Query } from '../engine/schema/spec';
 
@@ -15,7 +15,7 @@ export const isThickenWallQuery = (fn: unknown): fn is WallQuery['fn'] => fn ===
 export function thickenWallOf(doc: StudioDoc, bodies: readonly BodyResult[], { fn, a, b }: WallQuery) {
   const radial = fn === 'radial_wall';
   const unknown = { unknown: radial
-    ? 'Radial wall thickness needs the distinct native inner and outer faces of one current Exact cylinder Thicken solid, its full axial-end cut, or its original axial-cap Offset.'
+    ? 'Radial wall thickness needs the distinct native inner and outer faces of one current Exact cylinder Thicken solid, its full axial-end cut, its original axial-cap Offset, or its original upper-cap replacement.'
     : 'Planar wall thickness needs the distinct normal and reverse skin faces of one current Exact planar Thicken solid.' };
   if (!bodies.length || typeof a !== 'string' || typeof b !== 'string' || a === b) return unknown;
   const keys = new Set(bodies.map(body => body.key));
@@ -31,7 +31,7 @@ export function thickenWallOf(doc: StudioDoc, bodies: readonly BodyResult[], { f
   if (owner?.side !== 'solid' || !node || node.suppressed || id !== feature || featureId(doc.nodes, owner.node) !== feature ||
       !isClosedSixFaceSolid(brep)) return unknown;
   const direct = node.kind === 'thicken' && node.mode === (radial ? 'exact-cylinder' : 'exact-planar');
-  if (!direct && (!radial || (node.kind !== 'difference' && node.kind !== 'offset-face'))) return unknown;
+  if (!direct && (!radial || (node.kind !== 'difference' && node.kind !== 'offset-face' && node.kind !== 'replace-face'))) return unknown;
   const firstGeometry = faceGeometry(first[0].face), secondGeometry = faceGeometry(second[0].face);
   if (!radial) {
     const normalName = `${feature}.normal`, reverseName = `${feature}.reverse`;
@@ -46,9 +46,9 @@ export function thickenWallOf(doc: StudioDoc, bodies: readonly BodyResult[], { f
   }
   if (firstGeometry.kind !== 'cylinder' || secondGeometry.kind !== 'cylinder' || firstGeometry.out === secondGeometry.out) return unknown;
   if (!direct) {
-    const retained = node.kind === 'offset-face'
-      ? isExactThickenCapOffset(doc, snapshot, owner.node, brep, [a, b])
-      : isAxialThickenCut(doc, snapshot, owner.node, brep, [a, b], [firstGeometry, secondGeometry]);
+    const retained = node.kind === 'difference'
+      ? isAxialThickenCut(doc, snapshot, owner.node, brep, [a, b], [firstGeometry, secondGeometry])
+      : isExactThickenCapEdit(doc, snapshot, owner.node, brep, [a, b]);
     if (!retained) return unknown;
   }
   const outerFirst = firstGeometry.out === 1;

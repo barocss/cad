@@ -30,7 +30,7 @@ const seed = {
 const pins = [
   'apps/cad-studio/test/exact-cylinder-cap-plane-browser.mjs',
   'apps/cad-studio/test/mcp-browser-session.mjs',
-  ...['app/nativeOffsetFace', 'app/offsetFaceEdit', 'app/profileCommands', 'engine/doc', 'engine/offsetPlane', 'engine/exactThickenCapOffset']
+  ...['app/nativeOffsetFace', 'app/offsetFaceEdit', 'app/profileCommands', 'engine/doc', 'engine/offsetPlane', 'engine/exactThickenCapEdit']
     .map(name => 'packages/barocss-cad-model/src/' + name + '.ts'),
   'packages/barocss-cad/src/features/exact-cylinder-cap-offset.ts',
 ];

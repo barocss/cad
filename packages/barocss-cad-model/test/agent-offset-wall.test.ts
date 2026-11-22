@@ -5,7 +5,7 @@ import { acceptProposal, dispatchTool } from '../src/chat/tools';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
 import { partSnapshot } from '../src/engine/part';
-import { isExactThickenCapOffset } from '../src/engine/exactThickenCapOffset';
+import { isExactThickenCapEdit } from '../src/engine/exactThickenCapEdit';
 import type { Requirement } from '../src/engine/schema/spec';
 import { requirementEvidenceRevision } from '../src/util/digest';
 
@@ -89,7 +89,7 @@ test('the cap proof refuses another native result with the same skin names', asy
   assert.ok('state' in other);
   const doc = accepted.state.doc, snapshot = partSnapshot(doc);
   const names = ['n0.normal', 'n0.reverse'] as const;
-  assert.equal(isExactThickenCapOffset(doc, snapshot, 1, snapshot.outputs[0].brep, names), true);
-  assert.equal(isExactThickenCapOffset(doc, snapshot, 1, partBreps(other.state.doc)[0].brep, names), false);
-  assert.equal(isExactThickenCapOffset(doc, partSnapshot(other.state.doc), 1, snapshot.outputs[0].brep, names), false);
+  assert.equal(isExactThickenCapEdit(doc, snapshot, 1, snapshot.outputs[0].brep, names), true);
+  assert.equal(isExactThickenCapEdit(doc, snapshot, 1, partBreps(other.state.doc)[0].brep, names), false);
+  assert.equal(isExactThickenCapEdit(doc, partSnapshot(other.state.doc), 1, snapshot.outputs[0].brep, names), false);
 });

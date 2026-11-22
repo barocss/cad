@@ -5,6 +5,9 @@ import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
 const cap = 'n0.v-max', reference = 'n2.bottom';
+const skins = ['n0.normal', 'n0.reverse'];
+const wall = { id: 'RADIAL-2', source: 'Keep the radial wall at 2 ± 0.01 mm.', hard: true,
+  check: { query: { fn: 'radial_wall', a: skins[0], b: skins[1] }, op: '==', value: 2, tol: 0.01, unit: 'mm' } };
 const profile = [[30, 20], [30, 30], [20, 30], [10, 30], [10, 20]], n = Math.sqrt(17);
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 4,
@@ -21,19 +24,20 @@ const seed = {
     { id: 'n3', kind: 'translate', parent: { node: 2, side: 'solid' }, offset: [0, 0, 0] },
   ],
   outputs: { b0: { node: 0, side: 'solid' }, b3: { node: 3, side: 'solid' } },
+  requirements: [wall],
 };
 const pins = [
   'apps/cad-studio/test/exact-semicylinder-cap-replacement-browser.mjs',
   'apps/cad-studio/test/mcp-browser-session.mjs',
-  ...['app/replaceFaceCommand', 'chat/part/features', 'engine/doc', 'engine/offsetPlane']
+  ...['app/replaceFaceCommand', 'chat/part/features', 'chat/thickenWall', 'engine/doc', 'engine/exactThickenCapEdit', 'engine/offsetPlane']
     .map(name => 'packages/barocss-cad-model/src/' + name + '.ts'),
   ...['features/exact-cylinder-cap-offset', 'features/bored-cap-offset', 'part/part-model']
     .map(name => 'packages/barocss-cad/src/' + name + '.ts'),
 ];
 const f = await createFlow({
-  name: 'exact-semicylinder-cap-replacement', envFrozen: 'D1653_SOURCE_FROZEN', output: process.argv[2],
+  name: 'exact-semicylinder-cap-replacement', envFrozen: 'D1654_SOURCE_FROZEN', output: process.argv[2],
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Replace the original upper cap with an inclined exact plane, move the reference and reopen the same native solid.',
+  qualification: 'Replace the original upper cap with an inclined exact plane, move the reference and reopen the same native solid with current radial-wall evidence.',
   limits: ['One original upright two-quarter semicylinder and one tilted reference box. Desktop WebGPU and local stdio MCP.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -64,6 +68,25 @@ const incidence = ({ vertices, edges, coedges, loops, faces, shells, bodies }) =
   coedges.map(c => [c.id, c.edge, c.loop, c.twin, c.prev, c.next, c.pcurve?.id]), loops,
   faces.map(face => [face.id, face.name, face.shell, face.loops, face.surface.id]), shells, bodies,
 ];
+
+const wallPass = () => f.page.getByRole('listitem', { name: `Requirement ${wall.id}`, exact: true })
+  .and(f.page.locator('.req.pass')).waitFor();
+
+async function wallEvidence(call, staleRevision) {
+  if (staleRevision !== undefined) {
+    const stale = await call('requirements', { action: 'evidence', expectedRevision: staleRevision }, true);
+    assert.match(stale.error, /OUTPUT_STALE/);
+    assert.equal(stale.files, undefined);
+  }
+  const result = await call('requirements', { action: 'evidence' });
+  const row = JSON.parse(result.files[0].text).evidence.find(row => row.requirement?.id === wall.id);
+  assert.deepEqual([row.result.run, row.result.verdict, row.result.value.entities, row.freshness.state],
+    [result.revision, 'pass', skins, 'current']);
+  near(row.result.number, 2, 1e-10);
+  const proof = { revision: result.revision, measured: row.result.number, names: row.result.value.entities };
+  f.report.observations.push({ wallProof: proof });
+  return proof;
+}
 
 async function view(name) {
   await button('View cube directions').click();
@@ -153,7 +176,10 @@ await f.run(async () => {
     agentFile, 'replace-agent', async call => {
       const pin = await call('query', { action: 'summary' });
       await call('features', { action: 'command', command: 'replace-face', faces: [cap, reference], expectedRevision: pin.revision });
-      return JSON.parse(await readFile(agentFile, 'utf8'));
+      const bytes = await readFile(agentFile);
+      const proof = await wallEvidence(call);
+      assert.deepEqual(await readFile(agentFile), bytes);
+      return { doc: JSON.parse(bytes.toString('utf8')), proof };
     });
   const source = await f.inspect('source', seed);
   await f.newPage();
@@ -189,7 +215,8 @@ await f.run(async () => {
   await button('Apply', panel).click();
   await f.changed(seed);
   const accepted = await f.doc(), node = accepted.nodes[4];
-  assert.deepEqual(accepted, authoredByAgent);
+  assert.deepEqual(accepted, authoredByAgent.doc);
+  await wallPass();
   assert.deepEqual(accepted.nodes.slice(0, 4), seed.nodes);
   assert.deepEqual([node.kind, node.faces, node.target.feature, node.target.face], ['replace-face', [cap], 'n3', reference]);
   const original = source.find(row => row.key === 'b0');
@@ -216,6 +243,7 @@ await f.run(async () => {
   await f.applyEditor(accepted, '04-moved-reference');
   const moved = await f.doc(), expected = await measure('04-moved', moved, original, 11);
   assert.deepEqual(moved.nodes[4], node);
+  await wallPass();
   await f.undo();
   await f.same(accepted);
   await f.redo();
@@ -223,6 +251,13 @@ await f.run(async () => {
   const saved = await f.save('inclined-exact-semicylinder');
   await f.freshOpen(saved.file, moved, '05-reopened');
   assert.deepEqual(await measure('05-reopened', await f.doc(), original, 11), expected);
+  await wallPass();
+  const bytes = await readFile(saved.file);
+  const reopenedProof = await withMcpSession({ app: f.app, output: f.output, clientName: f.name },
+    saved.file, 'reopened-wall-evidence', call => wallEvidence(call, authoredByAgent.proof.revision));
+  assert.notEqual(reopenedProof.revision, authoredByAgent.proof.revision);
+  assert.deepEqual(await readFile(saved.file), bytes);
+  await f.snapshot('05-current-wall-evidence');
   await f.openFeatureEditor(4, 'reopened cap replacement');
   await button('Edit Replace face', f.editor()).click();
   const history = hud('Edit Replace face');

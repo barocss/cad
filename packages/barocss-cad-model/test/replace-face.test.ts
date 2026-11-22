@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
+import { runCheck } from '../src/chat/spec';
 import { dispatchTool, type ChatState } from '../src/chat/tools';
 import { directFaceDocumentProblem, emptyDoc, parentsOf, usesOf, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
+import { isExactThickenCapEdit } from '../src/engine/exactThickenCapEdit';
+import { partSnapshot } from '../src/engine/part';
 import { readStudioDoc } from '../src/engine/migrate';
 import { revisionOf } from '../src/util/revision';
 
@@ -124,7 +127,20 @@ test('Replace face links an inclined exact plane to the original semicylinder up
     }
     return brep;
   };
-  measure(result, 14);
+  const names = ['n0.normal', 'n0.reverse'] as const;
+  const radial = { query: { fn: 'radial_wall', a: names[0], b: names[1] }, op: '==', value: 2, tol: 0.01, unit: 'mm' } as const;
+  const checkWall = async (candidate: StudioDoc) => {
+    const { bodies } = await stateOf(candidate);
+    const wall = await runCheck(candidate, bodies, evaluate, radial);
+    assert.equal(wall.status, 'pass');
+    near(typeof wall.measured === 'number' ? wall.measured : undefined, 2);
+    assert.deepEqual(wall.entities, names);
+    const wrongLimit = await runCheck(candidate, bodies, evaluate, { ...radial, value: 3 });
+    assert.equal(wrongLimit.status, 'fail');
+    near(typeof wrongLimit.measured === 'number' ? wrongLimit.measured : undefined, 2);
+  };
+  const originalResult = measure(result, 14);
+  await checkWall(result);
   const move = (z: number): StudioDoc => ({ ...result, nodes: result.nodes.map((item, i) =>
     i === 3 && item.kind === 'translate' ? { ...item, offset: [0, 0, z] } : item) });
   const moved = move(-3), expected = measure(moved, 11);
@@ -133,6 +149,20 @@ test('Replace face links an inclined exact plane to the original semicylinder up
   assert.ok('doc' in opened);
   assert.deepEqual(opened.doc, moved);
   assert.deepEqual(measure(opened.doc, 11), expected);
+  const later = withNode(opened.doc, { kind: 'translate', parent: { node: 3, side: 'solid' }, offset: [0, 0, 9] });
+  for (const candidate of [moved, opened.doc, later]) await checkWall(candidate);
+
+  const current = partSnapshot(moved), prior = partSnapshot(result);
+  const oldEdit = prior.document.features.find(feature => feature.id === node.id);
+  assert.ok(oldEdit?.kind === 'replace-face');
+  assert.equal(isExactThickenCapEdit(moved, current, 4, expected, names), true);
+  assert.equal(isExactThickenCapEdit(moved, current, 4, originalResult, names), false);
+  const stalePlane = { ...current, document: { ...current.document,
+    features: current.document.features.map(feature => feature.id === node.id ? oldEdit : feature) } };
+  assert.equal(isExactThickenCapEdit(moved, stalePlane, 4, expected, names), false);
+  const noReference = { ...moved, nodes: moved.nodes.map((item, i) => i === 3 ? { ...item, suppressed: true as const } : item) };
+  assert.equal(isExactThickenCapEdit(noReference, current, 4, expected, names), false);
+
   for (const unsupported of [await apply('n0.v-min'), await apply('n0.v-max', 'n2.side0')]) {
     assert.ok(unsupported.isError && !unsupported.changed);
     assert.equal(unsupported.state.doc, doc);

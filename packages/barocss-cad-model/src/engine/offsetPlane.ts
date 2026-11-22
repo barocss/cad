@@ -90,9 +90,9 @@ export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneR
   return distance;
 }
 
-export function resolveReplacementPlane(doc: StudioDoc, node: ReplaceFaceNode, prefix: CadPartFeature[]) {
+export function resolveReplacementPlane(doc: StudioDoc, node: ReplaceFaceNode, prefix: CadPartFeature[], build?: BuildPart) {
   const missing = (reason: string) => refusal('BAD_REFERENCE', `Replace face: ${reason}`);
-  const { source, target } = boundSolids(doc, node.target, node.parent, prefix, missing);
+  const { source, target } = boundSolids(doc, node.target, node.parent, prefix, missing, build);
   const owner = doc.nodes[node.parent.node], face = node.faces[0];
   if (owner?.kind === 'thicken' && owner.mode === 'exact-cylinder') {
     const cap = exactSemicylinderCapSource(doc.nodes, node.parent.node, doc.parameters);
