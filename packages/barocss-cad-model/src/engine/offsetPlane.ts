@@ -4,7 +4,7 @@ import {
 } from '@barocss/cad';
 import { boxFaceReplacementFrame, draftedCapReplacementFrame, draftedFaceOffsetFrame, draftedWallReplacementFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { annularCapReplacementFrame, boredCapReplacementFrame, circularCapReplacementFrame } from '@barocss/cad/internal/bored-cap-offset';
-import { exactSemicylinderCapOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
+import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { prismCapReplacementFrame, prismWallOffsetFrame, prismWallReplacementFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { exactSemicylinderCapSource, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
 import { featureId } from './ids';
@@ -93,11 +93,17 @@ export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneR
 export function resolveReplacementPlane(doc: StudioDoc, node: ReplaceFaceNode, prefix: CadPartFeature[]) {
   const missing = (reason: string) => refusal('BAD_REFERENCE', `Replace face: ${reason}`);
   const { source, target } = boundSolids(doc, node.target, node.parent, prefix, missing);
-  const face = node.faces[0];
-  if (!boxFaceReplacementFrame(source, face) && !draftedCapReplacementFrame(source, face) &&
+  const owner = doc.nodes[node.parent.node], face = node.faces[0];
+  if (owner?.kind === 'thicken' && owner.mode === 'exact-cylinder') {
+    const cap = exactSemicylinderCapSource(doc.nodes, node.parent.node, doc.parameters);
+    if (!cap || !exactSemicylinderCapReplacementFrame(source, face, {
+      id: cap.id, surface: { ...owner.surface, kind: 'surface', id: 'surface' }, thickness: cap.thickness, side: owner.side,
+    })) throw missing('pick the original upper cap of an Exact semicylinder.');
+  } else if (!boxFaceReplacementFrame(source, face) && !draftedCapReplacementFrame(source, face) &&
       !draftedWallReplacementFrame(source, face) && !prismCapReplacementFrame(source, face) && !prismWallReplacementFrame(source, face) &&
-      !boredCapReplacementFrame(source, face) && !circularCapReplacementFrame(source, face) && !annularCapReplacementFrame(source, face))
+      !boredCapReplacementFrame(source, face) && !circularCapReplacementFrame(source, face) && !annularCapReplacementFrame(source, face)) {
     throw missing('the original face no longer supports replacement.');
+  }
   const plane = checkedPlane(target, node.target, missing);
   return { origin: plane.point, normal: plane.normal };
 }

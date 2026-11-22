@@ -806,6 +806,12 @@ function ellipsePcurve(pcurve: Curve, edge: Curve, heights: readonly number[]): 
 function encloseSideTrims(brep: Brep, lo: number, hi: number, kind: StockKind): Brep {
   const sideFaces = new Set(brep.faces.filter(face => isRectangular(kind) ? face.loops.length === 1
     : face.surface.kind === 'surface' && face.surface.degreeU === 2));
+  return encloseAxialSideTrims(brep, lo, hi, new Set([...sideFaces].map(face => face.id)));
+}
+
+/** @internal Keep identified vertical supports while their rational cap trims change height. */
+export function encloseAxialSideTrims(brep: Brep, lo: number, hi: number, sideIds: ReadonlySet<string>): Brep {
+  const sideFaces = new Set(brep.faces.filter(face => sideIds.has(face.id)));
   const sideLoops = new Set([...sideFaces].map(face => face.loops[0]));
   const edges = byId(brep.edges);
   const faces = brep.faces.map(face => {

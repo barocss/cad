@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { brepMassProperties, checkBrep, evaluateCadPart, evaluateCurve, faceGeometry } from '../dist/index.js';
-import { exactSemicylinderCapOffsetFrame, offsetExactSemicylinderCapIfAdmitted } from '../dist/features/exact-cylinder-cap-offset.js';
+import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementFrame, offsetExactSemicylinderCapIfAdmitted,
+  replaceExactSemicylinderCapIfAdmitted } from '../dist/features/exact-cylinder-cap-offset.js';
 
 const raw = () => ({
   degreeU: 2, degreeV: 1, knotsU: [0, 0, 0, 1, 1, 2, 2, 2], knotsV: [0, 0, 1, 1],
@@ -13,6 +14,9 @@ const doc = surface => ({ format: 'barocss-cad-part', version: 1, units: 'mm', p
 ] });
 const withOffset = (base, distance, face = 'h.v-max', target = 'h') => ({ ...base,
   features: [...base.features, { id: 'move', kind: 'offset-face', target, face, distance }],
+});
+const withReplacement = (base, plane, face = 'h.v-max', target = 'h') => ({ ...base,
+  features: [...base.features, { id: 'replace', kind: 'replace-face', target, face, plane }],
 });
 const body = (spec, id) => {
   const outputs = evaluateCadPart(spec).outputs;
@@ -154,4 +158,87 @@ test('resolved Thicken parameter and reversed V retain original source-relative 
     near(Math.max(...lower.vertices.map(vertex => vertex.point[2])), 12);
     near(brepMassProperties(lower, 1).volume, Math.PI * (12 ** 2 - 10 ** 2) / 2 * (12 + distance), 1e-7);
   }
+});
+
+for (const [k, height] of [[.5, 12], [-.25, 14]]) test(`original upper cap Replace face follows z=${k}(x-20)+${height} with native supports`, () => {
+  const base = doc(), source = freeze(body(base)), before = structuredClone(source);
+  const plane = { origin: [20, 20, height], normal: [-k, 0, 1] };
+  assert.deepEqual(exactSemicylinderCapReplacementFrame(source, 'h.v-max', sourceOf(base)), { anchor: [20, 29, 12], normal: [0, 0, 1] });
+  const result = body(withReplacement(base, plane), 'replace'), report = checkBrep(result, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+  assert.equal(report.topology[0].genus, 0);
+  assert.ok(report.maximumPcurveGap < 1e-8 && report.maximumEdgeSurfaceGap < 1e-8);
+  const identity = brep => ({ ...incidence(brep), coedges: brep.coedges.map(({ pcurve, ...use }) => [use, pcurve?.id]) });
+  assert.deepEqual(identity(result), identity(source));
+  assert.deepEqual(result.faces.find(face => face.name === 'h.v-min'), source.faces.find(face => face.name === 'h.v-min'));
+  for (const vertex of result.vertices) {
+    const original = source.vertices.find(value => value.id === vertex.id).point;
+    assert.deepEqual(vertex.point, [original[0], original[1], original[2] === 12 ? k * (original[0] - 20) + height : 0]);
+  }
+  for (const face of result.faces) {
+    const original = source.faces.find(value => value.id === face.id), geometry = faceGeometry(face), old = faceGeometry(original);
+    if (face.name === 'h.v-max') {
+      assert.equal(geometry.kind, 'plane');
+      geometry.n.forEach((value, axis) => near(value, plane.normal[axis] / Math.hypot(...plane.normal)));
+      continue;
+    }
+    assert.equal(geometry.kind, old.kind);
+    if (geometry.kind === 'cylinder') {
+      near(geometry.r, old.r); assert.deepEqual(geometry.a, old.a); assert.equal(geometry.out, old.out);
+      geometry.c.forEach((value, axis) => near(value, old.c[axis]));
+    } else if (geometry.kind === 'plane') {
+      geometry.n.forEach((value, axis) => near(value, old.n[axis]));
+      near(geometry.o.reduce((sum, value, axis) => sum + (value - old.o[axis]) * old.n[axis], 0), 0);
+    }
+  }
+  const cap = result.faces.find(face => face.name === 'h.v-max');
+  const loop = result.loops.find(loop => loop.id === cap.loops[0]);
+  for (const id of loop.coedges) {
+    const use = result.coedges.find(use => use.id === id), edge = result.edges.find(edge => edge.id === use.edge);
+    for (const t of [0, .13, .5, .81, 1]) {
+      const point = evaluateCurve(edge.curve, t);
+      near(point[2], k * (point[0] - 20) + height);
+    }
+  }
+  const mass = brepMassProperties(result, 1);
+  near(mass.volume, 18 * Math.PI * height, 1e-7);
+  near(mass.centroid[0], 20 + 41 * k / height);
+  near(mass.centroid[1], 20 + 488 / (27 * Math.PI));
+  near(mass.centroid[2], height / 2 + 41 * k ** 2 / (2 * height));
+  assert.deepEqual(source, before);
+});
+
+test('upper Replace face admits both tilt components and proves extrema on the actual outer half disk', () => {
+  const base = doc(), plane = { origin: [20, 20, 2], normal: [-.1, -1, 1] };
+  // Full-circle extrema would wrongly reject this half-disk: its actual minimum is 2 - .1*10 = 1.
+  const result = body(withReplacement(base, plane)), mass = brepMassProperties(result, 1);
+  near(mass.volume, 18 * Math.PI * 2 + 976 / 3, 1e-7);
+  assert.ok(checkBrep(result, { strict: true }).valid);
+  const reversed = raw(); reversed.controlPoints.forEach(row => row.reverse());
+  const reverseDoc = doc(reversed), source = body(reverseDoc), input = sourceOf(reverseDoc);
+  assert.equal(exactSemicylinderCapReplacementFrame(source, 'h.v-max', input), undefined);
+  assert.ok(exactSemicylinderCapReplacementFrame(source, 'h.v-min', input));
+  const reverseResult = body(withReplacement(reverseDoc, { origin: [20, 20, 12], normal: [-.25, 0, 1] }, 'h.v-min'));
+  near(brepMassProperties(reverseResult, 1).volume, 22 * Math.PI * 12, 1e-7);
+});
+
+test('upper Replace face refuses lower/side caps, stale sources, collapse, parallel and perpendicular planes', () => {
+  const base = doc(), source = body(base), input = sourceOf(base), plane = { origin: [20, 20, 12], normal: [-.5, 0, 1] };
+  for (const face of ['h.v-min', 'h.u-min', 'h.normal']) {
+    assert.equal(exactSemicylinderCapReplacementFrame(source, face, input), undefined);
+    assert.throws(() => body(withReplacement(base, plane, face)), /original upper cap/);
+  }
+  assert.equal(replaceExactSemicylinderCapIfAdmitted(source, 'h.v-max', { ...input, thickness: 3 }, plane), undefined);
+  for (const [targetPlane, pattern] of [
+    [{ origin: [20, 20, 5], normal: [-1, 0, 1] }, /opposite cap/],
+    [{ origin: [20, 20, 12], normal: [0, 0, 1] }, /tilt is too small/],
+    [{ origin: [20, 20, 15], normal: [0, 0, -1] }, /tilt is too small/],
+    [{ origin: [20, 20, 12], normal: [1, 0, 0] }, /perpendicular/],
+    [{ origin: [20, 20, 9999], normal: [-1, 0, 1] }, /coordinate range/],
+  ]) assert.throws(() => body(withReplacement(base, targetPlane)), pattern);
+  const placed = { ...base, features: [...base.features, { id: 'placed', kind: 'translate', target: 'h', offset: [0, 0, 0] }] };
+  assert.throws(() => body(withReplacement(placed, plane, 'h.v-max', 'placed')));
+  const afterOffset = withOffset(base, 2);
+  assert.throws(() => body(withReplacement(afterOffset, plane, 'h.v-max', 'move')));
 });

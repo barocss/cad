@@ -67,7 +67,7 @@ import type { EndpointBead } from './part-frame.js';
 import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
 import { offsetBoxCapIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
-import { offsetExactSemicylinderCapIfAdmitted } from '../features/exact-cylinder-cap-offset.js';
+import { offsetExactSemicylinderCapIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '../features/exact-cylinder-cap-offset.js';
 import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallIfAdmitted } from '../features/prism-wall-offset.js';
 import { annularCapReplacementFrame, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted, offsetBoreWallIfAdmitted, offsetCircularWallIfAdmitted,
   replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
@@ -679,11 +679,21 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       const target = solids(f.target, 'target'), face = f.face, plane = f.plane;
       if (target.length !== 1) return fail('REFERENCE', 'Replace face needs one closed solid.');
       if (typeof face !== 'string' || !face.trim() || /[+\0]/.test(face)) return fail('INPUT', 'Replace face needs one exact native face name.');
+      const author = ref(f.target, 'target').author;
+      const exactCylinder = author?.kind === 'thicken' && author.mode === 'exact-cylinder' ? {
+        id: author.id, surface: { ...structuredClone(author.surface), kind: 'surface', id: 'surface' } as Surface,
+        thickness: dim(author.thickness, 'Thicken thickness', true), side: author.side,
+      } : undefined;
       return () => {
         const brep = namedFaceTargetBrep(t, f.target, target[0]);
         if (brep.faces.filter(candidate => candidate.name === face).length !== 1)
           return fail('REFERENCE', 'Replace face: the selected native face is missing or ambiguous.');
         try {
+          if (exactCylinder) {
+            const replaced = replaceExactSemicylinderCapIfAdmitted(brep, face, exactCylinder, plane);
+            if (!replaced) return fail('CAPABILITY', 'Replace face needs the original upper cap of one clean two-quarter Exact cylinder Thicken.');
+            return one({ kind: 'brep', brep: replaced });
+          }
           const replaced = replaceBoredCapIfAdmitted(brep, face, plane) ?? replaceCircularCapIfAdmitted(brep, face, plane)
             ?? replaceAnnularCapIfAdmitted(brep, face, plane) ?? replacePrismCapIfAdmitted(brep, face, plane)
             ?? replacePrismWallIfAdmitted(brep, face, plane)

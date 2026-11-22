@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
+import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { dispatchTool, type ChatState } from '../src/chat/tools';
 import { directFaceDocumentProblem, emptyDoc, parentsOf, usesOf, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
@@ -79,4 +81,64 @@ test('Replace face refuses either-end collapse and a changed or missing saved re
   const bad = await dispatchTool(start, 'features', { ...command, faces: ['n1.side1', 'n1.side3'] }, evaluate);
   assert.ok(bad.isError && !bad.changed);
   assert.equal(bad.state.doc, start.doc);
+});
+
+test('Replace face links an inclined exact plane to the original semicylinder upper cap', async () => {
+  const profile = [[30, 20], [30, 30], [20, 30], [10, 30], [10, 20]];
+  const thicken = withNode(emptyDoc(), { kind: 'thicken', mode: 'exact-cylinder', name: 'Semicylinder', thickness: 2, side: 'reverse',
+    surface: {
+      degreeU: 2, degreeV: 1, knotsU: [0, 0, 0, 1, 1, 2, 2, 2], knotsV: [0, 0, 1, 1],
+      controlPoints: profile.map(([x, y]) => [[x, y, 0], [x, y, 12]]),
+      weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1].map(weight => [weight, weight]),
+    } });
+  const n = Math.sqrt(17);
+  const sketch = withNode(thicken, { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [8, 8],
+    plane: { origin: [44, 22, 20], normal: [-1 / n, 0, 4 / n], xAxis: [4 / n, 0, 1 / n] } });
+  const extrude = withNode(sketch, { kind: 'extrude', sketch: 1, height: 3 });
+  const doc = withNode(extrude, { kind: 'translate', parent: { node: 2, side: 'solid' }, offset: [0, 0, 0] });
+  const before = structuredClone(doc), state = await stateOf(doc);
+  const apply = (face: string, target = 'n2.bottom') => dispatchTool(state, 'features', {
+    action: 'command', command: 'replace-face', faces: [face, target], expectedRevision: revisionOf(doc),
+  }, evaluate);
+  const reply = await apply('n0.v-max');
+  assert.ok(!reply.isError && reply.changed, reply.content);
+  assert.deepEqual(doc, before);
+  const result = reply.state.doc, node = result.nodes[4];
+  assert.ok(node?.kind === 'replace-face' && node.sigs);
+  assert.deepEqual([node.parent, node.faces, node.target.feature, node.target.face],
+    [{ node: 0, side: 'solid' }, ['n0.v-max'], 'n3', 'n2.bottom']);
+  const originalDonor = partBreps(doc).find(body => body.key === 'b3');
+  assert.deepEqual(partBreps(result).find(body => body.key === 'b3'), originalDonor);
+  const measure = (candidate: StudioDoc, height: number) => {
+    const { brep } = partBreps(candidate).find(item => item.key === 'b4')!;
+    const report = checkBrep(brep, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    const { volume, centroid } = brepMassProperties(brep, 1);
+    near(volume, 18 * Math.PI * height);
+    near(centroid[0], 20 + 41 / (4 * height));
+    near(centroid[2], height / 2 + 41 / (32 * height));
+    for (const [name, radius] of [['n0.normal', 10], ['n0.reverse', 8]] as const) {
+      const support = faceGeometry(brep.faces.find(face => face.name === name)!);
+      assert.equal(support.kind, 'cylinder');
+      near(support.r, radius);
+    }
+    return brep;
+  };
+  measure(result, 14);
+  const move = (z: number): StudioDoc => ({ ...result, nodes: result.nodes.map((item, i) =>
+    i === 3 && item.kind === 'translate' ? { ...item, offset: [0, 0, z] } : item) });
+  const moved = move(-3), expected = measure(moved, 11);
+  assert.equal(moved.nodes[4], node);
+  const opened = await readStudioFile(encodeStudioFile(moved));
+  assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, moved);
+  assert.deepEqual(measure(opened.doc, 11), expected);
+  for (const unsupported of [await apply('n0.v-min'), await apply('n0.v-max', 'n2.side0')]) {
+    assert.ok(unsupported.isError && !unsupported.changed);
+    assert.equal(unsupported.state.doc, doc);
+  }
+  const collapsed = await evaluate(move(-11.5));
+  assert.ok(!collapsed.ok);
+  assert.match(collapsed.error.detail, /opposite cap/i);
+  assert.deepEqual(doc, before);
 });

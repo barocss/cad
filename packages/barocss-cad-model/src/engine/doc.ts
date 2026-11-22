@@ -430,7 +430,8 @@ export function exactSemicylinderCapSource(nodes: readonly unknown[], index: num
   if (!Array.isArray(first) || first.length !== 2 || !textVector(first[0], false) || !textVector(first[1], false) || first[1][2] === first[0][2]) return;
   const thickness = textDimension(node.thickness, parameters);
   if (thickness === null || thickness <= 0) return;
-  return { id: node.id, thickness, faces: [`${node.id}.v-min`, `${node.id}.v-max`] };
+  const faces = [`${node.id}.v-min`, `${node.id}.v-max`];
+  return { id: node.id, thickness, faces, upperFace: faces[first[0][2] < first[1][2] ? 1 : 0] };
 }
 
 function offsetSourceBase(nodes: readonly unknown[], index: number): number | undefined {
@@ -677,7 +678,15 @@ export function directFaceDocumentProblem(input: unknown): string | null {
         }
       }
       const parentIndex = (node.parent as BodyRef).node;
+      const [face] = node.faces as [string];
+      const signature = (node.sigs as Record<string, Sig>)[face];
       if (node.kind === 'replace-face') {
+        if (isExactCylinderThicken(value.nodes[parentIndex])) {
+          const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
+          if (exactSemicylinderCapSource(value.nodes, parentIndex, parameters)?.upperFace !== face || signature.k !== 'plane')
+            return 'Replace face: pick the original upper cap of an Exact semicylinder.';
+          continue;
+        }
         if (!isBoxReplacementSource(value.nodes, parentIndex) && !isDraftedFaceReplacementSource(value.nodes, parentIndex) &&
             !isStraightPolygonReplacementSource(value.nodes, value.nodes[parentIndex]) && !isBoredPlateReplacementSource(value.nodes, parentIndex) &&
             !isCylinderReplacementSource(value.nodes, parentIndex) && !isAnnularReplacementSource(value.nodes, parentIndex))
@@ -686,8 +695,6 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       }
       const parent = value.nodes[parentIndex];
       if (!textRecord(parent)) return 'Offset face: a supported solid parent is required.';
-      const [face] = node.faces as [string];
-      const signature = (node.sigs as Record<string, Sig>)[face];
       if (isExactCylinderThicken(parent)) {
         const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
         const source = exactSemicylinderCapSource(value.nodes, parentIndex, parameters);

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1653: [Replace the Exact semicylinder upper cap with an inclined plane](notes/exact-semicylinder-inclined-cap-replacement-2026-11-22/README.md), #17 and #629. Verify both exact rims, fixed supports, linked motion and native Open in Studio and local Agent parity.
 - D1652: [Link the Exact semicylinder lower cap to a reference plane](notes/exact-semicylinder-lower-cap-to-plane-2026-11-22/README.md), #17 and #629. Verify linked motion, refusal and current wall evidence through Studio Open.
 - D1651: [Extract native edge inspection from Studio App](notes/studio-native-edge-inspection-extraction-2026-11-22/README.md). Verify continuity location, late replies and the curvature comb in desktop Studio.
 - D1650: [Offset the original Exact semicylinder lower cap](notes/exact-semicylinder-lower-cap-offset-2026-11-22/README.md), #17 and #629. Move the lower cap by signed distance, retain the upper station and verify History, refusal and native Open.
