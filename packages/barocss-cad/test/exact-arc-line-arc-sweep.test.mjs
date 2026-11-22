@@ -333,7 +333,8 @@ for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
 test('same-turn arc-line-arc refuses other sections, kinks, noncoplanarity, axis contact and unsupported carriers', () => {
   const refused = (options, code, detail, section = disk) => assert.throws(() => evaluateCadPart(document(rail({ sameTurn: true, ...options }).curve, section)),
     error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
-  refused({}, 'CAPABILITY', /one circular outer section/, { id: 's', kind: 'sketch', profile: 'rectangle', min: [-1, -1], max: [1, 1] });
+  refused({}, 'CAPABILITY', /one circular outer section/, { id: 's', kind: 'sketch', profile: 'polygon',
+    points: [[-1, -1], [1, -1], [0, 1]] });
   refused({ lineTangent: [0, 1, 0] }, 'GEOMETRY', /common forward tangent at both joins/);
   refused({ secondTangent: [-1, 0, 0] }, 'GEOMETRY', /common forward tangent at both joins/);
   refused({ secondInward: [0, 0, 1] }, 'CAPABILITY', /two coplanar circular arcs separated/);
