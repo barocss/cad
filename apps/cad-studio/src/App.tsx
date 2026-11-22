@@ -252,8 +252,7 @@ import type { Analysis } from './viewport/analysis';
 import { asSection, type AxisSection, type Section } from './viewport/sectionView';
 import { type MapKind } from './viewport/scalarMaps';
 import { edgeChain } from '@barocss/cad-model/app/edgeChain';
-import type { SectionOutlineMode } from '@barocss/cad-model/app/sectionSketchProfile';
-import { sectionSketch } from './app/sectionSketch';
+import { sectionSketchAction } from './app/sectionSketch';
 import { bodyName, describeChange, lookOf, rootOf } from '@barocss/cad-model/app/bodies';
 import { readBrief } from '@barocss/cad-model/chat/brief';
 import { BriefPanel } from './ui/BriefPanel';
@@ -1919,23 +1918,13 @@ export function App() {
     changes: { canChangeDocument, commit, setSelection },
     onNotice: (message, options) => setToast(options?.acceptedDocument ? { ...message, documentSource: { doc: docNow.current } } : message) });
   const { deleteNode, separate, reorder, toggleSuppress, cascade, setCascade, deleteCascade, deleteSelection } = featureHistory;
-  const sectionSketchOpen = openIntent.current;
-  const sketchSection = (mode: SectionOutlineMode) => {
-    if (excludedSectionInstances.length) { setToast({ title: 'Restore section instances first', hint: 'Selective clipping is display-only; restore excluded instances before creating a section sketch.', detail: '' }); return; }
-    if (section?.mode !== 'plane' || section.planes.length !== 1) return;
-    if (!sectionExactShown || !sectionExact || sectionRef.current !== section || sectionLive.get()
-        || !fresh || busy || !ownsEvaluatedSource() || sectionSketchOpen !== openIntent.current || project.opening()) {
-      setToast({ title: 'The section is still being cut', hint: 'Wait a moment for the exact section, then try again.', detail: '' });
-      return;
-    }
-    if (!canChangeDocument()) return;
-    const result = sectionSketch(sectionExact, nextSerial(evaluated), mode);
-    if ('error' in result) { setToast({ ...result.error, documentSource: { doc, evaluated } }); return; }
-    const { draft } = result;
-    setToast(null); setSection(null); setSelection(emptySel);
-    setSketch(draft);
-    const [min, max] = sketchRegion(bodies, draft.plane); viewport.current?.frameSketch(min, max, draft.plane);
-  };
+  const sketchSection = sectionSketchAction({
+    section: { current: sectionRef, live: sectionLive, value: section, exact: sectionExact,
+      exactShown: sectionExactShown, hasExclusions: !!excludedSectionInstances.length },
+    model: { doc, evaluated, bodies, ready: fresh && !busy, ownsEvaluation: ownsEvaluatedSource, canChangeDocument },
+    opening: { intent: openIntent, pending: () => project.opening() },
+    view: { viewport, setNotice: setToast, setSection, clearSelection: () => setSelection(emptySel), setSketch },
+  });
   // A new or opened part replaces the document: an open sketch or tool would carry the old part's shapes
   // and face references into it, so they close first (U4).
   // (What was picked in the old part goes too: instances, direct-edit faces, measurements.)

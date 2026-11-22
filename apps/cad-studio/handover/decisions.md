@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1754: [Extract the Studio section-to-sketch action](notes/studio-section-sketch-action-2026-11-23/README.md), #44. Compare 37 desktop states and 27 native records through copy, refusal and fresh Open.
 - D1753: [Sweep an annular section around a closed circle](notes/exact-closed-annular-sweep-2026-11-23/README.md), #10. Verify the enclosed cavity, all 16 native seams, editable fresh Open and local Agent approval.
 - D1752: [Review an arc-and-line rectangular duct in travel order](notes/pending-arc-line-duct-review-2026-11-23/README.md), #324. Pin the inlet, outlet, eight joints and both Agent images through explicit Studio approval and fresh Open.
 - D1751: [Sweep rectangular sections from an arc into a straight span](notes/exact-rectangular-arc-line-sweep-2026-11-23/README.md), #10. Preserve authored side identity, native cap order and both duct openings through editable fresh Open.
