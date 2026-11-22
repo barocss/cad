@@ -316,7 +316,7 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'inspect',
-    description: 'Detail of faces and edges: a face\'s kind, area, normal or axis, radius, centre, the faces next to it and the feature that made it; an edge\'s ends, chord, line or curve, its two faces and the feature that made it. For a supported exact Direct join in the base part, pass curve, parameter and expectedDirectRevision together. The result gives the point in model units and the angle in degrees. For an untrimmed Direct surface in the base part, pass surface, u, v and expectedDirectRevision. The result gives the point in mm and the oriented unit normal.',
+    description: 'Face and edge details, or exact native planes and cylinders by face name. For a pending Exact Thicken, pass faces with proposal, expectedProposalRevision and expectedDirectRevision from query.render. For current native faces, pass faces and expectedRevision from query.rebuild or query.render. For a Direct join pass curve, parameter and expectedDirectRevision. For an untrimmed Direct surface point pass surface, u, v and expectedDirectRevision.',
     input_schema: { type: 'object', properties: {
       faces: selectorList('Faces'), edges: selectorList('Edges'),
       curve: { type: 'string', description: 'A visible Direct curve ID from query.summary.' },
@@ -325,6 +325,9 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
       u: { type: 'number', description: 'The native u parameter of the surface point.' },
       v: { type: 'number', description: 'The native v parameter of the surface point.' },
       expectedDirectRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The direct_revision from query.summary.' },
+      expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$', description: 'The current part revision for native face inspection.' },
+      proposal: { type: 'string', description: 'An open Exact Thicken proposal ID for native face inspection.' },
+      expectedProposalRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The directReviewRevision for the pending proposal.' },
     }, additionalProperties: false },
   },
   {

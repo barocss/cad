@@ -23,6 +23,8 @@ const num: JsonSchema = { type: 'number' }, str: JsonSchema = { type: 'string' }
  */
 const clearanceSchema = (coordinate: 'fraction' | 'time'): JsonSchema => ({ type: ['object', 'null'], properties: { value: num, [coordinate]: num, links: { type: 'array', items: str } }, required: ['value', coordinate, 'links'], additionalProperties: false });
 const versionPin = o({ id: str, snapshot: str, revision: str, evidenceRevision: str }, ['id', 'snapshot', 'revision', 'evidenceRevision']);
+const directCandidatePin = o({ proposal: str, proposalRevision: str, baseDirectRevision: str, directRevision: str },
+  ['proposal', 'proposalRevision', 'baseDirectRevision']);
 const footprint = o({ widthMm: num, depthMm: num }, ['widthMm', 'depthMm']);
 const stepIds: JsonSchema = { type: 'array', items: str };
 const savedStepState = o({ index: { type: 'integer', minimum: 0 }, step_id: str, installed: stepIds, active: stepIds, waiting: stepIds, unresolved: stepIds, unassigned: stepIds }, ['index', 'step_id', 'installed', 'active', 'waiting', 'unresolved', 'unassigned']);
@@ -103,9 +105,10 @@ const READ: Record<string, JsonSchema | null> = {
   list_proposals: o({ proposals: arr }, ['proposals']),
   render_views: o({ revision: str, imageSha256: str, legend: obj, views: obj, layout: str, notes: arr,
     directObjects: { type: 'array', items: o({ id: str, name: str, kind: { type: 'string', enum: ['curve', 'surface'] } }, ['id', 'name', 'kind']) },
-    candidate: o({ proposal: str, proposalRevision: str, baseDirectRevision: str }, ['proposal', 'proposalRevision', 'baseDirectRevision']) },
+    candidate: directCandidatePin },
   ['views', 'revision', 'imageSha256']),
-  inspect: o({ faces: arr, edges: arr, curveJoin: o({ curveId: str, parameter: num, point: nativePoint, angleDegrees: num, unit: { type: 'string', const: 'degrees' }, revision: str },
+  inspect: o({ faces: arr, edges: arr, revision: str, unit: { type: 'string', const: 'mm' }, candidate: directCandidatePin,
+    curveJoin: o({ curveId: str, parameter: num, point: nativePoint, angleDegrees: num, unit: { type: 'string', const: 'degrees' }, revision: str },
     ['curveId', 'parameter', 'point', 'angleDegrees', 'unit', 'revision']),
     surfacePoint: o({ surfaceId: str, u: num, v: num, point: nativePoint, normal: nativePoint, unit: { type: 'string', const: 'mm' }, revision: str },
       ['surfaceId', 'u', 'v', 'point', 'normal', 'unit', 'revision']) }),

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { part } from '../src/api';
+import { v2Result } from '../src/chat/groups';
 import { directInspectionRevision } from '../src/chat/sweepSource';
 import { acceptProposal, dispatchTool, previewProposal, type ChatState } from '../src/chat/tools';
 import { directOps, emptyDirect, importSource } from '../src/engine/direct';
@@ -53,6 +54,27 @@ test('a pinned Exact Thicken image shows the candidate solids without advancing 
   const names = Object.values(meta.legend) as string[];
   assert.ok(names.some(name => name.startsWith(featureId(doc.nodes, 1) + '.')));
   assert.ok(names.some(name => name.startsWith(featureId(preview.doc.nodes, preview.doc.nodes.length - 1) + '.')));
+  const face = names.find(name => name.endsWith('.normal'));
+  assert.ok(face, 'the exact top face appears in the image legend');
+  const inspect = { ...args, action: 'inspect', faces: [face] };
+  const measured = await call(pending, 'query', inspect);
+  assert.equal(measured.isError, false, measured.content);
+  assert.equal(measured.state, pending);
+  assert.equal(measured.changed, false);
+  const details = JSON.parse(measured.content);
+  assert.equal(details.revision, meta.revision);
+  assert.deepEqual(details.candidate, meta.candidate);
+  assert.equal(details.unit, 'mm');
+  const [measuredFace] = details.faces;
+  assert.equal(measuredFace.name, face);
+  assert.equal(measuredFace.geometry.kind, 'plane');
+  assert.deepEqual(measuredFace.geometry.outwardNormal, [0, 0, 1]);
+  assert.equal(measuredFace.geometry.point[2], 3);
+  const aliasLikeName = 'get_part_summary.top';
+  const imageNames = JSON.stringify({ ...meta, legend: { 1: aliasLikeName } });
+  const inspectedNames = JSON.stringify({ ...details, faces: [{ ...measuredFace, name: aliasLikeName }] });
+  assert.equal(v2Result(imageNames, 'render_views'), imageNames);
+  assert.equal(v2Result(inspectedNames, 'inspect'), inspectedNames);
 
   const changed = { ...pending, doc: { ...pending.doc, direct: directOps.move(direct, [surface], [0, 0, 1]) } };
   const rejected = { ...pending, doc: { ...pending.doc, proposals: [{ ...entry, status: 'rejected' as const }] } };
@@ -62,6 +84,9 @@ test('a pinned Exact Thicken image shows the candidate solids without advancing 
   assert.equal(approved.isError, false, approved.content);
   assert.equal(JSON.parse(approved.content).imageSha256, meta.imageSha256);
   assert.equal(approved.images?.[0].data, png.data);
+  const approvedMeasurement = await call(accepted.state, 'query', { action: 'inspect', faces: [face], expectedRevision: meta.revision });
+  assert.equal(approvedMeasurement.isError, false, approvedMeasurement.content);
+  assert.deepEqual(JSON.parse(approvedMeasurement.content).faces, details.faces);
   for (const [from, input, code] of [
     [pending, { ...args, expectedProposalRevision: 'a'.repeat(64) }, 'DIRECT_RENDER_PROPOSAL_STALE'],
     [changed, args, 'DIRECT_RENDER_STALE'],
@@ -75,4 +100,23 @@ test('a pinned Exact Thicken image shows the candidate solids without advancing 
     assert.equal(refused.images, undefined);
     assert.equal(refused.state, from);
   }
+  for (const [from, input, code] of [
+    [pending, { ...inspect, faces: ['missing'] }, 'NATIVE_FACE_NAME'],
+    [pending, { ...inspect, faces: [{ kind: 'plane' }] }, 'NATIVE_FACE_INPUT'],
+    [pending, { ...inspect, expectedProposalRevision: undefined }, 'DIRECT_INSPECT_PROPOSAL_INPUT'],
+    [pending, { ...inspect, expectedProposalRevision: 'a'.repeat(64) }, 'DIRECT_INSPECT_PROPOSAL_STALE'],
+    [changed, inspect, 'DIRECT_INSPECT_STALE'],
+    [changed, { ...inspect, expectedDirectRevision: directInspectionRevision(changed.doc) }, 'DIRECT_INSPECT_PROPOSAL_STALE'],
+    [rejected, inspect, 'DIRECT_INSPECT_PROPOSAL_UNAVAILABLE'],
+    [accepted.state, { ...inspect, expectedDirectRevision: candidateDirectRevision }, 'DIRECT_INSPECT_PROPOSAL_UNAVAILABLE'],
+    [accepted.state, { action: 'inspect', faces: [face], expectedRevision: revisionOf(pending.doc) }, 'NATIVE_FACE_STALE'],
+  ] as const) {
+    const refused = await call(from, 'query', input);
+    const reply = JSON.parse(refused.content);
+    assert.equal(reply.code, code);
+    assert.equal(reply.faces, undefined);
+    assert.equal(refused.state, from);
+    assert.equal(refused.changed, false);
+  }
+  assert.equal(JSON.stringify(pending.doc), bytes);
 });

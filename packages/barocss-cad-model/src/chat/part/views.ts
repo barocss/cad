@@ -3,6 +3,8 @@
 import { resolveNames, resolveSelectors, type NameSelection } from '../names';
 import { edgeDetail, faceDetail } from '../observe';
 import { renderDirectViews, renderViews } from '../views';
+import { partBreps, type BodyResult } from '../../engine/evaluate';
+import type { StudioDoc } from '../../engine/doc';
 import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, type PartRun, json, fail, strings, list } from '../toolKit';
 import { isObj } from '../../util/guards';
 import { revisionOf } from '../../util/revision';
@@ -12,9 +14,34 @@ import { directInspectionRevision } from '../sweepSource';
 import { directReviewKind, directReviewRevision } from '../directProposalReview';
 import { proposalIsStale } from '../proposals';
 import { previewProposalWith } from './proposals';
-import { evaluateCurve, surfaceDomain } from '@barocss/cad';
+import { evaluateCurve, faceGeometry, surfaceDomain } from '@barocss/cad';
 
 const isDirectPin = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+type DirectCandidatePin = { proposal: string; proposalRevision: string; baseDirectRevision: string };
+
+/** Replays a supported review candidate without advancing the working document. */
+async function pinnedDirectCandidate(state: ChatState, args: Record<string, unknown>, baseDirectRevision: string,
+  evaluate: Evaluate, dispatch: PartRun, action: 'RENDER' | 'INSPECT'): Promise<
+  { refusal: ToolOutcome } | { kind: 'sheet' | 'solid'; preview: { doc: StudioDoc; bodies: BodyResult[] }; candidate: DirectCandidatePin }
+> {
+  const { proposal, expectedProposalRevision } = args;
+  const refused = (suffix: string, reason: string) => ({ refusal: fail(state, reason, { code: `DIRECT_${action}_${suffix}` }) });
+  if (typeof proposal !== 'string' || !proposal || !isDirectPin(expectedProposalRevision))
+    return refused('PROPOSAL_INPUT', 'Pass the proposal ID and its directReviewRevision from proposals.list as expectedProposalRevision.');
+  const matches = (state.doc.proposals ?? []).filter(p => p.id === proposal);
+  const pending = matches.length === 1 ? matches[0] : undefined;
+  const kind = pending && directReviewKind(pending), pin = pending && directReviewRevision(pending);
+  if (!pending || !kind || !pin || (action === 'INSPECT' && kind !== 'solid'))
+    return refused('PROPOSAL_UNAVAILABLE', action === 'INSPECT' ? 'Choose a unique open Exact Thicken proposal from proposals.list.'
+      : 'Choose a unique open Direct Ruled or Exact Thicken proposal from proposals.list.');
+  if (kind === 'sheet' && state.bodies.length)
+    return refused('SCOPE', 'Use sheet and curve review on a base document with only Direct geometry to display.');
+  if (pin !== expectedProposalRevision || proposalIsStale(pending, requirementEvidenceRevision(state.doc)))
+    return refused('PROPOSAL_STALE', 'The proposal or its source changed. Read proposals.list and review the current document.');
+  const preview = await previewProposalWith(dispatch, state, proposal, evaluate);
+  if ('error' in preview) return refused('PROPOSAL_FAILED', preview.error);
+  return { kind, preview, candidate: { proposal, proposalRevision: pin, baseDirectRevision } };
+}
 
 async function renderDirectReview(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, dispatch: PartRun): Promise<ToolOutcome> {
   const { expectedDirectRevision, proposal, expectedProposalRevision } = args;
@@ -22,34 +49,25 @@ async function renderDirectReview(state: ChatState, args: Record<string, unknown
     return fail(state, 'For Direct review, pass direct_revision from query.summary as expectedDirectRevision without expectedRevision, highlight or section.', { code: 'DIRECT_RENDER_INPUT' });
   if (state.partOf || state.doc.instances?.length)
     return fail(state, 'Use Direct review in the base part of a document without placed parts.', { code: 'DIRECT_RENDER_SCOPE' });
-  const directOnlyScope = () => fail(state, 'Use sheet and curve review on a base document with only Direct geometry to display.', { code: 'DIRECT_RENDER_SCOPE' });
-  if (state.bodies.length && proposal === undefined && expectedProposalRevision === undefined) return directOnlyScope();
+  if (state.bodies.length && proposal === undefined && expectedProposalRevision === undefined)
+    return fail(state, 'Use sheet and curve review on a base document with only Direct geometry to display.', { code: 'DIRECT_RENDER_SCOPE' });
 
   let doc = state.doc;
   const baseDirectRevision = directInspectionRevision(doc);
   if (expectedDirectRevision !== baseDirectRevision)
     return fail(state, 'The Direct inputs changed. Read query.summary again.', { code: 'DIRECT_RENDER_STALE', expectedDirectRevision, revision: baseDirectRevision });
-  let candidate: { proposal: string; proposalRevision: string; baseDirectRevision: string } | undefined;
+  let candidate: DirectCandidatePin | undefined;
   if (proposal !== undefined || expectedProposalRevision !== undefined) {
-    if (typeof proposal !== 'string' || !proposal || !isDirectPin(expectedProposalRevision))
-      return fail(state, 'Pass the proposal ID and its directReviewRevision from proposals.list as expectedProposalRevision.', { code: 'DIRECT_RENDER_PROPOSAL_INPUT' });
-    const matches = (doc.proposals ?? []).filter(p => p.id === proposal);
-    const pending = matches.length === 1 ? matches[0] : undefined;
-    const kind = pending && directReviewKind(pending), pin = pending && directReviewRevision(pending);
-    if (!pending || !kind || !pin)
-      return fail(state, 'Choose a unique open Direct Ruled or Exact Thicken proposal from proposals.list.', { code: 'DIRECT_RENDER_PROPOSAL_UNAVAILABLE' });
-    if (kind === 'sheet' && state.bodies.length) return directOnlyScope();
-    if (pin !== expectedProposalRevision || proposalIsStale(pending, requirementEvidenceRevision(doc)))
-      return fail(state, 'The proposal or its source changed. Read proposals.list and review the current document.', { code: 'DIRECT_RENDER_PROPOSAL_STALE' });
-    const preview = await previewProposalWith(dispatch, state, proposal, evaluate);
-    if ('error' in preview) return fail(state, preview.error, { code: 'DIRECT_RENDER_PROPOSAL_FAILED' });
-    candidate = { proposal, proposalRevision: pin, baseDirectRevision };
-    if (kind === 'solid') {
+    const replay = await pinnedDirectCandidate(state, args, baseDirectRevision, evaluate, dispatch, 'RENDER');
+    if ('refusal' in replay) return replay.refusal;
+    const { preview } = replay;
+    candidate = replay.candidate;
+    if (replay.kind === 'solid') {
       const result = await renderViews(preview.doc, preview.bodies, evaluate);
       if (typeof result === 'string') return fail(state, result, { code: 'DIRECT_RENDER_PROPOSAL_FAILED' });
       const { image, ...rest } = result;
       return { state, content: json({ revision: revisionOf(preview.doc), ...rest, candidate: { ...candidate, directRevision: directInspectionRevision(preview.doc) } }),
-        isError: false, changed: false, summary: `Solid proposal ${proposal}`, images: [{ data: image, mediaType: 'image/png' }] };
+        isError: false, changed: false, summary: `Solid proposal ${candidate.proposal}`, images: [{ data: image, mediaType: 'image/png' }] };
     }
     if (preview.doc.direct === doc.direct)
       return fail(state, 'The replay did not produce a Direct candidate.', { code: 'DIRECT_RENDER_PROPOSAL_FAILED' });
@@ -141,7 +159,57 @@ async function inspectSurfacePoint(state: ChatState, args: Record<string, unknow
   }
 }
 
-async function inspectTool(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
+function nativeFaceReview(state: ChatState, doc: StudioDoc, bodies: readonly BodyResult[], names: readonly string[],
+  candidate?: DirectCandidatePin & { directRevision: string }): ToolOutcome {
+  const keys = new Set(bodies.map(body => body.key));
+  const native = partBreps(doc).filter(({ key }) => keys.has(key)).flatMap(({ key, brep }) => brep.faces.map(face => ({ key, face })));
+  const faces = [];
+  for (const name of names) {
+    const matches = native.filter(({ face }) => (face.name ?? face.id) === name);
+    if (matches.length !== 1)
+      return fail(state, `Use a unique native face name from the image. ${JSON.stringify(name)} has ${matches.length} matches.`, { code: 'NATIVE_FACE_NAME' });
+    const [{ face, key }] = matches;
+    const geometry = face.surface.kind === 'surface' ? faceGeometry(face) : null;
+    if (!geometry || geometry.kind === 'other')
+      return fail(state, `${JSON.stringify(name)} has no supported analytic plane or cylinder.`, { code: 'NATIVE_FACE_GEOMETRY' });
+    faces.push({ name, body: key, geometry: geometry.kind === 'plane'
+      ? { kind: 'plane', point: geometry.o, outwardNormal: geometry.n }
+      : { kind: 'cylinder', radius: geometry.r, axis: { point: geometry.c, direction: geometry.a },
+        outwardNormal: geometry.out === 1 ? 'away-from-axis' : 'toward-axis' } });
+  }
+  return { state, content: json({ revision: revisionOf(doc), unit: 'mm', faces, ...(candidate ? { candidate } : {}) }),
+    isError: false, changed: false, summary: `${faces.length} native faces inspected` };
+}
+
+async function inspectNativeFaces(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, dispatch: PartRun): Promise<ToolOutcome> {
+  const { faces, expectedRevision, expectedDirectRevision, proposal, expectedProposalRevision } = args;
+  if (!Array.isArray(faces) || !faces.length || !faces.every(name => typeof name === 'string' && name.length > 0)
+    || [args.edges, args.curve, args.parameter, args.surface, args.u, args.v].some(value => value !== undefined))
+    return fail(state, 'For pinned native inspection, supply exact face names in faces.', { code: 'NATIVE_FACE_INPUT' });
+  if (proposal === undefined && expectedProposalRevision === undefined) {
+    if (expectedDirectRevision !== undefined || typeof expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(expectedRevision))
+      return fail(state, 'For the current part, supply its model revision as expectedRevision.', { code: 'NATIVE_FACE_INPUT' });
+    const revision = revisionOf(state.doc);
+    if (expectedRevision !== revision)
+      return fail(state, 'The part revision changed. Read query.rebuild again before inspecting faces.', { code: 'NATIVE_FACE_STALE', revision });
+    return nativeFaceReview(state, state.doc, state.bodies, faces);
+  }
+  if (expectedRevision !== undefined || !isDirectPin(expectedDirectRevision))
+    return fail(state, 'For a pending proposal, supply the Direct and proposal revision pins.', { code: 'DIRECT_INSPECT_INPUT' });
+  if (state.partOf || state.doc.instances?.length)
+    return fail(state, 'Use pending native face review in the base part of a document without placed parts.', { code: 'DIRECT_INSPECT_SCOPE' });
+  const baseDirectRevision = directInspectionRevision(state.doc);
+  if (expectedDirectRevision !== baseDirectRevision)
+    return fail(state, 'The Direct inputs changed. Read query.summary again.', { code: 'DIRECT_INSPECT_STALE', revision: baseDirectRevision });
+  const replay = await pinnedDirectCandidate(state, args, baseDirectRevision, evaluate, dispatch, 'INSPECT');
+  if ('refusal' in replay) return replay.refusal;
+  const { preview, candidate } = replay;
+  return nativeFaceReview(state, preview.doc, preview.bodies, faces, { ...candidate, directRevision: directInspectionRevision(preview.doc) });
+}
+
+const inspectTool: PartHandler = async (state, args, evaluate, _options, dispatch) => {
+  if (args.expectedRevision !== undefined || args.proposal !== undefined || args.expectedProposalRevision !== undefined)
+    return inspectNativeFaces(state, args, evaluate, dispatch);
   if (args.surface !== undefined || args.u !== undefined || args.v !== undefined)
     return inspectSurfacePoint(state, args);
   if (args.curve !== undefined || args.parameter !== undefined || args.expectedDirectRevision !== undefined)
@@ -152,7 +220,7 @@ async function inspectTool(state: ChatState, args: Record<string, unknown>): Pro
   const edges = r.names.edges.map(n => edgeDetail(state.doc, state.bodies, n) ?? { name: n, error: 'no such edge' });
   const out = { ...(faces.length ? { faces } : {}), ...(edges.length ? { edges } : {}), ...(r.resolved.length ? { resolved: r.resolved } : {}) };
   return { state, content: json(out), isError: false, changed: false, summary: `${faces.length + edges.length} inspected` };
-}
+};
 async function selectTool(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
   const r = resolveSelectors(state.doc.nodes, state.bodies, { faces: list(args.faces), edges: list(args.edges), bodies: list(args.bodies) });
   if (r.error) return fail(state, r.error);

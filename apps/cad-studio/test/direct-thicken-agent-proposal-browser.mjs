@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const reviewImage = process.argv.includes('--candidate-image');
+const inspectFaces = process.argv.includes('--candidate-faces');
+const reviewImage = inspectFaces || process.argv.includes('--candidate-image');
 const rails = reviewImage || process.argv.includes('--rails');
 const weight = Math.SQRT1_2;
 const arc = [[30, 20], [30, 30], [20, 30], [10, 30], [10, 20]];
@@ -35,9 +36,10 @@ if (reviewImage) pins.push('packages/barocss-cad-model/src/chat/directProposalRe
   'packages/barocss-cad-model/src/chat/part/views.ts', 'packages/barocss-cad-model/src/chat/views.ts');
 const f = await createFlow({
   name: 'direct-thicken-agent-proposal', output: process.argv[2],
-  envFrozen: reviewImage ? 'D1637_SOURCE_FROZEN' : rails ? 'D1636_SOURCE_FROZEN' : 'D1628_SOURCE_FROZEN',
+  envFrozen: inspectFaces ? 'D1638_SOURCE_FROZEN' : reviewImage ? 'D1637_SOURCE_FROZEN' : rails ? 'D1636_SOURCE_FROZEN' : 'D1628_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: reviewImage ? 'Compare the unapproved Exact Thicken image from local MCP with the Studio candidate and the approved model after fresh Open.'
+  qualification: inspectFaces ? 'Measure the named native cylinder faces in a pending image and match them after a Studio approval and fresh Open.'
+    : reviewImage ? 'Compare the unapproved Exact Thicken image from local MCP with the Studio candidate and the approved model after fresh Open.'
     : rails ? 'Approve a pinned Ruled sheet and its exact semicylinder Thicken from two rails in one desktop Studio decision.'
     : 'Approve a pinned planar Direct Thicken proposal in desktop Studio and check its native solid after Save and fresh Open.',
   limits: [rails ? 'A two-quarter R10 semicylinder, vertical span 12 mm, 2 mm inward offset, local MCP L4 and desktop WebGPU.'
@@ -164,6 +166,27 @@ await f.run(async () => {
       assert.ok(Object.values(candidate.legend).some(name => name.endsWith('.normal')));
       assert.ok(Object.values(candidate.legend).some(name => name.endsWith('.reverse')));
       review = { args, candidate };
+      if (inspectFaces) {
+        const names = Object.values(candidate.legend);
+        const faces = ['.normal', '.reverse'].map(suffix => names.find(name => name.endsWith(suffix)));
+        const inspect = { action: 'inspect', ...args, faces };
+        const measured = await call('query', inspect);
+        assert.deepEqual([measured.revision, measured.unit, measured.candidate], [candidate.revision, 'mm', candidate.candidate]);
+        assert.deepEqual(measured.faces.map(face => face.name), faces);
+        assert.deepEqual(measured.faces.map(face => face.geometry.kind), ['cylinder', 'cylinder']);
+        assert.deepEqual(measured.faces.map(face => face.geometry.outwardNormal), ['away-from-axis', 'toward-axis']);
+        near(measured.faces[0].geometry.radius, 10);
+        near(measured.faces[1].geometry.radius, 8);
+        for (const { geometry: { axis } } of measured.faces) {
+          near(axis.point[0], 20); near(axis.point[1], 20);
+          near(Math.abs(axis.direction[2]), 1);
+        }
+        const refused = await call('query', { ...inspect, faces: ['no-such-face'] }, true);
+        assert.equal(refused.code, 'NATIVE_FACE_NAME');
+        assert.equal(refused.faces, undefined);
+        review.inspect = inspect;
+        review.faces = measured.faces;
+      }
     }
     assert.deepEqual(await readFile(file), pending);
     return { pin: before.direct_revision, review };
@@ -206,6 +229,14 @@ await f.run(async () => {
       const { direct_revision } = await call('query', { action: 'summary' });
       await refuseReview(request, review.args, 'DIRECT_RENDER_STALE');
       await refuseReview(request, { ...review.args, expectedDirectRevision: direct_revision }, 'DIRECT_RENDER_PROPOSAL_STALE');
+      if (review.inspect) {
+        for (const [args, code] of [[review.inspect, 'DIRECT_INSPECT_STALE'],
+          [{ ...review.inspect, expectedDirectRevision: direct_revision }, 'DIRECT_INSPECT_PROPOSAL_STALE']]) {
+          const refused = await call('query', args, true);
+          assert.equal(refused.code, code);
+          assert.equal(refused.faces, undefined);
+        }
+      }
     });
     assert.deepEqual(await readFile(edited.file), editedBytes);
   }
@@ -243,10 +274,18 @@ await f.run(async () => {
       assert.equal(approved.imageSha256, review.candidate.imageSha256);
       assert.deepEqual(approved.legend, review.candidate.legend);
       await refuseReview(request, { ...review.args, expectedDirectRevision: direct_revision }, 'DIRECT_RENDER_PROPOSAL_UNAVAILABLE');
+      if (review.inspect) {
+        const measured = await call('query', { action: 'inspect', expectedRevision: approved.revision, faces: review.inspect.faces });
+        assert.deepEqual(measured.faces, review.faces);
+        const refused = await call('query', { ...review.inspect, expectedDirectRevision: direct_revision }, true);
+        assert.equal(refused.code, 'DIRECT_INSPECT_PROPOSAL_UNAVAILABLE');
+        assert.equal(refused.faces, undefined);
+      }
     });
     assert.deepEqual(await readFile(saved.file), approvedBytes);
     f.report.observations.push({ candidateImage: review.candidate.imageSha256, approvedImageMatches: true,
-      candidateRevision: review.candidate.revision, candidateDirectRevision: review.candidate.candidate.directRevision });
+      candidateRevision: review.candidate.revision, candidateDirectRevision: review.candidate.candidate.directRevision,
+      ...(review.faces ? { measuredFaces: review.faces, approvedFacesMatch: true } : {}) });
   }
   await button('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();

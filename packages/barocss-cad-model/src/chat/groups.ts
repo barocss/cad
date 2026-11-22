@@ -207,8 +207,9 @@ export function v2Result(text: string, handler?: string): string {
   try { parsed = JSON.parse(text); } catch { return v2Text(text); }
   // These records carry literal IDs, names and refusal codes.
   if (handler === 'get_drawing_dimensions' || handler === 'calculate_drawing_tolerance_stack'
-    || (handler === 'inspect' && isRecord(parsed) && ('curveJoin' in parsed || 'surfacePoint' in parsed))
-    || (handler === 'render_views' && isRecord(parsed) && Array.isArray(parsed.directObjects))
+    || (handler === 'inspect' && isRecord(parsed) && ('curveJoin' in parsed || 'surfacePoint' in parsed
+      || (parsed.unit === 'mm' && typeof parsed.revision === 'string' && Array.isArray(parsed.faces))))
+    || (handler === 'render_views' && isRecord(parsed) && typeof parsed.imageSha256 === 'string')
     || handler === 'list_native_joints' || handler === 'measure_edge_continuity' || handler === 'measure_edge_curvature') return text;
   if (handler === 'get_part_summary' && isRecord(parsed)) {
     const { direct_curves, direct_surfaces, ...summary } = parsed;
