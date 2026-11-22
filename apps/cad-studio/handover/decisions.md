@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1700: [Edit the setback of a saved sketch Chamfer](notes/edit-saved-sketch-chamfer-2026-11-23/README.md), #21. Select one saved bevel, change C6 to C8, and preserve the neighboring bevel, constraints and native IDs.
+
 - D1699: [Keep orthogonal Chamfer setbacks during a sketch drag](notes/orthogonal-chamfer-drag-2026-11-23/README.md), #21. Distances on both mixed-turn bevels survive point drag, downstream rebuild and fresh Open.
 
 - D1698: [Drag a constrained sketch point](notes/constrained-sketch-point-drag-2026-11-22/README.md), #21. Keep authored constraints and a valid preview, commit one sketch edit and verify the R6 native extrusion after Save and fresh Open.

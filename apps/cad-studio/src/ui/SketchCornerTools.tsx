@@ -4,7 +4,7 @@ import type { Polygon } from '@barocss/cad-model/sketch/rules';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { prepareSketchCorners, type SketchCornerOperation } from '../sketch/cornerDraft';
+import { prepareSavedSketchChamfer, prepareSketchCorners, type SavedSketchChamfer, type SketchCornerAction } from '../sketch/cornerDraft';
 import type { ConstraintInspectionStore } from '../sketch/constraintInspection';
 import { useStoreValue } from '../state/valueStore';
 import { Icon } from './atoms';
@@ -14,37 +14,43 @@ const tools = [
   { operation: 'fillet', label: 'Fillet', icon: 'cad-fillet', field: 'Radius' },
   { operation: 'chamfer', label: 'Chamfer', icon: 'cad-chamfer', field: 'Distance' },
 ] as const;
+const editChamfer = { operation: 'resize-chamfer', label: 'Edit Chamfer', icon: 'cad-chamfer', field: 'Distance' } as const;
 
 const ownKeyboard = (event: KeyboardEvent<HTMLButtonElement>) => {
   if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
 };
 
-export function SketchCornerTools({ owner, source, doc, corners, inspection, onApply }: {
-  owner: SketchState; source: Polygon; doc: StudioDoc; corners: readonly number[];
+export function SketchCornerTools({ owner, source, doc, corners, resize, inspection, onApply }: {
+  owner: SketchState; source: Polygon; doc: StudioDoc; corners: readonly number[]; resize?: SavedSketchChamfer;
   inspection: ConstraintInspectionStore; onApply(shape: Polygon): void;
 }) {
   const current = useStoreValue(inspection);
   const draft = current?.target === 'corner' && current.owner === owner && current.doc === doc ? current : null;
-  const tool = tools.find(item => item.operation === draft?.operation);
+  const choices = resize ? [editChamfer] : tools;
+  const tool = choices.find(item => item.operation === draft?.operation);
   const result = draft?.result;
-  const preview = (operation: SketchCornerOperation, value: string) => {
+  const preview = (operation: SketchCornerAction, value: string) => {
+    const next = operation === 'resize-chamfer'
+      ? resize && prepareSavedSketchChamfer(owner, source, doc, resize.edge, value)
+      : prepareSketchCorners(owner, source, doc, operation, corners, value);
+    if (!next) return;
     inspection.set({
-      target: 'corner', owner, input: 'focus', doc, operation, corners, value,
-      result: prepareSketchCorners(owner, source, doc, operation, corners, value),
+      target: 'corner', owner, input: 'focus', doc, operation, value,
+      corners: resize ? [resize.edge, (resize.edge + 1) % source.points.length] : corners, result: next,
     });
   };
+  const accepted = result && 'shape' in result && result.shape !== source ? result.shape : null;
   const apply = () => {
-    const live = inspection.get();
-    if (!draft || live !== draft || 'error' in draft.result) return;
+    if (!accepted || inspection.get() !== draft) return;
     inspection.set(null);
-    onApply(draft.result.shape);
+    onApply(accepted);
   };
   return <>
     <div className="mb-1 flex gap-1" role="group" aria-label="Corner tools">
-      {tools.map(item => <Button key={item.operation} type="button" data-sketch-action
+      {choices.map(item => <Button key={item.operation} type="button" data-sketch-action
         variant={item.operation === draft?.operation ? 'default' : 'outline'}
         aria-pressed={item.operation === draft?.operation} onKeyDown={ownKeyboard}
-        onClick={() => { if (item.operation !== draft?.operation) preview(item.operation, '2'); }}>
+        onClick={() => { if (item.operation !== draft?.operation) preview(item.operation, String(resize?.distance ?? 2)); }}>
         <Icon name={item.icon} small />{item.label}
       </Button>)}
     </div>
@@ -65,7 +71,7 @@ export function SketchCornerTools({ owner, source, doc, corners, inspection, onA
         <Button type="button" variant="ghost" data-sketch-action onKeyDown={ownKeyboard}
           onClick={() => { if (inspection.get() === draft) inspection.set(null); }}>Cancel</Button>
         <Button type="button" variant="default" data-sketch-action onKeyDown={ownKeyboard}
-          disabled={!result || 'error' in result} onClick={apply}>Apply</Button>
+          disabled={!accepted} onClick={apply}>Apply</Button>
       </div>
     </div>}
   </>;

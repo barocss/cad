@@ -102,6 +102,9 @@ constraint, Chamfer uses the bevel length and its 135° joint angle to hold both
 a later sketch point drag. You can inspect these constraints in Studio. This applies to convex
 and reflex corners, including eligible pairs in a grouped edit.
 
+To edit the setback of a saved constrained Chamfer in Studio, reopen the sketch, select the
+bevel edge, and choose **Edit Chamfer**. Enter the new setback in **Distance** and apply the preview.
+
 ### Round a sketch corner
 
 For the same read and approval workflow, send `sketchRound` instead of `sketchChamfer`:
