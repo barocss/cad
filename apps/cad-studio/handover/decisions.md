@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1713: [Sweep a rectangular duct along same-turn tangent arcs](notes/exact-same-turn-rectangular-duct-2026-11-23/README.md), #10. Verify both mouths, eight native joins, aperture editing, positive wall clearance and explicit Studio approval.
+
 - D1712: [Extract viewport Hole regions from Studio App](notes/studio-viewport-hole-regions-2026-11-23/README.md), #44. Match 18 desktop states across placement, refusal recovery and saved Hole edits.
 
 - D1711: [Propose a saved sketch Fillet radius edit by side ID](notes/agent-saved-sketch-fillet-edit-2026-11-23/README.md), #21. Discover the current radius, enforce revision and explicit approval, and match the direct Studio edit.

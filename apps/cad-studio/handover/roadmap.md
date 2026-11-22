@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1712 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1713 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1712](notes/studio-viewport-hole-regions-2026-11-23/README.md), P4 Studio structure row 22. Hole region preparation is separate from Studio App. The three desktop workflows match across 18 states and viewport crops. [D1711](notes/agent-saved-sketch-fillet-edit-2026-11-23/README.md) qualifies a revision-bound local Agent edit to one saved Fillet. The B06 PDF group remains held.
-- **Next MAIN:** D1713, P5 Exact Sweep [rows 07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Carry one centered, bend-aligned rectangular opening through two unequal-radius tangent arcs turning in the same direction. Verify eight native joins, both open ends, positive wall clearance and editable fresh Studio Open.
+- **Current position:** [D1713](notes/exact-same-turn-rectangular-duct-2026-11-23/README.md), P5 Exact Sweep rows 07 and 30. Same-turn arcs carry a centered rectangular duct. Both mouths, eight native joins, fresh Open, aperture editing and explicit Agent approval verified. [D1712](notes/studio-viewport-hole-regions-2026-11-23/README.md) extracts the Studio Hole overlay. The B06 PDF group remains held.
+- **Next MAIN:** D1714, P5 downstream Boolean [rows 07](roadmap-rows/07.md), [08](roadmap-rows/08.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Try a box Subtract that trims only the D1713 duct inlet. Verify the open rim, unchanged outlet, independent removed volume and editable fresh Studio Open. Reuse native intersection paths and investigate the first unsupported boundary before changing geometry code.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

@@ -236,7 +236,7 @@ test('a rectangular S-bend refuses roll, either bend axis contact or crossing, a
   ]) refuses(rail, { ...section, holes: [hole] }, 'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/);
 });
 
-test('a same-turn rectangle refuses roll, either axis contact or crossing, and every inner loop without changing accepted state', () => {
+test('a same-turn rectangle refuses roll, either axis contact or crossing, and unsupported inner loops without changing accepted state', () => {
   const rail = pair({ turn: 1 }), initial = evaluateCadPart(document(rail.path)), before = structuredClone(initial);
   const refuses = (changedRail, sketch, code, message) => {
     assert.throws(() => reevaluate(initial, { document: document(changedRail.path, sketch) }),
@@ -249,8 +249,8 @@ test('a same-turn rectangle refuses roll, either axis contact or crossing, and e
     refuses(pair({ ...radii, turn: 1 }), section, 'PARAMETER', /radial half-width smaller than both path radii/);
   const rectangle = [[49, -32], [51, -32], [51, -28], [49, -28]].map(start => ({ kind: 'line', start }));
   const circle = [{ kind: 'arc', start: [51, -30], center: [50, -30], direction: 'ccw' }];
-  for (const holes of [[rectangle], [circle], [rectangle, circle]]) refuses(rail, { ...section, holes },
-    'CAPABILITY', /Exact same-turn rectangular sweep needs a solid section without holes\./);
+  for (const holes of [[circle], [rectangle, circle]]) refuses(rail, { ...section, holes },
+    'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/);
   const reopened = loadCadPart(saveCadPart(initial));
   assert.deepEqual(reopened.document, initial.document);
   assert.deepEqual(reopened.outputs[0].brep, initial.outputs[0].brep);
