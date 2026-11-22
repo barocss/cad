@@ -381,7 +381,7 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
     const frame = exactSemicylinderCapOffsetFrame(brep, display.name, { id: source.id,
       surface: { kind: 'surface', id: 'surface', ...node.surface }, thickness: source.thickness, side: node.side });
     if (!frame) return unsupported('the original upper cap of the Exact semicylinder could not be certified.');
-    return { parent: ref, face: display.name, ...frame, allowsPlane: false };
+    return { parent: ref, face: display.name, ...frame, allowsPlane: true };
   }
   if (isExactCylinderOffsetChain(ctx.doc.nodes, ref.node))
     return unsupported('use the original Exact semicylinder Thicken parent. Chained cap offsets are unsupported.');

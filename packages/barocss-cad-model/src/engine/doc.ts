@@ -691,8 +691,8 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       if (isExactCylinderThicken(parent)) {
         const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
         const source = exactSemicylinderCapSource(value.nodes, parentIndex, parameters);
-        if (!source || face !== source.face || node.target !== undefined || signature.k !== 'plane')
-          return 'Offset face: the original upper cap of an Exact semicylinder needs a signed distance.';
+        if (!source || face !== source.face || signature.k !== 'plane')
+          return 'Offset face: pick the original upper cap of an Exact semicylinder.';
         continue;
       }
       if (isExactCylinderOffsetChain(value.nodes, parentIndex))

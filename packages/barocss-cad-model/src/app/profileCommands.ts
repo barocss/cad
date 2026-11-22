@@ -342,11 +342,13 @@ export function checkDirectOffsetDistance(distance: number): void {
 
 function offsetPlaneAvailable(ctx: Ctx): boolean {
   const pick = ctx.selection.faces[0], body = pick && ctx.bodies[pick.body], ref = body?.ref;
-  const node = ref && ctx.doc.nodes[ref.node];
-  if (!node || !body.mesh.faces[pick.face]?.exact || ref.side !== 'solid') return false;
+  const node = ref && ctx.doc.nodes[ref.node], face = body?.mesh.faces[pick.face];
+  if (!node || !face?.exact || ref.side !== 'solid') return false;
+  if (node.kind === 'thicken' && node.mode === 'exact-cylinder')
+    return face.exact.kind === 'plane' && exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters)?.face === face.name;
   return node.kind === 'draft' || (node.kind === 'offset-face' && !isBoredPlateOffsetSource(ctx.doc.nodes, ref.node) &&
     !isBoxCapOffsetSource(ctx.doc.nodes, ref.node)) || (node.kind === 'extrude' &&
-    (!!node.draft || (body.mesh.faces[pick.face].nativeAxisPlane?.axis !== 'z' && isStraightHexagonalExtrusion(ctx.doc.nodes, node))));
+    (!!node.draft || (face.nativeAxisPlane?.axis !== 'z' && isStraightHexagonalExtrusion(ctx.doc.nodes, node))));
 }
 
 /** Display the selected original face and its outward world normal, not the signed movement. */

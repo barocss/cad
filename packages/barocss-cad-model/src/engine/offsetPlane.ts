@@ -1,11 +1,12 @@
 import {
   CadNumericPolicy, CadPartLimits, checkOutput, evaluateCadPart, faceGeometry,
-  type Brep, type CadPartFeature, type CadPartOutput,
+  type Brep, type CadPartDocument, type CadPartFeature, type CadPartOutput, type CadPartSnapshot,
 } from '@barocss/cad';
 import { boxFaceReplacementFrame, draftedCapReplacementFrame, draftedFaceOffsetFrame, draftedWallReplacementFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { annularCapReplacementFrame, boredCapReplacementFrame, circularCapReplacementFrame } from '@barocss/cad/internal/bored-cap-offset';
+import { exactSemicylinderCapOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { prismCapReplacementFrame, prismWallOffsetFrame, prismWallReplacementFrame } from '@barocss/cad/internal/prism-wall-offset';
-import type { OffsetFaceNode, OffsetPlaneRef, ReplaceFaceNode, StudioDoc } from './doc';
+import { exactSemicylinderCapSource, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
 import { featureId } from './ids';
 import { refusal } from './refusal';
 import { cross, dot, len, sub, type Vec3 } from './vec3';
@@ -45,9 +46,12 @@ function liveSolid(outputs: readonly CadPartOutput[], id: string, missing: (reas
   return output.brep;
 }
 
-function boundSolids(doc: StudioDoc, binding: OffsetPlaneRef, parent: OffsetFaceNode['parent'], prefix: CadPartFeature[], missing: (reason: string) => Error) {
+type BuildPart = (doc: CadPartDocument) => CadPartSnapshot;
+
+function boundSolids(doc: StudioDoc, binding: OffsetPlaneRef, parent: OffsetFaceNode['parent'], prefix: CadPartFeature[],
+  missing: (reason: string) => Error, build: BuildPart = evaluateCadPart) {
   if (doc.nodes[binding.body.node]?.suppressed) throw missing('the reference body is suppressed.');
-  const { outputs } = evaluateCadPart({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: doc.parameters, features: prefix });
+  const { outputs } = build({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: doc.parameters, features: prefix });
   const source = liveSolid(outputs, featureId(doc.nodes, parent.node), missing);
   const target = liveSolid(outputs, binding.feature, missing);
   return { source, target };
@@ -63,10 +67,20 @@ function checkedPlane(target: Brep, binding: OffsetPlaneRef, missing: (reason: s
 }
 
 /** Lower the saved binding from the same native prefix that owns both selected faces. */
-export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneRef, node: Pick<OffsetFaceNode, 'parent' | 'faces'>, prefix: CadPartFeature[]): number {
+export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneRef, node: Pick<OffsetFaceNode, 'parent' | 'faces'>,
+  prefix: CadPartFeature[], build?: BuildPart): number {
   const missing = (reason: string) => refusal('BAD_REFERENCE', `Offset face: ${reason}`);
-  const { source, target } = boundSolids(doc, binding, node.parent, prefix, missing);
-  const frame = draftedFaceOffsetFrame(source, node.faces[0]) ?? prismWallOffsetFrame(source, node.faces[0]);
+  const { source, target } = boundSolids(doc, binding, node.parent, prefix, missing, build);
+  const owner = doc.nodes[node.parent.node], face = node.faces[0];
+  let frame: { anchor: Vec3; normal: Vec3 } | undefined;
+  if (owner?.kind === 'thicken' && owner.mode === 'exact-cylinder') {
+    const cap = exactSemicylinderCapSource(doc.nodes, node.parent.node, doc.parameters);
+    if (cap?.face === face) frame = exactSemicylinderCapOffsetFrame(source, face, {
+      id: cap.id, surface: { ...owner.surface, kind: 'surface', id: 'surface' }, thickness: cap.thickness, side: owner.side,
+    });
+  } else {
+    frame = draftedFaceOffsetFrame(source, face) ?? prismWallOffsetFrame(source, face);
+  }
   if (!frame) throw missing('the original face no longer supports this direct edit.');
   const plane = checkedPlane(target, binding, missing);
   if (len(cross(frame.normal, plane.normal)) > roundoff) throw invalid('the reference plane must be parallel to the selected face.');

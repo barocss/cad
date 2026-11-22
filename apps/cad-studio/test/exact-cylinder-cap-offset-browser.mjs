@@ -127,7 +127,7 @@ await f.run(async () => {
   await f.command('Offset face');
   const panel = hud('Offset face');
   await status(panel, 'preview');
-  assert.equal(await panel.getByLabel('Mode', { exact: true }).count(), 0);
+  assert.equal(await panel.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
   assert.match(await panel.innerText(), /n0\.v-max.*Outward \+Z/s);
 
   f.phase = 'Drag the normal handle and apply a 2 mm offset';
@@ -169,7 +169,7 @@ await f.run(async () => {
   const edit = hud('Edit Offset face');
   await status(edit, 'preview');
   assert.equal(await offset(edit).inputValue(), '2');
-  assert.equal(await edit.getByLabel('Mode', { exact: true }).count(), 0);
+  assert.equal(await edit.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
   f.phase = 'Reject collapse and apply the inward History edit';
   await offset(edit).fill('-12');
   await status(edit, 'refused');
