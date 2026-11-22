@@ -27,6 +27,7 @@ import { HistoryFeatureEditor } from './ui/HistoryFeatureEditor';
 import { createCommandHudActions } from './app/commandHudActions';
 import { InstanceInspector } from './ui/InstanceInspector';
 import { useHistoryEditorSession } from './state/useHistoryEditorSession';
+import { useStudioKeyboard } from './app/useStudioKeyboard';
 import { useFilletEndpointDisplay } from './state/useFilletEndpointDisplay';
 import { createCommandReferencePicking, type CommandPickScope } from './app/commandReferencePicking';
 import { retireStudioNotice, type StudioNotice } from './app/studioNotice';
@@ -126,7 +127,7 @@ import { StepExportPanel } from './files/StepExportPanel';
 import { changesBeyondVariability } from './app/documentChanges';
 import { sameMeshes, withMasses, samePlacement, meshVolume } from './app/bodyResults';
 import { activeBandHighlight } from './app/bandHighlight';
-import { activateDraftBezier, activateDraftOutline, draftShapeOrder, sketchCutInputs, TOOLS, sketchRegion, switchTool } from './app/sketchControls';
+import { activateDraftBezier, activateDraftOutline, draftShapeOrder, sketchCutInputs, TOOLS, sketchRegion } from './app/sketchControls';
 import { detachRoundedInsetRecipe, resizeRoundedInsetSource, roundedInsetSourceWidth, validateRoundedInsetDocument } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
 import { roundedInsetMinimumSpan } from '@barocss/cad-model/sketch/internal/roundedRectangleInset';
 import { activeKey, historyHandleIsCurrent, type Active } from './app/commandState';
@@ -150,7 +151,7 @@ import { supportsPlacedBoxSnapRotation } from './viewport/placedBoxSnap';
 import { contentKey, evaluationKey } from '@barocss/cad-model/engine/evalMemo';
 import { bearingEditCurrent, bearingFaceInput, captureBearingEditSession, prepareBearingEdit, type BearingEditSession } from './app/bearingEdit';
 import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skeleton';
-import { offsetFaceGroup, carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, withNode, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
+import { offsetFaceGroup, carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { bodyKeyFor, featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
 import { captureSignatures, markedReferences, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
@@ -241,7 +242,6 @@ import { expandPatterns } from '@barocss/cad-model/assembly/patterns';
 const withPatterns = (d: StudioDoc): StudioDoc => d.instancePatterns?.length ? expandPatterns(d) : d;
 import { TooltipLayer } from './ui/Tooltip';
 import { resolveNames, type NameSelection } from '@barocss/cad-model/chat/names';
-import { duplicateBody } from '@barocss/cad-model/chat/features';
 import { defaultDrawing, type DrawingSettings } from '@barocss/cad-model/drawing/types';
 import { MatePanel } from './ui/MatePanel';
 import { sweepLinks } from '@barocss/cad-model/robot/sweep';
@@ -2055,20 +2055,6 @@ export function App() {
     setSketch(draft);
     const [min, max] = sketchRegion(bodies, draft.plane); viewport.current?.frameSketch(min, max, draft.plane);
   };
-  /**
-   * Arrow keys move the picked body: a move of its own, added once and then grown while the body's newest
-   * feature is that move (one history step for a run of nudges).
-   */
-  const nudge = (index: number, key: string, step: number) => {
-    const b = bodies[index], ref = refOf(b), top = evaluated.nodes[ref.node];
-    const d: [number, number, number] = [key === 'ArrowRight' ? step : key === 'ArrowLeft' ? -step : 0, key === 'ArrowUp' ? step : key === 'ArrowDown' ? -step : 0, key === 'PageUp' ? step : key === 'PageDown' ? -step : 0];
-    const grow = top?.kind === 'translate' && ref.node === evaluated.nodes.length - 1 && marker === null;
-    const next: StudioDoc = grow
-      ? { ...doc, nodes: doc.nodes.map((n, i) => i === ref.node && n.kind === 'translate' ? { ...n, offset: n.offset.map((v, k) => Math.round((Number(v) + d[k]) * 1000) / 1000) as [number, number, number] } : n) }
-      : withNode(evaluated, { kind: 'translate', parent: ref, offset: d });
-    chatSelection.current = { faces: [], edges: [], bodies: [grow ? b.key : bodyKeyFor(next.nodes, next.nodes.length - 1)] };
-    commit(next);
-  };
   // A new or opened part replaces the document: an open sketch or tool would carry the old part's shapes
   // and face references into it, so they close first (U4).
   // (What was picked in the old part goes too: instances, direct-edit faces, measurements.)
@@ -2317,9 +2303,6 @@ export function App() {
       setToast(null); setRecovery(null); setCascade(null); setMeshAsk(null); setRepairAsk(null); clearStepAsk();
     };
   }, [layout.setChatOpen, layout.setChatWidth, layout.setDockSheet]);
-  // Keyboard: Space palette, Enter apply, Esc cancel, letters run commands, F frames. The listener is
-  // added once and calls the newest handler (set each render), so a key pressed right after a click sees
-  // that click's selection, not the one before it (effects run only after the frame is painted).
   const skeletonHistoryAvailable = sketch3dInputActive && skel.session ? skel.historyAvailable : null;
   const cageHistoryAvailable = cageInputActive && cageEd.session
     ? { undo: cageEd.loopDraft?.kind !== 'slide' && cageEd.session.undo.length > 0, redo: cageEd.loopDraft?.kind !== 'slide' && cageEd.session.redo.length > 0 } : null;
@@ -2352,122 +2335,51 @@ export function App() {
       viewport.current?.frameSketch(min, max, plane);
     });
   };
-  const onKeyRef = useRef<(e: KeyboardEvent) => void>(() => {});
-  const dismissInspectionRef = useRef<() => boolean>(() => false);
-  dismissInspectionRef.current = () => !help && !palette && !stepAsk && !workspaceModeExit.pending
-    && (cancelNativeReview(true) || clearConstraintInspection(constraintInspection, sketch));
-  useEffect(() => {
-    const listen = (e: KeyboardEvent) => onKeyRef.current(e);
-    let dismissed = false;
-    let sketchAction = false;
-    const sketchActionKeys = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.isComposing) return;
-      if (e.key === 'Escape') {
-        if (!e.repeat) dismissed = dismissInspectionRef.current();
-        if (!dismissed) return;
-      } else if (e.key === 'Enter') {
-        if (!e.repeat) {
-          sketchAction = e.target instanceof Element && e.target.hasAttribute('data-sketch-action');
-          return;
-        }
-        // An action can disable or unmount its button. Its repeats must not finish the sketch.
-        if (!sketchAction) return;
-      } else return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    };
-    window.addEventListener('keydown', sketchActionKeys, true);
-    window.addEventListener('keydown', listen);
-    return () => {
-      window.removeEventListener('keydown', sketchActionKeys, true);
-      window.removeEventListener('keydown', listen);
-    };
-  }, []);
-  {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.isComposing || help || workspaceModeExit.pending || cascade) return;
-      const target = e.target;
-      const typing = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
-        || (target instanceof HTMLElement && target.isContentEditable);
-      const undoKey = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z';
-      // Leave text history and focused control activation to the browser.
-      if (undoKey && typing) return;
-      if (!typing && e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && (e.code === 'KeyM' || e.key.toLowerCase() === 'm')
-        && !rendering && !drawing && !sketch && !active && (measure || pinnedFaces.pair)) {
-        e.preventDefault(); layout.setDockSheet(true); setMeasurementFocus(true); return;
-      }
-      const control = target instanceof Element && target.closest('button, summary, select, [role="button"], [role="menuitem"]');
-      if ((e.key === 'Enter' || e.key === ' ') && control) return;
-      if (e.key === 'Tab' && (control || typing || (target instanceof HTMLElement && target.tabIndex >= 0))) return;
-      if (e.key === 'Escape' && heldDraftFace.view) { e.preventDefault(); heldDraftFace.cancel(); return; }
-      if (e.key === 'Escape' && finishEdgeEditor.current) { e.preventDefault(); finishEdgeEditor.cancel(); return; }
-      if (e.key === 'Escape' && stepAsk) { e.preventDefault(); clearStepAsk(); return; }
-      if (cageInputActive && cageEd.onKey(e)) return;
-      if (sketch3dInputActive && skel.onKey(e, (readFeature, close) => workspaceModeExit.switchWhenReady(close, { readFeature }))) return;
-      if (undoKey) { e.preventDefault(); replayHistory(e.shiftKey); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd' && !active && !sketch) { e.preventDefault(); start(commands.find(c => c.id === 'duplicate')!); return; }
-      // Copy a body, paste copies of it beside (each paste a little further on).
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c' && !active && !sketch && !typing) {
-        const one = selectedBodies(selection);
-        const body = one.length === 1 ? bodies[one[0]] : undefined;
-        if (body) {
-          const sourceNodes = bodiesFor?.nodes ?? evaluated.nodes;
-          clipboard.current = { key: body.key, featureId: featureId(sourceNodes, refOf(body).node), pastes: 0 };
-          setToast({ bodyCopy: true, title: 'Copied', hint: `${bodyName(doc, body)} — ⌘V pastes a copy beside it.`, detail: '' });
-        }
-        return;
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v' && !active && !sketch && !typing && clipboard.current) {
-        const copied = clipboard.current;
-        const src = bodies.find(b => b.key === copied.key); if (!src) return;
-        e.preventDefault();
-        if (!canChangeDocument()) return;
-        const k = copied.pastes + 1, w = src.mesh.bounds.max[0] - src.mesh.bounds.min[0] + 10;
-        const r = duplicateBody(evaluated, refOf(src), [Math.round(w * k), 0, 0]);
-        if (!commit(r.doc)) return;
-        copied.pastes = k;
-        chatSelection.current = { faces: [], edges: [], bodies: [bodyKeyFor(r.doc.nodes, r.top)] };
-        return;
-      }
-      if (drawing) return; // (the Drawing workspace has its own keys)
-      if (e.key === 'Escape' && (circleChord.escape(e.repeat) || overlaidLines.close() || twoPointSnap.cancel() || arcExtensionSnap.cancel() || pathGap.cancel())) { e.preventDefault(); return; }
-      if (e.key === 'Enter' && (circleChord.input.read(sketch) || twoPointSnap.input.read() || arcExtensionSnap.input.read(sketch) || pathGap.input.read(sketch))) { e.preventDefault(); return; }
-      if (e.key === 'Escape' && parameterEditNow.current?.kind === 'direct') { e.preventDefault(); discardDirectCandidateRef.current(); return; }
-      if (e.key === 'Escape' && routePanelOpen && !active && !sketch && !assembly.draft && !measure && !cageEd.session && !skel.session) { e.preventDefault(); discardRouteRef.current(); return; }
-      if (e.key === 'Escape') { projectionRequest.current++; if (palette) setPalette(false); else if (sketch && !active && (sketch.picked?.length || sketch.editDim)) setSketch(s => s && { ...s, picked: [], editDim: null }); else if (active || sketch) cancel(); else if (assembly.draft) assembly.cancel(); else if (measure) setMeasure(null); else if (cancelSectionFacePick(e.repeat)) e.preventDefault(); else { setSelection(emptySel); setInstanceSel([]); setDirectSel([]); } return; }
-      if (e.key === 'Enter' && e.target instanceof HTMLButtonElement && e.target.closest('[data-workspace-mode]')) return;
-      // Enter applies; Shift-Enter applies and starts the same command again (another hole, another shape).
-      if (e.key === 'Enter' && !palette && !(e.target instanceof HTMLInputElement && e.target.type === 'file')) { if (sketch) { e.preventDefault(); finishSketch(); } else if (active) { e.preventDefault(); if (e.shiftKey) commandApply.requestRepeat(active.cmd); apply(); } return; }
-      // A sketch tool key still works from a number box (letters are no numbers): it leaves the box.
-      const numberBox = e.target instanceof HTMLInputElement && e.target.type === 'number' && !e.target.classList.contains('dim-edit');
-      if (palette || (typing && !(sketch && numberBox && !e.metaKey && !e.ctrlKey && !e.altKey && /^[a-z]$/i.test(e.key)))) return;
-      if (e.key === ' ') { e.preventDefault(); setPalette(true); return; }
-      // Nudge the picked body: arrows 1 mm along X and Y (Shift: 10 mm), Page Up / Down along Z.
-      if (/^(Arrow(Left|Right|Up|Down)|PageUp|PageDown)$/.test(e.key) && !active && !sketch && !measure) { const one = selectedBodies(selection); if (one.length === 1 && bodies[one[0]]) { e.preventDefault(); nudge(one[0], e.key, e.shiftKey ? 10 : 1); return; } }
-      if (e.key === '?') { e.preventDefault(); setHelp(true); return; }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && !sketch && !active && !measure) {
-        e.preventDefault();
-        if (directSel.length && doc.direct) commitDirect({ ...doc.direct, objects: doc.direct.objects.filter(object => !directSel.includes(object.id)) }, []);
-        else deleteSelection();
-        return;
-      }
-      if (sketch) {
-        if (e.key.toLowerCase() === 'x' && !e.metaKey && !e.ctrlKey) { if (typing) { e.preventDefault(); (e.target as HTMLElement).blur(); } setSketch(s => s && { ...s, construct: !s.construct }); return; }
-        const t = (TOOLS.find(x => x.key.toLowerCase() === e.key.toLowerCase()) ?? TOOLS.find(x => x.tool === 'polygon' && e.key.toLowerCase() === 'p'))?.tool;
-        if (t) { if (typing) { e.preventDefault(); (e.target as HTMLElement).blur(); } setSketch(s => s && switchTool(s, t)); }
-        return;
-      }
-      // F frames what is picked (its bodies), or everything when nothing is.
-      if (e.key.toLowerCase() === 'f' && !e.shiftKey) {
-        const picked = selectedBodies(selection).map(i => bodies[i]).filter(body => body && !lookOf(doc, body).hidden);
-        viewport.current?.fit(picked.length ? { min: [0, 1, 2].map(k => Math.min(...picked.map(b => b.mesh.bounds.min[k]))) as Vec3, max: [0, 1, 2].map(k => Math.max(...picked.map(b => b.mesh.bounds.max[k]))) as Vec3 } : undefined); return;
-      }
-      const cmd = commands.find(c => c.shortcut && c.shortcut.toLowerCase() === (e.shiftKey ? 'shift ' : '') + e.key.toLowerCase());
-      if (cmd && !active) { e.preventDefault(); start(cmd); }
-    };
-    onKeyRef.current = onKey;
-  }
+  useStudioKeyboard({
+    dialog: {
+      blocked: help || workspaceModeExit.pending || !!cascade, paletteOpen: palette,
+      openPalette: () => setPalette(true), closePalette: () => setPalette(false), openHelp: () => setHelp(true),
+      dismissInspection: () => !help && !palette && !stepAsk && !workspaceModeExit.pending
+        && (cancelNativeReview(true) || clearConstraintInspection(constraintInspection, sketch)),
+      heldDraftFace: heldDraftFace.view ? heldDraftFace.cancel : undefined,
+      finishEdge: finishEdgeEditor.current ? finishEdgeEditor.cancel : undefined,
+      stepExport: stepAsk ? clearStepAsk : undefined,
+    },
+    model: {
+      doc, evaluated, bodiesFor, bodies, marker, clipboard, chatSelection, selection, directSelection: directSel,
+      canChange: canChangeDocument, commit, commitDirect, deleteSelection,
+      clearSelection: () => { setSelection(emptySel); setInstanceSel([]); setDirectSel([]); },
+      fit: bounds => viewport.current?.fit(bounds), notice: setToast,
+    },
+    drawing, save, replayHistory,
+    command: { active, start, apply, cancel, repeat: commandApply.requestRepeat },
+    sketch: {
+      current: sketch, update: setSketch, finish: finishSketch,
+      cancelAction: repeat => !!(circleChord.escape(repeat) || overlaidLines.close()
+        || twoPointSnap.cancel() || arcExtensionSnap.cancel() || pathGap.cancel()),
+      applyAction: () => !!(circleChord.input.read(sketch) || twoPointSnap.input.read()
+        || arcExtensionSnap.input.read(sketch) || pathGap.input.read(sketch)),
+    },
+    cageKey: cageInputActive ? cageEd.onKey : undefined,
+    skeletonKey: sketch3dInputActive
+      ? event => skel.onKey(event, (readFeature, close) => workspaceModeExit.switchWhenReady(close, { readFeature }))
+      : undefined,
+    measurement: {
+      active: !!measure,
+      canFocus: !rendering && !drawing && !sketch && !active && !!(measure || pinnedFaces.pair),
+      focus: () => { layout.setDockSheet(true); setMeasurementFocus(true); },
+      clear: () => setMeasure(null),
+    },
+    escape: {
+      hasDirectCandidate: () => parameterEditNow.current?.kind === 'direct',
+      discardDirectCandidate: () => discardDirectCandidateRef.current(),
+      discardRoute: routePanelOpen && !active && !sketch && !assembly.draft && !measure && !cageEd.session && !skel.session
+        ? () => discardRouteRef.current() : undefined,
+      invalidateProjection: () => { projectionRequest.current++; },
+      cancelAssembly: assembly.draft ? assembly.cancel : undefined,
+      cancelSectionFacePick,
+    },
+  });
 
   /** A command's button (the rail, the shapes bar): its tooltip says what it does or why it cannot run; shapes drag onto the model. */
   // (R1c: the buttons memoised, their handlers stable — `start` through a ref to the latest.)
