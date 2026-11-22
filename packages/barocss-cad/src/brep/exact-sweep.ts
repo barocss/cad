@@ -340,9 +340,11 @@ function sectionDirection(edge: Curve, boundary: RationalBoundary, tolerance: nu
 }
 
 type JoinedEdgeCount = 2 | 4 | 8;
+type SharedSection = readonly [outerEdges: 2 | 4, innerEdges: 0 | 2 | 4];
 
-function sectionBoundary(brep: Brep, name: string, centre: Point, normal: Point, tolerance: number, edgeCount: JoinedEdgeCount) {
-  const hasOpening = edgeCount === 8, edgesPerLoop = hasOpening ? 4 : edgeCount;
+function sectionBoundary(brep: Brep, name: string, centre: Point, normal: Point, tolerance: number,
+  [outerEdges, innerEdges]: SharedSection) {
+  const hasOpening = innerEdges > 0;
   const face = brep.faces.find(candidate => candidate.name === name);
   if (!face || face.loops.length !== (hasOpening ? 2 : 1) || face.surface.kind !== 'surface'
     || face.surface.controlPoints.flat().some(point => Math.abs(dot(sub(point, centre), normal)) > tolerance)) return;
@@ -354,7 +356,7 @@ function sectionBoundary(brep: Brep, name: string, centre: Point, normal: Point,
   if (plane.kind !== 'plane' || !(span > 0) || len(sub(plane.n, normal)) > angularRoundoff) return;
   const loops = face.loops.map(id => brep.loops.find(candidate => candidate.id === id));
   const outer = loops.find(loop => loop?.kind === 'outer'), inner = loops.find(loop => loop?.kind === 'inner');
-  if (outer?.coedges.length !== edgesPerLoop || (hasOpening && inner?.coedges.length !== edgesPerLoop)) return;
+  if (outer?.coedges.length !== outerEdges || (hasOpening && inner?.coedges.length !== innerEdges)) return;
   const curves = (coedges: readonly string[]) => coedges.map(id => {
     const use = brep.coedges.find(candidate => candidate.id === id)!;
     return brep.edges.find(edge => edge.id === use.edge)!.curve;
@@ -363,9 +365,9 @@ function sectionBoundary(brep: Brep, name: string, centre: Point, normal: Point,
 }
 
 function glueSection(a: Brep, aName: string, b: Brep, bName: string, centre: Point, normal: Point, tolerance: number,
-  edgeCount: JoinedEdgeCount, id: string): Brep | undefined {
-  const first = sectionBoundary(a, aName, centre, normal, tolerance, edgeCount);
-  const second = sectionBoundary(b, bName, centre, scale(normal, -1), tolerance, edgeCount);
+  section: SharedSection, id: string): Brep | undefined {
+  const first = sectionBoundary(a, aName, centre, normal, tolerance, section);
+  const second = sectionBoundary(b, bName, centre, scale(normal, -1), tolerance, section);
   const uniqueMatches = (from: readonly Curve[], to: readonly Curve[]) =>
     from.every(edge => to.filter(peer => sectionDirection(edge, peer, tolerance) !== undefined).length === 1);
   if (!first || !second || !uniqueMatches(first.outer, second.outer) || !uniqueMatches(second.outer, first.outer)
@@ -582,11 +584,10 @@ function rectangularElbowSection(rectangle: NonNullable<ReturnType<typeof rectan
 }
 
 /** The generic gluer matches all loops together. Keep those loops apart at its native matching tolerance. */
-function checkJointWall(a: Brep, b: Brep, opening: RectangularOpening | undefined, roundoff: number, refuse: Refuse) {
-  if (!opening) return;
+function jointWallClear(a: Brep, b: Brep, wall: number, roundoff: number): boolean {
   let vertexTolerance = 0;
   for (const piece of [a, b]) for (const vertex of piece.vertices) vertexTolerance = Math.max(vertexTolerance, vertex.tolerance);
-  if (!(opening.clearance > 10 * vertexTolerance + 2 * roundoff)) ductWallError(refuse);
+  return wall > 10 * vertexTolerance + 2 * roundoff;
 }
 
 function lineAndArcSweep(id: string, rail: JoinedRail, section: JoinedSection,
@@ -616,8 +617,9 @@ function lineAndArcSweep(id: string, rail: JoinedRail, section: JoinedSection,
   const roundoff = 128 * Number.EPSILON * Math.max(1, localRadius, extent);
   const boundary = opening ? 'outer rectangle and opening' : rectangle ? 'rectangle' : 'disk';
   const badJoint = () => refuse('GEOMETRY', `The exact ${style} sweep sections do not share the same ${boundary}.`);
-  checkJointWall(straight, bend, opening, roundoff, refuse);
-  const firstJoin = glueSection(straight, `${id}.junction`, bend, `${id}.start`, origin, identityAxes[2], roundoff, edgeCount, id);
+  const sharedSection: SharedSection = edgeCount === 8 ? [4, 4] : [edgeCount, 0];
+  if (opening && !jointWallClear(straight, bend, opening.clearance, roundoff)) ductWallError(refuse);
+  const firstJoin = glueSection(straight, `${id}.junction`, bend, `${id}.start`, origin, identityAxes[2], roundoff, sharedSection, id);
   if (!firstJoin) return badJoint();
   let glued = firstJoin;
   let tailMass: ((density: number) => { props: MassProperties; axes: SweepAxes; offset: Point }) | undefined;
@@ -631,9 +633,9 @@ function lineAndArcSweep(id: string, rail: JoinedRail, section: JoinedSection,
     // For the lead versus the tail, the mid-angle tangent through the bend centre gives projections
     // −ρ sin(θ/2) − leadStation cos(θ/2) < 0 and ρ sin(θ/2) + tailStation cos(θ/2) > 0.
     // This also covers a long tail that crosses the lead's tangent plane when θ > 90°.
-    checkJointWall(glued, tail, opening, roundoff, refuse);
+    if (opening && !jointWallClear(glued, tail, opening.clearance, roundoff)) ductWallError(refuse);
     const secondJoin = glueSection(glued, `${id}.end`, tail, `${id}.tail.junction`,
-      tailFrame.offset, tailFrame.axes[2], roundoff, edgeCount, id);
+      tailFrame.offset, tailFrame.axes[2], roundoff, sharedSection, id);
     if (!secondJoin) return badJoint();
     glued = secondJoin;
     tailMass = density => ({ props: prismaticMassProperties(tailPrism, density), ...tailFrame });
@@ -679,31 +681,43 @@ function tangentArcPair(path: Curve, refuse: Refuse) {
   return { first, second };
 }
 
-/** The shared disk's two edges are isocurves at the end of the first chart and start of the second. */
-function bindArcPairJoin(brep: Brep, id: string, tolerance: number): Brep | undefined {
+function concentricBore(disk: Circle, hole: Circle, refuse: Refuse): Circle {
+  const [x, y] = hole.center;
+  const roundoff = 128 * Number.EPSILON * Math.max(1, geometryScaleMM([disk.center, hole.center]));
+  if (Math.hypot(x - disk.center[0], y - disk.center[1]) > roundoff)
+    return refuse('GEOMETRY', 'Exact two-arc sweep needs the bore concentric with the outer circle.');
+  return { ...hole, center: [0, 0], start: [hole.start[0] - x, hole.start[1] - y] };
+}
+
+/** The two half-arcs of each shared circle are the terminal and initial chart isocurves. */
+function bindArcPairJoin(brep: Brep, id: string, tolerance: number, hasBore: boolean): Brep | undefined {
   const facesByLoop = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
   const edges = new Map(brep.edges.map(edge => [edge.id, edge])), uses = new Map(brep.coedges.map(use => [use.id, use]));
   const coedges: BrepCoedge[] = [];
-  let bound = 0;
+  let outer = 0, inner = 0;
   for (const use of brep.coedges) {
     const face = facesByLoop.get(use.loop), twin = use.twin ? uses.get(use.twin) : undefined;
     const other = twin && facesByLoop.get(twin.loop);
-    const first = face?.name?.startsWith(`${id}.first.side`), second = face?.name?.startsWith(`${id}.second.side`);
-    const across = first && other?.name?.startsWith(`${id}.second.side`) || second && other?.name?.startsWith(`${id}.first.side`);
+    const first = face?.name?.startsWith(`${id}.first.`), second = face?.name?.startsWith(`${id}.second.`);
+    const across = first && other?.name?.startsWith(`${id}.second.`) || second && other?.name?.startsWith(`${id}.first.`);
     if (!across) { coedges.push(use); continue; }
-    const surface = face?.surface, edge = edges.get(use.edge);
-    if (surface?.kind !== 'surface' || !edge) return;
+    const surface = face?.surface, peer = other?.surface, edge = edges.get(use.edge);
+    if (surface?.kind !== 'surface' || peer?.kind !== 'surface' || !edge) return;
+    // Revolve retains its bore chart IDs even when authored side tags replace display names.
+    const bore = surface.id.startsWith(`${id}_${first ? 'first' : 'second'}_hole0_`);
+    if (bore !== peer.id.startsWith(`${id}_${first ? 'second' : 'first'}_hole0_`)) return;
     const expected = first ? 'u1' : 'u0', binding = ringChartEdge(edge.curve, surface, tolerance);
     if (!binding || binding.side !== expected) return;
     const { id: useId, edge: edgeId, sense, loop, next, prev, twin: twinId } = use;
     coedges.push({ id: useId, edge: edgeId, sense, loop, next, prev, twin: twinId, pcurve: binding.pcurve });
-    bound++;
+    if (bore) inner++;
+    else outer++;
   }
-  if (bound === 4) return { ...brep, coedges };
+  if (outer === 4 && inner === (hasBore ? 4 : 0)) return { ...brep, coedges };
 }
 
 function oppositeArcSweep(id: string, arcs: NonNullable<ReturnType<typeof tangentArcPair>>, axes: SweepAxes,
-  profileRadius: number, tags: readonly string[] | undefined, refuse: Refuse): SweepSolid {
+  profileRadius: number, bore: Circle | undefined, tags: SideTags | undefined, refuse: Refuse): SweepSolid {
   const { first, second } = arcs, [x, y] = axes;
   if (Math.max(first.radius, second.radius) > CadNumericPolicy.coordinateAbs)
     return refuse('PARAMETER', 'Exact sweep path radius must be at most 10000 mm.');
@@ -712,27 +726,34 @@ function oppositeArcSweep(id: string, arcs: NonNullable<ReturnType<typeof tangen
   const ratio = second.radius / radius, sx = -dx * ratio, sy = -dy * ratio;
   const clearance = () => refuse('PARAMETER', 'Exact two-arc sweep needs both path radii larger than the profile radius.');
   if (!(Math.min(radius, Math.hypot(sx, sy)) - profileRadius > first.tolerance)) return clearance();
+  const wall = bore && profileRadius - circleRadius(bore);
+  const wallError = () => refuse('GEOMETRY', 'Exact two-arc sweep needs strictly positive wall clearance around the bore.');
+  if (wall !== undefined && !(wall > 10 * first.tolerance)) return wallError();
   const profile = [originDisk(profileRadius)];
   const bend = (piece: string, angle: number, bx: number, by: number, cap: 'start' | 'end') => {
     const part = `${id}_${piece}`, label = `${id}.${piece}`;
     const input: RevolveInput = { id: part, profile, angle: angle * 180 / Math.PI, axis: { origin: [bx, by], direction: [-by, bx] },
-      ...(tags ? { sideTags: tags } : {}) };
+      sideTags: tags?.outer, ...(bore ? { holes: [[bore]], holeTags: tags?.holes } : {}) };
     const original = revolveSweepProfile(input, { minimum: first.tolerance, refuse: clearance });
     const rename = <T extends { name?: string }>(element: T): T => element.name === undefined ? element
-      : { ...element, name: element.name.replaceAll(`${part}.`, `${label}.`).replaceAll(`${label}.${cap}`, `${id}.${cap}`) };
+      : { ...element, name: element.name.replaceAll(`${part}.`, `${label}.`).replaceAll(`${part}_hole0.`, `${label}.hole0.`)
+        .replaceAll(`${label}.${cap}`, `${id}.${cap}`) };
     return { input, brep: { ...original, faces: original.faces.map(rename), edges: original.edges.map(rename) } };
   };
   const a = bend('first', first.angle, dx, dy, 'start'), b = bend('second', second.angle, sx, sy, 'end');
   const join = bendEndFrame(dx, dy, radius, a.input.angle * Math.PI / 180);
   const placed = transformBrep(b.brep, { matrix: sweepMatrix(join.axes), offset: join.offset });
   const roundoff = 128 * Number.EPSILON * Math.max(1, radius, second.radius, profileRadius);
+  if (wall !== undefined && !jointWallClear(a.brep, placed, wall, roundoff)) return wallError();
   // At distance theta from the join, the signed projection along its tangent is +/−rho sin(theta).
   // Both rhos are positive, and each angle is at most 120°, so only the common cap can touch.
-  const glued = glueSection(a.brep, `${id}.first.end`, placed, `${id}.second.start`, join.offset, join.axes[2], roundoff, 2, id);
-  if (!glued) return refuse('GEOMETRY', 'The exact two-arc sweep sections do not share the same disk.');
-  const brep = bindArcPairJoin(glued, id, roundoff);
-  if (!brep || brep.faces.length !== 6
-    || brep.faces.filter(face => face.name === `${id}.start` || face.name === `${id}.end`).length !== 2)
+  const section: SharedSection = [2, bore ? 2 : 0];
+  const glued = glueSection(a.brep, `${id}.first.end`, placed, `${id}.second.start`, join.offset, join.axes[2], roundoff, section, id);
+  if (!glued) return refuse('GEOMETRY', `The exact two-arc sweep sections do not share the same ${bore ? 'annulus' : 'disk'}.`);
+  const brep = bindArcPairJoin(glued, id, roundoff, bore !== undefined);
+  const hasCap = (end: 'start' | 'end') =>
+    brep?.faces.some(face => face.name === `${id}.${end}` && face.loops.length === (bore ? 2 : 1));
+  if (!brep || brep.faces.length !== (bore ? 10 : 6) || !hasCap('start') || !hasCap('end'))
     return refuse('GEOMETRY', 'The exact two-arc sweep could not preserve the end caps and the tangent join.');
   return { brep, mass: density => combineMassProperties([
     { props: revolveMassProperties(a.input, density), axes: identityAxes, offset: origin },
@@ -822,12 +843,14 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
 
   const pair = tangentArcPair(path, refuse);
   if (pair) {
-    if (profileRadius === undefined || holes.length)
-      return refuse('CAPABILITY', 'Exact two-arc sweep needs one circular disk section without holes.');
+    if (!disk || profileRadius === undefined)
+      return refuse('CAPABILITY', 'Exact two-arc sweep needs one circular outer section.');
+    const hole = circularHole(holes, 'two-arc', refuse);
+    const bore = hole && concentricBore(disk, hole, refuse);
     const axes = frame(pair.first.tangent);
-    const result = place(oppositeArcSweep(id, pair, axes, profileRadius, sideTags?.outer, refuse), axes, pair.first.start);
+    const result = place(oppositeArcSweep(id, pair, axes, profileRadius, bore, sideTags, refuse), axes, pair.first.start);
     const report = checkBrep(result.brep, { strict: true });
-    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 0)
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== (bore ? 1 : 0))
       return refuse('GEOMETRY', 'The exact two-arc sweep did not produce a valid closed solid.');
     return result;
   }
