@@ -36,7 +36,7 @@ test('stored restriction retains Select and a focusable described Trim action', 
       { shape: 0, side: 1, start: [14, 6], end: [14, 16], id: 'e2' },
       { shape: 1, side: 3, start: [14, 16], end: [14, 6], id: 'e8' },
     ]] }, selection: { group: 0, occurrence: 1 }, highlight: undefined,
-    start() {}, close: () => true, choose() {}, selectEdge() {}, trimEdge() {}, onSplineDragChange() {},
+    start() {}, close: () => true, choose() {}, selectEdge() {}, trimEdge() {}, onSketchDragChange() {},
   };
   const html = renderToString(createElement(OverlaidLinesControls, { scan }));
   assert.match(html, /Select highlighted edge/);

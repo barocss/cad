@@ -1804,7 +1804,7 @@ export function App() {
       updateShape({ ...shape, r: diameter / 2 }, false, 'panel');
     },
     setConstraintConflict: (reason, source, ids) => setSketchIssue({ reason, conflict: { doc, source, ids } }), updateShape, trimSketch }),
-    dragTrim: { doc, scope: acceptanceScope, apply: dragTrim }, pathGap: pathGap.input, circleChord: circleChord.input, overlaidLine: overlaidLines.highlight, onSplineDragChange: overlaidLines.onSplineDragChange };
+    dragTrim: { doc, scope: acceptanceScope, apply: dragTrim }, pathGap: pathGap.input, circleChord: circleChord.input, overlaidLine: overlaidLines.highlight, onSketchDragChange: overlaidLines.onSketchDragChange };
 
   const viewBodiesRef = useRef<BodyResult[]>(null!);
   const sectionPickRef = useRef<SectionPick>(() => ({ face: null, edge: null, cap: false }));

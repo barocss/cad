@@ -15,7 +15,7 @@ import { countRender } from '../devRenders';
 type ViewportProps = ComponentPropsWithoutRef<typeof Viewport>;
 
 export type SceneSketchActions = Pick<ViewportProps,
-  'onSketchShape' | 'onSketchPick' | 'onSketchBandPick' | 'onSketchTrim' | 'dragTrim' | 'onDimClick' | 'onDimEdit' | 'onDimCommit' | 'pathGap' | 'circleChord' | 'overlaidLine' | 'onSplineDragChange'>;
+  'onSketchShape' | 'onSketchPick' | 'onSketchBandPick' | 'onSketchTrim' | 'dragTrim' | 'onDimClick' | 'onDimEdit' | 'onDimCommit' | 'pathGap' | 'circleChord' | 'overlaidLine' | 'onSketchDragChange'>;
 
 type SceneSelectionProps = Omit<SceneSelection, 'actions'> & SceneSelection['actions'];
 

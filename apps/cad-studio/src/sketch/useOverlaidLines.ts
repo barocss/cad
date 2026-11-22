@@ -39,7 +39,7 @@ export function useOverlaidLines(doc: StudioDoc, sketch: SketchState | null, doc
       if (trimRestriction) return;
       applyOverlaidTrim(next, trim, () => setScan(null));
     },
-    onSplineDragChange(active: boolean) {
+    onSketchDragChange(active: boolean) {
       dragInProgress.current = active;
       setDragging(active);
       if (active) setScan(null);

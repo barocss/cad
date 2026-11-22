@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1698: [Drag a constrained sketch point](notes/constrained-sketch-point-drag-2026-11-22/README.md), #21. Keep authored constraints and a valid preview, commit one sketch edit and verify the R6 native extrusion after Save and fresh Open.
+
 - D1697: [Review native sketch corner groups before approval](notes/pending-sketch-corner-review-2026-11-22/README.md), #324. Pin one pending image and the two native walls, and match both after Studio approval and fresh Open.
 
 - D1696: [Propose several sketch corners as one edit](notes/agent-sketch-corner-batch-2026-11-22/README.md), #21. Pin the side pairs to one revision and verify explicit Studio approval, native wall ownership and fresh Open.
