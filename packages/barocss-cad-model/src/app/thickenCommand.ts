@@ -13,7 +13,7 @@ export const thickenCommand: Command = {
     { key: 't', label: 'Thickness', kind: 'mm', min: 0, max: 10000 },
     { key: 'side', label: 'Side', kind: 'choice', options: [{ value: 'normal', label: 'Normal' }, { value: 'reverse', label: 'Reverse' }, { value: 'both', label: 'Both' }] },
     { key: 'mode', label: 'Geometry', kind: 'choice', options: [
-      { value: 'sampled', label: 'Sampled' }, { value: 'exact-planar', label: 'Exact planar' }, { value: 'exact-cylinder', label: 'Exact cylinder (90°)' },
+      { value: 'sampled', label: 'Sampled' }, { value: 'exact-planar', label: 'Exact planar' }, { value: 'exact-cylinder', label: 'Exact cylinder' },
     ] },
   ],
   defaults: () => ({ t: 2, side: 'normal', mode: 'sampled' }),

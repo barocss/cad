@@ -11,7 +11,7 @@ export const DIRECT_THICKEN_COMMAND = {
   hint: 'Use features.command inside proposals.propose for Studio approval. The body copies the source at the reviewed revision.',
   selection: 'Use the ID of one visible whole Direct surface in values and pass direct_revision from query.summary as expectedRevision.',
   values: { surface: 'Direct surface ID', t: 'positive thickness in mm', side: 'normal (default), reverse, or both',
-    mode: 'sampled (default), exact-planar for a whole convex coplanar bilinear sheet, or exact-cylinder for a whole upright quarter-cylinder patch' },
+    mode: 'sampled (default), exact-planar for a whole convex coplanar bilinear sheet, or exact-cylinder for a whole certified upright single-span circular sector' },
 };
 
 export const DIRECT_SNAPSHOT_APPROVAL = 'Direct surface snapshot';

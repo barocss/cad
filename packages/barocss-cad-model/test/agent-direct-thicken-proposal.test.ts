@@ -62,3 +62,33 @@ test('a reviewed Direct Thicken snapshots the visible whole source and always ne
   const exactVolume = exactPreview.bodies[0].volume;
   assert.ok(exactVolume !== null && Math.abs(exactVolume - (20 + 15) / 2 * 10 * 2) < 1e-8);
 });
+
+test('a Direct Thicken proposal previews the exact obtuse sector before user approval', async () => {
+  const weight = 1 / Math.sqrt(5);
+  const direct = importSource(emptyDirect(), `@model sector {version:0;length-unit:mm;
+    @surface #s {type:nurbs;degree-u:2;degree-v:1;knots-u:[0,0,0,1,1,1];knots-v:[0,0,1,1];
+      control-points:[[[10,0,0],[10,0,12]],[[10,20,0],[10,20,12]],[[-6,8,0],[-6,8,12]]];
+      weights:[[1,1],[${weight},${weight}],[1,1]];}
+  }`, 'Sector');
+  const state: ChatState = { doc: { ...emptyDoc(), direct }, bodies: [] };
+  const evaluate = async (doc: ChatState['doc']) => evaluatePart(doc, 1);
+  const proposed = await dispatchTool(state, 'proposals', { action: 'propose', title: 'Thicken the sector',
+    ops: [{ tool: 'features', args: { action: 'command', command: 'direct-thicken', expectedRevision: directInspectionRevision(state.doc),
+      values: { surface: direct.objects[0].id, t: 2, side: 'reverse', mode: 'exact-cylinder' } } }],
+  }, evaluate);
+  assert.equal(proposed.isError, false, proposed.content);
+  assert.deepEqual(proposed.state.doc.nodes, []);
+  const [proposal] = proposed.state.doc.proposals!;
+  assert.deepEqual(proposal.risk.approval, ['Direct surface snapshot']);
+  const preview = await previewProposal(proposed.state, proposal.id, evaluate);
+  assert.ok('doc' in preview);
+  const [node] = preview.doc.nodes;
+  assert.equal(node.kind, 'thicken');
+  assert.equal(node.mode, 'exact-cylinder');
+  const volume = preview.bodies[0].volume;
+  assert.ok(volume !== null && Math.abs(volume - Math.atan(2) * 36 * 12) < 1e-7);
+  const accepted = await acceptProposal(proposed.state, proposal.id, evaluate);
+  assert.ok('state' in accepted);
+  assert.deepEqual(accepted.state.doc.nodes, preview.doc.nodes);
+  assert.equal(accepted.state.doc.direct, direct);
+});
