@@ -652,6 +652,94 @@ function lineAndArcSweep(id: string, rail: JoinedRail, section: JoinedSection,
   } };
 }
 
+/** Recover two separate circular carriers with one planar, forward, opposite-curvature join. */
+function tangentArcPair(path: Curve, refuse: Refuse) {
+  const { degree, controlPoints: poles, weights, knots } = path;
+  if (degree !== 2 || poles.length !== 5 || weights[0] !== weights[2] || weights[2] !== weights[4]
+    || !(weights[1] < weights[0] && weights[3] < weights[0]) || knots[0] !== knots[2] || knots[3] !== knots[4]
+    || knots[5] !== knots[7] || !(knots[2] < knots[3] && knots[4] < knots[5])) return;
+  const [start, leadPole, join, tailPole, end] = poles, tolerance = pathTolerance(path, refuse);
+  const first = circularSpan(start, leadPole, join, weights[1] / weights[0], tolerance);
+  const second = circularSpan(join, tailPole, end, weights[3] / weights[0], tolerance);
+  if (!first || !second || joinedCircularSpans(path, tolerance)) return;
+  const inward = (arc: typeof first) => unit(sub(arc.toCentre, scale(arc.tangent, dot(arc.toCentre, arc.tangent))));
+  const n = inward(first), c = Math.cos(first.angle), s = Math.sin(first.angle);
+  const forward = add(scale(first.tangent, c), scale(n, s)), turned = add(scale(n, c), scale(first.tangent, -s));
+  const secondInward = inward(second);
+  // Leave same-side circle candidates to the existing single-carrier path and its diagnostics.
+  if (dot(turned, secondInward) > CadNumericPolicy.relativeComparison) return;
+  const lead = sub(join, leadPole), tail = sub(tailPole, join);
+  const roundoff = 256 * Number.EPSILON * Math.max(1, geometryScaleMM(poles), first.radius, second.radius);
+  const angular = Math.min(CadNumericPolicy.relativeComparison, roundoff / Math.min(len(lead), len(tail)));
+  if ([unit(lead), unit(tail), second.tangent].some(tangent => len(sub(forward, tangent)) > angular))
+    return refuse('GEOMETRY', 'The exact two-arc sweep path must meet with a common forward tangent.');
+  const inwardError = len(add(turned, secondInward));
+  if (inwardError > angular || 2 * second.radius * (inwardError + len(sub(forward, second.tangent))) > tolerance)
+    return refuse('CAPABILITY', 'Exact two-arc sweep needs two coplanar arcs of opposite curvature.');
+  return { first, second };
+}
+
+/** The shared disk's two edges are isocurves at the end of the first chart and start of the second. */
+function bindArcPairJoin(brep: Brep, id: string, tolerance: number): Brep | undefined {
+  const facesByLoop = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
+  const edges = new Map(brep.edges.map(edge => [edge.id, edge])), uses = new Map(brep.coedges.map(use => [use.id, use]));
+  const coedges: BrepCoedge[] = [];
+  let bound = 0;
+  for (const use of brep.coedges) {
+    const face = facesByLoop.get(use.loop), twin = use.twin ? uses.get(use.twin) : undefined;
+    const other = twin && facesByLoop.get(twin.loop);
+    const first = face?.name?.startsWith(`${id}.first.side`), second = face?.name?.startsWith(`${id}.second.side`);
+    const across = first && other?.name?.startsWith(`${id}.second.side`) || second && other?.name?.startsWith(`${id}.first.side`);
+    if (!across) { coedges.push(use); continue; }
+    const surface = face?.surface, edge = edges.get(use.edge);
+    if (surface?.kind !== 'surface' || !edge) return;
+    const expected = first ? 'u1' : 'u0', binding = ringChartEdge(edge.curve, surface, tolerance);
+    if (!binding || binding.side !== expected) return;
+    const { id: useId, edge: edgeId, sense, loop, next, prev, twin: twinId } = use;
+    coedges.push({ id: useId, edge: edgeId, sense, loop, next, prev, twin: twinId, pcurve: binding.pcurve });
+    bound++;
+  }
+  if (bound === 4) return { ...brep, coedges };
+}
+
+function oppositeArcSweep(id: string, arcs: NonNullable<ReturnType<typeof tangentArcPair>>, axes: SweepAxes,
+  profileRadius: number, tags: readonly string[] | undefined, refuse: Refuse): SweepSolid {
+  const { first, second } = arcs, [x, y] = axes;
+  if (Math.max(first.radius, second.radius) > CadNumericPolicy.coordinateAbs)
+    return refuse('PARAMETER', 'Exact sweep path radius must be at most 10000 mm.');
+  const dx = dot(first.toCentre, x), dy = dot(first.toCentre, y), radius = Math.hypot(dx, dy);
+  // The transported frame keeps the first bend center on the same local ray at the join. The second bend reverses it.
+  const ratio = second.radius / radius, sx = -dx * ratio, sy = -dy * ratio;
+  const clearance = () => refuse('PARAMETER', 'Exact two-arc sweep needs both path radii larger than the profile radius.');
+  if (!(Math.min(radius, Math.hypot(sx, sy)) - profileRadius > first.tolerance)) return clearance();
+  const profile = [originDisk(profileRadius)];
+  const bend = (piece: string, angle: number, bx: number, by: number, cap: 'start' | 'end') => {
+    const part = `${id}_${piece}`, label = `${id}.${piece}`;
+    const input: RevolveInput = { id: part, profile, angle: angle * 180 / Math.PI, axis: { origin: [bx, by], direction: [-by, bx] },
+      ...(tags ? { sideTags: tags } : {}) };
+    const original = revolveSweepProfile(input, { minimum: first.tolerance, refuse: clearance });
+    const rename = <T extends { name?: string }>(element: T): T => element.name === undefined ? element
+      : { ...element, name: element.name.replaceAll(`${part}.`, `${label}.`).replaceAll(`${label}.${cap}`, `${id}.${cap}`) };
+    return { input, brep: { ...original, faces: original.faces.map(rename), edges: original.edges.map(rename) } };
+  };
+  const a = bend('first', first.angle, dx, dy, 'start'), b = bend('second', second.angle, sx, sy, 'end');
+  const join = bendEndFrame(dx, dy, radius, a.input.angle * Math.PI / 180);
+  const placed = transformBrep(b.brep, { matrix: sweepMatrix(join.axes), offset: join.offset });
+  const roundoff = 128 * Number.EPSILON * Math.max(1, radius, second.radius, profileRadius);
+  // At distance theta from the join, the signed projection along its tangent is +/−rho sin(theta).
+  // Both rhos are positive, and each angle is at most 120°, so only the common cap can touch.
+  const glued = glueSection(a.brep, `${id}.first.end`, placed, `${id}.second.start`, join.offset, join.axes[2], roundoff, 2, id);
+  if (!glued) return refuse('GEOMETRY', 'The exact two-arc sweep sections do not share the same disk.');
+  const brep = bindArcPairJoin(glued, id, roundoff);
+  if (!brep || brep.faces.length !== 6
+    || brep.faces.filter(face => face.name === `${id}.start` || face.name === `${id}.end`).length !== 2)
+    return refuse('GEOMETRY', 'The exact two-arc sweep could not preserve the end caps and the tangent join.');
+  return { brep, mass: density => combineMassProperties([
+    { props: revolveMassProperties(a.input, density), axes: identityAxes, offset: origin },
+    { props: revolveMassProperties(b.input, density), ...join },
+  ]) };
+}
+
 /** Build a native solid by carrying a profile along a selected world-space path. */
 export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
   const { id, mode, outer, holes = [], path, xAxis, yAxis, sideTags } = input;
@@ -729,6 +817,18 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
       `The exact ${joinedStyle(lineArc, joined.section.edgeCount)} sweep is not a valid closed solid: ${report.issues[0]}`);
     if (joined.section.opening && (report.topology.length !== 1 || report.topology[0].genus !== 1))
       return refuse('GEOMETRY', 'The exact rectangular duct sweep did not preserve one through opening.');
+    return result;
+  }
+
+  const pair = tangentArcPair(path, refuse);
+  if (pair) {
+    if (profileRadius === undefined || holes.length)
+      return refuse('CAPABILITY', 'Exact two-arc sweep needs one circular disk section without holes.');
+    const axes = frame(pair.first.tangent);
+    const result = place(oppositeArcSweep(id, pair, axes, profileRadius, sideTags?.outer, refuse), axes, pair.first.start);
+    const report = checkBrep(result.brep, { strict: true });
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 0)
+      return refuse('GEOMETRY', 'The exact two-arc sweep did not produce a valid closed solid.');
     return result;
   }
 

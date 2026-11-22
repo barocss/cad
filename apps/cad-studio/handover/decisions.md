@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1681: [Sweep an exact circular disk through two opposite tangent arcs](notes/exact-opposite-arc-sweep-2026-11-22/README.md), #10. Preserve measurable junctions, corner and radius refusals, and editable Studio and Agent results.
 - D1680: [Measure non-circular cut rims on an offset Exact Sweep ring](notes/exact-offset-ring-intersect-2026-11-22/README.md), #10. Preserve the two trimmed torus rims, native continuity and editable Studio Open.
 - D1679: [Round both complete rims of a box-cut Exact Sweep half ring](notes/exact-half-ring-two-rim-fillet-2026-11-22/README.md), #10. Refuse singular radii before either solve and preserve both authored ends through editable Studio Open.
 - D1678: [Keep one complete half-ring rim fillet editable and measure the opposite rim](notes/exact-half-ring-rim-fillet-2026-11-22/README.md), #10. Refuse radii at or above the tube radius and preserve measurable untouched charts through editable Studio Open.

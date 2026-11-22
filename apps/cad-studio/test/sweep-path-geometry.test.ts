@@ -33,7 +33,9 @@ test('the exact label distinguishes a joined line and arc from a two-span circul
   const joined = { degree: 2, controlPoints: [0, 1, 2, 3, 4], knots: [0, 0, 0, 1, 1, 2, 2, 2],
     weights: [1, 1, 1, Math.SQRT1_2, 1] };
   assert.equal(sweepRepresentationLabel('exact', joined), 'Exact line and arc');
-  assert.equal(sweepRepresentationLabel('exact', { ...joined, weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1] }), 'Exact circular arc');
+  assert.equal(sweepRepresentationLabel('exact', { ...joined, weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1],
+    controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 30, 0], [30, 30, 0]] }), 'Exact two-arc path');
+  assert.equal(sweepRepresentationLabel('exact', { ...joined, weights: [1, 0, 1, Math.SQRT1_2, 1] }), 'Exact circular arc');
   assert.equal(sweepRepresentationLabel('exact-straight', joined), 'Exact straight path');
 });
 

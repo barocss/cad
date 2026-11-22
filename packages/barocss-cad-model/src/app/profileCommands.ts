@@ -690,8 +690,11 @@ export function sweepRepresentationLabel(mode: unknown, path?: SweepRail): strin
       && weights[4] === first && weights[5] === first && weights[6] === first)
       return 'Exact line–arc–line';
     if (controlPoints.length === 5 && weights.length === 5 && knots.length === 8 && knots[3] === knots[4]
-      && weights[1] === first && weights[2] === first && weights[4] === first)
-      return 'Exact line and arc';
+      && weights[2] === first && weights[4] === first) {
+      if (weights[1] === first) return 'Exact line and arc';
+      if (weights[1] > 0 && weights[1] < first && weights[3] > 0 && weights[3] < first)
+        return 'Exact two-arc path';
+    }
   }
   return sweepRepresentations.find(item => item.value === mode)?.label ?? sweepRepresentations[0].label;
 }
