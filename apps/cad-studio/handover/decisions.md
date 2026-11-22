@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1716: [Use one native radius handle when creating a two-rim Fillet](notes/paired-circular-fillet-create-2026-11-23/README.md), #214. Select both circular rims and verify one end-on drag, typed parity and editable fresh Open.
+
 - D1715: [Drag one History Fillet radius for two circular rims](notes/paired-circular-history-fillet-2026-11-23/README.md), #214. Keep the upper original rim as the anchor and match end-on drag, numeric entry and fresh Open.
 
 - D1714: [Retain native duct joints after an inlet Subtract](notes/exact-duct-inlet-boolean-2026-11-23/README.md), #10. Recover four native cylinder seam measurements, both open mouths and editable Studio fresh Open.

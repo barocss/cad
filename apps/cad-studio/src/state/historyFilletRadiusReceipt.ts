@@ -6,6 +6,7 @@ import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { toSig } from '@barocss/cad-model/engine/references';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
 import type { NativeFilletTorusFace } from '@barocss/cad-model/engine/nativeFilletTorus';
+import { circularFilletPair } from '@barocss/cad-model/app/circularFilletPair';
 import { add, cross, dot, len, scale, sub, unit, type Vec3 } from '@barocss/cad-model/engine/vec3';
 import type { Active } from '../app/commandState';
 
@@ -175,18 +176,9 @@ function pairedCircularHistoryFrame(rims: readonly [string, string], fillet: Fil
     return match && match.sig.kind === 'curve' && match.stored.d === undefined && match.stored.r === undefined
       ? match.source : undefined;
   });
-  const [top, bottom] = originals;
-  const topCircle = top?.nativeCircle, bottomCircle = bottom?.nativeCircle;
-  if (!top?.nativeJoint || !bottom?.nativeJoint || !topCircle || !bottomCircle
-    || top.nativeJoint.edgeId === bottom.nativeJoint.edgeId
-    || new Set([...top.nativeJoint.faces, ...bottom.nativeJoint.faces]).size !== 3
-    || topCircle.centre[2] - bottomCircle.centre[2] <= 2 * radius
-    || Math.hypot(topCircle.centre[0] - bottomCircle.centre[0], topCircle.centre[1] - bottomCircle.centre[1]) > 1e-8
-    || len(cross(topCircle.normal, bottomCircle.normal)) > 1e-9
-    || Math.abs(topCircle.radius - bottomCircle.radius) > 1e-8
-    || !(top.nativeFilletRim && top.nativeFilletRim.direction[2] > 0
-      && bottom.nativeFilletRim && bottom.nativeFilletRim.direction[2] < 0)) return;
-  const matches = [top, bottom].map(source => accepted.tori.flatMap((torus, index) => {
+  const pair = circularFilletPair(originals);
+  if (!pair || pair.top.edge !== originals[0] || pair.top.circle.centre[2] - pair.bottom.circle.centre[2] <= 2 * radius) return;
+  const matches = [pair.top.edge, pair.bottom.edge].map(source => accepted.tori.flatMap((torus, index) => {
     const frame = verifiedCircularFrame(source, torus, radius);
     return frame ? [{ index, frame }] : [];
   }));

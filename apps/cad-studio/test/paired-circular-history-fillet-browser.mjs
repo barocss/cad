@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--expect-generic');
+const create = process.argv.includes('--create');
 const edges = ['n1.bottom|n1.side1', 'n1.side1|n1.top'];
 const stock = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
@@ -15,10 +16,13 @@ const stock = {
 const pins = ['apps/cad-studio/src/state/historyFilletRadiusReceipt.ts', 'apps/cad-studio/src/app/useHistoryFilletRadius.ts',
   'apps/cad-studio/src/viewport/useCommandGizmos.ts', 'packages/barocss-cad-model/src/engine/nativeFilletTorus.ts',
   'packages/barocss-cad-model/src/engine/evaluate.ts'];
+if (create) pins.push('packages/barocss-cad-model/src/app/commands.ts', 'packages/barocss-cad-model/src/app/circularFilletPair.ts');
 const f = await createFlow({
-  name: 'paired-circular-history-fillet', output: process.argv[2], envFrozen: 'D1715_SOURCE_FROZEN',
+  name: create ? 'paired-circular-fillet-create' : 'paired-circular-history-fillet', output: process.argv[2],
+  envFrozen: create ? 'D1716_SOURCE_FROZEN' : 'D1715_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Edit the shared Constant Fillet radius of the two original circular rims in Studio History.',
+  qualification: create ? 'Select the two original circular rims and create one Constant Fillet.' :
+    'Edit the shared Constant Fillet radius of the two original circular rims in Studio History.',
   limits: ['One R8 quarter-sector extruded 10 mm, one terminal two-rim Fillet and desktop WebGPU.'],
   inspectorSource: String.raw`
 import assert from 'node:assert/strict';
@@ -73,7 +77,7 @@ if (process.argv[3] === '"seed"') {
 const near = (actual, expected, tolerance = 1e-7) => assert.ok(Math.abs(actual - expected) <= tolerance,
   JSON.stringify({ actual, expected, tolerance }));
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
-const handle = () => f.page.locator('g.gizmo-handle[data-handle="r"]');
+const handle = () => f.page.locator(`g.gizmo-handle[data-handle="${create ? 'radius' : 'r'}"]`);
 const anchor = r => [8 * Math.SQRT1_2 + r / 2, 8 * Math.SQRT1_2 + r / 2, 10 + r * Math.SQRT1_2];
 const screen = p => f.page.evaluate(point => window.__studioScreenOf(point), p);
 async function verify(doc, radius, label) {
@@ -120,7 +124,10 @@ async function verify(doc, radius, label) {
 }
 
 async function frame(view) {
-  await button(view, f.page.locator('.views')).click();
+  if (view === 'Bottom') {
+    await button('View cube directions', f.page.getByRole('group', { name: 'View cube', exact: true })).click();
+    await f.page.getByRole('menuitem', { name: view, exact: true }).click();
+  } else await button(view, f.page.locator('.views')).click();
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
 }
@@ -175,13 +182,85 @@ async function drag(seed, label) {
   return hud;
 }
 
+async function startPairedFillet(label) {
+  const midpoint = [8 * Math.SQRT1_2, 8 * Math.SQRT1_2];
+  const hud = f.page.getByRole('dialog', { name: 'Fillet', exact: true });
+  const field = hud.getByLabel('Radius', { exact: true });
+  await frame('Bottom');
+  const canvas = await f.page.locator('.vp-canvas').boundingBox();
+  await f.page.mouse.click(canvas.x + 8, canvas.y + 8);
+  const filter = button('Selection filter');
+  for (let i = 0; i < 6 && !(await filter.innerText()).includes('Edges'); i++) await filter.click();
+  assert.match(await filter.innerText(), /Edges/);
+  f.phase = 'Select both original circular rims in the viewport';
+  await f.worldClick([...midpoint, 0]);
+  await f.page.waitForFunction(() => window.__studioSelection?.selection?.edges?.length === 1);
+  await frame('Top');
+  await f.page.keyboard.down('Shift');
+  try { await f.worldClick([...midpoint, 10]); } finally { await f.page.keyboard.up('Shift'); }
+  await f.page.waitForFunction(() => window.__studioSelection?.selection?.edges?.length === 2);
+  const closeChat = button('Close chat');
+  if (await closeChat.isVisible()) await closeChat.click();
+  await f.snapshot(label);
+  await f.command('Fillet');
+  await field.fill('0.6');
+  await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
+  assert.match(await hud.innerText(), /Picked native edges\s+2\b/);
+  return { hud, field };
+}
+
+async function commitPairedFillet(hud, label) {
+  await button('Apply', hud).click();
+  await f.changed(stock);
+  return (await f.snapshot(label)).doc;
+}
+
+async function createPairedFillet() {
+  const { hud, field } = await startPairedFillet('01-create-paired-rims-selected');
+  const current = await readAnchor(.6);
+  if (baseline) {
+    assert.ok(current && current.gapPx > 5, JSON.stringify(current));
+    f.report.observations.push({ label: 'original-create-handle', ...current });
+    await f.snapshot('02-create-base-paired-handle');
+    await field.fill('1.5');
+    await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
+    const doc = await commitPairedFillet(hud, '03-create-base-typed-radius');
+    await verify(doc, 1.5, 'create-paired-typed-r15');
+    return;
+  }
+  assert.ok(current && current.gapPx < .75, JSON.stringify(current));
+  f.report.observations.push({ label: 'paired-create-top-anchor', ...current });
+  await f.snapshot('02-create-paired-upper-anchor');
+  await drag(stock, '03-create-paired-end-on');
+  const dragged = await commitPairedFillet(hud, '04-create-paired-applied');
+  const hash = await verify(dragged, 1.5, 'create-paired-dragged-r15');
+  await f.undo();
+  await f.same(stock);
+  await f.redo();
+  await f.same(dragged);
+  await f.undo();
+  await f.same(stock);
+  const typed = await startPairedFillet('05-create-paired-typed-selection');
+  await typed.field.fill('1.5');
+  await typed.hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
+  const typedDoc = await commitPairedFillet(typed.hud, '06-create-paired-typed-applied');
+  assert.equal(await verify(typedDoc, 1.5, 'create-paired-typed-r15'), hash);
+  const saved = await f.save('created-paired-circular-fillet');
+  const reopened = (await f.freshOpen(saved.file, typedDoc, '07-create-paired-reopened')).doc;
+  assert.equal(await verify(reopened, 1.5, 'create-paired-reopened-r15'), hash);
+  await f.openFeatureEditor(2);
+  near(Number(await f.editor().getByLabel('Radius', { exact: true }).inputValue()), 1.5);
+  await f.snapshot('08-create-paired-editable-after-open');
+}
+
 await f.run(async () => {
-  const seed = await f.inspect('paired-circular-seed', stock, 'seed');
+  const seed = create ? stock : await f.inspect('paired-circular-seed', stock, 'seed');
   await f.newPage();
   await f.page.locator('input[aria-label="Model file"]').setInputFiles({
     name: 'paired-circular-fillet.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)),
   });
   await f.same(seed);
+  if (create) return createPairedFillet();
   await verify(seed, .6, 'paired-native-r06');
   await frame('Top');
   await f.openFeatureEditor(2);

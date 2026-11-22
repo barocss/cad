@@ -36,6 +36,7 @@ import { linearSpanPatternInput } from '../engine/linearSpanPattern';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
 import { linearSpanHandles } from './linearSpanHandles';
 import type { BodyResult } from '../engine/evaluate';
+import { circularFilletPair } from './circularFilletPair';
 import type { BearingAssemblyInput } from '../engine/bearingContext';
 import type { DisplayEdge } from '../engine/mesh';
 import { refOf } from './bodyRef';
@@ -239,7 +240,9 @@ function edgeHandle(ctx: Ctx, key: string, size: number, kind: 'fillet' | 'chamf
   };
   const e = sel.edges[0], n = normals(e); if (n.length !== 2) return [];
   const max = Math.min(...sel.edges.map(limit));
-  const rim = useNativeRim && sel.edges.length === 1 && ctx.selection.edges.length === 1 && !ctx.selection.faces.length ? e.nativeFilletRim : undefined;
+  const rim = useNativeRim && ctx.selection.edges.length === sel.edges.length && !ctx.selection.faces.length
+    ? sel.edges.length === 1 ? e.nativeFilletRim : circularFilletPair(sel.edges)?.top.frame
+    : undefined;
   const out = rim?.direction ?? unit3([n[0][0] + n[1][0], n[0][1] + n[1][1], n[0][2] + n[1][2]]);
   const mid = rim?.midpoint ?? [0, 1, 2].map(k => (e.a[k] + e.b[k]) / 2);
   const at = [0, 1, 2].map(k => mid[k] + out[k] * Math.max(0, size)) as [number, number, number];
