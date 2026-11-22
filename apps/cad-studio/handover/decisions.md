@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1718: [Drag the radius of one saved sketch Fillet](notes/drag-saved-sketch-fillet-radius-2026-11-23/README.md), #21. Match the numeric preview, retain the sketch carriers and verify editable fresh Open.
+
 - D1717: [Replace one held edge in a saved two-edge Fillet](notes/two-edge-fillet-history-replacement-2026-11-23/README.md), #20. Preview a direct viewport pick, retain the second exact line and verify both blends after fresh Open.
 
 - D1716: [Use one native radius handle when creating a two-rim Fillet](notes/paired-circular-fillet-create-2026-11-23/README.md), #214. Select both circular rims and verify one end-on drag, typed parity and editable fresh Open.

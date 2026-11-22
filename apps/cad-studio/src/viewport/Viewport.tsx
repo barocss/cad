@@ -36,10 +36,11 @@ import type { RenderCamera } from '@barocss/cad-model/engine/render';
 import type { DirectDisplay } from '@barocss/cad-model/engine/direct';
 import { directBezierDisplay } from './directBezierDisplay';
 import { regionMesh, type ToolRegion } from '@barocss/cad-model/app/holeRegion';
-import type { SketchPlane } from '@barocss/cad-model/sketch/plane';
+import { toWorld, type SketchPlane } from '@barocss/cad-model/sketch/plane';
 import { handleLayout, type FeatureHandle } from './gizmo';
 import { gizmoMarks } from './GizmoMarks';
 import { HandleValueBox } from './HandleValueBox';
+import { SketchFilletRadiusHandle } from './SketchFilletRadiusHandle';
 import { ViewCube } from './ViewCube';
 import { CAGE_LINE_KEYS, CageMarks, cageLines, cagePoints } from './CageMarks';
 import type { CageMode, CageSelection, StudioCage } from '@barocss/cad-model/subd/cageEdit';
@@ -1062,6 +1063,14 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     } : { x: 4, y: 4, width: w - 8, height: h - 8 } : undefined;
     const pointDrag = input.pointDragPreview(sk);
     const inspection = constraintInspection?.owner === sk && drag.current.mode !== 'spline' && !pointDrag ? constraintInspection : null;
+    const filletHandle = sk?.tool === 'select' && !sk.editDim && sk.shape?.kind === 'polygon' &&
+      inspection?.target === 'corner' && inspection.operation === 'resize-fillet' && props.constraintInspection
+      ? <SketchFilletRadiusHandle draft={inspection} source={sk.shape} store={props.constraintInspection}
+        project={point => {
+          const [x, y] = cam.project(toWorld(sk.plane, point), w, h);
+          return [x, y];
+        }}
+        pointUnderPointer={event => input.sketchPointFromClient(event, sk.plane)} /> : null;
     const reference = props.sketchSnaps?.twoPoint.read();
     const extension = props.sketchSnaps?.extension.read(sk);
     const referenceHit = reference?.preview ? { at: reference.preview, kind: 'calculated' as const }
@@ -1201,15 +1210,15 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
     if (vb && !boxed && !props.handles?.some(mine)) valueBox.current = null;
     const valueEditor = boxed ? <HandleValueBox key={boxed.id} label={boxed.label} value={boxed.value} unit={boxed.unit ?? ''} at={handleLayout(boxed, projector()).to} width={w} height={h} onType={boxed.onType!} /> : null;
     // Axis triad, bottom-left, following the camera.
-    const { right, up } = cam.basis(); const tx = 92, ty = h - 64;
+    const basis = cam.basis();
+    const { right, up } = basis; const tx = 92, ty = h - 64;
     ['#e5534b', '#57b26b', '#4f8ff7'].forEach((color, k) => {
       const a: Vec3 = [0, 0, 0]; a[k] = 1;
       const x = a[0] * right[0] + a[1] * right[1] + a[2] * right[2], y = -(a[0] * up[0] + a[1] * up[1] + a[2] * up[2]);
       items.push(<g key={'t' + k}><line x1={tx} y1={ty} x2={tx + x * 20} y2={ty + y * 20} stroke={color} strokeWidth={2.5} strokeLinecap="round" />
         <text x={tx + x * 27} y={ty + y * 27 + 3} fontSize={9} textAnchor="middle" fill={color} fontFamily="IBM Plex Mono">{'XYZ'[k]}</text></g>);
     });
-    const basis = cam.basis();
-    return <><svg className="vp-overlay" width={w} height={h} aria-hidden="true">{items}</svg>{editor}{valueEditor}
+    return <><svg className="vp-overlay" width={w} height={h} aria-hidden="true">{items}</svg>{editor}{valueEditor}{filletHandle}
       {!propsRef.current.sketch && <ViewCube right={basis.right} up={basis.up} forward={basis.forward} onLook={lookFrom} onOrbit={(dx, dy) => { camera.current.orbit(dx, dy); request(); }} />}</>;
   };
 

@@ -7,12 +7,15 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 const radiusBaseline = process.argv.includes('--radius-baseline');
 const radiusEdit = process.argv.includes('--radius-edit');
 const radiusAgent = process.argv.includes('--radius-agent');
-const savedRadius = radiusBaseline || radiusEdit || radiusAgent;
+const radiusDrag = process.argv.includes('--radius-drag');
+const radiusDragBase = process.argv.includes('--radius-drag-base');
+const savedRadius = radiusBaseline || radiusEdit || radiusAgent || radiusDrag || radiusDragBase;
 const pins = [
   ...(savedRadius ? ['apps/cad-studio/src/ui/ConstraintTools.tsx',
     'apps/cad-studio/src/ui/SketchCornerTools.tsx', 'apps/cad-studio/src/sketch/cornerDraft.ts',
     'packages/barocss-cad-model/src/sketch/rules.ts'] : []),
-  ...(radiusEdit || radiusAgent ? ['packages/barocss-cad-model/src/sketch/filletEdit.ts'] : []),
+  ...(radiusEdit || radiusAgent || radiusDrag || radiusDragBase ? ['packages/barocss-cad-model/src/sketch/filletEdit.ts'] : []),
+  ...(radiusDrag ? ['apps/cad-studio/src/viewport/SketchFilletRadiusHandle.tsx'] : []),
   ...(radiusAgent ? ['packages/barocss-cad-model/src/chat/part/sketchCorner.ts',
     'packages/barocss-cad-model/src/chat/part/features.ts', 'packages/barocss-cad-model/src/chat/contract.ts',
     'packages/barocss-cad-model/src/chat/toolDefinitions.ts'] : []),
@@ -25,10 +28,10 @@ const pins = [
 ];
 const f = await createFlow({
   output: process.argv[2], name: savedRadius ? 'saved-sketch-fillet-radius' : 'sketch-point-drag',
-  envFrozen: radiusAgent ? 'D1711_SOURCE_FROZEN' : savedRadius ? 'D1710_SOURCE_FROZEN' : 'D1698_SOURCE_FROZEN',
+  envFrozen: radiusDrag || radiusDragBase ? 'D1718_SOURCE_FROZEN' : radiusAgent ? 'D1711_SOURCE_FROZEN' : savedRadius ? 'D1710_SOURCE_FROZEN' : 'D1698_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: radiusBaseline ? 'Measure the saved Fillet through the existing generic radius editor.'
-    : radiusEdit ? 'Edit the saved Fillet radius while keeping both straight carriers in place.'
+    : radiusEdit || radiusDrag || radiusDragBase ? 'Edit the saved Fillet radius while keeping both straight carriers in place.'
       : radiusAgent ? 'Discover and explicitly approve a revision-bound Fillet radius edit in Studio.'
     : 'Drag one closed sketch vertex with its constraints, then finish and reopen the downstream solid.',
   limits: ['Desktop Studio WebGPU, one tagged XY outline, 10 mm native Extrude, one optional convex R6 Fillet.'],
@@ -126,7 +129,18 @@ async function checkSavedRadius() {
   await f.worldClick(arcMidpoint);
   await pick.waitFor();
   await f.snapshot('02-saved-fillet-selected');
-  if (radiusEdit) {
+  if (radiusDragBase) {
+    f.phase = 'Confirm the saved Fillet offers numeric editing without a radius handle';
+    await f.sketchPanel().getByRole('button', { name: 'Edit Fillet', exact: true }).click();
+    const editor = f.sketchPanel().getByRole('group', { name: 'Edit Fillet', exact: true });
+    near(Number(await editor.getByLabel('Radius', { exact: true }).inputValue()), 6);
+    assert.equal(await f.page.getByLabel('Fillet radius handle', { exact: true }).count(), 0);
+    await f.snapshot('03-no-radius-drag-handle');
+    await f.same(source);
+    f.report.observations.push({ directRadiusDrag: 'FAIL: no handle', numericEditAvailable: true });
+    return;
+  }
+  if (radiusEdit || radiusDrag) {
     await editSavedRadius(source, shape, arcMidpoint);
     assert.equal(await readFile(file, 'utf8'), bytes);
     return;
@@ -157,6 +171,23 @@ async function editSavedRadius(source, shape, arcMidpoint) {
   const field = () => editor().getByLabel('Radius', { exact: true });
   const apply = () => button('Apply', editor());
   const preview = () => f.page.locator('.sk-corner-preview');
+  const handle = () => f.page.getByRole('button', { name: 'Fillet radius handle', exact: true });
+  const handlePoint = async radius => {
+    const offset = (1 - Math.SQRT1_2) * radius;
+    return f.screenOf([40 - offset, 30 - offset]);
+  };
+  const drag = async (from, to) => {
+    await handle().waitFor();
+    const box = await handle().boundingBox();
+    const start = [box.x + box.width / 2, box.y + box.height / 2];
+    const reference = await handlePoint(from);
+    assert.ok(Math.hypot(start[0] - reference[0], start[1] - reference[1]) < 0.5, 'Handle is at the native arc midpoint');
+    const end = await handlePoint(to);
+    await f.page.mouse.move(...start);
+    await f.page.mouse.down();
+    await f.page.mouse.move(start[0] + end[0] - reference[0], start[1] + end[1] - reference[1], { steps: 10 });
+    await f.page.mouse.up();
+  };
   const points = [[0, 0], [40, 0], [40, 22], [32, 30], [0, 30]];
   const seedNative = await f.inspect('original-radius-native', source);
   near(seedNative.volume, (1200 - 36 + 9 * Math.PI) * 10);
@@ -176,15 +207,49 @@ async function editSavedRadius(source, shape, arcMidpoint) {
   await f.snapshot('03-overflow-radius-refused');
   await button('Cancel', editor()).click();
 
+  if (radiusDrag) {
+    f.phase = 'Drag beyond the valid radius and cancel without changing the accepted sketch';
+    await button('Edit Fillet').click();
+    await handle().click();
+    near(Number(await field().inputValue()), 6);
+    assert.equal(await apply().isDisabled(), true);
+    await drag(6, 30);
+    await editor().getByRole('alert').waitFor();
+    assert.equal(await apply().isDisabled(), true);
+    await preview().waitFor({ state: 'hidden' });
+    await expectPoints(shape.points); await f.same(source);
+    await f.snapshot('03-drag-overflow-refused');
+    await button('Cancel', editor()).click();
+    await handle().waitFor({ state: 'hidden' });
+  }
+
   f.phase = 'Preview R8 on the saved Fillet and apply one local edit';
   await button('Edit Fillet').click();
   near(Number(await field().inputValue()), 6);
-  await field().fill('8');
+  if (radiusDrag) {
+    await drag(6, 8);
+    near(Number(await field().inputValue()), 8);
+    await preview().waitFor();
+    const dragged = await preview().getAttribute('points');
+    await expectPoints(shape.points); await f.same(source);
+    await f.snapshot('04-physical-radius-drag-preview');
+    await button('Cancel', editor()).click();
+    await expectPoints(shape.points); await f.same(source);
+    await button('Edit Fillet').click(); await field().fill('8');
+    await preview().waitFor();
+    assert.equal(await preview().getAttribute('points'), dragged, 'Typed R8 and dragged R8 use the same preview outline');
+    await button('Cancel', editor()).click();
+    await button('Edit Fillet').click(); await drag(6, 8);
+    near(Number(await field().inputValue()), 8);
+  } else {
+    await field().fill('8');
+  }
   await preview().waitFor();
   await expectPoints(shape.points);
   await f.same(source);
   await f.snapshot('04-local-radius-preview');
-  await field().press('Enter');
+  if (radiusDrag) await apply().click();
+  else await field().press('Enter');
   await expectPoints(points);
   await f.page.keyboard.press(`${keyboard}+z`);
   await expectPoints(shape.points);
@@ -234,7 +299,8 @@ async function editSavedRadius(source, shape, arcMidpoint) {
   await edit(shape.points);
   await f.worldClick(arcMidpoint);
   await button('Edit Fillet').click();
-  await field().fill('8');
+  if (radiusDrag) await drag(6, 8);
+  else await field().fill('8');
   await editor().getByRole('alert').getByText(/parameter binding/i).waitFor();
   assert.equal(await apply().isDisabled(), true);
   await preview().waitFor({ state: 'hidden' });

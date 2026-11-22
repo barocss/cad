@@ -1435,6 +1435,10 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     placementHandlers: { onDragOver, onDrop },
     overlay: { drag, gizmoHot, valueBox, sketchDraft, twoPointHover, bezierDraft, ellipseDraft, carc, liveShape, toolView, projector },
     cancelGizmo, listenForSketchKeys, resetSketchTool, startSketchPrimitiveAt,
+    sketchPointFromClient: (event: { clientX: number; clientY: number }, plane: SketchPlane) => {
+      const { x, y, w, h } = local(event);
+      return sketchPoint(x, y, w, h, plane);
+    },
     pointDragPreview: (sketch: SketchState | null) => {
       const press = pointPress.current;
       return press?.active && press.owner === sketch ? press.last ?? press.outline : null;
