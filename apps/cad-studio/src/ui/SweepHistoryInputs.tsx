@@ -12,13 +12,22 @@ interface Props {
 function profileLabel({ sweep, profile, parameters }: Props): string {
   if (profile?.kind !== 'sketch' && profile?.kind !== 'driven-sketch') return 'Unavailable';
   const name = `Sketch ${sweep.sketch + 1}`;
-  if (profile.kind !== 'sketch' || profile.profile !== 'circle') return name;
+  if (profile.kind !== 'sketch' || (profile.profile !== 'circle' && profile.profile !== 'rectangle')) return name;
   try {
     const resolved = resolveSketchDims(profile, parameters);
     if (resolved.profile === 'circle' && typeof resolved.radius === 'number' && Number.isFinite(resolved.radius)) {
       return `${name} · Ø${fmt(2 * resolved.radius)} mm`;
     }
-  } catch { return `${name} · Diameter unavailable`; }
+    if (resolved.profile === 'rectangle') {
+      const [left, bottom] = resolved.min, [right, top] = resolved.max;
+      if (typeof left === 'number' && typeof bottom === 'number' && typeof right === 'number' && typeof top === 'number'
+        && Number.isFinite(right - left) && Number.isFinite(top - bottom)) {
+        return `${name} · ${fmt(right - left)} × ${fmt(top - bottom)} mm`;
+      }
+    }
+  } catch {
+    return `${name} · ${profile.profile === 'circle' ? 'Diameter' : 'Size'} unavailable`;
+  }
   return name;
 }
 

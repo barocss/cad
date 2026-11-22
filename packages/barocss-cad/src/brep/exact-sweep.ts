@@ -339,7 +339,7 @@ function sectionDirection(edge: Curve, boundary: RationalBoundary, tolerance: nu
   if (forward !== reversed) return forward ? 1 : -1;
 }
 
-function diskBoundary(brep: Brep, name: string, centre: Point, normal: Point, tolerance: number) {
+function sectionBoundary(brep: Brep, name: string, centre: Point, normal: Point, tolerance: number, edgeCount: number) {
   const face = brep.faces.find(candidate => candidate.name === name);
   if (!face || face.loops.length !== 1 || face.surface.kind !== 'surface'
     || face.surface.controlPoints.flat().some(point => Math.abs(dot(sub(point, centre), normal)) > tolerance)) return;
@@ -350,19 +350,45 @@ function diskBoundary(brep: Brep, name: string, centre: Point, normal: Point, to
   const angularRoundoff = Math.min(CadNumericPolicy.relativeComparison, Math.max(256 * Number.EPSILON, 2 * tolerance / span));
   if (plane.kind !== 'plane' || !(span > 0) || len(sub(plane.n, normal)) > angularRoundoff) return;
   const loop = brep.loops.find(candidate => candidate.id === face.loops[0]);
-  if (loop?.kind !== 'outer' || loop.coedges.length !== 2) return;
+  if (loop?.kind !== 'outer' || loop.coedges.length !== edgeCount) return;
   return loop.coedges.map(id => {
     const use = brep.coedges.find(candidate => candidate.id === id)!;
     return brep.edges.find(edge => edge.id === use.edge)!.curve;
   });
 }
 
-function glueDisk(a: Brep, aName: string, b: Brep, bName: string, centre: Point, normal: Point, tolerance: number,
-  id: string): Brep | undefined {
-  const first = diskBoundary(a, aName, centre, normal, tolerance), second = diskBoundary(b, bName, centre, scale(normal, -1), tolerance);
+function glueSection(a: Brep, aName: string, b: Brep, bName: string, centre: Point, normal: Point, tolerance: number,
+  edgeCount: number, id: string): Brep | undefined {
+  const first = sectionBoundary(a, aName, centre, normal, tolerance, edgeCount);
+  const second = sectionBoundary(b, bName, centre, scale(normal, -1), tolerance, edgeCount);
   if (!first || !second || !first.every(edge => second.filter(peer => sectionDirection(edge, peer, tolerance) !== undefined).length === 1)
     || !second.every(edge => first.filter(peer => sectionDirection(edge, peer, tolerance) !== undefined).length === 1)) return;
   return glueAtSharedFace(a, b, { family: 'sweep-curve', id }) ?? undefined;
+}
+
+/** Bind a line inside an affine planar chart by the endpoints of its canonical edge. */
+function affinePlaneBinding(edge: Curve, surface: Surface, tolerance: number): Curve | undefined {
+  if (edge.degree !== 1 || edge.controlPoints.length !== 2 || edge.weights[0] !== edge.weights[1]
+    || surface.degreeU !== 1 || surface.degreeV !== 1 || surface.controlPoints.length !== 2 || surface.controlPoints[0].length !== 2
+    || surface.weights.some(row => row.some(weight => weight !== surface.weights[0][0]))) return;
+  const [[o, pv], [pu, puv]] = surface.controlPoints;
+  const a = sub(pu, o), b = sub(pv, o);
+  if (len(sub(sub(puv, pv), a)) > tolerance) return;
+  const aa = dot(a, a), ab = dot(a, b), bb = dot(b, b), determinant = aa * bb - ab * ab;
+  if (!(determinant > 256 * Number.EPSILON * aa * bb)) return;
+  const { u, v } = surfaceDomain(surface), uvTolerance = tolerance / Math.sqrt(Math.min(aa, bb));
+  const solve = (point: Point): Point | undefined => {
+    const q = sub(point, o), aq = dot(a, q), bq = dot(b, q);
+    const s = (bb * aq - ab * bq) / determinant, t = (aa * bq - ab * aq) / determinant;
+    if (!(s >= -uvTolerance && s <= 1 + uvTolerance && t >= -uvTolerance && t <= 1 + uvTolerance)) return;
+    const x = Math.max(0, Math.min(1, s)), y = Math.max(0, Math.min(1, t));
+    if (len(sub(q, add(scale(a, x), scale(b, y)))) <= tolerance)
+      return [u[0] + x * (u[1] - u[0]), v[0] + y * (v[1] - v[0]), 0];
+  };
+  const first = solve(edge.controlPoints[0]), last = solve(edge.controlPoints[1]);
+  if (!first || !last || len(sub(first, last)) === 0) return;
+  const [start, end] = curveDomain(edge);
+  return { kind: 'curve', id: 'pcurve', degree: 1, knots: [start, start, end, end], controlPoints: [first, last], weights: [1, 1] };
 }
 
 function sectionBinding(edge: Curve, boundary: RationalBoundary, fixed: number, domain: readonly [number, number],
@@ -408,7 +434,7 @@ function bindClosedRing(brep: Brep, tolerance: number): Brep | undefined {
 }
 
 /** Bind the exact section isocurves to the final canonical edge directions after gluing. */
-function bindBendSections(glued: Brep, id: string, hasTail: boolean, tolerance: number): Brep | undefined {
+function bindBendSections(glued: Brep, id: string, hasTail: boolean, edgeCount: number, tolerance: number): Brep | undefined {
   const facesByLoop = new Map(glued.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
   const edges = new Map(glued.edges.map(edge => [edge.id, edge]));
   const uses = new Map(glued.coedges.map(use => [use.id, use]));
@@ -423,8 +449,9 @@ function bindBendSections(glued: Brep, id: string, hasTail: boolean, tolerance: 
     const surface = face.surface, edge = edges.get(use.edge);
     if (surface.kind !== 'surface' || !edge) return;
     const { u, v } = surfaceDomain(surface), row = atEnd ? surface.controlPoints.length - 1 : 0;
-    const bendBinding = sectionBinding(edge.curve, { degree: surface.degreeV, knots: surface.knotsV,
-      controlPoints: surface.controlPoints[row], weights: surface.weights[row] }, u[atEnd ? 1 : 0], v, 'v', tolerance);
+    const bendBinding = edgeCount === 4 && surface.degreeU === 1 ? affinePlaneBinding(edge.curve, surface, tolerance)
+      : sectionBinding(edge.curve, { degree: surface.degreeV, knots: surface.knotsV,
+        controlPoints: surface.controlPoints[row], weights: surface.weights[row] }, u[atEnd ? 1 : 0], v, 'v', tolerance);
     if (!bendBinding) return;
     bindings.set(use.id, bendBinding);
     if (atEnd) {
@@ -441,7 +468,7 @@ function bindBendSections(glued: Brep, id: string, hasTail: boolean, tolerance: 
       starts++;
     }
   }
-  if (starts === 2 && ends === (hasTail ? 2 : 0)) return { ...glued, coedges: glued.coedges.map(use => {
+  if (starts === edgeCount && ends === (hasTail ? edgeCount : 0)) return { ...glued, coedges: glued.coedges.map(use => {
     const pcurve = bindings.get(use.id);
     if (!pcurve) return use;
     const { id, edge, sense, loop, next, prev, twin } = use;
@@ -463,16 +490,55 @@ function bendEndFrame(dx: number, dy: number, radius: number, angle: number) {
 type JoinedRail = NonNullable<ReturnType<typeof tangentLineArc>> & { tailLength?: number };
 const sweepStyle = (rail: JoinedRail) => rail.tailLength === undefined ? 'line-and-arc' : 'line-arc-line';
 
-function lineAndArcDisk(id: string, rail: JoinedRail, profileRadius: number,
-  axes: SweepAxes, sideTags: SideTags | undefined, refuse: Refuse): SweepSolid {
-  const { length, toCentre, radius, angle, tailLength, tolerance } = rail, [x, y] = axes;
-  const style = sweepStyle(rail), hasTail = tailLength !== undefined;
+interface JoinedSection {
+  profile: readonly ProfileSegmentInput[];
+  bendCentre: XY;
+  radialReach: number;
+  extent: number;
+  edgeCount: 2 | 4;
+}
+
+/** Read the canonical CCW rectangle in sketch coordinates and centre it on the rail. */
+function rectangleSection(outer: ExactSweepInput['outer']) {
+  if (outer.length !== 4 || outer.some(segment => segment.kind !== 'line')) return;
+  const [[x0, y0], [x1, low], [right, y1], [left, high]] = outer.map(({ start }) => start);
+  if (!(x0 < x1 && y0 < y1 && low === y0 && right === x1 && left === x0 && high === y1)) return;
+  const halfX = (x1 - x0) / 2, halfY = (y1 - y0) / 2;
+  const corners: XY[] = [[-halfX, -halfY], [halfX, -halfY], [halfX, halfY], [-halfX, halfY]];
+  const profile: ProfileSegmentInput[] = corners.map(start => ({ kind: 'line', start }));
+  return { profile, halfX, halfY };
+}
+
+/** A canonical bend frame can keep the section's roll only along the radial and binormal directions. */
+function rectangularElbowSection(rectangle: NonNullable<ReturnType<typeof rectangleSection>>, axes: SweepAxes,
+  rail: JoinedRail, refuse: Refuse): { section: JoinedSection; axes: SweepAxes } {
+  const [x, y, tangent] = axes, { toCentre, radius, tolerance } = rail, { halfX, halfY, profile } = rectangle;
+  const inward = unit(sub(toCentre, scale(tangent, dot(toCentre, tangent))));
+  const signX = Math.sign(dot(inward, x)), signY = Math.sign(dot(inward, y));
+  const radialX = scale(inward, signX), radialY = scale(inward, signY);
+  const alignment = Math.min(CadNumericPolicy.relativeComparison, tolerance / Math.hypot(halfX, halfY));
+  const extent = Math.max(halfX, halfY);
+  if (len(sub(x, radialX)) <= alignment) return {
+    axes: [radialX, unit(cross(tangent, radialX)), tangent],
+    section: { profile, bendCentre: [signX * radius, 0], radialReach: halfX, extent, edgeCount: 4 },
+  };
+  if (len(sub(y, radialY)) <= alignment) return {
+    axes: [unit(cross(radialY, tangent)), radialY, tangent],
+    section: { profile, bendCentre: [0, signY * radius], radialReach: halfY, extent, edgeCount: 4 },
+  };
+  return refuse('CAPABILITY', "Exact rectangular elbow sweep needs the rectangle's original axes aligned to the bend radial and binormal.");
+}
+
+function lineAndArcSweep(id: string, rail: JoinedRail, section: JoinedSection,
+  sideTags: SideTags | undefined, refuse: Refuse): SweepSolid {
+  const { length, radius, angle, tailLength, tolerance } = rail;
+  const { profile, edgeCount, radialReach, extent, bendCentre: [dx, dy] } = section;
+  const rectangle = edgeCount === 4, style = rectangle ? 'rectangular elbow' : sweepStyle(rail), hasTail = tailLength !== undefined;
   if (radius > CadNumericPolicy.coordinateAbs) return refuse('PARAMETER', 'Exact sweep path radius must be at most 10000 mm.');
-  const [dx, dy] = [dot(toCentre, x), dot(toCentre, y)];
   const localRadius = Math.hypot(dx, dy);
-  const bendClearance = () => refuse('PARAMETER', `Exact ${hasTail ? 'line-arc-line ' : ''}sweep needs a path radius larger than the profile radius.`);
-  if (!(localRadius - profileRadius > tolerance)) return bendClearance();
-  const profile = [originDisk(profileRadius)];
+  const bendClearance = () => refuse('PARAMETER', rectangle ? 'Exact rectangular elbow sweep needs radial half-width smaller than the path radius.'
+    : `Exact ${hasTail ? 'line-arc-line ' : ''}sweep needs a path radius larger than the profile radius.`);
+  if (!(localRadius - radialReach > tolerance)) return bendClearance();
   const prism = prismaticFromProfile({ outer: profile, from: -length, height: length, tag: `${id}.line`,
     names: { bottom: `${id}.start`, top: `${id}.junction` }, ...(sideTags ? { sideTags } : {}) });
   const straight = brepFromPrismatic(prism, { id: `${id}_line` });
@@ -483,11 +549,11 @@ function lineAndArcDisk(id: string, rail: JoinedRail, profileRadius: number,
     : { ...element, name: element.name.replaceAll(`${id}.side`, `${id}.bend.side`) };
   const bend = { ...arc, faces: arc.faces.map(renameSide), edges: arc.edges.map(renameSide) };
 
-  // At the join both pieces use the same centred disk in z = 0. For the bend, z = ρ sin θ
-  // is positive away from the join because ρ ≥ R − r > 0 and 0 < θ ≤ 120°. The straight piece stays at z ≤ 0.
-  const roundoff = 128 * Number.EPSILON * Math.max(1, localRadius, profileRadius);
-  const badJoint = () => refuse('GEOMETRY', `The exact ${style} sweep sections do not share the same disk.`);
-  const firstJoin = glueDisk(straight, `${id}.junction`, bend, `${id}.start`, origin, identityAxes[2], roundoff, id);
+  // Both join sections lie in z = 0. The bend has z = ρ sin θ, positive away from the join because the entire
+  // section has ρ > 0 and 0 < θ ≤ 120°. The straight piece stays at z ≤ 0.
+  const roundoff = 128 * Number.EPSILON * Math.max(1, localRadius, extent);
+  const badJoint = () => refuse('GEOMETRY', `The exact ${style} sweep sections do not share the same ${rectangle ? 'rectangle' : 'disk'}.`);
+  const firstJoin = glueSection(straight, `${id}.junction`, bend, `${id}.start`, origin, identityAxes[2], roundoff, edgeCount, id);
   if (!firstJoin) return badJoint();
   let glued = firstJoin;
   let tailMass: ((density: number) => { props: MassProperties; axes: SweepAxes; offset: Point }) | undefined;
@@ -501,14 +567,14 @@ function lineAndArcDisk(id: string, rail: JoinedRail, profileRadius: number,
     // For the lead versus the tail, the mid-angle tangent through the bend centre gives projections
     // −ρ sin(θ/2) − leadStation cos(θ/2) < 0 and ρ sin(θ/2) + tailStation cos(θ/2) > 0.
     // This also covers a long tail that crosses the lead's tangent plane when θ > 90°.
-    const secondJoin = glueDisk(glued, `${id}.end`, tail, `${id}.tail.junction`,
-      tailFrame.offset, tailFrame.axes[2], roundoff, id);
+    const secondJoin = glueSection(glued, `${id}.end`, tail, `${id}.tail.junction`,
+      tailFrame.offset, tailFrame.axes[2], roundoff, edgeCount, id);
     if (!secondJoin) return badJoint();
     glued = secondJoin;
     tailMass = density => ({ props: prismaticMassProperties(tailPrism, density), ...tailFrame });
   }
-  const brep = bindBendSections(glued, id, hasTail, roundoff);
-  if (!brep || brep.faces.length !== (hasTail ? 8 : 6) || brep.faces.filter(face => face.name === `${id}.start`).length !== 1
+  const brep = bindBendSections(glued, id, hasTail, edgeCount, roundoff);
+  if (!brep || brep.faces.length !== (hasTail ? 3 : 2) * edgeCount + 2 || brep.faces.filter(face => face.name === `${id}.start`).length !== 1
     || brep.faces.filter(face => face.name === `${id}.end`).length !== 1)
     return refuse('GEOMETRY', `The exact ${style} sweep could not preserve the end caps and the tangent joins.`);
   return { brep, mass: density => {
@@ -580,15 +646,21 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     return result;
   }
 
-  const lineArc = tangentLineArcLine(path, refuse) ?? tangentLineArc(path, refuse);
+  const lineArc: JoinedRail | undefined = tangentLineArcLine(path, refuse) ?? tangentLineArc(path, refuse);
   if (lineArc) {
-    const style = sweepStyle(lineArc);
-    if (profileRadius === undefined || holes.length)
-      return refuse('CAPABILITY', `Exact ${style} sweep needs one circular disk section without holes.`);
-    const axes = frame(lineArc.tangent);
-    const result = place(lineAndArcDisk(id, lineArc, profileRadius, axes, sideTags, refuse), axes, lineArc.start);
+    const rectangle = profileRadius === undefined && lineArc.tailLength !== undefined ? rectangleSection(outer) : undefined;
+    if ((profileRadius === undefined && !rectangle) || holes.length) return refuse('CAPABILITY',
+      lineArc.tailLength !== undefined && profileRadius === undefined
+        ? 'Exact line-arc-line sweep needs one circular disk or one bend-aligned rectangular section without holes.'
+        : `Exact ${sweepStyle(lineArc)} sweep needs one circular disk section without holes.`);
+    const initial = frame(lineArc.tangent), [x, y] = initial;
+    const joined: { axes: SweepAxes; section: JoinedSection } = rectangle ? rectangularElbowSection(rectangle, initial, lineArc, refuse) : {
+      axes: initial, section: { profile: [originDisk(profileRadius!)], bendCentre: [dot(lineArc.toCentre, x), dot(lineArc.toCentre, y)],
+        radialReach: profileRadius!, extent: profileRadius!, edgeCount: 2 },
+    };
+    const result = place(lineAndArcSweep(id, lineArc, joined.section, sideTags, refuse), joined.axes, lineArc.start);
     const report = checkBrep(result.brep, { strict: true });
-    if (!report.valid) return refuse('GEOMETRY', `The exact ${style} sweep is not a valid closed solid: ${report.issues[0]}`);
+    if (!report.valid) return refuse('GEOMETRY', `The exact ${rectangle ? 'rectangular elbow' : sweepStyle(lineArc)} sweep is not a valid closed solid: ${report.issues[0]}`);
     return result;
   }
 

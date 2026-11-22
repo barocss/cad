@@ -53,3 +53,16 @@ test('the closed circle option labels its stored span pattern without changing o
   assert.equal(sweepRepresentationLabel(undefined, circle), 'Faceted');
   assert.equal(sweepRepresentationLabel('exact', { ...circle, weights: Array(9).fill(1) }), 'Exact circular arc');
 });
+
+test('Sweep History displays a rectangular section with resolved sketch dimensions', () => {
+  const sweep: Extract<ModelNode, { kind: 'sweep-curve' }> = {
+    kind: 'sweep-curve', sketch: 0, name: 'Elbow rail', mode: 'exact',
+    path: { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
+      controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0], [20, 27, 0], [20, 34, 0]],
+      weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1] },
+  };
+  const profile: ModelNode = { kind: 'sketch', profile: 'rectangle', min: [-2, -3], max: [{ parameter: 'right' }, 3] };
+  const html = JSON.stringify(SweepHistoryInputs({ sweep, profile, parameters: { right: 2 } }));
+  assert.ok(html.includes('Sketch 1 · 4 × 6 mm'));
+  assert.ok(html.includes('Exact line–arc–line'));
+});
