@@ -12,8 +12,7 @@ import { SelectedInstancesPanel } from './ui/SelectedInstancesPanel';
 import { commitOutlineRotation } from './sketch/outlineRotationCommit';
 import { usePinnedMass } from './state/usePinnedMass';
 import { PinnedMassControls } from './ui/PinnedMassControls';
-import { currentDirectPole, ownsDirectPole, type DirectPoleSelection } from './state/directPoleSelection';
-import type { PolePatch } from './ui/DirectPoleEditor';
+import { useDirectPoleEditor } from './state/useDirectPoleEditor';
 import { SavedBezierPicker } from './ui/SavedBezierPicker';
 import { currentCoordinateFeedback } from './sketch/coordinateFeedback';
 import { useSketchDraftHistory } from './sketch/useSketchDraftHistory';
@@ -172,7 +171,7 @@ import { captureMeasureTarget, readMeasureTarget, sameMeasureOccurrence, type Me
 import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportInstanceSelection } from './assembly/nestedSelection';
 import { NestedPartPanel } from './ui/NestedPartPanel';
 import { offsetFaceLaunchView } from './viewport/offsetFaceLaunchView';
-import { DRAG_TYPE, snapshotInstanceIsolation, type Spot, type SketchState, type TransformGizmo, type ViewportHandle } from './viewport/Viewport';
+import { DRAG_TYPE, snapshotInstanceIsolation, type Spot, type SketchState, type ViewportHandle } from './viewport/Viewport';
 import { Button } from '@/components/ui/button';
 import { ToolIconButton } from '@/components/ui/tool-button';
 import { countRender, onBlockRender } from './devRenders';
@@ -524,11 +523,6 @@ export function App() {
   const { routePanelOpen, setRoutePanelOpen, routeCreate, setRouteCreate, routeMove, routeSelected, routePhase, setRoutePhase, routeError, routeViewDoc, routeVisualDoc, routePreviewBodies,
     discardRoute, selectRouteBundle, createRoute, previewRoute, changeRouteMove, applyRoute, detachRoute } = routeEditor;
   discardRouteRef.current = discardRoute;
-  /** The picked pole of the one selected direct object, and how far its gizmo has dragged it. */
-  const [pole, setPoleState] = useState<DirectPoleSelection | null>(null);
-  const poleNow = useRef(pole);
-  const setPole = (next: DirectPoleSelection | null) => { poleNow.current = next; setPoleState(next); };
-  const [poleDrag, setPoleDrag] = useState<Vec3 | null>(null);
   const { coordinateFeedback, sketchIssue, setSketchIssue, setSketchError, liveShape, renderedSketch, updateShape,
     recordSketchDraft, setActiveOutline, sketchHistoryAvailable, replaySketchHistory } = useSketchDraftHistory({ doc, docNow, sketch, setSketch, sketchGeneration });
   const [palette, setPalette] = useState(false);
@@ -1181,36 +1175,10 @@ export function App() {
     if (select) setDirectSel(select);
     return true;
   }, [doc, marker, acceptanceScope, stageFeatureCandidate, fresh, busy, workerFailure, ownsEvaluatedSource, activeStore, project.opening]);
-  const poleObj = directSel.length === 1 ? directSel[0] : null;
   // The direct tools load when the document first has direct geometry (state: re-render once they are in).
   const [directReady, setDirectReady] = useState(() => !!directNow());
   useEffect(() => { if (doc.direct?.objects.length && !directReady) void loadDirect().then(() => setDirectReady(true)); }, [doc.direct, directReady]);
   const D = directReady ? directNow() : null;
-  const poles = useMemo(() => { if (!poleObj || !doc.direct || !D) return []; try { return D.polesOf(doc.direct, poleObj); } catch { return []; } }, [doc.direct, poleObj, D]);
-  const ownedPole = currentDirectPole(pole, doc.direct, docGeneration, poleObj, poles.map(p => p.key));
-  if (pole && !ownedPole) { setPole(null); if (poleDrag) setPoleDrag(null); }
-  const poleHere = ownedPole ? poles.find(p => p.key === ownedPole.key) ?? null : null;
-  const selectDirectPole = (key: string | null) => {
-    if (docNow.current !== doc || !doc.direct || !poleObj || (key !== null && !poles.some(p => p.key === key))) return;
-    setPoleDrag(null);
-    setPole(key === null ? null : { direct: doc.direct, generation: docGeneration, id: poleObj, key });
-  };
-  const editDirectPole = (key: string, patch: PolePatch) => {
-    if (!ownedPole || ownedPole.key !== key || !D || docNow.current !== doc || !ownsDirectPole(ownedPole, poleNow.current, docNow.current.direct, poleModeNow.current)) return;
-    try {
-      const [i, j] = key.split(',').map(Number);
-      const next = key.includes(',') ? D.directOps.editSurfacePole(ownedPole.direct, ownedPole.id, i, j, patch) : D.directOps.editCurvePole(ownedPole.direct, ownedPole.id, i, patch);
-      if (commitDirect(next, [ownedPole.id])) setPole({ ...ownedPole, direct: next });
-    } catch (error) { setToast({ title: 'The pole could not be changed', hint: error instanceof Error ? error.message : String(error), detail: '' }); }
-  };
-  const poleMoved = (delta: readonly number[]) => poleHere!.at.map((v, k) => v + delta[k]);
-  // While a pole is dragged, its object is shown re-evaluated with the pole where the gizmo has it.
-  const directShown = useMemo(() => {
-    if (!D) return [];
-    if (routeVisualDoc) return D.directDisplay(routeVisualDoc.direct);
-    if (poleDrag && poleHere && poleObj && doc.direct) try { return D.directDisplay(D.movePole(doc.direct, poleObj, poleHere.key, poleHere.at.map((v, k) => v + poleDrag[k]))); } catch { /* shown as it was */ }
-    return D.directDisplay(doc.direct);
-  }, [doc.direct, poleDrag, poleHere, poleObj, D, routeVisualDoc]);
   /** One undoable change of the placed instances. */
   const commitInstances = useCallback((next: PartInstance[], select?: string[]) => {
     if (!canChangeDocument()) return false;
@@ -1341,6 +1309,13 @@ export function App() {
     return result.ok ? result.faceTable ?? null : null;
   }, [doc, engine]);
   const assembly = useAssembly({ doc, evaluated, bodies, instanceBodies, setDoc: setDocState, commit: commitAssembly, variantPreview: variants.showing !== null, readFaces: bomHasLinkedHousing(doc) ? readLinkedFaces : undefined });
+  const poleEditor = useDirectPoleEditor({
+    doc, generation: docGeneration, selectedObjects: directSel, tools: D, routePreview: routeVisualDoc,
+    enabled: !routePanelOpen && !active && !sketch && !rendering && !drawing && !measure && !assembly.draft,
+    currentDocument: () => docNow.current, currentWorker: () => workerSessionNow.current === workerSession,
+    commit: commitDirect, onNotice: setToast,
+  });
+  const directShown = poleEditor.shown;
   const robotExports = useRobotExports({ model: { doc, bodies, instanceBodies, instanceSources, fresh, busy, massReady }, assembly, fileName, onNotice: setToast });
   const { jointTree, robotReady, reportMotionError } = robotExports;
   // The joint-slider pose (RM2): a preview only — the instances shown moved by forward kinematics, nothing saved.
@@ -1468,7 +1443,7 @@ export function App() {
   }, [activeStore, commandApply, holeCloseFocus, setSketch]);
 
   const openRoute = () => {
-    cancel(); setPole(null); setPoleDrag(null); routeEditor.open(directSel);
+    cancel(); poleEditor.clear(); routeEditor.open(directSel);
   };
 
   useEffect(() => routeEditor.cancelIfChanged(doc), [doc]);
@@ -2913,21 +2888,6 @@ export function App() {
   const routeGuideUnderlays = useMemo(() => routeEditor.makeGuides(D, underlaysShown), [routePanelOpen, routeVisualDoc, routeViewDoc, routePhase, routeMove, doc, D, underlaysShown, busy, fresh, marker, active, sketch, rendering, drawing, measure, assembly.draft, cageEd.session, skel.session, ghost]);
   const viewportUnderlays = useMemo(() => routeGuideUnderlays.length ? [...underlaysShown, ...routeGuideUnderlays] : underlaysShown, [underlaysShown, routeGuideUnderlays]);
 
-  // The picked pole's gizmo: drag it along an axis; let go, the curve or surface is edited (one undo step).
-  const poleMode = !routePanelOpen && !active && !sketch && !rendering && !drawing && !measure && !assembly.draft;
-  const poleModeNow = useRef(poleMode); poleModeNow.current = poleMode;
-  if (!poleMode && (pole || poleDrag)) { setPole(null); if (poleDrag) setPoleDrag(null); }
-  const poleGizmo: TransformGizmo | null = poleMode && poleHere && poleObj && doc.direct ? {
-    origin: poleMoved(poleDrag ?? [0, 0, 0]) as Vec3, move: [0, 1, 2],
-    onMove: (delta, done) => {
-      if (workerSessionNow.current !== workerSession || !ownedPole || docNow.current !== doc || !ownsDirectPole(ownedPole, poleNow.current, docNow.current.direct, poleModeNow.current)) return;
-      if (!done) { setPoleDrag(delta); return; }
-      setPoleDrag(null); if (delta.every(v => v === 0)) return;
-      try { const next = D!.movePole(doc.direct!, poleObj, poleHere.key, poleMoved(delta)); if (commitDirect(next, [poleObj])) setPole({ ...ownedPole, direct: next }); }
-      catch (e) { setToast({ title: 'The pole could not be moved', hint: e instanceof Error ? e.message : String(e), detail: '' }); }
-    },
-  } : null;
-
   const selBodies = selectedBodies(selection).map(i => bodies[i]).filter(Boolean);
   const continuityPick = fresh && !busy && shownDoc === doc && marker === null && !workerFailure
     && !drawing && !rendering && !section && !inPlace && !active && !bodyDrag && !ghost && !workingComparison
@@ -2953,11 +2913,11 @@ export function App() {
   const continuityLocationOwner = useMemo(() => continuityVisible ? {} : null,
     [continuityVisible, evaluated, docGeneration, workerSession, continuityKey, continuityPick?.edge, continuityOpen]);
   const continuityLocation = useContinuityLocation(continuityLocationOwner, readContinuity);
-  const directCurveId = poleObj;
+  const directCurveId = poleEditor.objectId;
   const directCurveVisible = !!directCurveId && !workerFailure && !printEnabled && !camEnabled &&
     !drawing && !rendering && !section && !inPlace && !active && !ghost && !workingComparison &&
     !routePanelOpen && !routeVisualDoc && !measure && !instanceSel.length && !isolatedInstances && !stepsDisp?.opaque &&
-    !assembly.draft && !sketch && !cageEd.session && !skel.session && marker === null && shownDoc === doc && !poleDrag &&
+    !assembly.draft && !sketch && !cageEd.session && !skel.session && marker === null && shownDoc === doc && !poleEditor.dragging &&
     viewportDirect.some(item => item.id === directCurveId && item.kind === 'curve');
   const directCurvature = useDirectCurveCurvature(docGeneration, directCurveId, directCurveVisible, doc.direct, D?.measureDirectCurveCurvature);
   const { clearanceReason, clearanceDisplay, clearanceLabels } = useClearancePreview({
@@ -3011,7 +2971,7 @@ export function App() {
       ? 'Finish or cancel the current edit before finding the selection.'
       : rendering || drawing || inPlace || section || measure || printEnabled || camEnabled || pmiEnabled || previewMode !== 'none' || routePanelOpen || stepsDisp || isolatedInstances || ghost || workingComparison
         ? 'Return to the ordinary Model view before finding the selection.'
-        : bodyDrag || instDrag || poleDrag || sectionDragFrom || dragCmd.current
+        : bodyDrag || instDrag || poleEditor.dragging || sectionDragFrom || dragCmd.current
           ? 'Finish the current drag before finding the selection.'
           : project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatView || cutListView || stepAsk || stlAsk
             ? 'Finish the current document or dialog operation before finding the selection.' : null;
@@ -3020,7 +2980,7 @@ export function App() {
     ? 'Wait for the current main Model result.'
     : displayScopeReason || active || sketch || editNode !== null || instanceEdit || renaming || parameterEdit || assembly.draft || inPlace || section || measure || previewMode !== 'none' || pmiEnabled || routePanelOpen || stepsDisp || ghost || workingComparison || cutDraft
       ? 'Finish the current operation and return to ordinary Model view.'
-      : bodyDrag || instDrag || poleDrag || sectionDragFrom || dragCmd.current || project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatView || cutListView || stepAsk || stlAsk
+      : bodyDrag || instDrag || poleEditor.dragging || sectionDragFrom || dragCmd.current || project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatView || cutListView || stepAsk || stlAsk
         ? 'Finish the current drag or dialog first.' : null;
   const browserActions = useBrowserActions({
     model: { doc, evaluated, bodies, generation: docGeneration, workerSession, openIntent: bodyRevealOpenIntent },
@@ -3226,7 +3186,7 @@ export function App() {
       {!rendering && !drawing && !sketch && !measure && !instanceSel.length && <GravityExperimentPanel doc={doc} joints={jointTree?.joints ?? []} />}
       {!rendering && !sketch && !measure && !!doc.instances?.length && (assembly.draft || !!singleTop(instanceSel)) && <MatePanel assembly={assembly} instances={doc.instances} instance={singleTop(instanceSel)}
         onRefused={why => setToast({ title: 'The mate was refused', hint: why, detail: '' })} />}
-      {!rendering && !active && !sketch && !measure && !instanceSel.length && directSel.length > 0 && doc.direct && <DirectInspector doc={doc} directSel={directSel} onSelect={setDirectSel} poleControls={{ selected: poleHere?.key ?? null, select: selectDirectPole, edit: editDirectPole }}
+      {!rendering && !active && !sketch && !measure && !instanceSel.length && directSel.length > 0 && doc.direct && <DirectInspector doc={doc} directSel={directSel} onSelect={setDirectSel} poleControls={poleEditor.controls}
         curveCurvature={directCurveVisible ? directCurvature : undefined}
         changes={{ commitDirect }} onThicken={(id, t, side) => {
           if (directSel.length === 1 && directSel[0] === id) start(commands.find(c => c.id === 'thicken')!, { t, side });
@@ -3353,13 +3313,13 @@ export function App() {
         display={viewDisplay.viewport} onBackend={setViewBackend}
         modelUnavailable={modelUnavailable} bodies={cageInputActive ? cageEd.shown(shownBodies) : viewBodies} modelSelection={modelSelection}
         ghost={sketchGhost} sketch={sketch} curvatureComb={directCurvature.overlay ?? curvature.overlay} continuityLocation={continuityLocation.curve} filletEndpoints={displayedFilletEndpoints} filletPickedEdgeHighlight={filletPickedEdgeHighlight} constraintInspection={constraintInspection} regions={regions} threads={threads} profiles={active ? [] : profiles}
-        gizmo={cageInputActive ? cageEd.gizmo : routeGizmo ?? gizmo ?? instGizmo ?? poleGizmo} cage={cageInputActive ? cageEd.overlay : null} onPickCage={cageInputActive ? cageEd.onPick : undefined} tool={skel.tool}
+        gizmo={cageInputActive ? cageEd.gizmo : routeGizmo ?? gizmo ?? instGizmo ?? poleEditor.gizmo} cage={cageInputActive ? cageEd.overlay : null} onPickCage={cageInputActive ? cageEd.onPick : undefined} tool={skel.tool}
         handles={sectionDrag.length ? sectionDrag : handles} instancePreview={instancePreview} contactLinks={contactShown && motionContact ? motionContact.links : undefined}
         render={rendering ? render : null} analysis={rendering ? null : viewAnalysis}
         printDisplay={printDisplay} printActive={printEnabled && !printReason} camDisplay={camDisplay} camActive={camEnabled && !camReason}
         annotations={pmiItems} annotationSelected={pmiSelected} onPickAnnotation={pickAnnotation}
-        direct={viewportDirect} directSelection={directSel} poles={poleMode ? poles : undefined} cloud={benchCloud ?? workspaceCloud} underlays={viewportUnderlays}
-        pickedPole={poleHere?.key ?? null} onPickPole={key => selectDirectPole(poleHere?.key === key ? null : key)}
+        direct={viewportDirect} directSelection={directSel} poles={poleEditor.poles} cloud={benchCloud ?? workspaceCloud} underlays={viewportUnderlays}
+        pickedPole={poleEditor.controls.selected} onPickPole={poleEditor.pick}
         offsets={animatedOffsets} transforms={dragTransforms} instances={viewportInstances} clearance={clearanceDisplay}
         isolatedInstances={displayScopeReason ? undefined : stepsDisp?.opaque ?? isolatedInstances}
         clip={sectionClip} sectionHatch={sectionHatchLines} scalarMaps={scalarMaps} onHoverScalar={mapHoverOwner ? setMapHover : undefined}
