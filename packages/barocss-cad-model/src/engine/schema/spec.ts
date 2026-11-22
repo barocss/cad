@@ -13,6 +13,7 @@ export type Query =
   | { fn: 'radius'; face: unknown }
   | { fn: 'hole_diameter'; face: unknown }
   | { fn: 'radial_wall'; a: string; b: string }
+  | { fn: 'planar_wall'; a: string; b: string }
   | { fn: 'min_wall'; body?: string }
   | { fn: 'draft_min'; body?: string; pull?: [number, number, number] }
   | { fn: 'clearance'; a: string; b: string }

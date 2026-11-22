@@ -7,6 +7,7 @@ import { inspectLocalHeightPlan, isLocalTaskCount } from '../../team/localHeight
 import { digestOf, requirementEvidenceRevision } from '../../util/digest';
 import { revisionOf } from '../../util/revision';
 import { directInspectionRevision } from '../sweepSource';
+import { isThickenWallQuery } from '../thickenWall';
 import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, type PartRun, json, fail } from '../toolKit';
 import { isDirectPin, pinnedDirectCandidate } from './directCandidate';
 
@@ -35,7 +36,7 @@ async function setRequirementsTool(state: ChatState, args: Record<string, unknow
 async function checkCandidateWall(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, dispatch: PartRun): Promise<ToolOutcome> {
   const { requirement, expectedDirectRevision } = args;
   if (typeof requirement !== 'string' || !requirement || !isDirectPin(expectedDirectRevision) || args.validate !== undefined)
-    return fail(state, 'Pass the radial wall requirement ID and both Direct proposal pins.', { code: 'DIRECT_CHECK_INPUT' });
+    return fail(state, 'Pass the wall requirement ID and both Direct proposal pins.', { code: 'DIRECT_CHECK_INPUT' });
   if (state.partOf || state.doc.instances?.length)
     return fail(state, 'Check an Exact Thicken proposal in a base part without placed parts.', { code: 'DIRECT_CHECK_SCOPE' });
   const baseDirectRevision = directInspectionRevision(state.doc);
@@ -45,8 +46,8 @@ async function checkCandidateWall(state: ChatState, args: Record<string, unknown
   if ('refusal' in replay) return replay.refusal;
   const { candidate, preview, pending } = replay;
   const matches = (preview.doc.requirements ?? []).filter(r => r.id === requirement);
-  if (!pending.requirements?.includes(requirement) || matches.length !== 1 || matches[0].check.query.fn !== 'radial_wall')
-    return fail(state, 'Choose a radial wall requirement named by this proposal.', { code: 'DIRECT_CHECK_REQUIREMENT' });
+  if (!pending.requirements?.includes(requirement) || matches.length !== 1 || !isThickenWallQuery(matches[0].check.query.fn))
+    return fail(state, 'Choose a radial_wall or planar_wall requirement named by this proposal.', { code: 'DIRECT_CHECK_REQUIREMENT' });
   const { check } = matches[0], result = await runCheck(preview.doc, preview.bodies, evaluate, check);
   return { state, content: json({
     revision: revisionOf(preview.doc), evidenceRevision: requirementEvidenceRevision(preview.doc),

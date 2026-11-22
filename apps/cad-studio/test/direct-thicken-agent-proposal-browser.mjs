@@ -5,22 +5,31 @@ import { createFlow, sha256 } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
 const radialWall = process.argv.includes('--radial-wall');
-const inspectFaces = radialWall || process.argv.includes('--candidate-faces');
+const planarWall = process.argv.includes('--planar-wall');
+const wallReview = radialWall || planarWall;
+const inspectFaces = wallReview || process.argv.includes('--candidate-faces');
 const reviewImage = inspectFaces || process.argv.includes('--candidate-image');
-const rails = reviewImage || process.argv.includes('--rails');
+const rails = !planarWall && (reviewImage || process.argv.includes('--rails'));
 const weight = Math.SQRT1_2;
 const arc = [[30, 20], [30, 30], [20, 30], [10, 30], [10, 20]];
 const rail = (id, z) => `@curve #${id} {type:nurbs;degree:2;knots:[0,0,0,1,1,2,2,2];
   control-points:${JSON.stringify(arc.map(([x, y]) => [x, y, z]))};weights:[1,${weight},1,${weight},1];}`;
 const railSource = `@model panel {version:0;length-unit:mm;${rail('a', 0)}${rail('b', 12)}}`;
-const thickness = rails ? 2 : 3;
-const expectedVolume = rails ? 216 * Math.PI : 3600;
-const volumeLabel = rails ? '+678.58 mm³' : '+3600 mm³';
-const wall = { id: 'WALL-2', source: 'The radial wall must be 2 ± 0.01 mm.', hard: true,
-  check: { query: { fn: 'radial_wall', a: 'n0.normal', b: 'n0.reverse' }, op: '==', value: 2, tol: 0.01, unit: 'mm' } };
+const tiltedSource = '@model panel {version:0;length-unit:mm;@surface #s {type:nurbs;degree-u:1;degree-v:1;knots-u:[0,0,1,1];knots-v:[0,0,1,1];control-points:[[[10,-6,3],[34,30,-23]],[[40,-26,3],[64,10,-23]]];weights:[[1,1],[1,1]];}}';
+const thickness = rails || planarWall ? 2 : 3;
+const expectedVolume = rails ? 216 * Math.PI : planarWall ? 3640 : 3600;
+const volumeLabel = rails ? '+678.58 mm³' : `+${expectedVolume} mm³`;
+const wall = { id: 'WALL-2', source: `The ${planarWall ? 'normal' : 'radial'} wall must be 2 ± 0.01 mm.`, hard: true,
+  check: { query: { fn: planarWall ? 'planar_wall' : 'radial_wall', a: 'n0.normal', b: 'n0.reverse' }, op: '==', value: 2, tol: 0.01, unit: 'mm' } };
 const checkWall = args => ({ action: 'check', requirement: wall.id, ...args });
 const proposeThicken = (args, title) => ({ action: 'propose', title,
-  ...(radialWall ? { requirements: [wall.id] } : {}), ops: [{ tool: 'features', args }] });
+  ...(wallReview ? { requirements: [wall.id] } : {}), ops: [{ tool: 'features', args }] });
+const thickenCommand = (before, t) => ({
+  action: 'command', command: 'direct-thicken', expectedRevision: before.direct_revision,
+  values: rails
+    ? { first: before.direct_curves[0].id, second: before.direct_curves[1].id, t, side: 'reverse', mode: 'exact-cylinder' }
+    : { surface: before.direct_surfaces[0].id, t, side: 'both', ...(planarWall ? { mode: 'exact-planar' } : {}) },
+});
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nodes: [], outputs: {}, nextId: 0,
   direct: {
@@ -29,6 +38,9 @@ const seed = {
     },
     objects: [{ id: 'a', name: 'Front rail', source: 'rails', geometry: 'a' }, { id: 'b', name: 'Back rail', source: 'rails', geometry: 'b' }],
   },
+};
+if (planarWall) seed.direct = {
+  sources: { tilted: tiltedSource }, objects: [{ id: 'src', name: 'Tilted sheet', source: 'tilted', geometry: 's' }],
 };
 const pins = [
   'apps/cad-studio/test/direct-thicken-agent-proposal-browser.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs',
@@ -40,19 +52,21 @@ if (rails) pins.push('packages/barocss-cad-model/src/chat/directRuledProposal.ts
   'packages/barocss-cad/src/brep/thicken-cylinder.ts', 'apps/cad-studio/src/state/useProposalPreview.ts');
 if (reviewImage) pins.push('packages/barocss-cad-model/src/chat/directProposalReview.ts',
   'packages/barocss-cad-model/src/chat/part/views.ts', 'packages/barocss-cad-model/src/chat/views.ts');
-if (radialWall) pins.push('packages/barocss-cad-model/src/chat/radialWall.ts', 'packages/barocss-cad-model/src/chat/spec.ts',
+if (wallReview) pins.push('packages/barocss-cad-model/src/chat/thickenWall.ts', 'packages/barocss-cad-model/src/chat/spec.ts',
   'packages/barocss-cad-model/src/chat/part/directCandidate.ts', 'packages/barocss-cad-model/src/chat/part/requirements.ts');
+if (planarWall) pins.push('packages/barocss-cad/src/brep/thicken-planar.ts');
 const f = await createFlow({
   name: 'direct-thicken-agent-proposal', output: process.argv[2],
-  envFrozen: radialWall ? 'D1639_SOURCE_FROZEN' : inspectFaces ? 'D1638_SOURCE_FROZEN'
+  envFrozen: planarWall ? 'D1640_SOURCE_FROZEN' : radialWall ? 'D1639_SOURCE_FROZEN' : inspectFaces ? 'D1638_SOURCE_FROZEN'
     : reviewImage ? 'D1637_SOURCE_FROZEN' : rails ? 'D1636_SOURCE_FROZEN' : 'D1628_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: radialWall ? 'Check the pinned native wall, refuse a thin proposal in Studio and match the approved evidence after fresh Open.'
+  qualification: wallReview ? 'Check the pinned native wall, refuse a thin proposal in Studio and match the approved evidence after fresh Open.'
     : inspectFaces ? 'Measure the named native cylinder faces in a pending image and match them after a Studio approval and fresh Open.'
     : reviewImage ? 'Compare the unapproved Exact Thicken image from local MCP with the Studio candidate and the approved model after fresh Open.'
     : rails ? 'Approve a pinned Ruled sheet and its exact semicylinder Thicken from two rails in one desktop Studio decision.'
     : 'Approve a pinned planar Direct Thicken proposal in desktop Studio and check its native solid after Save and fresh Open.',
-  limits: [rails ? 'A two-quarter R10 semicylinder, vertical span 12 mm, 2 mm inward offset, local MCP L4 and desktop WebGPU.'
+  limits: [planarWall ? 'One 3D tilted parallelogram, symmetric 2 mm thickness, local MCP L4 and desktop WebGPU.'
+    : rails ? 'A two-quarter R10 semicylinder, vertical span 12 mm, 2 mm inward offset, local MCP L4 and desktop WebGPU.'
     : 'A 40 × 30 mm planar Ruled sheet, symmetric 3 mm faceted thickness, local MCP L4 and desktop WebGPU.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -72,14 +86,19 @@ if (action === 'make') {
     const bounds = ['min', 'max'].map(which => [0, 1, 2].map(axis => Math[which](...points.map(point => point[axis]))));
     return { key, support, bounds, volume: brepMassProperties(brep, 1).volume, valid: checkBrep(brep, { strict: true }).valid,
       solid: brep.bodies[0]?.kind, faces: brep.faces.length, digest: digestOf(brep),
-      cylinders: brep.faces.map(face => faceGeometry(face)).filter(face => face.kind === 'cylinder') };
+      cylinders: brep.faces.map(face => faceGeometry(face)).filter(face => face.kind === 'cylinder'),
+      ...(action === 'planar' ? { points, skins: ['n0.normal', 'n0.reverse'].map(name => {
+        const face = brep.faces.find(face => face.name === name);
+        if (face?.surface.kind !== 'surface') throw new Error('Expected skin: ' + name);
+        return face.surface.controlPoints.flat();
+      }) } : {}) };
   })));
 }
 `,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const card = () => f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
-const sheet = () => f.page.locator('.ol.direct').filter({ hasText: 'Ruled surface' });
+const sheet = () => f.page.locator('.ol.direct').filter({ hasText: planarWall ? 'Tilted sheet' : 'Ruled surface' });
 const mcp = (file, label, run) => withMcpSession({ app: f.app, output: f.output, clientName: f.name, autonomy: 4 }, file, label, run);
 const near = (got, want) => assert.ok(Math.abs(got - want) < 1e-8, `${got} != ${want}`);
 const render = (request, args) => request('tools/call', { name: 'query', arguments: { action: 'render', ...args } });
@@ -106,11 +125,13 @@ async function refuseReview(request, args, code) {
 }
 
 async function checkSolid(label, doc) {
-  const native = await f.inspect(label, doc, 'solid');
+  const native = await f.inspect(label, doc, planarWall ? 'planar' : 'solid');
   assert.equal(native.length, 1);
   const [plate] = native;
   assert.deepEqual([plate.valid, plate.solid], [true, 'solid']);
-  const expectedBounds = rails ? [[10, 20, 0], [30, 20, 12]] : [[10, -6, 1.5], [50, 24, 4.5]];
+  const expectedBounds = rails ? [[10, 20, 0], [30, 20, 12]]
+    : planarWall ? [[10 - 2/7, -26 - 3/7, -23 - 6/7], [64 + 2/7, 30 + 3/7, 3 + 6/7]]
+      : [[10, -6, 1.5], [50, 24, 4.5]];
   plate.bounds.forEach((corner, i) => corner.forEach((value, j) => near(value, expectedBounds[i][j])));
   near(plate.volume, expectedVolume);
   assert.deepEqual(doc.nodes.at(-1).surface, plate.support);
@@ -120,6 +141,15 @@ async function checkSolid(label, doc) {
     const ordered = plate.cylinders.sort((a, b) => a.r - b.r);
     near(ordered[0].r, 8); near(ordered[1].r, 10);
     for (const cylinder of ordered) { near(cylinder.c[0], 20); near(cylinder.c[1], 20); }
+  }
+  if (planarWall) {
+    assert.deepEqual([plate.faces, plate.cylinders.length, plate.points.length], [6, 0, 8]);
+    const qDot = ([x, y, z]) => 2*x + 3*y + 6*z;
+    for (const [i, wanted] of [27, 13].entries()) {
+      assert.equal(plate.skins[i].length, 4);
+      plate.skins[i].forEach(point => near(qDot(point), wanted));
+      assert.equal(plate.points.filter(point => Math.abs(qDot(point) - wanted) < 1e-8).length, 4);
+    }
   }
   return plate;
 }
@@ -136,17 +166,16 @@ await f.run(async () => {
     });
     return context;
   };
-  const doc = rails ? seed : await f.inspect('input', seed, 'make'), file = join(f.output, 'pending-thicken.bcad');
+  const doc = rails || planarWall ? seed : await f.inspect('input', seed, 'make'), file = join(f.output, 'pending-thicken.bcad');
   const original = Buffer.from(JSON.stringify(doc));
   await writeFile(file, original);
-  if (radialWall) {
+  if (wallReview) {
     const thinFile = join(f.output, 'thin-thicken.bcad');
     await writeFile(thinFile, original);
     await mcp(thinFile, 'thin-wall', async call => {
       await call('requirements', { action: 'set', requirements: [wall] });
       const before = await call('query', { action: 'summary' });
-      const command = { action: 'command', command: 'direct-thicken', expectedRevision: before.direct_revision,
-        values: { first: before.direct_curves[0].id, second: before.direct_curves[1].id, t: 1, side: 'reverse', mode: 'exact-cylinder' } };
+      const command = thickenCommand(before, 1);
       const result = await call('proposals', proposeThicken(command, '1 mm wall violates WALL-2'));
       assert.deepEqual(result.checks.newly_failing, [wall.id]);
       const [{ id: proposal, directReviewRevision: expectedProposalRevision }] = (await call('proposals', { action: 'list' })).proposals;
@@ -161,25 +190,23 @@ await f.run(async () => {
     await button('Iso').click();
     await f.page.getByTitle('Frame all (F)', { exact: true }).click();
     await button('Preview', card()).click();
-    await card().getByLabel('Volume change').getByText('+358.14 mm³', { exact: true }).waitFor();
+    await card().getByLabel('Volume change').getByText(planarWall ? '+1820 mm³' : '+358.14 mm³', { exact: true }).waitFor();
     await button('Accept', card()).click();
-    await f.waitToast(/P1 could not be applied.*WALL-2.*measured .*mm.*expected 2 ± 0\.01 mm/);
+    await f.waitToast(/P1 could not be applied.*WALL-2.*measured 1 mm.*expected 2 ± 0\.01 mm/);
     await f.same(thinPending);
     await f.snapshot('00-thin-refused');
     assert.deepEqual(await readFile(thinFile), thinBytes);
   }
   const { pin, review } = await mcp(file, 'proposal', async (call, request) => {
-    if (radialWall) await call('requirements', { action: 'set', requirements: [wall] });
+    if (wallReview) await call('requirements', { action: 'set', requirements: [wall] });
     const sourceBytes = await readFile(file);
     const help = await call('describe', { command: 'direct-thicken' });
     assert.equal(help.command, 'direct-thicken');
     const before = await call('query', { action: 'summary' });
     if (rails) assert.ok(help.values.first && help.values.second);
-    const values = rails
-      ? { first: before.direct_curves[0].id, second: before.direct_curves[1].id, t: thickness, side: 'reverse', mode: 'exact-cylinder' }
-      : { surface: before.direct_surfaces[0].id, t: thickness, side: 'both' };
-    const command = { action: 'command', command: help.command, expectedRevision: before.direct_revision, values };
-    const propose = args => proposeThicken(args, rails ? 'Create and thicken a Ruled semicylinder' : 'Thicken the planar Ruled sheet');
+    const command = thickenCommand(before, thickness), { values } = command;
+    const propose = args => proposeThicken(args, rails ? 'Create and thicken a Ruled semicylinder'
+      : planarWall ? 'Thicken the tilted sheet' : 'Thicken the planar Ruled sheet');
     assert.match((await call('features', command, true)).error, /user approval/i);
     assert.match((await call('proposals', propose({ ...command, expectedRevision: '0'.repeat(64) }), true)).error, /Direct inputs changed/);
     assert.match((await call('proposals', propose({ ...command, values: { ...command.values, t: 0 } }), true)).error, /positive thickness/);
@@ -214,13 +241,23 @@ await f.run(async () => {
         const measured = await call('query', inspect);
         assert.deepEqual([measured.revision, measured.unit, measured.candidate], [candidate.revision, 'mm', candidate.candidate]);
         assert.deepEqual(measured.faces.map(face => face.name), faces);
-        assert.deepEqual(measured.faces.map(face => face.geometry.kind), ['cylinder', 'cylinder']);
-        assert.deepEqual(measured.faces.map(face => face.geometry.outwardNormal), ['away-from-axis', 'toward-axis']);
-        near(measured.faces[0].geometry.radius, 10);
-        near(measured.faces[1].geometry.radius, 8);
-        for (const { geometry: { axis } } of measured.faces) {
-          near(axis.point[0], 20); near(axis.point[1], 20);
-          near(Math.abs(axis.direction[2]), 1);
+        if (planarWall) {
+          const q = [2, 3, 6];
+          for (const [i, { geometry }] of measured.faces.entries()) {
+            assert.equal(geometry.kind, 'plane');
+            const sign = i === 0 ? 1 : -1;
+            q.forEach((v, k) => near(geometry.outwardNormal[k], sign * v / 7));
+            near(q.reduce((sum, v, k) => sum + v * geometry.point[k], 0), 20 + sign * 7);
+          }
+        } else {
+          assert.deepEqual(measured.faces.map(face => face.geometry.kind), ['cylinder', 'cylinder']);
+          assert.deepEqual(measured.faces.map(face => face.geometry.outwardNormal), ['away-from-axis', 'toward-axis']);
+          near(measured.faces[0].geometry.radius, 10);
+          near(measured.faces[1].geometry.radius, 8);
+          for (const { geometry: { axis } } of measured.faces) {
+            near(axis.point[0], 20); near(axis.point[1], 20);
+            near(Math.abs(axis.direction[2]), 1);
+          }
         }
         const refused = await call('query', { ...inspect, faces: ['no-such-face'] }, true);
         assert.equal(refused.code, 'NATIVE_FACE_NAME');
@@ -228,7 +265,7 @@ await f.run(async () => {
         review.inspect = inspect;
         review.faces = measured.faces;
       }
-      if (radialWall) {
+      if (wallReview) {
         assert.deepEqual(result.checks.newly_passing, [wall.id]);
         const wallArgs = checkWall(args);
         const reply = await request('tools/call', { name: 'requirements', arguments: wallArgs });
@@ -264,23 +301,30 @@ await f.run(async () => {
   await f.same(pending);
   await f.snapshot('02-preview');
 
-  f.phase = 'Hide a source and refuse the now stale proposal';
+  f.phase = 'Edit a source and refuse the now stale proposal';
   await (rails ? f.page.locator('.ol.direct').and(f.page.getByTitle('Back rail', { exact: true })) : sheet()).click();
-  await button('Hide', f.page.getByRole('complementary', { name: 'Direct geometry' })).click();
+  const directPanel = f.page.getByRole('complementary', { name: 'Direct geometry' });
+  if (planarWall) {
+    const moveZ = directPanel.getByLabel('ΔZ', { exact: true });
+    await moveZ.fill('1');
+    await moveZ.press('Tab');
+    await button('Move', directPanel).click();
+  } else await button('Hide', directPanel).click();
   await f.changed(pending);
-  const hidden = await f.doc();
-  assert.equal(hidden.direct.objects.at(-1).hidden, true);
+  const changed = await f.doc();
+  if (planarWall) assert.notDeepEqual(changed.direct.sources, pending.direct.sources);
+  else assert.equal(changed.direct.objects.at(-1).hidden, true);
   await button('Rebase & preview', card()).click();
   await f.waitToast(/P1 could not be rebased/);
   assert.equal(await button('Preview', card()).isDisabled(), true);
-  await f.same(hidden);
+  await f.same(changed);
   await f.snapshot('03-stale');
   if (review) {
     const edited = await f.save('stale-review');
     const editedBytes = await readFile(edited.file);
     await mcp(edited.file, 'stale-review', async (call, request) => {
       const { direct_revision } = await call('query', { action: 'summary' });
-      if (radialWall) {
+      if (wallReview) {
         const old = await call('requirements', checkWall(review.args), true);
         const stale = await call('requirements', checkWall({ ...review.args, expectedDirectRevision: direct_revision }), true);
         assert.deepEqual([old.code, stale.code, old.measured, stale.measured], ['DIRECT_CHECK_STALE', 'DIRECT_CHECK_PROPOSAL_STALE', undefined, undefined]);
@@ -313,7 +357,10 @@ await f.run(async () => {
     assert.equal(accepted.direct.objects.length, 3);
     assert.deepEqual(accepted.direct.objects.slice(0, 2), doc.direct.objects);
     assert.equal(accepted.direct.sources.rails, doc.direct.sources.rails);
-  } else assert.deepEqual(accepted.direct, doc.direct);
+  } else {
+    if (planarWall) assert.equal(node.mode, 'exact-planar');
+    assert.deepEqual(accepted.direct, doc.direct);
+  }
   const plate = await checkSolid('accepted-native', accepted);
   await f.snapshot('04-approved');
   await f.undo();
@@ -339,7 +386,7 @@ await f.run(async () => {
         assert.equal(refused.code, 'DIRECT_INSPECT_PROPOSAL_UNAVAILABLE');
         assert.equal(refused.faces, undefined);
       }
-      if (radialWall) {
+      if (wallReview) {
         const decision = accepted.proposals[0].decided.evidence_revisions;
         assert.deepEqual(accepted.history.at(-1).evidence_revisions, decision);
         assert.equal(decision.after, review.wall.evidenceRevision);

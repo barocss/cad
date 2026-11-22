@@ -1,7 +1,7 @@
 // The v2 `proposals` group's handlers and the proposal machinery (R3, moved from chat/tools.ts): the autonomy gate, a
 // change worked out on a copy, accepted, rebased or previewed, and its parts. The tools' runner comes in as `run`;
 // chat/tools keeps the public functions' signatures as thin wrappers.
-import { prefixDoc, type ModelNode, type StudioDoc } from '../../engine/doc';
+import { fmt, prefixDoc, type ModelNode, type StudioDoc } from '../../engine/doc';
 import type { BodyResult } from '../../engine/evaluate';
 import { featureId } from '../../engine/ids';
 import { changesFixedSpanCountAndLength } from '../../app/patternHoleSpacing';
@@ -13,7 +13,8 @@ import { isDirectRuledOperation } from '../directRuledProposal';
 import { directReviewRevision } from '../directProposalReview';
 import { DIRECT_SNAPSHOT_APPROVAL, isDirectThickenOperation, isRuledThickenOperation } from '../directThickenProposal';
 import type { ChecksDelta, FollowUpRepairSource, Proposal, Risk } from '../../engine/schema/proposals';
-import { checkSpec, expectedOf, modelHash, runCheck } from '../spec';
+import { checkSpec, expectedOf, meets, modelHash, runCheck } from '../spec';
+import { isThickenWallQuery } from '../thickenWall';
 import { MUTATORS } from '../toolDefinitions';
 import { errorOf, moveOpsWith, runOps, type OpsRun } from './history';
 import { type ChatState, type Evaluate, type ToolOutcome, type PartRun, type PartHandler, type CallOptions, json, fail, strings } from '../toolKit';
@@ -185,12 +186,16 @@ export async function acceptProposalWith(dispatch: PartRun, state: ChatState, id
     cur = { ...cur, doc: partial.doc, bodies: r.bodies };
   }
   for (const requirement of state.doc.requirements ?? []) {
-    if (!requirement.hard || requirement.check.query.fn !== 'radial_wall' || !p.requirements?.includes(requirement.id)) continue;
+    if (!requirement.hard || !isThickenWallQuery(requirement.check.query.fn) || !p.requirements?.includes(requirement.id)) continue;
     const current = (cur.doc.requirements ?? []).filter(r => r.id === requirement.id);
     if (current.length !== 1 || digestOf(current[0]) !== digestOf(requirement))
       return { error: `${requirement.id}: review the wall thickness requirement separately before changing it.` };
     const result = await runCheck(cur.doc, cur.bodies, evaluate, requirement.check);
-    if (result.status !== 'pass') return { error: `${requirement.id}: ${result.why ?? `measured ${result.measured} mm, expected ${expectedOf(requirement.check)}` }.` };
+    if (result.status === 'pass') continue;
+    if (typeof result.measured !== 'number') return { error: `${requirement.id}: ${result.why ?? 'Wall thickness could not be measured'}.` };
+    const rounded = fmt(result.measured);
+    const measured = meets(Number(rounded), requirement.check).ok ? result.measured : rounded;
+    return { error: `${requirement.id}: measured ${measured} mm, expected ${expectedOf(requirement.check)}.` };
   }
   const at = new Date().toISOString(), hash = modelHash(cur.doc);
   const evidence = by.agent === 'user' ? { evidence_revisions: { before, after: requirementEvidenceRevision(cur.doc) } } : {};

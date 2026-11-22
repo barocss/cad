@@ -156,6 +156,36 @@ test('a linked radial wall requirement checks the pinned native output and gates
   assert.match('error' in refused ? refused.error : '', /needs the distinct native inner and outer faces/);
 });
 
+test('a planar wall measures the normal separation of the two exact skins for every side', async () => {
+  const evaluate = async (doc: ChatState['doc']) => evaluatePart(doc, 1);
+  const check: Requirement['check'] = { query: { fn: 'planar_wall', a: 'n0.reverse', b: 'n0.normal' }, op: '==', value: 7, unit: 'mm' };
+  for (const side of ['normal', 'reverse', 'both'] as const) {
+    // The cross product is 260 × [2,3,6]. The axis spans and the normal separation differ.
+    const doc = withNode(emptyDoc(), { kind: 'thicken', name: 'Tilted panel', thickness: 7, side, mode: 'exact-planar',
+      surface: { degreeU: 1, degreeV: 1, knotsU: [0,0,1,1], knotsV: [0,0,1,1],
+        controlPoints: [[[10,-6,3],[34,30,-23]], [[40,-26,3],[64,10,-23]]], weights: [[1,1],[1,1]] },
+    });
+    const native = await evaluate(doc);
+    assert.ok(native.ok);
+    const measured = await runCheck(doc, native.bodies, evaluate, check);
+    assert.equal(measured.status, 'pass');
+    assert.ok(typeof measured.measured === 'number' && Math.abs(measured.measured - 7) < 1e-10);
+    assert.deepEqual(measured.entities, ['n0.normal', 'n0.reverse']);
+    for (const [a, b] of [['n0.u-min', 'n0.u-max'], ['n0.normal', 'n0.v-min'], ['n0.reverse', 'absent']]) {
+      const invalid = { ...check, query: { fn: 'planar_wall' as const, a, b } };
+      const refused = await runCheck(doc, native.bodies, evaluate, invalid);
+      assert.equal(refused.status, 'unknown');
+      assert.equal(refused.measured, undefined);
+    }
+    const radial = { ...check, query: { fn: 'radial_wall' as const, a: 'n0.normal', b: 'n0.reverse' } };
+    assert.equal((await runCheck(doc, native.bodies, evaluate, radial)).status, 'unknown');
+    const moved = withNode(doc, { kind: 'translate', parent: { node: 0, side: 'solid' }, offset: [10, 5, 1] });
+    const translated = await evaluate(moved);
+    assert.ok(translated.ok);
+    assert.equal((await runCheck(moved, translated.bodies, evaluate, check)).status, 'unknown');
+  }
+});
+
 test('an ordered rail pair proposes a Ruled sheet and exact semicylinder as one approved change', async () => {
   const weight = Math.SQRT1_2;
   const circle = [[10, 0], [10, 10], [0, 10], [-10, 10], [-10, 0]];

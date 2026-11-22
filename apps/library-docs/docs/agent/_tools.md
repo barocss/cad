@@ -83,7 +83,7 @@ The brief (the part's intent), the locked reference bodies it must fit (datums, 
 | Action | Handler | Arguments and notes |
 |---|---|---|
 | `requirements.set` | `set_requirements` | requirements: [{id, source, hard?, check}], replace? |
-| `requirements.check` | `check_spec` | validate? or pinned radial wall requirement |
+| `requirements.check` | `check_spec` | validate? or pinned Thicken wall requirement |
 | `requirements.evidence` | `output_requirement_evidence` | part?, expectedRevision? — pinned report |
 | `requirements.plan_tasks` | `inspect_local_task_plan` | occurrences, expectedRevision? |
 | `requirements.brief` | `set_brief` | fields — authored design intent |

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1640: [Check normal wall thickness before Exact planar Thicken approval](notes/agent-exact-planar-wall-approval-2026-11-22/README.md), #322 and #324. Measure the two native skins of a tilted sheet and reproduce the approval evidence after Studio Save and Open.
 - D1639: [Check a named radial wall before Exact Thicken approval](notes/agent-exact-thicken-wall-approval-2026-11-22/README.md), #322 and #324. Bind the native wall check to the candidate image, refuse a thin wall in Studio and reproduce the passing evidence after native Open.
 - D1638: [Inspect native faces in a pending Exact Thicken](notes/agent-exact-thicken-native-faces-2026-11-22/README.md), #322 and #324. Pin inspection to the image candidate and verify coaxial radii and outward normal sense against the approved native file.
 - D1637: [Agent image review for a pending Exact Thicken](notes/agent-exact-thicken-visual-review-2026-11-22/README.md), #322 and #324. Render the pinned candidate solids read-only and match the PNG after Studio approval and fresh Open.
