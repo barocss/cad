@@ -683,13 +683,13 @@ function tangentArcPair(path: Curve, refuse: Refuse) {
   return { first, second, turn };
 }
 
-/** Read only a planar S-bend with one quadratic straight span between its two circular spans. */
+/** Read two coplanar circular spans with one forward tangent quadratic straight span between them. */
 function tangentArcLineArc(path: Curve, refuse: Refuse) {
   const { degree, controlPoints: poles, weights, knots } = path;
   if (degree !== 2 || poles.length !== 7 || weights[0] === weights[1] || weights[5] === weights[6]
     || weights[2] !== weights[3] || weights[3] !== weights[4]) return;
   const unsupported = () => refuse('CAPABILITY',
-    'Exact arc-line-arc sweep needs two coplanar circular arcs of opposite curvature separated by one straight segment.');
+    'Exact arc-line-arc sweep needs two coplanar circular arcs separated by one straight segment.');
   const weight = weights[0];
   if (weights.some((value, index) => index !== 1 && index !== 5 && value !== weight)
     || knots[0] !== knots[2] || knots[3] !== knots[4] || knots[5] !== knots[6] || knots[7] !== knots[9]
@@ -712,10 +712,11 @@ function tangentArcLineArc(path: Curve, refuse: Refuse) {
   const roundoff = 256 * Number.EPSILON * Math.max(1, extent, first.radius, second.radius);
   const angular = Math.min(CadNumericPolicy.relativeComparison,
     roundoff / Math.min(line.length, len(sub(firstEnd, firstPole)), len(sub(secondPole, secondStart))));
-  const inwardError = len(add(turned, inward(second)));
+  const secondInward = inward(second), turn: 1 | -1 = dot(turned, secondInward) > 0 ? 1 : -1;
+  const inwardError = len(sub(scale(turned, turn), secondInward));
   if (inwardError > angular || 2 * second.radius * (inwardError + len(sub(forward, second.tangent))) > tolerance)
     return unsupported();
-  return { first, second, turn: -1 as const, length: line.length };
+  return { first, second, turn, length: line.length };
 }
 
 function concentricBore(disk: Circle, hole: Circle, refuse: Refuse): Circle {
@@ -948,6 +949,8 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
   if (spaced) {
     if (!disk || profileRadius === undefined)
       return refuse('CAPABILITY', 'Exact arc-line-arc sweep needs one circular outer section.');
+    if (spaced.turn === 1 && holes.length)
+      return refuse('CAPABILITY', 'Exact same-turn arc-line-arc sweep needs one circular disk section without holes.');
     const hole = circularHole(holes, 'arc-line-arc', refuse);
     const bore = hole && concentricBore(disk, hole, refuse);
     const initial = frame(spaced.first.tangent), [x, y] = initial;

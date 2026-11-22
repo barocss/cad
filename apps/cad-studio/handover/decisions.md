@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1725: [Sweep a circular disk through two same-turn bends with a straight span](notes/exact-spaced-same-turn-sweep-2026-11-23/README.md), #10. Verify four native tangent edges, independent mass, fresh Open edits and explicit local Agent approval.
+
 - D1724: [Retain the spaced Sweep joints after an inlet bore Fillet](notes/spaced-bore-fillet-join-retention-2026-11-23/README.md), #10. Preserve both openings and the eight original native tangent joints through a radius edit and fresh Studio Open.
 
 - D1723: [Carry a concentric bore through the spaced S-bend](notes/exact-spaced-annular-s-bend-2026-11-23/README.md), #10. Qualify both open mouths, eight inner and outer joins, the editable bore, and explicit local Agent approval.

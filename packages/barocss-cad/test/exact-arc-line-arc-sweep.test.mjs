@@ -63,6 +63,72 @@ function sampleSection(curve, center, normal, radius) {
   }
 }
 
+// At angle delta from either join, the bend's tangent projection is ±(R-u) sin(delta), |u| <= r.
+// Since 0 <= delta <= 120° and r < R, the two bends occupy disjoint open half-spaces outside the line slab.
+function verifyEnvelope(brep, path, radius) {
+  const { first, second, direction, length } = path, binormal = unit(first.axis);
+  const reach = bend => (bend.radius + radius) * Math.sin(Math.min(bend.angle, Math.PI / 2));
+  const bounds = { first: [-reach(first), 0], line: [0, length], second: [length, length + reach(second)] };
+  for (const [label, [lo, hi]] of Object.entries(bounds)) {
+    for (const face of brep.faces.filter(face => face.name.startsWith(`w.${label}.`))) {
+      const { u, v } = surfaceDomain(face.surface);
+      for (const s of [0, .17, .5, .83, 1]) for (const t of [0, .24, .5, .69, 1]) {
+        const point = evaluateSurface(face.surface, u[0] + s * (u[1] - u[0]), v[0] + t * (v[1] - v[0]));
+        const station = dot(sub(point, first.end), direction);
+        assert.ok(station >= lo - 1e-8 && station <= hi + 1e-8, `${face.name}: ${station} outside [${lo}, ${hi}]`);
+        assert.ok(Math.abs(dot(sub(point, first.start), binormal)) <= radius + 1e-8);
+        if (label === 'first' && s < 1) assert.ok(station < 0);
+        if (label === 'second' && s > 0) assert.ok(station > length);
+      }
+    }
+  }
+}
+
+// Independent disk integration: dV = (1-u/R) du dv ds. Integrate sin, cos and their products analytically.
+// The straight span has its own uniform cylinder moments. No native revolve, B-rep or mass producer supplies these values.
+function independentDiskMass(path, radius, density) {
+  const area = Math.PI * radius ** 2, q = radius ** 2 / 4, volume = area * path.totalLength;
+  const first = [0, 0, 0], second = Array.from({ length: 3 }, () => [0, 0, 0]);
+  for (const bend of [path.first, path.second]) {
+    const { angle: a, radius: R, center: C, inward: n, tangent: t } = bend, b = unit(bend.axis);
+    const meanN = sub(scale(n, Math.sin(a) / a), scale(t, (1 - Math.cos(a)) / a));
+    const cc = .5 + Math.sin(2 * a) / (4 * a), ss = 1 - cc, cs = Math.sin(a) ** 2 / (2 * a);
+    const V = area * R * a, K = R + q / R;
+    for (let i = 0; i < 3; i++) {
+      first[i] += V * (C[i] - K * meanN[i]);
+      for (let j = 0; j < 3; j++) {
+        const meanNN = cc * n[i] * n[j] + ss * t[i] * t[j] - cs * (n[i] * t[j] + t[i] * n[j]);
+        second[i][j] += V * (C[i] * C[j] - K * (C[i] * meanN[j] + meanN[i] * C[j])
+          + (R ** 2 + 3 * q) * meanNN + q * b[i] * b[j]);
+      }
+    }
+  }
+  const d = path.direction, midpoint = add(path.first.end, scale(d, path.length / 2)), V = area * path.length;
+  for (let i = 0; i < 3; i++) {
+    first[i] += V * midpoint[i];
+    for (let j = 0; j < 3; j++) second[i][j] += V * (midpoint[i] * midpoint[j]
+      + path.length ** 2 / 12 * d[i] * d[j] + q * ((i === j ? 1 : 0) - d[i] * d[j]));
+  }
+  const centroid = scale(first, 1 / volume), mass = density * .001 * volume;
+  const central = second.map((row, i) => row.map((entry, j) => entry - volume * centroid[i] * centroid[j]));
+  const trace = central[0][0] + central[1][1] + central[2][2];
+  const inertia = central.map((row, i) => row.map((entry, j) => density * .001 * ((i === j ? trace : 0) - entry)));
+  return { volume, centroid, mass, inertia };
+}
+
+function checkIndependentDiskMass(output, path, radius) {
+  const density = 7.85, expected = independentDiskMass(path, radius, density), native = brepMassProperties(output.brep, density);
+  assert.equal(native.method, 'quadrature');
+  for (const actual of [massPropertiesOf(output, density), native]) {
+    near(actual.volume, expected.volume, 2e-8 * expected.volume);
+    near(actual.mass, expected.mass, 2e-8 * expected.mass);
+    for (let i = 0; i < 3; i++) {
+      near(actual.centroid[i], expected.centroid[i], 1e-7);
+      for (let j = 0; j < 3; j++) near(actual.inertia[i][j], expected.inertia[i][j], 2e-8 * expected.mass * 1000);
+    }
+  }
+}
+
 function verify(output, path, radius, boreRadius = 0) {
   const { first, second, direction, totalLength } = path, { brep } = output;
   const check = checkBrep(brep, { strict: true });
@@ -79,6 +145,7 @@ function verify(output, path, radius, boreRadius = 0) {
   assert.equal(mass.method, 'closed-form');
   near(mass.volume, volume, 1e-10 * volume);
   near(brepMassProperties(brep, 1).volume, volume, 1e-8 * volume);
+  verifyEnvelope(brep, path, radius);
 
   const caps = brep.faces.map(face => ({ face, plane: faceGeometry(face) })).filter(({ plane }) => plane.kind === 'plane');
   assert.deepEqual(caps.map(({ face }) => face.name).sort(), ['w.end', 'w.start']);
@@ -210,8 +277,7 @@ test('arc-line-arc refuses unsupported carriers, kinks, reversals, short lines, 
   refused(rail({ secondTangent: [0, 1, 0], secondInward: [1, 0, 0] }).curve, 'GEOMETRY', /common forward tangent at both joins/);
   refused(rail({ length: -8 }).curve, 'GEOMETRY', /common forward tangent at both joins/);
   refused(rail({ secondTangent: [-1, 0, 0] }).curve, 'GEOMETRY', /common forward tangent at both joins/);
-  refused(rail({ secondInward: [0, 0, 1] }).curve, 'CAPABILITY', /two coplanar circular arcs of opposite curvature/);
-  refused(rail({ sameTurn: true }).curve, 'CAPABILITY', /two coplanar circular arcs of opposite curvature/);
+  refused(rail({ secondInward: [0, 0, 1] }).curve, 'CAPABILITY', /two coplanar circular arcs separated/);
   refused(rail({ firstAngle: 29 }).curve, 'CAPABILITY', /two coplanar circular arcs/);
   refused(rail({ secondAngle: 121 }).curve, 'CAPABILITY', /two coplanar circular arcs/);
   refused(rail({ length: 0 }).curve, 'PARAMETER', /straight segment at least 0.0001 mm/);
@@ -226,6 +292,57 @@ test('arc-line-arc refuses unsupported carriers, kinks, reversals, short lines, 
     refused(rail({ firstRadius, secondRadius }).curve, 'PARAMETER', /both path radii larger than the profile radius/);
   refused(curve, 'CAPABILITY', /one circular outer section/, { id: 's', kind: 'sketch', profile: 'rectangle', min: [-1, -1], max: [1, 1] });
   refused(curve, 'CAPABILITY', /one open straight segment/, disk, 'exact-straight');
+});
+
+test('same-turn quarter arcs and their straight span keep four native G1 seams, independent mass and edited reopen identity', () => {
+  const path = rail({ sameTurn: true }), { curve } = path;
+  assert.deepEqual(curve.controlPoints, [[0, 0, 0], [0, 12, 0], [12, 12, 0], [16, 12, 0], [20, 12, 0], [38, 12, 0], [38, -6, 0]]);
+  const initial = evaluateCadPart(document(curve));
+  const verifyDisk = (snapshot, radius) => {
+    verify(snapshot.outputs[0], path, radius);
+    checkIndependentDiskMass(snapshot.outputs[0], path, radius);
+  };
+  verifyDisk(initial, 2);
+  const edited = reevaluate(initial, { document: document(curve, { ...disk, radius: 3 }) });
+  verifyDisk(edited, 3);
+  assert.deepEqual(edited.outputs[0].brep.edges.map(edge => [edge.id, edge.name]), initial.outputs[0].brep.edges.map(edge => [edge.id, edge.name]));
+  const reopened = loadCadPart(saveCadPart(edited));
+  assert.deepEqual(reopened.document, edited.document);
+  assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
+  verifyDisk(reopened, 3);
+  const restored = reevaluate(reopened, { document: document(curve) });
+  assert.deepEqual(restored.outputs[0].brep, initial.outputs[0].brep);
+  // The opposite-turn disk uses the same independent straight-plus-sectors oracle.
+  const opposite = rail();
+  checkIndependentDiskMass(evaluateCadPart(document(opposite.curve)).outputs[0], opposite, 2);
+});
+
+for (const [firstAngle, secondAngle, firstRadius, secondRadius, length] of [
+  [30, 120, 23, 10, 8], [120, 30, 10, 23, 8], [120, 120, 23, 10, 8], [90, 90, 12, 12, .00011],
+]) {
+  test(`oblique same-turn ${firstAngle}°/${secondAngle}° R${firstRadius}/R${secondRadius} with ${length} mm line stays within disjoint native envelopes`, () => {
+    const path = rail({ firstAngle, secondAngle, firstRadius, secondRadius, length, sameTurn: true,
+      start: [40, -30, 7], tangent: [.6, .8, 0], inward: [0, 0, 1] });
+    const output = evaluateCadPart(document(path.curve, { ...disk, radius: 8 })).outputs[0];
+    verify(output, path, 8);
+    checkIndependentDiskMass(output, path, 8);
+  });
+}
+
+test('same-turn arc-line-arc refuses holes, other sections, kinks, noncoplanarity, axis contact and unsupported carriers', () => {
+  const refused = (options, code, detail, section = disk) => assert.throws(() => evaluateCadPart(document(rail({ sameTurn: true, ...options }).curve, section)),
+    error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
+  refused({}, 'CAPABILITY', /one circular disk section without holes/, boreSection(1));
+  refused({}, 'CAPABILITY', /one circular outer section/, { id: 's', kind: 'sketch', profile: 'rectangle', min: [-1, -1], max: [1, 1] });
+  refused({ lineTangent: [0, 1, 0] }, 'GEOMETRY', /common forward tangent at both joins/);
+  refused({ secondTangent: [-1, 0, 0] }, 'GEOMETRY', /common forward tangent at both joins/);
+  refused({ secondInward: [0, 0, 1] }, 'CAPABILITY', /two coplanar circular arcs separated/);
+  refused({ length: -8 }, 'GEOMETRY', /common forward tangent at both joins/);
+  refused({ length: .00001 }, 'PARAMETER', /straight segment at least 0.0001 mm/);
+  for (const [firstRadius, secondRadius] of [[2, 18], [12, 2], [1, 18], [12, 1]])
+    refused({ firstRadius, secondRadius }, 'PARAMETER', /both path radii larger than the profile radius/);
+  refused({ firstAngle: 29 }, 'CAPABILITY', /two coplanar circular arcs/);
+  refused({ secondAngle: 121 }, 'CAPABILITY', /two coplanar circular arcs/);
 });
 
 test('the spaced S-bend preserves an exact through bore, eight tangent seams and edited reopen identity', () => {

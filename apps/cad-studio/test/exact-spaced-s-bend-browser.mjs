@@ -6,13 +6,16 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--expect-refused');
 const annular = process.argv.includes('--annular');
+const sameTurn = process.argv.includes('--same-turn');
+const turn = sameTurn ? -1 : 1;
+const endY = 12 + turn * 18;
 const path = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
-  controlPoints: [[0, 0, 0], [0, 12, 0], [12, 12, 0], [16, 12, 0], [20, 12, 0], [38, 12, 0], [38, 30, 0]],
+  controlPoints: [[0, 0, 0], [0, 12, 0], [12, 12, 0], [16, 12, 0], [20, 12, 0], [38, 12, 0], [38, endY, 0]],
   weights: [1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1] };
-const kink = path.controlPoints.map((point, i) => i === 5 ? [20, 30, 0] : point);
+const kink = path.controlPoints.map((point, i) => i === 5 ? [20, endY, 0] : point);
 const mark = (id, points) => `@curve #${id} { type:nurbs; degree:2; knots:${JSON.stringify(path.knots)};
   control-points:${JSON.stringify(points)}; weights:${JSON.stringify(path.weights)}; }`;
-const rail = 'Spaced S-bend rail';
+const rail = sameTurn ? 'Spaced same-turn rail' : 'Spaced S-bend rail';
 const representation = 'Exact arc–line–arc';
 const disk = { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 2, sideTags: { outer: ['e0'] } };
 const bore = { kind: 'arc', start: [{ parameter: 'BoreRadius' }, 0], center: [0, 0], direction: 'cw' };
@@ -25,11 +28,11 @@ const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: 
 const pins = ['packages/barocss-cad/src/brep/exact-sweep.ts', 'packages/barocss-cad-model/src/app/profileCommands.ts',
   'packages/barocss-cad-model/src/engine/errors.ts', 'packages/barocss-cad-model/src/chat/part/features.ts'];
 const f = await createFlow({
-  name: annular ? 'exact-spaced-annular-s-bend' : 'exact-spaced-s-bend', output: process.argv[2],
-  envFrozen: annular ? 'D1723_SOURCE_FROZEN' : 'D1721_SOURCE_FROZEN',
+  name: sameTurn ? 'exact-spaced-same-turn' : annular ? 'exact-spaced-annular-s-bend' : 'exact-spaced-s-bend', output: process.argv[2],
+  envFrozen: sameTurn ? 'D1725_SOURCE_FROZEN' : annular ? 'D1723_SOURCE_FROZEN' : 'D1721_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: `Sweep a ${annular ? 'concentric annulus' : 'disk'} along two tangent bends separated by a native straight span.`,
-  limits: [`Coplanar R12/R18 opposite quarter circles and 8 mm straight. One circular ${annular ? 'concentric bore' : 'disk'}. Desktop WebGPU and local MCP.`],
+  limits: [`Coplanar R12/R18 ${sameTurn ? 'same-turn' : 'opposite'} quarter circles and 8 mm straight. One circular ${annular ? 'concentric bore' : 'disk'}. Desktop WebGPU and local MCP.`],
   ...(!baseline && { inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, curveDomain, evaluateCurve, faceGeometry, massPropertiesOf, measureBrepEdgeContinuity } from '@barocss/cad';
@@ -81,7 +84,7 @@ const centroid = (radius, inner) => {
   const innerMoment = bend => 2 * (bend + (radius ** 2 + inner ** 2) / (4 * bend)) / Math.PI;
   const first = innerMoment(12), second = innerMoment(18);
   return [(firstLength * (12 - first) + run * 16 + secondLength * (20 + second)) / pathLength,
-    (firstLength * first + run * 12 + secondLength * (30 - second)) / pathLength, 0];
+    (firstLength * first + run * 12 + secondLength * (endY - turn * second)) / pathLength, 0];
 };
 const near = (value, target, tolerance = 1e-7) =>
   assert.ok(Number.isFinite(value) && Math.abs(value - target) <= tolerance, JSON.stringify({ value, target, tolerance }));
@@ -95,7 +98,7 @@ async function verify(label, doc, radius) {
     ? { bodies: 1, shells: 1, faces: 14, loops: 16, coedges: 56, edges: 28, vertices: 16 }
     : { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 28, edges: 14, vertices: 8 });
   assert.equal(native.caps.length, 2);
-  for (const [name, x0, y0, sense] of [['n1.start', 0, 0, -1], ['n1.end', 38, 30, 1]]) {
+  for (const [name, x0, y0, sense] of [['n1.start', 0, 0, -1], ['n1.end', 38, endY, turn]]) {
     const cap = native.caps.find(face => face.name === name);
     assert.ok(cap, name);
     cap.geometry.n.forEach((value, axis) => near(value, axis === 1 ? sense : 0));
@@ -212,11 +215,12 @@ await f.run(async () => {
   assert.ok(await button('Apply', hud()).isDisabled());
   await f.same(seed);
   const refusal = await hud().innerText();
-  assert.match(refusal, baseline ? annular ? /needs a circular disk/i : /outside the exact Sweep range/i : /tangent/i);
+  assert.match(refusal, baseline ? sameTurn ? /outside the arc–line–arc Sweep range/i
+    : annular ? /needs a circular disk/i : /outside the exact Sweep range/i : /tangent/i);
   await f.snapshot(baseline ? '02-baseline-spaced-refused' : '02-kink-refused');
   if (baseline) return;
 
-  f.phase = 'Apply a circular Exact Sweep on the spaced S-bend';
+  f.phase = 'Apply a circular Exact Sweep on the spaced rail';
   await button(rail, browser()).click();
   await hud().locator('.hud-step').getByText(representation, { exact: true }).waitFor();
   await status('preview').waitFor();
@@ -274,15 +278,23 @@ await f.run(async () => {
   assert.equal(Number(await f.editor().getByLabel('Diameter', { exact: true }).inputValue()), 2 * radius);
   await f.editor().getByText(representation, { exact: true }).waitFor();
   await f.snapshot('09-spaced-history');
+  if (sameTurn) {
+    await f.editor().getByLabel('Diameter', { exact: true }).fill('4');
+    const restored = (await f.applyEditor(edited, '09-spaced-diameter-restored')).doc;
+    assert.deepEqual(restored, accepted);
+    assert.equal((await verify('post-open-original-diameter', restored, 2)).digest, original.digest);
+  }
 
   f.phase = 'Approve the same revision-pinned sweep in Studio';
   const proposalFile = join(f.output, 'spaced-proposal.bcad');
   await copyFile(source.file, proposalFile);
   await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, proposalFile, 'spaced-s-bend', async call => {
     const expectedRevision = await currentPartRevision(call);
-    if (annular) {
+    if (annular || sameTurn) {
       const description = await call('describe', { command: 'sweep-curve' });
-      assert.match(description.values.sketch, /arc–line–arc path accepts a circular outer section with an optional concentric circular hole/);
+      assert.match(description.values.sketch, /arc–line–arc path accepts a circular disk/);
+      assert.match(description.values.sketch, /circular hole is supported when the bends turn in opposite directions/);
+      assert.match(description.values.representation, /straight tangent span can separate two coplanar bends that turn in the same or opposite directions/);
     }
     const { direct_curves: curves } = await call('query', { action: 'summary' });
     const picked = curves.find(curve => curve.id === 'spaced'), other = curves.find(curve => curve.id === 'kink');
@@ -296,7 +308,7 @@ await f.run(async () => {
     assert.ok(dry.dryRun);
     near(dry.change.volume, volume(2, annular ? 1 : 0), 0.001);
     assert.deepEqual(await readFile(proposalFile), before);
-    const proposal = await call('proposals', { action: 'propose', title: 'Exact spaced S-bend Sweep', ops: [op(picked.revision)] });
+    const proposal = await call('proposals', { action: 'propose', title: `Exact ${rail} Sweep`, ops: [op(picked.revision)] });
     assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);
   });
   const pending = JSON.parse(await readFile(proposalFile, 'utf8'));
