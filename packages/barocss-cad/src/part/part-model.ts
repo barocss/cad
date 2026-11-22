@@ -50,7 +50,7 @@ import { flatPattern as sheetFlatPattern, isFlatPatternError, type FlatPattern }
 import { isExtrudedProfileError, buildProfileLoop, type ProfileSegmentInput } from '../features/extruded-profile-solid.js';
 import { type BeadSharedComponent } from '../frame-sheet/frame-weldment.js';
 
-import type { Curve, FacetPatch, Point } from '../types.js';
+import type { Curve, FacetPatch, Point, Surface } from '../types.js';
 import { add, cross, dot, len, scale, sub, unit } from '../core/vec3.js';
 import { encodeBinaryStl } from '../io/stl.js';
 import { gearOperation } from './part-gears.js';
@@ -67,6 +67,7 @@ import type { EndpointBead } from './part-frame.js';
 import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
 import { offsetBoxCapIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
+import { offsetExactSemicylinderCapIfAdmitted } from '../features/exact-cylinder-cap-offset.js';
 import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallIfAdmitted } from '../features/prism-wall-offset.js';
 import { annularCapReplacementFrame, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted, offsetBoreWallIfAdmitted, offsetCircularWallIfAdmitted,
   replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
@@ -644,8 +645,17 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       const hole = ref(f.target, 'target').author;
       const stock = hole?.kind === 'hole' ? ref(hole.target, 'tube stock').author : undefined;
       const circle = stock?.kind === 'extrude' ? ref(stock.sketch, 'tube sketch').author : undefined;
+      const exactCylinder = hole?.kind === 'thicken' && hole.mode === 'exact-cylinder' ? {
+        id: hole.id, surface: { ...structuredClone(hole.surface), kind: 'surface', id: 'surface' } as Surface,
+        thickness: dim(hole.thickness, 'Thicken thickness', true), side: hole.side,
+      } : undefined;
       return () => {
         const brep = namedFaceTargetBrep(t, f.target, target[0]);
+        if (exactCylinder) {
+          const offset = exactCylinder && offsetExactSemicylinderCapIfAdmitted(brep, face, exactCylinder, distance);
+          if (!offset) return fail('CAPABILITY', 'Offset face needs the original upper cap of one clean two-quarter Exact cylinder Thicken.');
+          return one({ kind: 'brep', brep: offset });
+        }
         if (annularCapReplacementFrame(brep, face)) {
           if (hole?.kind !== 'hole' || (hole.axis !== undefined && hole.axis !== 'z') || hole.depth !== undefined || hole.countersink !== undefined)
             return fail('CAPABILITY', 'Annular cap offset needs one original through Hole in a forward circular Extrude.');

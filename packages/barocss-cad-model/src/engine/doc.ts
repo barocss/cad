@@ -414,6 +414,25 @@ export function isAnnularCapOffsetSource(nodes: readonly unknown[], index: numbe
   });
 }
 
+function isExactCylinderThicken(node: unknown): boolean {
+  return textRecord(node) && node.kind === 'thicken' && node.mode === 'exact-cylinder';
+}
+
+/** Identify the authored upper cap. Kernel evaluation certifies the two quarter spans and native trims. */
+export function exactSemicylinderCapSource(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>) {
+  const node = nodes[index];
+  if (!textRecord(node) || !isExactCylinderThicken(node) || node.suppressed || node.held !== undefined ||
+      typeof node.id !== 'string' || nodes.filter(candidate => textRecord(candidate) && candidate.id === node.id).length !== 1) return;
+  const { surface } = node;
+  if (!textRecord(surface) || surface.degreeU !== 2 || surface.degreeV !== 1 ||
+      !Array.isArray(surface.controlPoints) || surface.controlPoints.length !== 5) return;
+  const [first] = surface.controlPoints;
+  if (!Array.isArray(first) || first.length !== 2 || !textVector(first[0], false) || !textVector(first[1], false) || first[1][2] === first[0][2]) return;
+  const thickness = textDimension(node.thickness, parameters);
+  if (thickness === null || thickness <= 0) return;
+  return { id: node.id, face: `${node.id}.${first[1][2] > first[0][2] ? 'v-max' : 'v-min'}`, thickness };
+}
+
 function offsetSourceBase(nodes: readonly unknown[], index: number): number | undefined {
   for (;;) {
     const node = nodes[index];
@@ -422,6 +441,11 @@ function offsetSourceBase(nodes: readonly unknown[], index: number): number | un
     if (parent === undefined) return;
     index = parent;
   }
+}
+
+export function isExactCylinderOffsetChain(nodes: readonly unknown[], index: number): boolean {
+  const base = offsetSourceBase(nodes, index);
+  return base !== undefined && base !== index && isExactCylinderThicken(nodes[base]);
 }
 
 /** A distance-only rectangular plate source with one bore. */
@@ -664,6 +688,15 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       if (!textRecord(parent)) return 'Offset face: a supported solid parent is required.';
       const [face] = node.faces as [string];
       const signature = (node.sigs as Record<string, Sig>)[face];
+      if (isExactCylinderThicken(parent)) {
+        const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
+        const source = exactSemicylinderCapSource(value.nodes, parentIndex, parameters);
+        if (!source || face !== source.face || node.target !== undefined || signature.k !== 'plane')
+          return 'Offset face: the original upper cap of an Exact semicylinder needs a signed distance.';
+        continue;
+      }
+      if (isExactCylinderOffsetChain(value.nodes, parentIndex))
+        return 'Offset face: use the original Exact semicylinder Thicken parent. Chained cap offsets are unsupported.';
       if (signature.k === 'curved') {
         if (!isCylinderReplacementSource(value.nodes, parentIndex) && !isBoredPlateHole(value.nodes, parentIndex)
           && !isAnnularReplacementSource(value.nodes, parentIndex))

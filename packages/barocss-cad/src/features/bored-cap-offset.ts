@@ -506,7 +506,8 @@ export function annularCapReplacementFrame(brep: Brep, faceName: string): { anch
   return cap && { anchor: cap.point, normal: [0, 0, cap.sign] };
 }
 
-function mapCapStation(brep: Brep, station: number, height: (x: number, y: number) => number): Brep {
+/** @internal Shared axial map; callers prove that the two native stations own every pole. */
+export function mapCapStation(brep: Brep, station: number, height: (x: number, y: number) => number): Brep {
   const moved = (point: Point): Point => point[2] === station ? [point[0], point[1], height(point[0], point[1])] : point;
   return {
     ...brep,

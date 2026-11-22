@@ -7,7 +7,7 @@ import type { BodyResult, VolumeEvaluation } from '../engine/evaluate';
 // (a picked profile pulled along its normal), Revolve (turned about a sketch axis), Pipe (carried along
 // runs and bends) and Loft (through two or more picked sections). A profile drawn on a body's face joins
 // that body by default; Operation can make a new body or cut it instead.
-import { featureLabel, offsetFaceEndLabel, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, featureLabel, isExactCylinderOffsetChain, offsetFaceEndLabel, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
 import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle, twoGuideLoftSections } from './profiles';
@@ -371,6 +371,12 @@ export const offsetFaceCommand: Command = {
     if (selection.faces.length !== 1 || selection.edges.length || selection.bodies.length || selection.sketches?.length || selection.vertices?.length || ctx.direct?.length) return no(unsupportedFace);
     const picked = selection.faces[0], body = ctx.bodies[picked.body], face = body?.mesh.faces[picked.face];
     if (!Number.isInteger(picked.body) || !Number.isInteger(picked.face) || !body || !face || face.facet || !face.name) return no(unsupportedFace);
+    const ref = body.ref, source = ref && ctx.doc.nodes[ref.node];
+    if (source?.kind === 'thicken' && source.mode === 'exact-cylinder' &&
+        (ref?.side !== 'solid' || exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters)?.face !== face.name))
+      return no('Pick the original upper cap of an Exact semicylinder.');
+    if (ref && isExactCylinderOffsetChain(ctx.doc.nodes, ref.node))
+      return no('Edit the existing Offset face in History. Chained cap offsets are unsupported.');
     const cylinder = face.exact?.kind === 'cylinder' && body.ref?.side === 'solid'
       && (isCylinderReplacementSource(ctx.doc.nodes, body.ref.node) || isBoredPlateHole(ctx.doc.nodes, body.ref.node)
         || isAnnularReplacementSource(ctx.doc.nodes, body.ref.node));

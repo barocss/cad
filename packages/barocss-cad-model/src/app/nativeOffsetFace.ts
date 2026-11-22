@@ -2,10 +2,11 @@
 import { CadNumericPolicy, CadPartLimits, brepFromPrismatic, checkBrep, prismaticFromProfile, prismaticMassProperties, transformBrep, type Brep, type BrepFace, type Curve, type Surface } from '@barocss/cad';
 import { boxCapOffsetFrame, draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { annularCapReplacementFrame, boredCapOffsetFrame, boredPlateWallOffsetFrame, boreWallOffsetFrame, circularWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
+import { exactSemicylinderCapOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
-import { isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, isExactCylinderOffsetChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, massOfRef, partBreps, type BodyResult } from '../engine/evaluate';
 import { bodyKeyFor, withIds } from '../engine/ids';
 import { refusal } from '../engine/refusal';
@@ -372,6 +373,18 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   }
   if (display.exact?.kind !== 'plane') return undefined;
   const node = ctx.doc.nodes[ref.node];
+  if (node.kind === 'thicken' && node.mode === 'exact-cylinder') {
+    const source = exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
+    if (!source || source.face !== display.name) return unsupported('select the original upper cap of an Exact semicylinder.');
+    currentOffsetBody(ctx, body);
+    const { brep } = nativeOffsetBody(ctx, body, display);
+    const frame = exactSemicylinderCapOffsetFrame(brep, display.name, { id: source.id,
+      surface: { kind: 'surface', id: 'surface', ...node.surface }, thickness: source.thickness, side: node.side });
+    if (!frame) return unsupported('the original upper cap of the Exact semicylinder could not be certified.');
+    return { parent: ref, face: display.name, ...frame, allowsPlane: false };
+  }
+  if (isExactCylinderOffsetChain(ctx.doc.nodes, ref.node))
+    return unsupported('use the original Exact semicylinder Thicken parent. Chained cap offsets are unsupported.');
   if (isAnnularReplacementSource(ctx.doc.nodes, ref.node)) {
     if (!isAnnularCapOffsetSource(ctx.doc.nodes, ref.node, ctx.doc.parameters) || node.kind !== 'hole')
       return unsupported('the annular cap needs one original upright coaxial through Hole in a forward circular Extrude.');
