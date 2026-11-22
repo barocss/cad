@@ -1,28 +1,35 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
-const path = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
+const spaced = process.argv.includes('--spaced-opposite');
+const path = spaced ? { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
+  controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0], [12, 20, 0], [12, 38, 0], [30, 38, 0]],
+  weights: [1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1] } : { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
   controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 30, 0], [-6, 30, 0]],
   weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1] };
 const hole = [[-1, -2], [-1, 2], [1, 2], [1, -2]].map(start => ({ kind: 'line', start }));
 const sideTags = { outer: ['e1', 'e2', 'e3', 'e4'], holes: [['e5', 'e6', 'e7', 'e8']] };
+const rail = spaced ? 'Spaced S-bend rail' : 'Same-turn rail';
+const outletEnd = { x: spaced ? 30 : -6, y: spaced ? 38 : 30, sign: spaced ? 1 : -1 };
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: { InletTrim: 1 }, nextId: 4,
   nodes: [
     { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [-2, -3], max: [2, 3], holes: [hole], sideTags },
-    { id: 'n1', kind: 'sweep-curve', sketch: 0, name: 'Same-turn rail', path, mode: 'exact' },
+    { id: 'n1', kind: 'sweep-curve', sketch: 0, name: rail, path, mode: 'exact' },
     { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [-8, -5], max: [{ parameter: 'InletTrim' }, 5] },
     { id: 'n3', kind: 'extrude', sketch: 2, from: -5, height: 10 },
   ],
   outputs: { b1: { node: 1, side: 'solid' }, b3: { node: 3, side: 'solid' } },
 };
 const pins = ['apps/cad-studio/src/App.tsx', 'packages/barocss-cad-model/src/app/commands.ts',
-  'packages/barocss-cad/src/brep/exact-sweep.ts', 'packages/barocss-cad/src/brep/analytic-boolean.ts'];
+  'packages/barocss-cad/src/brep/exact-sweep.ts', 'packages/barocss-cad/src/brep/analytic-boolean.ts',
+  'packages/barocss-cad/src/brep/affine-plane-binding.ts'];
 const f = await createFlow({
-  name: 'exact-duct-inlet-trim', output: process.argv[2], envFrozen: 'D1714_SOURCE_FROZEN',
+  name: spaced ? 'exact-spaced-duct-inlet-trim' : 'exact-duct-inlet-trim', output: process.argv[2],
+  envFrozen: spaced ? 'D1739_SOURCE_FROZEN' : 'D1714_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Trim one inlet of a same-turn Exact rectangular duct with a box and reopen the editable result.',
-  limits: ['R12/R18 quarter arcs, 4 × 6 mm section, 2 × 4 mm aperture, one planar inlet trim in desktop WebGPU.'],
+  qualification: 'Trim one Exact rectangular duct inlet with a box and reopen the editable result.',
+  limits: [`R12/R18 quarter arcs${spaced ? ' separated by an 8 mm straight span' : ''}, 4 × 6 mm section, 2 × 4 mm aperture, one planar inlet trim in desktop WebGPU.`],
   inspectorSource: String.raw`
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, curveDomain, evaluateCurve, faceGeometry, massPropertiesOf, measureBrepEdgeContinuity } from '@barocss/cad';
@@ -40,7 +47,7 @@ const points = edge => {
 };
 const caps = brep.faces.flatMap(face => {
   const plane = faceGeometry(face);
-  if (plane.kind !== 'plane' || Math.abs(plane.n[0]) < .999999) return [];
+  if (plane.kind !== 'plane' || Math.abs(plane.n[0]) < .999999 || face.loops.length !== 2) return [];
   const boundaries = face.loops.map(id => {
     const loop = loops.get(id);
     return { kind: loop.kind, edges: loop.coedges.map(id => {
@@ -50,10 +57,11 @@ const caps = brep.faces.flatMap(face => {
   });
   return [{ name: face.name, plane, boundaries }];
 });
-const seams = brep.edges.filter(edge => points(edge).every(point => Math.abs(point[1] - 12) < 1e-7)).map(edge => ({
-  points: points(edge), result: measureBrepEdgeContinuity(brep, edge.id, { curvature: true }),
+const seams = ${JSON.stringify(spaced ? [12, 20] : [12])}.flatMap(station => brep.edges.filter(edge =>
+  points(edge).every(point => Math.abs(point[1] - station) < 1e-7)).map(edge => ({
+  station, points: points(edge), result: measureBrepEdgeContinuity(brep, edge.id, { curvature: true }),
   bindings: brep.coedges.filter(use => use.edge === edge.id).map(use => !!use.pcurve),
-}));
+})));
 console.log(JSON.stringify({ check: checkBrep(brep, { strict: true }), source: brep.source, caps, seams,
   volume: massPropertiesOf(output).volume, quadrature: brepMassProperties(brep, 1).volume, digest: digestOf(brep) }));
 `,
@@ -64,9 +72,9 @@ const near = (actual, expected, tolerance = 1e-7) => assert.ok(Math.abs(actual -
   JSON.stringify({ actual, expected, tolerance }));
 const intercept = (radius, x) => 12 - Math.sqrt(radius ** 2 - x ** 2);
 
-function verifyCap(cap, x, centreY) {
+function verifyCap(cap, x, centreY, sign = -1) {
   near(cap.plane.o[0], x);
-  cap.plane.n.forEach((value, i) => near(value, i === 0 ? -1 : 0));
+  cap.plane.n.forEach((value, i) => near(value, i === 0 ? sign : 0));
   assert.deepEqual(cap.boundaries.map(loop => loop.kind).sort(), ['inner', 'outer']);
   for (const loop of cap.boundaries) {
     const inner = loop.kind === 'inner';
@@ -95,20 +103,21 @@ async function verify(doc, inset, label) {
   assert.equal(native.caps.length, 2);
   assert.ok(inlet && outlet);
   verifyCap(inlet, inset);
-  verifyCap(outlet, -6, 30);
+  verifyCap(outlet, outletEnd.x, outletEnd.y, outletEnd.sign);
   const cylindricalSeams = native.seams.filter(seam => seam.points.every(point => Math.abs(point[0] - seam.points[0][0]) < 1e-7));
-  assert.equal(cylindricalSeams.length, 4);
+  assert.equal(cylindricalSeams.length, spaced ? 8 : 4);
+  if (spaced) assert.deepEqual([12, 20].map(station => cylindricalSeams.filter(seam => seam.station === station).length), [4, 4]);
   for (const seam of cylindricalSeams) {
     assert.deepEqual(seam.bindings, [true, true]);
     assert.equal(seam.result.status, 'measured');
     near(seam.result.maximumAngleDegrees, 0, 1e-6);
     assert.equal(seam.result.curvature.status, 'measured');
-    const radius = seam.points[0][0];
-    near(seam.result.curvature.maximumDifference, 1 / radius - 1 / (radius + 6));
+    const radius = Math.abs(seam.points[0][0] - (seam.station === 12 ? 0 : outletEnd.x));
+    near(seam.result.curvature.maximumDifference, spaced ? 1 / radius : 1 / radius - 1 / (radius + 6));
   }
   const integral = r => (r ** 2 * Math.asin(inset / r) + inset * Math.sqrt(r ** 2 - inset ** 2)) / 2;
   const removed = 6 * (integral(14) - integral(10)) - 4 * (integral(13) - integral(11));
-  const expected = 240 * Math.PI - removed;
+  const expected = 240 * Math.PI + (spaced ? 16 * 8 : 0) - removed;
   near(native.volume, expected);
   near(native.quadrature, expected);
   const { bodies } = await f.bodies();
@@ -119,9 +128,9 @@ async function verify(doc, inset, label) {
   return native;
 }
 
-async function showJoints(native) {
+async function showJoints(native, label = '03-native-joints-after-trim') {
   const browser = f.page.getByRole('complementary', { name: 'Browser', exact: true });
-  await button('Sweep along Same-turn rail · Subtract', browser).click();
+  await button(`Sweep along ${rail} · Subtract`, browser).click();
   const panel = f.page.getByRole('region', { name: 'Edge continuity', exact: true });
   await button('Inspect native joints', panel).click();
   const edges = panel.getByRole('combobox', { name: 'Native shared edge', exact: true });
@@ -135,29 +144,32 @@ async function showJoints(native) {
     assert.match(await result.innerText(), /Native samples\s+8/);
   }
   await result.scrollIntoViewIfNeeded();
-  await f.snapshot('03-native-joints-after-trim');
+  await f.snapshot(label);
 }
 
 async function showMouths(inset, label) {
-  await button('View cube directions', f.page.getByRole('group', { name: 'View cube', exact: true })).click();
-  await f.page.getByRole('menuitem', { name: 'Left', exact: true }).click();
-  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
-  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await f.page.waitForFunction(() => {
-    const labels = [...document.querySelectorAll('.view-cube .vc-label')];
-    return labels.length === 1 && labels[0].textContent === 'LEFT';
-  });
-  const centres = [[inset, (intercept(13, inset) + intercept(11, inset)) / 2, 0], [-6, 30, 0]];
-  for (const [x, y, z] of centres) {
+  const centres = [{ x: inset, y: (intercept(13, inset) + intercept(11, inset)) / 2, sign: -1, end: 'inlet' },
+    { ...outletEnd, end: 'outlet' }];
+  for (const { x, y, sign, end } of centres) {
+    const view = sign > 0 ? 'Right' : 'Left';
+    await button('View cube directions', f.page.getByRole('group', { name: 'View cube', exact: true })).click();
+    await f.page.getByRole('menuitem', { name: view, exact: true }).click();
+    if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+    await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+    await f.page.waitForFunction(name => {
+      const labels = [...document.querySelectorAll('.view-cube .vc-label')];
+      return labels.length === 1 && labels[0].textContent === name;
+    }, view.toUpperCase());
     const { opening, land } = await f.page.evaluate(([x, y, z]) => ({
       opening: window.__studioSurfacePoint([x, y, z]), land: window.__studioSurfacePoint([x, y, 2.5]),
-    }), [x, y, z]);
+    }), [x, y, 0]);
     assert.ok(land);
     near(land[0], x, 1e-4);
-    assert.ok(!opening || opening[0] > x + .5, JSON.stringify({ opening, land }));
-    f.report.observations.push({ label, x, opening: opening ?? null, land });
+    assert.ok(!opening || sign * (x - opening[0]) > .5, JSON.stringify({ opening, land }));
+    f.report.observations.push({ label, end, x, opening: opening ?? null, land });
+    if (spaced) await f.snapshot(`${label}-${end}`);
   }
-  await f.snapshot(label);
+  if (!spaced) await f.snapshot(label);
 }
 
 await f.run(async () => {
@@ -167,7 +179,7 @@ await f.run(async () => {
   await f.same(seed);
   await f.snapshot('01-original-duct-and-cutting-box');
   const browser = f.page.getByRole('complementary', { name: 'Browser', exact: true });
-  await button('Sweep along Same-turn rail', browser).click();
+  await button(`Sweep along ${rail}`, browser).click();
   await button('Extrude 10', browser).click({ modifiers: ['Shift'] });
   await f.page.evaluate(() => document.activeElement?.blur());
   f.phase = 'Subtract the box from the inlet';
@@ -190,7 +202,9 @@ await f.run(async () => {
   await f.same(edited);
   const saved = await f.save('duct-trimmed-inlet');
   const reopened = (await f.freshOpen(saved.file, edited, '05-trim-reopened')).doc;
-  assert.equal((await verify(reopened, 2, 'trim-reopened')).digest, next.digest);
+  const reopenedNative = await verify(reopened, 2, 'trim-reopened');
+  assert.equal(reopenedNative.digest, next.digest);
+  if (spaced) await showJoints(reopenedNative, '05-reopened-native-joints');
   await showMouths(2, '06-reopened-mouths');
   const restored = (await f.setParameter('InletTrim', 1, '07-trim-restored-after-open')).doc;
   assert.equal((await verify(restored, 1, 'trim-restored')).digest, first.digest);

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1739: [Retain the spaced rectangular duct joints after an inlet Subtract](notes/spaced-duct-inlet-boolean-2026-11-23/README.md), #10. Preserve eight inherited native bindings and both mouths through depth edits and fresh Open.
 - D1738: [Propose one common radius for mixed-size saved sketch Fillets](notes/agent-resize-mixed-sketch-fillets-2026-11-23/README.md), #21. Verify current revision and explicit Studio approval with exact manual and Agent parity through fresh Open.
 - D1737: [Set a common radius on saved sketch Fillets with different sizes](notes/resize-mixed-saved-sketch-fillets-2026-11-23/README.md), #21. Preserve the mixed source through refusal and finish both resize paths with the same native result.
 - D1736: [Sweep rectangular sections through a spaced S-bend](notes/exact-spaced-rectangular-s-bend-2026-11-23/README.md), #10. Verify solid and hollow rectangular sections, native joints, both open ends and editable fresh Open.

@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1738 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1739 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1738](notes/agent-resize-mixed-sketch-fillets-2026-11-23/README.md), P1 rows 04 and 09. The local Agent proposes the same mixed-size Fillet resize as Studio. Explicit approval and fresh Open reproduce the manual native body. [D1736](notes/exact-spaced-rectangular-s-bend-2026-11-23/README.md) adds solid and hollow rectangular sections to the spaced S-bend. The B06 PDF group remains held.
-- **Next MAIN:** D1739, P5 downstream Boolean [rows 07](roadmap-rows/07.md), [08](roadmap-rows/08.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Trim the inlet of the D1736 rectangular S-bend duct with a native Subtract. Check both open mouths, joint bindings after the cut, independent volume and editable fresh Open. Repair the first reproduced defect.
+- **Current position:** [D1739](notes/spaced-duct-inlet-boolean-2026-11-23/README.md), P5 rows 07, 08 and 30. Subtract on a spaced S-bend duct retains all eight cylinder-to-plane joints and both mouths through depth edits and fresh Open. [D1738](notes/agent-resize-mixed-sketch-fillets-2026-11-23/README.md) verifies the same mixed-radius edit through Studio and the local Agent. The B06 PDF group remains held.
+- **Next MAIN:** D1740, P4 [row 22](roadmap-rows/22.md), [#44](https://github.com/barocss/cad/issues/44). Extract the Align target reader and Revolve axis replacement startup from Studio App. Keep current document ownership, candidate handling and desktop interaction. Compare existing Align and Revolve flows before and after.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

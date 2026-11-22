@@ -21,6 +21,7 @@ import { revolutionOf, profileCrossings, onPatch, patchMargin, type Revolution }
 import { curvePiece, curveReversed } from '../nurbs/curves/curve-segment.js';
 import { BrepError, buildBrep, checkBrep, isFacetFace, lineCurve, nurbsOf as surfaceOfFace, type Brep, type BrepFace } from './brep-core.js';
 import { bindHalfRingIntersection } from './exact-ring-intersect.js';
+import { affinePlaneBinding } from './affine-plane-binding.js';
 import { facetPlane } from '../mesh/facet-patch.js';
 import { circleOf, polesOf, tessellateBrep } from './brep-tessellate.js';
 import { booleanCurveRegions, regionBox, curveFaceRegions, intersectSegments, segmentsApart, segAt as segAtAny, locateInRegion, paramOf as paramOfCurve, regionArea, regionInteriorPoint, segDistance, segIntegral, segReverse, type CurveRegion2, type CurveSegment2, type XY } from './curved-arrangement.js';
@@ -119,7 +120,7 @@ interface GFace {
   solid: 0 | 1; surf: Surf; region: CurveRegion2; out: 1 | -1; min: P3; max: P3; name?: string; cuts: CurveSegment2[];
   /** The source face's id. */
   id: string;
-  /** Whole, natively bound cylinder rulings inherited from an Exact Sweep. Never newly cut edges. */
+  /** Whole, natively bound cylinder joins inherited from an Exact Sweep, including their planar peers. */
   nativeRulings?: readonly Curve[];
 }
 /** A 3D curve piece: a segment, or an arc about c in the plane ⊥ n from u through `sweep` (≥ 0, CCW about n). */
@@ -456,11 +457,24 @@ function cylinderRulingBinding(edge: Curve, surface: Surface, roundoff: number):
 
 function nativeRulingMatches(edge: Curve, surface: Surface, binding: Curve | null, roundoff: number): boolean {
   if (!binding) return false;
-  const expected = cylinderRulingBinding(edge, surface, roundoff);
+  const expected = cylinderRulingBinding(edge, surface, roundoff) ?? planarRulingBinding(edge, surface, roundoff);
   return expected !== undefined && binding.degree === 1 && binding.controlPoints.length === 2
     && binding.weights.length === 2 && binding.weights[0] === binding.weights[1]
     && binding.knots.length === expected.knots.length && binding.knots.every((k, i) => k === expected.knots[i])
     && binding.controlPoints.every((point, i) => len(sub(point, expected.controlPoints[i])) <= 512 * Number.EPSILON);
+}
+
+/** A whole inherited line in an affine planar chart. Solve its coefficients, without fitting a curve. */
+function planarRulingBinding(edge: Curve, surface: Surface, roundoff: number): Curve | undefined {
+  if (rulingDirection(edge, edge.controlPoints, roundoff) !== 1
+    || surface.degreeU !== 1 || surface.degreeV !== 1 || surface.controlPoints.length !== 2
+    || surface.controlPoints.some(row => row.length !== 2)
+    || surface.weights.some(row => row.some(weight => weight !== surface.weights[0][0]))) return;
+  const { u, v } = surfaceDomain(surface);
+  if (surface.knotsU.length !== 4 || surface.knotsV.length !== 4
+    || !surface.knotsU.every((k, i) => k === u[i < 2 ? 0 : 1])
+    || !surface.knotsV.every((k, i) => k === v[i < 2 ? 0 : 1])) return;
+  return affinePlaneBinding(edge, surface, roundoff);
 }
 
 function facesOf(brep: Brep, solid: 0 | 1, tol: number): GFace[] {
@@ -508,11 +522,12 @@ function facesOf(brep: Brep, solid: 0 | 1, tol: number): GFace[] {
     // A general patch bulges past its edges (a hemisphere bounded by two meridians in one plane): its
     // control net bounds it.
     if (surf.kind === 'nurbs') for (const row of surfaceOfFace(face).controlPoints) for (const p of row) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], p[k]); max[k] = Math.max(max[k], p[k]); }
-    const nativeRulings = owners && surf.kind === 'cylinder' && face.surface.kind === 'surface'
+    const nativeRulings = owners && (surf.kind === 'cylinder' || surf.kind === 'plane') && face.surface.kind === 'surface'
       ? ordered.flatMap(lid => loops.get(lid)!.coedges.flatMap(cid => {
         const use = coedges.get(cid)!, edge = edges.get(use.edge)!, twin = use.twin ? coedges.get(use.twin) : undefined;
         const peer = twin ? owners.get(twin.loop) : undefined;
         return twin && peer?.surface.kind === 'surface'
+          && (surf.kind === 'cylinder' || surfaceOf(peer, tol).kind === 'cylinder')
           && nativeRulingMatches(edge.curve, face.surface as Surface, use.pcurve, roundoff)
           && nativeRulingMatches(edge.curve, peer.surface, twin.pcurve, roundoff) ? [edge.curve] : [];
       })) : [];
@@ -2565,10 +2580,10 @@ function stitchWith(pieces: Piece[], id: string, tol: number, exactEdges = false
       kind: li === 0 ? 'outer' as const : 'inner' as const,
       uses: uses2.map(u => {
         const edge = edgeList[u.index].curve;
-        // The Boolean may rebuild a retained cylinder over a smaller angular range. Rebind its inherited
-        // whole ruling to that final chart, never copy the old U coordinate onto the new surface.
+        // The Boolean rebuilds the retained cylinder or planar peer. Rebind its inherited whole
+        // ruling to that final chart, never copy the old UV coordinates onto the new surface.
         const pcurve = inherited?.some(source => rulingDirection(edge, source.controlPoints, roundoff) !== undefined)
-          ? cylinderRulingBinding(edge, chart.surface, roundoff) : undefined;
+          ? cylinderRulingBinding(edge, chart.surface, roundoff) ?? planarRulingBinding(edge, chart.surface, roundoff) : undefined;
         return { edge: u.edge, sense: u.sense, ...(pcurve ? { pcurve } : {}) };
       }),
     })) };
