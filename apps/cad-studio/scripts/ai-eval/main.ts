@@ -68,12 +68,13 @@ async function oneRun(b: Brief, k: number, o: { store: string; mcpScript: string
   // (The machine's load first, the lanes' light gate: a run is mostly the model's time, its tool calls light.)
   spawnSync('sh', [GATE, 'acquire', 'light', '900', `ai-eval ${b.id}`], { stdio: 'inherit' });
   const caps = { maxCalls: b.caps?.maxCalls ?? o.maxCalls, maxTurns: b.caps?.maxTurns ?? o.maxTurns, wallMs: b.caps?.wallMin ? b.caps.wallMin * 60_000 : o.wallMs };
-  const run = await runCodex({ dir: work, node: process.execPath, mcpScript: o.mcpScript, ...(o.model ? { model: o.model } : {}), effort: o.effort, doc, brief: b.prompt, ...(rowFiles ? { rowFiles } : {}), rowNote, conversation, ...caps });
+  const autonomy = b.autonomy ?? AUTONOMY;
+  const run = await runCodex({ autonomy, dir: work, node: process.execPath, mcpScript: o.mcpScript, ...(o.model ? { model: o.model } : {}), effort: o.effort, doc, brief: b.prompt, ...(rowFiles ? { rowFiles } : {}), rowNote, conversation, ...caps });
   const prompt = readFileSync(join(work, 'prompt.txt'), 'utf8');
   writeFileSync(join(dir, 'prompt.txt'), prompt);
   writeFileSync(join(dir, 'part.bcad'), encodeStudioFile(run.doc));
   const record: RunRecord = {
-    schema: RECORD_SCHEMA, n, harness: HARNESS, tools: TOOLSET.version, autonomy: AUTONOMY, caps,
+    schema: RECORD_SCHEMA, n, harness: HARNESS, tools: TOOLSET.version, autonomy, caps,
     brief: b.id, ladder: b.ladder, title: b.title, run: id, model: o.model ?? 'codex default', effort: o.effort, at: new Date().toISOString(),
     promptSha256: sha(prompt), end: run.end, ...(run.error ? { error: run.error } : {}), wallMs: run.wallMs, turns: run.turns,
     calls: run.calls, refusals: run.calls.filter(c => !c.ok).length, messages: run.messages, usage: run.usage, accepted: run.accepted,
@@ -136,30 +137,37 @@ async function judgeRun(dir: string): Promise<number> {
  */
 async function validate(ids: string[] | undefined): Promise<number> {
   const evaluate = async (d: StudioDoc) => evaluateDoc(d, 1);
+  const briefs = BRIEFS.filter(x => !ids || ids.includes(x.id));
+  if (!briefs.length || (ids && briefs.length !== ids.length)) {
+    process.stderr.write('validate: select existing, distinct brief IDs (see list)\n');
+    return 2;
+  }
   let bad = 0;
-  for (const b of BRIEFS.filter(x => !ids || ids.includes(x.id))) {
+  for (const b of briefs) {
     let calls = b.reference;
     if (b.rb9) { const n = Number(/^RB9\.(\d+)/.exec(b.rb9)![1]), rung = RUNGS.find(r => r.n === n)!; calls = rung.scripted(sample(rung.space, 1, 5)); }
-    if (!calls) { process.stdout.write(`${b.id}: no reference build\n`); continue; }
+    if (!calls) { process.stdout.write(`${b.id}: no reference build\n`); if (ids) bad++; continue; }
     const conversation = sha(b.id).slice(0, 24), { rowFiles } = attachments(b, conversation), doc = await startOf(b);
     const files = rowFiles ? receivePersonRowFiles(conversation, rowFiles, 1) : undefined;
     const e0 = await evaluate(doc);
     let state = { doc, bodies: e0.ok ? e0.bodies : [], turnBase: doc, turns: [b.prompt], ...(files ? { rowFiles: files } : {}) } as unknown as ChatState;
     const done: { tool: string; args: unknown; ok: boolean; text: string; turn: number; ms: number; error?: string }[] = [];
     const fileId = (v: unknown): unknown => typeof v === 'string' && v.startsWith('$file:') ? files?.files.find(f => f.source.filename === v.slice(6))?.id : Array.isArray(v) ? v.map(fileId) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fileId(x)])) : v;
+    let refused = false;
     for (const c of calls) {
       if (c.tool === '@accept') {
-        for (const p of (state.doc.proposals ?? []).filter(q => q.status === 'open')) { const a = await acceptProposal(state, p.id, evaluate); if ('error' in a) process.stdout.write(`  accept ${p.id}: ${a.error}\n`); else state = a.state; }
+        for (const p of (state.doc.proposals ?? []).filter(q => q.status === 'open')) { const a = await acceptProposal(state, p.id, evaluate); if ('error' in a) { refused = true; process.stdout.write(`  accept ${p.id}: ${a.error}\n`); } else state = a.state; }
         continue;
       }
       const args = fileId(c.args) as Record<string, unknown>, r = await dispatchTool(state, c.tool, args, evaluate);
       done.push({ tool: c.tool, args, ok: !r.isError, text: r.content.slice(0, 3000), turn: 1, ms: 0 });
-      if (r.isError) { process.stdout.write(`  ${c.tool} ${JSON.stringify(args).slice(0, 200)} refused: ${r.content.slice(0, 400)}\n`); break; }
+      if (r.isError) { refused = true; process.stdout.write(`  ${c.tool} ${JSON.stringify(args).slice(0, 200)} refused: ${r.content.slice(0, 400)}\n`); break; }
       state = r.state;
     }
     const checks = await b.oracle(await judge(state.doc), done), s = scoreOf(checks);
-    if (!s.pass) bad++;
-    process.stdout.write(`${b.id}: ${s.pass ? 'PASS' : 'FAIL'} ${s.hardPassed}/${s.hard} hard\n${checks.filter(c => !c.pass).map(c => `  ${c.hard ? 'FAIL' : 'soft'} ${c.id} ${c.what}: ${JSON.stringify(c.measured)?.slice(0, 300)} (want ${JSON.stringify(c.expected)?.slice(0, 120)})`).join('\n')}${checks.some(c => !c.pass) ? '\n' : ''}`);
+    const pass = !refused && s.pass && s.hard > 0;
+    if (!pass) bad++;
+    process.stdout.write(`${b.id}: ${pass ? 'PASS' : 'FAIL'} ${s.hardPassed}/${s.hard} hard\n${checks.filter(c => !c.pass).map(c => `  ${c.hard ? 'FAIL' : 'soft'} ${c.id} ${c.what}: ${JSON.stringify(c.measured)?.slice(0, 300)} (want ${JSON.stringify(c.expected)?.slice(0, 120)})`).join('\n')}${checks.some(c => !c.pass) ? '\n' : ''}`);
   }
   return bad ? 1 : 0;
 }

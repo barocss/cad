@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1683: [Freeze an editable B01 bracket revision for Agent evaluation](notes/b01-bracket-agent-revision-2026-11-22/README.md), #322. Bind W60→W80 to the approved sketch edit and verify an editable fresh Studio Open. The provider metric remains unmeasured.
 - D1682: [Sweep a concentric through-bore through the Exact S-bend](notes/exact-annular-s-bend-sweep-2026-11-22/README.md), #10. Preserve the two mouths, four measurable joints and editable Studio Open.
 - D1681: [Sweep an exact circular disk through two opposite tangent arcs](notes/exact-opposite-arc-sweep-2026-11-22/README.md), #10. Preserve measurable junctions, corner and radius refusals, and editable Studio and Agent results.
 - D1680: [Measure non-circular cut rims on an offset Exact Sweep ring](notes/exact-offset-ring-intersect-2026-11-22/README.md), #10. Preserve the two trimmed torus rims, native continuity and editable Studio Open.

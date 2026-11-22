@@ -33,7 +33,7 @@ export interface CodexRun {
 }
 export interface CodexOptions {
   dir: string; node: string; mcpScript: string; model?: string; effort?: string;
-  doc: StudioDoc; brief: string; rowFiles?: RowFileInput[]; rowNote: string; conversation: string;
+  doc: StudioDoc; brief: string; autonomy: number; rowFiles?: RowFileInput[]; rowNote: string; conversation: string;
   maxCalls: number; maxTurns: number; wallMs: number;
 }
 
@@ -46,7 +46,7 @@ interface Turn { thread?: string; end: CodexRun['end']; error?: string }
 /** One `codex exec` (or `exec resume`) turn: its events appended to events.jsonl, calls and messages to the run's. */
 async function turn(o: CodexOptions, k: number, input: string, thread: string | undefined, run: CodexRun, deadline: number): Promise<Turn> {
   const state = join(o.dir, 'state.json'), instructions = join(o.dir, 'instructions.md');
-  const env = `{CAD_CHAT_STATE=${toml(state)},CAD_AUTONOMY=${toml(String(AUTONOMY))},CAD_PROMPT=${toml(o.brief.slice(0, 4000))}}`;
+  const env = `{CAD_CHAT_STATE=${toml(state)},CAD_AUTONOMY=${toml(String(o.autonomy))},CAD_PROMPT=${toml(o.brief.slice(0, 4000))}}`;
   const common = ['--json', '--skip-git-repo-check', '--ignore-user-config', '--ignore-rules',
     ...(o.model ? ['-m', o.model] : []), '-c', `model_reasoning_effort=${toml(o.effort ?? 'high')}`,
     '-c', `model_instructions_file=${toml(instructions)}`, '-c', 'web_search="disabled"', '-c', 'sandbox_mode="read-only"', ...OFF.flatMap(f => ['--disable', f]),
@@ -96,7 +96,7 @@ async function acceptAll(doc: StudioDoc, k: number): Promise<{ doc: StudioDoc; a
 }
 
 /** The person's message after accepting (A6.2's turns list gets it too). */
-const followUp = (doc: StudioDoc, done: Accepted[]) => `${stateNote(doc, AUTONOMY)}\n\n${[
+const followUp = (doc: StudioDoc, done: Accepted[], autonomy: number) => `${stateNote(doc, autonomy)}\n\n${[
   ...done.filter(a => a.ok).map(a => `I accepted your proposal ${a.id} ("${a.title}").`),
   ...done.filter(a => !a.ok).map(a => `Your proposal ${a.id} ("${a.title}") could not be accepted: ${a.error}`),
   'Continue with the brief. When everything it asks for is done, say so.',
@@ -104,7 +104,7 @@ const followUp = (doc: StudioDoc, done: Accepted[]) => `${stateNote(doc, AUTONOM
 
 export async function runCodex(o: CodexOptions): Promise<CodexRun> {
   const state = join(o.dir, 'state.json'), t0 = Date.now(), deadline = t0 + o.wallMs;
-  const first = `${stateNote(o.doc, AUTONOMY)}\n\n${o.brief}${o.rowNote}`, turns = [o.brief];
+  const first = `${stateNote(o.doc, o.autonomy)}\n\n${o.brief}${o.rowNote}`, turns = [o.brief];
   const write = (doc: StudioDoc) => writeFileSync(state, JSON.stringify({ doc, changed: false, turns, ...(o.rowFiles ? { rowFiles: o.rowFiles, rowConversation: o.conversation } : {}) }));
   write(o.doc);
   writeFileSync(join(o.dir, 'instructions.md'), TOOLSET.prompt);
@@ -122,7 +122,7 @@ export async function runCodex(o: CodexOptions): Promise<CodexRun> {
     run.accepted.push(...a.accepted); run.doc = a.doc;
     if (k >= o.maxTurns) { run.end = 'turn-cap'; break; }
     if (!thread) { run.end = 'error'; run.error = 'no thread id to resume'; break; }
-    input = followUp(run.doc, a.accepted); turns.push(input);
+    input = followUp(run.doc, a.accepted, o.autonomy); turns.push(input);
     write(run.doc);
   }
   run.wallMs = Date.now() - t0; if (thread) run.thread = thread;

@@ -5,16 +5,17 @@ import {spawnSync} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {isAbsolute,join,relative,resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {createFlow,sha256} from './flow-helper.mjs';
 import {clickModelCommand} from './model-rail-helper.mjs';
-import {inspectorSource,oracleSource} from './bracket-baseline-oracles.mjs';
+import {inspectorSource,oracleSource,seedFile as retainedSeed,seedSHA256} from './bracket-baseline-oracles.mjs';
 
 const output=process.argv[2],repo=resolve(import.meta.dirname,'../../..');
 assert.ok(output&&isAbsolute(output));assert.ok(relative(repo,resolve(output)).startsWith('../'));await mkdir(output);
-const seedFile=process.env.D538_SEED_FILE??'/tmp/barocss-d448-remaining-run02/05-opfs-saved.bcad';
+const seedFile=process.env.D538_SEED_FILE??fileURLToPath(retainedSeed);
 assert.ok(isAbsolute(seedFile),'Seed input must be an absolute path');
 const seedBytes=await readFile(seedFile);
-assert.equal(seedBytes.length,3431);assert.equal(sha256(seedBytes),'2727e7d3d726a58030657720ebc7a8d09a4dab574887dd7d2001cc42305ed16f');
+assert.equal(seedBytes.length,3431);assert.equal(sha256(seedBytes),seedSHA256);
 const seedDoc=JSON.parse(seedBytes),projectName=`D538-${randomUUID()}`,partName='D538-support-bracket';
 const editorProducers=['packages/barocss-cad-model/src/sketch/rules.ts','packages/barocss-cad-model/src/sketch/settle.ts','packages/barocss-cad-model/src/sketch/outlineFields.ts','packages/barocss-cad-model/src/sketch/reopen.ts','packages/barocss-cad-model/src/sketch/profile.ts','apps/cad-studio/src/sketch/preserveConstruction.ts'];
 const f=await createFlow({name:'bracket-baseline',envFrozen:'D538_SOURCE_FROZEN',output,inspectorSource,oracleSource,
@@ -40,8 +41,8 @@ const invariant=(doc,width)=>{
   assert.deepEqual({...doc,nodes:seedDoc.nodes},seedDoc,'root metadata/output/nextId retained');
   assert.deepEqual(doc.nodes.slice(1),seedDoc.nodes.slice(1),'all downstream IDs/nodes/ref strings/historical signatures retained');
   const sketch=doc.nodes[0],original=seedDoc.nodes[0];
-  const {min,max,outline,...extras}=sketch,{min:oldMin,max:oldMax,outline:oldOutline,...originalExtras}=original;
-  assert.deepEqual(extras,originalExtras);assert.deepEqual(min,[-20,-20]);assert.deepEqual(max,[width-20,20]);
+  const {min,max,outline,...extras}=sketch,{outline:oldOutline,...originalExtras}=original;
+  delete originalExtras.min;delete originalExtras.max;assert.deepEqual(extras,originalExtras);assert.deepEqual(min,[-20,-20]);assert.deepEqual(max,[width-20,20]);
   assert.deepEqual(outline.lengths,{'0':width,'1':40});assert.deepEqual(outline.hv,oldOutline.hv);
 };
 const qualify=async(label,expectedDoc,width)=>{
@@ -72,13 +73,6 @@ async function publicView(f, name) {
   await f.page.getByRole('group', { name: 'Views', exact: true }).getByRole('button', { name, exact: true }).click();
   await f.page.locator('.views button[title="Frame all (F)"]').click();
   await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-}
-async function projected(f, world) {
-  const read = await f.page.evaluate(world => {
-    const pixel = window.__studioScreenOf(world);
-    return { pixel, clear: pixel && !!document.elementFromPoint(...pixel)?.closest('.vp-canvas') };
-  }, world);
-  assert.ok(read.pixel?.length === 2 && read.clear, 'unobstructed projected pointer target'); return read.pixel;
 }
 async function orbit(f, dx, dy) {
   const point = await f.page.evaluate(() => {

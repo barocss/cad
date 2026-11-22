@@ -17,6 +17,7 @@ import { sample, type Rung } from '@barocss/cad-model/rb9/core';
 import { clearanceMap, applyFill, fillOverlap } from '@barocss/cad-model/team/clearanceMap';
 import type { CallRecord } from './codex';
 import { LONG_BRIEFS } from './long';
+import { bracketRevisionBrief } from './bracket-revision';
 import { type Element, allNodes, check, evaluates, hasKind, oneSolid, reads, size, sizeOf, solids, sorted, volume, volumeOf, type Check, type Judged } from './oracle';
 
 // (The bundle runs from a temporary folder: ai-eval.mjs passes the repository's path.)
@@ -29,6 +30,8 @@ export interface Brief {
   id: string; ladder: Ladder; title: string; prompt: string;
   /** A document the person opened first (a .bcad path); else an empty part. */
   start?: string;
+  /** Use this review level for the provider run. The harness plays the reviewer between turns. */
+  autonomy?: 1 | 2 | 3 | 4;
   /** Files the person attached in the conversation (paths). */
   files?: string[];
   /** Where RB9's rung comes from, when it is one. */
@@ -493,7 +496,7 @@ const P1: Brief | null = existsSync(join(P1_DIR, 'brief.md')) && existsSync(join
 
 export const BRIEFS: Brief[] = [
   // single parts
-  rb9(1, 'single part'), rb9(4, 'single part'), FLANGED_SHAFT, rb9(5, 'single part'), rb9(3, 'single part'),
+  rb9(1, 'single part'), rb9(4, 'single part'), FLANGED_SHAFT, bracketRevisionBrief(REPO), rb9(5, 'single part'), rb9(3, 'single part'),
   // standard sizes from the person's files
   TAPPED_PLATE, MOTOR_PLATE, BEARING_SHAFT,
   // assemblies
