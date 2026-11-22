@@ -173,8 +173,8 @@ test('Replace face links an inclined exact plane to the original semicylinder up
   assert.deepEqual(doc, before);
 });
 
-test('a signed radial Offset and a linked inclined upper cap compose in both History orders', async () => {
-  const cap = 'n0.v-max', wall = 'n0.normal', reference = 'n2.bottom', n = Math.sqrt(5);
+function inclinedCapSource() {
+  const n = Math.sqrt(5);
   const source = withNode(emptyDoc(), { kind: 'thicken', mode: 'exact-cylinder', name: 'Semicylinder', thickness: 2, side: 'reverse',
     surface: {
       degreeU: 2, degreeV: 1, knotsU: [0, 0, 0, 1, 1, 2, 2, 2], knotsV: [0, 0, 1, 1],
@@ -184,7 +184,11 @@ test('a signed radial Offset and a linked inclined upper cap compose in both His
   const sketch = withNode(source, { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [8, 8],
     plane: { origin: [44, 20, 13], normal: [0, 1 / n, 2 / n], xAxis: [1, 0, 0] } });
   const donor = withNode(sketch, { kind: 'extrude', sketch: 1, height: 3 });
-  const base = withNode(donor, { kind: 'translate', parent: { node: 2, side: 'solid' }, offset: [0, 0, 0] });
+  return withNode(donor, { kind: 'translate', parent: { node: 2, side: 'solid' }, offset: [0, 0, 0] });
+}
+
+test('a signed radial Offset and a linked inclined upper cap compose in both History orders', async () => {
+  const cap = 'n0.v-max', wall = 'n0.normal', reference = 'n2.bottom', base = inclinedCapSource();
   const offset = { action: 'command', command: 'offset-face', faces: [wall], values: { d: 2 } };
   const replace = { action: 'command', command: 'replace-face', faces: [cap, reference] };
   const apply = async (doc: StudioDoc, command: typeof offset | typeof replace) => {
@@ -248,4 +252,82 @@ test('a signed radial Offset and a linked inclined upper cap compose in both His
   const expanded = await dispatchTool(await stateOf(tiltBeforeRadial), 'features', offset, evaluate);
   assert.ok(expanded.isError && !expanded.changed);
   assert.match(expanded.content, /opposite cap/i);
+});
+
+test('the linked upper-cap wall edit requires current ownership and a pinned single distance', async () => {
+  const cap = 'n0.v-max', wall = 'n0.normal', inner = 'n0.reverse';
+  async function command(doc: StudioDoc, name: string, faces: string[], values?: Record<string, number>) {
+    const reply = await dispatchTool(await stateOf(doc), 'features', { action: 'command', command: name, faces, values,
+      expectedRevision: revisionOf(doc) }, evaluate);
+    assert.ok(reply.changed && !reply.isError, reply.content);
+    return reply.state.doc;
+  }
+  const source = inclinedCapSource();
+  const linked = await command(source, 'replace-face', [cap, 'n2.bottom']);
+  const original = await command(linked, 'offset-face', [wall], { d: 2 }), index = 5;
+  const move = (doc: StudioDoc, z: number): StudioDoc => ({ ...doc, nodes: doc.nodes.map((node, i) =>
+    i === 3 && node.kind === 'translate' ? { ...node, offset: [0, 0, z] } : node) });
+  const moved = move(original, -2), accepted = await stateOf(moved);
+  const req = { action: 'edit', index, expectedRevision: revisionOf(moved), values: { offsetDistance: 3 } };
+  const discovery = await dispatchTool(accepted, 'features', { action: 'edit', index }, evaluate);
+  assert.match(discovery.content, /values\.offsetDistance .*current value 2/);
+  for (const bad of [
+    { ...req, expectedRevision: undefined },
+    { ...req, expectedRevision: revisionOf(original) },
+    { ...req, values: { offsetDistance: 3, d: 1 } },
+    { ...req, values: { offsetDistance: 0 } },
+    { ...req, values: { offsetDistance: 2 } },
+  ]) {
+    const refused = await dispatchTool(accepted, 'features', bad, evaluate);
+    assert.ok(refused.isError && !refused.changed, refused.content);
+    assert.equal(refused.state.doc, moved);
+  }
+  const contact = await dispatchTool(accepted, 'features', { ...req, values: { offsetDistance: 12 } }, evaluate);
+  assert.ok(contact.isError && !contact.changed, contact.content);
+  assert.match(contact.content, /opposite cap/i);
+  assert.equal(contact.state.doc, moved);
+
+  const result = await dispatchTool(accepted, 'features', req, evaluate);
+  assert.ok(!result.isError && result.changed, result.content);
+  const edited = result.state.doc;
+  assert.deepEqual(edited.nodes.slice(0, index), moved.nodes.slice(0, index));
+  assert.deepEqual(edited.nodes[index], { ...moved.nodes[index], distance: 3 });
+  assert.deepEqual(edited.outputs, moved.outputs);
+  const saved = await readStudioFile(encodeStudioFile(edited));
+  assert.ok('doc' in saved);
+  const native = (doc: StudioDoc) => partBreps(doc).find(body => body.key === 'b5')?.brep;
+  const brep = native(edited);
+  assert.ok(brep && checkBrep(brep, { strict: true }).valid);
+  assert.deepEqual(native(saved.doc), brep);
+  near(brepMassProperties(brep, 1).volume, 52.5 * 11 * Math.PI - (13 ** 3 - 8 ** 3) / 3);
+  const after = await stateOf(saved.doc);
+  const proof = await runCheck(saved.doc, after.bodies, evaluate, {
+    query: { fn: 'radial_wall', a: wall, b: inner }, op: '==', value: 5, tol: 0.01, unit: 'mm',
+  });
+  assert.equal(proof.status, 'pass');
+  near(typeof proof.measured === 'number' ? proof.measured : undefined, 5);
+
+  const innerOriginal = await command(linked, 'offset-face', [inner], { d: -1 });
+  const innerResult = await dispatchTool(await stateOf(innerOriginal), 'features', {
+    ...req, expectedRevision: revisionOf(innerOriginal), values: { offsetDistance: 1 },
+  }, evaluate);
+  assert.ok(innerResult.changed && !innerResult.isError, innerResult.content);
+  const innerBrep = native(innerResult.state.doc);
+  const innerFace = innerBrep?.faces.find(face => face.name === inner);
+  assert.ok(innerFace);
+  const innerSupport = faceGeometry(innerFace);
+  assert.ok(innerSupport.kind === 'cylinder' && innerSupport.out === -1);
+  near(innerSupport.r, 7);
+
+  const plainRadial = await command(source, 'offset-face', [wall], { d: 2 });
+  const continued = withNode(moved, { kind: 'translate', parent: { node: index, side: 'solid' }, offset: [1, 0, 0] });
+  for (const [doc, index] of [[plainRadial, 4], [continued, 5]] as const) {
+    const refused = await dispatchTool(await stateOf(doc), 'features', { ...req, index, expectedRevision: revisionOf(doc) }, evaluate);
+    assert.ok(refused.isError && !refused.changed, refused.content);
+    assert.equal(refused.state.doc, doc);
+  }
+  const incompleteView = { ...accepted, bodies: accepted.bodies.filter(body => body.ref?.node !== 3) };
+  const missingDonor = await dispatchTool(incompleteView, 'features', req, evaluate);
+  assert.ok(missingDonor.isError && !missingDonor.changed);
+  assert.equal(missingDonor.state.doc, moved);
 });

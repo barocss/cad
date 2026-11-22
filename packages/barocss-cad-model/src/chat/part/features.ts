@@ -8,7 +8,9 @@ import { editSavedOffsetFaceCommand } from '../../app/offsetFaceEdit';
 import { extrudeCommand } from '../../app/profileCommands';
 import { smoothScrewAngleField, smoothScrewAngleKey, smoothScrewWindingRule, smoothScrewPitchAdvance, smoothScrewPitchField, smoothScrewPitchKey, smoothScrewTurns, smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '../../app/smoothLoftTurn';
 import { hasLineArcScrewSections, hasLineArcTurnSections } from '../../app/lineArcScrew';
-import { featureLabel, isAnnularReplacementSource, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
+import { exactSemicylinderWallAfterReplacement, featureLabel, isAnnularReplacementSource, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
+import { snapshotOf } from '../../engine/evaluate';
+import { isExactThickenEdit } from '../../engine/exactThickenEdit';
 import { DIRECT_RULED_COMMAND, proposeDirectRuledCommand } from '../directRuledProposal';
 import { DIRECT_THICKEN_COMMAND, proposeDirectThickenCommand } from '../directThickenProposal';
 import { loadPersonRows } from '../rows';
@@ -33,7 +35,7 @@ import { mountAxis } from '../../app/mounts';
 import { firstProblem, isRefusal } from '../../engine/refusal';
 import { REFERENCE_CODES } from '../../engine/schema/references';
 import { addParameters, bindParameter, parameterUses, PARAMETER_CODES, removeParameter, renameParameter, withParameters, type Binding } from '../../engine/parameters';
-import { featureId } from '../../engine/ids';
+import { bodyKeyFor, featureId } from '../../engine/ids';
 import { sweepSourceRevision } from '../sweepSource';
 import { isReferencePlaneEdit } from '../../app/offsetPlanePick';
 import { preparePairedFixedSpanHoleEdit } from '../../app/patternHoleSpacing';
@@ -359,15 +361,38 @@ function isReviewedTubeWall(state: ChatState, index: number, node: Extract<Model
     wall.exact?.kind === 'cylinder' && 2 * wall.exact.r > boreDiameter;
 }
 
+function isReviewedLinkedCapWall(state: ChatState, index: number, node: Extract<ModelNode, { kind: 'offset-face' }>) {
+  const { doc, bodies } = state, [face] = node.faces;
+  if (index !== doc.nodes.length - 1 || node.target !== undefined || node.parent.side !== 'solid' ||
+    node.sigs?.[face]?.k !== 'curved' || doc.instances?.length || doc.variability || doc.configurations ||
+    bodies.length !== 2 || Object.keys(doc.outputs).length !== 2) return false;
+  const paired = exactSemicylinderWallAfterReplacement(doc.nodes, node.parent.node, doc.parameters, face);
+  if (!paired) return false;
+  const donor = paired.prior.target.body.node;
+  if (![index, donor].every(node => {
+    const key = bodyKeyFor(doc.nodes, node, 'solid');
+    const matches = bodies.filter(body => body.key === key && body.ref?.node === node && body.ref.side === 'solid');
+    return matches.length === 1 && doc.outputs[key]?.node === node && doc.outputs[key]?.side === 'solid';
+  })) return false;
+  try {
+    const snapshot = snapshotOf(doc), id = featureId(doc.nodes, index);
+    const outputs = snapshot.outputs.filter(output => output.id === id && output.feature === id);
+    const [a, b] = paired.source.skins;
+    return outputs.length === 1 && isExactThickenEdit(doc, snapshot, index, outputs[0].brep, [a, b]);
+  } catch {
+    return false;
+  }
+}
+
 function reviewedWallDistance(state: ChatState, index: number) {
   const { doc, bodies } = state, node = doc.nodes[index];
   if (state.partOf || node?.kind !== 'offset-face' || node.faces.length !== 1 || typeof node.distance !== 'number') return;
   const rightTaperWall = node.faces[0] === featureId(doc.nodes, node.parent.node) + '.side1';
-  const tubeWall = isReviewedTubeWall(state, index, node);
-  if (!rightTaperWall && !tubeWall) return;
+  const nativeRadial = isReviewedTubeWall(state, index, node) || isReviewedLinkedCapWall(state, index, node);
+  if (!rightTaperWall && !nativeRadial) return;
   const ctx: Ctx = { doc, bodies, selection: { bodies: [], faces: [], edges: [] } };
   const cmd = editSavedOffsetFaceCommand(doc, index);
-  if (!cmd?.build || (!tubeWall && cmd.handles?.(ctx, { d: node.distance })?.length !== 1)) return;
+  if (!cmd?.build || (!nativeRadial && cmd.handles?.(ctx, { d: node.distance })?.length !== 1)) return;
   return { ctx, build: cmd.build, distance: node.distance };
 }
 
@@ -375,7 +400,7 @@ async function editReviewedWallDistance(state: ChatState, index: number, distanc
   if (typeof distance !== 'number' || !Number.isFinite(distance))
     return fail(state, 'Set values.offsetDistance to a finite signed distance in mm.', { code: 'EDIT_INPUT' });
   const edit = reviewedWallDistance(state, index);
-  if (!edit) return fail(state, 'This edit needs the current terminal right wall Offset of an ordinary rectangular taper or a radial wall Offset of a coaxial tube.', { code: 'EDIT_INPUT' });
+  if (!edit) return fail(state, 'This edit needs the current terminal right wall Offset of an ordinary rectangular taper, a radial wall Offset of a coaxial tube, or a terminal wall Offset of an Exact semicylinder with a linked inclined upper-cap replacement.', { code: 'EDIT_INPUT' });
   let next: StudioDoc;
   try { next = edit.build(edit.ctx, { d: distance }); }
   catch (error) {
