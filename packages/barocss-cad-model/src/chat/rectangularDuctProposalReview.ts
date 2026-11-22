@@ -48,7 +48,7 @@ function scope(doc: StudioDoc) {
   return { sketch, sketchId: sketch.id, object, outer, inner, outerTags: tags.outer, innerTags };
 }
 
-/** Identify only one pinned creation of an independent rectangular S-bend duct. */
+/** Identify one pinned creation of an independent rectangular duct. */
 export function rectangularDuctProposal(doc: StudioDoc, proposal: Proposal) {
   if (proposal.status !== 'open' || proposal.ops.length !== 1) return;
   const [{ tool, args }] = proposal.ops, source = scope(doc);
@@ -80,7 +80,7 @@ function rectangle(edges: BrepEdge[], center: Point, normal: Point, sizes: numbe
   return corners.length === 4 && lengths.sort((a, b) => a - b).every((value, index) => near(value, expected[index]));
 }
 
-function capEvidence(brep: Brep, name: string, center: Point, normal: Point, source: NonNullable<ReturnType<typeof scope>>, wallNames: (tags: string[]) => string[]) {
+function capEvidence(brep: Brep, name: string, center: Point, normal: Point, source: NonNullable<ReturnType<typeof scope>>, wallNames: (tags: string[]) => string[], requireCharts = false) {
   const face = brep.faces.find(item => item.name === name);
   if (!face || face.loops.length !== 2) return;
   const plane = faceGeometry(face);
@@ -100,7 +100,7 @@ function capEvidence(brep: Brep, name: string, center: Point, normal: Point, sou
       const otherLoop = twin && brep.loops.find(item => item.id === twin.loop);
       const other = otherLoop && brep.faces.find(item => item.id === otherLoop.face);
       if (!use || use.loop !== loop.id || !twin || twin.twin !== use.id || twin.edge !== use.edge || twin.sense === use.sense ||
-        !edge || !other?.name || !walls.has(other.name)) return;
+        !edge || !other?.name || !walls.has(other.name) || (requireCharts && (!use.pcurve || !twin.pcurve))) return;
       edges.push(edge);
       if (edge.curve.controlPoints.length !== 2) return;
       const [a, b] = edge.curve.controlPoints.map(point => sub(point, center));
@@ -113,10 +113,10 @@ function capEvidence(brep: Brep, name: string, center: Point, normal: Point, sou
   if (result.outer && result.inner) return { name, outerEdges: result.outer, innerEdges: result.inner };
 }
 
-function seams(brep: Brep, feature: string, tags: string[]) {
+function seams(brep: Brep, feature: string, tags: string[], [lead, exit]: readonly [string, string]) {
   const result: string[] = [];
   for (const tag of tags) {
-    const first = `${feature}.first.side[${tag}]`, second = `${feature}.second.side[${tag}]`;
+    const first = `${feature}.${lead}.side[${tag}]`, second = `${feature}.${exit}.side[${tag}]`;
     const matches = brep.edges.filter(edge => edge.name === `${first}|${second}` || edge.name === `${second}|${first}`);
     if (matches.length !== 1) return;
     const [edge] = matches, uses = brep.coedges.filter(use => use.edge === edge.id);
@@ -153,24 +153,26 @@ export async function reviewedRectangularDuctEvidence(base: StudioDoc, candidate
     const report = checkBrep(brep, { strict: true });
     if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 1 ||
       canonical(report.counts) !== canonical({ bodies: 1, shells: 1, faces: 18, loops: 20, coedges: 80, edges: 40, vertices: 24 })) return;
-    const wallNames = (tags: string[], half: string) => tags.map(tag => `${feature}.${half}.side[${tag}]`);
-    const outerWalls = new Set(['first', 'second'].flatMap(half => wallNames(source.outerTags, half)));
-    const innerWalls = new Set(['first', 'second'].flatMap(half => wallNames(source.innerTags, half)));
+    const lineArc = brep.faces.some(face => face.name?.startsWith(`${feature}.line.`));
+    const pieces = lineArc ? ['line', 'bend'] as const : ['first', 'second'] as const;
+    const wallNames = (tags: string[], piece: string) => tags.map(tag => `${feature}.${piece}.side[${tag}]`);
+    const outerWalls = new Set(pieces.flatMap(piece => wallNames(source.outerTags, piece)));
+    const innerWalls = new Set(pieces.flatMap(piece => wallNames(source.innerTags, piece)));
     const names = new Set([...outerWalls, ...innerWalls, `${feature}.start`, `${feature}.end`]);
     if (new Set(brep.faces.map(face => face.name)).size !== names.size || brep.faces.some(face => !face.name || !names.has(face.name) || face.surface.kind !== 'surface')) return;
     const path = copied.path, points = path.controlPoints;
     const first = sub(points[1], points[0]), last = sub(points[4], points[3]);
     const normal = (vector: Point, sign: number): Point => vector.map(value => sign * value / Math.hypot(...vector)) as Point;
-    const caps = [capEvidence(brep, `${feature}.start`, points[0], normal(first, -1), source, tags => wallNames(tags, 'first')),
-      capEvidence(brep, `${feature}.end`, points[4], normal(last, 1), source, tags => wallNames(tags, 'second'))];
+    const caps = [capEvidence(brep, `${feature}.start`, points[0], normal(first, -1), source, tags => wallNames(tags, pieces[0])),
+      capEvidence(brep, `${feature}.end`, points[4], normal(last, 1), source, tags => wallNames(tags, pieces[1]), lineArc)];
     if (!caps[0] || !caps[1]) return;
-    const exteriorSeams = seams(brep, feature, source.outerTags), interiorSeams = seams(brep, feature, source.innerTags);
+    const exteriorSeams = seams(brep, feature, source.outerTags, pieces), interiorSeams = seams(brep, feature, source.innerTags, pieces);
     if (!exteriorSeams || !interiorSeams) return;
     const curve = { ...path, kind: 'curve' as const, id: edit.path };
     const center = evaluateCurve(curve, path.knots[3]), tangent = normal(sub(points[2], points[1]), 1);
     const edges = (ids: string[]) => ids.map(id => brep.edges.find(edge => edge.id === id)!);
     if (!rectangle(edges(exteriorSeams), center, tangent, source.outer) || !rectangle(edges(interiorSeams), center, tangent, source.inner)) return;
     return { brep, rectangularDuct: { body, sketch: edit.sketch, path: edit.path, pathRevision: edit.pathRevision,
-      caps: [caps[0], caps[1]], exteriorSeams, interiorSeams } };
+      caps: [caps[0], caps[1]], exteriorSeams, interiorSeams, ...(lineArc ? { pathKind: 'line-and-arc' as const } : {}) } };
   } catch { return; }
 }

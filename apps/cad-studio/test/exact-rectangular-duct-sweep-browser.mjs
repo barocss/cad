@@ -17,7 +17,9 @@ assert.ok(!opposite || !sameTurn, 'Choose one two-arc turn direction.');
 assert.ok(!lineArc || !twoArcs, 'Choose one path family.');
 const baseline = process.argv.includes('--expect-refused');
 const review = process.argv.includes('--review');
-assert.ok(!review || (opposite && !spaced && !baseline), 'Review needs an active touching opposite-arc duct flow.');
+const baselineReview = process.argv.includes('--expect-review-refused');
+assert.ok(!review || (!baseline && (lineArc || (opposite && !spaced))), 'Choose a supported duct review path.');
+assert.ok(!baselineReview || (review && lineArc));
 const railId = sameTurn ? 'same-turn' : opposite ? 's-bend' : 'elbow';
 const railName = sameTurn ? 'Same-turn rail' : opposite ? 'S-bend rail' : 'Elbow rail';
 const ends = twoArcs ? [
@@ -56,7 +58,7 @@ if (review) pins.push('apps/cad-studio/test/duct-proposal-review-browser-steps.m
 const f = await createFlow({
   name: spacedOpposite ? 'exact-spaced-s-bend-duct' : spaced ? 'exact-spaced-same-turn-duct' : sameTurn ? 'exact-rectangular-same-turn-duct'
     : opposite ? 'exact-rectangular-s-bend-duct' : 'exact-rectangular-duct-sweep', output: process.argv[2],
-  envFrozen: lineArc ? 'D1746_SOURCE_FROZEN' : spacedOpposite ? 'D1736_SOURCE_FROZEN' : spaced ? 'D1733_SOURCE_FROZEN' : review ? 'D1705_SOURCE_FROZEN'
+  envFrozen: lineArc ? (review ? 'D1747_SOURCE_FROZEN' : 'D1746_SOURCE_FROZEN') : spacedOpposite ? 'D1736_SOURCE_FROZEN' : spaced ? 'D1733_SOURCE_FROZEN' : review ? 'D1705_SOURCE_FROZEN'
     : sameTurn ? 'D1713_SOURCE_FROZEN' : opposite ? 'D1704_SOURCE_FROZEN' : 'D1675_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Sweep a centered rectangular duct, inspect both openings and edit the aperture through Studio History.',
@@ -385,13 +387,26 @@ await f.run(async () => {
     assert.deepEqual([twin.proposal, twin.applied], ['P2', false]);
     const staged = await readFile(file);
     f.phase = 'Review the pending duct and both native caps before Studio approval';
-    const evidence = await reviewPendingDuct(f, call, request, expectedRevision, op.args.values);
+    if (baselineReview) {
+      const { proposals: [proposal] } = await call('proposals', { action: 'list' });
+      assert.equal(proposal.id, 'P1');
+      assert.match(proposal.modelReviewRevision, /^[a-f0-9]{64}$/);
+      const result = await call('query', { action: 'render', expectedRevision, proposal: proposal.id,
+        expectedProposalRevision: proposal.modelReviewRevision }, true);
+      assert.equal(result.code, 'MODEL_REVIEW_REPLAY_FAILED');
+      assert.deepEqual(await readFile(file), staged);
+      f.report.observations.push({ label: 'line-and-arc-review-refused', proposal: proposal.id, result });
+      return;
+    }
+    const evidence = await reviewPendingDuct(f, call, request, expectedRevision, op.args.values,
+      lineArc ? 'line-and-arc' : undefined);
     assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*Studio/i);
     assert.deepEqual(await readFile(file), staged);
     return evidence;
   });
   const pending = JSON.parse(await readFile(file));
   assert.deepEqual([pending.nodes, pending.outputs], [seed.nodes, seed.outputs]);
+  if (baselineReview) return;
   if (reviewed) await checkChangedDuctPath(session, pending, reviewed, path.controlPoints);
   await f.freshOpen(file, pending, '09-duct-proposal-open');
   await button('Chat').first().click();
@@ -417,6 +432,10 @@ await f.run(async () => {
     const saved = await f.save('reviewed-rectangular-duct');
     await f.freshOpen(saved.file, approved, '11-reviewed-duct-fresh-open');
     assert.equal((await verify('approved-draft-reopened', await f.doc(), 4)).digest, native.digest);
+    if (lineArc) {
+      await showOpening(ends[0], '11-approved-inlet');
+      await showOpening(ends[1], '11-approved-outlet');
+    }
     await withMcpSession(session, saved.file, 'reviewed-duct-reopened', async (call, request) => {
       const bytes = await readFile(saved.file);
       await checkApprovedDuctReview(call, request, reviewed);

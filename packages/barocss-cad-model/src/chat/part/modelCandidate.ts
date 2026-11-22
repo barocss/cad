@@ -49,7 +49,7 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
   const duct = pending && !boreEdit && !cornerEdit && !resizeEdit ? rectangularDuctProposal(state.doc, pending) : undefined;
   const proposalRevision = boreEdit?.revision ?? cornerEdit?.revision ?? resizeEdit?.revision ?? duct?.revision;
   if (!pending || !proposalRevision)
-    return refuse('MODEL_REVIEW_UNAVAILABLE', 'Choose a unique open proposal for a supported bored-wall Offset, sketch corner group, saved Chamfer resize or rectangular S-bend duct.');
+    return refuse('MODEL_REVIEW_UNAVAILABLE', 'Choose a unique open proposal for a supported bored-wall Offset, sketch corner group, saved Chamfer resize or rectangular duct.');
   if (proposalRevision !== expectedProposalRevision || proposalIsStale(pending, requirementEvidenceRevision(state.doc)))
     return refuse('MODEL_REVIEW_PROPOSAL_STALE', 'The proposal or its source changed. Read proposals.list and request a fresh proposal.');
 

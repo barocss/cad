@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1746 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1747 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1746](notes/exact-rectangular-line-arc-sweep-2026-11-23/README.md), P5 rows 07 and 30. Exact line-and-arc Sweep supports aligned solid rectangles and centered rectangular duct openings. Desktop Studio verifies native outlet bindings, tangent joints and editable fresh Open. [D1745](notes/studio-sketch-camera-framing-2026-11-23/README.md) extracts Sketch camera framing from Viewport. The B06 PDF group remains held.
-- **Next MAIN:** D1747, P1 rows [04](roadmap-rows/04.md) and [16](roadmap-rows/16.md), [#324](https://github.com/barocss/cad/issues/324). Let the local Agent review a pending exact line-and-arc rectangular duct. Verify both open ends and eight native seams on the same revision as the candidate image, then approve in Studio and reopen.
+- **Current position:** [D1747](notes/pending-line-arc-duct-review-2026-11-23/README.md), P1 rows 04 and 16. Local Agent review ties both duct openings and eight native seams to a pending line-and-arc duct and verifies the same body after Studio approval and fresh Open. [D1746](notes/exact-rectangular-line-arc-sweep-2026-11-23/README.md) adds both rectangular sections. The B06 PDF group remains held.
+- **Next MAIN:** D1748, P1 rows [04](roadmap-rows/04.md) and [16](roadmap-rows/16.md), [#324](https://github.com/barocss/cad/issues/324). Allow an opposite orientation for Agent solid images. Verify that Left and Back expose both duct mouths, that native inspection requires the image pin for the chosen orientation, and that the approved native file reproduces the image.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

@@ -14,21 +14,21 @@ const text = `@model rails { version:0; length-unit:mm;
     control-points:[[0,0,0],[12,0,0],[12,12,0],[12,30,0],[30,30,0]];
     weights:[1,0.7071067811865476,1,0.7071067811865476,1]; } }`;
 
-async function fixture() {
+async function fixture(railText = text, railId = 's-bend', railName = 'S-bend rail') {
   const base = { ...withNode(emptyDoc(), {
     kind: 'sketch', profile: 'rectangle', min: [-2, -3], max: [2, 3],
     holes: [[[-1, -2], [-1, 2], [1, 2], [1, -2]].map(start => ({ kind: 'line' as const, start: start as [number, number] }))],
     sideTags: { outer: ['e1', 'e2', 'e3', 'e4'], holes: [['e5', 'e6', 'e7', 'e8']] },
-  }), direct: { sources: { rails: text }, objects: [{ id: 's-bend', name: 'S-bend rail', source: 'rails', geometry: 's-bend' }] } };
-  const pin = await sweepSourceRevision(base, 's-bend');
+  }), direct: { sources: { rails: railText }, objects: [{ id: railId, name: railName, source: 'rails', geometry: railId }] } };
+  const pin = await sweepSourceRevision(base, railId);
   assert.ok('revision' in pin);
   const proposal: Proposal = {
     id: 'P1', title: 'Exact rectangular duct', status: 'open', by: { agent: 'chat' }, at: '2026-11-22T16:24:01.567Z', base: 'test',
     ops: [{ tool: 'run_command', args: { command: 'sweep-curve', expectedRevision: revisionOf(base), values: {
-      sketch: 'n0', path: 's-bend', pathRevision: pin.revision, representation: 'exact',
+      sketch: 'n0', path: railId, pathRevision: pin.revision, representation: 'exact',
     } } }], risk: { level: 'low', features_touched: 1, references_broken: 0, hard_requirements_changed: [], approval: [] }, summary: '1 added',
   };
-  const copied = sweepPath(base, ['s-bend']);
+  const copied = sweepPath(base, [railId]);
   assert.notEqual(typeof copied, 'string');
   if (typeof copied === 'string') throw new Error(copied);
   const candidate = withNode(base, { kind: 'sweep-curve', sketch: 0, name: copied.name, path: copied.path, mode: 'exact' });
@@ -133,4 +133,31 @@ test('retained authored outline constraints and construction metadata do not rem
   assert.ok(erased.kind === 'sketch');
   delete erased.outline;
   assert.equal(await reviewedRectangularDuctEvidence(doc, { ...candidate, nodes: [erased, candidate.nodes[1]] }, edit), undefined);
+});
+
+
+test('a line-and-arc duct certifies the terminal chart and eight seams for the pinned native body', async () => {
+  const railText = `@model rails { version:0; length-unit:mm;
+    @curve #line-arc { type:nurbs; degree:2; knots:[0,0,0,1,1,2,2,2];
+      control-points:[[-10,0,0],[-5,0,0],[0,0,0],[20,0,0],[20,20,0]];
+      weights:[1,1,1,${Math.SQRT1_2},1]; } }`;
+  const { base, candidate, edit } = await fixture(railText, 'line-arc', 'Line and arc rail');
+  const evidence = await reviewedRectangularDuctEvidence(base, candidate, edit);
+  assert.ok(evidence);
+  const { brep, rectangularDuct } = evidence;
+  assert.deepEqual([rectangularDuct.pathKind, rectangularDuct.path, rectangularDuct.pathRevision],
+    ['line-and-arc', 'line-arc', edit.pathRevision]);
+  assert.deepEqual(rectangularDuct.caps.map(cap => [cap.name, cap.outerEdges.length, cap.innerEdges.length]),
+    [['n1.start', 4, 4], ['n1.end', 4, 4]]);
+  const outlet = rectangularDuct.caps[1];
+  for (const edge of [...outlet.outerEdges, ...outlet.innerEdges]) {
+    const uses = brep.coedges.filter(use => use.edge === edge);
+    assert.equal(uses.length, 2);
+    assert.ok(uses.every(use => use.pcurve));
+  }
+  const seams = [...rectangularDuct.exteriorSeams, ...rectangularDuct.interiorSeams];
+  assert.equal(new Set(seams).size, 8);
+  assert.ok(seams.every(id => brep.edges.find(edge => edge.id === id)?.name?.includes('n1.line.side[')));
+  assert.ok(Math.abs(brepMassProperties(brep, 1).volume - 16 * (10 + 10 * Math.PI)) < 1e-7);
+  assert.equal(await reviewedRectangularDuctEvidence(base, candidate, { ...edit, pathRevision: 'b'.repeat(64) }), undefined);
 });

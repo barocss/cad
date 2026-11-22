@@ -15,7 +15,7 @@ async function render(request, args) {
   return { meta, png };
 }
 
-export async function reviewPendingDuct(f, call, request, expectedRevision, values) {
+export async function reviewPendingDuct(f, call, request, expectedRevision, values, pathKind) {
   const { proposals: [first, second] } = await call('proposals', { action: 'list' });
   assert.deepEqual([first.id, second.id], ['P1', 'P2']);
   for (const item of [first, second]) assert.match(item.modelReviewRevision, /^[0-9a-f]{64}$/);
@@ -30,6 +30,7 @@ export async function reviewPendingDuct(f, call, request, expectedRevision, valu
     [first.id, first.modelReviewRevision, expectedRevision]);
   assert.notEqual(meta.revision, expectedRevision);
   assert.match(meta.candidate.bodySha256, /^[0-9a-f]{64}$/);
+  assert.equal(meta.rectangularDuct.pathKind, pathKind);
   const { body, sketch, path, pathRevision, caps, exteriorSeams, interiorSeams } = meta.rectangularDuct;
   assert.deepEqual([body, sketch, path, pathRevision], ['b1', values.sketch, values.path, values.pathRevision]);
   const faces = ['n1.start', 'n1.end'];
@@ -37,7 +38,14 @@ export async function reviewPendingDuct(f, call, request, expectedRevision, valu
     faces.map(name => [name, 4, 4]));
   assert.deepEqual([exteriorSeams.length, interiorSeams.length], [4, 4]);
   assert.equal(new Set([...exteriorSeams, ...interiorSeams]).size, 8);
-  assert.ok(faces.some(name => Object.values(meta.legend).includes(name)));
+  const labels = Object.values(meta.legend);
+  const visibleCaps = faces.filter(name => Object.values(meta.views).some(view => view.visible_faces.includes(name)));
+  if (pathKind === 'line-and-arc') {
+    assert.ok(labels.some(name => name.startsWith('n1.line.side[')));
+    assert.ok(labels.some(name => name.startsWith('n1.bend.side[')));
+  } else {
+    assert.ok(faces.some(name => labels.includes(name)));
+  }
   for (const [changed, code] of [
     [{ expectedRevision: '0'.repeat(16) }, 'MODEL_REVIEW_BASE_STALE'],
     [{ expectedProposalRevision: second.modelReviewRevision }, 'MODEL_REVIEW_PROPOSAL_STALE'],
@@ -52,7 +60,7 @@ export async function reviewPendingDuct(f, call, request, expectedRevision, valu
   assert.deepEqual(native.faces.map(face => [face.name, face.body, face.geometry.kind]), faces.map(name => [name, 'b1', 'plane']));
   await writeFile(join(f.output, 'candidate-duct-four-views.png'), png);
   f.report.observations.push({ label: 'pending-duct-review', ...meta.candidate, imageSha256: meta.imageSha256,
-    revision: meta.revision, rectangularDuct: meta.rectangularDuct });
+    revision: meta.revision, rectangularDuct: meta.rectangularDuct, visibleCaps });
   return { meta, png, faces, native, reviewPin };
 }
 

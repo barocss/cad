@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1747: [Review a pending exact line-and-arc rectangular duct](notes/pending-line-arc-duct-review-2026-11-23/README.md), #324. Pin the native openings, eight seams and Agent image to the candidate, then verify explicit Studio approval and fresh Open.
 - D1746: [Sweep rectangular sections from a straight span into an arc](notes/exact-rectangular-line-arc-sweep-2026-11-23/README.md), #10. Verify four solid joins, eight duct joins, both terminal openings and editable fresh Open.
 - D1745: [Extract Sketch camera framing from Studio Viewport](notes/studio-sketch-camera-framing-2026-11-23/README.md), #44. Match 23 desktop states and 24 camera and Fit observations.
 - D1744: [Sweep a concentric circular bore from a straight span into an arc](notes/exact-annular-line-arc-sweep-2026-11-23/README.md), #10. Verify the curved outlet and all four native joints through a bore edit and fresh Open.
