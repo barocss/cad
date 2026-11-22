@@ -17,6 +17,7 @@ interface Ring {
   R: number;
   r: number;
   roundoff: number;
+  boreRadius?: number;
   supports: ReadonlyMap<Surface, BrepFace>;
 }
 interface Corner { u: number; v: number; point: Point }
@@ -87,6 +88,48 @@ function readRing(brep: Brep, tolerance: number): Ring | undefined {
   const report = checkBrep(brep, { strict: true });
   if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 1) return;
   return { center, axis, R, r, roundoff, supports };
+}
+
+/** Read one complete shell without changing its chart order or inward face senses. */
+function ringShell(brep: Brep, shell: Brep['shells'][number]): Brep {
+  const faces = brep.faces.filter(face => shell.faces.includes(face.id));
+  const loops = brep.loops.filter(loop => faces.some(face => face.loops.includes(loop.id)));
+  const coedges = brep.coedges.filter(use => loops.some(loop => loop.id === use.loop));
+  const edges = brep.edges.filter(edge => coedges.some(use => use.edge === edge.id));
+  const vertices = brep.vertices.filter(vertex => edges.some(edge => edge.vertices.includes(vertex.id)));
+  return { ...brep, bodies: [{ ...brep.bodies[0], shells: [shell.id] }], shells: [shell], faces, loops, coedges, edges, vertices };
+}
+
+function ringOrientation(ring: Ring, sign: 1 | -1): boolean {
+  for (const face of ring.supports.values()) {
+    const surface = face.surface;
+    if (surface.kind !== 'surface') return false;
+    const sample = surfaceD1Evaluator(surface)(.25, .25), delta = sub(sample.point, ring.center);
+    const radial = sub(delta, scale(ring.axis, dot(delta, ring.axis)));
+    const outward = unit(sub(delta, scale(unit(radial), ring.R)));
+    const normal = scale(unit(cross(sample.du, sample.dv)), face.sense === 'forward' ? 1 : -1);
+    if (dist(normal, scale(outward, sign)) > ANGULAR_ROUNDOFF) return false;
+  }
+  return true;
+}
+
+/** Only two concentric, oppositely oriented radial-start half-profile shells from Exact Sweep. */
+function readAnnularRing(brep: Brep, tolerance: number): Ring | undefined {
+  if (brep.source.family !== 'sweep-curve' || brep.bodies.length !== 1 || brep.shells.length !== 2
+    || brep.faces.length !== 8 || brep.loops.length !== 8 || brep.vertices.length !== 8
+    || brep.edges.length !== 16 || brep.coedges.length !== 32
+    || brep.shells.some(shell => !shell.closed || shell.faces.length !== 4)) return;
+  const first = readRing(ringShell(brep, brep.shells[0]), tolerance);
+  const second = readRing(ringShell(brep, brep.shells[1]), tolerance);
+  if (!first || !second) return;
+  const outer = first.r > second.r ? first : second, inner = outer === first ? second : first;
+  const roundoff = Math.max(outer.roundoff, inner.roundoff);
+  if (!(outer.r - inner.r > 10 * tolerance) || dist(outer.center, inner.center) > roundoff
+    || Math.abs(outer.R - inner.R) > roundoff || dist(outer.axis, inner.axis) > ANGULAR_ROUNDOFF
+    || !ringOrientation(outer, 1) || !ringOrientation(inner, -1)) return;
+  const report = checkBrep(brep, { strict: true });
+  if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 2 || report.topology[0].genus !== 2) return;
+  return { ...outer, boreRadius: inner.r, roundoff, supports: new Map([...outer.supports, ...inner.supports]) };
 }
 
 function clippingPlane(box: Brep, ring: Ring, tolerance: number): { plane: Plane; offset: number } | undefined {
@@ -224,18 +267,21 @@ function withPcurve(use: BrepCoedge, pcurve: Curve): BrepCoedge {
 }
 
 function repair(result: Brep, ring: Ring, plane: Plane, tolerance: number): Brep | undefined {
-  if ((result.faces.length !== 4 && result.faces.length !== 6) || result.loops.length !== result.faces.length
-    || result.edges.length !== 2 * result.faces.length - 2 || result.coedges.length !== 2 * result.edges.length) return;
+  const annular = ring.boreRadius !== undefined, faceCount = result.faces.length;
+  if ((annular ? faceCount !== 6 && faceCount !== 10 : faceCount !== 4 && faceCount !== 6)
+    || result.loops.length !== faceCount + (annular ? 2 : 0)
+    || result.edges.length !== 2 * faceCount - (annular ? 0 : 2)
+    || result.coedges.length !== 2 * result.edges.length) return;
   const corners = new Map<string, Corner[]>(), facesByLoop = new Map<string, BrepFace>();
   const seen = new Set<Surface>();
   let caps = 0;
   for (const face of result.faces) {
     const surface = face.surface;
-    if (surface.kind !== 'surface' || face.loops.length !== 1) return;
-    facesByLoop.set(face.loops[0], face);
+    if (surface.kind !== 'surface') return;
+    for (const loop of face.loops) facesByLoop.set(loop, face);
     const input = ring.supports.get(surface);
     if (input) {
-      if (input.sense !== face.sense || seen.has(surface)) return;
+      if (face.loops.length !== 1 || input.sense !== face.sense || seen.has(surface)) return;
       seen.add(surface);
       const candidates = chartCorners(surface, plane, ring.roundoff);
       if (!candidates) return;
@@ -243,6 +289,9 @@ function repair(result: Brep, ring: Ring, plane: Plane, tolerance: number): Brep
     } else {
       const cap = facePlane(face);
       if (!cap || dist(cap.normal, plane.normal) > ANGULAR_ROUNDOFF || Math.abs(signedDistance(plane, cap.point)) > ring.roundoff) return;
+      if (annular) {
+        if (!annularCapLoops(result, face)) return;
+      } else if (face.loops.length !== 1) return;
       caps++;
     }
   }
@@ -291,7 +340,8 @@ function repair(result: Brep, ring: Ring, plane: Plane, tolerance: number): Brep
   const coedges = result.coedges.map(use => withPcurve(use, bindings.get(use.id)!));
   const brep = { ...result, vertices, coedges, edges };
   const report = checkBrep(brep, { strict: true });
-  if (report.valid && report.topology.length === 1 && report.topology[0].genus === 0 && report.maximumPcurveGap <= ring.roundoff) return brep;
+  if (report.valid && report.topology.length === 1 && report.topology[0].shells === 1
+    && report.topology[0].genus === (annular ? 1 : 0) && report.maximumPcurveGap <= ring.roundoff) return brep;
 }
 
 interface OffsetRimEdge { edge: BrepEdge; cap: BrepCoedge; wall: BrepCoedge }
@@ -431,10 +481,12 @@ function repairOffset(result: Brep, ring: Ring, plane: Plane, offset: number, to
 /** Keep native charts on an already-computed Boolean cut of an Exact Sweep ring by one box face. */
 export function bindHalfRingIntersection(a: Brep, b: Brep, result: Brep, tolerance: number): Brep | undefined {
   try {
-    const left = readRing(a, tolerance), ring = left ?? readRing(b, tolerance);
+    const left = readRing(a, tolerance) ?? readAnnularRing(a, tolerance);
+    const ring = left ?? readRing(b, tolerance) ?? readAnnularRing(b, tolerance);
     if (!ring) return;
     const cut = clippingPlane(left ? b : a, ring, tolerance);
-    if (cut) return cut.offset === 0 ? repair(result, ring, cut.plane, tolerance) : repairOffset(result, ring, cut.plane, cut.offset, tolerance);
+    if (cut?.offset === 0) return repair(result, ring, cut.plane, tolerance);
+    if (cut && ring.boreRadius === undefined) return repairOffset(result, ring, cut.plane, cut.offset, tolerance);
   } catch (error) {
     if (error instanceof RangeError || (error instanceof BrepError && error.code !== 'INPUT')) return;
     throw error;
@@ -443,7 +495,7 @@ export function bindHalfRingIntersection(a: Brep, b: Brep, result: Brep, toleran
 
 /** Evaluate an exact quarter-knot rim on both original Bézier quarters, only when their derivatives agree. */
 export function halfRingMeridianD1(brep: Brep, edge: BrepEdge, face: BrepFace, mate: BrepFace, uv: Curve) {
-  if ((!halfRingInputTopology(brep) && !halfRingFilletTopology(brep))
+  if ((!halfRingInputTopology(brep) && !halfAnnularRingTopology(brep) && !halfRingFilletTopology(brep))
     || face.surface.kind !== 'surface' || uv.degree !== 1 || uv.controlPoints.some(point => point[0] !== .5)) return;
   const uses = brep.coedges.filter(use => use.edge === edge.id);
   if (uses.length !== 2 || uses.some(use => !use.pcurve)) return;
@@ -604,6 +656,30 @@ export function halfRingFilletReferenceRims(body: Brep) {
 function halfRingInputTopology(brep: Brep) {
   return brep.source.family === 'analytic-boolean' && brep.faces.length === 6 && brep.edges.length === 10
     && brep.coedges.length === 20 && brep.coedges.every(use => use.pcurve);
+}
+
+function annularCapLoops(brep: Brep, face: BrepFace): boolean {
+  if (face.loops.length !== 2) return false;
+  const loops = brep.loops.filter(loop => face.loops.includes(loop.id));
+  return loops.length === 2 && loops.filter(loop => loop.kind === 'outer').length === 1
+    && loops.filter(loop => loop.kind === 'inner').length === 1 && loops.every(loop => loop.coedges.length === 2);
+}
+
+function halfAnnularRingTopology(brep: Brep) {
+  if (brep.source.family !== 'analytic-boolean' || (brep.faces.length !== 6 && brep.faces.length !== 10)
+    || brep.loops.length !== brep.faces.length + 2 || brep.edges.length !== 2 * brep.faces.length
+    || brep.coedges.length !== 2 * brep.edges.length || brep.coedges.some(use => !use.pcurve)) return false;
+  let caps = 0;
+  for (const face of brep.faces) {
+    if (face.surface.kind !== 'surface') return false;
+    if (halfTurnGrid(face.surface)) {
+      if (face.loops.length !== 1) return false;
+    } else {
+      if (!facePlane(face) || !annularCapLoops(brep, face)) return false;
+      caps++;
+    }
+  }
+  return caps === 2;
 }
 
 function halfRingFilletTopology(brep: Brep, rims = 1) {

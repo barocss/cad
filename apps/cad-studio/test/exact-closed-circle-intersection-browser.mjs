@@ -5,11 +5,14 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const railRadius = 20;
+const annular = process.argv.includes('--annular');
+const boreRadius = annular ? 1 : 0;
 const offsetCut = process.argv.includes('--offset');
 const firstOffset = offsetCut ? 1 : 0;
 const angle = process.argv.includes('--oblique') ? 29 * Math.PI / 180 : 0;
 const expectMissing = process.argv.includes('--expect-missing-binding');
 const localApproval = process.argv.includes('--local-approval');
+assert.ok(!annular || (!offsetCut && angle === 0));
 const path = {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4],
   controlPoints: Array.from({ length: 9 }, (_, i) => {
@@ -19,18 +22,21 @@ const path = {
   weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1, Math.SQRT1_2, 1, Math.SQRT1_2, 1],
 };
 const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 2,
-  nodes: [{ id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 2 },
+  nodes: [{ id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 2,
+    ...(annular ? { holes: [[{ kind: 'arc', start: [boreRadius, 0], center: [0, 0], direction: 'cw' }]],
+      sideTags: { outer: ['outer'], holes: [['bore']] } } : {}) },
     { id: 'n1', kind: 'sweep-curve', sketch: 0, name: 'Circular rail', path, mode: 'exact' }],
   outputs: { b1: { node: 1, side: 'solid' } } };
 const pins = [
   'packages/barocss-cad/src/brep/exact-sweep.ts', 'packages/barocss-cad/src/brep/analytic-boolean.ts',
   'packages/barocss-cad/src/brep/edge-continuity.ts',
-  ...(!expectMissing || offsetCut ? ['packages/barocss-cad/src/brep/exact-ring-intersect.ts'] : []),
+  ...(!expectMissing || offsetCut || annular ? ['packages/barocss-cad/src/brep/exact-ring-intersect.ts'] : []),
   ...(offsetCut && !expectMissing ? ['packages/barocss-cad/src/brep/offset-ring-trim.ts'] : []),
   'packages/barocss-cad-model/src/app/commands.ts', 'apps/cad-studio/src/App.tsx',
 ];
 const f = await createFlow({
-  name: 'exact-closed-circle-intersection', output: process.argv[2], envFrozen: offsetCut ? 'D1680_SOURCE_FROZEN' : 'D1677_SOURCE_FROZEN',
+  name: 'exact-closed-circle-intersection', output: process.argv[2],
+  envFrozen: annular ? 'D1755_SOURCE_FROZEN' : offsetCut ? 'D1680_SOURCE_FROZEN' : 'D1677_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: offsetCut ? 'Intersect a closed Exact Sweep with an offset box and edit both the cut position and tube diameter.'
     : 'Intersect a closed Exact Sweep with a box through its axis and edit its original circular section.',
@@ -114,52 +120,64 @@ async function verifyRingCut(label, doc, radius, offset = 0) {
   const geometry = await f.inspect(label, doc);
   assert.ok(geometry.check.valid, geometry.check.issues.join('\n'));
   assert.equal(geometry.check.counts.shells, 1);
-  assert.equal(geometry.check.topology[0].genus, 0);
+  assert.equal(geometry.check.topology[0].genus, annular ? 1 : 0);
   assert.equal(geometry.source.family, 'analytic-boolean');
   assert.equal(geometry.planes.length, 2);
   assert.ok(geometry.support.length >= 2);
+  if (annular) assert.deepEqual(geometry.check.counts, {
+    bodies: 1, shells: 1, faces: 10, loops: 12, coedges: 40, edges: 20, vertices: 12,
+  });
   let supportError = 0, rimError = 0, planeError = 0;
   const capSides = [], rimAngles = [], capJointIds = [];
+  let boreFaces = 0;
   for (const face of geometry.support) {
+    const bore = annular && face.name.includes('[bore]');
+    if (bore) boreFaces++;
     for (const [x, y, z] of face.samples)
-      supportError = Math.max(supportError, Math.abs(Math.hypot(Math.hypot(x, y) - railRadius, z) - radius));
+      supportError = Math.max(supportError, Math.abs(Math.hypot(Math.hypot(x, y) - railRadius, z) - (bore ? boreRadius : radius)));
   }
+  if (annular) assert.equal(boreFaces, geometry.support.length / 2);
   for (const cap of geometry.planes) {
     near(cap.geometry.o[0], offset, 1e-7);
     cap.geometry.n.forEach((value, i) => near(value, i === 0 ? -1 : 0, 1e-7));
-    assert.deepEqual(cap.loops.map(loop => loop.kind), ['outer']);
-    const edges = cap.loops[0].edges;
-    assert.ok(edges.length);
-    const sign = Math.sign(edges[0].samples[0][1]);
+    assert.deepEqual(cap.loops.map(loop => loop.kind), annular ? ['outer', 'inner'] : ['outer']);
+    const sign = Math.sign(cap.loops[0].edges[0].samples[0][1]);
     capSides.push(sign);
-    capJointIds.push(edges[0].id);
-    const ySamples = [];
-    let turn = 0;
-    for (const edge of edges) {
-      assert.ok(edge.reciprocal);
-      let previous;
-      for (const [x, y, z] of edge.samples) {
-        assert.equal(Math.sign(y), sign);
-        ySamples.push(y);
-        planeError = Math.max(planeError, Math.abs(x - offset));
-        const profileX = offset ? Math.hypot(x, y) - railRadius : y - sign * railRadius;
-        rimError = Math.max(rimError, Math.abs(Math.hypot(profileX, z) - radius));
-        const current = [profileX, z];
-        if (previous) turn += Math.atan2(previous[0] * current[1] - previous[1] * current[0],
-          previous[0] * current[0] + previous[1] * current[1]);
-        previous = current;
+    const turns = [];
+    for (const { kind, edges } of cap.loops) {
+      const rimRadius = kind === 'inner' ? boreRadius : radius;
+      assert.ok(edges.length);
+      capJointIds.push(edges[0].id);
+      const ySamples = [];
+      let turn = 0;
+      for (const edge of edges) {
+        assert.ok(edge.reciprocal);
+        let previous;
+        for (const [x, y, z] of edge.samples) {
+          assert.equal(Math.sign(y), sign);
+          ySamples.push(y);
+          planeError = Math.max(planeError, Math.abs(x - offset));
+          const profileX = offset ? Math.hypot(x, y) - railRadius : y - sign * railRadius;
+          rimError = Math.max(rimError, Math.abs(Math.hypot(profileX, z) - rimRadius));
+          const current = [profileX, z];
+          if (previous) turn += Math.atan2(previous[0] * current[1] - previous[1] * current[0],
+            previous[0] * current[0] + previous[1] * current[1]);
+          previous = current;
+        }
+        if (!offset) assert.equal(edge.degree, 2);
+        rimAngles.push({ degree: edge.degree, ownPcurve: edge.ownPcurve, twinPcurve: edge.twinPcurve });
       }
-      if (!offset) assert.equal(edge.degree, 2);
-      rimAngles.push({ degree: edge.degree, ownPcurve: edge.ownPcurve, twinPcurve: edge.twinPcurve });
+      near(Math.abs(turn), 2 * Math.PI, 1e-6);
+      turns.push(turn);
+      if (offset) {
+        const width = Math.max(...ySamples) - Math.min(...ySamples);
+        const exactWidth = Math.sqrt((railRadius + radius) ** 2 - offset ** 2)
+          - Math.sqrt((railRadius - radius) ** 2 - offset ** 2);
+        assert.ok(exactWidth - 2 * radius > .004);
+        near(width, exactWidth, 1e-6);
+      }
     }
-    near(Math.abs(turn), 2 * Math.PI, 1e-6);
-    if (offset) {
-      const width = Math.max(...ySamples) - Math.min(...ySamples);
-      const exactWidth = Math.sqrt((railRadius + radius) ** 2 - offset ** 2)
-        - Math.sqrt((railRadius - radius) ** 2 - offset ** 2);
-      assert.ok(exactWidth - 2 * radius > .004);
-      near(width, exactWidth, 1e-6);
-    }
+    if (annular) near(turns[0] + turns[1], 0, 1e-6);
   }
   assert.deepEqual(capSides.sort(), [-1, 1]);
   near(supportError, 0, 1e-7);
@@ -167,8 +185,10 @@ async function verifyRingCut(label, doc, radius, offset = 0) {
     near(planeError, 0, 1e-7);
     near(rimError, 0, 1e-6);
   }
-  const { volume: expectedVolume, centroidX } = offset ? offsetMass(radius, offset)
-    : { volume: Math.PI ** 2 * railRadius * radius ** 2, centroidX: 2 * (railRadius ** 2 + radius ** 2 / 4) / (Math.PI * railRadius) };
+  const { volume: expectedVolume, centroidX } = offset ? offsetMass(radius, offset) : {
+    volume: Math.PI ** 2 * railRadius * (radius ** 2 - boreRadius ** 2),
+    centroidX: 2 * (railRadius ** 2 + (radius ** 2 + boreRadius ** 2) / 4) / (Math.PI * railRadius),
+  };
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, 1);
   if (!expectMissing || !offset) {
@@ -178,7 +198,9 @@ async function verifyRingCut(label, doc, radius, offset = 0) {
       center.forEach((value, i) => near(value, i === 0 ? centroidX : 0, 1e-5));
   }
   assert.ok(geometry.joints.some(edge => edge.rim) && geometry.joints.some(edge => !edge.rim));
-  if (offset && !expectMissing) assert.equal(geometry.pcurves, geometry.check.counts.coedges);
+  if (annular) assert.equal(geometry.joints.filter(edge => edge.rim).length, 8);
+  if (annular || offset && !expectMissing)
+    assert.equal(geometry.pcurves, expectMissing ? 0 : geometry.check.counts.coedges);
   for (const joint of geometry.joints) {
     assert.equal(joint.status, expectMissing ? 'unsupported' : 'measured', JSON.stringify(joint));
     if (expectMissing) assert.equal(joint.reason, 'missing-pcurve', JSON.stringify(joint));
@@ -188,9 +210,10 @@ async function verifyRingCut(label, doc, radius, offset = 0) {
       assert.equal(joint.count, 8);
     }
   }
-  f.report.observations.push({ label, radius, offset, expectedVolume, volume: geometry.mass.volume, quadrature: geometry.quadrature.volume,
+  f.report.observations.push({ label, radius, offset, ...(annular ? { boreRadius } : {}), expectedVolume, volume: geometry.mass.volume, quadrature: geometry.quadrature.volume,
     workerVolume: bodies[0].volume, centroidX, supportError, planeError, rimError, counts: geometry.check.counts,
-    rimAngles, joints: geometry.joints, pcurves: geometry.pcurves, digest: geometry.digest });
+    maximumPcurveGap: geometry.check.maximumPcurveGap, rimAngles, joints: geometry.joints,
+    pcurves: geometry.pcurves, digest: geometry.digest });
   return { ...geometry, capJointIds };
 }
 
@@ -204,13 +227,15 @@ async function measureJoints(geometry, stage) {
   const result = panel.getByRole('status', { name: 'Edge continuity result', exact: true });
   const observed = [];
   const seam = geometry.joints.find(edge => !edge.rim);
-  const rims = (offsetCut ? geometry.capJointIds : geometry.capJointIds.slice(0, 1))
+  const rims = (offsetCut || annular ? geometry.capJointIds : geometry.capJointIds.slice(0, 1))
     .map(id => geometry.joints.find(edge => edge.id === id));
-  for (const [i, joint] of [seam, ...rims].entries()) {
+  const shown = annular && !expectMissing ? geometry.joints : [seam, ...rims];
+  for (const [i, joint] of shown.entries()) {
     await edges.selectOption(joint.id);
     await button('Measure continuity', panel).click();
     if (expectMissing) {
-      await result.getByText('Measurement detail', { exact: true }).click();
+      const detail = result.locator('details[open]');
+      if (!await detail.count()) await result.getByText('Measurement detail', { exact: true }).click();
       assert.match(await result.locator('details[open]').innerText(), /A face has no native parameter curve\./);
     } else {
       const angle = result.locator('[data-continuity-angle]');
@@ -220,12 +245,15 @@ async function measureJoints(geometry, stage) {
       assert.match(await result.innerText(), /Native samples\s+8/);
     }
     observed.push({ rim: joint.rim, text: await result.innerText() });
-    await f.snapshot(stage + (joint.rim ? '-native-cut-rim' + (offsetCut ? '-' + i : '') : '-native-bend-joint'));
+    if (!annular || joint === seam || rims.includes(joint)) {
+      const label = joint.rim ? '-native-cut-rim' + (offsetCut || annular ? '-' + i : '') : '-native-bend-joint';
+      await f.snapshot(stage + label);
+    }
   }
   f.report.observations.push({ label: stage === '03' ? 'desktop-continuity' : stage + '-desktop-continuity', observed });
 }
 
-async function viewCaps(offset = 0) {
+async function viewCaps(offset = 0, radius = 2, stage = '04') {
   f.phase = 'View and select the two cut caps in Left orthographic view';
   const cube = f.page.getByRole('group', { name: 'View cube', exact: true });
   await button('View cube directions', cube).click();
@@ -234,13 +262,18 @@ async function viewCaps(offset = 0) {
   await f.page.waitForFunction(() => document.querySelector('.view-cube .vc-label')?.textContent === 'LEFT');
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const y = Math.sqrt(railRadius ** 2 - offset ** 2);
-  const centers = [[offset, -y, 0], [offset, y, 0]];
-  const samples = await f.page.evaluate(points => points.map(point => window.__studioSurfacePoint(point)), [...centers, [0, 0, 0]]);
+  const z = annular ? (radius + boreRadius) / 2 : 0;
+  const centers = [[offset, -y, z], [offset, y, z]];
+  const cavities = annular ? [[offset, -y, 0], [offset, y, 0]] : [];
+  const samples = await f.page.evaluate(points => points.map(point => window.__studioSurfacePoint(point)),
+    [...centers, [0, 0, 0], ...cavities]);
   for (const [i, point] of centers.entries()) {
-    assert.ok(samples[i], 'The cap covers its projected center');
+    assert.ok(samples[i], 'A material point hits the planar cap');
     point.forEach((value, k) => near(samples[i][k], value, 1e-4));
   }
   assert.ok(!samples[2] || samples[2][0] > 10, JSON.stringify({ gapRay: samples[2] }));
+  for (const sample of samples.slice(3))
+    assert.ok(!sample || sample[0] > .1, JSON.stringify({ cavityRay: sample }));
   const filter = button('Selection filter');
   for (let i = 0; i < 6 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
@@ -254,9 +287,9 @@ async function viewCaps(offset = 0) {
       return faces?.length === 1 && faces[0].face !== previous;
     }, selected[i - 1] ?? -1);
     selected.push(await f.page.evaluate(() => window.__studioSelection.selection.faces[0].face));
-    await f.snapshot('04-' + (i + 1) + '-selected-cut-cap');
+    await f.snapshot(stage + '-' + (i + 1) + '-selected-cut-cap');
   }
-  f.report.observations.push({ label: 'desktop-cap-rays', samples, selected });
+  f.report.observations.push({ label: stage === '04' ? 'desktop-cap-rays' : 'reopened-desktop-cap-rays', samples, selected });
 }
 
 async function approveLocalIntersection(boxed, direct, directDigest) {
@@ -311,7 +344,7 @@ await f.run(async () => {
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: 'closed-exact-ring.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
-  near((await f.bodies()).bodies[0].volume, 2 * Math.PI ** 2 * railRadius * 2 ** 2, 1e-7);
+  near((await f.bodies()).bodies[0].volume, 2 * Math.PI ** 2 * railRadius * (2 ** 2 - boreRadius ** 2), 1e-7);
 
   f.phase = 'Create the clipping box';
   await f.page.evaluate(() => document.activeElement?.blur());
@@ -337,7 +370,7 @@ await f.run(async () => {
   const nativeCut = await verifyRingCut('intersected', cut, 2, firstOffset);
   await measureJoints(nativeCut, '03');
   await viewCaps(firstOffset);
-  if (offsetCut && expectMissing) return;
+  if ((offsetCut || annular) && expectMissing) return;
 
   let moved = cut;
   if (offsetCut) {
@@ -371,9 +404,20 @@ await f.run(async () => {
   const reopenedGeometry = await verifyRingCut('reopened', reopened, 3, offset);
   assert.equal(reopenedGeometry.digest, digest);
   if (!expectMissing) await measureJoints(reopenedGeometry, '06-reopened');
+  if (annular) await viewCaps(offset, 3, '06-reopened');
   await f.openFeatureEditor(1);
-  assert.equal(await f.editor().getByLabel('Diameter', { exact: true }).inputValue(), '6');
+  const diameter = f.editor().getByLabel('Diameter', { exact: true });
+  assert.equal(await diameter.inputValue(), '6');
   await f.snapshot('07-reopened-editable-sweep');
+  if (annular) {
+    await diameter.fill('4');
+    const restored = (await f.applyEditor(reopened, '07-reopened-restored-diameter')).doc;
+    assert.equal(restored.nodes[0].radius, 2);
+    assert.deepEqual(restored.nodes.slice(1), cut.nodes.slice(1));
+    assert.equal((await verifyRingCut('restored-after-open', restored, 2)).digest, nativeCut.digest);
+    await f.undo();
+    await f.same(reopened);
+  }
   if (offsetCut) {
     await f.closeEditor();
     await f.openFeatureEditor(3);
